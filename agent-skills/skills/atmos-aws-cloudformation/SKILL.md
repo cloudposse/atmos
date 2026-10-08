@@ -20,7 +20,7 @@ component and its nested commands are **experimental**; the top-level `aws` grou
 | Terraform/OpenTofu orchestration (contrast: HCL + state file vs. CFN's own stack/changeset state) | [atmos-terraform](../atmos-terraform/SKILL.md) |
 | Component architecture, inheritance, catalogs, `dependencies.components` DAG ordering | [atmos-components](../atmos-components/SKILL.md) |
 | AWS credentials / identities for the SDK client and per-target auth overrides | [atmos-auth](../atmos-auth/SKILL.md) |
-| Lifecycle hooks around `diff`/`apply`/`delete`/`drift detect`/`drift describe` | [atmos-hooks](../atmos-hooks/SKILL.md) |
+| Lifecycle hooks around `diff`/`apply`/`delete`/`drift detect`/`drift describe`/`changeset create`/`changeset execute` | [atmos-hooks](../atmos-hooks/SKILL.md) |
 | Native CI job summaries | [atmos-ci](../atmos-ci/SKILL.md) |
 | `!secret` values flowing into `parameters:` | [atmos-secrets](../atmos-secrets/SKILL.md) |
 | `kind: git` GitOps delivery target mechanics | [atmos-git](../atmos-git/SKILL.md) |
@@ -223,7 +223,7 @@ and `create`-vs-`update` semantics.
 
 ## Observability and Deployed-Stack Retrieval
 
-Use `tree`, `logs`, and `watch` to inspect resources and operations; `get template` and `get policy`
+Use `tree` (deployed nested-stack tree), `logs`, and `watch` to inspect stacks and operations; `get template` and `get policy`
 retrieve deployed state. See [operations](references/operations.md#observability-tree-logs-watch)
 for examples and flag behavior.
 
@@ -272,12 +272,16 @@ artifacts (Terraform-only). See [ci-and-listing](references/ci-and-listing.md#na
 
 ## Hooks
 
-Five lifecycle pairs fire hook events: `before`/`after` × `diff` (`plan` normalizes to `diff`),
-`apply` (`deploy` normalizes to `apply`), `delete`, `drift detect`, and `drift describe` — e.g.
-`after.aws/cloudformation.apply`, `before.aws/cloudformation.drift-detect`, and
-`after.aws/cloudformation.drift-describe`. Hyphens inside drift command names are meaningful. Every
-other verb (`render`, `validate`, `output`, `fmt`, `tree`, `logs`, `watch`, `changeset *`, `get *`,
-`stackset *`, `list`, `backend *`, `source *`) fires none. The hook-firing verbs accept `--skip-hooks`
+Seven lifecycle pairs fire hook events: `before`/`after` × `diff` (`plan` normalizes to `diff`),
+`apply` (`deploy` normalizes to `apply`), `delete`, `drift detect`, `drift describe`,
+`changeset create`, and `changeset execute` — e.g. `after.aws/cloudformation.apply`,
+`before.aws/cloudformation.drift-detect`, `after.aws/cloudformation.drift-describe`,
+`before.aws/cloudformation.changeset-create`, and `before.aws/cloudformation.changeset-execute`.
+Hyphens inside command names are meaningful. The changeset events are separate from `apply` and are
+not aliases of it; add them to a packaging hook's `events:` list for a `changeset create` /
+`changeset execute` workflow. Every other verb (`render`, `validate`, `output`, `fmt`, `tree`,
+`logs`, `watch`, `changeset list`/`delete`, `get *`, `stackset *`, `list`, `backend *`, `source *`)
+fires none. The hook-firing verbs accept `--skip-hooks`
 (no value skips all; `--skip-hooks=a,b` skips named hooks) and honor `ATMOS_SKIP_HOOKS`, as
 `atmos terraform` does. See [atmos-hooks](../atmos-hooks/SKILL.md) for the `hooks:` block shape.
 
@@ -298,9 +302,14 @@ There is no Rain CLI or config-file compatibility layer, and no `!Rain::` direct
 `aws/cloudformation` reads a component's `path:` template as raw bytes and submits it unmodified.
 Existing templates are pointed at (or `!include`d for parameter files), not rewritten. See
 [atmos-migration](../atmos-migration/SKILL.md)'s `references/from-rain.md` for the full `!Rain::`
-directive mapping table (`Constant`, `Env`, `Include`, `S3`, `Embed`, `Module`) and the
+directive mapping table (`Constant`, `Env`, `Include`, `Embed`, `S3`, `S3Http`, `Module`) and the
 Rain-verb-to-`atmos aws cloudformation`-verb cross-reference (`fmt`→`fmt`, `cat`→`get template`,
-`ls`→`list`, `bootstrap`→`backend create`, `log`→`logs`, `rm`→`delete`).
+`ls`→`list`, `bootstrap`→`backend create`, `logs`→`logs`, `rm`→`delete`,
+`stackset deploy|ls|rm`→`stackset create|update|instances|delete`). `rain tree` (local-template
+dependency graph) is not equivalent to Atmos `tree` (deployed nested-stack tree), and `rain diff`
+(compares two templates) is not `plan`/`diff` (changeset against the deployed stack).
+A `path:` template still containing `!Rain::` directives fails locally with
+`ErrAwsCloudFormationRainDirective` (directives listed, one replacement hint each).
 
 ## Guidance
 
@@ -312,8 +321,10 @@ Rain-verb-to-`atmos aws cloudformation`-verb cross-reference (`fmt`→`fmt`, `ca
 - Use `provision.backend.enabled: true` for a zero-friction dev sandbox; use explicit
   `backend create`/`update` in shared/production environments to re-apply secure defaults
   deliberately rather than only on first use.
-- Referenced local assets (Lambda zips, nested-stack templates) need manual out-of-band S3
-  upload today — automatic packaging only covers the template body itself.
+- Referenced local assets (Lambda zips, nested-stack templates) are not packaged automatically —
+  packaging covers only the template body. Build and upload them with `archive` + `publish` hook
+  steps (`before.aws/cloudformation.apply`, plus `.diff` and `.changeset-create` as needed), derive
+  the key from stack vars, and pass it to the template via `parameters:`.
 - Use the Floci `aws/emulator` identity (see `examples/cloudformation/`) to develop and test with
   zero AWS credentials before pointing at a real account.
 

@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/function/parser"
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -71,18 +72,35 @@ func processIncludeTagInternal(
 	}
 	includeFile = parsed.Path
 	includeQuery = parsed.Query
+	evalFunctions := parsed.Eval
 
 	// Try to find the file locally
 	localFile = findLocalFile(includeFile, file, atmosConfig)
 
 	// Process the file
 	if localFile != "" {
+		if isYAMLInclude(localFile, forceRaw) {
+			data, err := os.ReadFile(localFile)
+			if err != nil {
+				return fmt.Errorf("%w: %s, stack manifest: %s, error: %w",
+					ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
+			}
+			return spliceYAMLText(atmosConfig, node, string(data), includeSplice{query: includeQuery, eval: evalFunctions, val: val, file: file})
+		}
 		// Process local file
 		res, err = processLocalFile(localFile, forceRaw)
 		if err != nil {
 			return err
 		}
 	} else if shouldFetchRemote(includeFile) {
+		if isYAMLInclude(includeFile, forceRaw) {
+			raw, err := processRemoteFile(atmosConfig, includeFile, true)
+			if err != nil {
+				return err
+			}
+			text, _ := raw.(string)
+			return spliceYAMLText(atmosConfig, node, text, includeSplice{query: includeQuery, eval: evalFunctions, val: val, file: file})
+		}
 		// Process as remote if it's a URL or go-getter detects it as remote
 		res, err = processRemoteFile(atmosConfig, includeFile, forceRaw)
 		if err != nil {
@@ -109,6 +127,111 @@ func processIncludeTagInternal(
 
 	// Update the YAML node with the result
 	return updateYamlNode(node, res, val, file)
+}
+
+// includeSplice carries the per-include inputs spliceYAMLText needs: the yq
+// query, whether `| eval` was given, and the raw tag value and manifest file
+// for error messages.
+type includeSplice struct {
+	query string
+	eval  bool
+	val   string
+	file  string
+}
+
+// isYAMLInclude reports whether an !include target is a YAML document that
+// should be spliced into the manifest as YAML nodes, keeping any tags it
+// contains, rather than decoded to Go values first. !include.raw never is.
+func isYAMLInclude(path string, forceRaw bool) bool {
+	if forceRaw {
+		return false
+	}
+	ext := strings.ToLower(filepath.Ext(filetype.ExtractFilenameFromPath(path)))
+	return ext == YamlFileExtension || ext == YmlFileExtension
+}
+
+// spliceYAMLText parses yamlText (after applying query, if any) and replaces
+// node with the parsed document. Unlike the decode-then-re-encode path every
+// other file type takes, this keeps the included document's YAML tags, so a
+// foreign tag such as a CloudFormation short-form intrinsic reaches its
+// registered rewriter instead of being decoded to a bare string (before this,
+// `template: !include template.yaml` on an aws/cloudformation component
+// silently turned `Role: !GetAtt Role.Arn` into the literal string "Role.Arn").
+//
+// Atmos function tags inside the included file follow the documented
+// "included content is data" contract unless the include opted in with
+// `| eval`: without it the tag is dropped and its argument stays a string,
+// exactly as before; with it the walker's recursion into the spliced nodes
+// resolves them like any other manifest value.
+func spliceYAMLText(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, yamlText string, opts includeSplice) error {
+	defer perf.Track(atmosConfig, "utils.spliceYAMLText")()
+
+	query, val, file := opts.query, opts.val, opts.file
+	if query != "" {
+		evaluated, err := evaluateYqToYAML(atmosConfig, yamlText, query)
+		if err != nil {
+			return fmt.Errorf("%w: %s, stack manifest: %s, error: %w",
+				ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
+		}
+		yamlText = evaluated
+	}
+
+	trimmed := strings.TrimSpace(yamlText)
+	if trimmed == "" {
+		*node = yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}
+		return nil
+	}
+
+	// A yq query can yield a bare scalar whose text the YAML parser would
+	// misread (a trailing colon, a leading '#'); keep it as the string it is,
+	// exactly as EvaluateYqExpression does.
+	if query != "" && isScalarString(trimmed) {
+		setStringScalar(node, trimmed)
+		return nil
+	}
+
+	contentNode, err := unmarshalYamlContent(yamlText, val, file)
+	if err != nil {
+		return err
+	}
+	if query != "" && isMisinterpretedScalar(contentNode, trimmed) {
+		setStringScalar(node, trimmed)
+		return nil
+	}
+
+	if !opts.eval {
+		literalizeAtmosTags(contentNode)
+	}
+	*node = *contentNode
+	return nil
+}
+
+// literalizeAtmosTags drops every Atmos YAML function tag in the subtree,
+// keeping the tagged value as plain data (`!env HOME` -> "HOME"). Foreign
+// tags are left alone for their rewriters.
+func literalizeAtmosTags(node *yaml.Node) {
+	if node == nil {
+		return
+	}
+	tag := strings.TrimSpace(node.Tag)
+	if strings.HasPrefix(tag, "!") && !strings.HasPrefix(tag, "!!") && fntag.IsValidYAML(tag) {
+		node.Tag = ""
+		if node.Kind == yaml.ScalarNode {
+			node.Tag = "!!str"
+		}
+	}
+	for _, child := range node.Content {
+		literalizeAtmosTags(child)
+	}
+}
+
+// setStringScalar turns node into a plain string scalar holding value.
+func setStringScalar(node *yaml.Node, value string) {
+	if strings.HasPrefix(value, "#") {
+		handleCommentString(node, value)
+		return
+	}
+	*node = yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
 }
 
 // isRemoteURL checks if the path is a remote URL.

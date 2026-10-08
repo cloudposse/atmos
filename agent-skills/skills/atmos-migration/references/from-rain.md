@@ -2,15 +2,18 @@
 
 This reference is a scenario-keyed decision guide for moving a Rain-managed or raw-CloudFormation
 repo onto Atmos's native `aws/cloudformation` component type. For the full user-facing prose
-tutorial, see [atmos.tools/migration/from-rain](https://atmos.tools/migration/from-rain).
+tutorial, see [atmos.tools/migration/rain](https://atmos.tools/migration/rain).
 
 **Framing matters**: this is migrating *off* Rain / raw CloudFormation *onto* Atmos, not "how to
 write Rain syntax in Atmos." There is no Rain CLI or config-file compatibility layer, and no
-`!Rain::` directive preprocessing. A template containing `!Rain::*` tags is not valid
+`!Rain::` directive preprocessing. A `path:` template containing `!Rain::*` tags is not valid
 CloudFormation and Atmos will not accept it as-is — every directive must be resolved to a
-plain-CloudFormation or Atmos-native equivalent before the template is handed to
-`aws/cloudformation`. This is the single most likely blocker for a real migration; walk the
-directive table below with the user before touching anything else.
+plain-CloudFormation or Atmos-native equivalent first. Atmos now fails locally (at
+`render`/`validate`/`plan`/`apply`) with `ErrAwsCloudFormationRainDirective`: the error lists the
+directives found, gives one hint per directive naming its replacement, and links
+https://atmos.tools/migration/rain. (Previously only AWS rejected the template, with an opaque
+"YAML not well-formed (line N, column M)".) This is the single most likely blocker for a real
+migration; walk the directive table below with the user before touching anything else.
 
 Atmos's `aws/cloudformation` component type is currently **experimental**
 (`atmos aws cloudformation`, alias `atmos aws cfn`) — SDK-native, no `aws`/`cfn`/`sam`/`rain`
@@ -19,15 +22,20 @@ and `website/docs/stacks/components/aws-cloudformation.mdx` for the stack-config
 
 ## Core Principles (Rain-Specific)
 
-1. **Templates are not preprocessed.** `aws/cloudformation` reads a component's `path:` file
-  as raw bytes (`os.ReadFile`) and submits it to the CloudFormation API — Atmos never rewrites,
-  merges, or macro-expands the template body. This is a deliberate design boundary, not a gap: it
+1. **`path:` templates are not preprocessed.** `aws/cloudformation` reads a component's `path:`
+  file as raw bytes (`os.ReadFile`) and submits it to the CloudFormation API — Atmos never rewrites,
+  merges, or macro-expands that template body. This is a deliberate design boundary, not a gap: it
   means every `!Rain::*` directive (which Rain resolves by *preprocessing* the template before
-  submission) has no direct drop-in replacement at the same layer. The fix in every case is to
-  move the substitution **out of the template body** and into a layer Atmos or CloudFormation
-  itself already handles — Atmos stack config (`parameters:`, `!env`, `!template`, inheritance)
-  for anything CloudFormation Parameters can express, or CloudFormation's own native
-  `Fn::Transform`/`AWS::Include` intrinsic for template-fragment reuse.
+  submission) has no drop-in replacement at the `path:` layer. The fix is to move the substitution
+  into a layer Atmos or CloudFormation already handles: Atmos stack config (`parameters:`, `!env`,
+  `vars`, inheritance) for anything CloudFormation Parameters can express, or an Atmos-evaluated
+  template source — an inline `template:` map, or `template: !include <file> | eval`:
+  - Inline `template:` maps and `template: !include <file>` accept CloudFormation short-form
+    intrinsics (`!Ref`, `!Sub`, `!GetAtt`, all 18) and rewrite them to long form; do not hand-convert
+    to `Ref:`/`Fn::GetAtt:`.
+  - `!include <file> | eval` (opt-in) evaluates Atmos YAML functions (`!env`, nested `!include`)
+    inside the included file. Without `| eval`, included content is data: tags are dropped and the
+    argument kept.
 2. **Reuse templates and parameter files.** Point `path:` at the existing `.yaml`/`.json`
   template file unchanged (after resolving any `!Rain::` directives per the table below).
   Atmos `parameters:` accepts a map from parameter names to values, or a list of AWS CLI
@@ -40,15 +48,17 @@ and `website/docs/stacks/components/aws-cloudformation.mdx` for the stack-config
 3. **No 1:1 CLI compatibility.** `atmos aws cloudformation` verbs are Atmos-native — see the verb
   cross-reference table below. Do not tell a user to alias `rain` to `atmos aws cfn`; flag names,
   output shape, and confirmation semantics differ.
-4. **Template packaging is size-triggered, not full `aws cloudformation package`/Rain `pkg`
-  parity.** `apply`/`deploy` auto-uploads the **template body itself** to the component's
-  `kind: aws/s3` provision target when it exceeds CloudFormation's 51,200-byte inline limit
-  (`pkg/component/aws/cloudformation/packaging.go`). It does **not** currently rewrite local-asset
-  references inside the template (Lambda source zips, nested-stack templates referenced by
-  relative path) the way `aws cloudformation package` or Rain's `pkg`/`!Rain::S3` do. Tell users
-  who rely on that: pre-upload those assets to S3 out-of-band (a hook, a build step, or a
-  pre-existing pipeline) and reference the resulting S3 location directly in the template until a
-  future phase closes this gap. Do not claim full asset-packaging parity — it does not exist yet.
+4. **Template packaging is template-body only; assets use hooks.** The template body itself is
+  uploaded to the component's `kind: aws/s3` provision target when it exceeds CloudFormation's
+  51,200-byte inline limit, or whenever a `kind: aws/s3` target is selected
+  (`pkg/component/aws/cloudformation/packaging.go`). Packaging runs on
+  plan/diff/validate/changeset create/apply/deploy; only apply/deploy may create the bucket. It does
+  **not** rewrite local-asset references inside the template (Lambda source zips, nested-stack
+  templates by relative path) the way `aws cloudformation package` or Rain's `!Rain::S3` do. Asset
+  parity is the `archive` + `publish` hook-step pattern (see the `S3` row below): build and upload
+  the asset in a `before.aws/cloudformation.*` hook, derive the key from stack vars, and pass it
+  into the template through `parameters:`. There is no upload YAML function by design — YAML
+  functions never mutate state.
 5. **Crawl → walk → run**, same arc as every other migration reference: get to a working
   `atmos aws cloudformation plan`/`deploy` first, defer `provision:` targets, StackSets,
   inheritance, and catalogs until the user has a concrete need.
@@ -60,12 +70,16 @@ so a template still containing `!Rain::*` tags will fail as invalid CloudFormati
 
 | Rain directive | What it did | Atmos-native replacement |
 |---|---|---|
-| `!Rain::Constant` | Injects a named constant's value into the template at preprocess time | Move the value to a CloudFormation `Parameters:` entry, referenced via `!Ref` in the template; feed the value from the component's `parameters:` section in stack config (which itself supports inheritance, Go templates, and `!env`/`!template`) |
-| `!Rain::Env` | Injects an environment variable's value into the template at preprocess time | Same as `Constant`: turn it into a `Parameters:` entry, and set the component's `parameters:` value with `!env VAR_NAME` in the stack manifest |
-| `!Rain::Include` | Merges an external JSON/YAML fragment into the template at preprocess time | No direct Atmos-side equivalent (templates aren't preprocessed). For genuine fragment reuse, use CloudFormation's own native `Fn::Transform`/`AWS::Include` intrinsic (resolved by CloudFormation itself at deploy time, from a fragment already in S3) — this is a CloudFormation feature, not Rain- or Atmos-specific. For anything more structural, see `Module` below |
-| `!Rain::Embed` | Inlines a local file's contents as a string literal (e.g. Lambda inline code, `UserData` scripts) at preprocess time | For small scripts: inline the content directly using a YAML literal block scalar or folded `>` block scalar in the template by hand — this is a one-time manual flatten, not an ongoing process. For larger assets: pre-upload to S3 out-of-band and reference the S3 location directly (same gap noted in Core Principle 4) |
-| `!Rain::S3` | Uploads a local file/directory to S3 and rewrites the reference (e.g. Lambda `S3Bucket`/`S3Key`, nested-stack `TemplateURL`) at preprocess time | **Partial today**: the template body itself auto-packages via the component's `kind: aws/s3` provision target when it exceeds the inline size limit. Arbitrary local assets (Lambda zips, nested templates by relative path) are **not** auto-rewritten yet — pre-upload them out-of-band and reference the resulting S3 URL directly in the template |
-| `!Rain::Module` | Client-side, multi-file template composition (Rain's own docs mark this experimental) | Not supported — use AWS CDK for real modular/reusable template composition. This mirrors the PRD's own Non-Goal: Rain's module system is not a design Atmos is replicating |
+| `!Rain::Constant` (plus the `Rain: Constants:` section and `${Rain::Name}` inside `!Sub`) | Injects a named constant's value into the template at preprocess time | Stack `vars` + `{{ .vars.x }}` (in `parameters:` or an inline `template:`), or a CloudFormation `Parameters:` entry referenced via `!Ref` and fed from `parameters:` |
+| `!Rain::Env` | Injects an environment variable's value into the template at preprocess time | `template: !include template.yaml \| eval` with `!env NAME` inside the file; or a `Parameters:` entry fed from `parameters:` with `!env NAME` in the stack manifest |
+| `!Rain::Include` | Merges an external JSON/YAML fragment into the template at preprocess time | `!include f.yaml` inside the template file, with `\| eval` on the outer `template: !include`. Alternative: CloudFormation's own `Fn::Transform`/`AWS::Include` (resolved by CloudFormation from a fragment already in S3) |
+| `!Rain::Embed` | Inlines a local file's contents as a string literal (e.g. Lambda inline code, `UserData`) | `!include f.py` inside the template file (a non-YAML file loads as a string), with `\| eval` on the outer include; or flatten into a YAML block scalar by hand |
+| `!Rain::S3` | Uploads a local file/directory to S3 and rewrites the reference (e.g. Lambda `S3Bucket`/`S3Key`) at preprocess time | `archive` + `publish` steps in a `kind: steps` hook on `before.aws/cloudformation.apply` (add `before.aws/cloudformation.changeset-create` for the `--no-exec` workflow, and `diff` to preview). Derive the key from stack vars and pass bucket/key via `parameters:` (`Code.S3Bucket`/`Code.S3Key` use `!Ref`) |
+| `!Rain::S3Http` | Like `S3`, but yields the object's https URL (e.g. nested-stack `TemplateURL`) | Same `archive` + `publish` hook pattern; build the https URL from the bucket/key parameters in the template (`!Sub`) |
+| `!Rain::Module` | Client-side, multi-file template composition (experimental in Rain; needs `--experimental`) | No equivalent. The PRD points to AWS CDK for modular template composition; Rain's module system is not a design Atmos replicates |
+
+An unset `!env` variable with no default logs a warning and resolves to `""`. Set the variable or
+pass a default; `--dry-run` skips YAML functions and will not show the problem.
 
 ### Before/After: `Constant`/`Env` → Parameters
 
@@ -77,7 +91,7 @@ Resources:
   Bucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Rain::Constant BucketNamePrefix-bucket
+      BucketName: !Sub "${Rain::BucketNamePrefix}-bucket"
       Tags:
         - Key: Owner
           Value: !Rain::Env DEPLOY_OWNER
@@ -113,7 +127,28 @@ components:
         DeployOwner: !env DEPLOY_OWNER
 ```
 
-### Before/After: `Embed` → inline block scalar
+Parity for `!Rain::Env` inside the template file itself uses an Atmos-evaluated template source:
+
+```yaml
+# stacks/dev.yaml
+components:
+  "aws/cloudformation":
+    my-bucket:
+      template: !include template.yaml | eval
+```
+
+```yaml
+# template.yaml: !env is evaluated because of "| eval"
+Resources:
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      Tags:
+        - Key: Owner
+          Value: !env DEPLOY_OWNER
+```
+
+### Before/After: `Embed` → `!include` or inline block scalar
 
 Before (Rain):
 
@@ -126,7 +161,9 @@ Resources:
         ZipFile: !Rain::Embed handler.py
 ```
 
-After (Atmos — content flattened into the template once, by hand):
+After (Atmos), option 1: `ZipFile: !include handler.py` inside the template file, with
+`template: !include template.yaml | eval` in stack config. Option 2: content flattened into the
+template once, by hand:
 
 ```yaml
 Resources:
@@ -140,41 +177,93 @@ Resources:
 ```
 
 For anything beyond a few lines, package the function as a real deployment artifact (S3-hosted
-zip) instead — see the `S3` row.
+zip) instead.
+
+### Before/After: `S3` → `archive` + `publish` hook
+
+```yaml
+components:
+  "aws/cloudformation":
+    fn:
+      path: template.yaml          # Code.S3Bucket: !Ref ArtifactBucket, Code.S3Key: !Ref ArtifactKey
+      vars:
+        artifact_bucket: acme-lambda-artifacts
+        artifact_key: lambda/releases/v1/handler.zip
+      parameters:
+        ArtifactBucket: "{{ .vars.artifact_bucket }}"
+        ArtifactKey: "{{ .vars.artifact_key }}"
+      hooks:
+        package-lambda:
+          events:
+            - before.aws/cloudformation.diff
+            - before.aws/cloudformation.apply
+            - before.aws/cloudformation.changeset-create
+          kind: steps
+          on_failure: fail
+          with:
+            - type: archive
+              source: src/
+              destination: handler.zip
+              mtime: epoch
+            - type: publish
+              source: handler.zip
+              destination: "{{ .vars.artifact_key }}"
+              target:
+                kind: aws/s3
+                bucket: "{{ .vars.artifact_bucket }}"
+                region: us-east-1
+```
+
+Use a new artifact key per release so a code change changes the parameter. `--dry-run` skips hooks.
+Details: `website/docs/stacks/components/aws-cloudformation.mdx` (asset-packaging hooks).
 
 ## Rain → Atmos Verb Cross-Reference
 
 Every Atmos verb below is confirmed registered in `cmd/aws/cloudformation/cloudformation.go`'s
-`init()` — do not invent verb names beyond this table. Verbs marked "not supported" are confirmed
+`init()` — do not invent verb names beyond this table. Verbs marked "no equivalent" are confirmed
 PRD Non-Goals (`docs/prd/aws-cloudformation-component.md`); don't imply a workaround exists beyond
 what's stated.
 
 | Rain command | Atmos-native equivalent | Notes |
 |---|---|---|
-| `rain deploy` | `atmos aws cloudformation deploy <component> -s <stack>` | `deploy` = `apply` with `--auto-approve` implied, matching `atmos terraform deploy` |
-| `rain diff` | `atmos aws cloudformation diff <component> -s <stack>` (or `plan`) | `plan`/`diff` are the same operation under different names; both create-and-render a changeset without executing it |
-| `rain fmt` | `atmos aws cloudformation fmt <component> -s <stack> [--check]` | Native comment-preserving YAML round-trip — there is no `cfn-format` binary to shell out to, since Rain's own formatter was archived with Rain |
-| `rain cat` | `atmos aws cloudformation get template <component> -s <stack> [--original]` | `get template` fetches the deployed stack's template via `GetTemplate`; the verb shape follows `helm get manifest`, not Unix `cat` |
-| `rain ls` | `atmos aws cloudformation list -s <stack>` | Account-wide `ListStacks`, annotated with whether each stack matches a configured component's `stack_name`; not scoped to a single component |
-| `rain log` | `atmos aws cloudformation logs <component> -s <stack> [--chart]` | Combined event log across a stack and its nested stacks |
+| `rain deploy` | `atmos aws cloudformation deploy <component> -s <stack>` | `deploy` = `apply` with `--auto-approve` implied, matching `atmos terraform deploy`. `rain deploy --no-exec` → `changeset create`; `rain deploy --changeset <stack> <cs>` → `changeset execute --changeset-name=<cs>`. Flag mapping: see below |
+| `rain diff <from> <to>` | Not the same operation. Atmos `diff` (alias `plan`) | `rain diff` compares two templates and never creates a changeset. Atmos `diff`/`plan` creates a changeset against the deployed stack and renders it without executing |
+| `rain fmt` | `atmos aws cloudformation fmt <component> -s <stack> [--check]` | `rain fmt --verify` → `fmt --check`. Atmos `fmt` writes in place by default. It strips blank lines between sections, so a Rain-formatted template shows as unformatted once. Native comment-preserving YAML round-trip; no formatter binary |
+| `rain cat` | `atmos aws cloudformation get template <component> -s <stack> [--original]` | Fetches the deployed stack's template. Default = processed template (like `rain cat --transformed`); `--original` = what was submitted (like `rain cat --unformatted`) |
+| `rain ls` | `atmos aws cloudformation list [-s <stack>]` | One region only (`--region`), annotated managed/unmanaged against configured components; `-s` is optional. Rain's `--all` (all regions) has no equivalent. Rain's `--changeset` → `changeset list` |
+| `rain logs` (not `rain log`) | `atmos aws cloudformation logs <component> -s <stack> [--chart]` | Both have `--chart` (Rain: HTML Gantt) and include nested stacks by default |
 | `rain watch` | `atmos aws cloudformation watch <component> -s <stack>` | Attaches to a stack's in-progress (or already-terminal) operation and streams events |
-| `rain tree` | `atmos aws cloudformation tree <component> -s <stack>` | Nested-stack/resource dependency graph |
-| `rain rm` | `atmos aws cloudformation delete <component> -s <stack>` | Respects `termination_protection`; never silently disables it (`--disable-termination-protection` is an explicit escape hatch) |
-| `rain bootstrap` | `atmos aws cloudformation backend create <component> -s <stack>` | Provisions the S3 artifact bucket the component's `kind: aws/s3` provision target references — same registered S3 backend provisioner `atmos terraform backend create` uses. Opt into automatic provisioning with `provision.backend.enabled: true` instead of an explicit bootstrap step, if preferred |
-| `rain build` | Not supported — use [`atmos scaffold`](https://atmos.tools) | Skeleton-template generation is dev-time code generation, not a component-type concern (PRD Non-Goal) |
-| `rain forecast` | Not supported — use `plan`/`diff` + `validate` | Changeset review plus server-side `ValidateTemplate` cover the practical "will this deploy work" question (PRD Non-Goal) |
-| `rain cc` (Cloud Control API passthrough) | Not supported | Niche even within Rain; no equivalent planned (PRD Non-Goal) |
+| `rain tree` | Not equivalent (Atmos `tree` is different) | Rain `tree` is a local-template dependency graph of Parameters/Resources/Outputs (`--dot`). Atmos `tree <component> -s <stack>` is a *deployed* nested-stack tree (recurses `AWS::CloudFormation::Stack` only) |
+| `rain rm` | `atmos aws cloudformation delete <component> -s <stack>` | Respects `termination_protection`; never silently disables it (`--disable-termination-protection` is an explicit escape hatch). A stack that no longer exists reports "nothing to delete" even with `termination_protection: true` |
+| `rain stackset deploy` | `atmos aws cloudformation stackset create\|update <component> -s <stack>` | Needs a `kind: aws/stackset` provision target (`accounts`, `regions`, `permission_model`). Rain's `--accounts`/`--regions` → those target fields. `--admin` (delegated admin, `CallAs`) is not supported by Atmos today |
+| `rain stackset ls` | `atmos aws cloudformation stackset instances <component> -s <stack>` | |
+| `rain stackset rm` | `atmos aws cloudformation stackset delete <component> -s <stack>` | |
+| `rain bootstrap` | `atmos aws cloudformation backend create <component> -s <stack>` | Creates the S3 artifact bucket the `kind: aws/s3` target references (same provisioner as `atmos terraform backend create`). Rain also auto-creates `rain-artifacts-<account>-<region>` on deploy; Atmos auto-creates only with `provision.backend.enabled: true` (apply/deploy only) |
+| `rain console` | `atmos auth console` | Credentialed console access; no stack-scoped deep link (PRD Non-Goal) |
+| `rain info` | `atmos auth whoami` / `atmos describe config` | |
+| `rain build` | No equivalent | Schema/Bedrock template codegen. Do NOT map to `atmos scaffold`: scaffold ships no CloudFormation template (PRD Non-Goal) |
+| `rain forecast` | No equivalent | Closest practical check: `plan`/`diff` + `validate` (PRD Non-Goal) |
+| `rain merge`, `rain module` | No equivalent | Template composition; see the `Module` row above |
+| `rain cc` (Cloud Control API passthrough) | No equivalent | PRD Non-Goal |
 | (no Rain equivalent) | `atmos aws cloudformation output <component> -s <stack> [key]` | Renders deployed stack Outputs — the most-requested Rain gap per this PRD's user research. Also available as `!aws.cloudformation.output` for cross-component consumption |
-| (no Rain equivalent) | `atmos aws cloudformation drift detect` / `drift describe` | Native `DetectStackDrift`/`DescribeStackResourceDrifts` — Rain only implied drift support through its stack-monitoring workflow, with no dedicated commands |
-| (no Rain equivalent) | `atmos aws cloudformation changeset create/execute/list/delete` | Manual changeset control for two-phase deploy pipelines; `apply`/`deploy` already do this implicitly |
-| (no Rain equivalent) | `atmos aws cloudformation stackset create/update/delete/instances` | Multi-account/multi-region orchestration |
+| (no Rain equivalent) | `atmos aws cloudformation drift detect` / `drift describe` | Native `DetectStackDrift`/`DescribeStackResourceDrifts` |
+| (no Rain equivalent) | `atmos aws cloudformation changeset create/execute/list/delete` | Manual changeset control for two-phase pipelines; `apply`/`deploy` already do this implicitly. `changeset create`/`execute` fire `before`/`after.aws/cloudformation.changeset-create` / `changeset-execute` hook events (list them in a packaging hook's `events:` for the `rain deploy --no-exec` workflow) |
 
-**Confidence note for the agent**: the left column above is limited to Rain verbs this PRD's own
-Non-Goals/verb-surface sections explicitly name (`fmt`, `cat`, `ls`, `bootstrap`, `log`, `rm`,
-`deploy`, `diff`, `watch`, `tree`, `build`, `forecast`, `cc`). Rain's full historical CLI may have
-had additional niche subcommands (e.g. an `info`/`merge`-style command) — do not assert a mapping
-for a Rain verb not confirmed here; tell the user "I'm not certain that verb existed / what it
-mapped to" rather than guessing.
+### `rain deploy` flag mapping
+
+| Rain flag | Atmos |
+|---|---|
+| `--keep` | `disable_rollback: true` |
+| `--role-arn` | `role_arn` |
+| `--termination-protection` | `termination_protection: true` |
+| `--detach`, `--nested-change-set`, `--ignore-unknown-params` | No equivalent |
+
+**Confidence note for the agent**: this table reflects Rain's own docs and a 2026-10-08 field test
+(Rain was archived 2026-07-29): `deploy`, `diff`, `fmt`, `cat`, `ls`, `logs`, `tree`, `rm`,
+`stackset deploy|ls|rm`, `bootstrap`, `console`, `info`, `build`, `forecast`, `merge`, `module`,
+`cc`. Do not assert a mapping for a Rain verb not listed here (`watch` was carried over from the
+PRD, not re-verified); tell the user "I'm not certain that verb existed / what it mapped to"
+rather than guessing.
 
 ## Identifying the User's Shape
 
@@ -182,19 +271,22 @@ mapped to" rather than guessing.
 |---|---|
 | Raw CloudFormation, no Rain (hand-written templates + `aws cloudformation deploy`/console) | Skip the directive table — go straight to [The Minimum-Viable Migration](#the-minimum-viable-migration) |
 | Rain-managed templates with `!Rain::*` directives | Resolve every directive per the [mapping table](#rain-directive-mapping) first, then migrate |
-| Rain + a `rain.yaml`/pkg config for multi-stack orchestration | Config-file orchestration has no Atmos compatibility layer — each stack becomes one `aws/cloudformation` component in stack config; `depends_on`/DAG ordering replaces Rain's own ordering logic |
+| Rain + a Rain config file (`{Parameters: {...}, Tags: {...}}`, `RAIN_VAR_*` / `RAIN_DEFAULT_TAG_*` env defaults) | No config-file compatibility layer — each stack becomes one `aws/cloudformation` component; select the file's maps with `!include <file> .Parameters` / `.Tags`. The `RAIN_*` env defaults have no Atmos equivalent: set `parameters:` / `tags:` in (inheritable) stack config. Use `dependencies.components` for cross-stack ordering |
 
 ## The Minimum-Viable Migration
 
 1. **Install Atmos.** See `atmos.tools/install`.
 2. **Resolve `!Rain::` directives** in every template being migrated, per the table above. A
-  template still containing `!Rain::*` tags is not valid CloudFormation and will fail at
-  `render`/`validate`.
+  `path:` template still containing `!Rain::*` tags fails locally at
+  `render`/`validate`/`plan`/`apply` with `ErrAwsCloudFormationRainDirective` (directives listed,
+  one hint each).
 3. **Create `atmos.yaml`** pointing `components."aws/cloudformation".base_path` at wherever the
   templates already live — no forced reorganization, same stance as
   [from-native-terraform.md](from-native-terraform.md).
 4. **Create one stack file** for one environment, pointing `path:` at the existing (now
-  directive-free) template file:
+  directive-free) template file. Set the region with `settings.aws_cloudformation.region` (then the
+  active identity's region, then the AWS SDK chain; a component `env` `AWS_REGION` does not
+  override it):
   ```yaml
   # stacks/dev.yaml
   components:
@@ -202,6 +294,9 @@ mapped to" rather than guessing.
       vpc:
         path: template.yaml
         stack_name: acme-plat-dev-vpc
+        settings:
+          aws_cloudformation:
+            region: us-east-2
         parameters: !include ../params/dev-parameters.json
         capabilities:
           - CAPABILITY_IAM
@@ -217,8 +312,9 @@ mapped to" rather than guessing.
 
   A malformed entry (missing `ParameterKey`, unknown field, wrong type) fails with the entry's
   index instead of deploying template defaults. `UsePreviousValue: true` (without a
-  `ParameterValue`) is accepted and keeps the stack's current value; it only works when updating
-  an existing stack. For a Rain config file, select the map instead of including the whole file:
+  `ParameterValue`) is accepted and keeps the stack's current value; it works only on updates. On a
+  first deployment (CREATE) it fails locally with a hint. For a Rain config file, select the map
+  instead of including the whole file:
 
   ```yaml
   parameters: !include ../params/rain-config.yaml .Parameters
@@ -228,9 +324,25 @@ mapped to" rather than guessing.
   Including a whole Rain config file as `parameters:` fails: `Parameters` and `Tags` would be read
   as two parameters with map values.
 
-5. **Run `atmos aws cloudformation plan vpc -s dev`** and compare the predicted changeset against
-  what `rain diff`/`aws cloudformation deploy --no-execute-changeset` produced before.
-6. **Run `atmos aws cloudformation deploy vpc -s dev`** and confirm the end-of-deploy Outputs
+  `tags:` must be a map. An AWS CLI `[{Key, Value}]` list or a `!tags` string list is rejected with
+  a hint. Reshape an AWS CLI tags file with:
+
+  ```yaml
+  tags: !include 'tags.json ".[] as $t ireduce ({}; .[$t.Key] = $t.Value)"'
+  ```
+
+  `tags: !labels` is the explicit bridge from `metadata.labels`; labels and tags never flow into
+  each other automatically.
+
+5. **Authenticate and dry-run.** Pass `--identity` (or configure a default identity;
+  see the atmos-auth skill) in place of Rain's ambient credentials. Run
+  `atmos aws cloudformation plan vpc -s dev --dry-run` first: no AWS calls, static rules enforced
+  (unknown `--target`, S3 target missing `bucket`/`region`, oversize template with no packaging
+  target). It defers YAML functions, templates, source downloads, authentication, and hooks.
+6. **Run `atmos aws cloudformation plan vpc -s dev`** and compare the predicted changeset against
+  what `rain deploy --no-exec`/`aws cloudformation deploy --no-execute-changeset` produced before
+  (not `rain diff`, which compares two templates).
+7. **Run `atmos aws cloudformation deploy vpc -s dev`** and confirm the end-of-deploy Outputs
   summary matches what the stack already had deployed (via `rain cat`/console) before the
   migration.
 
@@ -244,8 +356,8 @@ are valid YAML; quoting this key is optional.
 
 ### Secrets go into `parameters:`, not `env:`
 
-SDK-native execution means there is no subprocess to receive `env:` the way Rain (which shells out
-to the `aws` CLI) does. `NoEcho` template parameters fed with `!secret` in `parameters:` are the
+Atmos is SDK-native: there is no subprocess, so a component `env:` cannot carry parameters into
+anything. `NoEcho` template parameters fed with `!secret` in `parameters:` are the
 delivery channel, and are masked in every rendered surface (changeset diffs, `describe`, logs) —
 see [from-native-terraform.md](from-native-terraform.md)'s "Common Gotchas" for the equivalent
 Terraform-side pattern, and the [Secrets skill](../../atmos-secrets/SKILL.md) for `!secret` usage.
@@ -262,8 +374,9 @@ change.
 Rain auto-creates its artifact bucket silently on first use. Atmos never does this by default —
 either run `atmos aws cloudformation backend create` explicitly (mirroring `atmos terraform backend
 create`), or set `provision.backend.enabled: true` for the same opt-in auto-provisioning Terraform
-components get. A packaged `apply`/`deploy` against a missing bucket fails with an actionable hint
-rather than a raw S3 error either way — never a surprise resource creation.
+components get (apply/deploy only). Without it, a missing bucket fails on every packaging verb
+(plan/diff/validate/changeset create/apply/deploy) with `ErrAwsCloudFormationBackendMissing` and a
+hint naming `backend create` — never a surprise resource creation.
 
 ## When to Escalate to Other Skills
 
@@ -281,6 +394,9 @@ Same routing as [from-native-terraform.md](from-native-terraform.md)'s equivalen
 - Do not tell a user `!Rain::*` directives "just work" in Atmos, or that there is any
   compatibility shim — there is none.
 - Do not claim the packaging pipeline replicates full `aws cloudformation package`/Rain `pkg` asset
-  rewriting — it currently auto-packages only the template body past the inline size limit.
+  rewriting — it packages only the template body; assets go through `archive` + `publish` hooks
+  with the key passed via `parameters:`. Do not suggest an upload YAML function.
+- Do not map `rain tree` to `atmos aws cloudformation tree`, `rain diff` to `plan`, or `rain build`
+  to `atmos scaffold` as equivalents.
 - Do not invent Atmos verb names beyond the [cross-reference table](#rain--atmos-verb-cross-reference) — verify against `cmd/aws/cloudformation/cloudformation.go`'s `init()` if in doubt.
 - Do not present `aws/cloudformation` as stable/GA — it is explicitly experimental.

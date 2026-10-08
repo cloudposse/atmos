@@ -3,6 +3,7 @@ package parser
 import (
 	"encoding/csv"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/alecthomas/participle/v2/lexer"
@@ -49,6 +50,9 @@ type RandomArgs struct {
 type IncludeArgs struct {
 	Path  string
 	Query string
+	// Eval reports the trailing `| eval` option: YAML functions inside the
+	// included file are evaluated instead of being included as data.
+	Eval bool
 }
 
 // StoreArgs contains the parsed !store arguments.
@@ -282,18 +286,24 @@ func ParseRandom(input string) (RandomArgs, error) {
 	return args, nil
 }
 
-// ParseInclude parses `path [query]` and preserves whitespace in the query.
+// ParseInclude parses `path [query] [| eval]` and preserves whitespace in the
+// query. The only option !include accepts is the valueless `eval`; a pipe that
+// is not followed by it belongs to the yq query (`.items[] | select(.enabled)`).
 func ParseInclude(input string) (IncludeArgs, error) {
-	tokens, err := tokenize(input)
+	head, opts, err := splitOptionsWith(input, includeOptions)
+	if err != nil {
+		return IncludeArgs{}, err
+	}
+	tokens, err := tokenize(head)
 	if err != nil {
 		return IncludeArgs{}, err
 	}
 	if len(tokens) == 0 {
 		return IncludeArgs{}, emptyError()
 	}
-	args := IncludeArgs{Path: unquote(tokens[0].value)}
+	args := IncludeArgs{Path: unquote(tokens[0].value), Eval: opts.eval}
 	if len(tokens) > 1 {
-		args.Query = unquote(rawFrom(input, tokens[1]))
+		args.Query = unquote(rawFrom(head, tokens[1]))
 	}
 	return args, nil
 }
@@ -421,9 +431,31 @@ func invalidArity(values []string, message string) error {
 type options struct {
 	defaultValue *string
 	query        string
+	// eval is the valueless `| eval` option (!include only).
+	eval bool
 }
 
+const (
+	optionDefault = "default"
+	optionQuery   = "query"
+	optionEval    = "eval"
+)
+
+// valueOptions are the `| <keyword> <value>` options most functions accept.
+var valueOptions = map[string]bool{optionDefault: true, optionQuery: true}
+
+// includeOptions are the options !include accepts: only the valueless `eval`.
+var includeOptions = map[string]bool{optionEval: true}
+
 func splitOptions(input string) (string, options, error) {
+	return splitOptionsWith(input, valueOptions)
+}
+
+// splitOptionsWith splits input into its head (the positional arguments) and
+// the trailing `| option ...` clauses, recognizing only the keywords in
+// allowed; a pipe followed by any other word is part of the head (e.g. a yq
+// expression).
+func splitOptionsWith(input string, allowed map[string]bool) (string, options, error) {
 	tokens, err := tokenize(input)
 	if err != nil {
 		return "", options{}, err
@@ -432,15 +464,14 @@ func splitOptions(input string) (string, options, error) {
 		if item.typeName != tokenPipe || index+1 >= len(tokens) {
 			continue
 		}
-		keyword := unquote(tokens[index+1].value)
-		if keyword == "default" || keyword == "query" {
-			return parseOptions(input, tokens, index)
+		if allowed[unquote(tokens[index+1].value)] {
+			return parseOptions(input, tokens, index, allowed)
 		}
 	}
 	return input, options{}, nil
 }
 
-func parseOptions(input string, tokens []token, firstOption int) (string, options, error) {
+func parseOptions(input string, tokens []token, firstOption int, allowed map[string]bool) (string, options, error) {
 	head := strings.TrimSpace(input[:tokens[firstOption].position.Offset])
 	result := options{}
 	for index := firstOption; index < len(tokens); {
@@ -448,32 +479,54 @@ func parseOptions(input string, tokens []token, firstOption int) (string, option
 			return "", options{}, parseError(tokens[index], "expected option delimiter")
 		}
 		keyword := unquote(tokens[index+1].value)
-		if keyword != "default" && keyword != "query" {
-			return "", options{}, parseError(tokens[index+1], "expected default or query option")
+		if !allowed[keyword] {
+			return "", options{}, parseError(tokens[index+1], "expected "+allowedOptionNames(allowed)+" option")
 		}
-		if index+2 >= len(tokens) || tokens[index+2].typeName == tokenPipe {
-			return "", options{}, parseError(tokens[index+1], "expected option value")
-		}
-		next := nextOption(tokens, index+2)
-		if keyword == "default" && index+3 != next {
-			return "", options{}, parseError(tokens[index+3], "default option accepts one value")
-		}
-		end := optionEnd(tokens, index+2)
-		value := unquote(strings.TrimSpace(input[tokens[index+2].position.Offset:end]))
-		if keyword != "default" && value == "" {
-			return "", options{}, parseError(tokens[index+2], "option value must not be empty")
-		}
-		if keyword == "default" {
-			result.defaultValue = &value
-		} else {
-			result.query = value
+		next, err := parseOption(input, tokens, index, keyword, &result)
+		if err != nil {
+			return "", options{}, err
 		}
 		index = next
-		if index == len(tokens) {
-			break
-		}
 	}
 	return head, result, nil
+}
+
+// parseOption consumes one `| keyword [value]` clause starting at the pipe at
+// index, stores it in result, and returns the index of the next clause (or
+// len(tokens) at the end).
+func parseOption(input string, tokens []token, index int, keyword string, result *options) (int, error) {
+	if keyword == optionEval {
+		result.eval = true
+		return index + 2, nil
+	}
+	if index+2 >= len(tokens) || tokens[index+2].typeName == tokenPipe {
+		return 0, parseError(tokens[index+1], "expected option value")
+	}
+	next := nextOption(tokens, index+2)
+	if keyword == optionDefault && index+3 != next {
+		return 0, parseError(tokens[index+3], "default option accepts one value")
+	}
+	end := optionEnd(tokens, index+2)
+	value := unquote(strings.TrimSpace(input[tokens[index+2].position.Offset:end]))
+	if keyword != optionDefault && value == "" {
+		return 0, parseError(tokens[index+2], "option value must not be empty")
+	}
+	if keyword == optionDefault {
+		result.defaultValue = &value
+	} else {
+		result.query = value
+	}
+	return next, nil
+}
+
+// allowedOptionNames renders the allowed keywords for an error message ("default or query").
+func allowedOptionNames(allowed map[string]bool) string {
+	names := make([]string, 0, len(allowed))
+	for name := range allowed {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return strings.Join(names, " or ")
 }
 
 func optionEnd(tokens []token, valueStart int) int {

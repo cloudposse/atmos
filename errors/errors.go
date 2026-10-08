@@ -1747,6 +1747,7 @@ var (
 	ErrAwsCloudFormationTerminationProtectionEnabled            = errors.New("aws/cloudformation stack has termination protection enabled")
 	ErrAwsCloudFormationRetainResourcesNotApplicable            = errors.New("--retain-resources is only valid for a stack in DELETE_FAILED status")
 	ErrAwsCloudFormationBackendTargetsFailed                    = errors.New("aws/cloudformation backend targets could not be inspected")
+	ErrAwsCloudFormationRainDirective                           = errors.New("aws/cloudformation template contains Rain directives, which Atmos does not preprocess")
 )
 
 // Provision-target authentication errors.

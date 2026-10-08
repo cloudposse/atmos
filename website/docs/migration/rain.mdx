@@ -1,0 +1,581 @@
+---
+title: Migrating from Rain
+sidebar_position: 7
+sidebar_label: From Rain
+description: Move Rain-managed CloudFormation stacks to the Atmos aws/cloudformation component without rewriting templates, with a native replacement for every Rain directive and command.
+id: rain
+---
+import Experimental from '@site/src/components/Experimental'
+import FAQItem from '@site/src/components/FAQItem'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import TaskList from '@site/src/components/TaskList'
+import Terminal from '@site/src/components/Terminal'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+Move the CloudFormation stacks you deploy with Rain to Atmos. Your templates, parameter files,
+and deployed stacks stay where they are. This guide maps every Rain directive, config file, and
+command to its Atmos-native equivalent, so you end up with Atmos conventions rather than a Rain
+emulation.
+</Intro>
+
+:::tip Using an AI Coding Assistant?
+Install the `atmos-migration` skill so Claude Code, Cursor, GitHub Copilot, and other AI coding
+assistants can apply this guide directly to your repository:
+
+```shell
+atmos ai skill install atmos-migration
+```
+
+See [AI Agent Skills](/ai/skills) for details.
+:::
+
+<Experimental />
+
+## Why Migrate from Rain
+
+[Rain was archived in July 2026](https://github.com/aws-cloudformation/rain). The existing
+releases still run, but nothing ships after them. If Rain is how your team deploys CloudFormation,
+the question is what replaces it, and Atmos answers it with a native `aws/cloudformation`
+component type. Atmos talks to the CloudFormation API through the AWS SDK, so there is no Rain,
+`aws`, or `sam` binary involved, and your stacks become components in the same stack manifests,
+inheritance, and CI workflows the rest of your infrastructure uses.
+
+The migration is parity, not compatibility. Rain preprocessed templates and resolved `!Rain::`
+directives before deployment. Atmos sends a file template to CloudFormation exactly as written and
+offers a native way to accomplish what each directive did. Templates that are plain CloudFormation
+need no changes at all.
+
+## Key Differences at a Glance
+
+| Concern | Rain | Atmos |
+|---|---|---|
+| Stack name | Command argument | `stack_name` on the component |
+| Parameters | `--params`, `--config`, `RAIN_VAR_*` | `parameters:` map, or `!include` of your existing parameter file |
+| Tags | `--tags`, `--config`, `RAIN_DEFAULT_TAG_*` | `tags:` map, or `tags: !labels` to carry Atmos labels onto the stack |
+| Region and credentials | `--region`, `--profile` | `settings.aws_cloudformation.region` and [Atmos Auth](/stacks/auth) or the SDK credential chain |
+| Template directives | `!Rain::Env`, `!Rain::Include`, `!Rain::Embed`, `!Rain::S3` | YAML functions inside an included template, hooks for uploads |
+| Artifact bucket | `rain-artifacts-<account>-<region>`, created on first deploy | A `kind: aws/s3` provision target, created by `backend create` or automatically with `provision.backend.enabled: true` |
+| Asset packaging | `rain pkg` rewrites the template | `archive` and `publish` hook steps upload assets; the template references them through parameters |
+| Environments | One invocation per environment | One stack manifest per environment, sharing a catalog through imports and inheritance |
+| Stack outputs | Console or `aws cloudformation describe-stacks` | `atmos aws cloudformation output`, plus `!aws.cloudformation.output` from other components |
+| Drift | Not a Rain feature | `drift detect` and `drift describe` |
+
+## Directory Structure Comparison
+
+<Tabs>
+  <TabItem value="before" label="Before (Rain)">
+```text
+.
+├── templates/
+│   ├── app.yaml                 # !Rain::Env, !Rain::Embed, !Rain::Include, !Rain::S3
+│   └── fragments/tags.yaml
+├── src/handler.py               # embedded by !Rain::Embed
+├── dist/worker/                 # uploaded by !Rain::S3
+├── params/
+│   ├── dev.json                 # AWS CLI parameter array
+│   └── rain-config.yaml         # {Parameters: {...}, Tags: {...}}
+└── deploy.sh                    # rain pkg + rain deploy per environment
+```
+  </TabItem>
+  <TabItem value="after" label="After (Atmos)">
+```text
+.
+├── atmos.yaml
+├── components/cloudformation/app/
+│   ├── template.yaml            # plain CloudFormation
+│   └── src/handler.py
+├── params/                      # unchanged; read with !include
+│   ├── dev.json
+│   └── rain-config.yaml
+└── stacks/
+    ├── catalog/app.yaml         # shared component config and packaging hook
+    └── deploy/
+        ├── dev.yaml
+        └── staging.yaml
+```
+  </TabItem>
+</Tabs>
+
+Nothing forces this layout. Point `components."aws/cloudformation".base_path` at wherever your
+templates already live and keep the parameter files where they are.
+
+## Concept Mapping
+
+### Rain Directives
+
+Rain resolved these directives by rewriting the template before it reached CloudFormation. Atmos
+never rewrites a file template, so a template that still contains a directive fails locally, before
+any AWS call, with the replacement named for each directive:
+
+```text
+Error: aws/cloudformation template contains Rain directives, which Atmos does not preprocess
+
+components/cloudformation/app/template.yaml uses Rain directives (Constant, Env, Embed, S3).
+
+💡 Replace !Rain::Env with `!env NAME` in the component's parameters:, or inside the template
+   when it is included with template: !include template.yaml | eval
+💡 Migration guide: https://atmos.tools/migration/rain
+```
+
+| Directive | What Rain did | Atmos-native replacement |
+|---|---|---|
+| `!Rain::Env NAME` | Inserted an environment variable | A CloudFormation parameter fed by `!env NAME` in `parameters:`, or `!env NAME` inside the template when it is included with `\| eval` |
+| `!Rain::Constant NAME`, `${Rain::NAME}` | Inserted a value from the template's `Rain: Constants:` section | A CloudFormation parameter fed from stack `vars:`, or `{{ .vars.name }}` in an inline template |
+| `!Rain::Include file.yaml` | Merged a YAML or JSON fragment | `!include file.yaml` inside the template, included with `\| eval` |
+| `!Rain::Embed file` | Inlined a file as a string | `!include file` inside the template, included with `\| eval`; a non-YAML file loads as a string |
+| `!Rain::S3 path`, `!Rain::S3Http path` | Uploaded a file or directory and inserted its S3 URI or URL | `archive` and `publish` hook steps upload the asset; the template reads the bucket and key from parameters |
+| `!Rain::Module` | Client-side template composition (experimental in Rain) | No equivalent. Expand modules in your build step, or use AWS CDK, and point `path` at the output |
+
+Two of these replacements rely on the `| eval` option of [`!include`](/functions/yaml/include).
+An included file is data by default, so its YAML functions are not evaluated. Adding `| eval`
+turns that on for the included template, and CloudFormation's own short-form intrinsics (`!Ref`,
+`!Sub`, `!GetAtt`) are preserved either way.
+
+#### Environment Values and Constants
+
+<Tabs>
+  <TabItem value="before" label="Before (Rain)">
+```yaml
+Rain:
+  Constants:
+    MarkerPrefix: /acme/app
+Resources:
+  Marker:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "${Rain::MarkerPrefix}/${Stage}/owner"
+      Type: String
+      Value: !Rain::Env DEPLOY_OWNER
+```
+  </TabItem>
+  <TabItem value="after" label="After (Atmos)">
+```yaml
+# components/cloudformation/app/template.yaml — plain CloudFormation
+Parameters:
+  Stage:
+    Type: String
+  MarkerPrefix:
+    Type: String
+  DeployOwner:
+    Type: String
+Resources:
+  Marker:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "${MarkerPrefix}/${Stage}/owner"
+      Type: String
+      Value: !Ref DeployOwner
+```
+
+```yaml
+# stacks/deploy/dev.yaml — the values come from stack configuration
+parameters:
+  Stage: "{{ .vars.stage }}"
+  MarkerPrefix: /acme/app
+  DeployOwner: !env DEPLOY_OWNER
+```
+  </TabItem>
+</Tabs>
+
+Turning a directive into a CloudFormation parameter keeps the template plain, which is the most
+portable outcome. An unset variable without a default resolves to an empty string and logs a
+warning, so give `!env` a default (`!env DEPLOY_OWNER platform`) when an empty value would be a
+mistake.
+
+#### Included Fragments and Embedded Files
+
+When you would rather keep the directives' shape, include the template into `template:` with
+`| eval` and use Atmos functions in the same places Rain used directives:
+
+<Tabs>
+  <TabItem value="before" label="Before (Rain)">
+```yaml
+Resources:
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      Tags: !Rain::Include fragments/tags.yaml
+  Function:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role: !GetAtt Role.Arn
+      Code:
+        ZipFile: !Rain::Embed ../src/handler.py
+```
+  </TabItem>
+  <TabItem value="after" label="After (Atmos)">
+```yaml
+# stacks/catalog/app.yaml
+components:
+  "aws/cloudformation":
+    app:
+      template: !include ../../components/cloudformation/app/template.yaml | eval
+```
+
+```yaml
+# components/cloudformation/app/template.yaml
+Resources:
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      Tags: !include ../../components/cloudformation/app/fragments/tags.yaml
+  Function:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role: !GetAtt Role.Arn
+      Code:
+        ZipFile: !include ../../components/cloudformation/app/src/handler.py
+```
+  </TabItem>
+</Tabs>
+
+Paths inside the included template resolve like paths in the stack manifest that includes it:
+`./` and `../` relative to that manifest, bare paths relative to `base_path`.
+
+#### Uploaded Assets
+
+`!Rain::S3` uploaded a file or directory during deployment and wrote the location into the
+template. Atmos keeps uploads out of the template and in a hook, because YAML functions only read
+values and never change infrastructure. The hook runs before `apply` and before
+`changeset create`, and the template reads the bucket and key through parameters:
+
+<Tabs>
+  <TabItem value="before" label="Before (Rain)">
+```yaml
+Resources:
+  Worker:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code: !Rain::S3
+        Path: ../dist/worker
+        BucketProperty: S3Bucket
+        KeyProperty: S3Key
+        Zip: true
+```
+  </TabItem>
+  <TabItem value="after" label="After (Atmos)">
+```yaml
+# stacks/catalog/app.yaml
+components:
+  "aws/cloudformation":
+    app:
+      path: template.yaml
+      parameters:
+        WorkerBucket: "acme-plat-cfn-artifacts-{{ .vars.stage }}"
+        WorkerKey: "lambda/worker-{{ .vars.stage }}.zip"
+      provision:
+        targets:
+          artifacts:
+            kind: aws/s3
+            bucket: "acme-plat-cfn-artifacts-{{ .vars.stage }}"
+            region: us-east-1
+      hooks:
+        package-worker:
+          events:
+            - before.aws/cloudformation.apply
+            - before.aws/cloudformation.changeset-create
+          kind: steps
+          with:
+            - name: archive
+              type: archive
+              source: dist/worker/
+              destination: .build/worker.zip
+              mtime: epoch
+            - name: publish
+              type: publish
+              source: .build/worker.zip
+              destination: "lambda/worker-{{ .vars.stage }}.zip"
+              target: artifacts
+```
+
+```yaml
+# components/cloudformation/app/template.yaml
+Resources:
+  Worker:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: !Ref WorkerBucket
+        S3Key: !Ref WorkerKey
+```
+  </TabItem>
+</Tabs>
+
+The `publish` step skips uploads whose content has not changed, so repeated deployments report
+`0 uploaded, 1 unchanged`. See [asset packaging hooks](/stacks/components/aws-cloudformation#asset-packaging-hooks)
+for the full pattern.
+
+### Parameter Files and Rain Config Files
+
+An AWS CLI parameter array is accepted as-is, and the `Parameters` and `Tags` sections of a Rain
+config file are selected with a YQ expression:
+
+<File title="stacks/deploy/dev.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    app:
+      parameters: !include ../../params/dev.json
+```
+</File>
+
+<File title="stacks/deploy/staging.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    app:
+      parameters: !include ../../params/rain-config.yaml .Parameters
+      tags: !include ../../params/rain-config.yaml .Tags
+```
+</File>
+
+Including a whole Rain config file as `parameters` is an error, because `Parameters` and `Tags`
+would be read as two parameters with map values. Values Rain took from `RAIN_VAR_*` and
+`RAIN_DEFAULT_TAG_*` environment variables belong in the catalog as `parameters` and `tags`, where
+every environment inherits them.
+
+### Tags
+
+Stack tags are a map. An AWS CLI tags file is a list of `Key`/`Value` objects and is rejected
+rather than silently dropped. Reshape it with a YQ expression, or carry your Atmos
+`metadata.labels` onto the stack explicitly:
+
+```yaml
+tags: !include '../../params/tags.json ".[] as $t ireduce ({}; .[$t.Key] = $t.Value)"'
+# or
+tags: !labels
+```
+
+Atmos labels and tags select components in Atmos commands; they never become CloudFormation tags
+unless you write `tags: !labels`.
+
+### The Artifact Bucket
+
+Rain created `rain-artifacts-<account>-<region>` the first time a deployment needed it. Atmos
+uses the `kind: aws/s3` provision target you declare, and creates it in one of two explicit ways:
+
+```shell
+atmos aws cloudformation backend create app -s dev
+```
+
+or, for the same create-on-demand behavior Rain had, with `provision.backend.enabled: true` on the
+component, which makes `apply` and `deploy` create a missing bucket. Preview commands never create
+it; they fail with a hint naming the command that will. Templates over the 51,200-byte inline limit
+are uploaded to this bucket automatically on every command that submits a template.
+
+## CLI Command Comparison
+
+| Rain | Atmos | Notes |
+|---|---|---|
+| `rain deploy <template> <stack>` | [`apply`](/cli/commands/aws/cloudformation/apply) or [`deploy`](/cli/commands/aws/cloudformation/deploy) | `apply` previews the changeset and prompts; `deploy` auto-approves |
+| `rain deploy --no-exec` | [`changeset create`](/cli/commands/aws/cloudformation/changeset/create) | Prints the changeset name and keeps it; fires the `changeset-create` hook events |
+| `rain deploy --changeset <stack> <name>` | [`changeset execute --changeset-name=<name>`](/cli/commands/aws/cloudformation/changeset/execute) | |
+| `rain deploy --keep` | `disable_rollback: true` | Component field |
+| `rain deploy --role-arn` | `role_arn` | Component field |
+| `rain deploy --termination-protection` | `termination_protection: true` | `delete` then requires `--disable-termination-protection` |
+| `rain diff <from> <to>` | [`plan` / `diff`](/cli/commands/aws/cloudformation/diff) | Different operation: Rain compared two templates, Atmos previews a changeset against the deployed stack |
+| `rain fmt` | [`fmt`](/cli/commands/aws/cloudformation/fmt) | Formats in place; `--check` is Rain's `--verify`. Blank lines between sections are removed |
+| `rain cat <stack>` | [`get template`](/cli/commands/aws/cloudformation/get/template) | `--original` returns the submitted template, like `rain cat --unformatted` |
+| `rain ls` | [`list`](/cli/commands/aws/cloudformation/list) | One region per call; marks which stacks match an Atmos component |
+| `rain ls --changeset` | [`changeset list`](/cli/commands/aws/cloudformation/changeset/list) | |
+| `rain logs <stack>` | [`logs`](/cli/commands/aws/cloudformation/logs) | `--chart` renders a per-resource timeline in the terminal; `--follow` streams |
+| `rain watch <stack>` | [`watch`](/cli/commands/aws/cloudformation/watch) | |
+| `rain tree <template>` | [`tree`](/cli/commands/aws/cloudformation/tree) | Different operation: Rain graphed a local template, Atmos shows deployed nested stacks |
+| `rain rm <stack>` | [`delete`](/cli/commands/aws/cloudformation/delete) | Prompts; respects termination protection |
+| `rain rm --changeset` | [`changeset delete`](/cli/commands/aws/cloudformation/changeset/delete) | |
+| `rain bootstrap` | [`backend create`](/cli/commands/aws/cloudformation/backend/create) | |
+| `rain pkg` | Hook steps | See [Uploaded Assets](#uploaded-assets) |
+| `rain stackset deploy` | [`stackset create` / `stackset update`](/cli/commands/aws/cloudformation/stackset/create) | Accounts and regions come from a `kind: aws/stackset` target; delegated admin is not supported |
+| `rain stackset ls` | [`stackset instances`](/cli/commands/aws/cloudformation/stackset/instances) | |
+| `rain stackset rm` | [`stackset delete`](/cli/commands/aws/cloudformation/stackset/delete) | |
+| `rain console` | [`atmos auth console`](/cli/commands/auth/console) | |
+| `rain info` | `atmos auth whoami`, `atmos describe config` | |
+| `rain forecast`, `rain build`, `rain merge`, `rain module`, `rain cc` | No equivalent | Keep a build step that emits plain CloudFormation |
+| (none) | [`output`](/cli/commands/aws/cloudformation/output), [`drift detect`](/cli/commands/aws/cloudformation/drift/detect), [`validate`](/cli/commands/aws/cloudformation/validate) | New verbs Rain never had |
+
+## Migration Steps
+
+The examples use component `app`, Atmos stack `dev`, and CloudFormation stack `acme-plat-dev-app`.
+Replace them with your names. Where a step references an existing deployment, match its stack name,
+account, region, and parameter values, because a different name or region selects a different stack.
+
+### Step 1: Install Atmos and Authenticate
+
+```shell
+brew install atmos
+```
+
+See [Installation](/install) for other platforms. Configure an [Atmos identity](/stacks/auth) for
+the account, or keep using the AWS SDK credential chain (`AWS_PROFILE` in the shell works). Every
+command below accepts `--identity=<name>` when more than one identity is configured.
+
+### Step 2: Create a Minimal atmos.yaml
+
+<File title="atmos.yaml">
+```yaml
+base_path: .
+
+components:
+  "aws/cloudformation":
+    base_path: components/cloudformation
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{ .vars.stage }}"
+
+templates:
+  settings:
+    enabled: true
+```
+</File>
+
+### Step 3: Resolve Rain Directives
+
+Skip this step for plain CloudFormation templates. For each directive, pick its replacement from
+[Rain Directives](#rain-directives): a CloudFormation parameter fed from stack configuration, an
+included template with `| eval`, or a packaging hook. Running any command on a template that still
+has directives tells you which ones remain.
+
+### Step 4: Describe the Stack in a Manifest
+
+<File title="stacks/catalog/app.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    app:
+      metadata:
+        type: abstract
+      path: template.yaml
+      stack_name: "acme-plat-{{ .vars.stage }}-app"
+      capabilities:
+        - CAPABILITY_IAM
+      settings:
+        aws_cloudformation:
+          region: us-east-1
+```
+</File>
+
+<File title="stacks/deploy/dev.yaml">
+```yaml
+import:
+  - catalog/app
+
+vars:
+  stage: dev
+
+components:
+  "aws/cloudformation":
+    app:
+      metadata:
+        type: real
+      parameters: !include ../../params/dev.json
+      tags: !include ../../params/rain-config.yaml .Tags
+```
+</File>
+
+Add `termination_protection`, `role_arn`, `stack_policy`, or `notification_arns` here if the
+existing deployment uses them. See the
+[CloudFormation component reference](/stacks/components/aws-cloudformation) for every field.
+
+### Step 5: Preview, Apply, Verify
+
+Check the configuration without touching AWS:
+
+<Terminal>
+```shell
+atmos aws cloudformation plan app -s dev --dry-run
+```
+</Terminal>
+
+Then preview against the real stack. Atmos creates a changeset, renders it, and removes it:
+
+<Terminal>
+```shell
+atmos aws cloudformation plan app -s dev
+```
+</Terminal>
+
+```text
+Changes for acme-plat-dev-app: 0 resources
+acme-plat-dev-app: no changes (changeset would be a no-op)
+```
+
+For an existing stack, no changes is the result you want. Review any replacement or deletion before
+you apply:
+
+<Terminal>
+```shell
+atmos aws cloudformation apply app -s dev
+atmos aws cloudformation output app -s dev
+```
+</Terminal>
+
+For CI or scripts, use `deploy`, which is `apply` with `--auto-approve`. In a non-interactive shell
+without `--auto-approve`, `apply` stops with an error before changing anything.
+
+## Migration Checklist
+
+<TaskList>
+- [ ] Install Atmos and configure credentials for the account
+- [ ] Match each existing stack's name, account, region, and parameter values
+- [ ] Resolve every Rain directive, or let the local error list the ones that remain
+- [ ] Reuse parameter files and Rain config sections with `!include`
+- [ ] Declare the artifact bucket as a provision target and create it, or enable automatic provisioning
+- [ ] Move `rain pkg` uploads into an `archive` + `publish` hook subscribed to the apply and changeset-create events
+- [ ] Run a dry run, then a real plan, and expect no changes for an existing stack
+- [ ] Apply, then verify outputs and tags
+- [ ] Update scripts for the new verbs, flags, and confirmation behavior
+- [ ] Repeat per environment through imports and inheritance
+</TaskList>
+
+## What Atmos Won't Do
+
+- Preprocess `!Rain::` directives or Rain modules. A template that still has them fails locally
+  with the replacement named for each.
+- Upload assets from inside a template. Uploads happen in hook steps, and YAML functions never
+  change infrastructure.
+- Reproduce `rain forecast`, `rain build`, `rain merge`, or Cloud Control passthrough.
+- Compare two local templates the way `rain diff` did, or graph a local template the way
+  `rain tree` did. The Atmos verbs of the same name work against the deployed stack.
+- Deploy StackSets with delegated administration.
+
+## Common Questions
+
+<FAQItem question="Do I need to change my CloudFormation templates?">
+Plain CloudFormation templates work unchanged, including short-form intrinsics. Only `!Rain::`
+directives need a replacement, and the error that reports them names it.
+</FAQItem>
+
+<FAQItem question="Can I keep my parameters JSON file?">
+Yes. Include the AWS CLI parameter array directly with `!include`. For a Rain config file, select
+`.Parameters` and `.Tags` separately.
+</FAQItem>
+
+<FAQItem question="What happens to the artifact bucket Rain created?">
+Nothing. Declare the bucket you want Atmos to use as a `kind: aws/s3` provision target. You can
+point it at the existing `rain-artifacts-<account>-<region>` bucket or create a new one with
+`backend create`.
+</FAQItem>
+
+<FAQItem question="Is there a Rain CLI compatibility mode?">
+No. The command comparison above maps each verb, and the flags, output, and confirmation behavior
+differ. The goal is parity through Atmos conventions, not a Rain emulation.
+</FAQItem>
+
+<FAQItem question="Why does a previously formatted template show as unformatted?">
+Atmos `fmt` removes blank lines between top-level sections. Run `fmt` once; subsequent `--check`
+runs pass.
+</FAQItem>
+
+## Next Steps
+
+- [CloudFormation component configuration](/stacks/components/aws-cloudformation)
+- [CloudFormation commands](/cli/commands/aws/cloudformation)
+- [The `!include` function](/functions/yaml/include)
+- [Hooks](/stacks/hooks)
+- [Component dependencies](/stacks/dependencies/components)

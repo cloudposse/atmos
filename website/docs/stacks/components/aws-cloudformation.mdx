@@ -79,7 +79,12 @@ dependencies, and be included in affected runs.
       [Inline Templates and Templating](#inline-templates-and-templating).
     - `path` — a **file reference**: the path to a template file, relative to
       the component's base path. Atmos uses the file verbatim: it does not
-      render Go templates or YAML functions in it.
+      render Go templates or YAML functions in it. A file that still contains
+      Rain directives (`!Rain::Env`, `!Rain::Embed`, `${Rain::Constant}`) is
+      rejected before any AWS call, with the Atmos-native replacement named for
+      each directive; see [Migrating from Rain](/migration/rain). To keep the
+      file but use YAML functions inside it, use
+      `template: !include <file> | eval` instead.
 
     Setting both is an error.
   </dd>
@@ -100,7 +105,23 @@ dependencies, and be included in affected runs.
   </dd>
 
   <dt>`tags`</dt>
-  <dd>A map of `key: value` tags applied to the CloudFormation stack (not to be confused with Atmos's own component `tags`/`--tags` selection, which is separate).</dd>
+  <dd>
+    A map of `key: value` tags applied to the CloudFormation stack (not to be
+    confused with Atmos's own component `tags`/`--tags` selection, which is
+    separate). `tags` must be a map of tag names to string values. A list is
+    rejected before any AWS call, whether it is the AWS CLI
+    `[{"Key": ..., "Value": ...}]` form or the string list that `!tags` produces,
+    so a stack is never deployed silently untagged. To reuse an existing AWS CLI
+    tags file, reshape it into a map with `!include`:
+
+    ```yaml
+    tags: !include 'tags.json ".[] as $t ireduce ({}; .[$t.Key] = $t.Value)"'
+    ```
+
+    To carry Atmos `metadata.labels` onto the stack, set `tags: !labels`. The
+    values of `metadata.tags` and `metadata.labels` never flow into stack tags
+    automatically; each stack tag has to be declared here.
+  </dd>
 
   <dt>`stack_policy`</dt>
   <dd>
@@ -250,10 +271,14 @@ These commands fire component hooks:
 | `delete` | `aws/cloudformation.delete` |
 | `drift detect` | `aws/cloudformation.drift-detect` |
 | `drift describe` | `aws/cloudformation.drift-describe` |
+| `changeset create` | `aws/cloudformation.changeset-create` |
+| `changeset execute` | `aws/cloudformation.changeset-execute` |
 
 Prefix the suffix with `before.` or `after.`, such as
-`before.aws/cloudformation.apply`. Other CloudFormation commands do not fire
-hooks. Use `--skip-hooks` to skip all hooks, or `--skip-hooks=name1,name2`
+`before.aws/cloudformation.apply`. The changeset events are separate from
+`apply`, so a hook listed only for `apply` does not fire around
+`changeset create` or `changeset execute`. Other CloudFormation commands,
+including `changeset list` and `changeset delete`, do not fire hooks. Use `--skip-hooks` to skip all hooks, or `--skip-hooks=name1,name2`
 to skip selected hooks. See [Hooks](/stacks/hooks).
 
 ## Component Directory Structure
@@ -285,8 +310,10 @@ A template file referenced by `path:` is used verbatim. Atmos does not render Go
 templates or YAML functions in it, so a `{{ }}` sequence in a file stays literal.
 Use an inline `template:` whenever a template needs per-stack values. Go
 templates work in both the string and map forms; YAML functions apply to values
-in the map form. In the map form, write CloudFormation intrinsic functions in
-their long form, such as `Ref:` and `Fn::GetAtt:`:
+in the map form. CloudFormation's short-form intrinsics (`!Ref`, `!Sub`,
+`!GetAtt`, `!Join`, and the rest) are accepted in the map form and rewritten to
+their long form (`Ref:`, `Fn::Sub:`, `Fn::GetAtt:`) before the template is sent,
+so you can write either spelling:
 
 <File title="stacks/catalog/marker.yaml">
 ```yaml
@@ -305,8 +332,7 @@ components:
               Value: !env MARKER_VALUE
         Outputs:
           ParameterName:
-            Value:
-              Ref: Marker
+            Value: !Ref Marker
       stack_policy:
         body:
           Statement:
@@ -316,6 +342,53 @@ components:
               Resource: "*"
 ```
 </File>
+
+### Keep the template in a file and still use YAML functions
+
+To keep a template as a file on disk and still use Atmos YAML functions inside
+it, include the file into `template:` with the `| eval` option. The file keeps
+its CloudFormation short-form intrinsics, and every Atmos function in it is
+evaluated as if it were written in the manifest:
+
+<File title="stacks/catalog/app.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    app:
+      stack_name: "{{ .vars.stage }}-app"
+      template: !include ../../components/cloudformation/app/template.yaml | eval
+```
+</File>
+
+<File title="components/cloudformation/app/template.yaml">
+```yaml
+Resources:
+  Function:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "app-${Stage}"
+      Role: !GetAtt Role.Arn
+      Code:
+        ZipFile: !include ../../components/cloudformation/app/src/handler.py
+      Tags: !include ../../components/cloudformation/app/tags.yaml
+  Marker:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/app/${Stage}/owner"
+      Type: String
+      Value: !env DEPLOY_OWNER
+```
+</File>
+
+Nested `!include` paths resolve the same way as in the manifest: `./` and `../`
+relative to the stack manifest that includes the template, bare paths relative
+to `base_path`. A non-YAML file loads as a string, which is how a script lands
+in `ZipFile`. Without `| eval`, an included file is data: its CloudFormation
+intrinsics are still preserved, but an Atmos function tag inside it is dropped
+and only its argument remains, per the
+[`!include` contract](/functions/yaml/include#included-content-is-data). The
+`| eval` option is a deliberate opt-in because it lets the included file run any
+YAML function, including `!exec`.
 
 CloudFormation has its own dynamic references that use the same `{{ }}` syntax,
 such as `{{resolve:ssm:/my/param}}`. Escape the opening braces once so that
@@ -373,9 +446,21 @@ resolve from the component directory. Use a new artifact key for each release
 so a code change also changes the CloudFormation parameter.
 
 These hooks run for `diff`/`plan` and `apply`/`deploy`, so a real preview also
-builds and uploads the archive. Dry-run skips hooks. Named changeset creation
-and execution do not fire these events; run packaging as a workflow step before
-creating a changeset in that workflow.
+builds and uploads the archive. Dry-run skips hooks. To package the artifact
+when you create or execute a named changeset, add the changeset events to the
+same hook so the changeset never references an artifact that was not uploaded:
+
+```yaml
+hooks:
+  package-lambda:
+    events:
+      - before.aws/cloudformation.diff
+      - before.aws/cloudformation.apply
+      - before.aws/cloudformation.changeset-create
+```
+
+List `before.aws/cloudformation.changeset-execute` as well if the changeset
+might be created by a different run and you want the archive rebuilt on execute.
 
 The upload uses the component's resolved AWS identity. An S3 delivery target's
 identity applies to template delivery, so grant the component identity access
@@ -657,6 +742,12 @@ reapply versioning, encryption, public-access blocking, and tags.
 The `validate`, `diff`/`plan`, and `changeset create` commands can upload oversized
 templates, but do not create buckets. Create the bucket before running them.
 
+When the bucket does not exist and `provision.backend.enabled` is not set, every
+command that packages a template (`plan`, `diff`, `validate`, `changeset create`,
+`apply`, and `deploy`) stops before uploading. Each reports that the packaging
+bucket does not exist and suggests running `atmos aws cloudformation backend create`
+or setting `provision.backend.enabled: true`.
+
 ### StackSet Targets
 
 ```yaml
@@ -822,5 +913,5 @@ when bypassing a declared identity.
 
 - [CloudFormation command reference](/cli/commands/aws/cloudformation)
 - [CloudFormation project configuration](/cli/configuration/components/aws-cloudformation)
-- [Migrating from Rain](/migration/from-rain)
+- [Migrating from Rain](/migration/rain)
 - [Component dependencies](/stacks/dependencies/components)

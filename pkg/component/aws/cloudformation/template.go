@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/aws/cloudformation/manifest"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -43,7 +44,14 @@ func loadTemplateBody(componentPath string, spec *stackSpec) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%w: %s: %w", errUtils.ErrMissingAwsCloudFormationTemplate, templateFile, err)
 	}
-	return string(data), nil
+	body := string(data)
+	// A template a user brings over from Rain may still carry `!Rain::` directives. CloudFormation
+	// rejects those with a bare "YAML not well-formed" at the API; catch them here, before any
+	// AWS call, and name the Atmos-native replacement for each.
+	if directives := manifest.DetectRainDirectives(body); len(directives) > 0 {
+		return "", manifest.RainDirectiveError(templateFile, directives)
+	}
+	return body, nil
 }
 
 // loadStackPolicyBody reads the component's stack policy file from disk, if configured.

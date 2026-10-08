@@ -77,6 +77,7 @@ func TestAutoProvisionBackendIfEnabled_Disabled_NoOp(t *testing.T) {
 	t.Cleanup(backend.ResetS3ClientFactory)
 	client := &createTrackingS3Client{}
 	backend.SetS3ClientFactory(func(aws.Config, ...func(*s3.Options)) backend.S3ClientAPI { return client })
+	useRealBucketExistenceCheck(t)
 
 	s3cfg := &targetS3Config{Bucket: "my-bucket", Region: "us-east-1"}
 	err := autoProvisionBackendIfEnabled(context.Background(), autoProvisionArgs{
@@ -97,6 +98,7 @@ func TestAutoProvisionBackendIfEnabled_AlreadyExists_NoOp(t *testing.T) {
 	t.Cleanup(backend.ResetS3ClientFactory)
 	client := &createTrackingS3Client{} // HeadBucket succeeds by default => exists.
 	backend.SetS3ClientFactory(func(aws.Config, ...func(*s3.Options)) backend.S3ClientAPI { return client })
+	useRealBucketExistenceCheck(t)
 
 	s3cfg := &targetS3Config{Bucket: "my-bucket", Region: "us-east-1"}
 	err := autoProvisionBackendIfEnabled(context.Background(), autoProvisionArgs{
@@ -116,6 +118,7 @@ func TestAutoProvisionBackendIfEnabled_Missing_Creates(t *testing.T) {
 	t.Cleanup(backend.ResetS3ClientFactory)
 	client := &createTrackingS3Client{fakeS3Client: fakeS3Client{headBucketErr: &types.NotFound{}}}
 	backend.SetS3ClientFactory(func(aws.Config, ...func(*s3.Options)) backend.S3ClientAPI { return client })
+	useRealBucketExistenceCheck(t)
 
 	s3cfg := &targetS3Config{Bucket: "my-bucket", Region: "us-east-1"}
 	err := autoProvisionBackendIfEnabled(context.Background(), autoProvisionArgs{
@@ -139,6 +142,7 @@ func TestAutoProvisionBackendIfEnabled_CreateFails_ReturnsError(t *testing.T) {
 		createBucketErr: errors.New("access denied"),
 	}
 	backend.SetS3ClientFactory(func(aws.Config, ...func(*s3.Options)) backend.S3ClientAPI { return client })
+	useRealBucketExistenceCheck(t)
 
 	s3cfg := &targetS3Config{Bucket: "my-bucket", Region: "us-east-1"}
 	err := autoProvisionBackendIfEnabled(context.Background(), autoProvisionArgs{
@@ -160,6 +164,7 @@ func TestAutoProvisionBackendIfEnabled_ExistenceCheckFails_DefersSilently(t *tes
 	t.Cleanup(backend.ResetS3ClientFactory)
 	client := &createTrackingS3Client{fakeS3Client: fakeS3Client{headBucketErr: errors.New("throttled")}}
 	backend.SetS3ClientFactory(func(aws.Config, ...func(*s3.Options)) backend.S3ClientAPI { return client })
+	useRealBucketExistenceCheck(t)
 
 	s3cfg := &targetS3Config{Bucket: "my-bucket", Region: "us-east-1"}
 	err := autoProvisionBackendIfEnabled(context.Background(), autoProvisionArgs{

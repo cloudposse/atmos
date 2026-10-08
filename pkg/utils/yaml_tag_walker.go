@@ -102,7 +102,28 @@ func dispatchTag(ctx TagContext, n *yaml.Node, policy TagWalkPolicy, file string
 		return false, nil
 	}
 
+	// A registered foreign tag (see yaml_tag_foreign.go) is rewritten in place
+	// into its native long form; the walker then recurses into the rewritten
+	// children so nested tags inside the value are still resolved.
+	if rewrite, ok := lookupForeignTagRewriter(tag); ok {
+		if err := rewrite(n); err != nil {
+			return false, fmt.Errorf("%w: '%s' found in file '%s': %w", errUtils.ErrUnsupportedYamlTag, tag, file, err)
+		}
+		return false, nil
+	}
+
 	if !fntag.IsValidYAML(tag) {
+		// A foreign tag a subsystem recognizes but does not emulate (e.g. a
+		// Rain directive) gets that subsystem's own hint instead of the
+		// generic supported-tags list.
+		if hints := lookupForeignTagHint(tag); len(hints) > 0 {
+			builder := errUtils.Build(errUtils.ErrUnsupportedYamlTag).
+				WithExplanationf("'%s' found in file '%s'", tag, file)
+			for _, hint := range hints {
+				builder = builder.WithHint(hint)
+			}
+			return false, builder.Err()
+		}
 		// Exact message shape preserved verbatim from before this walker was
 		// extracted -- existing tests assert on it via err.Error().
 		supportedTags := strings.Join(fntag.AllYAML(), ", ")

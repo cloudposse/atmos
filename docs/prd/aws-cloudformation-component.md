@@ -330,11 +330,14 @@ accept `--auto-approve` to skip it; `deploy` implies `--auto-approve`, matching 
 
 ### Template Packaging (Rain's `pkg` equivalent — in scope)
 
-Large templates, nested-stack templates, and local assets (e.g. Lambda source) that a CloudFormation
-API call can't accept inline must be uploaded to S3 and the template rewritten to reference them
-before creating a change set — this is what `aws cloudformation package` and Rain's `pkg` do.
-Packaging runs before `plan`, `diff`, explicit `changeset create`, and `apply`/`deploy`, so previews
-use the same packaged template as deployment. The packaging destination is itself **a provision
+Templates over CloudFormation's 51,200-byte inline limit must be uploaded to S3 and referenced by
+`TemplateURL` when creating a change set. Atmos packages the **template body only**; it does not
+rewrite nested-template or local-asset references (Lambda source) the way `aws cloudformation
+package` and Rain's `pkg`/`!Rain::S3` do. Assets are built and uploaded with `archive` + `publish`
+hook steps, with the object key passed to the template through `parameters:`.
+Packaging runs (when the template exceeds the limit or any `kind: aws/s3` target is selected) before
+`plan`, `diff`, `validate`, explicit `changeset create`, and `apply`/`deploy`, so previews use the
+same packaged template as deployment; only `apply`/`deploy` may create the bucket. The packaging destination is itself **a provision
 target, not a settings field**: a **`kind: aws/s3`** target carrying
 its own destination config (`bucket`/`prefix`, optional `region`), exactly as `kind: git` carries
 `repository`/`path`. There is no separate `settings.aws_cloudformation.s3_bucket` — one construct
@@ -364,10 +367,9 @@ How the targets interact:
 - **`kind: git`** (GitOps delivery): packages through the same `kind: aws/s3` target first (the
   published, rewritten template references S3 URIs), then publishes to the repository.
 - **`kind: aws/s3` selected directly** (`--target artifacts`): publish-only — upload the packaged
-  template + assets and stop, no deploy. This is CloudFormation's packaging flow: it can rewrite
-  nested template and asset references before uploading them. The generic `publish` step is
-  independent of CloudFormation and can upload arbitrary local files to S3 from any workflow,
-  custom command, or component hook.
+  template body and stop, no deploy. It does not rewrite nested template or asset references. The
+  generic `publish` step is independent of CloudFormation and can upload arbitrary local files to S3
+  from any workflow, custom command, or component hook.
 - A packaged deploy with **no `kind: aws/s3` target declared** fails with an actionable hint (add the
   target, or see [Artifact Bucket Provisioning](#artifact-bucket-provisioning-backend) for
   provisioning the bucket). Small templates that fit inline need no `kind: aws/s3` target at all.
@@ -749,8 +751,9 @@ target-account/region matrix add real design surface that shouldn't block the Ph
 
 ### Nested-Stack Dependency Tree
 
-`tree` renders the parent/nested-stack and resource dependency graph for a component, the Atmos
-equivalent of Rain's `tree`. Scoped to Phase 3 alongside `logs`/`watch` — useful observability, not
+`tree` renders the *deployed* parent/nested-stack tree for a component (recursing
+`AWS::CloudFormation::Stack` resources only). It is not equivalent to Rain's `tree`, which graphs
+Parameters/Resources/Outputs dependencies in a local template. Scoped to Phase 3 alongside `logs`/`watch` — useful observability, not
 required for a working `plan`/`apply`/`delete` loop.
 
 ### Rollback & Stack Policy
@@ -1178,7 +1181,7 @@ approved first. This section exists so the follow-up work has an unambiguous tar
 - `.claude/skills/atmos-migration/references/from-rain.md` — new reference file, plus a new row in
   `atmos-migration/SKILL.md`'s routing table ("User is migrating off Rain / raw CloudFormation → use
   `references/from-rain.md`").
-- `website/docs/migration/from-rain.mdx` — new page, sibling to `native-terraform.mdx`,
+- `website/docs/migration/rain.mdx` (slug `/migration/rain`) — new page, sibling to `native-terraform.mdx`,
   `terraform-workspaces.mdx`, `terragrunt.mdx` (flat `website/docs/migration/` directory, registered in
   `website/sidebars.js`'s `"Migration Guides"` category).
 - Structure: the same Crawl/Walk/Run arc as `native-terraform.mdx` (get to a working
@@ -1191,7 +1194,8 @@ approved first. This section exists so the follow-up work has an unambiguous tar
   (`Embed`, `Include`, `S3`, `Module`, `Constant`, `Env`), the Atmos-native replacement and a
   before/after template snippet — this is the single most likely blocker for a real Rain template
   and cannot be left to the reader. Also a Rain→Atmos verb cross-reference (`fmt`→`fmt`,
-  `cat`→`get template`, `ls`→`list`, `bootstrap`→`backend create`, `log`→`logs`, `rm`→`delete`).
+  `cat`→`get template`, `ls`→`list`, `bootstrap`→`backend create`, `logs`→`logs`, `rm`→`delete`,
+  `stackset deploy|ls|rm`→`stackset create|update|instances|delete`).
 
 ## Testing Strategy
 
@@ -1302,7 +1306,7 @@ summary tier, with no output variables, status checks, PR comments, or artifacts
 | Risk | Mitigation |
 |---|---|
 | `/`-bearing type string (`aws/cloudformation`) breaks an assumption somewhere in the registry, JSON Schema tooling, or a whitelist site | Spike early (see [Naming & Registry Precedent](#naming--registry-precedent)); fallback to a flat `cloudformation` type with `GetGroup() == "aws"` and CLI nesting preserving the namespace experience |
-| Template size exceeds CloudFormation's inline-body limit | Always package through the `provision` target abstraction (S3 upload) rather than inlining, matching `aws cloudformation package`/Rain's `pkg` behavior |
+| Template size exceeds CloudFormation's inline-body limit | Always package through the `provision` target abstraction (S3 upload) rather than inlining (template body only; asset uploads use `archive` + `publish` hooks) |
 | Drift-detection API is async and rate-limited | Poll `DescribeStackDriftDetectionStatus` with backoff; document expected latency in the CLI help text, don't block on it synchronously by default |
 | Stack set cross-account/region permission complexity | Scoped to Phase 3, after the core lifecycle has proven the auth/identity integration pattern on a single-account stack |
 | Rollback/stack-policy misconfiguration causing a stuck stack | Surface `ROLLBACK_FAILED`/`UPDATE_ROLLBACK_FAILED` states with an explicit, actionable error hint rather than a generic API error passthrough |

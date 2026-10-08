@@ -12,6 +12,7 @@ import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
 import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
+import SkipHooksFlag from '@site/docs/cli/commands/aws/cloudformation/_partials/_skip-hooks-flag.mdx'
 
 <Intro>
 Execute a named changeset and stream events until the operation finishes.
@@ -68,6 +69,7 @@ atmos aws cloudformation changeset execute vpc -s plat-ue2-dev --changeset-name 
 <SelectionFlags />
 
 <GitFlags />
+<SkipHooksFlag />
 </dl>
 
 ## Behavior
@@ -75,7 +77,21 @@ atmos aws cloudformation changeset execute vpc -s plat-ue2-dev --changeset-name 
 If the stack ends in a failed status after executing the changeset (e.g.
 `UPDATE_ROLLBACK_COMPLETE`), `changeset execute` exits non-zero.
 
-This command does not dispatch a named [lifecycle hook event](/stacks/components/aws-cloudformation#lifecycle-hooks). Hooks without an `events` list can still run.
+This command fires the `before.aws/cloudformation.changeset-execute` and
+`after.aws/cloudformation.changeset-execute` [lifecycle hooks](/stacks/components/aws-cloudformation#lifecycle-hooks).
+These events are separate from `apply`, so a hook listed only for
+`before.aws/cloudformation.apply` does not run here.
+
+To run an existing hook around the execution, add the event to the hook's
+`events` list:
+
+```yaml
+hooks:
+  notify-deploy:
+    events:
+      - after.aws/cloudformation.apply
+      - after.aws/cloudformation.changeset-execute
+```
 
 After a successful named CREATE or UPDATE, Atmos enables configured `termination_protection`,
 matching apply. Failure to enable it fails the command even if the deployment completed.

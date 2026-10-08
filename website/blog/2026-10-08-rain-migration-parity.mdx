@@ -1,0 +1,64 @@
+---
+slug: rain-migration-parity
+title: Migrate from Rain Without Rewriting Templates
+authors: [osterman]
+tags: [feature]
+---
+
+Rain, the AWS CloudFormation CLI, was archived in July 2026. Teams that deploy with it need a
+replacement, and the `aws/cloudformation` component now has a native answer for every Rain directive,
+config file, and command. A new [migration guide](/migration/rain) walks through it.
+
+<!--truncate-->
+
+## The Problem
+
+A Rain template is not plain CloudFormation. Rain rewrote `!Rain::Env`, `!Rain::Include`,
+`!Rain::Embed`, and `!Rain::S3` directives before deployment. Atmos sends a template file to
+CloudFormation as written, and until now the only error a migrating team saw came back from the
+CloudFormation API: "YAML not well-formed (line 20, column 14)", with no mention of Rain.
+
+Keeping a template file and using Atmos YAML functions inside it was not possible either. Pulling a
+template into `template:` with `!include` quietly turned every `!GetAtt Role.Arn` into the string
+`Role.Arn`, and an AWS CLI tags file deployed a stack with no tags at all.
+
+## What Changed
+
+A template that still contains Rain directives now fails locally, before any AWS call, and names the
+Atmos-native replacement for each directive it found.
+
+CloudFormation's short-form intrinsics (`!Ref`, `!Sub`, `!GetAtt`, and the rest) are accepted in
+inline templates and in templates pulled in with `!include`, and rewritten to their long form on the
+way out. A template file can be included verbatim.
+
+The [`!include` function](/functions/yaml/include) gained an opt-in `| eval` modifier. By default an
+included file is still data. With `| eval`, the YAML functions inside it are evaluated, which is how
+`!Rain::Env` becomes `!env`, `!Rain::Include` becomes a nested `!include`, and `!Rain::Embed` becomes
+`!include` of a script file:
+
+```yaml
+components:
+  "aws/cloudformation":
+    app:
+      template: !include ../../components/cloudformation/app/template.yaml | eval
+```
+
+Uploads stay out of templates. YAML functions never change infrastructure, so `!Rain::S3` maps to
+`archive` and `publish` hook steps, and those hooks now also fire on `changeset create` and
+`changeset execute`, the Atmos equivalents of `rain deploy --no-exec` and `rain deploy --changeset`.
+
+Several silent failures became clear errors: a list-shaped `tags:` is rejected with the reshape
+recipe and the `tags: !labels` bridge in the hint, a missing packaging bucket reports the command that
+creates it on every preview and deploy command, `UsePreviousValue` on a first deployment explains why
+there is no previous value, and `!env` warns when a variable is unset and has no default.
+
+## How to Use It
+
+Start with the [Rain migration guide](/migration/rain). It maps each directive, parameter file, and
+command, and its examples are the ones that were run against both a local emulator and a real AWS
+account while writing it. Install the `atmos-migration` agent skill to let an AI coding assistant
+apply the same mapping to your repository:
+
+```shell
+atmos ai skill install atmos-migration
+```
