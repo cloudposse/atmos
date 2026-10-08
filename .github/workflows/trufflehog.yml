@@ -41,7 +41,7 @@ jobs:
       # are still live against the provider's API, not just pattern matches —
       # keeps this a real blocking gate without pattern-only noise.
       - name: TruffleHog
-        uses: trufflesecurity/trufflehog@f714bf454f350590f4a24c3ddb1aef02c35bf5b6 # v3.97.5
+        uses: trufflesecurity/trufflehog@4dd8831c5f12599465d4d45c3c447b4018a34c85 # v3.97.9
         with:
           # The action's own docker invocation defaults to the mutable
           # ghcr.io/trufflesecurity/trufflehog:latest tag; pin image+version to
