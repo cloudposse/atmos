@@ -322,7 +322,10 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksR
 			chunkDTO.BatchTotal = &batch.BatchTotal
 		}
 		return c.sendAffectedStacksRequest(endpoint, chunkDTO)
-	})
+	}, withItemDescription(func(index int) string {
+		item := dto.Stacks[index]
+		return fmt.Sprintf("stack %q component %q", item.Stack, item.Component)
+	}))
 }
 
 // sendAffectedStacksRequest sends a single affected stacks upload request.
@@ -461,6 +464,18 @@ func (c *AtmosProAPIClient) UnlockStack(dto *dtos.UnlockStackRequest) (dtos.Unlo
 // It returns an *APIError (which implements error) if the response indicates failure, allowing callers
 // to inspect the HTTP status code for retry decisions.
 func handleAPIResponse(resp *http.Response, operation string) error {
+	// The gateway may reject a request before the app can return JSON.
+	if resp.StatusCode == http.StatusRequestEntityTooLarge {
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Operation:  operation,
+			Err: errUtils.Build(errUtils.ErrPayloadTooLarge).
+				WithContext("operation", operation).
+				WithHint("The request exceeded the Atmos Pro body size limit.").
+				Err(),
+		}
+	}
+
 	// Read the response body.
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
