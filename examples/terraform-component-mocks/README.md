@@ -1,4 +1,6 @@
 ---
+title: Terraform Component Mocks
+tags: [Terraform, Components]
 related_docs:
   - label: "Terraform plan"
     url: /cli/commands/terraform/plan

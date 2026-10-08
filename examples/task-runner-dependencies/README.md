@@ -1,4 +1,6 @@
 ---
+title: Task Runner Dependencies
+tags: [Automation]
 related_docs:
   - label: "Custom commands"
     url: /cli/configuration/commands
@@ -10,16 +12,30 @@ related_docs:
     url: /steps/preconditions
 ---
 
-# Task Dependencies and Incremental Runs
+# Task Runner Dependencies
 
-Define [prerequisites for custom commands](https://atmos.tools/cli/configuration/commands/dependencies) and [workflows](https://atmos.tools/workflows/dependencies) so Atmos runs them in dependency order. This example also demonstrates reusing identical dependencies, checking [input freshness](https://atmos.tools/steps/inputs), and skipping steps whose preconditions are not met.
+Demonstrates the custom-command and workflow task-runner's dependency system: `dependencies.commands` / `dependencies.workflows` (DAG execution with dedup), `fail_fast` vs `best_effort` sibling-dependency failure modes, step-level `inputs`/`artifacts` freshness checks (checksum, timestamp, and explicit CEL conditions), `preconditions`, the `continue: always` step field, native command aliases/`internal` commands, and constrained flag `values`.
 
-## Try It
-
-From this directory, run:
+## Run
 
 ```shell
+# Dependency graph: verify depends on compile (deduped), trd-lint, and unit-test
 atmos verify
+
+# fail_fast aborts the slow sibling once step-b-fails fails
+atmos release-failfast
+
+# best_effort lets the slow sibling finish despite a failing sibling
+atmos release-besteffort
+
+# Command depending on a workflow
+atmos deploy
+
+# Freshness: skips its own step when src/**/*.txt is unchanged
+atmos freshbuild
+atmos freshbuild        # second run is skipped -- inputs unchanged
 ```
 
-The `verify` command depends on compilation, linting, and unit-test commands. The commands write execution records under `logs/`, which let you inspect the order and see which dependencies ran. Several other commands deliberately fail to demonstrate failure handling; inspect `atmos.yaml` before running them.
+## Learn More
+
+See [Command Dependencies](https://atmos.tools/cli/configuration/commands/dependencies) documentation.
