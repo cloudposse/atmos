@@ -69,6 +69,16 @@ type File struct {
 	// post-migration update wrote, with no further template updates ever
 	// applied and no warning. See determineBaseContent's own doc comment.
 	OriginalSourcePath string
+
+	// Delimiters, when it holds exactly two non-empty entries (left and
+	// right), is the template delimiter pair for everything ProcessFile
+	// renders for this file: its content and its path. It takes precedence
+	// over the scaffold config's spec.delimiters, which is how a
+	// spec.files[].delimiters override (resolved by pkg/generator/ui) reaches
+	// the engine. Any other value (nil, wrong length, an empty side) is
+	// ignored and the scaffold config's delimiters, or the "{{"/"}}" default,
+	// apply.
+	Delimiters []string
 }
 
 // FileSkippedError represents when a file is intentionally skipped during processing.
@@ -129,10 +139,12 @@ func NewProcessor() *Processor {
 }
 
 // ProcessTemplate processes Go templates in file content.
+// It honors the delimiters configured in the scaffold config's spec.delimiters
+// (falling back to the default "{{"/"}}" when the config doesn't set a pair).
 func (p *Processor) ProcessTemplate(content string, targetPath string, scaffoldConfig interface{}, userValues map[string]interface{}) (string, error) {
 	defer perf.Track(nil, "engine.Processor.ProcessTemplate")()
 
-	return p.ProcessTemplateWithDelimiters(content, targetPath, scaffoldConfig, userValues, []string{defaultLeftDelimiter, defaultRightDelimiter})
+	return p.ProcessTemplateWithDelimiters(content, targetPath, scaffoldConfig, userValues, extractDelimiters(scaffoldConfig))
 }
 
 // ProcessTemplateWithDelimiters processes Go templates in file content with custom delimiters.
@@ -262,8 +274,8 @@ func buildTemplateFuncMap(userValues map[string]interface{}) template.FuncMap {
 func (p *Processor) ProcessFile(file File, targetPath string, force, update bool, scaffoldConfig interface{}, userValues map[string]interface{}) error {
 	defer perf.Track(nil, "engine.Processor.ProcessFile")()
 
-	// Extract delimiters from config
-	delimiters := extractDelimiters(scaffoldConfig)
+	// The file's own delimiters win over the scaffold config's.
+	delimiters := fileDelimiters(file.Delimiters, scaffoldConfig)
 
 	// Process and validate the file path
 	renderedPath, err := p.processFilePath(file.Path, targetPath, scaffoldConfig, userValues, delimiters)
@@ -272,7 +284,7 @@ func (p *Processor) ProcessFile(file File, targetPath string, force, update bool
 	}
 
 	// Validate path security: reject absolute paths, path traversal, and unrendered templates.
-	if err := validateRenderedPath(renderedPath, file.Path); err != nil {
+	if err := validateRenderedPath(renderedPath, file.Path, delimiters); err != nil {
 		return err
 	}
 
@@ -502,6 +514,16 @@ func writeFileSecure(fullPath string, content []byte, perm os.FileMode, overwrit
 	return err
 }
 
+// fileDelimiters returns the delimiter pair ProcessFile uses for a file:
+// its own File.Delimiters (fileOverride) when that holds exactly two non-empty
+// entries, otherwise the scaffold config's (see extractDelimiters).
+func fileDelimiters(fileOverride []string, scaffoldConfig interface{}) []string {
+	if len(fileOverride) == 2 && fileOverride[0] != "" && fileOverride[1] != "" {
+		return []string{fileOverride[0], fileOverride[1]}
+	}
+	return extractDelimiters(scaffoldConfig)
+}
+
 // extractDelimiters extracts template delimiters from scaffold config or returns defaults.
 func extractDelimiters(scaffoldConfig interface{}) []string {
 	delimiters := []string{defaultLeftDelimiter, defaultRightDelimiter}
@@ -526,7 +548,8 @@ func extractDelimiters(scaffoldConfig interface{}) []string {
 
 // tryExtractFromPointerConfig tries to extract delimiters from *config.ScaffoldConfig.
 func tryExtractFromPointerConfig(scaffoldConfig interface{}) []string {
-	if cfg, ok := scaffoldConfig.(*config.ScaffoldConfig); ok {
+	// A typed nil pointer is a non-nil interface, so guard before dereferencing.
+	if cfg, ok := scaffoldConfig.(*config.ScaffoldConfig); ok && cfg != nil {
 		if len(cfg.Spec.Delimiters) == 2 {
 			return []string{cfg.Spec.Delimiters[0], cfg.Spec.Delimiters[1]}
 		}
@@ -620,7 +643,15 @@ func fileExists(path string) bool {
 
 // validateRenderedPath validates that a rendered path is safe.
 // Rejects absolute paths, path traversal attempts (..), and unrendered template markers.
-func validateRenderedPath(renderedPath, originalPath string) error {
+// The unrendered-marker check uses the scaffold's active delimiter pair (spec.delimiters),
+// so a custom pair such as "[[ ]]" is detected when left unrendered, while a literal "{{" or
+// "${{" is legitimate in a path rendered under it. Falls back to the default "{{"/"}}" pair
+// when delimiters doesn't hold exactly two entries.
+func validateRenderedPath(renderedPath, originalPath string, delimiters []string) error {
+	if len(delimiters) != 2 {
+		delimiters = []string{defaultLeftDelimiter, defaultRightDelimiter}
+	}
+
 	// Clean the path to normalize it.
 	cleaned := filepath.Clean(renderedPath)
 
@@ -652,7 +683,7 @@ func validateRenderedPath(renderedPath, originalPath string) error {
 	}
 
 	// Reject unrendered template markers (indicates missing variables).
-	if strings.Contains(renderedPath, defaultLeftDelimiter) || strings.Contains(renderedPath, defaultRightDelimiter) {
+	if strings.Contains(renderedPath, delimiters[0]) || strings.Contains(renderedPath, delimiters[1]) {
 		return errUtils.Build(errUtils.ErrUnprocessedTemplate).
 			WithExplanationf("Unrendered template in file path: `%s`", renderedPath).
 			WithHint("Ensure all template variables in the path are defined").
@@ -716,10 +747,10 @@ func (p *Processor) handleExistingFile(file File, fullPath, targetPath string, f
 		// Create a temporary file with processed content for merging
 		tempFile := file
 		tempFile.Content = processedContent
-		// Clear the IsTemplate flag so mergeFile doesn't re-process the already-rendered content
+		// Clear the IsTemplate flag: the content is already rendered (mergeFile uses it as-is)
 		tempFile.IsTemplate = false
 
-		if err := p.mergeFile(fullPath, tempFile, targetPath); err != nil {
+		if err := p.mergeFile(fullPath, &tempFile); err != nil {
 			return err // Error already formatted by mergeFile
 		}
 		return nil
