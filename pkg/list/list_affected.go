@@ -317,6 +317,7 @@ func executeAffectedLogic(atmosConfig *schema.AtmosConfiguration, opts *Affected
 	}
 }
 
+// executeAffectedWithRepoPath computes the affected components against an already cloned target repository path.
 func executeAffectedWithRepoPath(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool, errOptions e.DescribeStacksErrorOptions) (*affectedLogicResult, error) {
 	filter, err := opts.affectedFilter()
 	if err != nil {
@@ -342,6 +343,7 @@ func executeAffectedWithRepoPath(atmosConfig *schema.AtmosConfiguration, opts *A
 	return &affectedLogicResult{affected: affected, localHead: nil, remoteRepoID: repoID}, nil
 }
 
+// executeAffectedWithClone computes the affected components by cloning the target reference.
 func executeAffectedWithClone(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool, errOptions e.DescribeStacksErrorOptions) (*affectedLogicResult, error) {
 	filter, err := opts.affectedFilter()
 	if err != nil {
@@ -370,6 +372,7 @@ func executeAffectedWithClone(atmosConfig *schema.AtmosConfiguration, opts *Affe
 	return &affectedLogicResult{affected: affected, localHead: localHead, remoteRepoID: repoID}, nil
 }
 
+// executeAffectedWithCheckout computes the affected components by checking out the target reference in a worktree.
 func executeAffectedWithCheckout(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool, errOptions e.DescribeStacksErrorOptions) (*affectedLogicResult, error) {
 	filter, err := opts.affectedFilter()
 	if err != nil {

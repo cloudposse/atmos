@@ -960,6 +960,7 @@ func TestAffectedCommandOptions_IdentityName(t *testing.T) {
 	}
 }
 
+// TestAffectedCommandOptions_AffectedFilter verifies that the affected filter is built from tags, labels, and exclude-locked and rejects invalid labels.
 func TestAffectedCommandOptions_AffectedFilter(t *testing.T) {
 	t.Run("builds filter from tags, labels, and exclude-locked", func(t *testing.T) {
 		opts := &AffectedCommandOptions{
@@ -992,6 +993,7 @@ func TestAffectedCommandOptions_AffectedFilter(t *testing.T) {
 	})
 }
 
+// TestAffectedCommandOptions_AffectedFilter_DefersSelectorsWithDependents verifies that selectors are deferred only when dependents are included.
 func TestAffectedCommandOptions_AffectedFilter_DefersSelectorsWithDependents(t *testing.T) {
 	tests := []struct {
 		name string
@@ -1013,6 +1015,7 @@ func TestAffectedCommandOptions_AffectedFilter_DefersSelectorsWithDependents(t *
 	}
 }
 
+// TestResolveAffectedDependents verifies when affected dependents are resolved and how the options are passed to the finalizer.
 func TestResolveAffectedDependents(t *testing.T) {
 	// Compile-time sentinel so a rename of the dependents options fails the build here.
 	_ = e.AffectedDependentsOptions{IncludeSettings: true, Flatten: true}

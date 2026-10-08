@@ -852,6 +852,7 @@ func dependentFixture(component, ci string, children ...schema.Dependent) schema
 	return d
 }
 
+// dependentSlugs returns the stack slugs of the given dependents in order.
 func dependentSlugs(dependents []schema.Dependent) []string {
 	slugs := make([]string, 0, len(dependents))
 	for i := range dependents {

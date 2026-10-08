@@ -31,6 +31,7 @@ func newViperKeyTestParser(t *testing.T) (*StandardFlagParser, *cobra.Command, *
 	return parser, cmd, v
 }
 
+// TestWithViperKey_StoresOverride verifies that WithViperKey records the Viper key override in the parser config.
 func TestWithViperKey_StoresOverride(t *testing.T) {
 	cfg := &parserConfig{registry: NewFlagRegistry()}
 
@@ -39,6 +40,7 @@ func TestWithViperKey_StoresOverride(t *testing.T) {
 	assert.Equal(t, map[string]string{"tags": "list.tags"}, cfg.viperKeys)
 }
 
+// TestStandardFlagParser_GetViperKey_Override verifies that a Viper key override takes precedence over the prefix and the flag name.
 func TestStandardFlagParser_GetViperKey_Override(t *testing.T) {
 	t.Run("override beats prefix", func(t *testing.T) {
 		parser := NewStandardFlagParser(
@@ -106,6 +108,7 @@ func TestStandardFlagParser_ViperKey_IsolatesFromAutomaticEnv(t *testing.T) {
 	})
 }
 
+// TestStandardFlagParser_ViperKey_ParseKeepsFlagName verifies that parsing returns values under the flag name even when the Viper key is overridden.
 func TestStandardFlagParser_ViperKey_ParseKeepsFlagName(t *testing.T) {
 	t.Setenv("ATMOS_TAGS", "leak")
 	t.Setenv("ATMOS_COMPONENT_TAGS", "good")

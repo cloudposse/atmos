@@ -1748,6 +1748,7 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 	})
 }
 
+// TestProcessHelmfileComponentsIndexed verifies indexed processing of helmfile components when detecting affected components.
 func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 	t.Parallel()
 
@@ -1961,6 +1962,7 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 	})
 }
 
+// TestProcessPackerComponentsIndexed verifies indexed processing of packer components when detecting affected components.
 func TestProcessPackerComponentsIndexed(t *testing.T) {
 	t.Parallel()
 
@@ -2633,6 +2635,7 @@ module "storage" {
 	})
 }
 
+// TestProcessStackAffected_EdgeCases verifies that invalid or missing stack and components sections yield no affected components.
 func TestProcessStackAffected_EdgeCases(t *testing.T) {
 	t.Parallel()
 

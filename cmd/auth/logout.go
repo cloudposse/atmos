@@ -62,6 +62,7 @@ may still be active. Works with all cloud providers (AWS, Azure, GCP, etc.).`,
 	RunE:               executeAuthLogoutCommand,
 }
 
+// init registers the auth logout flags and the namespaced --tags Viper key, then attaches the command to the auth parent.
 func init() {
 	defer perf.Track(nil, "auth.logout.init")()
 
@@ -90,6 +91,7 @@ func init() {
 	authCmd.AddCommand(authLogoutCmd)
 }
 
+// executeAuthLogoutCommand parses the logout flags and selects what to log out of (identity, provider, tags, or everything) before performing the logout.
 func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
 

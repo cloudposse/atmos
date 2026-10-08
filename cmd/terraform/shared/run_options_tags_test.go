@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestParseRunOptions_NormalizesTags verifies that tag values from strings and slices are split on commas, trimmed, and stripped of empty segments.
 func TestParseRunOptions_NormalizesTags(t *testing.T) {
 	tests := []struct {
 		name  string

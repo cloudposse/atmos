@@ -601,6 +601,7 @@ func TestIsComponentSectionEqual(t *testing.T) {
 	assert.False(t, isComponentSectionEqual(&remoteStacks, helmTestStack, cfg.HelmComponentType, helmTestComponent, "x", "missing"))
 }
 
+// TestProcessHelmComponentsIndexed verifies that a helm component whose chart or settings differ from the remote stacks is reported as affected.
 func TestProcessHelmComponentsIndexed(t *testing.T) {
 	t.Parallel()
 
@@ -636,6 +637,7 @@ func TestProcessHelmComponentsIndexed(t *testing.T) {
 	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackSettings)
 }
 
+// TestProcessHelmComponentsIndexed_NotAffected verifies that an unchanged helm component is not reported as affected.
 func TestProcessHelmComponentsIndexed_NotAffected(t *testing.T) {
 	t.Parallel()
 
@@ -662,6 +664,7 @@ func TestProcessHelmComponentsIndexed_NotAffected(t *testing.T) {
 	assert.Empty(t, affected)
 }
 
+// TestProcessHelmComponentsIndexed_FolderChanged verifies that a changed file in the helm component folder marks the component as affected.
 func TestProcessHelmComponentsIndexed_FolderChanged(t *testing.T) {
 	t.Parallel()
 
@@ -694,6 +697,7 @@ func TestProcessHelmComponentsIndexed_FolderChanged(t *testing.T) {
 	assert.Contains(t, affected[0].AffectedAll, affectedReasonComponent)
 }
 
+// TestProcessHelmComponentsIndexed_ValuesFilesChanged verifies that a changed values file referenced by a helm component marks it as affected.
 func TestProcessHelmComponentsIndexed_ValuesFilesChanged(t *testing.T) {
 	t.Parallel()
 
@@ -750,6 +754,7 @@ func TestProcessHelmComponentsIndexed_ValuesFilesChanged(t *testing.T) {
 	}
 }
 
+// TestProcessHelmComponentsIndexed_SkipsAbstractLockedAndInvalidSections verifies that abstract, locked, and malformed helm component sections are skipped.
 func TestProcessHelmComponentsIndexed_SkipsAbstractLockedAndInvalidSections(t *testing.T) {
 	t.Parallel()
 

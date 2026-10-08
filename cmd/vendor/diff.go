@@ -153,6 +153,7 @@ func diffManyComponents(v *viper.Viper, components []string) error {
 	return errors.Join(errs...)
 }
 
+// init registers the vendor diff flags with their namespaced selector Viper keys, then attaches the command to vendor.
 func init() {
 	vendorDiffParser = flags.NewStandardParser(
 		flags.WithStringFlag("component", "c", "", "Component to diff"),

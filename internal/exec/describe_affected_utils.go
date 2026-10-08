@@ -90,6 +90,7 @@ func rebaseConfigPathsOntoWorktree(atmosConfig *schema.AtmosConfiguration, local
 	return nil
 }
 
+// executeDescribeAffected describes the stacks at HEAD and at the BASE checkout and returns the affected components along with both repository heads.
 func executeDescribeAffected(
 	atmosConfig *schema.AtmosConfiguration,
 	localRepoFileSystemPath string,

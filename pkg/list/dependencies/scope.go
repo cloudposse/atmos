@@ -275,6 +275,7 @@ type closureResolutionParams struct {
 	lightweightStacks map[string]any
 }
 
+// resolveClosureStacks describes pending components until the closure is fully resolved and returns the resolved stacks with the final closure.
 func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, p closureResolutionParams) (*ScopeResult, error) {
 	resolvedStacks := make(map[string]any)
 	evaluatedComponents := make(map[string]map[string]bool)

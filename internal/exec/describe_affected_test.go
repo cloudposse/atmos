@@ -123,6 +123,7 @@ func createExpectedAffectedResults(componentPath string, templatesProcessed bool
 	}
 }
 
+// TestDescribeAffected verifies that Execute works with the mocked affected sources, output writer, and pager for the supported formats.
 func TestDescribeAffected(t *testing.T) {
 	d := describeAffectedExec{atmosConfig: &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{

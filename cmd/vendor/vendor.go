@@ -67,6 +67,7 @@ var vendorPullCmd = &cobra.Command{
 	},
 }
 
+// init registers the vendor pull flags with their namespaced selector Viper keys, attaches the pull command, and registers the vendor command provider.
 func init() {
 	// Set up vendor pull flags. Registered via Flags() (not PersistentFlags()): vendorPullCmd has
 	// no subcommands of its own, so persistent inheritance was never needed here.

@@ -895,6 +895,16 @@ func topLevelAffectedMetadata(a *schema.Affected, stacks map[string]any) map[str
 // With `--exclude-locked`, a locked dependent is never promoted. Without selectors the input is returned
 // unchanged.
 func applySelectorsToAffectedForest(affected []schema.Affected, filter AffectedFilter, stacks map[string]any) []schema.Affected {
+	out := applySelectorsToAffectedForestKeepMetadata(affected, filter, stacks)
+	clearAffectedDependentMetadata(out)
+	return out
+}
+
+// applySelectorsToAffectedForestKeepMetadata is applySelectorsToAffectedForest without the final metadata
+// clearing. The dependents keep the metadata recorded for selector matching, so a later step (flattening
+// with `--exclude-locked`) can still tell which dependents are locked. The caller must clear it afterwards
+// with clearAffectedDependentMetadata.
+func applySelectorsToAffectedForestKeepMetadata(affected []schema.Affected, filter AffectedFilter, stacks map[string]any) []schema.Affected {
 	if !filter.hasSelectors() {
 		return affected
 	}
@@ -919,12 +929,17 @@ func applySelectorsToAffectedForest(affected []schema.Affected, filter AffectedF
 		out = appendPromotedDependents(out, affected[i].Dependents, filter, seen)
 	}
 
-	for i := range out {
-		clearDependentMetadata(out[i].Dependents)
-	}
 	processIncludedInDependencies(&out)
 
 	return out
+}
+
+// clearAffectedDependentMetadata drops the transient dependent metadata from every affected item's
+// (nested) dependents.
+func clearAffectedDependentMetadata(affected []schema.Affected) {
+	for i := range affected {
+		clearDependentMetadata(affected[i].Dependents)
+	}
 }
 
 // appendPromotedDependents appends the dependents of a dropped top-level item to out as top-level entries

@@ -193,6 +193,7 @@ func FindAllStackConfigsInPaths(
 	return absolutePaths, relativePaths, nil
 }
 
+// processEnvVars applies the ATMOS_* environment variable overrides to the Atmos configuration.
 func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "config.processEnvVars")()
 
@@ -874,6 +875,7 @@ func applyInitEnumFlag[T ~string](raw, flagName string, isValid func(T) bool, se
 	return nil
 }
 
+// setSchemaDirs applies the schema directory and manifest overrides from the command line to the Atmos configuration.
 func setSchemaDirs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.JsonSchemaDir) > 0 {
 		atmosConfig.SetResourcePath("jsonschema", schema.ResourcePath{BasePath: configAndStacksInfo.JsonSchemaDir})

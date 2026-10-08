@@ -104,6 +104,7 @@ var affectedCmd = &cobra.Command{
 	},
 }
 
+// init registers the list affected flags through the list flag wrappers and binds them to Viper.
 func init() {
 	// Mark this subcommand as experimental.
 	affectedCmd.Annotations = map[string]string{"experimental": "true"}
@@ -140,6 +141,7 @@ func init() {
 	}
 }
 
+// executeListAffectedCmd processes the command line arguments and runs list affected with the parsed options.
 func executeListAffectedCmd(cmd *cobra.Command, args []string, opts *AffectedOptions) error {
 	defer perf.Track(nil, "list.executeListAffectedCmd")()
 

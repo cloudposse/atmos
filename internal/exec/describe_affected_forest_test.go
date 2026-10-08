@@ -57,6 +57,7 @@ func forestStacks(ciByComponent map[string]string) map[string]any {
 	return map[string]any{"dev": map[string]any{"components": map[string]any{"terraform": terraform}}}
 }
 
+// affectedComponents returns the component names of the given affected entries in order.
 func affectedComponents(affected []schema.Affected) []string {
 	out := make([]string, 0, len(affected))
 	for i := range affected {
@@ -74,6 +75,7 @@ var (
 
 var autoOnly = AffectedFilter{Labels: map[string]string{"ci": "auto"}}
 
+// TestApplySelectorsToAffectedForest verifies that selectors prune the affected forest and promote matching dependents of dropped parents.
 func TestApplySelectorsToAffectedForest(t *testing.T) {
 	t.Run("a dropped parent is replaced by its matching dependent at the parent's position", func(t *testing.T) {
 		affected := []schema.Affected{
@@ -212,6 +214,7 @@ func TestApplySelectorsToAffectedForest(t *testing.T) {
 	})
 }
 
+// TestApplySelectorsToAffectedForest_ExcludeLocked verifies that locked dependents are not promoted when ExcludeLocked is set.
 func TestApplySelectorsToAffectedForest_ExcludeLocked(t *testing.T) {
 	autoExcludeLocked := AffectedFilter{ExcludeLocked: true, Labels: map[string]string{"ci": "auto"}}
 	stacks := forestStacks(map[string]string{"iam": "manual"})
@@ -254,6 +257,7 @@ func TestApplySelectorsToAffectedForest_ExcludeLocked(t *testing.T) {
 	})
 }
 
+// TestTopLevelAffectedMetadata verifies the metadata lookup for top-level affected entries, including missing entries and component types.
 func TestTopLevelAffectedMetadata(t *testing.T) {
 	stacks := forestStacks(map[string]string{"vpc": "auto"})
 	a := topLevelAffected("vpc")
@@ -269,6 +273,7 @@ func TestTopLevelAffectedMetadata(t *testing.T) {
 	assert.Nil(t, topLevelAffectedMetadata(&helm, stacks), "the component type is part of the lookup")
 }
 
+// TestAffectedKey verifies that affected keys are stable for equal inputs and differ when any field differs.
 func TestAffectedKey(t *testing.T) {
 	assert.Equal(t, affectedKey("vpc", "dev", "terraform"), affectedKey("vpc", "dev", "terraform"))
 	assert.NotEqual(t, affectedKey("vpc", "dev", "terraform"), affectedKey("vpc", "dev", "helmfile"))
@@ -311,6 +316,7 @@ func TestDependentToAffected_CopiesEverySharedField(t *testing.T) {
 	}
 }
 
+// TestFlattenAffectedDependents verifies that nested dependents are lifted to the top level without duplicates.
 func TestFlattenAffectedDependents(t *testing.T) {
 	t.Run("dependents already at the top level are not repeated", func(t *testing.T) {
 		affected := []schema.Affected{
@@ -427,6 +433,7 @@ func TestFlattenAffectedDependents(t *testing.T) {
 	})
 }
 
+// TestFlattenAffectedDependents_ExcludeLocked verifies that locked dependents are dropped when flattening while their children are kept.
 func TestFlattenAffectedDependents_ExcludeLocked(t *testing.T) {
 	excludeLocked := AffectedFilter{ExcludeLocked: true}
 
@@ -477,6 +484,48 @@ func TestFlattenAffectedDependents_ExcludeLocked(t *testing.T) {
 	})
 }
 
+// TestApplySelectorsToAffectedForestKeepMetadata_ThenFlatten covers the finalizer order: the selectors prune
+// first, and the recorded metadata must survive until flattening so `--exclude-locked` can drop locked dependents.
+func TestApplySelectorsToAffectedForestKeepMetadata_ThenFlatten(t *testing.T) {
+	filter := AffectedFilter{ExcludeLocked: true, Labels: map[string]string{"ci": "auto"}}
+	stacks := forestStacks(map[string]string{"vpc": "auto"})
+	newForest := func() []schema.Affected {
+		return []schema.Affected{topLevelAffected("vpc", lockedDependent("iam", "auto", typedDependent("app", "auto")), typedDependent("web", "auto"))}
+	}
+
+	t.Run("the metadata is kept so the locked dependent is not lifted", func(t *testing.T) {
+		pruned := applySelectorsToAffectedForestKeepMetadata(newForest(), filter, stacks)
+		require.Len(t, pruned, 1)
+		require.Len(t, pruned[0].Dependents, 2)
+		assert.NotNil(t, pruned[0].Dependents[0].Metadata)
+
+		got := flattenAffectedDependents(pruned, filter)
+
+		assert.Equal(t, []string{"vpc", "app", "web"}, affectedComponents(got))
+	})
+
+	t.Run("the clearing wrapper loses the locked state, which is why the finalizer must not use it", func(t *testing.T) {
+		pruned := applySelectorsToAffectedForest(newForest(), filter, stacks)
+		require.Len(t, pruned[0].Dependents, 2)
+		assert.Nil(t, pruned[0].Dependents[0].Metadata)
+
+		got := flattenAffectedDependents(pruned, filter)
+
+		assert.Equal(t, []string{"vpc", "iam", "app", "web"}, affectedComponents(got))
+	})
+
+	t.Run("clearAffectedDependentMetadata clears every nesting level", func(t *testing.T) {
+		pruned := applySelectorsToAffectedForestKeepMetadata(newForest(), filter, stacks)
+
+		clearAffectedDependentMetadata(pruned)
+
+		assert.Nil(t, pruned[0].Dependents[0].Metadata)
+		assert.Nil(t, pruned[0].Dependents[0].Dependents[0].Metadata)
+		assert.Nil(t, pruned[0].Dependents[1].Metadata)
+	})
+}
+
+// TestDependentsOptions_NeedsDependentMetadata verifies which dependents options require dependent metadata to be collected.
 func TestDependentsOptions_NeedsDependentMetadata(t *testing.T) {
 	tests := []struct {
 		name string
@@ -496,6 +545,7 @@ func TestDependentsOptions_NeedsDependentMetadata(t *testing.T) {
 	}
 }
 
+// TestValidateDescribeAffectedArgs verifies argument validation for describe affected, including the flatten handling.
 func TestValidateDescribeAffectedArgs(t *testing.T) {
 	valid := func() DescribeAffectedCmdArgs {
 		return DescribeAffectedCmdArgs{Format: "json", ErrorMode: "warn"}
@@ -573,6 +623,7 @@ func TestValidateDescribeAffectedArgs(t *testing.T) {
 	}
 }
 
+// TestSetDescribeAffectedFlagValueInCliArgs_Flatten verifies that the flatten flag is copied into the CLI args without an environment variable source.
 func TestSetDescribeAffectedFlagValueInCliArgs_Flatten(t *testing.T) {
 	t.Setenv("GITHUB_ACTIONS", "")
 	t.Setenv("CI", "")
@@ -776,6 +827,58 @@ func TestFinalizeAffectedDependents(t *testing.T) {
 		assert.Equal(t, 1, filterCalls)
 		assert.True(t, recorded)
 		assert.Equal(t, []string{"vpc", "app", "web"}, affectedComponents(affected))
+	})
+
+	t.Run("exclude-locked with flatten and selectors drops locked dependents but lifts their children", func(t *testing.T) {
+		plainCalls, filterCalls = 0, 0
+		selecting := dependentsResolvers{
+			plain: resolvers.plain,
+			withFilter: func(_ *schema.AtmosConfiguration, affected *[]schema.Affected, opts *dependentsOptions) error {
+				filterCalls++
+				(*affected)[0].Dependents = []schema.Dependent{
+					lockedDependent("iam", "auto", typedDependent("app", "auto")),
+					typedDependent("web", "auto"),
+				}
+				opts.stacks = forestStacks(map[string]string{"vpc": "auto"})
+				return nil
+			},
+		}
+		affected := []schema.Affected{topLevelAffected("vpc")}
+
+		opts := &AffectedDependentsOptions{Filter: AffectedFilter{ExcludeLocked: true, Labels: map[string]string{"ci": "auto"}}, Flatten: true}
+		require.NoError(t, finalizeAffectedDependents(atmosConfig, &affected, opts, selecting))
+
+		assert.Zero(t, plainCalls)
+		assert.Equal(t, 1, filterCalls)
+		assert.Equal(t, []string{"vpc", "app", "web"}, affectedComponents(affected), "the locked dependent is not lifted")
+		assert.Equal(t, affectedReasonDependent, affected[1].Affected)
+		assert.Equal(t, affectedReasonDependent, affected[2].Affected)
+		for i := range affected {
+			assert.Empty(t, affected[i].Dependents)
+		}
+	})
+
+	t.Run("selectors without flatten leave no dependent metadata and keep locked nested dependents", func(t *testing.T) {
+		selecting := dependentsResolvers{
+			plain: resolvers.plain,
+			withFilter: func(_ *schema.AtmosConfiguration, affected *[]schema.Affected, opts *dependentsOptions) error {
+				(*affected)[0].Dependents = []schema.Dependent{lockedDependent("iam", "auto", typedDependent("app", "auto"))}
+				opts.stacks = forestStacks(map[string]string{"vpc": "auto"})
+				return nil
+			},
+		}
+		affected := []schema.Affected{topLevelAffected("vpc")}
+
+		opts := &AffectedDependentsOptions{Filter: AffectedFilter{ExcludeLocked: true, Labels: map[string]string{"ci": "auto"}}}
+		require.NoError(t, finalizeAffectedDependents(atmosConfig, &affected, opts, selecting))
+
+		require.Len(t, affected, 1)
+		require.Len(t, affected[0].Dependents, 1)
+		assert.Equal(t, "iam", affected[0].Dependents[0].Component, "nested dependents are not removed by --exclude-locked")
+		assert.Nil(t, affected[0].Dependents[0].Metadata)
+		require.Len(t, affected[0].Dependents[0].Dependents, 1)
+		assert.Equal(t, "app", affected[0].Dependents[0].Dependents[0].Component)
+		assert.Nil(t, affected[0].Dependents[0].Dependents[0].Metadata)
 	})
 
 	t.Run("exclude-locked without flatten keeps the plain resolver", func(t *testing.T) {

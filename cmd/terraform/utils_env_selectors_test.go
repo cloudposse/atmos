@@ -34,6 +34,7 @@ func setViperSelectors(t *testing.T, selectorTags []string, selectorLabels strin
 	v.Set("labels", selectorLabels)
 }
 
+// TestHasComponentArgument verifies detection of a component argument for plain and compound terraform subcommands.
 func TestHasComponentArgument(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -95,6 +96,7 @@ func TestIsMultiComponentInvocation_EnvOnlySelectors(t *testing.T) {
 	}
 }
 
+// TestDropEnvOnlySelectorsForComponent verifies that selectors sourced only from the environment are dropped when a component argument is given and kept otherwise.
 func TestDropEnvOnlySelectorsForComponent(t *testing.T) {
 	envLabels := map[string]string{"ci": "auto"}
 

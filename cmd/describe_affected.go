@@ -41,6 +41,7 @@ var describeAffectedCmd = &cobra.Command{
 	RunE:               getRunnableDescribeAffectedCmd(checkAtmosConfig, exec.ParseDescribeAffectedCliArgs, exec.NewDescribeAffectedExec),
 }
 
+// init registers the describe affected flags and flag parsers, then attaches the command to describe.
 func init() {
 	describeAffectedCmd.DisableFlagParsing = false
 

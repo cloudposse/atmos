@@ -741,8 +741,9 @@ func finalizeAffectedDependents(atmosConfig *schema.AtmosConfiguration, affected
 		if err := resolve.withFilter(atmosConfig, affected, depOpts); err != nil {
 			return err
 		}
-		// Does nothing without selectors.
-		*affected = applySelectorsToAffectedForest(*affected, opts.Filter, depOpts.stacks)
+		// Does nothing without selectors. The dependent metadata is kept until after flattening, so
+		// `--exclude-locked` can still see which dependents are locked when they are lifted.
+		*affected = applySelectorsToAffectedForestKeepMetadata(*affected, opts.Filter, depOpts.stacks)
 	} else if err := resolve.plain(atmosConfig, affected, opts.IncludeSettings, opts.ProcessTemplates, opts.ProcessYamlFunctions, opts.Skip, opts.OnlyInStack, opts.AuthManager, opts.AuthDisabled, opts.ErrOptions); err != nil {
 		return err
 	}
@@ -750,6 +751,9 @@ func finalizeAffectedDependents(atmosConfig *schema.AtmosConfiguration, affected
 	if opts.Flatten {
 		*affected = flattenAffectedDependents(*affected, opts.Filter)
 	}
+
+	// The metadata recorded for selector matching and locked detection is transient and never part of the output.
+	clearAffectedDependentMetadata(*affected)
 	return nil
 }
 

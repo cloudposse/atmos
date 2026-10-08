@@ -80,6 +80,7 @@ func TestSetSchemaRegistry_ExistingMapPreservesOtherKeys(t *testing.T) {
 	assert.Equal(t, "opa/path", atmosConfig.GetResourcePath("opa").BasePath)
 }
 
+// TestSetResourcePath_NilMap verifies that SetResourcePath does not panic when Schemas is nil.
 func TestSetResourcePath_NilMap(t *testing.T) {
 	// A config loaded without a `schemas:` section leaves Schemas nil; applying a
 	// `--schemas-opa-dir` or ATMOS_SCHEMAS_OPA_BASE_PATH override must not panic.
@@ -93,6 +94,7 @@ func TestSetResourcePath_NilMap(t *testing.T) {
 	assert.Equal(t, "opa/path", atmosConfig.GetResourcePath("opa").BasePath)
 }
 
+// TestSetResourcePath_ExistingMapPreservesOtherKeys verifies that SetResourcePath replaces only the given key.
 func TestSetResourcePath_ExistingMapPreservesOtherKeys(t *testing.T) {
 	// Setting one key must not clobber unrelated entries, and it replaces the same key.
 	atmosConfig := &AtmosConfiguration{Schemas: map[string]any{

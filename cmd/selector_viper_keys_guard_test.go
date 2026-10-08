@@ -47,6 +47,7 @@ var selectorGuardExemptFiles = map[string]string{
 	"kubernetes/kubernetes.go": "reads --tags/--labels from Cobra flags only",
 }
 
+// selectorReadAllowedReceiver reports whether a receiver expression is a Cobra or pflag flag set, from which reading the bare tags and labels keys is allowed.
 func selectorReadAllowedReceiver(receiver string) bool {
 	return strings.Contains(receiver, "Flags()") || strings.HasSuffix(receiver, "flags") || strings.HasSuffix(receiver, "flagSet")
 }
@@ -120,6 +121,7 @@ func scanSelectorSource(rel, src string) []string {
 	return violations
 }
 
+// TestSelectorFlagsUseNamespacedViperKeys verifies that non-terraform commands do not bind or read the bare Viper keys tags and labels.
 func TestSelectorFlagsUseNamespacedViperKeys(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	require.True(t, ok, "unable to resolve the test file location")

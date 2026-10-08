@@ -62,6 +62,7 @@ Supports multiple output formats:
 	RunE:               executeAuthListCommand,
 }
 
+// init registers the auth list flags, shell completions, and the --tags Viper key, then attaches the command to the auth parent.
 func init() {
 	defer perf.Track(nil, "auth.list.init")()
 

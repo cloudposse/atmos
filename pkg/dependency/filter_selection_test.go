@@ -24,6 +24,7 @@ func buildSelectionGraph(t *testing.T, ids []string, edges [][3]any) *Graph {
 	return graph
 }
 
+// sortedNodeIDs returns the IDs of the graph nodes in sorted order.
 func sortedNodeIDs(graph *Graph) []string {
 	ids := make([]string, 0, len(graph.Nodes))
 	for id := range graph.Nodes {
@@ -33,12 +34,14 @@ func sortedNodeIDs(graph *Graph) []string {
 	return ids
 }
 
+// sortedCopy returns a sorted copy of the input without modifying it.
 func sortedCopy(in []string) []string {
 	out := append([]string{}, in...)
 	sort.Strings(out)
 	return out
 }
 
+// keepByID returns a predicate that keeps only the nodes whose ID is in the allowed set.
 func keepByID(allowed ...string) func(*Node) bool {
 	set := make(map[string]bool, len(allowed))
 	for _, id := range allowed {
@@ -97,6 +100,7 @@ func TestGraph_FilterSelection_EqualsFilterWithoutSelectors(t *testing.T) {
 	}
 }
 
+// TestGraph_FilterSelection_Contraction verifies that dropped intermediate nodes are contracted so remaining nodes keep their dependency edges.
 func TestGraph_FilterSelection_Contraction(t *testing.T) {
 	// leaf -> middle -> base (leaf depends on middle depends on base).
 	chain := func(t *testing.T, optionalMiddle, optionalLeaf bool) *Graph {
@@ -193,6 +197,7 @@ func TestGraph_FilterSelection_Contraction(t *testing.T) {
 	})
 }
 
+// TestGraph_FilterSelection_DepthCountedThroughDroppedNodes verifies that the dependency depth limit counts levels through dropped nodes.
 func TestGraph_FilterSelection_DepthCountedThroughDroppedNodes(t *testing.T) {
 	// leaf -> middle -> base.
 	graph := buildSelectionGraph(t, []string{"base", "middle", "leaf"}, [][3]any{
@@ -221,6 +226,7 @@ func TestGraph_FilterSelection_DepthCountedThroughDroppedNodes(t *testing.T) {
 	}
 }
 
+// TestGraph_FilterSelection_DroppedSeed verifies that a seed rejected by the selector is dropped while matching dependents are kept.
 func TestGraph_FilterSelection_DroppedSeed(t *testing.T) {
 	// app -> database -> vpc, plus other -> vpc.
 	graph := buildSelectionGraph(t, []string{"vpc", "database", "app", "other"}, [][3]any{

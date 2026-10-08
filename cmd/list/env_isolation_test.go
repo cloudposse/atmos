@@ -107,6 +107,7 @@ func TestListSelectors_IgnoreTerraformEnvVars(t *testing.T) {
 	}
 }
 
+// TestListVendorTags_IgnoreTerraformEnvVar verifies that the vendor tags key ignores ATMOS_TAGS and honors ATMOS_VENDOR_TAGS.
 func TestListVendorTags_IgnoreTerraformEnvVar(t *testing.T) {
 	t.Run("ATMOS_TAGS does not leak", func(t *testing.T) {
 		t.Setenv("ATMOS_TAGS", "leak")

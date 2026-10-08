@@ -28,6 +28,7 @@ func newSelectorFlagsTestCmd(t *testing.T, cliArgs ...string) (*cobra.Command, *
 	return cmd, v, parser
 }
 
+// TestNewDescribeAffectedSelectorFlagsParser verifies that the selector parser registers the tags, labels, and flatten flags with the expected types and usage.
 func TestNewDescribeAffectedSelectorFlagsParser(t *testing.T) {
 	cmd := &cobra.Command{Use: "affected"}
 	newDescribeAffectedSelectorFlagsParser().RegisterPersistentFlags(cmd)
@@ -58,6 +59,7 @@ func TestDescribeAffectedCmd_RegistersSelectorFlags(t *testing.T) {
 	assert.NotNil(t, describeAffectedCmd.PersistentFlags().Lookup("flatten"))
 }
 
+// TestResolveDescribeAffectedSelectorFlags verifies that tags, labels, and flatten resolve from CLI flags and environment variables and record the env var that supplied each value.
 func TestResolveDescribeAffectedSelectorFlags(t *testing.T) {
 	tests := []struct {
 		name        string

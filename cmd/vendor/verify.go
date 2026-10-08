@@ -206,6 +206,7 @@ func createVerifyTable(rows []verifyRow) string {
 	return lineEnding + t.String() + lineEnding + lineEnding
 }
 
+// init registers the vendor verify flags with their namespaced selector Viper keys, then attaches the command to vendor.
 func init() {
 	vendorVerifyParser = flags.NewStandardParser(
 		flags.WithStringFlag("component", "c", "", "Verify only this component"),

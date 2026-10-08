@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestFlagValueFromEnv verifies that FlagValueFromEnv reports the environment variable that supplied a flag value.
 func TestFlagValueFromEnv(t *testing.T) {
 	t.Run("nil flag is not env sourced", func(t *testing.T) {
 		envVar, ok := FlagValueFromEnv(nil)

@@ -38,6 +38,7 @@ var authLoginCmd = &cobra.Command{
 	RunE:               executeAuthLoginCommand,
 }
 
+// init registers the auth login flags and the namespaced --tags Viper key, then attaches the command to the auth parent.
 func init() {
 	defer perf.Track(nil, "auth.login.init")()
 

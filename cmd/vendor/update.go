@@ -394,6 +394,7 @@ func runRepoWideUpdate(v *viper.Viper, p repoWideUpdateParams) (*vendoring.Updat
 	})
 }
 
+// init registers the vendor update flags with their namespaced selector Viper keys, then attaches the command to vendor.
 func init() {
 	vendorUpdateParser = flags.NewStandardParser(
 		flags.WithIntFlag(concurrency.Flag, "", 0, "Maximum concurrent preparations or version checks (edition default: 4; earlier editions: 1)"),

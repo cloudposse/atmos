@@ -32,6 +32,7 @@ func selectedClosureStacks() map[string]any {
 	})
 }
 
+// sortedClosureNodeIDs returns the IDs of the graph nodes in sorted order.
 func sortedClosureNodeIDs(graph *dependency.Graph) []string {
 	ids := make([]string, 0, len(graph.Nodes))
 	for id := range graph.Nodes {
@@ -41,6 +42,7 @@ func sortedClosureNodeIDs(graph *dependency.Graph) []string {
 	return ids
 }
 
+// TestSelectedClosure verifies the closure selected for each combination of selector, direction, and depth.
 func TestSelectedClosure(t *testing.T) {
 	t.Parallel()
 
@@ -171,6 +173,7 @@ func TestResolveScopedClosureEvaluatesDroppedDependents(t *testing.T) {
 	assert.Contains(t, terraformComponentsOf(t, result.Stacks, "core"), "vpc", "the unfiltered seed must stay described")
 }
 
+// terraformComponentsOf returns the sorted terraform component names of the given stack.
 func terraformComponentsOf(t *testing.T, stacks map[string]any, stack string) []string {
 	t.Helper()
 

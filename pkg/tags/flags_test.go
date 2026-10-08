@@ -37,6 +37,7 @@ func TestParseTagsFlag(t *testing.T) {
 	}
 }
 
+// TestParseLabelsFlag verifies parsing and validation of the labels flag value.
 func TestParseLabelsFlag(t *testing.T) {
 	t.Run("empty string returns nil", func(t *testing.T) {
 		got, err := ParseLabelsFlag("")
@@ -204,6 +205,7 @@ func TestParseLabelsFlag(t *testing.T) {
 	})
 }
 
+// TestParseLabelsFlagFrom verifies that labels parse like ParseLabelsFlag and that errors name the given source.
 func TestParseLabelsFlagFrom(t *testing.T) {
 	const source = "--labels (or ATMOS_LABELS)"
 

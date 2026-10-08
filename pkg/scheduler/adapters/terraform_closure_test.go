@@ -116,6 +116,7 @@ func executedClosureNodes(t *testing.T, stacks map[string]any, info *schema.Conf
 	return executed
 }
 
+// TestExecuteTerraformIncludeDependenciesExpandsAcrossSelectors verifies that included dependencies expand beyond the selector matches in dependency order.
 func TestExecuteTerraformIncludeDependenciesExpandsAcrossSelectors(t *testing.T) {
 	t.Run("tags seed keeps non-matching prerequisites in dependency order", func(t *testing.T) {
 		executed := executedClosureComponents(t, &schema.ConfigAndStacksInfo{
