@@ -26,8 +26,11 @@ annotations and log groups behave differently:
 
 ## Context
 
-- Reported in issue #3309; the startup banner was introduced in #3904.
-- Affected versions: broken in 1.238.1, last known good 1.227.0.
+- Reported in issue #3309; the startup banner was introduced in #3004
+  (`feat(ci): startup banner for CI/Pro status and legacy-action detection`),
+  which first shipped in v1.228.0.
+- Affected versions: last known good 1.227.0; every release from v1.228.0 onward
+  is affected (the reporter hit it on 1.238.1).
 - Design discussion on PR #3310 (superseded by this change) concluded: keep
   annotations on stderr always; disable grouping in detected legacy actions
   rather than moving group markers to stderr (which would desynchronize the
