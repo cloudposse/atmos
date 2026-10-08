@@ -789,7 +789,7 @@ func TestProcessCloudFormationComponentsIndexed(t *testing.T) {
 	affected, err := processCloudFormationComponentsIndexed(
 		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
 		atmosConfig, filesIndex, patternCache,
-		false, true, false,
+		false, true, AffectedFilter{},
 	)
 	require.NoError(t, err)
 
@@ -827,7 +827,7 @@ func TestProcessCloudFormationComponentsIndexed_MetadataRemovedLocally(t *testin
 	affected, err := processCloudFormationComponentsIndexed(
 		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
 		atmosConfig, filesIndex, patternCache,
-		false, false, false,
+		false, false, AffectedFilter{},
 	)
 	require.NoError(t, err)
 
@@ -860,7 +860,7 @@ func TestProcessCloudFormationComponentsIndexed_SettingsRemovedLocally(t *testin
 	affected, err := processCloudFormationComponentsIndexed(
 		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
 		atmosConfig, filesIndex, patternCache,
-		false, false, false,
+		false, false, AffectedFilter{},
 	)
 	require.NoError(t, err)
 
@@ -905,7 +905,7 @@ func TestProcessCloudFormationComponentsIndexed_DependenciesWithoutSettings(t *t
 	affected, err := processCloudFormationComponentsIndexed(
 		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
 		atmosConfig, filesIndex, patternCache,
-		false, false, false,
+		false, false, AffectedFilter{},
 	)
 	require.NoError(t, err)
 
@@ -934,7 +934,7 @@ func TestProcessCloudFormationComponentsIndexed_NotAffected(t *testing.T) {
 	affected, err := processCloudFormationComponentsIndexed(
 		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
 		atmosConfig, filesIndex, patternCache,
-		false, false, false,
+		false, false, AffectedFilter{},
 	)
 	require.NoError(t, err)
 	assert.Empty(t, affected)
@@ -968,7 +968,7 @@ func TestProcessCloudFormationComponentsIndexed_FolderChanged(t *testing.T) {
 	affected, err := processCloudFormationComponentsIndexed(
 		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
 		atmosConfig, filesIndex, patternCache,
-		false, false, false,
+		false, false, AffectedFilter{},
 	)
 	require.NoError(t, err)
 
@@ -1006,7 +1006,7 @@ func TestProcessCloudFormationComponentsIndexed_SkipsAbstractLockedAndInvalidSec
 		affected, err := processCloudFormationComponentsIndexed(
 			cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
 			atmosConfig, filesIndex, patternCache,
-			false, false, false,
+			false, false, AffectedFilter{},
 		)
 		require.NoError(t, err)
 		assert.Empty(t, affected)
@@ -1024,7 +1024,7 @@ func TestProcessCloudFormationComponentsIndexed_SkipsAbstractLockedAndInvalidSec
 		affected, err := processCloudFormationComponentsIndexed(
 			cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
 			atmosConfig, filesIndex, patternCache,
-			false, false, true,
+			false, false, AffectedFilter{ExcludeLocked: true},
 		)
 		require.NoError(t, err)
 		assert.Empty(t, affected)
@@ -1035,7 +1035,7 @@ func TestProcessCloudFormationComponentsIndexed_SkipsAbstractLockedAndInvalidSec
 		affected, err := processCloudFormationComponentsIndexed(
 			cfnTestStack, map[string]any{cfnTestComponent: "invalid"}, &remoteStacks, &remoteStacks,
 			atmosConfig, filesIndex, patternCache,
-			false, false, false,
+			false, false, AffectedFilter{},
 		)
 		require.NoError(t, err)
 		assert.Empty(t, affected)
@@ -1072,7 +1072,7 @@ func TestProcessStackAffected_CloudFormationSection(t *testing.T) {
 	affected, err := processStackAffected(
 		cfnTestStack, stackSection, &remoteStacks, &currentStacks,
 		atmosConfig, filesIndex, patternCache,
-		false, false, false,
+		false, false, AffectedFilter{},
 	)
 	require.NoError(t, err)
 
