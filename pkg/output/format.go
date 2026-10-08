@@ -465,13 +465,13 @@ func sortedKeys(m map[string]any) []string {
 	return keys
 }
 
-// formatTable outputs as a styled table with Key/Value columns.
+// formatTable outputs as a styled table with Output/Value columns.
 // Uses the same table rendering as list commands for consistent styling.
 func formatTable(outputs map[string]any, opts FormatOptions) (string, error) {
 	keys := sortedKeys(outputs)
 
-	// Build rows: Key | Value.
-	headers := []string{"Key", "Value"}
+	// Build rows: Output | Value.
+	headers := []string{"Output", "Value"}
 	rows := make([][]string, 0, len(keys))
 	for _, k := range keys {
 		value := outputs[k]

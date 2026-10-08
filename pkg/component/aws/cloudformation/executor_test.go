@@ -291,9 +291,10 @@ func TestRenderDiffSummary_ListsResourceChanges(t *testing.T) {
 	})
 	// The summary count must match what the per-resource loop actually prints:
 	// only entries with a non-nil ResourceChange, excluding hook-only changes.
-	assert.Contains(t, out, "vpc: 2 resource change(s)")
+	assert.Contains(t, out, "Changes for vpc: 2 resources")
 	assert.Contains(t, out, "MyBucket")
-	assert.Contains(t, out, "(replacement: True)")
+	assert.Contains(t, out, "Replacement")
+	assert.Contains(t, out, "True")
 	assert.Contains(t, out, "MyRole")
 	assert.NotContains(t, out, "MyRole (replacement", "an Add with no Replacement must not print a replacement annotation")
 }

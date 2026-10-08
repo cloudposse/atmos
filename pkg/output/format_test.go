@@ -1032,7 +1032,7 @@ func TestFormatOutputs_Table(t *testing.T) {
 	require.NoError(t, err)
 
 	// Table should contain headers and values.
-	assert.Contains(t, result, "Key")
+	assert.Contains(t, result, "Output")
 	assert.Contains(t, result, "Value")
 	assert.Contains(t, result, "url")
 	assert.Contains(t, result, "https://example.com")
@@ -1048,7 +1048,7 @@ func TestFormatOutputs_Table_EmptyOutputs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should still contain headers.
-	assert.Contains(t, result, "Key")
+	assert.Contains(t, result, "Output")
 	assert.Contains(t, result, "Value")
 }
 

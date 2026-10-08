@@ -191,8 +191,8 @@ func TestDeployDirect_PreviewPrecedesConfirmation(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, prompt, `"vpc"`)
 	preview := normalizeUIOutput(out)
-	assert.Contains(t, preview, "vpc: 1 resource change(s)")
-	assert.Contains(t, preview, "Add AWS::S3::Bucket Bucket")
+	assert.Contains(t, preview, "Changes for vpc: 1 resource")
+	assert.Contains(t, preview, "Add Bucket AWS::S3::Bucket")
 }
 
 // A declined prompt discards the changeset and, for a brand-new stack, the empty

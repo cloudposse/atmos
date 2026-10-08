@@ -81,29 +81,27 @@ func streamStackEvents(ctx context.Context, client CloudFormationClient, stackNa
 		// Belt-and-suspenders: Stop is idempotent, so this guarantees the spinner
 		// is never left running on every return path (poll error, ctx
 		// cancellation, timeout), even though the terminal-status path below
-		// already stops it via Success/Error.
+		// already stops it after the final event.
 		defer sp.Stop()
 	}
 
 	deadline := time.Now().Add(operationTimeout)
 	signals := completionSignals{baselineValid: baseline.valid}
-	sawStackTerminal := false
+	var reportedStatus cfntypes.StackStatus
 
 	for {
 		events, poll, err := pollStackEvents(ctx, client, stackName, seen, operation)
 		if err != nil {
 			return "", err
 		}
-		for i := range events {
-			dispatchStackEvent(sp, &events[i])
-			sawStackTerminal = sawStackTerminal || isStackTerminalEvent(&events[i], stackName)
-		}
+		reportedStatus = dispatchStackEvents(sp, events, stackName, reportedStatus)
 
 		if signals.observe(poll, len(events)) {
-			if !sawStackTerminal {
-				drainFinalStackEvents(ctx, client, finalEventsTarget(stackName, baseline, poll), seen, sp)
+			if reportedStatus != poll.Status {
+				finalEvents := drainFinalStackEvents(ctx, client, finalEventsTarget(stackName, baseline, poll), seen)
+				reportedStatus = dispatchStackEvents(sp, finalEvents, stackName, reportedStatus)
 			}
-			finishStreamSpinner(sp, stackName, poll.Status)
+			finishStreamSpinner(sp, stackName, poll.Status, reportedStatus)
 			return poll.Status, nil
 		}
 
@@ -207,23 +205,20 @@ func finalEventsTarget(stackName string, baseline eventBaseline, poll stackPoll)
 }
 
 // drainFinalStackEvents reads the stack's events once more after a terminal
-// status was accepted and prints any not shown yet. Events are polled before the
+// status was accepted and returns any not shown yet. Events are polled before the
 // stack status, so a stack that finishes between the two reads would otherwise
 // lose its final stack-level event (for example CREATE_COMPLETE), and a deleted
 // stack is never readable by name again, so its DELETE_COMPLETE is read by ID.
 // Best effort: failing to read never fails the operation that already finished.
-func drainFinalStackEvents(ctx context.Context, client CloudFormationClient, target string, seen map[string]bool, sp *spinner.Spinner) {
+func drainFinalStackEvents(ctx context.Context, client CloudFormationClient, target string, seen map[string]bool) []cfntypes.StackEvent {
 	if target == "" {
-		return
+		return nil
 	}
 	out, err := client.DescribeStackEvents(ctx, &cloudformation.DescribeStackEventsInput{StackName: awsString(target)})
 	if err != nil {
-		return
+		return nil
 	}
-	fresh := freshStackEvents(out.StackEvents, seen)
-	for i := range fresh {
-		dispatchStackEvent(sp, &fresh[i])
-	}
+	return freshStackEvents(out.StackEvents, seen)
 }
 
 // freshStackEvents returns the events not yet in seen, oldest first (the API
@@ -281,35 +276,32 @@ func dispatchStackEvent(sp *spinner.Spinner, event *cfntypes.StackEvent) {
 		return
 	}
 
-	line, _ := formatStackEventLine(event, true)
+	line := formatLiveStackEvent(event)
 	status := cfntypes.StackStatus(event.ResourceStatus)
 
 	switch {
 	case !isTerminalStackStatus(status):
 		sp.Update(line)
 	case isFailedStackStatus(status):
-		sp.Println(ui.FormatError(line))
+		sp.Println(formatLiveStackEventResult(event, false))
 	default:
-		sp.Println(ui.FormatSuccess(line))
+		sp.Println(formatLiveStackEventResult(event, true))
 	}
 }
 
-// finishStreamSpinner reports the stack's final terminal status on the spinner
-// (success or error, matching the resource-level coloring above) and stops it.
-// A no-op when sp is nil (non-TTY path never started one). The stack name is
-// bolded (markdown, rendered by Spinner.Success/Error) to match
-// dispatchStackEvent's per-resource lines instead of flat text.
-func finishStreamSpinner(sp *spinner.Spinner, stackName string, status cfntypes.StackStatus) {
+// finishStreamSpinner stops the live display, printing a final status only if
+// the matching root event was not already shown. Late or missing events keep
+// the same presentation as ordinary resource completion.
+func finishStreamSpinner(sp *spinner.Spinner, stackName string, status, reportedStatus cfntypes.StackStatus) {
 	if sp == nil {
 		return
 	}
-
-	line := fmt.Sprintf("**%s**: %s", stackName, status)
-	if isFailedStackStatus(status) {
-		sp.Error(line)
+	sp.Stop()
+	if reportedStatus == status {
 		return
 	}
-	sp.Success(line)
+	event := &cfntypes.StackEvent{LogicalResourceId: awsString(stackName), ResourceStatus: cfntypes.ResourceStatus(status)}
+	sp.Println(formatLiveStackEventResult(event, !isFailedStackStatus(status)))
 }
 
 // pollStackEvents fetches the current stack status and any events not already in
@@ -375,9 +367,8 @@ func isFailedStackStatus(status cfntypes.StackStatus) bool {
 //
 // The markdown parameter must be true only for callers whose line flows into a
 // renderer that actually processes markdown (ui.FormatSuccess/FormatError/
-// FormatInline/Info — see dispatchStackEvent): those bold the logical ID and
-// code-span the resource type for a lightly formatted TTY line instead of flat
-// text. Plain data/log channels (ui.Writeln, data.Writeln) never render
+// FormatInline/Info): those bold the logical ID and
+// code-span the resource type when a consumer requests markdown. Plain data/log channels (ui.Writeln, data.Writeln) never render
 // markdown, so passing true there would leak literal "**"/backtick characters
 // into piped or CI output.
 func formatStackEventLine(event *cfntypes.StackEvent, markdown bool) (line string, failed bool) {

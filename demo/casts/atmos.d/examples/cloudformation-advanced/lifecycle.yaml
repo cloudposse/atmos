@@ -99,8 +99,8 @@ commands:
               "Built release v2",
               "S3: 1 uploaded, 0 unchanged",
               "S3: 0 uploaded, 1 unchanged",
-              "CREATE_COMPLETE",
-              "UPDATE_COMPLETE",
+              "Created",
+              "Updated",
               "HTTP 200",
           ):
               if needle not in plain:
@@ -110,8 +110,21 @@ commands:
                   raise SystemExit(f"CloudFormation publish cast contains {bad!r}")
           if plain.count("S3: 1 uploaded, 0 unchanged") != 2 or plain.count("S3: 0 uploaded, 1 unchanged") != 1:
               raise SystemExit("CloudFormation publish cast is missing the first, repeat, or v2 publish result")
-          assert_colored(text, "atmos-cast-app-local")
+          for header in ("Action", "Resource", "Type", "Replacement", "Output", "Value"):
+              if header not in plain:
+                  raise SystemExit(f"CloudFormation publish cast missing table header {header!r}")
+          for action, stack, expected in (
+              ("Created", "atmos-cast-artifacts-local", 1),
+              ("Created", "atmos-cast-app-local", 1),
+              ("Updated", "atmos-cast-app-local", 2),
+          ):
+              count = len(re.findall(rf"✓ {action}\s+{stack}(?:\r?\n|$)", plain))
+              if count != expected:
+                  raise SystemExit(f"Expected {expected} {action} completion(s) for {stack}, got {count}")
+          if re.search(r"^http://127\.0\.0\.1", plain, re.MULTILINE):
+              raise SystemExit("CloudFormation publish cast leaked the endpoint helper output")
+          assert_colored(text, "Created")
           if len({frame for frame in "⣽⣻⢿⡿⣟⣯⣷⣾" if frame in text}) < 2:
               raise SystemExit("CloudFormation publish cast is missing animated spinner frames")
-          if not re.search(r"[⣽⣻⢿⡿⣟⣯⣷⣾].*Function.*IN_PROGRESS", plain):
+          if not re.search(r"[⣽⣻⢿⡿⣟⣯⣷⣾].*Creating.*Function", plain):
               raise SystemExit("CloudFormation publish cast is missing the live resource spinner")

@@ -26,6 +26,9 @@ components:
             - name: build
               type: shell
               command: python3 build.py
+              output: raw
+              show:
+                labels: false
               env:
                 ATMOS_DEMO_RELEASE: '{{ getenv "ATMOS_DEMO_RELEASE" "v1" }}'
             - name: package
@@ -40,6 +43,9 @@ components:
               target: artifacts
             - name: publish-result
               type: script
+              output: raw
+              show:
+                labels: false
               interpreter: python3
               script: |
                 changed = {{ "{{ .steps.publish.metadata.changed }}" }}
@@ -52,6 +58,7 @@ components:
           with:
             - name: endpoint
               type: shell
+              output: none
               command: >-
                 atmos --chdir=../../.. auth exec --identity local-aws --
                 python3 components/cloudformation/app/function_url.py
