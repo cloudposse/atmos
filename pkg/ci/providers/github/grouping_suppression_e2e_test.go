@@ -78,7 +78,9 @@ func TestGrouping_E2E_StdoutStaysCleanInLegacyActions(t *testing.T) {
 			require.NoError(t, err)
 
 			out := stdout.String()
-			assert.Contains(t, out, e2eJSONPayload, "the JSON payload must reach stdout")
+			// Exact match: stdout must carry ONLY the JSON payload - no group
+			// markers and no other stray text alongside it.
+			assert.Equal(t, e2eJSONPayload+"\n", out, "stdout must contain only the JSON payload")
 			assert.NotContains(t, out, "::group::", "no group marker may pollute stdout in a legacy action")
 			assert.NotContains(t, out, "::endgroup::")
 		})
@@ -91,7 +93,7 @@ func TestGrouping_E2E_StdoutStaysCleanInLegacyActions(t *testing.T) {
 			end()
 
 			out := stdout.String()
-			assert.Contains(t, out, e2eJSONPayload)
+			assert.Equal(t, e2eJSONPayload+"\n", out, "stdout must contain only the JSON payload")
 			assert.NotContains(t, out, "::group::")
 			assert.NotContains(t, out, "::endgroup::")
 		})
