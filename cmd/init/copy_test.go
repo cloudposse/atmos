@@ -75,7 +75,7 @@ func TestExecuteInitCopiesDirectory(t *testing.T) {
 		t.Run(map[bool]string{false: "no-git", true: "git"}[gitEnabled], func(t *testing.T) {
 			src := filepath.Join(t.TempDir(), "example")
 			require.NoError(t, os.Mkdir(src, 0o755))
-			readme := "# Example\n\nLiteral {{ .NotATemplate }} and {{ invalid syntax }}\n"
+			readme := "---\ntitle: Example\n---\n# Example\n\nLiteral {{ .NotATemplate }} and {{ invalid syntax }}\n"
 			require.NoError(t, os.WriteFile(filepath.Join(src, "README.md"), []byte(readme), 0o600))
 			t.Chdir(t.TempDir())
 			err := executeInit(context.Background(), &initOptions{templateName: src, git: gitEnabled})

@@ -8,6 +8,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
+func preflightProjectInit(root *cobra.Command, args []string) error {
+	command, remaining, err := root.Find(args)
+	if err == nil && isProjectInit(root, command) && !isHelpRequested(command, args) {
+		return initcmd.Preflight(remaining)
+	}
+	return nil
+}
+
 // startInitProgress keeps a single indicator alive from startup through copying.
 // Help and non-terminal output stay quiet; init stops it before prompts or results.
 func startInitProgress(root *cobra.Command, args []string) func() {

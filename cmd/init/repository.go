@@ -7,16 +7,25 @@ import (
 	"github.com/hashicorp/go-getter"
 	"github.com/spf13/viper"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/generator/source"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/vendor"
 )
 
+var commandAtmosConfig *schema.AtmosConfiguration
+
+// SetAtmosConfig supplies the configuration already resolved after global flags
+// and profiles are applied, avoiding another configuration load inside init.
+func SetAtmosConfig(config *schema.AtmosConfiguration) {
+	defer perf.Track(nil, "initcmd.SetAtmosConfig")()
+	commandAtmosConfig = config
+}
+
 // applyInitDefaults places configured values below command flags and environment
 // overrides. Viper's ordinary flag/env precedence remains authoritative.
 func applyInitDefaults(v *viper.Viper) (*schema.AtmosConfiguration, error) {
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := initSourceConfig(&initOptions{atmosConfig: commandAtmosConfig}, "")
 	if err != nil {
 		return nil, err
 	}

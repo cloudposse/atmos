@@ -2,10 +2,26 @@ package cmd
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
+
+func TestInitOccupiedTargetFailsBeforeConfigLoading(t *testing.T) {
+	t.Chdir(t.TempDir())
+	require.NoError(t, os.Mkdir("pacts", 0o755))
+	require.NoError(t, os.Mkdir("target", 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join("target", "file"), []byte("keep"), 0o600))
+	require.NoError(t, os.WriteFile("atmos.yaml", []byte("invalid: ["), 0o600))
+	originalArgs := os.Args
+	os.Args = []string{"atmos", "init", "pacts", "target"}
+	t.Cleanup(func() { os.Args = originalArgs })
+	require.ErrorIs(t, Execute(), errUtils.ErrTargetDirectoryNotEmpty)
+}
 
 func TestShowInitConfigProgress(t *testing.T) {
 	originalArgs := os.Args

@@ -22,61 +22,6 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
-	"github.com/cloudposse/atmos/cmd/internal"
-	errUtils "github.com/cloudposse/atmos/errors"
-	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/internal/tui/templates"
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
-	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	// Import adapters to register them with the config package.
-	_ "github.com/cloudposse/atmos/pkg/config/adapters"
-
-	// Import hook format handlers to register them with the hooks package.
-	_ "github.com/cloudposse/atmos/pkg/hooks/sarif"
-
-	// Import component providers to register them with the component registry.
-	// The init() function in each package registers the provider.
-	_ "github.com/cloudposse/atmos/pkg/component/ansible"
-	_ "github.com/cloudposse/atmos/pkg/component/container"
-	_ "github.com/cloudposse/atmos/pkg/component/emulator"
-	_ "github.com/cloudposse/atmos/pkg/component/helm"
-	_ "github.com/cloudposse/atmos/pkg/component/kubernetes"
-	_ "github.com/cloudposse/atmos/pkg/component/mock"
-
-	// Import the Atmos Pro credential broker so it registers itself (init) and is consulted
-	// before the first remote read in CI (lazily provisions the github/sts integration).
-	_ "github.com/cloudposse/atmos/pkg/auth/providers/atmospro/broker"
-
-	"github.com/cloudposse/atmos/pkg/ci"
-	cistartup "github.com/cloudposse/atmos/pkg/ci/startup"
-	"github.com/cloudposse/atmos/pkg/data"
-	"github.com/cloudposse/atmos/pkg/diagnostics"
-	envpkg "github.com/cloudposse/atmos/pkg/env"
-	"github.com/cloudposse/atmos/pkg/filesystem"
-	"github.com/cloudposse/atmos/pkg/flags"
-	"github.com/cloudposse/atmos/pkg/flags/compat"
-	"github.com/cloudposse/atmos/pkg/flags/osargs"
-	"github.com/cloudposse/atmos/pkg/flags/preprocess"
-	iolib "github.com/cloudposse/atmos/pkg/io"
-	log "github.com/cloudposse/atmos/pkg/logger"
-	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
-	"github.com/cloudposse/atmos/pkg/pager"
-	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/pro"
-	"github.com/cloudposse/atmos/pkg/proexec"
-	atmosprofile "github.com/cloudposse/atmos/pkg/profile"
-	"github.com/cloudposse/atmos/pkg/profiler"
-	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
-	"github.com/cloudposse/atmos/pkg/terminal"
-	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/heatmap"
-	"github.com/cloudposse/atmos/pkg/ui/markdown"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
-	"github.com/cloudposse/atmos/pkg/utils"
-	pkgversion "github.com/cloudposse/atmos/pkg/version"
-
 	// Import built-in command packages for side-effect registration.
 	// The init() function in each package registers the command with the registry.
 	_ "github.com/cloudposse/atmos/cmd/about"
@@ -100,7 +45,8 @@ import (
 	gitcmd "github.com/cloudposse/atmos/cmd/git"
 	_ "github.com/cloudposse/atmos/cmd/helm"
 	_ "github.com/cloudposse/atmos/cmd/helmfile"
-	_ "github.com/cloudposse/atmos/cmd/init"
+	initcmd "github.com/cloudposse/atmos/cmd/init"
+	"github.com/cloudposse/atmos/cmd/internal"
 	_ "github.com/cloudposse/atmos/cmd/kubernetes"
 	_ "github.com/cloudposse/atmos/cmd/list"
 	_ "github.com/cloudposse/atmos/cmd/lsp"
@@ -120,7 +66,57 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/vendor"
 	"github.com/cloudposse/atmos/cmd/version"
 	_ "github.com/cloudposse/atmos/cmd/workflow"
+	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/internal/tui/templates"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
+	// Import the Atmos Pro credential broker so it registers itself (init) and is consulted
+	// before the first remote read in CI (lazily provisions the github/sts integration).
+	_ "github.com/cloudposse/atmos/pkg/auth/providers/atmospro/broker"
+	"github.com/cloudposse/atmos/pkg/ci"
+	cistartup "github.com/cloudposse/atmos/pkg/ci/startup"
+	// Import component providers to register them with the component registry.
+	// The init() function in each package registers the provider.
+	_ "github.com/cloudposse/atmos/pkg/component/ansible"
+	_ "github.com/cloudposse/atmos/pkg/component/container"
+	_ "github.com/cloudposse/atmos/pkg/component/emulator"
+	_ "github.com/cloudposse/atmos/pkg/component/helm"
+	_ "github.com/cloudposse/atmos/pkg/component/kubernetes"
+	_ "github.com/cloudposse/atmos/pkg/component/mock"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	// Import adapters to register them with the config package.
+	_ "github.com/cloudposse/atmos/pkg/config/adapters"
+	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/diagnostics"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
+	"github.com/cloudposse/atmos/pkg/filesystem"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/flags/osargs"
+	"github.com/cloudposse/atmos/pkg/flags/preprocess"
+	atmosGit "github.com/cloudposse/atmos/pkg/git"
+	// Import hook format handlers to register them with the hooks package.
+	_ "github.com/cloudposse/atmos/pkg/hooks/sarif"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
+	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/pro"
+	"github.com/cloudposse/atmos/pkg/proexec"
+	atmosprofile "github.com/cloudposse/atmos/pkg/profile"
+	"github.com/cloudposse/atmos/pkg/profiler"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/toolchain"
+	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/heatmap"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/utils"
+	pkgversion "github.com/cloudposse/atmos/pkg/version"
 )
 
 const (
@@ -492,6 +488,11 @@ var RootCmd = &cobra.Command{
 					Err()
 				errUtils.CheckErrorPrintAndExit(enrichedErr, "", "")
 			}
+		}
+
+		// Reuse the fully resolved configuration for init's defaults and source fetch.
+		if err == nil && isProjectInit(cmd.Root(), cmd) {
+			initcmd.SetAtmosConfig(&tmpConfig)
 		}
 
 		// Proxy links are available to every child process launched by Atmos.
@@ -1867,8 +1868,9 @@ func applyCIGitCloneBootstrap(cmd *cobra.Command, args []string, tmpConfig *sche
 // command, captures telemetry, and handles unknown-command errors by showing usage.
 // This function is invoked once from main.main.
 func Execute() error {
-	stopProgress := startInitProgress(RootCmd, os.Args[1:])
-	defer stopProgress()
+	atmosGit.ResetRootTagCache()
+	defer atmosGit.ResetRootTagCache()
+	defer initcmd.SetAtmosConfig(nil)
 	executionID, restoreInvocation := proexec.BeginInvocation()
 	defer restoreInvocation()
 	defer perf.Track(&atmosConfig, "cmd.Execute")()
@@ -1886,6 +1888,11 @@ func Execute() error {
 	if err := processEarlyChdirFlag(); err != nil {
 		return err
 	}
+	if err := preflightProjectInit(RootCmd, os.Args[1:]); err != nil {
+		return err
+	}
+	stopProgress := startInitProgress(RootCmd, os.Args[1:])
+	defer stopProgress()
 	preprocessHelpTopicArgs()
 
 	// InitCliConfig finds and merges CLI configurations in the following order:

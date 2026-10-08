@@ -60,6 +60,7 @@ If no template is specified, an interactive selection will be shown.
 For scaffold templates, an omitted target directory is prompted interactively.`,
 	Args: cobra.MaximumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		defer SetAtmosConfig(nil)
 		template := ""
 		target := ""
 
@@ -172,9 +173,9 @@ For scaffold templates, an omitted target directory is prompted interactively.`,
 
 var initParser *flags.StandardParser
 
-func init() {
+func newInitParser() *flags.StandardParser {
 	// Create StandardParser for init command flags with ATMOS_INIT_* env vars.
-	initParser = flags.NewStandardParser(
+	return flags.NewStandardParser(
 		flags.WithIntFlag("depth", "", 1, "Git history depth for initialization (0 fetches full history)"),
 		flags.WithEnvVars("depth", "ATMOS_INIT_DEPTH"),
 		flags.WithBoolFlag("copy", "", false, "Copy source files verbatim without processing scaffold configuration or templates"),
@@ -218,6 +219,10 @@ func init() {
 		flags.WithEnvVars("recreate-deleted", "ATMOS_INIT_RECREATE_DELETED"),
 		flags.WithEnvVars("skip-hooks", "ATMOS_INIT_SKIP_HOOKS"),
 	)
+}
+
+func init() {
+	initParser = newInitParser()
 
 	// Register flags on the command.
 	initParser.RegisterFlags(initCmd)

@@ -38,6 +38,20 @@ func TestRepositoryDirectorySource(t *testing.T) {
 	}
 }
 
+func TestInitDefaultsReuseResolvedConfiguration(t *testing.T) {
+	t.Chdir(t.TempDir())
+	require.NoError(t, os.WriteFile("atmos.yaml", []byte("invalid: ["), 0o600))
+	resolved := &schema.AtmosConfiguration{Init: schema.InitConfig{Repository: "github.com/acme/examples", Ref: "selected-profile", Depth: 4}}
+	SetAtmosConfig(resolved)
+	t.Cleanup(func() { SetAtmosConfig(nil) })
+	v := viper.New()
+	got, err := applyInitDefaults(v)
+	require.NoError(t, err, "defaults must reuse the resolved config, without reading atmos.yaml again")
+	assert.Equal(t, resolved.Init, got.Init)
+	assert.Equal(t, "selected-profile", v.GetString("ref"))
+	assert.Equal(t, 4, v.GetInt("depth"))
+}
+
 func TestNormalizeInitArgumentConfiguredRepository(t *testing.T) {
 	t.Chdir(t.TempDir())
 	require.NoError(t, os.WriteFile("atmos.yaml", []byte("init:\n  repository: github.com/acme/starters?ref=stable\n"), 0o600))
