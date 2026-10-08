@@ -285,16 +285,28 @@ func requireBackendExists(ctx context.Context, args autoProvisionArgs) error {
 func packagingBucketMissingError(args autoProvisionArgs) error {
 	builder := errUtils.Build(errUtils.ErrAwsCloudFormationBackendMissing).
 		WithContext(bucketKey, args.S3Target.Bucket)
+	create := backendCreateCommand(args)
 	if isBackendProvisionEnabled(args.ComponentConfig) {
 		return builder.
 			WithExplanationf("The packaging bucket %q does not exist, and this command does not create it (only apply and deploy provision the bucket).", args.S3Target.Bucket).
-			WithHintf("Run `atmos aws cloudformation backend create %s -s %s` to create the bucket, or run `atmos aws cloudformation apply %s -s %s`, which provisions it because provision.backend.enabled is true.", args.Component, args.Stack, args.Component, args.Stack).
+			WithHintf("Run `%s` to create the bucket, or run `atmos aws cloudformation apply %s -s %s`, which provisions it because provision.backend.enabled is true.", create, args.Component, args.Stack).
 			Err()
 	}
 	return builder.
 		WithExplanationf("The packaging bucket %q does not exist.", args.S3Target.Bucket).
-		WithHintf("Run `atmos aws cloudformation backend create %s -s %s` to create the bucket, or set provision.backend.enabled: true so apply and deploy create it automatically.", args.Component, args.Stack).
+		WithHintf("Run `%s` to create the bucket, or set provision.backend.enabled: true so apply and deploy create it automatically.", create).
 		Err()
+}
+
+// backendCreateCommand renders the `backend create` invocation for the selected
+// packaging target, naming the target explicitly so the hint stays valid when
+// the component declares more than one `kind: aws/s3` target.
+func backendCreateCommand(args autoProvisionArgs) string {
+	cmd := fmt.Sprintf("atmos aws cloudformation backend create %s -s %s", args.Component, args.Stack)
+	if args.S3Target != nil && args.S3Target.Name != "" {
+		cmd += " --target=" + args.S3Target.Name
+	}
+	return cmd
 }
 
 // isNoSuchBucket reports whether err carries an S3 NoSuchBucket API error.

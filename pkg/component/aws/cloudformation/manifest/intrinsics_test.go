@@ -93,23 +93,25 @@ Resources:
       FunctionName: !Sub "${AppName}-${Stage}"
       Role: !GetAtt Role.Arn
       Code:
-        ZipFile: !include handler.py
+        ZipFile: !include ./handler.py
 Outputs:
   Name:
     Value: !Ref Function
 `
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "template.yaml"), []byte(template), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "handler.py"), []byte("print(1)\n"), 0o644))
+	sub := filepath.Join(dir, "components", "cloudformation", "app")
+	require.NoError(t, os.MkdirAll(sub, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sub, "template.yaml"), []byte(template), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(sub, "handler.py"), []byte("print(1)\n"), 0o644))
 	manifestPath := filepath.Join(dir, "stack.yaml")
 	require.NoError(t, os.WriteFile(manifestPath, []byte("x: 1\n"), 0o644))
 
-	result, err := u.UnmarshalYAMLFromFile[map[string]any](&schema.AtmosConfiguration{BasePath: dir}, "template: !include ./template.yaml | eval\n", manifestPath)
+	result, err := u.UnmarshalYAMLFromFile[map[string]any](&schema.AtmosConfiguration{BasePath: dir}, "template: !include ./components/cloudformation/app/template.yaml | eval\n", manifestPath)
 	require.NoError(t, err)
 
 	tpl := result["template"].(map[string]any)
 	props := tpl["Resources"].(map[string]any)["Function"].(map[string]any)["Properties"].(map[string]any)
 	assert.Equal(t, map[string]any{"Fn::Sub": "${AppName}-${Stage}"}, props["FunctionName"])
 	assert.Equal(t, map[string]any{"Fn::GetAtt": []any{"Role", "Arn"}}, props["Role"])
-	assert.Equal(t, "print(1)\n", props["Code"].(map[string]any)["ZipFile"], "Rain's !Rain::Embed parity: a nested !include of a non-YAML file is its text")
+	assert.Equal(t, "print(1)\n", props["Code"].(map[string]any)["ZipFile"], "Rain's !Rain::Embed parity: a nested ./ include resolves relative to the template file")
 	assert.Equal(t, map[string]any{"Ref": "Function"}, tpl["Outputs"].(map[string]any)["Name"].(map[string]any)["Value"])
 }

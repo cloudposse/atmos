@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	yaml "gopkg.in/yaml.v3"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -37,6 +39,14 @@ var rainDirectiveParity = map[string]string{
 
 var rainDirectivePattern = regexp.MustCompile(`!Rain::([A-Za-z0-9]+)|\$\{Rain::([A-Za-z0-9_]+)\}`)
 
+// rainSectionDirectives maps a Rain-specific top-level template section to the directive its
+// migration hint belongs to: `Rain:` holds `Constants:` (and other Rain settings), `Modules:` is
+// Rain's module system.
+var rainSectionDirectives = map[string]string{
+	"Rain":    "Constant",
+	"Modules": rainDirectiveModule,
+}
+
 // RainDirectiveHint returns the migration hint for a `!Rain::<Directive>` YAML tag, or "" for any
 // other tag. It is registered with the stack-manifest tag walker so a Rain directive inside an
 // inline or `!include`d template fails with the replacement named, not the generic supported-tags
@@ -51,26 +61,74 @@ func RainDirectiveHint(tag string) []string {
 	return rainHints([]string{strings.TrimPrefix(tag, rainTagPrefix)})
 }
 
-// DetectRainDirectives scans a raw template body for Rain directives (`!Rain::X` tags and
-// `${Rain::X}` substitutions inside `!Sub` strings) and returns the distinct directive names in
-// order of first appearance. A `${Rain::...}` substitution reports as "Constant", which is the
-// only directive that form belongs to.
+// DetectRainDirectives inspects a template body for Rain usage and returns the distinct directive
+// names in order of first appearance: `!Rain::X` tags, `${Rain::X}` substitutions inside scalar
+// values (reported as "Constant", the only directive that form belongs to), and the Rain-specific
+// top-level sections `Rain:` and `Modules:`. The template is parsed as YAML so that the words in a
+// `Description:` or a comment never count as directives; a body that is not parseable YAML falls
+// back to a plain text scan, since CloudFormation would reject it anyway.
 func DetectRainDirectives(body string) []string {
 	defer perf.Track(nil, "cloudformation.manifest.DetectRainDirectives")()
 
-	seen := map[string]bool{}
-	var found []string
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(body), &doc); err != nil {
+		return scanRainText(body)
+	}
+	collector := &rainCollector{seen: map[string]bool{}}
+	root := &doc
+	if root.Kind == yaml.DocumentNode && len(root.Content) > 0 {
+		root = root.Content[0]
+	}
+	if root.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(root.Content); i += 2 {
+			if name, ok := rainSectionDirectives[root.Content[i].Value]; ok {
+				collector.add(name)
+			}
+		}
+	}
+	collector.walk(root)
+	return collector.found
+}
+
+// rainCollector accumulates distinct directive names in document order.
+type rainCollector struct {
+	seen  map[string]bool
+	found []string
+}
+
+func (c *rainCollector) add(name string) {
+	if !c.seen[name] {
+		c.seen[name] = true
+		c.found = append(c.found, name)
+	}
+}
+
+func (c *rainCollector) walk(node *yaml.Node) {
+	if node == nil {
+		return
+	}
+	if tag := strings.TrimSpace(node.Tag); strings.HasPrefix(tag, rainTagPrefix) {
+		c.add(strings.TrimPrefix(tag, rainTagPrefix))
+	}
+	if node.Kind == yaml.ScalarNode && strings.Contains(node.Value, rainSubPrefix) {
+		c.add("Constant")
+	}
+	for _, child := range node.Content {
+		c.walk(child)
+	}
+}
+
+// scanRainText is the fallback for a body that does not parse as YAML.
+func scanRainText(body string) []string {
+	collector := &rainCollector{seen: map[string]bool{}}
 	for _, match := range rainDirectivePattern.FindAllStringSubmatch(body, -1) {
 		name := match[1]
 		if name == "" {
 			name = "Constant"
 		}
-		if !seen[name] {
-			seen[name] = true
-			found = append(found, name)
-		}
+		collector.add(name)
 	}
-	return found
+	return collector.found
 }
 
 // RainDirectiveError builds the error for a `path:` template file that still contains Rain

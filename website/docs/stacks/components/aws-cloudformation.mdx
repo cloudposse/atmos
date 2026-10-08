@@ -369,8 +369,8 @@ Resources:
       FunctionName: !Sub "app-${Stage}"
       Role: !GetAtt Role.Arn
       Code:
-        ZipFile: !include ../../components/cloudformation/app/src/handler.py
-      Tags: !include ../../components/cloudformation/app/tags.yaml
+        ZipFile: !include ./src/handler.py
+      Tags: !include ./tags.yaml
   Marker:
     Type: AWS::SSM::Parameter
     Properties:
@@ -380,10 +380,10 @@ Resources:
 ```
 </File>
 
-Nested `!include` paths resolve the same way as in the manifest: `./` and `../`
-relative to the stack manifest that includes the template, bare paths relative
-to `base_path`. A non-YAML file loads as a string, which is how a script lands
-in `ZipFile`. Without `| eval`, an included file is data: its CloudFormation
+A nested `!include` inside the evaluated template resolves `./` and `../`
+relative to the template file itself (bare paths relative to `base_path`), so
+the template can reference files next to it the way Rain's `!Rain::Embed` did.
+A non-YAML file loads as a string, which is how a script lands in `ZipFile`. Without `| eval`, an included file is data: its CloudFormation
 intrinsics are still preserved, but an Atmos function tag inside it is dropped
 and only its argument remains, per the
 [`!include` contract](/functions/yaml/include#included-content-is-data). The

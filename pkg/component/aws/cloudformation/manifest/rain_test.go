@@ -38,6 +38,25 @@ func TestDetectRainDirectives(t *testing.T) {
 	assert.Empty(t, DetectRainDirectives("Resources:\n  A:\n    Type: AWS::S3::Bucket\n"))
 	assert.Empty(t, DetectRainDirectives("Description: it rains a lot\nMetadata: {Rain: no}\n"), "the word Rain alone is not a directive")
 	assert.Equal(t, []string{"Constant"}, DetectRainDirectives(`x: "${Rain::Thing}"`))
+
+	t.Run("directive text in a description or comment is not a directive", func(t *testing.T) {
+		body := "Description: \"Replace !Rain::Env during migration\"\n# !Rain::Embed used to live here\nResources:\n  A:\n    Type: AWS::S3::Bucket\n"
+		assert.Empty(t, DetectRainDirectives(body))
+	})
+
+	t.Run("Rain-specific top-level sections count", func(t *testing.T) {
+		assert.Equal(t, []string{"Constant"}, DetectRainDirectives("Rain:\n  Constants:\n    A: b\nResources: {}\n"))
+		assert.Equal(t, []string{"Module"}, DetectRainDirectives("Modules:\n  Net:\n    Source: ./net.yaml\nResources: {}\n"))
+	})
+
+	t.Run("JSON template", func(t *testing.T) {
+		assert.Equal(t, []string{"Constant"}, DetectRainDirectives(`{"Resources": {"A": {"Properties": {"Name": "${Rain::Prefix}/x"}}}}`))
+		assert.Empty(t, DetectRainDirectives(`{"Resources": {"A": {"Type": "AWS::S3::Bucket"}}}`))
+	})
+
+	t.Run("unparseable body falls back to a text scan", func(t *testing.T) {
+		assert.Equal(t, []string{"Env"}, DetectRainDirectives("Resources:\n  A: [unterminated\n  B: !Rain::Env X\n"))
+	})
 }
 
 func TestRainDirectiveHint(t *testing.T) {

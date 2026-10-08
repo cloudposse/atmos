@@ -74,10 +74,12 @@ need no changes at all.
 │   └── fragments/tags.yaml
 ├── src/handler.py               # embedded by !Rain::Embed
 ├── dist/worker/                 # uploaded by !Rain::S3
+├── templates/network.yaml       # a second stack the app reads an output from
 ├── params/
-│   ├── dev.json                 # AWS CLI parameter array
-│   └── rain-config.yaml         # {Parameters: {...}, Tags: {...}}
-└── deploy.sh                    # rain pkg + rain deploy per environment
+│   ├── dev.yaml                 # {Parameters: {...}, Tags: {...}} per environment
+│   └── staging.yaml
+└── deploy.sh                    # loops environments, hand-orders network before app,
+                                 # copies the network output into the app parameters
 ```
   </TabItem>
   <TabItem value="after" label="After (Atmos)">
@@ -86,14 +88,21 @@ need no changes at all.
 ├── atmos.yaml
 ├── components/cloudformation/app/
 │   ├── template.yaml            # plain CloudFormation
-│   └── src/handler.py
+│   ├── fragments/tags.yaml
+│   └── src/
+│       ├── handler.py           # inlined through !include
+│       └── worker/              # archived and published by the hook
+├── components/cloudformation/network/template.yaml
 ├── params/                      # unchanged; read with !include
-│   ├── dev.json
-│   └── rain-config.yaml
+│   ├── dev.yaml
+│   └── staging.yaml
 └── stacks/
-    ├── catalog/app.yaml         # shared component config and packaging hook
+    ├── catalog/
+    │   ├── network.yaml         # abstract base: template, stack name pattern
+    │   └── app.yaml             # abstract base: parameters, dependency on network, packaging hook
+    ├── mixins/region/us-east-1.yaml
     └── deploy/
-        ├── dev.yaml
+        ├── dev.yaml             # imports the bases and the mixin; includes params/dev.yaml
         └── staging.yaml
 ```
   </TabItem>
@@ -221,19 +230,20 @@ Resources:
   Bucket:
     Type: AWS::S3::Bucket
     Properties:
-      Tags: !include ../../components/cloudformation/app/fragments/tags.yaml
+      Tags: !include ./fragments/tags.yaml
   Function:
     Type: AWS::Lambda::Function
     Properties:
       Role: !GetAtt Role.Arn
       Code:
-        ZipFile: !include ../../components/cloudformation/app/src/handler.py
+        ZipFile: !include ./src/handler.py
 ```
   </TabItem>
 </Tabs>
 
-Paths inside the included template resolve like paths in the stack manifest that includes it:
-`./` and `../` relative to that manifest, bare paths relative to `base_path`.
+A nested `!include` inside the template resolves `./` and `../` relative to the template file,
+exactly where Rain's `!Rain::Embed ../src/handler.py` looked; bare paths resolve relative to
+`base_path`.
 
 #### Uploaded Assets
 
@@ -265,7 +275,7 @@ components:
       path: template.yaml
       parameters:
         WorkerBucket: "acme-plat-cfn-artifacts-{{ .vars.stage }}"
-        WorkerKey: "lambda/worker-{{ .vars.stage }}.zip"
+        WorkerKey: "lambda/worker-{{ .vars.release }}.zip"
       provision:
         targets:
           artifacts:
@@ -281,13 +291,13 @@ components:
           with:
             - name: archive
               type: archive
-              source: dist/worker/
+              source: src/worker/
               destination: .build/worker.zip
               mtime: epoch
             - name: publish
               type: publish
               source: .build/worker.zip
-              destination: "lambda/worker-{{ .vars.stage }}.zip"
+              destination: "lambda/worker-{{ .vars.release }}.zip"
               target: artifacts
 ```
 
@@ -304,7 +314,10 @@ Resources:
   </TabItem>
 </Tabs>
 
-The `publish` step skips uploads whose content has not changed, so repeated deployments report
+The key carries a `release` variable (set it per deployment, for example from a git tag or
+`!env RELEASE`), because CloudFormation only updates a Lambda function when the `S3Key` value
+changes; uploading new code under the same key leaves the function untouched. The `publish` step
+skips uploads whose content has not changed, so repeated deployments of the same release report
 `0 uploaded, 1 unchanged`. See [asset packaging hooks](/stacks/components/aws-cloudformation#asset-packaging-hooks)
 for the full pattern.
 
@@ -398,7 +411,7 @@ are uploaded to this bucket automatically on every command that submits a templa
 
 ## Migration Steps
 
-The examples use component `app`, Atmos stack `dev`, and CloudFormation stack `acme-plat-dev-app`.
+The examples use components `network` and `app`, Atmos stacks `dev` and `staging`, and CloudFormation stacks `acme-plat-<stage>-network` and `acme-plat-<stage>-app`.
 Replace them with your names. Where a step references an existing deployment, match its stack name,
 account, region, and parameter values, because a different name or region selects a different stack.
 
@@ -438,10 +451,29 @@ templates:
 
 Skip this step for plain CloudFormation templates. For each directive, pick its replacement from
 [Rain Directives](#rain-directives): a CloudFormation parameter fed from stack configuration, an
-included template with `| eval`, or a packaging hook. Running any command on a template that still
-has directives tells you which ones remain.
+included template with `| eval`, or a packaging hook. Any command that reads the template
+(`render`, `validate`, `plan`, `apply`) lists the directives that remain; `--dry-run` only checks the
+stack configuration and never opens the template file.
 
-### Step 4: Describe the Stack in a Manifest
+### Step 4: Split Shared Config from Environment Config
+
+Rain repeated the same `rain deploy` per environment with a different `--config` file. In Atmos
+the shared part becomes an abstract base in a catalog, the per-environment part is each
+environment's stack manifest, and anything shared by a region or account becomes a mixin.
+
+<File title="stacks/catalog/network.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    network:
+      metadata:
+        type: abstract
+      path: template.yaml
+      stack_name: "acme-plat-{{ .vars.stage }}-network"
+      parameters:
+        Stage: "{{ .vars.stage }}"
+```
+</File>
 
 <File title="stacks/catalog/app.yaml">
 ```yaml
@@ -454,6 +486,26 @@ components:
       stack_name: "acme-plat-{{ .vars.stage }}-app"
       capabilities:
         - CAPABILITY_IAM
+      # deploy.sh ordered network before app by hand and copied its output into the
+      # app's parameters. Both become declarations.
+      dependencies:
+        components:
+          - name: network
+      parameters:
+        Stage: "{{ .vars.stage }}"
+        SharedBucket: !aws.cloudformation.output network SharedBucket
+```
+</File>
+
+<File title="stacks/mixins/region/us-east-1.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    network:
+      settings:
+        aws_cloudformation:
+          region: us-east-1
+    app:
       settings:
         aws_cloudformation:
           region: us-east-1
@@ -463,6 +515,8 @@ components:
 <File title="stacks/deploy/dev.yaml">
 ```yaml
 import:
+  - mixins/region/us-east-1
+  - catalog/network
   - catalog/app
 
 vars:
@@ -470,53 +524,77 @@ vars:
 
 components:
   "aws/cloudformation":
+    network:
+      metadata:
+        type: real
+      tags: !include ../../params/dev.yaml .Tags
     app:
       metadata:
         type: real
-      parameters: !include ../../params/dev.json
-      tags: !include ../../params/rain-config.yaml .Tags
+      parameters: !include ../../params/dev.yaml .Parameters
+      tags: !include ../../params/dev.yaml .Tags
 ```
 </File>
 
-Add `termination_protection`, `role_arn`, `stack_policy`, or `notification_arns` here if the
-existing deployment uses them. See the
+The environment stack includes the Rain config file for that environment, and its `Parameters`
+map deep-merges with the catalog's `parameters`, so `Stage` and `SharedBucket` come from the base
+and `DeployOwner` comes from the file. Keep the per-environment `!include` in the environment
+stack: an `!include` path is resolved when the manifest loads, before Go templates render, so
+`!include ../../params/{{ .vars.stage }}.yaml` in a catalog does not work. The `staging` stack is
+the same file with `stage: staging` and `params/staging.yaml`.
+
+Add `termination_protection`, `role_arn`, `stack_policy`, or `notification_arns` to the base
+when the existing deployment uses them. See the
 [CloudFormation component reference](/stacks/components/aws-cloudformation) for every field.
 
 ### Step 5: Preview, Apply, Verify
 
-Check the configuration without touching AWS:
+Check the stack configuration without touching AWS, then render the template once so any
+remaining Rain directive is reported before a real changeset is attempted:
 
 <Terminal>
 ```shell
 atmos aws cloudformation plan app -s dev --dry-run
+atmos aws cloudformation render app -s dev
 ```
 </Terminal>
 
-Then preview against the real stack. Atmos creates a changeset, renders it, and removes it:
+Then preview against the real stacks. Atmos creates a changeset per component, renders it, and
+removes it, in dependency order:
 
 <Terminal>
 ```shell
-atmos aws cloudformation plan app -s dev
+atmos aws cloudformation plan --all -s dev
 ```
 </Terminal>
 
 ```text
-Changes for acme-plat-dev-app: 0 resources
+Changes for acme-plat-dev-network: 0 resources
 acme-plat-dev-app: no changes (changeset would be a no-op)
 ```
 
 For an existing stack, no changes is the result you want. Review any replacement or deletion before
-you apply:
+you apply. This single command replaces the whole `deploy.sh` loop: `network` deploys first, the
+`SharedBucket` output is read from the deployed stack and passed to `app`, and `delete --all`
+later runs in reverse order:
 
 <Terminal>
 ```shell
-atmos aws cloudformation apply app -s dev
+atmos aws cloudformation deploy --all -s dev
 atmos aws cloudformation output app -s dev
 ```
 </Terminal>
 
-For CI or scripts, use `deploy`, which is `apply` with `--auto-approve`. In a non-interactive shell
-without `--auto-approve`, `apply` stops with an error before changing anything.
+```text
+ INFO  Processing components component_type=aws/cloudformation order=dependency count=2
+...
+ Output            Value
+ SharedBucketUsed  acme-net-dev-shared
+```
+
+Use `apply` instead of `deploy` to review and confirm each changeset interactively. In a
+non-interactive shell without `--auto-approve`, `apply` stops with an error before changing
+anything. Repeat for `staging` by pointing at its stack; the catalog and mixin are shared.
 
 ## Migration Checklist
 
@@ -530,7 +608,8 @@ without `--auto-approve`, `apply` stops with an error before changing anything.
 - [ ] Run a dry run, then a real plan, and expect no changes for an existing stack
 - [ ] Apply, then verify outputs and tags
 - [ ] Update scripts for the new verbs, flags, and confirmation behavior
-- [ ] Repeat per environment through imports and inheritance
+- [ ] Move shared config into catalog bases and mixins; keep each environment's Rain config `!include` in its own stack
+- [ ] Replace hand-ordered deploy loops with `dependencies.components` and `!aws.cloudformation.output`, then `deploy --all`
 </TaskList>
 
 ## What Atmos Won't Do

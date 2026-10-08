@@ -81,103 +81,7 @@ so a template still containing `!Rain::*` tags will fail as invalid CloudFormati
 An unset `!env` variable with no default logs a warning and resolves to `""`. Set the variable or
 pass a default; `--dry-run` skips YAML functions and will not show the problem.
 
-### Before/After: `Constant`/`Env` → Parameters
-
-Before (Rain):
-
-```yaml
-# template.yaml (Rain-preprocessed)
-Resources:
-  Bucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub "${Rain::BucketNamePrefix}-bucket"
-      Tags:
-        - Key: Owner
-          Value: !Rain::Env DEPLOY_OWNER
-```
-
-After (Atmos):
-
-```yaml
-# template.yaml (plain CloudFormation, no directives)
-Parameters:
-  BucketNamePrefix:
-    Type: String
-  DeployOwner:
-    Type: String
-Resources:
-  Bucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub "${BucketNamePrefix}-bucket"
-      Tags:
-        - Key: Owner
-          Value: !Ref DeployOwner
-```
-
-```yaml
-# stacks/dev.yaml
-components:
-  "aws/cloudformation":
-    my-bucket:
-      path: template.yaml
-      parameters:
-        BucketNamePrefix: acme-plat
-        DeployOwner: !env DEPLOY_OWNER
-```
-
-Parity for `!Rain::Env` inside the template file itself uses an Atmos-evaluated template source:
-
-```yaml
-# stacks/dev.yaml
-components:
-  "aws/cloudformation":
-    my-bucket:
-      template: !include template.yaml | eval
-```
-
-```yaml
-# template.yaml: !env is evaluated because of "| eval"
-Resources:
-  Bucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      Tags:
-        - Key: Owner
-          Value: !env DEPLOY_OWNER
-```
-
-### Before/After: `Embed` → `!include` or inline block scalar
-
-Before (Rain):
-
-```yaml
-Resources:
-  Function:
-    Type: AWS::Lambda::Function
-    Properties:
-      Code:
-        ZipFile: !Rain::Embed handler.py
-```
-
-After (Atmos), option 1: `ZipFile: !include handler.py` inside the template file, with
-`template: !include template.yaml | eval` in stack config. Option 2: content flattened into the
-template once, by hand:
-
-```yaml
-Resources:
-  Function:
-    Type: AWS::Lambda::Function
-    Properties:
-      Code:
-        ZipFile: |
-          def handler(event, context):
-              return {"statusCode": 200}
-```
-
-For anything beyond a few lines, package the function as a real deployment artifact (S3-hosted
-zip) instead.
+Before/after examples for `Env`/`Constant` (parameters) and `Include`/`Embed` (`| eval` includes) are in the user guide's Concept Mapping section; the hook pattern is the one agents get wrong most, so it stays here.
 
 ### Before/After: `S3` → `archive` + `publish` hook
 
@@ -272,6 +176,32 @@ rather than guessing.
 | Raw CloudFormation, no Rain (hand-written templates + `aws cloudformation deploy`/console) | Skip the directive table — go straight to [The Minimum-Viable Migration](#the-minimum-viable-migration) |
 | Rain-managed templates with `!Rain::*` directives | Resolve every directive per the [mapping table](#rain-directive-mapping) first, then migrate |
 | Rain + a Rain config file (`{Parameters: {...}, Tags: {...}}`, `RAIN_VAR_*` / `RAIN_DEFAULT_TAG_*` env defaults) | No config-file compatibility layer — each stack becomes one `aws/cloudformation` component; select the file's maps with `!include <file> .Parameters` / `.Tags`. The `RAIN_*` env defaults have no Atmos equivalent: set `parameters:` / `tags:` in (inheritable) stack config. Use `dependencies.components` for cross-stack ordering |
+
+## From a Rain Repo to Atmos Conventions
+
+A Rain repo is usually one template per stack, one `--config` file per environment, and a shell
+loop that orders stacks by hand and copies outputs between them. Map it to Atmos conventions, not
+to a flat one-stack-per-file copy (verified end to end against the Floci emulator, 2026-10-08):
+
+- **Shared config → catalog bases.** One abstract component per Rain template under
+  `stacks/catalog/` (`metadata.type: abstract`, `path`, `stack_name` with `{{ .vars.stage }}`,
+  shared `parameters`, `capabilities`, hooks).
+- **Per-environment `--config` files → the environment stack.** `stacks/deploy/<env>.yaml` imports
+  the bases and includes that environment's Rain config: `parameters: !include
+  ../../params/<env>.yaml .Parameters` and `tags: !include ... .Tags`. The included map deep-merges
+  with the base's `parameters`. Do NOT put `!include ../../params/{{ .vars.stage }}.yaml` in a
+  catalog: `!include` resolves when the manifest loads, before Go templates render, and fails with
+  "could not find local file '../../params/{{'".
+- **Region/account repetition → mixins.** `stacks/mixins/region/us-east-1.yaml` sets
+  `settings.aws_cloudformation.region` for every component; environment stacks import it.
+- **Hand-ordered deploy loops → declared dependencies.** `dependencies: {components: [{name:
+  network}]}` on the consumer (objects with `name:`, not bare strings). `deploy --all -s <env>`
+  then runs in dependency order and `delete --all` in reverse.
+- **Copied outputs → `!aws.cloudformation.output`.** `SharedBucket: !aws.cloudformation.output
+  network SharedBucket` in the consumer's `parameters`; evaluated per component at execution, so
+  a bulk apply from nothing works (the producer deploys first).
+- **`RAIN_VAR_*`/`RAIN_DEFAULT_TAG_*` → catalog `parameters`/`tags`** so every environment
+  inherits them; override per environment in the stack file.
 
 ## The Minimum-Viable Migration
 

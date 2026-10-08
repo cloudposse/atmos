@@ -87,8 +87,8 @@ To compute a value, put the YAML function in the stack manifest rather than in t
 ### Evaluating Functions Inside an Included File
 
 Add a trailing `| eval` to evaluate the YAML functions inside the included file exactly as if they were written in
-the manifest. Nested `!include` paths resolve relative to the including manifest (`./` and `../`) or to `base_path`,
-and a nested `!include` of a non-YAML file resolves to that file's text:
+the manifest. A nested `!include` inside the evaluated file resolves `./` and `../` paths relative to that file (bare
+paths still resolve relative to `base_path`), and a nested `!include` of a non-YAML file resolves to that file's text:
 
 ```yaml title="stacks/catalog/settings.yaml"
 home: !env HOME          # Evaluated when included with | eval.

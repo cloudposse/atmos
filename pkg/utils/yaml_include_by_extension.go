@@ -34,7 +34,35 @@ func ProcessIncludeTag(
 ) error {
 	defer perf.Track(atmosConfig, "utils.ProcessIncludeTag")()
 
-	return processIncludeTagInternal(atmosConfig, node, val, file, false)
+	_, err := processIncludeTagInternal(atmosConfig, node, val, file, includeMode{})
+	return err
+}
+
+// ProcessIncludeTagWalked is ProcessIncludeTag for callers that own a tag
+// walker: when the include is a local YAML file evaluated with `| eval`, the
+// spliced subtree is walked through walkIn with the included file as its
+// context, so a nested `!include ./x` resolves relative to that file rather
+// than the outer manifest. The returned bool reports that the subtree has
+// already been walked and the caller must not recurse into it again.
+func ProcessIncludeTagWalked(
+	atmosConfig *schema.AtmosConfiguration,
+	node *yaml.Node,
+	val string,
+	file string,
+	walkIn func(node *yaml.Node, file string) error,
+) (bool, error) {
+	defer perf.Track(atmosConfig, "utils.ProcessIncludeTagWalked")()
+
+	return processIncludeTagInternal(atmosConfig, node, val, file, includeMode{walkIn: walkIn})
+}
+
+// includeMode carries the caller-selected include behavior.
+type includeMode struct {
+	// forceRaw returns the file text verbatim (!include.raw).
+	forceRaw bool
+	// walkIn, when set, walks an evaluated local YAML include with the
+	// included file as the tag-resolution context.
+	walkIn func(node *yaml.Node, file string) error
 }
 
 // ProcessIncludeRawTag processes the !include.raw tag.
@@ -47,7 +75,8 @@ func ProcessIncludeRawTag(
 ) error {
 	defer perf.Track(atmosConfig, "utils.ProcessIncludeRawTag")()
 
-	return processIncludeTagInternal(atmosConfig, node, val, file, true)
+	_, err := processIncludeTagInternal(atmosConfig, node, val, file, includeMode{forceRaw: true})
+	return err
 }
 
 // processIncludeTagInternal handles both !include and !include.raw tags.
@@ -56,9 +85,11 @@ func processIncludeTagInternal(
 	node *yaml.Node,
 	val string,
 	file string,
-	forceRaw bool,
-) error {
+	mode includeMode,
+) (bool, error) {
 	defer perf.Track(atmosConfig, "utils.processIncludeTagInternal")()
+
+	forceRaw := mode.forceRaw
 
 	var includeFile string
 	var includeQuery string
@@ -68,7 +99,7 @@ func processIncludeTagInternal(
 	// Parse the include arguments
 	parsed, err := parser.ParseInclude(val)
 	if err != nil {
-		return err
+		return false, err
 	}
 	includeFile = parsed.Path
 	includeQuery = parsed.Query
@@ -82,29 +113,47 @@ func processIncludeTagInternal(
 		if isYAMLInclude(localFile, forceRaw) {
 			data, err := os.ReadFile(localFile)
 			if err != nil {
-				return fmt.Errorf("%w: %s, stack manifest: %s, error: %w",
+				return false, fmt.Errorf("%w: %s, stack manifest: %s, error: %w",
 					ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
 			}
-			return spliceYAMLText(atmosConfig, node, string(data), includeSplice{query: includeQuery, eval: evalFunctions, val: val, file: file})
+			if err := spliceYAMLText(atmosConfig, node, string(data), includeSplice{query: includeQuery, eval: evalFunctions, val: val, file: file}); err != nil {
+				return false, err
+			}
+			if evalFunctions && mode.walkIn != nil {
+				// Resolve tags nested in the included file relative to that file.
+				return true, mode.walkIn(node, localFile)
+			}
+			return false, nil
 		}
 		// Process local file
 		res, err = processLocalFile(localFile, forceRaw)
 		if err != nil {
-			return err
+			return false, err
 		}
 	} else if shouldFetchRemote(includeFile) {
 		if isYAMLInclude(includeFile, forceRaw) {
 			raw, err := processRemoteFile(atmosConfig, includeFile, true)
 			if err != nil {
-				return err
+				return false, err
 			}
-			text, _ := raw.(string)
-			return spliceYAMLText(atmosConfig, node, text, includeSplice{query: includeQuery, eval: evalFunctions, val: val, file: file})
+			var text string
+			switch v := raw.(type) {
+			case string:
+				text = v
+			case []byte:
+				text = string(v)
+			default:
+				return false, fmt.Errorf("%w: %s, stack manifest: %s, error: unexpected remote content type %T",
+					ErrIncludeYamlFunctionFailedStackManifest, val, file, raw)
+			}
+			// Nested paths inside remote content keep the outer manifest as
+			// their context; there is no local directory to resolve against.
+			return false, spliceYAMLText(atmosConfig, node, text, includeSplice{query: includeQuery, eval: evalFunctions, val: val, file: file})
 		}
 		// Process as remote if it's a URL or go-getter detects it as remote
 		res, err = processRemoteFile(atmosConfig, includeFile, forceRaw)
 		if err != nil {
-			return err
+			return false, err
 		}
 	} else {
 		// Local file not found - provide helpful error message.
@@ -113,7 +162,7 @@ func processIncludeTagInternal(
 		if errBasePath == "" {
 			errBasePath = atmosConfig.BasePath
 		}
-		return fmt.Errorf("%w: could not find local file '%s' (tried relative to manifest '%s' and base path '%s')",
+		return false, fmt.Errorf("%w: could not find local file '%s' (tried relative to manifest '%s' and base path '%s')",
 			ErrIncludeYamlFunctionInvalidFile, includeFile, file, errBasePath)
 	}
 
@@ -121,12 +170,12 @@ func processIncludeTagInternal(
 	if includeQuery != "" {
 		res, err = EvaluateYqExpression(atmosConfig, res, includeQuery)
 		if err != nil {
-			return err
+			return false, err
 		}
 	}
 
 	// Update the YAML node with the result
-	return updateYamlNode(node, res, val, file)
+	return false, updateYamlNode(node, res, val, file)
 }
 
 // includeSplice carries the per-include inputs spliceYAMLText needs: the yq

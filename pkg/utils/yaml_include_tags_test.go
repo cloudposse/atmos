@@ -27,32 +27,36 @@ func writeFile(t *testing.T, dir, name, content string) string {
 
 func TestIncludeYAML_PreservesNestedAtmosFunctions(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "template.yaml", `
+	// The template and its handler live in a subdirectory; a nested `./`
+	// include must resolve relative to the included template, not the manifest.
+	sub := filepath.Join(dir, "components", "app")
+	require.NoError(t, os.MkdirAll(sub, 0o755))
+	writeFile(t, sub, "template.yaml", `
 Resources:
   Marker:
     Properties:
       Value: !env DEPLOY_OWNER
-      Code: !include handler.py
+      Code: !include ./handler.py
 `)
-	writeFile(t, dir, "handler.py", "def handler(event, context):\n    return 1\n")
+	writeFile(t, sub, "handler.py", "def handler(event, context):\n    return 1\n")
 	manifestPath := writeFile(t, dir, "stack.yaml", "x: 1\n")
 
 	t.Run("with | eval", func(t *testing.T) {
-		result, err := UnmarshalYAMLFromFile[map[string]any](&schema.AtmosConfiguration{BasePath: dir}, "template: !include ./template.yaml | eval\n", manifestPath)
+		result, err := UnmarshalYAMLFromFile[map[string]any](&schema.AtmosConfiguration{BasePath: dir}, "template: !include ./components/app/template.yaml | eval\n", manifestPath)
 		require.NoError(t, err)
 
 		props := result["template"].(map[string]any)["Resources"].(map[string]any)["Marker"].(map[string]any)["Properties"].(map[string]any)
 		assert.Equal(t, "!env DEPLOY_OWNER", props["Value"], "nested !env is deferred for the evaluation phase")
-		assert.Equal(t, "def handler(event, context):\n    return 1\n", props["Code"], "nested !include of a non-YAML file resolves to its text")
+		assert.Equal(t, "def handler(event, context):\n    return 1\n", props["Code"], "nested ./ include resolves relative to the included template")
 	})
 
 	t.Run("without | eval the documented data contract holds", func(t *testing.T) {
-		result, err := UnmarshalYAMLFromFile[map[string]any](&schema.AtmosConfiguration{BasePath: dir}, "template: !include ./template.yaml\n", manifestPath)
+		result, err := UnmarshalYAMLFromFile[map[string]any](&schema.AtmosConfiguration{BasePath: dir}, "template: !include ./components/app/template.yaml\n", manifestPath)
 		require.NoError(t, err)
 
 		props := result["template"].(map[string]any)["Resources"].(map[string]any)["Marker"].(map[string]any)["Properties"].(map[string]any)
 		assert.Equal(t, "DEPLOY_OWNER", props["Value"], "tag dropped, argument kept as a string")
-		assert.Equal(t, "handler.py", props["Code"])
+		assert.Equal(t, "./handler.py", props["Code"])
 	})
 }
 
