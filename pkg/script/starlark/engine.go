@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/script"
 	climodule "github.com/cloudposse/atmos/pkg/script/starlark/stdlib/cli"
+	hashmodule "github.com/cloudposse/atmos/pkg/script/starlark/stdlib/hash"
 	regexmodule "github.com/cloudposse/atmos/pkg/script/starlark/stdlib/regex"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -261,9 +262,13 @@ func (s *session) predeclared() starlark.StringDict {
 		"fs":           s.filesystemModule(),
 		"regex":        regexmodule.New(),
 		"steps":        s.stepsModule(),
-		"exec":         module("exec", starlark.StringDict{"run": starlark.NewBuiltin("exec.run", s.exec)}),
-		"log":          module("log", s.logMembers()),
-		"ci":           s.ciModule(),
+		"hash":         hashmodule.New(),
+		"exec": module("exec", starlark.StringDict{
+			"run":   starlark.NewBuiltin("exec.run", s.exec),
+			"which": starlark.NewBuiltin("exec.which", s.which),
+		}),
+		"log": module("log", s.logMembers()),
+		"ci":  s.ciModule(),
 	}
 }
 
