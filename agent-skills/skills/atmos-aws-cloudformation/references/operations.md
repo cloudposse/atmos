@@ -26,6 +26,9 @@ acknowledgments in `capabilities:` independently.
   no-op changeset (CloudFormation's `FAILED` "didn't contain changes") is deleted and reported as `No changes`;
   the stack-policy, termination-protection, and Outputs follow-ups still run. Changeset names are
   `atmos-<stack>-<timestamp>` (the `atmos-` prefix is not repeated for stacks already named `atmos-...`).
+- **Stack policy timing**: with `stack_policy` set, an UPDATE installs the policy after confirmation and
+  before `ExecuteChangeSet`, so the policy governs that update. A CREATE installs it after the stack is
+  created, and a no-op apply installs it right after the no-op is reported.
 - **Never-deployed stacks**: the first CREATE changeset makes CloudFormation register an empty
   `REVIEW_IN_PROGRESS` stack. `diff`/`plan`, a declined `apply`, a failed changeset, and a changeset that
   cannot be executed delete that stub (only when this run created it and it is still `REVIEW_IN_PROGRESS`);
@@ -80,3 +83,31 @@ import/adoption itself is not supported).
 - A deployed stack with no Outputs prints `Stack <name> has no outputs` for the table format. Structured formats still print an empty document, so stdout stays parseable.
 - An unsupported `--format` error names the value and lists the valid formats. JSON is written without HTML escaping, so `<MASKED>` appears literally.
 - In bulk runs, JSON and YAML print one document keyed by stack, then component. Table output titles each component.
+
+## Confirmation
+
+**Confirmation**: `delete` prompts for interactive confirmation on a TTY; pass `--auto-approve` to
+skip it. `apply` creates its changeset first, prints the predicted changes, then asks (`--auto-approve`
+skips only the question, not the preview); declining deletes the changeset and the empty
+`REVIEW_IN_PROGRESS` stack Atmos created for a never-deployed component. Without a TTY and without
+`--auto-approve`, `apply` fails before creating anything (`confirmation required`, not `user aborted`).
+Publish-only (`aws/s3`) and external (`git`) targets change no stack and never ask. `deploy` defaults
+`--auto-approve` to `true`. See [apply flow](#apply-diff-and-delete-behavior).
+
+
+## Output Formats and Masking
+
+`output` supports the full standard format set shared with `atmos terraform output`: `json`, `yaml`,
+`hcl`, `env`, `dotenv`, `bash`, `csv`, `tsv`, `table` (default on a TTY), and `github` (GitHub
+Actions `$GITHUB_OUTPUT` syntax via `atmos aws cloudformation output vpc -s dev --format=github`),
+plus `--flatten` and `--uppercase` key options. An unsupported `--format` lists the valid ones. A
+stack with no Outputs prints `Stack <name> has no outputs` only in table format; JSON and YAML
+print an empty document. The `key` argument cannot be combined with bulk selection.
+
+With masking enabled, standalone output and apply summaries read the deployed template
+(`cloudformation:GetTemplate`) and redact outputs that reference NoEcho parameters, including
+intrinsics and indirect resource/condition dependencies. Known parameter/default values are also
+registered with the masker. Missing or invalid sensitivity metadata fails before output is printed.
+This works without a local template or source download, including when configured values are stale.
+`--mask=false` explicitly disables presentation masking. Internal component output lookups retain
+real values. Arbitrary transformed secrets without a detectable dependency cannot be recognized.

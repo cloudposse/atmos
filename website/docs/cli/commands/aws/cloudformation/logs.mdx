@@ -6,18 +6,24 @@ id: logs
 description: Show the combined event log across a stack and its nested stacks.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
 import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
-  Show the combined CloudFormation event log across a stack and every nested
-  stack beneath it (up to 10 levels deep), merged into a single chronological
-  timeline — instead of having to check each nested stack's events separately.
+Show events from a stack and its nested stacks in a single chronological log.
+Nested stacks are included up to 10 levels deep.
 </Intro>
 
 <Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
 
 <CastPlayer title="atmos aws cloudformation logs --help" src="/casts/screengrabs/atmos-aws-cloudformation-logs--help.cast" static chrome />
 
@@ -26,6 +32,8 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 ```shell
 atmos aws cloudformation logs <component> --stack <stack> [options]
 ```
+
+## Examples
 
 ```shell
 atmos aws cloudformation logs vpc -s plat-ue2-dev
@@ -44,44 +52,15 @@ atmos aws cloudformation logs --all -s plat-ue2-dev
 atmos aws cloudformation logs --affected --base origin/main
 ```
 
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
+
 ## Flags
 
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
   <dd>Atmos stack. With `--all`, `--affected`, `--tags`, or `--labels`, this is an optional stack filter; omit it to select components across stacks.</dd>
-
-  <dt>`--chart` <em>(optional)</em></dt>
-  <dd>Render a per-resource timeline (one line per logical resource ID, showing its status transitions in order) instead of a flat chronological event list.</dd>
-
-  <dt>`--follow`, `-f` <em>(optional)</em></dt>
-  <dd>Continuously stream new events until interrupted (`tail -f` style) instead of returning after one pass. Press Ctrl+C to stop; the command exits 130. Cannot be combined with `--chart`.</dd>
-
-<SelectionFlags />
-
-<GitFlags />
-</dl>
-
-## Output
-
-By default, every event from the stack and its nested stacks is printed in
-timestamp order, the same as a single stack's event stream. With `--chart`,
-events are grouped by logical resource ID instead, one line per resource
-showing its status transitions in order:
-
-```
-NatGateway                    CREATE_IN_PROGRESS -> CREATE_COMPLETE
-SubnetsStack                  CREATE_IN_PROGRESS -> CREATE_COMPLETE
-```
-
-With nested stacks, each row is prefixed with its stack name (`<stack-name>/<LogicalId>`). A stack ARN
-appears only when two different stacks share a name, for example a stack that was deleted and re-created,
-where the name alone would merge their rows.
-
-:::note
-`logs` does not fire `before`/`after` hook events — only
-[`apply`](/cli/commands/aws/cloudformation/apply),
-[`diff`](/cli/commands/aws/cloudformation/diff),
-[`delete`](/cli/commands/aws/cloudformation/delete),
-[`drift detect`](/cli/commands/aws/cloudformation/drift/detect), and
-[`drift describe`](/cli/commands/aws/cloudformation/drift/describe) do.
-:::

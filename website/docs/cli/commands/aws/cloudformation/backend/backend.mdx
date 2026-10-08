@@ -11,13 +11,8 @@ import DocCardList from '@theme/DocCardList'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-Create, describe, update, delete, and list the S3 bucket referenced by a `kind:
-aws/s3` `provision.targets` entry — the destination `apply`/`deploy` upload
-oversized templates to when packaging is needed (see [Delivery
-Targets](/stacks/components/aws-cloudformation#delivery-targets)). These verbs
-manage that bucket directly, the same way `atmos terraform backend` manages a
-Terraform component's state backend, targeting the identical registered S3
-backend type — no separate backend kind exists for CloudFormation.
+Manage the S3 buckets used to package CloudFormation templates. Each bucket is
+declared as a `kind: aws/s3` delivery target in the component’s stack configuration.
 </Intro>
 
 <Experimental />

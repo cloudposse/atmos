@@ -1,0 +1,46 @@
+---
+title: Using CloudFormation
+sidebar_position: 1.5
+sidebar_label: CloudFormation
+id: cloudformation
+description: Deploy AWS CloudFormation templates as native Atmos components.
+sidebar_group: component-library
+component_type: aws/cloudformation
+component_implementation: CloudFormation templates
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+CloudFormation components let you deploy AWS CloudFormation templates with the same
+stack configuration, inheritance, authentication, and dependencies used by other
+Atmos components. Atmos calls the AWS SDK directly; the `aws` CLI is not required.
+</Intro>
+
+<Experimental />
+
+Use a CloudFormation component when you already have a template or need AWS
+resources that fit CloudFormation. A component can refer to a template file or
+define the template inline in its stack manifest. Each stack can supply its own
+parameters, region, account identity, and delivery target.
+
+```yaml
+components:
+  "aws/cloudformation":
+    vpc:
+      stack_name: vpc
+      path: vpc.yaml
+      parameters:
+        Environment: dev
+```
+
+The `vpc` key is the component name in this stack. The template file is resolved
+from the configured CloudFormation component directory. See the
+[CloudFormation stack configuration](/stacks/components/aws-cloudformation) for
+the full schema, inline templates, changesets, drift detection, and StackSets.
+
+## Next steps
+
+- [Configure a CloudFormation component](/stacks/components/aws-cloudformation)
+- [Run CloudFormation commands](/cli/commands/aws/cloudformation)

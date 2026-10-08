@@ -1,0 +1,94 @@
+---
+slug: cloudformation-templated-policies-and-cross-account-outputs
+title: "Templated CloudFormation stack policies and account-safe output references"
+authors: [osterman]
+tags: [feature, experimental]
+---
+
+Stack policies often differ by environment, so static policy files can require
+separate copies. Cross-account output references also need a consistent way to
+identify the account containing the producer stack. Atmos now supports inline
+policies and output lookups that follow the producer's deployment identity.
+
+<!--truncate-->
+
+## The Problem
+
+A file-based stack policy cannot use Atmos template values. Maintaining separate
+files makes it harder to keep shared policy rules consistent across environments.
+
+Output lookups also need the producer's identity. Using a consumer's account
+can select a same-named stack with unrelated outputs.
+
+## The Fix
+
+### Inline Policies
+
+Use [`stack_policy.body`](/stacks/components/aws-cloudformation#cloudformation-specific-sections)
+for a policy rendered with Atmos templates and YAML functions. Choose either
+an inline body or `stack_policy.file`.
+
+### Cross-Account Outputs
+
+Both [`!aws.cloudformation.output`](/functions/yaml/aws.cloudformation.output)
+and [`atmos.Component`](/functions/template/atmos.Component) follow the producer's
+default direct target identity, even when the consumer passes `--identity`.
+Without target auth, the lookup uses the caller's credentials.
+
+The `describe component` and `describe stacks` commands use the same lookup
+rules as deployment. Invalid target settings fail with a correction hint; see
+[target validation](/stacks/components/aws-cloudformation#validation).
+
+## How to Use It
+
+Put stack-specific content in an inline template and policy:
+
+```yaml
+components:
+  "aws/cloudformation":
+    database:
+      stack_name: "database-{{ .vars.stage }}"
+      template:
+        Resources:
+          Endpoint:
+            Type: AWS::SSM::Parameter
+            Properties:
+              Type: String
+              Value: "db.{{ .vars.stage }}.example.com"
+      stack_policy:
+        body:
+          Statement:
+            - Effect: Deny
+              Action: "Update:Replace"
+              Principal: "*"
+              Resource: "LogicalResourceId/Endpoint"
+            - Effect: Allow
+              Action: "Update:*"
+              Principal: "*"
+              Resource: "*"
+```
+
+Inline templates require `templates.settings.enabled: true`. CloudFormation dynamic references need one level
+of escaping so Atmos leaves them for CloudFormation: `'{{ "{{" }}resolve:ssm:/app/token}}'`.
+
+Add a default direct target to the producer component. Define the named identity
+in global or component auth:
+
+```yaml
+components:
+  "aws/cloudformation":
+    network:
+      provision:
+        targets:
+          default:
+            kind: aws/cloudformation
+            auth:
+              identity: shared-services/deployer
+```
+
+## Get Involved
+
+See the [CloudFormation component documentation](/stacks/components/aws-cloudformation) for templates, stack
+policies and deployment targets. This builds on [native CloudFormation stacks](/changelog/native-cloudformation-component)
+and [CloudFormation CI summaries](/changelog/cloudformation-ci-lifecycle). Share feedback in the
+[Atmos GitHub discussions](https://github.com/cloudposse/atmos/discussions).

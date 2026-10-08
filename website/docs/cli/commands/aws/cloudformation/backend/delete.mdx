@@ -6,6 +6,8 @@ id: delete
 description: Permanently delete the S3 bucket used by the component's template-packaging backend.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 
@@ -18,6 +20,11 @@ import Experimental from '@site/src/components/Experimental'
 
 <Experimental />
 
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation#delivery-targets">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
+
 <CastPlayer title="atmos aws cloudformation backend delete --help" src="/casts/screengrabs/atmos-aws-cloudformation-backend-delete--help.cast" static chrome />
 
 ## Usage
@@ -25,6 +32,8 @@ import Experimental from '@site/src/components/Experimental'
 ```shell
 atmos aws cloudformation backend delete <component> --stack <stack> --force [options]
 ```
+
+## Examples
 
 ```shell
 atmos aws cloudformation backend delete vpc -s plat-ue2-dev --force
@@ -35,6 +44,13 @@ Disambiguate when the component declares more than one `kind: aws/s3` target:
 ```shell
 atmos aws cloudformation backend delete vpc -s plat-ue2-dev --target artifacts --force
 ```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
 
 ## Flags
 

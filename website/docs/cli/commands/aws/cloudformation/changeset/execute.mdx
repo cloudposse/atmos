@@ -6,21 +6,25 @@ id: execute
 description: Execute a previously-created, named changeset.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
 import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
-  Execute a previously-created, named changeset (`ExecuteChangeSet`) and stream
-  stack events until the operation reaches a terminal state — unlike
-  [`apply`](/cli/commands/aws/cloudformation/apply), which creates (or reuses)
-  and executes a changeset in one step, `changeset execute` acts on an
-  existing changeset by name, created earlier with
-  [`changeset create`](/cli/commands/aws/cloudformation/changeset/create).
+Execute a named changeset and stream events until the operation finishes.
+Create the changeset first with
+[`changeset create`](/cli/commands/aws/cloudformation/changeset/create).
 </Intro>
 
 <Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
 
 <CastPlayer title="atmos aws cloudformation changeset execute --help" src="/casts/screengrabs/atmos-aws-cloudformation-changeset-execute--help.cast" static chrome />
 
@@ -29,6 +33,8 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 ```shell
 atmos aws cloudformation changeset execute <component> --stack <stack> --changeset-name <name> [options]
 ```
+
+## Examples
 
 ```shell
 atmos aws cloudformation changeset execute vpc -s plat-ue2-dev --changeset-name vpc-2026-08-25
@@ -40,11 +46,18 @@ Skip the interactive confirmation prompt:
 atmos aws cloudformation changeset execute vpc -s plat-ue2-dev --changeset-name vpc-2026-08-25 --auto-approve
 ```
 
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
+
 ## Flags
 
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
-  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
 
   <dt>`--changeset-name` <em>(required)</em></dt>
   <dd>Name of the changeset to execute.</dd>
@@ -62,14 +75,7 @@ atmos aws cloudformation changeset execute vpc -s plat-ue2-dev --changeset-name 
 If the stack ends in a failed status after executing the changeset (e.g.
 `UPDATE_ROLLBACK_COMPLETE`), `changeset execute` exits non-zero.
 
-:::note
-`changeset execute` does not fire `before`/`after` hook events — only
-[`apply`](/cli/commands/aws/cloudformation/apply),
-[`diff`](/cli/commands/aws/cloudformation/diff),
-[`delete`](/cli/commands/aws/cloudformation/delete),
-[`drift detect`](/cli/commands/aws/cloudformation/drift/detect), and
-[`drift describe`](/cli/commands/aws/cloudformation/drift/describe) do.
-:::
+This command does not fire [lifecycle hooks](/stacks/components/aws-cloudformation#lifecycle-hooks).
 
 After a successful named CREATE or UPDATE, Atmos enables configured `termination_protection`,
 matching apply. Failure to enable it fails the command even if the deployment completed.

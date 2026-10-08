@@ -61,6 +61,11 @@ components:
             default: true
 ```
 
+A component-level default supersedes a stack-level (or component-type-level) default, so exactly one default
+survives. Two defaults at the same level conflict. In a terminal, Atmos asks which to use; without one it fails with
+the list of defaults and a hint to pass `--identity=<name>` or remove one, rather than silently falling back to the
+AWS SDK default credential chain. A bare `--identity` also needs a terminal; otherwise pass `--identity=<name>`.
+
 ## Auth Configuration Structure
 
 ### Providers

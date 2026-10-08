@@ -1,0 +1,40 @@
+---
+title: Using Helm
+sidebar_position: 3
+sidebar_label: Helm
+id: helm
+description: Deploy Helm charts as native Atmos components.
+sidebar_group: component-library
+component_type: helm
+component_implementation: Local, repository, or OCI Helm charts
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Helm components let Atmos manage chart releases through stack configuration.
+Use them when you want chart values, versions, and target namespaces to vary by
+stack while sharing Atmos inheritance, authentication, and dependencies.
+</Intro>
+
+A component can use a local chart, a chart repository, or an OCI chart. The
+`values` map becomes the chart values for that stack:
+
+```yaml
+components:
+  helm:
+    app:
+      chart: ./charts/app
+      namespace: app
+      values:
+        replicaCount: 2
+```
+
+The `app` key names this component instance. See the
+[Helm stack configuration](/stacks/components/helm) for chart references,
+values files, repositories, rendering, and deployment targets.
+
+## Next steps
+
+- [Configure a Helm component](/stacks/components/helm)
+- [Run Helm commands](/cli/commands/helm/usage)

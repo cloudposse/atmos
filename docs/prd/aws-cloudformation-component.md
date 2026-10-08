@@ -106,6 +106,12 @@ sharpens one priority:
   [Template Scaffolding](#template-scaffolding-delegated-to-atmos-scaffold).
 - No migration-guide content in this PRD. The guide's scope and location are recorded so follow-up work
   has a clear target, but authoring it is out of scope until this design is approved.
+- **No `generate:` blocks and no isolated per-instance workdirs. This is a settled decision, not a
+  deferral.** A `generate:` key on a CloudFormation component, in the stack's `aws/cloudformation:`
+  type-level section, or in its `overrides:` is a stack-processing error — never silently ignored. The
+  root-level `generate:` (Terraform's global scope) does not reach CloudFormation components. Stack-specific
+  template content belongs in an inline `template:` rendered by Atmos templates. See
+  [Templating Instead of `generate`](#templating-instead-of-generate) for the rationale and evidence.
 
 ## Naming & Registry Precedent
 
@@ -186,7 +192,7 @@ components:
   "aws/cloudformation":
     vpc:
       stack_name: acme-plat-ue2-dev-vpc      # explicit; no legacy name-pattern interpolation
-      template: template.yaml                # path relative to the component's base path
+      path: template.yaml                    # file relative to the component directory (or inline `template:`)
 
       parameters:
         CidrBlock: "10.0.0.0/16"
@@ -447,6 +453,104 @@ region, etc.) that generates a starting `template.yaml` plus a matching
 `aws/cloudformation` component verb — it's a cross-reference to an existing subsystem, and no new
 scaffolding logic belongs in `pkg/component/aws/cloudformation/`.
 
+### Templating Instead of `generate`
+
+**Decision (2026-10-02, final):** CloudFormation components do not support `generate:` and do not
+use isolated per-instance workdirs. Do not reintroduce either without a new PRD amendment that
+answers every point below.
+
+**The supported way to put stack configuration into a template is an inline `template:`.** When
+`templates.settings.enabled: true`, Atmos renders an inline `template:` with the same Go-template
+context as every other stack field (`.vars`, `.settings`, `.atmos_component`, `atmos.Component`,
+Sprig/Gomplate when enabled), and YAML functions (`!env`, `!store`, `!secret`,
+`!aws.cloudformation.output`, …) resolve inside it. A file referenced by `path:` is deployed
+verbatim. CloudFormation dynamic references need one level of escaping:
+
+```yaml
+components:
+  "aws/cloudformation":
+    app:
+      stack_name: "app-{{ .vars.stage }}"
+      template:
+        Resources:
+          Endpoint:
+            Type: AWS::SSM::Parameter
+            Properties:
+              Type: String
+              Value: "https://{{ .vars.stage }}.example.com"
+          Secret:
+            Type: AWS::SSM::Parameter
+            Properties:
+              Type: String
+              Value: '{{ "{{" }}resolve:ssm:/app/{{ .vars.stage }}/token}}'
+      stack_policy:
+        body:
+          Statement:
+            - Effect: Allow
+              Action: "Update:*"
+              Principal: "*"
+              Resource: "*"
+```
+
+A templated stack policy uses the inline `stack_policy.body` (mutually exclusive with
+`stack_policy.file`), for the same reason.
+
+**Why `generate` was tried and removed.** `generate:` reached CloudFormation through the shared
+stack schema, which accepted the key while the runtime silently dropped it. A field test reported
+the silent drop, and PR #3251 closed the gap by implementing generation into isolated workdirs
+instead of rejecting the key — reversing this component's documented stance ("CloudFormation
+components do not support a `generate:` section — there is no codegen-artifact output the way
+Terraform generates backend/provider files"). The correct fix for a silently ignored key is an error.
+
+Generation duplicated what inline `template:` already does, and its only structural difference —
+writing files to disk — forced per-stack/component workdirs, which is where the defects came from.
+The 2026-10-02 field test of #3251 (Floci emulator and real AWS) found, among others:
+
+- **Stale content deployed.** For a fully generated component (no source directory), renaming or
+  removing a `generate` key left the old file in the workdir; `path:` still pointed at it, and the
+  stale template deployed successfully.
+- **Changes invisible to CI.** A change only inside `generate:` did not mark the component affected,
+  so `--affected` pipelines skipped the deploy.
+- **Behavior of untouched components changed.** With generation enabled, the root-level `generate:`
+  written for Terraform flowed into every CloudFormation component, wrote `backend_override.tf.json`
+  into its workdir, and moved `path:` resolution from the component directory to the workdir — breaking
+  `path: ../shared/template.yaml`. An inline-template component with `provision.workdir.enabled: true`
+  also regressed to an opaque "workdir provisioning failed" error.
+- **Tooling saw the wrong files.** Hooks received `ATMOS_COMPONENT_PATH` and a working directory in
+  the shared source directory, without the generated template, so a pre-deploy linter checked the
+  wrong file (or none).
+- **Fragile state.** A `generate` key under `.atmos/` overwrote workdir metadata and broke every later
+  run until the workdir was deleted by hand; duplicate keys that normalize to one file deployed
+  nondeterministic content; `terraform workdir clean --all` deleted CloudFormation workdirs.
+- **Double templating.** Generated content was rendered by stack templating and again by the
+  generator, so `{{resolve:...}}` needed two levels of escaping, unlike inline `template:`.
+
+None of these exist without file generation. The one capability inline templating lacked — a templated
+stack policy — is covered by `stack_policy.body`.
+
+**Rejected alternatives.**
+
+- *Keep `generate`, harden it.* Every fix (stale-file pruning, affected wiring, hook path resolution,
+  reserved-path guards, workdir-clean scoping, scope isolation from Terraform) adds surface to a feature
+  whose output inline `template:` already produces.
+- *Template files referenced by `path:` (a `.tmpl`-style opt-in).* Not needed today; if real demand
+  appears, it is an in-memory render of the loaded file — still no files written, no workdir.
+- *Silently ignore `generate:` (the pre-#3251 runtime).* Rejected: a configuration that validates but
+  does nothing is a defect. It is an error.
+
+**Contract.**
+
+1. `supportsGenerate` excludes `aws/cloudformation`.
+2. `generate` is absent from every CloudFormation schema definition (`additionalProperties: false`
+    rejects it), and stack processing returns an error with a hint pointing to inline `template:` for a
+    component-level, type-level or `overrides` `generate`. The root-level `generate:` never applies to
+    CloudFormation components.
+3. CloudFormation never copies local component files into a workdir. `provision.workdir.enabled: true`
+    only selects a per-instance download directory for a JIT `source:`, the same as every
+    source-provisioned type. On a component without `source:` it is an error with a hint, not a
+    silent no-op.
+4. `atmos.yaml` has no `components."aws/cloudformation".auto_generate_files` setting.
+
 ### Changesets
 
 `plan`/`diff` implicitly create a changeset (`CreateChangeSet` + `DescribeChangeSet`) and render the
@@ -677,6 +781,11 @@ with the stack even if execution subsequently fails.
 
 For a new stack, apply the policy after successful creation, protecting subsequent updates; it does
 not restrict initial resource creation. Omission of `stack_policy` leaves an existing policy in place.
+
+The policy document comes from exactly one of `stack_policy.file` (a JSON file relative to the
+component directory, used verbatim) or `stack_policy.body` (inline, a JSON string or a YAML mapping
+serialized to JSON, rendered by Atmos templates like an inline `template:`). Setting both is a
+validation error. `stack_policy.body` needs no component directory.
 See [AWS SetStackPolicy](https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/API_SetStackPolicy.html).
 
 ### Validate Semantics
@@ -748,7 +857,7 @@ components:
       source:
         uri: github.com/acme/cfn-templates.git//vpc?ref={{ .Version }}
         version: 1.2.0
-      template: template.yaml            # relative to the vendored component dir
+      path: template.yaml                # relative to the vendored component dir
 
     # Point at a single CloudFormation file — no repo checkout structure needed
     dns:
@@ -901,7 +1010,10 @@ site):
     (`:275-310`).
 3. Same file — the capability predicates: **`supportsComponentHooks` (`:349`) and
     `supportsSourceProvision` (`:370`) must include the type or `hooks:`/`source:`/`provision:` are
-    silently dropped**; evaluate `supportsGenerate`/`supportsPlugins` (`:348-377`) explicitly and
+    silently dropped**. Recorded choice: `supportsGenerate` and `supportsPlugins` **exclude**
+    `aws/cloudformation`, and a `generate` key is an error rather than a dropped section (see
+    [Templating Instead of `generate`](#templating-instead-of-generate)). Original instruction: evaluate
+    `supportsGenerate`/`supportsPlugins` (`:348-377`) explicitly and
     record the choice.
 4. `internal/exec/stack_processor_process_stacks_helpers.go` — `ComponentProcessorResult`
     `Component<X>`/`BaseComponent<X>` fields (`:72-104`).
@@ -988,11 +1100,13 @@ JSON Schema — **four files**, not one:
 
 1. `pkg/datafetcher/schema/stacks/stack-config/1.0.json` gains an
     `aws_cloudformation_component_manifest` definition, modeled directly on `helm_component_manifest`
-    — type-specific properties (`template`, `stack_name`, `parameters`, `capabilities`, `tags`,
+    — type-specific properties (`template`, `path`, `stack_name`, `parameters`, `capabilities`, `tags`,
     `stack_policy`, `role_arn`, `notification_arns`, `disable_rollback`, `termination_protection`)
     plus the shared cross-type sections
-    (`vars`/`env`/`settings`/`hooks`/`generate`/`source`/`provision`/`auth`/`dependencies`/`metadata`),
-    with `additionalProperties: false`.
+    (`vars`/`env`/`settings`/`hooks`/`source`/`provision`/`auth`/`dependencies`/`metadata`/`locals`),
+    with `additionalProperties: false`. `generate` is deliberately **absent** so validation rejects it
+    (see [Templating Instead of `generate`](#templating-instead-of-generate)). All CloudFormation
+    definitions — in this file, the manifest schema and the test-fixture copy — list the same fields.
 2. `pkg/datafetcher/schema/atmos/manifest/1.0.json` — the parallel manifest schema carries its own
     copies of every per-type definition; a parity test
     (`pkg/datafetcher/schema_condition_validation_test.go:190`) fails when a definition is added to
@@ -1274,3 +1388,4 @@ would need its own PRD evaluating whether an SDK-native or shell-out design fits
 | 2026-08-24 | Packaging destination restructured as a provision target: new `kind: aws/s3` target (`bucket`/`prefix`) replaces `settings.aws_cloudformation.s3_bucket`/`s3_prefix`; implicit single-target resolution with `packaging:` disambiguator; `--target <s3-target>` = publish-only delivery; kind string matches artifacts-PRD/stores `aws/*` vocabulary; `ProvisionTarget` struct gains the S3 fields; direct-deploy target kind is `aws/cloudformation` (the type string, kubernetes precedent) with an implicit default target when no `provision:` is declared |
 | 2026-08-24 | Auth section upgraded: primary SDK seam is `pkg/aws/identity.LoadConfigWithAuth` (the `cmd/aws/*` pattern, in-process, emulator/FIPS-aware) superseding the helm env seam for client construction; component `auth:` confirmed generically plumbed; per-target `ProvisionTarget.Auth` overrides enable cross-account deploy-vs-bucket identities; `role_arn` clarified as the CloudFormation service role, not caller credentials |
 | 2026-09-09 | Phase 5 added: Native CI Integration — `pkg/ci/plugins/cloudformation` plugin registers `aws/cloudformation` alongside Terraform/Helmfile/Kubernetes/Helm; compact job summaries for `diff`/`apply`/`delete`/`drift detect`/`drift describe` at the Kubernetes/Helmfile tier; new `drift-detect`/`drift-describe` hook events; changeset/stack-set CI events and Atmos Pro drift-status upload recorded as unscheduled future work |
+| 2026-10-02 | Templating instead of `generate` (final decision): CloudFormation rejects `generate:` (component, type-level, `overrides`) with an error and never receives the root-level Terraform `generate:`; no local workdir provisioning (`provision.workdir.enabled` applies only to JIT `source:` downloads and errors without one); `auto_generate_files` removed; inline `stack_policy.body` added; rationale and 2026-10-02 field-test evidence recorded in [Templating Instead of `generate`](#templating-instead-of-generate); `path:` examples corrected and schema field parity (`path`/`locals`) required |

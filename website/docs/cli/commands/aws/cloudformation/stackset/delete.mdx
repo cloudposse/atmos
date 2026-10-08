@@ -6,21 +6,24 @@ id: delete
 description: Delete every stack instance, then the StackSet itself.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
 import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
-  Delete a CloudFormation StackSet. CloudFormation requires every stack
-  instance to be removed before the StackSet itself can be deleted, so
-  `stackset delete` lists the StackSet's current instances, deletes them all
-  (`DeleteStackInstances`, retaining no resources) if any exist, waits for
-  that operation to finish, and only then deletes the StackSet
-  (`DeleteStackSet`).
+Delete all stack instances and their resources, then delete the StackSet.
+Atmos waits for instance deletion to finish before removing the StackSet.
 </Intro>
 
 <Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation#delivery-targets">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
 
 <CastPlayer title="atmos aws cloudformation stackset delete --help" src="/casts/screengrabs/atmos-aws-cloudformation-stackset-delete--help.cast" static chrome />
 
@@ -29,6 +32,8 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 ```shell
 atmos aws cloudformation stackset delete <component> --stack <stack> [options]
 ```
+
+## Examples
 
 ```shell
 atmos aws cloudformation stackset delete vpc -s plat-ue2-dev
@@ -51,40 +56,15 @@ Deleting a StackSet that does not exist is not an error: `stackset delete`
 prints `<name> does not exist; nothing to delete` and exits 0, the same as
 [`delete`](/cli/commands/aws/cloudformation/delete) does for a missing stack.
 
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
+
 ## Flags
 
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
   <dd>Atmos stack. With `--all`, `--affected`, `--tags`, or `--labels`, this is an optional stack filter; omit it to select components across stacks.</dd>
-
-  <dt>`--auto-approve` <em>(optional)</em></dt>
-  <dd>Skip the interactive confirmation prompt. Without it, `stackset delete` prompts for confirmation on a TTY before deleting the StackSet.</dd>
-
-<SelectionFlags />
-
-<GitFlags />
-</dl>
-
-## Behavior
-
-`stackset delete` acts directly on the StackSet whose name matches the
-component's `stack_name` — it takes no `--target` flag and does not need a
-`kind: aws/stackset` provision target declared. The `DeleteStackInstances`
-operation is polled every 3 seconds until it reaches a terminal status
-(`SUCCEEDED`/`FAILED`/`STOPPED`), and the command times out after 30 minutes
-if it hasn't.
-
-Before deletion, Atmos describes the existing StackSet to determine its
-permission model. Deleting instances currently supports `SELF_MANAGED`
-permissions only. A `SERVICE_MANAGED` StackSet with instances is rejected
-before anything is deleted; remove those instances with AWS CloudFormation
-first. Empty service-managed StackSets can still be deleted with Atmos.
-
-:::note
-`stackset delete` does not fire `before`/`after` hook events — only
-[`apply`](/cli/commands/aws/cloudformation/apply),
-[`diff`](/cli/commands/aws/cloudformation/diff),
-[`delete`](/cli/commands/aws/cloudformation/delete),
-[`drift detect`](/cli/commands/aws/cloudformation/drift/detect), and
-[`drift describe`](/cli/commands/aws/cloudformation/drift/describe) do.
-:::

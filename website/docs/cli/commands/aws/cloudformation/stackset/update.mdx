@@ -6,20 +6,24 @@ id: update
 description: Update a StackSet's template, parameters, and capabilities.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
 import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
-  Update a CloudFormation StackSet's template, parameters, and capabilities
-  (`UpdateStackSet`) from the component's current configuration, and wait for
-  the update to propagate to every existing stack instance. `stackset update`
-  never changes which accounts/regions have instances — that set is fixed at
-  [`stackset create`](/cli/commands/aws/cloudformation/stackset/create) time.
+Update a StackSet’s template, parameters, and capabilities, then wait for the
+update to reach its existing instances. This command does not add or remove instances.
 </Intro>
 
 <Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation#delivery-targets">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
 
 <CastPlayer title="atmos aws cloudformation stackset update --help" src="/casts/screengrabs/atmos-aws-cloudformation-stackset-update--help.cast" static chrome />
 
@@ -28,6 +32,8 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 ```shell
 atmos aws cloudformation stackset update <component> --stack <stack> [options]
 ```
+
+## Examples
 
 ```shell
 atmos aws cloudformation stackset update vpc -s plat-ue2-dev
@@ -52,34 +58,15 @@ atmos aws cloudformation stackset update --all -s plat-ue2-dev
 atmos aws cloudformation stackset update --affected --base origin/main
 ```
 
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
+
 ## Flags
 
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
   <dd>Atmos stack. With `--all`, `--affected`, `--tags`, or `--labels`, this is an optional stack filter; omit it to select components across stacks.</dd>
-
-  <dt>`--target` <em>(optional)</em></dt>
-  <dd>The `kind: aws/stackset` provision target to use. Required when more than one is declared.</dd>
-
-  <dt>`--auto-approve` <em>(optional)</em></dt>
-  <dd>Skip the interactive confirmation prompt. Without it, `stackset update` prompts for confirmation on a TTY before updating the StackSet.</dd>
-
-<SelectionFlags />
-
-<GitFlags />
-</dl>
-
-## Behavior
-
-The `UpdateStackSet` operation is polled every 3 seconds until it reaches a
-terminal status (`SUCCEEDED`/`FAILED`/`STOPPED`), and the command times out
-after 30 minutes if it hasn't.
-
-:::note
-`stackset update` does not fire `before`/`after` hook events — only
-[`apply`](/cli/commands/aws/cloudformation/apply),
-[`diff`](/cli/commands/aws/cloudformation/diff),
-[`delete`](/cli/commands/aws/cloudformation/delete),
-[`drift detect`](/cli/commands/aws/cloudformation/drift/detect), and
-[`drift describe`](/cli/commands/aws/cloudformation/drift/describe) do.
-:::

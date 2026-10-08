@@ -6,20 +6,24 @@ id: fmt
 description: Format the local template in place, or check formatting with --check.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
 import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
-  Format the component's local template in place: a dependency-free, native
-  round-trip through the YAML parser that re-serializes the template with
-  consistent indentation, preserving comments and key order. There is no
-  `cfn-format` binary to shell out to (Rain's own formatter is archived along
-  with the rest of Rain), so this is entirely native.
+Format a template file with consistent YAML indentation while preserving
+comments and key order. Use `--check` to check formatting without modifying the template.
 </Intro>
 
 <Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
 
 <CastPlayer title="atmos aws cloudformation fmt --help" src="/casts/screengrabs/atmos-aws-cloudformation-fmt--help.cast" static chrome />
 
@@ -28,6 +32,8 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 ```shell
 atmos aws cloudformation fmt <component> --stack <stack> [options]
 ```
+
+## Examples
 
 ```shell
 atmos aws cloudformation fmt vpc -s plat-ue2-dev
@@ -46,6 +52,29 @@ atmos aws cloudformation fmt --all -s plat-ue2-dev
 atmos aws cloudformation fmt --affected --base origin/main --check
 ```
 
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
+
+  <dt>`--check` <em>(optional)</em></dt>
+  <dd>Report whether the template is formatted without writing changes. Exits non-zero if the template is not formatted — use this in CI instead of the default write-in-place behavior.</dd>
+
+<SelectionFlags />
+
+<GitFlags />
+</dl>
+
+This command does not fire [lifecycle hooks](/stacks/components/aws-cloudformation#lifecycle-hooks).
+
 ## Check mode
 
 With `--check`, `fmt` reports each template and never writes:
@@ -59,25 +88,7 @@ With `--check`, `fmt` reports each template and never writes:
 Components that point at the same template file share one check, identified by the file's resolved
 path, so a shared template is reported once per run rather than once per component.
 
-## Flags
+## Source Downloads
 
-<dl>
-  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
-  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
-
-  <dt>`--check` <em>(optional)</em></dt>
-  <dd>Report whether the template is formatted without writing changes. Exits non-zero if the template is not formatted — use this in CI instead of the default write-in-place behavior.</dd>
-
-<SelectionFlags />
-
-<GitFlags />
-</dl>
-
-:::note
-`fmt` never calls the CloudFormation API and does not fire `before`/`after`
-hook events — only [`apply`](/cli/commands/aws/cloudformation/apply),
-[`diff`](/cli/commands/aws/cloudformation/diff),
-[`delete`](/cli/commands/aws/cloudformation/delete),
-[`drift detect`](/cli/commands/aws/cloudformation/drift/detect), and
-[`drift describe`](/cli/commands/aws/cloudformation/drift/describe) do.
-:::
+Formatting does not call CloudFormation. If the template comes from an uncached
+remote source, Atmos downloads it first. Private sources may require authentication.

@@ -6,6 +6,8 @@ id: tree
 description: Render the nested-stack dependency tree.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
@@ -19,6 +21,11 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 
 <Experimental />
 
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
+
 <CastPlayer title="atmos aws cloudformation tree --help" src="/casts/screengrabs/atmos-aws-cloudformation-tree--help.cast" static chrome />
 
 ## Usage
@@ -26,6 +33,8 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 ```shell
 atmos aws cloudformation tree <component> --stack <stack> [options]
 ```
+
+## Examples
 
 ```shell
 atmos aws cloudformation tree vpc -s plat-ue2-dev
@@ -38,37 +47,15 @@ atmos aws cloudformation tree --all -s plat-ue2-dev
 atmos aws cloudformation tree --affected --base origin/main
 ```
 
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
+
 ## Flags
 
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
   <dd>Atmos stack. With `--all`, `--affected`, `--tags`, or `--labels`, this is an optional stack filter; omit it to select components across stacks.</dd>
-
-<SelectionFlags />
-
-<GitFlags />
-</dl>
-
-## Output
-
-```
-vpc-plat-ue2-dev
-├─ NatGatewayStack (vpc-plat-ue2-dev-NatGatewayStack-AB12CD34)
-└─ SubnetsStack (vpc-plat-ue2-dev-SubnetsStack-EF56GH78)
-```
-
-The root is the stack name. Each nested stack shows its logical resource ID in the parent, followed by
-its stack name in parentheses; stack ARNs are not shown.
-
-A nested stack whose `AWS::CloudFormation::Stack` resource is still
-`CREATE_IN_PROGRESS` (and so has no physical resource ID yet) is not shown —
-`tree` recurses only into nested stacks that have actually been created.
-
-:::note
-`tree` does not fire `before`/`after` hook events — only
-[`apply`](/cli/commands/aws/cloudformation/apply),
-[`diff`](/cli/commands/aws/cloudformation/diff),
-[`delete`](/cli/commands/aws/cloudformation/delete),
-[`drift detect`](/cli/commands/aws/cloudformation/drift/detect), and
-[`drift describe`](/cli/commands/aws/cloudformation/drift/describe) do.
-:::
