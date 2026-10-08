@@ -50,19 +50,30 @@ func validateCopyPaths(source, target string, force bool) (string, error) {
 	if containsPath(src, dst) || containsPath(dst, src) {
 		return "", fmt.Errorf("%w: source and target directories must not overlap", errUtils.ErrPathTraversal)
 	}
-	if err := rejectDestinationSymlinks(target, "."); err != nil {
+	if err := ValidateTarget(target, force); err != nil {
 		return "", err
+	}
+	return src, nil
+}
+
+// ValidateTarget checks a copy destination before fetching its source. Copy
+// repeats this validation before writing, since the destination may change.
+func ValidateTarget(target string, force bool) error {
+	defer perf.Track(nil, "directory.ValidateTarget")()
+
+	if err := rejectDestinationSymlinks(target, "."); err != nil {
+		return err
 	}
 	if err := genfs.ValidateTargetDirectory(target, force, false); err != nil {
 		// Copy sources do not support the generic validator's --update hint.
 		if errors.Is(err, errUtils.ErrTargetDirectoryNotEmpty) {
-			return "", errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).
+			return errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).
 				WithExplanationf("Directory `%s` already contains files", target).
 				WithHint("Choose another directory or use --force to overwrite matching files").WithExitCode(2).Err()
 		}
-		return "", err
+		return err
 	}
-	return src, nil
+	return nil
 }
 
 func copyEntries(ctx context.Context, source, target string, entries []entry) error {

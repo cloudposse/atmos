@@ -19,7 +19,7 @@ Start with any of the [official Atmos examples](/examples). Atmos copies the exa
 
 The same command also works with directories in other Git repositories, supported remote sources, and local directories. These sources use scaffold generation when a root manifest exists and copy their contents otherwise.
 
-Git sources use a single shallow fetch to avoid downloading repository history. Configure `init.depth` for any repository: use `1` for the latest revision or `0` for full history. A source URL's explicit `depth` parameter takes precedence. The CLI prints the actual destination and a `cd` command after displaying the example's README.
+Git sources use a single shallow fetch to avoid downloading repository history. Configure `init.depth` for any repository: use `1` for the latest revision or `0` for full history. A source URL's explicit `depth` parameter takes precedence. The CLI prints the actual destination and displays the example's README when present.
 
 Copies preserve literal template content, dotfiles, executable permissions, and empty directories while excluding Git metadata. Existing template names and interactive selection continue to work.
 

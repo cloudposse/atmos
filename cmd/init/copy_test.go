@@ -2,9 +2,12 @@ package initcmd
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/go-git/go-git/v5"
@@ -16,7 +19,56 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestExecuteInitValidatesTargetBeforeFetch(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		copy        bool
+		inferred    bool
+		force       bool
+		interactive bool
+	}{
+		{name: "explicit-copy", copy: true},
+		{name: "inferred-copy", copy: true, inferred: true},
+		{name: "interactive-copy", copy: true, interactive: true},
+		{name: "direct-source"},
+		{name: "force-copy", copy: true, force: true},
+		{name: "interactive-scaffold", interactive: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requests.Add(1)
+				w.WriteHeader(http.StatusNotFound)
+			}))
+			defer server.Close()
+			t.Chdir(t.TempDir())
+			require.NoError(t, os.Mkdir("example", 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join("example", "existing"), []byte("keep"), 0o600))
+			opts := &initOptions{
+				templateName: server.URL + "/example.zip", targetDir: "example",
+				copy: tc.copy, force: tc.force, interactive: tc.interactive,
+				atmosConfig: &schema.AtmosConfiguration{},
+			}
+			if tc.inferred {
+				opts.targetDir = ""
+			}
+			err := executeInit(context.Background(), opts)
+			if tc.force || (tc.interactive && !tc.copy) {
+				require.Error(t, err, "the test server rejects the fetch")
+				assert.Positive(t, requests.Load(), "force and scaffold update prompts must remain available")
+			} else {
+				require.ErrorIs(t, err, errUtils.ErrTargetDirectoryNotEmpty)
+				assert.Zero(t, requests.Load(), "invalid destinations must fail before any download")
+			}
+			content, err := os.ReadFile(filepath.Join("example", "existing"))
+			require.NoError(t, err)
+			assert.Equal(t, "keep", string(content))
+		})
+	}
+}
 
 func TestExecuteInitCopiesDirectory(t *testing.T) {
 	for _, gitEnabled := range []bool{false, true} {

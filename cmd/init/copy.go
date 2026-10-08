@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"al.essio.dev/pkg/shellescape"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -16,6 +15,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	gen "github.com/cloudposse/atmos/pkg/generator"
 	"github.com/cloudposse/atmos/pkg/generator/directory"
+	genfs "github.com/cloudposse/atmos/pkg/generator/filesystem"
 	"github.com/cloudposse/atmos/pkg/generator/source"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -28,6 +28,28 @@ type preparedInitSource struct {
 	name      string
 	copy      bool
 	cleanup   func()
+}
+
+// preflightInitTarget rejects known destination conflicts before downloading.
+// Interactive scaffolds retain their existing offer to merge into the target.
+func preflightInitTarget(opts *initOptions, src string) error {
+	if opts.copy && src != "" {
+		if err := validateCopyOptions(opts); err != nil {
+			return err
+		}
+		normalized, err := source.NormalizeInitSource(src, opts.ref)
+		if err != nil {
+			return err
+		}
+		if err := resolveCopyTarget(opts, normalized.Name); err != nil {
+			return err
+		}
+		return directory.ValidateTarget(opts.targetDir, opts.force)
+	}
+	if opts.targetDir != "" && !opts.interactive {
+		return genfs.ValidateTargetDirectory(opts.targetDir, opts.force, opts.update)
+	}
+	return nil
 }
 
 // explicitScaffoldFlags catches explicitly supplied scaffold-only settings,
@@ -187,7 +209,6 @@ func displayCopiedProject(prepared *preparedInitSource, targetDir string) error 
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	ui.MarkdownMessagef("## Get started\n\n```shell\ncd %s\n```", shellescape.Quote(targetDir))
 	return nil
 }
 

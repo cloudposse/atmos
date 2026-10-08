@@ -342,6 +342,10 @@ func executeInit(ctx context.Context, opts *initOptions) error {
 		return err
 	}
 
+	if err := preflightInitTarget(opts, selectedConfig.Source); err != nil {
+		return err
+	}
+
 	prepared, err := prepareInitSource(opts, &selectedConfig, configs)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrInitialization, err)
