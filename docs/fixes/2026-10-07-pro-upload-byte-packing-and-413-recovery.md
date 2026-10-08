@@ -59,13 +59,14 @@ whole-upload recovery.
   with the pinned native Pact library installed locally and supplied through
   `CGO_LDFLAGS`. Generated contracts are unchanged after restoring the generator's
   omitted final newline.
+- `npm run build` in `website` passed.
 - The repository-wide `go test -short ./... -timeout 5m` run failed; the `tests`
   package exceeded its five-minute timeout. The focused suites above passed.
 
 ## Follow-ups
 
 [#3313](https://github.com/cloudposse/atmos/issues/3313) tracks the exec-data protocol
-compatibility gap documented in the [engineering support artifact](https://atmos-pro.com/artifacts/ca_fsZlCPo0Xd1-j7LDjISkv/pdf).
+compatibility gap documented in the [engineering support artifact](https://atmos-pro.com/support/artifact/cMB4VA1cWyh4yY6v2NdZqcxxW61Ashq-fdnX7bR-kas).
 `UploadExecData` still sends one complete JSON body through the API function. The
 server's existing `batch`/`chunk`/`chunk_total` assembler concatenates top-level
 arrays but rejects multiple object or string parts; CLI execution data uses object
