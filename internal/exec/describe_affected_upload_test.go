@@ -290,7 +290,7 @@ func stubDescribeAffectedExec(atmosConfig *schema.AtmosConfiguration) describeAf
 		ref, sha, targetBranch string,
 		includeSpaceliftAdminStacks, includeSettings bool,
 		stack string, processTemplates, processYamlFunctions bool,
-		skip []string, excludeLocked bool,
+		skip []string, filter AffectedFilter,
 		authManager auth.AuthManager,
 		authDisabled bool,
 		errOptions DescribeStacksErrorOptions,

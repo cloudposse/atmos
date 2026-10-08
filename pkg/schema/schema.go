@@ -253,6 +253,17 @@ func (m *AtmosConfiguration) SetSchemaRegistry(key string, registry SchemaRegist
 	m.Schemas[key] = registry
 }
 
+// SetResourcePath stores a ResourcePath under the given key, lazily initializing the
+// Schemas map when it is nil. Like SetSchemaRegistry, it exists so flag and environment
+// variable overrides of the `jsonschema`, `opa` and `cue` base paths do not panic with
+// "assignment to entry in nil map" when the loaded `atmos.yaml` has no `schemas:` section.
+func (m *AtmosConfiguration) SetResourcePath(key string, resourcePath ResourcePath) {
+	if m.Schemas == nil {
+		m.Schemas = make(map[string]any)
+	}
+	m.Schemas[key] = resourcePath
+}
+
 func (m *AtmosConfiguration) GetResourcePath(key string) ResourcePath {
 	atmosSchemaInterface, interfaceOk := m.Schemas[key]
 	var resourcePath ResourcePath
@@ -2372,6 +2383,10 @@ type Dependent struct {
 	Dependents           []Dependent         `yaml:"dependents" json:"dependents" mapstructure:"dependents"`
 	IncludedInDependents bool                `yaml:"included_in_dependents" json:"included_in_dependents" mapstructure:"included_in_dependents"`
 	Settings             AtmosSectionMapType `yaml:"settings" json:"settings" mapstructure:"settings"`
+	// Metadata is the dependent component's `metadata` section. It is only populated by
+	// `describe affected --include-dependents` so the `--tags` / `--labels` selectors can be applied to
+	// dependents, and is never serialized.
+	Metadata AtmosSectionMapType `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // Settings

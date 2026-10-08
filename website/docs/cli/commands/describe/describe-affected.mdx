@@ -123,15 +123,11 @@ The following sections are **intentionally not** evaluated:
   </dd>
 </dl>
 
-:::tip Customize the evaluated sections
 Use [`describe.affected.sections`](/cli/configuration/describe) in `atmos.yaml` to define your own list of evaluated
 sections — for example to add a custom section or to narrow the set. When set, it fully replaces the defaults above
 (`metadata` and `settings` are always evaluated regardless).
-:::
 
-:::tip Use in GitHub Actions
 Run `atmos describe affected --format=matrix` directly in your workflow to fan out across affected components. When `ci.enabled` is `true` in `atmos.yaml`, the matrix is automatically written to `$GITHUB_OUTPUT`. See the [Deploy Affected workflow](/ci#deploy-affected) for the full pattern.
-:::
 
 ## CI Auto-Detection
 
@@ -189,9 +185,7 @@ atmos describe affected [options]
 By default, `atmos describe affected` executes YAML template functions (e.g., `!terraform.state`, `!terraform.output`) and Go templates during stack processing. When these functions access remote resources requiring authentication, use the `--identity` flag to authenticate before execution. You can disable function/template processing with `--process-functions=false` or `--process-templates=false` flags.
 :::
 
-:::tip
 Run `atmos describe affected --help` to see all the available options
-:::
 
 ## Examples
 
@@ -221,6 +215,13 @@ atmos describe affected --skip=terraform.output
 atmos describe affected --skip=terraform.output --skip=include
 atmos describe affected --skip=include,eval
 atmos describe affected --exclude-locked
+# Select only components tagged `production` or `tier-1` (matches any tag)
+atmos describe affected --tags=production,tier-1
+# Select only components labeled `ci: auto` (matches all pairs)
+atmos describe affected --labels=ci=auto
+atmos describe affected --labels=ci=auto,team=platform
+# Filter the GitHub Actions matrix
+atmos describe affected --format=matrix --labels=ci=auto
 # Authenticate before describing (when YAML functions require credentials)
 atmos describe affected --identity my-aws-identity
 atmos describe affected --identity # Interactive selection
@@ -448,11 +449,52 @@ Affected components and stacks:
 
     <dt>`--exclude-locked` <em>(optional)</em></dt>
     <dd>
-        Exclude the locked components (`metadata.locked: true`) from the output.
+        Exclude top-level components with `metadata.locked: true`, including deleted components locked in the base ref
+        and dependents promoted or flattened into top-level entries. Nested `dependents` lists are unchanged.
+        See [Filtering and Flattening Dependents](#filtering-and-flattening-dependents).
 
         Refer to [Locking Components with `metadata.locked`](/stacks/components#locking-components-metadatalocked)
 
         `atmos describe affected --exclude-locked`
+    </dd>
+
+    <dt>`--tags` <em>(optional)</em></dt>
+    <dd>
+        Match any comma-separated component tag (for example, `--tags=production,tier-1`).
+        Environment variable: `ATMOS_TAGS`.
+        See [Filtering by Tags and Labels](#filtering-by-tags-and-labels) for matching rules and upload restrictions.
+    </dd>
+
+    <dt>`--labels` <em>(optional)</em></dt>
+    <dd>
+        Match all comma-separated `key=value` or `key:value` pairs (for example, `--labels=ci:auto,team:platform`).
+        Environment variable: `ATMOS_LABELS`.
+        See [Filtering by Tags and Labels](#filtering-by-tags-and-labels) for matching rules and upload restrictions.
+    </dd>
+
+    <dt>`--flatten` <em>(optional)</em></dt>
+    <dd>
+        Report dependents as separate top-level entries, including in job matrices. Requires `--include-dependents`;
+        cannot be combined with `--upload`. Environment variable: `ATMOS_DESCRIBE_AFFECTED_FLATTEN`.
+
+        `atmos describe affected --include-dependents --flatten --labels=ci:auto --format=matrix`
+
+        See [Filtering and Flattening Dependents](#filtering-and-flattening-dependents) and
+        [environment behavior](#selector-environment-and-uploads).
+    </dd>
+
+    <dt>`--output-file` <em>(optional)</em></dt>
+    <dd>
+        Write the `--format=matrix` result to a file in `key=value` format, for use as a GitHub Actions step output
+        (`$GITHUB_OUTPUT`). Atmos appends two lines: `matrix=<json>` with the job matrix, and `count=<number>` with the
+        number of entries in it.
+
+        `atmos describe affected --format=matrix --output-file="$GITHUB_OUTPUT"`
+
+        When the flag is not set and [`ci.enabled`](/ci) is true, Atmos writes to `$GITHUB_OUTPUT` automatically.
+        Otherwise the matrix JSON is printed to stdout. The matrix is `{"include":[]}` when nothing is affected, never an
+        empty string, so test the `count` output instead of comparing the matrix with `''`.
+        The flag is only valid with `--format=matrix`.
     </dd>
 
     <dt>`--upload` <em>(optional)</em></dt>
@@ -464,6 +506,9 @@ Affected components and stacks:
         Atmos will perform an HTTP POST request to the URL `${ATMOS_PRO_BASE_URL}/${ATMOS_PRO_ENDPOINT}`,
         where the base URL is defined by the `ATMOS_PRO_BASE_URL` environment variable,
         and the URL path is defined by the `ATMOS_PRO_ENDPOINT`environment variable
+
+        Uploads are unfiltered and unflattened. Explicit selector and flatten flags are incompatible with `--upload`;
+        environment-only values are ignored with a warning. See [Environment Variables and Uploads](#selector-environment-and-uploads).
     </dd>
 
     <dt>`--identity` / `-i` <em>(optional)</em></dt>
@@ -1201,6 +1246,87 @@ are also not included in the output since they are explicitly disabled.
 ```
 </Terminal>
 
+## Filtering by Tags and Labels
+
+Use `--tags` and `--labels` to filter affected components in any output format:
+
+```shell
+# Match either tag
+atmos describe affected --tags=production,tier-1
+
+# Match the label (also accepts --labels=ci=auto)
+atmos describe affected --format=matrix --labels=ci:auto
+```
+
+For stack defaults and overrides, see [Choosing which components run in CI](/ci#keeping-privileged-components-out-of-ci).
+
+<span id="selector-matching-rules" />
+
+### Matching Rules
+
+Selectors read [`metadata.tags`](/stacks/components/component-metadata#tags) and
+[`metadata.labels`](/stacks/components/component-metadata#labels), using the same rules as
+[`atmos terraform`](/cli/commands/terraform/usage):
+
+- `--tags` matches **any** supplied comma-separated tag.
+- `--labels` matches **all** supplied comma-separated `key=value` or `key:value` pairs. Repeated keys use the last value.
+- When both flags are supplied, both filters must match. Matching is case-sensitive.
+- Components missing the requested metadata do not match. There is no negative selector; use default labels and overrides
+  to express exclusions.
+- Malformed label pairs produce an error identifying the flag or environment variable they came from.
+
+Deleted components, including those in deleted stacks, use metadata from the base ref. Abstract and disabled components
+remain excluded. `--exclude-locked` excludes locked top-level components, using base-ref metadata for deleted components.
+
+Go templates in tags and labels are rendered before matching by default. With `--process-templates=false` or templates
+disabled in `atmos.yaml`, Atmos compares the raw template text, which will not match a resolved value such as `ci:auto`.
+
+:::caution Empty selectors disable filtering
+An empty selector (`--labels=`, `--tags=`, or an empty corresponding environment variable) applies no filter for that
+selector. If no other selector is set, all otherwise eligible affected components are selected. Reject empty workflow
+variables with shell expansion such as `--labels="ci=${CI_LABEL:?}"` or validate them before running Atmos.
+:::
+
+### Filtering and Flattening Dependents
+
+With `--include-dependents`, selectors apply throughout the dependent tree:
+
+- Non-matching dependents are removed; their matching descendants move up to the nearest retained parent.
+- When a top-level affected component is removed, its matching dependents become top-level entries with
+  `affected: dependent` and `affected_all: [dependent]`.
+
+Add `--flatten` to report each remaining dependent once at the top level, with an empty `dependents` list. Newly lifted
+dependents have `affected: dependent`; components already reported as affected keep their original reasons. This makes
+dependents available as individual matrix entries:
+
+```shell
+atmos describe affected --include-dependents --flatten --labels=ci:auto --format=matrix
+```
+
+`--exclude-locked` excludes locked dependents from promotion and flattening. Flattening still traverses their unlocked
+descendants. The flag does not prune locked entries from nested `dependents` lists.
+
+`--flatten` supports JSON, YAML, and matrix output and requires `--include-dependents`. It cannot be combined with `--upload`.
+
+<span id="selector-environment-and-uploads" />
+
+### Environment Variables and Uploads
+
+`ATMOS_TAGS` and `ATMOS_LABELS` provide selectors for `describe affected` and multi-component Terraform commands
+(such as `--all`, `--affected`, or `--components`). Terraform ignores environment-only selectors when a single component
+is named. Use step-level variables when different steps need different selections:
+
+```shell
+ATMOS_LABELS=ci:auto atmos describe affected --format=matrix
+```
+
+[`atmos list affected`](/cli/commands/list/affected) instead reads `ATMOS_COMPONENT_TAGS` and `ATMOS_COMPONENT_LABELS`.
+
+`--upload` sends the complete, unfiltered and unflattened affected set to Atmos Pro. Explicit `--tags`, `--labels`, or
+`--flatten` flags cannot be combined with it; run uploads separately. With `--upload`, environment-only selectors and
+`ATMOS_DESCRIBE_AFFECTED_FLATTEN` are ignored with a warning. The flatten environment variable is also ignored with a
+warning when `--include-dependents` is absent.
+
 ## Affected Components with Dependencies
 
 The output of the `atmos describe affected` command can include dependencies for the affected components.
@@ -1405,10 +1531,8 @@ This is because `terraform destroy` needs access to the component's stack config
 which only exist in BASE — they've been deleted in HEAD.
 :::
 
-:::note Abstract Components
 [Abstract components](/design-patterns/inheritance-patterns/abstract-component) (`metadata.type: abstract`)
 are not reported as deleted since they are blueprints and are not provisioned.
-:::
 
 ## Working with Private Repositories
 
