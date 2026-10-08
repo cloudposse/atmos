@@ -12,15 +12,15 @@ import Intro from '@site/src/components/Intro'
 
 <Intro>
 Automation functions are the helpers Atmos supplies to scripts written in
-the [Atmos Automation Language](/automation/language). Use them to declare a
+the [Atmos Automation Language](/scripting/language). Use them to declare a
 program's command line, run Atmos and external commands, resolve component
 configuration, install tool dependencies, use configured identities, run work
 in parallel, and give users formatted progress and actionable errors.
 </Intro>
 
-Automation functions run when a script executes: in a [standalone program](/automation/standalone-cli-apps),
-a [custom command](/automation/custom-commands), a [workflow](/automation/workflows)
-step, or a [lifecycle hook](/automation/lifecycle-hooks). They are separate from
+Automation functions run when a script executes: in a [standalone program](/scripting/standalone-cli-apps),
+a [custom command](/scripting/custom-commands), a [workflow](/scripting/workflows)
+step, or a [lifecycle hook](/scripting/lifecycle-hooks). They are separate from
 [YAML functions](/functions/yaml) and [template functions](/functions/template),
 which Atmos evaluates while it loads stack manifests.
 
@@ -29,7 +29,7 @@ predeclares the names `cli`, `atmos`, `components`, `exec`, `steps`, `fs`, `json
 `regex`, `dependencies`, `ui`, `log`, `ci`, `errors`, `env`, and `ctx`, and the script's top-level
 `output` variable sets its result. The language itself, including statements,
 operators, and the universal built-ins, is described in the
-[language reference](/automation/reference).
+[language reference](/scripting/reference).
 
 ## Function categories
 

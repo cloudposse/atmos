@@ -2,7 +2,7 @@
 title: Statements
 sidebar_label: Statements
 sidebar_position: 4
-slug: /automation/reference/statements
+slug: /scripting/reference/statements
 description: Assignment, function definitions, return, conditionals, for and while loops, break, continue, pass, load, and top-level rules in the Atmos Automation Language.
 ---
 
@@ -16,7 +16,7 @@ makes top-level names assignable once and the scoping rules for functions.
 
 Simple statements fit on one line and can be separated by semicolons. Compound
 statements (`if`, `for`, `while`, `def`) own an indented block. See
-[Lexical Elements](/automation/reference/lexical-elements#indentation-and-blocks)
+[Lexical Elements](/scripting/reference/lexical-elements#indentation-and-blocks)
 for the indentation rules.
 
 ## Expression statements
@@ -108,7 +108,7 @@ else:
     mode = "full"      # error: cannot reassign global mode
 ```
 
-Choose the value with a [conditional expression](/automation/reference/expressions-operators#conditional-expressions),
+Choose the value with a [conditional expression](/scripting/reference/expressions-operators#conditional-expressions),
 or compute it in a function and assign the result once:
 
 ```python
@@ -267,7 +267,7 @@ print(low, high)   # 1 4
 
 An `if` statement runs the first block whose condition is true, and the optional
 `else` block runs when none is. Conditions follow the
-[truthiness rules](/automation/reference/data-types#truthiness), so
+[truthiness rules](/scripting/reference/data-types#truthiness), so
 `if items:` tests for a non-empty list.
 
 ```python
@@ -394,7 +394,7 @@ Rules for `load`:
   `double = 3` after loading `double` is an error.
 - Every value a file defines is frozen after it loads, so the importing file can
   read a loaded dictionary or list but cannot modify it. See
-  [Mutability and freezing](/automation/reference/data-types#mutability-and-freezing).
+  [Mutability and freezing](/scripting/reference/data-types#mutability-and-freezing).
 - The predeclared modules, such as `exec`, `json`, and `fs`, are available in
   loaded files.
 
@@ -425,11 +425,11 @@ syntax error: `class`, `import`, `try`, `with`, `raise`, `del`, `global`,
 `nonlocal`, `yield`, `async`, and `await`. Use dictionaries and functions
 instead of classes, `load()` instead of `import`, `d.pop(key)` instead of `del`,
 and `fail()` instead of `raise`. See
-[Differences from Python](/automation/reference/differences-from-python) for the
+[Differences from Python](/scripting/reference/differences-from-python) for the
 complete list.
 
 ## Next steps
 
-- [Expressions and Operators](/automation/reference/expressions-operators): build the values these statements use.
-- [Execution Model](/automation/reference/execution-model): how Atmos runs a program, top to bottom.
-- [Built-in Functions](/automation/reference/builtin-functions): `fail`, `range`, `enumerate`, and more.
+- [Expressions and Operators](/scripting/reference/expressions-operators): build the values these statements use.
+- [Execution Model](/scripting/reference/execution-model): how Atmos runs a program, top to bottom.
+- [Built-in Functions](/scripting/reference/builtin-functions): `fail`, `range`, `enumerate`, and more.

@@ -3,7 +3,7 @@ title: Custom CLI Apps
 sidebar_label: Custom CLI Apps
 description: Give your team one command to build, ship, and deploy locally or in CI with the Atmos Automation Language.
 id: standalone-cli-apps
-slug: /automation/standalone-cli-apps
+slug: /scripting/standalone-cli-apps
 ---
 
 import Intro from '@site/src/components/Intro'
@@ -24,18 +24,18 @@ process live in one place, and you can exercise them locally before a pipeline r
 As Bash wrappers grow, you end up maintaining argument parsing, quoting,
 JSON processing, and coordination between background processes. Atmos supplies
 typed inputs, structured values, parallel tasks, and generated help. Put shared
-logic in functions and [test it](/automation/testing), including success and
+logic in functions and [test it](/scripting/testing), including success and
 failure cases. The same test steps can check command results and deployed services.
 
 Starlark provides functions, loops, and structured data with familiar Python-like
 syntax. The interpreter ships with Atmos, so scripts using its built-ins need no
-separate language runtime. See [why Atmos uses Starlark](/automation/language#why-starlark)
+separate language runtime. See [why Atmos uses Starlark](/scripting/language#why-starlark)
 for the language's design and capabilities.
 
 Install Atmos and put it on your `PATH` before starting. The first two examples
 use only built-in functions; they need no `atmos.yaml`, stacks, Python, or other
 tools. To register a subcommand such as `atmos capacity` in a project's
-configuration, see [custom commands](/automation/custom-commands).
+configuration, see [custom commands](/scripting/custom-commands).
 
 ## Start with an executable script
 
@@ -450,9 +450,9 @@ also includes container operations, HTTP requests, archives, and formatted outpu
 
 Read the [command declaration reference](/steps/type/script#declaring-a-standalone-command)
 for supported flag types and parsing rules, and the
-[language overview](/automation/language) for helpers,
+[language overview](/scripting/language) for helpers,
 module loading, processes, and parallel tasks.
 
 Browse the [complete runnable example](/examples/starlark-script) for both scripts
 and their input data. To expose your automation under the Atmos CLI itself,
-continue with [custom commands](/automation/custom-commands).
+continue with [custom commands](/scripting/custom-commands).
