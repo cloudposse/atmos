@@ -125,11 +125,23 @@ Select only the components that are safe for automation, using [`atmos describe 
   run: atmos describe affected --format=matrix --labels=ci=auto
 ```
 
-Or plan only those components directly:
+Or plan only those components directly. The two commands select the same components, including with `--include-dependents`:
+a dependent that is not labeled `ci: auto` is skipped by both, and the labeled components that depend on it still run.
 
 ```shell
 atmos terraform plan --affected --labels=ci=auto
 ```
+
+A matrix that must also run the dependents of the changed components needs `--include-dependents`. Add `--flatten` to report
+each dependent as its own matrix entry, because the nested `dependents` lists of the default output are not part of the matrix:
+
+```yaml
+- id: affected
+  run: atmos describe affected --format=matrix --include-dependents --flatten --labels=ci=auto
+```
+
+A privileged component that changed does not hide its automated dependents. The dependents that match `ci=auto` are reported
+as their own entries (`affected: dependent`), and the privileged component itself is left out.
 
 Run the privileged components from a separate workflow, with its own role and approvals, that selects `--labels=ci=manual`.
 
@@ -144,10 +156,18 @@ exactly this kind of mistake.
 :::
 
 :::note
-Simple Go templates in `metadata.labels` and `metadata.tags` are rendered before the selector runs, as long as
-[templates are enabled](/templates) with `templates.settings.enabled: true`. When templates are disabled, or when
-`--process-templates=false` is passed, the raw `'{{ ... }}'` text is compared instead. It matches neither `ci=auto` nor
-`ci=manual`, so the component runs in neither workflow.
+Simple Go templates in `metadata.labels` and `metadata.tags` are rendered before the selector runs, because
+[templates](/templates) are processed by default. Only when templates are disabled, or when `--process-templates=false` is
+passed, is the raw `'{{ ... }}'` text compared instead. It matches neither `ci=auto` nor `ci=manual`, so the component runs
+in neither workflow.
+:::
+
+:::caution
+`ATMOS_LABELS` and `ATMOS_TAGS` are read by `atmos describe affected` and by `atmos terraform` when it selects several
+components, so a variable set at the job level applies to every such step in the job. `describe affected --upload` ignores
+them with a warning, because the upload is always unfiltered, and `atmos terraform` ignores a selector that only came from
+the environment when a single component is named. Set the variables on the steps that need them when a job mixes these
+commands.
 :::
 
 As a backstop, attach an [OPA policy](/validation/opa) to the privileged component so it fails if it runs in CI anyway:

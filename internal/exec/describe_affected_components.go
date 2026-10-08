@@ -36,6 +36,10 @@ const (
 	affectedReasonDeleted         = "deleted"
 	affectedReasonDeletedStack    = "deleted.stack"
 
+	// Dependent reason: a dependent lifted into the top-level affected list, either by --tags/--labels
+	// promotion or by --flatten. The literal matches what pkg/list/extract/affected.go reports for dependent rows.
+	affectedReasonDependent = "dependent"
+
 	// Secret-file dependency: a component is affected because a SOPS secret file it consumes
 	// changed. SOPS secret files are implicit file dependencies derived from the component's
 	// declared secrets (store-backed secrets are not files and contribute nothing).
@@ -89,11 +93,22 @@ type AffectedFilter struct {
 	Tags []string
 	// Labels keeps only components whose `metadata.labels` contain every one of these key/value pairs (match all).
 	Labels map[string]string
+	// DeferSelectors keeps Tags and Labels on the filter but stops the live-component processors from
+	// applying them. The caller applies them after the dependents are resolved, so a dependent that
+	// matches can still be promoted when its excluded parent is dropped. Deleted components are still
+	// matched inside findAffected, because their metadata only exists in BASE and they never have dependents.
+	DeferSelectors bool
 }
 
 // hasSelectors reports whether the filter restricts components by `metadata.tags` or `metadata.labels`.
 func (f AffectedFilter) hasSelectors() bool {
 	return len(f.Tags) > 0 || len(f.Labels) > 0
+}
+
+// selectorsApplyNow reports whether the live-component processors must apply the selectors themselves,
+// which is the case unless the caller deferred them until the dependents are resolved.
+func (f AffectedFilter) selectorsApplyNow() bool {
+	return f.hasSelectors() && !f.DeferSelectors
 }
 
 // matchesSelectors reports whether the component metadata satisfies the tags and labels selectors.
@@ -127,6 +142,11 @@ func shouldSkipComponent(metadataSection map[string]any, componentName string, f
 	// Skip locked components if requested.
 	if filter.ExcludeLocked && isComponentLocked(metadataSection) {
 		return true
+	}
+
+	// Deferred selectors are applied by the caller once the dependents are resolved.
+	if filter.DeferSelectors {
+		return false
 	}
 
 	// Skip components that do not match the `--tags` / `--labels` selectors.
@@ -298,7 +318,7 @@ func processTerraformComponentsIndexed(
 		// Check metadata section and skip if needed.
 		metadataSection, hasMetadata := componentSection[sectionNameMetadata].(map[string]any)
 		// A selector (--tags/--labels) can only match metadata, so components without a metadata section are excluded.
-		if !hasMetadata && filter.hasSelectors() {
+		if !hasMetadata && filter.selectorsApplyNow() {
 			continue
 		}
 		if hasMetadata {
@@ -416,7 +436,7 @@ func processSimpleComponentsIndexed(
 
 		metadataSection, hasMetadata := componentSection[sectionNameMetadata].(map[string]any)
 		// A selector (--tags/--labels) can only match metadata, so components without a metadata section are excluded.
-		if !hasMetadata && filter.hasSelectors() {
+		if !hasMetadata && filter.selectorsApplyNow() {
 			continue
 		}
 		if hasMetadata {
@@ -502,7 +522,7 @@ func processKubernetesComponentsIndexed(
 
 		metadataSection, hasMetadata := componentSection[sectionNameMetadata].(map[string]any)
 		// A selector (--tags/--labels) can only match metadata, so components without a metadata section are excluded.
-		if !hasMetadata && filter.hasSelectors() {
+		if !hasMetadata && filter.selectorsApplyNow() {
 			continue
 		}
 		if hasMetadata {
@@ -634,7 +654,7 @@ func processHelmComponentsIndexed(
 
 		metadataSection, hasMetadata := componentSection[sectionNameMetadata].(map[string]any)
 		// A selector (--tags/--labels) can only match metadata, so components without a metadata section are excluded.
-		if !hasMetadata && filter.hasSelectors() {
+		if !hasMetadata && filter.selectorsApplyNow() {
 			continue
 		}
 		if hasMetadata {

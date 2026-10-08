@@ -1957,6 +1957,7 @@ func newDescribeAffectedFlagSet() *pflag.FlagSet {
 	flags.Bool("exclude-locked", false, "")
 	flags.StringSlice("tags", nil, "")
 	flags.String("labels", "", "")
+	flags.Bool("flatten", false, "")
 	return flags
 }
 

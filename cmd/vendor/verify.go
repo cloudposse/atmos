@@ -67,9 +67,9 @@ Exits non-zero when any drift is found. This never checks for a newer upstream v
 		}
 
 		component := v.GetString("component")
-		filterTags := splitTags(v.GetString("tags"))
+		filterTags := splitTags(v.GetString(vendorTagsViperKey))
 		stack := v.GetString("stack")
-		labels, err := pkgtags.ParseLabelsFlag(v.GetString("labels"))
+		labels, err := pkgtags.ParseLabelsFlag(v.GetString(vendorLabelsViperKey))
 		if err != nil {
 			return err
 		}
@@ -212,8 +212,12 @@ func init() {
 		flags.WithStringFlag("type", "t", "terraform", componentTypeFlagHelp),
 		flags.WithStringFlag("file", "", "", "Vendor manifest file (default: ./vendor.yaml)"),
 		flags.WithStringFlag("tags", "", "", "Verify only components whose vendor.yaml source declares any of these tags (comma-separated, matches any)"),
+		flags.WithEnvVars(vendorTagsFlagName, envVendorTags),
+		flags.WithViperKey(vendorTagsFlagName, vendorTagsViperKey),
 		flags.WithStringFlag("stack", "s", "", "Verify only components belonging to the specified stack"),
-		flags.WithStringFlag("labels", "", "", vendorLabelsFlagHelp),
+		flags.WithStringFlag(vendorLabelsFlagName, "", "", vendorLabelsFlagHelp),
+		flags.WithEnvVars(vendorLabelsFlagName, envVendorLabels),
+		flags.WithViperKey(vendorLabelsFlagName, vendorLabelsViperKey),
 		flags.WithStringFlag("format", "", "table", "Output format: table or json"),
 	)
 	vendorVerifyParser.RegisterFlags(vendorVerifyCmd)

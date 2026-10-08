@@ -1,6 +1,14 @@
 package tags
 
-import "testing"
+import (
+	"errors"
+	"strings"
+	"testing"
+
+	cockroachErrors "github.com/cockroachdb/errors"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+)
 
 func TestParseTagsFlag(t *testing.T) {
 	tests := []struct {
@@ -174,6 +182,75 @@ func TestParseLabelsFlag(t *testing.T) {
 		want := map[string]string{"tier": "edge"}
 		if len(got) != len(want) || got["tier"] != want["tier"] {
 			t.Fatalf("ParseLabelsFlag() = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("malformed pair error names the pair, the default source, and carries a hint", func(t *testing.T) {
+		for _, input := range []string{"ci=auto,cost-center", "=platform", ":platform"} {
+			_, err := ParseLabelsFlag(input)
+			if err == nil {
+				t.Fatalf("ParseLabelsFlag(%q): expected error", input)
+			}
+			if !errors.Is(err, errUtils.ErrInvalidFlag) {
+				t.Fatalf("ParseLabelsFlag(%q) error %v does not wrap ErrInvalidFlag", input, err)
+			}
+			if !strings.Contains(err.Error(), "for --labels") {
+				t.Fatalf("ParseLabelsFlag(%q) error %q does not name the --labels source", input, err)
+			}
+			if hints := cockroachErrors.GetAllHints(err); len(hints) != 1 || !strings.Contains(hints[0], "key=value") {
+				t.Fatalf("ParseLabelsFlag(%q) hints = %v, want one key=value hint", input, hints)
+			}
+		}
+	})
+}
+
+func TestParseLabelsFlagFrom(t *testing.T) {
+	const source = "--labels (or ATMOS_LABELS)"
+
+	t.Run("valid input parses like ParseLabelsFlag", func(t *testing.T) {
+		got, err := ParseLabelsFlagFrom("ci=auto, team:platform,ci=manual", source)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := map[string]string{"ci": "manual", "team": "platform"}
+		if len(got) != len(want) || got["ci"] != want["ci"] || got["team"] != want["team"] {
+			t.Fatalf("ParseLabelsFlagFrom() = %v, want %v (duplicate keys are last-wins)", got, want)
+		}
+	})
+
+	t.Run("empty input returns nil", func(t *testing.T) {
+		got, err := ParseLabelsFlagFrom("", source)
+		if err != nil || got != nil {
+			t.Fatalf("ParseLabelsFlagFrom(\"\") = %v, %v; want nil, nil", got, err)
+		}
+	})
+
+	t.Run("error contains the caller-supplied source and the offending pair", func(t *testing.T) {
+		_, err := ParseLabelsFlagFrom("ci=auto,oops", source)
+		if err == nil {
+			t.Fatal("expected error for missing separator")
+		}
+		if !errors.Is(err, errUtils.ErrInvalidFlag) {
+			t.Fatalf("error %v does not wrap ErrInvalidFlag", err)
+		}
+		for _, want := range []string{source, `"oops"`, "expected key=value or key:value"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("error %q does not contain %q", err, want)
+			}
+		}
+		hints := cockroachErrors.GetAllHints(err)
+		if len(hints) != 1 || !strings.Contains(hints[0], "--labels=ci=auto,team=platform") {
+			t.Fatalf("hints = %v, want one hint with an example", hints)
+		}
+	})
+
+	t.Run("empty key error names the pair and source", func(t *testing.T) {
+		_, err := ParseLabelsFlagFrom("=platform", source)
+		if err == nil {
+			t.Fatal("expected error for empty key")
+		}
+		if !strings.Contains(err.Error(), source) || !strings.Contains(err.Error(), `"=platform"`) {
+			t.Fatalf("error %q should contain the source and the pair", err)
 		}
 	})
 }

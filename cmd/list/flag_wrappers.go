@@ -14,6 +14,13 @@ const (
 	flagSkip    = "skip"
 	flagFormat  = "format"
 	flagTags    = "tags"
+	flagLabels  = "labels"
+
+	// Viper keys for the tags and labels selectors. These are deliberately namespaced: a bare
+	// "tags" or "labels" key is resolved by Viper's AutomaticEnv() from ATMOS_TAGS / ATMOS_LABELS,
+	// which belong to the terraform family and must not narrow list commands.
+	tagsViperKey   = "list.tags"
+	labelsViperKey = "list.labels"
 
 	// Environment variables.
 	envListColumns = "ATMOS_LIST_COLUMNS"
@@ -262,6 +269,7 @@ func WithTagsFlag(options *[]flags.Option) {
 		*options,
 		flags.WithStringFlag(flagTags, "", "", "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
 		flags.WithEnvVars(flagTags, "ATMOS_COMPONENT_TAGS"),
+		flags.WithViperKey(flagTags, tagsViperKey),
 	)
 }
 
@@ -279,6 +287,7 @@ func WithVendorTagsFlag(options *[]flags.Option) {
 		*options,
 		flags.WithStringFlag(flagTags, "", "", "Filter by vendor manifest tags (comma-separated, matches any): --tags=networking,storage"),
 		flags.WithEnvVars(flagTags, "ATMOS_VENDOR_TAGS"),
+		flags.WithViperKey(flagTags, tagsViperKey),
 	)
 }
 
@@ -289,8 +298,9 @@ func WithLabelsFlag(options *[]flags.Option) {
 
 	*options = append(
 		*options,
-		flags.WithStringFlag("labels", "", "", "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
-		flags.WithEnvVars("labels", "ATMOS_COMPONENT_LABELS"),
+		flags.WithStringFlag(flagLabels, "", "", "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
+		flags.WithEnvVars(flagLabels, "ATMOS_COMPONENT_LABELS"),
+		flags.WithViperKey(flagLabels, labelsViperKey),
 	)
 }
 

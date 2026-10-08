@@ -198,6 +198,7 @@ jobs:
       image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
     outputs:
       matrix: ${{ steps.affected.outputs.matrix }}
+      count: ${{ steps.affected.outputs.count }}
     steps:
       - uses: actions/checkout@v6
       - id: affected
@@ -205,7 +206,7 @@ jobs:
 
   deploy:
     needs: affected
-    if: ${{ needs.affected.outputs.matrix != '' }}
+    if: ${{ needs.affected.outputs.count != '0' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.affected.outputs.matrix) }}
@@ -250,12 +251,27 @@ components:
 ```bash
 atmos describe affected --format=matrix --labels=ci=auto
 atmos terraform plan --affected --labels=ci=auto
+# Dependents of changed components as their own matrix entries.
+atmos describe affected --format=matrix --include-dependents --flatten --labels=ci=auto
 ```
 
 - `--tags` matches ANY tag in `metadata.tags`; `--labels` matches ALL `key=value`/`key:value` pairs in
-  `metadata.labels`. Env vars: `ATMOS_TAGS`, `ATMOS_LABELS`.
-- Both filter every output format, including `--format=matrix`, and are rejected with `--upload`
-  (the Atmos Pro inventory upload is always unfiltered).
+  `metadata.labels`. Env vars: `ATMOS_TAGS`, `ATMOS_LABELS`. Matching is case-sensitive, duplicate label keys
+  are last-wins, and a component without `metadata` (or without `tags`/`labels`) never matches.
+- Both filter every output format, including `--format=matrix`. On the command line they are rejected with
+  `--upload` (the Atmos Pro inventory upload is always unfiltered); a selector that only comes from a job-level
+  `ATMOS_TAGS`/`ATMOS_LABELS` is ignored with a warning instead.
+- `atmos terraform --affected|--all --include-dependents --tags|--labels` selects the same components as
+  `describe affected`: non-matching dependents are skipped and their matching dependents still run in order.
+  Prerequisites from `--include-dependencies` are not filtered.
+- With `--include-dependents`, a non-matching affected component is removed and its matching dependents become
+  top-level entries with `affected: dependent`. `--flatten` (env `ATMOS_DESCRIBE_AFFECTED_FLATTEN`; requires
+  `--include-dependents`; not with `--upload`) lifts every remaining dependent into the top-level list, which is
+  how a matrix includes dependents.
+- A job-level `ATMOS_TAGS`/`ATMOS_LABELS` applies to every `describe affected` and multi-component
+  `atmos terraform` step in the job. Set them per step when a job mixes those commands.
+- An empty matrix is `{"include":[]}`, never an empty string. Guard downstream jobs with the `count` output
+  (`needs.affected.outputs.count != '0'`), not `matrix != ''`.
 - Run privileged components from a separate workflow and role that selects `--labels=ci=manual`.
 - Backstop: an OPA policy in `settings.validation` (rule head `errors[message]` in `package atmos`)
   that checks `input.process_env.GITHUB_ACTIONS == "true"` and `input.metadata.labels.ci == "manual"`.
@@ -270,10 +286,11 @@ atmos terraform plan --affected --labels=ci=auto
   ```
 - An empty `--labels=`/`--tags=` (or empty `ATMOS_LABELS`/`ATMOS_TAGS`) applies no filter and selects everything.
   When passing a workflow variable, fail fast: `--labels="ci=${CI_LABEL:?}"`.
-- Simple Go templates in `metadata.labels` and `metadata.tags` are rendered before selection when
-  `templates.settings.enabled` is `true`. With templates disabled, or with `--process-templates=false`, the raw
-  `'{{ ... }}'` text is compared, so it matches neither `ci=auto` nor `ci=manual`.
-- Deleted components are filtered the same way, using their `metadata` from the base ref.
+- Simple Go templates in `metadata.labels` and `metadata.tags` are rendered before selection by default
+  (templates are processed unless disabled). With templates disabled, or with `--process-templates=false`, the
+  raw `'{{ ... }}'` text is compared, so it matches neither `ci=auto` nor `ci=manual`.
+- Deleted components are filtered the same way, using their `metadata` from the base ref. `--exclude-locked`
+  also drops deleted components that were locked in the base ref.
 
 For full examples, read [references/native-ci.md](references/native-ci.md).
 

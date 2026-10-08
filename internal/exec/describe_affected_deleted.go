@@ -33,7 +33,8 @@ var deletableComponentTypes = []string{
 //
 // The `--tags` / `--labels` selectors in the filter are evaluated against the deleted component's
 // metadata as it was in BASE, because a deleted component no longer has any metadata in HEAD.
-// `ExcludeLocked` is intentionally not applied to deleted components.
+// `ExcludeLocked` is applied to deleted components too, using their BASE metadata (`metadata.locked`),
+// so a component that was locked when it was deleted is not reported.
 func detectDeletedComponents(
 	remoteStacks *map[string]any,
 	currentStacks *map[string]any,
@@ -143,6 +144,11 @@ func processAllComponentsAsDeleted(
 				continue
 			}
 
+			// Skip components that were locked in BASE when `--exclude-locked` is set.
+			if deletedComponentExcludedAsLocked(componentSection, filter) {
+				continue
+			}
+
 			// Skip components that do not match the `--tags` / `--labels` selectors (using their BASE metadata).
 			if !deletedComponentMatchesSelectors(componentSection, filter) {
 				continue
@@ -226,6 +232,11 @@ func processDeletedComponentsInStack(
 				}
 			}
 
+			// Skip components that were locked in BASE when `--exclude-locked` is set.
+			if deletedComponentExcludedAsLocked(componentSection, filter) {
+				continue
+			}
+
 			// Skip components that do not match the `--tags` / `--labels` selectors (using their BASE metadata).
 			if !deletedComponentMatchesSelectors(componentSection, filter) {
 				continue
@@ -248,10 +259,30 @@ func processDeletedComponentsInStack(
 	return deleted, nil
 }
 
+// deletedComponentExcludedAsLocked reports whether a deleted component must be skipped because
+// `--exclude-locked` is set and the component was locked (`metadata.locked: true`) in BASE. The component
+// section is the one from BASE, since the component no longer exists in HEAD. A component without a
+// metadata section is never considered locked.
+func deletedComponentExcludedAsLocked(componentSection map[string]any, filter AffectedFilter) bool {
+	if !filter.ExcludeLocked {
+		return false
+	}
+
+	metadataSection, ok := componentSection[sectionNameMetadata].(map[string]any)
+	if !ok {
+		return false
+	}
+
+	return isComponentLocked(metadataSection)
+}
+
 // deletedComponentMatchesSelectors reports whether a deleted component satisfies the `--tags` / `--labels`
 // selectors of the filter. The component section is the one from BASE, since the component no longer
 // exists in HEAD. Without selectors every deleted component matches; with selectors a component that has
 // no metadata section cannot match (the same rule the added/modified path applies).
+//
+// It checks hasSelectors rather than selectorsApplyNow on purpose: DeferSelectors only defers the live
+// components, because a deleted component has no HEAD metadata and no dependents to resolve later.
 func deletedComponentMatchesSelectors(componentSection map[string]any, filter AffectedFilter) bool {
 	if !filter.hasSelectors() {
 		return true

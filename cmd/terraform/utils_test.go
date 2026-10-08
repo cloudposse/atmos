@@ -780,7 +780,7 @@ func TestIsMultiComponentInvocationUsesViperValues(t *testing.T) {
 	cmd.Flags().StringSlice("components", nil, "")
 	cmd.Flags().String("query", "", "")
 
-	assert.True(t, isMultiComponentInvocation(cmd))
+	assert.True(t, isMultiComponentInvocation(cmd, nil))
 }
 
 // TestHasSingleComponentFlags tests the hasSingleComponentFlags function.

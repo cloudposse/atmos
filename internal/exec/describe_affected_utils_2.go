@@ -821,6 +821,158 @@ func filterAffectedDependents(affected *[]schema.Affected, filter AffectedFilter
 	processIncludedInDependencies(affected)
 }
 
+// maxFlattenDependentDepth bounds the walk over nested dependents, guarding against a dependency cycle
+// or an extremely deep chain. It matches the limit used when `list affected` flattens dependents.
+const maxFlattenDependentDepth = 100
+
+// dependentToAffected converts a dependent into a top-level affected entry with the given reason
+// (for example "dependent"). Every field the two types share is copied one to one; the transient
+// Metadata that selector matching records on a dependent is never copied.
+func dependentToAffected(d *schema.Dependent, reason string) schema.Affected {
+	return schema.Affected{
+		Component:            d.Component,
+		ComponentType:        d.ComponentType,
+		ComponentPath:        d.ComponentPath,
+		Namespace:            d.Namespace,
+		Tenant:               d.Tenant,
+		Environment:          d.Environment,
+		Stage:                d.Stage,
+		Stack:                d.Stack,
+		StackSlug:            d.StackSlug,
+		SpaceliftStack:       d.SpaceliftStack,
+		AtlantisProject:      d.AtlantisProject,
+		Affected:             reason,
+		AffectedAll:          []string{reason},
+		Dependents:           d.Dependents,
+		IncludedInDependents: d.IncludedInDependents,
+		Settings:             d.Settings,
+	}
+}
+
+// affectedKey identifies a component instance in the affected list: the same
+// (component, stack, component type) triple that appendToAffected de-duplicates on.
+func affectedKey(component, stack, componentType string) string {
+	return componentType + "\x00" + stack + "\x00" + component
+}
+
+// topLevelAffectedMetadata returns the `metadata` section of a top-level affected component as it is in
+// HEAD (looked up from the already-resolved stacks), or nil when the component or its metadata is missing.
+func topLevelAffectedMetadata(a *schema.Affected, stacks map[string]any) map[string]any {
+	componentSection := findComponentSectionInCachedStacksByType(stacks, a.Stack, a.Component, a.ComponentType)
+	metadataSection, _ := componentSection[sectionNameMetadata].(map[string]any)
+	return metadataSection
+}
+
+// applySelectorsToAffectedForest applies the `--tags` / `--labels` selectors to the whole affected forest,
+// after the dependents are resolved: the live affected components were not filtered while they were
+// computed (see AffectedFilter.DeferSelectors), so a component that fails the selectors can still
+// contribute the dependents that pass them.
+//
+//   - Every item's nested dependents are pruned by the selectors.
+//   - A top-level item is kept when it is deleted (deleted items were already matched against their BASE
+//     metadata) or when its HEAD metadata satisfies the selectors. A live item that is missing from the
+//     stacks, or has no metadata, cannot match and is dropped.
+//   - A dropped item's matching dependents are promoted into the top-level list at its position, with the
+//     reason "dependent", unless the same component is already a top-level item or was already promoted.
+//
+// `included_in_dependents` is recomputed for the result, and the transient dependent metadata is cleared.
+// Without selectors the input is returned unchanged.
+func applySelectorsToAffectedForest(affected []schema.Affected, filter AffectedFilter, stacks map[string]any) []schema.Affected {
+	if !filter.hasSelectors() {
+		return affected
+	}
+
+	keep := make([]bool, len(affected))
+	seen := make(map[string]struct{}, len(affected))
+	for i := range affected {
+		a := &affected[i]
+		a.Dependents = pruneDependentsBySelectors(a.Dependents, filter)
+		keep[i] = a.Deleted || filter.matchesSelectors(topLevelAffectedMetadata(a, stacks))
+		if keep[i] {
+			seen[affectedKey(a.Component, a.Stack, a.ComponentType)] = struct{}{}
+		}
+	}
+
+	out := make([]schema.Affected, 0, len(affected))
+	for i := range affected {
+		if keep[i] {
+			out = append(out, affected[i])
+			continue
+		}
+		deps := affected[i].Dependents
+		for j := 0; j < len(deps); j++ {
+			d := &deps[j]
+			key := affectedKey(d.Component, d.Stack, d.ComponentType)
+			if _, dup := seen[key]; dup {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, dependentToAffected(d, affectedReasonDependent))
+		}
+	}
+
+	for i := range out {
+		clearDependentMetadata(out[i].Dependents)
+	}
+	processIncludedInDependencies(&out)
+
+	return out
+}
+
+// flattenAffectedDependents lifts every dependent into the top-level affected list as an entry with the
+// reason "dependent". Each top-level item keeps its position and loses its nested dependents; its
+// dependents follow it in pre-order. A component that is already a top-level item, or was already lifted
+// from another parent, appears only once. Deleted items pass through untouched (they have no dependents).
+// The result is never nil.
+func flattenAffectedDependents(affected []schema.Affected) []schema.Affected {
+	seen := make(map[string]struct{}, len(affected))
+	for i := range affected {
+		a := &affected[i]
+		seen[affectedKey(a.Component, a.Stack, a.ComponentType)] = struct{}{}
+	}
+
+	out := make([]schema.Affected, 0, len(affected))
+	for i := range affected {
+		a := affected[i]
+		if a.Deleted {
+			out = append(out, a)
+			continue
+		}
+
+		dependents := a.Dependents
+		a.Dependents = []schema.Dependent{}
+		a.IncludedInDependents = false
+		out = append(out, a)
+		out = appendFlattenedDependents(out, dependents, seen, 1)
+	}
+
+	return out
+}
+
+// appendFlattenedDependents appends the dependents (pre-order) that are not in seen yet to out. The
+// subtree of a dependent that was already seen is skipped, because it is reached from that earlier
+// occurrence: from the top-level item that owns it, or from the parent it was first lifted from.
+func appendFlattenedDependents(out []schema.Affected, dependents []schema.Dependent, seen map[string]struct{}, depth int) []schema.Affected {
+	for i := range dependents {
+		d := &dependents[i]
+		key := affectedKey(d.Component, d.Stack, d.ComponentType)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+
+		lifted := dependentToAffected(d, affectedReasonDependent)
+		lifted.Dependents = []schema.Dependent{}
+		lifted.IncludedInDependents = false
+		out = append(out, lifted)
+
+		if depth < maxFlattenDependentDepth {
+			out = appendFlattenedDependents(out, d.Dependents, seen, depth+1)
+		}
+	}
+	return out
+}
+
 // clearDependentMetadata drops the transient `metadata` recorded on dependents for selector matching, so
 // the pruned result has the same shape as one produced without selectors.
 func clearDependentMetadata(dependents []schema.Dependent) {

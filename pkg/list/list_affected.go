@@ -82,13 +82,65 @@ type AffectedCommandOptions struct {
 	IdentityName string // Identity name from --identity flag or ATMOS_IDENTITY env var.
 }
 
+// affectedLabelsSource names both places a list affected --labels value can come from,
+// for error messages that cannot tell which one supplied it.
+const affectedLabelsSource = "--labels (or ATMOS_COMPONENT_LABELS)"
+
+// finalizeAffectedDependents resolves and shapes the dependents of the affected components. It is a
+// variable so tests can observe the call without resolving real stacks.
+var finalizeAffectedDependents = e.FinalizeAffectedDependents
+
 // affectedFilter builds the component filter from the exclude-locked, tags, and labels options.
+//
+// With --include-dependents the tags and labels selectors are deferred: a component that fails them
+// can still have dependents that pass them, so the selectors are applied after the dependents are
+// resolved (see resolveAffectedDependents) instead of while the affected set is computed.
 func (opts *AffectedCommandOptions) affectedFilter() (e.AffectedFilter, error) {
-	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
+	labels, err := tags.ParseLabelsFlagFrom(opts.LabelsRaw, affectedLabelsSource)
 	if err != nil {
 		return e.AffectedFilter{}, err
 	}
-	return e.AffectedFilter{ExcludeLocked: opts.ExcludeLocked, Tags: opts.Tags, Labels: labels}, nil
+	filter := e.AffectedFilter{ExcludeLocked: opts.ExcludeLocked, Tags: opts.Tags, Labels: labels}
+	filter.DeferSelectors = opts.IncludeDependents && (len(filter.Tags) > 0 || len(filter.Labels) > 0)
+	return filter, nil
+}
+
+// dependentsRunContext carries the authentication and error-handling settings shared by the
+// affected computation and the dependents resolution that follows it.
+type dependentsRunContext struct {
+	AuthManager  auth.AuthManager
+	AuthDisabled bool
+	ErrOptions   e.DescribeStacksErrorOptions
+}
+
+// resolveAffectedDependents resolves the dependents of the affected components when --include-dependents
+// is set, applying the tags and labels selectors to them. Settings are always included, matching the
+// affected computation, because the rendered rows read enabled/locked status from them.
+func resolveAffectedDependents(
+	atmosConfig *schema.AtmosConfiguration,
+	opts *AffectedCommandOptions,
+	affected *[]schema.Affected,
+	run *dependentsRunContext,
+) error {
+	if !opts.IncludeDependents {
+		return nil
+	}
+
+	filter, err := opts.affectedFilter()
+	if err != nil {
+		return err
+	}
+	return finalizeAffectedDependents(atmosConfig, affected, &e.AffectedDependentsOptions{
+		IncludeSettings:      true,
+		ProcessTemplates:     opts.ProcessTemplates,
+		ProcessYamlFunctions: opts.ProcessFunctions,
+		Skip:                 opts.Skip,
+		OnlyInStack:          opts.Stack,
+		AuthManager:          run.AuthManager,
+		AuthDisabled:         run.AuthDisabled,
+		ErrOptions:           run.ErrOptions,
+		Filter:               filter,
+	})
 }
 
 // ExecuteListAffectedCmd executes the list affected command.
@@ -231,6 +283,9 @@ func getAffectedComponents(atmosConfig *schema.AtmosConfiguration, opts *Affecte
 	errOptions, collector := e.ErrorOptionsFromMode(opts.ErrorMode)
 	logicResult, err := executeAffectedLogic(atmosConfig, opts, authManager, authDisabled, errOptions)
 	if err != nil {
+		return nil, err
+	}
+	if err := resolveAffectedDependents(atmosConfig, opts, &logicResult.affected, &dependentsRunContext{AuthManager: authManager, AuthDisabled: authDisabled, ErrOptions: errOptions}); err != nil {
 		return nil, err
 	}
 

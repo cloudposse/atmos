@@ -75,11 +75,11 @@ what's already on disk matches vendor.lock.yaml — see 'atmos vendor verify' fo
 		// representation as the empty selector users intended.
 		components = normalizeComponentSelectors(components)
 		componentType := v.GetString("type")
-		tags := splitTags(v.GetString("tags"))
+		tags := splitTags(v.GetString(vendorTagsViperKey))
 		typeChanged := cmd.Flags().Changed("type")
 
 		stack := v.GetString("stack")
-		labels, labelsErr := pkgtags.ParseLabelsFlag(v.GetString("labels"))
+		labels, labelsErr := pkgtags.ParseLabelsFlag(v.GetString(vendorLabelsViperKey))
 		if labelsErr != nil {
 			return labelsErr
 		}
@@ -284,7 +284,7 @@ func resolveUpdateSelectors(p *updateSelectorParams) ([]string, error) {
 	if err := resetUnchangedFlag(p.cmd, "stack"); err != nil {
 		return nil, err
 	}
-	if err := resetUnchangedFlag(p.cmd, "labels"); err != nil {
+	if err := resetUnchangedFlag(p.cmd, vendorLabelsFlagName); err != nil {
 		return nil, err
 	}
 	if sliceValue, ok := p.cmd.Flags().Lookup("component").Value.(pflag.SliceValue); ok {
@@ -401,8 +401,12 @@ func init() {
 		flags.WithStringSliceFlag("component", "c", []string{}, "Update only these components (repeatable)"),
 		flags.WithStringFlag("type", "t", "terraform", componentTypeFlagHelp),
 		flags.WithStringFlag("tags", "", "", "Update only components whose vendor.yaml source declares any of these tags (comma-separated, matches any)"),
+		flags.WithEnvVars(vendorTagsFlagName, envVendorTags),
+		flags.WithViperKey(vendorTagsFlagName, vendorTagsViperKey),
 		flags.WithStringFlag("stack", "s", "", "Update only components belonging to the specified stack"),
-		flags.WithStringFlag("labels", "", "", vendorLabelsFlagHelp),
+		flags.WithStringFlag(vendorLabelsFlagName, "", "", vendorLabelsFlagHelp),
+		flags.WithEnvVars(vendorLabelsFlagName, envVendorLabels),
+		flags.WithViperKey(vendorLabelsFlagName, vendorLabelsViperKey),
 		flags.WithBoolFlag("check", "", false, "Dry run: show available updates without modifying files"),
 		flags.WithBoolFlag("pull", "", false, "After updating versions, run 'atmos vendor pull'"),
 		flags.WithBoolFlag("all", "", false, "Update all discoverable vendor sources (the default when no selector is given)"),

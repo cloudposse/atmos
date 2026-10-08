@@ -5,13 +5,16 @@ import (
 	"path/filepath"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/data"
+	flagsPkg "github.com/cloudposse/atmos/pkg/flags"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -152,6 +155,36 @@ func TestShouldSkipComponent_Selectors(t *testing.T) {
 			wantSkip: true,
 		},
 		{
+			name:     "deferred selectors do not skip a non-matching component",
+			metadata: map[string]any{"labels": map[string]any{"ci": "manual"}},
+			filter:   AffectedFilter{Labels: map[string]string{"ci": "auto"}, DeferSelectors: true},
+			wantSkip: false,
+		},
+		{
+			name:     "deferred selectors do not skip a component without labels or tags",
+			metadata: map[string]any{"component": "vpc"},
+			filter:   AffectedFilter{Tags: []string{"prod"}, DeferSelectors: true},
+			wantSkip: false,
+		},
+		{
+			name:     "deferred selectors still skip abstract components",
+			metadata: map[string]any{"type": "abstract"},
+			filter:   AffectedFilter{Tags: []string{"prod"}, DeferSelectors: true},
+			wantSkip: true,
+		},
+		{
+			name:     "deferred selectors still skip disabled components",
+			metadata: map[string]any{"enabled": false},
+			filter:   AffectedFilter{Tags: []string{"prod"}, DeferSelectors: true},
+			wantSkip: true,
+		},
+		{
+			name:     "deferred selectors still skip locked components with ExcludeLocked",
+			metadata: map[string]any{"locked": true, "labels": map[string]any{"ci": "auto"}},
+			filter:   AffectedFilter{ExcludeLocked: true, Labels: map[string]string{"ci": "auto"}, DeferSelectors: true},
+			wantSkip: true,
+		},
+		{
 			name:     "selectors alone do not skip a component that satisfies them",
 			metadata: map[string]any{"locked": true, "labels": map[string]any{"ci": "auto"}},
 			filter:   AffectedFilter{Labels: map[string]string{"ci": "auto"}},
@@ -172,6 +205,15 @@ func TestAffectedFilter_HasSelectors(t *testing.T) {
 	assert.False(t, AffectedFilter{ExcludeLocked: true}.hasSelectors())
 	assert.True(t, AffectedFilter{Tags: []string{"prod"}}.hasSelectors())
 	assert.True(t, AffectedFilter{Labels: map[string]string{"ci": "auto"}}.hasSelectors())
+}
+
+// TestAffectedFilter_SelectorsApplyNow verifies the live-component processors apply selectors unless deferred.
+func TestAffectedFilter_SelectorsApplyNow(t *testing.T) {
+	assert.False(t, AffectedFilter{}.selectorsApplyNow())
+	assert.False(t, AffectedFilter{DeferSelectors: true}.selectorsApplyNow())
+	assert.True(t, AffectedFilter{Tags: []string{"prod"}}.selectorsApplyNow())
+	assert.False(t, AffectedFilter{Tags: []string{"prod"}, DeferSelectors: true}.selectorsApplyNow())
+	assert.False(t, AffectedFilter{Labels: map[string]string{"ci": "auto"}, DeferSelectors: true}.selectorsApplyNow())
 }
 
 // TestFindAffected_Selectors checks the selectors through the full component-processing path,
@@ -204,6 +246,16 @@ func TestFindAffected_Selectors(t *testing.T) {
 		{name: "label selector excludes manual and metadata-less components", filter: AffectedFilter{Labels: map[string]string{"ci": "auto"}}, want: []string{"auto"}},
 		{name: "tag selector keeps only tagged components", filter: AffectedFilter{Tags: []string{"safe"}}, want: []string{"auto"}},
 		{name: "unmatched selector reports nothing", filter: AffectedFilter{Labels: map[string]string{"ci": "never"}}, want: []string{}},
+		{
+			name:   "deferred label selector does not filter live components",
+			filter: AffectedFilter{Labels: map[string]string{"ci": "auto"}, DeferSelectors: true},
+			want:   []string{"auto", "manual", "bare"},
+		},
+		{
+			name:   "deferred tag selector does not filter live components",
+			filter: AffectedFilter{Tags: []string{"safe"}, DeferSelectors: true},
+			want:   []string{"auto", "manual", "bare"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -258,6 +310,24 @@ func TestResolveAffectedSelectors(t *testing.T) {
 			name: "upload without selectors is accepted",
 			args: DescribeAffectedCmdArgs{Upload: true},
 		},
+		{
+			name:    "upload with CLI tags and env labels is rejected for the CLI selector",
+			args:    DescribeAffectedCmdArgs{Upload: true, Tags: []string{"prod"}, LabelsRaw: "ci=auto", LabelsEnvVar: "ATMOS_LABELS"},
+			wantErr: errUtils.ErrInvalidFlag,
+		},
+		{
+			name: "upload ignores env-sourced tags and labels",
+			args: DescribeAffectedCmdArgs{
+				Upload: true, Tags: []string{"prod"}, TagsEnvVar: "ATMOS_TAGS",
+				LabelsRaw: "ci=auto", LabelsEnvVar: "ATMOS_LABELS",
+			},
+		},
+		{
+			name:       "env-sourced selectors are kept without upload",
+			args:       DescribeAffectedCmdArgs{Tags: []string{"prod"}, TagsEnvVar: "ATMOS_TAGS", LabelsRaw: "ci=auto", LabelsEnvVar: "ATMOS_LABELS"},
+			wantTags:   []string{"prod"},
+			wantLabels: map[string]string{"ci": "auto"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -273,6 +343,32 @@ func TestResolveAffectedSelectors(t *testing.T) {
 			assert.Equal(t, tt.wantLabels, args.Labels)
 		})
 	}
+}
+
+// TestResolveAffectedSelectors_UploadEnvSelectorsCleared confirms an env-sourced selector is dropped
+// completely (parsed and raw forms) so the unfiltered upload is not mistaken for a filtered one.
+func TestResolveAffectedSelectors_UploadEnvSelectorsCleared(t *testing.T) {
+	args := DescribeAffectedCmdArgs{
+		Upload: true, Tags: []string{"prod"}, TagsEnvVar: "ATMOS_TAGS",
+		LabelsRaw: "ci=auto", LabelsEnvVar: "ATMOS_LABELS",
+	}
+	require.NoError(t, resolveAffectedSelectors(&args))
+	assert.Empty(t, args.Tags)
+	assert.Empty(t, args.Labels)
+	assert.Empty(t, args.LabelsRaw)
+	assert.False(t, args.affectedFilter().hasSelectors())
+}
+
+// TestResolveAffectedSelectors_UploadErrorHints pins the hints attached to the rejected combination.
+func TestResolveAffectedSelectors_UploadErrorHints(t *testing.T) {
+	args := DescribeAffectedCmdArgs{Upload: true, Tags: []string{"prod"}}
+	err := resolveAffectedSelectors(&args)
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+
+	hints := cockroachErrors.GetAllHints(err)
+	require.Len(t, hints, 2)
+	assert.Contains(t, hints[0], "without selectors")
+	assert.Contains(t, hints[1], "--tags= --labels=")
 }
 
 // TestResolveAffectedSelectors_UploadMessage pins the user-facing explanation for the rejected combination.
@@ -326,6 +422,40 @@ func TestSetDescribeAffectedFlagValueInCliArgs_Selectors(t *testing.T) {
 	t.Run("upload with selectors is rejected", func(t *testing.T) {
 		args := newArgs(t, map[string]string{"upload": "true", "tags": "prod"})
 		require.ErrorIs(t, resolveAffectedSelectors(&args), errUtils.ErrInvalidFlag)
+		assert.Empty(t, args.TagsEnvVar)
+	})
+
+	t.Run("command-line selectors record no env var", func(t *testing.T) {
+		args := newArgs(t, map[string]string{"tags": "prod", "labels": "ci=auto", "flatten": "true"})
+		assert.Empty(t, args.TagsEnvVar)
+		assert.Empty(t, args.LabelsEnvVar)
+		assert.Empty(t, args.FlattenEnvVar)
+		assert.True(t, args.Flatten)
+	})
+
+	t.Run("env-sourced selectors record their env var and are dropped by upload", func(t *testing.T) {
+		flagSet := newDescribeAffectedFlagSet()
+		require.NoError(t, flagSet.Set("tags", "prod"))
+		require.NoError(t, flagSet.Set("labels", "ci=auto"))
+		require.NoError(t, flagSet.Set("upload", "true"))
+		flagsPkg.MarkFlagValueFromEnv(flagSet.Lookup("tags"), "ATMOS_TAGS")
+		flagsPkg.MarkFlagValueFromEnv(flagSet.Lookup("labels"), "ATMOS_LABELS")
+
+		args := DescribeAffectedCmdArgs{CLIConfig: &schema.AtmosConfiguration{}}
+		SetDescribeAffectedFlagValueInCliArgs(flagSet, &args)
+		assert.Equal(t, "ATMOS_TAGS", args.TagsEnvVar)
+		assert.Equal(t, "ATMOS_LABELS", args.LabelsEnvVar)
+
+		require.NoError(t, resolveAffectedSelectors(&args))
+		assert.False(t, args.affectedFilter().hasSelectors())
+	})
+
+	t.Run("a flag set without the selector flags is nil-safe", func(t *testing.T) {
+		flagSet := pflag.NewFlagSet("bare", pflag.ContinueOnError)
+		args := DescribeAffectedCmdArgs{CLIConfig: &schema.AtmosConfiguration{}}
+		assert.NotPanics(t, func() { SetDescribeAffectedFlagValueInCliArgs(flagSet, &args) })
+		assert.Empty(t, args.TagsEnvVar)
+		assert.Empty(t, args.LabelsEnvVar)
 	})
 }
 
@@ -486,7 +616,7 @@ func TestDetectDeletedComponents_Selectors(t *testing.T) {
 			want:   []string{},
 		},
 		{
-			name:   "exclude-locked alone does not change deletions",
+			name:   "exclude-locked does not drop unlocked deletions",
 			filter: AffectedFilter{ExcludeLocked: true},
 			want: []string{
 				"dev/iam-manual", "dev/vpc-auto", "dev/priv-tagged", "dev/bare",
@@ -511,6 +641,119 @@ func TestDetectDeletedComponents_Selectors(t *testing.T) {
 			assert.ElementsMatch(t, tt.want, got)
 		})
 	}
+}
+
+// deletedLockedFixture builds BASE (remote) and HEAD (current) stacks where locked components were deleted:
+//   - stack "dev" exists in both; "locked-auto" (locked, ci=auto) and "open-auto" (unlocked, ci=auto) were removed from HEAD,
+//     "kept-locked" is locked and still exists in HEAD.
+//   - stack "old" was deleted entirely and held a locked and an unlocked component.
+func deletedLockedFixture() (remote, current map[string]any) {
+	comp := func(locked bool) map[string]any {
+		return map[string]any{"metadata": map[string]any{
+			"component": "x",
+			"locked":    locked,
+			"labels":    map[string]any{"ci": "auto"},
+		}}
+	}
+
+	remote = map[string]any{
+		"dev": map[string]any{"components": map[string]any{"terraform": map[string]any{
+			"locked-auto": comp(true),
+			"open-auto":   comp(false),
+			"kept-locked": comp(true),
+			"no-metadata": map[string]any{"vars": map[string]any{"a": "b"}},
+		}}},
+		"old": map[string]any{"components": map[string]any{"terraform": map[string]any{
+			"old-locked": comp(true),
+			"old-open":   comp(false),
+		}}},
+	}
+	current = map[string]any{
+		"dev": map[string]any{"components": map[string]any{"terraform": map[string]any{
+			"kept-locked": comp(true),
+		}}},
+	}
+	return remote, current
+}
+
+// TestDetectDeletedComponents_ExcludeLocked verifies --exclude-locked is applied to deleted components using
+// their BASE metadata, for both single-component and whole-stack deletions, and composes with selectors.
+func TestDetectDeletedComponents_ExcludeLocked(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Components: schema.Components{Terraform: schema.Terraform{BasePath: "components/terraform"}},
+	}
+
+	tests := []struct {
+		name   string
+		filter AffectedFilter
+		want   map[string]string // "stack/component" -> deletion type of every reported deletion.
+	}{
+		{
+			name: "without exclude-locked locked deletions are reported",
+			want: map[string]string{
+				"dev/locked-auto": deletionTypeComponent,
+				"dev/open-auto":   deletionTypeComponent,
+				"dev/no-metadata": deletionTypeComponent,
+				"old/old-locked":  deletionTypeStack,
+				"old/old-open":    deletionTypeStack,
+			},
+		},
+		{
+			name:   "exclude-locked drops locked deletions on both paths and keeps unlocked ones",
+			filter: AffectedFilter{ExcludeLocked: true},
+			want: map[string]string{
+				"dev/open-auto":   deletionTypeComponent,
+				"dev/no-metadata": deletionTypeComponent,
+				"old/old-open":    deletionTypeStack,
+			},
+		},
+		{
+			name:   "exclude-locked combined with labels still drops locked deletions",
+			filter: AffectedFilter{ExcludeLocked: true, Labels: map[string]string{"ci": "auto"}},
+			want: map[string]string{
+				"dev/open-auto": deletionTypeComponent,
+				"old/old-open":  deletionTypeStack,
+			},
+		},
+		{
+			name:   "labels alone do not drop locked deletions",
+			filter: AffectedFilter{Labels: map[string]string{"ci": "auto"}},
+			want: map[string]string{
+				"dev/locked-auto": deletionTypeComponent,
+				"dev/open-auto":   deletionTypeComponent,
+				"old/old-locked":  deletionTypeStack,
+				"old/old-open":    deletionTypeStack,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			remote, current := deletedLockedFixture()
+
+			deleted, err := detectDeletedComponents(&remote, &current, atmosConfig, "", tt.filter)
+			require.NoError(t, err)
+
+			got := make(map[string]string, len(deleted))
+			for _, d := range deleted {
+				assert.True(t, d.Deleted, "%s/%s must be flagged deleted", d.Stack, d.Component)
+				got[d.Stack+"/"+d.Component] = d.DeletionType
+			}
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestDeletedComponentExcludedAsLocked covers the predicate directly, including the negative paths.
+func TestDeletedComponentExcludedAsLocked(t *testing.T) {
+	locked := map[string]any{"metadata": map[string]any{"locked": true}}
+	unlocked := map[string]any{"metadata": map[string]any{"locked": false}}
+	noMetadata := map[string]any{"vars": map[string]any{}}
+
+	assert.True(t, deletedComponentExcludedAsLocked(locked, AffectedFilter{ExcludeLocked: true}))
+	assert.False(t, deletedComponentExcludedAsLocked(locked, AffectedFilter{}), "flag unset must not exclude")
+	assert.False(t, deletedComponentExcludedAsLocked(unlocked, AffectedFilter{ExcludeLocked: true}))
+	assert.False(t, deletedComponentExcludedAsLocked(noMetadata, AffectedFilter{ExcludeLocked: true}))
 }
 
 // TestDetectDeletedComponents_SelectorsKeepDeletionType verifies filtering does not alter the deletion
@@ -762,7 +1005,8 @@ func TestAttachDependentMetadata(t *testing.T) {
 
 // TestExecute_IncludeDependents_SelectorsPruneDependents is the end-to-end check through Execute: with
 // --include-dependents and --labels, a manual dependent is dropped from the output; without the selector
-// (the `terraform --affected` situation, where Tags/Labels are cleared) the dependents are unchanged.
+// (the `terraform --affected` situation, where Tags/Labels are cleared) the dependents are unchanged. When
+// the affected component itself fails the selectors, its matching dependents are promoted to the top level.
 func TestExecute_IncludeDependents_SelectorsPruneDependents(t *testing.T) {
 	ioCtx, err := iolib.NewContext()
 	require.NoError(t, err)
@@ -772,27 +1016,35 @@ func TestExecute_IncludeDependents_SelectorsPruneDependents(t *testing.T) {
 		Components: schema.Components{Terraform: schema.Terraform{BasePath: "components/terraform"}},
 	}
 
+	// The CI label of the affected component, which the with-selectors dependents stub publishes in the
+	// resolved stacks the way addDependentsToAffectedWithFilter does.
+	vpcCI := "auto"
+
 	d := describeAffectedExec{atmosConfig: atmosConfig}
 	d.IsTTYSupportForStdout = func() bool { return false }
+	var findFilter AffectedFilter
 	d.executeDescribeAffectedWithTargetRefCheckout = func(
 		_ *schema.AtmosConfiguration, _, _, _ string, _, _ bool, _ string, _, _ bool,
-		_ []string, _ AffectedFilter, _ auth.AuthManager, _ bool, _ DescribeStacksErrorOptions,
+		_ []string, filter AffectedFilter, _ auth.AuthManager, _ bool, _ DescribeStacksErrorOptions,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
-		return []schema.Affected{{Component: "vpc", Stack: "dev", StackSlug: "dev-vpc"}}, nil, nil, "", nil
+		findFilter = filter
+		return []schema.Affected{{Component: "vpc", ComponentType: "terraform", Stack: "dev", StackSlug: "dev-vpc", Affected: "stack.vars", AffectedAll: []string{"stack.vars"}}}, nil, nil, "", nil
 	}
 	setDependents := func(affected *[]schema.Affected) {
-		(*affected)[0].Dependents = []schema.Dependent{
-			dependentFixture("iam", "manual"),
-			dependentFixture("app", "auto"),
-		}
+		iam, app := dependentFixture("iam", "manual"), dependentFixture("app", "auto")
+		iam.ComponentType, app.ComponentType = "terraform", "terraform"
+		(*affected)[0].Dependents = []schema.Dependent{iam, app}
 	}
 	// Without selectors Execute uses addDependentsToAffected; with selectors it uses the variant that records metadata.
 	d.addDependentsToAffected = func(_ *schema.AtmosConfiguration, affected *[]schema.Affected, _, _, _ bool, _ []string, _ string, _ auth.AuthManager, _ bool, _ DescribeStacksErrorOptions) error {
 		setDependents(affected)
 		return nil
 	}
-	d.addDependentsToAffectedWithFilter = func(_ *schema.AtmosConfiguration, affected *[]schema.Affected, _ *dependentsOptions) error {
+	d.addDependentsToAffectedWithFilter = func(_ *schema.AtmosConfiguration, affected *[]schema.Affected, opts *dependentsOptions) error {
 		setDependents(affected)
+		opts.stacks = map[string]any{"dev": map[string]any{"components": map[string]any{"terraform": map[string]any{
+			"vpc": map[string]any{"metadata": map[string]any{"labels": map[string]any{"ci": vpcCI}}},
+		}}}}
 		return nil
 	}
 
@@ -814,15 +1066,30 @@ func TestExecute_IncludeDependents_SelectorsPruneDependents(t *testing.T) {
 	}
 
 	t.Run("labels=ci=auto drops the manual dependent", func(t *testing.T) {
+		vpcCI = "auto"
 		got := run(t, DescribeAffectedCmdArgs{LabelsRaw: "ci=auto"})
 		require.Len(t, got, 1)
+		assert.Equal(t, "vpc", got[0].Component)
 		assert.Equal(t, []string{"dev-app"}, dependentSlugs(got[0].Dependents))
+		assert.True(t, findFilter.DeferSelectors, "with dependents the selectors are deferred past the find step")
+		assert.True(t, findFilter.hasSelectors())
+	})
+
+	t.Run("a manual affected component is replaced by its matching dependent", func(t *testing.T) {
+		vpcCI = "manual"
+		got := run(t, DescribeAffectedCmdArgs{LabelsRaw: "ci=auto"})
+		require.Len(t, got, 1)
+		assert.Equal(t, "app", got[0].Component)
+		assert.Equal(t, affectedReasonDependent, got[0].Affected)
+		assert.Equal(t, []string{affectedReasonDependent}, got[0].AffectedAll)
+		assert.Empty(t, got[0].Dependents)
 	})
 
 	t.Run("no selector keeps every dependent", func(t *testing.T) {
 		got := run(t, DescribeAffectedCmdArgs{})
 		require.Len(t, got, 1)
 		assert.Equal(t, []string{"dev-iam", "dev-app"}, dependentSlugs(got[0].Dependents))
+		assert.False(t, findFilter.DeferSelectors)
 	})
 
 	t.Run("cleared selectors (terraform --affected) keep every dependent", func(t *testing.T) {
@@ -836,5 +1103,24 @@ func TestExecute_IncludeDependents_SelectorsPruneDependents(t *testing.T) {
 		require.NoError(t, d.Execute(&args))
 		require.Len(t, captured, 1)
 		assert.Equal(t, []string{"dev-iam", "dev-app"}, dependentSlugs(captured[0].Dependents))
+	})
+
+	t.Run("flatten lifts the remaining dependents into the top-level list", func(t *testing.T) {
+		got := run(t, DescribeAffectedCmdArgs{Flatten: true})
+		require.Len(t, got, 3)
+		assert.Equal(t, []string{"vpc", "iam", "app"}, []string{got[0].Component, got[1].Component, got[2].Component})
+		assert.Equal(t, "stack.vars", got[0].Affected)
+		assert.Equal(t, affectedReasonDependent, got[1].Affected)
+		for i := range got {
+			assert.Empty(t, got[i].Dependents)
+			assert.NotNil(t, got[i].Dependents)
+		}
+	})
+
+	t.Run("flatten runs after the selectors have pruned the dependents", func(t *testing.T) {
+		vpcCI = "auto"
+		got := run(t, DescribeAffectedCmdArgs{LabelsRaw: "ci=auto", Flatten: true})
+		require.Len(t, got, 2)
+		assert.Equal(t, []string{"vpc", "app"}, []string{got[0].Component, got[1].Component})
 	})
 }

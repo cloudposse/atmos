@@ -143,22 +143,65 @@ func TestExecuteTerraformIncludeDependenciesExpandsAcrossSelectors(t *testing.T)
 		require.Equal(t, []string{"app"}, executed)
 	})
 
-	t.Run("include-dependents expands in the reverse direction", func(t *testing.T) {
+	t.Run("include-dependents honours tags so non-matching dependents are skipped", func(t *testing.T) {
 		executed := executedClosureComponents(t, &schema.ConfigAndStacksInfo{
 			SubCommand:        "plan",
 			Tags:              []string{"network"},
 			IncludeDependents: -1,
 		}, nil)
-		require.Equal(t, []string{"vpc", "database", "app"}, executed)
+		require.Equal(t, []string{"vpc"}, executed)
 	})
 
-	t.Run("destroy with dependents runs dependents first", func(t *testing.T) {
+	t.Run("destroy with dependents only destroys matching nodes", func(t *testing.T) {
 		executed := executedClosureComponents(t, &schema.ConfigAndStacksInfo{
 			SubCommand:        "destroy",
 			Tags:              []string{"network"},
 			IncludeDependents: -1,
 		}, nil)
-		require.Equal(t, []string{"app", "database", "vpc"}, executed)
+		require.Equal(t, []string{"vpc"}, executed)
+	})
+
+	t.Run("all with include-dependents and tags equals tags alone", func(t *testing.T) {
+		executed := executedClosureComponents(t, &schema.ConfigAndStacksInfo{
+			SubCommand:        "plan",
+			Tags:              []string{"data"},
+			IncludeDependents: -1,
+		}, nil)
+		require.Equal(t, []string{"database"}, executed)
+	})
+
+	t.Run("non-matching seed still reaches its matching transitive dependent", func(t *testing.T) {
+		executed := executedClosureComponents(t, &schema.ConfigAndStacksInfo{
+			SubCommand:        "plan",
+			Tags:              []string{"app"},
+			IncludeDependents: -1,
+		}, &TerraformSelection{NodeIDs: []string{"vpc-dev"}})
+		require.Equal(t, []string{"app"}, executed)
+	})
+
+	t.Run("destroy of a non-matching seed destroys only the matching dependent", func(t *testing.T) {
+		executed := executedClosureComponents(t, &schema.ConfigAndStacksInfo{
+			SubCommand:        "destroy",
+			Tags:              []string{"app"},
+			IncludeDependents: -1,
+		}, &TerraformSelection{NodeIDs: []string{"vpc-dev"}})
+		require.Equal(t, []string{"app"}, executed)
+	})
+
+	t.Run("dependent depth is counted through non-matching intermediates", func(t *testing.T) {
+		executed := executedClosureComponents(t, &schema.ConfigAndStacksInfo{
+			SubCommand:        "plan",
+			Tags:              []string{"app"},
+			IncludeDependents: 1,
+		}, &TerraformSelection{NodeIDs: []string{"vpc-dev"}})
+		require.Empty(t, executed, "app is two hops from vpc, so depth 1 must not reach it")
+
+		executed = executedClosureComponents(t, &schema.ConfigAndStacksInfo{
+			SubCommand:        "plan",
+			Tags:              []string{"app"},
+			IncludeDependents: 2,
+		}, &TerraformSelection{NodeIDs: []string{"vpc-dev"}})
+		require.Equal(t, []string{"app"}, executed)
 	})
 
 	t.Run("destroy with dependencies destroys the seed first and prerequisites last", func(t *testing.T) {
@@ -282,6 +325,72 @@ func TestTerraformClosureSpecMerging(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			require.Equal(t, tc.want, terraformClosureSpec(tc.info, tc.selection))
+		})
+	}
+}
+
+// terraformLabeledChainTestStacks builds base (ci=auto) <- middle (ci=manual) <- leaf (ci=auto)
+// in stack "dev", where an arrow reads "is depended on by".
+func terraformLabeledChainTestStacks() map[string]any {
+	component := func(ci string, dependsOn map[string]any) map[string]any {
+		section := map[string]any{
+			cfg.MetadataSectionName: map[string]any{
+				"component": "mock",
+				"labels":    map[string]any{"ci": ci},
+			},
+			"vars": map[string]any{},
+		}
+		if dependsOn != nil {
+			section[cfg.SettingsSectionName] = map[string]any{"depends_on": dependsOn}
+		}
+		return section
+	}
+
+	return map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"base":   component("auto", nil),
+					"middle": component("manual", map[string]any{"1": map[string]any{"component": "base"}}),
+					"leaf":   component("auto", map[string]any{"1": map[string]any{"component": "middle"}}),
+				},
+			},
+		},
+	}
+}
+
+// TestExecuteTerraformDependentsContractThroughDroppedIntermediates proves a
+// dependent dropped by --labels still orders its surviving neighbors: the
+// edge leaf -> base survives both the filter and the strict scoped rebuild.
+func TestExecuteTerraformDependentsContractThroughDroppedIntermediates(t *testing.T) {
+	tests := []struct {
+		name       string
+		subCommand string
+		expected   []string
+	}{
+		{"plan runs base before leaf", "plan", []string{"base-dev", "leaf-dev"}},
+		{"destroy runs leaf before base", "destroy", []string{"leaf-dev", "base-dev"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var executed []string
+			err := ExecuteTerraform(context.Background(), TerraformOptions{
+				AtmosConfig: &schema.AtmosConfiguration{},
+				Info: &schema.ConfigAndStacksInfo{
+					SubCommand:        tt.subCommand,
+					Labels:            map[string]string{"ci": "auto"},
+					IncludeDependents: -1,
+				},
+				Stacks:    terraformLabeledChainTestStacks(),
+				Selection: &TerraformSelection{NodeIDs: []string{"base-dev"}},
+				Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+					executed = append(executed, terraformNodeID(execution.Info.Component, execution.Info.Stack))
+					return TerraformExecutionResult{}, nil
+				},
+			})
+			require.NoError(t, err)
+			require.Equal(t, tt.expected, executed)
 		})
 	}
 }

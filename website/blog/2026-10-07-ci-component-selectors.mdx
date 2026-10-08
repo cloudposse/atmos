@@ -24,7 +24,13 @@ Components already carry [`metadata.tags` and `metadata.labels`](/stacks/compone
 - `--tags` takes a comma-separated list and matches components that have any of the tags. It can also be set with `ATMOS_TAGS`.
 - `--labels` takes a comma-separated list of `key=value` or `key:value` pairs and matches components that have all of them. It can also be set with `ATMOS_LABELS`.
 
-The filters apply to every output format, including `--format=matrix`, so the selection that reaches your CI jobs is the one you declared in the stacks. Abstract components, disabled components, and locked components (with `--exclude-locked`) are excluded exactly as before.
+Matching is case-sensitive, and a component with no `metadata` (or no `metadata.tags` or `metadata.labels`) never matches. The filters apply to every output format, including `--format=matrix`, so the selection that reaches your CI jobs is the one you declared in the stacks. Abstract components, disabled components, and locked components (with `--exclude-locked`) are excluded exactly as before, and that includes a deleted component that was locked before it was removed.
+
+### A Privileged Parent No Longer Hides Its Automated Dependents
+
+With `--include-dependents`, the selectors apply to the whole result. Say `iam` is labeled `ci: manual`, and an automated `app` depends on it. When `iam` changes, `iam` is not selected by `--labels=ci=auto`, but `app` still needs to run. Atmos removes the non-matching `iam` from the top level and reports `app` as its own entry with `affected: dependent`, instead of dropping it along with its parent. The same rule applies at every level: a dependent that does not match is removed, and the matching dependents behind it move up.
+
+The nested `dependents` lists of the default output are not part of a job matrix. When the matrix should also run the dependents of the changed components, add `--flatten`, which lifts every remaining dependent into the top-level list as `affected: dependent`. It requires `--include-dependents`, it can also be set with `ATMOS_DESCRIBE_AFFECTED_FLATTEN`, and it cannot be combined with `--upload`.
 
 ## How to Use It
 
@@ -53,6 +59,9 @@ Then select on the label where CI builds its matrix.
 # The matrix for your pull request workflow.
 atmos describe affected --format=matrix --labels=ci=auto
 
+# The same matrix, with the dependents of the changed components as their own entries.
+atmos describe affected --format=matrix --include-dependents --flatten --labels=ci=auto
+
 # Or plan the same selection directly.
 atmos terraform plan --affected --labels=ci=auto
 ```
@@ -66,7 +75,13 @@ In a workflow, that is a one-flag change to the job that produces the matrix:
 
 The privileged components get their own workflow, with its own role and its own approvals, that selects them with `--labels=ci=manual`. Tags work the same way when you would rather select by a list, for example `--tags=production,tier-1`. The full flag reference is on the [`atmos describe affected`](/cli/commands/describe/affected#filtering-by-tags-and-labels) page.
 
-Two details are worth knowing before you wire this into a workflow. An empty selector value applies no filter, so `--labels=` or an empty `ATMOS_LABELS` selects every affected component, exactly as if you had left the flag off. If the label comes from a workflow variable, fail fast on an empty value with shell parameter expansion, for example `--labels="ci=${CI_LABEL:?}"`. Labels and tags can use simple Go templates, which Atmos renders before it selects as long as `templates.settings.enabled` is `true`. If templates are turned off, or you pass `--process-templates=false`, a templated label keeps its raw text and matches neither `ci=auto` nor `ci=manual`, so the component runs in neither workflow.
+Terraform and `describe affected` agree on the selection, including with `--include-dependents`. A change in `atmos terraform` worth noting: with `--tags` or `--labels`, the dependents that `--include-dependents` adds are now filtered too. A dependent that does not match is skipped, while the matching components behind it still run in dependency order. Before, every dependent ran even when it did not match, which could start a privileged component from a job that selected `ci=auto`. Prerequisites added by `--include-dependencies` are unchanged, because the selected components need them.
+
+A few details are worth knowing before you wire this into a workflow:
+
+- An empty selector value applies no filter, so `--labels=` or an empty `ATMOS_LABELS` selects every affected component, exactly as if you had left the flag off. If the label comes from a workflow variable, fail fast on an empty value with shell parameter expansion, for example `--labels="ci=${CI_LABEL:?}"`.
+- Labels and tags can use simple Go templates, which Atmos renders before it selects, because templates are processed by default. If templates are turned off, or you pass `--process-templates=false`, a templated label keeps its raw text and matches neither `ci=auto` nor `ci=manual`, so the component runs in neither workflow.
+- `ATMOS_LABELS` and `ATMOS_TAGS` set at the job level apply to every `atmos describe affected` and multi-component `atmos terraform` step in that job. Set them on the individual steps when a job mixes those commands with an upload.
 
 ### Add a Backstop with OPA
 
@@ -111,7 +126,11 @@ The policy fails the job rather than skipping it, so treat it as a safety net. T
 
 ### One Thing to Know About Uploads
 
-The inventory that `atmos describe affected --upload` sends to Atmos Pro is always the complete, unfiltered set. Because of that, `--tags` and `--labels` are rejected when combined with `--upload`. Run the upload as its own command and filter only the matrix.
+The inventory that `atmos describe affected --upload` sends to Atmos Pro is always the complete, unfiltered set. Because of that, `--tags` and `--labels` are rejected when combined with `--upload`. Run the upload as its own command and filter only the matrix. A selector that only comes from a job-level `ATMOS_TAGS` or `ATMOS_LABELS` does not break the upload: it is ignored with a warning, while a `--tags` or `--labels` flag on the same command line is an error.
+
+### Guard Empty Matrices on a Count
+
+When the matrix is empty, Atmos prints `{"include":[]}`, never an empty string, so a job condition like `matrix != ''` is always true and the job then fails on a matrix with no entries. With `--output-file`, or automatically in CI, Atmos also writes a `count` next to the `matrix`. Expose it as a job output and guard on `needs.affected.outputs.count != '0'`.
 
 If you are moving off the legacy actions, the [migration guide](/ci/migrate-legacy-actions#opting-components-out-of-ci) maps the old opt-out behavior to this pattern.
 

@@ -20,6 +20,19 @@ var vendorPullParser *flags.StandardParser
 // packer-inclusive discovery landed on vendor update/diff).
 const componentTypeFlagHelp = "Component type (terraform, helmfile, or packer)"
 
+// Namespaced Viper keys for the --tags and --labels selectors. A bare "tags" or "labels" key is
+// resolved by Viper's AutomaticEnv() from ATMOS_TAGS / ATMOS_LABELS, which belong to the terraform
+// family and must not narrow vendor commands. The vendor-specific environment variables are bound
+// explicitly instead.
+const (
+	vendorTagsFlagName   = "tags"
+	vendorLabelsFlagName = "labels"
+	vendorTagsViperKey   = "vendor.tags"
+	vendorLabelsViperKey = "vendor.labels"
+	envVendorTags        = "ATMOS_VENDOR_TAGS"
+	envVendorLabels      = "ATMOS_VENDOR_LABELS"
+)
+
 // vendorLabelsFlagHelp is the canonical --labels help text shared by every vendor subcommand that
 // registers the flag (vendor pull, vendor update, vendor diff, vendor clean, vendor verify). Unlike
 // --tags (vendor.yaml's own declared source tags, a manifest concept), --labels filters the
@@ -65,7 +78,11 @@ func init() {
 		flags.WithStringFlag("type", "t", "terraform", componentTypeFlagHelp),
 		flags.WithBoolFlag("dry-run", "", false, "Simulate pulling the latest version of the specified component from the remote repository without making any changes."),
 		flags.WithStringFlag("tags", "", "", "Only vendor the components whose vendor.yaml source declares any of these tags (comma-separated, matches any)"),
-		flags.WithStringFlag("labels", "", "", vendorLabelsFlagHelp),
+		// vendor pull reads --tags/--labels straight from its Cobra flags (internal/exec), so only the
+		// Viper key is namespaced here; the ATMOS_VENDOR_* variables apply to update, diff, and verify.
+		flags.WithViperKey(vendorTagsFlagName, vendorTagsViperKey),
+		flags.WithStringFlag(vendorLabelsFlagName, "", "", vendorLabelsFlagHelp),
+		flags.WithViperKey(vendorLabelsFlagName, vendorLabelsViperKey),
 		flags.WithBoolFlag("everything", "", false, "Vendor all components"),
 		flags.WithBoolFlag("refresh-lock", "", false, "Refresh immutable vendor lock entries from declared sources"),
 		flags.WithStringFlag("lock-enforcement", "", "", "Override vendor.lock.enforcement (strict, warn, or silent)"),

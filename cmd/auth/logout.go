@@ -68,7 +68,9 @@ func init() {
 	// Create parser with logout-specific flags.
 	logoutParser = flags.NewStandardParser(
 		flags.WithStringFlag("provider", "", "", "Logout from specific provider"),
-		flags.WithStringFlag("tags", "", "", "Logout from providers matching tags (comma-separated, matches any): --tags=production"),
+		flags.WithStringFlag(tagsFlagName, "", "", "Logout from providers matching tags (comma-separated, matches any): --tags=production"),
+		flags.WithEnvVars(tagsFlagName, envAuthTags),
+		flags.WithViperKey(tagsFlagName, authTagsViperKey),
 		flags.WithBoolFlag("all", "", false, "Logout from all identities and providers"),
 		flags.WithBoolFlag("all-realms", "", false, "Logout from all realms across all repositories (clears file-based credentials; keychain cleanup limited to current config)"),
 		flags.WithBoolFlag("dry-run", "", false, "Preview what would be removed without deleting"),
@@ -116,7 +118,7 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 
 	// Get flags.
 	providerFlag := v.GetString("provider")
-	tagsFlag := parseCommaSeparatedNames(v.GetString(tagsKey))
+	tagsFlag := parseCommaSeparatedNames(v.GetString(authTagsViperKey))
 	allFlag := v.GetBool("all")
 	allRealmsFlag := v.GetBool("all-realms")
 	dryRun := v.GetBool("dry-run")

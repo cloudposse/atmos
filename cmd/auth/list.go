@@ -29,7 +29,13 @@ var authListUsageMarkdown string
 const (
 	providersKey  = "providers"
 	identitiesKey = "identities"
-	tagsKey       = "tags"
+	tagsFlagName  = "tags"
+	// Namespaced Viper key for --tags (authTagsViperKey).
+	// A bare "tags" key is resolved by Viper's AutomaticEnv() from ATMOS_TAGS.
+	// That variable belongs to the terraform family and must not select auth identities.
+	// ATMOS_AUTH_TAGS is bound explicitly instead.
+	authTagsViperKey = "auth.tags"
+	envAuthTags      = "ATMOS_AUTH_TAGS"
 	// ListFormatFlagName is the name of the format flag for list command.
 	ListFormatFlagName = "format"
 )
@@ -64,7 +70,9 @@ func init() {
 		flags.WithStringFlag("format", "f", "tree", "Output format: tree, table, json, yaml, graphviz, mermaid, markdown"),
 		flags.WithStringFlag("providers", "", "", "Show only providers (optionally filter by name: --providers=aws-sso,okta)"),
 		flags.WithStringFlag("identities", "", "", "Show only identities (optionally filter by name: --identities=admin,dev)"),
-		flags.WithStringFlag("tags", "", "", "Filter by tags (comma-separated, matches any): --tags=production,admin"),
+		flags.WithStringFlag(tagsFlagName, "", "", "Filter by tags (comma-separated, matches any): --tags=production,admin"),
+		flags.WithEnvVars(tagsFlagName, envAuthTags),
+		flags.WithViperKey(tagsFlagName, authTagsViperKey),
 		flags.WithValidValues("format", "tree", "table", "json", "yaml", "graphviz", "dot", "mermaid", "markdown", "md"),
 	)
 
@@ -89,7 +97,7 @@ func init() {
 		log.Trace("Failed to register identities flag completion", "error", err)
 	}
 
-	if err := authListCmd.RegisterFlagCompletionFunc("tags", listTagsFlagCompletion); err != nil {
+	if err := authListCmd.RegisterFlagCompletionFunc(tagsFlagName, listTagsFlagCompletion); err != nil {
 		log.Trace("Failed to register tags flag completion", "error", err)
 	}
 
@@ -257,7 +265,7 @@ func parseFilterFlags(cmd *cobra.Command) (*filterConfig, error) {
 	v := viper.GetViper()
 	providersFlag := v.GetString(providersKey)
 	identitiesFlag := v.GetString(identitiesKey)
-	tagsFlag := v.GetString(tagsKey)
+	tagsFlag := v.GetString(authTagsViperKey)
 
 	hasProvidersFlag := cmd.Flags().Changed(providersKey)
 	hasIdentitiesFlag := cmd.Flags().Changed(identitiesKey)

@@ -541,7 +541,7 @@ atmos terraform apply --affected --tags production
 
 ### Include Dependencies and Dependents
 
-Selector flags choose the seed set; `--include-dependencies` and `--include-dependents` expand it through the dependency graph. Expanded components are applied even when they do not match the selectors — they are prerequisites (or dependents) of what was selected. Prerequisites can live in other stacks, so `--include-dependencies` with `-s dev` legitimately applies prerequisite components outside the `dev` stack:
+Selector flags choose the seed set; `--include-dependencies` and `--include-dependents` expand it through the dependency graph. Prerequisites added by `--include-dependencies` are applied even when they do not match the selectors, because the selected components need them. Dependents added by `--include-dependents` honour `--tags` and `--labels`: a dependent that does not match is skipped, while its matching dependents still run and keep their dependency order. A selected component that does not match `--tags` or `--labels` is skipped the same way, and the matching components that depend on it still run, mirroring [`atmos describe affected`](/cli/commands/describe/affected). As a result, `--tags` or `--labels` with `--include-dependents` and no other selection is equivalent to `--tags` or `--labels` alone. Prerequisites can live in other stacks, so `--include-dependencies` with `-s dev` legitimately applies prerequisite components outside the `dev` stack:
 
 ```shell
 # Apply dev-labeled components plus everything they depend on

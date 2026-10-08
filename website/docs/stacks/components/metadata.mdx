@@ -287,7 +287,7 @@ The `custom` section is inherited from base components when `stacks.inherit.meta
 
 ### `tags`
 
-A list of tags used to select this component with the `--tags` flag on commands like [`atmos list components`](/cli/commands/list/components), `atmos terraform plan/apply/deploy`, and the native Kubernetes/Helm/container commands:
+A list of tags used to select this component with the `--tags` flag on commands like [`atmos list components`](/cli/commands/list/components), [`atmos list affected`](/cli/commands/list/affected), [`atmos describe affected`](/cli/commands/describe/affected#filtering-by-tags-and-labels), `atmos terraform plan/apply/deploy`, and the native Kubernetes/Helm/container commands:
 
 ```yaml
 components:
@@ -300,6 +300,8 @@ components:
 ```
 
 `--tags` matches **any** of the given tags (OR semantics). For example, `atmos terraform apply --tags production,tier-1` applies components tagged `production` **or** `tier-1`.
+
+Tag matching is case-sensitive, so `Production` does not match `production`. A component without a `metadata` section, or without `metadata.tags`, never matches a `--tags` selector.
 
 `tags` can also be set as a [global default](#global-stack-wide-metadata).
 
@@ -318,6 +320,14 @@ components:
 ```
 
 `--labels` matches **all** of the given `key=value` pairs (AND semantics). For example, `atmos terraform apply --labels cost-center=platform,compliance=sox` only applies components whose `metadata.labels` contain both `cost-center: platform` **and** `compliance: sox`.
+
+The `--labels` flag is available on the same commands as `--tags`:
+
+- [`atmos list components`](/cli/commands/list/components) and [`atmos list affected`](/cli/commands/list/affected)
+- [`atmos describe affected`](/cli/commands/describe/affected#filtering-by-tags-and-labels), including `--format=matrix` for CI job matrices
+- `atmos terraform plan/apply/deploy` and the native Kubernetes/Helm/container commands
+
+Label keys and values are case-sensitive, so `CI=auto` does not match `ci: auto`. A component without a `metadata` section, or without `metadata.labels`, never matches a `--labels` selector, which is why a default label in a shared defaults file plus an override on the exceptions is the way to express "everything except these".
 
 `labels` can also be set as a [global default](#global-stack-wide-metadata).
 
