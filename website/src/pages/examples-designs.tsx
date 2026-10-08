@@ -3,6 +3,7 @@ import Layout from "@theme/Layout";
 import Head from "@docusaurus/Head";
 import Link from "@docusaurus/Link";
 import { useLocation } from "@docusaurus/router";
+import useIsBrowser from "@docusaurus/useIsBrowser";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -193,7 +194,11 @@ function ExampleCard({
 
 export default function ExamplesDesigns() {
   const location = useLocation();
-  const requestedLayout = new URLSearchParams(location.search).get("layout");
+  const isBrowser = useIsBrowser();
+  // Match the static catalog markup during hydration before applying URL state.
+  const requestedLayout = isBrowser
+    ? new URLSearchParams(location.search).get("layout")
+    : null;
   const layout =
     layouts.find(({ id }) => id === requestedLayout)?.id || "catalog";
   const [category, setCategory] = useState("All");
