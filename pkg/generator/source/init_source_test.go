@@ -54,6 +54,14 @@ func TestNormalizeInitSourceRejectsTraversal(t *testing.T) {
 	}
 }
 
+func TestNormalizeInitSourceNativeAbsolutePath(t *testing.T) {
+	// Percent signs must remain literal, including in Windows drive paths.
+	dir := filepath.Join(t.TempDir(), "100% local")
+	got, err := NormalizeInitSource(dir, "ignored")
+	require.NoError(t, err)
+	assert.Equal(t, InitSource{Source: dir, Name: "100% local"}, got)
+}
+
 func TestFetchDirectoryDoesNotInterpretScaffold(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "scaffold.yaml"), []byte("invalid: ["), 0o600))

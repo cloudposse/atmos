@@ -50,6 +50,7 @@ func TestIsTemplateSource(t *testing.T) {
 	assert.True(t, IsTemplateSource("git::https://example.com/acme/template.git"))
 	assert.True(t, IsTemplateSource("./local-template"))
 	assert.True(t, IsTemplateSource("/tmp/local-template"))
+	assert.True(t, IsTemplateSource(t.TempDir()), "native absolute paths must not be treated as template names")
 	assert.False(t, IsTemplateSource("aws/landing-zone"))
 	assert.False(t, IsTemplateSource("basic"))
 }
@@ -161,7 +162,7 @@ func TestResolve_LocalPathDefaultTimeout(t *testing.T) {
 func TestResolve_FileURI(t *testing.T) {
 	dir := writeSampleTemplate(t)
 
-	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", "file://"+dir, time.Minute)
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", sourceTestGitFileURI(dir), time.Minute)
 	require.NoError(t, err)
 	defer cleanup()
 	require.NotNil(t, cfg)
