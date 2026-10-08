@@ -163,3 +163,197 @@ tests:
         - "Case name \\(required\\)"
         - "Optional extra value"
       exit_code: 0
+
+  # !literal coverage (fixture: starlark-steps).
+  - name: starlark step fields literal plain string step
+    enabled: true
+    description: "A plain-string step written with !literal is used exactly as written"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "ft-literal-plain-step"
+    expect:
+      stdout:
+        - 'kept: \{\{ not a template \}\}'
+      exit_code: 0
+
+  - name: starlark step fields literal command env list
+    enabled: true
+    description: "A command-level env value written with !literal is kept; its neighbor still renders"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "ft-literal-env-list"
+    expect:
+      stdout:
+        - 'kept=\{\{ kept \}\} rendered=rendered'
+      exit_code: 0
+
+  - name: starlark step fields literal parallel parent env
+    enabled: true
+    description: "A parallel parent's env value written with !literal is kept; its neighbor still renders"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "ft-literal-parallel-env"
+    expect:
+      stdout:
+        - 'kept=\{\{ kept \}\} rendered=rendered'
+      exit_code: 0
+
+  - name: starlark step fields literal timeout is not rendered
+    enabled: true
+    description: "timeout: !literal is parsed as written, so the braces are an invalid duration"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "ft-literal-timeout-braces"
+    expect:
+      stderr:
+        - 'invalid duration "\{\{ 1 \}\}s"'
+        - !not 'must not run'
+      exit_code: 1
+
+  - name: starlark step fields timeout without literal renders
+    enabled: true
+    description: "The same timeout without !literal renders to 1s and the step runs"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "ft-timeout-rendered-braces"
+    expect:
+      stdout:
+        - 'rendered timeout ran'
+      exit_code: 0
+
+  - name: starlark step fields literal on an unsupported field fails at load
+    enabled: true
+    description: "!literal on when cannot be honored, so the configuration does not load"
+    workdir: "fixtures/scenarios/starlark-literal-invalid/"
+    command: "atmos"
+    args:
+      - "ft-literal-when"
+    expect:
+      stderr:
+        - '!literal is not supported on field "when" of step\s+"guarded"'
+      exit_code: 1
+
+  # Custom-command inputs (fixtures: starlark-steps, starlark-inputs).
+  - name: starlark step fields argument without required or default is required
+    enabled: true
+    description: "An argument that declares neither required nor default must be supplied"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "ft-arg-bare"
+    expect:
+      stderr:
+        - 'atmos ft-arg-bare <service>'
+      exit_code: 1
+
+  - name: starlark step fields argument without required or default accepts a value
+    enabled: true
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "ft-arg-bare"
+      - "web"
+    expect:
+      stdout:
+        - 'service=web'
+      exit_code: 0
+
+  - name: starlark step fields optional argument may be omitted
+    enabled: true
+    description: "required: false keeps the argument optional"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "ft-arg-optional"
+    expect:
+      stdout:
+        - 'service=\[\]'
+      exit_code: 0
+
+  - name: starlark step fields int flag leading zeros are decimal
+    enabled: true
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "ft-int-flag"
+      - "--count=010"
+    expect:
+      stdout:
+        - 'count=10'
+      exit_code: 0
+
+  - name: starlark step fields int flag rejects hexadecimal
+    enabled: true
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "ft-int-flag"
+      - "--count=0x10"
+    expect:
+      stderr:
+        - 'not a base-10 integer'
+      exit_code: 1
+
+  - name: starlark step fields wrong typed flag default makes only that command a stub
+    enabled: true
+    description: "An unquoted 2 on a string flag and the string true on a bool flag warn and name the flag"
+    workdir: "fixtures/scenarios/starlark-inputs/"
+    command: "atmos"
+    args:
+      - "ft-valid"
+    expect:
+      stdout:
+        - 'replicas=2'
+      stderr:
+        - 'Skipping invalid custom command'
+        - 'ft-string-integer-default'
+        - 'flag --replicas'
+        - 'ft-bool-string-default'
+        - 'flag --dry'
+      exit_code: 0
+
+  - name: starlark step fields wrong typed flag default reports when invoked
+    enabled: true
+    workdir: "fixtures/scenarios/starlark-inputs/"
+    command: "atmos"
+    args:
+      - "ft-string-integer-default"
+    expect:
+      stderr:
+        - 'invalid default value for custom command flag'
+        - '--replicas'
+        - 'default: "2"'
+      exit_code: 1
+
+  # Included scripts and Go templates (fixtures: starlark-steps ft-literal-include-*).
+  - name: starlark step fields included script with braces names what works
+    enabled: true
+    description: "!literal cannot be written inside an included file, so the hint names load() and !include.raw"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "ft-literal-include-braces"
+    expect:
+      stderr:
+        - 'has-braces\.star'
+        - 'load\(\)'
+        - '!include\.raw'
+        - !not 'write the field with the'
+      exit_code: 1
+
+  - name: starlark step fields include raw script is not rendered
+    enabled: true
+    description: "A script included with !include.raw is used exactly as written, braces and all"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "ft-literal-include-raw"
+    expect:
+      stdout:
+        - 'included script with \{\{ not a template \}\}'
+      exit_code: 0

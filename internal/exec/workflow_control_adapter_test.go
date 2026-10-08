@@ -104,3 +104,27 @@ func TestWorkflowControlRenderUsesTheWorkflowRenderer(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "X-y", got, "a Sprig function must work in a parallel child, as in a sequential step")
 }
+
+func TestWorkflowControlStep_ChildrenGetConfiguredCIReporter(t *testing.T) {
+	for _, stepType := range []string{schema.TaskTypeParallel, schema.TaskTypeMatrix} {
+		t.Run(stepType, func(t *testing.T) {
+			ResetStepExecutorState()
+			t.Cleanup(ResetStepExecutorState)
+			h := newCIHostHarness(t)
+			showSummary := false
+			parent := &schema.WorkflowStep{
+				Name: "fanout", Type: stepType, Output: "none",
+				ParallelOutput: &schema.ParallelOutputConfig{ShowSummary: &showSummary},
+				Steps:          []schema.WorkflowStep{h.child("child")},
+			}
+			if stepType == schema.TaskTypeMatrix {
+				parent.Matrix = map[string][]string{"env": {"dev"}}
+			}
+			control := &workflowControlContext{atmosConfig: h.config, workflowDefinition: &schema.WorkflowDefinition{}}
+
+			require.NoError(t, executeWorkflowControlStep(t.Context(), control, parent))
+
+			h.assertConfigured(t, "child")
+		})
+	}
+}

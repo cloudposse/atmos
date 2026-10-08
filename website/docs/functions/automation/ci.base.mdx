@@ -50,7 +50,9 @@ A struct, or `None` when no base can be determined:
   [`atmos describe affected`](/cli/commands/describe/affected#ci-auto-detection) uses, so a script and the native
   affected detection always agree.
 - Locally, the generic provider reads `ATMOS_CI_BASE_REF`. When nothing can be resolved, the call returns `None`.
-- The call only reads. It is not gated by any `ci.*.enabled` flag and never warns.
+- The call only reads. It is not gated by any `ci.*.enabled` flag and never warns. On GitHub Actions with
+  `ci.enabled`, it first marks the workspace as a git `safe.directory` so git can read it, once, without adding
+  duplicate entries.
 
 See [the `ci` module](/functions/automation/ci) for the shared behavior rules.
 

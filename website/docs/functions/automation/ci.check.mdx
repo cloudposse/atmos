@@ -53,10 +53,16 @@ A handle with these attributes and one method:
     <dd>The current state, as a string. It changes each time you call `update`.</dd>
 
     <dt>`id`</dt>
-    <dd>The identifier of the status.</dd>
+    <dd>
+        The identifier of the status. `update` addresses the same status by this identifier, so two checks that share a
+        name stay separate.
+    </dd>
 
     <dt>`url`</dt>
-    <dd>The link attached to the status, as a string.</dd>
+    <dd>
+        The link attached to the status, as a string. It is the `url` you passed, or the URL of the current run when you
+        passed none, and it changes when you pass a new `url` to `update`.
+    </dd>
 
     <dt>`update(state, description = "", url = "")`</dt>
     <dd>Sets a new state on the same status and returns `None`.</dd>
@@ -67,11 +73,14 @@ A handle with these attributes and one method:
 - On GitHub Actions, a check is a commit status, not a Checks API check run. It has a name, a state, a short
   description, and a link, and it has no body. Put details in [`ci.summary`](/functions/automation/ci.summary) or
   [`ci.comment`](/functions/automation/ci.comment). Posting needs `statuses: write`.
+- GitHub commit statuses have four states. `"pending"` and `"in_progress"` both report as `pending`, `"success"` reports
+  as `success`, `"failure"` reports as `failure`, and `"error"` and `"cancelled"` both report as `error`. The handle
+  keeps the state you passed.
 - Locally, each call prints the name, state, and description on stderr and nothing is posted.
 - Checks are opt-in. In CI the call is gated by [`ci.checks.enabled`](/cli/configuration/ci/checks), which is off by
   default. When it is off, the call warns, renders locally, and the script continues.
-- Under `pull_request_target` and `workflow_run`, comments and checks are held only when the pull request comes from a
-  fork (`ci.context.pr.fork`), unless `ci.allow_unsafe_fork_execution` is set. A held call warns and renders locally
+- Under `pull_request_target` and `workflow_run`, checks are held only when the pull request comes from a fork
+  (`ci.context.pr.fork`), unless `ci.allow_unsafe_fork_execution` is set. A held call warns and renders locally
   instead. See the [fork gate](/functions/automation/ci#fork-gate).
 - The description is masked before it leaves the process.
 

@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/automation"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/flags"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/retry"
@@ -129,6 +130,10 @@ func (e *Engine) Execute(ctx context.Context, spec script.Spec) (script.Result, 
 	if err := script.ValidateWorkingDirectory(spec.WorkingDirectory); err != nil {
 		return script.Result{}, scriptError(ctx, err, s.spec.ProjectRoot)
 	}
+	// Ctrl-C cancels this session instead of ending the process, so deferred calls get to run.
+	ctx, interrupt := watchInterrupt(ctx)
+	defer interrupt.stop()
+	s.ctx = ctx
 	thread, stop := s.thread(ctx, spec.Name, nil)
 	defer stop()
 	thread.SetLocal(stepLibraryKey, forkSteps(spec.Steps))
@@ -136,8 +141,20 @@ func (e *Engine) Execute(ctx context.Context, spec script.Spec) (script.Result, 
 		return script.Result{}, scriptError(ctx, err, s.spec.ProjectRoot)
 	}
 	globals, err := starlark.ExecFileOptions(fileOptions, thread, programName(&spec), spec.Source, s.globals)
+	if err != nil && interrupt.interrupted() {
+		return script.Result{}, s.finishInterrupted(ctx, thread)
+	}
+	// Help ends the script early on purpose. It is a success: deferred calls still run, and no
+	// output value is printed.
+	helpShown := errors.Is(err, errUtils.ErrScriptHelpShown)
+	if helpShown {
+		err = nil
+	}
 	if err = s.runDeferred(ctx, thread, err); err != nil {
 		return script.Result{}, scriptError(ctx, err, s.spec.ProjectRoot)
+	}
+	if helpShown {
+		return script.Result{}, nil
 	}
 	return s.output(ctx, thread, globals)
 }
@@ -150,6 +167,12 @@ func newSession(ctx context.Context, e *Engine, spec *script.Spec) *session {
 	}
 	s.ciReporter = spec.CI
 	if s.ciReporter == nil {
+		// Every production host wires a configured reporter. A nil one means a host forgot, and
+		// the local-only reporter reads every CI gate as off, so make the regression visible.
+		// Dry runs only parse the script and never reach the reporter, so they stay quiet.
+		if !spec.DryRun {
+			log.Warn("script host supplied no CI reporter; CI gates read as off", "script", spec.Name)
+		}
 		s.ciReporter = ci.NewReporter(nil)
 	}
 	s.globals = s.predeclared()

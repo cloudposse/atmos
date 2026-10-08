@@ -93,6 +93,9 @@ func (c *Command) CopyLoaderFields(src *Command) {
 		c.Steps[i].LiteralFields = slices.Clone(src.Steps[i].LiteralFields)
 		copyStepLoaderFields(c.Steps[i].Steps, src.Steps[i].Steps)
 	}
+	for i := 0; i < len(c.Env) && i < len(src.Env); i++ {
+		c.Env[i].LiteralFields = slices.Clone(src.Env[i].LiteralFields)
+	}
 	for i := 0; i < len(c.Commands) && i < len(src.Commands); i++ {
 		c.Commands[i].CopyLoaderFields(&src.Commands[i])
 	}
@@ -168,6 +171,10 @@ type CommandEnv struct {
 	Key          string `yaml:"key" json:"key" mapstructure:"key"`
 	Value        string `yaml:"value" json:"value" mapstructure:"value"`
 	ValueCommand string `yaml:"valueCommand" json:"valueCommand" mapstructure:"valueCommand"`
+	// LiteralFields lists the fields of this entry written with the !literal tag ("value"), so the
+	// runner uses them exactly as written instead of rendering them as templates. Loaders set it;
+	// it has no YAML or JSON key.
+	LiteralFields []string `yaml:"-" json:"-" mapstructure:"literal_fields"`
 }
 
 const commandEnvDecodeFailedMessage = "failed to decode command env"
