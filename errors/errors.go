@@ -1345,6 +1345,7 @@ var (
 	ErrScaffoldMatrixTargetMissingFileContext = errors.New("matrix target must reference .file.Path or .file.RelPath when its path matches more than one file")
 	ErrScaffoldComputedFieldInvalid           = errors.New("computed field is misconfigured")
 	ErrScaffoldComputedFieldNotSettable       = errors.New("computed field cannot be set")
+	ErrScaffoldFileDelimitersInvalid          = errors.New("spec.files[].delimiters must be exactly two non-empty strings")
 
 	// Source provisioner errors.
 	ErrSourceProvision       = errors.New("source provisioning failed")
