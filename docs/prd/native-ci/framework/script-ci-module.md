@@ -114,7 +114,7 @@ The provider decides `fork` from the event payload. The GitHub provider reports 
 A script keeps the layout of a report in a template file and passes the values:
 
 - `ci.summary(template=, data=)` and `ci.comment(template=, data=)` render a file under `ci.templates.base_path`, or an absolute path, with `data` as the context.
-- Scripts have no configured default template. A call that passes `data` without `template=` is an argument error. `ci.summary.template` and `ci.comments.template` are not read by scripts; `ci.summary.template` keeps its meaning for the native plugins only.
+- Scripts have no configured default template. A call that passes `data` without `template=` is an argument error. `ci.summary.template` is not read by scripts; it keeps its meaning for the native plugins only. There is no `ci.comments.template` key.
 - A relative `ci.templates.base_path` resolves against the Atmos `base_path`. There is no default base path.
 - A key that the template reads but `data` does not contain fails the render and names the key. A template that cannot be found fails with the resolved path and the value of `ci.templates.base_path`. A configured `ci.templates.container.image` that does not exist is an error.
 

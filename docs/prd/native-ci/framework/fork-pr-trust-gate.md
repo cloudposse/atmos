@@ -72,9 +72,9 @@ existing CI `Context` (which already populates `EventName`, `Ref`, `Repository`,
 - **Elevated event**: `GITHUB_EVENT_NAME ∈ {pull_request_target, workflow_run}`.
 - **Fork-targeting clone** — the *requested clone* points at fork content (either one of):
   1. A `--branch`/ref override that is a PR merge or head ref (e.g. `refs/pull/<N>/merge`,
-     `refs/pull/<N>/head`).
+      `refs/pull/<N>/head`).
   2. An ad-hoc clone URI whose host **or** `owner/repo` differs from the base
-     (`GITHUB_SERVER_URL` + `GITHUB_REPOSITORY`).
+      (`GITHUB_SERVER_URL` + `GITHUB_REPOSITORY`).
 
 The signal is keyed off the **requested clone target**, not merely the event payload. A
 forked PR under `pull_request_target` is *not* by itself fork-targeting: the safe no-arg
