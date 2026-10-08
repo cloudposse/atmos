@@ -13,7 +13,7 @@ import (
 )
 
 // templateReporter returns a reporter whose templates base path holds the given files.
-func templateReporter(t *testing.T, summary, comment string, files map[string]string) *reporter {
+func templateReporter(t *testing.T, summary string, files map[string]string) *reporter {
 	t.Helper()
 	dir := t.TempDir()
 	for name, content := range files {
@@ -22,7 +22,6 @@ func templateReporter(t *testing.T, summary, comment string, files map[string]st
 	cfg := &schema.AtmosConfiguration{}
 	cfg.CI.Templates.BasePath = dir
 	cfg.CI.Summary.Template = summary
-	cfg.CI.Comments.Template = comment
 	return &reporter{cfg: cfg}
 }
 
@@ -30,7 +29,6 @@ func TestReporterRenderTemplates(t *testing.T) {
 	files := map[string]string{
 		"summary-default.md": "default summary {{ .N }}",
 		"summary-other.md":   "other summary {{ .N }}",
-		"comment-default.md": "default comment {{ .N }}",
 		"comment-other.md":   "other comment {{ .N }}",
 	}
 	data := map[string]any{"N": 3}
@@ -38,7 +36,6 @@ func TestReporterRenderTemplates(t *testing.T) {
 	tests := []struct {
 		name     string
 		summary  string
-		comment  string
 		call     string
 		template string
 		want     string
@@ -51,15 +48,13 @@ func TestReporterRenderTemplates(t *testing.T) {
 		{name: "summary with neither", call: "summary", wantErr: errUtils.ErrCITemplateNotFound},
 		{name: "summary explicit name missing on disk", call: "summary", template: "absent.md", wantErr: errUtils.ErrCITemplateNotFound},
 		{name: "comment explicit name", call: "comment", template: "comment-other.md", want: "other comment 3"},
-		{name: "comment explicit name wins over the native-plugin default", comment: "comment-default.md", call: "comment", template: "comment-other.md", want: "other comment 3"},
-		{name: "comment empty name ignores ci.comments.template", comment: "comment-default.md", call: "comment", wantErr: errUtils.ErrCITemplateNotFound},
 		{name: "comment ignores the summary default", summary: "summary-default.md", call: "comment", wantErr: errUtils.ErrCITemplateNotFound},
 		{name: "comment with neither", call: "comment", wantErr: errUtils.ErrCITemplateNotFound},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := templateReporter(t, tt.summary, tt.comment, files)
+			r := templateReporter(t, tt.summary, files)
 			var (
 				got string
 				err error
@@ -81,7 +76,7 @@ func TestReporterRenderTemplates(t *testing.T) {
 }
 
 func TestReporterRenderTemplates_MissingKeyFails(t *testing.T) {
-	r := templateReporter(t, "", "", map[string]string{"typo.md": "{{ .Stak }}"})
+	r := templateReporter(t, "", map[string]string{"typo.md": "{{ .Stak }}"})
 	_, err := r.RenderSummary("typo.md", map[string]any{"Stack": "dev"})
 	require.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
 	_, err = r.RenderComment("typo.md", map[string]any{"Stack": "dev"})
