@@ -144,6 +144,10 @@ func (c *AtmosProAPIClient) doUploadExecDataRequest(url string, data []byte) (*d
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusRequestEntityTooLarge {
+		return nil, handleAPIResponse(resp, uploadExecDataOperation)
+	}
+
 	body, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
 		return nil, wrapErr(errUtils.ErrFailedToReadResponseBody, readErr)
