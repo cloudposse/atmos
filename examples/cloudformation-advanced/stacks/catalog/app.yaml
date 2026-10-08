@@ -28,6 +28,12 @@ components:
               command: python3 build.py
               env:
                 ATMOS_DEMO_RELEASE: '{{ getenv "ATMOS_DEMO_RELEASE" "v1" }}'
+            - name: build-summary
+              type: toast
+              level: info
+              content: |-
+                Built Lambda **{{ .atmos_component }}** ((· release {{ getenv "ATMOS_DEMO_RELEASE" "v1" }}))
+                → `components/cloudformation/app/.build/package/`
             - name: test
               type: shell
               command: python3 -B -m unittest discover -s tests -v

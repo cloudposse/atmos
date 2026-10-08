@@ -31,6 +31,12 @@ components:
                 labels: false
               env:
                 ATMOS_DEMO_RELEASE: '{{ getenv "ATMOS_DEMO_RELEASE" "v1" }}'
+            - name: build-summary
+              type: toast
+              level: info
+              content: |-
+                Built Lambda **{{ .atmos_component }}** ((· release {{ getenv "ATMOS_DEMO_RELEASE" "v1" }}))
+                → `components/cloudformation/app/.build/package/`
             - name: package
               type: archive
               source: .build/package/

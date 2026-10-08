@@ -95,8 +95,9 @@ commands:
               "atmos aws cfn deploy artifacts -s advanced",
               "atmos aws cfn deploy app -s advanced",
               "ATMOS_DEMO_RELEASE=v2 atmos aws cfn deploy app -s advanced",
-              "Built release v1",
-              "Built release v2",
+              "▶ Built Lambda app · release v1",
+              "▶ Built Lambda app · release v2",
+              "→ components/cloudformation/app/.build/package/",
               "s3://atmos-cast-artifacts-local/lambda/v1/handler.zip",
               "s3://atmos-cast-artifacts-local/lambda/v2/handler.zip",
               "Publish artifacts (aws/s3): 1 uploaded, 0 unchanged",
@@ -125,6 +126,11 @@ commands:
                   raise SystemExit(f"Expected {expected} {action} completion(s) for {stack}, got {count}")
           if re.search(r"^http://127\.0\.0\.1", plain, re.MULTILINE):
               raise SystemExit("CloudFormation publish cast leaked the endpoint helper output")
+          if "Built release " in plain:
+              raise SystemExit("Build status must use the shared UI and identify the Lambda component")
+          if plain.count("→ components/cloudformation/app/.build/package/") != 3:
+              raise SystemExit("Every build must show its package directory")
+          assert_colored(text, "Built Lambda")
           assert_colored(text, "Created")
           assert_colored(text, "Changes for")
           if "▶ Changes for atmos-cast-artifacts-local · 1 resource" not in plain:
