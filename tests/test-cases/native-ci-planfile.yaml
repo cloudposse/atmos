@@ -38,7 +38,7 @@ tests:
         - "has_changes=true"
         - "has_errors=false"
         - "exit_code=0"
-        - "summary="
+        - "summary<<EOF"
         - '<summary><a id="result-prod-mycomponent" />Plan: 1 to add, 0 to change, 0 to destroy.</summary>'
 
   - name: "atmos terraform plan without ci"
@@ -90,7 +90,7 @@ tests:
         - "has_changes=false"
         - "has_errors=true"
         - "exit_code=1"
-        - "summary="
+        - "summary<<EOF"
         - '## Plan Failed for `mycomponent/failure` in `prod`'
         - "PLAN-FAILED-ff0000"
         - '<a id="result-prod-mycomponent_failure" />'
