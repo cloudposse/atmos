@@ -5,17 +5,19 @@ authors: [osterman]
 tags: [feature, dx]
 ---
 
-Trying an example should take a few commands after installing Atmos. Previously, getting a working copy meant cloning the repository or preparing a scaffold manifest. The [Atmos init command](/cli/commands/init) now accepts example directories directly.
+Trying Atmos for the first time should be easy. Install it, check out an example, and run it. Now you can with [`atmos init`](/cli/commands/init).
 
 <!--truncate-->
 
 ## The Problem
 
-An example can already contain everything needed to run Atmos: configuration, stacks, and components. Requiring a separate scaffold manifest adds work before a new user can try it or a team can share it.
+Someone new to Atmos should be able to kick the tires almost immediately. A working example provides the configuration, stacks, and components to start exploring with just a few commands.
 
 ## The Fix
 
-Initialize from a GitHub directory, an existing remote source, or a local directory. Official Atmos examples are copied verbatim, including examples that contain a scaffold manifest. Other direct sources use scaffold generation when a root manifest exists and copy their contents otherwise.
+Start with any of the [official Atmos examples](/examples). Atmos copies the example verbatim, including examples that contain a scaffold manifest.
+
+The same command also works with directories in other Git repositories, supported remote sources, and local directories. These sources use scaffold generation when a root manifest exists and copy their contents otherwise.
 
 Official examples use a single shallow Git fetch to avoid downloading repository history. The CLI prints the actual destination and a `cd` command after displaying the example's README.
 
