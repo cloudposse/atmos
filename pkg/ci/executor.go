@@ -1,10 +1,12 @@
 package ci
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
 	_ "github.com/cloudposse/atmos/pkg/ci/artifact/github" // Register github artifact store.
@@ -71,6 +73,13 @@ func Execute(opts ExecuteOptions) error {
 	if platform == nil {
 		return nil
 	}
+	// A misconfigured provider environment (for example an unparsable API URL) is a
+	// hard error: silently warning would let a run believe it reported when it did not.
+	if v, ok := platform.(provider.ConfigValidator); ok {
+		if err := v.ValidateConfig(); err != nil {
+			return err
+		}
+	}
 
 	// Get plugin and binding for this event.
 	pl, binding := getPluginAndBinding(opts)
@@ -86,6 +95,9 @@ func Execute(opts ExecuteOptions) error {
 
 	hookCtx := buildHookContext(opts, platform)
 	if err := binding.Handler(hookCtx); err != nil {
+		if errors.Is(err, errUtils.ErrInvalidURL) {
+			return err
+		}
 		log.Warn("CI hook handler failed", "event", opts.Event, "error", err)
 	}
 

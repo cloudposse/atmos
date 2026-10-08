@@ -688,7 +688,7 @@ func TestAggregateHelpersCoverFallbacks(t *testing.T) {
 
 	assert.Equal(t, "all", aggregateStackValue(nil))
 	assert.Equal(t, "all", aggregateStackValue(&schema.ConfigAndStacksInfo{}))
-	assert.Equal(t, "<!-- atmos:ci:plan:aggregate:all -->", buildAggregateCommentMarker("plan", ""))
+	assert.Equal(t, "plan:aggregate:all", buildAggregateCommentKey("plan", ""))
 }
 
 func TestAggregateMarkdownStaysBelowGitHubSummaryLimit(t *testing.T) {

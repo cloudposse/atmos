@@ -494,8 +494,12 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 		Output:      output,
 		ForceCIMode: forceCIMode,
 	}); err != nil {
+		// A misconfigured provider (invalid API URL) fails the command; every other
+		// CI hook error is reported and the command result stands.
+		if errors.Is(err, errUtils.ErrInvalidURL) {
+			return err
+		}
 		log.Warn(ciHookFailedMsg, "error", err)
-		// Don't fail the command on CI hook errors.
 	}
 
 	return nil

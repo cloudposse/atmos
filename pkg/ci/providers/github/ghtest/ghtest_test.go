@@ -79,6 +79,41 @@ func TestServer_CommentsCreateEditAndList(t *testing.T) {
 	assert.Equal(t, "second", current[0].Body)
 }
 
+func TestServer_CommitCommentsCreateEditAndList(t *testing.T) {
+	s := ghtest.NewServer(t, ghtest.WithSeedCommitComments("o", "r", "abc", ghtest.Comment{Body: "seeded"}))
+
+	status, body := do(t, s, http.MethodGet, "/repos/o/r/commits/abc/comments", "")
+	require.Equal(t, http.StatusOK, status)
+	assert.Contains(t, body, "seeded")
+
+	status, body = do(t, s, http.MethodPost, "/repos/o/r/commits/abc/comments", `{"body":"first"}`)
+	require.Equal(t, http.StatusCreated, status)
+	var created struct {
+		ID      int64  `json:"id"`
+		HTMLURL string `json:"html_url"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(body), &created))
+	assert.NotZero(t, created.ID)
+	assert.Contains(t, created.HTMLURL, "commitcomment-")
+
+	status, _ = do(t, s, http.MethodPatch, "/repos/o/r/comments/"+itoa(created.ID), `{"body":"second"}`)
+	require.Equal(t, http.StatusOK, status)
+	status, _ = do(t, s, http.MethodPatch, "/repos/o/r/comments/424242", `{"body":"x"}`)
+	assert.Equal(t, http.StatusNotFound, status)
+
+	writes := s.Comments()
+	require.Len(t, writes, 2, "seeded comments are not writes")
+	assert.Equal(t, "abc", writes[0].SHA)
+	assert.False(t, writes[0].Edited)
+	assert.True(t, writes[1].Edited)
+	assert.Equal(t, "second", writes[1].Body)
+
+	current := s.CommitCommentsFor("o", "r", "abc")
+	require.Len(t, current, 2)
+	assert.Equal(t, "second", current[1].Body)
+	assert.Empty(t, s.CommentsFor("o", "r", 0), "commit comments never appear as issue comments")
+}
+
 func itoa(n int64) string {
 	b, _ := json.Marshal(n)
 	return string(b)
@@ -205,6 +240,66 @@ func TestSetEnv_PullRequestTargetIsElevated(t *testing.T) {
 	require.NotNil(t, ctx.PullRequest)
 	assert.Equal(t, 7, ctx.PullRequest.Number)
 	assert.False(t, ctx.PullRequest.Fork, "WithPullRequest describes a same-repository pull request")
+}
+
+// TestSetEnv_ElevatedEventsRunAgainstTheBaseBranch verifies the GitHub contract that
+// pull_request_target and workflow_run set GITHUB_REF to the base branch, so only the payload names the pull request.
+func TestSetEnv_ElevatedEventsRunAgainstTheBaseBranch(t *testing.T) {
+	t.Run("pull_request_target", func(t *testing.T) {
+		s := ghtest.NewServer(t)
+		ghtest.SetEnv(
+			t, s,
+			ghtest.WithEvent("pull_request_target", map[string]any{"action": "synchronize"}),
+			ghtest.WithPullRequest(7, "feature", "main"),
+		)
+
+		assert.Equal(t, "refs/heads/main", os.Getenv("GITHUB_REF"))
+		assert.Equal(t, "main", os.Getenv("GITHUB_REF_NAME"))
+		assert.Equal(t, "feature", os.Getenv("GITHUB_HEAD_REF"))
+		assert.Equal(t, "main", os.Getenv("GITHUB_BASE_REF"))
+	})
+
+	t.Run("workflow_run same repository", func(t *testing.T) {
+		s := ghtest.NewServer(t)
+		env := ghtest.SetEnv(
+			t, s,
+			ghtest.WithRepository("acme/infra"),
+			ghtest.WithEvent("workflow_run", nil),
+			ghtest.WithPullRequest(9, "feature", "main"),
+		)
+
+		assert.Equal(t, "refs/heads/main", os.Getenv("GITHUB_REF"))
+		assert.Empty(t, os.Getenv("GITHUB_HEAD_REF"), "workflow_run sets neither GITHUB_HEAD_REF nor GITHUB_BASE_REF")
+		assert.Empty(t, os.Getenv("GITHUB_BASE_REF"))
+
+		ctx, err := github.NewProvider().Context()
+		require.NoError(t, err)
+		assert.True(t, ctx.ElevatedEvent)
+		require.NotNil(t, ctx.PullRequest)
+		assert.Equal(t, 9, ctx.PullRequest.Number)
+		assert.False(t, ctx.PullRequest.Fork)
+
+		var payload map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ghtest.ReadFile(t, env.EventPath)), &payload))
+		assert.Contains(t, payload, "workflow_run")
+		assert.NotContains(t, payload, "pull_request")
+	})
+
+	t.Run("workflow_run fork has no pull request list", func(t *testing.T) {
+		s := ghtest.NewServer(t)
+		ghtest.SetEnv(
+			t, s,
+			ghtest.WithRepository("acme/infra"),
+			ghtest.WithEvent("workflow_run", nil),
+			ghtest.WithForkPullRequest(9, "fork-branch", "main"),
+		)
+
+		ctx, err := github.NewProvider().Context()
+		require.NoError(t, err)
+		require.NotNil(t, ctx.PullRequest)
+		assert.True(t, ctx.PullRequest.Fork)
+		assert.Zero(t, ctx.PullRequest.Number, "GitHub leaves workflow_run.pull_requests empty for fork runs")
+	})
 }
 
 func TestSetEnv_ForkPullRequest(t *testing.T) {

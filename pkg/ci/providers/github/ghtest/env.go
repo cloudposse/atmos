@@ -25,6 +25,10 @@ const (
 	defaultEventName  = "push"
 	eventPullRequest  = "pull_request"
 
+	// Events GitHub runs against the base branch, with GITHUB_REF=refs/heads/<base>.
+	eventPullRequestTarget = "pull_request_target"
+	eventWorkflowRun       = "workflow_run"
+
 	// Head repositories of pull requests created by WithForkPullRequest belong to forkOwner.
 	forkOwner = "forker"
 
@@ -135,7 +139,10 @@ func WithToken(token string) EnvOption {
 // WithPullRequest makes the run a pull request: it writes a pull_request event
 // payload, sets GITHUB_REF=refs/pull/N/merge, GITHUB_REF_NAME=N/merge,
 // GITHUB_HEAD_REF and GITHUB_BASE_REF, and defaults the event name to
-// "pull_request" unless WithEvent chose another (such as pull_request_target).
+// "pull_request" unless WithEvent chose another. For pull_request_target and
+// workflow_run, which GitHub runs against the base branch, GITHUB_REF is
+// refs/heads/<base> and only the payload names the pull request (workflow_run
+// writes a workflow_run payload instead of a pull_request one).
 func WithPullRequest(number int, headRef, baseRef string) EnvOption {
 	defer perf.Track(nil, "ghtest.WithPullRequest")()
 
@@ -194,9 +201,7 @@ func SetEnv(t testing.TB, s *Server, opts ...EnvOption) Env {
 
 	cfg.refName = strings.TrimPrefix(strings.TrimPrefix(cfg.ref, "refs/heads/"), "refs/tags/")
 	if cfg.pr != nil {
-		cfg.ref = fmt.Sprintf("refs/pull/%d/merge", cfg.pr.number)
-		cfg.refName = fmt.Sprintf("%d/merge", cfg.pr.number)
-		cfg.headRef, cfg.baseRef = cfg.pr.headRef, cfg.pr.baseRef
+		applyPullRequestRefs(cfg)
 	}
 
 	env := newEnvFiles(t)
@@ -208,6 +213,26 @@ func SetEnv(t testing.TB, s *Server, opts ...EnvOption) Env {
 	}
 
 	return env
+}
+
+// applyPullRequestRefs derives the ref variables of a pull request run. Plain pull_request runs
+// check out refs/pull/<n>/merge. The pull_request_target and workflow_run events run against the
+// base branch, so GITHUB_REF is refs/heads/<base> and only the event payload names the pull
+// request, exactly as on a real runner. The workflow_run event sets neither GITHUB_HEAD_REF nor
+// GITHUB_BASE_REF.
+func applyPullRequestRefs(cfg *envConfig) {
+	switch cfg.eventName {
+	case eventPullRequestTarget, eventWorkflowRun:
+		cfg.ref = "refs/heads/" + cfg.pr.baseRef
+		cfg.refName = cfg.pr.baseRef
+		if cfg.eventName == eventPullRequestTarget {
+			cfg.headRef, cfg.baseRef = cfg.pr.headRef, cfg.pr.baseRef
+		}
+	default:
+		cfg.ref = fmt.Sprintf("refs/pull/%d/merge", cfg.pr.number)
+		cfg.refName = fmt.Sprintf("%d/merge", cfg.pr.number)
+		cfg.headRef, cfg.baseRef = cfg.pr.headRef, cfg.pr.baseRef
+	}
 }
 
 // envVars builds the full set of variables SetEnv exports.
@@ -270,7 +295,11 @@ func writeEventPayload(t testing.TB, path string, cfg *envConfig) {
 	t.Helper()
 
 	payload := map[string]any{}
-	if cfg.pr != nil {
+	switch {
+	case cfg.pr != nil && cfg.eventName == eventWorkflowRun:
+		payload["action"] = "completed"
+		payload[eventWorkflowRun] = workflowRunFixture(cfg)
+	case cfg.pr != nil:
 		payload["action"] = "opened"
 		payload["number"] = cfg.pr.number
 		payload["pull_request"] = map[string]any{
@@ -334,4 +363,24 @@ func RegisterProvider(t testing.TB, p ci.Provider) {
 
 	t.Cleanup(ci.SwapRegistryForTest())
 	ci.Register(p)
+}
+
+// workflowRunFixture is the workflow_run payload object for the pull request fixture. As on GitHub,
+// pull_requests lists the pull request only when the triggering run came from the same repository;
+// it is empty for a fork.
+func workflowRunFixture(cfg *envConfig) map[string]any {
+	pullRequests := []any{}
+	if !cfg.pr.fork {
+		pullRequests = append(pullRequests, map[string]any{
+			"number": cfg.pr.number,
+			"base":   map[string]any{"ref": cfg.pr.baseRef},
+		})
+	}
+	return map[string]any{
+		"id":              1,
+		"head_branch":     cfg.pr.headRef,
+		"head_sha":        cfg.sha,
+		"head_repository": headRepoFixture(cfg),
+		"pull_requests":   pullRequests,
+	}
 }

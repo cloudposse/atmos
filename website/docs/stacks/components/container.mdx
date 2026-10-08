@@ -150,7 +150,22 @@ Containers in the same stack automatically join a shared network and can resolve
 
 ## CI Reporting
 
-When [CI](/cli/configuration/ci) is enabled, `atmos container build` and `atmos container push` write a summary for each image to the job summary: the tag, digest, image ID, runtime settings, environment variables, labels, and layers. Each summary is also posted to one pull request comment per image, updated in place on later runs, when `ci.comments.enabled` is on.
+When [CI](/cli/configuration/ci) is enabled, `atmos container build` and `atmos container push` write a summary for each image to the job summary: the tag, digest, image ID, runtime settings, environment variables, labels, and layers. The job summary always keeps the full report, and every pushed reference gets its own section.
+
+### Pull request comments
+
+The same summary can also be posted as a pull request comment. Atmos posts a comment only when all of these are true:
+
+- `ci.enabled` and `ci.summary.enabled` are on, and Atmos runs under a detected CI provider, so the summary reached the provider.
+- `ci.comments.enabled` is `true`. Comments are off by default because they write to the pull request.
+- A pull request number is known. When none is known, for example on a push to a branch, the comment is posted as a commit comment on the run's commit instead.
+- The job token can write comments. On GitHub Actions, grant `pull-requests: write`, and `contents: write` for commit comments.
+
+Atmos keeps one comment per image, not one per tag. The comment key is `container:image:<registry/repository>` with the tag and digest removed, so `ghcr.io/acme/api:sha-1a2b3c` and `ghcr.io/acme/api:latest` update the same comment. A build or push replaces the body in place, and a push of several tags lists every reference pushed in that run. Images with different repositories, for example one pushed to two registries, get separate comments.
+
+GitHub rejects comment bodies over 65,536 characters. Atmos truncates the comment body at 65,000 characters and ends it with a note that points to the job summary, which keeps the full report. A comment that cannot be posted logs a warning that names the image and never fails the build or push.
+
+When comments are off, Atmos does not post a comment and does not print a preview of one to the log. Outside CI, the summary is rendered locally as before.
 
 To change the Markdown, point `ci.templates.container.image` at a template file under `ci.templates.base_path`:
 

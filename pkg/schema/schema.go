@@ -1289,9 +1289,12 @@ type CIConfig struct {
 	Templates   CITemplatesConfig   `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
 	Cache       CICacheConfig       `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`
 	Groups      CIGroupsConfig      `yaml:"groups,omitempty" json:"groups,omitempty" mapstructure:"groups"`
-	// AllowUnsafeForkExecution opts out of the fork-checkout safety gate that
-	// refuses to clone untrusted fork content under pull_request_target and
-	// workflow_run events. Leave false unless a fork-facing workflow has a
+	// AllowUnsafeForkExecution opts out of both fork safety gates for
+	// pull_request_target and workflow_run events: the clone gate that refuses
+	// to check out untrusted fork content, and the posting gate that holds
+	// comments, commit statuses, environment and path exports, and SARIF
+	// uploads for a fork pull request. ATMOS_ALLOW_UNSAFE_FORK_EXECUTION sets
+	// the same switch. Leave false unless a fork-facing workflow has a
 	// documented reason to bypass it. See
 	// docs/prd/native-ci/framework/fork-pr-trust-gate.md.
 	AllowUnsafeForkExecution bool `yaml:"allow_unsafe_fork_execution,omitempty" json:"allow_unsafe_fork_execution,omitempty" mapstructure:"allow_unsafe_fork_execution"`

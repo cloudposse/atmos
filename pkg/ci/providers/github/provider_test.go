@@ -416,11 +416,15 @@ func TestProviderContextPullRequestFork(t *testing.T) {
 		wantFork bool
 	}{
 		{"same repository", "pull_request", pullRequest(repo("acme/infra", false), repo("acme/infra", false)), false},
-		{"head flagged as fork", "pull_request", pullRequest(repo("acme/infra", true), repo("acme/infra", false)), true},
+		// A repository that is itself a fork of something else still hosts same-repository pull requests.
+		{"base repository is itself a fork", "pull_request_target", pullRequest(repo("acme/infra", true), repo("acme/infra", true)), false},
+		{"head flagged as fork but same repository", "pull_request", pullRequest(repo("acme/infra", true), repo("acme/infra", false)), false},
+		{"same repository differing only by case", "pull_request", pullRequest(repo("Acme/Infra", false), repo("acme/infra", false)), false},
 		{"head repository name differs", "pull_request_target", pullRequest(repo("forker/infra", false), repo("acme/infra", false)), true},
-		{"head repository deleted", "pull_request_target", pullRequest(nil, repo("acme/infra", false)), false},
-		{"no repository objects", "pull_request", map[string]any{"pull_request": map[string]any{"head": map[string]any{}}}, false},
-		{"no pull_request object", "pull_request", map[string]any{}, false},
+		// A deleted fork or an unreadable payload cannot be proven same-repository, so it is held.
+		{"head repository deleted", "pull_request_target", pullRequest(nil, repo("acme/infra", false)), true},
+		{"no repository objects", "pull_request", map[string]any{"pull_request": map[string]any{"head": map[string]any{}}}, true},
+		{"no pull_request object", "pull_request", map[string]any{}, true},
 	}
 
 	for _, tt := range tests {
@@ -439,7 +443,7 @@ func TestProviderContextPullRequestFork(t *testing.T) {
 		})
 	}
 
-	t.Run("unreadable payload is not a fork", func(t *testing.T) {
+	t.Run("unreadable payload is held as a fork", func(t *testing.T) {
 		t.Setenv("GITHUB_EVENT_NAME", "pull_request")
 		t.Setenv("GITHUB_EVENT_PATH", "")
 		t.Setenv("GITHUB_REF", "refs/pull/7/merge")
@@ -448,7 +452,51 @@ func TestProviderContextPullRequestFork(t *testing.T) {
 
 		require.NoError(t, err)
 		require.NotNil(t, ctx.PullRequest)
-		assert.False(t, ctx.PullRequest.Fork)
+		assert.Equal(t, 7, ctx.PullRequest.Number, "the number falls back to GITHUB_REF")
+		assert.True(t, ctx.PullRequest.Fork)
+	})
+}
+
+// TestProviderContextPullRequestNumberFromPayload covers the events GitHub runs against the base
+// branch: GITHUB_REF is refs/heads/<base> there, so only the event payload carries the number.
+func TestProviderContextPullRequestNumberFromPayload(t *testing.T) {
+	payload := func(number any) map[string]any {
+		return map[string]any{"pull_request": map[string]any{
+			"number": number,
+			"head":   map[string]any{"ref": "feature", "repo": map[string]any{"full_name": "acme/infra"}},
+			"base":   map[string]any{"ref": "main", "repo": map[string]any{"full_name": "acme/infra"}},
+		}}
+	}
+
+	for _, event := range []string{"pull_request_target", "pull_request"} {
+		t.Run(event+" reads the number from the payload", func(t *testing.T) {
+			t.Setenv("GITHUB_EVENT_NAME", event)
+			t.Setenv("GITHUB_EVENT_PATH", writeEventPayload(t, payload(float64(42))))
+			t.Setenv("GITHUB_REF", "refs/heads/main")
+			t.Setenv("GITHUB_REF_NAME", "main")
+			t.Setenv("GITHUB_REPOSITORY", "acme/infra")
+
+			ctx, err := NewProvider().Context()
+
+			require.NoError(t, err)
+			require.NotNil(t, ctx.PullRequest)
+			assert.Equal(t, 42, ctx.PullRequest.Number)
+			assert.False(t, ctx.PullRequest.Fork)
+			assert.Equal(t, "https://github.com/acme/infra/pull/42", ctx.PullRequest.URL)
+		})
+	}
+
+	t.Run("a payload without a number falls back to GITHUB_REF", func(t *testing.T) {
+		t.Setenv("GITHUB_EVENT_NAME", "pull_request_target")
+		t.Setenv("GITHUB_EVENT_PATH", writeEventPayload(t, payload(nil)))
+		t.Setenv("GITHUB_REF", "refs/pull/8/merge")
+		t.Setenv("GITHUB_REPOSITORY", "acme/infra")
+
+		ctx, err := NewProvider().Context()
+
+		require.NoError(t, err)
+		require.NotNil(t, ctx.PullRequest)
+		assert.Equal(t, 8, ctx.PullRequest.Number)
 	})
 }
 
@@ -475,8 +523,9 @@ func TestProviderContextWorkflowRunFork(t *testing.T) {
 			payload: run(map[string]any{"full_name": "acme/infra", "fork": false}, nil),
 		},
 		{
-			name:    "no head repository has no pull request",
-			payload: run(nil, nil),
+			// A repository that is itself a fork still runs same-repository workflows.
+			name:    "same repository flagged as a fork has no pull request",
+			payload: run(map[string]any{"full_name": "acme/infra", "fork": true}, nil),
 		},
 		{
 			name:    "fork run by name",
@@ -488,8 +537,17 @@ func TestProviderContextWorkflowRunFork(t *testing.T) {
 			}{0, "fork-branch", ""},
 		},
 		{
-			name: "fork run flagged with pull request details",
-			payload: run(map[string]any{"full_name": "acme/infra", "fork": true}, []any{
+			name:    "no head repository is a deleted fork and is held",
+			payload: run(nil, nil),
+			want: &struct {
+				number  int
+				headRef string
+				baseRef string
+			}{0, "fork-branch", ""},
+		},
+		{
+			name: "fork run with pull request details",
+			payload: run(map[string]any{"full_name": "forker/infra", "fork": true}, []any{
 				map[string]any{"number": float64(9), "base": map[string]any{"ref": "main"}},
 			}),
 			want: &struct {
@@ -521,4 +579,44 @@ func TestProviderContextWorkflowRunFork(t *testing.T) {
 			assert.Equal(t, tt.want.baseRef, ctx.PullRequest.BaseRef)
 		})
 	}
+}
+
+// TestProviderContextWorkflowRunSameRepoKeepsPullRequest verifies that a workflow_run for a pull request
+// from the same repository exposes the pull request number from the payload and is not a fork.
+func TestProviderContextWorkflowRunSameRepoKeepsPullRequest(t *testing.T) {
+	payload := map[string]any{"workflow_run": map[string]any{
+		"head_branch":     "feature",
+		"head_repository": map[string]any{"full_name": "acme/infra", "fork": false},
+		"pull_requests": []any{
+			map[string]any{"number": float64(9), "base": map[string]any{"ref": "main"}},
+		},
+	}}
+	t.Setenv("GITHUB_EVENT_NAME", "workflow_run")
+	t.Setenv("GITHUB_EVENT_PATH", writeEventPayload(t, payload))
+	t.Setenv("GITHUB_REF", "refs/heads/main")
+	t.Setenv("GITHUB_REPOSITORY", "acme/infra")
+
+	ctx, err := NewProvider().Context()
+
+	require.NoError(t, err)
+	assert.True(t, ctx.ElevatedEvent)
+	require.NotNil(t, ctx.PullRequest)
+	assert.Equal(t, 9, ctx.PullRequest.Number)
+	assert.False(t, ctx.PullRequest.Fork)
+	assert.Equal(t, "feature", ctx.PullRequest.HeadRef)
+	assert.Equal(t, "main", ctx.PullRequest.BaseRef)
+}
+
+// TestProviderContextWorkflowRunUnreadablePayloadIsHeld verifies an unreadable payload cannot prove a
+// same-repository run, so the run is treated as a fork.
+func TestProviderContextWorkflowRunUnreadablePayloadIsHeld(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "workflow_run")
+	t.Setenv("GITHUB_EVENT_PATH", "")
+	t.Setenv("GITHUB_REPOSITORY", "acme/infra")
+
+	ctx, err := NewProvider().Context()
+
+	require.NoError(t, err)
+	require.NotNil(t, ctx.PullRequest)
+	assert.True(t, ctx.PullRequest.Fork)
 }

@@ -1857,6 +1857,44 @@ var (
 	ErrMockFailWithTimesNegative = errors.New("httpmock: FailWithTimes called with negative times; use FailWith for an unlimited failure")
 )
 
+// CI reporter and provider sentinels.
+var (
+	// ErrCICommentKeyRequired is returned when a comment asks to update an existing comment but names no key to find it by.
+	ErrCICommentKeyRequired = errors.New("a comment key is required to update an existing comment")
+
+	// ErrCICommentTargetInvalid is returned when a comment target is not one of auto, pr, or commit.
+	ErrCICommentTargetInvalid = errors.New("invalid comment target")
+
+	// ErrCICommitUnknown is returned when a commit comment is requested but the commit SHA is unknown.
+	ErrCICommitUnknown = errors.New("commit SHA is unknown")
+)
+
+// Automation runtime, standalone script, and custom-command input sentinels.
+var (
+	// ErrScriptHelpShown is returned by cli.command after the host printed the script's help.
+	// It ends the script without running its remaining statements; the engine reports success.
+	ErrScriptHelpShown = errors.New("script help shown")
+
+	// ErrLiteralFieldUnsupported is returned when the !literal tag is written on a field that
+	// does not support it, so the tag cannot be silently ignored.
+	ErrLiteralFieldUnsupported = errors.New("!literal is not supported")
+
+	// ErrScriptInterrupted is returned when an interrupt (Ctrl-C) ended a standalone script
+	// after its deferred calls ran. The process exits with the conventional status 130.
+	ErrScriptInterrupted = errors.New("script interrupted")
+)
+
+// Step library, process cleanup, Git hook, and !starlark sentinels.
+var (
+	// ErrStarlarkUnsupportedInConfig is returned when `!starlark` appears in atmos.yaml, which only
+	// stack manifests evaluate.
+	ErrStarlarkUnsupportedInConfig = errors.New("!starlark is not supported in atmos.yaml")
+
+	// ErrHookRecursionLimit is returned when lifecycle hooks trigger themselves more than the
+	// allowed number of levels deep.
+	ErrHookRecursionLimit = errors.New("hook recursion limit exceeded")
+)
+
 // Test step (`type: test`) failure sentinel.
 var ErrTestsFailed = errors.New("tests failed")
 

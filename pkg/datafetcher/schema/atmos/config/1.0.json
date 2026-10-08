@@ -2623,7 +2623,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "AllowUnsafeForkExecution opts out of the fork-checkout safety gate that\nrefuses to clone untrusted fork content under pull_request_target and\nworkflow_run events. Leave false unless a fork-facing workflow has a\ndocumented reason to bypass it. See\ndocs/prd/native-ci/framework/fork-pr-trust-gate.md."
+          "description": "AllowUnsafeForkExecution opts out of both fork safety gates for\npull_request_target and workflow_run events: the clone gate that refuses\nto check out untrusted fork content, and the posting gate that holds\ncomments, commit statuses, environment and path exports, and SARIF\nuploads for a fork pull request. ATMOS_ALLOW_UNSAFE_FORK_EXECUTION sets\nthe same switch. Leave false unless a fork-facing workflow has a\ndocumented reason to bypass it. See\ndocs/prd/native-ci/framework/fork-pr-trust-gate.md."
         }
       },
       "type": "object",

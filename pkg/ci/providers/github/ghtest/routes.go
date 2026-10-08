@@ -39,6 +39,10 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("POST /repos/{owner}/{repo}/issues/{number}/comments", s.createComment)
 	mux.HandleFunc("PATCH /repos/{owner}/{repo}/issues/comments/{id}", s.editComment)
 
+	mux.HandleFunc("GET /repos/{owner}/{repo}/commits/{sha}/comments", s.listCommitComments)
+	mux.HandleFunc("POST /repos/{owner}/{repo}/commits/{sha}/comments", s.createCommitComment)
+	mux.HandleFunc("PATCH /repos/{owner}/{repo}/comments/{id}", s.editCommitComment)
+
 	mux.HandleFunc("POST /repos/{owner}/{repo}/statuses/{sha}", s.createStatus)
 	mux.HandleFunc("GET /repos/{owner}/{repo}/commits/{ref}/status", s.combinedStatus)
 	mux.HandleFunc("GET /repos/{owner}/{repo}/commits/{ref}/check-runs", s.listCheckRuns)
@@ -56,6 +60,9 @@ func (s *Server) routes() *http.ServeMux {
 }
 
 func commentURL(c *Comment) string {
+	if c.SHA != "" {
+		return fmt.Sprintf("https://github.com/%s/%s/commit/%s#commitcomment-%d", c.Owner, c.Repo, c.SHA, c.ID)
+	}
 	return fmt.Sprintf("https://github.com/%s/%s/pull/%d#issuecomment-%d", c.Owner, c.Repo, c.Number, c.ID)
 }
 
@@ -66,6 +73,49 @@ func commentJSON(c *Comment) map[string]any {
 		"body":     c.Body,
 		"user":     map[string]any{"login": "github-actions[bot]"},
 	}
+}
+
+func (s *Server) listCommitComments(w http.ResponseWriter, r *http.Request) {
+	key := commitKey{r.PathValue(pathOwner), r.PathValue(pathRepo), r.PathValue(pathSHA)}
+
+	s.mu.Lock()
+	all := append([]Comment(nil), s.commitComments[key]...)
+	s.mu.Unlock()
+
+	start, end, next := page(r, len(all))
+	out := make([]map[string]any, 0, end-start)
+	for i := start; i < end; i++ {
+		out = append(out, commentJSON(&all[i]))
+	}
+	s.setNextLink(w, r, next)
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) createCommitComment(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		Body string `json:"body"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeError(w, http.StatusBadRequest, msgBadJSON)
+		return
+	}
+
+	s.mu.Lock()
+	c := s.addComment(&Comment{
+		Owner: r.PathValue(pathOwner),
+		Repo:  r.PathValue(pathRepo),
+		SHA:   r.PathValue(pathSHA),
+		Body:  payload.Body,
+	})
+	s.commentWrites = append(s.commentWrites, c)
+	s.mu.Unlock()
+
+	writeJSON(w, http.StatusCreated, commentJSON(&c))
+}
+
+// editCommitComment handles PATCH /repos/{owner}/{repo}/comments/{id}, which edits a commit comment.
+func (s *Server) editCommitComment(w http.ResponseWriter, r *http.Request) {
+	editStoredComment(s, w, r, s.commitComments, func(k commitKey) repoKey { return repoKey{k.owner, k.repo} })
 }
 
 // page returns the [start, end) window for the request's page/per_page and
@@ -150,6 +200,13 @@ func (s *Server) createComment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) editComment(w http.ResponseWriter, r *http.Request) {
+	editStoredComment(s, w, r, s.comments, func(k issueKey) repoKey { return repoKey{k.owner, k.repo} })
+}
+
+// editStoredComment applies a comment edit request to the comment in store whose ID is in the
+// request path, among the comments of the requested repository. The repoOf argument maps a store
+// key to its repository, which lets issue and commit comments share the same edit logic.
+func editStoredComment[K comparable](s *Server, w http.ResponseWriter, r *http.Request, store map[K][]Comment, repoOf func(K) repoKey) {
 	id, err := strconv.ParseInt(r.PathValue(pathID), decimalBase, int64Bits)
 	if err != nil {
 		writeError(w, http.StatusNotFound, msgNotFound)
@@ -163,13 +220,13 @@ func (s *Server) editComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	owner, repo := r.PathValue(pathOwner), r.PathValue(pathRepo)
+	want := repoKey{r.PathValue(pathOwner), r.PathValue(pathRepo)}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for key, list := range s.comments {
-		if key.owner != owner || key.repo != repo {
+	for key, list := range store {
+		if repoOf(key) != want {
 			continue
 		}
 		for i := range list {
