@@ -137,9 +137,11 @@ func newFake(t *testing.T, ctrl *gomock.Controller, name string, detect bool) (*
 
 func newHarness(t *testing.T, detected, local kind) *harness {
 	t.Helper()
-	// A forced CI mode would make the generic provider the detected one.
+	// A forced CI mode would make the generic provider the detected one, and a parent Atmos
+	// process (the CI job that runs these tests inside a log group) would make every group nested.
 	t.Setenv("ATMOS_CI", "")
 	t.Setenv("CI", "")
+	t.Setenv(logGroupSentinelEnvVar, "")
 	restore := SwapRegistryForTest()
 	t.Cleanup(restore)
 	ctrl := gomock.NewController(t)
@@ -1382,9 +1384,10 @@ func TestReporter_GroupNesting(t *testing.T) {
 
 	t.Run("a group inside a process that a parent group already covers is plain", func(t *testing.T) {
 		resetLogGroupDepth(t)
-		t.Setenv(logGroupSentinelEnvVar, "1")
 		h := newHarness(t, kindCapable, kindCapable)
 		h.ciCtx(&Context{})
+		// Set after newHarness, which blanks the sentinel so the ambient CI job cannot leak one in.
+		t.Setenv(logGroupSentinelEnvVar, "1")
 
 		end, rc, err := NewReporter(ciConfig(nil)).Group("child")
 		require.NoError(t, err)

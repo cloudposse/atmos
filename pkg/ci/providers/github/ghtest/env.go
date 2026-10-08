@@ -265,6 +265,9 @@ func envVars(s *Server, cfg *envConfig, env *Env) map[string]string {
 		"ATMOS_CI_GITHUB_TOKEN":   "",
 		"ATMOS_PRO_GITHUB_TOKEN":  "",
 		"GH_TOKEN":                "",
+		// A CI job that runs the tests inside an Atmos log group exports this sentinel to child
+		// processes; blank it so every test group is the outermost one.
+		"ATMOS_CI_LOG_GROUP_ACTIVE": "",
 	}
 }
 
