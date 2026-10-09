@@ -74,7 +74,8 @@ Findings, by area:
 
 - **Stack-introduced leftovers, fixed in this PR.** `describe affected` no longer silently skips SOPS files
   chosen by a selector: without credentials it falls back to the SOPS provider's configured locations and logs
-  a warning naming the component and declaration. The CloudFormation help casts were regenerated. `-i` was not
+  a warning naming the component and declaration. The CloudFormation help casts were regenerated; the
+  `source delete` and `source pull` recordings were refreshed again to include `--dry-run`. `-i` was not
   added to `source list/describe/delete`: those verbs never authenticate, so the flag would be a no-op.
 - **Pre-existing bugs fixed at the maintainer's request.** `--query` results keep their types (account IDs
   such as `068007702576` no longer become floats; unquoted leading-zero digit strings load as strings), and a
@@ -82,7 +83,9 @@ Findings, by area:
   `atmos.Component` no longer recurses forever: load-time rendering defers `atmos.Component` to the
   per-component render, and genuine cycles report `ErrCircularDependency`.
 - **Intended behavior documented.** YAML functions inside `!include`d files are not evaluated; the
-  `!include` page now says so.
+  `!include` page now says so. Changeset delete and execute dispatch no named hook event, but hooks
+  without an `events` list can still run. Unresolved SOPS selectors report provider directories in
+  the `folder` output field.
 - **Process.** The fix-log skill now triages follow-ups by origin: fix what the PR or stack introduced, ask per
   item about pre-existing bugs, document intended behavior.
 - **Release docs.** New changelog post `cloudformation-templated-policies-and-cross-account-outputs` and a
@@ -115,8 +118,11 @@ Findings, by area:
   `stack_policy.body`; apply hooks fired. Secrets repros (lane B) re-run on the emulator: unresolved
   status, literal secret usable beside an unresolvable selector, `!secret` through a selected store, SOPS
   collision detected.
+- Help casts: regenerated `atmos aws cloudformation source delete --help=all` and
+  `atmos aws cloudformation source pull --help=all` from the current binary; full help includes inherited
+  flags, so both show `--dry-run`. The screengrab validator checks both recordings for the flag.
 - Not run: real-AWS re-validation of the identity fixes (SSO session expired; covered by unit tests with
-  fakes); cast regeneration (stale casts listed below).
+  fakes).
 
 ## Follow-ups
 

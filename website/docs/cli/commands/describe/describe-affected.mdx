@@ -995,7 +995,7 @@ where:
                 declaration. Instead, the component is treated as affected by **any change under the locations its
                 SOPS providers can use**: each provider's `spec.path` directory (default `secrets`), the directory of
                 the static prefix of a templated `spec.file`, or the whole working directory when that path is itself a
-                selector. In that case `file` holds the directory, and a warning names the component, stack,
+                selector. In that case `folder` holds the directory, and a warning names the component, stack,
                 declaration and selector so the extra affected components are explainable. Declarations with a literal
                 backend keep using the exact file.
             </dd>

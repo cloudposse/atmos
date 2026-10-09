@@ -70,4 +70,4 @@ valid names, never a `deleted` message with exit code 0.
 <GitFlags />
 </dl>
 
-This command does not fire [lifecycle hooks](/stacks/components/aws-cloudformation#lifecycle-hooks).
+This command does not dispatch a named [lifecycle hook event](/stacks/components/aws-cloudformation#lifecycle-hooks). Hooks without an `events` list can still run.

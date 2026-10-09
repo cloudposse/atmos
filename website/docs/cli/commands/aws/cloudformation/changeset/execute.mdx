@@ -75,7 +75,7 @@ atmos aws cloudformation changeset execute vpc -s plat-ue2-dev --changeset-name 
 If the stack ends in a failed status after executing the changeset (e.g.
 `UPDATE_ROLLBACK_COMPLETE`), `changeset execute` exits non-zero.
 
-This command does not fire [lifecycle hooks](/stacks/components/aws-cloudformation#lifecycle-hooks).
+This command does not dispatch a named [lifecycle hook event](/stacks/components/aws-cloudformation#lifecycle-hooks). Hooks without an `events` list can still run.
 
 After a successful named CREATE or UPDATE, Atmos enables configured `termination_protection`,
 matching apply. Failure to enable it fails the command even if the deployment completed.

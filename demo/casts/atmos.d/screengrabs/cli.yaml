@@ -427,7 +427,15 @@ commands:
               for index, command in enumerate(commands, 1):
                   slug = command_slug(command)
                   tmp_cast = Path(tmpdir) / f"{slug}.cast"
-                  argv = command.split() + [f"--cast={tmp_cast}"]
+                  argv = command.split()
+                  # These source commands inherit --dry-run. Record full help
+                  # so the docs show that flag, keeping the existing asset slug.
+                  if command in (
+                      "atmos aws cloudformation source delete --help",
+                      "atmos aws cloudformation source pull --help",
+                  ):
+                      argv[-1] = "--help=all"
+                  argv.append(f"--cast={tmp_cast}")
                   proc = subprocess.run(
                       argv, cwd=FIXTURE, env=env, capture_output=True, text=True
                   )
@@ -858,6 +866,11 @@ commands:
               assert_no_error_output(text)
               assert_no_local_paths(text)
               assert_body_color(text)
+              if command in (
+                  "atmos aws cloudformation source delete --help",
+                  "atmos aws cloudformation source pull --help",
+              ) and "--dry-run" not in strip_ansi(text):
+                  raise SystemExit(f"source help cast must show --dry-run: {path.name}")
               if command.endswith(" --help") and len(re.findall(r"(?m)^USAGE$", strip_ansi(text))) != 1:
                   raise SystemExit(
                       f"help cast must contain exactly one USAGE heading: {path.name}"
