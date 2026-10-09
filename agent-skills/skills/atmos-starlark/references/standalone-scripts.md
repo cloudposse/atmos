@@ -8,16 +8,16 @@ runs directly as its own command-line tool. This is "interpreter mode". See also
 ## Running a script
 
 ```shell
+./deploy vpc --stack=dev               # Executable with an Atmos shebang.
 atmos ./deploy.star vpc --stack=dev    # Explicit path.
 atmos deploy.star vpc --stack=dev      # A .star file needs no ./ prefix.
-./deploy vpc --stack=dev               # Executable with an Atmos shebang.
 ```
 
 Rules:
 
 - `.star` files: any first argument ending in `.star` selects script mode. The file must
-  exist and be a regular file. Only `.star` names can produce a script error (a `.star`
-  directory fails with "must be a regular file").
+  exist and be a regular file. Missing `.star` paths and `.star` directories fail during
+  script selection. Extensionless scripts can also produce errors when run.
 - Extensionless files: the path must contain a separator (`./deploy`, `/opt/tools/deploy`)
   and the first line must be an Atmos shebang. A bare name such as `atmos deploy` is still a
   normal Atmos command lookup and fails as an unknown command. A path that is not a script (an
