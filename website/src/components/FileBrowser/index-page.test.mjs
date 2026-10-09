@@ -25,12 +25,20 @@ const { code } = transformSync(readFileSync(filename, 'utf8'), {
   ],
 });
 const module = { exports: {} };
+let requestedQuery = '';
+const reactWithQuery = {
+  ...React,
+  useState(initial) {
+    const [value, update] = React.useState(initial);
+    return [typeof initial === 'string' ? requestedQuery : value, update];
+  },
+};
 const passthrough = ({ children }) => React.createElement(React.Fragment, null, children);
 vm.runInNewContext(code, {
   module,
   exports: module.exports,
   require(name) {
-    if (name === 'react') return React;
+    if (name === 'react') return reactWithQuery;
     if (name === '@theme/Layout' || name === 'react-markdown') return passthrough;
     if (name === '@docusaurus/Link') {
       return ({ to, children, ...props }) => React.createElement('a', { href: to, ...props }, children);
@@ -46,7 +54,8 @@ vm.runInNewContext(code, {
 }, { filename });
 const IndexPage = module.exports.default;
 
-function renderSections(examples, tags) {
+function renderSections(examples, tags, query = '') {
+  requestedQuery = query;
   const html = renderToStaticMarkup(React.createElement(IndexPage, {
     treeData: { examples: examples.map(([name, tags]) => ({ name, title: name, tags, root: {} })), tags },
     optionsData: { routeBasePath: '/gists', title: 'Projects', description: 'Project examples' },
@@ -76,5 +85,15 @@ test('primary examples take precedence over secondary-tag fallback', () => {
   ], ['Terraform', 'Emulators']), [
     { tag: 'Terraform', names: ['native'] },
     { tag: 'Emulators', names: ['emulated'] },
+  ]);
+});
+
+
+test('search results appear once even when the match carries a secondary tag', () => {
+  assert.deepEqual(renderSections([
+    ['generate-files', ['Terraform', 'Automation']],
+    ['workflow', ['Automation']],
+  ], ['Terraform', 'Automation'], 'generate-files'), [
+    { tag: 'Terraform', names: ['generate-files'] },
   ]);
 });
