@@ -6,6 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestParseRepositoryURL verifies the Azure DevOps HTTPS and SSH URL forms parse into their
+// organization, project, and repository, and that other URLs are rejected.
 func TestParseRepositoryURL(t *testing.T) {
 	tests := []struct {
 		name               string
