@@ -3,6 +3,7 @@ package cloudformation
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -83,6 +84,45 @@ func listAllStackResources(ctx context.Context, client CloudFormationClient, sta
 	}
 }
 
+// listAllStackEvents fetches a stack's complete history, oldest-first like the watch poller.
+// Event IDs suppress overlapping pages; events without IDs must not hide one another.
+func listAllStackEvents(ctx context.Context, client CloudFormationClient, stackName string) ([]cfntypes.StackEvent, error) {
+	defer perf.Track(nil, "cloudformation.listAllStackEvents")()
+
+	var events []cfntypes.StackEvent
+	var nextToken *string
+	for {
+		out, err := client.DescribeStackEvents(ctx, &cloudformation.DescribeStackEventsInput{
+			StackName: awsString(stackName),
+			NextToken: nextToken,
+		})
+		if err != nil {
+			return nil, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationAPICallFailed, err)
+		}
+		events = append(events, out.StackEvents...)
+		if stringValue(out.NextToken) == "" {
+			break
+		}
+		nextToken = out.NextToken
+	}
+
+	// Reverse the entire newest-first history, preserving the existing per-stack tie order.
+	slices.Reverse(events)
+	seen := map[string]bool{}
+	unique := events[:0]
+	for i := range events {
+		id := stringValue(events[i].EventId)
+		if id != "" {
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
+		}
+		unique = append(unique, events[i])
+	}
+	return unique, nil
+}
+
 // flattenStackNames returns every stack name in a tree (the root and every
 // descendant), depth-first.
 func flattenStackNames(node *stackNode) []string {
@@ -139,7 +179,7 @@ func runLogs(ctx context.Context, client CloudFormationClient, stackName string,
 
 	var allEvents []cfntypes.StackEvent
 	for _, name := range flattenStackNames(root) {
-		events, _, err := pollStackEvents(ctx, client, name, map[string]bool{}, OperationLogs)
+		events, err := listAllStackEvents(ctx, client, name)
 		if err != nil {
 			return summary, err
 		}
