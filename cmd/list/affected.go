@@ -1,6 +1,8 @@
 package list
 
 import (
+	"strings"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -92,7 +94,7 @@ var affectedCmd = &cobra.Command{
 			Stack:             v.GetString("stack"),
 			ExcludeLocked:     v.GetBool("exclude-locked"),
 			Tags:              tags.ParseTagsFlag(v.GetString(tagsViperKey)),
-			Labels:            v.GetString(labelsViperKey),
+			Labels:            strings.Join(tags.ReadLabelsFlagKey(v, labelsViperKey), ","),
 			ProcessTemplates:  v.GetBool("process-templates"),
 			ProcessFunctions:  v.GetBool("process-functions"),
 			Skip:              v.GetStringSlice("skip"),

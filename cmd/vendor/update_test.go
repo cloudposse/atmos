@@ -256,7 +256,7 @@ func TestVendorCommands_ScalarLabelsPreserveSpaces(t *testing.T) {
 			cmd.Flags().StringSlice("config", nil, "")
 			cmd.Flags().StringSlice("config-path", nil, "")
 			cmd.Flags().StringSlice("profile", nil, "")
-			viper.Set("labels", "team = platform,owner=platform engineering")
+			viper.Set(vendorLabelsViperKey, "team = platform,owner=platform engineering")
 			require.NoError(t, cmd.Flags().Set("component", "vpc"))
 			err := cmd.RunE(cmd, nil)
 			// Valid labels reach selector conflict validation instead of failing to parse.

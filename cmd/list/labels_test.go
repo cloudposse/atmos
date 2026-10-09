@@ -1,6 +1,7 @@
 package list
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -29,4 +30,17 @@ func TestListOptions_ScalarLabelsPreserveSpaces(t *testing.T) {
 			assert.Equal(t, map[string]string{"team": "platform", "owner": "platform engineering"}, parsed)
 		})
 	}
+}
+
+// TestAffectedLabels_RepeatedFlagJoins proves that list affected, which keeps its labels as one
+// comma-separated string, still sees every occurrence of the repeatable --labels flag through the
+// namespaced Viper key instead of silently reading an empty string from the slice value.
+func TestAffectedLabels_RepeatedFlagJoins(t *testing.T) {
+	cmd := newCmdWithListParser("affected", affectedParser.RegisterFlags)
+	setFlag(t, cmd, "labels", "team=platform")
+	setFlag(t, cmd, "labels", "owner=platform engineering")
+	v := viper.New()
+	require.NoError(t, affectedParser.BindFlagsToViper(cmd, v))
+
+	assert.Equal(t, "team=platform,owner=platform engineering", strings.Join(tags.ReadLabelsFlagKey(v, labelsViperKey), ","))
 }
