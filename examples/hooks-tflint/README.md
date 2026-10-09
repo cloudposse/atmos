@@ -1,4 +1,6 @@
 ---
+title: TFLint Hook
+tags: [Hooks]
 related_docs:
   - label: "Terraform plan"
     url: /cli/commands/terraform/plan

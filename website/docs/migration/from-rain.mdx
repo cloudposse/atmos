@@ -18,15 +18,6 @@ import TabItem from '@theme/TabItem'
 Rain is no longer actively maintained. If you built a deploy workflow around it — `rain deploy`, `rain watch`, a Makefile calling `rain fmt` in CI — that workflow now has no owner. Your CloudFormation templates are still good. What's gone is the CLI, the artifact-bucket bootstrapping, and the drift/changeset ergonomics Rain gave you on top of the raw AWS CLI. Atmos's native `aws/cloudformation` component type replaces that layer without asking you to rewrite a single resource.
 </Intro>
 
-:::caution Unreleased CloudFormation extensions
-
-The backend commands, inline `template:` bodies, file-based `path:` configuration, and related
-examples on this page require the [phase 4 implementation](https://github.com/cloudposse/atmos/pull/3137).
-Until it lands, file-based components use `template: template.yaml`; backend commands and inline
-templates are unavailable.
-
-:::
-
 <Experimental />
 
 ## Why This Guide?
@@ -332,7 +323,7 @@ Outputs, so you get that view both at deploy time and on demand afterward with
 | `rain watch` | [`atmos aws cloudformation watch`](/cli/commands/aws/cloudformation/watch) | Attaches to a stack's in-progress or already-terminal operation |
 | `rain tree` | [`atmos aws cloudformation tree`](/cli/commands/aws/cloudformation/tree) | Nested-stack/resource dependency graph |
 | `rain rm` | [`atmos aws cloudformation delete`](/cli/commands/aws/cloudformation/delete) | Respects `termination_protection` — never silently disables it |
-| `rain bootstrap` | `atmos aws cloudformation backend create` (requires phase 4) | Provisions the S3 artifact bucket; `provision.backend.enabled: true` does it automatically instead |
+| `rain bootstrap` | [`atmos aws cloudformation backend create`](/cli/commands/aws/cloudformation/backend/create) | Provisions the S3 artifact bucket; `provision.backend.enabled: true` does it automatically instead |
 | `rain build` | Not supported — use [`atmos scaffold`](/cli/commands/scaffold/usage) | Skeleton-template generation is a dev-time concern, not a component-type verb |
 | `rain forecast` | Not supported — use `plan`/`diff` + `validate` | Changeset review plus server-side validation cover the same question |
 | `rain cc` (Cloud Control passthrough) | Not supported | No equivalent planned |
@@ -539,7 +530,7 @@ every available section.
 **Walk**: Explore these next:
 - [`!aws.cloudformation.output`](/functions/yaml/aws.cloudformation.output) for cross-component values
 - [Drift Detection](/cli/commands/aws/cloudformation/drift)
-- Artifact Bucket Provisioning (requires phase 4)
+- [Artifact Bucket Provisioning](/cli/commands/aws/cloudformation/backend)
 
 **Run**: When you're ready for advanced features:
 - [StackSets](/cli/commands/aws/cloudformation/stackset)

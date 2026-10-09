@@ -1,6 +1,6 @@
 ---
 title: Generate Files
-tags: [Automation]
+tags: [Terraform, Automation]
 cast:
   file: /casts/examples/generate-files/component-files.cast
   title: atmos generate files

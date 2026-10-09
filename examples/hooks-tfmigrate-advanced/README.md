@@ -1,4 +1,6 @@
 ---
+title: TFMigrate Hook (Advanced)
+tags: [Hooks]
 related_docs:
   - label: "Terraform state migrations"
     url: /cli/commands/terraform/migrate
