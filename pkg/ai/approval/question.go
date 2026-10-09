@@ -107,7 +107,7 @@ func (a *PermissionApprover) askQuestions(ctx context.Context, req Request) (Dec
 		return Decision{}, fmt.Errorf("asking the user failed: %w", err)
 	}
 
-	updated := make(map[string]any, len(req.Input)+1)
+	updated := make(map[string]any, len(req.Input))
 	for key, value := range req.Input {
 		updated[key] = value
 	}
@@ -176,7 +176,8 @@ func askOne(q Question) (string, error) {
 
 // choose shows the options and returns the labels the user picked.
 func choose(q Question) ([]string, error) {
-	options := make([]huh.Option[string], 0, len(q.Options)+1)
+	// The size comes from model output, so it is not used in arithmetic; append grows the list for "Other…".
+	options := make([]huh.Option[string], 0, len(q.Options))
 	for _, opt := range q.Options {
 		display := opt.Label
 		if strings.TrimSpace(opt.Description) != "" {
