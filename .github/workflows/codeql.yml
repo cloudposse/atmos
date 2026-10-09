@@ -217,7 +217,10 @@ jobs:
           # (govulncheck's SSA construction parallelizes via goroutines, which
           # -p doesn't govern) while nearly tripling run time.
           GOMEMLIMIT: "32GiB"
-        run: govulncheck -format sarif ./... > govulncheck.sarif
+        # The target also removes exact duplicate stacks from the report: the
+        # SARIF schema requires them to be unique and the upload rejects the
+        # report otherwise. See internal/ci/vulncheck.
+        run: go tool mage ci:vulncheck govulncheck.sarif
 
       - name: Upload SARIF file
         if: always()
