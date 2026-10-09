@@ -10,6 +10,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/smithy-go"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -325,7 +326,7 @@ func TestPreOperationEventBaseline_ReturnsExistingEventIDs(t *testing.T) {
 func TestPreOperationEventBaseline_StackNotFound(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
-	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, errors.New("Stack [vpc] does not exist"))
+	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, &smithy.GenericAPIError{Code: "ValidationError", Message: "Stack [vpc] does not exist"})
 
 	seen := preOperationEventBaseline(context.Background(), client, "vpc")
 	assert.True(t, seen.valid)
