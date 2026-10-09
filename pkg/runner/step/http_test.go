@@ -820,3 +820,111 @@ func TestHTTPHelpers(t *testing.T) {
 		}, methods)
 	})
 }
+
+// TestHTTPHandler_RetryOnExpectStatusMismatch verifies that with an explicit expect.status
+// and a retry policy, a non-matching status (here 404 while an endpoint warms up) is retried
+// until the expectation is met: the polling contract the docs promise.
+func TestHTTPHandler_RetryOnExpectStatusMismatch(t *testing.T) {
+	t.Parallel()
+
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls < 3 {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	handler := mustGetHTTPHandler(t)
+	step := &schema.WorkflowStep{
+		Name: "poll-status", Type: "http", URL: srv.URL,
+		Expect: &schema.HTTPExpect{Status: []int{200}},
+		Retry:  fastRetry(t, 5),
+	}
+	require.NoError(t, handler.Validate(step))
+
+	result, err := handler.Execute(context.Background(), step, NewVariables())
+	require.NoError(t, err)
+	assert.Equal(t, 3, calls, "404s are retried while expect.status is unmet")
+	assert.Equal(t, 3, result.Metadata[metaAttempts])
+}
+
+// TestHTTPHandler_RetryOnExpectResponseMismatch verifies a body that fails expect.response
+// is retried under a retry policy until it matches.
+func TestHTTPHandler_RetryOnExpectResponseMismatch(t *testing.T) {
+	t.Parallel()
+
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls < 2 {
+			_, _ = w.Write([]byte(`{"status":"starting"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"status":"ready"}`))
+	}))
+	defer srv.Close()
+
+	handler := mustGetHTTPHandler(t)
+	step := &schema.WorkflowStep{
+		Name: "poll-body", Type: "http", URL: srv.URL,
+		Expect: &schema.HTTPExpect{Response: []string{`"status":"ready"`}},
+		Retry:  fastRetry(t, 5),
+	}
+	require.NoError(t, handler.Validate(step))
+
+	_, err := handler.Execute(context.Background(), step, NewVariables())
+	require.NoError(t, err)
+	assert.Equal(t, 2, calls)
+}
+
+// TestHTTPHandler_ExpectMismatchExhaustsRetry verifies the error after the last attempt
+// names the status received and the attempt count, and that no retry happens without a policy.
+func TestHTTPHandler_ExpectMismatchExhaustsRetry(t *testing.T) {
+	t.Parallel()
+
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	handler := mustGetHTTPHandler(t)
+	step := &schema.WorkflowStep{
+		Name: "poll-exhaust", Type: "http", URL: srv.URL,
+		Expect: &schema.HTTPExpect{Status: []int{200}},
+		Retry:  fastRetry(t, 3),
+	}
+	require.NoError(t, handler.Validate(step))
+
+	_, err := handler.Execute(context.Background(), step, NewVariables())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrHTTPStepUnexpectedStatus)
+	assert.Equal(t, 3, calls, "retried up to max_attempts")
+	attempts, ok := errUtils.GetContext(err, "attempts")
+	require.True(t, ok)
+	assert.Equal(t, "3", attempts)
+	status, ok := errUtils.GetContext(err, "status")
+	require.True(t, ok)
+	assert.Contains(t, status, "404")
+
+	t.Run("no retry policy means a single attempt", func(t *testing.T) {
+		t.Parallel()
+
+		var single int
+		one := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			single++
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer one.Close()
+		step := &schema.WorkflowStep{Name: "once", Type: "http", URL: one.URL, Expect: &schema.HTTPExpect{Status: []int{200}}}
+		require.NoError(t, handler.Validate(step))
+		_, err := handler.Execute(context.Background(), step, NewVariables())
+		require.ErrorIs(t, err, errUtils.ErrHTTPStepUnexpectedStatus)
+		assert.Equal(t, 1, single)
+	})
+}

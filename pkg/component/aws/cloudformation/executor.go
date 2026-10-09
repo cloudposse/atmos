@@ -3,9 +3,7 @@ package cloudformation
 import (
 	"context"
 	"fmt"
-	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -456,35 +454,6 @@ func renderDiffSummary(stackName string, result *changeSetResult) error {
 		return fmt.Errorf("write CloudFormation diff summary: %w", err)
 	}
 	return nil
-}
-
-// diffSummaryText builds the text renderDiffSummary writes: a header line with
-// the number of resource changes, then one line per changed resource (or the
-// no-op line when the changeset would change nothing).
-func diffSummaryText(stackName string, result *changeSetResult) string {
-	lines := []string{fmt.Sprintf("%s: no changes (changeset would be a no-op)", stackName)}
-	if !result.NoOp {
-		lines = diffResourceLines(result.Changes)
-		lines = append([]string{fmt.Sprintf("%s: %d resource change(s)", stackName, len(lines))}, lines...)
-	}
-	return strings.Join(lines, "\n")
-}
-
-// diffResourceLines renders resource changes, excluding non-resource changes.
-func diffResourceLines(changes []cfntypes.Change) []string {
-	var lines []string
-	for _, change := range changes {
-		rc := change.ResourceChange
-		if rc == nil {
-			continue
-		}
-		line := fmt.Sprintf("  %-8s %-28s %s", rc.Action, aws.ToString(rc.ResourceType), aws.ToString(rc.LogicalResourceId))
-		if rc.Replacement != "" {
-			line += fmt.Sprintf(" (replacement: %s)", rc.Replacement)
-		}
-		lines = append(lines, line)
-	}
-	return lines
 }
 
 // runApply executes the changeset (creating or updating the stack) and renders

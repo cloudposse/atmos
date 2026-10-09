@@ -408,6 +408,7 @@ func verifyStepsHookTypes(name string, hook *Hook) error {
 func stepVariables(ctx *ExecContext) *runnerstep.Variables {
 	vars := runnerstep.NewVariables()
 	vars.SetAtmosConfig(ctx.AtmosConfig)
+	vars.PublishInfo = ctx.Info
 	for k, v := range BuildAtmosEnv(ctx, "", "") {
 		vars.SetEnv(k, v)
 	}

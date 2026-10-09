@@ -1,6 +1,7 @@
 package output
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -17,7 +18,10 @@ import (
 )
 
 // defaultFmt is the default format verb for generic value formatting.
-const defaultFmt = "%v"
+const (
+	defaultFmt = "%v"
+	jsonIndent = "  "
+)
 
 // FormatOutputs converts an outputs map to the specified format.
 func FormatOutputs(outputs map[string]any, format Format) (string, error) {
@@ -206,7 +210,7 @@ func dispatchSingleValueFormat(key string, value any, format Format) (string, er
 
 // formatSingleJSON outputs a single value as JSON.
 func formatSingleJSON(value any) (string, error) {
-	jsonBytes, err := json.MarshalIndent(value, "", "  ")
+	jsonBytes, err := json.MarshalIndent(value, "", jsonIndent)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal value to JSON: %w", err)
 	}
@@ -261,7 +265,7 @@ func formatSingleDelimited(key string, value any, delimiter string) (string, err
 // output explicitly to ensure consistent behavior across all formats.
 func formatJSON(outputs map[string]any) (string, error) {
 	sorted := sortMapRecursive(outputs)
-	jsonBytes, err := json.MarshalIndent(sorted, "", "  ")
+	jsonBytes, err := json.MarshalIndent(sorted, "", jsonIndent)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal outputs to JSON: %w", err)
 	}
@@ -465,13 +469,13 @@ func sortedKeys(m map[string]any) []string {
 	return keys
 }
 
-// formatTable outputs as a styled table with Key/Value columns.
+// formatTable outputs as a styled table with Output/Value columns.
 // Uses the same table rendering as list commands for consistent styling.
 func formatTable(outputs map[string]any, opts FormatOptions) (string, error) {
 	keys := sortedKeys(outputs)
 
-	// Build rows: Key | Value.
-	headers := []string{"Key", "Value"}
+	// Build rows: Output | Value.
+	headers := []string{"Output", "Value"}
 	rows := make([][]string, 0, len(keys))
 	for _, k := range keys {
 		value := outputs[k]
@@ -486,12 +490,12 @@ func formatTable(outputs map[string]any, opts FormatOptions) (string, error) {
 }
 
 // formatValueForTable converts a value to a string suitable for table display.
-// Scalars are returned as-is, complex types are JSON-encoded compactly.
+// Scalars are returned as-is; JSON documents and complex values are indented.
 // If config is provided, syntax highlighting is applied.
 func formatValueForTable(value any, config *schema.AtmosConfiguration) string {
 	switch v := value.(type) {
 	case string:
-		return highlightValue(v, config)
+		return highlightValue(prettyTableJSON(v), config)
 	case float64:
 		// Check if it's an integer value.
 		if v == float64(int64(v)) {
@@ -503,15 +507,29 @@ func formatValueForTable(value any, config *schema.AtmosConfiguration) string {
 	case nil:
 		return ""
 	default:
-		// Complex types (maps, slices) - compact JSON with deterministic key ordering.
+		// Complex types (maps, slices) use indented JSON with deterministic key ordering.
 		// Apply sorting for consistent output across runs (matches formatJSON/formatYAML behavior).
 		sorted := sortValueRecursive(v)
-		jsonBytes, err := json.Marshal(sorted)
+		jsonBytes, err := json.MarshalIndent(sorted, "", jsonIndent)
 		if err != nil {
 			return fmt.Sprintf(defaultFmt, v)
 		}
 		return highlightValue(string(jsonBytes), config)
 	}
+}
+
+// prettyTableJSON expands only complete JSON objects and arrays. Indenting the
+// original bytes preserves large numbers, escape sequences, and key order.
+func prettyTableJSON(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if !strings.HasPrefix(trimmed, "{") && !strings.HasPrefix(trimmed, "[") {
+		return value
+	}
+	var formatted bytes.Buffer
+	if err := json.Indent(&formatted, []byte(trimmed), "", jsonIndent); err != nil {
+		return value
+	}
+	return formatted.String()
 }
 
 // highlightValue applies JSON syntax highlighting if config is available.

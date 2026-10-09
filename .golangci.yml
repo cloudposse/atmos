@@ -91,6 +91,8 @@ linters:
             - "!**/pkg/aws/organization/**"
             - "!**/pkg/aws/security/**"
             - "!**/pkg/aws/cloudformation/**"
+            # S3 uploads are an AWS-specific leaf used by the generic step engine.
+            - "!**/pkg/aws/s3upload/**"
             - "!**/pkg/provisioner/backend/**"
             # pkg/component/aws/cloudformation is the SDK-native aws/cloudformation
             # component type; it deploys directly through the CloudFormation API and

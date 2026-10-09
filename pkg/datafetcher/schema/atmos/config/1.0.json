@@ -10408,7 +10408,7 @@
           "description": "File picker fields."
         },
         "source": {
-          "description": "Source: workdir provisioning (string or source map), or the directory/file to archive (archive step type, string only)."
+          "description": "Source: workdir provisioning (string or source map), or a local directory/file for archive and publish steps (string only)."
         },
         "reset": {
           "anyOf": [
@@ -11198,6 +11198,17 @@
           ],
           "description": "Workflow container override or false to run on host."
         },
+        "target": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object"
+            }
+          ],
+          "description": "Target selects a named component target or an inline publishing target."
+        },
         "format": {
           "anyOf": [
             {
@@ -11218,7 +11229,7 @@
               "type": "null"
             }
           ],
-          "description": "Pack: archive file to write. Extract: directory to extract into."
+          "description": "Archive output/extraction path, or publish path relative to its target."
         },
         "subpath": {
           "anyOf": [
@@ -15768,7 +15779,7 @@
           "description": "File picker fields."
         },
         "source": {
-          "description": "Source: workdir provisioning (string or source map), or the directory/file to archive (archive step type, string only)."
+          "description": "Source: workdir provisioning (string or source map), or a local directory/file for archive and publish steps (string only)."
         },
         "reset": {
           "anyOf": [
@@ -16599,6 +16610,17 @@
           ],
           "description": "Run the emulator without persistence for this step (emulator step type)."
         },
+        "target": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object"
+            }
+          ],
+          "description": "Target selects a named component target or an inline publishing target."
+        },
         "format": {
           "anyOf": [
             {
@@ -16619,7 +16641,7 @@
               "type": "null"
             }
           ],
-          "description": "Pack: archive file to write. Extract: directory to extract into."
+          "description": "Archive output/extraction path, or publish path relative to its target."
         },
         "subpath": {
           "anyOf": [

@@ -137,9 +137,7 @@ func TestPrintStackEvent_FailedStatusWithReason(t *testing.T) {
 }
 
 // formatStackEventLine(markdown=true) must bold the logical ID and code-span
-// the resource type, for dispatchStackEvent's TTY line (which flows into
-// ui.FormatSuccess/FormatError/FormatInline — renderers that actually process
-// markdown, see the function's own doc comment).
+// the resource type, for consumers that explicitly request markdown formatting.
 func TestFormatStackEventLine_MarkdownWrapsIdentifiers(t *testing.T) {
 	logicalID := "MyBucket"
 	resourceType := "AWS::S3::Bucket"
@@ -487,12 +485,12 @@ func TestDispatchStackEvent_InProgressUpdatesSpinner(t *testing.T) {
 	sp := spinner.New("watching")
 	out := normalizeUIOutput(captureStderr(t, func() { dispatchStackEvent(sp, event) }))
 	assert.Contains(t, out, "MyBucket")
-	assert.Contains(t, out, string(cfntypes.ResourceStatusCreateInProgress))
+	assert.Contains(t, out, "Creating")
 }
 
 // dispatchStackEvent must route a completed (non-failed) terminal event to
-// Spinner.Println with FormatSuccess coloring (checkmark icon), not a plain line.
-func TestDispatchStackEvent_CompleteUsesFormatSuccess(t *testing.T) {
+// Spinner.Println with a green checkmark and a readable action verb.
+func TestDispatchStackEvent_CompleteShowsSuccess(t *testing.T) {
 	logicalID := "MyBucket"
 	resourceType := "AWS::S3::Bucket"
 	event := &cfntypes.StackEvent{
@@ -503,14 +501,14 @@ func TestDispatchStackEvent_CompleteUsesFormatSuccess(t *testing.T) {
 
 	sp := spinner.New("watching")
 	out := normalizeUIOutput(captureStderr(t, func() { dispatchStackEvent(sp, event) }))
-	assert.Contains(t, out, "✓", "terminal, non-failed events must render via ui.FormatSuccess")
+	assert.Contains(t, out, "✓", "terminal, non-failed events must show a success icon")
 	assert.Contains(t, out, "MyBucket")
-	assert.Contains(t, out, string(cfntypes.ResourceStatusCreateComplete))
+	assert.Contains(t, out, "Created")
 }
 
 // dispatchStackEvent must route a failed terminal event to Spinner.Println
-// with FormatError coloring (X icon), including the status reason.
-func TestDispatchStackEvent_FailedUsesFormatError(t *testing.T) {
+// with error coloring (X icon), including the status reason.
+func TestDispatchStackEvent_FailedShowsError(t *testing.T) {
 	logicalID := "MyBucket"
 	resourceType := "AWS::S3::Bucket"
 	reason := "Bucket already exists"
@@ -523,7 +521,7 @@ func TestDispatchStackEvent_FailedUsesFormatError(t *testing.T) {
 
 	sp := spinner.New("watching")
 	out := normalizeUIOutput(captureStderr(t, func() { dispatchStackEvent(sp, event) }))
-	assert.Contains(t, out, "✗", "failed terminal events must render via ui.FormatError")
+	assert.Contains(t, out, "✗", "failed terminal events must show an error icon")
 	assert.Contains(t, out, "MyBucket")
 	assert.Contains(t, out, "Bucket already exists")
 }
@@ -546,29 +544,28 @@ func TestDispatchStackEvent_NilSpinnerFallsBackToPrintStackEvent(t *testing.T) {
 }
 
 // finishStreamSpinner must report a successful terminal status via
-// Spinner.Success (FormatSuccess coloring).
+// a success icon and a readable action verb.
 func TestFinishStreamSpinner_SuccessStatus(t *testing.T) {
 	sp := spinner.New("watching")
-	out := normalizeUIOutput(captureStderr(t, func() { finishStreamSpinner(sp, "vpc", cfntypes.StackStatusCreateComplete) }))
+	out := normalizeUIOutput(captureStderr(t, func() { finishStreamSpinner(sp, "vpc", cfntypes.StackStatusCreateComplete, "") }))
 	assert.Contains(t, out, "✓")
 	assert.Contains(t, out, "vpc")
-	assert.Contains(t, out, string(cfntypes.StackStatusCreateComplete))
+	assert.Contains(t, out, "Created")
 }
 
-// finishStreamSpinner must report a failed terminal status via Spinner.Error
-// (FormatError coloring).
+// finishStreamSpinner must retain the exact failed status with an error icon.
 func TestFinishStreamSpinner_FailedStatus(t *testing.T) {
 	sp := spinner.New("watching")
-	out := normalizeUIOutput(captureStderr(t, func() { finishStreamSpinner(sp, "vpc", cfntypes.StackStatusCreateFailed) }))
+	out := normalizeUIOutput(captureStderr(t, func() { finishStreamSpinner(sp, "vpc", cfntypes.StackStatusCreateFailed, "") }))
 	assert.Contains(t, out, "✗")
 	assert.Contains(t, out, "vpc")
-	assert.Contains(t, out, string(cfntypes.StackStatusCreateFailed))
+	assert.Contains(t, out, "CREATE_FAILED")
 }
 
 // finishStreamSpinner must be a no-op for a nil spinner (the non-TTY path
 // never starts one).
 func TestFinishStreamSpinner_NilSpinnerIsNoop(t *testing.T) {
-	out := captureStderr(t, func() { finishStreamSpinner(nil, "vpc", cfntypes.StackStatusCreateComplete) })
+	out := captureStderr(t, func() { finishStreamSpinner(nil, "vpc", cfntypes.StackStatusCreateComplete, "") })
 	assert.Empty(t, out)
 }
 

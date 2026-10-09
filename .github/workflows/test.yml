@@ -1333,6 +1333,7 @@ jobs:
           - emulator-aws
           - terraform-tests
           - backend-provisioning
+          - cloudformation-advanced
 
     timeout-minutes: 30
     steps:
@@ -1343,8 +1344,11 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
             checkpoint-api.hashicorp.com:443
+            d2glxqk2uabbnd.cloudfront.net:443
+            d5l0dvt14r5h8.cloudfront.net:443
             github.com:443
             mirror.gcr.io:443
+            public.ecr.aws:443
             raw.githubusercontent.com:443
             registry.terraform.io:443
             rekor.sigstore.dev:443

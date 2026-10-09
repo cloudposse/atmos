@@ -152,7 +152,7 @@ type Task struct {
 
 	// File picker fields.
 	Path       string   `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`                   // Starting path for file picker, or target path for workdir.
-	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source: workdir provisioning (string or source map), or the directory/file to archive (archive step type, string only).
+	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source: workdir provisioning (string or source map), or a local directory/file for archive and publish steps (string only).
 	Reset      bool     `yaml:"reset,omitempty" json:"reset,omitempty" mapstructure:"reset"`                // Reset the target path before provisioning.
 	Extensions []string `yaml:"extensions,omitempty" json:"extensions,omitempty" mapstructure:"extensions"` // File extensions filter.
 
@@ -251,11 +251,14 @@ type Task struct {
 	Provider         string                `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`    // auto, docker, podman, or empty for auto-detect.
 	Container        *WorkflowContainer    `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"` // Workflow container override or false to run on host.
 
+	// Target selects a named component target or an inline publishing target.
+	Target any `yaml:"target,omitempty" json:"target,omitempty" mapstructure:"target" jsonschema:"oneof_type=string;object"`
+
 	// Archive step fields (type: archive). Action reuses the container step's
 	// Action field (create | extract | update | replace); Source reuses the
 	// workdir step's Source field (archive requires it to be a string path).
 	Format      string   `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`                // zip | tar | tgz | tar.bz2 | tar.xz; inferred from destination/source extension when omitted.
-	Destination string   `yaml:"destination,omitempty" json:"destination,omitempty" mapstructure:"destination"` // Pack: archive file to write. Extract: directory to extract into.
+	Destination string   `yaml:"destination,omitempty" json:"destination,omitempty" mapstructure:"destination"` // Archive output/extraction path, or publish path relative to its target.
 	Subpath     string   `yaml:"subpath,omitempty" json:"subpath,omitempty" mapstructure:"subpath"`             // Pack: nest source content under this path inside the archive. Extract: only extract this path, prefix stripped.
 	Include     []string `yaml:"include,omitempty" json:"include,omitempty" mapstructure:"include"`             // Glob(s); keep only matching files.
 	Exclude     []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`             // Glob(s); drop matching files, evaluated before include.
@@ -548,6 +551,9 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Exclude:     task.Exclude,
 		Mtime:       task.Mtime,
 
+		// S3 upload step fields.
+		Target: task.Target,
+
 		// Require step fields.
 		Tools: task.Tools,
 		Files: task.Files,
@@ -714,6 +720,9 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Include:     step.Include,
 		Exclude:     step.Exclude,
 		Mtime:       step.Mtime,
+
+		// S3 upload step fields.
+		Target: step.Target,
 
 		// Require step fields.
 		Tools: step.Tools,

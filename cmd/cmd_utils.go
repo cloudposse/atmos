@@ -1006,6 +1006,7 @@ func executeCustomCommand(
 	stepVars.SetTemplatePasses(3)
 	stepVars.ProtectTemplateRoots("Arguments", "Flags", "flags", "TrailingArgs")
 	configureCustomCommandScannerContext(stepVars, &atmosConfig, toolchainEnv.PATH(), authManager)
+	stepVars.SetFlag("identity", commandIdentity)
 
 	// Freshness checker for steps' `inputs:` (sources/generates/check), shared across all
 	// steps in this command run. See internal/exec/workflow_utils.go's identical wiring.

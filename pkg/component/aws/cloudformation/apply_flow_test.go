@@ -191,8 +191,8 @@ func TestDeployDirect_PreviewPrecedesConfirmation(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, prompt, `"vpc"`)
 	preview := normalizeUIOutput(out)
-	assert.Contains(t, preview, "vpc: 1 resource change(s)")
-	assert.Contains(t, preview, "Add AWS::S3::Bucket Bucket")
+	assert.Contains(t, preview, "Changes for vpc · 1 resource")
+	assert.Contains(t, preview, "Add Bucket AWS::S3::Bucket")
 }
 
 // A declined prompt discards the changeset and, for a brand-new stack, the empty
@@ -237,7 +237,7 @@ func TestDeployDirect_AutoApproveSkipsPrompt(t *testing.T) {
 	var err error
 	out := captureStderr(t, func() { _, err = deployDirect(autoApproveOctx(), client, vpcSpec()) })
 	require.NoError(t, err)
-	assert.Contains(t, normalizeUIOutput(out), "vpc:")
+	assert.Contains(t, normalizeUIOutput(out), "Changes for vpc · 0 resources")
 }
 
 // M4: a no-op apply deletes the FAILED "didn't contain changes" changeset, says

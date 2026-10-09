@@ -1032,7 +1032,7 @@ func TestFormatOutputs_Table(t *testing.T) {
 	require.NoError(t, err)
 
 	// Table should contain headers and values.
-	assert.Contains(t, result, "Key")
+	assert.Contains(t, result, "Output")
 	assert.Contains(t, result, "Value")
 	assert.Contains(t, result, "url")
 	assert.Contains(t, result, "https://example.com")
@@ -1048,7 +1048,7 @@ func TestFormatOutputs_Table_EmptyOutputs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should still contain headers.
-	assert.Contains(t, result, "Key")
+	assert.Contains(t, result, "Output")
 	assert.Contains(t, result, "Value")
 }
 
@@ -1082,9 +1082,10 @@ func TestFormatOutputs_Table_ComplexTypes(t *testing.T) {
 	assert.Contains(t, result, "simple")
 	assert.Contains(t, result, "list")
 	assert.Contains(t, result, "map")
-	// Complex types should be JSON-encoded.
-	assert.Contains(t, result, `["a","b","c"]`)
-	assert.Contains(t, result, `{"key":"val"}`)
+	// Complex types should occupy indented value blocks.
+	assert.Contains(t, result, "list    [\n")
+	assert.Contains(t, result, "\n           \"a\",\n")
+	assert.Contains(t, result, "\n           \"key\": \"val\"\n")
 }
 
 // TestFormatOutputs_Table_IntegerAndFloat tests table format with numeric types.
@@ -1116,8 +1117,8 @@ func TestFormatValueForTable(t *testing.T) {
 		{"bool true", true, "true"},
 		{"bool false", false, "false"},
 		{"nil", nil, ""},
-		{"slice", []any{"a", "b"}, `["a","b"]`},
-		{"map", map[string]any{"key": "value"}, `{"key":"value"}`},
+		{"slice", []any{"a", "b"}, "[\n  \"a\",\n  \"b\"\n]"},
+		{"map", map[string]any{"key": "value"}, "{\n  \"key\": \"value\"\n}"},
 		{"nested map", map[string]any{"outer": map[string]any{"inner": "val"}}, `inner`},
 	}
 
@@ -1490,4 +1491,24 @@ func TestFormatValueForTable_MarshalErrorFallsBackToDefaultFormat(t *testing.T) 
 	ch := make(chan int)
 	result := formatValueForTable(ch, nil)
 	assert.Equal(t, fmt.Sprintf("%v", ch), result)
+}
+
+func TestTablePrettyPrintsJSONDocuments(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value any
+		want  string
+	}{
+		{"object string", `{"id":9007199254740993,"nested":{"ok":true}}`, "{\n  \"id\": 9007199254740993,\n  \"nested\": {\n    \"ok\": true\n  }\n}"},
+		{"array string", `[1,{"name":"value"}]`, "[\n  1,\n  {\n    \"name\": \"value\"\n  }\n]"},
+		{"map", map[string]any{"key": "value"}, "{\n  \"key\": \"value\"\n}"},
+		{"slice", []any{true, false}, "[\n  true,\n  false\n]"},
+		{"scalar string", `"hello"`, `"hello"`},
+		{"number string", "123.00", "123.00"},
+		{"invalid json", `{"key":`, `{"key":`},
+		{"trailing document", `{"key":1} {}`, `{"key":1} {}`},
+		{"url", "https://example.com/", "https://example.com/"},
+	} {
+		t.Run(tc.name, func(t *testing.T) { assert.Equal(t, tc.want, formatValueForTable(tc.value, nil)) })
+	}
 }
