@@ -1,6 +1,6 @@
 module github.com/cloudposse/atmos
 
-go 1.26.8
+go 1.26.9
 
 require (
 	al.essio.dev/pkg/shellescape v1.6.0
@@ -76,7 +76,7 @@ require (
 	github.com/gofrs/flock v0.13.1
 	github.com/google/cel-go v0.30.0
 	github.com/google/go-cmp v0.7.0
-	github.com/google/go-containerregistry v0.21.9
+	github.com/google/go-containerregistry v0.22.0
 	github.com/google/go-github/v59 v59.0.0
 	github.com/google/renameio/v2 v2.0.2
 	github.com/google/uuid v1.6.0
@@ -136,9 +136,9 @@ require (
 	go.uber.org/mock v0.6.0
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/oauth2 v0.36.0
-	golang.org/x/sync v0.22.0
-	golang.org/x/term v0.45.0
-	golang.org/x/text v0.41.0
+	golang.org/x/sync v0.23.0
+	golang.org/x/term v0.46.0
+	golang.org/x/text v0.42.0
 	google.golang.org/api v0.289.0
 	google.golang.org/genai v1.58.0
 	google.golang.org/grpc v1.83.2
@@ -238,7 +238,7 @@ require (
 	github.com/dgraph-io/ristretto/v2 v2.4.0 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
-	github.com/docker/cli v29.6.2+incompatible // indirect
+	github.com/docker/cli v29.7.2+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.7 // indirect
 	github.com/docker/libkv v0.2.2-0.20180912205406-458977154600 // indirect
 	github.com/dsnet/compress v0.0.1 // indirect
@@ -328,7 +328,7 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/kevinburke/ssh_config v1.6.0 // indirect
-	github.com/klauspost/compress v1.19.1 // indirect
+	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
@@ -442,11 +442,11 @@ require (
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	go4.org/unsafe/assume-no-moving-gc v0.0.0-20231121144256-b99613f794b6 // indirect
 	gocloud.dev v0.41.0 // indirect; Pinned: gomplate/v3's s3blob code references s3blob.URLOpener.ConfigProvider, which was removed in gocloud.dev v0.42+. Bump when gomplate/v3 updates or when we migrate the gomplate/v3 usages to gomplate/v4.
-	golang.org/x/crypto v0.56.0
+	golang.org/x/crypto v0.57.0
 	golang.org/x/exp v0.0.0-20260508232706-74f9aab9d74a // indirect
-	golang.org/x/mod v0.40.0 // indirect
-	golang.org/x/net v0.58.0 // indirect
-	golang.org/x/sys v0.47.0
+	golang.org/x/mod v0.41.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/sys v0.48.0
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.49.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
