@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,8 +34,10 @@ func TestCustomCommandShellViewport(t *testing.T) {
 			stdout, stderr := captureStdoutStderr(t, func() { command.Run(command, nil) })
 			if live {
 				assert.Empty(t, stdout, "successful viewport output must not leak to stdout")
-				assert.NotContains(t, stderr, "passing-stderr")
-				assert.Contains(t, stderr, "compile completed")
+				// Raw terminal capture can include live frames drawn before the viewport
+				// clears them. TestOutputViewportTailAndResize verifies that clearing;
+				// here verify the command finishes with its summary and no stdout replay.
+				assert.Regexp(t, "compile completed\\r?\\n$", ansi.Strip(stderr))
 			} else {
 				assert.Equal(t, "passing-stdout", stdout)
 				assert.Equal(t, "passing-stderr", stderr)
