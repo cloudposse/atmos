@@ -213,3 +213,18 @@ func TestStateContainsDestinations(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &state))
 	require.Len(t, state.Records, 3)
 }
+
+func TestLocalSnapshotChangesRequireUpdateEvenAfterSelectionChanges(t *testing.T) {
+	e, repo := fixture(t)
+	run(t, e, Options{})
+	write(t, filepath.Join(repo, "skills", "demo", "changed.txt"), "changed")
+	e.Config.AI.Skills["test"].Include = []string{"demo"}
+	_, err := e.Run(context.Background(), Options{})
+	require.ErrorIs(t, err, ErrDrift)
+	run(t, e, Options{Update: true})
+	e.Config.AI.Skills["test"].Ref = schema.SkillRef{Dependency: "skills"}
+	write(t, filepath.Join(e.Project, "versions.lock.yaml"), "version: 1\ntracks:\n  default:\n    skills:\n      version: v1\n")
+	run(t, e, Options{})
+	write(t, filepath.Join(repo, "skills", "demo", "changed.txt"), "changed again")
+	run(t, e, Options{Update: true})
+}

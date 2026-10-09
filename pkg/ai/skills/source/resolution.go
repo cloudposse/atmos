@@ -68,9 +68,13 @@ func (e *Engine) resolveOne(ctx context.Context, o *Options, request resolutionR
 	if o.Check {
 		return previous, nil, e.checkLocalSources(&previous)
 	}
-	refresh := o.Update && d.Ref.Dependency == "" && !immutableRef(ref)
+	refresh := e.shouldRefresh(o, label, ref)
 	if !matching || refresh {
-		return e.discover(ctx, &d, ref, temp)
+		resolved, roots, err := e.discover(ctx, &d, ref, temp)
+		if err == nil && !o.Update {
+			err = unchangedLocalSnapshots(&previous, &resolved)
+		}
+		return resolved, roots, err
 	}
 	roots, err := e.replay(ctx, &previous, temp)
 	return previous, roots, err
@@ -200,4 +204,29 @@ func (e *Engine) addDesired(record *Record, tree string, wanted map[string]desir
 	record.Path = target
 	wanted[target] = desired{Record: record, Tree: tree}
 	return nil
+}
+
+func unchangedLocalSnapshots(previous, resolved *Resolution) error {
+	for _, old := range previous.Repositories {
+		if old.Commit != "" || old.Digest == "" {
+			continue
+		}
+		for _, next := range resolved.Repositories {
+			if next.Source == old.Source && next.Commit == "" && next.Digest != old.Digest {
+				return fmt.Errorf("%w: local source changed; run skill update", ErrDrift)
+			}
+		}
+	}
+	return nil
+}
+
+func (e *Engine) shouldRefresh(o *Options, label, ref string) bool {
+	if !o.Update {
+		return false
+	}
+	d := e.Config.AI.Skills[label]
+	if _, local := localPath(d.Source, e.Project); local {
+		return true
+	}
+	return d.Ref.Dependency == "" && !immutableRef(ref)
 }
