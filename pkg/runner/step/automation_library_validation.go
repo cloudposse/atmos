@@ -41,12 +41,21 @@ func validateAutomationStepFields(node *yaml.Node, stepType string) error {
 		if !fields[key] && (!scoped || !slices.Contains(automationPolicyFields, key)) {
 			return unknownAutomationFieldError(key, stepType, fields, scoped)
 		}
-		if key == "steps" {
-			for _, child := range value.Content {
-				if err := validateAutomationStepFields(child, ""); err != nil {
-					return err
-				}
-			}
+		if err := validateAutomationChildFields(key, value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateAutomationChildFields validates the fields of every nested step.
+func validateAutomationChildFields(key string, node *yaml.Node) error {
+	if key != "steps" {
+		return nil
+	}
+	for _, child := range node.Content {
+		if err := validateAutomationStepFields(child, ""); err != nil {
+			return err
 		}
 	}
 	return nil
