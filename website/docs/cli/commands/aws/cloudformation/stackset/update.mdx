@@ -53,8 +53,8 @@ atmos aws cloudformation stackset update --affected --base origin/main
 ## Flags
 
 <dl>
-  <dt>`--stack`, `-s` <em>(required)</em></dt>
-  <dd>Atmos stack.</dd>
+  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
+  <dd>Atmos stack. With `--all`, `--affected`, `--tags`, or `--labels`, this is an optional stack filter; omit it to select components across stacks.</dd>
 
   <dt>`--target` <em>(optional)</em></dt>
   <dd>The `kind: aws/stackset` provision target to use. Required when more than one is declared.</dd>
