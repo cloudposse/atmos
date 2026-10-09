@@ -14,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/toolchain/installer"
 	"github.com/cloudposse/atmos/tests/testhelpers/httpmock"
 )
 
@@ -362,7 +363,9 @@ func TestRunInstall_WithLatestKeyword(t *testing.T) {
 		Asset: "terraform", Format: "raw", BinaryName: "terraform",
 	})
 	mock.RegisterRelease("hashicorp", "terraform", httpmock.ReleaseSpec{TagName: "v1.11.4"})
-	mock.RegisterReleaseAsset("hashicorp", "terraform", "v1.11.4", "terraform", []byte("test terraform binary"))
+	// Raw release downloads append .exe on Windows, so serve that exact asset name.
+	assetName := installer.EnsureWindowsExeExtension("terraform")
+	mock.RegisterReleaseAsset("hashicorp", "terraform", "v1.11.4", assetName, []byte("test terraform binary"))
 
 	// Create a .tool-versions file
 	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
