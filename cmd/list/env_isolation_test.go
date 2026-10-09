@@ -37,29 +37,29 @@ func TestListSelectors_IgnoreTerraformEnvVars(t *testing.T) {
 	tests := []struct {
 		name   string
 		parser *flags.StandardParser
-		parse  func(cmd *cobra.Command, v *viper.Viper) (selectorTags []string, labels string)
+		parse  func(cmd *cobra.Command, v *viper.Viper) (selectorTags []string, labels []string)
 	}{
-		{"components", componentsParser, func(cmd *cobra.Command, v *viper.Viper) ([]string, string) {
+		{"components", componentsParser, func(cmd *cobra.Command, v *viper.Viper) ([]string, []string) {
 			o := parseComponentsOptions(cmd, v)
 			return o.Tags, o.LabelsRaw
 		}},
-		{"stacks", stacksParser, func(cmd *cobra.Command, v *viper.Viper) ([]string, string) {
+		{"stacks", stacksParser, func(cmd *cobra.Command, v *viper.Viper) ([]string, []string) {
 			o := parseStacksOptions(cmd, v)
 			return o.Tags, o.LabelsRaw
 		}},
-		{"metadata", metadataParser, func(cmd *cobra.Command, v *viper.Viper) ([]string, string) {
+		{"metadata", metadataParser, func(cmd *cobra.Command, v *viper.Viper) ([]string, []string) {
 			o := parseMetadataOptions(cmd, v)
 			return o.Tags, o.LabelsRaw
 		}},
-		{"instances", instancesParser, func(cmd *cobra.Command, v *viper.Viper) ([]string, string) {
+		{"instances", instancesParser, func(cmd *cobra.Command, v *viper.Viper) ([]string, []string) {
 			o := parseInstancesOptions(cmd, v)
 			return o.Tags, o.LabelsRaw
 		}},
-		{"sources", sourcesParser, func(cmd *cobra.Command, v *viper.Viper) ([]string, string) {
+		{"sources", sourcesParser, func(cmd *cobra.Command, v *viper.Viper) ([]string, []string) {
 			o := parseSourcesOptions(cmd, v, nil)
 			return o.Tags, o.LabelsRaw
 		}},
-		{"dependencies", dependenciesParser, func(cmd *cobra.Command, v *viper.Viper) ([]string, string) {
+		{"dependencies", dependenciesParser, func(cmd *cobra.Command, v *viper.Viper) ([]string, []string) {
 			o := parseDependenciesOptions(cmd, v, nil)
 			return o.Tags, o.LabelsRaw
 		}},
@@ -87,7 +87,7 @@ func TestListSelectors_IgnoreTerraformEnvVars(t *testing.T) {
 			selectorTags, labels := tt.parse(cmd, v)
 
 			assert.Equal(t, []string{"istio", "eks"}, selectorTags)
-			assert.Equal(t, "team=platform", labels)
+			assert.Equal(t, []string{"team=platform"}, labels)
 		})
 
 		t.Run(tt.name+"/cli flags win over env vars", func(t *testing.T) {
@@ -102,7 +102,7 @@ func TestListSelectors_IgnoreTerraformEnvVars(t *testing.T) {
 			selectorTags, labels := tt.parse(cmd, v)
 
 			assert.Equal(t, []string{"cli"}, selectorTags)
-			assert.Equal(t, "team=cli", labels)
+			assert.Equal(t, []string{"team=cli"}, labels)
 		})
 	}
 }

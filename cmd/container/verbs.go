@@ -80,7 +80,7 @@ func buildVerbCmd(name, short, long string, optionalArg, withAllFlag bool) *cobr
 		parser := flags.NewStandardParser(
 			flags.WithBoolFlag("all", "", false, "Operate on all container components in all stacks (scope to one stack with --stack)"),
 			flags.WithStringSliceFlag("tags", "", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
-			flags.WithStringFlag("labels", "", "", "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
+			flags.WithStringSliceFlag("labels", "", nil, "Filter by labels (comma-separated key=value or key:value pairs within an occurrence, and/or repeated, matches all): --labels=cost-center=platform,compliance=sox or --labels cost-center=platform --labels compliance=sox"),
 		)
 		parser.RegisterFlags(cmd)
 
@@ -92,7 +92,7 @@ func buildVerbCmd(name, short, long string, optionalArg, withAllFlag bool) *cobr
 			if err := baseValidator(c, args); err != nil {
 				return err
 			}
-			labelsFlag, _ := c.Flags().GetString("labels")
+			labelsFlag, _ := c.Flags().GetStringSlice("labels")
 			_, err := tags.ParseLabelsFlag(labelsFlag)
 			return err
 		}

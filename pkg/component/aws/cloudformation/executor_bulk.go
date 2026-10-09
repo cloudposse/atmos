@@ -1,6 +1,8 @@
 package cloudformation
 
 import (
+	"maps"
+
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci"
@@ -59,7 +61,7 @@ func executeBulk(
 		Stacks:        stacks,
 		ComponentType: cfg.CloudFormationComponentType,
 		SubCommand:    string(operation),
-		Flags:         ctx.Flags,
+		Flags:         bulkOperationFlags(operation, ctx.Flags),
 		Selection:     selection,
 	})
 }
@@ -227,4 +229,18 @@ func dispatchAffected(
 		)
 		return affected, err
 	}
+}
+
+// bulkOperationFlags preserves selection context for fmt after graph dispatch
+// clears selectors to prevent recursively entering the bulk path.
+func bulkOperationFlags(operation Operation, flags map[string]any) map[string]any {
+	if operation != OperationFmt {
+		return flags
+	}
+	result := maps.Clone(flags)
+	if result == nil {
+		result = make(map[string]any)
+	}
+	result[fmtSkipInlineKey] = true
+	return result
 }

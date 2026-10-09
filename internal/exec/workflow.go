@@ -9,12 +9,14 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -43,10 +45,12 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	commandLineLabels, err := flags.GetString("labels")
-	if err != nil {
-		return err
-	}
+	commandLineLabelsSlice := tags.ReadLabelsFlag(viper.GetViper())
+	// commandLineLabels stays a single comma-joined string here because it's only ever
+	// forwarded verbatim as one `--labels=...` occurrence to nested workflow/atmos
+	// invocations (see workflowCommandFilters below), never parsed into a map in this
+	// file -- the downstream --labels flag (also a StringSlice) comma-splits it again.
+	commandLineLabels := strings.Join(commandLineLabelsSlice, ",")
 	processStacks := commandLineStack != ""
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
