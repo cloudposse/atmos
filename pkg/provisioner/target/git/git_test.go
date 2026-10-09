@@ -33,6 +33,7 @@ func (e *errEnvProvider) EnsureIdentityEnvironment(_ context.Context, _ string) 
 	return nil, e.err
 }
 
+// TestParseConfig verifies every git target field, including pull_request, is parsed.
 func TestParseConfig(t *testing.T) {
 	block := map[string]any{
 		"repository": "deployments",
@@ -57,6 +58,7 @@ func TestParseConfig(t *testing.T) {
 	assert.False(t, *cfg.Split)
 }
 
+// TestParseConfigEmpty verifies an empty target block yields zero values.
 func TestParseConfigEmpty(t *testing.T) {
 	cfg, err := parseConfig(map[string]any{})
 	require.NoError(t, err)

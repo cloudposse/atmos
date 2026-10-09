@@ -25,11 +25,13 @@ type fakePublisher struct {
 	calls []atmosgit.PullRequestOptions
 }
 
+// Reconcile records the options and reports the pull request as created on the first call only.
 func (f *fakePublisher) Reconcile(_ context.Context, options *atmosgit.PullRequestOptions) (*atmosgit.PullRequestResult, error) {
 	f.calls = append(f.calls, *options)
 	return &atmosgit.PullRequestResult{Number: 7, URL: "https://example.invalid/pr/7", Created: len(f.calls) == 1}, nil
 }
 
+// PullRequestBodyBadge returns a marker so tests can assert the badge leads the default body.
 func (f *fakePublisher) PullRequestBodyBadge() string { return "BADGE" }
 
 // installPRFakes swaps the forge-facing seams for doubles: the publisher registry, forge
@@ -48,6 +50,7 @@ func installPRFakes(t *testing.T) *fakePublisher {
 	return publisher
 }
 
+// requireGit skips the test when the git binary is unavailable and isolates git from the developer's config.
 func requireGit(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
@@ -82,11 +85,13 @@ func prDeliverInput(bare, workdir, branch string, pr map[string]any, files map[s
 	}
 }
 
+// remoteRefCount returns the number of commits reachable from ref in the bare repository.
 func remoteRefCount(t *testing.T, bare, ref string) string {
 	t.Helper()
 	return strings.TrimSpace(gitCmd(t, bare, "rev-list", "--count", ref))
 }
 
+// manifest builds a single-file artifact with the given namespace.yaml content.
 func manifest(content string) map[string][]byte {
 	return map[string][]byte{"namespace.yaml": []byte(content)}
 }
@@ -176,6 +181,8 @@ func TestDeliverPullRequestRecreatesHeadAfterMerge(t *testing.T) {
 	assert.Equal(t, "2", remoteRefCount(t, bare, testPRBranch), "the new head must be one commit on top of base, not stacked on the stale head")
 }
 
+// TestDeliverPullRequestSkipsReconcileWhenNothingChanged verifies that a head with nothing beyond
+// the base is neither pushed nor turned into a pull request.
 func TestDeliverPullRequestSkipsReconcileWhenNothingChanged(t *testing.T) {
 	requireGit(t)
 	publisher := installPRFakes(t)
@@ -193,6 +200,8 @@ func TestDeliverPullRequestSkipsReconcileWhenNothingChanged(t *testing.T) {
 	assert.Empty(t, strings.TrimSpace(gitCmd(t, bare, "branch", "--list", testPRBranch)), "an empty head must not be pushed")
 }
 
+// TestResolvePullRequestAddress verifies forge detection and address parsing for Azure DevOps,
+// github.com, and GitHub Enterprise Server URIs over HTTPS and SSH.
 func TestResolvePullRequestAddress(t *testing.T) {
 	t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com")
 	tests := []struct {
@@ -218,6 +227,8 @@ func TestResolvePullRequestAddress(t *testing.T) {
 	}
 }
 
+// TestResolvePullRequestAddressRejectsUnsupportedURIs verifies unsupported or malformed URIs are
+// rejected instead of being treated as GitHub.
 func TestResolvePullRequestAddressRejectsUnsupportedURIs(t *testing.T) {
 	for _, uri := range []string{
 		"/tmp/origin.git",                                 // Local path.
@@ -244,6 +255,8 @@ func TestDeliverPullRequestRejectsUnsupportedForgeBeforeAnyGitOperation(t *testi
 	assert.NoDirExists(t, workdir)
 }
 
+// TestParseConfigPullRequest verifies every pull_request field decodes, and that a non-map
+// pull_request block fails closed.
 func TestParseConfigPullRequest(t *testing.T) {
 	cfg, err := parseConfig(map[string]any{"pull_request": map[string]any{
 		"enabled": true, "branch": "deploy/argocd", "title": "T", "body": "B",
@@ -259,6 +272,8 @@ func TestParseConfigPullRequest(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrGitTargetPullRequestConfig)
 }
 
+// TestDefaultPullRequestBranch verifies the default head branch name, including flattening of
+// nested segments and skipping of empty ones.
 func TestDefaultPullRequestBranch(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -281,12 +296,15 @@ func TestDefaultPullRequestBranch(t *testing.T) {
 // together with an error, as a provider does when a later label/reviewer step fails.
 type errPublisher struct{}
 
+// Reconcile returns a pull request together with errPRMetadata.
 func (errPublisher) Reconcile(context.Context, *atmosgit.PullRequestOptions) (*atmosgit.PullRequestResult, error) {
 	return &atmosgit.PullRequestResult{Number: 9, URL: "https://example.invalid/pr/9"}, errPRMetadata
 }
 
 var errPRMetadata = errors.New("add labels failed")
 
+// TestDeliverPullRequestSurfacesReconcileErrorAfterPush verifies a pull request API error is
+// returned after the head was already pushed.
 func TestDeliverPullRequestSurfacesReconcileErrorAfterPush(t *testing.T) {
 	requireGit(t)
 	installPRFakes(t)
@@ -301,6 +319,8 @@ func TestDeliverPullRequestSurfacesReconcileErrorAfterPush(t *testing.T) {
 	assert.Equal(t, "2", remoteRefCount(t, bare, testPRBranch), "the head is pushed before the PR API call")
 }
 
+// TestDeliverPullRequestFailsBeforeGitOperations verifies publisher and default-branch errors
+// abort the delivery before anything is cloned.
 func TestDeliverPullRequestFailsBeforeGitOperations(t *testing.T) {
 	errFactory := errors.New("publisher unavailable")
 	errDefault := errors.New("no default branch")
@@ -338,6 +358,8 @@ func TestDeliverPullRequestFailsBeforeGitOperations(t *testing.T) {
 	}
 }
 
+// TestDeliverPullRequestRemoteProbeError verifies an unreachable remote is reported as an error
+// rather than treated as an absent head branch.
 func TestDeliverPullRequestRemoteProbeError(t *testing.T) {
 	requireGit(t)
 	installPRFakes(t)
@@ -351,6 +373,7 @@ func TestDeliverPullRequestRemoteProbeError(t *testing.T) {
 	assert.NoDirExists(t, workdir)
 }
 
+// TestDeliverPullRequestReconcileError verifies a clone/reconcile failure surfaces with its hint.
 func TestDeliverPullRequestReconcileError(t *testing.T) {
 	requireGit(t)
 	installPRFakes(t)
@@ -365,6 +388,8 @@ func TestDeliverPullRequestReconcileError(t *testing.T) {
 	assert.Contains(t, strings.Join(cockroacherrors.GetAllHints(err), "\n"), "Confirm the configured branch exists")
 }
 
+// TestDeliverPullRequestInvalidHeadBranch verifies an invalid head branch name fails at checkout
+// without reconciling a pull request.
 func TestDeliverPullRequestInvalidHeadBranch(t *testing.T) {
 	requireGit(t)
 	publisher := installPRFakes(t)
@@ -378,11 +403,14 @@ func TestDeliverPullRequestInvalidHeadBranch(t *testing.T) {
 	assert.Empty(t, publisher.calls)
 }
 
+// TestReportPullRequestNil verifies reporting tolerates a missing result and prints a created one.
 func TestReportPullRequestNil(t *testing.T) {
 	assert.NotPanics(t, func() { reportPullRequest(nil) })
 	assert.NotPanics(t, func() { reportPullRequest(&atmosgit.PullRequestResult{Number: 1, URL: "u", Created: true}) })
 }
 
+// TestDeliverPullRequestWriteArtifactError verifies an invalid managed path fails before anything
+// is committed or pushed.
 func TestDeliverPullRequestWriteArtifactError(t *testing.T) {
 	requireGit(t)
 	publisher := installPRFakes(t)
@@ -403,10 +431,13 @@ type stubCommitFailureProvider struct{ stubCloneFailureProvider }
 
 var errCommitStub = errors.New("commit failed")
 
+// Commit always fails with errCommitStub.
 func (s *stubCommitFailureProvider) Commit(context.Context, *atmosgit.CommitOptions) (*atmosgit.CommitResult, error) {
 	return nil, errCommitStub
 }
 
+// TestCommitAndPushReportsCommitError verifies a commit failure is returned and reported as not
+// committed.
 func TestCommitAndPushReportsCommitError(t *testing.T) {
 	s := &repoSession{provider: &stubCommitFailureProvider{}, resolved: &atmosgit.ResolvedRepository{}}
 
