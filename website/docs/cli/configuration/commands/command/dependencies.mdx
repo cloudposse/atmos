@@ -105,7 +105,7 @@ Use tool dependencies in custom commands to ensure all team members and CI/CD pi
 
 ## Using Toolchain Tools
 
-Custom commands automatically have access to tools defined in your project's `.tool-versions` file. The toolchain ensures the correct versions are installed and available in PATH when your command executes.
+Custom commands automatically have access to tools defined in your project's `.tool-versions` file. Pinned versions that are already installed are added to PATH when your command executes; the [`toolchain.install`](/cli/configuration/toolchain#install) policy controls whether missing ones are installed.
 
 ### Automatic Tool Access
 
@@ -129,11 +129,12 @@ commands:
       - kubectl apply -f manifests/
 ```
 
-When you run `atmos deploy`:
-1. Atmos reads `.tool-versions` to identify required tools
-2. Missing tools are automatically installed
-3. PATH is updated to include toolchain binaries
-4. Command steps execute with the correct tool versions
+When you run `atmos deploy` with the default [`toolchain.install: auto`](/cli/configuration/toolchain#install):
+1. Atmos reads `.tool-versions` to identify the project's tools
+2. Tools that are already installed (for example by `atmos toolchain install`) are added to `PATH`; missing tools are not downloaded
+3. Command steps execute with the pinned versions of the installed tools
+
+To have Atmos install missing `.tool-versions` tools for custom commands, set `toolchain.install: always`, or declare the tools in the command's `dependencies.tools`.
 
 ### Declaring Additional Dependencies
 

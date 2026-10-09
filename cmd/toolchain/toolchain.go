@@ -69,11 +69,13 @@ var toolchainCmd = &cobra.Command{
 		// installed.
 		if _, envSet := os.LookupEnv("ATMOS_TOOL_VERSIONS"); envSet || cmd.Flags().Changed(flagToolVersions) {
 			// Set both names: file_path takes precedence over versions_file when resolving.
-			atmosCfg.Toolchain.VersionsFile = v.GetString("toolchain.tool-versions")
+			// Read the parser-bound key, which resolves both the flag and its environment
+			// variable; toolchain.tool-versions only tracks the flag (and its default).
+			atmosCfg.Toolchain.VersionsFile = v.GetString(flagToolVersions)
 			atmosCfg.Toolchain.FilePath = atmosCfg.Toolchain.VersionsFile
 		}
 		if _, envSet := os.LookupEnv("ATMOS_TOOLCHAIN_PATH"); envSet || cmd.Flags().Changed(flagToolchainPath) {
-			path := v.GetString("toolchain.path")
+			path := v.GetString(flagToolchainPath)
 			atmosCfg.Toolchain.InstallPath = path
 			atmosCfg.Toolchain.ToolsDir = path
 		}

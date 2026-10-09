@@ -118,3 +118,33 @@ func TestInvalidToolchainInstallEnvVarFailsAtConfigLoad(t *testing.T) {
 	require.NoError(t, err)
 	require.ErrorIs(t, processEnvVars(&atmosConfig), errUtils.ErrInvalidToolchainInstall)
 }
+
+// TestInvalidToolchainInstallFailsCLIConfigLoad exercises the CLI's configuration entry point,
+// so an unknown toolchain.install value from atmos.yaml or ATMOS_TOOLCHAIN_INSTALL fails before
+// any command runs, and a valid value loads normally.
+func TestInvalidToolchainInstallFailsCLIConfigLoad(t *testing.T) {
+	tests := []struct {
+		name    string
+		yaml    string
+		env     string
+		wantErr bool
+	}{
+		{name: "invalid value in atmos.yaml", yaml: "base_path: ./\ntoolchain:\n  install: sometimes\n", wantErr: true},
+		{name: "invalid value in the environment", yaml: "base_path: ./\n", env: "sometimes", wantErr: true},
+		{name: "valid value with different case loads", yaml: "base_path: ./\ntoolchain:\n  install: Never\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writeEditionTestConfig(t, tt.yaml)
+			t.Setenv("ATMOS_TOOLCHAIN_INSTALL", tt.env)
+
+			atmosConfig, err := InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+			if tt.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrInvalidToolchainInstall)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, schema.ToolchainInstallNever, atmosConfig.Toolchain.Install)
+		})
+	}
+}

@@ -59,7 +59,9 @@ approach:
 - Added `ForCommand` and `ForDependencies` and routed custom commands, hooks, and Ansible components
   through the shared overlay.
 - Honored `toolchain.file_path` before `versions_file` in manifest resolution and the file manager,
-  and kept the `--tool-versions` flag and `ATMOS_TOOL_VERSIONS` overrides winning.
+  and kept the `--tool-versions` flag and `ATMOS_TOOL_VERSIONS` overrides winning. `atmos toolchain`
+  now reads `ATMOS_TOOL_VERSIONS` and `ATMOS_TOOLCHAIN_PATH` themselves; it previously read the flag
+  defaults (`.tool-versions`, `.tools`) whenever only the environment variable was set.
 - Fell back to an unlocked manifest read when the shared lock cannot be created because of permissions
   or a read-only filesystem. Writes still require the lock.
 - Added `ErrToolRegistryIndexUnavailable` so an unreachable Aqua registry index is reported as such,
