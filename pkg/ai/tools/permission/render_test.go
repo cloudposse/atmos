@@ -370,8 +370,17 @@ func TestHandleCachedResponse_ReportsSaved(t *testing.T) {
 }
 
 func TestAlwaysLabels(t *testing.T) {
-	assert.Equal(t, "Always allow this command", alwaysAllowLabel(scopedFakeTool{name: "Bash", key: "Bash(ls)"}))
-	assert.Equal(t, "Always deny this command", alwaysDenyLabel(scopedFakeTool{name: "Bash", key: "Bash(ls)"}))
+	for _, tool := range []scopedFakeTool{
+		{name: "Bash", key: "Bash(ls)"},
+		{name: "Read", key: "Read(/repo/go.mod)"},
+		{name: "Glob", key: "Glob(**/*.go)"},
+		{name: "WebFetch", key: "WebFetch(https://example.com)"},
+	} {
+		t.Run(tool.name, func(t *testing.T) {
+			assert.Equal(t, "Always allow this exact request", alwaysAllowLabel(tool))
+			assert.Equal(t, "Always deny this exact request", alwaysDenyLabel(tool))
+		})
+	}
 	assert.Equal(t, "Always allow atmos_list_stacks", alwaysAllowLabel(plainFakeTool{name: "atmos_list_stacks"}))
 	assert.Equal(t, "Always deny atmos → list", alwaysDenyLabel(plainFakeTool{name: "mcp__atmos__list"}))
 }

@@ -2,7 +2,7 @@
 slug: declarative-ai-skills
 title: "Declare and Lock AI Skills with Version Tracks"
 authors: [osterman]
-tags: [feature]
+tags: [feature, breaking-change]
 ---
 Shared AI skills need a record of where they came from and which revision a project uses.
 [Declarative skill sources](/cli/configuration/ai/skills#declarative-sources) put that selection in
@@ -37,6 +37,28 @@ atmos ai skill sync --check
 Commit `skills.lock.yaml` and ignore `.atmos/skills/`. See the
 [configuration reference](/cli/configuration/ai/skills#declarative-sources) for managed versions,
 local sources, explicit pruning, and recovery.
+
+### Migrating Claude Code Automation
+
+Existing MCP configurations previously caused Claude Code to approve every tool automatically.
+Both `atmos ai ask` and `atmos ai exec` now enforce
+[Atmos tool permissions](/cli/configuration/ai/providers#claude-code-tool-approval).
+With the default confirmation policy, unattended runs fail when a tool needs approval.
+
+Before upgrading CI jobs, set an explicit policy. For example, `allow` avoids prompts while
+still enforcing blocked tools:
+
+```yaml
+ai:
+  tools:
+    mode: allow
+    blocked: ["Edit", "Write"]
+```
+
+For narrower approvals, configure `ai.providers.claude-code.allowed_tools` with the specific
+Claude Code tools your job needs. The `yolo` mode bypasses all Atmos permission checks,
+including blocked tools. Edition pins do not restore the former implicit approval.
+See the [automation migration guide](/cli/commands/ai/exec#claude-code-tool-permissions).
 
 ## Get Involved
 

@@ -121,16 +121,7 @@ var listCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		statuses, err := engine.Status(cmd.Context(), source.Options{})
-		if err != nil {
-			return err
-		}
-		for _, status := range statuses {
-			if status.Name == "" {
-				status.Name = status.Source
-			}
-			entries = append(entries, listEntry{name: status.Name, displayName: status.Name, source: status.Source, displaySource: status.Source, installed: status.Status != "missing" && status.Status != "stale", sourceStatus: &status})
-		}
+		entries = appendSourceListEntries(cmd.Context(), entries, engine)
 		return renderSkillList(entries, installedOnly, detailed, outputFormat)
 	},
 }

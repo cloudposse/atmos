@@ -278,6 +278,12 @@ func (e *Engine) validateRecords(scope string, records []*Record) error {
 		if r == nil {
 			return ErrInvalid
 		}
+		if scope == scopeProject && r.Project != e.Project {
+			return fmt.Errorf("%w: project skill state in %s was recorded for %s, but the project is now at %s; "+
+				"restore the project to its recorded location and uninstall its project skills before moving it again; "+
+				"keep the installation records until those owned copies have been removed",
+				ErrInvalid, filepath.Join(e.stateDir(scopeProject), "installations.json"), r.Project, e.Project)
+		}
 		target, err := e.recordDestination(r)
 		if err != nil || r.Scope != scope || target != r.Path || seen[r.Path] {
 			return fmt.Errorf("%w: invalid recorded destination %s", ErrInvalid, r.Path)

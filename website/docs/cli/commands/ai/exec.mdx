@@ -92,6 +92,34 @@ The prompt can be provided as:
 When multiple MCP servers are configured with API providers, Atmos automatically selects only the servers relevant to your prompt using a lightweight routing call. Use `--mcp` to bypass routing and specify servers directly. CLI providers (`claude-code`, `codex-cli`, `copilot-cli`, `opencode`, `gemini-cli`) skip routing — all servers are passed to the CLI tool, which handles selection internally.
 :::
 
+## Claude Code Tool Permissions
+
+Both `ask` and `exec` apply the Atmos permission system to Claude Code tool requests.
+With the default `ai.tools.mode: require_confirmation`, an unattended run fails if a tool
+needs approval and no terminal is available.
+
+:::warning Migration for existing MCP configurations
+Previously, configuring `mcp.servers` implicitly approved all Claude Code tools, including
+built-in tools such as `Bash` and `Edit`. That implicit approval has been removed for both
+commands. Existing CI jobs may need an explicit permission policy before upgrading.
+:::
+
+For unattended execution, set `allow` to avoid prompts while retaining the blocked list:
+
+```yaml
+ai:
+  default_provider: claude-code
+  tools:
+    mode: allow
+    blocked: ["Edit", "Write"]
+```
+
+To pre-approve only specific tools in Claude Code, configure
+`ai.providers.claude-code.allowed_tools`, for example `["Read", "Bash(atmos list stacks)"]`.
+The `yolo` mode bypasses all Atmos permission checks, including blocked tools.
+See [Claude Code tool approval](/cli/configuration/ai/providers#claude-code-tool-approval)
+for cached decisions and interactive behavior.
+
 ## Exit Codes
 
 The command uses standard Unix exit codes for automation:
@@ -412,7 +440,7 @@ fi
 
 <dl>
   <dt>`atmos ai ask`</dt>
-  <dd>Non-interactive. Human-readable text output. Best for quick terminal questions.</dd>
+  <dd>Human-readable answers with interactive tool approval when needed. Best for quick terminal questions.</dd>
 
   <dt>`atmos ai chat`</dt>
   <dd>Interactive. Rich TUI with markdown. Best for extended conversations.</dd>

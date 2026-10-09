@@ -1143,7 +1143,8 @@ same run.
 2. Each permission request from Claude goes through the Atmos permission system
     (`ai.tools.mode`, `allowed`, `restricted`, `blocked`, and the persistent cache in
     `.atmos/ai.settings.local.json`). When approval is needed, Atmos shows its own prompt with the
-    tool and its parameters: Always allow, Allow once, Deny once, Always deny.
+    tool and its parameters: Allow once, Always allow this exact request, Deny once,
+    Always deny this exact request.
 3. "Always allow" for `Bash` is scoped to the exact command, for example
     `Bash(atmos list stacks)`. A different command prompts again.
 4. A denial is returned to the model so it can continue and explain. Ctrl-C at the prompt aborts
@@ -1161,10 +1162,17 @@ same run.
     raise `ai.providers.claude-code.max_turns`.
 
 **User-visible change:** Configurations with `mcp.servers` no longer get
-`--dangerously-skip-permissions` for `ask`. MCP and built-in tool calls are approved through the
-Atmos permission system, and `ai.tools.mode: allow` or `yolo` restores unattended runs.
+`--dangerously-skip-permissions` for either `ask` or `exec`. Previously, the same MCP configuration
+implicitly approved all Claude Code tools. Both commands now use the Atmos permission system.
+The default `require_confirmation` mode fails without a terminal when approval is needed, so
+existing unattended `exec` jobs must configure an explicit policy. Set `ai.tools.mode: allow`
+to avoid prompting while retaining blocked-tool enforcement, or pre-approve specific tools with
+`ai.providers.claude-code.allowed_tools`. The `yolo` mode bypasses every permission check.
+See the [automation migration example](https://atmos.tools/cli/commands/ai/exec#claude-code-tool-permissions).
+This is an ungated behavior change: edition pins cannot restore the old MCP approval bypass.
 
-**Scope:** Other CLI providers keep their existing behavior and show the plain spinner.
+**Scope:** Claude Code permission enforcement applies to both `ask` and `exec`. Only `ask`
+shows the progress spinner. Other CLI providers keep their existing approval behavior.
 
 ---
 
@@ -1174,7 +1182,7 @@ Atmos permission system, and `ai.tools.mode: allow` or `yolo` restores unattende
 
 1. **No tool-use loop** — Claude Code's `-p` mode runs its own tool loop internally.
     Atmos cannot inject custom tools mid-conversation (but can provide them via MCP).
-2. **Streaming is parsed for Claude Code `ask` only** — Atmos parses the `stream-json` event
+2. **Streaming is parsed for Claude Code `ask` and `exec` only** — Atmos parses the `stream-json` event
     stream to drive approvals and the progress spinner. Output is still presented as a single
     answer, not streamed token by token, and other CLI providers complete before output is
     available.

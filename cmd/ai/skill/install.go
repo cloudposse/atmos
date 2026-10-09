@@ -138,7 +138,7 @@ func init() {
 		flags.WithBoolFlag("yes", "y", false, "Skip confirmation prompt"),
 		flags.WithEnvVars("force", "ATMOS_AI_SKILL_FORCE"),
 		flags.WithEnvVars("yes", "ATMOS_AI_SKILL_YES"),
-		flags.WithStringFlag("path", "", "", "Override the skill install directory (default: ~/.atmos/skills). Relative paths resolve against CWD, e.g. --path .github/skills for VS Code/Copilot auto-discovery."),
+		flags.WithStringFlag("path", "", "", "Override the skill install directory (default: .atmos/skills/content; --scope user: ~/.atmos/skills/content). Relative paths resolve against CWD, e.g. --path .github/skills for VS Code/Copilot auto-discovery."),
 		flags.WithEnvVars("path", "ATMOS_AI_SKILL_PATH"),
 		flags.WithStringSliceFlag(clientFlag, "c", nil, "AI client to distribute the skill to (repeatable): claude-code, vscode, gemini"),
 		flags.WithEnvVars(clientFlag, "ATMOS_AI_SKILL_CLIENT"),

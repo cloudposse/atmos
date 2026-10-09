@@ -156,7 +156,7 @@ atmos ai skill install [source] [flags]
   <dd>Skip the confirmation prompt.</dd>
 
   <dt>`--path`</dt>
-  <dd>Override the skill install directory (default: `~/.atmos/skills`). Relative paths resolve against the current working directory, e.g. `--path .github/skills` for VS Code/Copilot auto-discovery. Setting `--path` skips auto-distribution to AI clients.</dd>
+  <dd>Override the skill install directory (default: the project’s `.atmos/skills/content`, with each skill under `<name>`; `--scope user` uses `~/.atmos/skills/content`). Relative paths resolve against the current working directory, e.g. `--path .github/skills` for VS Code/Copilot auto-discovery. Setting `--path` skips auto-distribution to AI clients.</dd>
 
   <dt>`-c, --client`</dt>
   <dd>AI client to distribute the skill to (repeatable): `claude-code`, `vscode`, `gemini`. Defaults to auto-detected clients.</dd>
@@ -255,7 +255,7 @@ atmos ai skill update [name] [flags]
   <dd>Skip the confirmation prompt.</dd>
 
   <dt>`--path`</dt>
-  <dd>Override the skill install directory (default: `~/.atmos/skills`). Relative paths resolve against the current working directory.</dd>
+  <dd>Override the skill install directory (default: the project’s `.atmos/skills/content`, with each skill under `<name>`; `--scope user` uses `~/.atmos/skills/content`). Relative paths resolve against the current working directory.</dd>
 
   <dt>`-c, --client`</dt>
   <dd>AI client to distribute the updated skill to (repeatable): `claude-code`, `vscode`, `gemini`. Defaults to auto-detected clients.</dd>
@@ -504,16 +504,6 @@ atmos ai skill install cloudposse/atmos
 ```
 </Terminal>
 
-## Related Commands
-
-<DocCardList items={[
-  {type: 'link', href: '/cli/commands/ai/ask', label: 'atmos ai ask', description: 'Ask a one-time question'},
-  {type: 'link', href: '/cli/commands/ai/chat', label: 'atmos ai chat', description: 'Start or resume an AI chat session'},
-  {type: 'link', href: '/cli/commands/ai/exec', label: 'atmos ai exec', description: 'Run Atmos and shell commands via AI prompts'},
-  {type: 'link', href: '/cli/commands/ai/sessions', label: 'atmos ai sessions', description: 'Manage AI chat sessions'},
-]} />
-
-
 ## Declarative management
 
 Use [declarative sources](/cli/configuration/ai/skills#declarative-sources) to share skill selections
@@ -533,3 +523,12 @@ and lock exact source revisions across a team.
 Installation commands accept `--source <label>` to select a declaration explicitly and `--track`
 to select the version track. Configuration commands and reconciliation support `--dry-run`.
 The existing no-argument `install` continues to install all bundled skills.
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/ai/ask', label: 'atmos ai ask', description: 'Ask a one-time question'},
+  {type: 'link', href: '/cli/commands/ai/chat', label: 'atmos ai chat', description: 'Start or resume an AI chat session'},
+  {type: 'link', href: '/cli/commands/ai/exec', label: 'atmos ai exec', description: 'Run Atmos and shell commands via AI prompts'},
+  {type: 'link', href: '/cli/commands/ai/sessions', label: 'atmos ai sessions', description: 'Manage AI chat sessions'},
+]} />

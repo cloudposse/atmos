@@ -200,7 +200,7 @@ func runRequestForm(form *huh.Form) error {
 // alwaysAllowLabel names the "always allow" choice for the tool, saying what it covers.
 func alwaysAllowLabel(tool Tool) string {
 	if _, scoped := tool.(ScopedTool); scoped {
-		return "Always allow this command"
+		return "Always allow this exact request"
 	}
 	return "Always allow " + prettyToolName(tool.Name())
 }
@@ -208,7 +208,7 @@ func alwaysAllowLabel(tool Tool) string {
 // alwaysDenyLabel names the "always deny" choice for the tool, saying what it covers.
 func alwaysDenyLabel(tool Tool) string {
 	if _, scoped := tool.(ScopedTool); scoped {
-		return "Always deny this command"
+		return "Always deny this exact request"
 	}
 	return "Always deny " + prettyToolName(tool.Name())
 }

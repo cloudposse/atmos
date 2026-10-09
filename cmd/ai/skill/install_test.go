@@ -699,6 +699,9 @@ func TestInstallCmd_CommandRegistration(t *testing.T) {
 }
 
 func TestInstallCmd_OutputDuringInstall(t *testing.T) {
+	sourceCommandFixture(t)
+	resetInstallCmdFlagsForTest(t)
+	t.Cleanup(func() { resetInstallCmdFlagsForTest(t) })
 	uiOutput := setupSkillCommandUI(t)
 
 	// Reset flags.
@@ -847,6 +850,9 @@ func TestInstallCmd_RunE_ContextUsage(t *testing.T) {
 	}
 
 	t.Run("uses context in installer", func(t *testing.T) {
+		sourceCommandFixture(t)
+		resetInstallCmdFlagsForTest(t)
+		t.Cleanup(func() { resetInstallCmdFlagsForTest(t) })
 		uiOutput := setupSkillCommandUI(t)
 		resetFlags()
 		_ = installCmd.Flags().Set("yes", "true")
@@ -918,6 +924,9 @@ func TestInstallCmd_RunE_AllFlagCombinations(t *testing.T) {
 }
 
 func TestInstallCmd_RunE_InstallOptionsPassthrough(t *testing.T) {
+	sourceCommandFixture(t)
+	resetInstallCmdFlagsForTest(t)
+	t.Cleanup(func() { resetInstallCmdFlagsForTest(t) })
 	uiOutput := setupSkillCommandUI(t)
 
 	// Reset flags before test.

@@ -236,38 +236,33 @@ When the AI needs to run a tool, for example `atmos list stacks`, `ask` pauses a
 
 <Terminal title="atmos ai ask (claude-code)">
 ```console
-$ atmos ai ask "list my stacks"
-⣽ Running atmos list stacks…
+  Permission required ────────────────────────────────────────────────────────────
+  Tool  Bash
+  Why   List all Atmos stacks
+  │
+  │ atmos list stacks
+  │
 
-🔧 Tool Execution Request
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Tool: Bash
-Description: List all Atmos stacks
 
-Parameters:
-  command: atmos list stacks
-  description: List all Atmos stacks
+  Allow execution?
+  "Always" choices are saved to .atmos/ai.settings.local.json
+  > Allow once
+    Always allow this exact request
+    Deny once
+    Always deny this exact request
 
-┃ Allow execution?
-┃ > Always allow (save to .atmos/ai.settings.local.json)
-┃   Allow once
-┃   Deny once
-┃   Always deny (save to .atmos/ai.settings.local.json)
-
-⣽ Running atmos list stacks…
-
-You have 4 stacks: ue1-network, ue1-prod, uw2-network, and uw2-prod.
+↑ up • ↓ down • / filter • enter submit
 ```
 </Terminal>
 
 Use the arrow keys to choose an option and press Enter.
 
 <dl>
-  <dt>**Always allow**</dt>
-  <dd>Run the tool and remember the decision in `.atmos/ai.settings.local.json`. For `Bash`, the decision is scoped to the exact command, for example `Bash(atmos list stacks)`. A different command still prompts.</dd>
-
   <dt>**Allow once**</dt>
   <dd>Run the tool this time only.</dd>
+
+  <dt>**Always allow**</dt>
+  <dd>Run the tool and remember the decision in `.atmos/ai.settings.local.json`. For `Bash`, the decision is scoped to the exact command, for example `Bash(atmos list stacks)`. A different command still prompts.</dd>
 
   <dt>**Deny once**</dt>
   <dd>Refuse this call. The model continues and explains what it could not do.</dd>

@@ -111,7 +111,7 @@ func init() {
 	updateParser = flags.NewStandardParser(
 		flags.WithBoolFlag("yes", "y", false, "Skip confirmation prompt"),
 		flags.WithEnvVars("yes", "ATMOS_AI_SKILL_YES"),
-		flags.WithStringFlag("path", "", "", "Override the skill install directory (default: ~/.atmos/skills). Relative paths resolve against CWD."),
+		flags.WithStringFlag("path", "", "", "Override the skill install directory (default: .atmos/skills/content; --scope user: ~/.atmos/skills/content). Relative paths resolve against CWD."),
 		flags.WithEnvVars("path", "ATMOS_AI_SKILL_PATH"),
 		flags.WithStringSliceFlag(clientFlag, "c", nil, "AI client to distribute the updated skill to (repeatable): claude-code, vscode, gemini"),
 		flags.WithEnvVars(clientFlag, "ATMOS_AI_SKILL_CLIENT"),

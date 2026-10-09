@@ -378,28 +378,29 @@ settings.
 When a tool requires confirmation, Atmos shows the tool and its parameters:
 
 ```
-🔧 Tool Execution Request
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Tool: atmos_describe_component
-Description: Describe an Atmos component configuration in a specific stack
+  Permission required ────────────────────────────────────────────────────────────
+  Tool       atmos_describe_component
+  Why        Describe an Atmos component configuration in a specific stack
+  component  vpc
+  stack      prod-use1
 
-Parameters:
-  component: vpc
-  stack: prod-use1
 
-┃ Allow execution?
-┃ > Always allow (save to .atmos/ai.settings.local.json)
-┃   Allow once
-┃   Deny once
-┃   Always deny (save to .atmos/ai.settings.local.json)
+  Allow execution?
+  "Always" choices are saved to .atmos/ai.settings.local.json
+  > Allow once
+    Always allow atmos_describe_component
+    Deny once
+    Always deny atmos_describe_component
+
+↑ up • ↓ down • / filter • enter submit
 ```
 
 <dl>
-  <dt>**Always allow**</dt>
-  <dd>Run the tool now and remember the decision in `.atmos/ai.settings.local.json`.</dd>
-
   <dt>**Allow once**</dt>
   <dd>Run the tool this time only.</dd>
+
+  <dt>**Always allow**</dt>
+  <dd>Run the tool now and remember the decision in `.atmos/ai.settings.local.json`.</dd>
 
   <dt>**Deny once**</dt>
   <dd>Refuse this call. The model continues and can explain what it could not do.</dd>
@@ -418,7 +419,7 @@ For the `Bash` tool, "Always allow" applies to the exact command you approved, n
 Bash(atmos list stacks)
 ```
 
-Running `atmos list stacks` again no longer prompts. A different command, for example `atmos describe stacks`, still prompts. Other tools are remembered by tool name.
+Running `atmos list stacks` again no longer prompts. A different command, for example `atmos describe stacks`, still prompts. Claude Code also scopes `Read`, `Edit`, `Write`, `NotebookEdit`, `Glob`, `Grep`, and `WebFetch` approvals to the request’s file path, notebook path, search path or pattern, or URL. Examples include `Read(/repo/go.mod)` and `Glob(**/*.go)`. Atmos’s own tools and requests without a specifier are remembered by bare tool name.
 
 ### Non-Interactive Runs
 

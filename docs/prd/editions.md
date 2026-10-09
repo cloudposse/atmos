@@ -255,6 +255,16 @@ current schema.
   [the migration note](https://atmos.tools/changelog/pro-upload-byte-packing#how-to-use-it)
   and [the fix log](../fixes/2026-10-07-pro-upload-byte-packing-and-413-recovery.md).
 
+  **Additional post-editions candidate (2026-10-09):** configuring `mcp.servers`
+  previously made Claude Code auto-approve every tool in `atmos ai ask` and `atmos ai exec`.
+  Both commands now enforce Atmos tool permissions; the same configuration with the default
+  `require_confirmation` policy fails in unattended runs when a tool needs approval.
+  Set `ai.tools.mode: allow` (retaining blocked tools) or pre-approve specific Claude Code
+  tools to migrate. No literal configuration default changes, and edition pins do not restore
+  the former bypass. See [PR #3352](https://github.com/cloudposse/atmos/pull/3352),
+  [the migration example](https://atmos.tools/cli/commands/ai/exec#claude-code-tool-permissions),
+  and [the provider PRD](atmos-ai-local-providers.md).
+
   **Not gatable:** the auth credential realm isolation change (2026-02-10,
   [changelog/auth-realm-isolation](https://atmos.tools/changelog/auth-realm-isolation)) is a hard
   break — cached credentials moved realms and every user had to re-login. Editions cannot roll it
@@ -281,3 +291,4 @@ current schema.
 | 2026-09-24 | 1.3 | Recorded project-relative toolchain paths and automatic-install metadata policy as behavior-gating candidates. |
 | 2026-09-25 | 1.4 | Recorded automatic exception reporting for existing Pro-enabled stacks as a behavior-gating candidate. |
 | 2026-10-07 | 1.5 | Recorded the Pro upload runtime budget fallback as a behavior-gating candidate. |
+| 2026-10-09 | 1.6 | Recorded Claude Code permission enforcement for existing MCP configurations in ask and exec as a behavior-gating candidate. |
