@@ -342,8 +342,15 @@ How the targets interact:
   direct-deploy target registers `kind: kubernetes` — the kind names the delivery mechanism, and
   `aws` alone names a cloud, not a mechanism; a future `aws/lambda` sibling registers its own).
   When no `provision:` section is declared, an implicit default target of this kind applies,
-  mirroring kubernetes' implicit `cluster` target — zero config for the common case. When packaging
-  is needed, assets upload to the component's `kind: aws/s3` target before
+  mirroring kubernetes' implicit `cluster` target — zero config for the common case. The
+  CloudFormation implementation must extend the shared resolver with
+  `SelectTargetWithDefault(provisionSection, flagTarget, defaultName, defaultKind)` and pass
+  `defaultName: "default"` and `defaultKind: "aws/cloudformation"`. The existing `SelectTarget`
+  remains the Kubernetes/Helm wrapper with its `cluster`/`kubernetes` defaults; CloudFormation
+  must use the explicit-default resolver. The implementation's no-provision regression must
+  exercise apply with no `provision:` section, assert the selected target is `default`, and
+  require the CloudFormation change-set API flow, preventing a fallback to Kubernetes delivery.
+  When packaging is needed, assets upload to the component's `kind: aws/s3` target before
   `CreateChangeSet`, including preview runs. Resolution is implicit when the component declares
   exactly one `kind: aws/s3` target; with several, the deploy-style target names its packaging store explicitly
   (`packaging: <target-name>`), and an ambiguous setup is an error with a hint — never a silent
