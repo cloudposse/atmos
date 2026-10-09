@@ -217,7 +217,7 @@ atmos aws cloudformation source list --stack dev
 
 ### Delete Vendored Source
 
-Remove the vendored component directory (requires --force for safety):
+Remove the vendored component directory without prompting (`--force` skips confirmation; omit it to confirm interactively):
 
 ```shell
 atmos aws cloudformation source delete vpc --stack dev --force
@@ -240,7 +240,7 @@ atmos aws cloudformation source delete vpc --stack dev --force
   <dd>Identity to use for authentication when downloading from protected sources (`pull` only).</dd>
 
   <dt>`--force` / `-f`</dt>
-  <dd>Force re-vendor even if component directory exists (`pull` command), or confirm deletion (`delete` command).</dd>
+  <dd>Force re-vendor even if component directory exists (`pull` command), or skip deletion confirmation (`delete` command).</dd>
 </dl>
 
 ## Authentication
