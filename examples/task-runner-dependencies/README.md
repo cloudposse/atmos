@@ -22,7 +22,8 @@ Demonstrates the custom-command and workflow task-runner's dependency system: `d
 # Dependency graph: verify depends on compile (deduped), trd-lint, and unit-test
 atmos verify
 
-# fail_fast aborts the slow sibling once step-b-fails fails
+# fail_fast skips a pending slow sibling after step-b-fails fails.
+# If step-c-slow has already started, it may still finish.
 atmos release-failfast
 
 # best_effort lets the slow sibling finish despite a failing sibling

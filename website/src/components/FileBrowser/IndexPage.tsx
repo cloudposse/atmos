@@ -71,7 +71,8 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
       // this tag as primary, fall back to any example carrying it at all, so
       // the section isn't silently dropped just because it's never anyone's
       // first tag.
-      const examples = primary.length > 0 ? primary : filteredExamples.filter((ex) => ex.tags.includes(tag));
+      // Search results belong only to their primary section so each result appears once.
+      const examples = primary.length > 0 || query ? primary : filteredExamples.filter((ex) => ex.tags.includes(tag));
       return { tag, examples };
     }),
     { tag: 'More', examples: filteredExamples.filter((ex) => ex.tags.length === 0) },
