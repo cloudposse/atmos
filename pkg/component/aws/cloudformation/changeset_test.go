@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/smithy-go"
 	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,7 +36,7 @@ func TestStackExists(t *testing.T) {
 		{
 			name: "not found",
 			setup: func(m *MockCloudFormationClient) {
-				m.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(nil, errors.New("stack vpc does not exist"))
+				m.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(nil, &smithy.GenericAPIError{Code: "ValidationError", Message: "Stack with id vpc does not exist"})
 			},
 			expected: false,
 		},
@@ -458,8 +459,11 @@ func TestChangeSetName_ShortStackName(t *testing.T) {
 // builder, while still matching both the sentinel and the original AWS error
 // via errors.Is.
 func TestWrapAPICallError_StackNotFound(t *testing.T) {
-	awsErr := errors.New(`operation error CloudFormation: UpdateTerminationProtection, https response error ` +
-		`StatusCode: 400, api error ValidationError: Stack [fixdemo-dev] does not exist`)
+	awsErr := &smithy.OperationError{
+		ServiceID:     "CloudFormation",
+		OperationName: "UpdateTerminationProtection",
+		Err:           &smithy.GenericAPIError{Code: "ValidationError", Message: "Stack [fixdemo-dev] does not exist"},
+	}
 
 	err := wrapAPICallError("fixdemo-dev", awsErr)
 	require.Error(t, err)

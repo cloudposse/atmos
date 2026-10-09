@@ -2,11 +2,11 @@ package cloudformation
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/smithy-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -16,7 +16,7 @@ func TestPollStackEvents_DeleteNotFoundCompletes(t *testing.T) {
 	for _, source := range []string{"events", "stack"} {
 		t.Run(source, func(t *testing.T) {
 			client := NewMockCloudFormationClient(gomock.NewController(t))
-			notFound := errors.New("Stack [vpc] does not exist")
+			notFound := &smithy.GenericAPIError{Code: "ValidationError", Message: "Stack [vpc] does not exist"}
 			if source == "events" {
 				client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, notFound)
 			} else {
@@ -52,7 +52,7 @@ func TestPollStackEvents_ApplyNotFoundIsNotCompletion(t *testing.T) {
 	for _, eventsNotFound := range []bool{false, true} {
 		t.Run(map[bool]string{true: "events", false: "stack"}[eventsNotFound], func(t *testing.T) {
 			client := NewMockCloudFormationClient(gomock.NewController(t))
-			notFound := errors.New("Stack [vpc] does not exist")
+			notFound := &smithy.GenericAPIError{Code: "ValidationError", Message: "Stack [vpc] does not exist"}
 			if eventsNotFound {
 				client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, notFound)
 			} else {
