@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/smithy-go"
 	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -266,7 +267,7 @@ func TestJSONOutputIsNotHTMLEscaped(t *testing.T) {
 func TestDescribeStackOutputs_ErrorMapping(t *testing.T) {
 	t.Run("missing stack", func(t *testing.T) {
 		client := NewMockCloudFormationClient(gomock.NewController(t))
-		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(nil, errors.New("api error ValidationError: Stack [vpc] does not exist"))
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(nil, &smithy.GenericAPIError{Code: "ValidationError", Message: "Stack [vpc] does not exist"})
 
 		_, err := describeStackOutputs(context.Background(), client, "vpc")
 		require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackNotFound)

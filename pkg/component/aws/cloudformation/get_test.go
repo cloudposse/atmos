@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/smithy-go"
 	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -163,7 +164,7 @@ func TestRunGetTemplate_OriginalIsByteExact(t *testing.T) {
 // A missing stack on a get verb is the stack-not-found sentinel with a hint,
 // not AWS's raw validation message. Other failures keep the API sentinel.
 func TestGetVerbs_MissingStackMapsToStackNotFound(t *testing.T) {
-	missing := errors.New("api error ValidationError: Stack with id vpc does not exist")
+	missing := &smithy.GenericAPIError{Code: "ValidationError", Message: "Stack with id vpc does not exist"}
 
 	tests := []struct {
 		name string

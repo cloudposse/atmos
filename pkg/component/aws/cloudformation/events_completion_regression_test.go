@@ -138,7 +138,7 @@ func TestStreamStackEvents_NoFinalReadWhenStackTerminalEventSeen(t *testing.T) {
 // DELETE_IN_PROGRESS). It is read by the stack ID recorded in the baseline.
 func TestStreamStackEvents_DeleteCompleteReadByStackID(t *testing.T) {
 	client := NewMockCloudFormationClient(gomock.NewController(t))
-	notFound := errors.New("Stack [vpc] does not exist")
+	notFound := &smithy.GenericAPIError{Code: "ValidationError", Message: "Stack [vpc] does not exist"}
 	deleted := stackLevelEvent("e9", cfntypes.ResourceStatusDeleteComplete)
 	stackID := *deleted.StackId
 	gomock.InOrder(
