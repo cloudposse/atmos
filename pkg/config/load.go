@@ -2875,7 +2875,10 @@ func fixAuthIdentities(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) e
 			continue
 		}
 		if err := decoder.Decode(identityData); err != nil {
-			log.Trace("Failed to decode identity", "name", name, "error", err)
+			log.Warn("Failed to decode identity", "name", name, "error", err)
+			if existing, ok := atmosConfig.Auth.Identities[name]; ok {
+				mergedIdentities[name] = existing
+			}
 			continue
 		}
 		mergedIdentities[name] = identity

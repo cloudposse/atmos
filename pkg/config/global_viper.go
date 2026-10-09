@@ -100,6 +100,7 @@ type mergedConfigSource struct {
 	content string
 }
 
+// track appends a source in effective merge order, including repeated paths.
 func (t *mergedFilesTracker) track(source mergedConfigSource) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -109,6 +110,7 @@ func (t *mergedFilesTracker) track(source mergedConfigSource) {
 	}
 }
 
+// snapshot returns an independent slice of immutable source records.
 func (t *mergedFilesTracker) snapshot() []mergedConfigSource {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -136,6 +138,7 @@ type mergedFilesRegistry struct {
 	trackers map[*viper.Viper]*mergedFilesTracker
 }
 
+// start registers an empty tracker for a configuration load.
 func (r *mergedFilesRegistry) start(v *viper.Viper) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -156,6 +159,7 @@ func (r *mergedFilesRegistry) attach(parent, child *viper.Viper) func() {
 	}
 }
 
+// track retains source content for a registered load or its attached import Viper.
 func (r *mergedFilesRegistry) track(v *viper.Viper, path string, content []byte) {
 	r.mu.Lock()
 	tracker := r.trackers[v]
@@ -165,6 +169,7 @@ func (r *mergedFilesRegistry) track(v *viper.Viper, path string, content []byte)
 	}
 }
 
+// snapshot returns the sources associated with this load, or nil if unregistered.
 func (r *mergedFilesRegistry) snapshot(v *viper.Viper) []mergedConfigSource {
 	r.mu.Lock()
 	tracker := r.trackers[v]

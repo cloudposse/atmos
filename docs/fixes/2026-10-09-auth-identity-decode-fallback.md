@@ -1,0 +1,38 @@
+# Fix: Retain decoded auth identities when reconstruction fails
+
+**Date:** 2026-10-09
+
+## Summary
+
+Preserve an already decoded identity and emit a warning when reconstruction from
+raw configuration sources fails. Addresses review feedback on #3339.
+
+## Context
+
+Reconstruction replaces the identity map when any identity decodes successfully.
+A failed identity was skipped with only a trace message, losing its existing
+Viper-decoded value. Existing import tests exercised successful reconstruction,
+but did not cover a raw value that differs from the effective Viper value.
+
+## Changes
+
+- Keep the existing entry for the same lookup key after a decode failure and log
+  the identity name and error at warning level; successful reconstruction still
+  takes precedence.
+- Cover failure with and without a fallback, successful reconstruction, and
+  preservation of an unrelated dotted identity.
+- Document source-tracking helpers and regression tests flagged by review.
+- Update the trace snapshot to count repeated source merges and use tabs in the
+  SARIF regression script as required by EditorConfig, fixing two CI failures.
+
+## Validation
+
+The new regression test failed before the fix. Config and adapter short tests,
+focused config race tests, the previously failing
+`TestCLICommands/Valid_Log_Level_in_Config_File` acceptance test, patch-scoped
+custom lint, SARIF regression tests, ShellCheck, and the affected-file schema,
+EditorConfig, and workflow validation checks passed.
+
+## Follow-ups
+
+None.

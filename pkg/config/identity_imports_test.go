@@ -98,6 +98,7 @@ auth:
 	}
 }
 
+// writeIdentityImportFixture writes an isolated configuration source and returns its path.
 func writeIdentityImportFixture(t *testing.T, dir, name, content string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
@@ -106,6 +107,7 @@ func writeIdentityImportFixture(t *testing.T, dir, name, content string) string 
 	return path
 }
 
+// TestLoadConfig_ImportedIdentitiesHierarchy checks nested imports and profile overrides in the final identities.
 func TestLoadConfig_ImportedIdentitiesHierarchy(t *testing.T) {
 	setupTestAdapters()
 	dir := t.TempDir()
@@ -153,6 +155,7 @@ auth:
 	assert.True(t, cfg.Auth.Identities["nested.reader"].Default)
 }
 
+// TestLoadConfig_ImportedIdentitiesRepeatedSources checks repeated merge precedence and deduplicated file reporting.
 func TestLoadConfig_ImportedIdentitiesRepeatedSources(t *testing.T) {
 	setupTestAdapters()
 	dir := t.TempDir()
@@ -186,6 +189,7 @@ auth:
 	assert.Equal(t, []string{first, shared, second}, LoadedConfigFiles())
 }
 
+// TestLoadConfig_ImportedIdentitiesProvisioned checks partial overrides of cached provisioned identities.
 func TestLoadConfig_ImportedIdentitiesProvisioned(t *testing.T) {
 	setupTestAdapters()
 	dir := t.TempDir()
@@ -226,6 +230,7 @@ auth:
 	assert.Equal(t, "Account.Prod/Admin", cfg.Auth.IdentityCaseMap["account.prod/admin"])
 }
 
+// TestLoadConfig_ImportedIdentitiesTrackerCleanup checks tracker cleanup on successful and failed loads.
 func TestLoadConfig_ImportedIdentitiesTrackerCleanup(t *testing.T) {
 	for _, invalid := range []bool{false, true} {
 		t.Run(fmt.Sprintf("invalid=%t", invalid), func(t *testing.T) {
@@ -254,6 +259,7 @@ func TestLoadConfig_ImportedIdentitiesTrackerCleanup(t *testing.T) {
 	}
 }
 
+// TestLoadConfig_ImportedIdentitiesConcurrent checks that concurrent loads retain only their own imported identities.
 func TestLoadConfig_ImportedIdentitiesConcurrent(t *testing.T) {
 	setupTestAdapters()
 	root := t.TempDir()
@@ -284,6 +290,7 @@ func TestLoadConfig_ImportedIdentitiesConcurrent(t *testing.T) {
 	wg.Wait()
 }
 
+// identityNames collects identity lookup keys for order-independent assertions.
 func identityNames(cfg *schema.AtmosConfiguration) []string {
 	names := make([]string, 0, len(cfg.Auth.Identities))
 	for name := range cfg.Auth.Identities {
