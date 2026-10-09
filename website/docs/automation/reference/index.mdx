@@ -11,8 +11,9 @@ import Intro from '@site/src/components/Intro'
 
 <Intro>
 The Atmos Automation Language is based on Starlark, a Python-like language.
-This reference covers its syntax, data types, and execution rules. For a first
-program and instructions to run it, start with [Custom CLI Apps](/scripting/standalone-cli-apps).
+This reference covers its syntax, data types, and execution rules. For configuration
+and runnable examples, start with [Workflows](/scripting/workflows) or
+[Custom Commands](/scripting/custom-commands).
 </Intro>
 
 ## What this reference covers
@@ -29,17 +30,6 @@ This reference covers the language. For the Atmos-supplied helpers and values, s
 [automation function reference](/functions/automation). For how scripts run in each entry point,
 see the [script step](/steps/type/script) and the overview in
 [Atmos Automation Language](/scripting/language).
-
-A first script shows the pieces together:
-
-```python
-def capacity(replicas, workers_per_replica):
-    if replicas < 1:
-        fail("replicas must be positive")
-    return replicas * workers_per_replica
-
-print("Total workers: {}".format(capacity(3, 4)))  # Total workers: 12
-```
 
 ## Topics
 
@@ -61,6 +51,17 @@ print("Total workers: {}".format(capacity(3, 4)))  # Total workers: 12
    output streams, and dry runs.
 8. [Differences from Python](/scripting/reference/differences-from-python) gives Python
    programmers a practical list of what works differently or is missing.
+
+## Example: a function and a condition
+
+```python
+def capacity(replicas, workers_per_replica):
+    if replicas < 1:
+        fail("replicas must be positive")
+    return replicas * workers_per_replica
+
+print("Total workers: {}".format(capacity(3, 4)))  # Total workers: 12
+```
 
 ## Where to go next
 

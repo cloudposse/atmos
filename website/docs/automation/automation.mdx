@@ -16,8 +16,8 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-Add scripts to workflows, custom commands, and lifecycle hooks using the Atmos
-Automation Language, based on Starlark.
+Add scripts to workflows, custom commands, and hooks using the Atmos Automation
+Language, based on Starlark.
 </Intro>
 
 Use your Atmos stacks, cloud identities, and toolchain to build, deploy, and test.
@@ -30,9 +30,24 @@ and shared functions. Run the same commands locally and in CI.
 | --- | --- |
 | [A workflow](#workflows-and-parallel-tasks) | A sequence of tasks, with parallel execution, retries, and timeouts |
 | [A custom command](#custom-commands) | An Atmos subcommand such as `atmos capacity` |
-| [A lifecycle hook](#lifecycle-hooks) | Checks or actions before or after a component operation |
+| [A hook](#lifecycle-hooks) | Checks or actions triggered by component, scaffold, or Git events |
 | [A test suite](#testing-your-automation) | Tests for scripts, command results, and deployed services |
 | [A CLI app](#executable-scripts) | A standalone script with its own arguments, flags, and help |
+
+## Script step syntax
+
+Use `type: script` and `interpreter: starlark` to add a script to a step list:
+
+```yaml
+- name: report
+  type: script
+  interpreter: starlark
+  script: ui.info("Starting")
+```
+
+Workflows, custom commands, and Git hooks accept step lists. Component and
+scaffold hooks wrap steps with an event and a hook kind; see
+[hook syntax](/scripting/lifecycle-hooks#lifecycle-hook-syntax).
 
 ## Workflows and parallel tasks
 
@@ -69,6 +84,8 @@ Steps can collect user input and pass results to later steps. See
 Add project-specific subcommands to Atmos in `atmos.yaml`. Define their
 arguments, flags, defaults, help, and steps. Commands can run existing tools or
 Starlark scripts; Atmos parses inputs and passes them to the script.
+
+### Example: report capacity
 
 Save this configuration as `atmos.yaml`. The `commands:` entry registers the
 `capacity` subcommand, its flag, and the script step that implements it:
@@ -108,12 +125,15 @@ explanations and recovery hints.
 
 ## Lifecycle hooks
 
-Run commands or scripts before or after component operations. A before-hook can
-reject invalid configuration; an after-hook can check the result or run follow-up
-tasks.
+Hooks run actions when an event occurs. Use them around component operations,
+scaffold generation, or Git events such as `pre-commit`. Component and scaffold
+hooks select lifecycle events; Git hooks are configured separately in `atmos.yaml`.
 
-Starlark hooks receive `ctx.component`, `ctx.hook`, and `ctx.operation`, including
-the component's resolved variables.
+Component hooks receive `ctx.component`, `ctx.hook`, and `ctx.operation`.
+Scaffold hooks receive template inputs; Git hooks receive Git arguments.
+See [hook syntax and inputs](/scripting/lifecycle-hooks) before adding a hook.
+
+### Example: check component ownership
 
 This example requires an owner before Terraform plans. The `dev` stack passes;
 the `unowned` stack fails the check and never starts a plan. Its tiny Terraform
@@ -122,7 +142,7 @@ module has no providers or resources, so you can try it without cloud credential
 <CastEmbed src="/casts/examples/starlark-hooks/owner-check.cast" title="Check component ownership before Terraform plans" chrome controls scrubber />
 
 <ActionCard title="Add a lifecycle hook">
-    Attach a script to a component operation.
+    Run scripts at component, scaffold, or Git events.
     <div>
       <PrimaryCTA to="/scripting/lifecycle-hooks">Read the Guide</PrimaryCTA>
     </div>
@@ -155,13 +175,13 @@ Test groups work in workflows, custom commands, and lifecycle hooks.
 
 ## Custom CLI apps {#executable-scripts}
 
-Run `.star` files directly with Atmos. No command registration in `atmos.yaml`
-is required.
+A CLI app is an executable with its own arguments, flags, and help. Run it as
+`./myapp`; no extension or command registration in `atmos.yaml` is required.
 
-With Atmos on your `PATH`, save this as `hello.star`. The first line selects
-Atmos as its interpreter. This example needs no stacks or external tools.
+With Atmos on your `PATH`, save this as `myapp`. The first line selects Atmos
+as its interpreter. This example needs no stacks or external tools.
 
-<File title="hello.star">
+<File title="myapp">
 ```python
 #!/usr/bin/env atmos
 name = ctx.args[0] if ctx.args else "world"
@@ -171,12 +191,12 @@ ui.success("Hello, {}!".format(name))
 
 <Terminal title="Run the script">
 ```shell
-chmod +x hello.star
-./hello.star platform
+chmod +x myapp
+./myapp platform
 ```
 </Terminal>
 
-It prints `Hello, platform!`. You can also use `atmos hello.star platform`,
+It prints `Hello, platform!`. You can also use `atmos ./myapp platform`,
 including on systems without shebang support.
 
 The following script uses the built-in `fs` and `json` helpers to read a service
