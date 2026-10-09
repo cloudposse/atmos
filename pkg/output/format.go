@@ -158,6 +158,11 @@ func FormatSingleValueWithOptions(key string, value any, format Format, opts For
 		transformedKey = strings.ToUpper(key)
 	}
 
+	// Table rendering also needs the supplied syntax-highlighting configuration.
+	if format == FormatTable {
+		return formatTable(map[string]any{transformedKey: value}, opts)
+	}
+
 	return dispatchSingleValueFormat(transformedKey, value, format)
 }
 
