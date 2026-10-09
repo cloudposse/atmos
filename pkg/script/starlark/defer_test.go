@@ -121,3 +121,32 @@ func TestDeferValidation(t *testing.T) {
 		require.ErrorIs(t, err, errUtils.ErrStarlarkInvalidArgument, source)
 	}
 }
+
+func TestDeferCancellationDuringCleanupStillRunsRemainingCalls(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	runner := NewMockRunner(gomock.NewController(t))
+	gomock.InOrder(
+		runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, _ process.TaskSpec) process.Result {
+			cancel()
+			return process.Result{Err: ctx.Err()}
+		}),
+		runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, _ process.TaskSpec) process.Result {
+			assert.NoError(t, ctx.Err(), "later cleanup uses a live grace context")
+			_, bounded := ctx.Deadline()
+			assert.True(t, bounded, "cleanup still has a deadline")
+			return process.Result{}
+		}),
+	)
+	var out bytes.Buffer
+	_, err := New(WithProcessRunner(runner)).Execute(ctx, script.Spec{Name: "test.star", Stdout: &out, Source: `
+def cleanup():
+    exec.run(["cleanup"])
+    print("cleanup completed")
+defer(cleanup)
+defer(lambda: exec.run(["cancel"]))
+`})
+	require.Error(t, err, "the canceled first cleanup is still reported")
+	assert.Equal(t, "cleanup completed\n", out.String())
+}

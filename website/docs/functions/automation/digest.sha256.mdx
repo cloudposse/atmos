@@ -39,8 +39,8 @@ The digest as a 64-character lowercase hexadecimal string.
 ### Fingerprint a build artifact
 
 ```python
-digest = digest.sha256(fs.read_file(".build/handler.zip"))
-ci.output("artifact_sha256", digest)
+artifact_sha256 = digest.sha256(fs.read_file(".build/handler.zip"))
+ci.output("artifact_sha256", artifact_sha256)
 ```
 
 ### Confirm two builds are byte-identical

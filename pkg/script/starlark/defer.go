@@ -65,10 +65,15 @@ func (s *session) runDeferred(ctx context.Context, t *starlark.Thread, bodyErr e
 	if !ok || len(stack.calls) == 0 {
 		return bodyErr
 	}
-	thread, stop := s.deferThread(ctx, t)
-	defer stop()
+	thread := t
+	stop := func() {}
+	defer func() { stop() }()
 	var failures []error
 	for len(stack.calls) > 0 {
+		// Cancellation can arrive during cleanup; switch once and share one grace deadline.
+		if thread == t && ctx.Err() != nil {
+			thread, stop = s.deferThread(ctx, t)
+		}
 		last := len(stack.calls) - 1
 		call := stack.calls[last]
 		stack.calls = stack.calls[:last]

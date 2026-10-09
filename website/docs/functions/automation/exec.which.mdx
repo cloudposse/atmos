@@ -63,7 +63,11 @@ exec.run([tf, "version"])
 ### Report where a tool came from
 
 ```python
-ui.info("Using " + exec.which("jq"))
+jq = exec.which("jq")
+if jq:
+    ui.info("Using " + jq)
+else:
+    ui.info("jq is not installed")
 ```
 
 ## Errors

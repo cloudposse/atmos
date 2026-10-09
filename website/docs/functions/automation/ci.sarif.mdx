@@ -58,15 +58,18 @@ ci.sarif("trivy.sarif", category = "trivy")
 
 ```python
 for component in ["vpc", "eks"]:
-    report = "build/" + component + ".sarif"
-    exec.run(["checkov", "--directory=components/terraform/" + component, "--output=sarif", "--output-file-path=build"])
-    ci.sarif(report, category = "checkov-" + component)
+    report_dir = "build/" + component
+    result = exec.run(["checkov", "--directory=components/terraform/" + component, "--output=sarif", "--output-file-path=" + report_dir], check = False)
+    ci.sarif(report_dir + "/results_sarif.sarif", category = "checkov-" + component)
+    if result.exit_code != 0:
+        fail("Checkov failed for " + component)
 ```
 
 ## Errors
 
 - A missing or non-string `path`, or a file that does not exist, fails the script.
-- An API error or a missing permission fails the script. A gated-off call never fails.
+- An API error or a missing permission fails the script.
+- The file must exist and be readable even when uploads are disabled; Atmos reads it before checking the upload gate.
 
 ## Related
 

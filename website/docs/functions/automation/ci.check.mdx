@@ -79,9 +79,12 @@ A handle with these attributes and one method:
 ### Report progress
 
 ```python
-check = ci.check("deploy / prod", state = "in_progress", description = "Applying 4 components")
-exec.run(["atmos", "terraform", "deploy", "vpc", "--stack=prod"])
-check.update("success", description = "Applied 4 components")
+check = ci.check("deploy / prod", state = "in_progress", description = "Applying vpc")
+result = exec.run(["atmos", "terraform", "deploy", "vpc", "--stack=prod"], check = False)
+if result.exit_code != 0:
+    check.update("failure", description = "Deployment failed")
+    fail("deployment failed")
+check.update("success", description = "Applied vpc")
 ```
 
 ### Report a failure with a link
