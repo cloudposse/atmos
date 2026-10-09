@@ -219,11 +219,19 @@ jobs:
           GOMEMLIMIT: "32GiB"
         run: govulncheck -format sarif ./... > govulncheck.sarif
 
+      - name: Normalize govulncheck call stacks
+        if: always()
+        # SARIF requires unique stacks; govulncheck can repeat identical traces.
+        # Keep all findings and distinct traces, and retain the uploader's validation.
+        run: |
+          node --test .github/scripts/normalize-govulncheck-sarif.test.mjs
+          node .github/scripts/normalize-govulncheck-sarif.mjs govulncheck.sarif govulncheck.normalized.sarif
+
       - name: Upload SARIF file
         if: always()
         uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
-          sarif_file: govulncheck.sarif
+          sarif_file: govulncheck.normalized.sarif
           category: govulncheck
           # See the ref/sha override comment on the analyze job's upload step
           # above: without it, merge_group uploads race the ephemeral
