@@ -1,0 +1,51 @@
+---
+slug: tool-versions-baseline
+title: "Your .tool-versions Now Picks the Terraform Every Component Runs"
+authors: [osterman]
+tags: [enhancement]
+---
+You pin `hashicorp/terraform 1.9.0` in `.tool-versions`, run `atmos terraform plan`, and Atmos quietly runs whatever Terraform happens to be first on your `PATH` — a Homebrew upgrade, a teammate's tfenv shim, or an older binary on a CI runner. The [Terraform versions guide](/howto/manage-terraform-versions) promised the pinned version; components didn't deliver it. Now every command and component uses `.tool-versions` as its baseline.
+<!--truncate-->
+
+## The Problem
+
+Atmos already reads `.tool-versions` for `atmos toolchain` commands and workflows, but component runs only looked at explicit `dependencies.tools` in stack configuration. A project that pinned its tools in one file still got whatever executable the machine offered when it ran `atmos terraform plan`, `atmos helmfile diff`, or a `!terraform.output` lookup. Custom commands and hooks ignored the file too.
+
+Fixing that naively would create new problems. Many `.tool-versions` files are shared with asdf or mise and list tools Atmos doesn't manage (`nodejs`, `python`) or versions like `system`. And nobody wants `atmos describe stacks` to download every tool in the file just to evaluate a template.
+
+## The Fix
+
+The project's `.tool-versions` is now a baseline for every command and [component type](/stacks/dependencies#project-defaults), with installs limited to what a run actually executes:
+
+- **Components** install their own executable when the file pins it — `terraform`, `tofu` when the component sets `command: tofu`, `helmfile` (plus `helm`), `packer`, or `ansible`. Other tools in the file are added to `PATH` only if they're already installed. Nothing else is downloaded during a component run, including read-only commands like `describe`, `plan --dry-run`, and `terraform version`.
+- **Custom commands and hooks** put already-installed tools from the file on `PATH` and install only their own `dependencies.tools`.
+- **Workflows** keep their existing behavior: they install every listed tool that is missing before the first step.
+
+Explicit `dependencies.tools` always win, even when one side uses a short name or alias and the other uses `owner/repo`. Entries Atmos can't use — `system`, `ref:` and `path:` versions, unknown tools, lines without a version, or `~> 1.9.0` written with a space — are skipped instead of failing the run. Two entries for the same tool with different versions (`tofu 1.12.6` and `opentofu/opentofu 1.11.0`) now stop with an error naming both, instead of picking one at random.
+
+## How to Use It
+
+Pin the tool once:
+
+```text title=".tool-versions"
+hashicorp/terraform 1.9.0
+```
+
+Every component without an override runs Terraform 1.9.0, installing it on first use. Override a single component when it needs something else:
+
+```yaml title="stacks/deploy/prod.yaml"
+components:
+  terraform:
+    legacy-vpc:
+      dependencies:
+        tools:
+          terraform: "1.8.5"
+```
+
+Running `legacy-vpc` uses 1.8.5 and leaves `.tool-versions` untouched. If your configuration points at a different manifest, [`toolchain.file_path`](/cli/configuration/toolchain) is now honored everywhere.
+
+If a component previously relied on a binary from `PATH` while `.tool-versions` pinned a different version, it now runs the pinned version. Remove or update the pin, or set `dependencies.tools` on the component, to keep the old binary.
+
+## Get Involved
+
+Questions or edge cases with your `.tool-versions`? Open an issue or join the conversation in the [Cloud Posse community](https://cloudposse.com/slack).
