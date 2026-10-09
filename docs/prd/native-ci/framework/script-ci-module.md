@@ -4,7 +4,7 @@
 
 ## Status
 
-Implemented. Scripts written in the Atmos Automation Language (Starlark) get a predeclared `ci` module. Follow-ups are listed under [Out of scope](#out-of-scope-follow-ups).
+Implemented. Scripts written in the Atmos Automation Language (Starlark) get a predeclared `ci` module. Remaining work is listed under [Remaining implementation work](#remaining-implementation-work).
 
 ## Problem
 

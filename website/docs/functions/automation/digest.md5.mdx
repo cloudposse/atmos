@@ -11,7 +11,7 @@ import Intro from '@site/src/components/Intro'
 <Intro>
     The `digest.md5` function returns the MD5 digest of a string as lowercase hexadecimal. MD5 is not
     collision resistant, so use it only where another system already expects it, such as comparing
-    against an S3 ETag for a single-part upload. For fingerprints you control, use
+    against a compatible S3 ETag. For fingerprints you control, use
     [`digest.sha256`](/functions/automation/digest.sha256).
 </Intro>
 
@@ -36,7 +36,9 @@ The digest as a 32-character lowercase hexadecimal string.
 
 ### Compare a local file with an S3 ETag
 
-S3 reports the MD5 of a single-part upload as its ETag, wrapped in quotes:
+This comparison applies to single-part S3 uploads that are unencrypted or use SSE-S3.
+SSE-KMS, SSE-C, and multipart uploads do not have MD5 ETags; use an explicit
+[S3 checksum](https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) for those objects.
 
 ```python
 local = digest.md5(fs.read_file(".build/handler.zip"))
