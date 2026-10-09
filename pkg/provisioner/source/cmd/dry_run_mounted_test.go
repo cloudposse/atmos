@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cfncmd "github.com/cloudposse/atmos/cmd/aws/cloudformation"
+	"github.com/cloudposse/atmos/pkg/provisioner/source"
 )
 
 func TestCloudFormationSourceDryRun_MountedCommandsPreserveSource(t *testing.T) {
@@ -36,6 +37,8 @@ func TestCloudFormationSourceDryRun_MountedCommandsPreserveSource(t *testing.T) 
 			require.NoError(t, os.MkdirAll(componentDir, 0o755))
 			template := filepath.Join(componentDir, "template.yaml")
 			require.NoError(t, os.WriteFile(template, []byte("Resources: {}\n"), 0o600))
+			// `source delete` only acts on directories the provisioner created.
+			require.NoError(t, source.WriteProvenance(componentDir, &source.Provenance{Component: "vpc", Source: "https://example.invalid/component.zip"}))
 			writeSourceDryRunFixture(t, rootDir, server.URL)
 			t.Setenv("ATMOS_CLI_CONFIG_PATH", rootDir)
 			t.Setenv("ATMOS_BASE_PATH", rootDir)
@@ -72,8 +75,11 @@ func TestCloudFormationSourceDryRun_MountedCommandsPreserveSource(t *testing.T) 
 			assert.Equal(t, "Resources: {}\n", string(contents))
 			entries, err := os.ReadDir(componentDir)
 			require.NoError(t, err)
-			require.Len(t, entries, 1)
-			assert.Equal(t, "template.yaml", entries[0].Name())
+			names := make([]string, 0, len(entries))
+			for _, entry := range entries {
+				names = append(names, entry.Name())
+			}
+			assert.ElementsMatch(t, []string{".atmos", "template.yaml"}, names)
 		})
 	}
 }

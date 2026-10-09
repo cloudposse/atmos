@@ -90,19 +90,23 @@ func executeDelete(cmd *cobra.Command, args []string, config *Config, parser *fl
 		return err
 	}
 
-	if sourceDryRun(cmd) {
-		ui.Info(fmt.Sprintf("Dry run: would delete source for %s in stack %s", component, deleteOpts.Stack))
-		return nil
-	}
-
-	// Initialize config and get component info with global flags.
-	atmosConfig, componentConfig, err := initDeleteContext(config.ComponentType, component, deleteOpts.Stack, &deleteOpts.GlobalFlags)
+	// Initialize config and get component info with global flags. Dry-run performs the same
+	// validation as the real run (component exists, has source, destination resolvable).
+	atmosConfig, componentConfig, err := loadSourceComponent(config.ComponentType, component, deleteOpts.Stack, &deleteOpts.GlobalFlags, deleteMissingSourceHint)
 	if err != nil {
 		return err
 	}
 
 	// Determine and delete the target directory.
-	return deleteSourceDirectory(atmosConfig, config.ComponentType, component, componentConfig, deleteOpts.Force)
+	return deleteSourceDirectory(atmosConfig, deleteRequest{
+		componentType:   config.ComponentType,
+		component:       component,
+		stack:           deleteOpts.Stack,
+		componentConfig: componentConfig,
+		force:           deleteOpts.Force,
+		dryRun:          sourceDryRun(cmd),
+		globalFlags:     &deleteOpts.GlobalFlags,
+	})
 }
 
 // parseDeleteFlags parses delete command flags and validates them.
@@ -138,24 +142,14 @@ func parseDeleteFlags(cmd *cobra.Command, parser *flags.StandardParser, componen
 	}, nil
 }
 
-// initDeleteContext initializes config and retrieves component configuration.
-func initDeleteContext(componentType, component, stack string, globalFlags *global.Flags) (*schema.AtmosConfiguration, map[string]any, error) {
-	// Build config info with global flag values.
-	configInfo := schema.ConfigAndStacksInfo{
-		ComponentFromArg: component,
-		ComponentType:    componentType,
-		Stack:            stack,
-	}
+// deleteMissingSourceHint is the hint shown when `source delete` targets a component without source.
+const deleteMissingSourceHint = "Only components with source can be deleted via this command"
 
-	// Wire global flags to config info if provided.
-	if globalFlags != nil {
-		configInfo.AtmosBasePath = globalFlags.BasePath
-		configInfo.AtmosConfigFilesFromArg = globalFlags.Config
-		configInfo.AtmosConfigDirsFromArg = globalFlags.ConfigPath
-		configInfo.ProfilesFromArg = globalFlags.Profile
-	}
-
-	atmosConfig, err := initCliConfigFunc(configInfo, false)
+// loadSourceComponent initializes config and retrieves the component configuration, requiring
+// that the component declares `source:`. It is shared by the real and dry-run paths of
+// `source pull` and `source delete` so both reject the same inputs.
+func loadSourceComponent(componentType, component, stack string, globalFlags *global.Flags, missingSourceHint string) (*schema.AtmosConfiguration, map[string]any, error) {
+	atmosConfig, err := initCliConfigFunc(sourceConfigInfo(componentType, component, stack, globalFlags), false)
 	if err != nil {
 		return nil, nil, errUtils.Build(errUtils.ErrFailedToInitConfig).WithCause(err).Err()
 	}
@@ -173,30 +167,77 @@ func initDeleteContext(componentType, component, stack string, globalFlags *glob
 		return nil, nil, errUtils.Build(errUtils.ErrSourceMissing).
 			WithContext("component", component).
 			WithContext("stack", stack).
-			WithHint("Only components with source can be deleted via this command").
+			WithHint(missingSourceHint).
 			Err()
 	}
 
 	return &atmosConfig, componentConfig, nil
 }
 
+// sourceConfigInfo builds the config-loading input for a component, wiring the CLI global flags
+// (--base-path, --config, --config-path, --profile) when provided.
+func sourceConfigInfo(componentType, component, stack string, globalFlags *global.Flags) schema.ConfigAndStacksInfo {
+	configInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: component,
+		ComponentType:    componentType,
+		Stack:            stack,
+	}
+	if globalFlags != nil {
+		configInfo.AtmosBasePath = globalFlags.BasePath
+		configInfo.AtmosConfigFilesFromArg = globalFlags.Config
+		configInfo.AtmosConfigDirsFromArg = globalFlags.ConfigPath
+		configInfo.ProfilesFromArg = globalFlags.Profile
+	}
+	return configInfo
+}
+
+// deleteRequest bundles the inputs of one `source delete` invocation.
+type deleteRequest struct {
+	componentType   string
+	component       string
+	stack           string
+	componentConfig map[string]any
+	force           bool
+	dryRun          bool
+	globalFlags     *global.Flags
+}
+
 // deleteSourceDirectory deletes the vendored source directory.
-func deleteSourceDirectory(atmosConfig *schema.AtmosConfiguration, componentType, component string, componentConfig map[string]any, force bool) error {
-	targetDir, err := source.DetermineTargetDirectory(atmosConfig, componentType, component, componentConfig)
+//
+// The directory is the one the runtime provisions into (see source.ResolveTarget), not one derived
+// from the instance name. A directory that a component without `source:` owns, or that the source
+// provisioner did not create, is never deleted. A dry run performs every check and skips only the
+// confirmation prompt and the deletion.
+func deleteSourceDirectory(atmosConfig *schema.AtmosConfiguration, req deleteRequest) error {
+	target, err := source.ResolveTarget(atmosConfig, req.componentType, req.component, req.componentConfig)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrSourceProvision).
 			WithCause(err).
-			WithContext("component", component).
+			WithContext("component", req.component).
 			Err()
 	}
+	targetDir := target.Dir
 
 	if _, err := os.Stat(targetDir); os.IsNotExist(err) {
 		ui.Warning(fmt.Sprintf("Directory does not exist: %s", targetDir))
 		return nil
 	}
 
+	if err := requireConfirmationPossible(req); err != nil {
+		return err
+	}
+
+	if err := checkDeletable(atmosConfig, req, targetDir); err != nil {
+		return err
+	}
+
+	if req.dryRun {
+		ui.Info(fmt.Sprintf("Dry run: would delete %s (source for %s in stack %s)", targetDir, req.component, req.stack))
+		return nil
+	}
+
 	// Prompt for confirmation unless --force.
-	confirmed, err := flags.PromptForConfirmation(fmt.Sprintf("Delete directory: %s?", targetDir), force)
+	confirmed, err := flags.PromptForConfirmation(fmt.Sprintf("Delete directory: %s?", targetDir), req.force)
 	if err != nil {
 		if errors.Is(err, errUtils.ErrInteractiveNotAvailable) {
 			ui.Warning("Use --force to delete in non-interactive mode")
@@ -222,4 +263,59 @@ func deleteSourceDirectory(atmosConfig *schema.AtmosConfiguration, componentType
 			return nil
 		},
 	)
+}
+
+// requireConfirmationPossible reports a non-interactive session without --force before the
+// ownership checks, so the established "use --force" contract comes first. A dry run never prompts.
+func requireConfirmationPossible(req deleteRequest) error {
+	if req.force || req.dryRun || flags.ConfirmationAvailable() {
+		return nil
+	}
+	ui.Warning("Use --force to delete in non-interactive mode")
+	return errUtils.ErrInteractiveNotAvailable
+}
+
+// checkDeletable loads the stack's components of this type and applies the source package's
+// deletion guard to targetDir.
+func checkDeletable(atmosConfig *schema.AtmosConfiguration, req deleteRequest, targetDir string) error {
+	// Describing stacks needs a configuration with the stack files resolved, which the lighter
+	// configuration used to describe a single component does not carry.
+	stackConfig, err := initCliConfigForPrompt(sourceConfigInfo(req.componentType, req.component, req.stack, req.globalFlags), true)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrFailedToInitConfig).
+			WithCause(err).
+			WithExplanation("Cannot verify that no other component owns the directory, so it will not be deleted").
+			Err()
+	}
+	stacksMap, err := executeDescribeStacksFunc(
+		&stackConfig,
+		req.stack,
+		nil,
+		[]string{req.componentType},
+		nil,
+		false, false, false, false,
+		nil, nil,
+	)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrExecuteDescribeStacks).
+			WithCause(err).
+			WithExplanation("Cannot verify that no other component owns the directory, so it will not be deleted").
+			WithContext("stack", req.stack).
+			Err()
+	}
+	return source.CheckDeletable(atmosConfig, req.componentType, targetDir, stackComponentsOfType(stacksMap, req.stack, req.componentType))
+}
+
+// stackComponentsOfType returns the `components.<type>` map of a stack from a describe-stacks result.
+func stackComponentsOfType(stacksMap map[string]any, stack, componentType string) map[string]any {
+	stackData, ok := stacksMap[stack].(map[string]any)
+	if !ok {
+		return nil
+	}
+	components, ok := stackData["components"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	typed, _ := components[componentType].(map[string]any)
+	return typed
 }

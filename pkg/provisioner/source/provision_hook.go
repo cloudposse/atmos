@@ -112,10 +112,12 @@ func AutoProvisionSource(
 
 	stack, _ := componentConfig["atmos_stack"].(string)
 
-	targetDir, isWorkdir, err := determineSourceTargetDirectory(atmosConfig, componentType, component, componentConfig)
+	// ResolveTarget is the single destination resolver shared with `source pull` / `source delete`.
+	target, err := ResolveTarget(atmosConfig, componentType, component, componentConfig)
 	if err != nil {
 		return wrapProvisionError(err, "Failed to determine target directory", component)
 	}
+	targetDir, isWorkdir := target.Dir, target.IsWorkdir
 
 	// Check if provisioning is needed (version change, URI change, or fresh workdir).
 	needs, reason := needsProvisioning(targetDir, sourceSpec, isWorkdir)
@@ -140,17 +142,21 @@ func AutoProvisionSource(
 		}
 	}
 
+	if authContext != nil {
+		ctx = downloader.WithAWSAuthContext(ctx, authContext.AWS)
+	}
+
 	// Vendor the source to target directory.
 	if err := vendorToTarget(ctx, atmosConfig, sourceSpec, vendorTarget{path: targetDir, component: component, writers: writers}); err != nil {
 		return err
 	}
 
-	// Write workdir metadata (when workdir is enabled).
+	// Record provenance: workdir metadata for workdir targets, the `.atmos/source.json` marker for
+	// shared component directories. Non-critical: a failure only limits `source delete`.
+	if err := recordProvenance(target, stack, sourceSpec); err != nil {
+		out.Warningf("Failed to record source provenance: %s", err)
+	}
 	if isWorkdir {
-		if err := writeWorkdirMetadata(targetDir, component, stack, sourceSpec); err != nil {
-			// Non-critical error - log and continue.
-			out.Warningf("Failed to write workdir metadata: %s", err)
-		}
 		componentConfig[workdir.WorkdirPathKey] = targetDir
 		// Signal that the workdir was wiped and re-provisioned this invocation.
 		// buildInitArgs checks this to decide whether -reconfigure is needed:
@@ -180,6 +186,10 @@ func applyGlobalTTLDefault(sourceSpec *schema.VendorComponentSource, atmosConfig
 		if atmosConfig.Components.Packer.Source != nil {
 			sourceSpec.TTL = atmosConfig.Components.Packer.Source.TTL
 		}
+	case cfg.CloudFormationComponentType:
+		if atmosConfig.Components.CloudFormation.Source != nil {
+			sourceSpec.TTL = atmosConfig.Components.CloudFormation.Source.TTL
+		}
 	}
 }
 
@@ -205,13 +215,14 @@ func extractSourceAndComponent(componentConfig map[string]any) (*schema.VendorCo
 	return sourceSpec, component, nil
 }
 
-// vendorToTarget creates the target directory and vendors the source.
+// vendorTarget identifies the provisioning destination and progress output streams.
 type vendorTarget struct {
 	path      string
 	component string
 	writers   provisioner.OutputWriters
 }
 
+// vendorToTarget provisions with progress reporting and removes a newly created target when downloading fails.
 func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, target vendorTarget) error {
 	progressMsg := fmt.Sprintf("Auto-provisioning source for '%s'", target.component)
 	completedMsg := fmt.Sprintf("Auto-provisioned source to %s", target.path)
@@ -241,14 +252,11 @@ func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 					out.Warningf("Failed to clean up target directory after failed provisioning: %s", rmErr)
 				}
 			}
-			return errUtils.Build(errUtils.ErrSourceProvision).
-				WithCause(err).
-				WithExplanation("Failed to auto-provision component source").
-				WithContext("component", target.component).
-				WithContext("source", sourceSpec.Uri).
-				WithContext("target", target.path).
-				WithHint("Verify source URI is accessible and credentials are valid").
-				Err()
+			return provisionFailure(err, "Failed to auto-provision component source", map[string]string{
+				"component": target.component,
+				"source":    sourceSpec.Uri,
+				"target":    target.path,
+			}, "Verify source URI is accessible and credentials are valid")
 		}
 
 		return nil
@@ -267,11 +275,7 @@ func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 
 // wrapProvisionError wraps an error with provision context.
 func wrapProvisionError(err error, explanation, component string) error {
-	return errUtils.Build(errUtils.ErrSourceProvision).
-		WithCause(err).
-		WithExplanation(explanation).
-		WithContext("component", component).
-		Err()
+	return provisionFailure(err, explanation, map[string]string{"component": component}, "")
 }
 
 // determineSourceTargetDirectory determines where to download the source.
@@ -323,17 +327,18 @@ func determineSourceTargetDirectory(
 //   - Version has changed from what's in metadata.
 //   - URI has changed from what's in metadata.
 //   - No metadata exists (fresh workdir).
+//   - A remote source TTL expires (workdir or a shared directory with provenance).
 //
-// Returns (false, "") if the existing workdir is up-to-date.
+// Returns (false, "") if the cached source can be reused.
 func needsProvisioning(targetDir string, sourceSpec *schema.VendorComponentSource, isWorkdir bool) (bool, string) {
 	// Check if directory exists and has content.
 	if !isNonEmptyDir(targetDir) {
 		return true, ""
 	}
 
-	// For non-workdir targets, existence is sufficient - no metadata tracking.
+	// Shared directories retain their contents unless an owned remote source expires.
 	if !isWorkdir {
-		return false, ""
+		return sharedSourceExpired(targetDir, sourceSpec)
 	}
 
 	// Directory exists and has content - check metadata for version/URI changes.

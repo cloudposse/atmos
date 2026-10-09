@@ -65,6 +65,7 @@ components:
 
 func TestSourceDelete_MixedProviders(t *testing.T) {
 	terraformDir, cloudFormationDir := mixedSourceProviders(t)
+	require.NoError(t, source.WriteProvenance(cloudFormationDir, &source.Provenance{Component: "shared", Source: "github.com/example/cloudformation"}))
 	cmd := DeleteCommand(&Config{ComponentType: "aws/cloudformation"})
 	cmd.SetArgs([]string{"shared", "--stack", "dev", "--force"})
 	require.NoError(t, cmd.Execute())
@@ -112,6 +113,32 @@ func TestSourcePull_MixedProviders(t *testing.T) {
 			require.NoError(t, cmd.Execute())
 			assert.Equal(t, 1, authLookups)
 			assert.Equal(t, 1, provisions)
+		})
+	}
+}
+
+func TestSourceDryRun_MixedProviders(t *testing.T) {
+	terraformDir, cloudFormationDir := mixedSourceProviders(t)
+	require.NoError(t, source.WriteProvenance(cloudFormationDir, &source.Provenance{Component: "shared", Source: "github.com/example/cloudformation"}))
+	originalDescribe := describeTypedComponentFunc
+	t.Cleanup(func() { describeTypedComponentFunc = originalDescribe })
+	for _, verb := range []string{"pull", "delete"} {
+		t.Run(verb, func(t *testing.T) {
+			lookups := 0
+			describeTypedComponentFunc = func(componentType, component, stack string) (map[string]any, error) {
+				lookups++
+				assert.Equal(t, "aws/cloudformation", componentType)
+				config, err := originalDescribe(componentType, component, stack)
+				require.NoError(t, err)
+				assert.Equal(t, "github.com/example/cloudformation", config["source"].(map[string]any)["uri"])
+				return config, nil
+			}
+			cmd := mountSourceCommand(t, verb, true)
+			cmd.SetArgs([]string{"source", verb, "shared", "--stack", "dev", "--dry-run"})
+			require.NoError(t, cmd.Execute())
+			assert.Equal(t, 1, lookups)
+			assert.DirExists(t, terraformDir)
+			assert.DirExists(t, cloudFormationDir)
 		})
 	}
 }

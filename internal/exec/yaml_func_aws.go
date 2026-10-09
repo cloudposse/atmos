@@ -275,6 +275,10 @@ func processTagAwsCloudFormationOutputWithContext(
 		return nil, fmt.Errorf("failed to describe aws/cloudformation component %s in stack %s: %w", component, stack, err)
 	}
 
+	resolvedAuthContext, err = cloudFormationOutputAuthForSections(atmosConfig, sections, cloudFormationOutputScope(stack, stackInfo, authDisabled), resolvedAuthContext)
+	if err != nil {
+		return nil, err
+	}
 	outputs, err := cloudFormationOutputsForSections(atmosConfig, component, sections, resolvedAuthContext)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get aws/cloudformation output for component %s in stack %s, output %s: %w", component, stack, output, err)

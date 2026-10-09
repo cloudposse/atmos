@@ -479,6 +479,11 @@ func executeDescribeStacks(
 		atmosConfig.AuthManager = authManager
 	}
 	authDisabled = authDisabled || authdeferred.AuthDisabled(authManager)
+	// Explicit identities bind to stores here, as describe component does. The deferred
+	// manager binds credentials per store read instead.
+	if !authdeferred.IsDeferred(authManager) {
+		injectDescribeComponentStoreAuthResolver(atmosConfig, authManager)
+	}
 
 	stacksMap, _, deferredContexts, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
 	if err != nil {
@@ -633,6 +638,11 @@ func propagateAuth(configAndStacksInfo *schema.ConfigAndStacksInfo, authManager 
 	}
 	configAndStacksInfo.AuthManager = authManager
 	managerStackInfo := authManager.GetStackInfo()
+	// Carry the caller's original identity selection so evaluation sees the same request
+	// describe component and deploy do.
+	if managerStackInfo != nil && managerStackInfo.RequestedIdentity != nil {
+		configAndStacksInfo.RequestedIdentity = managerStackInfo.RequestedIdentity
+	}
 	if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
 		configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
 	}

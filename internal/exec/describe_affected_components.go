@@ -63,6 +63,7 @@ const (
 	// Affected reasons for aws/cloudformation-specific sections.
 	affectedReasonStackStackName             = "stack.stack_name"
 	affectedReasonStackTemplate              = "stack.template"
+	affectedReasonStackPath                  = "stack.path"
 	affectedReasonStackParameters            = "stack.parameters"
 	affectedReasonStackCapabilities          = "stack.capabilities"
 	affectedReasonStackTags                  = "stack.tags"
@@ -99,6 +100,7 @@ const (
 	// Section name constants for aws/cloudformation-specific isEqual comparisons.
 	sectionNameStackName             = "stack_name"
 	sectionNameTemplate              = "template"
+	sectionNamePath                  = "path"
 	sectionNameParameters            = "parameters"
 	sectionNameCapabilities          = "capabilities"
 	sectionNameTags                  = "tags"
@@ -935,8 +937,8 @@ func checkCloudFormationSettingsAffected(
 }
 
 // addCloudFormationSectionAffected checks the aws/cloudformation-specific
-// first-class sections (stack_name, template, parameters, capabilities, tags,
-// stack_policy, role_arn, notification_arns, disable_rollback,
+// first-class sections (stack_name, template, path, source, provision, parameters,
+// capabilities, tags, stack_policy, role_arn, notification_arns, disable_rollback,
 // termination_protection, timeout_in_minutes) for inline config changes
 // between the remote and current stacks, mirroring addHelmSectionAffected.
 func addCloudFormationSectionAffected(
@@ -956,6 +958,9 @@ func addCloudFormationSectionAffected(
 	}{
 		{sectionNameStackName, affectedReasonStackStackName},
 		{sectionNameTemplate, affectedReasonStackTemplate},
+		{sectionNamePath, affectedReasonStackPath},
+		{sectionNameSource, affectedReasonStackSource},
+		{sectionNameProvision, affectedReasonStackProvision},
 		{sectionNameParameters, affectedReasonStackParameters},
 		{sectionNameCapabilities, affectedReasonStackCapabilities},
 		{sectionNameTags, affectedReasonStackTags},
@@ -1227,16 +1232,39 @@ func checkSecretFileChangesIndexed(
 }
 
 // getSecretFileDependencies returns the SOPS files the component's declared secrets resolve to,
-// as file dependencies. Store-backed secrets contribute nothing (they are not files). It is
-// best-effort: declarations whose provider/path cannot be resolved are skipped.
+// as file dependencies. Store-backed secrets contribute nothing (they are not files).
+//
+// `describe affected` normally runs without credentials, so a SOPS declaration whose backend is a
+// YAML-function selector (for example `sops: !aws.cloudformation.output ...`) cannot be resolved
+// here. Skipping it would silently hide a changed secret file, so the component is instead treated
+// as affected by any change under the locations its SOPS providers can use (folder dependencies),
+// and a warning names the component and declaration. Other declarations that cannot be resolved
+// are skipped.
 func getSecretFileDependencies(atmosConfig *schema.AtmosConfiguration, stackName, componentName string, componentSection map[string]any) []schema.ComponentDependency {
-	files := secrets.NewService(atmosConfig, stackName, componentName, componentSection).FileDependencies()
-	if len(files) == 0 {
+	set := secrets.NewService(atmosConfig, stackName, componentName, componentSection).ResolveFileDependencies()
+	for i := range set.Unresolved {
+		u := &set.Unresolved[i]
+		log.Warn(
+			"SOPS secret backend selector cannot be resolved without credentials; treating the component as affected by any change under the SOPS provider locations",
+			"component", componentName,
+			"stack", stackName,
+			"secret", u.Declaration,
+			"field", u.Field,
+			"selector", u.Selector,
+			"folders", u.Locations.Folders,
+			"files", u.Locations.Files,
+			"reason", u.Err,
+		)
+	}
+	if len(set.Files) == 0 && len(set.Folders) == 0 {
 		return nil
 	}
-	deps := make([]schema.ComponentDependency, 0, len(files))
-	for _, f := range files {
+	deps := make([]schema.ComponentDependency, 0, len(set.Files))
+	for _, f := range set.Files {
 		deps = append(deps, schema.ComponentDependency{Kind: "file", Path: f})
+	}
+	for _, f := range set.Folders {
+		deps = append(deps, schema.ComponentDependency{Kind: "folder", Path: f})
 	}
 	return deps
 }

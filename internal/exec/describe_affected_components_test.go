@@ -625,6 +625,9 @@ func TestAddCloudFormationSectionAffected(t *testing.T) {
 	}{
 		{"stack_name", sectionNameStackName, "vpc-prod", "vpc-staging", affectedReasonStackStackName},
 		{"template", sectionNameTemplate, "template-a.yaml", "template-b.yaml", affectedReasonStackTemplate},
+		{"path", sectionNamePath, "template-a.yaml", "template-b.yaml", affectedReasonStackPath},
+		{"source", sectionNameSource, map[string]any{"uri": "s3://bucket/a.yaml"}, map[string]any{"uri": "s3://bucket/b.yaml"}, affectedReasonStackSource},
+		{"provision", sectionNameProvision, map[string]any{"workdir": map[string]any{"enabled": true}}, map[string]any{"workdir": map[string]any{"enabled": false}}, affectedReasonStackProvision},
 		{"parameters", sectionNameParameters, map[string]any{"CidrBlock": "10.0.0.0/16"}, map[string]any{"CidrBlock": "10.1.0.0/16"}, affectedReasonStackParameters},
 		{"capabilities", sectionNameCapabilities, []any{"CAPABILITY_IAM"}, []any{"CAPABILITY_NAMED_IAM"}, affectedReasonStackCapabilities},
 		{"tags", sectionNameTags, map[string]any{"env": "a"}, map[string]any{"env": "b"}, affectedReasonStackTags},
@@ -710,6 +713,9 @@ func TestAddCloudFormationSectionAffected_SectionRemoved(t *testing.T) {
 		{"tags", sectionNameTags, map[string]any{"env": "prod"}, affectedReasonStackTags},
 		{"stack_policy", sectionNameStackPolicy, map[string]any{"file": "policy.json"}, affectedReasonStackStackPolicy},
 		{"role_arn", sectionNameRoleArn, "arn:aws:iam::111:role/deploy", affectedReasonStackRoleArn},
+		{"path", sectionNamePath, "template.yaml", affectedReasonStackPath},
+		{"source", sectionNameSource, map[string]any{"uri": "s3://bucket/a.yaml"}, affectedReasonStackSource},
+		{"provision", sectionNameProvision, map[string]any{"workdir": map[string]any{"enabled": true}}, affectedReasonStackProvision},
 	}
 
 	for _, tt := range tests {
@@ -799,6 +805,61 @@ func TestProcessCloudFormationComponentsIndexed(t *testing.T) {
 	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackMetadata)
 	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackStackName)
 	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackSettings)
+}
+
+// TestProcessCloudFormationComponentsIndexed_PathSourceProvisionOnly guards the case where the
+// only edit is to `path`, `source` or `provision`: each retargets what gets deployed (a different
+// template file, a different vendored source, a different destination) and must mark the
+// component affected, while identical values on both refs must not.
+func TestProcessCloudFormationComponentsIndexed_PathSourceProvisionOnly(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		section    string
+		local      any
+		remote     any
+		wantReason string
+	}{
+		{"path changed", sectionNamePath, "other.yaml", "template.yaml", affectedReasonStackPath},
+		{"source changed", sectionNameSource, map[string]any{"uri": "s3://b/new.yaml"}, map[string]any{"uri": "s3://b/old.yaml"}, affectedReasonStackSource},
+		{"provision changed", sectionNameProvision, map[string]any{"workdir": map[string]any{"enabled": true}}, map[string]any{"workdir": map[string]any{"enabled": false}}, affectedReasonStackProvision},
+		{"path unchanged", sectionNamePath, "template.yaml", "template.yaml", ""},
+		{"source unchanged", sectionNameSource, map[string]any{"uri": "s3://b/a.yaml"}, map[string]any{"uri": "s3://b/a.yaml"}, ""},
+		{"provision unchanged", sectionNameProvision, map[string]any{"workdir": map[string]any{"enabled": true}}, map[string]any{"workdir": map[string]any{"enabled": true}}, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			atmosConfig := cfnAtmosConfig()
+			cloudFormationSection := map[string]any{
+				cfnTestComponent: map[string]any{
+					sectionNameStackName: "vpc-prod",
+					tt.section:           tt.local,
+				},
+			}
+			remoteStacks := cfnRemoteStacksWith(map[string]any{
+				sectionNameStackName: "vpc-prod",
+				tt.section:           tt.remote,
+			})
+
+			affected, err := processCloudFormationComponentsIndexed(
+				cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+				atmosConfig, newChangedFilesIndex(atmosConfig, nil, ""), newComponentPathPatternCache(),
+				false, true, AffectedFilter{},
+			)
+			require.NoError(t, err)
+
+			if tt.wantReason == "" {
+				assert.Empty(t, affected)
+				return
+			}
+			require.Len(t, affected, 1)
+			assert.Equal(t, tt.wantReason, affected[0].Affected)
+		})
+	}
 }
 
 // TestProcessCloudFormationComponentsIndexed_MetadataRemovedLocally guards
@@ -1440,4 +1501,91 @@ func TestFindAffected_SectionsOverride(t *testing.T) {
 		affected := runFindAffectedTF(t, nil, local, remote)
 		assert.Empty(t, affected)
 	})
+}
+
+// selectorBackedSopsSection is a component whose SOPS backend is a YAML-function selector, which
+// `describe affected` cannot evaluate without credentials. The only provider stores its files under
+// the "vault" directory.
+func selectorBackedSopsSection() map[string]any {
+	return map[string]any{
+		"secrets": map[string]any{
+			"providers": map[string]any{
+				"dev-sops": map[string]any{"kind": "sops/age", "spec": map[string]any{"path": "vault"}},
+			},
+			"vars": map[string]any{
+				"API_KEY": map[string]any{"sops": "!aws.cloudformation.output producer dev SopsProviderName"},
+			},
+		},
+	}
+}
+
+// TestCheckSecretFileChangesIndexed_SelectorBackedSops proves a selector-backed SOPS declaration is
+// never silently skipped: a change under the provider's directory marks the component affected,
+// while an unrelated change does not.
+func TestCheckSecretFileChangesIndexed_SelectorBackedSops(t *testing.T) {
+	t.Parallel()
+
+	const (
+		stackName     = "dev"
+		componentName = "consumer"
+	)
+	inVault, err := filepath.Abs(filepath.Join("vault", "dev.consumer.enc.yaml"))
+	require.NoError(t, err)
+	elsewhere, err := filepath.Abs(filepath.Join("unrelated", "dev.consumer.enc.yaml"))
+	require.NoError(t, err)
+
+	tests := []struct {
+		name         string
+		changedFiles []string
+		wantAffected bool
+	}{
+		{"file under the provider directory", []string{inVault}, true},
+		{"file outside the provider directory", []string{elsewhere}, false},
+		{"no changed files", nil, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			atmosConfig := &schema.AtmosConfiguration{}
+			section := selectorBackedSopsSection()
+			filesIndex := newChangedFilesIndex(atmosConfig, tt.changedFiles, "")
+			var affected []schema.Affected
+			currentStacks := map[string]any{}
+
+			err := checkSecretFileChangesIndexed(
+				&affected, atmosConfig, componentName, stackName, cfg.KubernetesComponentType,
+				&section, filesIndex, false, &currentStacks, false,
+			)
+			require.NoError(t, err)
+
+			if !tt.wantAffected {
+				assert.Empty(t, affected)
+				return
+			}
+			require.Len(t, affected, 1)
+			assert.Equal(t, componentName, affected[0].Component)
+			assert.Equal(t, affectedReasonSecretFile, affected[0].Affected)
+		})
+	}
+}
+
+// TestGetSecretFileDependencies_SelectorBackedSops proves the dependencies cover the provider's
+// directory as a folder rather than being empty.
+func TestGetSecretFileDependencies_SelectorBackedSops(t *testing.T) {
+	t.Parallel()
+
+	deps := getSecretFileDependencies(&schema.AtmosConfiguration{}, "dev", "consumer", selectorBackedSopsSection())
+
+	require.Len(t, deps, 1)
+	assert.True(t, deps[0].IsFolderDependency())
+	assert.Equal(t, "vault", deps[0].Path)
+}
+
+// TestGetSecretFileDependencies_NoSecrets proves a component without secrets has no dependencies.
+func TestGetSecretFileDependencies_NoSecrets(t *testing.T) {
+	t.Parallel()
+
+	assert.Empty(t, getSecretFileDependencies(&schema.AtmosConfiguration{}, "dev", "consumer", map[string]any{}))
 }

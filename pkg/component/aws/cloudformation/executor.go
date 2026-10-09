@@ -10,13 +10,13 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -33,10 +33,12 @@ var (
 // opContext bundles the request-scoped values threaded through the operation
 // dispatch, keeping each function's own argument list short.
 type opContext struct {
-	Ctx         context.Context
-	AtmosConfig *schema.AtmosConfiguration
-	Info        *schema.ConfigAndStacksInfo
-	Flags       map[string]any
+	// RequestedIdentity preserves CLI/env precedence before component default selection.
+	RequestedIdentity string
+	Ctx               context.Context
+	AtmosConfig       *schema.AtmosConfiguration
+	Info              *schema.ConfigAndStacksInfo
+	Flags             map[string]any
 }
 
 // Execute runs a single aws/cloudformation component operation.
@@ -66,6 +68,16 @@ func Execute(ctx *component.ExecutionContext, operation Operation) error {
 
 // executeSingle runs the operation for a single component (the non-bulk path).
 func executeSingle(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation) error {
+	// Stack evaluation can read secrets before the CloudFormation client is
+	// authenticated. Bind each lookup lazily to its component/store identity;
+	// never install credentials on a shared configuration or unused backend.
+	localConfig := *atmosConfig
+	atmosConfig = &localConfig
+	if !info.DryRun && !authdeferred.IsDeferred(atmosConfig.AuthManager) {
+		atmosConfig.AuthManager = authdeferred.NewManager(authdeferred.AuthOptions{
+			Config: atmosConfig, Disabled: cfg.NormalizeIdentityValue(info.Identity) == cfg.IdentityFlagDisabledValue,
+		})
+	}
 	discovered, err := processStacks(atmosConfig, *info, true, !info.DryRun, !info.DryRun, nil, nil)
 	if err != nil {
 		return err
@@ -170,11 +182,7 @@ func resolveSpecAndTemplate(ctx context.Context, atmosConfig *schema.AtmosConfig
 		return spec, nil
 	}
 
-	componentPath, err := resolveComponentPath(atmosConfig, info)
-	if err != nil {
-		return nil, err
-	}
-	componentPath, _, err = provisionAndResolveComponentPath(ctx, provisioner.OutputWriters{}, atmosConfig, info, cfg.CloudFormationComponentType, componentPath)
+	componentPath, err := prepareComponentFiles(ctx, atmosConfig, info)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +218,7 @@ func runWithHooks(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConf
 		return err
 	}
 
-	octx := &opContext{Ctx: ctx.GoContext(), AtmosConfig: atmosConfig, Info: info, Flags: ctx.Flags}
+	octx := &opContext{Ctx: ctx.GoContext(), AtmosConfig: atmosConfig, Info: info, Flags: ctx.Flags, RequestedIdentity: ctx.ConfigAndStacksInfo.Identity}
 	summary, opErr := runOperation(octx, operation, spec)
 
 	// The outcome status describes the CloudFormation operation, not the
@@ -395,12 +403,10 @@ func runOperation(octx *opContext, operation Operation, spec *stackSpec) (map[st
 		}
 	}
 
-	region := resolveRegion(octx.Info.ComponentSection)
-	awsCfg, err := buildAWSConfig(octx.Ctx, octx.Info, region)
+	client, err := clientForOperation(octx, operation)
 	if err != nil {
 		return summary, err
 	}
-	client := newClient(awsCfg, resolveEndpointURL(octx.Info))
 	return runRemoteOperation(octx, operation, client, spec, summary)
 }
 
@@ -503,10 +509,19 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 	for k, v := range deploySummary {
 		summary[k] = v
 	}
-	// The stack's final status, under the same key delete uses, is recorded even
-	// when the deploy failed (for example ROLLBACK_COMPLETE) so CI can report it.
-	if result != nil && result.StackStatus != "" {
-		summary["final_status"] = string(result.StackStatus)
+	// Preserve the reviewed changeset even when confirmation, execution or event
+	// polling failed. CI reports the planned changes alongside the operation error.
+	if result != nil {
+		summary["changeset_id"] = result.ChangeSetID
+		summary["changeset_name"] = result.ChangeSetName
+		summary["changes"] = result.Changes
+		// A failed computation does not establish whether the stack has changes.
+		if result.Status == cfntypes.ChangeSetStatusCreateComplete || result.NoOp {
+			summary["no_op"] = result.NoOp
+		}
+		if result.StackStatus != "" {
+			summary["final_status"] = string(result.StackStatus)
+		}
 	}
 	if err != nil {
 		return summary, err
@@ -516,11 +531,6 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 		// direct stack deploy happened.
 		return summary, nil
 	}
-	summary["changeset_id"] = result.ChangeSetID
-	summary["changeset_name"] = result.ChangeSetName
-	summary["no_op"] = result.NoOp
-	summary["changes"] = result.Changes
-
 	if err := applyPostDeployPolicy(octx, client, spec, result); err != nil {
 		return summary, err
 	}

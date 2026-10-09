@@ -4,12 +4,15 @@ package source
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/downloader"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
@@ -42,6 +45,10 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 			Err()
 	}
 
+	if params.AuthContext != nil {
+		ctx = downloader.WithAWSAuthContext(ctx, params.AuthContext.AWS)
+	}
+
 	// Extract source from component config.
 	sourceSpec, err := ExtractSource(params.ComponentConfig)
 	if err != nil {
@@ -58,8 +65,9 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 		return nil
 	}
 
-	// Determine target directory.
-	targetDir, err := DetermineTargetDirectory(params.AtmosConfig, params.ComponentType, params.Component, params.ComponentConfig)
+	// Determine the target directory with the same resolver the runtime (AutoProvisionSource) uses,
+	// so this command provisions exactly the directory render/deploy later reads from.
+	target, err := ResolveTarget(params.AtmosConfig, params.ComponentType, params.Component, params.ComponentConfig)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrSourceProvision).
 			WithCause(err).
@@ -68,6 +76,7 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 			WithContext("stack", params.Stack).
 			Err()
 	}
+	targetDir := target.Dir
 
 	// Check if vendoring is needed.
 	if !params.Force && !needsVendoring(targetDir) {
@@ -86,22 +95,50 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 	progressMsg := fmt.Sprintf("Vendoring `%s` from `%s`", componentID, sourceSpec.Uri)
 	completedMsg := fmt.Sprintf("Vendored `%s` to `%s`", componentID, targetDir)
 	err = spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
-		return VendorSource(ctx, params.AtmosConfig, sourceSpec, targetDir)
+		if err := VendorSource(ctx, params.AtmosConfig, sourceSpec, targetDir); err != nil {
+			return err
+		}
+		// Record provenance so `source delete` can prove it owns this directory.
+		return recordProvenance(target, params.Stack, sourceSpec)
 	})
 	if err != nil {
-		return errUtils.Build(errUtils.ErrSourceProvision).
-			WithCause(err).
-			WithExplanation("Failed to vendor component source").
-			WithContext("source", sourceSpec.Uri).
-			WithContext("target", targetDir).
-			WithContext("component", params.Component).
-			WithContext("stack", params.Stack).
-			WithHint("Verify source URI is accessible and credentials are valid").
-			Err()
+		return provisionFailure(err, "Failed to vendor component source", map[string]string{
+			"source":    sourceSpec.Uri,
+			"target":    targetDir,
+			"component": params.Component,
+			"stack":     params.Stack,
+		}, "Verify source URI is accessible and credentials are valid")
 	}
 
 	restoreInstanceLock(targetDir, params.ComponentConfig)
 	return nil
+}
+
+// provisionFailure wraps a source provisioning failure with outer context. When the cause already
+// carries ErrSourceProvision (the downloader and vendoring layers build it themselves) the sentinel
+// is not repeated: re-wrapping printed "source provisioning failed:" twice and duplicated the hint.
+// The outer explanation, hint and context are added only for causes that do not carry it yet.
+func provisionFailure(cause error, explanation string, context map[string]string, hint string) error {
+	var builder *errUtils.ErrorBuilder
+	if errors.Is(cause, errUtils.ErrSourceProvision) {
+		builder = errUtils.Build(cause)
+	} else {
+		builder = errUtils.Build(errUtils.ErrSourceProvision).
+			WithCause(cause).
+			WithExplanation(explanation)
+		if hint != "" {
+			builder = builder.WithHint(hint)
+		}
+	}
+	keys := make([]string, 0, len(context))
+	for key := range context {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		builder = builder.WithContext(key, context[key])
+	}
+	return builder.Err()
 }
 
 // restoreInstanceLock seeds the vendored component dir's canonical .terraform.lock.hcl from a
@@ -205,7 +242,7 @@ func validateWithinComponentBasePath(targetDir, componentBasePath string) error 
 	}
 
 	if !isWithinBase(absTarget, absBase) {
-		return errUtils.Build(errUtils.ErrPathTraversal).
+		return errUtils.Build(fmt.Errorf("%w: component target directory `%s` resolves outside the component base path `%s`", errUtils.ErrPathTraversal, targetDir, componentBasePath)).
 			WithExplanationf("Component target directory `%s` resolves outside the component base path `%s`", targetDir, componentBasePath).
 			WithHint("Component names must not contain '..' segments that escape the components directory").
 			WithContext("target_dir", absTarget).
@@ -233,7 +270,7 @@ func validateWithinComponentBasePath(targetDir, componentBasePath string) error 
 	}
 
 	if !isWithinBase(resolvedTarget, resolvedBase) {
-		return errUtils.Build(errUtils.ErrPathTraversal).
+		return errUtils.Build(fmt.Errorf("%w: component target directory `%s` resolves outside the component base path `%s` through a symlink", errUtils.ErrPathTraversal, targetDir, componentBasePath)).
 			WithExplanationf("Component target directory `%s` resolves outside the component base path `%s` through a symlink", targetDir, componentBasePath).
 			WithHint("A symlink under the components directory points outside the component base path").
 			WithContext("target_dir", absTarget).
@@ -274,7 +311,7 @@ func validateTargetIsComponentSubdirectory(targetDir, componentBasePath string) 
 	}
 
 	if absTarget == absBase {
-		return errUtils.Build(errUtils.ErrPathTraversal).
+		return errUtils.Build(fmt.Errorf("%w: component target directory `%s` resolves to the component base path `%s` itself", errUtils.ErrPathTraversal, targetDir, componentBasePath)).
 			WithExplanationf("Component target directory `%s` resolves to the component base path `%s` itself", targetDir, componentBasePath).
 			WithHint("Component name must not be empty, '.', or resolve away to nothing (e.g. 'child/..')").
 			WithContext("target_dir", absTarget).

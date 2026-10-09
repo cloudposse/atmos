@@ -385,7 +385,8 @@ func TestInitConfigAndStacksInfo(t *testing.T) {
 
 	// The global --identity flag binds ATMOS_IDENTITY via Viper (see pkg/flags/global_builder.go),
 	// so initConfigAndStacksInfo picks up the identity from the environment through that binding.
-	cmd.Flags().StringP("identity", "i", "", "Specify identity")
+	// --identity/-i is registered locally by newOperationCommand itself (flags.WithIdentityFlag()
+	// in operationFlagOptions); re-registering it here would panic with "flag redefined: identity".
 	v := viper.GetViper()
 	require.NoError(t, v.BindEnv("identity", "ATMOS_IDENTITY"))
 	t.Cleanup(func() { v.Set("identity", nil) })

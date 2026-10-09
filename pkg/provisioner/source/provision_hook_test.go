@@ -1373,6 +1373,12 @@ func TestApplyGlobalTTLDefault(t *testing.T) {
 			expectedTTL: "7d",
 		},
 		{
+			name:          "cloudformation without source defaults",
+			componentType: "aws/cloudformation",
+			atmosConfig:   &schema.AtmosConfiguration{},
+			expectedTTL:   "",
+		},
+		{
 			name:          "per-component TTL takes precedence over global",
 			sourceTTL:     "0s",
 			componentType: "terraform",
