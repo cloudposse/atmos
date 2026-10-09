@@ -30,7 +30,7 @@ func Run(cfg *schema.GitConfig, hookName string, hookArgs []string, opts ...RunO
 		return runSteps(hookName, entry, hookArgs, opts)
 	}
 
-	dir, err := resolveWorkingDir()
+	dir, mergedEnv, err := resolveHookEnvironment()
 	if err != nil {
 		return wrapHookError(hookName, err)
 	}
@@ -41,7 +41,6 @@ func Run(cfg *schema.GitConfig, hookName string, hookArgs []string, opts ...RunO
 	// ShellRunner inherits os.Stdin via interp.StdIO(os.Stdin, ...) so hooks that
 	// read from stdin (pre-push, pre-receive) work correctly.
 	// ExitCodeError is returned when the child exits non-zero, preserving the code.
-	mergedEnv := os.Environ()
 	if err := u.ShellRunner(command, hookName, dir, mergedEnv, os.Stdout); err != nil {
 		return wrapHookError(hookName, err)
 	}

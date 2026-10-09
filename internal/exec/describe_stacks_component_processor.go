@@ -823,7 +823,7 @@ func resolveStackName(
 		return stackManifestName, schema.Context{}, nil
 
 	case atmosConfig.Stacks.NameTemplate != "":
-		name, err := ProcessTmpl(atmosConfig, "describe-stacks-name-template",
+		name, err := processStackNameTemplate(atmosConfig, stackFileName,
 			atmosConfig.Stacks.NameTemplate, info.ComponentSection, false)
 		if err != nil {
 			return "", schema.Context{}, err

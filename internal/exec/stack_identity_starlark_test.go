@@ -79,3 +79,67 @@ func TestResolveSpaceliftContextPrefixRejectsComputedIdentity(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "prod", prefix)
 }
+
+func TestStackNameTemplatesRejectComputedInputsBeforeTransformation(t *testing.T) {
+	t.Parallel()
+	computed := starlarkTestSource(`return "prod"`)
+	section := map[string]any{"vars": map[string]any{"stage": computed, "environment": "dev"}}
+	for _, source := range []string{
+		`{{ printf "%.4s" .vars.stage }}`,
+		`{{ .vars.stage | sha256sum }}`,
+		`{{ slice .vars.stage 0 4 }}`,
+		`{{ printf "%.4s" (index .vars "stage") }}`,
+		`{{ get .vars "stage" | sha256sum }}`,
+		`{{ dig "stage" "fallback" .vars | sha256sum }}`,
+		`{{ range $key, $value := .vars }}{{ if eq $key "stage" }}{{ printf "%.4s" $value }}{{ end }}{{ end }}`,
+		`{{ pluck "stage" .vars | printf "%.4s" }}`,
+		`{{ $v := .vars }}{{ printf "%.4s" $v.stage }}`,
+		`{{ if .vars.stage }}prod{{ else }}dev{{ end }}`,
+		`{{ printf "%.4s" .vars }}`,
+		`{{ .vars | printf "%.4s" }}`,
+		`{{ with .vars }}{{ .stage | sha256sum }}{{ end }}`,
+		`{{ define "name" }}{{ printf "%.4s" .stage }}{{ end }}{{ template "name" .vars }}`,
+	} {
+		t.Run(source, func(t *testing.T) {
+			t.Parallel()
+			_, err := processStackNameTemplate(&schema.AtmosConfiguration{}, "deploy/prod", source, section, false)
+			require.ErrorIs(t, err, errUtils.ErrStarlarkStackIdentity)
+			field, ok := errUtils.GetContext(err, "field")
+			require.True(t, ok)
+			assert.Equal(t, "vars.stage", field)
+		})
+	}
+}
+
+func TestStackNameTemplatesAllowUnrelatedComputedInputs(t *testing.T) {
+	t.Parallel()
+	section := map[string]any{"vars": map[string]any{
+		"stage": starlarkTestSource(`return "prod"`), "environment": "dev",
+	}}
+	for _, source := range []string{
+		`{{ .vars.environment }}`,
+		`{{ index .vars "environment" }}`,
+		`{{ get .vars "environment" }}`,
+		`{{ default .vars "dev" }}`,
+		`{{ coalesce "dev" .vars }}`,
+		`{{ and .vars "dev" }}`,
+		`{{ or "dev" .vars }}`,
+		`{{ if empty .vars }}prod{{ else }}dev{{ end }}`,
+		`{{ range $key, $value := .vars }}{{ if eq $key "environment" }}{{ $value }}{{ end }}{{ end }}`,
+		`{{ $v := .vars }}{{ $v.environment }}`,
+		`{{ with .vars }}{{ .environment }}{{ end }}`,
+		`{{ if false }}{{ .vars.stage }}{{ else }}dev{{ end }}`,
+		`{{ if and false .vars.stage }}prod{{ else }}dev{{ end }}`,
+	} {
+		t.Run(source, func(t *testing.T) {
+			t.Parallel()
+			got, err := processStackNameTemplate(&schema.AtmosConfiguration{}, "deploy/dev", source, section, false)
+			require.NoError(t, err)
+			assert.Equal(t, "dev", got)
+		})
+	}
+	// Non-naming templates still preserve computed source for the later Starlark pass.
+	got, err := ProcessTmpl(&schema.AtmosConfiguration{}, "component-template", `{{ .vars.stage }}`, section, false)
+	require.NoError(t, err)
+	assert.Equal(t, section["vars"].(map[string]any)["stage"], got)
+}
