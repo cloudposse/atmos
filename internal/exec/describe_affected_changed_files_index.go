@@ -209,6 +209,8 @@ func (idx *changedFilesIndex) getRelevantFiles(componentType string, atmosConfig
 		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Ansible.BasePath)
 	case cfg.ContainerComponentType:
 		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Container.BasePath)
+	case cfg.CloudFormationComponentType:
+		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.CloudFormation.BasePath)
 	default:
 		// Unknown component type (or a type with no filesystem source, e.g. emulator) -
 		// return all files as fallback.

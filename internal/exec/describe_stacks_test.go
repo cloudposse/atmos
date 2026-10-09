@@ -405,11 +405,12 @@ func TestNewDescribeStacksExec(t *testing.T) {
 func TestGetComponentBasePath_AllCases(t *testing.T) {
 	ac := &schema.AtmosConfiguration{
 		Components: schema.Components{
-			Terraform: schema.Terraform{BasePath: "components/terraform"},
-			Helmfile:  schema.Helmfile{BasePath: "components/helmfile"},
-			Packer:    schema.Packer{BasePath: "components/packer"},
-			Ansible:   schema.Ansible{BasePath: "components/ansible"},
-			Container: schema.ContainerComponentsConfig{BasePath: "components/container"},
+			Terraform:      schema.Terraform{BasePath: "components/terraform"},
+			Helmfile:       schema.Helmfile{BasePath: "components/helmfile"},
+			Packer:         schema.Packer{BasePath: "components/packer"},
+			Ansible:        schema.Ansible{BasePath: "components/ansible"},
+			Container:      schema.ContainerComponentsConfig{BasePath: "components/container"},
+			CloudFormation: schema.AwsCloudFormation{BasePath: "components/cloudformation"},
 		},
 	}
 
@@ -422,6 +423,8 @@ func TestGetComponentBasePath_AllCases(t *testing.T) {
 		{cfg.PackerSectionName, "components/packer"},
 		{cfg.AnsibleSectionName, "components/ansible"},
 		{cfg.ContainerSectionName, "components/container"},
+		{cfg.CloudFormationSectionName, "components/cloudformation"},
+		{cfg.EmulatorSectionName, ""},
 		{"unknown", ""},
 	}
 
