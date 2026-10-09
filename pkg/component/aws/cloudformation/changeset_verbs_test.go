@@ -402,7 +402,7 @@ func TestRunChangesetDelete_NonexistentIsNotFound(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 	// No DeleteChangeSet expectation: calling it fails the test.
-	client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(nil, errors.New("ChangeSet [nope] does not exist"))
+	client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(nil, &cfntypes.ChangeSetNotFoundException{Message: awsString("ChangeSet [nope] does not exist")})
 
 	var err error
 	out := captureStdout(t, func() {
