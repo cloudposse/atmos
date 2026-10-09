@@ -12,8 +12,11 @@ def normalize(report):
             if "stacks" not in result:
                 continue
             unique = []
+            seen = set()
             for stack in result["stacks"]:
-                if stack not in unique:
+                key = json.dumps(stack, sort_keys=True, separators=(",", ":"))
+                if key not in seen:
+                    seen.add(key)
                     unique.append(stack)
             result["stacks"] = unique
     return report
