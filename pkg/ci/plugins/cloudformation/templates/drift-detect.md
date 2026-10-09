@@ -22,7 +22,7 @@ Drifted resources: **{{ .DriftedCount }}**
 To reproduce locally:
 
 ```shell
-atmos aws cloudformation drift detect {{ .Component }} -s {{ .Stack }}
+atmos aws cloudformation drift detect {{ .Component }} -s {{ .Stack }}{{ if .FailOnDrift }} --fail-on-drift{{ end }}
 ```
 
 {{- if .Output }}

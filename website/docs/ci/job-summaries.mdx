@@ -1,7 +1,7 @@
 ---
 title: Job Summaries
 sidebar_label: Job Summaries
-description: Rich Markdown job summaries for Terraform plan, apply, test, Kubernetes, Helm, and Helmfile operations
+description: Rich Markdown job summaries for Terraform, Kubernetes, Helm, Helmfile, and CloudFormation operations
 id: job-summaries
 slug: /ci/job-summaries
 ---
@@ -157,10 +157,16 @@ local reproduction command, and captured masked stdout/stderr in a collapsible s
 ## CloudFormation Summaries
 
 When `ci.enabled: true` and summaries are enabled, native CloudFormation commands write compact
-job summaries in CI. `diff` shows the pending changeset, `apply` and `delete` show the stack
-operation result, and `drift detect` and `drift describe` show drifted resources. These summaries
-are for human review; CloudFormation commands do not emit `$GITHUB_OUTPUT` values, commit statuses,
-PR comments, or stored artifacts.
+job summaries in CI. The title preserves the invoked verb: `plan` is not reported as `diff`, and
+`deploy` is not reported as `apply`. `diff` and `plan` list resource changes in the pending
+changeset or say "No changes" for a no-op. `apply` and `deploy` list stack Outputs under
+"CloudFormation output" and say "No changes" for a no-op. NoEcho-dependent outputs are masked,
+as they are in `atmos aws cloudformation output`.
+
+`delete` shows the stack operation result. `drift detect` and `drift describe` show drift status,
+drifted resources, and each modified resource's property differences. The reproduction command
+includes `--fail-on-drift` when used. CloudFormation also emits CI output variables, but does not
+write commit statuses, PR comments, or stored artifacts.
 
 ## Configuration
 

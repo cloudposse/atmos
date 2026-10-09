@@ -235,7 +235,20 @@ func TestNewS3Backend_MissingBucket(t *testing.T) {
 // injecting a gomock-generated artifact.Backend so uploadPackage's own logic
 // (digest computation, object naming, error wrapping) can be exercised
 // without a real S3 call. Auto-restores on cleanup.
+//
+// Unless the caller already set GetMetadata expectations, a mock backend
+// reports every object as absent, so uploadPackage always uploads.
 func stubNewS3Backend(t *testing.T, backend artifact.Backend, err error) {
+	t.Helper()
+	if mock, ok := backend.(*artifact.MockBackend); ok {
+		mock.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(nil, errUtils.ErrArtifactNotFound).AnyTimes()
+	}
+	stubNewS3BackendExact(t, backend, err)
+}
+
+// stubNewS3BackendExact overrides the newS3BackendFunc seam without adding any
+// default mock expectations.
+func stubNewS3BackendExact(t *testing.T, backend artifact.Backend, err error) {
 	t.Helper()
 	original := newS3BackendFunc
 	newS3BackendFunc = func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, _ *targetS3Config) (artifact.Backend, error) {
@@ -321,6 +334,12 @@ func TestUploadPackageRealBackendPrefix(t *testing.T) {
 			var paths []string
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				mu.Lock()
+				if r.Method == http.MethodHead {
+					// Report the content-addressed object as absent so the upload proceeds.
+					mu.Unlock()
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
 				paths = append(paths, r.URL.Path)
 				mu.Unlock()
 				_, err := io.Copy(io.Discard, r.Body)

@@ -1568,7 +1568,8 @@
               "type": "string"
             },
             "parameters": {
-              "type": "object"
+              "description": "Template parameters: a map of name to value, or a list of {ParameterKey, ParameterValue} entries.",
+              "type": ["object", "array"]
             },
             "capabilities": {
               "type": "array",

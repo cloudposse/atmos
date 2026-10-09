@@ -14,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // deleteOptions carries the delete-specific flags (--retain-resources,
@@ -49,14 +50,19 @@ const terminationProtectionRestoreTimeout = 30 * time.Second
 // stack isn't in DELETE_FAILED status) can never leave the stack's
 // termination protection disabled with no DeleteStack call, and therefore no
 // restoration path, ever having run.
-func deleteStack(ctx context.Context, client CloudFormationClient, spec *stackSpec, opts deleteOptions) error {
+//
+// The returned bool reports that the stack does not exist (CloudFormation said
+// so while validating or deleting), so the caller can tell "nothing to delete"
+// apart from a delete that really ran. That case is still a success: deleting
+// what is already gone is idempotent.
+func deleteStack(ctx context.Context, client CloudFormationClient, spec *stackSpec, opts deleteOptions) (bool, error) {
 	defer perf.Track(nil, "cloudformation.deleteStack")()
 
 	err := deleteExistingStack(ctx, client, spec, opts)
 	if isMissingStackValidationError(err) {
-		return nil
+		return true, nil
 	}
-	return err
+	return false, err
 }
 
 // deleteExistingStack validates and deletes a stack; the caller treats an AWS
@@ -183,7 +189,7 @@ func validateTerminationProtectionGate(ctx context.Context, client CloudFormatio
 		protected = aws.ToBool(describedStack.EnableTerminationProtection)
 	}
 	if protected {
-		return describedStack, errUtils.Build(errUtils.ErrAwsCloudFormationChangeSetFailed).
+		return describedStack, errUtils.Build(errUtils.ErrAwsCloudFormationTerminationProtectionEnabled).
 			WithExplanationf("Stack %q has termination_protection enabled.", spec.StackName).
 			WithHint("Pass --disable-termination-protection to delete it anyway. " +
 				"Setting termination_protection: false and re-applying does not disable " +
@@ -210,7 +216,7 @@ func checkRetainResourcesGate(ctx context.Context, client CloudFormationClient, 
 		}
 	}
 	if !isDeleteFailedStack(describedStack.StackStatus) {
-		return nil, errUtils.Build(errUtils.ErrAwsCloudFormationChangeSetFailed).
+		return nil, errUtils.Build(errUtils.ErrAwsCloudFormationRetainResourcesNotApplicable).
 			WithExplanationf("--retain-resources is only valid for a stack in DELETE_FAILED status; %s is currently %s.", spec.StackName, describedStack.StackStatus).
 			WithHint("Retry the delete without --retain-resources, or wait for the stack to reach DELETE_FAILED.").
 			Err()
@@ -317,7 +323,7 @@ func describeStack(ctx context.Context, client CloudFormationClient, stackName s
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
 	}
 	if len(out.Stacks) == 0 {
-		return nil, fmt.Errorf("%w: stack %s not found", errUtils.ErrAwsCloudFormationChangeSetFailed, stackName)
+		return nil, fmt.Errorf("%w: stack %s not found", errUtils.ErrAwsCloudFormationStackNotFound, stackName)
 	}
 	return &out.Stacks[0], nil
 }
@@ -327,4 +333,77 @@ func describeStack(ctx context.Context, client CloudFormationClient, stackName s
 func isMissingStackValidationError(err error) bool {
 	var apiErr smithy.APIError
 	return errors.As(err, &apiErr) && apiErr.ErrorCode() == "ValidationError" && isStackNotFoundError(err)
+}
+
+// runDelete deletes the stack and streams events until it's gone. Deleting a
+// stack that does not exist is an idempotent success that says so (the same
+// message with or without a terminal); a completed delete reports success; a
+// delete that ends DELETE_FAILED suggests --retain-resources for the resources
+// that blocked it.
+func runDelete(ctx context.Context, client CloudFormationClient, flags map[string]any, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+	opts := deleteOptionsFromFlags(flags)
+	// Captured immediately before deleteStack's DeleteStack call -- see
+	// preOperationEventBaseline -- so streamStackEvents can tell a fast
+	// delete's own events apart from anything already present on the stack.
+	baseline := preOperationEventBaseline(ctx, client, spec.StackName)
+	missing, err := deleteStack(ctx, client, spec, opts)
+	if err != nil {
+		return summary, err
+	}
+	if missing {
+		summary["already_deleted"] = true
+		ui.Info(fmt.Sprintf("%s does not exist; nothing to delete", spec.StackName))
+		return summary, nil
+	}
+	status, err := streamStackEvents(ctx, client, spec.StackName, baseline, OperationDelete)
+	if err != nil {
+		return summary, err
+	}
+	summary["final_status"] = string(status)
+	if isFailedStackStatus(status) {
+		return summary, deleteFailedError(ctx, client, spec.StackName, status)
+	}
+	ui.Success(fmt.Sprintf("Deleted stack %s", spec.StackName))
+	return summary, nil
+}
+
+// deleteFailedError reports a delete that did not complete. For DELETE_FAILED it
+// lists the resources CloudFormation could not delete and hints at
+// --retain-resources, the way to finish deleting the stack while keeping them.
+func deleteFailedError(ctx context.Context, client CloudFormationClient, stackName string, status cfntypes.StackStatus) error {
+	err := fmt.Errorf("%w: stack %s ended in status %s", errUtils.ErrAwsCloudFormationOperationFailed, stackName, status)
+	if !isDeleteFailedStack(status) {
+		return err
+	}
+	ids := failedDeleteResourceIDs(ctx, client, stackName)
+	retain := "<LogicalResourceId>"
+	if len(ids) > 0 {
+		retain = strings.Join(ids, ",")
+	}
+	return errUtils.Build(err).
+		WithHintf("Delete the stack anyway, keeping the resources that failed to delete, with `atmos aws cloudformation delete <component> -s <stack> --retain-resources=%s`.", retain).
+		Err()
+}
+
+// failedDeleteResourceIDs lists the logical IDs of the stack's resources that are
+// in DELETE_FAILED. Best effort: a lookup failure only drops the IDs from the hint.
+func failedDeleteResourceIDs(ctx context.Context, client CloudFormationClient, stackName string) []string {
+	var ids []string
+	var nextToken *string
+	for {
+		out, err := client.ListStackResources(ctx, &cloudformation.ListStackResourcesInput{StackName: awsString(stackName), NextToken: nextToken})
+		if err != nil {
+			return ids
+		}
+		for i := range out.StackResourceSummaries {
+			resource := &out.StackResourceSummaries[i]
+			if resource.ResourceStatus == cfntypes.ResourceStatusDeleteFailed {
+				ids = append(ids, stringValue(resource.LogicalResourceId))
+			}
+		}
+		if out.NextToken == nil {
+			return ids
+		}
+		nextToken = out.NextToken
+	}
 }

@@ -3,6 +3,8 @@ package cloudformation
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
@@ -61,13 +63,20 @@ func ListDeployedStacks(
 ) ([]DeployedStackSummary, error) {
 	defer perf.Track(nil, "cloudformation.ListDeployedStacks")()
 
+	// Validate --status locally first: a bad value must not reach AWS (whose
+	// raw ValidationError names neither the offending value nor the valid set).
+	statuses, err := toStackStatuses(statusFilter)
+	if err != nil {
+		return nil, err
+	}
+
 	awsCfg, err := buildAWSConfig(ctx, info, region)
 	if err != nil {
 		return nil, err
 	}
 	client := newClient(awsCfg, resolveEndpointURL(info))
 
-	stacks, err := listDeployedStacks(ctx, client, toStackStatuses(statusFilter))
+	stacks, err := listDeployedStacks(ctx, client, statuses)
 	if err != nil {
 		return nil, err
 	}
@@ -115,20 +124,68 @@ func defaultDeployedStackStatuses() []cfntypes.StackStatus {
 
 // toStackStatuses converts CLI-provided status strings to the SDK's enum type, defaulting to
 // defaultDeployedStackStatuses (excludes DELETE_COMPLETE) when the caller didn't request an
-// explicit filter.
-func toStackStatuses(statusFilter []string) []cfntypes.StackStatus {
+// explicit filter. Each value is matched case-insensitively against the SDK's StackStatus enum
+// (so "create_complete" works) and normalized to its canonical upper-case form; an unknown value
+// is rejected with an error naming every valid status instead of surfacing AWS's raw
+// ValidationError.
+func toStackStatuses(statusFilter []string) ([]cfntypes.StackStatus, error) {
 	if len(statusFilter) == 0 {
-		return defaultDeployedStackStatuses()
+		return defaultDeployedStackStatuses(), nil
 	}
+	valid := cfntypes.StackStatus("").Values()
 	statuses := make([]cfntypes.StackStatus, 0, len(statusFilter))
-	for _, s := range statusFilter {
-		statuses = append(statuses, cfntypes.StackStatus(s))
+	for _, raw := range statusFilter {
+		status, ok := matchStackStatus(valid, raw)
+		if !ok {
+			return nil, invalidStackStatusError(raw, valid)
+		}
+		statuses = append(statuses, status)
 	}
-	return statuses
+	return statuses, nil
 }
 
+// matchStackStatus finds the SDK StackStatus equal to raw, ignoring case and surrounding space.
+func matchStackStatus(valid []cfntypes.StackStatus, raw string) (cfntypes.StackStatus, bool) {
+	candidate := strings.TrimSpace(raw)
+	for _, status := range valid {
+		if strings.EqualFold(string(status), candidate) {
+			return status, true
+		}
+	}
+	return "", false
+}
+
+// invalidStackStatusError builds the --status validation error, naming the bad value and the
+// complete set of valid statuses.
+func invalidStackStatusError(raw string, valid []cfntypes.StackStatus) error {
+	names := make([]string, 0, len(valid))
+	for _, status := range valid {
+		names = append(names, string(status))
+	}
+	sort.Strings(names)
+	return errUtils.Build(errUtils.ErrInvalidFlag).
+		WithExplanationf("Unknown stack status %q for --status.", raw).
+		WithHintf("Valid statuses (case-insensitive): %s.", strings.Join(names, ", ")).
+		WithContext("flag", "status").
+		WithContext("value", raw).
+		Err()
+}
+
+// ValidateStackStatusFilter reports whether every --status value names a known CloudFormation
+// stack status (case-insensitive). The CLI layer calls it before authenticating or describing
+// stacks so a typo fails immediately.
+func ValidateStackStatusFilter(statusFilter []string) error {
+	defer perf.Track(nil, "cloudformation.ValidateStackStatusFilter")()
+
+	_, err := toStackStatuses(statusFilter)
+	return err
+}
+
+// deployedStacksRowFormat lays out the list table: marker, status, stack name.
+const deployedStacksRowFormat = "%-9s %-30s %s"
+
 // RenderDeployedStacksList writes the list to the data channel (stdout) as a
-// simple table: one line per stack, with a "MANAGED"/"unmanaged" marker.
+// simple table with a header row: one line per stack, with a "managed"/"unmanaged" marker.
 func RenderDeployedStacksList(stacks []DeployedStackSummary) {
 	defer perf.Track(nil, "cloudformation.RenderDeployedStacksList")()
 
@@ -136,11 +193,12 @@ func RenderDeployedStacksList(stacks []DeployedStackSummary) {
 		_ = data.Writeln("No stacks found.")
 		return
 	}
+	_ = data.Writeln(fmt.Sprintf(deployedStacksRowFormat, "MANAGED", "STATUS", "STACK NAME"))
 	for _, s := range stacks {
 		managed := "unmanaged"
 		if s.Managed {
 			managed = "managed"
 		}
-		_ = data.Writeln(fmt.Sprintf("%-9s %-30s %s", managed, s.Status, s.StackName))
+		_ = data.Writeln(fmt.Sprintf(deployedStacksRowFormat, managed, s.Status, s.StackName))
 	}
 }

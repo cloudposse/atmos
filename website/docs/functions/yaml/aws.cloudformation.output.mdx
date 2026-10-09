@@ -65,6 +65,8 @@ See the full explanation: [YAML Function Merging](/reference/yaml-function-mergi
 
 - The target component must be a native `aws/cloudformation` component with a resolved `stack_name` — `!aws.cloudformation.output` errors if the target has no `stack_name` configured.
 - The target stack must already be deployed. `!aws.cloudformation.output` calls the live `DescribeStacks` API; there is no local-state equivalent (`aws/cloudformation` has no Terraform/OpenTofu-style state file to read instead).
+- The target stack must hold deployed resources. A stack that only holds a preview changeset (`REVIEW_IN_PROGRESS`, left behind by `diff` or `plan` on a component that was never applied) or that failed to create (`ROLLBACK_COMPLETE`, `ROLLBACK_FAILED`, `CREATE_FAILED`), or is being deleted (`DELETE_*`), is an error: `stack "<name>" has status <status>`. Apply the target component first.
+- The `output-key` must exist. A key the stack does not declare is an error that lists the keys it does have, instead of resolving to `null`. A key that exists with an empty value is not an error.
 - Resolving the function requires AWS authentication — it uses the target component's own auth if it authenticates independently, otherwise the enclosing component's (propagated from `--identity`).
 
 ## Examples
@@ -88,13 +90,13 @@ components:
 
 ## Caching the result of `!aws.cloudformation.output` function
 
-Atmos caches (in memory) the results of the `!aws.cloudformation.output` function.
+Atmos does not cache the result of the `!aws.cloudformation.output` function. Every evaluation of the
+function calls `DescribeStacks` again, so each use in your manifests costs one API call, and the value
+always reflects the deployed stack at that moment.
 
-The cache is per Atmos CLI command execution, e.g., each new execution of a command like `atmos terraform plan`
-or `atmos describe component` will create and use a new memory cache, re-invoking `DescribeStacks` on the next run.
-
-If you define the function in stack manifests for the same component in a stack more than once, the first call will
-produce the result and cache it, and all the consecutive calls will just use the cached data.
+The [`atmos.Component`](/functions/template/atmos.Component) template function resolves `.outputs` through
+the same lookup and caches the component's sections for the duration of one Atmos command. Use it when
+several values come from the same component and you want a single API call.
 
 ## Considerations
 
@@ -102,7 +104,7 @@ produce the result and cache it, and all the consecutive calls will just use the
 
 - Using `!aws.cloudformation.output` with secrets can expose sensitive data to standard output (stdout) in any commands that describe stacks or components.
 
-- Consider cold-start scenarios: if the dependent `aws/cloudformation` stack has not yet been deployed, the function returns an error.
+- Consider cold-start scenarios: if the dependent `aws/cloudformation` stack does not exist, or exists without deployed resources (for example `REVIEW_IN_PROGRESS` after a `diff`), the function returns an error. A misspelled `output-key` is an error too, so a typo cannot reach the consuming component as an empty value.
 
 - Be mindful of disaster recovery (DR) implications when using it across regions.
 

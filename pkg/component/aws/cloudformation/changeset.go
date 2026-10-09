@@ -15,6 +15,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // changeSetPollInterval is how often DescribeChangeSet is polled while a changeset
@@ -47,7 +48,26 @@ type changeSetResult struct {
 	// OnStackFailure preserves the stored policy returned by DescribeChangeSet,
 	// including named changesets whose type is not exposed by that API.
 	OnStackFailure cfntypes.OnStackFailure
+	// StackStub is true when creating this CREATE changeset made CloudFormation
+	// register a brand-new, empty REVIEW_IN_PROGRESS stack: the stack did not
+	// exist at all before this invocation. Only then may Atmos remove the stack
+	// again when it abandons the changeset; a stack that already existed (in any
+	// state) is never ours to delete.
+	StackStub bool
+	// StackStatus is the stack's status once the operation finished: for a no-op,
+	// the status the stack already had; for an executed changeset, the terminal
+	// status observed while streaming its events. Empty when the changeset was
+	// only created (diff, changeset create) or never reached a status.
+	StackStatus cfntypes.StackStatus
 }
+
+// changeSetCleanupTimeout bounds best-effort cleanup of an abandoned changeset
+// and its stub stack. Cleanup runs on a context detached from cancellation so
+// that Ctrl-C at the confirmation prompt still removes what was created.
+const changeSetCleanupTimeout = 30 * time.Second
+
+// atmosChangeSetPrefix identifies changesets created by Atmos.
+const atmosChangeSetPrefix = "atmos-"
 
 // changeSetNameMaxLength is CloudFormation's hard limit on ChangeSetName length
 // (same limit as stack names): https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/API_CreateChangeSet.html
@@ -58,17 +78,23 @@ const changeSetNameMaxLength = 128
 const decimalBase = 10
 
 // changeSetName generates a unique, stack-scoped changeset name for this operation.
-// The sanitized suffix is truncated so the final "atmos-<suffix>-<timestamp>" name
-// never exceeds CloudFormation's 128-character ChangeSetName limit, even for a
+// The name is "atmos-<suffix>-<timestamp>"; when the stack name already begins
+// with "atmos-" the prefix is not repeated, so the name never reads
+// "atmos-atmos-...". The sanitized suffix is truncated so the final name never
+// exceeds CloudFormation's 128-character ChangeSetName limit, even for a
 // maximum-length stack name.
 func changeSetName(stackName string) string {
 	timestamp := strconv.FormatInt(time.Now().UnixNano(), decimalBase)
 	suffix := sanitizeChangeSetSuffix(stackName)
-	maxSuffixLength := changeSetNameMaxLength - len("atmos--") - len(timestamp)
+	prefix := atmosChangeSetPrefix
+	if strings.HasPrefix(suffix, atmosChangeSetPrefix) {
+		prefix = ""
+	}
+	maxSuffixLength := changeSetNameMaxLength - len(prefix) - len("-") - len(timestamp)
 	if len(suffix) > maxSuffixLength {
 		suffix = suffix[:maxSuffixLength]
 	}
-	return fmt.Sprintf("atmos-%s-%s", suffix, timestamp)
+	return fmt.Sprintf("%s%s-%s", prefix, suffix, timestamp)
 }
 
 // sanitizeChangeSetSuffix keeps changeset names within CloudFormation's
@@ -86,28 +112,57 @@ func sanitizeChangeSetSuffix(s string) string {
 	return b.String()
 }
 
+// stackState is the observed state of a stack by name: whether CloudFormation
+// knows it at all, and its status when it does.
+type stackState struct {
+	Found  bool
+	Status cfntypes.StackStatus
+}
+
+// describeStackState looks the stack up by name. A "does not exist" response is
+// not an error: it reports Found == false.
+func describeStackState(ctx context.Context, client CloudFormationClient, stackName string) (stackState, error) {
+	defer perf.Track(nil, "cloudformation.describeStackState")()
+
+	out, err := client.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{StackName: awsString(stackName)})
+	if err != nil {
+		if isStackNotFoundError(err) {
+			return stackState{}, nil
+		}
+		return stackState{}, err
+	}
+	if len(out.Stacks) == 0 {
+		return stackState{}, nil
+	}
+	return stackState{Found: true, Status: out.Stacks[0].StackStatus}, nil
+}
+
+// exists reports whether the stack has real resources to update. A stack left in
+// REVIEW_IN_PROGRESS (a CREATE changeset was made but never executed, then
+// abandoned) has no resources yet, so a fresh CREATE changeset is generated.
+func (s stackState) exists() bool {
+	return s.Found && s.Status != cfntypes.StackStatusReviewInProgress
+}
+
 // stackExists reports whether the stack already exists (and is not itself
 // mid-deletion), determining whether the changeset should be CREATE or UPDATE type.
 func stackExists(ctx context.Context, client CloudFormationClient, stackName string) (bool, error) {
 	defer perf.Track(nil, "cloudformation.stackExists")()
 
-	out, err := client.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{StackName: awsString(stackName)})
+	state, err := describeStackState(ctx, client, stackName)
 	if err != nil {
-		if isStackNotFoundError(err) {
-			return false, nil
-		}
 		return false, err
 	}
-	for i := range out.Stacks {
-		if out.Stacks[i].StackStatus == cfntypes.StackStatusReviewInProgress {
-			// A stack left in REVIEW_IN_PROGRESS (a CREATE changeset was made but
-			// never executed, then abandoned) has no real resources yet — treat
-			// as not-existing so a fresh CREATE changeset can be generated.
-			continue
-		}
-		return true, nil
-	}
-	return false, nil
+	return state.exists(), nil
+}
+
+// rollbackCompleteError explains that a stack whose initial create failed cannot
+// be updated, and how to recover. Atmos never deletes the stack on its own.
+func rollbackCompleteError(spec *stackSpec) error {
+	return errUtils.Build(errUtils.ErrAwsCloudFormationStackRollbackComplete).
+		WithExplanationf("Stack %q is in ROLLBACK_COMPLETE: its initial create failed and CloudFormation cannot update a stack in that state.", spec.StackName).
+		WithHintf("Delete the failed stack with `atmos aws cloudformation delete %s`, then run apply again.", spec.commandTarget()).
+		Err()
 }
 
 // stackNotFoundMessage matches the stack-specific messages returned by CloudFormation.
@@ -149,13 +204,16 @@ func wrapAPICallError(stackName string, err error) error {
 func createChangeSet(ctx context.Context, client CloudFormationClient, spec *stackSpec) (*changeSetResult, error) {
 	defer perf.Track(nil, "cloudformation.createChangeSet")()
 
-	exists, err := stackExists(ctx, client, spec.StackName)
+	state, err := describeStackState(ctx, client, spec.StackName)
 	if err != nil {
 		return nil, err
 	}
+	if state.Status == cfntypes.StackStatusRollbackComplete {
+		return nil, rollbackCompleteError(spec)
+	}
 
 	changeSetType := cfntypes.ChangeSetTypeCreate
-	if exists {
+	if state.exists() {
 		changeSetType = cfntypes.ChangeSetTypeUpdate
 	}
 
@@ -190,7 +248,55 @@ func createChangeSet(ctx context.Context, client CloudFormationClient, spec *sta
 		return nil, fmt.Errorf(wrapFmt, errUtils.ErrAwsCloudFormationChangeSetFailed, err)
 	}
 
-	return waitForChangeSet(ctx, client, spec.StackName, name, changeSetType)
+	result, err := waitForChangeSet(ctx, client, spec.StackName, name, changeSetType)
+	if result != nil {
+		// A CREATE changeset against a stack CloudFormation did not know at all
+		// made it register an empty REVIEW_IN_PROGRESS stub.
+		result.StackStub = changeSetType == cfntypes.ChangeSetTypeCreate && !state.Found
+		if result.NoOp {
+			result.StackStatus = state.Status
+		}
+	}
+	return result, err
+}
+
+// discardChangeSet deletes a changeset Atmos created but is abandoning (a diff
+// preview, a declined apply, a no-op, or a failed computation) and, when its
+// CREATE made Atmos bring the stack into existence, removes that empty stub
+// stack too. Cleanup is best effort: failures are warnings, never errors, so
+// they cannot mask the command's own outcome.
+func discardChangeSet(ctx context.Context, client CloudFormationClient, stackName string, result *changeSetResult) {
+	defer perf.Track(nil, "cloudformation.discardChangeSet")()
+
+	if result == nil || result.ChangeSetName == "" {
+		return
+	}
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), changeSetCleanupTimeout)
+	defer cancel()
+
+	if err := deleteChangeSet(cleanupCtx, client, stackName, result.ChangeSetName); err != nil {
+		ui.Warning(fmt.Sprintf("failed to clean up changeset %q: %v", result.ChangeSetName, err))
+	}
+	if result.StackStub {
+		removeStubStack(cleanupCtx, client, stackName)
+	}
+}
+
+// removeStubStack deletes the empty stack a CREATE changeset registered, but only
+// after confirming it is still in REVIEW_IN_PROGRESS: a stack in any other status
+// holds real resources and must never be deleted here.
+func removeStubStack(ctx context.Context, client CloudFormationClient, stackName string) {
+	state, err := describeStackState(ctx, client, stackName)
+	if err != nil {
+		ui.Warning(fmt.Sprintf("failed to inspect stub stack %q for cleanup: %v", stackName, err))
+		return
+	}
+	if !state.Found || state.Status != cfntypes.StackStatusReviewInProgress {
+		return
+	}
+	if _, err := client.DeleteStack(ctx, &cloudformation.DeleteStackInput{StackName: awsString(stackName)}); err != nil {
+		ui.Warning(fmt.Sprintf("failed to remove empty %s stack %q: %v", cfntypes.StackStatusReviewInProgress, stackName, err))
+	}
 }
 
 // changeSetPollDecision is the outcome of inspecting one DescribeChangeSet poll.

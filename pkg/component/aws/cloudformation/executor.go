@@ -15,11 +15,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	sharedoutput "github.com/cloudposse/atmos/pkg/output"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Seams for testing.
@@ -163,6 +161,7 @@ func resolveSpecAndTemplate(ctx context.Context, atmosConfig *schema.AtmosConfig
 	if err != nil {
 		return nil, err
 	}
+	spec.withAtmosIdentity(info)
 
 	if operationsSkippingTemplateLoad[operation] {
 		if operation == OperationChangesetExecute && spec.StackPolicyFile != "" {
@@ -286,9 +285,7 @@ var operationHandlers = map[Operation]operationHandler{
 	OperationDelete: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
 		return runDelete(octx.Ctx, client, octx.Flags, spec, summary)
 	},
-	OperationOutput: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
-		return runOutput(octx.Ctx, client, spec.StackName, octx.Flags, summary)
-	},
+	OperationOutput:          runOutputOperation,
 	OperationChangesetCreate: runChangesetCreate,
 	OperationChangesetExecute: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
 		return runChangesetExecute(octx.Ctx, client, spec, changesetNameFlag(octx.Flags), summary)
@@ -351,7 +348,17 @@ var operationHandlers = map[Operation]operationHandler{
 func resolveStackSetTargetFromContext(octx *opContext) (*stackSetConfig, error) {
 	provisionSection, _ := octx.Info.ComponentSection[cfg.ProvisionSectionName].(map[string]any)
 	flagTarget, _ := octx.Flags[targetKey].(string)
-	return resolveStackSetTarget(provisionSection, flagTarget)
+	ssCfg, err := resolveStackSetTarget(provisionSection, flagTarget)
+	if err != nil {
+		return nil, err
+	}
+	// A permission_model typo fails here, locally, instead of at the AWS API. This
+	// is the real-run path only: dry-run resolves the target without rendering
+	// templates, so it validates a deferred permission_model itself.
+	if err := validateStackSetPermissionModel(ssCfg.Name, ssCfg.PermissionModel); err != nil {
+		return nil, err
+	}
+	return ssCfg, nil
 }
 
 // changesetNameFlag extracts the required --changeset-name flag value.
@@ -379,8 +386,13 @@ func runOperation(octx *opContext, operation Operation, spec *stackSpec) (map[st
 		return runFmt(spec, octx.Flags, summary)
 	}
 
-	if err := requireConfirmation(operation, spec.StackName, octx.Flags); err != nil {
-		return summary, err
+	// apply asks only after its changeset is created and previewed (see
+	// deployDirect), and only when it deploys a stack: publish-only and external
+	// deliveries change no stack and never ask.
+	if operation != OperationApply {
+		if err := requireConfirmation(operation, spec.StackName, octx.Flags); err != nil {
+			return summary, err
+		}
 	}
 
 	region := resolveRegion(octx.Info.ComponentSection)
@@ -412,6 +424,7 @@ func runDiff(octx *opContext, client CloudFormationClient, spec *stackSpec, summ
 	}
 	result, err := createChangeSet(octx.Ctx, client, spec)
 	if err != nil {
+		discardChangeSet(octx.Ctx, client, spec.StackName, result)
 		return summary, err
 	}
 	summary["changeset_id"] = result.ChangeSetID
@@ -420,11 +433,11 @@ func runDiff(octx *opContext, client CloudFormationClient, spec *stackSpec, summ
 	summary["changes"] = result.Changes
 	renderErr := renderDiffSummary(spec.StackName, result)
 
-	// Clean up the preview even if its output could not be written. A cleanup
-	// failure is a warning; preserve any rendering failure as the command error.
-	if err := deleteChangeSet(octx.Ctx, client, spec.StackName, result.ChangeSetName); err != nil {
-		ui.Warning(fmt.Sprintf("failed to clean up preview changeset %q: %v", result.ChangeSetName, err))
-	}
+	// Clean up the preview even if its output could not be written: the changeset
+	// and, for a stack that did not exist before this diff, the empty
+	// REVIEW_IN_PROGRESS stub the CREATE changeset registered. A cleanup failure is
+	// only a warning; any rendering failure stays the command error.
+	discardChangeSet(octx.Ctx, client, spec.StackName, result)
 	return summary, renderErr
 }
 
@@ -433,15 +446,22 @@ func runDiff(octx *opContext, client CloudFormationClient, spec *stackSpec, summ
 // to renderOutputsSummary, without which those verbs produce no visible output
 // at all despite successfully creating and describing the changeset.
 func renderDiffSummary(stackName string, result *changeSetResult) error {
+	if err := data.Writeln(diffSummaryText(stackName, result)); err != nil {
+		return fmt.Errorf("write CloudFormation diff summary: %w", err)
+	}
+	return nil
+}
+
+// diffSummaryText builds the text renderDiffSummary writes: a header line with
+// the number of resource changes, then one line per changed resource (or the
+// no-op line when the changeset would change nothing).
+func diffSummaryText(stackName string, result *changeSetResult) string {
 	lines := []string{fmt.Sprintf("%s: no changes (changeset would be a no-op)", stackName)}
 	if !result.NoOp {
 		lines = diffResourceLines(result.Changes)
 		lines = append([]string{fmt.Sprintf("%s: %d resource change(s)", stackName, len(lines))}, lines...)
 	}
-	if err := data.Writeln(strings.Join(lines, "\n")); err != nil {
-		return fmt.Errorf("write CloudFormation diff summary: %w", err)
-	}
-	return nil
+	return strings.Join(lines, "\n")
 }
 
 // diffResourceLines renders resource changes, excluding non-resource changes.
@@ -483,6 +503,11 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 	for k, v := range deploySummary {
 		summary[k] = v
 	}
+	// The stack's final status, under the same key delete uses, is recorded even
+	// when the deploy failed (for example ROLLBACK_COMPLETE) so CI can report it.
+	if result != nil && result.StackStatus != "" {
+		summary["final_status"] = string(result.StackStatus)
+	}
 	if err != nil {
 		return summary, err
 	}
@@ -494,6 +519,7 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 	summary["changeset_id"] = result.ChangeSetID
 	summary["changeset_name"] = result.ChangeSetName
 	summary["no_op"] = result.NoOp
+	summary["changes"] = result.Changes
 
 	if err := applyPostDeployPolicy(octx, client, spec, result); err != nil {
 		return summary, err
@@ -514,27 +540,6 @@ func applyPostDeployPolicy(octx *opContext, client CloudFormationClient, spec *s
 	return nil
 }
 
-// runDelete deletes the stack and streams events until it's gone.
-func runDelete(ctx context.Context, client CloudFormationClient, flags map[string]any, spec *stackSpec, summary map[string]any) (map[string]any, error) {
-	opts := deleteOptionsFromFlags(flags)
-	// Captured immediately before deleteStack's DeleteStack call -- see
-	// preOperationEventBaseline -- so streamStackEvents can tell a fast
-	// delete's own events apart from anything already present on the stack.
-	baseline := preOperationEventBaseline(ctx, client, spec.StackName)
-	if err := deleteStack(ctx, client, spec, opts); err != nil {
-		return summary, err
-	}
-	status, err := streamStackEvents(ctx, client, spec.StackName, baseline, OperationDelete)
-	if err != nil {
-		return summary, err
-	}
-	summary["final_status"] = string(status)
-	if isFailedStackStatus(status) {
-		return summary, fmt.Errorf("%w: stack %s ended in status %s", errUtils.ErrAwsCloudFormationOperationFailed, spec.StackName, status)
-	}
-	return summary, nil
-}
-
 // deleteOptionsFromFlags builds deleteOptions from the command's flags.
 func deleteOptionsFromFlags(flags map[string]any) deleteOptions {
 	opts := deleteOptions{}
@@ -545,46 +550,4 @@ func deleteOptionsFromFlags(flags map[string]any) deleteOptions {
 		opts.DisableTerminationProtection = v
 	}
 	return opts
-}
-
-// runOutput renders the deployed stack's Outputs via the standalone `output`
-// verb's path (also called by runApply for the end-of-deploy summary).
-func runOutput(ctx context.Context, client CloudFormationClient, stackName string, flags map[string]any, summary map[string]any) (map[string]any, error) {
-	outputs, err := presentedStackOutputs(ctx, client, stackName)
-	if err != nil {
-		return summary, err
-	}
-	summary["outputs"] = outputs
-	if err := renderOutputsSummary(outputs, flags); err != nil {
-		return summary, err
-	}
-	return summary, nil
-}
-
-// renderOutputsSummary writes the Outputs to the data channel (stdout) in the
-// requested format (default: table), reusing the shared pkg/output formatter —
-// the full standard format set (json/yaml/hcl/env/dotenv/bash/csv/tsv/github).
-// Returns an error on an invalid --format (wrapped in ErrInvalidFlag, instead of
-// swallowing it: a bad value must fail the command, not silently exit 0 with
-// empty stdout) or on a write failure, so callers report the operation as
-// unsuccessful instead of silently succeeding with no output.
-func renderOutputsSummary(outputs map[string]any, flags map[string]any) error {
-	format := sharedoutput.FormatTable
-	if f, ok := flags["format"].(string); ok && f != "" {
-		format = sharedoutput.Format(f)
-	}
-
-	opts := sharedoutput.FormatOptions{}
-	if flatten, ok := flags["flatten"].(bool); ok {
-		opts.Flatten = flatten
-	}
-	if uppercase, ok := flags["uppercase"].(bool); ok {
-		opts.Uppercase = uppercase
-	}
-
-	rendered, err := sharedoutput.FormatOutputsWithOptions(outputs, format, opts)
-	if err != nil {
-		return fmt.Errorf("%w: failed to format outputs: %w", errUtils.ErrInvalidFlag, err)
-	}
-	return data.Write(rendered)
 }

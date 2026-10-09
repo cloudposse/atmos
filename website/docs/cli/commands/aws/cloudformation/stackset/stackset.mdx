@@ -71,6 +71,12 @@ StackSet target is never implicit by default:
 - **None declared** — `stackset create`/`stackset update` fail with a hint to
   add one.
 
+The target's `permission_model` is checked before anything is created: a value
+other than `SELF_MANAGED` or `SERVICE_MANAGED` fails locally with the list of
+valid models instead of at the AWS API. A StackSet target is not a target for
+`apply`/`deploy`: `apply --target <name>` fails with a hint to use
+`stackset create` or `stackset update` instead.
+
 `stackset delete` and `stackset instances` act directly on the StackSet whose
 name matches the component's `stack_name` — they take no `--target` flag and
 do not need a `kind: aws/stackset` target declared at all.

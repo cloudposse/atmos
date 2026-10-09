@@ -50,6 +50,12 @@ atmos aws cloudformation backend update vpc -s plat-ue2-dev --target artifacts
   <dt>`--target` <em>(optional)</em></dt>
   <dd>The `kind: aws/s3` provision target to use. Required when more than one is declared.</dd>
 
+  <dt>`--auto-approve` <em>(optional)</em></dt>
+  <dd>Skip the confirmation prompt shown when the bucket already exists, since re-applying the secure defaults overwrites its existing encryption, versioning, public-access settings, and tags. Required to reconcile an existing bucket in a non-interactive session. A bucket that does not exist yet never prompts.</dd>
+
+  <dt>`--dry-run` <em>(optional)</em></dt>
+  <dd>Resolve the component and its `kind: aws/s3` target from static configuration and print what would happen, without authenticating or making AWS calls. A component or stack that does not exist fails the same way the real run does.</dd>
+
   <dt>`--identity`, `-i` <em>(optional)</em></dt>
   <dd>Atmos identity to authenticate with.</dd>
 </dl>

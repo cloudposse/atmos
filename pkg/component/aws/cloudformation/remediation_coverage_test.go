@@ -81,6 +81,8 @@ func TestNamedChangesetProtectionFailureIsReportedAfterCompletion(t *testing.T) 
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{StackEvents: []cfntypes.StackEvent{{EventId: awsString("completed"), ResourceStatus: cfntypes.ResourceStatusCreateComplete}}}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}}}, nil),
+		// Final read for the stack-level event after the terminal status.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().UpdateTerminationProtection(gomock.Any(), &cloudformation.UpdateTerminationProtectionInput{StackName: awsString("protected"), EnableTerminationProtection: &enabled}).Return(nil, denied),
 	)
 	summary, err := runChangesetExecute(context.Background(), client, &stackSpec{StackName: "protected", TerminationProtection: true}, "reviewed", map[string]any{})

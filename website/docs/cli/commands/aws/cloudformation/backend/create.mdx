@@ -47,6 +47,12 @@ atmos aws cloudformation backend create vpc -s plat-ue2-dev --target artifacts
   <dt>`--target` <em>(optional)</em></dt>
   <dd>The `kind: aws/s3` provision target to use. Required when more than one is declared.</dd>
 
+  <dt>`--auto-approve` <em>(optional)</em></dt>
+  <dd>Skip the confirmation prompt shown when the bucket already exists, since re-applying the secure defaults overwrites its existing encryption, versioning, public-access settings, and tags. Required to reconcile an existing bucket in a non-interactive session. A bucket that does not exist yet never prompts.</dd>
+
+  <dt>`--dry-run` <em>(optional)</em></dt>
+  <dd>Resolve the component and its `kind: aws/s3` target from static configuration and print what would happen, for example `would create bucket <name> in region <region>`. It makes no AWS calls and does not authenticate. A component or stack that does not exist, or a component with no resolvable target, fails the same way the real run does.</dd>
+
   <dt>`--identity`, `-i` <em>(optional)</em></dt>
   <dd>Atmos identity to authenticate with.</dd>
 </dl>
@@ -58,4 +64,6 @@ atmos aws cloudformation backend create vpc -s plat-ue2-dev --target artifacts
 same registered S3 backend provisioner `atmos terraform backend create` uses
 — no separate backend implementation exists for CloudFormation. If the bucket
 already existed, a warning explains which existing settings (versioning,
-encryption, public access, tags) are being overwritten.
+encryption, public access, tags) are being overwritten. The warning prints
+before the final `Provisioned` line, so the last line reports the completed
+result.

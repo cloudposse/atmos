@@ -18,6 +18,13 @@ import (
 // cmd/aws/cloudformation's own flagAutoApprove naming convention.
 const flagAutoApprove = "auto-approve"
 
+// Backend verb names, used in messages and dry-run output.
+const (
+	verbCreate = "create"
+	verbUpdate = "update"
+	verbDelete = "delete"
+)
+
 // stackFlagCompletion reuses cmd/terraform/shared's generic stack-name
 // completion (component/stack listing is not terraform-specific despite the
 // package's name — cmd/terraform/backend already reuses it verbatim).

@@ -230,30 +230,40 @@ See the GitHub Actions guide for [workflow validation](/integrations/github-acti
 
 ## Features
 
-Terraform commands support the full native CI feature set below. Kubernetes, Helm, Helmfile,
-and CloudFormation commands currently produce job summaries only; they do not emit output
-variables, status checks, PR comments, or stored artifacts.
+Terraform commands support the full native CI feature set below. Kubernetes, Helm, and Helmfile
+commands produce job summaries only; CloudFormation commands produce summaries and output
+variables. These commands do not emit status checks, PR comments, or stored artifacts.
 
 ### [Job Summaries](/ci/job-summaries)
 
 Rich Markdown summaries with resource counts, inline badges, collapsible diffs, and captured
 command output written to `$GITHUB_STEP_SUMMARY`. Terraform includes plan/apply summaries plus
-the broader native CI features below. Helm, Helmfile, and CloudFormation currently write
-summaries only. Templates are fully customizable with Go template syntax.
+the broader native CI features below. Helm and Helmfile currently write summaries only, and
+CloudFormation writes summaries plus output variables. Templates are fully customizable with Go template syntax.
 
 Kubernetes summaries are intentionally compact: `plan`/`diff` show created, changed, and
 no-change objects; `apply`/`deploy` show applied or delivered objects; `delete` shows deleted
 and not-found objects; `validate` shows valid and invalid objects plus errors.
 
-CloudFormation summaries are compact in the same way: `diff` shows the pending changeset,
-`apply`/`delete` show the stack operation result, and `drift detect`/`drift describe` show
-the drifted resources found against the deployed stack.
+CloudFormation summaries cover changesets, stack operations, and drift results. See
+[Job Summaries](/ci/job-summaries#cloudformation-summaries) for the command-specific details.
 
 ### [Outputs](/cli/configuration/ci/output)
 
 Terraform plan and apply results exported as CI output variables for use in downstream jobs.
-On GitHub Actions, these are written to `$GITHUB_OUTPUT`. Kubernetes and CloudFormation
-commands do not emit output variables.
+On GitHub Actions, these are written to `$GITHUB_OUTPUT`. Kubernetes commands do not emit output
+variables.
+
+CloudFormation commands emit these variables, following the same `ci.output.enabled` and
+`ci.output.variables` settings as Terraform:
+
+- `stack`, `component`, `command` (the verb you ran, for example `plan`), `stack_name`, and `exit_code`
+- `changeset_name`, when the operation created a changeset
+- `has_changes` (`diff`/`plan`, `apply`/`deploy`): `false` for a no-op changeset
+- `stack_status`, when the operation observed a final status (`delete`)
+- `drifted`, `drift_status`, and `drifted_resource_count` (`drift detect`, `drift describe`)
+- `output_<Key>` for each stack Output after `apply`/`deploy`. These bypass the `ci.output.variables`
+  allow-list and carry the masked values, so NoEcho-dependent outputs are never exported in clear text.
 
 ### [Checks](/cli/configuration/ci/checks)
 
@@ -334,10 +344,10 @@ CI features are activated with the `--ci` flag on supported commands or automati
   <dd>Open (or update) a pull request with available vendored-component updates directly from CI — replaces the deprecated Component Updater action.</dd>
 
   <dt>[`atmos aws cloudformation diff|apply|delete [--ci]`](/cli/commands/aws/cloudformation)</dt>
-  <dd>Run CloudFormation diff, apply, and delete with a native job summary only. No output variables, status checks, comments, or artifacts are emitted.</dd>
+  <dd>Run CloudFormation diff, apply, and delete with a native job summary and output variables. No status checks, comments, or artifacts are emitted.</dd>
 
   <dt>[`atmos aws cloudformation drift detect|describe [--ci]`](/cli/commands/aws/cloudformation/drift)</dt>
-  <dd>Run CloudFormation drift detection and description with a native job summary only.</dd>
+  <dd>Run CloudFormation drift detection and description with a native job summary and output variables.</dd>
 </dl>
 
 ## Providers

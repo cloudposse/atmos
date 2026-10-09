@@ -48,6 +48,9 @@ atmos aws cloudformation backend delete vpc -s plat-ue2-dev --target artifacts -
   <dt>`--target` <em>(optional)</em></dt>
   <dd>The `kind: aws/s3` provision target to use. Required when more than one is declared.</dd>
 
+  <dt>`--dry-run` <em>(optional)</em></dt>
+  <dd>Resolve the component and its `kind: aws/s3` target from static configuration and print what would be deleted, for example `would delete bucket <name> in region <region>`. It makes no AWS calls and deletes nothing. A component or stack that does not exist fails the same way the real run does.</dd>
+
   <dt>`--identity`, `-i` <em>(optional)</em></dt>
   <dd>Atmos identity to authenticate with.</dd>
 </dl>
@@ -55,6 +58,5 @@ atmos aws cloudformation backend delete vpc -s plat-ue2-dev --target artifacts -
 ## Behavior
 
 `backend delete` lists every object and version in the bucket, warns how many
-will be removed (including a separate count of `.tfstate`-suffixed keys, in
-case the bucket is shared with an unrelated Terraform backend), deletes them
-all in batches, and finally deletes the now-empty bucket.
+will be removed, deletes them all in batches, and finally deletes the
+now-empty bucket.

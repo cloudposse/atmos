@@ -8,6 +8,8 @@ description: Format the local template in place, or check formatting with --chec
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
+import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
+import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
   Format the component's local template in place: a dependency-free, native
@@ -44,6 +46,19 @@ atmos aws cloudformation fmt --all -s plat-ue2-dev
 atmos aws cloudformation fmt --affected --base origin/main --check
 ```
 
+## Check mode
+
+With `--check`, `fmt` reports each template and never writes:
+
+- A template that is already formatted prints `already formatted`.
+- An unformatted template prints `not formatted`; a single-component run then exits non-zero.
+- With `--all`, `--affected`, `--tags`, or `--labels`, `fmt --check` checks every selected template and
+  prints a line for each one, then exits non-zero once at the end, with an error that lists every
+  unformatted template. It does not stop at the first one.
+
+Components that point at the same template file share one check, identified by the file's resolved
+path, so a shared template is reported once per run rather than once per component.
+
 ## Flags
 
 <dl>
@@ -53,20 +68,9 @@ atmos aws cloudformation fmt --affected --base origin/main --check
   <dt>`--check` <em>(optional)</em></dt>
   <dd>Report whether the template is formatted without writing changes. Exits non-zero if the template is not formatted — use this in CI instead of the default write-in-place behavior.</dd>
 
-  <dt>`--all` <em>(optional)</em></dt>
-  <dd>Format all `aws/cloudformation` components' templates in dependency order.</dd>
+<SelectionFlags />
 
-  <dt>`--affected` <em>(optional)</em></dt>
-  <dd>Format affected `aws/cloudformation` components' templates and their dependencies.</dd>
-
-  <dt>`--include-dependents` <em>(optional)</em></dt>
-  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
-
-  <dt>`--tags` <em>(optional)</em></dt>
-  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
-
-  <dt>`--labels` <em>(optional)</em></dt>
-  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+<GitFlags />
 </dl>
 
 :::note
