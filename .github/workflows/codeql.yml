@@ -199,6 +199,9 @@ jobs:
         with:
           size-gb: '20'
 
+      - name: Test SARIF stack normalization
+        run: bash scripts/test-dedupe-sarif-stacks.sh
+
       - name: Run govulncheck
         shell: bash
         # Bounds a swap-thrashing run instead of burning the 6h job default.
@@ -217,7 +220,12 @@ jobs:
           # (govulncheck's SSA construction parallelizes via goroutines, which
           # -p doesn't govern) while nearly tripling run time.
           GOMEMLIMIT: "32GiB"
-        run: govulncheck -format sarif ./... > govulncheck.sarif
+        run: |
+          govulncheck -format sarif ./... > govulncheck.sarif
+          # govulncheck can emit identical stacks, but SARIF requires unique
+          # entries per result. Keep every finding and distinct stack trace.
+          jq -f scripts/dedupe-sarif-stacks.jq govulncheck.sarif > govulncheck.normalized.sarif
+          mv govulncheck.normalized.sarif govulncheck.sarif
 
       - name: Upload SARIF file
         if: always()
