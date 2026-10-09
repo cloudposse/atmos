@@ -552,6 +552,7 @@ func TestDeliverApply_AutoProvisionsMissingBackend(t *testing.T) {
 	t.Cleanup(backend.ResetS3ClientFactory)
 	s3Client := &createTrackingS3Client{fakeS3Client: fakeS3Client{headBucketErr: &types.NotFound{}}}
 	backend.SetS3ClientFactory(func(aws.Config, ...func(*s3.Options)) backend.S3ClientAPI { return s3Client })
+	useRealBucketExistenceCheck(t)
 
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
@@ -593,6 +594,7 @@ func TestDeliverApply_AutoProvisionFailure_AbortsBeforeUpload(t *testing.T) {
 		createBucketErr: errors.New("access denied"),
 	}
 	backend.SetS3ClientFactory(func(aws.Config, ...func(*s3.Options)) backend.S3ClientAPI { return s3Client })
+	useRealBucketExistenceCheck(t)
 
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)  // no expectations: any call fails the test.

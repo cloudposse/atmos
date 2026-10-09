@@ -109,12 +109,23 @@ func buildStackSpec(componentSection map[string]any) (*stackSpec, error) {
 		return nil, err
 	}
 
-	spec.Tags = normalizeTags(componentSection[cfg.TagsSectionName])
+	tags, err := normalizeTags(componentSection[cfg.TagsSectionName])
+	if err != nil {
+		return nil, fmt.Errorf("tags: %w", err)
+	}
+	spec.Tags = tags
 
 	if err := resolveStackPolicySection(spec, componentSection[cfg.StackPolicySectionName]); err != nil {
 		return nil, err
 	}
 
+	applyOptionalStackSettings(spec, componentSection)
+	return spec, nil
+}
+
+// applyOptionalStackSettings copies the optional scalar stack settings (role,
+// notifications, rollback, termination protection, timeout) onto spec.
+func applyOptionalStackSettings(spec *stackSpec, componentSection map[string]any) {
 	spec.RoleArn, _ = componentSection[cfg.RoleArnSectionName].(string)
 	spec.NotificationArns = normalizeStringSlice(componentSection[cfg.NotificationArnsSectionName])
 	spec.DisableRollback, _ = componentSection[cfg.DisableRollbackSectionName].(bool)
@@ -125,8 +136,6 @@ func buildStackSpec(componentSection map[string]any) (*stackSpec, error) {
 		ui.Warning("timeout_in_minutes is unsupported by changeset-based operations and is ignored.")
 		spec.TimeoutInMinutes = toInt32(timeout)
 	}
-
-	return spec, nil
 }
 
 // resolveStackPolicySection reads `stack_policy.file` or the inline `stack_policy.body` into the spec.
@@ -397,12 +406,30 @@ func joinCapabilities(values []cfntypes.Capability) string {
 	return strings.Join(names, ", ")
 }
 
-// normalizeTags converts `tags:` (a map[string]string-ish) to CloudFormation tags,
-// sorted by key for deterministic output.
-func normalizeTags(raw any) []cfntypes.Tag {
+// tagsShapeHint shows the explicit bridges from other tag shapes to the native map.
+const tagsShapeHint = "Write tags as a map (`tags: {Team: platform}`). To reuse an AWS CLI `[{Key,Value}]` file, " +
+	"reshape it with `tags: !include 'tags.json \".[] as $t ireduce ({}; .[$t.Key] = $t.Value)\"'`. " +
+	"To carry Atmos `metadata.labels` onto the stack, use `tags: !labels`."
+
+// invalidTagsError reports a `tags:` section that is not a map of names to scalar values.
+func invalidTagsError(explanation string, args ...any) error {
+	return errUtils.Build(errUtils.ErrInvalidAwsCloudFormationSettings).
+		WithExplanationf(explanation, args...).
+		WithHint(tagsShapeHint).
+		Err()
+}
+
+// normalizeTags converts `tags:` (a map of tag name to scalar value) to CloudFormation
+// tags, sorted by key for deterministic output. An absent section yields no tags; any
+// other shape (such as the AWS CLI [{Key, Value}] list or a plain string list) or a
+// non-scalar tag value is rejected rather than silently dropped.
+func normalizeTags(raw any) ([]cfntypes.Tag, error) {
+	if raw == nil {
+		return nil, nil
+	}
 	tags, ok := raw.(map[string]any)
 	if !ok {
-		return nil
+		return nil, invalidTagsError("tags must be a map of tag names to string values, got %T", raw)
 	}
 	keys := make([]string, 0, len(tags))
 	for k := range tags {
@@ -412,13 +439,16 @@ func normalizeTags(raw any) []cfntypes.Tag {
 
 	result := make([]cfntypes.Tag, 0, len(keys))
 	for _, key := range keys {
-		value := fmt.Sprintf("%v", tags[key])
+		switch tags[key].(type) {
+		case map[string]any, []any:
+			return nil, invalidTagsError("tags must be a map of tag names to string values, but tag %q has a %T value", key, tags[key])
+		}
 		result = append(result, cfntypes.Tag{
 			Key:   awsString(key),
-			Value: awsString(value),
+			Value: awsString(fmt.Sprintf("%v", tags[key])),
 		})
 	}
-	return result
+	return result, nil
 }
 
 // normalizeStringSlice converts a YAML-decoded []any (or already-[]string) into a

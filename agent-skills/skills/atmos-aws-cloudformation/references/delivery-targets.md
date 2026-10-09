@@ -91,11 +91,17 @@ provision:
 unknown `permission_model` or `SERVICE_MANAGED` with both `accounts` and `regions`. Template or YAML-function values are
 not evaluated and not judged. Output names the verb, component, and stack.
 
-**Packaging scope today**: automatic packaging uploads the **template body itself** when it exceeds
-the inline size limit. It does not currently rewrite local-asset references inside the template
+**Packaging scope**: packaging uploads the **template body itself** when it exceeds the 51,200-byte
+inline limit, or when any `kind: aws/s3` target is selected. It runs on
+plan/diff/validate/changeset create/apply/deploy; only apply/deploy may create the bucket (with
+`provision.backend.enabled: true`). It does not rewrite local-asset references inside the template
 (Lambda source zips, nested-stack templates referenced by relative path) the way `aws cloudformation
-package`/Rain's `pkg` do — pre-upload those assets out-of-band and reference the resulting S3
-location directly in the template until a future phase closes this gap.
+package`/Rain's `!Rain::S3` do. For assets, use `archive` + `publish` steps in a `kind: steps` hook
+on `before.aws/cloudformation.apply` (and `.diff` / `.changeset-create` for previews and the
+`changeset create` workflow), derive the object key from stack vars, and pass bucket/key to the
+template through `parameters:`. There is no upload YAML function: YAML functions never mutate state.
+A missing artifact bucket fails every packaging verb with `ErrAwsCloudFormationBackendMissing` and a
+hint naming `backend create`.
 
 ## Stack Sets
 

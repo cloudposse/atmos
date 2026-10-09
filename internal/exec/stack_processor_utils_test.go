@@ -4827,47 +4827,32 @@ func TestManifestSchemaErrorMessage(t *testing.T) {
 func TestExtractLocalsFromRawYAML_UnsupportedTagHints(t *testing.T) {
 	t.Cleanup(ClearLocalsExtractionCache)
 
-	tests := []struct {
-		name        string
-		content     string
-		file        string
-		wantContain []string
-		wantAbsent  []string
-	}{
-		{
-			name:        "short-form Ref",
-			content:     "components:\n  aws/cloudformation:\n    web:\n      template:\n        Outputs:\n          Id: !Ref Bucket\n",
-			file:        "stack-ref.yaml",
-			wantContain: []string{"`!Ref` is a CloudFormation short-form intrinsic", "Ref:", "path:"},
-			wantAbsent:  []string{"rename it to .yaml.tmpl"},
-		},
-		{
-			name:        "short-form Sub",
-			content:     "components:\n  aws/cloudformation:\n    web:\n      template:\n        Value: !Sub \"${AWS::Region}\"\n",
-			file:        "stack-sub.yaml",
-			wantContain: []string{"`!Sub` is a CloudFormation short-form intrinsic", "Fn::Sub:"},
-			wantAbsent:  []string{"rename it to .yaml.tmpl"},
-		},
-		{
-			name:        "other unsupported tag keeps the generic hint",
-			content:     "vars:\n  stage: !envv HOME\n",
-			file:        "stack-other.yaml",
-			wantContain: []string{"rename it to .yaml.tmpl"},
-			wantAbsent:  []string{"CloudFormation short-form"},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := extractLocalsFromRawYAML(&schema.AtmosConfiguration{}, tt.content, tt.file)
+	t.Run("CloudFormation short-form intrinsics are accepted", func(t *testing.T) {
+		// The aws/cloudformation manifest package registers !Ref/!Sub/... as foreign tags that
+		// rewrite to their long form, so a stack manifest carrying them parses cleanly.
+		for name, content := range map[string]string{
+			"Ref": "components:\n  aws/cloudformation:\n    web:\n      template:\n        Outputs:\n          Id: !Ref Bucket\n",
+			"Sub": "components:\n  aws/cloudformation:\n    web:\n      template:\n        Value: !Sub \"${AWS::Region}\"\n",
+		} {
+			_, err := extractLocalsFromRawYAML(&schema.AtmosConfiguration{}, content, "stack-"+name+".yaml")
+			require.NoError(t, err, name)
+		}
+	})
 
-			require.ErrorIs(t, err, errUtils.ErrInvalidStackManifest)
-			require.ErrorIs(t, err, errUtils.ErrUnsupportedYamlTag)
-			for _, want := range tt.wantContain {
-				assert.Contains(t, err.Error(), want)
-			}
-			for _, absent := range tt.wantAbsent {
-				assert.NotContains(t, err.Error(), absent)
-			}
-		})
-	}
+	t.Run("Rain directive gets the migration hint", func(t *testing.T) {
+		content := "components:\n  aws/cloudformation:\n    web:\n      template:\n        Value: !Rain::Env OWNER\n"
+		_, err := extractLocalsFromRawYAML(&schema.AtmosConfiguration{}, content, "stack-rain.yaml")
+		require.ErrorIs(t, err, errUtils.ErrInvalidStackManifest)
+		require.ErrorIs(t, err, errUtils.ErrUnsupportedYamlTag)
+		assert.True(t, errUtils.HasHint(err, "Replace !Rain::Env with"))
+		assert.NotContains(t, err.Error(), "rename it to .yaml.tmpl")
+	})
+
+	t.Run("other unsupported tag keeps the generic hint", func(t *testing.T) {
+		_, err := extractLocalsFromRawYAML(&schema.AtmosConfiguration{}, "vars:\n  stage: !envv HOME\n", "stack-other.yaml")
+		require.ErrorIs(t, err, errUtils.ErrInvalidStackManifest)
+		require.ErrorIs(t, err, errUtils.ErrUnsupportedYamlTag)
+		assert.Contains(t, err.Error(), "rename it to .yaml.tmpl")
+		assert.NotContains(t, err.Error(), "CloudFormation short-form")
+	})
 }

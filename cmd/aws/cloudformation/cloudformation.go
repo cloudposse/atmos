@@ -322,13 +322,15 @@ func operationFlagOptions(use, subCommand string) []flags.Option {
 }
 
 // skipHooksVerbs are the verbs that fire lifecycle hooks (before/after
-// diff/apply/delete/drift events) and therefore accept --skip-hooks.
+// diff/apply/delete/drift/changeset-create/changeset-execute events) and therefore accept --skip-hooks.
 var skipHooksVerbs = map[string]bool{
-	opDiff:           true,
-	subCommandApply:  true,
-	subCommandDelete: true,
-	"drift-detect":   true,
-	"drift-describe": true,
+	opDiff:              true,
+	subCommandApply:     true,
+	subCommandDelete:    true,
+	"drift-detect":      true,
+	"drift-describe":    true,
+	"changeset-create":  true,
+	"changeset-execute": true,
 }
 
 // skipHooksFlagOptions registers --skip-hooks with the same semantics as

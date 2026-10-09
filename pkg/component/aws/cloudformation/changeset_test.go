@@ -499,3 +499,77 @@ func TestTimeValue(t *testing.T) {
 	ts := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	assert.Equal(t, ts, timeValue(&ts))
 }
+
+// UsePreviousValue on a CREATE changeset must fail locally with a hinted
+// sentinel error naming the offending parameters, without calling CreateChangeSet.
+func TestCreateChangeSet_UsePreviousValueOnCreateRejected(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
+	// No CreateChangeSet expectation: a call fails the test.
+
+	spec := &stackSpec{
+		StackName:    "vpc",
+		TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'",
+		Parameters: []cfntypes.Parameter{
+			{ParameterKey: awsString("Keep"), UsePreviousValue: awsBool(true)},
+			{ParameterKey: awsString("Set"), ParameterValue: awsString("x")},
+			{ParameterKey: awsString("AlsoKeep"), UsePreviousValue: awsBool(true)},
+		},
+	}
+	_, err := createChangeSet(context.Background(), client, spec)
+	require.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationParameters)
+	assert.NotErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+
+	details := cockroachErrors.GetAllDetails(err)
+	require.NotEmpty(t, details)
+	assert.Contains(t, strings.Join(details, " "), "Keep, AlsoKeep")
+	assert.NotContains(t, strings.Join(details, " "), "Set,")
+	hints := cockroachErrors.GetAllHints(err)
+	require.NotEmpty(t, hints)
+	assert.Contains(t, strings.Join(hints, " "), "ParameterValue")
+}
+
+// Negative paths: UsePreviousValue on an UPDATE proceeds, and a CREATE with
+// UsePreviousValue explicitly false is not rejected.
+func TestCreateChangeSet_UsePreviousValueAllowedWhenNotCreateOrFalse(t *testing.T) {
+	tests := []struct {
+		name        string
+		stackExists bool
+		usePrevious bool
+		wantType    cfntypes.ChangeSetType
+	}{
+		{name: "UPDATE with UsePreviousValue", stackExists: true, usePrevious: true, wantType: cfntypes.ChangeSetTypeUpdate},
+		{name: "CREATE with UsePreviousValue false", stackExists: false, usePrevious: false, wantType: cfntypes.ChangeSetTypeCreate},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := NewMockCloudFormationClient(gomock.NewController(t))
+			out := &cloudformation.DescribeStacksOutput{}
+			if tt.stackExists {
+				out.Stacks = []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}}
+			}
+			client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(out, nil)
+
+			var gotType cfntypes.ChangeSetType
+			client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, input *cloudformation.CreateChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.CreateChangeSetOutput, error) {
+					gotType = input.ChangeSetType
+					return &cloudformation.CreateChangeSetOutput{}, nil
+				},
+			)
+			client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
+				Status: cfntypes.ChangeSetStatusCreateComplete,
+			}, nil)
+
+			spec := &stackSpec{
+				StackName:    "vpc",
+				TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'",
+				Parameters:   []cfntypes.Parameter{{ParameterKey: awsString("Keep"), UsePreviousValue: awsBool(tt.usePrevious)}},
+			}
+			_, err := createChangeSet(context.Background(), client, spec)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantType, gotType)
+		})
+	}
+}

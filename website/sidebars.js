@@ -100,7 +100,7 @@ module.exports = {
                                 'migration/taskfile',
                             ]
                         },
-                        'migration/from-rain'
+                        'migration/rain'
                     ]
                 },
             ]

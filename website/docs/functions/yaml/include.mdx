@@ -62,8 +62,9 @@ With `!include` it's possible to import multiple different file formats into Atm
 
 ### Included Content Is Data
 
-`!include` inserts the parsed content of a file as plain data. YAML functions inside an included YAML file are
-not evaluated: the tag is dropped and its argument remains as a string. This is intended behavior.
+`!include` inserts the parsed content of a file as plain data. By default, YAML functions inside an included YAML
+file are not evaluated: the tag is dropped and its argument remains as a string. This is intended behavior, and it
+is what makes an included file safe to treat as configuration rather than code.
 
 ```yaml title="stacks/catalog/settings.yaml"
 home: !env HOME     # Included as the string "HOME", not the environment value.
@@ -79,8 +80,38 @@ components:
         home: !env HOME   # Evaluated: YAML functions work in the manifest itself.
 ```
 
-To compute a value, put the YAML function in the stack manifest rather than in the included file, or use
-[imports](/stacks/imports), whose manifests are processed with YAML functions and templates.
+To compute a value, put the YAML function in the stack manifest rather than in the included file, use
+[imports](/stacks/imports), whose manifests are processed with YAML functions and templates, or opt in with the
+`| eval` option described next.
+
+### Evaluating Functions Inside an Included File
+
+Add a trailing `| eval` to evaluate the YAML functions inside the included file exactly as if they were written in
+the manifest. A nested `!include` inside the evaluated file resolves `./` and `../` paths relative to that file (bare
+paths still resolve relative to `base_path`), and a nested `!include` of a non-YAML file resolves to that file's text:
+
+```yaml title="stacks/catalog/settings.yaml"
+home: !env HOME          # Evaluated when included with | eval.
+script: !include ./bootstrap.sh
+region: us-east-2
+```
+
+```yaml title="stacks/deploy/dev.yaml"
+components:
+  terraform:
+    app:
+      vars:
+        settings: !include stacks/catalog/settings.yaml | eval
+```
+
+The option goes after the optional YQ expression (`!include file.yaml .vars | eval`), and only a pipe followed by
+the word `eval` is read as the option; any other pipe belongs to the YQ expression. Treat `| eval` as deliberate:
+the included file can then run any YAML function, including `!exec`, so only use it with files you control.
+
+Tags that are not Atmos YAML functions but belong to the included document's own format are preserved either way.
+A CloudFormation template included into an `aws/cloudformation` component's `template:` keeps its `!Ref`, `!Sub`,
+and `!GetAtt` intrinsics with or without `| eval`; see
+[CloudFormation inline templates](/stacks/components/aws-cloudformation#inline-templates-and-templating).
 
 ### URL Query Strings and Fragments
 
@@ -261,7 +292,7 @@ and consistent promotion of settings across environments.
 
 ## Usage
 
-The `!include` function can be called with either one or two parameters:
+The `!include` function takes a file path, an optional YQ expression, and an optional `| eval` modifier:
 
 ```yaml
   # Download the file and inject the content directly into the current location in the YAML
@@ -270,6 +301,9 @@ The `!include` function can be called with either one or two parameters:
   # Download the file, filter the content using the YQ expression,
   # and inject the result directly into the current location in the YAML
   !include <file-path> <yq-expression>
+
+  # Same, but also evaluate the YAML functions inside the included file
+  !include <file-path> [<yq-expression>] | eval
 ```
 
 ## Arguments
@@ -282,6 +316,9 @@ The `!include` function can be called with either one or two parameters:
 
     <dt>`yq-expression`</dt>
     <dd>(Optional) [YQ](https://mikefarah.gitbook.io/yq) expression to retrieve individual values from the file</dd>
+
+    <dt>`| eval`</dt>
+    <dd>(Optional) Evaluate the YAML functions inside the included file instead of including them as data. See [Evaluating Functions Inside an Included File](#evaluating-functions-inside-an-included-file)</dd>
 </dl>
 
 ## Using YQ Expressions to retrieve individual values from files

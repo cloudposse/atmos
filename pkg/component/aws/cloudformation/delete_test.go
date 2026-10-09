@@ -19,7 +19,10 @@ import (
 func TestDeleteStack_BlocksOnTerminationProtection(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
-	// No API calls expected — the guard must short-circuit before calling DeleteStack.
+	// The stack exists, so the gate fires; DeleteStack must never be called.
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{EnableTerminationProtection: aws.Bool(true)}},
+	}, nil)
 
 	spec := &stackSpec{StackName: "vpc", TerminationProtection: true}
 	_, err := deleteStack(context.Background(), client, spec, deleteOptions{})

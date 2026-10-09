@@ -273,6 +273,10 @@ func eventsFor(operation Operation) (hooks.HookEvent, hooks.HookEvent) {
 		return hooks.BeforeAwsCloudFormationDriftDetect, hooks.AfterAwsCloudFormationDriftDetect
 	case OperationDriftDescribe:
 		return hooks.BeforeAwsCloudFormationDriftDescribe, hooks.AfterAwsCloudFormationDriftDescribe
+	case OperationChangesetCreate:
+		return hooks.BeforeAwsCloudFormationChangesetCreate, hooks.AfterAwsCloudFormationChangesetCreate
+	case OperationChangesetExecute:
+		return hooks.BeforeAwsCloudFormationChangesetExecute, hooks.AfterAwsCloudFormationChangesetExecute
 	default:
 		return hooks.HookEvent(""), hooks.HookEvent("")
 	}

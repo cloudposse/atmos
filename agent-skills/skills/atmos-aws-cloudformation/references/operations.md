@@ -52,10 +52,14 @@ acknowledgments in `capabilities:` independently.
 ## Observability: tree, logs, watch
 
 ```shell
-atmos aws cloudformation tree vpc -s dev              # nested-stack/resource dependency graph
+atmos aws cloudformation tree vpc -s dev              # deployed nested-stack tree
 atmos aws cloudformation logs vpc -s dev [--chart] [--follow]   # combined event log across nested stacks
 atmos aws cloudformation watch vpc -s dev             # attach to an in-progress (or terminal) operation
 ```
+
+`tree` shows the *deployed* nested-stack hierarchy and recurses `AWS::CloudFormation::Stack`
+resources only. It is not Rain's `tree`, which graphs Parameters/Resources/Outputs dependencies in a
+local template. `logs` includes nested stacks by default.
 
 `logs --chart` renders a per-resource timeline instead of a flat chronological list; `--follow`
 tails new events continuously and is mutually exclusive with `--chart`. `watch` is for *attaching* to

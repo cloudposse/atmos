@@ -104,6 +104,30 @@ func TestDryRunRejectsInvalidPackagingConfiguration(t *testing.T) {
 	}
 }
 
+// A list-shaped `tags:` (AWS CLI form or !tags) fails the dry run instead of silently
+// deploying an untagged stack; the map form keeps passing.
+func TestDryRunRejectsNonMapTags(t *testing.T) {
+	for name, tags := range map[string]any{
+		"AWS CLI list": []any{map[string]any{"Key": "Team", "Value": "platform"}},
+		"string list":  []any{"platform"},
+		"nested map":   map[string]any{"Team": map[string]any{"name": "platform"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			section := dryRunSection("Resources: {}", nil, nil)
+			section["tags"] = tags
+			err := runDryRun(t, section, nil, OperationApply)
+			require.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+			assert.Contains(t, err.Error(), "tags")
+		})
+	}
+
+	t.Run("map form is accepted", func(t *testing.T) {
+		section := dryRunSection("Resources: {}", nil, nil)
+		section["tags"] = map[string]any{"Team": "platform"}
+		require.NoError(t, runDryRun(t, section, nil, OperationApply))
+	})
+}
+
 // Negative path: valid or irrelevant packaging configuration must keep passing, including a
 // template exactly at the inline limit and operations that never package.
 func TestDryRunAcceptsValidPackagingConfiguration(t *testing.T) {

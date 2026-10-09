@@ -2,9 +2,12 @@ package cloudformation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/aws/smithy-go"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -15,6 +18,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// bucketKey is the synthetic backend block / log / error-context key for the packaging bucket name.
+const bucketKey = "bucket"
 
 // provisionTimeout bounds one explicit `backend create`/`update` bucket reconcile.
 const provisionTimeout = 5 * time.Minute
@@ -121,8 +127,8 @@ func BuildSyntheticBackendConfig(s3cfg *targetS3Config, componentConfig map[stri
 	return map[string]any{
 		"backend_type": backendTypeS3,
 		backendMapKey: map[string]any{
-			"bucket": s3cfg.Bucket,
-			"region": resolveBackendRegion(s3cfg, componentConfig, authContext),
+			bucketKey: s3cfg.Bucket,
+			"region":  resolveBackendRegion(s3cfg, componentConfig, authContext),
 		},
 		"provision": map[string]any{
 			backendMapKey: map[string]any{"enabled": true},
@@ -193,18 +199,16 @@ func autoProvisionBackendIfEnabled(ctx context.Context, args autoProvisionArgs) 
 		return nil
 	}
 
-	synthetic := BuildSyntheticBackendConfig(args.S3Target, args.ComponentConfig, args.AuthContext)
-	backendBlock, _ := synthetic[backendMapKey].(map[string]any)
-
-	exists, err := backend.S3BackendExists(ctx, args.AtmosConfig, backendBlock, args.AuthContext)
+	exists, err := packagingBucketExists(ctx, args)
 	if err != nil {
-		log.Debug("Backend existence check failed; deferring to template upload", "error", err, "bucket", args.S3Target.Bucket)
+		log.Debug("Backend existence check failed; deferring to template upload", "error", err, bucketKey, args.S3Target.Bucket)
 		return nil
 	}
 	if exists {
 		return nil
 	}
 
+	synthetic := BuildSyntheticBackendConfig(args.S3Target, args.ComponentConfig, args.AuthContext)
 	describeFunc := func(string, string) (map[string]any, error) {
 		return synthetic, nil
 	}
@@ -226,37 +230,89 @@ func autoProvisionBackendIfEnabled(ctx context.Context, args autoProvisionArgs) 
 	return nil
 }
 
-// requireBackendExistsIfEnabled is autoProvisionBackendIfEnabled's read-only
-// counterpart for operations that must never create infrastructure (validate,
-// diff, changeset create). When the component opted in to
-// `provision.backend.enabled: true` and the packaging bucket is missing, it
-// fails with ErrAwsCloudFormationBackendMissing and a hint to create the bucket
-// explicitly. An existence-check failure is logged and deferred to the upload's
-// own error, matching autoProvisionBackendIfEnabled's leniency.
-func requireBackendExistsIfEnabled(ctx context.Context, args autoProvisionArgs) error {
-	defer perf.Track(args.AtmosConfig, "cloudformation.requireBackendExistsIfEnabled")()
+// s3BucketExistsFunc is a seam for testing: packagingBucketExists calls through
+// this variable so unit tests can avoid real AWS credential resolution and
+// network probes when they exercise unrelated packaging paths.
+var s3BucketExistsFunc = backend.S3BackendExists
 
-	if !isBackendProvisionEnabled(args.ComponentConfig) {
-		return nil
-	}
-
+// packagingBucketExists reports whether the aws/s3 packaging target's bucket
+// exists, using the same synthetic backend block the provisioner uses. It is the
+// single existence probe shared by the auto-provision and read-only paths.
+func packagingBucketExists(ctx context.Context, args autoProvisionArgs) (bool, error) {
 	synthetic := BuildSyntheticBackendConfig(args.S3Target, args.ComponentConfig, args.AuthContext)
 	backendBlock, _ := synthetic[backendMapKey].(map[string]any)
+	return s3BucketExistsFunc(ctx, args.AtmosConfig, backendBlock, args.AuthContext)
+}
 
-	exists, err := backend.S3BackendExists(ctx, args.AtmosConfig, backendBlock, args.AuthContext)
+// ensurePackagingBucket makes sure the packaging bucket is usable before the
+// template upload. When mayProvision is true (apply and deploy) and the
+// component opted in to `provision.backend.enabled: true`, a missing bucket is
+// created. In every other case (validate, diff, changeset create, or a
+// component that did not opt in) the check is read-only and a missing bucket
+// fails with ErrAwsCloudFormationBackendMissing and a hint, so the raw S3
+// NoSuchBucket error never reaches the user.
+func ensurePackagingBucket(ctx context.Context, args autoProvisionArgs, mayProvision bool) error {
+	defer perf.Track(args.AtmosConfig, "cloudformation.ensurePackagingBucket")()
+
+	if mayProvision && isBackendProvisionEnabled(args.ComponentConfig) {
+		return autoProvisionBackendIfEnabled(ctx, args)
+	}
+	return requireBackendExists(ctx, args)
+}
+
+// requireBackendExists is the read-only existence check: it never creates
+// infrastructure. A missing bucket fails with ErrAwsCloudFormationBackendMissing
+// and a hint to create the bucket explicitly. An existence-check failure is
+// logged and deferred to the upload's own error, matching
+// autoProvisionBackendIfEnabled's leniency.
+func requireBackendExists(ctx context.Context, args autoProvisionArgs) error {
+	defer perf.Track(args.AtmosConfig, "cloudformation.requireBackendExists")()
+
+	exists, err := packagingBucketExists(ctx, args)
 	if err != nil {
-		log.Debug("Backend existence check failed; deferring to template upload", "error", err, "bucket", args.S3Target.Bucket)
+		log.Debug("Backend existence check failed; deferring to template upload", "error", err, bucketKey, args.S3Target.Bucket)
 		return nil
 	}
 	if exists {
 		return nil
 	}
+	return packagingBucketMissingError(args)
+}
 
-	return errUtils.Build(errUtils.ErrAwsCloudFormationBackendMissing).
-		WithExplanationf("The packaging bucket %q does not exist, and this command does not create it (only apply and deploy provision the bucket).", args.S3Target.Bucket).
-		WithHintf("Run `atmos aws cloudformation backend create %s -s %s` to create the bucket, or run `atmos aws cloudformation apply %s -s %s`, which provisions it because provision.backend.enabled is true.", args.Component, args.Stack, args.Component, args.Stack).
-		WithContext("bucket", args.S3Target.Bucket).
+// packagingBucketMissingError builds the hinted ErrAwsCloudFormationBackendMissing
+// error for a packaging bucket that does not exist. The hint depends on whether
+// the component already opted in to automatic provisioning.
+func packagingBucketMissingError(args autoProvisionArgs) error {
+	builder := errUtils.Build(errUtils.ErrAwsCloudFormationBackendMissing).
+		WithContext(bucketKey, args.S3Target.Bucket)
+	create := backendCreateCommand(args)
+	if isBackendProvisionEnabled(args.ComponentConfig) {
+		return builder.
+			WithExplanationf("The packaging bucket %q does not exist, and this command does not create it (only apply and deploy provision the bucket).", args.S3Target.Bucket).
+			WithHintf("Run `%s` to create the bucket, or run `atmos aws cloudformation apply %s -s %s`, which provisions it because provision.backend.enabled is true.", create, args.Component, args.Stack).
+			Err()
+	}
+	return builder.
+		WithExplanationf("The packaging bucket %q does not exist.", args.S3Target.Bucket).
+		WithHintf("Run `%s` to create the bucket, or set provision.backend.enabled: true so apply and deploy create it automatically.", create).
 		Err()
+}
+
+// backendCreateCommand renders the `backend create` invocation for the selected
+// packaging target, naming the target explicitly so the hint stays valid when
+// the component declares more than one `kind: aws/s3` target.
+func backendCreateCommand(args autoProvisionArgs) string {
+	cmd := fmt.Sprintf("atmos aws cloudformation backend create %s -s %s", args.Component, args.Stack)
+	if args.S3Target != nil && args.S3Target.Name != "" {
+		cmd += " --target=" + args.S3Target.Name
+	}
+	return cmd
+}
+
+// isNoSuchBucket reports whether err carries an S3 NoSuchBucket API error.
+func isNoSuchBucket(err error) bool {
+	var apiErr smithy.APIError
+	return errors.As(err, &apiErr) && apiErr.ErrorCode() == "NoSuchBucket"
 }
 
 // resolveBackendRegion implements BuildSyntheticBackendConfig's documented

@@ -63,6 +63,12 @@ func TestEventsFor(t *testing.T) {
 		{OperationDelete, hooks.BeforeAwsCloudFormationDelete, hooks.AfterAwsCloudFormationDelete},
 		{OperationDriftDetect, hooks.BeforeAwsCloudFormationDriftDetect, hooks.AfterAwsCloudFormationDriftDetect},
 		{OperationDriftDescribe, hooks.BeforeAwsCloudFormationDriftDescribe, hooks.AfterAwsCloudFormationDriftDescribe},
+		{OperationChangesetCreate, hooks.BeforeAwsCloudFormationChangesetCreate, hooks.AfterAwsCloudFormationChangesetCreate},
+		{OperationChangesetExecute, hooks.BeforeAwsCloudFormationChangesetExecute, hooks.AfterAwsCloudFormationChangesetExecute},
+		{OperationChangesetList, hooks.HookEvent(""), hooks.HookEvent("")},
+		{OperationChangesetDelete, hooks.HookEvent(""), hooks.HookEvent("")},
+		{OperationValidate, hooks.HookEvent(""), hooks.HookEvent("")},
+		{OperationOutput, hooks.HookEvent(""), hooks.HookEvent("")},
 		{OperationRender, hooks.HookEvent(""), hooks.HookEvent("")},
 	}
 	for _, tt := range tests {

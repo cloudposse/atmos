@@ -152,3 +152,44 @@ func TestDeleteStack_DisappearsAfterProtectionDisabled(t *testing.T) {
 	// The stack vanished while DeleteStack ran: the delete proceeds to event streaming.
 	require.False(t, alreadyGone)
 }
+
+// With termination_protection: true in local config and the stack already gone,
+// delete must report "nothing to delete" instead of failing the protection
+// gate: there is no stack left to protect.
+func TestDeleteStack_MissingStackBeatsLocalTerminationProtection(t *testing.T) {
+	client := NewMockCloudFormationClient(gomock.NewController(t))
+	missing := &smithy.GenericAPIError{Code: "ValidationError", Message: "Stack with id vpc does not exist"}
+	// No DeleteStack or UpdateTerminationProtection expectation: a call fails the test.
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(nil, missing)
+
+	alreadyGone, err := deleteStack(t.Context(), client, &stackSpec{StackName: "vpc", TerminationProtection: true}, deleteOptions{})
+	require.NoError(t, err)
+	assert.True(t, alreadyGone)
+}
+
+// Negative path: a stack that exists with local termination_protection: true
+// still hits the gate, and a live-protected stack with drifted local config
+// does too.
+func TestDeleteStack_ExistingProtectedStackStillBlocked(t *testing.T) {
+	tests := []struct {
+		name  string
+		local bool
+		live  bool
+	}{
+		{name: "local and live protected", local: true, live: true},
+		{name: "local protected, live drifted off", local: true, live: false},
+		{name: "local off, live protected", local: false, live: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := NewMockCloudFormationClient(gomock.NewController(t))
+			client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&sdk.DescribeStacksOutput{
+				Stacks: []cfntypes.Stack{{EnableTerminationProtection: awsBool(tt.live)}},
+			}, nil)
+
+			alreadyGone, err := deleteStack(t.Context(), client, &stackSpec{StackName: "vpc", TerminationProtection: tt.local}, deleteOptions{})
+			require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationTerminationProtectionEnabled)
+			assert.False(t, alreadyGone)
+		})
+	}
+}
