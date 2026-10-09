@@ -22,16 +22,15 @@ but did not cover a raw value that differs from the effective Viper value.
 - Cover failure with and without a fallback, successful reconstruction, and
   preservation of an unrelated dotted identity.
 - Document source-tracking helpers and regression tests flagged by review.
-- Update the trace snapshot to count repeated source merges and use tabs in the
-  SARIF regression script as required by EditorConfig, fixing two CI failures.
+- Update the trace snapshot to count repeated source merges, fixing a CI failure.
 
 ## Validation
 
 The new regression test failed before the fix. Config and adapter short tests,
 focused config race tests, the previously failing
 `TestCLICommands/Valid_Log_Level_in_Config_File` acceptance test, patch-scoped
-custom lint, SARIF regression tests, ShellCheck, and the affected-file schema,
-EditorConfig, and workflow validation checks passed.
+custom lint, and the affected-file schema and EditorConfig validation checks
+passed.
 
 ## Follow-ups
 
