@@ -1979,7 +1979,14 @@ func renderImportPath(
 		tmplData = merged
 	}
 
-	rendered, err := processTmpl(atmosConfig, tmplInput{name: fmt.Sprintf("import-path(%s)", relativeFilePath), value: imp, data: tmplData, ignoreMissing: ignoreMissing, manifestLoadFile: relativeFilePath})
+	rendered, err := processTmpl(atmosConfig, tmplInput{
+		name:                  fmt.Sprintf("import-path(%s)", relativeFilePath),
+		value:                 imp,
+		data:                  tmplData,
+		ignoreMissing:         ignoreMissing,
+		manifestLoadFile:      relativeFilePath,
+		skipComponentDeferral: true,
+	})
 	if err != nil {
 		wrapped := fmt.Errorf("%w: import path '%s' in file '%s': %w",
 			errUtils.ErrImportPathTemplate, imp, relativeFilePath, err)

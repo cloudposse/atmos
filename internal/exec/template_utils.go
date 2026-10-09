@@ -67,16 +67,19 @@ func ProcessTmpl(
 
 // tmplInput describes a template to render with processTmpl.
 type tmplInput struct {
-	name          string
-	value         string
-	data          any
-	ignoreMissing bool
+	name  string
+	value string
+	data  any
 	// manifestLoadFile is set while a stack manifest (or a section of it) is rendered during stack
 	// loading. atmos.Component then must not describe the target component: that loads every stack
 	// manifest again, including the one being rendered, and recursed without limit. Plain
 	// atmos.Component actions are left as template text for the later per-component render; other
 	// forms fail with ErrComponentFuncDuringManifestLoad.
 	manifestLoadFile string
+	ignoreMissing    bool
+	// skipComponentDeferral keeps the manifest-load guard active but evaluates Component calls
+	// immediately so import paths, which have no later render pass, reject them.
+	skipComponentDeferral bool
 }
 
 // manifestLoadOnlyContextKeys returns the top-level keys of the manifest-load template context that
@@ -129,7 +132,7 @@ func processTmpl(atmosConfig *schema.AtmosConfiguration, in tmplInput) (string, 
 	// of the manifest now. `locals` and import context values exist only in this pass, so
 	// they are resolved inside the deferred actions. Actions that cannot be deferred fail with
 	// ErrComponentFuncDuringManifestLoad.
-	if in.manifestLoadFile != "" {
+	if in.manifestLoadFile != "" && !in.skipComponentDeferral {
 		atmostmpl.DeferCalls(t.Tree, "atmos", "Component", in.data, manifestLoadOnlyContextKeys(in.data)...)
 	}
 
