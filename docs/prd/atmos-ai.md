@@ -475,8 +475,8 @@ AI can execute Atmos commands and file operations with granular permission contr
 ai:
   tools:
     enabled: true
-    # require_confirmation: true    # Default: true (secure by default)
-                                     # Set to false to opt-out of prompts
+    mode: require_confirmation       # Default (secure by default)
+                                     # allow: never prompt; yolo: bypass all checks
 
     allowed:
       - atmos_describe_*
@@ -490,8 +490,6 @@ ai:
     blocked:
       - atmos_terraform_apply
       - atmos_terraform_destroy
-
-    yolo_mode: false
 
     audit:
       enabled: true
@@ -604,7 +602,7 @@ Tool Execution Requested
 3. **Allowed Tools** (config) - Pre-approved in configuration
 4. **Cached Allowances** (.atmos/ai.settings.local.json) - User allowed previously
 5. **Restricted Tools** (config) - Requires prompt if not cached
-6. **Default Behavior** - Defaults to prompting (secure by default) unless `require_confirmation: false` is set to opt-out
+6. **Default Behavior** - Defaults to prompting (secure by default) unless `mode: allow` is set to opt-out (the older `require_confirmation: false` and `yolo_mode: true` booleans remain as deprecated aliases for `mode: allow` and `mode: yolo`)
 
 **Key Features:**
 
@@ -1579,8 +1577,8 @@ ai:
   # Tool execution
   tools:
     enabled: true
-    # require_confirmation: true    # Default: true (secure by default)
-                                     # Set to false to opt-out of prompts
+    mode: require_confirmation       # Default (secure by default)
+                                     # allow: never prompt; yolo: bypass all checks
 
     allowed:
       - atmos_describe_*
@@ -1594,8 +1592,6 @@ ai:
     blocked:
       - atmos_terraform_apply
       - atmos_terraform_destroy
-
-    yolo_mode: false
 
     audit:
       enabled: true

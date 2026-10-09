@@ -1618,6 +1618,11 @@ var (
 	ErrCLIProviderExecFailed        = errors.New("CLI provider execution failed")
 	ErrCLIProviderParseResponse     = errors.New("failed to parse CLI provider response")
 	ErrCLIProviderToolsNotSupported = errors.New("tool execution not supported for CLI providers; use MCP pass-through instead")
+	ErrCLIProviderEmptyResponse     = errors.New("CLI provider returned an empty response")
+	ErrCLIProviderMaxTurns          = errors.New("CLI provider reached its maximum number of turns before answering")
+	ErrCLIProviderToolDenied        = errors.New("CLI provider tool use was not approved")
+	ErrAIEmptyResponse              = errors.New("AI returned an empty response")
+	ErrAIToolsInvalidMode           = errors.New("invalid ai.tools.mode")
 
 	// Web search errors.
 	ErrWebSearchFailed      = errors.New("web search request failed")

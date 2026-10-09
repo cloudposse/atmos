@@ -396,110 +396,6 @@ func TestGetSessionStoragePath(t *testing.T) {
 	})
 }
 
-func TestGetPermissionMode(t *testing.T) {
-	tests := []struct {
-		name         string
-		atmosConfig  *schema.AtmosConfiguration
-		expectedMode permission.Mode
-	}{
-		{
-			name: "YOLO mode enabled",
-			atmosConfig: &schema.AtmosConfiguration{
-				AI: schema.AISettings{
-					Tools: schema.AIToolSettings{
-						YOLOMode: true,
-					},
-				},
-			},
-			expectedMode: permission.ModeYOLO,
-		},
-		{
-			name: "require confirmation explicitly enabled",
-			atmosConfig: &schema.AtmosConfiguration{
-				AI: schema.AISettings{
-					Tools: schema.AIToolSettings{
-						RequireConfirmation: boolPtr(true),
-					},
-				},
-			},
-			expectedMode: permission.ModePrompt,
-		},
-		{
-			name: "default prompt mode (not configured)",
-			atmosConfig: &schema.AtmosConfiguration{
-				AI: schema.AISettings{
-					Tools: schema.AIToolSettings{
-						// RequireConfirmation not set (nil) - defaults to prompt.
-					},
-				},
-			},
-			expectedMode: permission.ModePrompt,
-		},
-		{
-			name: "YOLO takes precedence over confirmation",
-			atmosConfig: &schema.AtmosConfiguration{
-				AI: schema.AISettings{
-					Tools: schema.AIToolSettings{
-						YOLOMode:            true,
-						RequireConfirmation: boolPtr(true),
-					},
-				},
-			},
-			expectedMode: permission.ModeYOLO,
-		},
-		{
-			name: "explicitly disabled (opt-out) defaults to allow",
-			atmosConfig: &schema.AtmosConfiguration{
-				AI: schema.AISettings{
-					Tools: schema.AIToolSettings{
-						YOLOMode:            false,
-						RequireConfirmation: boolPtr(false),
-					},
-				},
-			},
-			expectedMode: permission.ModeAllow,
-		},
-		{
-			name: "YOLO mode with nil require confirmation",
-			atmosConfig: &schema.AtmosConfiguration{
-				AI: schema.AISettings{
-					Tools: schema.AIToolSettings{
-						YOLOMode:            true,
-						RequireConfirmation: nil,
-					},
-				},
-			},
-			expectedMode: permission.ModeYOLO,
-		},
-		{
-			name: "empty AI settings defaults to prompt",
-			atmosConfig: &schema.AtmosConfiguration{
-				AI: schema.AISettings{},
-			},
-			expectedMode: permission.ModePrompt,
-		},
-		{
-			name: "YOLO false with nil require confirmation defaults to prompt",
-			atmosConfig: &schema.AtmosConfiguration{
-				AI: schema.AISettings{
-					Tools: schema.AIToolSettings{
-						YOLOMode:            false,
-						RequireConfirmation: nil,
-					},
-				},
-			},
-			expectedMode: permission.ModePrompt,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := getPermissionMode(tt.atmosConfig)
-			assert.Equal(t, tt.expectedMode, result)
-		})
-	}
-}
-
 // TestGetSessionStoragePathCrossPlatform tests path handling across different OS.
 func TestGetSessionStoragePathCrossPlatform(t *testing.T) {
 	basePath := t.TempDir()
@@ -906,48 +802,6 @@ func TestChatCmd_FlagUsage(t *testing.T) {
 		require.NotNil(t, flag)
 		assert.NotEmpty(t, flag.Usage)
 		assert.Contains(t, flag.Usage, "session")
-	})
-}
-
-// TestGetPermissionMode_AdditionalCases tests additional permission mode scenarios.
-func TestGetPermissionMode_AdditionalCases(t *testing.T) {
-	t.Run("returns ModePrompt when RequireConfirmation is true", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{
-			AI: schema.AISettings{
-				Tools: schema.AIToolSettings{
-					YOLOMode:            false,
-					RequireConfirmation: boolPtr(true),
-				},
-			},
-		}
-		mode := getPermissionMode(atmosConfig)
-		assert.Equal(t, permission.ModePrompt, mode)
-	})
-
-	t.Run("returns ModeAllow when RequireConfirmation is false and YOLOMode is false", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{
-			AI: schema.AISettings{
-				Tools: schema.AIToolSettings{
-					YOLOMode:            false,
-					RequireConfirmation: boolPtr(false),
-				},
-			},
-		}
-		mode := getPermissionMode(atmosConfig)
-		assert.Equal(t, permission.ModeAllow, mode)
-	})
-
-	t.Run("YOLO mode takes precedence even when RequireConfirmation is false", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{
-			AI: schema.AISettings{
-				Tools: schema.AIToolSettings{
-					YOLOMode:            true,
-					RequireConfirmation: boolPtr(false),
-				},
-			},
-		}
-		mode := getPermissionMode(atmosConfig)
-		assert.Equal(t, permission.ModeYOLO, mode)
 	})
 }
 
@@ -2197,34 +2051,6 @@ func TestGetSessionStoragePath_EmptyPath(t *testing.T) {
 	assert.Contains(t, result, "sessions.db")
 	// Should be based on basePath.
 	assert.True(t, strings.HasPrefix(result, basePath))
-}
-
-// TestGetPermissionMode_RequireConfirmationTrue tests when RequireConfirmation is explicitly true.
-func TestGetPermissionMode_RequireConfirmationTrue(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{
-		AI: schema.AISettings{
-			Tools: schema.AIToolSettings{
-				YOLOMode:            false,
-				RequireConfirmation: boolPtr(true),
-			},
-		},
-	}
-	result := getPermissionMode(atmosConfig)
-	assert.Equal(t, permission.ModePrompt, result)
-}
-
-// TestGetPermissionMode_RequireConfirmationFalse tests when RequireConfirmation is explicitly false.
-func TestGetPermissionMode_RequireConfirmationFalse(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{
-		AI: schema.AISettings{
-			Tools: schema.AIToolSettings{
-				YOLOMode:            false,
-				RequireConfirmation: boolPtr(false),
-			},
-		},
-	}
-	result := getPermissionMode(atmosConfig)
-	assert.Equal(t, permission.ModeAllow, result)
 }
 
 // TestChatCmd_RunE_OllamaWithInstructionsSuccess tests instructions load success path.

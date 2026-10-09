@@ -86,7 +86,7 @@ ai:
   # Tool execution
   tools:
     enabled: true
-    require_confirmation: true
+    mode: require_confirmation   # require_confirmation | allow | yolo
     allowed: []
     restricted: []
     blocked: []
@@ -149,7 +149,7 @@ ai:
   <dd>Maximum tokens in conversation history. More precise, approximate counting (~10-20% accuracy). If both limits are set, whichever is hit first wins (default: `0` = unlimited)</dd>
 
   <dt>`timeout_seconds`</dt>
-  <dd>Request timeout in seconds (default: `60`)</dd>
+  <dd>Request timeout in seconds (default: `60`). For the `claude-code` provider this counts the AI's working time. Time spent waiting for you at a tool approval prompt does not count.</dd>
 
   <dt>`max_tool_iterations`</dt>
   <dd>Maximum number of tool execution loops per AI request. Increase for complex queries that require many tool calls (e.g., IAM audit across multiple regions). Default: `25`</dd>

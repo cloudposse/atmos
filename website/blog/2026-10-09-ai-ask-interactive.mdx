@@ -1,0 +1,68 @@
+---
+slug: ai-ask-interactive
+title: "A Conversation, Not a Dead End: Interactive atmos ai ask"
+authors: [osterman]
+tags: [feature, experimental]
+---
+
+You ask the AI how many stacks you have. After a pause with nothing on screen, it answers that it needs your approval to run a command, and asks whether you would approve it. There is no prompt to say yes to, no sign that anything was happening while you waited, and no way to reply. The answer ends, and so does the conversation.
+
+That is what asking a question from the terminal has felt like when the AI runs through Claude Code. Atmos now keeps the conversation open: it shows you what the AI wants to do, lets you approve it, lets the AI ask you to choose, and lets you follow up without starting over.
+
+<!--truncate-->
+
+## The Problem
+
+Claude Code runs without a terminal of its own when Atmos starts it for a one-off question. It cannot ask you anything, so it refuses any tool that needs permission and then describes the refusal in its answer. You see a request for approval that you have no way to give.
+
+Two more rough edges made it worse:
+
+- Nothing showed that work was in progress, so a slow answer looked the same as a hung command.
+- Answers often ended with an offer ("I can break that down by tenant if you'd like") that you could only accept by retyping the whole question.
+
+## The Fix
+
+[`atmos ai ask`](/cli/commands/ai/ask) is now interactive when it runs through the `claude-code` provider.
+
+**Approval in the same run.** When the AI needs to run a command, Atmos pauses and shows the request in a block that wraps to your terminal width, with the command in its own panel. You choose Allow once (the default), Always allow, Deny once, or Always deny. The AI waits for your answer and continues in the same run. A one-line receipt stays behind so you can see what you approved.
+
+**Choices instead of guesses.** When the AI needs you to pick between options or confirm something, it asks with a selection list. You choose with the arrow keys, or choose Other to type your own answer. Your choice goes straight back to the AI.
+
+**Progress you can see.** A spinner shows that work is happening and names the command in progress, for example Running `atmos list stacks`. It steps aside while a prompt is on screen, and Ctrl-C cancels the request.
+
+**Follow-up questions.** After an answer, a prompt offers to continue. Type a reply and the AI answers with the earlier questions and answers as context, so a short "yes, by tenant" is enough. Press Enter on an empty line to finish.
+
+Answers are also written in Markdown with the command, file, and stack names set off as code, so they read well in the terminal.
+
+## How to Use It
+
+Ask as usual. With the Claude Code CLI installed, Atmos prompts when approval is needed:
+
+```shell
+atmos ai ask "how many stacks do we have?"
+```
+
+Approvals you choose to keep are saved in `.atmos/ai.settings.local.json`. For Bash commands, Always allow applies to that exact command, so a different command asks again.
+
+One setting now controls how tool requests are approved. The new `ai.tools.mode` option replaces the pair of booleans `yolo_mode` and `require_confirmation`:
+
+```yaml
+ai:
+  tools:
+    enabled: true
+    mode: require_confirmation   # default: prompt for tools that need approval
+    # mode: allow                # never prompt; ai.tools.blocked still applies
+    # mode: yolo                 # never prompt and skip the blocked and restricted checks
+```
+
+The old settings still work as aliases, and `mode` wins when both are set. The [AI tools configuration](/cli/configuration/ai/tools) page describes each mode.
+
+Follow-up questions and selection lists appear only when both input and output are a terminal and the command is not running in CI. When you pipe the output or run in a pipeline, `ask` prints the answer and exits, and a command that would need approval fails with an error that names it and suggests `mode: allow`.
+
+If you configure `mcp.servers`, Atmos used to start Claude Code with every tool call pre-approved. For `ask` and [`exec`](/cli/commands/ai/exec), those calls now go through the same approval as everything else. Set `ai.tools.mode: allow` for unattended runs, or `yolo` in an isolated runner.
+
+An empty answer, for example when Claude Code runs out of turns, is now reported as an error with a hint to raise `ai.providers.claude-code.max_turns`, instead of printing a blank line.
+
+## Get Involved
+
+This feature is experimental. If an approval, a question, or a follow-up does not behave the way you expect, [open an issue](https://github.com/cloudposse/atmos/issues) with the command you ran and what you saw.

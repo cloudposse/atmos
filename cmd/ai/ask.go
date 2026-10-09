@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"bytes"
 	"context"
 	_ "embed"
 	"fmt"
@@ -11,17 +10,15 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/ai/executor"
-	"github.com/cloudposse/atmos/pkg/ai/formatter"
+	"github.com/cloudposse/atmos/pkg/ai/interactive"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
+	"github.com/cloudposse/atmos/pkg/ai/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 //go:embed markdown/atmos_ai_ask.md
@@ -123,51 +120,52 @@ var askCmd = &cobra.Command{
 		// Create non-interactive executor.
 		exec := executor.NewExecutor(client, toolExecutor, &atmosConfig)
 
-		// Create context with timeout (default 60 seconds if not configured).
+		// Timeout defaults to 60 seconds if not configured.
 		timeoutSeconds := 60
 		if atmosConfig.AI.TimeoutSeconds > 0 {
 			timeoutSeconds = atmosConfig.AI.TimeoutSeconds
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
-		defer cancel()
+		timeout := time.Duration(timeoutSeconds) * time.Second
+
+		// Show a spinner that follows tool activity, and let providers that run their own
+		// tools ask for approval at the terminal.
+		interactiveSession, err := interactive.Attach(&atmosConfig, client, "Thinking…", timeout)
+		if err != nil {
+			return err
+		}
 
 		// Load or create a persisted session when --session and ai.sessions.enabled
 		// are both set. Cheap no-op (no storage opened) otherwise.
-		sess, err := prepareSession(ctx, &atmosConfig, sessionID, client.GetModel())
+		sess, err := prepareSession(context.Background(), &atmosConfig, sessionID, client.GetModel())
 		if err != nil {
 			return fmt.Errorf("failed to prepare session: %w", err)
 		}
 		defer sess.Close() // Best-effort session storage cleanup.
 
-		// Execute question with tool support.
-		ui.Writef("👽 Thinking...\n")
-		result := exec.Execute(ctx, executor.Options{
-			Prompt:       finalQuestion,
-			ToolsEnabled: !noTools && toolExecutor != nil,
-			SessionID:    sessionID,
-			History:      sess.History(),
+		turn := &askTurn{
+			exec:         exec,
+			interactive:  interactiveSession,
+			sess:         sess,
+			sessionID:    sessionID,
+			timeout:      timeout,
+			toolsEnabled: !noTools && toolExecutor != nil,
+		}
+
+		history := append([]types.Message(nil), sess.History()...)
+		answer, err := turn.run(finalQuestion, question, history)
+		if err != nil {
+			return err
+		}
+
+		// In a terminal, keep the conversation going: the answer often ends with an offer to dig deeper.
+		history = append(
+			history,
+			types.Message{Role: types.RoleUser, Content: question},
+			types.Message{Role: types.RoleAssistant, Content: answer},
+		)
+		return interactive.Continue(history, func(followUp string, earlier []types.Message) (string, error) {
+			return turn.run(followUp, followUp, earlier)
 		})
-
-		// Persist this turn (the plain question, not the context-augmented
-		// finalQuestion) so a subsequent `--session` invocation sees it.
-		if result.Success {
-			sess.recordTurn(ctx, question, result.Response)
-		}
-
-		if !result.Success {
-			if result.Error != nil {
-				return fmt.Errorf("%w: %s", errUtils.ErrAIExecutionFailed, result.Error.Message)
-			}
-			return errUtils.ErrAIExecutionFailed
-		}
-
-		// Render response with tool execution details as Markdown.
-		var buf bytes.Buffer
-		mdFormatter := formatter.NewFormatter(formatter.FormatMarkdown)
-		if err := mdFormatter.Format(&buf, result); err != nil {
-			return fmt.Errorf("failed to format response: %w", err)
-		}
-		return data.Markdownf("%s", buf.String())
 	},
 }
 

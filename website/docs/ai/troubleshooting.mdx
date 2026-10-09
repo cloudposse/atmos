@@ -254,6 +254,25 @@ providers:
     binary: /usr/local/bin/claude
 ```
 
+### Claude Code Needs Approval in CI
+
+With the `claude-code` provider, `atmos ai ask` shows an approval prompt in the terminal when Claude needs a tool that is not already allowed. In CI or any environment without a terminal, the command fails with an error instead of waiting. Choose one of:
+
+```yaml
+ai:
+  tools:
+    mode: allow          # never prompt; ai.tools.blocked is still honored
+  providers:
+    claude-code:
+      allowed_tools: ["Read", "Glob", "Grep"]   # pre-approve specific tools
+```
+
+See [Tool approval](/cli/commands/ai/ask#tool-approval).
+
+### Empty Answer from Claude Code
+
+When Claude Code stops before producing an answer, typically because it reached `max_turns`, `atmos ai ask` reports an error rather than printing a blank line. Raise `ai.providers.claude-code.max_turns`.
+
 ### MCP Servers Not Working with Codex CLI
 
 Codex CLI MCP servers don't inherit the parent process environment. If `atmos auth exec` fails with "identity not found", ensure `ATMOS_PROFILE` is exported:

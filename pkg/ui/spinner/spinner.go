@@ -426,6 +426,7 @@ type Spinner struct {
 	program     *tea.Program
 	done        chan struct{}
 	isTTY       bool
+	onInterrupt func()
 }
 
 // New creates a new Spinner with the given progress message.
@@ -455,13 +456,27 @@ func (s *Spinner) Start() {
 		// but don't let bubbletea open /dev/tty for input — there isn't one.
 		opts = append(opts, tea.WithInput(nil))
 	}
-	s.program = tea.NewProgram(model, opts...)
-	s.done = make(chan struct{})
+	program := tea.NewProgram(model, opts...)
+	done := make(chan struct{})
+	onInterrupt := s.onInterrupt
+	s.program = program
+	s.done = done
 
 	go func() {
-		defer close(s.done)
-		_, _ = s.program.Run()
+		defer close(done)
+		final, _ := program.Run()
+		if m, ok := final.(manualSpinnerModel); ok && m.interrupted && onInterrupt != nil {
+			onInterrupt()
+		}
 	}()
+}
+
+// SetInterruptHandler registers a function that is called when the user presses ctrl+c
+// while the spinner is showing. The terminal is in raw mode then, so the keypress never
+// becomes a signal; without a handler the spinner would disappear while the work continues.
+// Set it before Start. The handler runs on the spinner's goroutine.
+func (s *Spinner) SetInterruptHandler(handler func()) {
+	s.onInterrupt = handler
 }
 
 // Update replaces the in-progress message. In non-interactive output it emits
@@ -533,7 +548,8 @@ type manualSpinnerModel struct {
 	finalMsg    string
 	success     bool
 	done        bool
-	width       int // Terminal width; seeded synchronously by initialWidth(), refined by tea.WindowSizeMsg.
+	interrupted bool // Set when the user pressed ctrl+c; the line is cleared and the owner is told.
+	width       int  // Terminal width; seeded synchronously by initialWidth(), refined by tea.WindowSizeMsg.
 }
 
 type manualStopMsg struct {
@@ -564,6 +580,8 @@ func (m manualSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
+			m.done = true
+			m.interrupted = true
 			return m, tea.Quit
 		}
 	case tea.WindowSizeMsg:
