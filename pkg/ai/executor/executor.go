@@ -111,16 +111,17 @@ func (e *Executor) executeSimple(ctx context.Context, prompt string, history []t
 	if len(history) > 0 {
 		messages := make([]types.Message, 0, len(history)+1)
 		messages = append(messages, history...)
-		messages = append(messages, types.Message{Role: types.RoleUser, Content: prompt})
+		messages = append(messages, types.Message{Role: types.RoleUser, Content: withResponseStyle(prompt)})
 		response, err = e.client.SendMessageWithHistory(ctx, messages)
 	} else {
-		response, err = e.client.SendMessage(ctx, prompt)
+		response, err = e.client.SendMessage(ctx, withResponseStyle(prompt))
 	}
 	if err != nil {
 		result.Success = false
 		result.Error = &formatter.ErrorInfo{
 			Message: err.Error(),
 			Type:    "ai_error",
+			Err:     err,
 		}
 		return
 	}
@@ -209,7 +210,24 @@ Always use tools when needed rather than describing what you would do.
 
 If atmos_list_stacks returns zero stacks, this is a new Atmos project that doesn't have any
 stacks written yet. Treat this as an opportunity, not an error: proactively offer to help the
-user create their first stack and component rather than just reporting that none exist.`
+user create their first stack and component rather than just reporting that none exist.
+
+` + responseStylePrompt
+
+// responseStylePrompt tells the AI how to format answers. Answers are rendered as Markdown in a
+// terminal, and `ask` can continue the conversation with a follow-up question.
+const responseStylePrompt = `Response style: write GitHub-flavored Markdown, because your answer is rendered in a terminal.
+Lead with the answer and keep it concise. Put commands, file paths, and component, stack and variable
+names in backticks, and use fenced code blocks with a language for multi-line snippets. Prefer short
+paragraphs and flat lists, and avoid HTML. If there is a useful next step, end with at most one short,
+concrete question that offers it.`
+
+// withResponseStyle prefixes a prompt that is sent without a system prompt with the response style.
+// Not every provider accepts an empty tool list alongside a system prompt, so the plain path
+// carries the guidance in the message instead.
+func withResponseStyle(prompt string) string {
+	return responseStylePrompt + "\n\n---\n\n" + prompt
+}
 
 // executeWithTools executes a prompt with tool support, handling multiple tool execution rounds.
 // When history is non-empty (a resumed session), it is prepended to the conversation.
@@ -238,6 +256,7 @@ func (e *Executor) executeWithTools(ctx context.Context, prompt string, history 
 				Message: err.Error(),
 				Type:    "ai_error",
 				Details: map[string]interface{}{"iteration": iteration},
+				Err:     err,
 			}
 			return
 		}

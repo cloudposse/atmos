@@ -862,14 +862,17 @@ servers. The exported config is exactly what Claude Code needs.
    for automatic credential injection (same as IDE integration).
 4. Env var keys are uppercased (Viper lowercases them, but env vars must be UPPERCASE).
 5. Toolchain PATH is injected so `uvx`/`npx` are available to MCP server subprocesses.
-6. Atmos passes `--mcp-config <temp-file> --dangerously-skip-permissions` to Claude Code.
-7. `--dangerously-skip-permissions` is required because `-p` mode is non-interactive
-   and cannot show approval prompts. This is safe because the MCP servers were explicitly
-   configured by the user in `atmos.yaml`.
+6. Atmos passes `--mcp-config <temp-file>` to Claude Code. For `atmos ai ask`, Claude runs over
+   the stdio control protocol (see [Interactive Approval and Progress](#interactive-approval-and-progress-claude-code)),
+   so permission requests reach the Atmos permission system instead of being auto-approved.
+7. Earlier versions also passed `--dangerously-skip-permissions`, because `-p` mode is
+   non-interactive and cannot show approval prompts. That flag auto-approved every tool call,
+   including Claude's built-in Bash and Edit tools. For `ask`, Atmos no longer passes it. Users
+   who want unattended runs set `ai.tools.mode: allow` or `yolo`.
 8. The temp file is cleaned up after the CLI tool exits.
 
 **Implemented for:**
-- ✅ Claude Code: `claude -p --mcp-config <file> --dangerously-skip-permissions`
+- ✅ Claude Code: `claude -p --mcp-config <file>` with the stdio control protocol for approvals (previously `--dangerously-skip-permissions`)
 - ⚠️ Gemini CLI: writes `.gemini/settings.json` to cwd, passes `--allowed-mcp-server-names` — **MCP blocked with `oauth-personal` auth** (see Known Limitations)
 - ✅ Codex CLI: writes to `~/.codex/config.toml` (backup/restore), uses `--dangerously-bypass-approvals-and-sandbox`
 
@@ -1127,6 +1130,42 @@ consistent with whichever provider was actually selected.
 - Display provider and cost info in `atmos ai` output.
 - Session continuity via `--resume` for Claude Code and Codex CLI.
 
+### Interactive Approval and Progress (Claude Code)
+
+**Goal:** `atmos ai ask` with the `claude-code` provider is interactive. When Claude needs a
+tool that is not already allowed, the user decides in the terminal and Claude continues in the
+same run.
+
+**Requirements:**
+
+1. Atmos runs Claude Code with `--input-format stream-json --output-format stream-json --verbose
+   --permission-prompt-tool stdio`. Atmos parses the event stream incrementally.
+2. Each permission request from Claude goes through the Atmos permission system
+   (`ai.tools.mode`, `allowed`, `restricted`, `blocked`, and the persistent cache in
+   `.atmos/ai.settings.local.json`). When approval is needed, Atmos shows its own prompt with the
+   tool and its parameters: Always allow, Allow once, Deny once, Always deny.
+3. "Always allow" for `Bash` is scoped to the exact command, for example
+   `Bash(atmos list stacks)`. A different command prompts again.
+4. A denial is returned to the model so it can continue and explain. Ctrl-C at the prompt aborts
+   the run.
+5. Progress events drive a spinner on stderr: "Thinking…" while the model works, updated to the
+   tool in progress ("Running atmos list stacks…"). The spinner pauses while a prompt is on
+   screen. The answer is written to stdout, so piping stays clean. Non-interactive
+   environments get no animation.
+6. When approval is needed and no terminal is available, the command fails with an error and
+   hints: run in a terminal, set `ai.tools.mode: allow` or `yolo`, or add the tool to
+   `ai.providers.claude-code.allowed_tools`.
+7. `ai.timeout_seconds` counts the AI's working time. Time spent waiting at an approval prompt
+   does not count.
+8. An empty answer, for example when Claude reaches `max_turns`, is an error with a hint to
+   raise `ai.providers.claude-code.max_turns`.
+
+**User-visible change:** Configurations with `mcp.servers` no longer get
+`--dangerously-skip-permissions` for `ask`. MCP and built-in tool calls are approved through the
+Atmos permission system, and `ai.tools.mode: allow` or `yolo` restores unattended runs.
+
+**Scope:** Other CLI providers keep their existing behavior and show the plain spinner.
+
 ---
 
 ## Limitations and Trade-offs
@@ -1135,8 +1174,10 @@ consistent with whichever provider was actually selected.
 
 1. **No tool-use loop** — Claude Code's `-p` mode runs its own tool loop internally.
    Atmos cannot inject custom tools mid-conversation (but can provide them via MCP).
-2. **No streaming to Atmos TUI** — The subprocess completes before output is available
-   (unless `stream-json` is parsed incrementally).
+2. **Streaming is parsed for Claude Code `ask` only** — Atmos parses the `stream-json` event
+   stream to drive approvals and the progress spinner. Output is still presented as a single
+   answer, not streamed token by token, and other CLI providers complete before output is
+   available.
 3. **Binary dependency** — Users must have `claude` or `gemini` installed. Not all
    environments (CI/CD containers) will have them.
 4. **Version coupling** — Claude Code's `-p` output format could change between versions.

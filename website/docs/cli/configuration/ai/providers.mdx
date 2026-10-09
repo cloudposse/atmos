@@ -163,7 +163,7 @@ In addition to `model`, CLI providers support:
   <dd>Path to the CLI binary. Optional — defaults to finding it on PATH.</dd>
 
   <dt>`max_turns`</dt>
-  <dd>Maximum agentic turns per invocation (Claude Code only).</dd>
+  <dd>Maximum agentic turns per invocation (Claude Code only). When Claude reaches this limit before producing an answer, `atmos ai ask` reports an error with a hint to raise this value.</dd>
 
   <dt>`max_budget_usd`</dt>
   <dd>Budget cap per invocation in USD (Claude Code only).</dd>
@@ -172,8 +172,30 @@ In addition to `model`, CLI providers support:
   <dd>Enable automatic tool approval (Codex CLI, Copilot CLI, and opencode). For Codex, this passes `--full-auto` (or `--dangerously-bypass-approvals-and-sandbox` when MCP servers are configured). For Copilot, this passes `--allow-all-tools` (implied automatically when MCP servers are configured). For opencode, this passes `--auto`, which blanket-approves every permission not explicitly denied; because opencode already allows tool calls by default, this is **only** enabled when you set `full_auto: true` (never implicitly from MCP config), so your opencode `permission` rules are respected.</dd>
 
   <dt>`allowed_tools`</dt>
-  <dd>List of tools Claude Code is allowed to use (Claude Code only).</dd>
+  <dd>List of tools Claude Code is allowed to use without asking (Claude Code only). Tools on this list never trigger an approval prompt, which makes it the way to pre-approve tools for non-interactive runs such as CI, for example `["Read", "Glob", "Grep", "Bash(atmos list stacks)"]`.</dd>
 </dl>
+
+### Claude Code Tool Approval
+
+With the `claude-code` provider, `atmos ai ask` is interactive. When Claude needs to run a tool that is not already allowed, for example `atmos list stacks` through its `Bash` tool, Atmos shows its own approval prompt in the terminal while Claude waits. After you answer, Claude continues in the same run. No extra flags are needed and nothing has to be re-run.
+
+The prompt shows the tool and its parameters and offers **Always allow**, **Allow once**, **Deny once**, and **Always deny**. Always-choices are cached in `.atmos/ai.settings.local.json`. For `Bash`, "Always allow" applies to the exact command, for example `Bash(atmos list stacks)`, so a different command still prompts. Denying lets Claude continue and explain what it could not do. Pressing Ctrl-C at the prompt aborts the run.
+
+Requests are checked against the Atmos [permission system](/cli/configuration/ai/tools#permission-flow), so `ai.tools.mode`, `allowed`, `restricted`, and `blocked` all apply. Set `ai.tools.mode: allow` or `yolo` for unattended runs.
+
+When approval is needed and no terminal is available, `ask` fails with an error that suggests running in a terminal, setting `ai.tools.mode: allow` or `yolo`, or adding the tool to `ai.providers.claude-code.allowed_tools`.
+
+<dl>
+  <dt>Timeout</dt>
+  <dd>The `ai.timeout_seconds` setting (default `60`) counts the time the AI spends working. Time spent waiting for you at an approval prompt does not count.</dd>
+
+  <dt>Progress</dt>
+  <dd>The spinner on stderr shows the tool in progress, for example "Running atmos list stacks…", and pauses while a prompt is on screen.</dd>
+</dl>
+
+:::warning Behavior change with MCP servers
+Previously, when `mcp.servers` were configured, Atmos started Claude Code with `--dangerously-skip-permissions`, so every tool call was auto-approved, including Claude's built-in `Bash` and `Edit` tools. For `atmos ai ask`, Atmos no longer passes that flag. MCP tool calls and built-in tool calls that Claude asks permission for now go through the Atmos permission system and prompt unless they are allowed. To restore unattended runs, set `ai.tools.mode: allow` or `yolo`.
+:::
 
 ### CLI Provider Examples
 

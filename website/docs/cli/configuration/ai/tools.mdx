@@ -10,7 +10,7 @@ import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 The `ai.tools` section controls which Atmos commands the AI assistant can execute and whether user
-confirmation is required.
+approval is required before each one runs.
 </Intro>
 
 <Experimental />
@@ -62,7 +62,7 @@ When the AI calls a tool, it runs **locally** and only the tool's output is sent
 ai:
   tools:
     enabled: true
-    require_confirmation: true
+    mode: require_confirmation      # require_confirmation (default) | allow | yolo
     allowed:
       - atmos_describe_component
       - atmos_list_stacks
@@ -74,7 +74,6 @@ ai:
       - edit_file
     blocked:
       - execute_bash_command
-    yolo_mode: false                # Skip all confirmations (DANGEROUS!)
 ```
 </File>
 
@@ -84,21 +83,28 @@ ai:
   <dt>`tools.enabled`</dt>
   <dd>Enable or disable the tool subsystem for `atmos ai chat`/`ask`/`exec` (default: `false`). When disabled, the AI can only answer from its training data and conversation context. This does **not** affect `atmos mcp start` — see [MCP note](#mcp-server-note) below.</dd>
 
-  <dt>`tools.require_confirmation`</dt>
-  <dd>Prompt the user before executing any tool (default: `true`). Set to `false` to allow all tools except `restricted` to execute automatically.</dd>
+  <dt>`tools.mode`</dt>
+  <dd>How Atmos approves tool calls (default: `require_confirmation`). One value selects the whole approval behavior: `require_confirmation` prompts for each tool that needs approval; `allow` never prompts and still honors `blocked`; `yolo` never prompts and bypasses the `blocked` and `restricted` checks (use with care). An unknown value is an error that lists the valid values. When `mode` is set it takes precedence over the deprecated `yolo_mode` and `require_confirmation` settings below, which are then ignored. Applies to `atmos ai chat`, `ask`, and `exec`, including tool requests from the `claude-code` provider.</dd>
 
   <dt>`tools.allowed`</dt>
   <dd>When non-empty, restricts which tools exist at all — only tools matching one of these name patterns are registered; every other tool simply isn't available this session. Listed tools also skip the confirmation prompt. Supports wildcard patterns like `atmos_describe_*`. Empty/unset (default: `[]`) means every tool is registered, subject to normal confirmation rules.</dd>
 
   <dt>`tools.restricted`</dt>
-  <dd>List of tools (from whatever `allowed` already let through) that always require user confirmation, even when `require_confirmation: false` (default: `[]`). Use this to protect write and execute operations.</dd>
+  <dd>List of tools (from whatever `allowed` already let through) that always prompt unless they are also in `allowed` (default: `[]`). Applies when `mode` is `require_confirmation`; `mode: allow` and `mode: yolo` never prompt. Use this to protect write and execute operations.</dd>
 
   <dt>`tools.blocked`</dt>
-  <dd>List of tools completely blocked from execution (default: `[]`). The AI cannot invoke these tools under any circumstances.</dd>
+  <dd>List of tools completely blocked from execution (default: `[]`). The AI cannot invoke these tools, except when `mode: yolo` bypasses the check.</dd>
 
-  <dt>`tools.yolo_mode`</dt>
-  <dd>Skip all permission checks and execute tools immediately (default: `false`). Only use in trusted, isolated CI/CD environments. **Never use in production or shared environments.**</dd>
+  <dt>`tools.yolo_mode` (deprecated)</dt>
+  <dd>Deprecated alias for `mode: yolo` when set to `true`. Ignored when `mode` is set.</dd>
+
+  <dt>`tools.require_confirmation` (deprecated)</dt>
+  <dd>Deprecated alias. Setting it to `false` is the same as `mode: allow`, and `true` is the same as `mode: require_confirmation`. Ignored when `mode` is set.</dd>
 </dl>
+
+:::note Migrating from the two booleans
+Existing `yolo_mode` and `require_confirmation` settings keep working. Replace them with `mode` at your convenience: `yolo_mode: true` becomes `mode: yolo`, and `require_confirmation: false` becomes `mode: allow`.
+:::
 
 ### MCP Server Note
 
@@ -336,13 +342,13 @@ See [Web Search](/cli/configuration/ai#web-search) in the AI configuration refer
 
 <dl>
   <dt>**Prompt** (default)</dt>
-  <dd>Set `require_confirmation: true`. Ask before each tool execution. The most secure mode.</dd>
+  <dd>Set `mode: require_confirmation`. Ask before each tool execution that needs approval. The most secure mode.</dd>
 
   <dt>**Allow**</dt>
-  <dd>Set `require_confirmation: false`. Auto-execute all tools except those in `restricted`.</dd>
+  <dd>Set `mode: allow`. Run tools without prompting. Tools in `blocked` are still denied.</dd>
 
   <dt>**YOLO**</dt>
-  <dd>Set `yolo_mode: true`. Skip all permission checks. Only use in isolated CI/CD environments.</dd>
+  <dd>Set `mode: yolo`. Skip all permission checks, including `blocked` and `restricted`. Only use in isolated CI/CD environments.</dd>
 </dl>
 
 ### Permission Flow
@@ -352,19 +358,27 @@ matching tools are registered in the first place. Everything below only applies 
 made it that far:
 
 ```
-1. YOLO Mode?     → Yes → Execute immediately
-2. Blocked?       → Yes → Deny
-3. Allowed list?  → Yes → Execute without prompt
-4. Restricted?    → Yes → Always prompt
-5. Default        → Prompt if require_confirmation is true
+1. mode: yolo?     → Yes → Execute immediately
+2. Blocked?        → Yes → Deny
+3. mode: allow?    → Yes → Execute without prompt
+4. Allowed list?   → Yes → Execute without prompt
+5. Restricted?     → Yes → Always prompt
+6. Default         → Prompt
 ```
+
+The same flow applies to every tool request, whether the request comes from Atmos's own tool loop
+(API providers) or from the `claude-code` provider. When Claude Code asks to run a tool such as
+`Bash`, `Edit`, or an MCP tool, Atmos checks the request against this flow and prompts you in the
+terminal if approval is needed. Claude waits for your answer and continues in the same run. See
+[Claude Code provider](/cli/configuration/ai/providers#cli-provider-settings) for the provider-side
+settings.
 
 ### Permission Prompts
 
-When a tool requires confirmation:
+When a tool requires confirmation, Atmos shows the tool and its parameters:
 
 ```
-Tool Execution Request
+🔧 Tool Execution Request
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Tool: atmos_describe_component
 Description: Describe an Atmos component configuration in a specific stack
@@ -373,14 +387,48 @@ Parameters:
   component: vpc
   stack: prod-use1
 
-Options:
-  [a] Always allow (save to .atmos/ai.settings.local.json)
-  [y] Allow once
-  [n] Deny once
-  [d] Always deny (save to .atmos/ai.settings.local.json)
-
-Choice (a/y/n/d):
+┃ Allow execution?
+┃ > Always allow (save to .atmos/ai.settings.local.json)
+┃   Allow once
+┃   Deny once
+┃   Always deny (save to .atmos/ai.settings.local.json)
 ```
+
+<dl>
+  <dt>**Always allow**</dt>
+  <dd>Run the tool now and remember the decision in `.atmos/ai.settings.local.json`.</dd>
+
+  <dt>**Allow once**</dt>
+  <dd>Run the tool this time only.</dd>
+
+  <dt>**Deny once**</dt>
+  <dd>Refuse this call. The model continues and can explain what it could not do.</dd>
+
+  <dt>**Always deny**</dt>
+  <dd>Refuse this call and remember the decision in `.atmos/ai.settings.local.json`.</dd>
+</dl>
+
+Pressing **Ctrl-C** at the prompt aborts the whole run.
+
+### Command-Scoped Approvals for Bash
+
+For the `Bash` tool, "Always allow" applies to the exact command you approved, not to the tool as a whole. Approving `atmos list stacks` saves a rule such as:
+
+```
+Bash(atmos list stacks)
+```
+
+Running `atmos list stacks` again no longer prompts. A different command, for example `atmos describe stacks`, still prompts. Other tools are remembered by tool name.
+
+### Non-Interactive Runs
+
+When approval is needed and no terminal is available (CI, a pipe on stdin, or no TTY), `atmos ai ask` fails with an error instead of waiting for input. The error suggests three ways forward:
+
+- Run the command in a terminal.
+- Set `ai.tools.mode: allow` (or `yolo` in an isolated runner).
+- Add the tool to `ai.providers.claude-code.allowed_tools`.
+
+For unattended pipelines, prefer a narrow `allowed` list together with `mode: allow` over `mode: yolo`.
 
 ## Wildcard Patterns
 
@@ -396,6 +444,8 @@ allowed:
 ## Persistent Permission Cache
 
 "Always allow" and "always deny" choices from interactive prompts are saved to `.atmos/ai.settings.local.json`. This file is user-specific and gitignored by default.
+
+Cached decisions apply to every command that uses the permission system, including `atmos ai ask` with the `claude-code` provider.
 
 **Priority order:** `tools.allowed` (registration filter) > Blocked tools (config) > Cached denials > Allowed tools (config) > Cached allowances > Restricted tools > Default behavior.
 
@@ -455,14 +505,14 @@ call to it is denied. A tool listed in both `allowed` and `restricted` is auto-a
 prompted — `allowed` is checked first, before `restricted`.
 
 :::warning YOLO Mode
-Never use `yolo_mode` in production, shared environments, or workstations with production access. Reserve it for isolated CI/CD runners and sandboxed testing.
+Never use `mode: yolo` in production, shared environments, or workstations with production access. Reserve it for isolated CI/CD runners and sandboxed testing.
 :::
 
 ## Troubleshooting
 
 **Tools not executing:** Check `tools.enabled: true` in your config, verify the tool isn't in `blocked`, and — if you've set `tools.allowed` — verify the tool is actually in that list (otherwise it was never registered in the first place).
 
-**No permission prompts:** The tool may be in `allowed` or you may have previously chosen "always allow" in `.atmos/ai.settings.local.json`. Delete the cache file to reset.
+**No permission prompts:** The tool may be in `allowed`, `mode` may be `allow` or `yolo`, or you may have previously chosen "always allow" in `.atmos/ai.settings.local.json`. Delete the cache file to reset.
 
 **Timeouts:** Tools have a 30-second timeout. Long-running operations are automatically cancelled. Run them manually if needed.
 
