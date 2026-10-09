@@ -53,7 +53,7 @@ The `ci` module is predeclared in every script: standalone scripts and the scrip
 
 On a CI platform Atmos does not recognize, forced CI mode (the `--ci` flag, `ATMOS_CI=true`, or `CI=true` with no recognized provider) makes the generic provider the detected provider. The gates then apply as on a real platform, `ci.context.local` is false, and the generic provider writes to the files named by `ATMOS_CI_OUTPUT`, `ATMOS_CI_SUMMARY`, `ATMOS_CI_ENV`, and `ATMOS_CI_PATH` when they are set. The generic provider reads the run's context from `ATMOS_CI_PR`, `ATMOS_CI_PR_FORK`, `ATMOS_CI_EVENT`, `ATMOS_CI_RUN_ID`, and `ATMOS_CI_RUN_URL` in addition to the SHA, branch, and repository variables documented in [generic.md](../providers/generic.md). `ATMOS_CI_PR_FORK` only fills `ci.context.pr.fork`; it never gates anything on the generic provider.
 
-Workflow commands (`::add-mask::`, `::group::`, annotations) are written to stderr so piped data on stdout stays clean. `::add-mask::` is emitted only when `ci.enabled` is true. An invalid `GITHUB_API_URL` or `ATMOS_CI_GITHUB_API_URL` is a hard error, in scripts and in the Terraform `--ci` flow. Repeated `ci.base()` calls do not duplicate `safe.directory` entries.
+Annotations and `::add-mask::` are written to stderr. Log-group markers go to stdout to surround command output; set `ci.groups.mode: off` when stdout must remain machine-readable. `::add-mask::` is emitted only when `ci.enabled` is true. An invalid `GITHUB_API_URL` or `ATMOS_CI_GITHUB_API_URL` is a hard error, in scripts and in the Terraform `--ci` flow. Repeated `ci.base()` calls do not duplicate `safe.directory` entries.
 
 The GitHub provider honors `GITHUB_API_URL` (GitHub Enterprise Server), overridable with `ATMOS_CI_GITHUB_API_URL`.
 

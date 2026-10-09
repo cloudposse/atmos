@@ -342,7 +342,7 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 | | `ghtest` fake GitHub API + Actions env fixture (`pkg/ci/providers/github/ghtest`) | | Done | |
 | | `templates.RenderReport` (`pkg/ci/templates/report.go`): renders a script report template from `ci.templates.base_path` or an absolute path, wrapping `ErrCITemplateNotFound` when the file is missing | | Done | |
 | | `Reporter.RenderSummary` / `Reporter.RenderComment`: the template name is required (no configured default for scripts); a missing key in the data fails and names the key; a missing template reports the resolved path and `ci.templates.base_path` | | Done | |
-| | Starlark `ci.summary(markdown, template, data)` and `ci.comment(body, key, behavior, pr, template, data)`: `template=` or `data=` with a configured default renders the text; literal text and a template are mutually exclusive | | Done | |
+| | Starlark `ci.summary(markdown, template, data)` and `ci.comment(body, key, behavior, pr, template, data)`: templated reports require `template=`, with optional `data=`; scripts have no configured default, and literal text and a template are mutually exclusive | | Done | |
 | **—** | Documentation | — | **Done** | 100% |
 | | Archive old GitHub Actions docs (deprecation tip added) | | Done | |
 | | Write new CI integration docs (ci.mdx expanded) | | Done | |

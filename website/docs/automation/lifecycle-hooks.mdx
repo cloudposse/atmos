@@ -112,7 +112,8 @@ and `type: atmos` steps, so a hook that runs `atmos.terraform(...)` uses the sam
 
 A hook that runs the Atmos command it is attached to would start itself again. Atmos counts nesting in the
 `ATMOS_HOOK_DEPTH` environment variable: every hook runs with a value one higher than the command that triggered it, and
-a hook that reaches depth 8 fails with `hook recursion limit exceeded`, naming the hook and the event. Scope the hook to
+depth 8 is allowed. Attempting to start a ninth nested hook fails with `hook recursion limit exceeded`, naming the hook
+and the event. Scope the hook to
 the event that needs it, or check `ATMOS_HOOK_DEPTH` to guard the command it runs.
 
 ## Interrupting a hook

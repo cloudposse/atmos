@@ -1053,8 +1053,8 @@ facts that GitHub Actions provides on its own. See [CI configuration](/cli/confi
   <dt>`ATMOS_HOOK_DEPTH`</dt>
   <dd>
     Set by Atmos for the commands a hook runs. It counts how many hooks deep the running command is. A hook that
-    reaches depth 8 fails with `hook recursion limit exceeded`, naming the hook and its event, so a hook that runs the
-    command it is attached to cannot recurse without bound.
+    runs at depth 8 is allowed; attempting to start a ninth nested hook fails with `hook recursion limit exceeded`,
+    naming the hook and its event. This bounds recursion when a hook runs the command it is attached to.
   </dd>
 
   <dt>`ATMOS_CONFIG_GET_FORMAT`</dt>

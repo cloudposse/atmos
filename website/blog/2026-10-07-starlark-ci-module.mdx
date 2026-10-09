@@ -121,9 +121,11 @@ misspelled key in the data fails the call and names the key, and a template that
 found reports the path it looked in.
 
 Container builds and pushes already wrote an image summary to the job. They now go through
-the same path, so with `ci.comments.enabled` on, each image repository gets one pull request
-comment that later builds update in place, whatever tag they push. The Markdown can be
-replaced with `ci.templates.container.image`.
+the same path. With `ci.comments.enabled` on, each image repository gets a comment on the
+pull request when one is known, or on the commit otherwise. Later builds update the comment
+for that image in the same pull request or commit, regardless of tag. Push runs that post
+commit comments need `contents: write` permission. Customize the Markdown with
+`ci.templates.container.image`.
 
 The hold under `pull_request_target` and `workflow_run` applies only when the pull request
 comes from a fork. For a fork pull request, Atmos holds comments, commit statuses,
