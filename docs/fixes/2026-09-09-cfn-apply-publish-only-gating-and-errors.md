@@ -10,8 +10,8 @@ it does not mean the fix is present in the documentation-only revision.
 ## Summary
 
 `atmos aws cfn apply <component> -s <stack> --target <publish-only-target>` crashed with a raw,
-unwrapped AWS SDK error (`ValidationError: Stack [...] does not exist`) whenever the selected
-provision target never actually deployed a stack directly — a `kind: aws/s3` target selected via
+unwrapped AWS SDK error (`ValidationError: Stack [...] does not exist`) when the named stack was
+absent and the selected provision target did not deploy a stack directly — a `kind: aws/s3` target selected via
 `--target`, or any other non-`aws/cloudformation` target kind (e.g. `kind: git`). `runApply`
 unconditionally ran the stack-policy, termination-protection, and outputs follow-up steps after
 `deliverApply` returned, regardless of whether a direct stack deploy had actually happened. Fixed
@@ -36,8 +36,10 @@ target for an `apply` and has three possible outcomes:
 `pkg/component/aws/cloudformation/executor.go`'s `runApply` called `setStackPolicy`,
 `applyTerminationProtection`, and `describeStackOutputs` unconditionally after `deliverApply`
 returned without error — regardless of which of the three outcomes had occurred. For outcomes 2
-and 3, no stack exists (or the stack, if any, is unrelated to this operation), so these
-stack-scoped API calls always failed. The confirmed live repro: a component with
+and 3, the target does not deploy the stack directly. If the named stack is absent, the
+stack-scoped calls fail; if an unrelated stack with that name already exists, policy or
+termination-protection calls may change its settings, and output lookup may return its outputs.
+The confirmed live repro: a component with
 `termination_protection: true` and an `aws/s3` provision target named `artifacts`, never yet
 deployed as a direct stack, running `atmos aws cfn apply <component> -s <stack> --target
 artifacts`, hit:
