@@ -327,6 +327,6 @@ func (s *session) ciSARIF(t *starlark.Thread, b *starlark.Builtin, args starlark
 	if err != nil {
 		return nil, failWith(errUtils.ErrStarlark, err, "ci.sarif: cannot read file: %s", err)
 	}
-	rc, err := s.reporter(t).SARIF(threadContext(t), ci.SARIFReport{Body: body, Category: category})
+	rc, err := s.reporter(t).SARIF(threadContext(t), ci.SARIFReport{Body: body, Category: category, Path: path})
 	return s.ciDone(t, "sarif", rc, err)
 }
