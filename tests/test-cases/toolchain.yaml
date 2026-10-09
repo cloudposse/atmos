@@ -81,6 +81,8 @@ tests:
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
       COLUMNS: "120"
+      # Release metadata comes from the local fixture server, not the GitHub API.
+      ATMOS_TOOLCHAIN_GITHUB_API_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/api/v3"
     command: "atmos"
     args:
       - "toolchain"
@@ -136,6 +138,8 @@ tests:
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
       COLUMNS: "120"
+      # Release metadata comes from the local fixture server, not the GitHub API.
+      ATMOS_TOOLCHAIN_GITHUB_API_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/api/v3"
     command: "atmos"
     args:
       - "toolchain"
@@ -168,6 +172,8 @@ tests:
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
       COLUMNS: "120"
+      # Release metadata comes from the local fixture server, not the GitHub API.
+      ATMOS_TOOLCHAIN_GITHUB_API_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/api/v3"
     command: "atmos"
     args:
       - "toolchain"

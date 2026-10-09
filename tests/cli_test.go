@@ -948,6 +948,10 @@ func TestMain(m *testing.M) {
 	// canaries are unaffected.
 	var githubMock *httpmock.GitHubMockServer
 	githubMock, githubMockClose = httpmock.NewGitHubMockServerStandalone()
+	// Toolchain info snapshots need a stable release list even when GitHub is rate-limited.
+	githubMock.RegisterRelease("replicatedhq", "replicated", httpmock.ReleaseSpec{TagName: "v1.2.3", PublishedAt: "2026-01-01T00:00:00Z"})
+	githubMock.RegisterRelease("junegunn", "fzf", httpmock.ReleaseSpec{TagName: "v1.2.3", PublishedAt: "2026-01-01T00:00:00Z"})
+	githubMock.RegisterRelease("jqlang", "jq", httpmock.ReleaseSpec{TagName: "jq-1.7.1", PublishedAt: "2026-01-01T00:00:00Z"})
 	os.Setenv("ATMOS_TEST_GITHUB_MOCK_URL", githubMock.URL()) //nolint:lintroller // Set before m.Run(); no *testing.T available in TestMain; must persist process-wide for every subtest.
 
 	// Register the one raw-content fixture tests/test-cases/atmos-include-yaml-function.yaml's
