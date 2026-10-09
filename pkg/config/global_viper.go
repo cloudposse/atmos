@@ -89,33 +89,37 @@ func GlobalViper() *SafeViper {
 // mergedFilesTracker tracks the config files merged during a single LoadConfig
 // call, guarded by its own mutex.
 type mergedFilesTracker struct {
-	mu    sync.Mutex
-	files []string
+	mu      sync.Mutex
+	sources []mergedConfigSource
 }
 
-func (t *mergedFilesTracker) track(path string) {
+// mergedConfigSource retains the YAML even after a downloaded import is removed.
+// Content is immutable so snapshots cannot mutate another reader's source data.
+type mergedConfigSource struct {
+	path    string
+	content string
+}
+
+func (t *mergedFilesTracker) track(source mergedConfigSource) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if path != "" && !slices.Contains(t.files, path) {
-		t.files = append(t.files, path)
+	if source.path != "" {
+		// Keep repeated merges: their position determines precedence.
+		t.sources = append(t.sources, source)
 	}
 }
 
-func (t *mergedFilesTracker) snapshot() []string {
+func (t *mergedFilesTracker) snapshot() []mergedConfigSource {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	out := make([]string, len(t.files))
-	copy(out, t.files)
-	return out
+	return slices.Clone(t.sources)
 }
 
 // mergedFilesRegistry correlates each concurrent LoadConfig call's tracked
 // config files with the local *viper.Viper instance that call created ("v" in
-// load.go). That pointer already flows through every merge/case-preservation
-// helper LoadConfig calls (mergeConfig, mergeConfigFile,
-// collectConfigFilesForCasePreservation, ...), so using its identity as the
-// correlation key gives each concurrent LoadConfig call an isolated tracker
-// without threading a brand-new parameter through that entire call graph.
+// load.go). Temporary Viper instances used for imports share their parent's
+// tracker through attach. This keeps merge/case-preservation helpers correlated
+// with the owning load without threading a new parameter through the call graph.
 //
 // A mutex alone does not provide this: it prevents concurrent map writes, but
 // a single shared tracker still lets one LoadConfig call's reset()/track()
@@ -138,16 +142,30 @@ func (r *mergedFilesRegistry) start(v *viper.Viper) {
 	r.trackers[v] = &mergedFilesTracker{}
 }
 
-func (r *mergedFilesRegistry) track(v *viper.Viper, path string) {
+// attach associates an import Viper with its parent's tracker until cleanup.
+func (r *mergedFilesRegistry) attach(parent, child *viper.Viper) func() {
+	r.mu.Lock()
+	if tracker := r.trackers[parent]; tracker != nil {
+		r.trackers[child] = tracker
+	}
+	r.mu.Unlock()
+	return func() {
+		r.mu.Lock()
+		delete(r.trackers, child)
+		r.mu.Unlock()
+	}
+}
+
+func (r *mergedFilesRegistry) track(v *viper.Viper, path string, content []byte) {
 	r.mu.Lock()
 	tracker := r.trackers[v]
 	r.mu.Unlock()
 	if tracker != nil {
-		tracker.track(path)
+		tracker.track(mergedConfigSource{path: path, content: string(content)})
 	}
 }
 
-func (r *mergedFilesRegistry) snapshot(v *viper.Viper) []string {
+func (r *mergedFilesRegistry) snapshot(v *viper.Viper) []mergedConfigSource {
 	r.mu.Lock()
 	tracker := r.trackers[v]
 	r.mu.Unlock()
@@ -167,7 +185,13 @@ func (r *mergedFilesRegistry) finish(v *viper.Viper) []string {
 	if !ok {
 		return nil
 	}
-	return tracker.snapshot()
+	var files []string
+	for _, source := range tracker.snapshot() {
+		if !slices.Contains(files, source.path) {
+			files = append(files, source.path)
+		}
+	}
+	return files
 }
 
 var mergedFilesReg = &mergedFilesRegistry{trackers: make(map[*viper.Viper]*mergedFilesTracker)}
