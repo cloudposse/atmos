@@ -61,11 +61,12 @@ func TestDetectDeletedComponents_ComponentDeleted(t *testing.T) {
 
 // TestDetectDeletedComponents_HelmAndKubernetesComponentDeleted guards against
 // helm/kubernetes deletions going undetected (both were previously omitted
-// from the hardcoded [terraform, helmfile, packer] search list).
+// from the hardcoded [terraform, helmfile, packer] search list). Registered custom
+// providers must remain excluded until the live affected path supports them.
 //
 //nolint:paralleltest // registerFakeComponentTypes mutates the shared component registry (comp.Reset/comp.Register); must run serially.
 func TestDetectDeletedComponents_HelmAndKubernetesComponentDeleted(t *testing.T) {
-	registerFakeComponentTypes(t, cfg.HelmComponentType, cfg.KubernetesComponentType)
+	registerFakeComponentTypes(t, cfg.HelmComponentType, cfg.KubernetesComponentType, "test-provider")
 
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -82,11 +83,16 @@ func TestDetectDeletedComponents_HelmAndKubernetesComponentDeleted(t *testing.T)
 						"vars": map[string]any{"namespace": "cert-manager"},
 					},
 				},
+				"test-provider": map[string]any{
+					"custom-widget": map[string]any{
+						"vars": map[string]any{"name": "custom-widget"},
+					},
+				},
 			},
 		},
 	}
 
-	// Both deleted in HEAD.
+	// All three components are deleted in HEAD; only the supported types are reported.
 	currentStacks := map[string]any{
 		"dev-us-east-1": map[string]any{
 			"components": map[string]any{
@@ -111,16 +117,14 @@ func TestDetectDeletedComponents_HelmAndKubernetesComponentDeleted(t *testing.T)
 }
 
 // TestDetectDeletedComponents_HelmAndKubernetesEntireStackDeleted guards the
-// processAllComponentsAsDeleted path (entire-stack deletion) for registered
-// component types. The sibling test above only exercises
-// processDeletedComponentsInStack (a component removed from a stack that
-// still exists); this exercises the other loop that was also switched from
-// the hardcoded [terraform, helmfile, packer] list to
-// componentSectionSearchOrder().
+// processAllComponentsAsDeleted path (entire-stack deletion) for canonical
+// component types while excluding unsupported registered custom providers.
+// The sibling test above exercises processDeletedComponentsInStack (a component
+// removed from a stack that still exists); this exercises the other deletion loop.
 //
 //nolint:paralleltest // registerFakeComponentTypes mutates the shared component registry (comp.Reset/comp.Register); must run serially.
 func TestDetectDeletedComponents_HelmAndKubernetesEntireStackDeleted(t *testing.T) {
-	registerFakeComponentTypes(t, cfg.HelmComponentType, cfg.KubernetesComponentType)
+	registerFakeComponentTypes(t, cfg.HelmComponentType, cfg.KubernetesComponentType, "test-provider")
 
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -135,6 +139,11 @@ func TestDetectDeletedComponents_HelmAndKubernetesEntireStackDeleted(t *testing.
 				cfg.KubernetesComponentType: map[string]any{
 					"cert-manager": map[string]any{
 						"vars": map[string]any{"namespace": "cert-manager"},
+					},
+				},
+				"test-provider": map[string]any{
+					"custom-widget": map[string]any{
+						"vars": map[string]any{"name": "custom-widget"},
 					},
 				},
 			},
