@@ -45,8 +45,8 @@ atmos aws cloudformation logs --affected --base origin/main
 ## Flags
 
 <dl>
-  <dt>`--stack`, `-s` <em>(required)</em></dt>
-  <dd>Atmos stack.</dd>
+  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
+  <dd>Atmos stack. With `--all`, `--affected`, `--tags`, or `--labels`, this is an optional stack filter; omit it to select components across stacks.</dd>
 
   <dt>`--chart` <em>(optional)</em></dt>
   <dd>Render a per-resource timeline (one line per logical resource ID, showing its status transitions in order) instead of a flat chronological event list.</dd>

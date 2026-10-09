@@ -39,8 +39,8 @@ atmos aws cloudformation tree --affected --base origin/main
 ## Flags
 
 <dl>
-  <dt>`--stack`, `-s` <em>(required)</em></dt>
-  <dd>Atmos stack.</dd>
+  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
+  <dd>Atmos stack. With `--all`, `--affected`, `--tags`, or `--labels`, this is an optional stack filter; omit it to select components across stacks.</dd>
 
   <dt>`--all` <em>(optional)</em></dt>
   <dd>Render trees for all `aws/cloudformation` components in dependency order.</dd>

@@ -48,8 +48,8 @@ atmos aws cloudformation stackset delete --affected --base origin/main
 ## Flags
 
 <dl>
-  <dt>`--stack`, `-s` <em>(required)</em></dt>
-  <dd>Atmos stack.</dd>
+  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
+  <dd>Atmos stack. With `--all`, `--affected`, `--tags`, or `--labels`, this is an optional stack filter; omit it to select components across stacks.</dd>
 
   <dt>`--auto-approve` <em>(optional)</em></dt>
   <dd>Skip the interactive confirmation prompt. Without it, `stackset delete` prompts for confirmation on a TTY before deleting the StackSet.</dd>
