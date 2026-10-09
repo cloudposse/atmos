@@ -210,5 +210,5 @@ func buildAggregateCommentKey(command, stack string) string {
 	if stack == "" {
 		stack = aggregateStackAll
 	}
-	return fmt.Sprintf("%s:aggregate:%s", command, stack)
+	return fmt.Sprintf("aggregate:%s:%s", command, stack)
 }

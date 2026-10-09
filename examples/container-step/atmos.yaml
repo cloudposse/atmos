@@ -10,7 +10,7 @@ ci:
   summary:
     enabled: true
   # Uncomment to also post one pull request comment per image, updated in place on every build and push.
-  # The job needs `pull-requests: write`. Nothing is previewed in the log while comments are off.
+  # The job needs `pull-requests: write and contents: write`. Nothing is previewed in the log while comments are off.
   # comments:
   #   enabled: true
 

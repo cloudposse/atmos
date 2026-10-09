@@ -56,10 +56,15 @@ func safeDirectoryConfigured(workspace string) bool {
 	if err != nil {
 		return false
 	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.TrimSpace(line) == workspace {
-			return true
+	// Remove the output terminator without dropping empty values that reset the list.
+	configured := false
+	for _, line := range strings.Split(strings.TrimSuffix(string(out), "\n"), "\n") {
+		switch line {
+		case "":
+			configured = false
+		case workspace:
+			configured = true
 		}
 	}
-	return false
+	return configured
 }
