@@ -1,3 +1,4 @@
+<!-- editorconfig-checker-disable-file -->
 # Atmos AI Local Providers — Use Claude Code, Gemini CLI, and OpenAI Codex Instead of API Tokens
 
 **Status:** Phase 1-3 Shipped (all 4 providers), Phase 4 auto-detection Shipped

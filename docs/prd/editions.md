@@ -263,7 +263,7 @@ current schema.
   unless `ai.tools.mode` is `allow` or `yolo`. The new `ai.tools.mode` key and the deprecated
   `yolo_mode` / `require_confirmation` aliases are not journaled because no shipped default
   changes; this runtime behavior is independent of edition pins because `KindBehavior`
-  resolution is not implemented. See the migration note in
+  resolution is not implemented. See [PR #3350](https://github.com/cloudposse/atmos/pull/3350) and the migration note in
   [atmos-ai-local-providers.md](atmos-ai-local-providers.md#interactive-approval-and-progress-claude-code).
 
   **Not gatable:** the auth credential realm isolation change (2026-02-10,

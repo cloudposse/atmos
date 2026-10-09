@@ -1,3 +1,4 @@
+<!-- editorconfig-checker-disable-file -->
 # Atmos AI - Complete Product Requirements Document
 
 **Status:** Production Ready
