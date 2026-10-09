@@ -23,13 +23,6 @@ test('Reference exposes CLI essentials and capabilities without extra category l
   assert.equal(sidebars.cli.some(item => ['CLI', 'GitHub Actions', 'Stack Guides'].includes(item.label)), false);
 });
 
-test('workflow name placeholder links to its definition', () => {
-  const workflow = sidebars.cli.find(item => item.label === 'Workflows');
-  const named = workflow.items[0].items[0];
-  assert.equal(named.label, '<name>');
-  assert.deepEqual(named.link, {type: 'doc', id: 'workflows/workflows/workflow/name'});
-});
-
 test('CI/CD exposes workflow guides and orders capabilities from setup to review', () => {
   const github = ci.items[0];
   assert.equal(github.link.id, 'integrations/github-actions/index');

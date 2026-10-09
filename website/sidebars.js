@@ -316,7 +316,6 @@ module.exports = {
                             link: {type: 'doc', id: 'workflows/name'},
                             customProps: {title: 'Workflow names'},
                             collapsed: false,
-                            link: {type: 'doc', id: 'workflows/workflows/workflow/name'},
                             items: [
                                 {type: 'doc', id: 'workflows/workflows/workflow/stack', label: 'stack'},
                                 {type: 'doc', id: 'workflows/workflows/workflow/env', label: 'env'},
