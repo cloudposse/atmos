@@ -67,6 +67,7 @@ func TestCloudFormationCmdAttributes(t *testing.T) {
 	assert.ElementsMatch(t, []string{
 		"render", "plan", "diff", "apply", "deploy", "delete", "validate", "output",
 		"changeset", "drift", "fmt", "get", "list", "source",
+		"logs", "stackset", "tree", "watch",
 	}, subcommands)
 
 	// "output" registers the "outputs" alias.
@@ -508,4 +509,51 @@ func TestCloudFormationCmd_RegistersFmtSubcommand(t *testing.T) {
 	}
 	require.NotNil(t, found, "expected `atmos aws cloudformation fmt` to be registered")
 	assert.NotNil(t, found.Flag("check"))
+}
+
+// CloudFormationCmd must mount tree/logs/watch as top-level subcommands.
+func TestCloudFormationCmd_RegistersObservabilitySubcommands(t *testing.T) {
+	names := make([]string, 0, len(CloudFormationCmd.Commands()))
+	for _, sub := range CloudFormationCmd.Commands() {
+		names = append(names, sub.Name())
+	}
+	assert.Contains(t, names, "tree")
+	assert.Contains(t, names, "logs")
+	assert.Contains(t, names, "watch")
+}
+
+// operationSpecificFlagOptions must delegate stackset/observability
+// operations to phase3FlagOptions, registering "logs"'s --chart flag
+// (defaulting false) and nothing extra for an unrecognized subCommand.
+func TestOperationSpecificFlagOptions_DelegatesToPhase3(t *testing.T) {
+	logsCmd := newOperationCommand("logs", "logs", "Show the combined event log")
+	chartFlag := logsCmd.Flag("chart")
+	require.NotNil(t, chartFlag, "expected logs to register --chart")
+	assert.Equal(t, "false", chartFlag.DefValue)
+
+	// --chart is logs-only: an unrelated operation must not pick it up.
+	treeCmd := newOperationCommand("tree", "tree", "Render the nested-stack dependency tree")
+	assert.Nil(t, treeCmd.Flag("chart"), "--chart must be logs-only")
+}
+
+// phase3FlagOptions must return nil (no extra flags) for a subCommand it
+// doesn't recognize, keeping tree/watch flag-free beyond the shared set.
+func TestPhase3FlagOptions_UnrecognizedSubCommand(t *testing.T) {
+	assert.Nil(t, phase3FlagOptions("tree"))
+	assert.Nil(t, phase3FlagOptions("watch"))
+	assert.Nil(t, phase3FlagOptions("not-a-real-subcommand"))
+}
+
+// getOperationFlags must surface logs' --chart flag as a bool, both when set
+// and when left at its default.
+func TestGetOperationFlags_IncludesChart(t *testing.T) {
+	logsCmd := newOperationCommand("logs", "logs", "Show the combined event log")
+	require.NoError(t, logsCmd.Flags().Set("chart", "true"))
+
+	flags := getOperationFlags(logsCmd)
+	assert.Equal(t, true, flags["chart"])
+
+	logsCmdDefault := newOperationCommand("logs", "logs", "Show the combined event log")
+	flags = getOperationFlags(logsCmdDefault)
+	assert.Equal(t, false, flags["chart"])
 }

@@ -1,0 +1,251 @@
+package cloudformation
+
+import (
+	"context"
+	"fmt"
+	"slices"
+	"sort"
+	"strings"
+
+	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+// nestedStackResourceType is the resource type a nested stack shows up as in
+// its parent's ListStackResources output.
+const nestedStackResourceType = "AWS::CloudFormation::Stack"
+
+// maxNestedStackDepth bounds tree/logs' recursion into nested stacks, as a
+// defensive guard against unexpectedly deep (or, in principle, cyclic) nesting.
+const maxNestedStackDepth = 10
+
+// stackNode is one stack in the nested-stack tree: its own name plus every
+// child (nested) stack discovered under it.
+type stackNode struct {
+	StackName string
+	Children  []*stackNode
+}
+
+// buildStackTree walks a stack's resources, recursing into every nested stack
+// (AWS::CloudFormation::Stack resources) up to maxNestedStackDepth.
+func buildStackTree(ctx context.Context, client CloudFormationClient, stackName string, depth int) (*stackNode, error) {
+	defer perf.Track(nil, "cloudformation.buildStackTree")()
+
+	node := &stackNode{StackName: stackName}
+	if depth >= maxNestedStackDepth {
+		return node, nil
+	}
+
+	resources, err := listAllStackResources(ctx, client, stackName)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range resources {
+		r := &resources[i]
+		if stringValue(r.ResourceType) != nestedStackResourceType {
+			continue
+		}
+		childID := stringValue(r.PhysicalResourceId)
+		if childID == "" {
+			// Nested stack not yet created (still IN_PROGRESS) — nothing to recurse into yet.
+			continue
+		}
+		child, err := buildStackTree(ctx, client, childID, depth+1)
+		if err != nil {
+			return nil, err
+		}
+		node.Children = append(node.Children, child)
+	}
+	return node, nil
+}
+
+// listAllStackResources fetches every resource for a stack, paginating through NextToken.
+func listAllStackResources(ctx context.Context, client CloudFormationClient, stackName string) ([]cfntypes.StackResourceSummary, error) {
+	var resources []cfntypes.StackResourceSummary
+	var nextToken *string
+	for {
+		out, err := client.ListStackResources(ctx, &cloudformation.ListStackResourcesInput{
+			StackName: awsString(stackName),
+			NextToken: nextToken,
+		})
+		if err != nil {
+			return nil, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationAPICallFailed, err)
+		}
+		resources = append(resources, out.StackResourceSummaries...)
+		if out.NextToken == nil {
+			return resources, nil
+		}
+		nextToken = out.NextToken
+	}
+}
+
+// listAllStackEvents fetches a stack's complete history, oldest-first like the watch poller.
+// Event IDs suppress overlapping pages; events without IDs must not hide one another.
+func listAllStackEvents(ctx context.Context, client CloudFormationClient, stackName string) ([]cfntypes.StackEvent, error) {
+	defer perf.Track(nil, "cloudformation.listAllStackEvents")()
+
+	var events []cfntypes.StackEvent
+	var nextToken *string
+	for {
+		out, err := client.DescribeStackEvents(ctx, &cloudformation.DescribeStackEventsInput{
+			StackName: awsString(stackName),
+			NextToken: nextToken,
+		})
+		if err != nil {
+			return nil, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationAPICallFailed, err)
+		}
+		events = append(events, out.StackEvents...)
+		if stringValue(out.NextToken) == "" {
+			break
+		}
+		nextToken = out.NextToken
+	}
+
+	// Reverse the entire newest-first history, preserving the existing per-stack tie order.
+	slices.Reverse(events)
+	seen := map[string]bool{}
+	unique := events[:0]
+	for i := range events {
+		id := stringValue(events[i].EventId)
+		if id != "" {
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
+		}
+		unique = append(unique, events[i])
+	}
+	return unique, nil
+}
+
+// flattenStackNames returns every stack name in a tree (the root and every
+// descendant), depth-first.
+func flattenStackNames(node *stackNode) []string {
+	names := []string{node.StackName}
+	for _, child := range node.Children {
+		names = append(names, flattenStackNames(child)...)
+	}
+	return names
+}
+
+// renderStackTree writes an indented tree of a stack and its nested stacks.
+func renderStackTree(node *stackNode, prefix string) {
+	_ = data.Writeln(prefix + node.StackName)
+	renderStackTreeChildren(node.Children, prefix)
+}
+
+// renderStackTreeChildren renders every descendant of a node with the
+// appropriate ├─/└─ branch glyph and continuation prefix at every depth,
+// recursing into each child's own children the same way — not just one level
+// deep, which would leave grandchildren+ printed as bare lines with no
+// branch glyph.
+func renderStackTreeChildren(children []*stackNode, prefix string) {
+	for i, child := range children {
+		branch := "├─ "
+		nextPrefix := prefix + "│  "
+		if i == len(children)-1 {
+			branch = "└─ "
+			nextPrefix = prefix + "   "
+		}
+		_ = data.Writeln(prefix + branch + child.StackName)
+		renderStackTreeChildren(child.Children, nextPrefix)
+	}
+}
+
+// runTree renders the nested-stack dependency tree for a component.
+func runTree(ctx context.Context, client CloudFormationClient, stackName string, summary map[string]any) (map[string]any, error) {
+	root, err := buildStackTree(ctx, client, stackName, 0)
+	if err != nil {
+		return summary, err
+	}
+	summary["tree"] = root
+	renderStackTree(root, "")
+	return summary, nil
+}
+
+// runLogs renders the combined event log for a stack and every nested stack
+// beneath it, sorted chronologically. --chart renders a lightweight
+// per-resource timeline instead of a flat chronological list.
+func runLogs(ctx context.Context, client CloudFormationClient, stackName string, chart bool, summary map[string]any) (map[string]any, error) {
+	root, err := buildStackTree(ctx, client, stackName, 0)
+	if err != nil {
+		return summary, err
+	}
+
+	var allEvents []cfntypes.StackEvent
+	for _, name := range flattenStackNames(root) {
+		events, err := listAllStackEvents(ctx, client, name)
+		if err != nil {
+			return summary, err
+		}
+		allEvents = append(allEvents, events...)
+	}
+	// SliceStable (not Slice): preserves the per-nested-stack API order for events
+	// with equal timestamps, so the flat log and resource timeline render
+	// deterministically instead of varying whenever the API returns equal-timestamp
+	// events in a different order across runs.
+	sort.SliceStable(allEvents, func(i, j int) bool {
+		return timeValue(allEvents[i].Timestamp).Before(timeValue(allEvents[j].Timestamp))
+	})
+	summary["event_count"] = len(allEvents)
+
+	if chart {
+		renderEventChart(allEvents)
+		return summary, nil
+	}
+	for i := range allEvents {
+		printStackEvent(&allEvents[i])
+	}
+	return summary, nil
+}
+
+// renderEventChart groups events by stack and logical resource ID and prints each
+// resource's status transitions on one line — a compact per-resource timeline
+// rather than a flat chronological event stream.
+func renderEventChart(events []cfntypes.StackEvent) {
+	type resourceKey struct {
+		stackID   string
+		logicalID string
+	}
+	order := []resourceKey{}
+	byResource := map[resourceKey][]string{}
+	for i := range events {
+		e := &events[i]
+		key := resourceKey{stackID: stringValue(e.StackId), logicalID: stringValue(e.LogicalResourceId)}
+		if _, seen := byResource[key]; !seen {
+			order = append(order, key)
+		}
+		byResource[key] = append(byResource[key], string(e.ResourceStatus))
+	}
+	for _, key := range order {
+		label := key.logicalID
+		if key.stackID != "" {
+			label = key.stackID + "/" + label
+		}
+		_ = data.Writeln(fmt.Sprintf("%-30s %s", label, strings.Join(byResource[key], " -> ")))
+	}
+}
+
+// runWatch attaches to a stack's in-progress (or already-terminal) operation
+// and streams events until it reaches a terminal status — the same polling
+// loop apply/delete use internally, exposed as its own verb for attaching to
+// an operation already in progress, including one started outside Atmos.
+func runWatch(ctx context.Context, client CloudFormationClient, stackName string, summary map[string]any) (map[string]any, error) {
+	// Watching attaches to an existing operation, so its existing history is
+	// intentionally fresh relative to an empty, valid baseline. This allows an
+	// already-terminal operation to finish without waiting for new events.
+	status, err := streamStackEvents(ctx, client, stackName, eventBaseline{valid: true}, OperationWatch)
+	if err != nil {
+		return summary, err
+	}
+	summary["final_status"] = string(status)
+	if isFailedStackStatus(status) {
+		return summary, fmt.Errorf("%w: stack %s ended in status %s", errUtils.ErrAwsCloudFormationChangeSetFailed, stackName, status)
+	}
+	return summary, nil
+}
