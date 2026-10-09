@@ -765,7 +765,7 @@ func TestAddCloudFormationSectionAffected_SectionAdded(t *testing.T) {
 // a metadata change, a first-class section change (stack_name), and a settings
 // change must all surface as distinct affected reasons for the same component.
 //
-//nolint:dupl // intentional per-component-type test duplication, mirrors TestProcessHelmComponentsIndexed by design (see comment above).
+// Intentional per-component-type test duplication, mirrors TestProcessHelmComponentsIndexed by design (see comment above).
 func TestProcessCloudFormationComponentsIndexed(t *testing.T) {
 	t.Parallel()
 
@@ -945,7 +945,7 @@ func TestProcessCloudFormationComponentsIndexed_NotAffected(t *testing.T) {
 // (not shared logic) -- see the analogous production-code rationale in
 // stack_processor_process_stacks.go.
 //
-//nolint:dupl // intentional per-component-type test duplication, see comment above
+// Intentional per-component-type test duplication, see comment above.
 func TestProcessCloudFormationComponentsIndexed_FolderChanged(t *testing.T) {
 	t.Parallel()
 
@@ -983,7 +983,7 @@ func TestProcessCloudFormationComponentsIndexed_FolderChanged(t *testing.T) {
 // function (not shared logic) -- see the analogous production-code rationale in
 // stack_processor_process_stacks.go.
 //
-//nolint:dupl // intentional per-component-type test duplication, see comment above
+// Intentional per-component-type test duplication, see comment above.
 func TestProcessCloudFormationComponentsIndexed_SkipsAbstractLockedAndInvalidSections(t *testing.T) {
 	t.Parallel()
 
