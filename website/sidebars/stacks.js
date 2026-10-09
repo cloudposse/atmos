@@ -223,6 +223,14 @@ const defaultFields = {
     "settings",
     "vars",
   ],
+  "aws/cloudformation": [
+    "auth",
+    "dependencies",
+    "env",
+    "hooks",
+    "settings",
+    "vars",
+  ],
   helm: [
     "auth",
     "command",
