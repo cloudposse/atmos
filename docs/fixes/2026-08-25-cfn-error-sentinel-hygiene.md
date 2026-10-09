@@ -4,6 +4,12 @@
 
 ## Summary
 
+**Stack provenance:** This historical report was split into documentation-only
+[PR #3136](https://github.com/cloudposse/atmos/pull/3136). The behavior changes described below
+were pending at that layer and belong to companion implementation
+[PR #3137](https://github.com/cloudposse/atmos/pull/3137); merging the documentation layer alone
+does not implement them. The implementation details remain a record of the companion work.
+
 `errUtils.ErrAwsCloudFormationChangeSetFailed` and `ErrAwsCloudFormationDriftDetected` were being
 used across `pkg/component/aws/cloudformation` as generic catch-all sentinels for failures that had
 nothing to do with a changeset or with confirmed drift — most seriously, `drift detect`/`describe`
@@ -55,6 +61,9 @@ new one (not just made to compile) — `drift_test.go`, `delete_test.go`, `get_t
 a field-test finding per this repo's testing conventions).
 
 ## Validation
+
+The results below record validation of the companion implementation, not the standalone #3136
+documentation head. They are preserved as historical evidence and were not rerun by this docs split.
 
 - `go test ./pkg/component/aws/cloudformation/... ./errors/...` — all pass, including every
   reclassified assertion.

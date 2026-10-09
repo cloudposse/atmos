@@ -41,8 +41,10 @@ This example mirrors [`examples/emulator-aws`](../emulator-aws) (same emulator, 
 
 ## Usage
 
-Validate the stacks, start the sandbox, deploy, inspect outputs, then tear everything down (a container runtime —
-Docker or Podman — is the only prerequisite):
+Before running the lifecycle, install Docker or Podman and Python 3 (`python3` on `PATH`).
+The demo lifecycle hooks use Python 3 to record their events.
+
+Validate the stacks, start the sandbox, deploy, inspect outputs, then tear everything down:
 
 ```shell
 atmos validate stacks                        # validate configuration before deployment
