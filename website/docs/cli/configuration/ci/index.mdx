@@ -149,8 +149,9 @@ detected provider. The `ci.*` switches then apply as they do on a recognized pla
 the files named by `ATMOS_CI_OUTPUT`, `ATMOS_CI_SUMMARY`, `ATMOS_CI_ENV`, and `ATMOS_CI_PATH` are written when set.
 Without forced CI mode, commands run locally render their CI output on the terminal and write nothing.
 
-Workflow commands such as `::group::`, `::add-mask::`, and annotations are written to stderr, so piped data on stdout
-stays clean. `::add-mask::` is emitted only when `ci.enabled` is true.
+Annotations and `::add-mask::` are written to stderr. Log-group markers are written to stdout to surround command
+output. Set `ci.groups.mode: off` when piping stdout to a data parser. `::add-mask::` is emitted only when
+`ci.enabled` is true.
 
 An invalid `GITHUB_API_URL` or `ATMOS_CI_GITHUB_API_URL` fails the command, both in scripts and in the `--ci` flow of
 Terraform commands, instead of sending the token to an unintended host.

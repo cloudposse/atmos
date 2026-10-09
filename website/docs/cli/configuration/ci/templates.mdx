@@ -95,7 +95,9 @@ ci:
     Filename of the custom container image summary template within the base path. A configured file that does not
     exist is an error, so a typo cannot silently revert to the built-in template. Without the key, Atmos uses
     `<base_path>/container/image.md` when that file exists, and the built-in template otherwise. The same
-    Markdown is used for the job summary and for the per-image pull request comment, keyed `container:image:<registry/repository>`.
+    Markdown is used for the job summary and for the per-image comment, keyed `container:image:<registry/repository>`.
+    The comment targets the pull request when one is known, or the commit otherwise. GitHub commit comments require
+    `contents: write` permission.
 
     The template receives these fields, all already escaped Markdown: `.Image`, `.Badges`, `.Description`,
     `.Tag`, `.Digest`, `.ID`, `.Revision`, `.Source`, `.Entrypoint`, `.Command`, `.StopSignal`, `.StorageDriver`,
