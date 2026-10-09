@@ -175,3 +175,8 @@ Per the `pull-request` skill's semver-label rule: **the label is per-PR, not per
 five-layer stack adds one user-visible feature, only the final layer that wires it up gets
 `minor`/`major` — the foundation/plumbing layers underneath it get `no-release`. Don't label every
 layer in a stack the same way just because they're part of one larger effort.
+
+`no-release` classifies non-user-visible work for the PR policy and release-documentation checks;
+it does not suppress a version bump. The release-drafter resolver in `.github/auto-release.yml`
+currently maps this label to `patch`. Keep using the policy's label for foundation PRs; changing
+release publication or version resolution is a separate policy change.
