@@ -56,8 +56,9 @@ type prefixProbe struct {
 // Building it once per registration change (instead of once per Mask call) removes the
 // per-call sort and regex compilation from the hot path.
 type maskSnapshot struct {
-	literals []literalEntry // Longest first.
-	patterns []*regexp.Regexp
+	literals    []literalEntry // Longest first.
+	patterns    []*regexp.Regexp
+	patternSpan int // Maximum byte length of a cross-line regex match.
 
 	// probes indexes prefix probes by their first byte for the streaming hold-back scan.
 	probes    [256][]prefixProbe
@@ -69,6 +70,11 @@ func buildMaskSnapshot(literals map[string]bool, patterns []*regexp.Regexp) *mas
 	snap := &maskSnapshot{
 		literals: make([]literalEntry, 0, len(literals)),
 		patterns: append([]*regexp.Regexp(nil), patterns...),
+	}
+
+	for _, pattern := range patterns {
+		span, _ := maskPatternSpan(pattern) // Patterns were validated at registration.
+		snap.patternSpan = max(snap.patternSpan, span)
 	}
 
 	for literal := range literals {
@@ -164,16 +170,39 @@ func (s *maskSnapshot) holdbackLen(input string, lineBoundary bool) int {
 	cut := n - s.partialSuffixLen(input)
 
 	if lineBoundary && len(s.patterns) > 0 {
-		// Regex patterns have no bounded prefix, so hold the entire unfinished line.
-		// A fixed tail could drop a pattern's prefix and expose its secret suffix.
-		boundary := strings.LastIndexAny(input, "\r\n") + 1
-		cut = min(cut, boundary)
-	}
-
-	if cut < n {
+		// Cross-line patterns have a finite width. Retain their possible prefix as well
+		// as the unfinished line needed by unbounded, line-local patterns.
+		if s.patternSpan > 0 {
+			cut = min(cut, max(0, n-s.patternSpan+1))
+		}
+		for {
+			previous := cut
+			cut = strings.LastIndexAny(input[:cut], "\r\n") + 1
+			cut = s.avoidStraddle(input, cut)
+			cut = s.avoidPatternStraddle(input, cut)
+			if cut == previous {
+				break
+			}
+		}
+	} else if cut < n {
 		cut = s.avoidStraddle(input, cut)
 	}
 	return n - cut
+}
+
+// avoidPatternStraddle keeps complete matches intact when a cross-line prefix moves the cut.
+func (s *maskSnapshot) avoidPatternStraddle(input string, cut int) int {
+	if cut == 0 || s.patternSpan == 0 {
+		return cut
+	}
+	for _, pattern := range s.patterns {
+		for _, loc := range pattern.FindAllStringIndex(input, -1) {
+			if loc[0] < cut && loc[1] > cut {
+				cut = loc[0]
+			}
+		}
+	}
+	return cut
 }
 
 // partialSuffixLen returns the length of the longest suffix of input that is a proper prefix of

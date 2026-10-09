@@ -375,13 +375,14 @@ var (
 	ErrGitArtifactRead             = errors.New("failed to read provision artifact")
 
 	// I/O and output errors.
-	ErrBuildIOConfig  = errors.New("failed to build I/O config")
-	ErrUnknownStream  = errors.New("unknown I/O stream")
-	ErrWriteToStream  = errors.New("failed to write to stream")
-	ErrMaskingContent = errors.New("failed to mask content")
-	ErrHeadLookup     = errors.New("HEAD not found")
-	ErrInvalidFormat  = errors.New("invalid format")
-	ErrOutputFormat   = errors.New("output format error")
+	ErrBuildIOConfig        = errors.New("failed to build I/O config")
+	ErrUnknownStream        = errors.New("unknown I/O stream")
+	ErrWriteToStream        = errors.New("failed to write to stream")
+	ErrMaskingContent       = errors.New("failed to mask content")
+	ErrUnboundedMaskPattern = errors.New("mask patterns that can match carriage returns or newlines must have a finite maximum match length")
+	ErrHeadLookup           = errors.New("HEAD not found")
+	ErrInvalidFormat        = errors.New("invalid format")
+	ErrOutputFormat         = errors.New("output format error")
 
 	// File operation errors.
 	ErrRefusingToDeleteSymlink = ErrRefuseDeleteSymbolicLink

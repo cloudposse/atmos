@@ -37,6 +37,9 @@ jobs:
           # Fetch full history for proper diff checking
           fetch-depth: 0
 
+      - name: Test CI helper scripts
+        run: node --test .github/scripts/*.test.mjs
+
       - name: Set up Atmos
         uses: ./.github/actions/setup-atmos-bootstrap
         with:

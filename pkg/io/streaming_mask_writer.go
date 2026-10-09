@@ -18,6 +18,8 @@ import (
 // write. With only literals registered, output that cannot be the start of a secret is forwarded
 // on the same Write call. With regex patterns registered, the entire unfinished line is held by
 // default, so buffering grows with the line length until a newline, carriage return, or Flush.
+// Bounded cross-line regexes also retain their maximum match width and any line crossing that
+// boundary. Unbounded cross-line regexes are rejected when registered.
 // Held bytes are released only by a later Write that rules them out, or by Flush; nothing is ever
 // flushed on a timer.
 //

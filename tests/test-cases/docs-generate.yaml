@@ -27,6 +27,8 @@ tests:
     snapshot: false
     description: "Ensure all 3 input types are supported"
     workdir: "fixtures/scenarios/docs-generate/input-variants/"
+    env:
+      ATMOS_TEST_DOCS_REMOTE_INPUT: "${ATMOS_TEST_GITHUB_MOCK_URL}/raw/cloudposse/atmos/main/README.yaml"
     command: "atmos"
     args:
       - "docs"
