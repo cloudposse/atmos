@@ -349,6 +349,15 @@ func TestRunInstall_WithCanonicalFormat(t *testing.T) {
 
 // TestRunInstall_WithLatestKeyword tests RunInstall with the "latest" version keyword.
 func TestRunInstall_WithLatestKeyword(t *testing.T) {
+	for _, binaryName := range []string{"terraform", "terraform.exe"} {
+		t.Run(binaryName, func(t *testing.T) {
+			testRunInstallWithLatestKeyword(t, binaryName)
+		})
+	}
+}
+
+func testRunInstallWithLatestKeyword(t *testing.T, binaryName string) {
+	t.Helper()
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 
@@ -360,11 +369,11 @@ func TestRunInstall_WithLatestKeyword(t *testing.T) {
 	}
 	mock.RegisterAquaTool(&httpmock.AquaTool{
 		Owner: "hashicorp", Repo: "terraform", VersionPrefix: "v",
-		Asset: "terraform", Format: "raw", BinaryName: "terraform",
+		Asset: binaryName, Format: "raw", BinaryName: binaryName,
 	})
 	mock.RegisterRelease("hashicorp", "terraform", httpmock.ReleaseSpec{TagName: "v1.11.4"})
 	// Raw release downloads append .exe on Windows, so serve that exact asset name.
-	assetName := installer.EnsureWindowsExeExtension("terraform")
+	assetName := installer.EnsureWindowsExeExtension(binaryName)
 	mock.RegisterReleaseAsset("hashicorp", "terraform", "v1.11.4", assetName, []byte("test terraform binary"))
 
 	// Create a .tool-versions file
@@ -395,7 +404,8 @@ func TestRunInstall_WithLatestKeyword(t *testing.T) {
 	updatedToolVersions, err := LoadToolVersions(toolVersionsPath)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"latest"}, updatedToolVersions.Tools["terraform"])
-	binaryPath := NewInstaller().GetBinaryPath("hashicorp", "terraform", "1.11.4", "terraform")
+	// GetBinaryPath uses an explicit filename verbatim, including its platform suffix.
+	binaryPath := NewInstaller().GetBinaryPath("hashicorp", "terraform", "1.11.4", assetName)
 	content, err := os.ReadFile(binaryPath)
 	require.NoError(t, err)
 	assert.Equal(t, "test terraform binary", string(content))
