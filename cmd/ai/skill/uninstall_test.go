@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/ai/skills/marketplace"
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
@@ -746,61 +747,23 @@ Another test skill.
 }
 
 func TestUninstallCmd_RunE_InstallerInitFailure(t *testing.T) {
-	// Reset flags before test.
-	resetFlags := func() {
-		forceFlag := uninstallCmd.Flags().Lookup("force")
-		if forceFlag != nil {
-			_ = forceFlag.Value.Set("false")
-		}
-	}
+	sourceCommandFixture(t)
+	forceFlag := uninstallCmd.Flags().Lookup("force")
+	require.NotNil(t, forceFlag)
+	require.NoError(t, forceFlag.Value.Set("false"))
 
-	t.Run("fails when home directory is unwritable", func(t *testing.T) {
-		resetFlags()
+	// A corrupt registry fails initialization on every platform. A file in place
+	// of the skills directory instead looks like a missing registry on Windows.
+	home, err := homedir.Dir()
+	require.NoError(t, err)
+	registryDir := filepath.Join(home, ".atmos", "skills")
+	require.NoError(t, os.MkdirAll(registryDir, 0o755))
+	registryPath := filepath.Join(registryDir, "registry.json")
+	require.NoError(t, os.WriteFile(registryPath, []byte("{invalid JSON"), 0o600))
 
-		// Create a temp directory and set up an unwritable skills path.
-		tempHome := t.TempDir()
-
-		// Create .atmos/skills as a file (not a directory) to cause registry failure.
-		atmosDir := filepath.Join(tempHome, ".atmos")
-		err := os.MkdirAll(atmosDir, 0o755)
-		require.NoError(t, err)
-
-		// Create skills as a file, not a directory, to cause registry creation to fail.
-		skillsFile := filepath.Join(atmosDir, "skills")
-		err = os.WriteFile(skillsFile, []byte("not a directory"), 0o644)
-		require.NoError(t, err)
-
-		// Set both home variables for os.UserHomeDir and the homedir helper.
-		t.Setenv("HOME", tempHome)
-		t.Setenv("USERPROFILE", tempHome)
-
-		// Reset homedir cache to pick up new HOME.
-		homedir.Reset()
-		homedir.DisableCache = true
-		t.Cleanup(func() {
-			homedir.Reset()
-			homedir.DisableCache = false
-		})
-
-		// Capture stdout.
-		oldStdout := os.Stdout
-		r, w, _ := os.Pipe()
-		os.Stdout = w
-
-		// Run the command - should fail during installer initialization.
-		err = uninstallCmd.RunE(uninstallCmd, []string{"some-skill"})
-
-		w.Close()
-		os.Stdout = oldStdout
-
-		// Drain the pipe.
-		var buf bytes.Buffer
-		_, _ = io.Copy(&buf, r)
-
-		// Verify we get an error about initialization.
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), ".atmos")
-	})
+	err = uninstallCmd.RunE(uninstallCmd, []string{"some-skill"})
+	require.ErrorIs(t, err, marketplace.ErrRegistryCorrupted)
+	assert.Contains(t, err.Error(), "failed to initialize installer")
 }
 
 // TestUninstallCmd_RunE_NoArgsUninstallsEverything covers the CLI wiring for
