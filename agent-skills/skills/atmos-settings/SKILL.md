@@ -16,7 +16,7 @@ Use this skill for global `atmos.yaml` options that are not owned by a narrower 
 | Section | Use for |
 |---|---|
 | `settings` | Global CLI behavior, terminal behavior, telemetry, experimental options |
-| `logs` | Log level, log file path, debug output behavior |
+| `logs` | Log level, log file path, log color, debug output behavior |
 | `errors` | Error output formatting and error reporting options |
 | `env` | Environment variables applied to Atmos operations |
 | `docs` | Documentation generation defaults |
@@ -56,7 +56,7 @@ syntax highlighting, pager). Fields:
 settings:
   terminal:
     color: true               # Explicitly force color on (overrides TTY auto-detection)
-    no_color: false           # Deprecated: use the --no-color flag or ATMOS_NO_COLOR/NO_COLOR/CLICOLOR env vars instead
+    no_color: false           # Deprecated: use the --no-color flag or ATMOS_NO_COLOR/NO_COLOR env vars instead
     force_color: false        # ENV-only (ATMOS_FORCE_COLOR) -- not settable from this config field
     theme: dracula             # Theme name; see `atmos theme list` for available names
     max_width: 120
@@ -74,8 +74,11 @@ otherwise Atmos falls back to TTY auto-detection.
 
 | Flag | Env vars | Effect |
 |---|---|---|
-| `--no-color` | `ATMOS_NO_COLOR`, `NO_COLOR`, `CLICOLOR` | Disable color output |
+| `--no-color` | `ATMOS_NO_COLOR`, `NO_COLOR` | Disable all color output, including logs; overrides `--force-color` |
 | `--force-color` | `ATMOS_FORCE_COLOR`, `CLICOLOR_FORCE` | Force color output even when not a TTY (e.g. piped/CI output, screenshots) |
+| `--logs-color` | `ATMOS_LOGS_COLOR` | Log color only (`logs.color`, default `true`); `false` keeps logs plain while UI output stays colored |
+
+`CLICOLOR=0` disables color unless forced. Nonempty `NO_COLOR` always wins, even over `--no-color=false`.
 
 ### `atmos theme` Commands
 

@@ -833,6 +833,10 @@ func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
 
 		log.SetOutput(output)
 	}
+	if forceColor {
+		// A new log destination resets the profile, so apply forced color after SetOutput.
+		log.SetColorProfile(termenv.TrueColor)
+	}
 	if _, err := log.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
 		// Enrich the error with proper formatting for user-facing output.
 		// The error from ParseLogLevel has format: "sentinel\nexplanation"
@@ -1685,6 +1689,10 @@ func handleConfigInitError(initErr error, atmosConfig *schema.AtmosConfiguration
 // handleConfigInitErrorWithArgs processes config initialization errors with explicit args.
 // This is a testable version of handleConfigInitError that accepts args as a parameter.
 func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfiguration, args []string) error {
+	// An invalid log color is fatal for every command, matching an invalid log level.
+	if errors.Is(initErr, errUtils.ErrInvalidLogsColor) {
+		return initErr
+	}
 	if isVersionCommandWithArgs(args) {
 		// Version command should always work, even with invalid config.
 		log.Debug("Warning: CLI configuration error (continuing for version command)", "error", initErr)
@@ -1800,6 +1808,10 @@ func skipLeadingRootFlags(args []string) ([]string, bool) {
 		skip, consumesValue := isSkippableRootFlag(args[0])
 		if !skip {
 			break
+		}
+		if !consumesValue && boolFlagHasSeparateValue(args[0], args, 0) {
+			args = args[2:]
+			continue
 		}
 		if consumesValue {
 			if len(args) < 2 {
@@ -2120,6 +2132,11 @@ func preprocessArgs() []string {
 	// This rewrites --identity value → --identity=value before Cobra parses.
 	processedArgs := preprocessNoOptDefValFlags(osArgs)
 
+	// Step 1b: Fold "--bool-flag true|false" into "--bool-flag=true|false" for boolean flags
+	// that belong to the target command (for example terraform's --dry-run or --affected).
+	// Global boolean flags were already handled above through the global registry.
+	processedArgs = preprocessCommandBoolFlags(processedArgs)
+
 	// Step 2: Preprocess compatibility flags (external tool syntax like -var).
 	// This separates Atmos flags from pass-through flags.
 	// Note: This may call RootCmd.SetArgs() if there are compat flags.
@@ -2235,8 +2252,42 @@ func preprocessNoOptDefValFlags(args []string) []string {
 	// Use the preprocess pipeline for native flag preprocessing.
 	pipeline := preprocess.NewPipeline(
 		preprocess.NewNoOptDefValPreprocessor(flagInfos),
+		// Fold "--bool-flag true|false" into "--bool-flag=true|false" so the literal
+		// is not left behind as a stray positional argument.
+		preprocess.NewBoolValuePreprocessor(flagInfos),
 	)
 	return pipeline.Run(args)
+}
+
+// preprocessCommandBoolFlags rewrites "--flag true|false" to "--flag=true|false" for the
+// boolean flags (local and inherited) of the command the arguments resolve to.
+// Only an explicit true/false literal is folded in; a bare boolean flag never consumes
+// a subcommand or component name. Arguments after "--" are never modified.
+func preprocessCommandBoolFlags(args []string) []string {
+	targetCmd, _, _ := RootCmd.Find(args)
+	if targetCmd == nil {
+		return args
+	}
+
+	boolFlags := make(map[string]bool)
+	collect := func(f *pflag.Flag) {
+		if f.Value.Type() != "bool" {
+			return
+		}
+		boolFlags[f.Name] = true
+		if f.Shorthand != "" {
+			boolFlags[f.Shorthand] = true
+		}
+	}
+	targetCmd.LocalFlags().VisitAll(collect)
+	targetCmd.InheritedFlags().VisitAll(collect)
+	if len(boolFlags) == 0 {
+		return args
+	}
+
+	return terminalenv.NormalizeBoolFlagValues(args, func(name string) bool {
+		return boolFlags[name]
+	})
 }
 
 // displayPerformanceHeatmap shows the performance heatmap visualization.

@@ -31,6 +31,11 @@ func ColorOptionsFromArgs(args []string) ColorOptions {
 	fs.BoolP("help", "h", false, "") // Continue scanning color flags on help invocations.
 	fs.BoolVar(&options.NoColor, "no-color", options.NoColor, "")
 	logsColor := fs.Bool("logs-color", true, "")
+	// Fold "--no-color false" / "--logs-color false" into the flag so the literal is a
+	// value, matching the Cobra-side normalization; other following args stay untouched.
+	args = NormalizeBoolFlagValues(args, func(name string) bool {
+		return name == "no-color" || name == "logs-color"
+	})
 	_ = fs.Parse(args) // Normal flag/config validation reports invalid values later.
 	options.NoColorSet = fs.Changed("no-color")
 	if fs.Changed("logs-color") {

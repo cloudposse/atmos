@@ -606,6 +606,12 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		return atmosConfig, fmt.Errorf("apply edition defaults: %w", err)
 	}
 
+	// Viper's SetTypeByDefaultValue coerces any non-boolean logs.color to false during
+	// the unmarshal below, so reject it first while the raw value is still visible.
+	if err := validateLogsColorConfig(v); err != nil {
+		return atmosConfig, err
+	}
+
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err := v.Unmarshal(&atmosConfig, atmosDecodeHook())

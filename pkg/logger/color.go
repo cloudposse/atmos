@@ -17,7 +17,12 @@ type colorPolicy struct {
 	disabled    bool
 	profile     termenv.Profile
 	profileSet  bool
-	plain       atomic.Bool
+	// downgraded records that the renderer was forced to Ascii by an opt-out, so a later
+	// re-enable without an explicit profile must restore automatic detection.
+	downgraded bool
+	// out is the underlying writer (before the ANSI filter) used to re-detect the profile.
+	out   io.Writer
+	plain atomic.Bool
 }
 
 // SetColorEnabled controls logging color independently of the UI profile.
@@ -36,11 +41,26 @@ func (l *AtmosLogger) applyColorProfile() {
 	switch {
 	case l.color.disabled || l.color.logDisabled:
 		profile = termenv.Ascii
+		l.color.downgraded = true
 	case !l.color.profileSet:
-		return // Preserve automatic detection until a terminal profile is available.
+		if l.color.downgraded {
+			// An earlier opt-out forced the renderer to Ascii; restore automatic detection.
+			l.color.downgraded = false
+			l.color.plain.Store(false)
+			l.charm.SetColorProfile(detectColorProfile(l.color.out))
+		}
+		return // Otherwise preserve automatic detection until a terminal profile is available.
 	}
 	l.color.plain.Store(profile == termenv.Ascii)
 	l.charm.SetColorProfile(profile)
+}
+
+// detectColorProfile mirrors the automatic detection Charm performs when it builds a renderer.
+func detectColorProfile(w io.Writer) termenv.Profile {
+	if w == nil {
+		w = os.Stderr
+	}
+	return termenv.NewOutput(w).EnvColorProfile()
 }
 
 // colorWriter strips preformatted ANSI as well as renderer-generated styling.
@@ -87,10 +107,16 @@ func (l *AtmosLogger) setColorOutput(w io.Writer) {
 	if w == nil {
 		w = os.Stderr
 	}
+	l.color.out = w
 	if w != io.Discard {
 		w = &colorWriter{Writer: w, policy: l.color}
 	}
 	l.charm.SetOutput(w)
-	// SetOutput replaces Charm's renderer, so always reapply the policy afterwards.
+	// An explicit profile describes the previous destination, so the new renderer keeps
+	// Charm's automatic detection. Callers that force color reapply it after SetOutput.
+	l.color.profileSet = false
+	l.color.downgraded = false
+	l.color.plain.Store(false)
+	// SetOutput replaces Charm's renderer, so always reapply the opt-out policy afterwards.
 	l.applyColorProfile()
 }

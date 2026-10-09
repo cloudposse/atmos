@@ -491,7 +491,7 @@ func resolveForceColor(configForceColor bool) bool {
 func buildConfig() *Config {
 	cfg := &Config{
 		// From flags (bound via viper in cmd/root.go)
-		NoColor:  viperguard.GetBool("no-color") || env.ColorOptionsFromArgs(os.Args[1:]).NoColor,
+		NoColor:  env.ResolveNoColor(os.Args[1:], viperguard.GetBool("no-color")),
 		Color:    viperguard.GetBool("color"),
 		ForceTTY: viperguard.GetBool("force-tty"),
 

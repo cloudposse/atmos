@@ -742,7 +742,7 @@ func formatContextForMarkdown(err error) string {
 func shouldUseColor() bool {
 	// Build terminal config from all sources (flags, env vars, atmos.yaml).
 	termConfig := &terminal.Config{
-		NoColor:    viper.GetBool("no-color") || terminalenv.ColorOptionsFromArgs(os.Args[1:]).NoColor,
+		NoColor:    terminalenv.ResolveNoColor(os.Args[1:], viper.GetBool("no-color")),
 		Color:      viper.GetBool("color"),
 		ForceColor: viper.GetBool("force-color"),
 

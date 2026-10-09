@@ -116,3 +116,22 @@ func TestColorWriterPreservesFileCapabilities(t *testing.T) {
 	_, err = nonFile.Read(buf)
 	assert.ErrorIs(t, err, io.EOF)
 }
+
+func TestSetOutputDropsPreviousExplicitProfile(t *testing.T) {
+	logger := New()
+	logger.SetLevel(DebugLevel)
+	// UI initialization in CI pushes a detected terminal profile into the logger.
+	logger.SetColorProfile(termenv.TrueColor)
+
+	var output bytes.Buffer
+	logger.SetOutput(&output)
+	logger.Debug("record", "key", "value")
+	assert.Contains(t, output.String(), "key=value")
+	assert.NotContains(t, output.String(), "\x1b", "a profile detected for another writer must not leak into a buffer")
+
+	// Forced color is reapplied after the destination changes.
+	output.Reset()
+	logger.SetColorProfile(termenv.TrueColor)
+	logger.Debug("record")
+	assert.Contains(t, output.String(), "\x1b")
+}

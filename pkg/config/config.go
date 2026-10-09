@@ -155,6 +155,22 @@ func parseFlags() map[string]string {
 	return parseFlagsFromArgs(os.Args)
 }
 
+// rootBoolFlags lists the global boolean flags (without the leading dashes) that
+// parseFlagsFromArgs must not let consume the next argument unless it is an explicit
+// true/false literal.
+var rootBoolFlags = map[string]bool{
+	"ai":               true,
+	"force-color":      true,
+	"force-tty":        true,
+	"heatmap":          true,
+	"interactive":      true,
+	"logs-color":       true,
+	"mask":             true,
+	"no-color":         true,
+	"profiler-enabled": true,
+	"verbose":          true,
+}
+
 // parseFlagsFromArgs parses flags from the given args slice.
 // This function is exposed for testing purposes.
 func parseFlagsFromArgs(args []string) map[string]string {
@@ -172,6 +188,14 @@ func parseFlagsFromArgs(args []string) map[string]string {
 			// Case like --flag=value
 			parts := strings.SplitN(arg, "=", 2)
 			flags[parts[0]] = parts[1]
+		case rootBoolFlags[arg]:
+			// Boolean flag: only an explicit true/false literal is its value, so that
+			// "--verbose version" does not swallow the command name.
+			flags[arg] = "true"
+			if i+1 < len(args) && terminalenv.IsBoolLiteral(args[i+1]) {
+				flags[arg] = strings.ToLower(args[i+1])
+				i++ // Skip the next argument as it's the value.
+			}
 		case i+1 < len(args) && !strings.HasPrefix(args[i+1], "--"):
 			// Case like --flag value
 			flags[arg] = args[i+1]

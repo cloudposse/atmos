@@ -54,7 +54,7 @@ func HighlightCode(code string, language string, syntaxTheme string) (string, er
 // PrintStyledText prints a styled text to the terminal.
 func PrintStyledText(text string) error {
 	// Check NO_COLOR first (highest priority).
-	if viper.GetBool("no-color") || terminalenv.ColorOptionsFromArgs(os.Args[1:]).NoColor {
+	if terminalenv.ResolveNoColor(os.Args[1:], viper.GetBool("no-color")) {
 		return nil
 	}
 
@@ -150,7 +150,7 @@ func PrintStyledTextToSpecifiedOutput(out io.Writer, text string) error {
 	noColor := os.Getenv("NO_COLOR")                  //nolint:forbidigo // Standard terminal env var
 
 	// If explicitly disabled, return early without printing
-	if viper.GetBool("no-color") || terminalenv.ColorOptionsFromArgs(os.Args[1:]).NoColor || isFalsy(atmosForceColor) || isFalsy(cliColorForce) || isFalsy(forceColorEnv) || noColor != "" {
+	if terminalenv.ResolveNoColor(os.Args[1:], viper.GetBool("no-color")) || isFalsy(atmosForceColor) || isFalsy(cliColorForce) || isFalsy(forceColorEnv) || noColor != "" {
 		return nil
 	}
 

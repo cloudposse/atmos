@@ -20,6 +20,14 @@ func TestLogColorStartup(t *testing.T) {
 		t.Skip("builds and runs the Atmos binary")
 	}
 	binary := buildAtmosBinary(t)
+	// Cases where the UI (stdout) must stay colored independently of the log result.
+	colorUI := map[string]bool{
+		"logging false preserves color UI":      true,
+		"CLICOLOR=1 with force-color":           true,
+		"CLICOLOR=1 with CLICOLOR_FORCE":        true,
+		"CLICOLOR=0 with force-color":           true,
+		"CLI no-color=false beats env no-color": true,
+	}
 	for _, tt := range []struct {
 		name        string
 		env         []string
@@ -35,6 +43,13 @@ func TestLogColorStartup(t *testing.T) {
 		{"logging true respects pipe", nil, []string{"--logs-color=true"}, false, false},
 		{"force-color enables logs", nil, []string{"--logs-color=true", "--force-color"}, true, false},
 		{"global veto beats logging true", []string{"CI=true", "GITHUB_ACTIONS=true"}, []string{"--logs-color=true", "--no-color"}, false, true},
+		// CLICOLOR=1 only advertises color support; it must not act as an opt-out.
+		{"CLICOLOR=1 with force-color", []string{"CLICOLOR=1"}, []string{"--force-color"}, true, false},
+		{"CLICOLOR=1 with CLICOLOR_FORCE", []string{"CLICOLOR=1", "CLICOLOR_FORCE=1"}, nil, true, false},
+		{"CLICOLOR=0 with force-color", []string{"CLICOLOR=0"}, []string{"--force-color"}, true, false},
+		// CLI flags beat the environment even though logging is configured before Cobra parses flags.
+		{"CLI no-color=false beats env no-color", []string{"ATMOS_FORCE_COLOR=true", "ATMOS_NO_COLOR=true"}, []string{"--no-color=false"}, true, false},
+		{"NO_COLOR beats CLI no-color=false", []string{"ATMOS_FORCE_COLOR=true", "NO_COLOR=1"}, []string{"--no-color=false"}, false, true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -68,7 +83,7 @@ func TestLogColorStartup(t *testing.T) {
 				assert.NotContains(t, stdout.String(), "\x1b")
 				assert.NotContains(t, stderr.String(), "\x1b")
 			}
-			if tt.name == "logging false preserves color UI" {
+			if colorUI[tt.name] {
 				assert.Contains(t, stdout.String(), "\x1b")
 			}
 		})

@@ -957,7 +957,8 @@ var (
 	ErrCacheDir       = errors.New("cache directory creation failed")
 
 	// Logger errors.
-	ErrInvalidLogLevel = errors.New("invalid log level")
+	ErrInvalidLogLevel  = errors.New("invalid log level")
+	ErrInvalidLogsColor = errors.New("invalid logs color")
 
 	// File operation errors.
 	ErrCopyFile            = errors.New("failed to copy file")

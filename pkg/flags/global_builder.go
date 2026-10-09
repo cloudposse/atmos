@@ -94,7 +94,7 @@ func (b *GlobalOptionsBuilder) registerLoggingFlags(defaults *global.Flags) {
 	b.options = append(b.options, WithEnvVars("logs-color", "ATMOS_LOGS_COLOR"))
 
 	b.options = append(b.options, WithBoolFlag("no-color", "", defaults.NoColor, "Disable color output"))
-	b.options = append(b.options, WithEnvVars("no-color", "ATMOS_NO_COLOR", "NO_COLOR", "CLICOLOR"))
+	b.options = append(b.options, WithEnvVars("no-color", "ATMOS_NO_COLOR", "NO_COLOR"))
 }
 
 // registerTerminalFlags registers terminal and I/O configuration flags.
