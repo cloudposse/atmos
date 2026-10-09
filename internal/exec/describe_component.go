@@ -658,7 +658,7 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 	// Fields to keep (the sections a stack manifest can define).
 	//
 	// NOTE: this is an intentional allowlist, not an exhaustive one. It still omits
-	// several real stack-definable sections (e.g. retry, generate, auth, secrets,
+	// several real stack-definable sections (e.g. retry, auth, secrets,
 	// command, backend_type, workspace). Whether to surface those, and whether this
 	// filter should be driven by the manifest schema instead of a hand-maintained
 	// list, is a broader design question tracked separately (see #3223).
@@ -680,9 +680,25 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 		"component":    true,
 		"hooks":        true,
 		"flags":        true,
-		"chart":        true, // Native Helm chart reference (#3218).
-		"values":       true, // Native Helm chart values (#3218).
-		"values_files": true, // Native Helm values files (#3218).
+		// Helm-specific sections (built-in types don't get container's pass-through;
+		// without these, `describe component` silently strips them under the default
+		// `describe.component.filter: schema` mode).
+		cfg.ChartSectionName:        true,
+		cfg.ValuesSectionName:       true,
+		cfg.ValuesFilesSectionName:  true,
+		cfg.RepositoriesSectionName: true,
+		// Kubernetes-specific sections.
+		cfg.ProviderSectionName:  true,
+		cfg.PathsSectionName:     true,
+		cfg.ManifestsSectionName: true,
+		cfg.RenderSectionName:    true,
+		// Cross-type sections (generate: terraform/kubernetes/helm; source: terraform/
+		// helmfile/packer/kubernetes/helm; provision: helm/kubernetes) — also previously
+		// missing from this whitelist for every type that defines them, not just CFN's
+		// future sections.
+		cfg.GenerateSectionName:  true,
+		cfg.SourceSectionName:    true,
+		cfg.ProvisionSectionName: true,
 	}
 
 	filtered := make(map[string]any)
