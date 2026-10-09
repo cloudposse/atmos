@@ -2,10 +2,12 @@ package cloudformation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/smithy-go"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -60,8 +62,11 @@ func describeNamedChangeSet(ctx context.Context, client CloudFormationClient, st
 		StackName:     awsString(stackName),
 	})
 	if err != nil {
-		if isStackNotFoundError(err) {
-			return nil, fmt.Errorf("%w: %q on stack %q", errUtils.ErrAwsCloudFormationChangeSetNotFound, changeSetName, stackName)
+		var apiErr smithy.APIError
+		changeSetMissing := errors.As(err, &apiErr) && apiErr.ErrorCode() == "ChangeSetNotFound"
+		// A changeset is also absent when its containing stack no longer exists.
+		if changeSetMissing || isStackNotFoundError(err) {
+			return nil, fmt.Errorf("%w: %q on stack %q: %w", errUtils.ErrAwsCloudFormationChangeSetNotFound, changeSetName, stackName, err)
 		}
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationChangeSetFailed, err)
 	}

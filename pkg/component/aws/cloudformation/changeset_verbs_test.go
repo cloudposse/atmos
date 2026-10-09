@@ -105,11 +105,13 @@ func TestDescribeNamedChangeSet_Success(t *testing.T) {
 func TestDescribeNamedChangeSet_NotFound(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
-	client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(nil, errors.New("ChangeSet [cs-1] does not exist"))
+	awsErr := &cfntypes.ChangeSetNotFoundException{Message: awsString("ChangeSet [cs-1] does not exist")}
+	client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(nil, awsErr)
 
 	_, err := describeNamedChangeSet(context.Background(), client, "vpc", "cs-1")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetNotFound)
+	assert.ErrorIs(t, err, awsErr)
 	assert.Contains(t, err.Error(), "cs-1")
 	assert.Contains(t, err.Error(), "vpc")
 }
