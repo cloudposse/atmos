@@ -43,6 +43,27 @@ def deploy(release, changed, unchanged):
     return hashlib.sha256(expected).hexdigest()
 
 
+def dump_container_logs():
+    """Capture this example's emulator and Lambda logs before cleanup removes them."""
+    runtime = shutil.which("docker") or shutil.which("podman")
+    if runtime is None:
+        return
+    try:
+        containers = subprocess.run(
+            [runtime, "ps", "-a", "--filter", "name=atmos-advanced-emulator-aws",
+             "--filter", "name=floci-aws-atmos-cfn-advanced-app-local-Function-",
+             "--format", "{{.ID}}"],
+            check=True, text=True, stdout=subprocess.PIPE, timeout=20,
+        ).stdout.splitlines()
+        for container in containers:
+            print(f"Container {container} logs before cleanup:", flush=True)
+            subprocess.run([runtime, "logs", "--tail", "200", container],
+                           check=False, timeout=20)
+    except (OSError, subprocess.SubprocessError) as error:
+        # Diagnostics must never mask the original failure or prevent cleanup.
+        print(f"Could not collect container logs: {error}", file=sys.stderr)
+
+
 def main():
     for command in ("atmos", "aws", "python3"):
         if shutil.which(command) is None:
@@ -61,6 +82,9 @@ def main():
         updated = deploy("v2", changed=1, unchanged=0)
         assert first != updated, "Updated release did not change the package"
         print("PASS: build → test → archive → publish → deploy → HTTP validation", flush=True)
+    except (subprocess.SubprocessError, AssertionError):
+        dump_container_logs()
+        raise
     finally:
         if started:
             # Attempt every cleanup even if deployment or an earlier cleanup failed.

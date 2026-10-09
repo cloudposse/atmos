@@ -913,6 +913,8 @@ func TestHTTPHandler_ExpectMismatchExhaustsRetry(t *testing.T) {
 	assert.Contains(t, status, "404")
 
 	t.Run("no retry policy means a single attempt", func(t *testing.T) {
+		t.Parallel()
+
 		var single int
 		one := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			single++
