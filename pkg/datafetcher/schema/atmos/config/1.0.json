@@ -6957,6 +6957,17 @@
               "type": "boolean"
             },
             {
+              "type": "string",
+              "pattern": "^(?:1|0|t|f|T|F|TRUE|True|true|FALSE|False|false)$"
+            },
+            {
+              "type": "integer",
+              "enum": [
+                0,
+                1
+              ]
+            },
+            {
               "type": "null"
             },
             {

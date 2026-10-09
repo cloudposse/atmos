@@ -90,6 +90,21 @@ func TestPreprocessCommandBoolFlags(t *testing.T) {
 			args: []string{"terraform", "plan", "vpc", "--not-a-flag", "false"},
 			want: []string{"terraform", "plan", "vpc", "--not-a-flag", "false"},
 		},
+		{
+			name: "leading root bool flag with separate value",
+			args: []string{"--verbose", "false", "terraform", "plan", "vpc", "--dry-run", "false"},
+			want: []string{"--verbose=false", "terraform", "plan", "vpc", "--dry-run=false"},
+		},
+		{
+			name: "leading root shorthand with separate value",
+			args: []string{"-v", "false", "terraform", "plan", "vpc", "--dry-run", "false"},
+			want: []string{"-v=false", "terraform", "plan", "vpc", "--dry-run=false"},
+		},
+		{
+			name: "leading separator preserves args",
+			args: []string{"--", "--dry-run", "false"},
+			want: []string{"--", "--dry-run", "false"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

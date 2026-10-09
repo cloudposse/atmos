@@ -2264,7 +2264,13 @@ func preprocessNoOptDefValFlags(args []string) []string {
 // Only an explicit true/false literal is folded in; a bare boolean flag never consumes
 // a subcommand or component name. Arguments after "--" are never modified.
 func preprocessCommandBoolFlags(args []string) []string {
-	targetCmd, _, _ := RootCmd.Find(args)
+	// Resolve the command after leading root flags so "--verbose false terraform plan"
+	// does not stop command resolution at the separate "false" value.
+	commandArgs, ok := skipLeadingRootFlags(args)
+	if !ok {
+		return args
+	}
+	targetCmd, _, _ := RootCmd.Find(commandArgs)
 	if targetCmd == nil {
 		return args
 	}
