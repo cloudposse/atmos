@@ -2,13 +2,16 @@ package cloudformation
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/smithy-go"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -104,9 +107,15 @@ func stackExists(ctx context.Context, client CloudFormationClient, stackName str
 	return false, nil
 }
 
-// isStackNotFoundError reports whether err is CloudFormation's "does not exist" error.
+// stackNotFoundMessage matches the stack-specific messages returned by CloudFormation.
+var stackNotFoundMessage = regexp.MustCompile(`^Stack (?:\[[^\[\]\s]+\]|with id \S+) does not exist(?: or has been deleted)?\.?$`)
+
+// isStackNotFoundError reports whether err is CloudFormation's missing-stack validation error.
+// Missing roles, template objects, and other resources must retain their original errors.
 func isStackNotFoundError(err error) bool {
-	return strings.Contains(err.Error(), "does not exist")
+	var apiErr smithy.APIError
+	return errors.As(err, &apiErr) && apiErr.ErrorCode() == "ValidationError" &&
+		stackNotFoundMessage.MatchString(apiErr.ErrorMessage())
 }
 
 // wrapAPICallError wraps a raw AWS CloudFormation SDK error with the shared
