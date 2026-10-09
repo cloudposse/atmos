@@ -54,9 +54,13 @@ every repeated template call paid for a client reset and serialized remote read.
 - Tests covered separate credentials, configured identities, disabled auth,
   backend instances, and invocations; retry of nil results and errors;
   concurrent same-key calls; and avoidance of repeated auth binding on hits.
+- Cache-bypass tests covered missing, typed-nil, value-backed, and secret
+  backends; unsupported store configuration and invalid effective auth; and
+  configurations without deferred auth. A direct cache test verified that nil
+  results and errors remain retryable before a successful value is memoized.
 - Focused store/template tests and the existing concurrent credential-isolation
   test passed. `go test -race ./internal/exec ./pkg/store/deferred
-  ./pkg/stack/deferred -run 'Test(DeferredStoreTemplate|ConcurrentStoreReadsKeepTheirComponentCredentials|DeferredStoreSuccessfulAuthIsNotRepeated|ValueCache)' -count=1`
+  ./pkg/stack/deferred -run 'Test(DeferredStoreTemplate|ConcurrentStoreReadsKeepTheirComponentCredentials|DeferredStoreSuccessfulAuthIsNotRepeated|ValueCache|StoreValue)' -count=1`
   passed. `git diff --check` passed.
 - `bash .claude/skills/fix-log/scripts/validate-fix-doc.sh
   docs/fixes/2026-10-09-deferred-store-template-lookup-cache.md` passed.

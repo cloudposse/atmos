@@ -1,6 +1,7 @@
 package deferred
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -83,4 +84,57 @@ func TestValueCacheContextFollowsInvocation(t *testing.T) {
 	value, found := cache.Load("result")
 	require.True(t, found)
 	require.Equal(t, "original", value)
+}
+
+func TestStoreValueFallsBackWithoutDeferredAuth(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		ac   *schema.AtmosConfiguration
+	}{
+		{name: "nil configuration"},
+		{name: "ordinary auth manager", ac: &schema.AtmosConfiguration{}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			calls := 0
+			lookup := func() (any, error) {
+				calls++
+				return calls, nil
+			}
+			for want := 1; want <= 2; want++ {
+				value, err := StoreValue(test.ac, "same-key", lookup)
+				require.NoError(t, err)
+				require.Equal(t, want, value)
+			}
+			require.Equal(t, 2, calls)
+		})
+	}
+}
+
+func TestStoreValueCachesOnlySuccessfulNonNilResults(t *testing.T) {
+	ac := &schema.AtmosConfiguration{}
+	authdeferred.ConfigureAuth(ac, "")
+	calls := 0
+	lookup := func() (any, error) {
+		calls++
+		switch calls {
+		case 1:
+			return nil, nil
+		case 2:
+			return nil, errors.New("temporary failure")
+		default:
+			return "resolved", nil
+		}
+	}
+
+	value, err := StoreValue(ac, "same-key", lookup)
+	require.NoError(t, err)
+	require.Nil(t, value)
+	_, err = StoreValue(ac, "same-key", lookup)
+	require.ErrorContains(t, err, "temporary failure")
+	for range 2 {
+		value, err = StoreValue(ac, "same-key", lookup)
+		require.NoError(t, err)
+		require.Equal(t, "resolved", value)
+	}
+	require.Equal(t, 3, calls)
 }

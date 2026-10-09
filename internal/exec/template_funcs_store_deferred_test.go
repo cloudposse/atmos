@@ -10,11 +10,23 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
+	storedeferred "github.com/cloudposse/atmos/pkg/store/deferred"
 )
+
+// A value-backed store has no stable pointer identity for the cache key.
+type valueBackedTemplateStore struct{ reads *int }
+
+func (s valueBackedTemplateStore) Set(_, _, _ string, _ any) error { return nil }
+func (s valueBackedTemplateStore) Get(_, _, _ string) (any, error) {
+	(*s.reads)++
+	return *s.reads, nil
+}
+func (s valueBackedTemplateStore) GetKey(_ string) (any, error) { return nil, nil }
 
 func newDeferredTemplateStoreConfig(backend store.Store) *schema.AtmosConfiguration {
 	ac := &schema.AtmosConfiguration{Stores: store.StoreRegistry{"remote": backend}}
@@ -192,4 +204,69 @@ func TestDeferredStoreTemplateConcurrentMissesShareRead(t *testing.T) {
 	for value := range results {
 		require.Equal(t, "shared", value)
 	}
+}
+
+func TestDeferredStoreTemplateBypassesUnsafeCacheKeys(t *testing.T) {
+	opts := storedeferred.StoreOptions{Name: "remote", Stack: "global", Component: "target", Key: "id"}
+
+	t.Run("missing backend", func(t *testing.T) {
+		ac := newDeferredTemplateStoreConfig(nil)
+		for range 2 {
+			_, err := deferredStoreFunc(ac, nil, opts)
+			require.ErrorIs(t, err, errUtils.ErrStoreNotFound)
+		}
+	})
+
+	t.Run("typed nil backend", func(t *testing.T) {
+		var backend *store.MockStore
+		ac := newDeferredTemplateStoreConfig(backend)
+		_, ok := deferredStoreCacheKey(ac, nil, opts)
+		require.False(t, ok)
+	})
+
+	t.Run("value backed backend", func(t *testing.T) {
+		reads := 0
+		ac := newDeferredTemplateStoreConfig(valueBackedTemplateStore{reads: &reads})
+		for want := 1; want <= 2; want++ {
+			value, err := deferredStoreFunc(ac, nil, opts)
+			require.NoError(t, err)
+			require.Equal(t, want, value)
+		}
+		require.Equal(t, 2, reads)
+	})
+
+	t.Run("secret backend", func(t *testing.T) {
+		backend := store.NewMockStore(gomock.NewController(t))
+		ac := newDeferredTemplateStoreConfig(backend)
+		ac.StoresConfig = store.StoresConfig{"remote": {Secret: true}}
+		for range 2 {
+			_, err := deferredStoreFunc(ac, nil, opts)
+			require.ErrorIs(t, err, errUtils.ErrStoreIsSecret)
+		}
+	})
+
+	t.Run("unsupported store config", func(t *testing.T) {
+		backend := store.NewMockStore(gomock.NewController(t))
+		ac := newDeferredTemplateStoreConfig(backend)
+		ac.StoresConfig = store.StoresConfig{"remote": {Options: map[string]any{"unsupported": make(chan int)}}}
+		backend.EXPECT().Get("global", "target", "id").Return("first", nil)
+		backend.EXPECT().Get("global", "target", "id").Return("second", nil)
+		for _, want := range []string{"first", "second"} {
+			value, err := deferredStoreFunc(ac, nil, opts)
+			require.NoError(t, err)
+			require.Equal(t, want, value)
+		}
+	})
+
+	t.Run("invalid effective auth", func(t *testing.T) {
+		backend := store.NewMockStore(gomock.NewController(t))
+		ac := newDeferredTemplateStoreConfig(backend)
+		info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{
+			"auth": map[string]any{"identities": map[string]any{
+				"undefined": map[string]any{"default": true},
+			}},
+		}}
+		_, ok := deferredStoreCacheKey(ac, info, opts)
+		require.False(t, ok)
+	})
 }
