@@ -48,15 +48,18 @@ type harness struct {
 	reporter ci.Reporter
 	// local receives the local (generic provider) renderings.
 	local *bytes.Buffer
-	// stdout receives the data channel, where workflow commands are written.
+	// stdout receives data and log-group markers.
 	stdout *bytes.Buffer
+	// uiStderr receives annotations.
+	uiStderr *bytes.Buffer
 }
 
 func newHarness(t *testing.T, cfg *schema.AtmosConfiguration, serverOpts []ghtest.Option, envOpts ...ghtest.EnvOption) *harness {
 	t.Helper()
 
 	isolateLocalEnv(t)
-	stdout := initIO(t)
+	uiStderr := &bytes.Buffer{}
+	stdout := initIO(t, uiStderr)
 	s := ghtest.NewServer(t, serverOpts...)
 	env := ghtest.SetEnv(t, s, envOpts...)
 	// Resolve the SHA from GITHUB_SHA rather than the surrounding git checkout.
@@ -71,6 +74,7 @@ func newHarness(t *testing.T, cfg *schema.AtmosConfiguration, serverOpts []ghtes
 		reporter: ci.NewReporter(cfg).WithOutput(local),
 		local:    local,
 		stdout:   stdout,
+		uiStderr: uiStderr,
 	}
 }
 
@@ -254,7 +258,7 @@ func TestReporter_GitHubWrites(t *testing.T) {
 		assert.Contains(t, h.stdout.String(), "::add-mask::"+secret)
 	})
 
-	t.Run("annotate and group emit workflow commands", func(t *testing.T) {
+	t.Run("annotations use stderr and groups bracket stdout", func(t *testing.T) {
 		h := newHarness(t, fullCIConfig(), nil, envOpts...)
 		rc, err := h.reporter.Annotate(ci.Annotation{Path: "main.tf", StartLine: 12, Level: ci.AnnotationError, Message: "bucket is public"})
 		assertGitHub(t, rc, err)
@@ -262,7 +266,8 @@ func TestReporter_GitHubWrites(t *testing.T) {
 		assertGitHub(t, rc, err)
 		end()
 
-		assert.Equal(t, "::error file=main.tf,line=12::bucket is public\n::group::Deploy vpc\n::endgroup::\n", h.stdout.String())
+		assert.Equal(t, "::error file=main.tf,line=12::bucket is public\n", h.uiStderr.String())
+		assert.Equal(t, "::group::Deploy vpc\n::endgroup::\n", h.stdout.String())
 	})
 
 	t.Run("sarif uploads to code scanning", func(t *testing.T) {

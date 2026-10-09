@@ -32,13 +32,17 @@ func (s *captureStreams) RawError() stdio.Writer  { return s.stderr }
 
 // initIO points the global data writer and UI formatter at captured streams and returns the
 // buffer that receives the data channel (stdout). Defaults are restored when the test ends.
-func initIO(t *testing.T) *bytes.Buffer {
+func initIO(t *testing.T, uiStderr ...*bytes.Buffer) *bytes.Buffer {
 	t.Helper()
 
 	// CI runners advertise color support; the assertions compare plain text.
 	t.Setenv("NO_COLOR", "1")
 	stdout := &bytes.Buffer{}
-	ioCtx, err := atmosio.NewContext(atmosio.WithStreams(&captureStreams{stdout: stdout, stderr: &bytes.Buffer{}}))
+	stderr := &bytes.Buffer{}
+	if len(uiStderr) > 0 {
+		stderr = uiStderr[0]
+	}
+	ioCtx, err := atmosio.NewContext(atmosio.WithStreams(&captureStreams{stdout: stdout, stderr: stderr}))
 	require.NoError(t, err)
 	data.InitWriter(ioCtx)
 	ui.InitFormatter(ioCtx)
