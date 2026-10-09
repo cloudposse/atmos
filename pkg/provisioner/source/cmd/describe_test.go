@@ -54,11 +54,11 @@ func TestExecuteDescribe_MissingStack(t *testing.T) {
 // TestExecuteDescribe_DescribeComponentError tests that executeDescribe handles describe component errors.
 func TestExecuteDescribe_DescribeComponentError(t *testing.T) {
 	// Save original and restore after test.
-	origDescribeFunc := describeComponentFunc
-	defer func() { describeComponentFunc = origDescribeFunc }()
+	origDescribeFunc := describeTypedComponentFunc
+	defer func() { describeTypedComponentFunc = origDescribeFunc }()
 
 	// Mock describe component to fail.
-	describeComponentFunc = func(component, stack string) (map[string]any, error) {
+	describeTypedComponentFunc = func(componentType, component, stack string) (map[string]any, error) {
 		return nil, errors.New("mock describe error")
 	}
 
@@ -87,11 +87,11 @@ func TestExecuteDescribe_DescribeComponentError(t *testing.T) {
 // TestExecuteDescribe_NoSource tests that executeDescribe returns error when no source is configured.
 func TestExecuteDescribe_NoSource(t *testing.T) {
 	// Save original and restore after test.
-	origDescribeFunc := describeComponentFunc
-	defer func() { describeComponentFunc = origDescribeFunc }()
+	origDescribeFunc := describeTypedComponentFunc
+	defer func() { describeTypedComponentFunc = origDescribeFunc }()
 
 	// Mock describe component to return config without source.
-	describeComponentFunc = func(component, stack string) (map[string]any, error) {
+	describeTypedComponentFunc = func(componentType, component, stack string) (map[string]any, error) {
 		return map[string]any{
 			"vars": map[string]any{"foo": "bar"},
 		}, nil
@@ -120,14 +120,14 @@ func TestExecuteDescribe_NoSource(t *testing.T) {
 }
 
 func TestExecuteDescribe_SuccessUsesFormattedYAMLPrinter(t *testing.T) {
-	origDescribeFunc := describeComponentFunc
+	origDescribeFunc := describeTypedComponentFunc
 	origInitCliConfigFunc := initCliConfigFunc
 	defer func() {
-		describeComponentFunc = origDescribeFunc
+		describeTypedComponentFunc = origDescribeFunc
 		initCliConfigFunc = origInitCliConfigFunc
 	}()
 
-	describeComponentFunc = func(component, stack string) (map[string]any, error) {
+	describeTypedComponentFunc = func(componentType, component, stack string) (map[string]any, error) {
 		assert.Equal(t, "weather", component)
 		assert.Equal(t, "dev", stack)
 		return map[string]any{

@@ -100,12 +100,12 @@ func TestExecutePull_DescribeComponentError(t *testing.T) {
 
 	// Save originals and restore after test.
 	origInitFunc := initCliConfigFunc
-	origDescribeFunc := describeComponentFunc
+	origDescribeFunc := describeTypedComponentFunc
 	origMergeFunc := mergeAuthFunc
 	origCreateFunc := createAuthFunc
 	defer func() {
 		initCliConfigFunc = origInitFunc
-		describeComponentFunc = origDescribeFunc
+		describeTypedComponentFunc = origDescribeFunc
 		mergeAuthFunc = origMergeFunc
 		createAuthFunc = origCreateFunc
 	}()
@@ -143,7 +143,9 @@ func TestExecutePull_DescribeComponentError(t *testing.T) {
 
 	// Wire mocks to function variables.
 	initCliConfigFunc = mockLoader.InitCliConfig
-	describeComponentFunc = mockDescriber.DescribeComponent
+	describeTypedComponentFunc = func(_ string, component, stack string) (map[string]any, error) {
+		return mockDescriber.DescribeComponent(component, stack)
+	}
 	mergeAuthFunc = mockMerger.MergeComponentAuth
 	createAuthFunc = mockCreator.CreateAuthManager
 
@@ -177,12 +179,12 @@ func TestExecutePull_NoSource(t *testing.T) {
 
 	// Save originals and restore after test.
 	origInitFunc := initCliConfigFunc
-	origDescribeFunc := describeComponentFunc
+	origDescribeFunc := describeTypedComponentFunc
 	origMergeFunc := mergeAuthFunc
 	origCreateFunc := createAuthFunc
 	defer func() {
 		initCliConfigFunc = origInitFunc
-		describeComponentFunc = origDescribeFunc
+		describeTypedComponentFunc = origDescribeFunc
 		mergeAuthFunc = origMergeFunc
 		createAuthFunc = origCreateFunc
 	}()
@@ -216,7 +218,9 @@ func TestExecutePull_NoSource(t *testing.T) {
 
 	// Wire mocks to function variables.
 	initCliConfigFunc = mockLoader.InitCliConfig
-	describeComponentFunc = mockDescriber.DescribeComponent
+	describeTypedComponentFunc = func(_ string, component, stack string) (map[string]any, error) {
+		return mockDescriber.DescribeComponent(component, stack)
+	}
 	mergeAuthFunc = mockMerger.MergeComponentAuth
 	createAuthFunc = mockCreator.CreateAuthManager
 
@@ -250,13 +254,13 @@ func TestExecutePull_Success(t *testing.T) {
 
 	// Save originals and restore after test.
 	origInitFunc := initCliConfigFunc
-	origDescribeFunc := describeComponentFunc
+	origDescribeFunc := describeTypedComponentFunc
 	origMergeFunc := mergeAuthFunc
 	origCreateFunc := createAuthFunc
 	origProvisionFunc := provisionSourceFunc
 	defer func() {
 		initCliConfigFunc = origInitFunc
-		describeComponentFunc = origDescribeFunc
+		describeTypedComponentFunc = origDescribeFunc
 		mergeAuthFunc = origMergeFunc
 		createAuthFunc = origCreateFunc
 		provisionSourceFunc = origProvisionFunc
@@ -314,7 +318,9 @@ func TestExecutePull_Success(t *testing.T) {
 
 	// Wire mocks to function variables.
 	initCliConfigFunc = mockLoader.InitCliConfig
-	describeComponentFunc = mockDescriber.DescribeComponent
+	describeTypedComponentFunc = func(_ string, component, stack string) (map[string]any, error) {
+		return mockDescriber.DescribeComponent(component, stack)
+	}
 	mergeAuthFunc = mockMerger.MergeComponentAuth
 	createAuthFunc = mockCreator.CreateAuthManager
 	provisionSourceFunc = mockProvisioner.Provision

@@ -21,8 +21,9 @@ func DescribeCommand(cfg *Config) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "describe [component]",
-		Short: fmt.Sprintf("Show source configuration for a %s component", cfg.TypeLabel),
+		Annotations: map[string]string{sourceComponentTypeAnnotation: cfg.ComponentType},
+		Use:         "describe [component]",
+		Short:       fmt.Sprintf("Show source configuration for a %s component", cfg.TypeLabel),
 		Long: fmt.Sprintf(`Display the source configuration for a %s component.
 
 This command shows the source URI, version, and any path filters configured
@@ -99,7 +100,7 @@ func executeDescribe(cmd *cobra.Command, args []string, cfg *Config, parser *fla
 	}
 
 	// Get component configuration.
-	componentConfig, err := DescribeComponent(component, stack)
+	componentConfig, err := describeSourceComponent(cfg.ComponentType, component, stack)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrDescribeComponent).
 			WithCause(err).

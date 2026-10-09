@@ -151,10 +151,10 @@ func TestDeleteSourceDirectory_Success(t *testing.T) {
 func TestInitDeleteContext_NoSource(t *testing.T) {
 	// Save originals and restore after test.
 	origInitFunc := initCliConfigFunc
-	origDescribeFunc := describeComponentFunc
+	origDescribeFunc := describeTypedComponentFunc
 	defer func() {
 		initCliConfigFunc = origInitFunc
-		describeComponentFunc = origDescribeFunc
+		describeTypedComponentFunc = origDescribeFunc
 	}()
 
 	// Mock config init to succeed.
@@ -163,13 +163,13 @@ func TestInitDeleteContext_NoSource(t *testing.T) {
 	}
 
 	// Mock describe component to return config without source.
-	describeComponentFunc = func(component, stack string) (map[string]any, error) {
+	describeTypedComponentFunc = func(componentType, component, stack string) (map[string]any, error) {
 		return map[string]any{
 			"vars": map[string]any{"foo": "bar"},
 		}, nil
 	}
 
-	atmosConfig, componentConfig, err := initDeleteContext("vpc", "dev", nil)
+	atmosConfig, componentConfig, err := initDeleteContext("terraform", "vpc", "dev", nil)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrSourceMissing)
@@ -181,10 +181,10 @@ func TestInitDeleteContext_NoSource(t *testing.T) {
 func TestInitDeleteContext_Success(t *testing.T) {
 	// Save originals and restore after test.
 	origInitFunc := initCliConfigFunc
-	origDescribeFunc := describeComponentFunc
+	origDescribeFunc := describeTypedComponentFunc
 	defer func() {
 		initCliConfigFunc = origInitFunc
-		describeComponentFunc = origDescribeFunc
+		describeTypedComponentFunc = origDescribeFunc
 	}()
 
 	// Mock config init to succeed.
@@ -197,7 +197,7 @@ func TestInitDeleteContext_Success(t *testing.T) {
 	}
 
 	// Mock describe component to return config with source.
-	describeComponentFunc = func(component, stack string) (map[string]any, error) {
+	describeTypedComponentFunc = func(componentType, component, stack string) (map[string]any, error) {
 		return map[string]any{
 			"source": map[string]any{
 				"uri": "github.com/example/vpc",
@@ -205,7 +205,7 @@ func TestInitDeleteContext_Success(t *testing.T) {
 		}, nil
 	}
 
-	atmosConfig, componentConfig, err := initDeleteContext("vpc", "dev", nil)
+	atmosConfig, componentConfig, err := initDeleteContext("terraform", "vpc", "dev", nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, atmosConfig)
@@ -216,7 +216,7 @@ func TestInitDeleteContext_Success(t *testing.T) {
 // Note: initDeleteContext uses cfg.InitCliConfig directly (not the mock function),
 // so testing with real config is done via integration tests.
 // The error paths are covered by the TestInitDeleteContext_NoSource and TestInitDeleteContext_Success tests
-// which mock describeComponentFunc.
+// which mock describeTypedComponentFunc.
 
 // TestExecuteDelete_MissingStack tests that executeDelete returns error when --stack is not provided.
 func TestExecuteDelete_MissingStack(t *testing.T) {
@@ -245,10 +245,10 @@ func TestExecuteDelete_MissingStack(t *testing.T) {
 func TestExecuteDelete_NoForceNonTTY(t *testing.T) {
 	// Save originals and restore after test.
 	origInitFunc := initCliConfigFunc
-	origDescribeFunc := describeComponentFunc
+	origDescribeFunc := describeTypedComponentFunc
 	defer func() {
 		initCliConfigFunc = origInitFunc
-		describeComponentFunc = origDescribeFunc
+		describeTypedComponentFunc = origDescribeFunc
 	}()
 
 	// Create temp directory with existing component.
@@ -267,7 +267,7 @@ func TestExecuteDelete_NoForceNonTTY(t *testing.T) {
 	}
 
 	// Mock describe component.
-	describeComponentFunc = func(component, stack string) (map[string]any, error) {
+	describeTypedComponentFunc = func(componentType, component, stack string) (map[string]any, error) {
 		return map[string]any{
 			"source": map[string]any{
 				"uri": "github.com/example/vpc",
@@ -312,7 +312,7 @@ func TestInitDeleteContext_ConfigInitError(t *testing.T) {
 		return schema.AtmosConfiguration{}, assert.AnError
 	}
 
-	atmosConfig, componentConfig, err := initDeleteContext("vpc", "dev", nil)
+	atmosConfig, componentConfig, err := initDeleteContext("terraform", "vpc", "dev", nil)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrFailedToInitConfig)
@@ -324,10 +324,10 @@ func TestInitDeleteContext_ConfigInitError(t *testing.T) {
 func TestInitDeleteContext_DescribeComponentError(t *testing.T) {
 	// Save originals and restore after test.
 	origInitFunc := initCliConfigFunc
-	origDescribeFunc := describeComponentFunc
+	origDescribeFunc := describeTypedComponentFunc
 	defer func() {
 		initCliConfigFunc = origInitFunc
-		describeComponentFunc = origDescribeFunc
+		describeTypedComponentFunc = origDescribeFunc
 	}()
 
 	// Mock config init to succeed.
@@ -336,11 +336,11 @@ func TestInitDeleteContext_DescribeComponentError(t *testing.T) {
 	}
 
 	// Mock describe component to fail.
-	describeComponentFunc = func(component, stack string) (map[string]any, error) {
+	describeTypedComponentFunc = func(componentType, component, stack string) (map[string]any, error) {
 		return nil, assert.AnError
 	}
 
-	atmosConfig, componentConfig, err := initDeleteContext("vpc", "dev", nil)
+	atmosConfig, componentConfig, err := initDeleteContext("terraform", "vpc", "dev", nil)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrDescribeComponent)
@@ -361,10 +361,10 @@ func TestDeleteSourceDirectory_DetermineTargetError(t *testing.T) {
 func TestExecuteDelete_Success(t *testing.T) {
 	// Save originals and restore after test.
 	origInitFunc := initCliConfigFunc
-	origDescribeFunc := describeComponentFunc
+	origDescribeFunc := describeTypedComponentFunc
 	defer func() {
 		initCliConfigFunc = origInitFunc
-		describeComponentFunc = origDescribeFunc
+		describeTypedComponentFunc = origDescribeFunc
 	}()
 
 	// Create temp directory with existing component.
@@ -385,7 +385,7 @@ func TestExecuteDelete_Success(t *testing.T) {
 	}
 
 	// Mock describe component to return config with source.
-	describeComponentFunc = func(component, stack string) (map[string]any, error) {
+	describeTypedComponentFunc = func(componentType, component, stack string) (map[string]any, error) {
 		return map[string]any{
 			"source": map[string]any{
 				"uri": "github.com/example/vpc",
