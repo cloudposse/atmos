@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -49,6 +50,7 @@ func ExtractComponentInfoFromPath(
 
 	// 3. Try to match against each component type.
 	componentTypes := []string{"terraform", "helmfile", "packer"}
+	var componentBaseErr error
 	for _, componentType := range componentTypes {
 		info, err := tryExtractComponentType(atmosConfig, absPath, componentType)
 		if err == nil {
@@ -61,10 +63,17 @@ func ExtractComponentInfoFromPath(
 			)
 			return info, nil
 		}
+		// Retain the specific diagnostic, but allow overlapping bases to match a later type.
+		if componentBaseErr == nil && errors.Is(err, errUtils.ErrPathIsComponentBase) {
+			componentBaseErr = err
+		}
 		log.Trace("Path does not match component type", "type", componentType, "error", err)
 	}
 
 	// None of the component types matched.
+	if componentBaseErr != nil {
+		return nil, componentBaseErr
+	}
 	return nil, buildPathNotInComponentDirError(atmosConfig, absPath)
 }
 
