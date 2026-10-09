@@ -20,7 +20,7 @@ tests:
       file_contains:
         "README.md":
           - "## Requirements"
-          - "## Providers" 
+          - "## Providers"
 
   - name: "atmos docs generate input variants"
     enabled: true
