@@ -966,6 +966,15 @@ func TestMain(m *testing.M) {
 	githubMock.RegisterRawFile("cloudposse", "atmos", "main",
 		"tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml", string(includeFixtureContent))
 
+	// Serve the docs input-variants test's remote input from this checkout.
+	readmeFixtureContent, readErr := os.ReadFile(filepath.Join(repoRoot, "README.yaml"))
+	if readErr != nil {
+		logger.Error("failed to read docs generation fixture", "error", readErr)
+		githubMockClose()
+		errUtils.Exit(1)
+	}
+	githubMock.RegisterRawFile("cloudposse", "atmos", "main", "README.yaml", string(readmeFixtureContent))
+
 	// Keep toolchain info snapshots independent of upstream releases and API quotas.
 	for _, tool := range []struct{ owner, repo, tag, prefix string }{
 		{"replicatedhq", "replicated", "v0.124.1", "v"},

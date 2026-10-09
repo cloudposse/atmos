@@ -14,6 +14,7 @@ The Linux and Windows acceptance logs on PR #3351 showed exhausted GitHub API qu
 
 - Route in-process include rate-limit checks to the same mock that serves their raw content.
 - Consolidate duplicate CLI include cases onto the existing mock fixture; retain literal public raw-URL coverage in the in-process tests and real-network coverage in the opt-in live GitHub canaries.
+- Serve the docs input-variants test's remote README from the checkout through the mock HTTP server; this also fixes Windows shard 5, which finished after the attached logs.
 - Use the local basic component fixture for the identity-flag success case.
 - Serve fixed releases, publication dates, and registry metadata for the three affected toolchain info snapshots, without changing golden files or expected output.
 - Resolve and install `terraform@latest` from a local registry and release asset in isolated cache/install directories; assert both the retained `latest` declaration and the installed file contents.
@@ -22,6 +23,7 @@ The Linux and Windows acceptance logs on PR #3351 showed exhausted GitHub API qu
 
 - Focused include tests and identity-flag tests passed.
 - The CLI include case and all three affected toolchain info snapshots passed without regeneration.
+- The docs input-variants CLI test passed, retaining its remote/local/inline merge assertions.
 - Focused toolchain install and GitHub mock-server tests passed, including with `-race`.
 - Patch-scoped custom golangci-lint passed with zero issues.
 - Local execution used macOS; Linux and Windows execution is delegated to the PR CI matrix.
