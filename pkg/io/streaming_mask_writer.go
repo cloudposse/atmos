@@ -15,9 +15,11 @@ import (
 //
 // Unlike MaskWriter, which masks every Write independently, it carries over the unfinished tail
 // of a write that could still grow into a registered secret and masks it together with the next
-// write. Output that cannot be the start of a secret is forwarded on the same Write call, so
-// ordinary output sees no added latency. Held bytes are released only by a later Write that rules
-// them out, or by Flush; nothing is ever flushed on a timer.
+// write. With only literals registered, output that cannot be the start of a secret is forwarded
+// on the same Write call. With regex patterns registered, the entire unfinished line is held by
+// default, so buffering grows with the line length until a newline, carriage return, or Flush.
+// Held bytes are released only by a later Write that rules them out, or by Flush; nothing is ever
+// flushed on a timer.
 //
 // The writer is safe for concurrent use. Call Flush once the producer is done.
 type StreamingMaskWriter struct {

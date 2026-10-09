@@ -16,11 +16,6 @@ const (
 	flexSpanBase     = 256
 	flexSpanPerSpace = 128
 
-	// A streaming writer withholds at most this many trailing bytes while waiting for a line
-	// boundary because regex patterns are registered. Longer partial lines release everything but
-	// this tail so memory stays bounded for output without newlines.
-	maxPatternHold = 4096
-
 	// Separator between the lines of a multiline literal.
 	lineSeparator = "\n"
 )
@@ -169,9 +164,9 @@ func (s *maskSnapshot) holdbackLen(input string, lineBoundary bool) int {
 	cut := n - s.partialSuffixLen(input)
 
 	if lineBoundary && len(s.patterns) > 0 {
-		// Regex patterns have no known prefix, so hold the unfinished line.
+		// Regex patterns have no bounded prefix, so hold the entire unfinished line.
+		// A fixed tail could drop a pattern's prefix and expose its secret suffix.
 		boundary := strings.LastIndexAny(input, "\r\n") + 1
-		boundary = max(boundary, n-maxPatternHold)
 		cut = min(cut, boundary)
 	}
 

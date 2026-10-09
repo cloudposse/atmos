@@ -253,6 +253,58 @@ func TestStreamingMaskWriter_RegexPatternsHoldUnfinishedLine(t *testing.T) {
 	assert.Equal(t, "10%\r20%\r", rec.String())
 }
 
+func TestStreamingMaskWriter_LongRegexSecrets(t *testing.T) {
+	payload := strings.Repeat("x", 12*1024)
+	tests := []struct {
+		name    string
+		pattern string
+		chunks  []string
+	}{
+		{
+			name:    "long token before newline",
+			pattern: `Bearer [A-Za-z0-9]+`,
+			chunks:  []string{"Bearer " + payload, "\n"},
+		},
+		{
+			name:    "split prefix and multiple token chunks",
+			pattern: `Bearer [A-Za-z0-9]+`,
+			chunks:  []string{"Bear", "er " + payload[:5000], payload[5000:9000], payload[9000:], "\n"},
+		},
+		{
+			name:    "flush without newline",
+			pattern: `Bearer [A-Za-z0-9]+`,
+			chunks:  []string{"Bearer " + payload[:7000], payload[7000:]},
+		},
+		{
+			name:    "pattern matches only after its closing delimiter",
+			pattern: `BEGIN [A-Za-z0-9]+ END`,
+			chunks:  []string{"BEGIN " + payload[:5000], payload[5000:], " END", "\n"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newMasker(&Config{})
+			require.NoError(t, m.RegisterPattern(tt.pattern))
+			rec := &recordingWriter{}
+			sw := newTestStreamingWriter(m, rec)
+			_, err := sw.Write([]byte("ordinary output\n"))
+			require.NoError(t, err)
+			for _, chunk := range tt.chunks {
+				n, err := sw.Write([]byte(chunk))
+				require.NoError(t, err)
+				require.Equal(t, len(chunk), n)
+				require.Zero(t, strings.Count(rec.String(), "x"), "no token bytes may be emitted, even before Flush")
+			}
+			require.NoError(t, sw.Flush())
+			want := "ordinary output\n" + MaskReplacement
+			if strings.HasSuffix(tt.chunks[len(tt.chunks)-1], "\n") {
+				want += "\n"
+			}
+			assert.Equal(t, want, rec.String())
+		})
+	}
+}
+
 func TestStreamingMaskWriter_WithoutLineHold(t *testing.T) {
 	m := newMasker(&Config{})
 	m.RegisterValue("s3cr3t-token-value")
