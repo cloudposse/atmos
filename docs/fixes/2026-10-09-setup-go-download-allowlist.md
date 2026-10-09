@@ -47,9 +47,15 @@ only part of it.
   23 jobs lacked at least one required host; afterward, none did.
 - Parsed every workflow file as YAML and ran `actionlint` on the edited
   workflows with no findings.
-- The CI result on the PR is the remaining validation, since the failure
-  depends on which runner image a job receives.
+- The [preview build on the corrected PR commit](https://github.com/cloudposse/atmos/actions/runs/37987721019)
+  passed. The subsequent [preview deployment](https://github.com/cloudposse/atmos/actions/runs/37989333932)
+  still failed during Go setup, before AWS credentials or artifact deployment.
+  Its log confirms the allowlist lacked the new hosts: this `workflow_run`
+  deployment uses the workflow from `main`, not the PR branch.
 
 ## Follow-ups
 
-None.
+Land the workflow allowlist fix on `main` before expecting preview deployments
+to consistently pass on runners without the pinned Go version cached. Then
+trigger a fresh preview build so its deployment uses the corrected workflow.
+Retrying the old deployment alone does not apply the PR's workflow changes.
