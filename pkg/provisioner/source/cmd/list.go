@@ -38,8 +38,9 @@ func ListCommand(cfg *Config) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "list [component]",
-		Short: fmt.Sprintf("List %s components with source configuration", cfg.TypeLabel),
+		Annotations: map[string]string{sourceComponentTypeAnnotation: cfg.ComponentType},
+		Use:         "list [component]",
+		Short:       fmt.Sprintf("List %s components with source configuration", cfg.TypeLabel),
 		Long: fmt.Sprintf(`List all %s components that have source configured.
 
 If component is specified, shows source info for that component across stacks.

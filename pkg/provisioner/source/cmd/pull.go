@@ -22,8 +22,9 @@ func PullCommand(cfg *Config) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "pull [component]",
-		Short: fmt.Sprintf("Vendor %s component source from source configuration", cfg.TypeLabel),
+		Annotations: map[string]string{sourceComponentTypeAnnotation: cfg.ComponentType},
+		Use:         "pull [component]",
+		Short:       fmt.Sprintf("Vendor %s component source from source configuration", cfg.TypeLabel),
 		Long: fmt.Sprintf(`Vendor a %s component source based on source configuration.
 
 This command downloads the component source from the URI specified in the source field
@@ -116,13 +117,13 @@ func executePull(cmd *cobra.Command, args []string, cfg *Config, parser *flags.S
 	}
 
 	// Initialize config and auth with global flags.
-	atmosConfig, authContext, err := InitConfigAndAuth(component, opts.Stack, opts.Identity, &opts.Flags)
+	atmosConfig, authContext, err := initConfigAndAuth(cfg.ComponentType, component, opts.Stack, opts.Identity, &opts.Flags)
 	if err != nil {
 		return err
 	}
 
 	// Get component configuration.
-	componentConfig, err := DescribeComponent(component, opts.Stack)
+	componentConfig, err := describeSourceComponent(cfg.ComponentType, component, opts.Stack)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrDescribeComponent).
 			WithCause(err).

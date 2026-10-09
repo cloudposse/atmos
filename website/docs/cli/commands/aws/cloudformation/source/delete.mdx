@@ -26,12 +26,14 @@ Use this command to delete the vendored source directory for an `aws/cloudformat
 ## Usage
 
 ```shell
-atmos aws cloudformation source delete <component> --stack <stack> [--force]
+atmos aws cloudformation source delete [component] [--stack <stack>] [--force]
 ```
 
 ## Description
 
 The `delete` command removes the vendored component directory. Without `--force`, it prompts for confirmation and deletes only after you confirm. Use `--force` to skip the confirmation prompt.
+
+The component and stack can be omitted to request interactive selection. Selection requires interactive mode, terminal input, and available candidates; it is disabled in CI. If either value remains unresolved, the command reports a missing-argument or missing-stack error. `--force` skips deletion confirmation only; it does not supply missing component or stack values.
 
 For CI or other unattended use, provide the component, `--stack`, and `--force`. If the directory exists and terminal input is unavailable, running without `--force` returns an interactive-input error and leaves the directory unchanged.
 
@@ -66,18 +68,28 @@ atmos aws cloudformation source delete vpc --stack dev
 
 The command asks whether to delete the source directory. Choose **Yes!** to delete it, or **No.** to cancel and keep the directory. Without terminal input, use `--force` as shown in the previous example.
 
+### Request Interactive Selection
+
+Omitting the component and stack prompts you to select a source-managed CloudFormation component and a stack containing it, then confirm deletion:
+
+```shell
+atmos aws cloudformation source delete
+```
+
+You can also provide the component and omit `--stack` to select only the stack. If `ATMOS_STACK` is set, that stack is used without a selection prompt.
+
 ## Arguments
 
 <dl>
   <dt>`component`</dt>
-  <dd>**Required.** The name of the Atmos component to delete.</dd>
+  <dd>The name of the Atmos component to delete. May be omitted for interactive selection when a matching candidate is available; required explicitly for non-interactive use.</dd>
 </dl>
 
 ## Flags
 
 <dl>
   <dt>`--stack` / `-s`</dt>
-  <dd>**Required.** The Atmos stack name. Can also be set via `ATMOS_STACK` environment variable.</dd>
+  <dd>The Atmos stack name. Can also be set via `ATMOS_STACK`. If unset, attempts interactive selection of a stack containing the component. For non-interactive use, supply `--stack` or `ATMOS_STACK`.</dd>
 
   <dt>`--force` / `-f`</dt>
   <dd>**Optional.** Skip confirmation and delete the source directory. Use this flag for non-interactive deletion.</dd>

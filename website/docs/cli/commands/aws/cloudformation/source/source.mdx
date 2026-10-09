@@ -223,18 +223,26 @@ Remove the vendored component directory without prompting (`--force` skips confi
 atmos aws cloudformation source delete vpc --stack dev --force
 ```
 
+Omitting the component and stack requests interactive selection before deletion confirmation:
+
+```shell
+atmos aws cloudformation source delete
+```
+
+Selection requires interactive mode, terminal input, and available candidates, and is disabled in CI. For unattended deletion, use the explicit component, `--stack`, and `--force` invocation above; `--force` does not bypass missing-value validation.
+
 ## Arguments
 
 <dl>
   <dt>`component`</dt>
-  <dd>The Atmos component name (required for pull, describe, delete)</dd>
+  <dd>The Atmos component name. For `pull`, `describe`, and `delete`, provide it explicitly or select it interactively when a candidate is available. For `list`, it is an optional filter; omit it to list all components with sources.</dd>
 </dl>
 
 ## Flags
 
 <dl>
   <dt>`--stack` / `-s`</dt>
-  <dd>Atmos stack name (required). Can also be set via `ATMOS_STACK` environment variable.</dd>
+  <dd>Atmos stack name, also settable via `ATMOS_STACK`. For `pull`, `describe`, and `delete`, an unset stack triggers interactive selection when available; non-interactive use requires a stack value. For `list`, the stack is an optional filter; omit it to list across stacks.</dd>
 
   <dt>`--identity` / `-i`</dt>
   <dd>Identity to use for authentication when downloading from protected sources (`pull` only).</dd>
