@@ -770,8 +770,9 @@ func TestUninstallCmd_RunE_InstallerInitFailure(t *testing.T) {
 		err = os.WriteFile(skillsFile, []byte("not a directory"), 0o644)
 		require.NoError(t, err)
 
-		// Set HOME to temp directory.
+		// Set both home variables for os.UserHomeDir and the homedir helper.
 		t.Setenv("HOME", tempHome)
+		t.Setenv("USERPROFILE", tempHome)
 
 		// Reset homedir cache to pick up new HOME.
 		homedir.Reset()

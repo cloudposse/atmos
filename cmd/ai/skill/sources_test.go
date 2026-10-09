@@ -8,8 +8,18 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/ai/skills/source"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
+
+func TestPrintSourceStatusesPreservesWindowsPath(t *testing.T) {
+	output := setupSkillCommandUI(t)
+	// This is display text, not a path accessed by the host operating system.
+	path := `~\.claude\skills\demo`
+	printSourceStatuses([]source.Status{{Status: "installed", Name: "demo", Path: path}})
+	require.Contains(t, atmosansi.Strip(output.String()), path)
+}
 
 func sourceCommandFixture(t *testing.T) string {
 	t.Helper()

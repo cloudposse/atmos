@@ -180,9 +180,11 @@ func TestVersionTracks(t *testing.T) {
 
 func TestContainment(t *testing.T) {
 	e, repo := fixture(t)
-	for _, path := range []string{"../escape", "/absolute", "foo/../../escape", "foo\\bar"} {
-		_, err := within(repo, path)
-		require.Error(t, err)
+	for _, path := range []string{"../escape", "/absolute", "foo/../../escape", "foo\\bar", "C:/absolute", "C:relative", "//server/share"} {
+		t.Run(path, func(t *testing.T) {
+			_, err := within(repo, path)
+			require.ErrorIs(t, err, ErrInvalid)
+		})
 	}
 	require.NoError(t, os.Symlink(repo, filepath.Join(repo, "skills", "demo", "escape")))
 	_, err := e.Run(context.Background(), Options{})

@@ -32,7 +32,9 @@ func safePath(path string) error {
 }
 
 func within(root, relative string) (string, error) {
-	if filepath.IsAbs(relative) || strings.Contains(relative, "\\") {
+	// Manifest paths are portable slash-separated paths. On Windows, IsAbs
+	// does not identify a rooted path without a drive, such as /absolute.
+	if strings.HasPrefix(relative, "/") || filepath.IsAbs(relative) || strings.ContainsAny(relative, "\\:") {
 		return "", fmt.Errorf("%w: absolute or nonportable path %s", ErrInvalid, relative)
 	}
 	for _, segment := range strings.Split(relative, "/") {

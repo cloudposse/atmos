@@ -152,6 +152,10 @@ func printSourceStatuses(statuses []source.Status) {
 		if home != "" {
 			path = strings.Replace(path, home, "~", 1)
 		}
+		if path != "" {
+			// Preserve Windows separators when the status is rendered as Markdown.
+			path = "`" + path + "`"
+		}
 		ui.Infof("%s: %s / %s [%s, %s, %s] %s", s.Status, s.Source, s.Name, s.Scope, s.Track, s.Client, path)
 		changed[s.Source+"/"+s.Name] = true
 	}
