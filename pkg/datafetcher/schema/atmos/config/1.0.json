@@ -8651,7 +8651,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "PullRequest configures pull-request publishing (git kind; not yet supported by the cli provider)."
+          "description": "PullRequest publishes the delivery on a feature branch and opens/updates a pull request (git kind)."
         }
       },
       "type": "object",
@@ -8715,11 +8715,139 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Enabled requests pull-request publishing (not yet supported by the cli provider)."
+          "description": "Enabled commits to a head branch and opens/updates a pull request instead of pushing to the base branch."
+        },
+        "branch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Branch is the head branch name. Default: atmos/\u003ctarget\u003e/\u003cstack\u003e/\u003ccomponent\u003e."
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Title is the pull request title (supports templates)."
+        },
+        "body": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Body is the pull request markdown body (supports templates)."
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Labels are applied to the pull request."
+        },
+        "draft": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Draft opens the pull request as a draft."
+        },
+        "reviewers": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Reviewers are requested on the pull request."
+        },
+        "assignees": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Assignees are assigned to the pull request (not supported by Azure DevOps)."
         }
       },
       "type": "object",
-      "description": "ProvisionTargetPullRequest configures pull-request publishing for a git delivery."
+      "description": "ProvisionTargetPullRequest configures pull-request publishing for a git delivery.\nThe base is the repository's branch (else the remote default branch) and the forge\n(GitHub or Azure DevOps) is detected from the repository URI."
     },
     "Registry": {
       "properties": {

@@ -1,0 +1,57 @@
+---
+slug: gitops-pull-request-delivery
+title: "Deliver GitOps Changes Through Pull Requests"
+authors: [bonddim]
+tags: [feature]
+---
+In most GitOps setups the deployment repository is protected. Nothing lands on `main` without review, because whatever reaches `main` is what Argo CD or Flux applies to the cluster. Delivering rendered manifests into that repository has meant giving the deploy pipeline permission to push straight to the branch the cluster reconciles from, which skips the review step the repository exists to enforce. Git provision targets can now deliver through a pull request.
+<!--truncate-->
+
+## The Problem
+
+A [git provision target](/stacks/components/kubernetes#publishing-through-a-pull-request) renders the manifests for a Helm, Helmfile, or Kubernetes component and commits them to a deployment repository. Until now it could only push to the repository's configured branch. Teams that protect that branch had two options: open an exception for the deploy identity, or wrap Atmos in scripts that create a branch, push it, and call the forge API to open a pull request.
+
+## The Fix
+
+Set `pull_request.enabled` on the target. Atmos commits the rendered manifests to a head branch, pushes it (never the base), and opens a pull request into the repository's branch, or into the remote's default branch when none is configured. If that pull request already exists, Atmos updates it.
+
+- Re-deliveries stack onto the open branch as new commits, and the same pull request updates in place. Atmos never force-pushes.
+- Identical re-deliveries create no commit. A rerun still reconciles the pull request, which recovers a run where the push succeeded but the pull request call failed.
+- GitHub and Azure DevOps are both supported, and Atmos detects which one from the repository URI. Title, body, labels, reviewers, assignees, and draft status are configurable, and the text fields support templates.
+
+This applies everywhere a git target is used: `atmos helm deploy`, `atmos helmfile template --target`, and `atmos kubernetes apply` / `deploy`.
+
+## How to Use It
+
+```yaml
+git:
+  repositories:
+    deployments:
+      uri: https://github.com/acme/deployments.git
+      branch: main               # the pull request base
+
+components:
+  helm:
+    monitoring:
+      provision:
+        targets:
+          deployment-repo:
+            kind: git
+            repository: deployments
+            path: "clusters/{{ .vars.stage }}/monitoring"
+            pull_request:
+              enabled: true
+              title: "Deploy monitoring to {{ .vars.stage }}"
+              labels: [gitops]
+              reviewers: [platform-team]
+```
+
+```shell
+atmos helm deploy monitoring -s plat-ue2-dev --target deployment-repo
+```
+
+Git credentials work as they already do for git targets, including `GIT_CONFIG_*` headers set in CI. The pull request API token comes from `GITHUB_TOKEN` (or `ATMOS_CI_GITHUB_TOKEN` / `GH_TOKEN`) for GitHub, and from `AZURE_DEVOPS_EXT_PAT` for Azure DevOps. See [Publishing through a pull request](/stacks/components/kubernetes#publishing-through-a-pull-request) for every option.
+
+## Get Involved
+
+Try it on your deployment repository and tell us how it fits your review flow in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions) or the [SweetOps Slack](https://cloudposse.com/slack).

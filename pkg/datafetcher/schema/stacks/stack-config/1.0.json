@@ -1325,7 +1325,38 @@
                     "properties": {
                       "enabled": {
                         "type": "boolean",
-                        "description": "Publish via pull request (not yet supported by the cli git provider)"
+                        "description": "Commit to a head branch and open/update a pull request into the repository branch (else the remote default) instead of pushing to it; GitHub or Azure DevOps is detected from the repository URI"
+                      },
+                      "branch": {
+                        "type": "string",
+                        "description": "Head branch name (default: atmos/<target>/<stack>/<component>)"
+                      },
+                      "title": {
+                        "type": "string",
+                        "description": "Pull request title"
+                      },
+                      "body": {
+                        "type": "string",
+                        "description": "Pull request body (markdown)"
+                      },
+                      "labels": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Labels to apply to the pull request"
+                      },
+                      "draft": {
+                        "type": "boolean",
+                        "description": "Open the pull request as a draft"
+                      },
+                      "reviewers": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Reviewers to request"
+                      },
+                      "assignees": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Assignees (not supported by azuredevops)"
                       }
                     },
                     "additionalProperties": false

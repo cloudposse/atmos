@@ -607,7 +607,7 @@ type ProvisionTarget struct {
 	Auth ProvisionTargetAuth `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
 	// Commit controls the commit message and signing for the delivery (git kind).
 	Commit ProvisionTargetCommit `yaml:"commit,omitempty" json:"commit,omitempty" mapstructure:"commit"`
-	// PullRequest configures pull-request publishing (git kind; not yet supported by the cli provider).
+	// PullRequest publishes the delivery on a feature branch and opens/updates a pull request (git kind).
 	PullRequest ProvisionTargetPullRequest `yaml:"pull_request,omitempty" json:"pull_request,omitempty" mapstructure:"pull_request"`
 }
 
@@ -625,9 +625,25 @@ type ProvisionTargetCommit struct {
 }
 
 // ProvisionTargetPullRequest configures pull-request publishing for a git delivery.
+// The base is the repository's branch (else the remote default branch) and the forge
+// (GitHub or Azure DevOps) is detected from the repository URI.
 type ProvisionTargetPullRequest struct {
-	// Enabled requests pull-request publishing (not yet supported by the cli provider).
+	// Enabled commits to a head branch and opens/updates a pull request instead of pushing to the base branch.
 	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	// Branch is the head branch name. Default: atmos/<target>/<stack>/<component>.
+	Branch string `yaml:"branch,omitempty" json:"branch,omitempty" mapstructure:"branch"`
+	// Title is the pull request title (supports templates).
+	Title string `yaml:"title,omitempty" json:"title,omitempty" mapstructure:"title"`
+	// Body is the pull request markdown body (supports templates).
+	Body string `yaml:"body,omitempty" json:"body,omitempty" mapstructure:"body"`
+	// Labels are applied to the pull request.
+	Labels []string `yaml:"labels,omitempty" json:"labels,omitempty" mapstructure:"labels"`
+	// Draft opens the pull request as a draft.
+	Draft bool `yaml:"draft,omitempty" json:"draft,omitempty" mapstructure:"draft"`
+	// Reviewers are requested on the pull request.
+	Reviewers []string `yaml:"reviewers,omitempty" json:"reviewers,omitempty" mapstructure:"reviewers"`
+	// Assignees are assigned to the pull request (not supported by Azure DevOps).
+	Assignees []string `yaml:"assignees,omitempty" json:"assignees,omitempty" mapstructure:"assignees"`
 }
 
 type Docs struct {

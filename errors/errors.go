@@ -1190,7 +1190,9 @@ var (
 	ErrProvisionTargetKindUnknown = errors.New("provision target kind is not registered")
 	ErrProvisionTargetKindMissing = errors.New("provision target is missing a kind")
 	ErrProvisionTargetNoFetch     = errors.New("provision target kind does not support reading current state")
-	ErrGitPullRequestNotSupported = errors.New("git pull request publishing is not supported by the cli provider")
+
+	// Git target pull-request publishing errors.
+	ErrGitTargetPullRequestConfig = errors.New("invalid git target pull_request configuration")
 
 	// Backend provisioning errors.
 	ErrBucketRequired             = errors.New("backend.bucket is required")

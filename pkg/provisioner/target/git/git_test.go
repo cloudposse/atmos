@@ -52,7 +52,7 @@ func TestParseConfig(t *testing.T) {
 	assert.Equal(t, "platform-admin", cfg.Identity)
 	assert.Equal(t, "Render argocd", cfg.CommitMessage)
 	assert.Equal(t, "always", cfg.Signing)
-	assert.True(t, cfg.PullRequest)
+	assert.True(t, cfg.PullRequest.Enabled)
 	require.NotNil(t, cfg.Split)
 	assert.False(t, *cfg.Split)
 }
@@ -62,7 +62,7 @@ func TestParseConfigEmpty(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, cfg.Repository)
 	assert.Empty(t, cfg.Identity)
-	assert.False(t, cfg.PullRequest)
+	assert.False(t, cfg.PullRequest.Enabled)
 	assert.Nil(t, cfg.Split, "split is unset until the target block explicitly configures it")
 }
 
@@ -97,17 +97,6 @@ func TestResolveSplit(t *testing.T) {
 			assert.Equal(t, tt.want, resolveSplit(tt.split, tt.path))
 		})
 	}
-}
-
-func TestDeliverPullRequestNotSupported(t *testing.T) {
-	g := &gitProvisioner{}
-	err := g.Deliver(context.Background(), &target.DeliverInput{
-		AtmosConfig:  &schema.AtmosConfiguration{},
-		TargetName:   "deployment-repo",
-		TargetConfig: map[string]any{"repository": "deployments", "pull_request": map[string]any{"enabled": true}},
-	})
-	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrGitPullRequestNotSupported)
 }
 
 func TestDeliverRepositoryNotFound(t *testing.T) {
