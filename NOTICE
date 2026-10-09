@@ -1096,7 +1096,7 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/crypto
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/crypto/+/v0.56.0:LICENSE
+    URL: https://cs.opensource.google/go/x/crypto/+/v0.57.0:LICENSE
 
   - golang.org/x/exp
     License: BSD-3-Clause
@@ -1108,11 +1108,11 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/mod/semver
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/mod/+/v0.40.0:LICENSE
+    URL: https://cs.opensource.google/go/x/mod/+/v0.41.0:LICENSE
 
   - golang.org/x/net
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/net/+/v0.58.0:LICENSE
+    URL: https://cs.opensource.google/go/x/net/+/v0.60.0:LICENSE
 
   - golang.org/x/oauth2
     License: BSD-3-Clause
@@ -1120,19 +1120,19 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/sync
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/sync/+/v0.22.0:LICENSE
+    URL: https://cs.opensource.google/go/x/sync/+/v0.23.0:LICENSE
 
   - golang.org/x/sys
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/sys/+/v0.47.0:LICENSE
+    URL: https://cs.opensource.google/go/x/sys/+/v0.48.0:LICENSE
 
   - golang.org/x/term
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/term/+/v0.45.0:LICENSE
+    URL: https://cs.opensource.google/go/x/term/+/v0.46.0:LICENSE
 
   - golang.org/x/text
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/text/+/v0.41.0:LICENSE
+    URL: https://cs.opensource.google/go/x/text/+/v0.42.0:LICENSE
 
   - golang.org/x/time/rate
     License: BSD-3-Clause
