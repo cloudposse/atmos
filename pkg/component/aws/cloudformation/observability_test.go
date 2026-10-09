@@ -324,6 +324,7 @@ func TestRunLogs_MergesAndSortsAcrossStacks(t *testing.T) {
 
 	rootLater := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	childEarlier := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	rootOldest := time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC)
 
 	gomock.InOrder(
 		client.EXPECT().ListStackResources(gomock.Any(), &cloudformation.ListStackResourcesInput{StackName: awsString("root")}).Return(&cloudformation.ListStackResourcesOutput{
@@ -338,27 +339,29 @@ func TestRunLogs_MergesAndSortsAcrossStacks(t *testing.T) {
 		StackEvents: []cfntypes.StackEvent{
 			{EventId: awsString("root-1"), LogicalResourceId: awsString("RootResource"), Timestamp: &rootLater},
 		},
+		NextToken: awsString("root-next"),
 	}, nil)
-	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStacksOutput{
-		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("root"), NextToken: awsString("root-next")}).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: awsString("root-older"), LogicalResourceId: awsString("RootOldestResource"), Timestamp: &rootOldest},
+		},
 	}, nil)
 	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("child")}).Return(&cloudformation.DescribeStackEventsOutput{
 		StackEvents: []cfntypes.StackEvent{
 			{EventId: awsString("child-1"), LogicalResourceId: awsString("ChildResource"), Timestamp: &childEarlier},
 		},
 	}, nil)
-	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("child")}).Return(&cloudformation.DescribeStacksOutput{
-		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
-	}, nil)
 
 	out := captureStderr(t, func() {
 		summary, err := runLogs(context.Background(), client, "root", false, map[string]any{})
 		require.NoError(t, err)
-		assert.Equal(t, 2, summary["event_count"])
+		assert.Equal(t, 3, summary["event_count"])
 	})
 
 	// The child event (earlier timestamp) must be printed before the root event.
+	oldestIdx := indexOf(t, out, "RootOldestResource")
 	childIdx := indexOf(t, out, "ChildResource")
+	assert.Less(t, oldestIdx, childIdx)
 	rootIdx := indexOf(t, out, "RootResource")
 	assert.Less(t, childIdx, rootIdx, "events must be merged in chronological order")
 }
@@ -388,16 +391,10 @@ func TestRunLogs_StableSortPreservesOrderForEqualTimestamps(t *testing.T) {
 			{EventId: awsString("root-1"), LogicalResourceId: awsString("RootResource"), Timestamp: &tied},
 		},
 	}, nil)
-	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStacksOutput{
-		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
-	}, nil)
 	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("child")}).Return(&cloudformation.DescribeStackEventsOutput{
 		StackEvents: []cfntypes.StackEvent{
 			{EventId: awsString("child-1"), LogicalResourceId: awsString("ChildResource"), Timestamp: &tied},
 		},
-	}, nil)
-	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("child")}).Return(&cloudformation.DescribeStacksOutput{
-		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
 	}, nil)
 
 	out := captureStderr(t, func() {
@@ -437,14 +434,16 @@ func TestRunLogs_ChartMode(t *testing.T) {
 
 	earlier := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
 	later := time.Date(2026, 1, 1, 11, 0, 0, 0, time.UTC)
-	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStackEventsOutput{
 		StackEvents: []cfntypes.StackEvent{
-			{EventId: awsString("e1"), LogicalResourceId: awsString("MyBucket"), ResourceStatus: cfntypes.ResourceStatusCreateInProgress, Timestamp: &earlier},
 			{EventId: awsString("e2"), LogicalResourceId: awsString("MyBucket"), ResourceStatus: cfntypes.ResourceStatusCreateComplete, Timestamp: &later},
 		},
+		NextToken: awsString("older"),
 	}, nil)
-	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
-		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("root"), NextToken: awsString("older")}).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: awsString("e1"), LogicalResourceId: awsString("MyBucket"), ResourceStatus: cfntypes.ResourceStatusCreateInProgress, Timestamp: &earlier},
+		},
 	}, nil)
 
 	out := captureStdout(t, func() {
@@ -466,8 +465,8 @@ func TestRunLogs_BuildTreeError(t *testing.T) {
 	require.Error(t, err)
 }
 
-// runLogs must propagate a pollStackEvents failure.
-func TestRunLogs_PollStackEventsError(t *testing.T) {
+// runLogs must propagate an event-listing failure.
+func TestRunLogs_ListStackEventsError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().ListStackResources(gomock.Any(), gomock.Any()).Return(&cloudformation.ListStackResourcesOutput{}, nil)
