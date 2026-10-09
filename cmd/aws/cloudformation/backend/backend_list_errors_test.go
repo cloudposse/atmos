@@ -198,7 +198,7 @@ func TestExecuteCreateOrUpdate_ResolvesTargetAuthOnce(t *testing.T) {
 			useFakeS3(t, tt.exists)
 
 			created := false
-			backend.RegisterBackendCreate("s3", func(_ context.Context, _ *schema.AtmosConfiguration, _ map[string]any, _ *schema.AuthContext) (*backend.ProvisionResult, error) {
+			backend.RegisterBackendCreate("s3", func(_ context.Context, _ *schema.AtmosConfiguration, _ map[string]any, _ *schema.AuthContext, _ ...backend.CreateOption) (*backend.ProvisionResult, error) {
 				created = true
 				return &backend.ProvisionResult{}, nil
 			})

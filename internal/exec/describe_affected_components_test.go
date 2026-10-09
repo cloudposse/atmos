@@ -848,7 +848,7 @@ func TestProcessCloudFormationComponentsIndexed_PathSourceProvisionOnly(t *testi
 			affected, err := processCloudFormationComponentsIndexed(
 				cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
 				atmosConfig, newChangedFilesIndex(atmosConfig, nil, ""), newComponentPathPatternCache(),
-				false, true, false,
+				false, true, AffectedFilter{},
 			)
 			require.NoError(t, err)
 
