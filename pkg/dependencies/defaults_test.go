@@ -127,7 +127,9 @@ func TestComponentToolVersionsManifest(t *testing.T) {
 				case "missing":
 					require.NoError(t, os.Remove(manifest))
 				case "malformed":
-					require.NoError(t, os.WriteFile(manifest, []byte("terraform\n"), 0o600))
+					// A line without a version is skipped with a warning; valid lines still apply.
+					require.NoError(t, os.WriteFile(manifest, []byte("terraform\nhashicorp/terraform 1.9.0\n"), 0o600))
+					expected = installedDefaultBinary(t, config, "hashicorp", "terraform", "1.9.0")
 				case "unreadable":
 					require.NoError(t, os.Remove(manifest))
 					require.NoError(t, os.Mkdir(manifest, 0o755))
@@ -143,7 +145,7 @@ func TestComponentToolVersionsManifest(t *testing.T) {
 				} else {
 					env, err = ForSections(config, nil)
 				}
-				if scenario == "malformed" || scenario == "unreadable" {
+				if scenario == "unreadable" {
 					require.ErrorContains(t, err, "failed to load .tool-versions")
 					assert.Nil(t, env)
 					return

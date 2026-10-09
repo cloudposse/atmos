@@ -58,7 +58,7 @@ The same file applies to every command and component type, with these difference
 - Custom commands and hooks use only the tools that are already installed. Atmos installs just their own `dependencies.tools`.
 - Workflows install every tool listed in `.tool-versions` that is missing before running the first step, because a workflow can call any project tool.
 
-If the file does not pin the component's executable, Atmos installs nothing for it and uses the system `PATH`. Entries with the version `system`, `ref:...`, or `path:...`, a bare operator such as `~>` (write `~>1.9.0` without a space), or a tool name Atmos cannot resolve are skipped without failing the run. Two entries for the same tool with different versions, such as `tofu 1.12.6` and `opentofu/opentofu 1.11.0`, are an error.
+If the file does not pin the component's executable, Atmos installs nothing for it and uses the system `PATH`. Entries with the version `system`, `ref:...`, or `path:...`, a bare operator such as `~>` (write `~>1.9.0` without a space), or a tool name Atmos cannot resolve are skipped without failing the run, as are lines that list a tool without a version (with a warning). Two entries for the same tool with different versions, such as `tofu 1.12.6` and `opentofu/opentofu 1.11.0`, are an error.
 
 Explicit `dependencies.tools` entries always override `.tool-versions`, even when they select a different version or use a version constraint. For example:
 

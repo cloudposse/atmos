@@ -46,7 +46,9 @@ approach:
   aliases, or the repo segment of an `owner/repo` key. Native Kubernetes components select nothing;
   native Helm selects `helm`.
 - Made manifest entries best-effort: `system`, `ref:`, `path:`, bare constraint operators (with a
-  warning), and unresolvable names are skipped. Explicit dependencies stay strict.
+  warning), and unresolvable names are skipped. Lines without a version are skipped with a warning
+  through the new `LoadToolVersionsLenient`; commands that rewrite the file keep the strict parser so
+  no line is ever dropped. Explicit dependencies stay strict.
 - Collapsed duplicate manifest identities with the same version and added `ErrToolVersionsConflict`
   for different versions, naming both entries.
 - Added `ForCommand` and `ForDependencies` and routed custom commands, hooks, and Ansible components

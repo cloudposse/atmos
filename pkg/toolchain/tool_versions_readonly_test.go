@@ -107,3 +107,21 @@ func TestIsReadOnlyFilesystemError(t *testing.T) {
 	assert.True(t, isLockUnavailableError(wrapped))
 	assert.False(t, isReadOnlyFilesystemError(errors.New("anything")))
 }
+
+// TestLoadToolVersionsLenient verifies that the lenient loader skips lines without
+// a version while the strict loader keeps rejecting them, so callers that rewrite
+// the file never drop a line.
+func TestLoadToolVersionsLenient(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".tool-versions")
+	require.NoError(t, os.WriteFile(path, []byte("terraform\n# comment\njqlang/jq 1.7.1 1.6\n"), 0o600))
+
+	lenient, err := LoadToolVersionsLenient(path)
+	require.NoError(t, err)
+	assert.Equal(t, map[string][]string{"jqlang/jq": {"1.7.1", "1.6"}}, lenient.Tools)
+
+	_, err = LoadToolVersions(path)
+	require.ErrorIs(t, err, ErrInvalidToolSpec)
+
+	_, err = LoadToolVersionsLenient(filepath.Join(t.TempDir(), "missing"))
+	require.ErrorIs(t, err, os.ErrNotExist)
+}

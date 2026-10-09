@@ -35,16 +35,37 @@ func LoadToolVersions(filePath string) (*ToolVersions, error) {
 		return nil, err
 	}
 
+	return loadToolVersionsShared(filePath, false)
+}
+
+// LoadToolVersionsLenient loads a .tool-versions file like LoadToolVersions, but
+// skips malformed lines (a tool without a version) with a warning instead of
+// failing. Use it only for read-only consumers such as project tool defaults;
+// callers that rewrite the file must use LoadToolVersions so no line is dropped.
+func LoadToolVersionsLenient(filePath string) (*ToolVersions, error) {
+	defer perf.Track(nil, "toolchain.LoadToolVersionsLenient")()
+
+	if _, err := os.Stat(filePath); err != nil {
+		return nil, err
+	}
+	return loadToolVersionsShared(filePath, true)
+}
+
+func loadToolVersionsShared(filePath string, lenient bool) (*ToolVersions, error) {
 	var toolVersions *ToolVersions
 	err := withToolVersionsSharedLock(filePath, func() error {
 		var err error
-		toolVersions, err = loadToolVersionsUnlocked(filePath)
+		toolVersions, err = loadToolVersionsFile(filePath, lenient)
 		return err
 	})
 	return toolVersions, err
 }
 
 func loadToolVersionsUnlocked(filePath string) (*ToolVersions, error) {
+	return loadToolVersionsFile(filePath, false)
+}
+
+func loadToolVersionsFile(filePath string, lenient bool) (*ToolVersions, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
@@ -62,6 +83,10 @@ func loadToolVersionsUnlocked(filePath string) (*ToolVersions, error) {
 		}
 		parts := strings.Fields(line)
 		if len(parts) < 2 {
+			if lenient {
+				log.Warn("Skipping malformed .tool-versions line: missing version", "file", filePath, "line", i+1, "content", line)
+				continue
+			}
 			return nil, fmt.Errorf("%w: invalid format at line %d: '%s' (missing version)", ErrInvalidToolSpec, i+1, line)
 		}
 		tool := parts[0]
