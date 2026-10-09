@@ -714,8 +714,8 @@ func TestInstallCmd_OutputDuringInstall(t *testing.T) {
 	// Run with valid source format.
 	_ = installCmd.RunE(installCmd, []string{"github.com/cloudposse/test-skill"})
 
-	// Should print "Downloading skill from..." message.
-	assert.Contains(t, uiOutput.String(), "Resolving skill source")
+	// Should print the source resolution message.
+	assert.Contains(t, atmosansi.Strip(uiOutput.String()), "Resolving skill source")
 }
 
 func TestInstallCmd_RunENotNil(t *testing.T) {
@@ -855,8 +855,8 @@ func TestInstallCmd_RunE_ContextUsage(t *testing.T) {
 		err := installCmd.RunE(installCmd, []string{"github.com/nonexistent/repo@v1.0.0"})
 
 		assert.Error(t, err)
-		// Verify output shows downloading started.
-		assert.Contains(t, uiOutput.String(), "Resolving skill source")
+		// Verify output shows source resolution started.
+		assert.Contains(t, atmosansi.Strip(uiOutput.String()), "Resolving skill source")
 	})
 }
 
@@ -937,8 +937,8 @@ func TestInstallCmd_RunE_InstallOptionsPassthrough(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "download")
 
-	// Verify download message was printed.
-	assert.Contains(t, uiOutput.String(), "Resolving skill source")
+	// Verify the source resolution message was printed.
+	assert.Contains(t, atmosansi.Strip(uiOutput.String()), "Resolving skill source")
 }
 
 // TestInstallCmd_RunE_SuccessfulInstall tests the full successful install path.

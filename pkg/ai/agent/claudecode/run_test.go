@@ -2,6 +2,7 @@ package claudecode
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -224,13 +225,14 @@ func TestExecClaude_ApprovalDecisions(t *testing.T) {
 			wantLogs: []string{`"message":"no terminal"`},
 		},
 		{
-			name:      "approver error is returned and the tool is denied",
+			name:      "approver error is returned and the run is stopped",
 			approvErr: errUtils.ErrUserAborted,
 			assertOut: func(t *testing.T, out string, err error) {
 				require.ErrorIs(t, err, errUtils.ErrUserAborted)
 				assert.Empty(t, out)
 			},
-			wantLogs: []string{`"behavior":"deny"`},
+			// Cancellation can kill the child before it reads the denial from stdin.
+			// TestSession_ApprovalErrorDeniesBeforeCancel verifies that write directly.
 		},
 	}
 
@@ -263,6 +265,28 @@ func TestExecClaude_ApprovalDecisions(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSession_ApprovalErrorDeniesBeforeCancel(t *testing.T) {
+	var stdin bytes.Buffer
+	cancelled := false
+	sess := &session{
+		stdin: &stdin,
+		approver: &fakeApprover{fn: func(context.Context, approval.Request) (approval.Decision, error) {
+			return approval.Decision{}, errUtils.ErrUserAborted
+		}},
+		cancel: func() {
+			// Check at cancellation time: writing afterwards would race with process termination.
+			assert.JSONEq(t, `{"type":"control_response","response":{"subtype":"success","request_id":"req-1","response":{"behavior":"deny","message":"Tool approval failed.","interrupt":true}}}`, stdin.String())
+			cancelled = true
+		},
+	}
+
+	stop := sess.handleLine(t.Context(), []byte(`{"type":"control_request","request_id":"req-1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"touch x"}}}`))
+
+	assert.True(t, stop, "approval errors must stop reading the subprocess stream")
+	assert.True(t, cancelled, "approval errors must cancel the subprocess")
+	assert.ErrorIs(t, sess.fatal, errUtils.ErrUserAborted)
 }
 
 // TestExecClaude_InterruptSkipsApproverForLaterRequests verifies that once a run is being

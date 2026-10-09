@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -68,6 +69,17 @@ func newTestAskTurn(t *testing.T, client *scriptedAskClient) *askTurn {
 	}
 }
 
+func assertAskPrompt(t *testing.T, prompts []string, question string) {
+	t.Helper()
+
+	require.Len(t, prompts, 1)
+	// Plain provider messages include response guidance before the unchanged question.
+	guidance, prompt, found := strings.Cut(prompts[0], "\n\n---\n\n")
+	require.True(t, found, "response guidance must be separated from the question")
+	assert.Contains(t, guidance, "GitHub-flavored Markdown")
+	assert.Equal(t, question, prompt)
+}
+
 func TestAskTurn_Run(t *testing.T) {
 	t.Run("returns the answer text", func(t *testing.T) {
 		client := &scriptedAskClient{response: "You have 289 stacks."}
@@ -76,7 +88,7 @@ func TestAskTurn_Run(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, "You have 289 stacks.", answer)
-		assert.Equal(t, []string{"how many stacks?"}, client.sentPrompts)
+		assertAskPrompt(t, client.sentPrompts, "how many stacks?")
 	})
 
 	t.Run("sends earlier turns as history so a follow-up has context", func(t *testing.T) {
@@ -90,10 +102,8 @@ func TestAskTurn_Run(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Len(t, client.sentHistory, 1)
-		require.Len(t, client.sentHistory[0], 2)
-		assert.Equal(t, "how many stacks?", client.sentHistory[0][0].Content)
-		assert.Equal(t, "289", client.sentHistory[0][1].Content)
-		assert.Equal(t, []string{"and in core?"}, client.sentPrompts)
+		assert.Equal(t, history, client.sentHistory[0])
+		assertAskPrompt(t, client.sentPrompts, "and in core?")
 	})
 
 	t.Run("an empty answer is an error, not a blank line", func(t *testing.T) {
