@@ -23,6 +23,10 @@ const (
 )
 
 var (
+	ErrAISkillSourceInvalid                  = errors.New("invalid skill source")
+	ErrAISkillSourceDrift                    = errors.New("skill installation is not current")
+	ErrAISkillSourceOwnership                = errors.New("skill destination is not owned by this source")
+	ErrAISkillSourceRecovery                 = errors.New("skill transaction requires recovery")
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrDownloadFile                          = errors.New("failed to download file")
 	ErrInvalidClientMode                     = errors.New("invalid client mode for operation")

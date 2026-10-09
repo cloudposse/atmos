@@ -613,6 +613,10 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		return atmosConfig, err
 	}
 
+	if err := validateSkillSources(&atmosConfig); err != nil {
+		return atmosConfig, err
+	}
+
 	// Validate components.terraform.flags against its raw viper map, not the just-unmarshalled
 	// atmosConfig.Components.Terraform.Flags: the typed TerraformFlags decode above silently
 	// drops any unrecognized key (e.g. a typo like `lock_timout`), so a global-level typo would
@@ -2404,6 +2408,7 @@ func loadEmbeddedConfig(v *viper.Viper) error {
 // caseSensitivePaths lists the YAML paths that need case preservation.
 // Viper lowercases all map keys, but these sections need original case.
 var caseSensitivePaths = []string{
+	"ai.skills",              // Source labels preserve their declared spelling.
 	envKey,                   // Environment variables (e.g., GITHUB_TOKEN)
 	"templates.settings.env", // Template env variables (e.g., AWS_PROFILE)
 	"auth.identities",        // Auth identity names (e.g., SuperAdmin)
@@ -2507,6 +2512,7 @@ func getAtmosDecodeHookFunc() mapstructure.DecodeHookFunc {
 		mapstructure.StringToTimeDurationHookFunc(),
 		mapstructure.StringToSliceHookFunc(SliceSeparator),
 		commandEnvMapDecodeHook(),
+		schema.SkillRefDecodeHook(),
 		schema.ConditionDecodeHook(),
 		schema.WorkflowStepDecodeHook(),
 		schema.TasksDecodeHook(),
@@ -2632,6 +2638,16 @@ func preserveCaseSensitiveMaps(v *viper.Viper, atmosConfig *schema.AtmosConfigur
 
 	atmosConfig.CaseMaps = mergedCaseMaps
 	populateLegacyIdentityCaseMap(mergedCaseMaps, atmosConfig)
+	if mapping := mergedCaseMaps.Get("ai.skills"); len(mapping) > 0 {
+		restored := make(map[string]*schema.AISkillConfig, len(atmosConfig.AI.Skills))
+		for key, value := range atmosConfig.AI.Skills {
+			if original, ok := mapping[strings.ToLower(key)]; ok {
+				key = original
+			}
+			restored[key] = value
+		}
+		atmosConfig.AI.Skills = restored
+	}
 
 	log.Trace("Preserved case-sensitive map keys", "paths", caseSensitivePaths, "files_processed", len(filesToProcess))
 }

@@ -1,0 +1,43 @@
+---
+slug: declarative-ai-skills
+title: "Declare and Lock AI Skills with Version Tracks"
+authors: [osterman]
+tags: [feature]
+---
+Shared AI skills need a record of where they came from and which revision a project uses.
+[Declarative skill sources](/cli/configuration/ai/skills#declarative-sources) put that selection in
+Atmos configuration and lock each contributing repository for repeatable installation.
+
+<!--truncate-->
+
+## The Problem
+
+Installing a repository manually records an action, but does not give a team a shared declaration
+of the skills, plugins, clients, and versions their project needs. A marketplace may also reference
+plugins in other repositories, each advancing independently.
+
+## The Fix
+
+Declare sources under `ai.skills` and commit the resulting skills lock. Configuration commands edit
+those declarations independently of installation. Project installations have their own ownership
+records, and ordinary synchronization retains obsolete copies until you explicitly prune them.
+
+Managed refs can use the [version function](/functions/yaml/version) to follow an Atmos version track.
+
+## How to Use It
+
+```shell
+atmos ai skill add cloudposse/atmos --name cloudposse
+atmos ai skill set cloudposse plugins '[atmos]'
+atmos ai skill sync
+atmos ai skill sync --frozen
+atmos ai skill sync --check
+```
+
+Commit `skills.lock.yaml` and ignore `.atmos/skills/`. See the
+[configuration reference](/cli/configuration/ai/skills#declarative-sources) for managed versions,
+local sources, explicit pruning, and recovery.
+
+## Get Involved
+
+Report issues and share your workflows in the [Atmos repository](https://github.com/cloudposse/atmos).

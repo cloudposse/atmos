@@ -798,7 +798,7 @@ func TestUninstallCmd_RunE_InstallerInitFailure(t *testing.T) {
 
 		// Verify we get an error about initialization.
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to initialize installer")
+		assert.Contains(t, err.Error(), ".atmos")
 	})
 }
 
@@ -832,6 +832,9 @@ func TestUninstallCmd_RunE_NoArgsUninstallsEverything(t *testing.T) {
 	homedir.Reset()
 	t.Cleanup(homedir.Reset)
 
+	project := t.TempDir()
+	t.Chdir(project)
+
 	setupSkillCommandUI(t)
 
 	// Install a couple of bundled skills (offline, fast) to have something to
@@ -839,7 +842,7 @@ func TestUninstallCmd_RunE_NoArgsUninstallsEverything(t *testing.T) {
 	require.NoError(t, installCmd.Flags().Set("yes", "true"))
 	require.NoError(t, installCmd.RunE(installCmd, []string{"atmos-terraform"}))
 	require.NoError(t, installCmd.RunE(installCmd, []string{"atmos-git"}))
-	require.FileExists(t, filepath.Join(tempHome, ".atmos", "skills", "atmos-terraform", "SKILL.md"))
+	require.FileExists(t, filepath.Join(project, ".atmos", "skills", "content", "atmos-terraform", "SKILL.md"))
 
 	uiOutput := setupSkillCommandUI(t)
 	require.NoError(t, uninstallCmd.Flags().Set("force", "true"))
@@ -848,7 +851,7 @@ func TestUninstallCmd_RunE_NoArgsUninstallsEverything(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, atmosansi.Strip(uiOutput.String()), "skills uninstalled successfully")
 
-	_, statErr := os.Stat(filepath.Join(tempHome, ".atmos", "skills", "atmos-terraform"))
+	_, statErr := os.Stat(filepath.Join(project, ".atmos", "skills", "content", "atmos-terraform"))
 	assert.True(t, os.IsNotExist(statErr), "skill directory should be removed")
 }
 

@@ -128,7 +128,8 @@ func TestInstallCmd_RunE_NoArgsInstallsEveryBundledSkill(t *testing.T) {
 	// empty temp dir, this test would read whatever real project happens to
 	// be checked out (and, worse, distributeToClients would create real
 	// signal directories on disk under the actual source tree).
-	t.Chdir(t.TempDir())
+	project := t.TempDir()
+	t.Chdir(project)
 
 	uiOutput := setupSkillCommandUI(t)
 	require.NoError(t, installCmd.Flags().Set("yes", "true"))
@@ -137,14 +138,12 @@ func TestInstallCmd_RunE_NoArgsInstallsEveryBundledSkill(t *testing.T) {
 	require.NoError(t, err)
 	output := atmosansi.Strip(uiOutput.String())
 	assert.Contains(t, output, "Discovered")
-	assert.Contains(t, output, "skills installed successfully in",
-		"batch install should say where the skills landed, combined with the count on one line")
-	assert.Contains(t, output, filepath.Join("~", ".atmos", "skills"))
+	assert.Contains(t, output, filepath.Join(".atmos", "skills", "content"))
 	assert.NotContains(t, output, "atmos ai chat",
 		"a plain CLI install is never run from inside atmos ai chat, so this hint must never print")
 
-	// A representative skill actually landed on disk under the fake HOME.
-	assert.FileExists(t, filepath.Join(tempHome, ".atmos", "skills", "atmos-terraform", "SKILL.md"))
+	// Project canonical content is isolated from other projects.
+	assert.FileExists(t, filepath.Join(project, ".atmos", "skills", "content", "atmos-terraform", "SKILL.md"))
 }
 
 // TestInstallCmd_RunE_DistributingToShowsRealClientDirectory guards against
@@ -172,6 +171,8 @@ func TestInstallCmd_RunE_DistributingToShowsRealClientDirectory(t *testing.T) {
 	t.Setenv("USERPROFILE", tempHome)
 	homedir.Reset()
 	t.Cleanup(homedir.Reset)
+
+	t.Chdir(t.TempDir())
 
 	uiOutput := setupSkillCommandUI(t)
 	require.NoError(t, installCmd.Flags().Set("yes", "true"))
@@ -202,6 +203,7 @@ func TestInstallCmd_RunE_PathWithClientWarns(t *testing.T) {
 	resetFlags()
 	t.Cleanup(resetFlags)
 
+	t.Chdir(t.TempDir())
 	tempHome := t.TempDir()
 	t.Setenv("HOME", tempHome)
 	t.Setenv("USERPROFILE", tempHome)
@@ -211,10 +213,12 @@ func TestInstallCmd_RunE_PathWithClientWarns(t *testing.T) {
 	uiOutput := setupSkillCommandUI(t)
 	require.NoError(t, installCmd.Flags().Set("yes", "true"))
 	require.NoError(t, installCmd.Flags().Set("client", "claude-code"))
-	overridePath := filepath.Join(t.TempDir(), "custom-skills")
+	manualBase, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	overridePath := filepath.Join(manualBase, "custom-skills")
 	require.NoError(t, installCmd.Flags().Set("path", overridePath))
 
-	err := installCmd.RunE(installCmd, []string{"atmos-terraform"})
+	err = installCmd.RunE(installCmd, []string{"atmos-terraform"})
 	require.NoError(t, err)
 
 	output := atmosansi.Strip(uiOutput.String())
@@ -243,6 +247,7 @@ func TestInstallCmd_RunE_PathWithoutDistributionFlagsDoesNotWarn(t *testing.T) {
 	resetFlags()
 	t.Cleanup(resetFlags)
 
+	t.Chdir(t.TempDir())
 	tempHome := t.TempDir()
 	t.Setenv("HOME", tempHome)
 	t.Setenv("USERPROFILE", tempHome)
@@ -251,10 +256,12 @@ func TestInstallCmd_RunE_PathWithoutDistributionFlagsDoesNotWarn(t *testing.T) {
 
 	uiOutput := setupSkillCommandUI(t)
 	require.NoError(t, installCmd.Flags().Set("yes", "true"))
-	overridePath := filepath.Join(t.TempDir(), "custom-skills")
+	manualBase, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	overridePath := filepath.Join(manualBase, "custom-skills")
 	require.NoError(t, installCmd.Flags().Set("path", overridePath))
 
-	err := installCmd.RunE(installCmd, []string{"atmos-terraform"})
+	err = installCmd.RunE(installCmd, []string{"atmos-terraform"})
 	require.NoError(t, err)
 
 	output := atmosansi.Strip(uiOutput.String())
@@ -708,7 +715,7 @@ func TestInstallCmd_OutputDuringInstall(t *testing.T) {
 	_ = installCmd.RunE(installCmd, []string{"github.com/cloudposse/test-skill"})
 
 	// Should print "Downloading skill from..." message.
-	assert.Contains(t, uiOutput.String(), "Downloading skills from")
+	assert.Contains(t, uiOutput.String(), "Resolving skill source")
 }
 
 func TestInstallCmd_RunENotNil(t *testing.T) {
@@ -822,7 +829,7 @@ func TestInstallCmd_RunE_InstallerInitFailure(t *testing.T) {
 
 		// Verify we get an error about initialization.
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to initialize installer")
+		assert.Contains(t, err.Error(), ".atmos")
 	})
 }
 
@@ -849,7 +856,7 @@ func TestInstallCmd_RunE_ContextUsage(t *testing.T) {
 
 		assert.Error(t, err)
 		// Verify output shows downloading started.
-		assert.Contains(t, uiOutput.String(), "Downloading skills from")
+		assert.Contains(t, uiOutput.String(), "Resolving skill source")
 	})
 }
 
@@ -931,7 +938,7 @@ func TestInstallCmd_RunE_InstallOptionsPassthrough(t *testing.T) {
 	assert.Contains(t, err.Error(), "download")
 
 	// Verify download message was printed.
-	assert.Contains(t, uiOutput.String(), "Downloading skills from")
+	assert.Contains(t, uiOutput.String(), "Resolving skill source")
 }
 
 // TestInstallCmd_RunE_SuccessfulInstall tests the full successful install path.

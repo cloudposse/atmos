@@ -112,6 +112,15 @@ type AIContextSettings struct {
 // AISkillConfig contains configuration for a custom AI skill.
 // Skills follow the Agent Skills open standard (https://agentskills.io).
 type AISkillConfig struct {
+	Source          string   `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+	Ref             SkillRef `yaml:"ref,omitempty" json:"ref,omitempty,omitzero" mapstructure:"ref"`
+	Kind            string   `yaml:"kind,omitempty" json:"kind,omitempty" mapstructure:"kind"`
+	Subpath         string   `yaml:"subpath,omitempty" json:"subpath,omitempty" mapstructure:"subpath"`
+	Plugins         []string `yaml:"plugins,omitempty" json:"plugins,omitempty" mapstructure:"plugins"`
+	Include         []string `yaml:"include,omitempty" json:"include,omitempty" mapstructure:"include"`
+	Exclude         []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`
+	Clients         []string `yaml:"clients,omitempty" json:"clients,omitempty" mapstructure:"clients"`
+	Scope           string   `yaml:"scope,omitempty" json:"scope,omitempty" mapstructure:"scope"`
 	DisplayName     string   `yaml:"display_name,omitempty" json:"display_name,omitempty" mapstructure:"display_name"`             // User-facing name
 	Description     string   `yaml:"description,omitempty" json:"description,omitempty" mapstructure:"description"`                // What this skill does
 	SystemPrompt    string   `yaml:"system_prompt,omitempty" json:"system_prompt,omitempty" mapstructure:"system_prompt"`          // Specialized instructions

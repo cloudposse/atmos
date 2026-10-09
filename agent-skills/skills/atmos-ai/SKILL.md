@@ -128,6 +128,23 @@ install into each client's user-level directory instead of the project one, or `
 full manual control of the install location (this skips auto-distribution to clients). See
 [`atmos ai skill`](https://atmos.tools/cli/commands/ai/skill) for the full flag reference.
 
+### Declarative skill sources and version tracks
+
+Declare external skill sources under `ai.skills.<label>` with `source`, `ref`, `kind`, `subpath`,
+`plugins`, `include`, `exclude`, `clients`, and `scope`. Keep source declarations separate from inline
+prompt/tool entries. Use `ref: !version dependency` to select a locked version track dependency.
+
+- `atmos ai skill add <source> --name <label>`, `set`, and `remove` edit configuration only.
+- `atmos ai skill sync` reconciles declarations with `skills.lock.yaml` and installed copies.
+- `sync --frozen` requires matching locks; `sync --check` is an offline, read-only drift check.
+- Ordinary sync retains obsolete copies. Use `sync --prune` for explicit removal.
+- Use `--source <label>` to disambiguate installation/update/uninstall targets.
+- Advance managed refs with `atmos version track update`, then synchronize skills. Skill updates do
+  not advance managed dependencies independently.
+- Commit resolution locks; ignore `.atmos/skills/`, which stores project content and ownership.
+- Modified owned files require `--force`; unowned destinations and symlink escapes are refused.
+- Recover interrupted transactions with `atmos ai skill sync --recover` from the owning project.
+
 ### Installing Skills: Claude Code Plugin (Claude Code only)
 
 For Claude Code specifically, the skills plugin is a lighter-weight alternative that also

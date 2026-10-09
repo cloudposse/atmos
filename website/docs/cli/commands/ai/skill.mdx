@@ -512,3 +512,24 @@ atmos ai skill install cloudposse/atmos
   {type: 'link', href: '/cli/commands/ai/exec', label: 'atmos ai exec', description: 'Run Atmos and shell commands via AI prompts'},
   {type: 'link', href: '/cli/commands/ai/sessions', label: 'atmos ai sessions', description: 'Manage AI chat sessions'},
 ]} />
+
+
+## Declarative management
+
+Use [declarative sources](/cli/configuration/ai/skills#declarative-sources) to share skill selections
+and lock exact source revisions across a team.
+
+| Command | Effect |
+|---|---|
+| `add <source> --name <label>` | Create a configuration declaration |
+| `set <label> <field> <value>` | Edit a declaration |
+| `remove <label>` | Remove a declaration, retaining installations |
+| `sync [label]` | Install or reconcile declared sources |
+| `sync --prune` | Also remove obsolete owned copies |
+| `sync --check` | Check installation state offline |
+| `sync --frozen` | Install only from matching locks |
+| `sync --recover` | Recover an interrupted transaction |
+
+Installation commands accept `--source <label>` to select a declaration explicitly and `--track`
+to select the version track. Configuration commands and reconciliation support `--dry-run`.
+The existing no-argument `install` continues to install all bundled skills.

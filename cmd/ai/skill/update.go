@@ -52,6 +52,10 @@ var updateCmd = &cobra.Command{
 		skipConfirm := v.GetBool("yes")
 		path := v.GetString("path")
 
+		if handled, err := runDeclared(cmd, args, v); handled {
+			return err
+		}
+
 		installer, err := marketplace.NewInstaller(version.Version)
 		if err != nil {
 			return fmt.Errorf("failed to initialize installer: %w", err)
@@ -123,6 +127,7 @@ func init() {
 
 	// Register flags on the command.
 	updateParser.RegisterFlags(updateCmd)
+	sourceFlags().RegisterFlags(updateCmd)
 
 	// Bind flags to Viper for environment variable support.
 	if err := updateParser.BindToViper(viper.GetViper()); err != nil {

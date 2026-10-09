@@ -55,6 +55,10 @@ var installCmd = &cobra.Command{
 		skipConfirm := v.GetBool("yes")
 		path := v.GetString("path")
 
+		if handled, err := runDeclared(cmd, args, v); handled {
+			return err
+		}
+
 		// Create installer.
 		installer, err := marketplace.NewInstaller(version.Version)
 		if err != nil {
@@ -150,6 +154,7 @@ func init() {
 
 	// Register flags on the command.
 	installParser.RegisterFlags(installCmd)
+	sourceFlags().RegisterFlags(installCmd)
 
 	// Bind flags to Viper for environment variable support.
 	if err := installParser.BindToViper(viper.GetViper()); err != nil {
