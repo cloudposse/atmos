@@ -328,3 +328,61 @@ func TestMarkStepTimeout_LeavesOtherErrorsAlone(t *testing.T) {
 		assert.ErrorIs(t, markStepTimeout(t.Context(), tasks, wrapped), errUtils.ErrStepTimeout)
 	})
 }
+
+func TestHookEnvironmentPreservesRelativeGitPaths(t *testing.T) {
+	repoDir := initTempRepo(t)
+	sub := filepath.Join(repoDir, "sub")
+	require.NoError(t, os.Mkdir(sub, 0o755))
+	t.Chdir(sub)
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Setenv("GIT_DIR", filepath.Join("..", ".git"))
+	t.Setenv("GIT_WORK_TREE", "..")
+	t.Setenv("GIT_INDEX_FILE", filepath.Join("..", ".git", "custom-index"))
+	t.Setenv("OTHER_RELATIVE_PATH", "unchanged")
+
+	dir, env, err := resolveHookEnvironment()
+	require.NoError(t, err)
+	wantRoot, err := filepath.EvalSymlinks(filepath.Dir(cwd))
+	require.NoError(t, err)
+	assert.Equal(t, wantRoot, dir)
+	for _, entry := range []string{
+		"GIT_DIR=" + filepath.Join(cwd, "..", ".git"),
+		"GIT_WORK_TREE=" + filepath.Dir(cwd),
+		"GIT_INDEX_FILE=" + filepath.Join(cwd, "..", ".git", "custom-index"),
+		"OTHER_RELATIVE_PATH=unchanged",
+	} {
+		assert.Contains(t, env, entry)
+	}
+
+	t.Run("steps receive corrected Git environment", func(t *testing.T) {
+		cfg := &schema.GitConfig{Hooks: map[string]schema.GitHookEntry{"pre-commit": {Steps: schema.Tasks{
+			{Name: "probe", Type: "script", Interpreter: "starlark", Script: `print(exec.run(["git", "rev-parse", "--absolute-git-dir"], output = "capture").stdout.strip())`},
+		}}}}
+		var stdout, stderr bytes.Buffer
+		require.NoError(t, Run(cfg, "pre-commit", nil, WithOutputWriters(&stdout, &stderr)), stderr.String())
+		assert.Equal(t, filepath.ToSlash(filepath.Join(wantRoot, ".git")), filepath.ToSlash(strings.TrimSpace(stdout.String())))
+	})
+	t.Run("commands receive corrected Git environment", func(t *testing.T) {
+		cfg := &schema.GitConfig{Hooks: map[string]schema.GitHookEntry{"pre-commit": {
+			Command: `git rev-parse --absolute-git-dir > git-path.txt`,
+		}}}
+		require.NoError(t, Run(cfg, "pre-commit", nil))
+		result, err := os.ReadFile(filepath.Join(repoDir, "git-path.txt"))
+		require.NoError(t, err)
+		assert.Equal(t, filepath.ToSlash(filepath.Join(wantRoot, ".git")), filepath.ToSlash(strings.TrimSpace(string(result))))
+	})
+}
+
+func TestHookEnvironmentKeepsAbsoluteAndEmptyGitPaths(t *testing.T) {
+	t.Chdir(t.TempDir())
+	absolute := filepath.Join(t.TempDir(), "index")
+	t.Setenv("GIT_INDEX_FILE", absolute)
+	t.Setenv("GIT_DIR", "")
+	t.Setenv("GIT_WORK_TREE", "")
+	_, env, err := resolveHookEnvironment()
+	require.NoError(t, err)
+	assert.Contains(t, env, "GIT_INDEX_FILE="+absolute)
+	assert.Contains(t, env, "GIT_DIR=")
+	assert.Contains(t, env, "GIT_WORK_TREE=")
+}

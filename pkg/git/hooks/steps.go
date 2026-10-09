@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -59,7 +60,7 @@ func runSteps(name string, entry schema.GitHookEntry, args []string, opts []RunO
 	vars := step.NewVariables()
 	vars.SetAtmosConfig(options.config)
 	vars.ScriptArgs = slices.Clone(args)
-	dir, err := resolveWorkingDir()
+	dir, processEnv, err := resolveHookEnvironment()
 	if err != nil {
 		return wrapHookError(name, err)
 	}
@@ -72,7 +73,7 @@ func runSteps(name string, entry schema.GitHookEntry, args []string, opts []RunO
 	}
 	err = step.NewAutomationLibrary(vars, nil).RunSteps(options.ctx, entry.Steps, &automation.StepCall{
 		WorkingDirectory: dir,
-		ProcessEnv:       envpkg.MergeGlobalEnv(os.Environ(), globalEnv),
+		ProcessEnv:       envpkg.MergeGlobalEnv(processEnv, globalEnv),
 		Stdout:           options.stdout,
 		Stderr:           options.stderr,
 	})
@@ -122,4 +123,28 @@ func markStepTimeout(ctx context.Context, tasks schema.Tasks, err error) error {
 			Err()
 	}
 	return err
+}
+
+// resolveHookEnvironment preserves Git paths relative to the caller before hooks change directories.
+func resolveHookEnvironment() (string, []string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", nil, err
+	}
+	dir, err := resolveWorkingDir()
+	if err != nil {
+		return "", nil, err
+	}
+	env := os.Environ()
+	for i, entry := range env {
+		key, value, found := strings.Cut(entry, "=")
+		if !found || value == "" || filepath.IsAbs(value) {
+			continue
+		}
+		switch key {
+		case "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE":
+			env[i] = key + "=" + filepath.Join(cwd, value)
+		}
+	}
+	return dir, env, nil
 }

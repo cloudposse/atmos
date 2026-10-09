@@ -3,6 +3,7 @@ package standalone
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -193,7 +194,7 @@ func TestValueErrorsStaySentinelCompatibleWithoutRepeatingIt(t *testing.T) {
 
 	_, err = ParseDecimalInt("99999999999999999999")
 	require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
-	assert.Equal(t, "out of range for a 64-bit integer", err.Error())
+	assert.Equal(t, fmt.Sprintf("out of range for a %d-bit integer", strconv.IntSize), err.Error())
 
 	_, err = ParseStringList(`"open`)
 	require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
