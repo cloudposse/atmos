@@ -208,7 +208,8 @@ func logComponentFuncCacheHit(functionName string, sections map[string]any) {
 
 // authCacheKeySuffix derives a cache-key fragment from the resolved AuthContext, so
 // componentFunc's cache never conflates two calls to the same stack+component that resolved to
-// different identities/regions. Empty when authContext is nil (no identity resolved), matching
+// different identities, regions, endpoints, or AWS credential/config files. Empty when
+// authContext is nil (no identity resolved), matching
 // the pre-existing stack+component-only key for that common case.
 func authCacheKeySuffix(authContext *schema.AuthContext) string {
 	if authContext == nil {
@@ -216,7 +217,7 @@ func authCacheKeySuffix(authContext *schema.AuthContext) string {
 	}
 	switch {
 	case authContext.AWS != nil:
-		return fmt.Sprintf("aws:%q:%q:%q", authContext.AWS.Profile, authContext.AWS.Region, authContext.AWS.EndpointURL)
+		return fmt.Sprintf("aws:%q:%q:%q:%q:%q", authContext.AWS.Profile, authContext.AWS.Region, authContext.AWS.EndpointURL, authContext.AWS.CredentialsFile, authContext.AWS.ConfigFile)
 	case authContext.Azure != nil:
 		return fmt.Sprintf("azure:%s:%s", authContext.Azure.Profile, authContext.Azure.SubscriptionID)
 	case authContext.GCP != nil:

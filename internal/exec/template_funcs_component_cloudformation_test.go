@@ -155,3 +155,35 @@ func TestComponentFunc_CacheLoggingPreservesResults(t *testing.T) {
 		})
 	}
 }
+
+// AWS profiles can have the same name in different credential/config files; eager
+// component results must stay isolated while repeated references still hit their cache.
+func TestComponentFunc_CloudFormationBranch_CacheSeparatesAWSFiles(t *testing.T) {
+	clearComponentFuncSyncMap(t)
+	ac := setupAwsCloudFormationOutputFixture(t)
+	getter := NewMockCloudFormationOutputsGetter(gomock.NewController(t))
+	stubCloudFormationOutputsGetter(t, getter)
+
+	base := schema.AWSAuthContext{
+		Profile:         "shared-profile",
+		Region:          "us-east-1",
+		EndpointURL:     "http://localhost:4566",
+		CredentialsFile: "credentials-a",
+		ConfigFile:      "config-a",
+	}
+	contexts := []schema.AWSAuthContext{base, base, base}
+	contexts[1].CredentialsFile = "credentials-b"
+	contexts[2].ConfigFile = "config-b"
+	outputs := []string{"vpc-first", "vpc-other-credentials", "vpc-other-config"}
+	for i := range contexts {
+		getter.EXPECT().GetOutputs(gomock.Any(), "us-east-1", "test-vpc", &contexts[i]).
+			Return(map[string]any{"VpcId": outputs[i]}, nil).Times(1)
+	}
+
+	for _, i := range []int{0, 1, 2, 1, 0, 2} {
+		info := &schema.ConfigAndStacksInfo{AuthContext: &schema.AuthContext{AWS: &contexts[i]}}
+		value, err := componentFunc(&ac, info, "vpc", "test")
+		require.NoError(t, err)
+		assert.Equal(t, outputs[i], value.(map[string]any)[cfg.OutputsSectionName].(map[string]any)["VpcId"])
+	}
+}
