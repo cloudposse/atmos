@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -378,6 +380,11 @@ func TestRemoveTempDir(t *testing.T) {
 //
 //nolint:paralleltest // The stdout sub-tests swap os.Stdout to capture output; must run serially.
 func TestPrintOrWriteToFile_ScalarResults(t *testing.T) {
+	// Use standard streams even if an earlier test installed a buffered writer.
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+
 	tests := []struct {
 		name         string
 		data         any
