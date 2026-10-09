@@ -24,15 +24,15 @@ straightforward. No new protocols or SDKs needed — just `exec.Command` + JSON 
 ### Why This Matters
 
 1. **No API tokens to buy** — Users with Claude Max or Google accounts use their existing
-   subscription. Zero additional cost.
+    subscription. Zero additional cost.
 2. **Familiar auth** — Users already authenticated with `claude` or `gemini` on their
-   system. No API key configuration in `atmos.yaml`.
+    system. No API key configuration in `atmos.yaml`.
 3. **Latest models** — CLI tools auto-update. Users always get the latest models without
-   Atmos needing to update provider code.
+    Atmos needing to update provider code.
 4. **Free tier** — Gemini CLI offers 1,000 requests/day free with just a Google account.
 5. **Simplicity** — New users can `brew install --cask claude-code` + `atmos ai chat` with zero
-   configuration. The current flow requires: create API account → generate key →
-   configure `atmos.yaml` → set env var.
+    configuration. The current flow requires: create API account → generate key →
+    configure `atmos.yaml` → set env var.
 
 ---
 
@@ -213,12 +213,12 @@ Both Claude Agent SDK (Python/TypeScript) and Codex SDK (TypeScript) exist but a
 **not suitable** for direct Atmos integration:
 
 1. **Language mismatch** — Both SDKs are Python/TypeScript, Atmos is Go. Would require
-   bundling a runtime.
+    bundling a runtime.
 2. **Licensing restriction (Claude)** — Anthropic explicitly states: "Unless previously
-   approved, Anthropic does not allow third party developers to offer claude.ai login or
-   rate limits for their products."
+    approved, Anthropic does not allow third party developers to offer claude.ai login or
+    rate limits for their products."
 3. **Unnecessary** — The CLI tools (`claude -p`, `codex exec`, `gemini -p`) provide
-   everything the SDKs do, with simpler integration (subprocess vs. FFI).
+    everything the SDKs do, with simpler integration (subprocess vs. FFI).
 
 **Important distinction:** When Atmos invokes the user's locally installed CLI binary,
 the user is running their own tool — Atmos is not "offering" any provider's login. This is
@@ -267,22 +267,22 @@ prompt-only queries skip steps 3-8.
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
 │  1. User runs: atmos ai ask "What did we spend on EC2 last month?"  │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ▼
+└─────────────────────────────┬───────────────────────────────────────┘
+                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  2. Atmos reads atmos.yaml                                          │
 │     • AI provider: claude-code (CLI provider)                       │
 │     • MCP servers: 2 configured (aws-docs, aws-billing)             │
 │     • Auth identity: "readonly" on servers that need credentials    │
 │     • Toolchain: uv → astral-sh/uv (for uvx binary)                 │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ▼
+└─────────────────────────────┬───────────────────────────────────────┘
+                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  3. Atmos resolves toolchain                                        │
 │     • Loads toolchain dependencies (uv → astral-sh/uv)              │
 │     • Extracts toolchain bin PATH: ~/.atmos/toolchain/bin/...       │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ▼
+└─────────────────────────────┬───────────────────────────────────────┘
+                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  4. Atmos generates MCP config                                      │
 │     (CLI providers skip MCP routing — ALL servers are included)     │
@@ -301,8 +301,8 @@ prompt-only queries skip steps 3-8.
 │     • Claude Code: temp .mcp.json via --mcp-config flag             │
 │     • Codex CLI: ~/.codex/config.toml (backup/restore after exit)   │
 │     • Gemini CLI: .gemini/settings.json in cwd (backup/restore)     │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ▼
+└─────────────────────────────┬───────────────────────────────────────┘
+                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  5. Atmos invokes the CLI tool as a subprocess                      │
 │                                                                     │
@@ -316,8 +316,8 @@ prompt-only queries skip steps 3-8.
 │         --dangerously-bypass-approvals-and-sandbox                  │
 │                                                                     │
 │     Prompt sent via stdin.                                          │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ▼
+└─────────────────────────────┬───────────────────────────────────────┘
+                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  6. CLI tool reads the MCP config and starts relevant servers       │
 │                                                                     │
@@ -326,8 +326,8 @@ prompt-only queries skip steps 3-8.
 │     → Starts aws-billing MCP server from the config:                │
 │       atmos auth exec -i readonly -- \                              │
 │         uvx awslabs.billing-cost-management-mcp-server@latest       │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ▼
+└─────────────────────────────┬───────────────────────────────────────┘
+                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  7. atmos auth exec handles authentication                          │
 │                                                                     │
@@ -336,8 +336,8 @@ prompt-only queries skip steps 3-8.
 │     • Sets AWS_SHARED_CREDENTIALS_FILE, AWS_CONFIG_FILE,            │
 │       AWS_PROFILE on the subprocess environment                     │
 │     • Starts the MCP server with authenticated credentials          │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ▼
+└─────────────────────────────┬───────────────────────────────────────┘
+                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  8. MCP server runs with AWS credentials                            │
 │                                                                     │
@@ -345,8 +345,8 @@ prompt-only queries skip steps 3-8.
 │     • MCP server connects to AWS Cost Explorer API                  │
 │     • CLI tool calls the billing tool via JSON-RPC                  │
 │     • Tool returns raw cost data (service line items, amounts)      │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ▼
+└─────────────────────────────┬───────────────────────────────────────┘
+                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  9. CLI tool analyzes the raw data and returns result               │
 │                                                                     │
@@ -356,8 +356,8 @@ prompt-only queries skip steps 3-8.
 │     Codex CLI JSONL:                                                │
 │       {"type":"item.completed","item":{"type":"agent_message",      │
 │        "text":"EC2 spend was $88.10."}}                             │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ▼
+└─────────────────────────────┬───────────────────────────────────────┘
+                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  10. Atmos parses the response and renders it                       │
 │                                                                     │
@@ -376,37 +376,37 @@ to the relevant ones based on the query.
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
 │  1. User runs: atmos ai ask "What did we spend on EC2 last month?"  │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ▼
+└─────────────────────────────┬───────────────────────────────────────┘
+                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  2. Atmos reads atmos.yaml                                          │
 │     • AI provider: anthropic (API provider)                         │
 │     • MCP servers: 2 configured (aws-docs, aws-billing)             │
 │     • API key: from ANTHROPIC_API_KEY env var                       │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ▼
+└─────────────────────────────┬───────────────────────────────────────┘
+                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  3. Smart MCP routing                                               │
 │     • Atmos sends server descriptions + query to the AI provider    │
 │     • AI returns: ["aws-billing"] (relevant to "EC2 spend")         │
 │     • Only aws-billing is started (aws-docs skipped)                │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ▼
+└─────────────────────────────┬───────────────────────────────────────┘
+                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  4. Atmos starts the MCP server with auth credentials               │
 │     • atmos auth exec -i readonly -- uvx awslabs.billing@latest     │
 │     • MCP server connects, tools are registered in Atmos            │
 │     • Tools appear alongside native Atmos tools (describe, list)    │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ▼
+└─────────────────────────────┬───────────────────────────────────────┘
+                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  5. Atmos sends prompt + tool definitions to the API                │
 │     • API call to Anthropic with tool schemas                       │
 │     • AI decides to call the billing tool                           │
 │     • Atmos executes the tool and returns results to the AI         │
 │     • AI generates final response from the tool results             │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ▼
+└─────────────────────────────┬───────────────────────────────────────┘
+                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  6. Atmos displays the result with markdown rendering               │
 │                                                                     │
@@ -696,14 +696,14 @@ When the user runs `atmos ai chat`:
 2. Atmos generates a temporary `mcp.json` config pointing to the running MCP server.
 3. Atmos invokes `claude -p --mcp-config /tmp/atmos-mcp.json "query"`.
 4. Claude Code can use both its built-in tools AND the Atmos MCP tools AND the AWS MCP
-   tools — all through the user's Claude Max subscription.
+    tools — all through the user's Claude Max subscription.
 
 ```text
 User's Claude Max subscription
-         │
+          │
     claude -p --mcp-config atmos-mcp.json
-         │
-    ┌────┴────────────────────────────┐
+          │
+    ┌─────┴───────────────────────────┐
     │         Claude Code              │
     │  ┌──────────┐  ┌──────────────┐ │
     │  │ Built-in │  │ MCP Clients  │ │
@@ -730,12 +730,12 @@ User's Claude Max subscription
 2. Add payment method
 3. Generate API key
 4. Configure atmos.yaml:
-   ai:
-     provider: anthropic
-     api_key_env_var: ANTHROPIC_API_KEY
+    ai:
+      provider: anthropic
+      api_key_env_var: ANTHROPIC_API_KEY
 5. Set env var: export ANTHROPIC_API_KEY=sk-ant-...
 6. Run: atmos ai chat
-   → Pay per token ($3-15 per million tokens)
+    → Pay per token ($3-15 per million tokens)
 ```
 
 ### New Flow (Local Provider)
@@ -744,11 +744,11 @@ User's Claude Max subscription
 1. Install Claude Code: brew install --cask claude-code  (already done by most users)
 2. Authenticate: claude auth login  (already done by most users)
 3. Configure atmos.yaml:
-   ai:
-     provider: claude-code
+    ai:
+      provider: claude-code
 4. Run: atmos ai chat
-   → Uses existing Claude Max subscription
-   → No additional cost
+    → Uses existing Claude Max subscription
+    → No additional cost
 ```
 
 ### Even Simpler — Auto-Detection
@@ -859,16 +859,16 @@ servers. The exported config is exactly what Claude Code needs.
 1. When a CLI provider is selected and `mcp.servers` is configured in `atmos.yaml`:
 2. Atmos generates a temp `.mcp.json` via `WriteMCPConfigToTempFile()`.
 3. The exported `.mcp.json` wraps each server with `atmos auth exec -i <identity> --`
-   for automatic credential injection (same as IDE integration).
+    for automatic credential injection (same as IDE integration).
 4. Env var keys are uppercased (Viper lowercases them, but env vars must be UPPERCASE).
 5. Toolchain PATH is injected so `uvx`/`npx` are available to MCP server subprocesses.
 6. Atmos passes `--mcp-config <temp-file>` to Claude Code. For `atmos ai ask`, Claude runs over
-   the stdio control protocol (see [Interactive Approval and Progress](#interactive-approval-and-progress-claude-code)),
-   so permission requests reach the Atmos permission system instead of being auto-approved.
+    the stdio control protocol (see [Interactive Approval and Progress](#interactive-approval-and-progress-claude-code)),
+    so permission requests reach the Atmos permission system instead of being auto-approved.
 7. Earlier versions also passed `--dangerously-skip-permissions`, because `-p` mode is
-   non-interactive and cannot show approval prompts. That flag auto-approved every tool call,
-   including Claude's built-in Bash and Edit tools. For `ask`, Atmos no longer passes it. Users
-   who want unattended runs set `ai.tools.mode: allow` or `yolo`.
+    non-interactive and cannot show approval prompts. That flag auto-approved every tool call,
+    including Claude's built-in Bash and Edit tools. For `ask`, Atmos no longer passes it. Users
+    who want unattended runs set `ai.tools.mode: allow` or `yolo`.
 8. The temp file is cleaned up after the CLI tool exits.
 
 **Implemented for:**
@@ -891,21 +891,21 @@ YOLO mode, and workspace settings in untrusted directories. Enterprise settings 
 controlled at three levels:
 
 1. **System settings** (highest precedence):
-   - macOS: `/Library/Application Support/GeminiCli/settings.json`
-   - Linux: `/etc/gemini-cli/settings.json`
-   - Override via `GEMINI_CLI_SYSTEM_SETTINGS_PATH` env var
-   - Can set `security.disableYoloMode: true` and control `mcp.allowed` list
+    - macOS: `/Library/Application Support/GeminiCli/settings.json`
+    - Linux: `/etc/gemini-cli/settings.json`
+    - Override via `GEMINI_CLI_SYSTEM_SETTINGS_PATH` env var
+    - Can set `security.disableYoloMode: true` and control `mcp.allowed` list
 
 2. **Google Workspace admin policies:**
-   When authenticated with a managed Google Workspace account, the admin may enforce:
-   - MCP disabled: `"MCP is disabled by your administrator"`
-   - YOLO disabled: `"YOLO mode is disabled by secureModeEnabled setting"`
-   - These cannot be overridden locally — requires admin action
+    When authenticated with a managed Google Workspace account, the admin may enforce:
+    - MCP disabled: `"MCP is disabled by your administrator"`
+    - YOLO disabled: `"YOLO mode is disabled by secureModeEnabled setting"`
+    - These cannot be overridden locally — requires admin action
 
 3. **Folder trust:**
-   - Trust is stored in `~/.gemini/trustedFolders.json`
-   - Untrusted folders block: MCP servers, workspace settings, tool auto-accept
-   - Atmos writes to cwd (trusted by user) instead of temp dirs to avoid this
+    - Trust is stored in `~/.gemini/trustedFolders.json`
+    - Untrusted folders block: MCP servers, workspace settings, tool auto-accept
+    - Atmos writes to cwd (trusted by user) instead of temp dirs to avoid this
 
 **Gemini CLI MCP — Known Limitation with `oauth-personal` auth:**
 
@@ -1000,31 +1000,31 @@ PATH = "/toolchain/bin:/usr/local/bin:/usr/bin"
 **Key findings during Codex CLI MCP testing (2026-04-01):**
 
 1. **`--full-auto` does NOT auto-approve MCP tool calls** — it only auto-approves file
-   writes and shell commands. MCP tool calls require explicit approval or
-   `--dangerously-bypass-approvals-and-sandbox`. This is safe because MCP servers are
-   explicitly configured by the user in `atmos.yaml`.
+    writes and shell commands. MCP tool calls require explicit approval or
+    `--dangerously-bypass-approvals-and-sandbox`. This is safe because MCP servers are
+    explicitly configured by the user in `atmos.yaml`.
 
 2. **Codex CLI output format differs from API docs** — The JSONL events use
-   `item.type="agent_message"` with text directly on `item.text`, not the documented
-   `item.type="message"` with nested `item.content[].text` array. `ExtractResult()`
-   handles both formats.
+    `item.type="agent_message"` with text directly on `item.text`, not the documented
+    `item.type="message"` with nested `item.content[].text` array. `ExtractResult()`
+    handles both formats.
 
 3. **Project-level `.codex/config.toml` is not supported** — Codex CLI only reads from
-   `~/.codex/config.toml`. The initial temp-dir approach (writing `.codex/config.toml`
-   and setting `cmd.Dir`) did not work. `-c` flag overrides also don't register MCP
-   servers — they are visible in config but not loaded as tools at runtime.
+    `~/.codex/config.toml`. The initial temp-dir approach (writing `.codex/config.toml`
+    and setting `cmd.Dir`) did not work. `-c` flag overrides also don't register MCP
+    servers — they are visible in config but not loaded as tools at runtime.
 
 4. **`uvx` must be on PATH** — When `uvx` is only available in the Atmos toolchain,
-   the PATH env var must be injected into each MCP server's config via toolchain PATH
-   resolution.
+    the PATH env var must be injected into each MCP server's config via toolchain PATH
+    resolution.
 
 5. **Codex CLI MCP servers do NOT inherit the parent process environment** — Unlike
-   Claude Code (where `cmd.Env` is nil, causing Go to inherit the parent env), Codex
-   CLI's MCP server subprocesses only receive env vars explicitly configured in the
-   `[mcp_servers.<name>.env]` TOML section. `ATMOS_PROFILE` and other `ATMOS_*` vars
-   must be injected so `atmos auth exec` can discover the auth config. Without this,
-   auth fails with "identity not found" because `atmos` can't find the profile-based
-   auth configuration.
+    Claude Code (where `cmd.Env` is nil, causing Go to inherit the parent env), Codex
+    CLI's MCP server subprocesses only receive env vars explicitly configured in the
+    `[mcp_servers.<name>.env]` TOML section. `ATMOS_PROFILE` and other `ATMOS_*` vars
+    must be injected so `atmos auth exec` can discover the auth config. Without this,
+    auth fails with "identity not found" because `atmos` can't find the profile-based
+    auth configuration.
 
 **Also shipped:**
 - MCP server routing and registration is skipped for CLI providers (`isCLIProvider()`).
@@ -1050,7 +1050,7 @@ The exported `.mcp.json` already handles auth correctly:
     "aws-billing": {
       "command": "atmos",
       "args": ["auth", "exec", "-i", "readonly", "--",
-               "uvx", "awslabs.billing-cost-management-mcp-server@latest"],
+                "uvx", "awslabs.billing-cost-management-mcp-server@latest"],
       "env": { "AWS_REGION": "us-east-1" }
     }
   }
@@ -1082,7 +1082,7 @@ only available in the toolchain bin directory, the MCP server will fail to start
     "aws-billing": {
       "command": "atmos",
       "args": ["auth", "exec", "-i", "readonly", "--",
-               "uvx", "awslabs.billing-cost-management-mcp-server@latest"],
+                "uvx", "awslabs.billing-cost-management-mcp-server@latest"],
       "env": {
         "AWS_REGION": "us-east-1",
         "PATH": "/Users/user/.atmos/toolchain/bin:/usr/local/bin:/usr/bin"
@@ -1139,26 +1139,26 @@ same run.
 **Requirements:**
 
 1. Atmos runs Claude Code with `--input-format stream-json --output-format stream-json --verbose
-   --permission-prompt-tool stdio`. Atmos parses the event stream incrementally.
+    --permission-prompt-tool stdio`. Atmos parses the event stream incrementally.
 2. Each permission request from Claude goes through the Atmos permission system
-   (`ai.tools.mode`, `allowed`, `restricted`, `blocked`, and the persistent cache in
-   `.atmos/ai.settings.local.json`). When approval is needed, Atmos shows its own prompt with the
-   tool and its parameters: Always allow, Allow once, Deny once, Always deny.
+    (`ai.tools.mode`, `allowed`, `restricted`, `blocked`, and the persistent cache in
+    `.atmos/ai.settings.local.json`). When approval is needed, Atmos shows its own prompt with the
+    tool and its parameters: Always allow, Allow once, Deny once, Always deny.
 3. "Always allow" for `Bash` is scoped to the exact command, for example
-   `Bash(atmos list stacks)`. A different command prompts again.
+    `Bash(atmos list stacks)`. A different command prompts again.
 4. A denial is returned to the model so it can continue and explain. Ctrl-C at the prompt aborts
-   the run.
+    the run.
 5. Progress events drive a spinner on stderr: "Thinking…" while the model works, updated to the
-   tool in progress ("Running atmos list stacks…"). The spinner pauses while a prompt is on
-   screen. The answer is written to stdout, so piping stays clean. Non-interactive
-   environments get no animation.
+    tool in progress ("Running atmos list stacks…"). The spinner pauses while a prompt is on
+    screen. The answer is written to stdout, so piping stays clean. Non-interactive
+    environments get no animation.
 6. When approval is needed and no terminal is available, the command fails with an error and
-   hints: run in a terminal, set `ai.tools.mode: allow` or `yolo`, or add the tool to
-   `ai.providers.claude-code.allowed_tools`.
+    hints: run in a terminal, set `ai.tools.mode: allow` or `yolo`, or add the tool to
+    `ai.providers.claude-code.allowed_tools`.
 7. `ai.timeout_seconds` counts the AI's working time. Time spent waiting at an approval prompt
-   does not count.
+    does not count.
 8. An empty answer, for example when Claude reaches `max_turns`, is an error with a hint to
-   raise `ai.providers.claude-code.max_turns`.
+    raise `ai.providers.claude-code.max_turns`.
 
 **User-visible change:** Configurations with `mcp.servers` no longer get
 `--dangerously-skip-permissions` for `ask`. MCP and built-in tool calls are approved through the
@@ -1173,25 +1173,25 @@ Atmos permission system, and `ai.tools.mode: allow` or `yolo` restores unattende
 ### Limitations
 
 1. **No tool-use loop** — Claude Code's `-p` mode runs its own tool loop internally.
-   Atmos cannot inject custom tools mid-conversation (but can provide them via MCP).
+    Atmos cannot inject custom tools mid-conversation (but can provide them via MCP).
 2. **Streaming is parsed for Claude Code `ask` only** — Atmos parses the `stream-json` event
-   stream to drive approvals and the progress spinner. Output is still presented as a single
-   answer, not streamed token by token, and other CLI providers complete before output is
-   available.
+    stream to drive approvals and the progress spinner. Output is still presented as a single
+    answer, not streamed token by token, and other CLI providers complete before output is
+    available.
 3. **Binary dependency** — Users must have `claude` or `gemini` installed. Not all
-   environments (CI/CD containers) will have them.
+    environments (CI/CD containers) will have them.
 4. **Version coupling** — Claude Code's `-p` output format could change between versions.
-   Atmos needs to handle format evolution gracefully.
+    Atmos needs to handle format evolution gracefully.
 5. **Rate limits** — Subscription rate limits may be lower than API rate limits for
-   high-volume usage.
+    high-volume usage.
 6. **Gemini CLI MCP blocked for all personal accounts** — Google disables MCP on the
-   server-side proxy for `oauth-personal` auth. This affects ALL personal `@gmail.com`
-   accounts regardless of subscription tier (free, Gemini Advanced, Gemini 3 Pro) —
-   the restriction is based on account type, not payment level. MCP servers configured
-   in `.gemini/settings.json` are visible to Gemini but cannot be invoked as tools.
-   Switching to `gemini-api-key` auth enables MCP but makes the provider functionally
-   equivalent to the existing `gemini` API provider. The `gemini-cli` provider works
-   for prompt-only queries without MCP. See Phase 3 section for full details.
+    server-side proxy for `oauth-personal` auth. This affects ALL personal `@gmail.com`
+    accounts regardless of subscription tier (free, Gemini Advanced, Gemini 3 Pro) —
+    the restriction is based on account type, not payment level. MCP servers configured
+    in `.gemini/settings.json` are visible to Gemini but cannot be invoked as tools.
+    Switching to `gemini-api-key` auth enables MCP but makes the provider functionally
+    equivalent to the existing `gemini` API provider. The `gemini-cli` provider works
+    for prompt-only queries without MCP. See Phase 3 section for full details.
 
 ### Trade-offs
 
