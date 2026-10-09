@@ -26,18 +26,19 @@ func DeleteCommand(config *Config) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "delete [component]",
-		Short: fmt.Sprintf("Remove vendored %s source directory", config.TypeLabel),
+		Annotations: map[string]string{sourceComponentTypeAnnotation: config.ComponentType},
+		Use:         "delete [component]",
+		Short:       fmt.Sprintf("Remove vendored %s source directory", config.TypeLabel),
 		Long: fmt.Sprintf(`Delete the vendored source directory for a %s component.
 
 This command removes the component directory that was created by 'atmos %s source pull'.
 
-If component is not specified, prompts interactively for selection.`, config.TypeLabel, config.ComponentType),
+If component is not specified, prompts interactively for selection.`, config.TypeLabel, config.CLI()),
 		Example: fmt.Sprintf(`  # Delete vendored source
   atmos %s source delete vpc --stack dev --force
 
   # Interactive: prompts for component and stack
-  atmos %s source delete`, config.ComponentType, config.ComponentType),
+  atmos %s source delete`, config.CLI(), config.CLI()),
 		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return executeDelete(cmd, args, config, parser)
@@ -89,8 +90,13 @@ func executeDelete(cmd *cobra.Command, args []string, config *Config, parser *fl
 		return err
 	}
 
+	if sourceDryRun(cmd) {
+		ui.Info(fmt.Sprintf("Dry run: would delete source for %s in stack %s", component, deleteOpts.Stack))
+		return nil
+	}
+
 	// Initialize config and get component info with global flags.
-	atmosConfig, componentConfig, err := initDeleteContext(component, deleteOpts.Stack, &deleteOpts.GlobalFlags)
+	atmosConfig, componentConfig, err := initDeleteContext(config.ComponentType, component, deleteOpts.Stack, &deleteOpts.GlobalFlags)
 	if err != nil {
 		return err
 	}
@@ -133,10 +139,11 @@ func parseDeleteFlags(cmd *cobra.Command, parser *flags.StandardParser, componen
 }
 
 // initDeleteContext initializes config and retrieves component configuration.
-func initDeleteContext(component, stack string, globalFlags *global.Flags) (*schema.AtmosConfiguration, map[string]any, error) {
+func initDeleteContext(componentType, component, stack string, globalFlags *global.Flags) (*schema.AtmosConfiguration, map[string]any, error) {
 	// Build config info with global flag values.
 	configInfo := schema.ConfigAndStacksInfo{
 		ComponentFromArg: component,
+		ComponentType:    componentType,
 		Stack:            stack,
 	}
 
@@ -153,7 +160,7 @@ func initDeleteContext(component, stack string, globalFlags *global.Flags) (*sch
 		return nil, nil, errUtils.Build(errUtils.ErrFailedToInitConfig).WithCause(err).Err()
 	}
 
-	componentConfig, err := DescribeComponent(component, stack)
+	componentConfig, err := describeSourceComponent(componentType, component, stack)
 	if err != nil {
 		return nil, nil, errUtils.Build(errUtils.ErrDescribeComponent).
 			WithCause(err).

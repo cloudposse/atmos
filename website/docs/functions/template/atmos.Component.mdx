@@ -32,7 +32,8 @@ Atmos component in a stack, and use it in `Go` templates in Atmos component conf
   <dt>`section`</dt>
   <dd>Atmos section name. Any section returned by the CLI command
   <a href="/cli/commands/describe/component#output">atmos describe component</a> can be used.
-  A special `outputs` section is also supported to get the outputs (remote state) of Terraform/OpenTofu components.</dd>
+  A special `outputs` section is also supported to get the outputs (remote state) of Terraform/OpenTofu components,
+  or the deployed Outputs of native `aws/cloudformation` components.</dd>
 
   <dt>`outputs`</dt>
   <dd>Using the `outputs` section in the `atmos.Component` command is an convenient way to read the outputs (remote state)
@@ -204,6 +205,29 @@ Then we can use the [`toRawJson` or `toJson`](https://masterminds.github.io/spri
 
 The results of the `toRawJson` function are serialized into JSON, which can be safely embedded in the YAML stack configuration.
 The single quotes around the braces in the `delimiters` setting ensure that the JSON is not parsed as YAML, but then processed as a template function which removes the single quotes and replaces it with the JSON string.
+
+## Using `atmos.Component` with `aws/cloudformation` Components
+
+The `outputs` section is not limited to Terraform/OpenTofu targets: when `component` resolves to a native
+`aws/cloudformation` component, `atmos.Component(...).outputs` returns the deployed CloudFormation stack's
+[Outputs](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/outputs-section-structure.html) instead
+— fetched live via `DescribeStacks`. This is the same Terraform&harr;CloudFormation interop bridge as the
+[`!aws.cloudformation.output`](/functions/yaml/aws.cloudformation.output) YAML function; use whichever fits the
+call site (`atmos.Component` when you also need other sections of the target, like `vars` or `settings`;
+`!aws.cloudformation.output` for a single Output value).
+
+```yaml
+components:
+  terraform:
+    my_lambda_component:
+      vars:
+        # Read the `VpcId` Output of the native aws/cloudformation `vpc` component in the current stack
+        vpc_id: '{{ (atmos.Component "vpc" .stack).outputs.VpcId }}'
+```
+
+The target `aws/cloudformation` component must have a resolved `stack_name` and already be deployed —
+`atmos.Component` calls the live CloudFormation API for these targets, the same as for Terraform/OpenTofu targets
+without a `static` remote state backend.
 
 ## Examples
 
