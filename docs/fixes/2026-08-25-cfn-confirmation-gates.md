@@ -4,6 +4,12 @@
 
 ## Summary
 
+**Stack provenance:** This historical report was split into documentation-only
+[PR #3136](https://github.com/cloudposse/atmos/pull/3136). The behavior changes described below
+were pending at that layer and belong to companion implementation
+[PR #3137](https://github.com/cloudposse/atmos/pull/3137); merging the documentation layer alone
+does not implement them. The implementation details remain a record of the companion work.
+
 Two mutating `atmos aws cloudformation` verbs had no confirmation gate, unlike every sibling
 mutating verb (`apply`, `delete`, `changeset execute`, `stackset create/update/delete`):
 `backend create`/`update` silently overwrote an *existing* bucket's encryption, versioning,
@@ -38,6 +44,9 @@ uses. `--changeset-name` was already required; `--auto-approve` was already regi
   struct to stay under this repo's 5-argument function limit (`argument-limit` lint rule).
 
 ## Validation
+
+The results below record validation of the companion implementation, not the standalone #3136
+documentation head. They are preserved as historical evidence and were not rerun by this docs split.
 
 - New tests: `TestRequireConfirmation_ChangesetDeletePrompts/AutoApproveSkipsPrompt/DeclinedAborts`;
   `TestConfirmExistingBackendOverwrite_AutoApproveSkipsCheck/DoesNotExist_NoPrompt/

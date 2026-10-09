@@ -4,6 +4,12 @@
 
 ## Summary
 
+**Stack provenance:** This historical report was split into documentation-only
+[PR #3136](https://github.com/cloudposse/atmos/pull/3136). The behavior changes described below
+were pending at that layer and belong to companion implementation
+[PR #3137](https://github.com/cloudposse/atmos/pull/3137); merging the documentation layer alone
+does not implement them. The implementation details remain a record of the companion work.
+
 `atmos aws cfn --help`, `atmos helm --help`, and `atmos kubernetes --help` showed every global CLI
 flag (`--base-path`, `--chdir`, `--config`, `--cast`, `--ai`, `--mask`, `--no-color`, `--profile`,
 `--profiler-*`, `--redirect-stderr`, `--settings-list-merge-strategy`, `--skill`, `--edition`,
@@ -49,6 +55,9 @@ the real `RootCmd` tree) — the fix is scoped to removing its three buggy call 
 option itself.
 
 ## Validation
+
+The results below record validation of the companion implementation, not the standalone #3136
+documentation head. They are preserved as historical evidence and were not rerun by this docs split.
 
 - New tests (written first, confirmed failing against the old registration before the fix):
   `TestCloudFormationCmd_DoesNotDuplicateGlobalFlags`,
