@@ -42,6 +42,15 @@ class NormalizeSarifTests(unittest.TestCase):
             with self.subTest(report=report):
                 self.assertEqual(normalize(copy.deepcopy(report)), report)
 
+    def test_distinct_json_metadata_types_are_preserved(self):
+        stacks = [
+            {"frames": [], "properties": {"value": value}}
+            for value in (True, 1, False, 0, None, "1")
+        ]
+        report = {"runs": [{"results": [{"stacks": stacks + stacks}]}]}
+        result = normalize(report)["runs"][0]["results"][0]["stacks"]
+        self.assertEqual(json.dumps(result), json.dumps(stacks))
+
     def test_file_round_trip_preserves_metadata_and_numbers(self):
         report = {"version": "2.1.0", "properties": {"text": "é", "large": 2**64}}
         with tempfile.TemporaryDirectory() as directory:
