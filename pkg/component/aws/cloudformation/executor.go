@@ -203,7 +203,11 @@ func runOperation(octx *opContext, operation Operation, spec *stackSpec) (map[st
 		return summary, err
 	}
 	client := newClient(awsCfg, resolveEndpointURL(octx.Info))
+	return runRemoteOperation(octx, operation, client, spec, summary)
+}
 
+// runRemoteOperation dispatches an operation after confirmation and client setup.
+func runRemoteOperation(octx *opContext, operation Operation, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
 	switch operation {
 	case OperationValidate:
 		return runValidate(octx, client, spec, summary)
@@ -302,10 +306,8 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 	summary["changeset_id"] = result.ChangeSetID
 	summary["no_op"] = result.NoOp
 
-	if spec.StackPolicyBody != "" && (result.NoOp || result.ChangeSetType == cfntypes.ChangeSetTypeCreate) {
-		if err := setStackPolicy(octx.Ctx, client, spec); err != nil {
-			return summary, err
-		}
+	if err := applyPostDeployPolicy(octx, client, spec, result); err != nil {
+		return summary, err
 	}
 
 	if err := applyTerminationProtection(octx.Ctx, client, spec); err != nil {
@@ -321,6 +323,14 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 		return summary, err
 	}
 	return summary, nil
+}
+
+// applyPostDeployPolicy sets policies for new stacks and no-op deployments.
+func applyPostDeployPolicy(octx *opContext, client CloudFormationClient, spec *stackSpec, result *changeSetResult) error {
+	if spec.StackPolicyBody != "" && (result.NoOp || result.ChangeSetType == cfntypes.ChangeSetTypeCreate) {
+		return setStackPolicy(octx.Ctx, client, spec)
+	}
+	return nil
 }
 
 // runDelete deletes the stack and streams events until it's gone.

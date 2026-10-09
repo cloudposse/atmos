@@ -163,7 +163,9 @@ func operationFlagOptions(name string) []flags.Option {
 		flags.WithStringFlag("ssh-key-password", "", "", "Password for the SSH private key used to clone the target ref for affected detection."),
 		flags.WithBoolFlag("clone-target-ref", "", false, "Clone the target ref instead of checking it out in the current repository for affected detection."),
 		flags.WithStringSliceFlag(flagTags, "", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
+		flags.WithViperKey(flagTags, "aws.cloudformation.tags"),
 		flags.WithStringFlag(flagLabels, "", "", "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
+		flags.WithViperKey(flagLabels, "aws.cloudformation.labels"),
 	}
 
 	if name == opApply || name == opDeploy || name == opDelete {
