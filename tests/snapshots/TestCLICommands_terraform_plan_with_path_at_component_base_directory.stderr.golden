@@ -2,16 +2,10 @@
 
 # Error
 
-**Error:** failed to resolve component from path: path is not within Atmos component directories
+**Error:** failed to resolve component from path: must specify a component directory, not the base directory
 
-Path /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform is not within any configured component directories
+Cannot resolve component: path points to component base directory Path: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform Component base: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform
 
-Configured component base paths:
-
-  • Terraform: components/terraform
-  • Helmfile: components/helmfile
-  • Packer: components/packer
-
-💡 Change to a component directory and use . or provide a path within one of the component directories above
+💡 Navigate into a specific component directory Example: cd terraform/vpc && atmos terraform plan . --stack <stack>
 
 💡 Make sure the path is within your component directories
