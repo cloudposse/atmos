@@ -57,11 +57,11 @@ func (l *Loader) Load(componentType, command string, defaultTemplates fs.FS) (st
 	defer perf.Track(l.atmosConfig, "templates.Loader.Load")()
 
 	// 1. Check explicit override from config.
-	content, err := l.loadFromConfigOverride(componentType, command)
+	content, found, err := l.loadFromConfigOverride(componentType, command)
 	if err != nil {
 		return "", err
 	}
-	if content != "" {
+	if found {
 		return content, nil
 	}
 
@@ -81,30 +81,30 @@ func (l *Loader) Load(componentType, command string, defaultTemplates fs.FS) (st
 // configured ci.templates.container.<command> file that is missing is an error, so a typo in the
 // path cannot silently revert to the embedded default. The embedded default is used for the
 // container only when the key is unset.
-func (l *Loader) loadFromConfigOverride(componentType, command string) (string, error) {
+func (l *Loader) loadFromConfigOverride(componentType, command string) (string, bool, error) {
 	if l.atmosConfig == nil {
-		return "", nil
+		return "", false, nil
 	}
 
 	overrides := l.getComponentOverrides(componentType)
 	if overrides == nil {
-		return "", nil
+		return "", false, nil
 	}
 
 	filename, ok := overrides[command]
 	if !ok || filename == "" {
-		return "", nil
+		return "", false, nil
 	}
 
 	path := l.resolvePath(filename)
 	content, err := os.ReadFile(path)
 	if err != nil {
 		if componentType == containerComponentType {
-			return "", l.overrideNotFoundError(componentType, command, filename, path, err)
+			return "", false, l.overrideNotFoundError(componentType, command, filename, path, err)
 		}
-		return "", nil
+		return "", false, nil
 	}
-	return string(content), nil
+	return string(content), true, nil
 }
 
 // overrideNotFoundError describes a configured template override that cannot be read.

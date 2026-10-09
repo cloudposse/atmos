@@ -214,3 +214,15 @@ func TestRenderReport_NotFoundWithoutBasePathSaysItIsUnset(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrCITemplateNotFound)
 	assert.Contains(t, formatted(err), compact("ci.templates.base_path: (unset)"))
 }
+
+func TestLoaderLoad_EmptyContainerOverrideDoesNotFallBack(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "empty.md"), nil, 0o600))
+	cfg := reportConfig(dir)
+	cfg.CI.Templates.Container = map[string]string{"image": "empty.md"}
+
+	got, err := NewLoader(cfg).Load("container", "image", ContainerDefaults())
+	require.NoError(t, err)
+	assert.Empty(t, got, "an explicitly empty override takes precedence over the embedded template")
+}

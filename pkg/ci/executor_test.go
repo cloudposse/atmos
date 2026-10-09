@@ -1162,3 +1162,25 @@ func TestExecute_HandlerInvalidURLErrorPropagates(t *testing.T) {
 	})
 	require.ErrorIs(t, err, errUtils.ErrInvalidURL)
 }
+
+func TestExecute_InvalidProviderConfigSkipsUnhandledEvents(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+	Register(&invalidURLProvider{mockProvider: mockProvider{name: "github-actions", detected: true}})
+
+	ClearPlugins()
+	require.NoError(t, RegisterPlugin(&stubPlugin{
+		componentType: "terraform",
+		bindings:      []plugin.HookBinding{{Event: "before.terraform.plan"}},
+	}))
+	for _, event := range []string{"before.terraform.apply", "before.terraform.plan", "before.unknown.plan"} {
+		t.Run(event, func(t *testing.T) {
+			err := Execute(ExecuteOptions{
+				Event:       event,
+				AtmosConfig: &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+				Info:        &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc"},
+			})
+			require.NoError(t, err, "an event without a handler cannot use the invalid API URL")
+		})
+	}
+}

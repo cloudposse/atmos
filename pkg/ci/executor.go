@@ -73,13 +73,6 @@ func Execute(opts ExecuteOptions) error {
 	if platform == nil {
 		return nil
 	}
-	// A misconfigured provider environment (for example an unparsable API URL) is a
-	// hard error: silently warning would let a run believe it reported when it did not.
-	if v, ok := platform.(provider.ConfigValidator); ok {
-		if err := v.ValidateConfig(); err != nil {
-			return err
-		}
-	}
 
 	// Get plugin and binding for this event.
 	pl, binding := getPluginAndBinding(opts)
@@ -91,6 +84,14 @@ func Execute(opts ExecuteOptions) error {
 	if binding.Handler == nil {
 		log.Debug("Binding has no handler", "event", opts.Event)
 		return nil
+	}
+
+	// A misconfigured provider environment (for example an unparsable API URL) is a
+	// hard error: silently warning would let a run believe it reported when it did not.
+	if v, ok := platform.(provider.ConfigValidator); ok {
+		if err := v.ValidateConfig(); err != nil {
+			return err
+		}
 	}
 
 	hookCtx := buildHookContext(opts, platform)

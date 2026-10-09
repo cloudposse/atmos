@@ -80,3 +80,34 @@ func isolateGlobalGitConfig(t *testing.T) {
 
 	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(t.TempDir(), "gitconfig"))
 }
+
+func TestEnsureGitSafeDirectoryHonorsResets(t *testing.T) {
+	for _, resetAfterWorkspace := range []bool{true, false} {
+		name := "workspace after reset"
+		if resetAfterWorkspace {
+			name = "reset after workspace"
+		}
+		t.Run(name, func(t *testing.T) {
+			isolateGlobalGitConfig(t)
+			workspace := filepath.Join(t.TempDir(), "workspace")
+			t.Setenv("GITHUB_ACTIONS", "true")
+			t.Setenv("GITHUB_WORKSPACE", workspace)
+			values := []string{"", workspace}
+			if resetAfterWorkspace {
+				values = []string{workspace, ""}
+			}
+			for _, value := range values {
+				require.NoError(t, exec.Command("git", "config", "--global", "--add", "safe.directory", value).Run())
+			}
+
+			require.NoError(t, EnsureGitSafeDirectory())
+			require.NoError(t, EnsureGitSafeDirectory())
+			if resetAfterWorkspace {
+				values = append(values, workspace)
+			}
+			out, err := exec.Command("git", "config", "--global", "--get-all", "safe.directory").Output()
+			require.NoError(t, err)
+			assert.Equal(t, values, strings.Split(strings.TrimSuffix(string(out), "\n"), "\n"))
+		})
+	}
+}
