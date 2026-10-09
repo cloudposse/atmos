@@ -106,7 +106,7 @@ func TestDefaultProvisioner_CreateBackend_Success(t *testing.T) {
 	t.Cleanup(backend.ResetRegistryForTesting)
 
 	called := false
-	backend.RegisterBackendCreate("s3", func(_ context.Context, _ *schema.AtmosConfiguration, backendConfig map[string]any, _ *schema.AuthContext) (*backend.ProvisionResult, error) {
+	backend.RegisterBackendCreate("s3", func(_ context.Context, _ *schema.AtmosConfiguration, backendConfig map[string]any, _ *schema.AuthContext, _ ...backend.CreateOption) (*backend.ProvisionResult, error) {
 		called = true
 		assert.Equal(t, "my-bucket", backendConfig["bucket"])
 		assert.Equal(t, "us-east-1", backendConfig["region"])
