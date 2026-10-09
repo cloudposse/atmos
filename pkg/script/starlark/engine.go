@@ -121,6 +121,12 @@ func (e *Engine) Execute(ctx context.Context, spec script.Spec) (script.Result, 
 		return script.Result{}, err
 	}
 	s := newSession(ctx, e, &spec)
+	return s.execute(ctx)
+}
+
+// execute validates and runs a prepared invocation, then finishes deferred calls and output.
+func (s *session) execute(ctx context.Context) (script.Result, error) {
+	spec := &s.spec
 	if spec.DryRun {
 		return script.Result{}, s.check(ctx)
 	}
@@ -140,7 +146,7 @@ func (e *Engine) Execute(ctx context.Context, spec script.Spec) (script.Result, 
 	if err := s.componentContext(thread); err != nil {
 		return script.Result{}, scriptError(ctx, err, s.spec.ProjectRoot)
 	}
-	globals, err := starlark.ExecFileOptions(fileOptions, thread, programName(&spec), spec.Source, s.globals)
+	globals, err := starlark.ExecFileOptions(fileOptions, thread, programName(spec), spec.Source, s.globals)
 	if err != nil && interrupt.interrupted() {
 		return script.Result{}, s.finishInterrupted(ctx, thread)
 	}
