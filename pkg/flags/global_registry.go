@@ -47,6 +47,7 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		// Logging configuration.
 		LogsLevel: v.GetString("logs-level"),
 		LogsFile:  v.GetString("logs-file"),
+		LogsColor: v.GetBool("logs-color"),
 		NoColor:   v.GetBool("no-color"),
 
 		// Terminal and I/O configuration.
@@ -326,6 +327,13 @@ func registerLoggingFlags(registry *FlagRegistry) {
 		Default:     "/dev/stderr",
 		Description: "File to write logs to",
 		EnvVars:     []string{"ATMOS_LOGS_FILE"},
+	})
+
+	registry.Register(&BoolFlag{
+		Name:        "logs-color",
+		Default:     true,
+		Description: "Enable log color when available",
+		EnvVars:     []string{"ATMOS_LOGS_COLOR"},
 	})
 
 	registry.Register(&BoolFlag{

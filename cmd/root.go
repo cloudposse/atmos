@@ -110,6 +110,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/terminal"
+	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/heatmap"
@@ -442,6 +443,10 @@ var RootCmd = &cobra.Command{
 		syncGlobalFlagsToViper(cmd)
 
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
+		if cmd.Flags().Changed("logs-color") {
+			value, _ := cmd.Flags().GetBool("logs-color")
+			configAndStacksInfo.LogsColor = strconv.FormatBool(value)
+		}
 		// Honor CLI overrides for resolving atmos.yaml and its imports.
 		if bp, _ := cmd.Flags().GetString("base-path"); bp != "" {
 			configAndStacksInfo.AtmosBasePath = bp
@@ -646,7 +651,7 @@ var RootCmd = &cobra.Command{
 		// Configure lipgloss color profile based on terminal capabilities.
 		// Forced color is intentionally honored even when stdout is non-TTY,
 		// which is how deterministic asciicast generation runs in CI.
-		if tmpConfig.Settings.Terminal.ForceColor || viper.GetBool("force-color") {
+		if !globalColorDisabled(&tmpConfig) && (tmpConfig.Settings.Terminal.ForceColor || viper.GetBool("force-color")) {
 			lipgloss.SetColorProfile(termenv.TrueColor)
 			log.SetColorProfile(termenv.TrueColor)
 			theme.InvalidateStyleCache()
@@ -754,7 +759,12 @@ func maybePromoteLogLevelForDebugMode(atmosConfig *schema.AtmosConfiguration, co
 //
 //nolint:revive,cyclop // Function complexity is acceptable for logger configuration.
 func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
-	forceColor := atmosConfig.Settings.Terminal.ForceColor || viper.GetBool("force-color")
+	disabled := globalColorDisabled(atmosConfig)
+	log.Default().SetColorEnabled(atmosConfig.Logs.Color == nil || *atmosConfig.Logs.Color, disabled)
+	forceColor := !disabled && (atmosConfig.Settings.Terminal.ForceColor || viper.GetBool("force-color"))
+	if disabled {
+		ui.SetColorProfile(termenv.Ascii)
+	}
 	if forceColor {
 		lipgloss.SetColorProfile(termenv.TrueColor)
 		log.SetColorProfile(termenv.TrueColor)
@@ -779,7 +789,7 @@ func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
 
 	// Get theme-aware log styles.
 	var styles *log.Styles
-	if forceColor || atmosConfig.Settings.Terminal.IsColorEnabled(term.IsTTYSupportForStderr()) {
+	if !disabled && (atmosConfig.Logs.Color == nil || *atmosConfig.Logs.Color) && (forceColor || atmosConfig.Settings.Terminal.IsColorEnabled(term.IsTTYSupportForStderr())) {
 		// Get color scheme for the configured theme.
 		scheme, err := theme.GetColorSchemeForTheme(atmosConfig.Settings.Terminal.Theme)
 		if err == nil && scheme != nil {
@@ -852,21 +862,21 @@ func configureEarlyColorProfile(cmd *cobra.Command) {
 	//nolint:forbidigo // Standard terminal env var, must use os.Getenv before config loads.
 	if os.Getenv("NO_COLOR") != "" {
 		// NO_COLOR is set - disable all colors
-		lipgloss.SetColorProfile(termenv.Ascii)
+		ui.SetColorProfile(termenv.Ascii)
 		theme.InvalidateStyleCache() // Regenerate theme styles without colors
 		return
 	}
 
 	// Check --no-color flag (already parsed by cobra at this point)
 	if noColor, _ := cmd.Flags().GetBool("no-color"); noColor {
-		lipgloss.SetColorProfile(termenv.Ascii)
+		ui.SetColorProfile(termenv.Ascii)
 		theme.InvalidateStyleCache()
 		return
 	}
 
 	// Check --force-color flag
 	if forceColor, _ := cmd.Flags().GetBool("force-color"); forceColor {
-		lipgloss.SetColorProfile(termenv.TrueColor)
+		ui.SetColorProfile(termenv.TrueColor)
 		theme.InvalidateStyleCache()
 		return
 	}
@@ -881,6 +891,10 @@ func setupColorProfile(atmosConfig *schema.AtmosConfiguration) {
 
 	// Force TrueColor profile when ATMOS_FORCE_COLOR is enabled.
 	// This bypasses terminal detection and always outputs ANSI color codes.
+	if globalColorDisabled(atmosConfig) {
+		ui.SetColorProfile(termenv.Ascii)
+		return
+	}
 	if atmosConfig.Settings.Terminal.ForceColor {
 		lipgloss.SetColorProfile(termenv.TrueColor)
 		log.SetColorProfile(termenv.TrueColor)
@@ -899,6 +913,17 @@ func setupColorProfileFromEnv() {
 // This is a testable version of setupColorProfileFromEnv that accepts args as a parameter.
 func setupColorProfileFromEnvWithArgs(args []string) {
 	defer perf.Track(nil, "cmd.setupColorProfileFromEnvWithArgs")()
+
+	colorArgs := args
+	if len(colorArgs) > 0 {
+		colorArgs = colorArgs[1:]
+	}
+	options := terminalenv.ColorOptionsFromArgs(colorArgs)
+	log.Default().SetColorEnabled(options.LogsColor != "false", options.NoColor)
+	if options.NoColor {
+		ui.SetColorProfile(termenv.Ascii)
+		return
+	}
 
 	// Check environment variables first using the bound viper key:
 	// init() maps both ATMOS_FORCE_COLOR and CLICOLOR_FORCE to "force-color".

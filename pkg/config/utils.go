@@ -897,6 +897,9 @@ func setSchemaDirs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *
 }
 
 func setLoggingConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
+	if err := setLoggingColor(atmosConfig, configAndStacksInfo.LogsColor); err != nil {
+		return err
+	}
 	if len(configAndStacksInfo.LogsLevel) > 0 {
 		normalizedLevel, err := log.ParseLogLevel(configAndStacksInfo.LogsLevel)
 		if err != nil {

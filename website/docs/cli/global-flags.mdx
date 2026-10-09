@@ -288,9 +288,19 @@ These flags are available for every Atmos command:
         - Can also use `ATMOS_LOGS_FILE` environment variable
     </dd>
 
+    <dt>`--logs-color`</dt>
+    <dd>
+        Control Atmos log color independently of terminal UI output.
+        - Boolean: `true` (default) enables color when available; `false` disables log color
+        - Preserves terminal and CI color detection, including for log files
+        - Use `--force-color` to force enabled log color, or `--logs-color=false` for plain logs
+        - Can also use `ATMOS_LOGS_COLOR` or `logs.color` in `atmos.yaml`
+        - `--no-color` and nonempty `NO_COLOR` always override this setting
+    </dd>
+
     <dt>`--no-color`</dt>
     <dd>
-        Disable colored terminal output.
+        Disable colored terminal output and ANSI escapes in Atmos logs, including startup logs.
         - Useful for CI/CD environments or when piping output
         - Can also use `ATMOS_NO_COLOR` or `NO_COLOR` environment variables
         - The `NO_COLOR` env var follows the standard from https://no-color.org/

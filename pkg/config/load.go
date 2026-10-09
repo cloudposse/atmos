@@ -926,6 +926,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 	// would shadow these values and break edition rollback (test-enforced).
 	v.SetDefault("logs.file", "/dev/stderr")
 	v.SetDefault("logs.level", "Warning")
+	v.SetDefault("logs.color", true)
 	v.SetDefault("diagnostics.enabled", false)
 	v.SetDefault("diagnostics.file", "")
 	v.SetDefault("diagnostics.include_output", false)

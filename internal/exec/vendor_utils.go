@@ -29,7 +29,8 @@ import (
 
 // Dedicated logger for stderr to keep stdout clean of detailed messaging, e.g. for files vendoring.
 var StderrLogger = func() *log.AtmosLogger {
-	l := log.New()
+	// Inherit the global color policy while retaining a dedicated stderr destination.
+	l := log.Default().With()
 	l.SetOutput(os.Stderr)
 	return l
 }()

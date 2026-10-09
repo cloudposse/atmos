@@ -1968,6 +1968,7 @@ func isRootBoolFlag(arg string) bool {
 		"--interactive",
 		"--mask",
 		"--no-color",
+		"--logs-color",
 		"--profiler-enabled",
 		"--verbose",
 		"-v":

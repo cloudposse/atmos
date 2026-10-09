@@ -90,6 +90,9 @@ func (b *GlobalOptionsBuilder) registerLoggingFlags(defaults *global.Flags) {
 	b.options = append(b.options, WithStringFlag("logs-file", "", defaults.LogsFile, "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'"))
 	b.options = append(b.options, WithEnvVars("logs-file", "ATMOS_LOGS_FILE"))
 
+	b.options = append(b.options, WithBoolFlag("logs-color", "", defaults.LogsColor, "Enable log color when available; --no-color and NO_COLOR always override"))
+	b.options = append(b.options, WithEnvVars("logs-color", "ATMOS_LOGS_COLOR"))
+
 	b.options = append(b.options, WithBoolFlag("no-color", "", defaults.NoColor, "Disable color output"))
 	b.options = append(b.options, WithEnvVars("no-color", "ATMOS_NO_COLOR", "NO_COLOR", "CLICOLOR"))
 }

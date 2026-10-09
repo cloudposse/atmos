@@ -19,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
 	mdstyle "github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -53,7 +54,7 @@ func HighlightCode(code string, language string, syntaxTheme string) (string, er
 // PrintStyledText prints a styled text to the terminal.
 func PrintStyledText(text string) error {
 	// Check NO_COLOR first (highest priority).
-	if os.Getenv("NO_COLOR") != "" { //nolint:forbidigo // Standard terminal env var
+	if viper.GetBool("no-color") || terminalenv.ColorOptionsFromArgs(os.Args[1:]).NoColor {
 		return nil
 	}
 
@@ -149,7 +150,7 @@ func PrintStyledTextToSpecifiedOutput(out io.Writer, text string) error {
 	noColor := os.Getenv("NO_COLOR")                  //nolint:forbidigo // Standard terminal env var
 
 	// If explicitly disabled, return early without printing
-	if viper.GetBool("no-color") || isFalsy(atmosForceColor) || isFalsy(cliColorForce) || isFalsy(forceColorEnv) || noColor != "" {
+	if viper.GetBool("no-color") || terminalenv.ColorOptionsFromArgs(os.Args[1:]).NoColor || isFalsy(atmosForceColor) || isFalsy(cliColorForce) || isFalsy(forceColorEnv) || noColor != "" {
 		return nil
 	}
 

@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -105,17 +106,10 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	if v, ok := flagKeyValue["verbose"]; ok && v == "true" {
 		atmosConfig.Logs.Level = "Debug"
 	}
-	if val, ok := flagKeyValue["no-color"]; ok {
-		valLower := strings.ToLower(val)
-		switch valLower {
-		case "true":
-			atmosConfig.Settings.Terminal.NoColor = true
-			atmosConfig.Settings.Terminal.Color = false
-		case "false":
-			atmosConfig.Settings.Terminal.NoColor = false
-			atmosConfig.Settings.Terminal.Color = true
-		}
-		// If value is neither "true" nor "false", leave defaults unchanged
+	// Resolve boolean color flags without consuming the following command name.
+	if options := terminalenv.ColorOptionsFromArgs(os.Args[1:]); options.NoColorSet {
+		atmosConfig.Settings.Terminal.NoColor = options.NoColor
+		atmosConfig.Settings.Terminal.Color = !options.NoColor
 	}
 
 	// Handle --pager global flag

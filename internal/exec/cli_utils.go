@@ -69,6 +69,7 @@ var commonFlags = []string{
 	cfg.RedirectStdErrFlag,
 	cfg.LogsLevelFlag,
 	cfg.LogsFileFlag,
+	cfg.LogsColorFlag,
 	cfg.QueryFlag,
 	cfg.SettingsListMergeStrategyFlag,
 	cfg.ProcessTemplatesFlag,
@@ -188,6 +189,7 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.RedirectStdErr = argsAndFlagsInfo.RedirectStdErr
 	configAndStacksInfo.LogsLevel = argsAndFlagsInfo.LogsLevel
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
+	configAndStacksInfo.LogsColor = argsAndFlagsInfo.LogsColor
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 	// Fallback: Cobra strips flags from the args passed to RunE, so when this
 	// flag is provided on the command line after the subcommand, the legacy
@@ -697,6 +699,13 @@ func processArgsAndFlags(
 				def.setFunc(&info, val)
 				break
 			}
+		}
+
+		// --logs-color is boolean and must never consume the next positional argument.
+		if arg == cfg.LogsColorFlag {
+			info.LogsColor = "true"
+		} else if value, found := strings.CutPrefix(arg, cfg.LogsColorFlag+"="); found {
+			info.LogsColor = value
 		}
 
 		// --identity has special optional/empty-value semantics.

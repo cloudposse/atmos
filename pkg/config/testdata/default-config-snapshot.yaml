@@ -24,6 +24,7 @@ init.git: true
 init.ref: ""
 init.repository: github.com/cloudposse/atmos
 list.error_mode: warn
+logs.color: true
 logs.file: /dev/stderr
 logs.level: Warning
 settings.experimental: warn-daily

@@ -25,7 +25,11 @@ func init() {
 		charmLogger.SetColorProfile(termenv.Ascii)
 	}
 
-	defaultLogger.Store(NewAtmosLogger(charmLogger))
+	logger := NewAtmosLogger(charmLogger)
+	options := env.ColorOptionsFromArgs(os.Args[1:])
+	logger.SetColorEnabled(options.LogsColor != "false", options.NoColor)
+	logger.SetOutput(os.Stderr)
+	defaultLogger.Store(logger)
 }
 
 // Default returns the global default AtmosLogger instance.

@@ -1651,6 +1651,7 @@ type Workflows struct {
 }
 
 type Logs struct {
+	Color *bool  `yaml:"color,omitempty" json:"color,omitempty" mapstructure:"color"`
 	File  string `yaml:"file" json:"file" mapstructure:"file"`
 	Level string `yaml:"level" json:"level" mapstructure:"level"`
 }
@@ -1767,6 +1768,7 @@ type ArgsAndFlagsInfo struct {
 	RedirectStdErr            string
 	LogsLevel                 string
 	LogsFile                  string
+	LogsColor                 string
 	SettingsListMergeStrategy string
 	Query                     string
 	Affected                  bool
@@ -2052,6 +2054,7 @@ type ConfigAndStacksInfo struct {
 	RedirectStdErr            string
 	LogsLevel                 string
 	LogsFile                  string
+	LogsColor                 string
 	SettingsListMergeStrategy string
 	Query                     string
 	AtmosConfigFilesFromArg   []string

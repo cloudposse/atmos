@@ -6951,6 +6951,19 @@
     },
     "Logs": {
       "properties": {
+        "color": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
         "file": {
           "anyOf": [
             {

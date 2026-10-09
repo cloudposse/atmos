@@ -37,6 +37,7 @@ type Flags struct {
 	// Logging configuration.
 	LogsLevel string
 	LogsFile  string
+	LogsColor bool
 	NoColor   bool
 
 	// Terminal and I/O configuration.
@@ -101,6 +102,7 @@ func NewFlags() Flags {
 	return Flags{
 		LogsLevel:    "Warning",
 		LogsFile:     "/dev/stderr",
+		LogsColor:    true,
 		NoColor:      false,
 		ForceColor:   false,
 		ForceTTY:     false,
