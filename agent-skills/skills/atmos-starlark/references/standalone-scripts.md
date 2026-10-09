@@ -3,7 +3,7 @@
 A standalone script is a `.star` file (or an executable with an Atmos shebang) that Atmos
 runs directly as its own command-line tool. This is "interpreter mode". See also
 [Custom CLI apps](https://atmos.tools/automation/standalone-cli-apps) and the
-[function reference](https://atmos.tools/functions/automation/cli.command).
+[language overview](https://atmos.tools/automation/language).
 
 ## Running a script
 
@@ -24,7 +24,7 @@ Rules:
   whose last element is `atmos` (`#!/usr/local/bin/atmos`). Other forms are not detected.
   `atmos` must be on `PATH` for the `env` forms.
 - Symlinks are resolved before running. `ctx.script.path` is the real file, and `load()`
-  resolves relative to the real file's directory, so a symlink on `PATH` can load its
+  resolves relative to the target file's directory, so the target file can load its
   sibling modules.
 - Atmos global flags must not precede the script path: `atmos --chdir=x deploy.star` fails
   as an unknown command. Everything after the script path belongs to the script. Change

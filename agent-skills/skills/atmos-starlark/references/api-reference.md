@@ -1,8 +1,8 @@
 # Atmos Automation Language API Reference
 
-Everything below is predeclared; there is nothing to import. The published
-[function reference](https://atmos.tools/functions/automation) documents each function in
-more depth. If a name is not listed here, it does not exist.
+Everything below is predeclared; there is nothing to import. See the
+[language overview](https://atmos.tools/automation/language) and
+[script step](https://atmos.tools/steps/type/script) for usage. If a name is not listed here, it does not exist.
 
 ## Context and inputs
 
