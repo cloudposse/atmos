@@ -407,6 +407,31 @@ func TestFormatSingleValue_Table(t *testing.T) {
 	assert.Contains(t, result, "https://example.com")
 }
 
+func TestFormatSingleValueWithOptions_TableHighlighting(t *testing.T) {
+	value := map[string]any{"enabled": true, "port": float64(8080)}
+	config := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{ForceColor: true},
+		},
+	}
+	opts := FormatOptions{Uppercase: true, AtmosConfig: config}
+	want, err := FormatOutputsWithOptions(map[string]any{"config": value}, FormatTable, opts)
+	require.NoError(t, err)
+	plain, err := FormatOutputsWithOptions(map[string]any{"config": value}, FormatTable, FormatOptions{Uppercase: true})
+	require.NoError(t, err)
+	require.NotEqual(t, plain, want, "forced syntax highlighting must change the rendered values")
+
+	got, err := FormatSingleValueWithOptions("config", value, FormatTable, opts)
+	require.NoError(t, err)
+	assert.Equal(t, want, got, "single and bulk table outputs must honor the same options")
+	assert.Contains(t, got, "CONFIG")
+
+	config.Settings.Terminal.NoColor = true
+	got, err = FormatSingleValueWithOptions("config", value, FormatTable, opts)
+	require.NoError(t, err)
+	assert.Equal(t, plain, got, "NoColor must override forced syntax highlighting")
+}
+
 // TestFormatSingleValue_ComplexTable proves FormatTable also accepts complex
 // (map/list) single values, same as JSON/YAML/HCL.
 func TestFormatSingleValue_ComplexTable(t *testing.T) {
