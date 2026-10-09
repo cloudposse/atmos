@@ -1620,9 +1620,6 @@ func TestOperationHandlers_Logs_ThreadsChartFlag(t *testing.T) {
 			{EventId: awsString("e1"), LogicalResourceId: awsString("MyBucket"), ResourceStatus: cfntypes.ResourceStatusCreateComplete},
 		},
 	}, nil)
-	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
-		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
-	}, nil)
 
 	spec := &stackSpec{StackName: "vpc"}
 	octx := &opContext{Ctx: context.Background(), Flags: map[string]any{"chart": true}}
