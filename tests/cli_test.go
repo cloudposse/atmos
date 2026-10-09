@@ -966,6 +966,20 @@ func TestMain(m *testing.M) {
 	githubMock.RegisterRawFile("cloudposse", "atmos", "main",
 		"tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml", string(includeFixtureContent))
 
+	// Keep toolchain info snapshots independent of upstream releases and API quotas.
+	for _, tool := range []struct{ owner, repo, tag, prefix string }{
+		{"replicatedhq", "replicated", "v0.124.1", "v"},
+		{"junegunn", "fzf", "v0.67.0", "v"},
+		{"jqlang", "jq", "jq-1.7.1", "jq-"},
+	} {
+		githubMock.RegisterAquaTool(&httpmock.AquaTool{
+			Owner: tool.owner, Repo: tool.repo, VersionPrefix: tool.prefix,
+		})
+		githubMock.RegisterRelease(tool.owner, tool.repo, httpmock.ReleaseSpec{
+			TagName: tool.tag, PublishedAt: "2025-12-17T00:00:00Z",
+		})
+	}
+
 	// Auto-start the Floci cloud emulators for the opt-in Floci E2E tests. This is a
 	// no-op unless ATMOS_TEST_FLOCI=true and the FLOCI_* endpoint env vars are unset,
 	// so CI (which pre-sets them to its service containers) is unaffected. On machines
