@@ -44,6 +44,6 @@ jobs:
           permission-workflows: write
 
       - name: Update major version tag
-        uses: cloudposse/github-action-major-release-tagger@853c309982b8cd78c46a4cdc17cca6720d52541a # v2
+        uses: cloudposse/github-action-major-release-tagger@853c309982b8cd78c46a4cdc17cca6720d52541a # 2.0.0
         with:
           token: ${{ steps.github-app.outputs.token }}

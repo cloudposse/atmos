@@ -1,0 +1,71 @@
+name: Apt Install With Mirror Failover
+description: >
+  Installs Ubuntu packages with apt on a GitHub-hosted runner, with mirror
+  failover that works under harden-runner's block egress policy. The runner
+  image points apt at a mirror list (/etc/apt/apt-mirrors.txt, referenced from
+  ubuntu.sources as mirror+file:) whose only plain-HTTP entry is the Azure
+  mirror; its fallbacks are HTTPS archive.ubuntu.com and security.ubuntu.com,
+  which jobs that allowlist only port 80 block outright. One bad Azure
+  response (e.g. a 502 Proxy Error) then fails the whole install. This action
+  rewrites that mirror list to two HTTP mirrors (archive.ubuntu.com first,
+  azure.archive.ubuntu.com as failover), disables apt's SRV lookups, drops the
+  runner's unrelated Chrome apt source, and retries update+install with a
+  cooldown. Callers under block egress must allowlist archive.ubuntu.com:80
+  and azure.archive.ubuntu.com:80. See
+  docs/fixes/2026-10-08-ci-apt-mirror-failover.md.
+
+inputs:
+  packages:
+    description: 'Space-separated list of apt packages to install'
+    required: true
+  backoff-seconds:
+    description: 'Seconds to wait before each retry'
+    required: false
+    default: '30'
+
+runs:
+  using: composite
+  steps:
+    - name: apt-get install (with mirror failover and retry)
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+        BACKOFF_SECONDS: ${{ inputs.backoff-seconds }}
+      run: |
+        set -euo pipefail
+
+        # The runner image's ubuntu.sources reads its URIs from this mirror
+        # list (see actions/runner-images configure-apt-sources.sh), so this is
+        # the file to rewrite -- editing ubuntu.sources itself has no effect.
+        # Both mirrors carry every pocket, including -security. Only rewrite
+        # when the list exists, so other runner images keep their own setup.
+        if [ -f /etc/apt/apt-mirrors.txt ]; then
+          printf 'http://archive.ubuntu.com/ubuntu/\tpriority:1\nhttp://azure.archive.ubuntu.com/ubuntu/\tpriority:2\n' \
+            | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+        fi
+
+        # apt otherwise resolves _http._tcp.<mirror> SRV records before every
+        # fetch, which harden-runner reports as outbound attempts to hosts that
+        # are not (and cannot usefully be) on the allowlist. It goes in
+        # apt.conf.d rather than on the command line because apt's post-update
+        # hooks (ESM, motd) spawn their own apt runs that would not inherit -o.
+        echo 'Acquire::EnableSrvRecords "false";' | sudo tee /etc/apt/apt.conf.d/99-atmos-no-srv >/dev/null
+
+        # Chrome is preinstalled on the runner but irrelevant here, and its
+        # mutable third-party index intermittently returns a hash mismatch.
+        sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+
+        apt_opts=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+        read -r -a packages <<<"$PACKAGES"
+
+        attempt=1
+        max_attempts=3
+        until sudo apt-get "${apt_opts[@]}" update && sudo apt-get "${apt_opts[@]}" install -y --no-install-recommends "${packages[@]}"; do
+          if [ "$attempt" -ge "$max_attempts" ]; then
+            echo "apt-get install failed after $max_attempts attempts" >&2
+            exit 1
+          fi
+          echo "apt-get install failed (attempt $attempt/$max_attempts), retrying in ${BACKOFF_SECONDS}s..." >&2
+          sleep "$BACKOFF_SECONDS"
+          attempt=$((attempt + 1))
+        done

@@ -988,21 +988,11 @@ jobs:
           mode: restore-only
 
       - name: Install Linux build dependencies (libudev-dev for CGO_ENABLED=1 -- see comment above)
-        run: |
-          # The DEB822 /etc/apt/sources.list.d/ubuntu.sources file (and the
-          # Azure mirror it points at) is a GitHub-hosted-runner-image thing;
-          # only rewrite the mirror if that file actually exists, so this
-          # step works across runner image variations.
-          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
-            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
-          fi
-          # Chrome is preinstalled on some runner images but is not needed by
-          # this libudev-only step. Its mutable apt index intermittently
-          # returns a hash mismatch, failing the entire race suite before it
-          # reaches the tests.
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
+        # Mirror failover + retry that works under harden-runner block egress;
+        # see .github/actions/apt-install.
+        uses: ./.github/actions/apt-install
+        with:
+          packages: libudev-dev pkg-config
 
       - name: Install Terraform, OpenTofu, Packer, Helm, and Helmfile
         # Unlike the `test`/`build` jobs, this job never ran this step, so
@@ -1470,13 +1460,11 @@ jobs:
         run: tofu version
 
       - name: Install Linux build dependencies
-        run: |
-          # The Azure mirror used by GitHub's Ubuntu runners can stall long
-          # enough to exhaust this job's timeout. Use Ubuntu's primary archive
-          # for this small, deterministic dependency install instead.
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
+        # Mirror failover + retry that works under harden-runner block egress;
+        # see .github/actions/apt-install.
+        uses: ./.github/actions/apt-install
+        with:
+          packages: libudev-dev pkg-config
 
       - name: Run Floci Go E2E tests
         env:
