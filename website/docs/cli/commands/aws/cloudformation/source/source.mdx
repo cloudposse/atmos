@@ -13,16 +13,17 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-Use these commands to manage `aws/cloudformation` component sources with just-in-time (JIT) vendoring. This enables components to declare their source location inline using the top-level `source` field without requiring a separate `component.yaml` file. Sources are automatically provisioned when running `aws cloudformation` commands—just run `atmos aws cloudformation plan` and the source is downloaded on first use.
+Manage downloaded CloudFormation sources. Use these commands to pull, inspect,
+list, or delete sources declared in stack manifests.
 </Intro>
 
 <Experimental />
 
-<ActionCard title="Source-Based Version Pinning">
-    Learn how to use the source field for native per-environment version control directly in stack configuration.
-    <div>
-      <PrimaryCTA to="/design-patterns/version-management/source-based-versioning">Design Pattern</PrimaryCTA>
-    </div>
+<ActionCard title="Source Configuration">
+  Configure source locations, version pins, path filters, and authentication.
+  <div>
+    <PrimaryCTA to="/stacks/components/aws-cloudformation#source-provisioning">Configuration Reference</PrimaryCTA>
+  </div>
 </ActionCard>
 
 <CastPlayer title="atmos aws cloudformation source --help" src="/casts/screengrabs/atmos-aws-cloudformation-source--help.cast" static chrome />
@@ -33,183 +34,31 @@ Use these commands to manage `aws/cloudformation` component sources with just-in
 atmos aws cloudformation source <subcommand> [options]
 ```
 
-## Subcommands
-
-<DocCardList />
-
-## Automatic Provisioning
-
-Sources are automatically provisioned when running any `aws cloudformation` command. If a component has `source` configured and the target directory doesn't exist, Atmos downloads the source before running the operation:
-
-```shell
-# Source is automatically provisioned on first use
-atmos aws cloudformation plan vpc --stack dev
-# → Auto-provisioning source for component 'vpc'
-# → Auto-provisioned source to components/cloudformation/vpc
-# → CloudFormation operation runs
-```
-
-This means you can simply configure your component's source and run `atmos aws cloudformation` commands—no explicit vendor step needed.
-
-## CLI Commands
-
-The explicit CLI commands are useful for fine-grained control:
-- Force re-vendor the already-configured source (re-downloads the same `source.uri`/`source.version`; to pick up a newer revision, update `source.version` or the URI in stack configuration first)
-- Describe source configuration
-- Delete vendored sources
-- List components with sources
-
-## How It Works
-
-The source provisioner enables just-in-time vendoring of `aws/cloudformation` components directly from stack configuration. Instead of pre-vendoring components or maintaining separate `component.yaml` files, you can declare the source inline:
-
-```yaml
-# stacks/dev.yaml
-components:
-  "aws/cloudformation":
-    vpc:
-      source:
-        uri: github.com/cloudposse/cloudformation-aws-components//modules/vpc
-        version: 1.0.0
-        included_paths:
-          - "*.yaml"
-          - "modules/**"
-        excluded_paths:
-          - "*.md"
-          - "tests/**"
-      stack_name: vpc-dev
-```
-
-When you run `atmos aws cloudformation source pull vpc --stack dev`, Atmos:
-
-1. **Reads Configuration** - Extracts `source` from the component's stack manifest.
-2. **Resolves Source** - Parses the go-getter-compatible URI with optional version.
-3. **Downloads Content** - Fetches the source using go-getter (supports git, s3, http, oci, etc.).
-4. **Filters Files** - Applies `included_paths` and `excluded_paths` patterns.
-5. **Copies to Target** - Places files in the component directory.
-
-## Source Specification
-
-The `source` field supports two formats:
-
-### String Format (Simple)
-
-For simple cases, use a go-getter URI string:
-
-```yaml
-source: "github.com/cloudposse/cloudformation-aws-components//modules/vpc?ref=1.0.0"
-```
-
-### Map Format (Full Control)
-
-For more control, use a map with explicit fields:
-
-```yaml
-source:
-  uri: github.com/cloudposse/cloudformation-aws-components//modules/vpc
-  version: 1.0.0
-  included_paths:
-    - "*.yaml"
-    - "*.json"
-    - "modules/**"
-  excluded_paths:
-    - "*.md"
-    - "tests/**"
-    - "examples/**"
-```
-
-### Source Fields
-
-<dl>
-  <dt>`uri`</dt>
-  <dd>Go-getter compatible source URI. Supports git, s3, http, gcs, oci, and other protocols.</dd>
-
-  <dt>`version`</dt>
-  <dd>Version tag, branch, or commit. Appended as `?ref=<version>` for git sources. For non-git sources (S3, HTTP, OCI), the version should be embedded in the URI itself.</dd>
-
-  <dt>`included_paths`</dt>
-  <dd>Glob patterns for files to include. If specified, only matching files are copied.</dd>
-
-  <dt>`excluded_paths`</dt>
-  <dd>Glob patterns for files to exclude. Applied after included_paths filtering.</dd>
-
-  <dt>`ttl`</dt>
-  <dd>
-  Cache duration for JIT-vendored sources. Controls how long a cached source is reused before re-pulling from the remote. When set, Atmos checks the source's last update time against this TTL. If expired, the source is re-pulled automatically on the next command invocation. If not set, cached sources are reused indefinitely (only re-pulled on version or URI changes).
-
-  Examples: `"0s"` (always re-pull), `"1h"` (hourly), `"7d"` (weekly), `"daily"`.
-
-  A global default can be set in `atmos.yaml` under `components."aws/cloudformation".source.ttl` and overridden per-component.
-  </dd>
-
-  <dt>`retry`</dt>
-  <dd>
-  Optional retry configuration for handling transient network errors during download. Useful for unreliable networks or when hitting rate limits.
-
-  ```yaml
-  retry:
-    max_attempts: 5
-    initial_delay: 2s
-    max_delay: 60s
-    backoff_strategy: exponential
-  ```
-
-  All fields are optional. Recommended: `max_attempts`, `initial_delay`, `max_delay`, `backoff_strategy` (`exponential`, `linear`, `constant`). Additional options: `multiplier`, `random_jitter`, `max_elapsed_time`.
-  </dd>
-</dl>
-
 ## Examples
 
 ### Vendor a Component
-
-Download and vendor a component source:
 
 ```shell
 atmos aws cloudformation source pull vpc --stack dev
 ```
 
-Output:
-```
-Vendoring component 'vpc' from source...
-Downloading from github.com/cloudposse/cloudformation-aws-components//modules/vpc?ref=1.0.0
-✓ Successfully vendored component to components/cloudformation/vpc
-```
-
 ### Force Re-vendor
 
-Force re-download even if the component directory exists:
+Refresh the configured source, even if its directory exists:
 
 ```shell
 atmos aws cloudformation source pull vpc --stack dev --force
 ```
 
-### View Source Configuration
+Update the URI or version in stack configuration to download a different revision.
 
-Display the source configuration for a component:
+### View Source Configuration
 
 ```shell
 atmos aws cloudformation source describe vpc --stack dev
 ```
 
-Output:
-```yaml
-components:
-  "aws/cloudformation":
-    vpc:
-      source:
-        uri: github.com/cloudposse/cloudformation-aws-components//modules/vpc
-        version: 1.0.0
-        included_paths:
-          - "*.yaml"
-          - "modules/**"
-        excluded_paths:
-          - "*.md"
-          - "tests/**"
-```
-
 ### List Components with Sources
-
-List all components that have source configured:
 
 ```shell
 atmos aws cloudformation source list --stack dev
@@ -244,147 +93,135 @@ Selection requires interactive mode, terminal input, and available candidates, a
   <dt>`--stack` / `-s`</dt>
   <dd>Atmos stack name, also settable via `ATMOS_STACK`. For `pull`, `describe`, and `delete`, an unset stack triggers interactive selection when available; non-interactive use requires a stack value. For `list`, the stack is an optional filter; omit it to list across stacks.</dd>
 
-  <dt>`--identity` / `-i`</dt>
-  <dd>Identity to use for authentication when downloading from protected sources (`pull` only).</dd>
+  <dt>`--identity`, `-i`</dt>
+  <dd>Identity for authenticated source downloads.</dd>
 
   <dt>`--force` / `-f`</dt>
   <dd>Force re-vendor even if component directory exists (`pull` command), or skip deletion confirmation (`delete` command).</dd>
+
+  <dt>`--dry-run`</dt>
+  <dd>Preview a pull or deletion without authentication, downloads, or deletion.</dd>
 </dl>
+
+## Subcommands
+
+<DocCardList />
+
+## Automatic Provisioning
+
+Commands that need template files download their configured source before use.
+For example, the first `plan` downloads a missing source:
+
+```shell
+atmos aws cloudformation plan vpc --stack dev
+```
+
+Deployed-stack reads and stack deletion do not need a source download.
+Named changeset execution may need source files for a configured stack policy.
+Dry-run never downloads sources.
+
+## CLI Commands
+
+Use `pull --force` for an explicit refresh, `describe` to inspect configuration,
+`list` to find configured sources, and `delete` to remove a download.
+
+## How It Works
+
+1. Resolve the component's source and destination.
+2. Download the source when a refresh is needed.
+3. Apply inclusion and exclusion filters.
+4. Make the downloaded files available to the component.
+
+See [caching and refresh](/stacks/components/aws-cloudformation#caching-and-refresh)
+for URI, version, and TTL handling.
+
+## Source Specification
+
+### String Format (Simple)
+
+```yaml
+source: github.com/acme/cfn-templates.git//vpc?ref=1.2.0
+```
+
+### Map Format (Full Control)
+
+```yaml
+source:
+  uri: github.com/acme/cfn-templates.git//vpc
+  version: 1.2.0
+  included_paths:
+    - "*.yaml"
+  excluded_paths:
+    - "tests/**"
+```
+
+### Source Fields
+
+See the [source field reference](/stacks/components/aws-cloudformation#source-fields)
+for URI, version, filters, TTL, and retry settings.
 
 ## Authentication
 
-Source commands support authentication for accessing private repositories or cloud storage.
-
 ### Component-Level Identity
 
-Components can specify an authentication identity:
-
-```yaml
-components:
-  "aws/cloudformation":
-    vpc:
-      source:
-        uri: github.com/my-org/private-components//modules/vpc
-        version: v1.0.0
-      auth:
-        identities:
-          github-deployer:
-            default: true
-            kind: github/app
-            via:
-              provider: github-app
-```
+Downloads use the component's resolved identity. Configure it through
+[Atmos Auth](/stacks/auth). For private buckets, use an authenticated
+[S3 source URI](/stacks/components/aws-cloudformation#private-s3-sources).
 
 ### Identity Flag Override
-
-Override the component's default identity:
 
 ```shell
 atmos aws cloudformation source pull vpc --stack dev --identity admin
 ```
 
-For more details on configuring authentication identities, see the [Authentication Guide](/stacks/auth).
-
 ## Configuration Patterns
 
 ### Inheritance with source
 
-Use stack inheritance to share source configurations:
-
-```yaml
-# stacks/catalog/vpc/defaults.yaml
-components:
-  "aws/cloudformation":
-    vpc/defaults:
-      source:
-        uri: github.com/cloudposse/cloudformation-aws-components//modules/vpc
-        version: 1.0.0
-
-# stacks/dev.yaml
-components:
-  "aws/cloudformation":
-    vpc:
-      metadata:
-        inherits: [vpc/defaults]
-      # Inherits source configuration
-      stack_name: vpc-dev
-```
+Declare a source in a catalog component and inherit it in each stack. See
+[source-based version pinning](/design-patterns/version-management/source-based-versioning).
 
 ### Version Override per Environment
 
-Override the version per environment:
-
-```yaml
-# stacks/dev.yaml
-components:
-  "aws/cloudformation":
-    vpc:
-      metadata:
-        inherits: [vpc/defaults]
-      source:
-        version: 1.1.0  # Override version for dev
-
-# stacks/prod.yaml
-components:
-  "aws/cloudformation":
-    vpc:
-      metadata:
-        inherits: [vpc/defaults]
-      source:
-        version: 1.0.0  # Pin to stable version for prod
-```
+Override `source.version` in the environment's stack to select a different Git
+revision. Use a workdir when instances need separate downloaded sources.
+See [Workdirs](/stacks/components/aws-cloudformation#workdirs).
 
 ## Supported Source Types
 
-The source provisioner uses go-getter and supports multiple protocols:
-
 ### Git Sources
 
-Shortened GitHub syntax (recommended):
 ```yaml
 source:
-  uri: github.com/cloudposse/cloudformation-aws-components//modules/vpc
-  version: 1.0.0
+  uri: git::https://github.com/acme/cfn-templates.git//vpc
+  version: 1.2.0
 ```
 
-Explicit HTTPS:
-```yaml
-source:
-  uri: git::https://github.com/org/repo.git//path
-  version: main
-```
-
-Explicit SSH:
-```yaml
-source:
-  uri: git::ssh://git@github.com/org/repo.git//path
-  version: main
-```
+For SSH, use `git::ssh://git@github.com/acme/cfn-templates.git//vpc`.
 
 ### S3 Sources
 
 ```yaml
 source:
-  uri: s3::https://s3-us-east-1.amazonaws.com/my-bucket/components/vpc.tar.gz
+  uri: s3://my-cfn-templates/vpc.yaml?region=us-east-1
 ```
 
 ### HTTP/HTTPS Sources
 
 ```yaml
 source:
-  uri: https://releases.example.com/components/vpc-1.0.0.tar.gz
+  uri: https://releases.example.com/templates/vpc-1.2.0.tar.gz
 ```
 
 ### OCI Registry Sources
 
 ```yaml
 source:
-  uri: oci::registry.example.com/components/vpc:v1.0.0
+  uri: oci::registry.example.com/templates/vpc:1.2.0
 ```
 
 ## See Also
 
-- [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) — Design pattern for per-environment version management
-- [Stack Configuration](/learn/stacks) — Learn about Atmos stacks
-- [`atmos aws cloudformation`](/cli/commands/aws/cloudformation) — Parent command overview
-- [Vendoring](/vendor) — Pre-vendor components for immutability and audit trails
+- [Source configuration](/stacks/components/aws-cloudformation#source-provisioning)
+- [Source-based version pinning](/design-patterns/version-management/source-based-versioning)
+- [CloudFormation commands](/cli/commands/aws/cloudformation)

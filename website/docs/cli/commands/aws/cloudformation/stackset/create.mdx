@@ -6,22 +6,25 @@ id: create
 description: Create a StackSet, and its initial stack instances if configured.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
 import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
-  Create a CloudFormation StackSet (`CreateStackSet`) from the resolved
-  `kind: aws/stackset` provision target's `accounts`/`regions`/
-  `permission_model`/role settings, plus the component's own
-  `template`/`parameters`/`capabilities`/`tags`. When the target declares both
-  `accounts` and `regions`, `stackset create` also creates the initial stack
-  instances (`CreateStackInstances`) across that account/region matrix and
-  waits for the operation to finish — the only verb that creates instances.
+Create a CloudFormation StackSet from the component’s template and selected
+StackSet target. When both accounts and regions are configured, Atmos also
+creates the initial stack instances and waits for completion.
 </Intro>
 
 <Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation#delivery-targets">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
 
 <CastPlayer title="atmos aws cloudformation stackset create --help" src="/casts/screengrabs/atmos-aws-cloudformation-stackset-create--help.cast" static chrome />
 
@@ -30,6 +33,8 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 ```shell
 atmos aws cloudformation stackset create <component> --stack <stack> [options]
 ```
+
+## Examples
 
 ```shell
 atmos aws cloudformation stackset create vpc -s plat-ue2-dev
@@ -53,6 +58,13 @@ Create StackSets for all or affected components in dependency order:
 atmos aws cloudformation stackset create --all -s plat-ue2-dev
 atmos aws cloudformation stackset create --affected --base origin/main
 ```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
 
 ## Flags
 
@@ -88,14 +100,7 @@ The `CreateStackInstances` operation is polled every 3 seconds until it
 reaches a terminal status (`SUCCEEDED`/`FAILED`/`STOPPED`), and the command
 times out after 30 minutes if it hasn't.
 
-:::note
-`stackset create` does not fire `before`/`after` hook events — only
-[`apply`](/cli/commands/aws/cloudformation/apply),
-[`diff`](/cli/commands/aws/cloudformation/diff),
-[`delete`](/cli/commands/aws/cloudformation/delete),
-[`drift detect`](/cli/commands/aws/cloudformation/drift/detect), and
-[`drift describe`](/cli/commands/aws/cloudformation/drift/describe) do.
-:::
+This command does not fire [lifecycle hooks](/stacks/components/aws-cloudformation#lifecycle-hooks).
 
 Quote every account ID as a 12-digit string, for example `accounts: ["012345678901"]`.
 Numeric values, mixed-type lists and malformed region names are rejected before creating or

@@ -23,9 +23,10 @@ credentials or external sources are available.
 The [CloudFormation commands](/cli/commands/aws/cloudformation) integrate with
 [native CI job summaries](/ci#job-summaries). Diff summaries show pending changes; apply and delete
 summaries report the stack operation; drift summaries count only modified or deleted resources.
-Each summary includes the command to reproduce the operation. CloudFormation integration currently
-provides summaries only: it does not publish PR comments, commit statuses, CI output variables, or
-stored artifacts.
+Each summary includes a command to reproduce the operation.
+
+CloudFormation also supports [CI output variables](/ci#outputs). PR comments,
+commit statuses, and stored artifacts are not published.
 
 The same commands also handle these lifecycle cases:
 
@@ -42,13 +43,16 @@ The same commands also handle these lifecycle cases:
   source-only component when the provisioned result contains one unambiguous template file.
 - Configured [before/after hooks](/stacks/hooks) now match both drift commands correctly.
 
-The [output command](/cli/commands/aws/cloudformation/output#masking) reads deployed template
-metadata to mask outputs that reference `NoEcho` parameters, even when local parameter values have
-changed or the local template is absent. With masking enabled, output presentation requires
-`cloudformation:GetTemplate` as well as `cloudformation:DescribeStacks`; unreadable metadata stops
-presentation before raw values are printed. Internal component dependencies still receive real
-values. Arbitrary transformed secrets without detectable template references cannot be recognized,
-so keep secrets out of CloudFormation Outputs.
+### Output Masking
+
+The [output command](/cli/commands/aws/cloudformation/output#masking) uses deployed
+template metadata to mask outputs that depend on `NoEcho` parameters. This
+works even when the local template is absent or parameter values have changed.
+
+With masking enabled, presentation requires `cloudformation:GetTemplate` and
+`cloudformation:DescribeStacks`. Unreadable metadata stops presentation.
+Internal dependency lookups still receive real values. Keep secrets out of
+outputs: transformations without detectable references may evade masking.
 
 ## How to Use It
 

@@ -6,19 +6,24 @@ id: template
 description: Fetch the deployed stack's template.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
 import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
-  Fetch the deployed stack's template (`GetTemplate`) and write it to stdout.
-  By default this is the fully-processed template CloudFormation actually
-  deployed — the same shape a diff against the local render should compare
-  against — not the user-submitted source.
+Print the deployed stack’s template. By default, Atmos retrieves the processed
+template and formats it as YAML. Use `--original` to retrieve the submitted body.
 </Intro>
 
 <Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
 
 <CastPlayer title="atmos aws cloudformation get template --help" src="/casts/screengrabs/atmos-aws-cloudformation-get-template--help.cast" static chrome />
 
@@ -27,6 +32,8 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 ```shell
 atmos aws cloudformation get template <component> --stack <stack> [options]
 ```
+
+## Examples
 
 ```shell
 atmos aws cloudformation get template vpc -s plat-ue2-dev
@@ -50,11 +57,18 @@ diff template.yaml deployed.yaml
 
 A stack that does not exist is an error that points at `atmos aws cloudformation apply`.
 
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
+
 ## Flags
 
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
-  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
 
   <dt>`--original` <em>(optional)</em></dt>
   <dd>Fetch the user-submitted template instead of the processed one CloudFormation deployed, and print it exactly as returned, without re-serializing it.</dd>
@@ -64,11 +78,4 @@ A stack that does not exist is an error that points at `atmos aws cloudformation
 <GitFlags />
 </dl>
 
-:::note
-`get template` does not fire `before`/`after` hook events — only
-[`apply`](/cli/commands/aws/cloudformation/apply),
-[`diff`](/cli/commands/aws/cloudformation/diff),
-[`delete`](/cli/commands/aws/cloudformation/delete),
-[`drift detect`](/cli/commands/aws/cloudformation/drift/detect), and
-[`drift describe`](/cli/commands/aws/cloudformation/drift/describe) do.
-:::
+This command does not fire [lifecycle hooks](/stacks/components/aws-cloudformation#lifecycle-hooks).

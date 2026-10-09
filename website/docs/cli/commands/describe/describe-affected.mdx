@@ -982,6 +982,24 @@ where:
                 ```
             </dd>
 
+            <dt>`secret.file`</dt>
+            <dd>
+                A [SOPS](/cli/configuration/secrets) file that one of the component's declared
+                [`secrets`](/functions/yaml/secret) is stored in changed. Atmos works out the file from the secret's
+                `sops:` provider the same way `atmos secret` does, so no `dependencies` entry is needed.
+                Store-backed secrets are not files and never produce this reason.
+
+                If a declaration's `sops:` backend is a [YAML function selector](/functions/yaml/secret#backend-selected-by-a-yaml-function)
+                (for example `!aws.cloudformation.output ...`), Atmos cannot know which file it names without
+                credentials, and `atmos describe affected` normally runs without them. It does not skip the
+                declaration. Instead, the component is treated as affected by **any change under the locations its
+                SOPS providers can use**: each provider's `spec.path` directory (default `secrets`), the directory of
+                the static prefix of a templated `spec.file`, or the whole working directory when that path is itself a
+                selector. In that case `folder` holds the directory, and a warning names the component, stack,
+                declaration and selector so the extra affected components are explainable. Declarations with a literal
+                backend keep using the exact file.
+            </dd>
+
             <dt>`deleted`</dt>
             <dd>
                 The component was deleted (exists in BASE but not in HEAD). This happens when a component is removed from

@@ -6,6 +6,8 @@ id: list
 description: List the component's template-packaging backend targets and whether each exists.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 
@@ -16,6 +18,11 @@ import Experimental from '@site/src/components/Experimental'
 
 <Experimental />
 
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation#delivery-targets">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
+
 <CastPlayer title="atmos aws cloudformation backend list --help" src="/casts/screengrabs/atmos-aws-cloudformation-backend-list--help.cast" static chrome />
 
 ## Usage
@@ -24,10 +31,19 @@ import Experimental from '@site/src/components/Experimental'
 atmos aws cloudformation backend list <component> --stack <stack> [options]
 ```
 
+## Examples
+
 ```shell
 atmos aws cloudformation backend list vpc -s plat-ue2-dev
 atmos aws cloudformation backend list vpc -s plat-ue2-dev --format json
 ```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
 
 ## Flags
 
@@ -42,23 +58,29 @@ atmos aws cloudformation backend list vpc -s plat-ue2-dev --format json
   <dd>Atmos identity to authenticate with.</dd>
 </dl>
 
-The component argument is required. Running `backend list` with only a stack
-fails with a hint that shows the full form,
-`atmos aws cloudformation backend list <component> -s <stack>`. There is no
-stack-wide form (see Behavior below).
-
 ## Behavior
 
-Unlike [`atmos terraform
-backend`](/cli/commands/terraform/terraform-backend)'s own `list` verb (which
-lists every backend across a whole stack, with no component argument),
-`backend list` is scoped
-to one component: CloudFormation's provision-target model declares `kind:
-aws/s3` targets per-component under `provision.targets`, not once per stack,
-so there is no component-independent, stack-wide backend inventory to list.
-`backend list` never needs `--target` — it always shows every declared target
-at once.
+The command lists every S3 target for one component; it does not accept
+`--target`. Supply a component name and `--stack`.
 
 The `table` format prints a header row (`TARGET`, `BUCKET`, `REGION`,
 `STATUS`). The `json` and `yaml` formats use snake_case keys; see [`backend
 describe`](/cli/commands/aws/cloudformation/backend/describe) for the shape.
+
+### Targets that cannot be inspected
+
+Each target uses its own identity. Failed authentication or bucket checks appear
+as error rows; healthy targets still appear in the output:
+
+```text
+TARGET               BUCKET                         REGION         STATUS
+a-broken             broken-bucket                  us-east-1      error: aws/cloudformation component requested an identity, but the auth manager could not resolve it: identity "devv" not found
+b-good               good-bucket                    us-east-1      exists
+```
+
+In the `json` and `yaml` formats the failed entry carries an `error` field with
+the same cause; healthy entries omit it.
+
+After the rows print, the command exits non-zero if any target failed. The
+error names the failed targets and their count, and hints to run
+`atmos aws cloudformation backend describe --target <name>` for details.

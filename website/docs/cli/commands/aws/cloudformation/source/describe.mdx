@@ -15,9 +15,9 @@ Use this command to display the `source` configuration for an `aws/cloudformatio
 </Intro>
 
 <ActionCard title="Source-Based Version Pinning">
-    Learn how to configure the `source` field for per-environment version control.
+    Configure source locations, version pins, and authentication.
     <div>
-      <PrimaryCTA to="/design-patterns/version-management/source-based-versioning">Design Pattern</PrimaryCTA>
+      <PrimaryCTA to="/stacks/components/aws-cloudformation#source-provisioning">Source Configuration</PrimaryCTA>
     </div>
 </ActionCard>
 
@@ -28,15 +28,6 @@ Use this command to display the `source` configuration for an `aws/cloudformatio
 ```shell
 atmos aws cloudformation source describe <component> --stack <stack>
 ```
-
-## Description
-
-The `describe` command extracts and displays the `source` configuration from a component's stack manifest. The output matches the stack manifest schema format, making it easy to copy and paste into your configuration. This is useful for:
-
-- Verifying source configuration before vendoring
-- Checking the version configured for a component
-- Reviewing included/excluded path filters
-- Debugging source provisioning issues
 
 ## Examples
 
@@ -94,6 +85,11 @@ components:
   <dt>`--stack` / `-s`</dt>
   <dd>**Required.** The Atmos stack name. Can also be set via `ATMOS_STACK` environment variable.</dd>
 </dl>
+
+## Description
+
+Inspect the source URI, version, and path filters before downloading. The result
+uses the stack manifest's YAML structure.
 
 ## Output Format
 

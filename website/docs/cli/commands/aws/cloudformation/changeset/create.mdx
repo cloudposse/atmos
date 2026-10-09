@@ -6,20 +6,25 @@ id: create
 description: Create a changeset and leave it for later review or execution.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
 import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
-  Create a CloudFormation changeset for the component and leave it in place for
-  later manual review and execution — the explicit-control complement to
-  [`diff`](/cli/commands/aws/cloudformation/diff)/[`plan`](/cli/commands/aws/cloudformation/plan)'s
-  implicit, preview-only changeset (which is deleted again as soon as it has
-  been rendered).
+Create a changeset for later review and execution. Use
+[`changeset execute`](/cli/commands/aws/cloudformation/changeset/execute) to
+deploy the reviewed changes.
 </Intro>
 
 <Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
 
 <CastPlayer title="atmos aws cloudformation changeset create --help" src="/casts/screengrabs/atmos-aws-cloudformation-changeset-create--help.cast" static chrome />
 
@@ -28,6 +33,8 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 ```shell
 atmos aws cloudformation changeset create <component> --stack <stack> [options]
 ```
+
+## Examples
 
 ```shell
 atmos aws cloudformation changeset create vpc -s plat-ue2-dev
@@ -40,11 +47,18 @@ atmos aws cloudformation changeset create --all -s plat-ue2-dev
 atmos aws cloudformation changeset create --affected --base origin/main
 ```
 
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
+
 ## Flags
 
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
-  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
 
 <SelectionFlags />
 
@@ -66,11 +80,4 @@ no-op (no changes to apply), and the predicted changes — the same diff summary
 changeset later with
 [`changeset execute`](/cli/commands/aws/cloudformation/changeset/execute).
 
-:::note
-`changeset create` does not fire `before`/`after` hook events — only
-[`apply`](/cli/commands/aws/cloudformation/apply),
-[`diff`](/cli/commands/aws/cloudformation/diff),
-[`delete`](/cli/commands/aws/cloudformation/delete),
-[`drift detect`](/cli/commands/aws/cloudformation/drift/detect), and
-[`drift describe`](/cli/commands/aws/cloudformation/drift/describe) do.
-:::
+This command does not fire [lifecycle hooks](/stacks/components/aws-cloudformation#lifecycle-hooks).

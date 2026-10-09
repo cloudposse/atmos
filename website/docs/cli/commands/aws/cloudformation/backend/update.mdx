@@ -6,22 +6,23 @@ id: update
 description: Reapply secure defaults to the component's template-packaging backend bucket.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-  Apply configuration changes to the S3 bucket referenced by the component's
-  resolved `kind: aws/s3` provision target — creating it first if it doesn't
-  exist yet, then bringing its versioning, encryption, and
-  public-access-block settings in line with Atmos's secure defaults.
-  `backend update` and [`backend
-  create`](/cli/commands/aws/cloudformation/backend/create) dispatch through
-  the identical idempotent code path; `update` exists as the explicit,
-  intention-revealing verb for "make sure this bucket's settings are still
-  correct."
+Reapply the template-packaging bucket’s settings, creating the bucket if needed.
+This command has the same behavior as
+[`backend create`](/cli/commands/aws/cloudformation/backend/create).
 </Intro>
 
 <Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation#delivery-targets">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
 
 <CastPlayer title="atmos aws cloudformation backend update --help" src="/casts/screengrabs/atmos-aws-cloudformation-backend-update--help.cast" static chrome />
 
@@ -30,6 +31,8 @@ import Experimental from '@site/src/components/Experimental'
 ```shell
 atmos aws cloudformation backend update <component> --stack <stack> [options]
 ```
+
+## Examples
 
 ```shell
 atmos aws cloudformation backend update vpc -s plat-ue2-dev
@@ -40,6 +43,13 @@ Disambiguate when the component declares more than one `kind: aws/s3` target:
 ```shell
 atmos aws cloudformation backend update vpc -s plat-ue2-dev --target artifacts
 ```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
 
 ## Flags
 

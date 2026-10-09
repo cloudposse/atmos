@@ -6,19 +6,24 @@ id: policy
 description: Fetch the deployed stack's policy.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
 import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
-  Fetch the deployed stack's current stack policy (`GetStackPolicy`) and write
-  it to stdout — the policy CloudFormation is actually enforcing, as opposed
-  to the `stack_policy` configured on the component (which `apply` only
-  applies after a successful deploy).
+Print the stack policy currently installed on the deployed stack.
+Use this command to inspect which update restrictions CloudFormation enforces.
 </Intro>
 
 <Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
 
 <CastPlayer title="atmos aws cloudformation get policy --help" src="/casts/screengrabs/atmos-aws-cloudformation-get-policy--help.cast" static chrome />
 
@@ -28,15 +33,24 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 atmos aws cloudformation get policy <component> --stack <stack> [options]
 ```
 
+## Examples
+
 ```shell
 atmos aws cloudformation get policy vpc -s plat-ue2-dev
 ```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
 
 ## Flags
 
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
-  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
 
 <SelectionFlags />
 
@@ -51,11 +65,4 @@ a message saying so instead of an empty body.
 If the stack does not exist, `get policy` fails with a stack-not-found error that points at
 `atmos aws cloudformation apply`, instead of AWS's raw validation message.
 
-:::note
-`get policy` does not fire `before`/`after` hook events — only
-[`apply`](/cli/commands/aws/cloudformation/apply),
-[`diff`](/cli/commands/aws/cloudformation/diff),
-[`delete`](/cli/commands/aws/cloudformation/delete),
-[`drift detect`](/cli/commands/aws/cloudformation/drift/detect), and
-[`drift describe`](/cli/commands/aws/cloudformation/drift/describe) do.
-:::
+This command does not fire [lifecycle hooks](/stacks/components/aws-cloudformation#lifecycle-hooks).

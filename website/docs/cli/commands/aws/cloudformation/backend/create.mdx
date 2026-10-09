@@ -6,19 +6,22 @@ id: create
 description: Provision the S3 bucket used by the component's template-packaging backend.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-  Create or update the S3 bucket referenced by the component's resolved `kind:
-  aws/s3` provision target, applying secure defaults: versioning enabled,
-  AES-256 encryption, and all four public-access-block settings enabled. If
-  the bucket already exists, its settings are brought in line with these
-  defaults rather than left as-is — this operation is idempotent, and can
-  safely be run again.
+Create the template-packaging bucket or reapply its settings. Atmos enables
+versioning, AES-256 encryption, and all public-access-block settings.
 </Intro>
 
 <Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation#delivery-targets">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
 
 <CastPlayer title="atmos aws cloudformation backend create --help" src="/casts/screengrabs/atmos-aws-cloudformation-backend-create--help.cast" static chrome />
 
@@ -27,6 +30,8 @@ import Experimental from '@site/src/components/Experimental'
 ```shell
 atmos aws cloudformation backend create <component> --stack <stack> [options]
 ```
+
+## Examples
 
 ```shell
 atmos aws cloudformation backend create vpc -s plat-ue2-dev
@@ -37,6 +42,13 @@ Disambiguate when the component declares more than one `kind: aws/s3` target:
 ```shell
 atmos aws cloudformation backend create vpc -s plat-ue2-dev --target artifacts
 ```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
 
 ## Flags
 
@@ -59,11 +71,9 @@ atmos aws cloudformation backend create vpc -s plat-ue2-dev --target artifacts
 
 ## Behavior
 
-`backend create` resolves the component's stack configuration to find its
-`kind: aws/s3` provision target(s), then provisions the bucket through the
-same registered S3 backend provisioner `atmos terraform backend create` uses
-— no separate backend implementation exists for CloudFormation. If the bucket
-already existed, a warning explains which existing settings (versioning,
-encryption, public access, tags) are being overwritten. The warning prints
-before the final `Provisioned` line, so the last line reports the completed
-result.
+For an existing bucket, Atmos asks for confirmation before reapplying versioning,
+encryption, public-access blocking, and tags. Use `--auto-approve` in CI.
+A new bucket does not require confirmation.
+
+The existence check and provisioning use the same target identity. The command
+reports the settings being overwritten before printing the completion message.

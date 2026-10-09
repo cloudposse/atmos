@@ -10,6 +10,12 @@ import Intro from '@site/src/components/Intro'
 The `workflows` section defines the named workflows in a [workflow manifest](/workflows). Each entry at `workflows.<name>` contains its own defaults and the ordered `steps` array Atmos runs for that workflow.
 </Intro>
 
+## Naming a workflow
+
+`<name>` in `workflows.<name>` is a free-form placeholder for the key you
+choose for a workflow, such as `deploy` in the example below. See
+[naming a workflow](/workflows/workflow/name) for how to use that key.
+
 ```yaml
 workflows:
   deploy:

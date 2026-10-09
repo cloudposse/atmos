@@ -12,11 +12,8 @@ import Intro from "@site/src/components/Intro";
 import Experimental from "@site/src/components/Experimental";
 
 <Intro>
-  Tell Atmos where native `aws/cloudformation` component files live. This
-  project-wide setting keeps stack files focused on what to deploy, while
-  `atmos.yaml` defines where CloudFormation components are found. Stacks are
-  deployed directly through the AWS SDK for Go v2, so no `aws` CLI or
-  `cfn`/`sam`/`Rain` binary is required.
+Configure the directory containing CloudFormation components in `atmos.yaml`.
+Define each component's template and deployment settings in its stack manifest.
 </Intro>
 
 <Experimental />
@@ -30,11 +27,10 @@ components:
     # Base path to native aws/cloudformation component directories (where local
     # templates live). Defaults to components/cloudformation.
     base_path: components/cloudformation
+    source:
+      ttl: 1h
 ```
 </File>
-
-Quoting the `aws/cloudformation` key is optional in YAML (a `/` doesn't require it) — quoted here
-to match the convention used throughout these docs and examples.
 
 ## Configuration Reference
 
@@ -42,17 +38,19 @@ to match the convention used throughout these docs and examples.
   <dt>`base_path`</dt>
   <dd>
     Base directory for native `aws/cloudformation` components. A component's
-    `template:` (and, when set, `stack_policy.file:`) resolve relative to its
+    `path:` (and, when set, `stack_policy.file:`) resolve relative to its
     component directory under this base path. Defaults to
     <code>components/cloudformation</code>.
   </dd>
+  <dt>`source.ttl`</dt>
+  <dd>Default cache duration for remote CloudFormation sources, such as `1h`,
+  `7d`, or `0s` (refresh each invocation). Unset by default. A component's
+  `source.ttl` overrides it. See
+  [source caching](/stacks/components/aws-cloudformation#caching-and-refresh).</dd>
 </dl>
 
-Component-level fields — `template`, `stack_name`, `parameters`, `capabilities`,
-`tags`, `stack_policy`, `role_arn`, `notification_arns`, `disable_rollback`,
-`termination_protection`, `timeout_in_minutes`, `source`, `provision`, `auth`,
-and `dependencies` — are configured per stack, not in `atmos.yaml`. See
-[CloudFormation stack configuration](/stacks/components/aws-cloudformation).
+Configure templates, parameters, sources, and delivery targets in
+[stack manifests](/stacks/components/aws-cloudformation).
 
 ## Region Resolution
 
@@ -73,15 +71,17 @@ components:
       # ...
 ```
 
-A component `env` entry such as `AWS_REGION` or `AWS_DEFAULT_REGION` does not
-select the region, because Atmos builds the CloudFormation client in-process
-from the list above and never reads the component `env` for it. When the
-component `env` sets one of them to a different region than the one Atmos
-resolved, Atmos prints a warning that the value is ignored. Set
-`settings.aws_cloudformation.region` to override the region.
+### Component Environment Variables
 
-There is no per-component account override outside stack sets — the account is
-always the active identity's account.
+Set `settings.aws_cloudformation.region` to choose the component's region.
+Entries for `AWS_REGION` or `AWS_DEFAULT_REGION` in the component's `env` block
+do not select it. Atmos warns when those entries conflict with the resolved region.
+
+### Account Selection
+
+The account is the active identity's account. A [delivery target's auth block](/stacks/components/aws-cloudformation#target-authentication)
+can select a different identity for that destination; an explicit CLI identity
+still takes precedence.
 
 See the [`atmos aws cloudformation`](/cli/commands/aws/cloudformation)
 command reference and the

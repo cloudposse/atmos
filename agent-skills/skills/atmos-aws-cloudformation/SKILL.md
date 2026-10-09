@@ -9,14 +9,9 @@ metadata:
 
 # Atmos Native AWS CloudFormation Components
 
-Use this skill for the **native `aws/cloudformation`** component type
-(`components."aws/cloudformation"`). It deploys CloudFormation stacks directly through the
-**AWS SDK for Go v2** — no `aws` CLI, and no `cfn`/`sam`/`Rain` binary. `aws/cloudformation` is the
-first member of an `aws/*` namespace for AWS-native primitives that bypass Terraform.
-
-This feature is **experimental** — the nested command group carries the same experimental
-annotation pattern `atmos terraform backend` uses; the top-level `aws` command group itself stays
-stable.
+Use this skill for native `components."aws/cloudformation"` stacks. Atmos deploys them through
+the **AWS SDK for Go v2**, without an `aws`, `cfn`, `sam`, or Rain binary. This first `aws/*`
+component and its nested commands are **experimental**; the top-level `aws` group stays stable.
 
 ## Related Skills
 
@@ -55,7 +50,7 @@ components:
       tags:
         team: platform
       stack_policy:
-        file: stack-policy.json
+        file: stack-policy.json              # or an inline `body:` (JSON string or YAML map)
       role_arn: "arn:aws:iam::123456789012:role/cfn-deploy"
       termination_protection: true
       timeout_in_minutes: 30
@@ -78,18 +73,20 @@ components:
 
 CloudFormation components use the same stack sections as other component types — `vars`, `env`,
 `auth`, `metadata`, `settings`, `dependencies`, `hooks`, `source`/`provision`, inheritance, and
-overrides — plus CloudFormation-specific fields. They do **not** support `generate:` (no
-codegen-artifact output, unlike Terraform's backend/provider generation) or `plugins:` (no
-chart-style plugin system, unlike native Helm).
+overrides — plus CloudFormation-specific fields. `generate:` and `plugins:` are not supported: a
+`generate:` key on a component, under the `aws/cloudformation:` type-level section, or in
+CloudFormation `overrides` is a stack-processing error. Use an inline `template:` instead — Atmos
+renders it with Go templates (when `templates.settings.enabled: true`) and YAML functions, so
+per-stack template content needs no generated files.
 
 | Field | Purpose |
 |---|---|
-| `template` / `path` *(exactly one required)* | `template` is an **inline** body (string or YAML map) that flows through Atmos's `{{ }}` templating before reaching CloudFormation. `path` is a **file reference**, read as raw bytes, no templating. Setting both is an error. |
+| `template` / `path` *(exactly one required)* | `template` is an **inline** body (string or YAML map) rendered by Atmos Go templates (`templates.settings.enabled: true`) and YAML functions (`!env`, `!store`, `!aws.cloudformation.output`, ...) before reaching CloudFormation. `path` is a **file reference**, read as raw bytes, no templating. Setting both is an error. To pass a CloudFormation dynamic reference through the template renderer, escape the opening braces once: `Value: '{{ "{{" }}resolve:ssm:/my/param}}'`. |
 | `stack_name` | Explicit stack name. Supports Go templates; no legacy name-pattern interpolation. |
 | `parameters` | A map of name to value, or an AWS CLI/Rain list of `{ParameterKey, ParameterValue}` entries (`UsePreviousValue: true` allowed; also `!include` of a JSON array). Scalars stringified, lists comma-joined for `List<Type>`. Other shapes are an error. For a Rain config file use `!include rain.yaml .Parameters`. |
 | `capabilities` | Acknowledged IAM capabilities: `CAPABILITY_IAM`, `CAPABILITY_NAMED_IAM`, `CAPABILITY_AUTO_EXPAND` (macros/SAM). Validated locally; an unknown value fails with the valid set. |
 | `tags` | `map[string]string` tags on the stack — distinct from Atmos's own component `tags`/`--tags`. |
-| `stack_policy.file` | JSON policy path. Set before UPDATE execution (apply/deploy or explicit changeset execute), after successful CREATE. Policy-setting errors stop pending updates; blocked updates never trigger an automatic override. |
+| `stack_policy.file` / `stack_policy.body` *(mutually exclusive; setting both is a validation error)* | `file` is a JSON policy path relative to the component's base path, read verbatim. `body` is an inline policy: a JSON string (used as written) or a YAML map (serialized to JSON). `body` needs no component directory and is rendered by Atmos templates and YAML functions like an inline `template`. Atmos installs the policy before UPDATE execution (apply/deploy or explicit changeset execute), and after a successful CREATE or a no-op apply. Policy-setting errors stop pending updates; blocked updates never trigger an automatic override. |
 | `role_arn` | The CloudFormation **service role**, not caller credentials — `CreateChangeSet`'s `RoleARN`. |
 | `notification_arns` | SNS topic ARNs CloudFormation publishes stack events to. |
 | `disable_rollback` | Prevents automatic rollback on stack creation/update failure. |
@@ -102,7 +99,7 @@ chart-style plugin system, unlike native Helm).
 
 | Command | Purpose |
 |---|---|
-| `atmos aws cloudformation render <component> -s <stack>` | Render the local template client-side. No API calls. |
+| `atmos aws cloudformation render <component> -s <stack>` | Render the template client-side without deploying or validating it through the CloudFormation API. Local or already-provisioned sources render offline without AWS credentials; source provisioning (for example a cold private S3 source) and configured secret or output lookups can still require authentication and network access. |
 | `atmos aws cloudformation validate <component> -s <stack>` | Server-side `ValidateTemplate` — syntax and capability discovery, not a local linter. |
 | `atmos aws cloudformation diff <component> -s <stack>` | Creates (or reuses) a changeset and previews the changes an apply would make, then deletes the preview changeset (best-effort cleanup) so it never leaks against the account's changeset quota. `plan` is an alias. |
 | `atmos aws cloudformation apply <component> -s <stack>` | Executes the changeset (`ExecuteChangeSet`), creating or updating the stack — never a direct `CreateStack`/`UpdateStack` call. Streams per-resource stack events live and ends with a rendered Outputs summary. |
@@ -119,30 +116,17 @@ All operation commands accept `--all`, `--affected` (with `--base`/`--ref`/`--sh
 `--tags`/`--labels`-based selection. `atmos aws cfn` is a Cobra alias for `atmos aws cloudformation`
 that works with every verb.
 
-**Confirmation**: `delete` prompts for interactive confirmation on a TTY; pass `--auto-approve` to
-skip it. `apply` creates its changeset first, prints the predicted changes, then asks (`--auto-approve`
-skips only the question, not the preview); declining deletes the changeset and the empty
-`REVIEW_IN_PROGRESS` stack Atmos created for a never-deployed component. Without a TTY and without
-`--auto-approve`, `apply` fails before creating anything (`confirmation required`, not `user aborted`).
-Publish-only (`aws/s3`) and external (`git`) targets change no stack and never ask. `deploy` defaults
-`--auto-approve` to `true`. See [apply flow](references/operations.md#apply-diff-and-delete-behavior).
+**Confirmation**: direct `apply` previews the changeset before asking; `deploy` auto-approves.
+`delete` also asks; publish-only/external targets do not. See
+[apply flow](references/operations.md#apply-diff-and-delete-behavior) for cleanup and non-TTY behavior.
 
 ### Output formats
 
-`output` supports the full standard format set shared with `atmos terraform output`: `json`, `yaml`,
-`hcl`, `env`, `dotenv`, `bash`, `csv`, `tsv`, `table` (default on a TTY), and `github` (GitHub
-Actions `$GITHUB_OUTPUT` syntax via `atmos aws cloudformation output vpc -s dev --format=github`),
-plus `--flatten` and `--uppercase` key options. An unsupported `--format` lists the valid ones. A
-stack with no Outputs prints `Stack <name> has no outputs`. The `key` argument cannot be combined
-with bulk selection.
-
-With masking enabled, standalone output and apply summaries read the deployed template
-(`cloudformation:GetTemplate`) and redact outputs that reference NoEcho parameters, including
-intrinsics and indirect resource/condition dependencies. Known parameter/default values are also
-registered with the masker. Missing or invalid sensitivity metadata fails before output is printed.
-This works without a local template or source download, including when configured values are stale.
-`--mask=false` explicitly disables presentation masking. Internal component output lookups retain
-real values. Arbitrary transformed secrets without a detectable dependency cannot be recognized.
+Formats: `json`, `yaml`, `hcl`, `env`, `dotenv`, `bash`, `csv`, `tsv`, `table`, `github`;
+key modifiers: `--flatten`, `--uppercase`. A positional key selects one output.
+Masking reads deployed templates and fails closed if sensitivity metadata is unavailable;
+`--mask=false` disables it. Internal lookups keep real values. See
+[output formats and masking](references/operations.md#output-formats-and-masking) for the full contract.
 
 ## Changesets
 
@@ -202,6 +186,10 @@ components:
 
 A single-file source URI (e.g. a raw `https://.../dns.yaml` link) is fetched directly and used
 as-is — `path:` isn't needed in that case.
+
+`provision.workdir.enabled` only applies to a `source:` (it selects the per-instance download
+directory). Setting it on a component without a `source:` is an error, because CloudFormation does
+not copy local components into workdirs.
 
 Inspect and manage vendored sources with the `source` verb group:
 
@@ -269,10 +257,10 @@ components:
     base_path: components/cloudformation   # default
 ```
 
-`base_path` is the only project-wide setting. Every other CloudFormation field (`template`/`path`,
+`base_path` is a project-wide setting. Other CloudFormation fields (`template`/`path`,
 `stack_name`, `parameters`, `capabilities`, `tags`, `stack_policy`, `role_arn`, `notification_arns`,
 `disable_rollback`, `termination_protection`, `timeout_in_minutes`, `source`, `provision`, `auth`,
-`dependencies`) is configured per stack, not in `atmos.yaml`.
+`dependencies`) are configured per stack, not in `atmos.yaml`.
 
 ## Native CI Summaries
 
@@ -316,8 +304,9 @@ Rain-verb-to-`atmos aws cloudformation`-verb cross-reference (`fmt`→`fmt`, `ca
 
 ## Guidance
 
-- Prefer `path:` for templates that live in the component directory; use inline `template:` only
-  when the body needs Atmos's own `{{ }}` templating before reaching CloudFormation.
+- Prefer `path:` for templates that live in the component directory; use inline `template:` when
+  the body needs Atmos's own `{{ }}` templating or YAML functions before reaching CloudFormation.
+  CloudFormation has no `generate:` — inline templating replaces it.
 - Use `dependencies.components` so `--all`/`--affected` deploys stacks in the right order — a
   Terraform component can `depends_on` a CFN stack and vice versa.
 - Use `provision.backend.enabled: true` for a zero-friction dev sandbox; use explicit

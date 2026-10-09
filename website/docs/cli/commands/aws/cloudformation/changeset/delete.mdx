@@ -6,6 +6,8 @@ id: delete
 description: Delete a named changeset without touching the stack.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
@@ -20,6 +22,11 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 
 <Experimental />
 
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
+
 <CastPlayer title="atmos aws cloudformation changeset delete --help" src="/casts/screengrabs/atmos-aws-cloudformation-changeset-delete--help.cast" static chrome />
 
 ## Usage
@@ -27,6 +34,8 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 ```shell
 atmos aws cloudformation changeset delete <component> --stack <stack> --changeset-name <name> [options]
 ```
+
+## Examples
 
 ```shell
 atmos aws cloudformation changeset delete vpc -s plat-ue2-dev --changeset-name vpc-2026-08-25
@@ -37,11 +46,18 @@ A changeset name that does not exist on the stack is an error
 [`changeset list`](/cli/commands/aws/cloudformation/changeset/list) for the
 valid names, never a `deleted` message with exit code 0.
 
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
+
 ## Flags
 
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
-  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
 
   <dt>`--changeset-name` <em>(required)</em></dt>
   <dd>Name of the changeset to delete.</dd>
@@ -54,11 +70,4 @@ valid names, never a `deleted` message with exit code 0.
 <GitFlags />
 </dl>
 
-:::note
-`changeset delete` does not fire `before`/`after` hook events — only
-[`apply`](/cli/commands/aws/cloudformation/apply),
-[`diff`](/cli/commands/aws/cloudformation/diff),
-[`delete`](/cli/commands/aws/cloudformation/delete),
-[`drift detect`](/cli/commands/aws/cloudformation/drift/detect), and
-[`drift describe`](/cli/commands/aws/cloudformation/drift/describe) do.
-:::
+This command does not dispatch a named [lifecycle hook event](/stacks/components/aws-cloudformation#lifecycle-hooks). Hooks without an `events` list can still run.
