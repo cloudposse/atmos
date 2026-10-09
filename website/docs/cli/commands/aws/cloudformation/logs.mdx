@@ -64,3 +64,32 @@ atmos aws cloudformation logs --affected --base origin/main
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
   <dd>Atmos stack. With `--all`, `--affected`, `--tags`, or `--labels`, this is an optional stack filter; omit it to select components across stacks.</dd>
+
+  <dt>`--chart` <em>(optional)</em></dt>
+  <dd>Render a per-resource timeline (one line per logical resource ID, showing its status transitions in order) instead of a flat chronological event list.</dd>
+
+  <dt>`--follow`, `-f` <em>(optional)</em></dt>
+  <dd>Continuously stream new events until interrupted (`tail -f` style) instead of returning after one pass. Press Ctrl+C to stop; the command exits 130. Cannot be combined with `--chart`.</dd>
+
+<SelectionFlags />
+
+<GitFlags />
+</dl>
+
+## Output
+
+By default, every event from the stack and its nested stacks is printed in
+timestamp order, the same as a single stack's event stream. With `--chart`,
+events are grouped by logical resource ID instead, one line per resource
+showing its status transitions in order:
+
+```text
+NatGateway                    CREATE_IN_PROGRESS -> CREATE_COMPLETE
+SubnetsStack                  CREATE_IN_PROGRESS -> CREATE_COMPLETE
+```
+
+With nested stacks, each row is prefixed with its stack name (`<stack-name>/<LogicalId>`). A stack ARN
+appears only when two different stacks share a name, for example a stack that was deleted and re-created,
+where the name alone would merge their rows.
+
+This command does not fire [lifecycle hooks](/stacks/components/aws-cloudformation#lifecycle-hooks).

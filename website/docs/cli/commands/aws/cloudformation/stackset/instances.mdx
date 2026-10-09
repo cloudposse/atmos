@@ -58,3 +58,20 @@ atmos aws cloudformation stackset instances --affected --base origin/main
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
   <dd>Atmos stack. With `--all`, `--affected`, `--tags`, or `--labels`, this is an optional stack filter; omit it to select components across stacks.</dd>
+
+<SelectionFlags />
+
+<GitFlags />
+</dl>
+
+## Output
+
+If the StackSet has no instances, `stackset instances` prints a single line
+saying so. Otherwise, each line shows the instance's account, region, status,
+and stack ID.
+
+`stackset instances` acts directly on the StackSet whose name matches the
+component's `stack_name` — it takes no `--target` flag and does not need a
+`kind: aws/stackset` provision target declared.
+
+This command does not fire [lifecycle hooks](/stacks/components/aws-cloudformation#lifecycle-hooks).

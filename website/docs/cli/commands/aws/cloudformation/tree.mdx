@@ -59,3 +59,25 @@ atmos aws cloudformation tree --affected --base origin/main
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
   <dd>Atmos stack. With `--all`, `--affected`, `--tags`, or `--labels`, this is an optional stack filter; omit it to select components across stacks.</dd>
+
+<SelectionFlags />
+
+<GitFlags />
+</dl>
+
+## Output
+
+```text
+vpc-plat-ue2-dev
+├─ NatGatewayStack (vpc-plat-ue2-dev-NatGatewayStack-AB12CD34)
+└─ SubnetsStack (vpc-plat-ue2-dev-SubnetsStack-EF56GH78)
+```
+
+The root is the stack name. Each nested stack shows its logical resource ID in the parent, followed by
+its stack name in parentheses; stack ARNs are not shown.
+
+A nested stack whose `AWS::CloudFormation::Stack` resource is still
+`CREATE_IN_PROGRESS` (and so has no physical resource ID yet) is not shown —
+`tree` recurses only into nested stacks that have actually been created.
+
+This command does not fire [lifecycle hooks](/stacks/components/aws-cloudformation#lifecycle-hooks).

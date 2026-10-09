@@ -68,3 +68,28 @@ prints `<name> does not exist; nothing to delete` and exits 0, the same as
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
   <dd>Atmos stack. With `--all`, `--affected`, `--tags`, or `--labels`, this is an optional stack filter; omit it to select components across stacks.</dd>
+
+  <dt>`--auto-approve` <em>(optional)</em></dt>
+  <dd>Skip the interactive confirmation prompt. Without it, `stackset delete` prompts for confirmation on a TTY before deleting the StackSet.</dd>
+
+<SelectionFlags />
+
+<GitFlags />
+</dl>
+
+## Behavior
+
+`stackset delete` acts directly on the StackSet whose name matches the
+component's `stack_name` — it takes no `--target` flag and does not need a
+`kind: aws/stackset` provision target declared. The `DeleteStackInstances`
+operation is polled every 3 seconds until it reaches a terminal status
+(`SUCCEEDED`/`FAILED`/`STOPPED`), and the command times out after 30 minutes
+if it hasn't.
+
+Before deletion, Atmos describes the existing StackSet to determine its
+permission model. Deleting instances currently supports `SELF_MANAGED`
+permissions only. A `SERVICE_MANAGED` StackSet with instances is rejected
+before anything is deleted; remove those instances with AWS CloudFormation
+first. Empty service-managed StackSets can still be deleted with Atmos.
+
+This command does not fire [lifecycle hooks](/stacks/components/aws-cloudformation#lifecycle-hooks).

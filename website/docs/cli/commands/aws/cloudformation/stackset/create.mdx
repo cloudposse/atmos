@@ -71,3 +71,37 @@ atmos aws cloudformation stackset create --affected --base origin/main
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
   <dd>Atmos stack. With `--all`, `--affected`, `--tags`, or `--labels`, this is an optional stack filter; omit it to select components across stacks.</dd>
+
+  <dt>`--target` <em>(optional)</em></dt>
+  <dd>The `kind: aws/stackset` provision target to use. Required when more than one is declared.</dd>
+
+  <dt>`--auto-approve` <em>(optional)</em></dt>
+  <dd>Skip the interactive confirmation prompt. Without it, `stackset create` prompts for confirmation on a TTY before creating the StackSet.</dd>
+
+<SelectionFlags />
+
+<GitFlags />
+</dl>
+
+## Behavior
+
+If the resolved target declares only `accounts` or only `regions` (not both),
+`stackset create` stops after creating the StackSet itself — no instances are
+created. To add instances to the existing StackSet later, use AWS CloudFormation
+directly through [CreateStackInstances](https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/API_CreateStackInstances.html).
+Atmos currently has no separate command to add instances.
+
+Instance targeting currently supports `SELF_MANAGED` permissions only. A
+`SERVICE_MANAGED` target with both `accounts` and `regions` is rejected before
+any AWS resources are created. Service-managed targets without both fields
+can still create an empty StackSet; manage their instances with AWS CloudFormation.
+
+The `CreateStackInstances` operation is polled every 3 seconds until it
+reaches a terminal status (`SUCCEEDED`/`FAILED`/`STOPPED`), and the command
+times out after 30 minutes if it hasn't.
+
+This command does not fire [lifecycle hooks](/stacks/components/aws-cloudformation#lifecycle-hooks).
+
+Quote every account ID as a 12-digit string, for example `accounts: ["012345678901"]`.
+Numeric values, mixed-type lists and malformed region names are rejected before creating or
+updating a StackSet. Static dry-run performs the same checks for known target values.
