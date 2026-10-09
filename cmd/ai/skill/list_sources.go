@@ -3,6 +3,7 @@ package skill
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -25,13 +26,13 @@ func mergeSourceListEntries(entries []listEntry, statuses []source.Status) []lis
 		if status.Client != "" && status.Client != "atmos" {
 			continue
 		}
-		installed := status.Status != "missing" && (status.Status != "stale" || status.Path != "")
+		installed := sourceListInstalled(&status, statuses)
 		status.Status = sourceListState(&status, statuses)
 		if status.Name == "" {
 			status.Name = status.Source
 		}
 		entry := listEntry{name: status.Name, displayName: status.Name}
-		index := catalogEntryIndex(entries, status.Name)
+		index := catalogEntryIndex(entries, &status)
 		if index >= 0 {
 			entry = entries[index]
 		}
@@ -49,6 +50,18 @@ func mergeSourceListEntries(entries []listEntry, statuses []source.Status) []lis
 	return entries
 }
 
+// sourceListInstalled includes surviving client copies even when the canonical copy is missing.
+func sourceListInstalled(canonical *source.Status, statuses []source.Status) bool {
+	for _, status := range statuses {
+		if status.Name == canonical.Name && status.Source == canonical.Source && status.Scope == canonical.Scope &&
+			status.Status != "missing" && (status.Status != "stale" || status.Path != "") {
+			return true
+		}
+	}
+	return false
+}
+
+// sourceListState preserves canonical health and summarizes unhealthy client destinations.
 func sourceListState(canonical *source.Status, statuses []source.Status) string {
 	problems := []string{}
 	for _, status := range statuses {
@@ -64,10 +77,15 @@ func sourceListState(canonical *source.Status, statuses []source.Status) string 
 	return canonical.Status + "; " + strings.Join(problems, "; ")
 }
 
-// catalogEntryIndex keeps distinct scopes visible without duplicating a catalog row.
-func catalogEntryIndex(entries []listEntry, name string) int {
+// catalogEntryIndex merges catalog metadata but preserves installations at different paths.
+func catalogEntryIndex(entries []listEntry, status *source.Status) int {
 	for i := range entries {
-		if entries[i].name == name && entries[i].sourceStatus == nil {
+		entry := &entries[i]
+		if entry.name != status.Name || entry.sourceStatus != nil {
+			continue
+		}
+		if !entry.installed || (entry.skill != nil && entry.skill.Path != "" && status.Path != "" &&
+			filepath.Clean(entry.skill.Path) == filepath.Clean(status.Path)) {
 			return i
 		}
 	}

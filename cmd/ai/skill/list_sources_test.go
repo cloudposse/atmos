@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/ai/skills/marketplace"
 	"github.com/cloudposse/atmos/pkg/ai/skills/source"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -55,6 +56,74 @@ func TestSourceListKeepsDistinctScopes(t *testing.T) {
 	require.Equal(t, statuses[0], *result[0].sourceStatus)
 	require.True(t, result[0].installed)
 	require.Equal(t, statuses[1], *result[1].sourceStatus)
+}
+
+func TestSourceListInstalledWithMissingCanonicalCopy(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		state     string
+		source    string
+		skill     string
+		scope     string
+		installed bool
+	}{
+		{name: "current client", state: "current", installed: true},
+		{name: "stale client", state: "stale", installed: true},
+		{name: "drifted client", state: "drifted", installed: true},
+		{name: "obsolete client", state: "obsolete", installed: true},
+		{name: "missing client", state: "missing"},
+		{name: "different source", state: "current", source: "other"},
+		{name: "different skill", state: "current", skill: "other"},
+		{name: "different scope", state: "current", scope: "user"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			canonical := source.Status{Source: "team", Name: "demo", Scope: "project", Client: "atmos", Path: "canonical", Status: "missing"}
+			client := canonical
+			client.Client, client.Path, client.Status = "claude-code", "client-copy", tt.state
+			if tt.source != "" {
+				client.Source = tt.source
+			}
+			if tt.skill != "" {
+				client.Name = tt.skill
+			}
+			if tt.scope != "" {
+				client.Scope = tt.scope
+			}
+			entries := mergeSourceListEntries(nil, []source.Status{canonical, client})
+			require.Len(t, entries, 1)
+			require.Equal(t, tt.installed, entries[0].installed)
+			require.Contains(t, entries[0].sourceStatus.Status, "missing")
+			require.Equal(t, tt.installed, len(filterInstalled(entries)) == 1)
+		})
+	}
+}
+
+func TestSourceListPreservesUnrelatedInstalledCatalogEntry(t *testing.T) {
+	root := t.TempDir()
+	legacy := &marketplace.InstalledSkill{Name: "demo", Source: "legacy/repo", Version: "v1", Path: filepath.Join(root, "legacy")}
+	catalog := listEntry{name: "demo", displayName: "Demo", available: true, installed: true, skill: legacy, version: "v1", source: legacy.Source, updateAvailable: true}
+	for _, tt := range []struct {
+		name string
+		path string
+	}{
+		{name: "different installation", path: filepath.Join(root, "project")},
+		{name: "unresolved declaration"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			status := source.Status{Source: "team", Name: "demo", Scope: "project", Client: "atmos", Path: tt.path, Status: "missing"}
+			entries := mergeSourceListEntries([]listEntry{catalog}, []source.Status{status})
+			require.Len(t, entries, 2)
+			require.Equal(t, catalog, entries[0], "retain the original installation details")
+			require.Equal(t, &status, entries[1].sourceStatus)
+			require.Equal(t, []listEntry{catalog}, filterInstalled(entries))
+		})
+	}
+
+	status := source.Status{Source: "team", Name: "demo", Scope: "user", Client: "atmos", Path: legacy.Path, Status: "current"}
+	entries := mergeSourceListEntries([]listEntry{catalog}, []source.Status{status})
+	require.Len(t, entries, 1, "the same installation must not appear twice")
+	require.Equal(t, &status, entries[0].sourceStatus)
+	require.Len(t, filterInstalled(entries), 1)
 }
 
 func TestSourceListStatusErrorsPreserveCatalog(t *testing.T) {
