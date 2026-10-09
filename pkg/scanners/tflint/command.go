@@ -49,9 +49,12 @@ const terraformLintWrappedErrorFormat = "%w: %w"
 // On success it also returns the resolved toolchain PATH, empty if tflint came from the
 // ambient PATH rather than a .tool-versions-driven install. Callers combine this PATH
 // with each target's own via combineToolchainPATH. The per-target toolchain resolution
-// via dependencies.ForComponent reads .tool-versions too, but it only auto-installs the
-// component's own executable (terraform) from the manifest and puts other manifest tools
-// on PATH only if they are already installed. The install performed here is what makes
+// via dependencies.ForComponent reads .tool-versions too, but under the default
+// toolchain.install policy it only auto-installs the component's own executable
+// (terraform) from the manifest and puts other manifest tools on PATH only if they are
+// already installed. With toolchain.install set to never, the environment built here
+// installs nothing either and tflint must already be installed or on PATH. The install
+// performed here is what makes
 // a project-wide tflint pin visible to every target, so keep combining the two PATHs.
 func checkTFLintAvailableImpl(atmosConfig *schema.AtmosConfiguration) (string, error) {
 	deps, err := dependencies.LoadToolVersionsDependencies(atmosConfig)

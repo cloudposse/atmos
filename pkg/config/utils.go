@@ -308,6 +308,10 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		return err
 	}
 
+	if err := normalizeConfiguredToolchainInstall(atmosConfig); err != nil {
+		return err
+	}
+
 	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE", foundEnvVarMessage,
 		schema.TerraformInitReconfigure.IsValid, errUtils.ErrInvalidInitReconfigure, &atmosConfig.Components.Terraform.Init.Reconfigure); err != nil {
 		return err
@@ -545,6 +549,31 @@ func normalizeConfiguredMocksMode(atmosConfig *schema.AtmosConfiguration) error 
 	}
 	atmosConfig.Components.Terraform.Mocks.Mode = mode
 	return nil
+}
+
+// normalizeConfiguredToolchainInstall lower-cases and validates toolchain.install as loaded from
+// atmos.yaml or ATMOS_TOOLCHAIN_INSTALL (bound through Viper), so a typo fails at config load
+// instead of being accepted silently until a tool is needed.
+func normalizeConfiguredToolchainInstall(atmosConfig *schema.AtmosConfiguration) error {
+	policy, err := normalizeInitEnumValue(string(atmosConfig.Toolchain.Install),
+		schema.ToolchainInstall.IsValid, errUtils.ErrInvalidToolchainInstall)
+	if err != nil {
+		return errUtils.Build(err).
+			WithHintf("Set `toolchain.install` (or `ATMOS_TOOLCHAIN_INSTALL`) to one of: %s", toolchainInstallValuesList()).
+			WithContext("value", string(atmosConfig.Toolchain.Install)).
+			Err()
+	}
+	atmosConfig.Toolchain.Install = policy
+	return nil
+}
+
+// toolchainInstallValuesList renders the valid toolchain.install values for hints.
+func toolchainInstallValuesList() string {
+	values := make([]string, 0, len(schema.ToolchainInstallValues))
+	for _, value := range schema.ToolchainInstallValues {
+		values = append(values, string(value))
+	}
+	return strings.Join(values, ", ")
 }
 
 // normalizeInitEnumValue trims and lower-cases value, then validates it with isValid, returning

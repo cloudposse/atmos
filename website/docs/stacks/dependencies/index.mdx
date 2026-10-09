@@ -32,18 +32,23 @@ Tool dependencies can be defined at multiple levels, with more specific levels t
 
 #### Project Defaults
 
-The project's `.tool-versions` file supplies defaults for every command and component type: Terraform, Helmfile, Packer, Ansible, Helm, and Kubernetes component runs (including Terraform output and template lookups), workflows, custom commands, and hooks. The first version listed for each tool is its default. How a run uses the file depends on what it is:
+The project's `.tool-versions` file supplies defaults for every command and component type: Terraform, Helmfile, Packer, Ansible, Helm, and Kubernetes component runs (including Terraform output and template lookups), workflows, custom commands, and hooks. The first version listed for each tool is its default. How a run uses the file depends on the [`toolchain.install`](/cli/configuration/toolchain#install) policy, which defaults to `auto`:
 
 <dl>
-  <dt>Components</dt>
-  <dd>Atmos installs the component's own executable from `.tool-versions` when the file pins it, plus `helm` for Helmfile components. The executable comes from the component's `command`, then `components.<type>.command` in `atmos.yaml`, then the type default (`terraform`, `helmfile`, `packer`, `ansible`). A `command` that is a path selects nothing. Native Kubernetes components run in process and select nothing. If the file does not pin the executable, Atmos installs nothing for it and uses the system `PATH`. Every other tool in the file is added to `PATH` only if it is already installed (for example by `atmos toolchain install`); Atmos never downloads it for a component run.</dd>
+  <dt>`never`</dt>
+  <dd>Atmos installs nothing. Explicit `dependencies.tools` and `.tool-versions` tools join `PATH` only when they are already installed. A missing `dependencies.tools` entry is an error with a hint to run `atmos toolchain install`. A missing `.tool-versions` tool is skipped and the system `PATH` is used.</dd>
 
-  <dt>Custom commands and hooks</dt>
-  <dd>Tools in `.tool-versions` that are already installed are added to `PATH`. Atmos does not download them. Only the command's or hook's own `dependencies.tools` are installed.</dd>
+  <dt>`declared`</dt>
+  <dd>Atmos installs only explicit `dependencies.tools`. Components, custom commands, and hooks do not read `.tool-versions` at all. Workflows install every tool listed in `.tool-versions` that is missing, because a workflow can call any project tool.</dd>
 
-  <dt>Workflows</dt>
-  <dd>Atmos installs every tool listed in `.tool-versions` that is missing, together with the workflow's own `dependencies.tools`, before the first step runs.</dd>
+  <dt>`auto` (default)</dt>
+  <dd>Component runs install their own executable from `.tool-versions` when the file pins it, plus `helm` for Helmfile components. The executable comes from the component's `command`, then `components.<type>.command` in `atmos.yaml`, then the type default (`terraform`, `helmfile`, `packer`, `ansible`). A `command` that is a path selects nothing, and native Kubernetes components run in process and select nothing. If the file does not pin the executable, Atmos installs nothing for it and uses the system `PATH`. Every other tool in the file joins `PATH` only if it is already installed (for example by `atmos toolchain install`). Custom commands and hooks install only their own `dependencies.tools` and use already-installed `.tool-versions` tools. Workflows install every tool listed in `.tool-versions` that is missing, together with the workflow's own `dependencies.tools`, before the first step runs.</dd>
+
+  <dt>`always`</dt>
+  <dd>Atmos installs every usable `.tool-versions` tool for every run: components, custom commands, hooks, and workflows.</dd>
 </dl>
+
+Projects pinned to an [edition](/cli/configuration/edition) dated before 2026-10-09 get `declared`, which is how Atmos behaved before `.tool-versions` became a baseline.
 
 An explicit `dependencies.tools` entry is always installed and overrides the `.tool-versions` entry for the same tool without being constrained by it. Short names, configured aliases, and qualified names that resolve to the same tool are treated as one tool when Atmos compares the manifest with explicit dependencies: for example, `terraform: "1.8.5"` overrides `hashicorp/terraform 1.9.0` in `.tool-versions`. Atmos does not apply this matching between different explicit stack scopes, so use the same key at each scope.
 

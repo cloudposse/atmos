@@ -219,6 +219,20 @@ var journal = []Entry{
 		Description: "With --use-mocks, Terraform lookups use real state when it exists and fall back to component mocks only when the state isn't provisioned or the output is missing.",
 		Ref:         "https://atmos.tools/changelog/terraform-component-mocks-fallback",
 	},
+	{
+		// toolchain.install is a brand-new key (PR #3346), journaled the same way as
+		// components.terraform.init.mode above: it governs behavior Atmos already had a fixed
+		// answer for (only explicit dependencies.tools were installed; component runs never read
+		// .tool-versions), just not a configurable one. A project pinned before this date keeps
+		// that behavior with no explicit toolchain.install: declared needed.
+		Date:        "2026-10-09",
+		Key:         "toolchain.install",
+		Kind:        KindValue,
+		Old:         "declared",
+		New:         "auto",
+		Description: "Component runs install their own pinned command from .tool-versions and use other already-installed listed tools; pinned projects keep using only declared dependencies.",
+		Ref:         "https://github.com/cloudposse/atmos/pull/3346",
+	},
 }
 
 // Journal returns a copy of the journal sorted by date (oldest first), then key.

@@ -167,6 +167,7 @@ toolchain:
   use_tool_versions: false
   use_lock_file: true
   frozen_lock_file: false
+  install: auto
 init:
   repository: github.com/cloudposse/atmos
   depth: 1

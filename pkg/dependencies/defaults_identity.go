@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
+
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 )
@@ -17,11 +19,12 @@ type toolIdentity struct {
 	aliases map[string]string
 	resolve func(tool string) (owner, repo string, err error)
 	find    func(owner, repo, version string, binaryName ...string) (string, error)
+	list    func(owner, repo string) ([]string, error)
 	locator *toolchain.Installer
 }
 
 func newToolIdentity(atmosConfig *schema.AtmosConfiguration, cfg *envConfig) *toolIdentity {
-	ids := &toolIdentity{resolve: cfg.resolveFunc, find: cfg.findBinaryPath}
+	ids := &toolIdentity{resolve: cfg.resolveFunc, find: cfg.findBinaryPath, list: cfg.listInstalled}
 	if atmosConfig != nil {
 		ids.aliases = atmosConfig.Toolchain.Aliases
 	}
@@ -77,17 +80,49 @@ func (t *toolIdentity) identity(tool string) (string, error) {
 	return owner + "/" + repo, nil
 }
 
-// installed reports whether the group's pinned version is already on disk.
-func (t *toolIdentity) installed(group *defaultGroup) bool {
-	owner, repo, ok := splitOwnerRepo(group.identity)
+// installedVersion reports the installed version of the tool that satisfies the
+// requested version, and whether there is one. A concrete version must be on
+// disk exactly. A constraint (for example `~>1.9.0`) resolves to the highest
+// installed version that satisfies it. Nothing is ever downloaded.
+func (t *toolIdentity) installedVersion(identity, version string) (string, bool) {
+	owner, repo, ok := splitOwnerRepo(identity)
 	if !ok {
-		return false
+		return "", false
+	}
+	if isConstraint(version) {
+		version, ok = t.highestInstalledMatch(owner, repo, version)
+		if !ok {
+			return "", false
+		}
 	}
 	if t.find == nil {
 		t.find = t.installer().FindBinaryPath
 	}
-	_, err := t.find(owner, repo, group.version)
-	return err == nil
+	if _, err := t.find(owner, repo, version); err != nil {
+		return "", false
+	}
+	return version, true
+}
+
+// highestInstalledMatch returns the highest installed version of owner/repo that
+// satisfies the constraint.
+func (t *toolIdentity) highestInstalledMatch(owner, repo, constraint string) (string, bool) {
+	parsed, err := semver.NewConstraint(constraint)
+	if err != nil {
+		return "", false
+	}
+	if t.list == nil {
+		t.list = t.installer().ListInstalledVersions
+	}
+	installed, err := t.list(owner, repo)
+	if err != nil {
+		return "", false
+	}
+	match, err := highestMatch(installed, parsed)
+	if err != nil {
+		return "", false
+	}
+	return match, true
 }
 
 // groupSelected reports whether any manifest key in the group matches any of the

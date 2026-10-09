@@ -408,6 +408,13 @@ var (
 	// tool (for example `tofu` and `opentofu/opentofu`) but pin different versions.
 	ErrToolVersionsConflict = errors.New("conflicting .tool-versions entries for the same tool")
 
+	// ErrInvalidToolchainInstall reports an unknown toolchain.install policy.
+	ErrInvalidToolchainInstall = errors.New("invalid toolchain.install (expected never, declared, auto, or always)")
+
+	// ErrToolNotInstalled reports an explicit dependency that is not installed while
+	// toolchain.install is never, which forbids installing it.
+	ErrToolNotInstalled = errors.New("required tool is not installed and toolchain.install is never")
+
 	// Helm plugin errors.
 	ErrInvalidHelmPluginSpec = errors.New("invalid helm plugin specification")
 	ErrHelmPluginInstall     = errors.New("helm plugin installation failed")

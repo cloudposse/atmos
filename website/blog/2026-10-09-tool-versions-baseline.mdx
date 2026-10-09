@@ -21,6 +21,8 @@ The project's `.tool-versions` is now a baseline for every command and [componen
 - **Custom commands and hooks** put already-installed tools from the file on `PATH` and install only their own `dependencies.tools`.
 - **Workflows** keep their existing behavior: they install every listed tool that is missing before the first step.
 
+How much Atmos installs on its own is a setting, so you can make it more or less eager (see [Control What Atmos Installs](#control-what-atmos-installs)).
+
 Explicit `dependencies.tools` always win, even when one side uses a short name or alias and the other uses `owner/repo`. Entries Atmos can't use — `system`, `ref:` and `path:` versions, unknown tools, lines without a version, or `~> 1.9.0` written with a space — are skipped instead of failing the run. Two entries for the same tool with different versions (`tofu 1.12.6` and `opentofu/opentofu 1.11.0`) now stop with an error naming both, instead of picking one at random.
 
 ## How to Use It
@@ -44,7 +46,23 @@ components:
 
 Running `legacy-vpc` uses 1.8.5 and leaves `.tool-versions` untouched. If your configuration points at a different manifest, [`toolchain.file_path`](/cli/configuration/toolchain) is now honored everywhere.
 
-If a component previously relied on a binary from `PATH` while `.tool-versions` pinned a different version, it now runs the pinned version. Remove or update the pin, or set `dependencies.tools` on the component, to keep the old binary.
+If a component previously relied on a binary from `PATH` while `.tool-versions` pinned a different version, it now runs the pinned version. Remove or update the pin, or set `dependencies.tools` on the component, to keep the old binary. Or restore the previous behavior for the whole project with `toolchain.install: declared`, described next.
+
+## Control What Atmos Installs
+
+The new [`toolchain.install`](/cli/configuration/toolchain#install) setting decides which tools Atmos installs on its own:
+
+```yaml title="atmos.yaml"
+toolchain:
+  install: auto   # never | declared | auto | always
+```
+
+- `never` installs nothing. Tools are used only when they are already installed, and a missing `dependencies.tools` entry fails with a hint to run `atmos toolchain install`. Use it on air-gapped runners or when an image bakes in every tool.
+- `declared` installs only explicit `dependencies.tools` (and, for workflows, every `.tool-versions` tool). Components, custom commands, and hooks ignore `.tool-versions`, exactly as before this change.
+- `auto` is the default and the behavior described above.
+- `always` installs every tool in `.tool-versions` for every run, including custom commands and hooks.
+
+Projects pinned to an [edition](/cli/configuration/edition) dated before 2026-10-09 keep `declared` automatically, so upgrading Atmos does not change what an existing pinned project downloads or runs. Set `ATMOS_TOOLCHAIN_INSTALL` to override the setting for a single run.
 
 ## Get Involved
 

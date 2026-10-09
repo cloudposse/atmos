@@ -8,36 +8,79 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// defaultsRequest describes how the project's .tool-versions manifest is applied
-// to one environment.
-//
-// The manifest is a baseline. Workflows install every usable entry. Everything
-// else only installs the tools the run itself selects (a component's executable
-// and its companions) when the manifest defines them; every other manifest tool
-// is added to the environment only when it is already installed.
+// defaultsRequest describes the run an environment is built for. The
+// toolchain.install policy decides how the project's .tool-versions manifest is
+// applied to it (see manifestUseFor).
 type defaultsRequest struct {
-	// installAll installs every usable manifest entry that no explicit
-	// dependency overrides. Only workflows set it.
-	installAll bool
+	// workflow marks a workflow run. Workflows declare every manifest tool, so
+	// they install all of it under the declared and auto policies.
+	workflow bool
 	// selected lists the bare executable names the run needs (for example
 	// "terraform" or "tofu"). Empty for workflows, commands, and hooks.
 	selected []string
 }
 
+// manifestUse says what a run does with the .tool-versions manifest.
+type manifestUse int
+
+const (
+	// The manifestIgnored use does not read the manifest at all.
+	manifestIgnored manifestUse = iota
+	// The manifestPresentOnly use adds manifest tools that are already installed
+	// and never installs any.
+	manifestPresentOnly
+	// The manifestSelected use installs the manifest tools the run selects and
+	// adds the other manifest tools only when they are already installed.
+	manifestSelected
+	// The manifestInstallAll use installs every usable manifest entry.
+	manifestInstallAll
+)
+
+// planRequest is a defaultsRequest after the install policy has been applied.
+type planRequest struct {
+	use      manifestUse
+	selected []string
+}
+
 // toolPlan is the result of overlaying the manifest on explicit dependencies.
 type toolPlan struct {
-	// install holds explicit dependencies plus selected manifest tools. These are
-	// handed to the installer, which downloads any that are missing.
+	// install holds explicit dependencies plus manifest tools the policy installs.
+	// These are handed to the installer, which downloads any that are missing.
 	install map[string]string
 	// present holds manifest tools that are already installed. They only
 	// contribute to PATH and resolved binaries and are never installed.
 	present map[string]string
 }
 
+// manifestUseFor maps the install policy and run kind to the manifest handling.
+//
+//	never:    manifest tools are PATH-only; nothing is installed.
+//	declared: workflows install every manifest tool; every other run ignores the manifest.
+//	auto:     workflows install every manifest tool; other runs install what they select.
+//	always:   every run installs every manifest tool.
+func manifestUseFor(policy schema.ToolchainInstall, workflow bool) manifestUse {
+	switch policy {
+	case schema.ToolchainInstallNever:
+		return manifestPresentOnly
+	case schema.ToolchainInstallAlways:
+		return manifestInstallAll
+	case schema.ToolchainInstallDeclared:
+		if workflow {
+			return manifestInstallAll
+		}
+		return manifestIgnored
+	default:
+		if workflow {
+			return manifestInstallAll
+		}
+		return manifestSelected
+	}
+}
+
 // newEnvironmentWithDefaults overlays resolved explicit dependencies on the
-// project's tool versions. Defaults never constrain explicit dependencies, and
-// they are best-effort: entries that cannot be used are skipped instead of
-// aborting the run.
+// project's tool versions according to toolchain.install. Defaults never
+// constrain explicit dependencies, and they are best-effort: entries that cannot
+// be used are skipped instead of aborting the run.
 func newEnvironmentWithDefaults(
 	atmosConfig *schema.AtmosConfiguration,
 	explicit map[string]string,
@@ -46,18 +89,33 @@ func newEnvironmentWithDefaults(
 ) (*ToolchainEnvironment, error) {
 	defer perf.Track(atmosConfig, "dependencies.newEnvironmentWithDefaults")()
 
-	manifest, err := LoadToolVersionsDependencies(atmosConfig)
+	policy, err := InstallPolicy(atmosConfig)
 	if err != nil {
 		return nil, err
+	}
+	use := manifestUseFor(policy, req.workflow)
+
+	var manifest map[string]string
+	if use != manifestIgnored {
+		manifest, err = LoadToolVersionsDependencies(atmosConfig)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	cfg := &envConfig{}
 	for _, opt := range opts {
 		opt(cfg)
 	}
-	plan, err := planToolDefaults(manifest, explicit, req, newToolIdentity(atmosConfig, cfg))
+	ids := newToolIdentity(atmosConfig, cfg)
+	plan, err := planToolDefaults(manifest, explicit, planRequest{use: use, selected: req.selected}, ids)
 	if err != nil {
 		return nil, fmt.Errorf("failed to overlay tool defaults: %w", err)
+	}
+	if policy == schema.ToolchainInstallNever {
+		if err := requireInstalled(plan, ids); err != nil {
+			return nil, err
+		}
 	}
 	return newEnvironmentWithPresent(atmosConfig, plan.install, plan.present, opts...)
 }
@@ -65,7 +123,7 @@ func newEnvironmentWithDefaults(
 // planToolDefaults decides which manifest entries are installed, which are
 // PATH-only, and which are dropped. Neither input map is mutated, including when
 // the installer later resolves version ranges in the returned install map.
-func planToolDefaults(manifest, explicit map[string]string, req defaultsRequest, ids *toolIdentity) (*toolPlan, error) {
+func planToolDefaults(manifest, explicit map[string]string, req planRequest, ids *toolIdentity) (*toolPlan, error) {
 	plan := &toolPlan{
 		install: make(map[string]string, len(explicit)),
 		present: map[string]string{},
@@ -92,11 +150,12 @@ func planToolDefaults(manifest, explicit map[string]string, req defaultsRequest,
 
 	for i := range groups {
 		group := &groups[i]
-		switch {
-		case req.installAll, ids.groupSelected(group, req.selected):
+		if req.use == manifestInstallAll || (req.use == manifestSelected && ids.groupSelected(group, req.selected)) {
 			plan.install[group.key()] = group.version
-		case ids.installed(group):
-			plan.present[group.key()] = group.version
+			continue
+		}
+		if version, ok := ids.installedVersion(group.identity, group.version); ok {
+			plan.present[group.key()] = version
 		}
 	}
 	return plan, nil

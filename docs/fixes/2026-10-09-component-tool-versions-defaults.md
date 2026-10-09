@@ -10,6 +10,11 @@ added to `PATH` only when they are already installed. Workflows keep their exist
 install every listed tool that is missing. Explicit `dependencies.tools` entries are always installed
 and override the baseline, including when an alias and a qualified name identify the same tool.
 
+How much Atmos installs on its own is the `toolchain.install` setting (`never`, `declared`, `auto`,
+`always`; default `auto`). The behavior above is `auto`. Projects pinned to an edition before
+2026-10-09 get `declared`, which restores the previous behavior (components, custom commands, and
+hooks ignore `.tool-versions`).
+
 ## Context
 
 [Issue #3341](https://github.com/cloudposse/atmos/issues/3341) reported that the Terraform version
@@ -59,9 +64,30 @@ approach:
   or a read-only filesystem. Writes still require the lock.
 - Added `ErrToolRegistryIndexUnavailable` so an unreachable Aqua registry index is reported as such,
   with hints to use `owner/repo` names or aliases.
-- Updated the dependencies, Terraform versions, workflow, custom command, and hook docs, including the
-  workflow install-all exception; corrected stale comments in the tflint scanner and the toolchain
-  example.
+- Replaced the hard-coded policy (including the workflow install-all exception) with the
+  `toolchain.install` setting: `schema.ToolchainInstall` values `never`, `declared`, `auto`, `always`;
+  default `auto` through `setDefaultConfiguration`, bound to `ATMOS_TOOLCHAIN_INSTALL`, and validated
+  at config load (`ErrInvalidToolchainInstall`) and again where the policy is read
+  (`dependencies.InstallPolicy`). An empty value means `auto`.
+  - `never`: no installer call. Explicit dependencies and manifest tools resolve from what is already
+    installed, constraints against installed versions. A missing explicit dependency fails with the new
+    `ErrToolNotInstalled` and a hint to run `atmos toolchain install`; a missing manifest tool is skipped.
+  - `declared`: explicit dependencies only; components, custom commands, and hooks never read the
+    manifest. Workflows install every manifest tool.
+  - `auto`: the behavior described above. `always`: every usable manifest tool for every run.
+  - `NewEnvironmentFromDeps` stays manifest-free and honors `never` (installs nothing, uses what is
+    installed), which also covers the MCP client, AI agent setup, and the tflint availability check.
+  - `atmos cast render` skips downloading the managed `agg`/`ffmpeg` renderers under `never` and reports
+    `ErrToolNotInstalled` with an install hint when one is missing.
+  - Left alone: `atmos toolchain exec` and toolchain proxies (explicit tool invocations that install on
+    demand) and Atmos version re-exec (a separate subsystem).
+- Journaled `toolchain.install` in `pkg/edition` (`declared` to `auto`, 2026-10-09, PR #3346) with the
+  default snapshot regenerated, replacing the earlier post-editions `KindBehavior` candidate note in
+  `docs/prd/editions.md`. Regenerated the `atmos.yaml` JSON schema and the seven `describe config`
+  golden snapshots that now include `toolchain.install: auto`.
+- Updated the toolchain configuration, dependencies, Terraform versions, workflow, custom command, and
+  hook docs, the changelog post, and the roadmap entry for the policy; corrected stale comments in the
+  tflint scanner and the toolchain example.
 
 ## Validation
 
@@ -78,10 +104,21 @@ approach:
     override, workflow install-all, and a workflow pin overriding the manifest all behave as
     documented.
   - Offline, an explicit short name reports that the Aqua registry index could not be loaded.
-- `go test -count=1` passed for `./pkg/dependencies/...`, `./pkg/toolchain/...`,
-  `./pkg/terraform/output/...`, `./pkg/scanners/tflint/...`, `./pkg/hooks/...`, `./pkg/component/...`,
-  `./cmd/toolchain/...`, and `./errors/...`, plus scoped runs of `./cmd`
-  (`Custom|Dependenc|Toolchain|Proxy`) and `./internal/exec` (`Workflow|Toolchain|Dependenc|ToolVersions`).
+- `go test -count=1` passed for `./pkg/dependencies/...`, `./pkg/toolchain/...`, `./pkg/config/...`,
+  `./pkg/edition/...`, `./pkg/schema/...`, `./pkg/asciicast/...`, `./pkg/terraform/output/...`,
+  `./pkg/scanners/tflint/...`, `./pkg/hooks/...`, `./pkg/component/...`, `./pkg/datafetcher/...`,
+  `./cmd/mcp/...`, `./cmd/ai/...`, `./pkg/ai/agent/...`, and `./errors/...`, plus scoped runs of `./cmd`
+  (`Custom|Dependenc|Toolchain|Proxy|MCP|AI`) and `./internal/exec`
+  (`Workflow|Toolchain|Dependenc|ToolVersions`).
+- Policy coverage in `pkg/dependencies/install_policy_test.go`: all four policies across component,
+  sections, workflow, command, and dependencies constructors (installer call and map, PATH-only
+  contents); `never` with installed, missing, unresolvable, and constraint dependencies; `declared`
+  ignoring an installed manifest terraform while a decoy on `PATH` wins; the manifest not being read
+  under `declared`; invalid values; and `NewEnvironmentFromDeps` under `never`. In `pkg/config`: the
+  edition pin (`declared` before 2026-10-09, `auto` on and after), environment-variable and
+  configuration-file precedence, and invalid values failing at config load.
+- Not run: a field test of `toolchain.install` against the built binary; the policy is covered by the
+  unit tests above only.
 - `go build ./...` passed; `./custom-gcl run --new-from-rev=origin/main` reported 0 issues on the
   changed packages.
 - `npm run build` in `website` succeeded. It reported broken anchors only on pages this change does not

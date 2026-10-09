@@ -41,7 +41,7 @@ When you run `atmos lint vpc -s plat-ue2-dev`, Atmos will:
 2. Install it from the [toolchain registry](/cli/configuration/toolchain/registries) if missing
 3. Execute the command steps with the tool available in PATH
 
-The project's `.tool-versions` file is a baseline for custom commands too. Tools listed there are added to `PATH` only when they are already installed (for example by `atmos toolchain install`); Atmos never downloads them for a custom command. A command's `dependencies.tools` entry is always installed and overrides the `.tool-versions` entry for the same tool, even when one uses a short name or alias and the other the qualified `owner/repo` name. See [Project Defaults](/stacks/dependencies#project-defaults).
+The project's `.tool-versions` file is a baseline for custom commands too. By default ([`toolchain.install: auto`](/cli/configuration/toolchain#install)), tools listed there are added to `PATH` only when they are already installed (for example by `atmos toolchain install`); Atmos does not download them for a custom command. Set `toolchain.install: always` to install them, `declared` to ignore the file for custom commands, or `never` to install nothing, including the command's own `dependencies.tools`. A command's `dependencies.tools` entry overrides the `.tool-versions` entry for the same tool, even when one uses a short name or alias and the other the qualified `owner/repo` name. See [Project Defaults](/stacks/dependencies#project-defaults).
 
 ## Multiple Tool Dependencies
 

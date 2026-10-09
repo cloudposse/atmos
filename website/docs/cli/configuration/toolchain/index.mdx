@@ -47,6 +47,9 @@ toolchain:
 
   # Maximum simultaneous tool installs (default: 4)
   max_concurrency: 4
+
+  # Which tools Atmos installs automatically: never | declared | auto | always (default: auto)
+  install: auto
 ```
 </File>
 
@@ -105,6 +108,29 @@ toolchain:
     Override with `ATMOS_TOOLCHAIN_FROZEN_LOCK_FILE=true` for CI.
   </dd>
 
+  <dt>`install`</dt>
+  <dd>
+    Controls which tools Atmos installs on its own, without an explicit `atmos toolchain install`,
+    when a component, workflow, custom command, or hook needs them. Each value installs everything
+    the previous value does, and more:
+    - `never`: installs nothing. Explicit `dependencies.tools` and `.tool-versions` tools are used only
+      when they are already installed. A missing `dependencies.tools` entry is an error with a hint to run
+      `atmos toolchain install`. A missing `.tool-versions` tool is skipped, and the system `PATH` is used.
+    - `declared`: installs only explicit `dependencies.tools`. Workflows also install every
+      `.tool-versions` tool, because a workflow can call any project tool. Components, custom commands, and
+      hooks do not read `.tool-versions` at all.
+    - `auto` (default): `declared`, plus the run's own executable (and `helm` for Helmfile components) when
+      `.tool-versions` pins it. Other `.tool-versions` tools join `PATH` only when they are already installed.
+    - `always`: installs every `.tool-versions` tool for every run: components, custom commands, hooks, and
+      workflows.
+
+    Default: `auto`. Projects pinned to an [edition](/cli/configuration/edition) dated before
+    2026-10-09 get `declared`, which keeps the previous behavior. Precedence, highest first: the
+    `ATMOS_TOOLCHAIN_INSTALL` environment variable, `toolchain.install` in `atmos.yaml`, then the
+    edition-aware default. An unknown value fails when the configuration loads and lists the valid values.
+    See [Install Policy](#install) for what each value installs per run type.
+  </dd>
+
   <dt>`max_concurrency`</dt>
   <dd>
     Maximum number of independent tool installs that may run at the same time.
@@ -113,6 +139,36 @@ toolchain:
     - Applies to explicit multi-tool installs and installs from `.tool-versions`
   </dd>
 </dl>
+
+### Install Policy {#install}
+
+The `toolchain.install` setting decides how eagerly Atmos installs tools on its own. This table shows
+what each value installs for each kind of run:
+
+| Run type | `never` | `declared` | `auto` (default) | `always` |
+| --- | --- | --- | --- | --- |
+| Component (Terraform, Helmfile, Packer, Ansible, Helm) | Nothing | Explicit `dependencies.tools` | Explicit `dependencies.tools`, plus the component's executable (and `helm` for Helmfile) when `.tool-versions` pins it | Explicit `dependencies.tools` and every `.tool-versions` tool |
+| Custom command or hook | Nothing | Explicit `dependencies.tools` | Explicit `dependencies.tools` | Explicit `dependencies.tools` and every `.tool-versions` tool |
+| Workflow | Nothing | Explicit `dependencies.tools` and every `.tool-versions` tool | Explicit `dependencies.tools` and every `.tool-versions` tool | Explicit `dependencies.tools` and every `.tool-versions` tool |
+
+Beyond what it installs, each policy treats the rest of `.tool-versions` differently:
+
+- `never` puts `.tool-versions` tools on `PATH` when they are already installed and skips the rest.
+  A missing explicit `dependencies.tools` entry is an error that points to `atmos toolchain install`.
+- `declared` does not read `.tool-versions` for components, custom commands, and hooks.
+- `auto` puts the other `.tool-versions` tools on `PATH` only when they are already installed.
+
+Entries that Atmos cannot use (`system`, `ref:` and `path:` versions, unresolvable names) are skipped
+under every policy, explicit `dependencies.tools` always override `.tool-versions`, and conflicting
+duplicate entries are an error. Projects pinned to an [edition](/cli/configuration/edition) before
+2026-10-09 get `declared`. For example, to keep a CI image hermetic:
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  install: never
+```
+</File>
 
 ## Environment Variables
 
@@ -123,6 +179,7 @@ and Atmos version switching:
 | --- | --- |
 | `ATMOS_TOOLCHAIN_FILE_PATH` | The version manifest path, including both `file_path` and `versions_file`. |
 | `ATMOS_TOOLCHAIN_INSTALL_PATH` | The binary installation directory, `install_path`. |
+| `ATMOS_TOOLCHAIN_INSTALL` | The automatic install policy, [`install`](#install). |
 
 Absolute paths are used as supplied. Relative paths resolve from the configured project base.
 Without a project, an explicit installation path is still honored; XDG storage remains the default.
@@ -292,6 +349,12 @@ Configure toolchain behavior via environment variables:
 
   <dt>`ATMOS_TOOLCHAIN_INSTALL_PATH`</dt>
   <dd>Override the tool installation directory</dd>
+
+  <dt>`ATMOS_TOOLCHAIN_INSTALL`</dt>
+  <dd>
+    Override the automatic install policy: `never`, `declared`, `auto`, or `always`.
+    See [`install`](#install).
+  </dd>
 
   <dt>`ATMOS_TOOLCHAIN_MAX_CONCURRENCY`</dt>
   <dd>

@@ -432,7 +432,7 @@ func TestDefaultsResolutionFailures(t *testing.T) {
 
 	t.Run("explicit dependencies stay strict", func(t *testing.T) {
 		config, _ := defaultsFixture(t, "default 1.0.0\n")
-		env, err := newEnvironmentWithDefaults(config, map[string]string{"explicit": "2.0.0"}, defaultsRequest{installAll: true}, resolve("explicit"), noInstall)
+		env, err := newEnvironmentWithDefaults(config, map[string]string{"explicit": "2.0.0"}, defaultsRequest{workflow: true}, resolve("explicit"), noInstall)
 		require.ErrorIs(t, err, cause)
 		assert.Contains(t, err.Error(), "explicit")
 		assert.Nil(t, env)
@@ -442,7 +442,7 @@ func TestDefaultsResolutionFailures(t *testing.T) {
 		config, _ := defaultsFixture(t, "default 1.0.0\n")
 		var installed map[string]string
 		_, err := newEnvironmentWithDefaults(
-			config, map[string]string{"owner/explicit": "2.0.0"}, defaultsRequest{installAll: true}, resolve("default"),
+			config, map[string]string{"owner/explicit": "2.0.0"}, defaultsRequest{workflow: true}, resolve("default"),
 			withEnsureTools(func(deps map[string]string) error { installed = maps.Clone(deps); return nil }),
 			withFindBinaryPath(func(_, _, _ string, _ ...string) (string, error) { return "", os.ErrNotExist }),
 			withBuildPATH(func(*schema.AtmosConfiguration, map[string]string) (string, error) { return "", nil }),
@@ -460,7 +460,7 @@ func TestPlanToolDefaultsIsolation(t *testing.T) {
 	explicit := map[string]string{"mikefarah/yq": "4.40.0"}
 	wantManifest, wantExplicit := maps.Clone(manifest), maps.Clone(explicit)
 
-	plan, err := planToolDefaults(manifest, explicit, defaultsRequest{installAll: true}, ids)
+	plan, err := planToolDefaults(manifest, explicit, planRequest{use: manifestInstallAll}, ids)
 	require.NoError(t, err)
 	want := map[string]string{"hashicorp/terraform": "1.15.9", "jqlang/jq": "1.7.1", "mikefarah/yq": "4.40.0"}
 	assert.Equal(t, want, plan.install)
@@ -472,7 +472,7 @@ func TestPlanToolDefaultsIsolation(t *testing.T) {
 	assert.Equal(t, wantExplicit, explicit)
 
 	// Source to result.
-	plan, err = planToolDefaults(manifest, explicit, defaultsRequest{installAll: true}, ids)
+	plan, err = planToolDefaults(manifest, explicit, planRequest{use: manifestInstallAll}, ids)
 	require.NoError(t, err)
 	manifest["hashicorp/terraform"] = "0.0.1"
 	explicit["mikefarah/yq"] = "0.0.1"
@@ -487,7 +487,7 @@ func TestPlanToolDefaultsExactKeyOverridesWithoutResolution(t *testing.T) {
 	plan, err := planToolDefaults(
 		map[string]string{"unknown": "~>2.0.0"},
 		map[string]string{"unknown": "1.0.0"},
-		defaultsRequest{installAll: true}, ids,
+		planRequest{use: manifestInstallAll}, ids,
 	)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{"unknown": "1.0.0"}, plan.install)
