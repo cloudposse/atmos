@@ -9,10 +9,8 @@ description: Reference for the universal constants and functions of the Atmos Au
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The Atmos Automation Language provides constants and functions that are
-available in every script, loaded module, and function without an import. This page lists each
-one with its signature, return value, failure conditions, and an example. The names that Atmos
-adds for components, commands, files, and output are listed at the end.
+Built-in constants and functions are available in every script without an
+import. Each entry lists its signature, return value, errors, and an example.
 </Intro>
 
 ## Conventions
@@ -646,7 +644,7 @@ They are available without an import and are documented in the
 
 <dl>
   <dt>`cli`</dt>
-  <dd>Module. [`cli.command`](/functions/automation/cli.command), [`cli.arg`](/functions/automation/cli.arg), and [`cli.flag`](/functions/automation/cli.flag) declare a standalone program's interface.</dd>
+  <dd>Module. [`cli.command`](/functions/automation/cli.command), [`cli.arg`](/functions/automation/cli.arg), and [`cli.flag`](/functions/automation/cli.flag) declare a standalone app's arguments, flags, and help.</dd>
 
   <dt>`atmos`</dt>
   <dd>Module. Run registered Atmos commands: [`atmos.run`](/functions/automation/atmos.run), [`atmos.terraform`](/functions/automation/atmos.terraform), [`atmos.helm`](/functions/automation/atmos.helm), [`atmos.toolchain`](/functions/automation/atmos.toolchain), and the other command wrappers described under [command wrappers](/functions/automation#atmos-command-wrappers).</dd>

@@ -9,10 +9,8 @@ description: How Atmos Automation Language evaluates a script, including single-
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Atmos Automation Language runs a script from top to bottom in a fixed, repeatable way. This page
-describes the rules that shape how scripts behave: globals that are assigned once, values that
-become immutable, errors that stop the script, how files are loaded, where output goes, and what a
-dry run does.
+Atmos parses a script, resolves its names, then executes its statements.
+This page covers scope, freezing, errors, module loading, output, and cancellation.
 </Intro>
 
 ## Phases of a run

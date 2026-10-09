@@ -1,7 +1,7 @@
 ---
 title: Testing Automation
 sidebar_label: Testing
-description: Test automation with native test steps, Atmos Automation Language checks, and assertions on real command results.
+description: Group script assertions, command checks, and service tests in workflows, custom commands, and hooks.
 id: testing
 slug: /scripting/testing
 ---
@@ -9,22 +9,55 @@ slug: /scripting/testing
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Test your automation as you develop it, then run the same checks in CI. Check
-shared functions, command behavior, and deployed services so changes to your
-build and release process have tests of their own.
+A test step groups checks and reports their results. Use it to test script logic,
+command behavior, or deployed services in workflows, custom commands, and hooks.
 </Intro>
 
-A `type: test` step runs checks and reports which passed and which failed.
-Each check can be a script, an HTTP request, a shell command, or another supported
-step. Use test steps in workflows, custom commands, and lifecycle hooks. Atmos
-collects the results, shows the output of failed checks, and returns a failing
-exit code when a suite fails.
+Each check can be a script, an HTTP request, a shell command, or another
+supported step. A successful script passes; call `fail()` when an expectation
+is not met.
 
-In a script written in the Atmos Automation Language, use a condition and
-`fail()` to report an unmet expectation. A script that finishes successfully
-passes.
+## Test syntax
 
-## Create a test workflow
+Add a `type: test` step to a workflow or custom command's `steps` list:
+
+```yaml
+- name: checks
+  type: test
+  title: Configuration checks
+  steps:
+    - name: required-files
+      type: script
+      interpreter: starlark
+      script: |
+        if not fs.exists("atmos.yaml"):
+            fail("atmos.yaml is missing")
+```
+
+`title` labels the group; each child's `name` identifies a check in the results.
+For a lifecycle hook, select `kind: step`, `type: test`, and put the test's
+`title` and `steps` under `with`. See [hook syntax](/scripting/lifecycle-hooks#lifecycle-hook-syntax).
+
+## Read results and use them in CI
+
+Successful logs stay hidden by default. Failed checks display their buffered
+output and errors; set `output: all` on the test step to include successful logs.
+Interactive terminals show a live tree, while CI and redirected output use
+static results.
+
+The default failure policy lets independent checks finish, then fails the group
+if unhandled failures remain. Nest `parallel` or `matrix` groups when checks can
+run concurrently or need several input combinations. Keep the default failing
+policy for suites intended to gate CI.
+
+Test steps also work inside custom commands and lifecycle hooks. See the
+[test step reference](/steps/type/test) for failure policies, supported
+children, counts, and hook configuration. The
+[language overview](/scripting/language) describes output
+values and process execution; the [test example](/examples/tests) shows a larger
+suite.
+
+## Example: test a workflow {#create-a-test-workflow}
 
 With Atmos installed and on your `PATH`, save this as `atmos.yaml`. The first
 example uses only built-in functions and needs no external tools:
@@ -87,9 +120,9 @@ Change the produced worker count from `12` to `11` and rerun. The result check
 fails with `worker count must equal replicas times four`, the independent
 calculation check still passes, and the workflow exits nonzero.
 
-## Test a custom command's behavior
+## Example: test a custom command {#test-a-custom-commands-behavior}
 
-Test the interface your team uses as well as the logic behind it. For the
+Test the command your team runs as well as its internal logic. For the
 [custom command guide's](/scripting/custom-commands) `atmos capacity`, add this
 child under the test step's `steps` list in the same project:
 
@@ -116,22 +149,3 @@ error out of the live output while making it available to the check.
 
 The same approach tests standalone scripts and other tools. Use fixed inputs
 for deterministic checks; subprocess tests still need the tools they invoke.
-
-## Read results and use them in CI
-
-Successful logs stay hidden by default. Failed checks display their buffered
-output and errors; set `output: all` on the test step to include successful logs.
-Interactive terminals show a live tree, while CI and redirected output use
-static results.
-
-The default failure policy lets independent checks finish, then fails the group
-if unhandled failures remain. Nest `parallel` or `matrix` groups when checks can
-run concurrently or need several input combinations. Keep the default failing
-policy for suites intended to gate CI.
-
-Test steps also work inside custom commands and lifecycle hooks. See the
-[test step reference](/steps/type/test) for failure policies, supported
-children, counts, and hook configuration. The
-[language overview](/scripting/language) describes output
-values and process execution; the [test example](/examples/tests) shows a larger
-suite.
