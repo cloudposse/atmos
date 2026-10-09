@@ -486,41 +486,24 @@ func validateComponentMetadata(info *schema.ConfigAndStacksInfo) error {
 	return nil
 }
 
-// ensureDependencies resolves and installs component dependencies, returning the updated environment list.
-// If dependencies are found, it installs them and adds the toolchain PATH to the environment.
+// ensureDependencies resolves component dependencies over the project's .tool-versions
+// manifest and returns the updated environment list. Explicit dependencies.tools are
+// installed; the ansible executable is installed when the manifest pins it; other
+// manifest tools join PATH only if already installed.
 func ensureDependencies(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 ) ([]string, error) {
 	defer perf.Track(atmosConfig, "ansible.ensureDependencies")()
 
-	resolver := dependencies.NewResolver(atmosConfig)
-	deps, err := resolver.ResolveComponentDependencies("ansible", info.StackSection, info.ComponentSection)
+	tenv, err := dependencies.ForComponent(atmosConfig, cfg.AnsibleComponentType, info.StackSection, info.ComponentSection)
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrDependencyResolution, err)
 	}
 
-	envList := info.ComponentEnvList
-
-	if len(deps) > 0 {
-		log.Debug("Installing component dependencies", "component", info.ComponentFromArg, "stack", info.Stack, "tools", deps)
-		installer := dependencies.NewInstaller(atmosConfig)
-		if err := installer.EnsureTools(deps); err != nil {
-			return nil, errors.Join(errUtils.ErrDependencyResolution, fmt.Errorf("install dependencies: %w", err))
-		}
-
-		// Build PATH with toolchain binaries and add to component environment.
-		// This does NOT modify the global process environment - only the subprocess environment.
-		toolchainPATH, err := dependencies.BuildToolchainPATH(atmosConfig, deps)
-		if err != nil {
-			return nil, errors.Join(errUtils.ErrPathResolution, fmt.Errorf("toolchain PATH: %w", err))
-		}
-
-		// Propagate toolchain PATH into environment for subprocess.
-		envList = append(envList, fmt.Sprintf("PATH=%s", toolchainPATH))
-	}
-
-	return envList, nil
+	// Propagate the toolchain PATH into the subprocess environment only. This does
+	// NOT modify the global process environment.
+	return append(info.ComponentEnvList, tenv.EnvVars()...), nil
 }
 
 // PlaybookConfig holds the resolved playbook and inventory configuration.

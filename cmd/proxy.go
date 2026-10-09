@@ -71,7 +71,9 @@ func proxyConfigContextDetected() bool {
 // present.
 func applyProxyEnvOverrides(atmosConfig *schema.AtmosConfiguration) {
 	if versionsFile, ok := os.LookupEnv(toolchain.ProxyVersionsFileEnv); ok && versionsFile != "" {
+		// Set both names: file_path takes precedence over versions_file when resolving.
 		atmosConfig.Toolchain.VersionsFile = versionsFile
+		atmosConfig.Toolchain.FilePath = versionsFile
 	}
 	if installPath, ok := os.LookupEnv(toolchain.ProxyInstallPathEnv); ok && installPath != "" {
 		atmosConfig.Toolchain.InstallPath = installPath

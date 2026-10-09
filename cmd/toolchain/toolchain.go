@@ -68,7 +68,9 @@ var toolchainCmd = &cobra.Command{
 		// the XDG cache default, so the two paths could disagree about what was
 		// installed.
 		if _, envSet := os.LookupEnv("ATMOS_TOOL_VERSIONS"); envSet || cmd.Flags().Changed(flagToolVersions) {
+			// Set both names: file_path takes precedence over versions_file when resolving.
 			atmosCfg.Toolchain.VersionsFile = v.GetString("toolchain.tool-versions")
+			atmosCfg.Toolchain.FilePath = atmosCfg.Toolchain.VersionsFile
 		}
 		if _, envSet := os.LookupEnv("ATMOS_TOOLCHAIN_PATH"); envSet || cmd.Flags().Changed(flagToolchainPath) {
 			path := v.GetString("toolchain.path")

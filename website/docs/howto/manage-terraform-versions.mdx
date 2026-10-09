@@ -50,7 +50,34 @@ terraform 1.9.0
 opentofu 1.8.0
 ```
 
-When you run `atmos terraform plan`, Atmos will automatically use the version specified in `.tool-versions`.
+When you run `atmos terraform plan`, Atmos uses `.tool-versions` as the project's default tool environment. If the file pins the component's executable (`terraform`, or `tofu` when the component sets `command: tofu`), Atmos installs that version when it is missing. Other tools in the file are added to `PATH` only if they are already installed, for example with `atmos toolchain install`. If a tool lists multiple versions, the first is its default. Terraform output lookups, including `!terraform.output` and `atmos.Component()`, use these defaults too.
+
+The same file applies to every command and component type, with these differences:
+
+- Helmfile components also install `helm` when the file pins it.
+- Custom commands and hooks use only the tools that are already installed. Atmos installs just their own `dependencies.tools`.
+- Workflows install every tool listed in `.tool-versions` that is missing before running the first step, because a workflow can call any project tool.
+
+If the file does not pin the component's executable, Atmos installs nothing for it and uses the system `PATH`. Entries with the version `system`, `ref:...`, or `path:...`, a bare operator such as `~>` (write `~>1.9.0` without a space), or a tool name Atmos cannot resolve are skipped without failing the run. Two entries for the same tool with different versions, such as `tofu 1.12.6` and `opentofu/opentofu 1.11.0`, are an error.
+
+Explicit `dependencies.tools` entries always override `.tool-versions`, even when they select a different version or use a version constraint. For example:
+
+```text title=".tool-versions"
+hashicorp/terraform 1.9.0
+```
+
+```yaml title="stacks/deploy/prod.yaml"
+components:
+  terraform:
+    legacy-vpc:
+      dependencies:
+        tools:
+          terraform: "1.8.5"
+```
+
+Here, `legacy-vpc` uses Terraform `1.8.5`; components without an override use `1.9.0`. Atmos treats a short name or configured alias and its qualified name as the same tool when it compares the manifest with explicit dependencies, so `terraform` overrides `hashicorp/terraform`. Running the component does not change the project pin in `.tool-versions`.
+
+Precedence is `.tool-versions` → stack-wide `dependencies.tools` → component-type dependencies → component-instance dependencies. Existing constraint checks between explicit stack scopes still apply. If neither the manifest nor stack configuration declares a tool, Atmos falls back to the system `PATH`.
 
 ### Setting Versions
 

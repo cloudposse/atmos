@@ -26,6 +26,8 @@ workflows:
 
 Atmos installs missing tools and prepares `PATH` before running the workflow.
 
+Workflows also install every tool listed in the project's `.tool-versions` file that is missing, before the first step runs. A workflow `dependencies.tools` entry overrides the `.tool-versions` entry for the same tool, even when one uses a short name or alias and the other the qualified `owner/repo` name. Entries whose version is `system`, `ref:...`, or `path:...`, a bare operator such as `~>`, or a tool name Atmos cannot resolve are skipped. Components, custom commands, and hooks behave differently: they only use `.tool-versions` tools that are already installed. See [Project Defaults](/stacks/dependencies#project-defaults).
+
 ## Version Values
 
 Dependency versions support the same toolchain version forms used elsewhere in Atmos:

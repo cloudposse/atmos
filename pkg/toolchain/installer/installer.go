@@ -162,6 +162,8 @@ func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
 	if resolver, ok := defaultShortNameResolver(); ok {
 		if owner, repo, err := resolver.ResolveShortName(toolName); err == nil {
 			return owner, repo, nil
+		} else if errors.Is(err, errUtils.ErrToolRegistryIndexUnavailable) {
+			return "", "", registryIndexUnavailableError(toolName, err)
 		} else if !errors.Is(err, registry.ErrToolNotFound) {
 			return "", "", err
 		}
@@ -172,6 +174,22 @@ func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
 		WithHint("Or use full format: owner/repo (e.g., hashicorp/terraform)").
 		WithHint("Run 'atmos toolchain registry search' to browse available tools").
 		WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
+		WithContext("tool", toolName).
+		WithExitCode(2).
+		Err()
+}
+
+// registryIndexUnavailableError reports that the Aqua registry index could not be
+// loaded or fetched, so a short tool name could not be resolved. This is distinct
+// from the tool genuinely being absent from a registry that did load.
+func registryIndexUnavailableError(toolName string, cause error) error {
+	// The cause already wraps ErrToolRegistryIndexUnavailable; building from it
+	// keeps errors.Is working without repeating the sentinel text in the message.
+	return errUtils.Build(cause).
+		WithExplanationf("Could not load the Aqua registry index to resolve '%s'", toolName).
+		WithHintf("Use the full owner/repo form (e.g., hashicorp/terraform) instead of '%s'", toolName).
+		WithHintf("Or add an alias in atmos.yaml:\n```yaml\ntoolchain:\n  aliases:\n    %s: owner/repo\n```", toolName).
+		WithHint("Check network connectivity and proxy settings (HTTPS_PROXY), or run once with network access to populate the registry index cache").
 		WithContext("tool", toolName).
 		WithExitCode(2).
 		Err()

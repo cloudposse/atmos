@@ -404,6 +404,10 @@ var (
 	ErrDependencyResolution = errors.New("dependency resolution failed")
 	ErrToolInstall          = errors.New("tool installation failed")
 
+	// ErrToolVersionsConflict reports .tool-versions entries that identify the same
+	// tool (for example `tofu` and `opentofu/opentofu`) but pin different versions.
+	ErrToolVersionsConflict = errors.New("conflicting .tool-versions entries for the same tool")
+
 	// Helm plugin errors.
 	ErrInvalidHelmPluginSpec = errors.New("invalid helm plugin specification")
 	ErrHelmPluginInstall     = errors.New("helm plugin installation failed")
@@ -422,6 +426,7 @@ var (
 	ErrLatestFileNotFound                 = errors.New("latest version file not found")
 	ErrRegistryNotReachable               = errors.New("registry not reachable")
 	ErrToolNotInRegistry                  = errors.New("tool not in registry")
+	ErrToolRegistryIndexUnavailable       = errors.New("tool registry index unavailable")
 	ErrToolPlatformNotSupported           = errors.New("tool does not support this platform")
 	ErrAliasNotFound                      = errors.New("alias not found")
 	ErrBinaryNotExecutable                = errors.New("binary not executable")

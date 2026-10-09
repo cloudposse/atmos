@@ -30,6 +30,27 @@ The `dependencies.tools` section declares which CLI tool versions a component re
 
 Tool dependencies can be defined at multiple levels, with more specific levels taking precedence.
 
+#### Project Defaults
+
+The project's `.tool-versions` file supplies defaults for every command and component type: Terraform, Helmfile, Packer, Ansible, Helm, and Kubernetes component runs (including Terraform output and template lookups), workflows, custom commands, and hooks. The first version listed for each tool is its default. How a run uses the file depends on what it is:
+
+<dl>
+  <dt>Components</dt>
+  <dd>Atmos installs the component's own executable from `.tool-versions` when the file pins it, plus `helm` for Helmfile components. The executable comes from the component's `command`, then `components.<type>.command` in `atmos.yaml`, then the type default (`terraform`, `helmfile`, `packer`, `ansible`). A `command` that is a path selects nothing. Native Kubernetes components run in process and select nothing. If the file does not pin the executable, Atmos installs nothing for it and uses the system `PATH`. Every other tool in the file is added to `PATH` only if it is already installed (for example by `atmos toolchain install`); Atmos never downloads it for a component run.</dd>
+
+  <dt>Custom commands and hooks</dt>
+  <dd>Tools in `.tool-versions` that are already installed are added to `PATH`. Atmos does not download them. Only the command's or hook's own `dependencies.tools` are installed.</dd>
+
+  <dt>Workflows</dt>
+  <dd>Atmos installs every tool listed in `.tool-versions` that is missing, together with the workflow's own `dependencies.tools`, before the first step runs.</dd>
+</dl>
+
+An explicit `dependencies.tools` entry is always installed and overrides the `.tool-versions` entry for the same tool without being constrained by it. Short names, configured aliases, and qualified names that resolve to the same tool are treated as one tool when Atmos compares the manifest with explicit dependencies: for example, `terraform: "1.8.5"` overrides `hashicorp/terraform 1.9.0` in `.tool-versions`. Atmos does not apply this matching between different explicit stack scopes, so use the same key at each scope.
+
+Project defaults are best effort. Atmos skips `.tool-versions` entries whose version is `system`, `ref:...`, or `path:...`, whose version is a bare operator such as `~>` (write `~>1.9.0` without a space), or whose tool name Atmos cannot resolve (for example `nodejs`). Skipped entries never fail a run. When two entries name the same tool with the same version (for example `tofu 1.12.6` and `opentofu/opentofu 1.12.6`), Atmos uses one of them. When they name the same tool with different versions, Atmos stops with an error naming both entries.
+
+The manifest is optional. If neither the manifest nor explicit dependencies declare a tool, Atmos uses the system `PATH`. Component overrides do not rewrite `.tool-versions`.
+
 #### Global Level
 
 Tool versions defined at the root level apply to all components:
@@ -110,11 +131,12 @@ Tool dependencies support multiple version formats:
 
 Tool dependencies are merged from the most general to the most specific level:
 
-1. **Global `dependencies.tools`** (applies to all components)
-2. **Component-type `terraform.dependencies.tools`** (applies to all components of that type)
-3. **Component `components.terraform.<name>.dependencies.tools`** (applies to specific component)
+1. **Project `.tool-versions`** (project defaults, applied as described in [Project Defaults](#project-defaults))
+2. **Global `dependencies.tools`** (applies to all components)
+3. **Component-type `terraform.dependencies.tools`** (applies to all components of that type)
+4. **Component `components.terraform.<name>.dependencies.tools`** (applies to specific component)
 
-More specific levels override less specific levels. For example:
+Explicit dependencies always override `.tool-versions` defaults. Within the explicit stack scopes, more specific levels override less specific levels subject to existing parent version constraints. For example:
 
 <File title="Example: Version Override">
 ```yaml

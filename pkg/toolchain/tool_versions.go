@@ -2,13 +2,16 @@ package toolchain
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/filelock"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -215,11 +218,40 @@ func withToolVersionsLock(filePath string, fn func() error) error {
 	return filelock.New(filePath+".lock").WithExclusive(context.Background(), fn)
 }
 
+// withToolVersionsSharedLock runs fn under a shared lock on the manifest's
+// sibling .lock file. Reads must keep working when the manifest lives on a
+// read-only checkout or filesystem (the lock file cannot be created there), so
+// a permission or read-only-filesystem failure to take the lock degrades to an
+// unlocked read. Errors returned by fn itself are never swallowed, and writers
+// (withToolVersionsLock) keep requiring the lock.
 func withToolVersionsSharedLock(filePath string, fn func() error) error {
+	ran := false
+	run := func() error {
+		ran = true
+		return fn()
+	}
+
+	err := lockToolVersionsShared(filePath, run)
+	if err == nil || ran || !isLockUnavailableError(err) {
+		return err
+	}
+
+	log.Debug("Tool versions lock unavailable, reading without lock", "file", filePath, "error", err)
+	return fn()
+}
+
+// lockToolVersionsShared acquires the shared lock for filePath and runs fn.
+func lockToolVersionsShared(filePath string, fn func() error) error {
 	if err := os.MkdirAll(filepath.Dir(filePath), toolVersionsDirectoryPermissions); err != nil {
 		return fmt.Errorf("create .tool-versions directory: %w", err)
 	}
 	return filelock.New(filePath+".lock").WithShared(context.Background(), fn)
+}
+
+// isLockUnavailableError reports whether err means the lock file cannot be
+// created or opened because of permissions or a read-only filesystem.
+func isLockUnavailableError(err error) bool {
+	return errors.Is(err, fs.ErrPermission) || isReadOnlyFilesystemError(err)
 }
 
 // findDuplicateKey checks whether adding a tool/version combination would create a duplicate

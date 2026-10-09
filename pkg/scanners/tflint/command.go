@@ -47,12 +47,12 @@ const terraformLintWrappedErrorFormat = "%w: %w"
 // docs/fixes/2026-07-22-terraform-lint-fail-fast-and-progress-ux.md.
 //
 // On success it also returns the resolved toolchain PATH, empty if tflint came from the
-// ambient PATH rather than a .tool-versions-driven install. This matters because
-// executeTarget's own toolchain resolution via dependencies.ForComponent only sees
-// stack/component-declared `dependencies:` blocks; it never reads .tool-versions, so a
-// project-wide-only pin would otherwise be found here but invisible again by the time
-// each target actually runs tflint. Callers combine this PATH with each target's own
-// via combineToolchainPATH.
+// ambient PATH rather than a .tool-versions-driven install. Callers combine this PATH
+// with each target's own via combineToolchainPATH. The per-target toolchain resolution
+// via dependencies.ForComponent reads .tool-versions too, but it only auto-installs the
+// component's own executable (terraform) from the manifest and puts other manifest tools
+// on PATH only if they are already installed. The install performed here is what makes
+// a project-wide tflint pin visible to every target, so keep combining the two PATHs.
 func checkTFLintAvailableImpl(atmosConfig *schema.AtmosConfiguration) (string, error) {
 	deps, err := dependencies.LoadToolVersionsDependencies(atmosConfig)
 	if err != nil {
@@ -78,7 +78,8 @@ func checkTFLintAvailableImpl(atmosConfig *schema.AtmosConfiguration) (string, e
 // in front of a target's own component-resolved toolchain PATH, so a project-wide pin for
 // a tool no component itself declares (e.g. tflint via .tool-versions with no matching
 // `dependencies:` block anywhere in the stack) still gets found at execution time — see
-// checkTFLintAvailableImpl's doc comment for why dependencies.ForComponent alone can't see it.
+// checkTFLintAvailableImpl's doc comment for why dependencies.ForComponent alone does not
+// install it.
 func combineToolchainPATH(projectPATH, componentPATH string) string {
 	switch {
 	case projectPATH == "":
