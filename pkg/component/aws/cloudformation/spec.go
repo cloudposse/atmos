@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -56,7 +57,7 @@ func buildStackSpec(componentSection map[string]any) (*stackSpec, error) {
 	if err != nil {
 		return nil, err
 	}
-	if templateBody == "" && templatePath == "" && !isAbstractComponent(componentSection) {
+	if templateBody == "" && templatePath == "" && !isAbstractComponent(componentSection) && !source.HasSource(componentSection) {
 		return nil, errUtils.ErrMissingAwsCloudFormationTemplate
 	}
 

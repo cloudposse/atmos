@@ -3,6 +3,7 @@ package cloudformation
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -49,6 +50,8 @@ func captureStdout(t *testing.T, fn func()) string {
 	return string(buf[:n])
 }
 
+// TestEventsFor checks lifecycle hook pairs, including hyphenated drift verbs, and excludes local
+// render from lifecycle events.
 func TestEventsFor(t *testing.T) {
 	tests := []struct {
 		operation  Operation
@@ -58,6 +61,8 @@ func TestEventsFor(t *testing.T) {
 		{OperationDiff, hooks.BeforeAwsCloudFormationDiff, hooks.AfterAwsCloudFormationDiff},
 		{OperationApply, hooks.BeforeAwsCloudFormationApply, hooks.AfterAwsCloudFormationApply},
 		{OperationDelete, hooks.BeforeAwsCloudFormationDelete, hooks.AfterAwsCloudFormationDelete},
+		{OperationDriftDetect, hooks.BeforeAwsCloudFormationDriftDetect, hooks.AfterAwsCloudFormationDriftDetect},
+		{OperationDriftDescribe, hooks.BeforeAwsCloudFormationDriftDescribe, hooks.AfterAwsCloudFormationDriftDescribe},
 		{OperationRender, hooks.HookEvent(""), hooks.HookEvent("")},
 	}
 	for _, tt := range tests {
@@ -199,10 +204,7 @@ func TestRunDelete_FailedStatus(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationOperationFailed)
 }
 
-// expectDescribeStacksWithVpcIDOutput sets up the single DescribeStacks call
-// TestRunOutput and TestRunOutput_RenderError both need (a stack with a
-// VpcId Output) -- their behavior under test diverges only in the
-// requested --format.
+// expectDescribeStacksWithVpcIDOutput returns one deployed output.
 func expectDescribeStacksWithVpcIDOutput(client *MockCloudFormationClient, outputKey, outputVal *string) {
 	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 		Stacks: []cfntypes.Stack{{
@@ -211,6 +213,8 @@ func expectDescribeStacksWithVpcIDOutput(client *MockCloudFormationClient, outpu
 	}, nil)
 }
 
+// TestRunOutput preserves a public deployed output in the operation summary after loading its
+// sensitivity metadata.
 func TestRunOutput(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
@@ -218,6 +222,7 @@ func TestRunOutput(t *testing.T) {
 	outputKey := "VpcId"
 	outputVal := "vpc-123"
 	expectDescribeStacksWithVpcIDOutput(client, &outputKey, &outputVal)
+	expectVpcOutputTemplate(client)
 
 	summary, err := runOutput(context.Background(), client, "vpc", map[string]any{"format": "json"}, map[string]any{})
 	require.NoError(t, err)
@@ -339,6 +344,7 @@ func TestRunApply_Success(t *testing.T) {
 	outputKey := "VpcId"
 	outputVal := "vpc-123"
 	expectRunApplySuccessfulDeployFlow(t, client, &outputKey, &outputVal)
+	expectVpcOutputTemplate(client)
 
 	octx := &opContext{
 		Ctx:         context.Background(),
@@ -364,6 +370,7 @@ func TestRunApply_RenderOutputsError(t *testing.T) {
 	outputKey := "VpcId"
 	outputVal := "vpc-123"
 	expectRunApplySuccessfulDeployFlow(t, client, &outputKey, &outputVal)
+	expectVpcOutputTemplate(client)
 
 	octx := &opContext{
 		Ctx:         context.Background(),
@@ -950,27 +957,7 @@ func TestExecute_Single_Render_Success(t *testing.T) {
 	templateBody := "AWSTemplateFormatVersion: '2010-09-09'"
 	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "template.yaml"), []byte(templateBody), 0o644))
 
-	installExecutorSeamStubs(t, executorSeamStubs{
-		initCliConfig: func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
-			return schema.AtmosConfiguration{}, nil
-		},
-		processStacks: func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
-			info.ComponentIsEnabled = true
-			info.ComponentSection = map[string]any{"stack_name": "vpc", "path": "template.yaml"}
-			return info, nil
-		},
-		setupComponentAuthForCLI: func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
-			t.Fatal("render must never set up AWS auth")
-			return nil, nil
-		},
-		propagateAuth: func(_ *schema.ConfigAndStacksInfo, _ auth.AuthManager) {
-			t.Fatal("render must never propagate auth")
-		},
-		provisionAndResolveComponentPath: func(_ context.Context, _ provisioner.OutputWriters, _ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, _, _ string) (string, bool, error) {
-			return tempDir, false, nil
-		},
-		getHooks: noopGetHooks,
-	})
+	installLocalOnlyExecutionStubs(t, tempDir, OperationRender)
 
 	ctx := &component.ExecutionContext{ConfigAndStacksInfo: schema.ConfigAndStacksInfo{ComponentFromArg: "vpc"}}
 	var renderErr error
@@ -989,27 +976,7 @@ func TestExecute_Single_Fmt_Success(t *testing.T) {
 	templateBody := "AWSTemplateFormatVersion: '2010-09-09'"
 	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "template.yaml"), []byte(templateBody), 0o644))
 
-	installExecutorSeamStubs(t, executorSeamStubs{
-		initCliConfig: func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
-			return schema.AtmosConfiguration{}, nil
-		},
-		processStacks: func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
-			info.ComponentIsEnabled = true
-			info.ComponentSection = map[string]any{"stack_name": "vpc", "path": "template.yaml"}
-			return info, nil
-		},
-		setupComponentAuthForCLI: func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
-			t.Fatal("fmt must never set up AWS auth")
-			return nil, nil
-		},
-		propagateAuth: func(_ *schema.ConfigAndStacksInfo, _ auth.AuthManager) {
-			t.Fatal("fmt must never propagate auth")
-		},
-		provisionAndResolveComponentPath: func(_ context.Context, _ provisioner.OutputWriters, _ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, _, _ string) (string, bool, error) {
-			return tempDir, false, nil
-		},
-		getHooks: noopGetHooks,
-	})
+	installLocalOnlyExecutionStubs(t, tempDir, OperationFmt)
 
 	ctx := &component.ExecutionContext{ConfigAndStacksInfo: schema.ConfigAndStacksInfo{ComponentFromArg: "vpc"}}
 	err := Execute(ctx, OperationFmt)
@@ -1186,6 +1153,85 @@ func TestRunWithHooks_OpErrPropagates(t *testing.T) {
 	err := runWithHooks(ctx, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, Operation("bogus"), spec)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidSpecificAwsCloudFormationComponent)
+}
+
+// runWithHooks must set the after-hook outcome to RunFailure when the
+// operation fails, so a `when: failure` hook fires and a `when: success`
+// (the default) hook does not — before this fix, the outcome was never set,
+// so RunAll always defaulted to RunSuccess regardless of opErr and
+// failure-only hooks silently never ran. Uses a declined-confirmation delete
+// to fail deterministically without any AWS API call.
+func TestRunWithHooks_SetsFailureOutcome(t *testing.T) {
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	tempDir := t.TempDir()
+	failureMarker := filepath.Join(tempDir, "failure-hook-ran")
+	successMarker := filepath.Join(tempDir, "success-hook-ran")
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "components", "cloudformation", "vpc"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "atmos.yaml"),
+		[]byte(`base_path: "./"
+components:
+  aws/cloudformation:
+    base_path: "components/cloudformation"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+schemas: {}
+logs:
+  level: Info
+`),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "stacks", "test.yaml"),
+		[]byte(fmt.Sprintf(`vars:
+  stage: test
+components:
+  aws/cloudformation:
+    vpc:
+      hooks:
+        on-failure:
+          events:
+            - after.aws/cloudformation.delete
+          when: failure
+          kind: command
+          command: %s
+          args: ["-test.run", "^$"]
+          env:
+            _ATMOS_TEST_WRITE_MARKER: %s
+        on-success:
+          events:
+            - after.aws/cloudformation.delete
+          kind: command
+          command: %s
+          args: ["-test.run", "^$"]
+          env:
+            _ATMOS_TEST_WRITE_MARKER: %s
+`, exe, failureMarker, exe, successMarker)),
+		0o644,
+	))
+
+	t.Chdir(tempDir)
+	info := schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "test"}
+	loadedConfig, err := cfg.InitCliConfig(info, true)
+	require.NoError(t, err)
+
+	stubConfirmOperation(t, false, nil)
+
+	ctx := &component.ExecutionContext{}
+	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
+	runErr := runWithHooks(ctx, &loadedConfig, &info, OperationDelete, spec)
+	require.Error(t, runErr, "the declined confirmation must fail the operation")
+
+	_, failureErr := os.Stat(failureMarker)
+	assert.NoError(t, failureErr, "the when:failure hook must run after a failed operation")
+	_, successErr := os.Stat(successMarker)
+	assert.True(t, os.IsNotExist(successErr), "the default (success-only) hook must not run after a failed operation")
 }
 
 // runOperation must reject apply/delete when the confirmation prompt is
@@ -1749,4 +1795,38 @@ func TestResolveStackSetTargetFromContext_Error(t *testing.T) {
 	_, err := resolveStackSetTargetFromContext(octx)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+}
+
+// Deployed metadata is required before presenting output values with masking enabled.
+func expectVpcOutputTemplate(client *MockCloudFormationClient) {
+	client.EXPECT().GetTemplate(gomock.Any(), gomock.Eq(&cloudformation.GetTemplateInput{StackName: awsString("vpc")})).Return(
+		&cloudformation.GetTemplateOutput{TemplateBody: awsString("Resources: {}\nOutputs:\n  VpcId:\n    Value: vpc-123\n")}, nil,
+	)
+}
+
+// installLocalOnlyExecutionStubs supplies a local template and fails immediately if a local operation
+// attempts AWS authentication.
+func installLocalOnlyExecutionStubs(t *testing.T, tempDir string, operation Operation) {
+	t.Helper()
+	installExecutorSeamStubs(t, executorSeamStubs{
+		initCliConfig: func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		},
+		processStacks: func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+			info.ComponentIsEnabled = true
+			info.ComponentSection = map[string]any{"stack_name": "vpc", "path": "template.yaml"}
+			return info, nil
+		},
+		setupComponentAuthForCLI: func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+			t.Fatalf("%s must never set up AWS auth", operation)
+			return nil, nil
+		},
+		propagateAuth: func(_ *schema.ConfigAndStacksInfo, _ auth.AuthManager) {
+			t.Fatalf("%s must never propagate auth", operation)
+		},
+		provisionAndResolveComponentPath: func(_ context.Context, _ provisioner.OutputWriters, _ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, _, _ string) (string, bool, error) {
+			return tempDir, false, nil
+		},
+		getHooks: noopGetHooks,
+	})
 }

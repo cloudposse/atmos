@@ -68,7 +68,7 @@ func Execute(ctx *component.ExecutionContext, operation Operation) error {
 
 // executeSingle runs the operation for a single component (the non-bulk path).
 func executeSingle(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation) error {
-	discovered, err := processStacks(atmosConfig, *info, true, true, true, nil, nil)
+	discovered, err := processStacks(atmosConfig, *info, true, !info.DryRun, !info.DryRun, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -78,14 +78,11 @@ func executeSingle(ctx *component.ExecutionContext, atmosConfig *schema.AtmosCon
 		return nil
 	}
 
-	if err := (&ComponentProvider{}).ValidateComponent(info.ComponentSection); err != nil {
-		return err
+	// Resolve static config before any authentication, provisioning or hooks.
+	if info.DryRun {
+		return validateDryRun(atmosConfig, info, ctx.Flags, operation)
 	}
-
-	// Dry-run validates the resolved component without authenticating, provisioning
-	// sources, or executing hooks. Render keeps its normal local template behavior.
-	if info.DryRun && operation != OperationRender {
-		_, err := buildStackSpec(info.ComponentSection)
+	if err := (&ComponentProvider{}).ValidateComponent(info.ComponentSection); err != nil {
 		return err
 	}
 
@@ -183,13 +180,10 @@ func resolveSpecAndTemplate(ctx context.Context, atmosConfig *schema.AtmosConfig
 		return nil, err
 	}
 
-	if spec.TemplateBody == "" {
-		spec.TemplateAbsPath = resolveTemplateFilePath(componentPath, spec)
-		spec.TemplateBody, err = loadTemplateBody(componentPath, spec)
-		if err != nil {
-			return nil, err
-		}
+	if err := resolveTemplateBody(componentPath, spec); err != nil {
+		return nil, err
 	}
+
 	registerNoEchoValues(spec.TemplateBody, spec)
 
 	if operationsSkippingStackPolicyLoad[operation] {
@@ -203,7 +197,10 @@ func resolveSpecAndTemplate(ctx context.Context, atmosConfig *schema.AtmosConfig
 	return spec, nil
 }
 
-// runWithHooks runs the before/after hooks around the operation.
+// runWithHooks runs the before/after hooks around the operation. The Native CI
+// summary hook (runCIHook) fires on both success and failure — mirroring
+// Kubernetes's runWithHooks — since a job summary describing a failed
+// operation is exactly as useful as one describing a successful one.
 func runWithHooks(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation, spec *stackSpec) error {
 	hookSet, err := getHooks(atmosConfig, info)
 	if err != nil {
@@ -215,12 +212,47 @@ func runWithHooks(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConf
 	}
 
 	octx := &opContext{Ctx: ctx.GoContext(), AtmosConfig: atmosConfig, Info: info, Flags: ctx.Flags}
-	_, opErr := runOperation(octx, operation, spec)
+	summary, opErr := runOperation(octx, operation, spec)
+
+	// The outcome status describes the CloudFormation operation, not the
+	// after-hooks: a failed apply must let `when: failure`/`always` hooks run
+	// and see the right status, mirroring runUserHooks in cmd/terraform/utils.go.
+	outcome := hooks.Outcome{Status: hooks.RunSuccess}
+	if opErr != nil {
+		outcome = hooks.Outcome{Status: hooks.RunFailure, Err: opErr, ExitCode: errUtils.GetExitCode(opErr)}
+	}
+	hookSet.SetOutcome(outcome)
+
+	// User-defined `hooks:` blocks run first, then the CI summary dispatch —
+	// matching the ordering Kubernetes's executor uses between its own
+	// user-hook and CI-hook calls. The CI hook is fire-and-forget (errors are
+	// logged, not returned; see runCIHook), so it never masks opErr or the
+	// after-hooks error below.
+	afterErr := hookSet.RunAll(after, atmosConfig, info, nil, nil)
+	// opErr takes precedence (it's the more actionable failure, matching the
+	// return below), but when the operation succeeded and only the after-hook
+	// failed, the CI summary must still reflect that failure rather than
+	// silently reporting success.
+	ciErr := opErr
+	if ciErr == nil {
+		ciErr = afterErr
+	}
+	runCIHook(ciHookParams{
+		event:       after,
+		flags:       ctx.Flags,
+		atmosConfig: atmosConfig,
+		info:        info,
+		summary:     summary,
+		commandErr:  ciErr,
+	})
+
+	// The underlying operation's own error takes priority: a failed apply is
+	// the more actionable/severe failure than a problem in a user-defined
+	// after-hook, and callers (exit code, CI status) should see it first.
 	if opErr != nil {
 		return opErr
 	}
-
-	return hookSet.RunAll(after, atmosConfig, info, nil, nil)
+	return afterErr
 }
 
 // eventsFor maps an Operation to its before/after hook events.
@@ -232,6 +264,10 @@ func eventsFor(operation Operation) (hooks.HookEvent, hooks.HookEvent) {
 		return hooks.BeforeAwsCloudFormationApply, hooks.AfterAwsCloudFormationApply
 	case OperationDelete:
 		return hooks.BeforeAwsCloudFormationDelete, hooks.AfterAwsCloudFormationDelete
+	case OperationDriftDetect:
+		return hooks.BeforeAwsCloudFormationDriftDetect, hooks.AfterAwsCloudFormationDriftDetect
+	case OperationDriftDescribe:
+		return hooks.BeforeAwsCloudFormationDriftDescribe, hooks.AfterAwsCloudFormationDriftDescribe
 	default:
 		return hooks.HookEvent(""), hooks.HookEvent("")
 	}
@@ -379,6 +415,7 @@ func runDiff(octx *opContext, client CloudFormationClient, spec *stackSpec, summ
 		return summary, err
 	}
 	summary["changeset_id"] = result.ChangeSetID
+	summary["changeset_name"] = result.ChangeSetName
 	summary["no_op"] = result.NoOp
 	summary["changes"] = result.Changes
 	renderErr := renderDiffSummary(spec.StackName, result)
@@ -455,6 +492,7 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 		return summary, nil
 	}
 	summary["changeset_id"] = result.ChangeSetID
+	summary["changeset_name"] = result.ChangeSetName
 	summary["no_op"] = result.NoOp
 
 	if err := applyPostDeployPolicy(octx, client, spec, result); err != nil {
@@ -465,15 +503,7 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 		return summary, err
 	}
 
-	outputs, err := describeStackOutputs(octx.Ctx, client, spec.StackName)
-	if err != nil {
-		return summary, err
-	}
-	summary["outputs"] = outputs
-	if err := renderOutputsSummary(outputs, octx.Flags); err != nil {
-		return summary, err
-	}
-	return summary, nil
+	return runOutput(octx.Ctx, client, spec.StackName, octx.Flags, summary)
 }
 
 // applyPostDeployPolicy sets policies for new stacks and no-op deployments.
@@ -520,7 +550,7 @@ func deleteOptionsFromFlags(flags map[string]any) deleteOptions {
 // runOutput renders the deployed stack's Outputs via the standalone `output`
 // verb's path (also called by runApply for the end-of-deploy summary).
 func runOutput(ctx context.Context, client CloudFormationClient, stackName string, flags map[string]any, summary map[string]any) (map[string]any, error) {
-	outputs, err := describeStackOutputs(ctx, client, stackName)
+	outputs, err := presentedStackOutputs(ctx, client, stackName)
 	if err != nil {
 		return summary, err
 	}

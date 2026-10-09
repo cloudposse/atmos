@@ -115,7 +115,11 @@ func TestPrintStartupStatus_NoOpWhenAlreadyShown(t *testing.T) {
 	assert.Empty(t, stderr.String())
 }
 
+// TestPrintStartupStatus_NoOpOutsideCI isolates provider detection from the inherited notice sentinel
+// and requires silence outside CI.
 func TestPrintStartupStatus_NoOpOutsideCI(t *testing.T) {
+	// Atmos custom commands pass this process-tree sentinel to test binaries.
+	t.Setenv(noticesShownEnvVar, "")
 	restore := ci.SwapRegistryForTest()
 	defer restore()
 	ci.Register(&fakeProvider{detected: false})
@@ -127,7 +131,11 @@ func TestPrintStartupStatus_NoOpOutsideCI(t *testing.T) {
 	assert.Empty(t, stderr.String())
 }
 
+// TestPrintStartupStatus_PrintsWhenInCI requires the version banner after isolating the inherited
+// process-tree notice sentinel.
 func TestPrintStartupStatus_PrintsWhenInCI(t *testing.T) {
+	// Atmos custom commands pass this process-tree sentinel to test binaries.
+	t.Setenv(noticesShownEnvVar, "")
 	restore := ci.SwapRegistryForTest()
 	defer restore()
 	ci.Register(&fakeProvider{detected: true})

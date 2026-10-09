@@ -110,10 +110,11 @@ func TestResolveStackSetTarget_MultipleNoFlagAmbiguous(t *testing.T) {
 // administration_role_arn/execution_role_name only when present.
 func TestStackSetConfigFromTarget(t *testing.T) {
 	t.Run("default permission model, no roles", func(t *testing.T) {
-		cfg := stackSetConfigFromTarget("mine", map[string]any{
+		cfg, err := stackSetConfigFromTarget("mine", map[string]any{
 			"accounts": []any{"111111111111", "222222222222"},
 			"regions":  []any{"us-east-1"},
 		})
+		require.NoError(t, err)
 		assert.Equal(t, "mine", cfg.Name)
 		assert.Equal(t, defaultPermissionModel, cfg.PermissionModel)
 		assert.Equal(t, []string{"111111111111", "222222222222"}, cfg.Accounts)
@@ -123,27 +124,32 @@ func TestStackSetConfigFromTarget(t *testing.T) {
 	})
 
 	t.Run("explicit permission model override and roles", func(t *testing.T) {
-		cfg := stackSetConfigFromTarget("mine", map[string]any{
+		cfg, err := stackSetConfigFromTarget("mine", map[string]any{
 			"permission_model":        "SERVICE_MANAGED",
 			"administration_role_arn": "arn:aws:iam::111111111111:role/AdminRole",
 			"execution_role_name":     "ExecutionRole",
 		})
+		require.NoError(t, err)
 		assert.Equal(t, "SERVICE_MANAGED", cfg.PermissionModel)
 		assert.Equal(t, "arn:aws:iam::111111111111:role/AdminRole", cfg.AdministrationRoleArn)
 		assert.Equal(t, "ExecutionRole", cfg.ExecutionRoleName)
 	})
 }
 
-// toStringSlice must normalize a []any of strings, return nil for nil/a
-// non-[]any value, and silently drop mixed-type entries (documented behavior,
-// asserted explicitly rather than merely "doesn't panic").
-func TestToStringSlice(t *testing.T) {
-	assert.Nil(t, toStringSlice(nil))
-	assert.Nil(t, toStringSlice(""))
-	assert.Nil(t, toStringSlice(42))
-	assert.Equal(t, []string{"a", "b"}, toStringSlice([]any{"a", "b"}))
-	assert.Equal(t, []string{"a", "c"}, toStringSlice([]any{"a", 42, "c", true}), "non-string entries must be silently dropped")
-	assert.Equal(t, []string{"123456789012"}, toStringSlice("123456789012"), "a single scalar string is a one-element list, not silently dropped")
+// TestStackSetTargetStrings accepts omitted or quoted account targets and rejects malformed region
+// types and values.
+func TestStackSetTargetStrings(t *testing.T) {
+	for _, input := range []any{nil, []any{}, "012345678901", []string{"012345678901"}, []any{"012345678901"}} {
+		values, err := stackSetTargetStrings("fleet", "accounts", input, stackSetAccountPattern)
+		require.NoError(t, err)
+		if input != nil && len(values) > 0 {
+			assert.Equal(t, []string{"012345678901"}, values)
+		}
+	}
+	for _, input := range []any{42, []any{"us-east-2", true}, "", "not a region"} {
+		_, err := stackSetTargetStrings("fleet", "regions", input, stackSetRegionPattern)
+		require.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+	}
 }
 
 // runStackSetCreate must wrap a CreateStackSet API error and never attempt
@@ -808,4 +814,14 @@ func TestNilIfEmpty(t *testing.T) {
 	got := nilIfEmpty("value")
 	require.NotNil(t, got)
 	assert.Equal(t, "value", *got)
+}
+
+// TestResolveStackSetTargetRejectsMalformedAccounts requires quoted account identifiers and an error
+// naming the invalid target field.
+func TestResolveStackSetTargetRejectsMalformedAccounts(t *testing.T) {
+	for _, accounts := range []any{539916835077, []any{539916835077}, []any{"539916835077", false}, "123", "", map[string]any{"id": "539916835077"}} {
+		_, err := resolveStackSetTarget(map[string]any{"targets": map[string]any{"fleet": map[string]any{"kind": kindAwsStackSet, "accounts": accounts}}}, "")
+		require.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+		assert.Contains(t, err.Error(), "provision.targets.fleet.accounts")
+	}
 }

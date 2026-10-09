@@ -21,6 +21,8 @@ var (
 	affectedCloudFormationComponentsFunc = affectedCloudFormationComponents
 )
 
+// executeBulk discovers the dependency graph without resolving YAML functions, then executes producers
+// first for apply and consumers first for delete.
 func executeBulk(
 	ctx *component.ExecutionContext,
 	atmosConfig *schema.AtmosConfiguration,
@@ -39,8 +41,8 @@ func executeBulk(
 		[]string{cfg.CloudFormationComponentType},
 		nil,
 		false,
-		true,
-		true,
+		!info.DryRun,
+		false, // Resolve YAML functions per node, after dependencies have completed.
 		true,
 		info.Skip,
 		authManager,
@@ -56,6 +58,7 @@ func executeBulk(
 
 	return executeGraph(ctx.GoContext(), &component.GraphExecutionOptions{
 		Provider:      &ComponentProvider{},
+		ReverseOrder:  operation == OperationDelete,
 		AtmosConfig:   atmosConfig,
 		Info:          info,
 		Stacks:        stacks,
@@ -110,6 +113,8 @@ func graphSelectionForBulk(
 	}, nil
 }
 
+// affectedCloudFormationComponents selects changed components without resolving output dependencies
+// that may not exist until execution.
 func affectedCloudFormationComponents(
 	ctx *component.ExecutionContext,
 	atmosConfig *schema.AtmosConfiguration,
@@ -118,8 +123,8 @@ func affectedCloudFormationComponents(
 	args := e.DescribeAffectedCmdArgs{
 		CLIConfig:                   atmosConfig,
 		Stack:                       info.Stack,
-		ProcessTemplates:            true,
-		ProcessYamlFunctions:        true,
+		ProcessTemplates:            !info.DryRun,
+		ProcessYamlFunctions:        false,
 		Skip:                        info.Skip,
 		IncludeSettings:             false,
 		IncludeDependents:           false,

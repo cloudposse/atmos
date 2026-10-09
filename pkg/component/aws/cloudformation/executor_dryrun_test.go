@@ -108,7 +108,9 @@ func TestRunOperation_DryRunRenderStillReturnsTemplate(t *testing.T) {
 	assert.Equal(t, spec.TemplateBody, summary["template"])
 }
 
-func TestExecuteSingle_DryRunRenderStillLoadsTemplate(t *testing.T) {
+// TestExecuteSingle_DryRunRenderDoesNotProvision ensures render dry runs stop before source
+// provisioning.
+func TestExecuteSingle_DryRunRenderDoesNotProvision(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "template.yaml"), []byte("Resources: {}"), 0o644))
 	var provisions int
@@ -125,7 +127,7 @@ func TestExecuteSingle_DryRunRenderStillLoadsTemplate(t *testing.T) {
 		getHooks: noopGetHooks,
 	})
 	require.NoError(t, executeSingle(&component.ExecutionContext{}, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{DryRun: true}, OperationRender))
-	assert.Equal(t, 1, provisions)
+	assert.Zero(t, provisions)
 }
 
 func TestExecuteSingle_DryRunStillValidatesParameters(t *testing.T) {
