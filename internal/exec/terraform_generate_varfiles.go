@@ -200,12 +200,14 @@ func ExecuteTerraformGenerateVarfiles(
 				configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
 				configAndStacksInfo.ComponentSection["atmos_manifest"] = stackFileName
 
-				// Terraform workspace
+				// Terraform workspace. Batch generation starts from a physical manifest before
+				// evaluating computed vars. Keep its provisional workspace physical as well;
+				// BuildTerraformWorkspace runs again after finishValues with the resolved context.
 				workspace, err := BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
-				if err != nil {
+				if err != nil && !errors.Is(err, errUtils.ErrStarlarkStackIdentity) {
 					return err
 				}
-				if containsStarlark(workspace) {
+				if errors.Is(err, errUtils.ErrStarlarkStackIdentity) || containsStarlark(workspace) {
 					workspace = strings.ReplaceAll(stackFileName, "/", "-")
 				}
 				componentSection["workspace"] = workspace
