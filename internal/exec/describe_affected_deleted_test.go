@@ -96,7 +96,7 @@ func TestDetectDeletedComponents_HelmAndKubernetesComponentDeleted(t *testing.T)
 		},
 	}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 2)
 
@@ -144,7 +144,7 @@ func TestDetectDeletedComponents_HelmAndKubernetesEntireStackDeleted(t *testing.
 	// The entire stack is gone in HEAD.
 	currentStacks := map[string]any{}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 2)
 
