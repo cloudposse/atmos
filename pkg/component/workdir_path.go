@@ -233,7 +233,7 @@ func ProvisionAndResolveComponentPath(
 	// run of the same provisioner is idempotent.
 	if componentType == cfg.TerraformComponentType {
 		if err := provWorkdir.ProvisionWorkdir(ctx, atmosConfig, info.ComponentSection, info.AuthContext, writers); err != nil {
-			return "", false, errors.Join(errUtils.ErrWorkdirProvision, err)
+			return "", false, wrapWorkdirProvisionError(err)
 		}
 	}
 
@@ -284,6 +284,17 @@ func ProvisionAndResolveComponentPath(
 	// fallback is again a local component dir, so wrap with ErrInvalidComponent.
 	exists, err := componentDirExists(fallbackComponentPath, "re-check component path after provisioning", errUtils.ErrInvalidComponent)
 	return fallbackComponentPath, exists, err
+}
+
+// wrapWorkdirProvisionError classifies a workdir provisioning failure as ErrWorkdirProvision without
+// repeating the sentinel text. The workdir service already returns builder errors that wrap the
+// sentinel together with an explanation, context and hints; joining a second copy of the sentinel
+// printed "workdir provisioning failed" twice and dropped that explanation from the rendered error.
+func wrapWorkdirProvisionError(err error) error {
+	if errors.Is(err, errUtils.ErrWorkdirProvision) {
+		return err
+	}
+	return errUtils.Build(errUtils.ErrWorkdirProvision).WithCause(err).Err()
 }
 
 // sourceMisplacedUnderMetadata reports whether a component nests `source` under `metadata`, where

@@ -37,6 +37,7 @@ import (
 // lookup rather than a central switch. New already matches providers.Constructor.
 func init() {
 	providers.Register(providers.TrackSops, New)
+	providers.RegisterLocations(providers.TrackSops, possibleLocations)
 }
 
 const (

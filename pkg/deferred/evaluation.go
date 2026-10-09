@@ -24,8 +24,7 @@ func FilterDeferredFields(dctx *m.DeferredMergeContext, section string, paths []
 		for _, value := range values {
 			field := append([]string{section}, value.Path...)
 			for _, path := range paths {
-				length := min(len(field), len(path))
-				if slices.Equal(field[:length], path[:length]) {
+				if evaluationPathsOverlap(field, path) {
 					needed = true
 				}
 			}
@@ -38,6 +37,8 @@ func FilterDeferredFields(dctx *m.DeferredMergeContext, section string, paths []
 
 // ExpandEvaluationPaths includes fields referenced by selected template values.
 // Dynamic scope/root access cannot be proven safe to narrow, so it evaluates fully.
+// A "*" path segment selects every map key at that level. Ancestor values are
+// inspected when they must be evaluated to materialize a requested descendant.
 // Optional delimiters keep dependency analysis aligned with template rendering.
 func ExpandEvaluationPaths(data map[string]any, paths [][]string, delimiters ...string) [][]string {
 	defer perf.Track(nil, "deferred.ExpandEvaluationPaths")()
@@ -61,18 +62,13 @@ func ExpandEvaluationPaths(data map[string]any, paths [][]string, delimiters ...
 			continue
 		}
 		seen[key] = true
-		var value any = data
-		for _, part := range path {
-			section, ok := value.(map[string]any)
-			if !ok {
-				value = nil
-				break
+		var refs [][]string
+		for _, value := range evaluationPathValues(data, path) {
+			dependencies, static := evaluationReferences(value, delimiters)
+			if !static {
+				return nil
 			}
-			value = section[part]
-		}
-		refs, ok := evaluationReferences(value, delimiters)
-		if !ok {
-			return nil
+			refs = append(refs, dependencies...)
 		}
 		for _, ref := range refs {
 			if !seen[strings.Join(ref, "\x00")] {
@@ -186,7 +182,7 @@ func SplitEvaluationFields(data map[string]any, paths [][]string) (map[string]an
 func childEvaluationPaths(paths [][]string, key string) ([][]string, bool) {
 	var children [][]string
 	for _, path := range paths {
-		if len(path) == 0 || path[0] != key {
+		if len(path) == 0 || (path[0] != key && path[0] != "*") {
 			continue
 		}
 		if len(path) == 1 {
@@ -209,4 +205,35 @@ func RestoreEvaluationFields(result, excluded map[string]any) {
 			result[key] = value
 		}
 	}
+}
+
+// evaluationPathsOverlap keeps requested ancestors and descendants while treating
+// wildcard segments in the requested path as any map key.
+func evaluationPathsOverlap(field, requested []string) bool {
+	for i := range min(len(field), len(requested)) {
+		if requested[i] != "*" && requested[i] != field[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// evaluationPathValues selects dependency-bearing values, including scalar
+// ancestor expressions that produce maps whose keys are not available yet.
+func evaluationPathValues(value any, path []string) []any {
+	if len(path) == 0 {
+		return []any{value}
+	}
+	section, ok := value.(map[string]any)
+	if !ok {
+		return []any{value}
+	}
+	if path[0] != "*" {
+		return evaluationPathValues(section[path[0]], path[1:])
+	}
+	var values []any
+	for _, child := range section {
+		values = append(values, evaluationPathValues(child, path[1:])...)
+	}
+	return values
 }

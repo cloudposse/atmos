@@ -2,12 +2,18 @@ package secrets
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // scopeFieldKey is the key under a declaration's spec map holding its (derived) scope.
 const scopeFieldKey = "scope"
+
+// scopePositionKey records the position-derived scope of a declaration whose explicit `scope` is a
+// template or YAML function that cannot be validated until it is rendered. The one-way rule is then
+// enforced after rendering (see Declaration.ScopeConflict) instead of rejecting the unrendered text.
+const scopePositionKey = "scope_position"
 
 // TagScope returns a copy of a `secrets:` section with the derived scope stamped onto every
 // declaration under `secrets.vars`. Stamping happens by declaration position before the standard
@@ -62,6 +68,17 @@ func TagScope(section map[string]any, scope Scope) (map[string]any, error) {
 // stamp; any other explicit scope must match the positional one.
 func stampDeclarationScope(name string, spec map[string]any, scope Scope) (map[string]any, error) {
 	existing, _ := spec[scopeFieldKey].(string)
+	if isDeferredScope(existing) {
+		// `scope` is evaluated later (it is in the evaluated-field list), so it cannot be validated
+		// against its position yet. Keep it, and record the position so the rendered value is
+		// validated once it is known.
+		deferred := make(map[string]any)
+		for sk, sv := range spec {
+			deferred[sk] = sv
+		}
+		deferred[scopePositionKey] = string(scope)
+		return deferred, nil
+	}
 	if existing != "" && existing != string(scope) && existing != string(ScopeGlobal) {
 		return nil, fmt.Errorf("%w: secret %q declares scope %q but its position implies %q",
 			ErrScopeConflict, name, existing, scope)
@@ -75,4 +92,10 @@ func stampDeclarationScope(name string, spec map[string]any, scope Scope) (map[s
 		newSpec[scopeFieldKey] = string(scope)
 	}
 	return newSpec, nil
+}
+
+// isDeferredScope reports whether an explicit scope value is a template or YAML function that is
+// evaluated after stack merging and therefore cannot be compared with the declaration's position yet.
+func isDeferredScope(value string) bool {
+	return strings.Contains(value, "{{") || strings.HasPrefix(strings.TrimSpace(value), "!")
 }

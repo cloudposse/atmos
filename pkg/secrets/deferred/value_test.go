@@ -84,3 +84,59 @@ func TestSecretDefaultDoesNotHideAuthenticationFailure(t *testing.T) {
 		require.Nil(t, value)
 	}
 }
+
+// TestSecretValueResolvesSelectorStore proves `!secret` can consume a store chosen by a YAML-function
+// selector: the evaluator supplied through the option names the store, and the lookup then reads and
+// authenticates that store on demand. An unresolvable selector names the declaration and never reaches
+// the backend or authentication.
+func TestSecretValueResolvesSelectorStore(t *testing.T) {
+	const selector = "!aws.cloudformation.output producer dev SecretStoreName"
+	newConfig := func(ctrl *gomock.Controller) (*schema.AtmosConfiguration, *store.MockIdentityAwareStore, *authdeferred.MockAuthFactory) {
+		backend := store.NewMockIdentityAwareStore(ctrl)
+		factory := authdeferred.NewMockAuthFactory(ctrl)
+		return &schema.AtmosConfiguration{
+			AuthManager:  authdeferred.NewManager(authdeferred.AuthOptions{Factory: factory}),
+			Stores:       store.StoreRegistry{"vault": backend},
+			StoresConfig: store.StoresConfig{"vault": {Secret: true}},
+		}, backend, factory
+	}
+	info := func() *schema.ConfigAndStacksInfo {
+		i := &schema.ConfigAndStacksInfo{Stack: "dev", Component: "app", ComponentSection: map[string]any{
+			"secrets": map[string]any{"vars": map[string]any{"KEY": map[string]any{"store": selector}}},
+		}}
+		return i
+	}
+	require.NoError(t, iolib.Initialize())
+
+	t.Run("resolved", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ac, backend, factory := newConfig(ctrl)
+		gomock.InOrder(
+			backend.EXPECT().ResetAuthContext(),
+			factory.EXPECT().Create(gomock.Any(), gomock.Any(), "dev").Return(nil, nil),
+			backend.EXPECT().Get("dev", "app", "KEY").Return("resolved-secret", nil),
+		)
+		evaluator := secrets.WithSelectorEvaluator(func(path []string, raw any) (any, error) {
+			require.Equal(t, []string{"secrets", "vars", "KEY", "store"}, path)
+			require.Equal(t, selector, raw)
+			return "vault", nil
+		})
+
+		got, err := NewValue(ac, "!secret KEY", "dev", info(), evaluator).Resolve()
+		require.NoError(t, err)
+		require.Equal(t, "resolved-secret", got)
+	})
+
+	t.Run("unresolvable names the declaration", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ac, _, _ := newConfig(ctrl) // No backend or factory calls are expected.
+		evaluator := secrets.WithSelectorEvaluator(func([]string, any) (any, error) {
+			return nil, errUtils.ErrAwsCloudFormationStackNotFound
+		})
+
+		_, err := NewValue(ac, "!secret KEY", "dev", info(), evaluator).Resolve()
+		require.ErrorIs(t, err, secrets.ErrSelectorUnresolved)
+		require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackNotFound)
+		require.Contains(t, err.Error(), `"KEY"`)
+	})
+}

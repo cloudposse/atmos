@@ -7,6 +7,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -50,4 +51,23 @@ func confirmAction(title string) (bool, error) {
 		return false, fmt.Errorf("confirmation prompt failed: %w", err)
 	}
 	return confirmed, nil
+}
+
+// interactiveFn reports whether prompts can be shown (a TTY, interactive mode enabled, and not CI).
+// It is a seam so tests can exercise the non-interactive path without a real terminal.
+var interactiveFn = flags.IsInteractive
+
+// confirmActionInteractive asks for confirmation only when a prompt can actually be shown. Without
+// a TTY (pipelines, CI, scripts) the underlying form would fail with an opaque terminal error
+// ("could not open a new TTY"), so it fails with a clear error and a hint to pass --force instead.
+func confirmActionInteractive(title string) (bool, error) {
+	defer perf.Track(nil, "secret.confirmActionInteractive")()
+
+	if !interactiveFn() {
+		return false, errUtils.Build(errUtils.ErrInteractiveModeNotAvailable).
+			WithExplanationf("Confirmation is required (%s) but no interactive terminal is available.", title).
+			WithHint("Pass `--force` to proceed without confirmation").
+			Err()
+	}
+	return confirmAction(title)
 }

@@ -114,10 +114,15 @@ func enumeratedSecretRows(facet secretScope, verify bool) ([]map[string]any, err
 	}
 	entries, atmosConfig, err := enumerateScopesFn(facet)
 	if err != nil {
-		if progress != nil {
-			progress.Error("Secret verification failed")
+		if !isPartialEnumeration(err) {
+			if progress != nil {
+				progress.Error("Secret verification failed")
+			}
+			return nil, err
 		}
-		return nil, err
+		// A component that cannot be evaluated is named and skipped; its healthy siblings are still
+		// listed so one broken component never hides every other secret.
+		ui.Warningf("Some components were skipped because their secret declarations could not be evaluated: %v", err)
 	}
 
 	var rows []map[string]any
@@ -196,6 +201,9 @@ func renderSecretRows(rows []map[string]any, verbose bool, outputFormat format.F
 	}
 
 	columns := secretListColumns(verbose)
+	if rowsHaveReason(rows) {
+		columns = append(columns, column.Config{Name: "Reason", Value: "{{ .reason }}"})
+	}
 
 	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
 	if err != nil {
@@ -233,7 +241,19 @@ func statusRow(stack, component string, st *secrets.Status) map[string]any {
 		"provider":    backendLabel(&st.Declaration),
 		"status":      statusLabel(st),
 		"description": st.Declaration.Description,
+		"reason":      st.Reason,
 	}
+}
+
+// rowsHaveReason reports whether any row carries a reason, so the Reason column only appears when
+// there is something to explain (an unresolved selector or an error).
+func rowsHaveReason(rows []map[string]any) bool {
+	for _, row := range rows {
+		if reason, _ := row["reason"].(string); reason != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // scopeLabel returns the display scope for a declaration, defaulting empty to "instance".
@@ -275,6 +295,11 @@ func backendLabel(decl *secrets.Declaration) string {
 func statusLabel(st *secrets.Status) string {
 	if st.Err != nil {
 		return "error"
+	}
+	if st.Unresolved {
+		// The backend is a selector (e.g. !aws.cloudformation.output) that is only evaluated with
+		// credentials; the Reason column says how to resolve it.
+		return "unresolved"
 	}
 	if st.Unknown {
 		// Not checked: the backend is remote and verification was not requested. Use --verify

@@ -1,8 +1,10 @@
 package secrets
 
 import (
+	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/io"
@@ -20,11 +22,14 @@ type Service struct {
 	componentSection map[string]any
 	stack            string
 	component        string
+	// evaluator lazily resolves backend selectors (e.g. `!aws.cloudformation.output ...`). It is nil
+	// for credential-free services, which report selector-backed declarations as unresolved.
+	evaluator SelectorEvaluator
 }
 
 // NewService creates a Service scoped to a (stack, component) and its resolved component
 // section (which carries the secrets.vars declarations after inheritance/merge).
-func NewService(atmosConfig *schema.AtmosConfiguration, stack, component string, componentSection map[string]any) *Service {
+func NewService(atmosConfig *schema.AtmosConfiguration, stack, component string, componentSection map[string]any, opts ...Option) *Service {
 	defer perf.Track(atmosConfig, "secrets.NewService")()
 
 	return &Service{
@@ -32,7 +37,21 @@ func NewService(atmosConfig *schema.AtmosConfiguration, stack, component string,
 		componentSection: componentSection,
 		stack:            stack,
 		component:        component,
+		evaluator:        applyOptions(opts).evaluator,
 	}
+}
+
+// provider resolves the backend provider for a declaration, lazily evaluating any backend selector
+// for that declaration only.
+func (s *Service) provider(decl *Declaration) (providers.Provider, error) {
+	req := providerRequest{
+		atmosConfig: s.atmosConfig,
+		section:     s.componentSection,
+		stack:       s.stack,
+		component:   s.component,
+		evaluator:   s.evaluator,
+	}
+	return req.provider(decl)
 }
 
 // Declarations returns the declared secrets for the service's scope, sorted by name.
@@ -71,8 +90,13 @@ func (s *Service) VaultsMissingKeys() ([]GenerableVault, error) {
 			continue
 		}
 		seen[key] = true
-		prov, err := providerFor(s.atmosConfig, &d, s.componentSection)
+		prov, err := s.provider(&d)
 		if err != nil {
+			// A vault whose name comes from an unresolvable selector cannot be keyed yet; skip it
+			// rather than blocking key generation for the declarations that can be resolved.
+			if errors.Is(err, ErrSelectorUnresolved) {
+				continue
+			}
 			return nil, err
 		}
 		if kg, ok := prov.(providers.KeyGenerator); ok && !kg.HasKey() {
@@ -89,7 +113,7 @@ func (s *Service) GenerateKeyForVault(v GenerableVault) (*providers.KeygenResult
 	defer perf.Track(s.atmosConfig, "secrets.Service.GenerateKeyForVault")()
 
 	decl := Declaration{BackendType: BackendType(v.Track), BackendName: v.Name}
-	prov, err := providerFor(s.atmosConfig, &decl, s.componentSection)
+	prov, err := s.provider(&decl)
 	if err != nil {
 		return nil, err
 	}
@@ -106,6 +130,9 @@ func (s *Service) declarationFor(name string) (Declaration, error) {
 	if !ok {
 		return Declaration{}, fmt.Errorf("%w: %q", ErrSecretNotDeclared, name)
 	}
+	if err := decl.ScopeConflict(); err != nil {
+		return Declaration{}, err
+	}
 	return decl, nil
 }
 
@@ -115,8 +142,11 @@ func (s *Service) providerAndCoord(name string) (providers.Provider, providers.C
 	if err != nil {
 		return nil, providers.Coordinate{}, err
 	}
-	provider, err := providerFor(s.atmosConfig, &decl, s.componentSection)
+	provider, err := s.provider(&decl)
 	if err != nil {
+		if errors.Is(err, ErrSelectorUnresolved) {
+			return nil, providers.Coordinate{}, err
+		}
 		return nil, providers.Coordinate{}, fmt.Errorf("%w (secret %q)", err, name)
 	}
 	coord := coordinateForDeclaration(&decl, s.stack, s.component)
@@ -200,12 +230,21 @@ func (s *Service) DeleteAll() (int, error) {
 	defer perf.Track(s.atmosConfig, "secrets.Service.DeleteAll")()
 
 	decls := s.Declarations()
+	var errs []error
+	deleted := 0
 	for _, decl := range decls {
+		// One declaration whose backend cannot be resolved (for example a selector whose producer
+		// was deleted) must not strand the values of the declarations that can still be deleted.
 		if err := s.Delete(decl.Name); err != nil {
-			return 0, err
+			errs = append(errs, err)
+			continue
 		}
+		deleted++
 	}
-	return len(decls), nil
+	if len(errs) > 0 {
+		return deleted, errors.Join(errs...)
+	}
+	return deleted, nil
 }
 
 // Reset overwrites a file-based provider's backing file (e.g. SOPS) with a clean, empty document
@@ -258,14 +297,31 @@ func (s *Service) Status(verify bool) []Status {
 			Declaration: decl,
 			Coordinate:  coordinateForDeclaration(&decl, s.stack, s.component),
 		}
-		provider, err := providerFor(s.atmosConfig, &decl, s.componentSection)
+		if err := decl.ScopeConflict(); err != nil {
+			st.Err = err
+			st.Reason = err.Error()
+			out = append(out, st)
+			continue
+		}
+		// Without --verify there is no authenticated scope to evaluate a backend selector in, so
+		// report an explicit unresolved state with its reason instead of a bare error.
+		if !verify && IsSelector(decl.BackendName) {
+			st.Unknown = true
+			st.Unresolved = true
+			st.Reason = fmt.Sprintf("backend selector %q is resolved with --verify (requires credentials)", strings.TrimSpace(decl.BackendName))
+			out = append(out, st)
+			continue
+		}
+		provider, err := s.provider(&decl)
 		if err != nil {
 			st.Err = err
+			st.Reason = err.Error()
 			out = append(out, st)
 			continue
 		}
 		if err := checkScopeSupported(provider, &decl, st.Coordinate); err != nil {
 			st.Err = err
+			st.Reason = err.Error()
 			out = append(out, st)
 			continue
 		}
@@ -279,6 +335,9 @@ func (s *Service) Status(verify bool) []Status {
 		initialized, err := provider.Status(st.Coordinate)
 		st.Initialized = initialized
 		st.Err = err
+		if err != nil {
+			st.Reason = err.Error()
+		}
 		out = append(out, st)
 	}
 	return out
@@ -289,38 +348,6 @@ func (s *Service) Status(verify bool) []Status {
 func providerStatusIsLocal(provider providers.Provider) bool {
 	ls, ok := provider.(providers.LocalStatus)
 	return ok && ls.LocalStatusCheck()
-}
-
-// FileDependencies returns the distinct backing files this scope's file-based declared secrets
-// (currently SOPS) resolve to, for `describe affected` to treat as implicit dependencies: a
-// changed secret file then marks every component that consumes it. Secrets whose backend is not
-// file-based (store-backed) contribute nothing. It is best-effort — declarations whose provider
-// or path cannot be resolved are skipped rather than failing the whole computation. Results are
-// de-duplicated and sorted.
-func (s *Service) FileDependencies() []string {
-	defer perf.Track(s.atmosConfig, "secrets.Service.FileDependencies")()
-
-	seen := make(map[string]bool)
-	var files []string
-	for _, decl := range s.Declarations() {
-		d := decl
-		provider, err := providerFor(s.atmosConfig, &d, s.componentSection)
-		if err != nil {
-			continue
-		}
-		fp, ok := provider.(providers.FilePathProvider)
-		if !ok {
-			continue
-		}
-		path, err := fp.FilePath(coordinateForDeclaration(&d, s.stack, s.component))
-		if err != nil || path == "" || seen[path] {
-			continue
-		}
-		seen[path] = true
-		files = append(files, path)
-	}
-	sort.Strings(files)
-	return files
 }
 
 // ScopeOf returns the resolved scope of a declared secret and whether it is declared. An undeclared
