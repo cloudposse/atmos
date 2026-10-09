@@ -177,9 +177,19 @@ func TestFormatAnnotation(t *testing.T) {
 }
 
 func TestReportSARIF(t *testing.T) {
-	p, buf := newBoundProvider(t)
-	require.NoError(t, p.ReportSARIF(context.Background(), provider.SARIFReport{Body: []byte("12345"), Category: "trivy"}))
-	assert.Contains(t, buf.String(), `SARIF report "trivy" (5 bytes) not uploaded: no CI provider detected`)
+	ctx := context.Background()
+
+	t.Run("names the category and byte count", func(t *testing.T) {
+		p, buf := newBoundProvider(t)
+		require.NoError(t, p.ReportSARIF(ctx, provider.SARIFReport{Body: []byte("12345"), Category: "trivy"}))
+		assert.Contains(t, buf.String(), `SARIF report "trivy" (5 bytes) not uploaded: no CI provider detected`)
+	})
+
+	t.Run("names the file path when known", func(t *testing.T) {
+		p, buf := newBoundProvider(t)
+		require.NoError(t, p.ReportSARIF(ctx, provider.SARIFReport{Body: []byte("12345"), Category: "trivy", Path: "reports/trivy.sarif"}))
+		assert.Contains(t, buf.String(), `SARIF report "trivy" from reports/trivy.sarif (5 bytes) not uploaded: no CI provider detected`)
+	})
 }
 
 func TestLogGroup(t *testing.T) {

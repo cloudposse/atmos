@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -21,7 +22,9 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/providers/generic"
+	githubci "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/script"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -406,14 +409,38 @@ func TestCISARIFReadsThroughEngineFileReader(t *testing.T) {
 		read = append(read, path)
 		return []byte(`{"runs":[]}`), nil
 	})
-	m := newCIMock(t)
-	m.EXPECT().SARIF(gomock.Any(), ci.SARIFReport{Body: []byte(`{"runs":[]}`), Category: "tf"}).Return(ci.Receipt{}, nil)
-	m.EXPECT().SARIF(gomock.Any(), ci.SARIFReport{Body: []byte(`{"runs":[]}`), Category: ""}).Return(ci.Receipt{}, nil)
 	absolute := filepath.Join(dir, "abs", "r.sarif")
+	m := newCIMock(t)
+	m.EXPECT().SARIF(gomock.Any(), ci.SARIFReport{Body: []byte(`{"runs":[]}`), Category: "tf", Path: "out/r.sarif"}).Return(ci.Receipt{}, nil)
+	m.EXPECT().SARIF(gomock.Any(), ci.SARIFReport{Body: []byte(`{"runs":[]}`), Category: "", Path: absolute}).Return(ci.Receipt{}, nil)
 	_, _, err := executeCI(t, &script.Spec{CI: m, WorkingDirectory: dir, Source: `ci.sarif("out/r.sarif", category="tf")
 ci.sarif(` + `"` + strings.ReplaceAll(absolute, `\`, `\\`) + `"` + `)`}, reader)
 	require.NoError(t, err)
 	assert.Equal(t, []string{filepath.Join(dir, "out", "r.sarif"), absolute}, read)
+}
+
+func TestCISARIFLocalRenderingNamesFile(t *testing.T) {
+	for _, detected := range []bool{false, true} {
+		t.Run(strconv.FormatBool(detected), func(t *testing.T) {
+			useGenericOnly(t)
+			if detected {
+				t.Setenv("GITHUB_ACTIONS", "true")
+				ci.Register(githubci.NewProvider())
+			}
+			cfg := &schema.AtmosConfiguration{}
+			cfg.CI.Enabled = true
+			report := filepath.Join(t.TempDir(), "r.sarif")
+			require.NoError(t, os.WriteFile(report, []byte(`{"runs":[]}`), 0o600))
+			stdout, stderr, err := executeCI(t, &script.Spec{CI: ci.NewReporter(cfg), Source: `ci.sarif(` + strconv.Quote(report) + `, category = "tf")`})
+			require.NoError(t, err)
+			assert.Empty(t, stdout)
+			assert.Contains(t, stderr, report)
+			assert.Contains(t, stderr, "not uploaded")
+			if detected {
+				assert.Contains(t, stderr, "ci.results.enabled is off")
+			}
+		})
+	}
 }
 
 func TestCISARIFReadFailure(t *testing.T) {
