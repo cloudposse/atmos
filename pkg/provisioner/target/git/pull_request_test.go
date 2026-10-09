@@ -415,3 +415,29 @@ func TestCommitAndPushReportsCommitError(t *testing.T) {
 	require.ErrorIs(t, err, errCommitStub)
 	assert.False(t, committed)
 }
+
+// TestDeliverPullRequestRejectsHeadEqualToBase verifies a head branch equal to the base (the
+// configured branch or the resolved remote default) is rejected before any git operation,
+// since delivering on it would push straight to the base.
+func TestDeliverPullRequestRejectsHeadEqualToBase(t *testing.T) {
+	tests := []struct {
+		name       string
+		repoBranch string
+	}{
+		{"configured base", "main"},
+		{"default base", ""}, // installPRFakes resolves the remote default to "main".
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			publisher := installPRFakes(t)
+			workdir := filepath.Join(t.TempDir(), "workdir")
+
+			err := (&gitProvisioner{}).Deliver(context.Background(),
+				prDeliverInput("https://github.com/acme/deployments.git", workdir, tt.repoBranch, map[string]any{"enabled": true, "branch": "main"}, manifest("v: 1\n")))
+
+			require.ErrorIs(t, err, errUtils.ErrGitTargetPullRequestConfig)
+			assert.NoDirExists(t, workdir)
+			assert.Empty(t, publisher.calls)
+		})
+	}
+}

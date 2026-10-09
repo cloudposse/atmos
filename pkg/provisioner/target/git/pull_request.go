@@ -112,6 +112,12 @@ func resolvePullRequestBranches(ctx context.Context, s *repoSession, pr *schema.
 	if b.Head == "" {
 		b.Head = defaultPullRequestBranch(in.TargetName, &in.Artifact.Metadata)
 	}
+	// A head equal to the base would leave the delivery on the base branch and push to it
+	// directly, defeating pull-request mode.
+	if b.Head == b.Base {
+		return pullRequestBranches{}, fmt.Errorf("%w: pull_request.branch %q must differ from the base branch",
+			errUtils.ErrGitTargetPullRequestConfig, b.Head)
+	}
 	exists, err := remoteBranchExists(ctx, s, b.Head)
 	if err != nil {
 		return pullRequestBranches{}, err

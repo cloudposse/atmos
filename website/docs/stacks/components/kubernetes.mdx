@@ -285,7 +285,7 @@ components:
   <dd>Publish through a pull request. The base branch is never pushed.</dd>
 
   <dt>`branch`</dt>
-  <dd>Head branch name. Defaults to `atmos/<target>/<stack>/<component>`.</dd>
+  <dd>Head branch name. Defaults to `atmos/<target>/<stack>/<component>`. It must differ from the base branch.</dd>
 
   <dt>`title`, `body`</dt>
   <dd>Pull request title and markdown body. By default the title names the component, target, and stack, and the body lists them along with the managed path. Both support Go templates.</dd>
