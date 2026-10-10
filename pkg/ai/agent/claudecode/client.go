@@ -4,17 +4,16 @@
 package claudecode
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"strconv"
-	"strings"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/agent/base"
+	"github.com/cloudposse/atmos/pkg/ai/approval"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/ai/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -42,8 +41,17 @@ type Client struct {
 	model         string
 	mcpServers    map[string]schema.MCPServerConfig // MCP servers to pass through via --mcp-config.
 	toolchainPATH string                            // Toolchain bin PATH for MCP server subprocesses.
-	mcpConfigPath string                            // Pre-generated MCP config file path.
+	mcpConfigPath string                            // MCP config file path for the invocation in progress.
+	approver      approval.Approver                 // Optional; asked before tools that need permission.
+	progress      func(approval.Event)              // Optional; receives tool progress events.
+	timeout       time.Duration                     // Run timeout excluding approval waits; 0 = none.
 }
+
+var (
+	_ approval.ProgressReporter = (*Client)(nil)
+	_ approval.Approvable       = (*Client)(nil)
+	_ approval.TimeoutManaged   = (*Client)(nil)
+)
 
 // NewClient creates a new Claude Code CLI client from Atmos configuration.
 func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
@@ -84,14 +92,7 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 	if len(atmosConfig.MCP.Servers) > 0 {
 		client.mcpServers = atmosConfig.MCP.Servers
 		client.toolchainPATH = base.ResolveToolchainPATH(atmosConfig)
-		// Pre-generate MCP config so we can show the path before "Thinking...".
-		mcpConfigPath, mcpErr := mcpclient.WriteMCPConfigToTempFile(client.mcpServers, client.toolchainPATH)
-		if mcpErr != nil {
-			log.Debug("Failed to generate MCP config for Claude Code", "error", mcpErr)
-		} else {
-			client.mcpConfigPath = mcpConfigPath
-			ui.Info(fmt.Sprintf("MCP servers configured: %d (config: %s)", len(client.mcpServers), mcpConfigPath))
-		}
+		ui.Info(fmt.Sprintf("MCP servers configured: %d", len(client.mcpServers)))
 	}
 
 	return client, nil
@@ -160,11 +161,25 @@ func (c *Client) GetMaxTokens() int {
 }
 
 // buildArgs constructs the CLI arguments for claude -p invocation.
+//
+// Output is always streamed as NDJSON (stream-json, which requires --verbose in -p mode) so
+// tool progress can be reported. When an Approver is set, Claude additionally runs the SDK
+// stdio control protocol (--input-format stream-json --permission-prompt-tool stdio): it asks
+// Atmos before running a tool that needs permission and blocks until answered.
+//
+// --dangerously-skip-permissions accompanies --mcp-config only when no Approver is set, so
+// MCP pass-through tools can run unattended. With an Approver, MCP tools go through the
+// Atmos permission system instead.
 func (c *Client) buildArgs(systemPrompt string) []string {
 	args := []string{
 		"-p",
-		"--output-format", "json",
+		"--output-format", "stream-json",
+		"--verbose",
 		"--max-turns", strconv.Itoa(c.maxTurns),
+	}
+
+	if c.approver != nil {
+		args = append(args, "--input-format", "stream-json", "--permission-prompt-tool", "stdio")
 	}
 
 	if c.maxBudget > 0 {
@@ -179,72 +194,51 @@ func (c *Client) buildArgs(systemPrompt string) []string {
 		args = append(args, "--allowedTools", tool)
 	}
 
-	// MCP pass-through: use pre-generated config file.
+	// MCP pass-through: use the config file written for this invocation.
 	if c.mcpConfigPath != "" {
 		args = append(args, "--mcp-config", c.mcpConfigPath)
-		args = append(args, "--dangerously-skip-permissions")
+		if c.approver == nil {
+			args = append(args, "--dangerously-skip-permissions")
+		}
 	}
 
 	return args
 }
 
-// execClaude runs the claude CLI and returns the result text.
-func (c *Client) execClaude(ctx context.Context, prompt, systemPrompt string) (string, error) {
-	args := c.buildArgs(systemPrompt)
-
-	cmd := exec.CommandContext(ctx, c.binaryPath, args...) //nolint:gosec // Binary path is from user config or exec.LookPath.
-	cmd.Stdin = strings.NewReader(prompt)
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	// Clean up temp MCP config file after Claude Code exits.
-	if c.mcpConfigPath != "" {
-		defer os.Remove(c.mcpConfigPath)
+// prepareMCPConfig writes the MCP config file for one invocation and returns a function that
+// removes it again. The file can hold environment values and headers, so it never outlives the run.
+func (c *Client) prepareMCPConfig() func() {
+	if len(c.mcpServers) == 0 {
+		return func() {}
 	}
-
-	if err := cmd.Run(); err != nil {
-		stderrStr := stderr.String()
-		if stderrStr != "" {
-			return "", fmt.Errorf("%w: %s: %s: %w", errUtils.ErrCLIProviderExecFailed, ProviderName, stderrStr, err)
-		}
-		return "", fmt.Errorf("%w: %s: %w", errUtils.ErrCLIProviderExecFailed, ProviderName, err)
+	path, err := mcpclient.WriteMCPConfigToTempFile(c.mcpServers, c.toolchainPATH)
+	if err != nil {
+		log.Debug("Failed to generate MCP config for Claude Code", "error", err)
+		return func() {}
 	}
-
-	return parseResponse(stdout.Bytes())
+	c.mcpConfigPath = path
+	return func() {
+		_ = os.Remove(path)
+		c.mcpConfigPath = ""
+	}
 }
 
-// claudeResponse is the JSON output from `claude -p --output-format json`.
-type claudeResponse struct {
-	Type         string  `json:"type"`
-	Subtype      string  `json:"subtype"`
-	Result       string  `json:"result"`
-	CostUSD      float64 `json:"cost_usd"`
-	TotalCostUSD float64 `json:"total_cost_usd"`
-	DurationMS   int     `json:"duration_ms"`
-	IsError      bool    `json:"is_error"`
-	SessionID    string  `json:"session_id"`
-	NumTurns     int     `json:"num_turns"`
+// SetProgressHandler registers a callback for tool progress events. The callback runs on the
+// goroutine that called SendMessage*, never concurrently with it.
+func (c *Client) SetProgressHandler(handler func(approval.Event)) {
+	c.progress = handler
 }
 
-// parseResponse extracts the result text from Claude Code JSON output.
-func parseResponse(output []byte) (string, error) {
-	var resp claudeResponse
-	if err := json.Unmarshal(output, &resp); err != nil {
-		// If not valid JSON, return raw text (Claude Code may output plain text on some errors).
-		trimmed := strings.TrimSpace(string(output))
-		if trimmed != "" {
-			return trimmed, nil
-		}
-		return "", fmt.Errorf("%w: %w", errUtils.ErrCLIProviderParseResponse, err)
-	}
+// SetApprover registers the approver consulted before Claude runs a tool that needs permission.
+// Passing nil restores unattended operation.
+func (c *Client) SetApprover(approver approval.Approver) {
+	c.approver = approver
+}
 
-	if resp.IsError {
-		return "", fmt.Errorf("%w: %s: %s", errUtils.ErrCLIProviderExecFailed, ProviderName, resp.Result)
-	}
-
-	return resp.Result, nil
+// SetTimeout sets the run timeout. Time spent inside the approver does not count. Zero disables
+// the timeout (the caller's context still applies).
+func (c *Client) SetTimeout(timeout time.Duration) {
+	c.timeout = timeout
 }
 
 // applyProviderConfig applies provider-specific settings to the client.

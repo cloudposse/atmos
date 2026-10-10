@@ -610,6 +610,15 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 	}
 
 	switch node.Tag {
+	case "!version":
+		parts := strings.Split(currentPath, ".")
+		if len(parts) != 4 || parts[0] != "ai" || parts[1] != "skills" || parts[3] != "ref" || strings.TrimSpace(node.Value) == "" {
+			return unsupportedAtmosYamlTagError(node.Tag, currentPath)
+		}
+		node.Value = schema.SkillVersionMarker + node.Value
+		node.Tag = "!!str"
+		v.Set(currentPath, node.Value)
+		return nil
 	case u.AtmosYamlFuncUnset:
 		// The !unset tag is handled in processMappingNode by skipping the key.
 		// If we reach here, it means !unset was used in a context where it can't

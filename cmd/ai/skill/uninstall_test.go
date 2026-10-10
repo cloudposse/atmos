@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/ai/skills/marketplace"
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
@@ -746,60 +747,23 @@ Another test skill.
 }
 
 func TestUninstallCmd_RunE_InstallerInitFailure(t *testing.T) {
-	// Reset flags before test.
-	resetFlags := func() {
-		forceFlag := uninstallCmd.Flags().Lookup("force")
-		if forceFlag != nil {
-			_ = forceFlag.Value.Set("false")
-		}
-	}
+	sourceCommandFixture(t)
+	forceFlag := uninstallCmd.Flags().Lookup("force")
+	require.NotNil(t, forceFlag)
+	require.NoError(t, forceFlag.Value.Set("false"))
 
-	t.Run("fails when home directory is unwritable", func(t *testing.T) {
-		resetFlags()
+	// A corrupt registry fails initialization on every platform. A file in place
+	// of the skills directory instead looks like a missing registry on Windows.
+	home, err := homedir.Dir()
+	require.NoError(t, err)
+	registryDir := filepath.Join(home, ".atmos", "skills")
+	require.NoError(t, os.MkdirAll(registryDir, 0o755))
+	registryPath := filepath.Join(registryDir, "registry.json")
+	require.NoError(t, os.WriteFile(registryPath, []byte("{invalid JSON"), 0o600))
 
-		// Create a temp directory and set up an unwritable skills path.
-		tempHome := t.TempDir()
-
-		// Create .atmos/skills as a file (not a directory) to cause registry failure.
-		atmosDir := filepath.Join(tempHome, ".atmos")
-		err := os.MkdirAll(atmosDir, 0o755)
-		require.NoError(t, err)
-
-		// Create skills as a file, not a directory, to cause registry creation to fail.
-		skillsFile := filepath.Join(atmosDir, "skills")
-		err = os.WriteFile(skillsFile, []byte("not a directory"), 0o644)
-		require.NoError(t, err)
-
-		// Set HOME to temp directory.
-		t.Setenv("HOME", tempHome)
-
-		// Reset homedir cache to pick up new HOME.
-		homedir.Reset()
-		homedir.DisableCache = true
-		t.Cleanup(func() {
-			homedir.Reset()
-			homedir.DisableCache = false
-		})
-
-		// Capture stdout.
-		oldStdout := os.Stdout
-		r, w, _ := os.Pipe()
-		os.Stdout = w
-
-		// Run the command - should fail during installer initialization.
-		err = uninstallCmd.RunE(uninstallCmd, []string{"some-skill"})
-
-		w.Close()
-		os.Stdout = oldStdout
-
-		// Drain the pipe.
-		var buf bytes.Buffer
-		_, _ = io.Copy(&buf, r)
-
-		// Verify we get an error about initialization.
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to initialize installer")
-	})
+	err = uninstallCmd.RunE(uninstallCmd, []string{"some-skill"})
+	require.ErrorIs(t, err, marketplace.ErrRegistryCorrupted)
+	assert.Contains(t, err.Error(), "failed to initialize installer")
 }
 
 // TestUninstallCmd_RunE_NoArgsUninstallsEverything covers the CLI wiring for
@@ -832,6 +796,9 @@ func TestUninstallCmd_RunE_NoArgsUninstallsEverything(t *testing.T) {
 	homedir.Reset()
 	t.Cleanup(homedir.Reset)
 
+	project := t.TempDir()
+	t.Chdir(project)
+
 	setupSkillCommandUI(t)
 
 	// Install a couple of bundled skills (offline, fast) to have something to
@@ -839,7 +806,7 @@ func TestUninstallCmd_RunE_NoArgsUninstallsEverything(t *testing.T) {
 	require.NoError(t, installCmd.Flags().Set("yes", "true"))
 	require.NoError(t, installCmd.RunE(installCmd, []string{"atmos-terraform"}))
 	require.NoError(t, installCmd.RunE(installCmd, []string{"atmos-git"}))
-	require.FileExists(t, filepath.Join(tempHome, ".atmos", "skills", "atmos-terraform", "SKILL.md"))
+	require.FileExists(t, filepath.Join(project, ".atmos", "skills", "content", "atmos-terraform", "SKILL.md"))
 
 	uiOutput := setupSkillCommandUI(t)
 	require.NoError(t, uninstallCmd.Flags().Set("force", "true"))
@@ -848,7 +815,7 @@ func TestUninstallCmd_RunE_NoArgsUninstallsEverything(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, atmosansi.Strip(uiOutput.String()), "skills uninstalled successfully")
 
-	_, statErr := os.Stat(filepath.Join(tempHome, ".atmos", "skills", "atmos-terraform"))
+	_, statErr := os.Stat(filepath.Join(project, ".atmos", "skills", "content", "atmos-terraform"))
 	assert.True(t, os.IsNotExist(statErr), "skill directory should be removed")
 }
 
@@ -1184,16 +1151,9 @@ func TestUninstallCmd_StandardParserServer(t *testing.T) {
 	})
 }
 
-// TestUninstallCmd_RunE_ForceCleansUpUserScopeEvenWithProjectSignalPresent
-// guards against the exact bug reported live: installing to user scope, then
-// running `uninstall --force` (no explicit --scope) from a project directory
-// that happens to have its own project-level client signal (e.g. this repo's
-// own .claude/) silently defaulted scope to "project" and skipped the real
-// (user-scope) distributed copy entirely -- and, worse, could target
-// unrelated real files sitting at the wrong-but-real project path. Uninstall
-// must check both scopes so the actual distributed copy always gets cleaned
-// up regardless of which scope's signal happens to be detectable from CWD.
-func TestUninstallCmd_RunE_ForceCleansUpUserScopeEvenWithProjectSignalPresent(t *testing.T) {
+// Recorded user installations require an explicit user scope for removal.
+// A coincidental project client signal must not broaden destructive defaults.
+func TestUninstallCmd_RunE_ForceRequiresExplicitUserScope(t *testing.T) {
 	// clearFlag resets a flag's value to its default AND clears pflag's own
 	// Changed bit -- plain Flags().Set() would leave Changed true, which
 	// explicitSkillScope/resolveUninstallScopes read to mean "the user
@@ -1263,6 +1223,8 @@ func TestUninstallCmd_RunE_ForceCleansUpUserScopeEvenWithProjectSignalPresent(t 
 	require.NoError(t, uninstallCmd.Flags().Set("force", "true"))
 	require.NoError(t, uninstallCmd.RunE(uninstallCmd, []string{}))
 
-	assert.NoDirExists(t, userDistPath,
-		"the real user-scope distributed copy must be cleaned up even though CWD's own project-scope .claude/ signal exists")
+	assert.DirExists(t, userDistPath, "project-default uninstall must preserve user installations")
+	require.NoError(t, uninstallCmd.Flags().Set("scope", "user"))
+	require.NoError(t, uninstallCmd.RunE(uninstallCmd, []string{}))
+	assert.NoDirExists(t, userDistPath, "explicit user scope removes the owned user installation")
 }

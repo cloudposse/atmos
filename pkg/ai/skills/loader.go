@@ -1,6 +1,8 @@
 package skills
 
 import (
+	log "github.com/charmbracelet/log"
+
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -15,6 +17,7 @@ type SkillLoader interface {
 func LoadSkills(atmosConfig *schema.AtmosConfiguration, marketplaceLoader ...SkillLoader) (*Registry, error) {
 	registry := NewRegistry()
 
+	loadProjectSkills(atmosConfig, registry, marketplaceLoader)
 	// 1. Load marketplace-installed skills.
 	if len(marketplaceLoader) > 0 && marketplaceLoader[0] != nil {
 		_ = marketplaceLoader[0].LoadInstalledSkills(registry)
@@ -23,9 +26,12 @@ func LoadSkills(atmosConfig *schema.AtmosConfiguration, marketplaceLoader ...Ski
 	// 2. Load custom skills from configuration if available.
 	if atmosConfig != nil && len(atmosConfig.AI.Skills) > 0 {
 		for name, config := range atmosConfig.AI.Skills {
+			if config == nil || config.Source != "" {
+				continue
+			}
 			skill := FromConfig(name, config)
 			if err := registry.Register(skill); err != nil {
-				// Log warning but continue - don't fail if custom skill is invalid.
+				log.Warnf("Shadowed or invalid inline skill %q: %v", name, err)
 				continue
 			}
 		}
@@ -41,4 +47,21 @@ func GetDefaultSkill(atmosConfig *schema.AtmosConfiguration) string {
 		return atmosConfig.AI.DefaultSkill
 	}
 	return ""
+}
+
+func loadProjectSkills(config *schema.AtmosConfiguration, registry *Registry, loaders []SkillLoader) {
+	if config == nil || len(loaders) == 0 {
+		return
+	}
+	loader, ok := loaders[0].(interface{ LoadProjectSkills(*Registry, string) error })
+	if !ok {
+		return
+	}
+	base := config.BasePath
+	if base == "" {
+		base = config.CliConfigPath
+	}
+	if err := loader.LoadProjectSkills(registry, base); err != nil {
+		log.Warnf("Failed to load project skills: %v", err)
+	}
 }

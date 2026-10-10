@@ -23,6 +23,10 @@ const (
 )
 
 var (
+	ErrAISkillSourceInvalid                  = errors.New("invalid skill source")
+	ErrAISkillSourceDrift                    = errors.New("skill installation is not current")
+	ErrAISkillSourceOwnership                = errors.New("skill destination is not owned by this source")
+	ErrAISkillSourceRecovery                 = errors.New("skill transaction requires recovery")
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrDownloadFile                          = errors.New("failed to download file")
 	ErrInvalidClientMode                     = errors.New("invalid client mode for operation")
@@ -1618,6 +1622,11 @@ var (
 	ErrCLIProviderExecFailed        = errors.New("CLI provider execution failed")
 	ErrCLIProviderParseResponse     = errors.New("failed to parse CLI provider response")
 	ErrCLIProviderToolsNotSupported = errors.New("tool execution not supported for CLI providers; use MCP pass-through instead")
+	ErrCLIProviderEmptyResponse     = errors.New("CLI provider returned an empty response")
+	ErrCLIProviderMaxTurns          = errors.New("CLI provider reached its maximum number of turns before answering")
+	ErrCLIProviderToolDenied        = errors.New("CLI provider tool use was not approved")
+	ErrAIEmptyResponse              = errors.New("AI returned an empty response")
+	ErrAIToolsInvalidMode           = errors.New("invalid ai.tools.mode")
 
 	// Web search errors.
 	ErrWebSearchFailed      = errors.New("web search request failed")

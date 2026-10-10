@@ -188,9 +188,9 @@ func (m *ChatModel) handleSendMessage(msg sendMessageMsg) (bool, tea.Cmd) {
 	m.isCancelling = false
 
 	// Create cancellable context for this AI request.
-	// Use 5-minute timeout to allow for complex operations with multiple tool executions.
+	// Providers managing their own timeout exclude approval waits from the deadline.
 	// User can still cancel manually with Esc key if needed.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := m.requestContext()
 	m.cancelFunc = cancel
 
 	m.updateViewportContent()
@@ -320,6 +320,9 @@ func (m *ChatModel) handleSpinnerTick(msg spinner.TickMsg, cmds *[]tea.Cmd) bool
 
 // handleProviderSwitched handles the result of an async provider switch.
 func (m *ChatModel) handleProviderSwitched(msg providerSwitchedMsg) {
+	if msg.err == nil {
+		msg.err = m.configureProviderApproval(msg.newClient)
+	}
 	if msg.err != nil {
 		m.addMessage(roleSystem, fmt.Sprintf("Error switching provider: %v", msg.err))
 		m.updateViewportContent()

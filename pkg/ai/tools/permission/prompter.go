@@ -54,111 +54,208 @@ func (p *CLIPrompter) checkCachedPermission(toolName string) (bool, bool) {
 	return false, false
 }
 
-// displayPrompt shows the tool execution request and prompt options.
-func (p *CLIPrompter) displayPrompt(tool Tool, params map[string]interface{}) {
-	ui.Writef("\n🔧 Tool Execution Request\n")
-	ui.Writef("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-	ui.Writef("Tool: %s\n", tool.Name())
-	ui.Writef("Description: %s\n", tool.Description())
+// checkCachedForTool resolves the cached decision for a tool. Command-scoped tools
+// (ScopedTool) are looked up by their exact CacheKey; all other tools by name using
+// the legacy matching rules.
+func (p *CLIPrompter) checkCachedForTool(tool Tool) (bool, bool) {
+	scoped, ok := tool.(ScopedTool)
+	if !ok {
+		return p.checkCachedPermission(tool.Name())
+	}
+	if p.cache == nil {
+		return false, false
+	}
+	key := scoped.CacheKey()
+	if p.cache.IsAllowedExact(key) {
+		return true, true
+	}
+	if p.cache.IsDeniedExact(key) {
+		return false, true
+	}
+	return false, false
+}
 
-	if len(params) > 0 {
-		ui.Writef("\nParameters:\n")
-		for key, value := range params {
-			ui.Writef("  %s: %v\n", key, value)
-		}
+// HasCachedDecision reports whether a stored allow/deny decision answers for the
+// tool, in which case Prompt returns without showing anything.
+func (p *CLIPrompter) HasCachedDecision(tool Tool) bool {
+	_, found := p.checkCachedForTool(tool)
+	return found
+}
+
+// cacheKeyFor returns the key under which decisions for the tool are stored.
+func cacheKeyFor(tool Tool) string {
+	if scoped, ok := tool.(ScopedTool); ok {
+		return scoped.CacheKey()
+	}
+	return tool.Name()
+}
+
+// settingsPathHint names the file where "always" decisions are stored.
+const settingsPathHint = ".atmos/ai.settings.local.json"
+
+// Receipt verbs printed after the user decides.
+const (
+	receiptAllowed = "Allowed"
+	receiptDenied  = "Denied"
+	// The receiptGutter constant is the number of columns reserved for the status icon and its space.
+	receiptGutter = 2
+)
+
+// handleCachedResponse processes a response when cache is available. It reports whether
+// the request is allowed and whether the decision was persisted to the cache.
+func (p *CLIPrompter) handleCachedResponse(response, toolName string) (allowed, saved bool) {
+	switch response {
+	case "a", "always":
+		return true, p.persist(p.cache.AddAllow(toolName))
+	case "y", "yes":
+		return true, false
+	case "d", "deny":
+		return false, p.persist(p.cache.AddDeny(toolName))
+	default:
+		return false, false
 	}
 }
 
-// handleCachedResponse processes a response when cache is available.
-func (p *CLIPrompter) handleCachedResponse(response, toolName string) bool {
-	switch response {
-	case "a", "always":
-		if err := p.cache.AddAllow(toolName); err != nil {
-			ui.Warningf("Failed to save permission: %v", err)
-		} else {
-			ui.Successf("Permission saved to .atmos/ai.settings.local.json")
-		}
-		return true
-	case "y", "yes":
-		return true
-	case "d", "deny":
-		if err := p.cache.AddDeny(toolName); err != nil {
-			ui.Warningf("Failed to save permission: %v", err)
-		} else {
-			ui.Successf("Permission saved to .atmos/ai.settings.local.json")
-		}
-		return false
-	default:
+// persist reports whether a cache write succeeded, warning the user when it did not.
+func (p *CLIPrompter) persist(err error) bool {
+	if err != nil {
+		ui.Warningf("Failed to save permission: %v", err)
 		return false
 	}
+	return true
+}
+
+// printReceipt prints one status line recording the decision, followed by a blank
+// line that separates it from whatever the AI prints next.
+func printReceipt(tool Tool, params map[string]interface{}, allowed, saved bool) {
+	verb := receiptDenied
+	if allowed {
+		verb = receiptAllowed
+	}
+	suffix := ""
+	if saved {
+		suffix = " (saved to " + settingsPathHint + ")"
+	}
+	budget := requestWidth() + formGutter - receiptGutter - len(verb) - len(" ") - len(suffix)
+	line := verb + " " + summarizeRequest(tool, params, budget) + suffix
+
+	if allowed {
+		ui.Success(line)
+	} else {
+		ui.Warning(line)
+	}
+	ui.Writeln("")
 }
 
 // Prompt asks the user for permission via CLI.
 func (p *CLIPrompter) Prompt(ctx context.Context, tool Tool, params map[string]interface{}) (bool, error) {
-	if decision, found := p.checkCachedPermission(tool.Name()); found {
+	if decision, found := p.checkCachedForTool(tool); found {
 		return decision, nil
 	}
 
-	p.displayPrompt(tool, params)
-
 	// Prompts require a TTY; fail loudly instead of silently defaulting to deny.
-	if !terminal.New().IsTTY(terminal.Stdin) {
+	// Checked before anything is printed so non-interactive logs stay free of a dangling request.
+	if !terminal.HasRealTTYInput() {
 		return false, errUtils.ErrInteractiveNotAvailable
 	}
 
 	if p.cache != nil {
-		return p.promptWithCache(tool.Name())
+		return p.promptWithCache(tool, params)
 	}
 
-	return p.promptWithoutCache()
+	return p.promptWithoutCache(tool, params)
+}
+
+// requestNote builds the note field that shows the request inside the form, so huh
+// erases it together with the choices once the user answers.
+func requestNote(tool Tool, params map[string]interface{}) *huh.Note {
+	title, body := renderRequestParts(tool, params, requestWidth())
+	return huh.NewNote().Title(title).Description(escapeNoteMarkup(body))
+}
+
+// requestTheme returns the Atmos huh theme tuned for the request block: the note title
+// sits flush above its body, and the vertical breathing room is owned by the note card
+// (above the block) rather than doubled up by the choices below it.
+func requestTheme() *huh.Theme {
+	t := uiutils.NewAtmosHuhTheme()
+	for _, styles := range []*huh.FieldStyles{&t.Focused, &t.Blurred} {
+		styles.NoteTitle = styles.NoteTitle.MarginBottom(0)
+		styles.Card = styles.Card.MarginTop(1)
+		styles.Base = styles.Base.MarginTop(0)
+	}
+	return t
+}
+
+// runRequestForm runs the form and maps huh errors onto Atmos errors.
+func runRequestForm(form *huh.Form) error {
+	if err := form.Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return errUtils.ErrUserAborted
+		}
+		return fmt.Errorf("%w: %w", errUtils.ErrAIPermissionPromptFailed, err)
+	}
+	return nil
+}
+
+// alwaysAllowLabel names the "always allow" choice for the tool, saying what it covers.
+func alwaysAllowLabel(tool Tool) string {
+	return "Always allow " + prettyToolName(cacheKeyFor(tool))
+}
+
+// alwaysDenyLabel names the "always deny" choice for the tool, saying what it covers.
+func alwaysDenyLabel(tool Tool) string {
+	return "Always deny " + prettyToolName(cacheKeyFor(tool))
 }
 
 // promptWithCache presents the four cached-permission choices via a huh select
-// and dispatches the selection through handleCachedResponse.
-func (p *CLIPrompter) promptWithCache(toolName string) (bool, error) {
-	var response string
+// (safest first) and dispatches the selection through handleCachedResponse.
+func (p *CLIPrompter) promptWithCache(tool Tool, params map[string]interface{}) (bool, error) {
+	response := choiceAllowOnce
 
 	form := huh.NewForm(
 		huh.NewGroup(
+			requestNote(tool, params),
 			huh.NewSelect[string]().
 				Title("Allow execution?").
+				Description("\"Always\" choices are saved to "+settingsPathHint).
 				Options(
-					huh.NewOption("Always allow (save to .atmos/ai.settings.local.json)", choiceAlwaysAllow),
 					huh.NewOption("Allow once", choiceAllowOnce),
+					huh.NewOption(alwaysAllowLabel(tool), choiceAlwaysAllow),
 					huh.NewOption("Deny once", choiceDenyOnce),
-					huh.NewOption("Always deny (save to .atmos/ai.settings.local.json)", choiceAlwaysDeny),
+					huh.NewOption(alwaysDenyLabel(tool), choiceAlwaysDeny),
 				).
 				Value(&response),
 		),
-	).WithTheme(uiutils.NewAtmosHuhTheme())
+	).WithTheme(requestTheme())
 
-	if err := form.Run(); err != nil {
-		if errors.Is(err, huh.ErrUserAborted) {
-			return false, errUtils.ErrUserAborted
-		}
-		return false, fmt.Errorf("%w: %w", errUtils.ErrAIPermissionPromptFailed, err)
+	if err := runRequestForm(form); err != nil {
+		return false, err
 	}
 
-	return p.handleCachedResponse(response, toolName), nil
+	allowed, saved := p.handleCachedResponse(response, cacheKeyFor(tool))
+	printReceipt(tool, params, allowed, saved)
+	return allowed, nil
 }
 
 // promptWithoutCache presents a simple allow/deny confirmation via huh.
-func (p *CLIPrompter) promptWithoutCache() (bool, error) {
-	var allowed bool
+func (p *CLIPrompter) promptWithoutCache(tool Tool, params map[string]interface{}) (bool, error) {
+	allowed := true
 
-	confirm := uiutils.NewAtmosConfirm().
-		Title("Allow execution?").
-		Affirmative("Allow").
-		Negative("Deny").
-		Value(&allowed).
-		WithTheme(uiutils.NewAtmosHuhTheme())
+	form := huh.NewForm(
+		huh.NewGroup(
+			requestNote(tool, params),
+			uiutils.NewAtmosConfirm().
+				Title("Allow execution?").
+				Affirmative("Allow").
+				Negative("Deny").
+				Value(&allowed),
+		),
+	).WithTheme(requestTheme())
 
-	if err := confirm.Run(); err != nil {
-		if errors.Is(err, huh.ErrUserAborted) {
-			return false, errUtils.ErrUserAborted
-		}
-		return false, fmt.Errorf("%w: %w", errUtils.ErrAIPermissionPromptFailed, err)
+	if err := runRequestForm(form); err != nil {
+		return false, err
 	}
 
+	printReceipt(tool, params, allowed, false)
 	return allowed, nil
 }

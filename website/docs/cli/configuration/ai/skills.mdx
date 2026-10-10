@@ -493,3 +493,107 @@ ai:
 - [Claude Code Integration](/ai/claude-code-integration) - Use Atmos with Claude Code
 - [Tools Configuration](/cli/configuration/ai/tools) - Tool execution and permissions
 - [`atmos ai skill`](/cli/commands/ai/skill) - Install and share community skills
+
+
+## Declarative sources
+
+Declare shared skill sources alongside existing inline skills. A source entry cannot contain
+inline prompt or tool fields.
+
+```yaml
+version:
+  track: prod
+  dependencies:
+    atmos-skills:
+      datasource: github-tags
+      package: cloudposse/atmos
+      desired: v1.229.0
+
+ai:
+  skills:
+    cloudposse:
+      source: cloudposse/atmos
+      kind: marketplace
+      plugins: [atmos]
+      ref: !version atmos-skills
+      clients: [claude-code]
+      scope: project
+```
+
+| Field | Meaning | Default |
+|---|---|---|
+| `source` | Git repository or local directory | Required |
+| `ref` | Branch, tag, commit, or `!version dependency` | Repository default branch |
+| `kind` | `auto`, `marketplace`, or `skills` | `auto` |
+| `subpath` | Relative directory inside the source | Repository root |
+| `plugins` | Marketplace plugin names | All plugins |
+| `include` / `exclude` | Skill-name glob patterns; exclusion wins | All skills |
+| `clients` | `claude-code`, `vscode`, `gemini` | Detect installed clients |
+| `scope` | `project` or `user` | `project` |
+
+Marketplace discovery supports relative plugin directories and `github`, `url`, and `git-subdir`
+Git plugin sources. Only skills are installed. Hooks, agents, MCP configuration, plugin dependencies,
+npm, archive, and command sources are not installed. Unsupported selected source types fail.
+
+### Declare, then install
+
+Configuration commands do not install or remove files:
+
+```shell
+atmos ai skill add cloudposse/atmos --name cloudposse
+atmos ai skill set cloudposse plugins '[atmos]'
+atmos ai skill set cloudposse ref '!version atmos-skills'
+atmos version track lock prod
+atmos ai skill sync --track prod
+```
+
+The `add`, `set`, and `remove` commands preserve YAML comments, tags, and existing file permissions.
+Partial declarations are validated against the merged configuration. Use `--dry-run` to
+preview edits. If a declaration occurs in multiple configuration layers, removal requires a
+single explicit `--config` file and reports declarations remaining in other layers.
+
+### Locks and updates
+
+Commit `skills.lock.yaml` and the configured version lock. The skills lock pins every contributing
+Git repository, including external marketplace plugins, and records skill content digests.
+Unchanged declarations reuse locked commits. Local directory sources use content digests;
+run `update` to accept changed local content. A project-root `source: .` excludes generated
+`.atmos` state, `skills.lock.yaml`, and installation destinations owned by this project from
+its snapshot. Authored files, including other hidden files, remain part of the source digest.
+
+For managed refs, advance the version track before synchronizing:
+
+```shell
+atmos version track update prod
+atmos ai skill sync --track prod
+atmos ai skill sync --track prod --frozen
+atmos ai skill sync --track prod --check
+```
+
+The `--frozen` flag requires matching locks and may install missing copies. The `--check` flag
+checks offline without writing and fails for missing, stale, modified, or obsolete installations.
+The `--dry-run` flag previews reconciliation without persistent changes; it may download sources
+to temporary directories. A skill update never independently advances a `!version` dependency.
+
+### Ownership and removal
+
+Project copies and machine-local records live under `.atmos/skills/`; ignore that directory in Git.
+Different projects can install different revisions. User installations are shared, and another
+project cannot take over their ownership. Atmos loads project skills before user skills and inline
+entries, reporting shadowed names.
+
+```shell
+atmos ai skill remove cloudposse
+atmos ai skill sync                  # Reports retained obsolete copies
+atmos ai skill sync --prune          # Removes unchanged obsolete owned copies
+atmos ai skill uninstall demo --source cloudposse --client claude-code
+```
+
+An explicit client selection limits changes to those destinations. Canonical content remains while
+other client copies need it. Ad-hoc installations are excluded from declarative pruning.
+
+Modified owned files require `--force` before replacement or deletion. Existing unowned directories
+are never overwritten, even with force. Source symlinks, path escapes, and destination symlinks are
+rejected. Failed replacements roll back; if recovery is interrupted, use `atmos ai skill sync --recover`
+from the owning project before retrying. Existing legacy user skills remain readable; legacy client
+copies are not assumed to be owned.

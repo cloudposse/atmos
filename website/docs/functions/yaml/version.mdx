@@ -15,7 +15,11 @@ Use `!version` to read a locked version from the active Atmos version track.
 
 The `!version` YAML function resolves a name from `versions.lock.yaml`. It uses the stack's asserted `version.track`, then `version.track` from `atmos.yaml`, then `default`.
 
-`!version` is a stack-manifest function — it only resolves inside stack configuration files (`stacks/**`), not in `atmos.yaml` itself. `atmos.yaml` is only consulted as a *source* for `version.track`; it isn't processed by the same YAML-function evaluator, so `!version` there fails with an unsupported-tag error.
+The `!version` function resolves inside stack manifests and in the `ref` field of
+[declarative AI skill sources](/cli/configuration/ai/skills#declarative-sources).
+Skill refs resolve when you install or synchronize skills, rather than during configuration loading.
+Other fields in `atmos.yaml` do not accept this tag. Skill commands select the track using
+`--track`, then `version.track`, then `default`.
 
 ## Usage
 

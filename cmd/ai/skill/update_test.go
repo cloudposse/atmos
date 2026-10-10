@@ -1,6 +1,7 @@
 package skill
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -60,16 +61,18 @@ func resetUpdateFlags(t *testing.T) {
 func TestUpdateCmd_RunE_AlreadyUpToDate(t *testing.T) {
 	resetUpdateFlags(t)
 	t.Cleanup(func() { resetUpdateFlags(t) })
-	tempHome := setupUpdateTestEnv(t)
+	setupUpdateTestEnv(t)
+	project, err := os.Getwd()
+	require.NoError(t, err)
 
 	require.NoError(t, installCmd.Flags().Set("yes", "true"))
 	t.Cleanup(func() { resetFlagChangedForTest(t, installCmd, "yes") })
 	require.NoError(t, installCmd.RunE(installCmd, []string{"atmos-terraform"}))
-	require.FileExists(t, filepath.Join(tempHome, ".atmos", "skills", "atmos-terraform", "SKILL.md"))
+	require.FileExists(t, filepath.Join(project, ".atmos", "skills", "content", "atmos-terraform", "SKILL.md"))
 
 	uiOutput := setupSkillCommandUI(t)
 	require.NoError(t, updateCmd.Flags().Set("yes", "true"))
-	err := updateCmd.RunE(updateCmd, []string{"atmos-terraform"})
+	err = updateCmd.RunE(updateCmd, []string{"atmos-terraform"})
 	require.NoError(t, err)
 	assert.Contains(t, atmosansi.Strip(uiOutput.String()), "already up to date")
 }
