@@ -124,6 +124,7 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 				Component: ScriptComponentRef(vars), ResolveComponent: ScriptComponentResolver(vars),
 				ProcessOverrides: step.ScriptProcessOverrides,
 				Hook:             vars.ScriptHook,
+				Args:             vars.ScriptArgs,
 			})
 			return runErr
 		}

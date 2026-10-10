@@ -1,10 +1,15 @@
 # Starlark automation and command testing
 
-**Last Updated:** 2026-10-05
+**Last Updated:** 2026-10-06
 
-**Status:** Core interpreter, script-step integration, and standalone CLI support
-implemented in the current codebase; service APIs and broader command-testing
-features remain proposed. This status does not identify a released version.
+**Status:** Interpreter registration, standalone and stdin execution, script-step
+integration, direct step-library calls, structured errors, decoded query results,
+process execution controls, and Git-hook scripts are implemented in the current
+PR stack. Direct service modules and test-file discovery remain proposed. This
+status does not identify a released version.
+
+**Related:** [Atmos SDK](atmos-sdk.md), [Git-hook steps](git-hook-steps.md),
+[native stack definitions (exploratory)](starlark-stack-definitions.md).
 
 ## Problem Statement
 
@@ -40,8 +45,8 @@ can declare their own arguments, typed flags, validation, and help in Starlark.
   Starlark is an embedded language with a deliberately limited standard library.
 - Run the embedded interpreter inside workflow containers; scripts currently opt
   out with `container: false`, and external interpreters retain their own paths.
-- Expose arbitrary registered steps, background services, or a new state/secret
-  engine in this increment; future APIs must reuse existing Atmos services.
+- Implement a new state/secret engine or give direct script calls ownership of
+  workflow background jobs; shared steps retain their host-context requirements.
 - Execute external Safire migrations or publish script packages as part of this
   feature's tests; those require separate scope and side-effect decisions.
 
@@ -90,9 +95,8 @@ items are not commitments to ship; their contracts require further design.
 
 | Capability | Acceptance criterion for a future increment | Dependency |
 |------------|--------------------------------------------|------------|
-| Typed step dispatch and lifecycle helpers | Reuse the shared runner's policies and enforce restrictions for interactive/background/terminal steps. | Runner API and lifecycle ownership. |
 | Starlark test-file discovery and command assertions | Discover tests predictably, isolate process/HTTP/step mocks, and require explicit integration-test opt-in. | Test-runner design; injected services already support Go-hosted tests. |
-| File writes, globbing, temporary workspaces, and broader UI/time helpers | Define permissions, deterministic ordering, parallel writes, and cleanup on failure/cancellation. | Filesystem and lifecycle API design. |
+| File writes, temporary workspaces, and broader time helpers | Define permissions, deterministic ordering, parallel writes, and cleanup on failure/cancellation. | Filesystem and lifecycle API design. |
 | External automation migrations | Demonstrate required APIs, side effects, retry boundaries, and cleanup in representative fixtures. | Separate migration scope; no Safire commands run here. |
 
 ## Success Metrics
@@ -120,7 +124,7 @@ documented core. Owners are roles, not assigned individuals.
 | Question | Owner | Timing |
 |----------|-------|--------|
 | What are the scope, return types, and side-effect rules for direct service reads/writes and `components.list`? | Runtime and service maintainers | Blocking before those APIs are implemented. |
-| How should arbitrary typed steps expose context restrictions and own background processes or cleanup? | Workflow/runtime maintainers | Blocking before shared step dispatch. |
+| Should scripts gain scoped background-process ownership beyond existing workflow contexts? | Workflow/runtime maintainers | Design before expanding the implemented synchronous step library. |
 | What discovery convention and mock boundaries should command-level Starlark tests use? | Test-runner maintainers | Blocking before test-file discovery. |
 | How should Starlark frames map into observability events without unsafe details or retry duplicates? | Runtime and observability maintainers | Blocking before richer event mapping. |
 | Which file/UI/lifecycle helpers and external migrations provide sufficient benefit to prioritize? | Product owner and automation authors | Non-blocking prioritization; no committed release. |
@@ -131,14 +135,16 @@ The current codebase implements the core described below, including the fixes
 recorded on 2026-10-04. This PRD does not infer a released version from repository
 state. Future P1/P2 work has no supplied deadline, staffing assignment, or release
 commitment; each increment requires scoped contracts and validation before being
-advertised as available. Service access, typed-step dispatch, and command testing
-depend on their existing Atmos subsystems rather than independent replacements.
+advertised as available. Further service access and command testing depend on existing Atmos subsystems
+rather than independent replacements. Typed-step dispatch already reuses the shared runner.
 
 ## Implemented Behavior
 
 ### Interpreter, parallel functions, and step integration
 
 - `interpreter: starlark` runs in process through the `pkg/script` engine registry.
+  Registration owns name, extension, and optional Atmos-shebang/stdin fallback
+  selection. Starlark registers `.star`; TypeScript is not implemented.
 - `steps.parallel(functions=[fn, ...], max_concurrency=4, fail_fast=False)` invokes
   zero-argument functions concurrently and joins every branch before returning.
 - `steps.task(name, function, args=[], kwargs={}, retry=None, timeout="")` describes
@@ -165,7 +171,11 @@ depend on their existing Atmos subsystems rather than independent replacements.
   launch failures, signals, cancellation and transport errors still raise.
   `output="capture"` captures stdout/stderr without showing either stream; the default
   `output="stream"` shows subprocess output live and captures it. Start failures
-  (missing command, bad directory) always raise.
+  (missing command, bad directory) always raise. `exec.run` and `component.exec`
+  accept per-call timeouts and retries. One timeout bounds attempts and backoff.
+  Only ordinary nonzero exits are retried; `check=False` returns them immediately.
+  Retry output conditions inspect the failed attempt; captured results contain
+  only the final attempt.
 - Script `env` contains explicit step inputs, not ambient process variables.
   `print` is captured as stdout; an optional top-level `output` becomes the step
   value (a string as-is, any other value JSON-encoded; a non-encodable value fails
@@ -222,6 +232,32 @@ depend on their existing Atmos subsystems rather than independent replacements.
   context. To bound resolution by a parallel task's deadline, call `components.get`
   inside that task with explicit name, stack, and type.
 
+### Shared step library and filesystem inspection
+
+- `steps.run(type, **fields)` and named functions such as `steps.input`, `steps.http`,
+  and `steps.container` dispatch registered handlers through `automation.StepLibrary`.
+  Calls run immediately; `steps.task` defers function calls for `steps.parallel`.
+- Results expose `value`, `values`, `metadata`, `outputs`, `skipped`, and `error`.
+  Execution failures raise. Named results are available to subsequent templates.
+  `result.data` lazily decodes JSON from `value`; metadata and named outputs retain
+  their existing types. Invalid/empty JSON fails only on access.
+- Each invocation owns step state. Parallel branches and retries get isolated
+  snapshots. Step environment changes affect subsequent step calls, not the script's
+  immutable `env` or `exec.run` environment. Pass explicit overrides to those APIs.
+- Prompt steps already provide text, confirmation, selection, and other inputs.
+  They follow existing non-TTY defaults/errors. Terminal-owning operations cannot
+  run in parallel script tasks. YAML-style parallel groups use `steps.run("parallel", ...)`.
+- Workflow scheduling, identity, background jobs, and freshness remain host-owned.
+  Unsupported direct-call policies fail; wait/cancel handlers require job context.
+  The `exec` step replaces the process on Unix; `exec.run` returns to the script.
+- `fs.glob`, `fs.stat`, `fs.exists`, and `fs.readlink` use the shared Go filesystem
+  interface. Matches are sorted; stat reports bytes; existence follows symlinks;
+  missing paths are distinguished from other errors. Recursive globbing and writes
+  are not provided. See [the filesystem contract](git-hook-steps.md#filesystem-api).
+- Local Git hooks now accept ordered `steps` with inline Starlark, independently
+  of component lifecycle hooks. Their scripts receive positional `ctx.args` and
+  run inside the hook process. See [Git-hook steps](git-hook-steps.md).
+
 ### Parsed inputs and literal fields
 
 - Embedded scripts receive immutable `ctx.flags` and `ctx.arguments` dictionaries.
@@ -250,6 +286,7 @@ depend on their existing Atmos subsystems rather than independent replacements.
 
 ### Dialect, output, and diagnostics
 
+- Numeric `sum` and `round` helpers are implemented.
 - Top-level `if`/`for`/`while`, `set()`, and recursion are enabled for entry scripts and
   loaded modules. Globals stay single-assignment: rebinding a global (including `n += 1`
   at the top level or assigning `output` in both branches of an if/else) fails with
@@ -276,6 +313,13 @@ depend on their existing Atmos subsystems rather than independent replacements.
 - Hook script steps (`kind: step`, `kind: steps`, `type: test`) can call `components.get`
   for components other than their own.
 
+Structured errors use `errors.build(message)` with snake_case builder methods:
+`with_title`, `with_explanation`, `with_hint`, `with_example`, `with_context`,
+`with_cause`, and `with_exit_code`. Builders are immutable; `.fail()` raises the
+error. Unhandled errors use normal Atmos reporting, including configured Sentry.
+Context marked safe by the builder must not contain secrets. Masking depends on
+registered secrets, patterns, and configuration, not on the choice of language.
+
 ### Logging
 
 - `log.trace/debug/info/warn/error(message, **fields)` write to the Atmos logger
@@ -300,7 +344,16 @@ depend on their existing Atmos subsystems rather than independent replacements.
   `atmos.scaffold`, `atmos.vendor`, `atmos.list`, `atmos.describe`, and `atmos.config`.
   Generic wrappers accept positional CLI strings, `flags={}`, `args=[]`, and the
   standard cwd/env/output/check options; commands with no arguments work as well.
-  These calls retain native CLI behavior and return process results.
+  These calls return process results. Named list/describe wrappers and config-get
+  wrappers default to capture and request JSON when the selected command exposes
+  a format flag. This includes `atmos.config("get", ...)` and
+  `atmos.stack("config", "get", ...)` (plus the `stack get` alias). Explicit format
+  and output choices win. The generic `atmos.run` keeps literal CLI behavior.
+- Process results preserve `.stdout`, `.stderr`, and `.exit_code`. Their lazy,
+  cached `.data` view decodes JSON from stdout without altering it; collections
+  are frozen. Empty or invalid JSON raises only when `.data` is accessed. This
+  lets scripts iterate affected components for monorepo build/test/deploy selection.
+  It does not add remote caching or a Bazel-compatible build graph.
 - The CLI supplies an immutable snapshot of its registered commands, including
   custom commands and aliases, to the runtime. Named wrappers and flag spelling
   follow that catalog rather than a separate hard-coded CLI surface. Embedding
@@ -323,7 +376,7 @@ The CLI recognizes a `.star` filename or an explicit file path with an Atmos
 shebang after any leading Atmos global flags. `#!/usr/bin/env atmos` and an
 absolute Atmos interpreter path work through the operating system's normal script
 dispatch. Invoking Atmos without arguments preserves the existing root UI/help
-behavior; ordinary CLI commands retain their existing path.
+behavior even when stdin is redirected; ordinary CLI commands retain their existing path.
 Bare extensionless names remain commands. A new `atmos script run` command is not
 part of this interface. The `.star` extension is optional for an explicit script
 path with a recognized shebang.
@@ -343,6 +396,18 @@ Standalone metrics summaries are disabled when `settings.metrics.enabled` is uns
 an explicit setting is honored. Tracebacks display paths relative to the working
 directory where possible, while load resolution retains physical paths. Log fields
 and hints use the script filename.
+
+#### Stdin execution
+
+Use `atmos - [args...] < script.star`, or `atmos - -- [args...]` to separate
+script arguments explicitly. Select a registered engine with
+`atmos --interpreter=starlark -`. Bare `atmos < script.star` and
+`atmos -- foo bar < script.star` do not select script execution.
+
+The CLI reads source through EOF only after detecting the explicit stdin marker.
+Stdin scripts have `ctx.script = None`, report `<stdin>` source locations, and
+resolve imports against the invocation working directory. Stdin consumed as
+source is not simultaneously available as a separate script input stream.
 
 #### Declared command interfaces
 
@@ -442,9 +507,9 @@ web-server fixtures with Starlark.
 | Regex operations in 17 files, including ANSI cleanup and progress assertions | `regex.search`, `regex.replace`, `regex.findall` | Implemented with Go/RE2 syntax, full-match results and literal replacement. Python lookbehind patterns must be rewritten. |
 | JSON cast events, payloads and manifest checks | `json.encode/decode` | Already implemented. |
 | `Path.write_text()` in 21 files, notably cast sanitizers | Atomic `fs.write_file(path, content)` | Proposed; define permissions, replacement and parallel-writer behavior before exposing. |
-| File existence and globbing in `screengrabs/cli.yaml` and `cast_checks.py` | `fs.exists`, sorted `fs.glob`, and path helpers | Proposed; distinguish missing paths from permission errors and define recursive/symlink behavior. |
+| File inspection in validators and repository checks | `fs.exists`, sorted `fs.glob`, `fs.stat`, `fs.readlink` | Implemented; byte sizes and explicit symlink behavior. No recursive globbing or write API. |
 | `subprocess.run` in screengrab generation | `exec.run(argv, env=..., working_directory=..., check=False, output="capture")` | Implemented; explicit nonzero-result policy and capture without streaming. |
-| Python server start/stop and readiness polling in HTTP/weather fixtures | Shared background, HTTP and retry step interfaces | Reuse Atmos lifecycle services when typed-step dispatch is exposed; do not add detached processes or global environment mutation. |
+| Python server start/stop and readiness polling in HTTP/weather fixtures | Shared background, HTTP and retry step interfaces | HTTP and retry step APIs are exposed; background ownership still belongs to the workflow. No detached-process API is added. |
 | Temporary directories and atomic replacement in screengrab generation | Scoped temporary workspace and atomic file APIs | Proposed; deterministic cleanup on success, failure and cancellation. |
 | UTC timestamps and hook artifacts in `examples/hooks-custom-command/scripts/notify.py` | Injectable clock, explicit hook inputs, file writes and Markdown UI | Proposed; avoid ambient environment reads and make time deterministic in tests. |
 
@@ -502,7 +567,8 @@ until the corresponding stream and scoped-artifact APIs exist.
 ## First-class service access and observability requirements
 
 Existing YAML functions and resolved component handles provide indirect reads.
-There are no direct `secrets`, `stores`, or Terraform state/output Starlark modules
+The registered `steps.store` handler is available, but there are no dedicated
+`secrets`, `stores`, or Terraform state/output Starlark modules
 in this increment. The next service APIs must delegate to Atmos's existing
 authentication, stack resolution, secret masking, caching and provider services:
 
@@ -528,8 +594,6 @@ raw component config and captured subprocess output must not become event tags.
 The following retain the earlier design intent; they must not be advertised as
 available Starlark APIs yet:
 
-- Expose registered Atmos steps through one shared policy-aware runner, including
-  context restrictions for interactive, background, and terminal-control steps.
 - Add native `components.list`; typed invocation inputs are already implemented.
   Custom providers' no-op `Execute`
   methods must never stand in for actual custom-command execution.
@@ -540,6 +604,20 @@ available Starlark APIs yet:
   side effects, retry boundaries, and cleanup using representative command fixtures.
 
 No external Safire commands are executed by this implementation or its tests.
+
+## Product boundaries
+
+The embedded language supports application builds, tests, releases, deployments,
+and monorepo orchestration as well as infrastructure operations. Teams can reuse
+one script locally and in CI. Atmos ships the interpreter, step library, CLI input
+conventions, and diagnostics in its binary; called tools, container engines,
+credentials, registries, and remote services remain external requirements.
+
+Starlark avoids requiring a Python or Node package environment for the embedded
+language itself. Host functions intentionally add process execution and filesystem
+I/O, so arbitrary Atmos scripts are neither deterministic evaluations nor security
+sandboxes. The language's constrained syntax and shared APIs reduce orchestration
+choices; they do not guarantee reliable deployments or eliminate external failures.
 
 ## References and Change History
 
@@ -560,4 +638,5 @@ replace checks against the current codebase:
 
 | Date | PRD change |
 |------|------------|
+| 2026-10-06 | Reconciled the shared SDK, extension registry, stdin execution, step library, structured errors, query defaults and decoded results, process controls, filesystem inspection, and local Git-hook integration. |
 | 2026-10-05 | Reorganized into explicit PRD sections and reconciled implemented inputs, literal fields, output, recursion, command catalog, standalone declarations, global flags, usage errors, and re-execution. Kept unimplemented service and testing APIs separate. |

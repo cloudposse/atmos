@@ -28,7 +28,7 @@ func (s *session) componentContext(thread *starlark.Thread) error {
 		selected = &lazyComponent{s: s, ref: *s.spec.Component}
 	}
 	hook, operation := hookValues(s.spec.Hook)
-	args, file := fileContext(s.spec.File)
+	args, file := fileContext(s.spec.File, s.spec.Args)
 	flags, err := convert.Dictionary(s.spec.Flags)
 	if err != nil {
 		return err

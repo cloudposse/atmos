@@ -5315,6 +5315,20 @@
               "type": "null"
             }
           ]
+        },
+        "steps": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tasks"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Steps runs registered steps in order, as an alternative to Command."
         }
       },
       "type": "object",

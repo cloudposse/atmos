@@ -1,0 +1,41 @@
+---
+title: "fs.glob"
+sidebar_label: "fs.glob"
+sidebar_class_name: command
+description: Find files matching a pattern.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>Find files matching a pattern.</Intro>
+
+## Usage
+
+```python
+fs.glob(pattern)
+```
+
+<dl>
+  <dt>`pattern`</dt>
+  <dd>A path pattern supporting `*`, `?`, and character classes such as `[a-z]`.
+  Wildcards do not cross directory separators. Recursive `**` matching is not supported.</dd>
+</dl>
+
+Returns a sorted list of matching paths, or an empty list if nothing matches.
+Relative patterns return paths relative to the script's working directory;
+absolute patterns return absolute paths. Returned paths use forward slashes.
+Hidden files are included when they match. Invalid patterns fail; directory
+read errors are ignored, matching Go's filesystem glob behavior.
+
+```python
+for path in fs.glob(".claude/agents/*.md"):
+    print(path)
+```
+
+Relative paths resolve against the script's working directory, including when
+called from a loaded module. Absolute paths are used as given. These functions
+inspect the local filesystem; they do not isolate access to the repository.
+Calls honor cancellation before and after the filesystem operation.
+
+See [reading files](/functions/automation/fs.read_file) and
+[Git hooks](/cli/configuration/git#local-git-hooks).

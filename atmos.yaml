@@ -372,3 +372,49 @@ mcp:
         - mcp
         - start
       description: Atmos's own AI tools (describe, list, validate, ...) exposed via MCP
+
+# Run these checks with a build that includes embedded Git-hook steps.
+git:
+  hooks:
+    pre-commit:
+      steps:
+        - name: check-symlinks
+          type: script
+          interpreter: starlark
+          script: |
+            entries = exec.run(["git", "ls-files", "-s", "-z"], output = "capture").stdout
+            broken = []
+            for entry in entries.split("\x00"):
+                if not entry:
+                    continue
+                metadata, _, path = entry.partition("\t")
+                if metadata.split(" ")[0] == "120000" and not fs.exists(path):
+                    broken.append(path)
+            if broken:
+                (errors.build("Broken tracked symlinks")
+                    .with_explanation("\n".join(broken))
+                    .with_hint("Restore the targets or remove obsolete symlinks.")
+                    .fail())
+
+        - name: check-agent-file-sizes
+          type: script
+          interpreter: starlark
+          script: |
+            limits = [
+                ("CLAUDE.md", 40000),
+                (".conductor/*/CLAUDE.md", 40000),
+                (".claude/agents/*.md", 25000),
+            ]
+            oversized = []
+            for pattern, limit in limits:
+                for path in fs.glob(pattern):
+                    if not fs.exists(path):
+                        continue
+                    info = fs.stat(path)
+                    if info.is_file and info.size > limit:
+                        oversized.append("{}: {} bytes (limit {})".format(path, info.size, limit))
+            if oversized:
+                (errors.build("Agent instruction files exceed size limits")
+                    .with_explanation("\n".join(oversized))
+                    .with_hint("Move detailed guidance into linked docs; preserve mandatory instructions.")
+                    .fail())

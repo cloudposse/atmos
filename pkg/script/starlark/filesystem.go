@@ -1,8 +1,6 @@
 package starlark
 
 import (
-	"path/filepath"
-
 	"go.starlark.net/starlark"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -19,10 +17,7 @@ func (s *session) readFile(thread *starlark.Thread, b *starlark.Builtin, args st
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(s.spec.WorkingDirectory, path)
-	}
-	contents, err := s.engine.readFile(filepath.Clean(path))
+	contents, err := s.engine.readFile(s.filesystemPath(path))
 	if err != nil {
 		return nil, failWith(errUtils.ErrStarlark, err, "cannot read file: %s", err)
 	}

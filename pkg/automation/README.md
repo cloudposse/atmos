@@ -76,3 +76,17 @@ waits. The operation receives a context; the caller supplies the predicate that
 decides which errors may be retried. It reuses the shared retry implementation.
 Script process calls use this policy for `exec.run` and `component.exec`.
 The step registry adapter still owns handler-specific execution behavior.
+
+## Filesystem inspection
+
+The `FileSystem` interface supplies context-aware `Glob`, `Stat`, `Exists`, and
+`Readlink` operations. `LocalFileSystem` implements them with the operating system.
+`FileInfo` carries byte size and regular-file, directory, and symlink flags.
+Interpreters resolve paths against their invocation directory and convert the
+results to language values. The Starlark engine accepts an alternate implementation
+through `WithFileSystem`.
+
+For synchronous host-owned step lists, `AutomationLibrary.RunSteps` accepts
+`schema.Tasks` plus invocation streams and working directory. It validates the
+sequence before execution and shares outputs and environment changes between
+steps. Workflow scheduler policies are rejected. Atmos Git hooks use this path.

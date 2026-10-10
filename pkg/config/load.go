@@ -1591,7 +1591,7 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 
 	// Process YAML functions. Custom commands are decoded separately, anchored to this config
 	// file and the project base path, so their !include paths do not depend on the working directory.
-	if err := preprocessAtmosYamlFuncExceptCommands(content, tempViper); err != nil {
+	if err := preprocessAtmosYamlFuncExceptCommands(content, tempViper, configFilePath); err != nil {
 		return errors.Join(errUtils.ErrPreprocessYAMLFunctions, err)
 	}
 	if processedCommands == nil {
@@ -2040,7 +2040,7 @@ func mergeConfigFile(
 		return err
 	}
 
-	err = preprocessAtmosYamlFuncExceptCommands(content, v)
+	err = preprocessAtmosYamlFuncExceptCommands(content, v, path)
 	if err != nil {
 		return err
 	}
@@ -2059,8 +2059,8 @@ func mergeConfigFile(
 
 // preprocessAtmosYamlFuncExceptCommands runs preprocessAtmosYamlFunc over everything but the
 // top-level `commands` key, which extractCommandsWithYamlFunctionsForFile decodes with its own
-// include scope.
-func preprocessAtmosYamlFuncExceptCommands(content []byte, v *viper.Viper) error {
+// include scope. Git hook steps use the same step-aware decoder before generic processing.
+func preprocessAtmosYamlFuncExceptCommands(content []byte, v *viper.Viper, sourceFile string) error {
 	var root goyaml.Node
 	if err := goyaml.Unmarshal(content, &root); err != nil {
 		return err
@@ -2076,6 +2076,9 @@ func preprocessAtmosYamlFuncExceptCommands(content []byte, v *viper.Viper) error
 	}
 	// Process the parsed tree directly: aliases can refer to anchors under commands,
 	// so serializing the filtered tree would leave dangling aliases on the next parse.
+	if err := preprocessGitHookSteps(&root, v, sourceFile); err != nil {
+		return err
+	}
 	return processNode(&root, v, "")
 }
 
@@ -2142,7 +2145,7 @@ func mergeConfigFileWithImports(path string, v *viper.Viper) error {
 		return err
 	}
 	if len(imports) > 0 {
-		if err = preprocessAtmosYamlFuncExceptCommands(content, tempViper); err != nil {
+		if err = preprocessAtmosYamlFuncExceptCommands(content, tempViper, path); err != nil {
 			return err
 		}
 		overlayProfileSettings(v, tempViper.AllSettings(), "")
@@ -2697,6 +2700,9 @@ func restoreCaseSensitiveEnvMaps(atmosConfig *schema.AtmosConfiguration) {
 		atmosConfig.Templates.Settings.Env = caseSensitiveEnv
 	}
 	restoreCaseSensitiveCommandEnvMaps(atmosConfig)
+	for _, hook := range atmosConfig.Git.Hooks {
+		restoreGitHookStepEnv(hook.Steps, atmosConfig.CaseMaps)
+	}
 }
 
 func restoreCaseSensitiveCommandEnvMaps(atmosConfig *schema.AtmosConfiguration) {
