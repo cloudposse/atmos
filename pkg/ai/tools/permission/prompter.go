@@ -22,6 +22,18 @@ const (
 	choiceAlwaysDeny  = "d"
 )
 
+// stdinIsTerminal reports whether stdin is a terminal. It is a seam: tests replace it to force or refuse the
+// interactive path without a real terminal.
+var stdinIsTerminal = func() bool {
+	return terminal.New().IsTTY(terminal.Stdin)
+}
+
+// runForm runs a built huh form. It is a seam: tests replace it to drive the form in accessible
+// mode with scripted input, so a prompt never blocks on a real terminal.
+var runForm = func(form *huh.Form) error {
+	return form.Run()
+}
+
 // CLIPrompter implements Prompter using command-line prompts.
 type CLIPrompter struct {
 	cache *PermissionCache
@@ -156,7 +168,7 @@ func (p *CLIPrompter) Prompt(ctx context.Context, tool Tool, params map[string]i
 
 	// Prompts require a TTY; fail loudly instead of silently defaulting to deny.
 	// Checked before anything is printed so non-interactive logs stay free of a dangling request.
-	if !terminal.New().IsTTY(terminal.Stdin) {
+	if !stdinIsTerminal() {
 		return false, errUtils.ErrInteractiveNotAvailable
 	}
 
@@ -189,7 +201,7 @@ func requestTheme() *huh.Theme {
 
 // runRequestForm runs the form and maps huh errors onto Atmos errors.
 func runRequestForm(form *huh.Form) error {
-	if err := form.Run(); err != nil {
+	if err := runForm(form); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
 			return errUtils.ErrUserAborted
 		}

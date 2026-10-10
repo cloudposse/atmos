@@ -222,7 +222,9 @@ func denialKey(toolUseID, toolName string) string {
 func (s *session) evaluateResult() (string, error) {
 	var resp claudeResponse
 	if err := json.Unmarshal(s.result, &resp); err != nil {
-		return parseResponse(s.result)
+		// The line was already decoded as a JSON object, so this is a field type mismatch.
+		// Falling back to the plain-text path would return the raw JSON as the answer.
+		return "", fmt.Errorf("%w: %s: %w", errUtils.ErrCLIProviderParseResponse, ProviderName, err)
 	}
 	remaining := resp.PermissionDenials[:0:0]
 	for _, denial := range resp.PermissionDenials {

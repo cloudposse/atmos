@@ -570,3 +570,26 @@ func TestBuildArgs_AskUserQuestionGuidanceOnlyWithApprover(t *testing.T) {
 		assert.NotContains(t, strings.Join(args, " "), "AskUserQuestion")
 	})
 }
+
+// A result line that is a JSON object but has a field of the wrong type is a protocol problem.
+// It must not fall back to the plain-text path, which would return the raw JSON as the answer.
+func TestSessionEvaluateResult_MistypedFieldIsAParseError(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+	}{
+		{name: "turn count as a string", line: `{"type":"result","subtype":"success","is_error":false,"result":"all done","num_turns":"two"}`},
+		{name: "errors as objects", line: `{"type":"result","subtype":"error","is_error":true,"result":null,"errors":[{"message":"boom"}]}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sess := &session{result: []byte(tt.line)}
+
+			out, err := sess.evaluateResult()
+
+			require.ErrorIs(t, err, errUtils.ErrCLIProviderParseResponse)
+			assert.Empty(t, out, "the raw result line is never returned as the answer")
+		})
+	}
+}

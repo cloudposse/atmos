@@ -7,7 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -433,4 +435,121 @@ func captureStderr(t *testing.T, fn func()) string {
 	r.Close()
 
 	return buf.String()
+}
+
+// TestRenderTitle_RuleOnlyWhenThereIsRoom covers a width too narrow for the heading plus a rule.
+func TestRenderTitle_RuleOnlyWhenThereIsRoom(t *testing.T) {
+	titleWidth := runewidth.StringWidth(requestTitle)
+
+	tests := []struct {
+		name      string
+		width     int
+		wantRule  bool
+		wantWidth int
+	}{
+		{name: "narrower than the heading", width: titleWidth - 5, wantRule: false, wantWidth: titleWidth},
+		{name: "exactly the heading", width: titleWidth, wantRule: false, wantWidth: titleWidth},
+		{name: "heading and the separating space only", width: titleWidth + 1, wantRule: false, wantWidth: titleWidth},
+		{name: "room for one rule column", width: titleWidth + 2, wantRule: true, wantWidth: titleWidth + 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ansi.Strip(renderTitle(tt.width))
+
+			assert.Equal(t, tt.wantRule, strings.Contains(got, "─"))
+			assert.Equal(t, tt.wantWidth, runewidth.StringWidth(got))
+			assert.True(t, strings.HasPrefix(got, requestTitle))
+		})
+	}
+}
+
+// TestHighlightShell covers command highlighting with and without color.
+func TestHighlightShell(t *testing.T) {
+	const command = "atmos list stacks | grep -v prod"
+
+	setProfile := func(t *testing.T, profile termenv.Profile) {
+		t.Helper()
+		previous := lipgloss.ColorProfile()
+		lipgloss.SetColorProfile(profile)
+		t.Cleanup(func() { lipgloss.SetColorProfile(previous) })
+	}
+
+	t.Run("with color the command is highlighted and its text is unchanged", func(t *testing.T) {
+		setProfile(t, termenv.TrueColor)
+
+		got := highlightShell(command)
+
+		assert.Contains(t, got, "\x1b[", "escape codes are added")
+		assert.Equal(t, command, ansi.Strip(got), "highlighting never changes the text")
+		assert.False(t, strings.HasSuffix(got, "\n"), "the lexer's trailing newline is removed")
+	})
+
+	t.Run("without color the line is returned as is", func(t *testing.T) {
+		setProfile(t, termenv.Ascii)
+
+		assert.Equal(t, command, highlightShell(command))
+	})
+
+	t.Run("blank lines are never highlighted", func(t *testing.T) {
+		setProfile(t, termenv.TrueColor)
+
+		assert.Equal(t, "   ", highlightShell("   "))
+		assert.Equal(t, "", highlightShell(""))
+	})
+}
+
+// TestWrapText_EdgeCases covers indentation that is too wide to keep, spaces that do not fit, and wide runes.
+func TestWrapText_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name   string
+		text   string
+		width  int
+		indent string
+		want   []string
+	}{
+		{
+			name:  "a leading indent over half the width is dropped on wrapped lines",
+			text:  "        aaa bbb ccc",
+			width: 10,
+			want:  []string{"aaa bbb", "ccc"},
+		},
+		{
+			name:   "a continuation indent over half the width is dropped",
+			text:   "  aaa bbb ccc ddd",
+			width:  10,
+			indent: "      ",
+			want:   []string{"aaa bbb", "ccc ddd"},
+		},
+		{
+			name:  "a run of spaces that does not fit ends the line",
+			text:  "aaaa          bbbb",
+			width: 8,
+			want:  []string{"aaaa", "bbbb"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := wrapText(tt.text, tt.width, tt.indent)
+
+			assert.Equal(t, tt.want, got)
+			assert.Equal(t, strings.Join(strings.Fields(tt.text), ""), strings.Join(strings.Fields(strings.Join(got, "")), ""),
+				"no characters are lost")
+		})
+	}
+}
+
+// TestWrapText_RuneWiderThanTheLine covers a line narrower than a single double-width rune: the rune is
+// placed on a line of its own (overflowing it) instead of looping forever or being dropped.
+func TestWrapText_RuneWiderThanTheLine(t *testing.T) {
+	got := wrapText("日本", 1, "")
+
+	var nonEmpty []string
+	for _, line := range got {
+		if line != "" {
+			nonEmpty = append(nonEmpty, line)
+		}
+	}
+	assert.Equal(t, []string{"日", "本"}, nonEmpty)
 }

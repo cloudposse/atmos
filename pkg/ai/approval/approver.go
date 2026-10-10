@@ -125,6 +125,7 @@ type requestTool struct {
 
 var _ permission.ScopedTool = (*requestTool)(nil)
 
+// newRequestTool wraps a provider request so the permission checker can evaluate it.
 func newRequestTool(req Request) *requestTool {
 	return &requestTool{req: req}
 }

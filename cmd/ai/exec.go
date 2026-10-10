@@ -120,6 +120,9 @@ var execCmd = &cobra.Command{
 		if !noTools && atmosConfig.AI.Tools.Enabled {
 			// Use shared initialization function.
 			toolsResult, toolsErr := initializeAIToolsAndExecutor(&atmosConfig, mcpServers, prompt)
+			if isInvalidToolMode(toolsErr) {
+				return exitWithError(1, "config_error", toolsErr)
+			}
 			if toolsErr != nil {
 				log.Warn("Failed to initialize tools", "error", toolsErr)
 			}

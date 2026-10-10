@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	cockroachErrors "github.com/cockroachdb/errors"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/formatter"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -55,6 +57,13 @@ func failedResultError(info *formatter.ErrorInfo) error {
 		if errors.Is(info.Err, target) {
 			return info.Err
 		}
+	}
+
+	// Keep the hints of any other error that carries them (for example the provider timeout).
+	// Formatting it into a message would drop them; the builder preserves them and keeps both
+	// the sentinel and the cause matchable with errors.Is.
+	if info.Err != nil && len(cockroachErrors.GetAllHints(info.Err)) > 0 {
+		return errUtils.Build(errUtils.ErrAIExecutionFailed).WithCause(info.Err).Err()
 	}
 
 	return fmt.Errorf("%w: %s", errUtils.ErrAIExecutionFailed, info.Message)

@@ -51,6 +51,18 @@ type QuestionOption struct {
 	Description string `json:"description"`
 }
 
+// stdinIsTerminal reports whether stdin is a terminal. It is a seam: tests replace it to force or refuse the
+// interactive path without a real terminal.
+var stdinIsTerminal = func() bool {
+	return terminal.New().IsTTY(terminal.Stdin)
+}
+
+// runForm runs a built huh form. It is a seam: tests replace it to drive the form in accessible
+// mode with scripted input, so a prompt never blocks on a real terminal.
+var runForm = func(form *huh.Form) error {
+	return form.Run()
+}
+
 // Asker shows questions to the user and returns their answers keyed by question text.
 type Asker interface {
 	// Available reports whether the user can be asked at all (a terminal is attached).
@@ -121,7 +133,7 @@ type terminalAsker struct{}
 
 // Available reports whether stdin is a terminal.
 func (terminalAsker) Available() bool {
-	return terminal.New().IsTTY(terminal.Stdin)
+	return stdinIsTerminal()
 }
 
 // Ask shows each question as a selection list, with an "Other…" option for free text.
@@ -217,7 +229,7 @@ func typeAnswer(q Question) (string, error) {
 // runField runs one field as its own form and maps a user abort to errUtils.ErrUserAborted.
 func runField(field huh.Field) error {
 	form := huh.NewForm(huh.NewGroup(field)).WithKeyMap(uiutils.NewAtmosKeyMap()).WithTheme(uiutils.NewAtmosHuhTheme())
-	if err := form.Run(); err != nil {
+	if err := runForm(form); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
 			return errUtils.ErrUserAborted
 		}

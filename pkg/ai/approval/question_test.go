@@ -103,6 +103,7 @@ func TestParseQuestions(t *testing.T) {
 		},
 		{name: "no questions", input: map[string]any{}, want: nil},
 		{name: "questions of the wrong type", input: map[string]any{"questions": "nope"}, wantErr: true},
+		{name: "questions that cannot be encoded", input: map[string]any{"questions": make(chan int)}, wantErr: true},
 	}
 
 	for _, tt := range tests {

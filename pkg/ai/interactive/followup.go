@@ -14,6 +14,21 @@ import (
 	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
+// isTTY reports whether a standard stream is a terminal. It is a seam: tests replace it to simulate
+// terminals and pipes.
+var isTTY = func(stream terminal.Stream) bool {
+	return terminal.New().IsTTY(stream)
+}
+
+// isCI reports whether the process runs in a CI environment. It is a seam: tests replace it to simulate CI.
+var isCI = telemetry.IsCI
+
+// runForm runs a built huh form. It is a seam: tests replace it to drive the form in accessible
+// mode with scripted input, so a prompt never blocks on a real terminal.
+var runForm = func(form *huh.Form) error {
+	return form.Run()
+}
+
 // TurnFunc runs one conversation turn and returns the answer text.
 // The history argument holds every earlier question and answer, oldest first.
 type TurnFunc func(question string, history []types.Message) (string, error)
@@ -75,8 +90,7 @@ func (c Conversation) Continue(history []types.Message, turn TurnFunc) error {
 
 // terminalAvailable reports whether a person can type a follow-up and see the result.
 func terminalAvailable() bool {
-	term := terminal.New()
-	return term.IsTTY(terminal.Stdin) && term.IsTTY(terminal.Stdout) && !telemetry.IsCI()
+	return isTTY(terminal.Stdin) && isTTY(terminal.Stdout) && !isCI()
 }
 
 // promptFollowUp asks for the next question.
@@ -92,7 +106,7 @@ func promptFollowUp() (string, error) {
 		),
 	).WithKeyMap(uiutils.NewAtmosKeyMap()).WithTheme(uiutils.NewAtmosHuhTheme())
 
-	if err := form.Run(); err != nil {
+	if err := runForm(form); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
 			return "", errUtils.ErrUserAborted
 		}

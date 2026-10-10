@@ -105,6 +105,9 @@ var askCmd = &cobra.Command{
 		var toolExecutor *tools.Executor
 		if !noTools && atmosConfig.AI.Tools.Enabled {
 			toolsResult, toolsErr := initializeAIToolsAndExecutor(&atmosConfig, mcpServers, question)
+			if isInvalidToolMode(toolsErr) {
+				return toolsErr
+			}
 			if toolsErr != nil {
 				log.Warn("Failed to initialize tools", "error", toolsErr)
 				// Continue without tools rather than failing.
@@ -158,11 +161,8 @@ var askCmd = &cobra.Command{
 		}
 
 		// In a terminal, keep the conversation going: the answer often ends with an offer to dig deeper.
-		history = append(
-			history,
-			types.Message{Role: types.RoleUser, Content: question},
-			types.Message{Role: types.RoleAssistant, Content: answer},
-		)
+		// The history carries the full prompt (including any stack context), not just the plain question.
+		history = appendTurn(history, finalQuestion, answer)
 		return interactive.Continue(history, func(followUp string, earlier []types.Message) (string, error) {
 			return turn.run(followUp, followUp, earlier)
 		})
@@ -195,4 +195,16 @@ func init() {
 	}
 
 	aiCmd.AddCommand(askCmd)
+}
+
+// appendTurn returns history extended with one question and its answer. It never writes into the
+// caller's slice, and prompt is what the AI actually received, so follow-ups keep any stack context.
+func appendTurn(history []types.Message, prompt, answer string) []types.Message {
+	out := make([]types.Message, 0, len(history)+2)
+	out = append(out, history...)
+	return append(
+		out,
+		types.Message{Role: types.RoleUser, Content: prompt},
+		types.Message{Role: types.RoleAssistant, Content: answer},
+	)
 }

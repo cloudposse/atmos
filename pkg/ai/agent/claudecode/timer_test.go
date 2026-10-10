@@ -1,6 +1,7 @@
 package claudecode
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -66,4 +67,85 @@ func TestPausableTimer_StopPreventsFireAndResume(t *testing.T) {
 	timer.resume()
 	time.Sleep(200 * time.Millisecond)
 	assert.False(t, timer.didFire())
+}
+
+// TestPausableTimer_FireAfterPauseIsIgnored covers the race where the runtime timer's callback is already
+// on its way when pause() takes the lock: the late callback must not fire the user's function.
+func TestPausableTimer_FireAfterPauseIsIgnored(t *testing.T) {
+	var fired atomic.Int32
+	timer := newPausableTimer(time.Hour, func() { fired.Add(1) })
+	defer timer.stop()
+
+	timer.pause()
+	timer.fire() // The callback that lost the race.
+
+	assert.Zero(t, fired.Load())
+	assert.False(t, timer.didFire())
+
+	// The timer is still usable: resuming re-arms it with what remains.
+	timer.mu.Lock()
+	timer.remaining = 20 * time.Millisecond
+	timer.mu.Unlock()
+	timer.resume()
+
+	assert.Eventually(t, func() bool { return fired.Load() == 1 }, 5*time.Second, 5*time.Millisecond)
+	assert.True(t, timer.didFire())
+}
+
+// TestPausableTimer_PauseIsIdempotent checks that pausing twice charges the elapsed time only once.
+func TestPausableTimer_PauseIsIdempotent(t *testing.T) {
+	timer := newPausableTimer(time.Hour, func() { t.Error("must not fire") })
+	defer timer.stop()
+
+	timer.pause()
+	timer.mu.Lock()
+	afterFirst := timer.remaining
+	timer.mu.Unlock()
+	require.Less(t, afterFirst, time.Hour, "the elapsed time was charged")
+
+	time.Sleep(20 * time.Millisecond)
+	timer.pause()
+
+	timer.mu.Lock()
+	afterSecond := timer.remaining
+	timer.mu.Unlock()
+	assert.Equal(t, afterFirst, afterSecond, "a second pause does not charge more time")
+}
+
+// TestPausableTimer_PauseAfterBudgetElapsedFiresOnResume checks the remaining time never goes negative:
+// when the whole budget was used up before the pause landed, resuming fires right away.
+func TestPausableTimer_PauseAfterBudgetElapsedFiresOnResume(t *testing.T) {
+	var fired atomic.Int32
+	timer := newPausableTimer(time.Hour, func() { fired.Add(1) })
+	defer timer.stop()
+
+	timer.mu.Lock()
+	timer.startedAt = time.Now().Add(-2 * time.Hour)
+	timer.mu.Unlock()
+	timer.pause()
+
+	timer.mu.Lock()
+	remaining := timer.remaining
+	timer.mu.Unlock()
+	assert.Zero(t, remaining, "the remaining time is clamped to zero")
+	assert.False(t, timer.didFire(), "pausing does not fire the timer")
+
+	timer.resume()
+
+	assert.Eventually(t, func() bool { return fired.Load() == 1 }, 5*time.Second, 5*time.Millisecond)
+	assert.True(t, timer.didFire())
+}
+
+// TestPausableTimer_ResumeWhileRunningDoesNotArmASecondTimer checks that an unpaired resume is a no-op.
+func TestPausableTimer_ResumeWhileRunningDoesNotArmASecondTimer(t *testing.T) {
+	var fired atomic.Int32
+	timer := newPausableTimer(30*time.Millisecond, func() { fired.Add(1) })
+	defer timer.stop()
+
+	timer.resume()
+	timer.resume()
+
+	require.Eventually(t, func() bool { return fired.Load() >= 1 }, 5*time.Second, 5*time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
+	assert.Equal(t, int32(1), fired.Load(), "the callback runs exactly once")
 }
