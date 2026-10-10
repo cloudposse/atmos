@@ -300,6 +300,16 @@ func (v *Variables) SetTemplateData(data map[string]any) {
 	}
 }
 
+// SetTemplateRoot updates one root while preserving the other invocation inputs.
+func (v *Variables) SetTemplateRoot(name string, value any) {
+	defer perf.Track(nil, "step.Variables.SetTemplateRoot")()
+
+	if v.templateRoots == nil {
+		v.templateRoots = make(map[string]any)
+	}
+	v.templateRoots[name] = value
+}
+
 // SetTemplateRenderer sets the one-pass renderer used by Resolve.
 func (v *Variables) SetTemplateRenderer(renderer TemplateRenderer) {
 	defer perf.Track(nil, "step.Variables.SetTemplateRenderer")()

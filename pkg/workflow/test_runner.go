@@ -368,7 +368,7 @@ func (e *testGroupExecutor) branchVariables(matrix map[string]string) *step.Vari
 	e.mu.Lock()
 	local := e.vars.Clone()
 	e.mu.Unlock()
-	local.SetTemplateData(map[string]any{"matrix": matrix})
+	local.SetTemplateRoot("matrix", matrix)
 	if len(matrix) == 0 {
 		return local
 	}

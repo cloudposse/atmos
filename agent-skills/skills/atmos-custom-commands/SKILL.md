@@ -144,6 +144,47 @@ An embedded Starlark script step in such a command reads the selected component 
 `ctx.component` (resolved on first access). Workflows have no component in scope, so
 `ctx.component` is `None` there; see `atmos-starlark`.
 
+## Starlark Script Steps
+
+Use a `type: script` step with `interpreter: starlark` when a command needs loops,
+conditionals, data shaping, or concurrency that native steps cannot express. Inputs
+reach the script as values, not as text:
+
+```yaml
+commands:
+  - name: deploy-all
+    description: Deploy components in parallel
+    arguments:
+      - name: group
+        required: true
+    flags:
+      - name: dry-run
+        type: bool
+      - name: stack
+        shorthand: s
+        required: true
+    steps:
+      - name: deploy
+        type: script
+        interpreter: starlark
+        script: |
+          if ctx.flags["dry-run"]:
+              ui.info("dry run for " + ctx.arguments["group"])
+          else:
+              atmos.terraform("deploy", ctx.arguments["group"], ctx.flags["stack"])
+```
+
+- Read declared flags and arguments from `ctx.flags` (string and bool types preserved) and
+  `ctx.arguments`. `ctx.args` is empty, and trailing arguments after `--` are not exposed to
+  scripts.
+- Do not template flag values into the script source (`{{ .Flags.x }}`): the script body is
+  rendered as a Go template first, so a literal `{{` in Starlark source breaks the step.
+  `ctx.flags` and `ctx.arguments` are safe for any value.
+- `cli.command`, `cli.arg`, and `cli.flag` are only for standalone scripts
+  (`atmos ./tool.star`); declare the command interface in YAML here.
+- Script steps default to raw output with no step labels; `show: {labels: true}` restores them.
+  A `timeout:` on the script step is not enforced; use `steps.task(..., timeout="30s")`.
+
 ## Routing
 
 | Need | Skill |
@@ -151,7 +192,7 @@ An embedded Starlark script step in such a command reads the selected component 
 | Complete command schema and examples | [references/command-syntax.md](references/command-syntax.md) |
 | Reusable multi-step orchestration | `atmos-workflows` |
 | Shared step fields and step types | `atmos-steps` |
-| Embedded Starlark and parallel function calls | `atmos-starlark` |
+| Embedded Starlark, parallel function calls, and standalone `atmos ./tool.star` CLI apps | `atmos-starlark` |
 | Smoke tests, integration tests, and test groups | `atmos-tests` |
 | Tool versions and PATH behavior | `atmos-toolchain` |
 | Auth providers, identities, assume role/root, OIDC | `atmos-auth` |

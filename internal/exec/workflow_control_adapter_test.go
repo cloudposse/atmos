@@ -6,6 +6,7 @@ import (
 
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/scheduler"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/workflow"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -70,4 +71,20 @@ func TestStoreWorkflowControlResultMarksSkippedFallback(t *testing.T) {
 	require.NotNil(t, stored)
 	assert.Empty(t, stored.Value)
 	assert.True(t, stored.Skipped)
+}
+
+func TestWorkflowControlStarlarkInputs(t *testing.T) {
+	ResetStepExecutorState()
+	t.Cleanup(ResetStepExecutorState)
+	control := &workflowControlContext{}
+	vars := workflowControlVariables(control)
+	vars.SetFlag("stack", "dev")
+	parent := &schema.WorkflowStep{Name: "group", Type: schema.TaskTypeParallel, Output: "none", Steps: []schema.WorkflowStep{{
+		Name: "inspect", Type: schema.TaskTypeScript, Interpreter: "starlark",
+		Script: `output = {"stack": ctx.flags["stack"], "arguments": ctx.arguments}`,
+	}}}
+	require.NoError(t, executeWorkflowControlStep(t.Context(), control, parent))
+	value, ok := vars.GetValue("inspect")
+	require.True(t, ok)
+	assert.JSONEq(t, `{"stack":"dev","arguments":{}}`, value)
 }

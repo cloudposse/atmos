@@ -158,3 +158,33 @@ func TestCustomCommandControlExecutor_ResolvesChildWorkingDirectory(t *testing.T
 		})
 	}
 }
+
+func TestCustomCommandControlStarlarkInputs(t *testing.T) {
+	for _, kind := range []string{schema.TaskTypeParallel, schema.TaskTypeMatrix} {
+		t.Run(kind, func(t *testing.T) {
+			executor := stepPkg.NewStepExecutor()
+			executor.Variables().SetTemplateData(map[string]any{
+				"Flags":     map[string]any{"enabled": true, "literal": "{{ .Env.NOT_DEFINED }}"},
+				"Arguments": map[string]string{"service": "api"},
+			})
+			parent := &schema.WorkflowStep{Name: "group", Type: kind, Output: "none", Steps: []schema.WorkflowStep{{
+				Name: "inspect", Type: schema.TaskTypeScript, Interpreter: "starlark",
+				Script: `output = {"enabled": ctx.flags["enabled"], "literal": ctx.flags["literal"], "service": ctx.arguments["service"]}`,
+			}}}
+			expected := 1
+			if kind == schema.TaskTypeMatrix {
+				parent.Matrix = map[string][]string{"region": {"east", "west"}}
+				expected = 2
+			}
+			err := ExecuteCustomCommandControlStep(t.Context(), &CustomCommandControlContext{
+				AtmosConfig: schema.AtmosConfiguration{BasePath: t.TempDir()},
+				Executor:    executor,
+			}, parent)
+			require.NoError(t, err)
+			require.Len(t, executor.Variables().Steps, expected)
+			for _, result := range executor.Variables().Steps {
+				assert.JSONEq(t, `{"enabled":true,"literal":"{{ .Env.NOT_DEFINED }}","service":"api"}`, result.Value)
+			}
+		})
+	}
+}

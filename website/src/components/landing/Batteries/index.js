@@ -77,9 +77,9 @@ const BATTERIES = [
   {
     icon: RiTerminalBoxLine,
     title: 'Workflows & Automation',
-    desc: 'Run, automate, and chain anything — 35+ step types and custom commands orchestrate tasks across every component.',
-    tag: '35+ STEP TYPES · CUSTOM COMMANDS',
-    to: '/workflows',
+    desc: 'Build CLI apps, extend Atmos with custom subcommands, and automate tasks with workflows, hooks, tests, and Atmos Automation Language.',
+    tag: 'WORKFLOWS · COMMANDS · HOOKS',
+    to: '/automation',
   },
   {
     icon: RiCloudLine,

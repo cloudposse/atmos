@@ -1,0 +1,110 @@
+---
+title: Lifecycle Hooks
+sidebar_label: Lifecycle Hooks
+description: Run checks and follow-up actions automatically around component operations using Atmos Automation Language.
+id: lifecycle-hooks
+slug: /automation/lifecycle-hooks
+---
+
+import Intro from '@site/src/components/Intro'
+import EmbedFile from '@site/src/components/EmbedFile'
+import CastEmbed from '@site/src/components/CastEmbed'
+
+<Intro>
+Lifecycle hooks attach automation to component operations.
+Use lifecycle hooks when you want to enforce checks or run follow-up work
+automatically before or after an operation, without asking callers to remember
+an extra command.
+</Intro>
+
+A lifecycle hook runs when Atmos reaches an event such as
+`before.terraform.plan`. Hooks can run existing tools or scripts. An Atmos
+Automation Language script receives the component's resolved context directly,
+so it can inspect inherited variables without parsing another command's output.
+
+Use a [custom command](/automation/custom-commands) for an action users invoke
+explicitly. Use a hook when the action should accompany a particular component
+operation.
+
+## Add a check before planning
+
+This stack defines an `api` component and a hook requiring it to have an owner:
+
+<EmbedFile filePath="examples/starlark-hooks/stacks/dev.yaml" />
+
+The hook selects `before.terraform.plan` and uses `kind: step` with `type: script`
+to run one script step. Its `with` block configures that step, including
+`interpreter: starlark` for Atmos Automation Language.
+
+`on_failure: fail` makes a failed check stop the operation. The script reads
+`ctx.component.vars`, calls `fail()` if the owner is absent, and otherwise prints
+a success message with `ui.success()`.
+
+The component is named `api` in the stack; its implementation directory is
+`service`. `ctx.component.name` retains the component name used by the caller,
+so messages identify `api`.
+
+## Run the passing case
+
+Use the [complete hook example](/examples/starlark-hooks), which includes the Atmos
+configuration and a tiny Terraform module. With Atmos and Terraform installed,
+run from that example's directory:
+
+```shell
+atmos terraform plan api -s dev
+```
+
+The hook prints:
+
+```text
+Owner check passed: api belongs to platform (dev).
+```
+
+Terraform then reports no changes. This example has no providers or resources
+and needs no cloud credentials or provider installation.
+
+## Stop an invalid operation
+
+The `unowned` stack imports the same configuration and clears the owner:
+
+<EmbedFile filePath="examples/starlark-hooks/stacks/unowned.yaml" />
+
+Run the same operation against that stack:
+
+```shell
+atmos terraform plan api -s unowned
+```
+
+The command fails with `Set an owner before planning api`. Because the check runs
+before the plan and has a failing policy, the Terraform plan does not start.
+The inherited hook protects both stacks using the same logic.
+
+<CastEmbed src="/casts/examples/starlark-hooks/owner-check.cast" title="Allow a valid plan and stop an invalid one" chrome controls scrubber />
+
+## Work with lifecycle context
+
+Hook scripts receive read-only objects describing their invocation:
+
+| Object | Use it for |
+| --- | --- |
+| `ctx.component` | Component name, stack, implementation path, resolved variables, settings, and metadata |
+| `ctx.hook` | Hook name and the canonical event that triggered it |
+| `ctx.operation` | Parent command and the operation outcome supplied to an after-hook |
+
+A before-hook has no operation outcome yet: status, exit code, and error are
+`None`. After-hooks expose the supplied outcome. Ordinary lifecycle hooks do not
+capture the parent command's stdout or stderr, and Terraform outputs are not
+automatically attached to the component context.
+
+## Choose events and failure behavior
+
+Declare the events your hook handles explicitly. Use before-events for checks
+that must pass first and after-events for follow-up work. Keep a hook's failure
+policy visible alongside its event so the effect on the parent command is clear.
+
+See the [hooks reference](/stacks/hooks) for supported events, kinds, inheritance,
+and failure policies. The
+[lifecycle context reference](/steps/type/script#lifecycle-hook-context)
+lists script fields and their behavior, including hooks without an individual
+component binding. Browse the [runnable example](/examples/starlark-hooks) for the
+complete project used in this guide.

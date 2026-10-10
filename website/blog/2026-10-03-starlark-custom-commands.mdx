@@ -3,15 +3,17 @@ slug: starlark-custom-commands
 title: "Introducing Atmos Automation Language"
 authors: [osterman]
 tags: [feature]
-cast: "/casts/examples/starlark-script/summarize.cast"
-castTitle: "One executable file, no extra interpreter"
+cast: "/casts/examples/starlark-commands/capacity.cast"
+castTitle: "Custom command defined in atmos.yaml"
 ---
 
 Small automation tasks often need a separate interpreter, shell quoting, and commands
-that turn structured configuration back into text. [Atmos Automation Language](/steps/type/script#embedded-starlark)
+that turn structured configuration back into text. [Atmos Automation Language](/automation)
 is a Python-like language for automating commands, workflows, and lifecycle hooks.
-Built on Starlark and embedded in Atmos, it lets you run one executable file,
-extend your project CLI, or check a component before an operation starts.
+Built on Starlark and embedded in Atmos, it lets you extend your project CLI,
+coordinate workflow tasks, or check a component before an operation starts.
+For executable apps with their own CLI, see the separate
+[Atmos interpreter announcement](/changelog/atmos-interpreter).
 
 <!--truncate-->
 
@@ -26,35 +28,36 @@ pieces harder to reuse and test.
 
 ## The Fix
 
-Use an Atmos shebang for a standalone program, or declare a `type: script` step
-with `interpreter: starlark` inside a custom command or hook. All three use the same
-embedded interpreter and built-in helpers. Hooks receive their component context
+Declare a `type: script` step with `interpreter: starlark` inside a custom command,
+workflow, or hook. These entry points share the embedded interpreter and built-in
+helpers. Hooks receive their component context
 automatically. Larger programs can share functions and run independent tasks with
 bounded concurrency.
 
+### Why Starlark?
+
+A shared automation language should be easy for the whole team to learn and
+review. Like HCL's deliberate focus on configuration, Starlark keeps its scope
+small while providing functions, loops, and structured values for programmable
+automation. Familiar Python-like syntax and an interpreter included in Atmos
+let teams share that logic across projects written in different languages.
+
+Atmos supplies the commands and helpers scripts can use. Pure calculations are
+repeatable; operations that read files or invoke tools depend on the environment.
+See [why Atmos uses Starlark](/automation/language#why-starlark) for the benefits
+and boundaries.
+
 ## How to Use It
 
-### Run an executable script
-
-A [standalone script](/steps/type/script#standalone-script-spike) starts with
-`#!/usr/bin/env atmos`. This example reads a JSON service manifest and totals its
-replicas using the built-in `fs` and `json` helpers. Run
-`./summarize.star services.json` with Atmos on your PATH; no additional interpreter
-or JSON command-line tool is required.
-
-<CastEmbed src="/casts/examples/starlark-script/summarize.cast" title="One executable file, no extra interpreter" chrome controls scrubber />
-
-[View the full example](/examples/starlark-script)
-
-### Add a project command
+### Add an Atmos subcommand
 
 A [custom command](/cli/configuration/commands) gives the same kind of small program
-a named CLI entry point. YAML defines the `capacity` command and its `--replicas`
+an `atmos capacity` entry point. YAML defines the `capacity` command and its `--replicas`
 flag. The Starlark step converts and validates the flag value, then calculates total
-worker capacity. The flag travels through the step environment, keeping user input
-out of the script source.
+worker capacity. The step reads the parsed value directly from `ctx.flags`, keeping
+user input out of the script source without an environment-variable mapping.
 
-<CastEmbed src="/casts/examples/starlark-commands/capacity.cast" title="A custom command with flags and Starlark logic" chrome controls scrubber />
+<CastEmbed src="/casts/examples/starlark-commands/capacity.cast" title="Custom command: atmos capacity --replicas 3" chrome controls scrubber />
 
 [View the full example](/examples/starlark-commands)
 

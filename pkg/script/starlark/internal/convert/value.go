@@ -4,6 +4,8 @@ package convert
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 
 	"go.starlark.net/starlark"
 
@@ -59,4 +61,37 @@ func Sequence(value starlark.Value) ([]starlark.Value, error) {
 	default:
 		return nil, InvalidArgument("expected a list or tuple, got %s", value.Type())
 	}
+}
+
+// Dictionary copies native command inputs into an immutable Starlark dictionary
+// with sorted keys, keeping iteration and printed output deterministic.
+func Dictionary(values map[string]any) (*starlark.Dict, error) {
+	defer perf.Track(nil, "convert.Dictionary")()
+
+	result := starlark.NewDict(len(values))
+	for _, key := range slices.Sorted(maps.Keys(values)) {
+		raw := values[key]
+		var value starlark.Value
+		switch v := raw.(type) {
+		case nil:
+			value = starlark.None
+		case string:
+			value = starlark.String(v)
+		case int:
+			value = starlark.MakeInt(v)
+		case bool:
+			value = starlark.Bool(v)
+		case []string:
+			items := make([]starlark.Value, len(v))
+			for i, item := range v {
+				items[i] = starlark.String(item)
+			}
+			value = starlark.NewList(items)
+		default:
+			return nil, InvalidArgument("unsupported input type %T for %q", raw, key)
+		}
+		_ = result.SetKey(starlark.String(key), value)
+	}
+	result.Freeze()
+	return result, nil
 }

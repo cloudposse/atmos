@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	osexec "os/exec"
 	"strings"
@@ -84,15 +85,9 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 		return nil, err
 	}
 
-	mode := OutputMode(step.Output)
-	if workflow != nil {
-		mode = GetOutputMode(step, workflow)
-	}
-	if mode == "" {
-		mode = OutputModeLog
-	}
-
-	writer := NewOutputModeWriter(mode, step.Name, GetViewportConfig(step, workflow), GetShowConfig(step, workflow))
+	// Script steps share the command-step output defaults: raw mode and no step labels unless
+	// the step or workflow opts in through output or show.labels.
+	writer := NewCommandOutputWriter(step, workflow)
 	var embedded script.Result
 	stdout, stderr, err := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
 		if engine, ok := script.Get(invocation.interpreter); ok {
@@ -110,6 +105,7 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 				Name:         step.Name, Source: invocation.script, WorkingDirectory: invocation.workDir,
 				SourcePath: step.ScriptSource, ProjectRoot: scriptProjectRoot(vars),
 				Env: resolved, ProcessEnv: env, Stdout: stdout, Stderr: stderr, DryRun: step.DryRun,
+				Flags: vars.ScriptFlags(), Arguments: vars.ScriptArguments(),
 				Component: ScriptComponentRef(vars), ResolveComponent: ScriptComponentResolver(vars),
 				ProcessOverrides: step.ScriptProcessOverrides,
 				Hook:             vars.ScriptHook,
@@ -218,4 +214,50 @@ func (h *ScriptHandler) resolveEnv(step *schema.WorkflowStep, vars *Variables) (
 		env = envpkg.UpdateEnvVar(env, key, value)
 	}
 	return env, nil
+}
+
+// ScriptFlags snapshots parsed flags without rendering user-provided strings.
+// Custom commands preserve native types in their template roots; workflows use
+// the string-valued flag map. Neither path needs to materialize prior step output.
+func (v *Variables) ScriptFlags() map[string]any {
+	defer perf.Track(nil, "step.Variables.ScriptFlags")()
+
+	if v == nil {
+		return nil
+	}
+
+	for _, key := range []string{"Flags", "flags"} {
+		if value, exists := v.templateRoots[key]; exists {
+			return scriptInputMap(value)
+		}
+	}
+	return scriptInputMap(v.Flags)
+}
+
+// ScriptArguments snapshots named command arguments for embedded scripts.
+func (v *Variables) ScriptArguments() map[string]any {
+	defer perf.Track(nil, "step.Variables.ScriptArguments")()
+
+	if v == nil {
+		return nil
+	}
+
+	return scriptInputMap(v.templateRoots["Arguments"])
+}
+
+func scriptInputMap(value any) map[string]any {
+	defer perf.Track(nil, "step.scriptInputMap")()
+
+	switch input := value.(type) {
+	case map[string]any:
+		return maps.Clone(input)
+	case map[string]string:
+		result := make(map[string]any, len(input))
+		for key, item := range input {
+			result[key] = item
+		}
+		return result
+	default:
+		return nil
+	}
 }

@@ -23,6 +23,7 @@ type Spec struct {
 	// display: load() resolution and ctx.script paths keep using absolute paths.
 	ProjectRoot           string
 	Env                   map[string]string
+	Flags, Arguments      map[string]any
 	ProcessEnv            []string
 	Stdout, Stderr        io.Writer
 	DryRun                bool
@@ -33,6 +34,7 @@ type Spec struct {
 	AtmosWorkingDirectory string
 	File                  *File
 	InstallTools          ToolInstaller
+	ParseCommand          CommandParser
 }
 
 // ToolInstaller provisions pinned tools and returns their executable directories.

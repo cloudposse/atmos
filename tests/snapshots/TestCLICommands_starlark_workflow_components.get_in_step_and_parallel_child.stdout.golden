@@ -1,0 +1,2 @@
+seq handle: component(name = "api", stack = "dev", type = "app")
+seq vars: {"image":"nginx:1.25","replicas":2,"stage":"dev"} child vars: {"image":"nginx:1.25","replicas":2,"stage":"dev"} child settings: {"team":"platform"}

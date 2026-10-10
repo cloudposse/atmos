@@ -160,6 +160,7 @@ output = main()
 ```
 
 To carry changing state, mutate a dictionary or list instead of rebinding a name.
+An indexed update such as `state["n"] += 1` mutates the dictionary and keeps `state` bound to the same object.
 Mutate it before handing it to `steps.parallel`, because everything reachable from a
 parallel task becomes immutable at dispatch:
 
@@ -313,6 +314,24 @@ so output from concurrent tasks never interleaves mid-line:
 [worker] deploying worker
 [api] api ready
 [worker] worker ready
+```
+
+### Step labels
+
+Like [`shell`](/steps/type/shell) steps, a `script` step streams its output as-is. It does
+not print a `[name]` label before the output or a `✓ name completed` line after it. Set
+[`output`](/steps/output) to choose a different output mode, or set `show.labels: true`
+to print the labels:
+
+```yaml
+steps:
+  - name: summarize
+    type: script
+    interpreter: starlark
+    show:
+      labels: true
+    script: |
+      print("done")
 ```
 
 ### Loading files
@@ -593,7 +612,7 @@ Use an Atmos shebang to run an automation program directly:
 
 ```python
 #!/usr/bin/env atmos
-dependencies.tools("jq", "1.7.1")
+dependencies.tools("jqlang/jq", "1.7.1")
 
 ui.info("Script arguments: %s" % ctx.args)
 exec.run(["jq", "--version"])
@@ -623,6 +642,76 @@ It returns `stdout`, `stderr`, and `exit_code`, with the same output and error
 policies as `atmos.run`. Optional `flags={...}` and `args=[...]` pass CLI options.
 This operation does not change the calling script's PATH; use `dependencies.tools`
 when subsequent script calls need the installed tool.
+
+### Declaring a standalone command
+
+Standalone scripts can declare their interface using Atmos's native flag handling:
+
+```python
+#!/usr/bin/env atmos
+def validate(args, flags):
+    if flags["replicas"] < 1:
+        fail("replicas must be positive")
+
+def main(args, flags):
+    print("{}: {} replicas".format(args["service"], flags["replicas"]))
+
+cli.command(
+    description = "Report a service's replica count",
+    args = [cli.arg("service", description="Service name")],
+    flags = [cli.flag("replicas", type="int", shorthand="r", default=2)],
+    validate = validate,
+    run = main,
+)
+```
+
+After saving this as `replicas.star` and making it executable, run
+`./replicas.star api -r 3` or `./replicas.star --help`. Help skips both callbacks;
+parse failures and failed validation prevent `main` from running. Keep work with
+side effects inside `main`, since ordinary top-level statements still execute
+when the script loads.
+
+| Declaration | Options |
+| --- | --- |
+| `cli.arg(name, ...)` | `description`, `required` (default `True`). Required arguments precede optional ones. Omitted optional arguments are `None`. |
+| `cli.flag(name, ...)` | `type` (`"string"`, `"int"`, `"bool"`, or `"string_list"`), `default`, `shorthand`, `description`, `required`, `choices`, and an optional `env` binding. |
+| `cli.command(run=main, ...)` | `name` (defaults to the script filename), `description`, `args`, `flags`, and an optional `validate` callback. Call once per standalone invocation, outside parallel tasks. |
+
+`main(args, flags)` and `validate(args, flags)` receive immutable dictionaries.
+Names are dictionary keys, including hyphenated flags. Integers and booleans arrive
+as typed values; `string_list` flags accept comma-separated or repeated values.
+`choices` applies to string and string-list flags. A required flag must be supplied
+on the command line or through its declared environment binding; it cannot also
+declare a default. Boolean flags use defaults and cannot be required.
+
+Command-line values override environment bindings, which override defaults. The
+environment binding is optional; scripts always read the parsed `flags` dictionary
+directly. `validate` may call `fail()` with an explanation, return `False` to reject
+the input, or return `None` or `True` to accept it. The value returned by `main`
+is the return value of `cli.command`; assign it to `output` to emit structured data.
+
+Unknown flags and invalid values fail through the native parser. `--` ends flag
+parsing so later values are positional arguments. All arguments after the script
+filename belong to the script, including flags such as `--config` and `--help`.
+Scripts that do not use `cli.command` continue to receive the original `ctx.args`.
+
+### Reading command inputs in script steps
+
+Custom-command script steps read parsed inputs directly through `ctx.flags` and
+`ctx.arguments`, without templates or environment mappings:
+
+```python
+replicas = int(ctx.flags["replicas"])
+service = ctx.arguments["service"]
+print("{}: {} replicas".format(service, replicas))
+```
+
+These dictionaries preserve the host command's value types. A custom command flag
+declared as `type: string` still needs `int(...)` when used in arithmetic; boolean
+flags remain booleans. Workflow flags are strings. Inputs are immutable and are
+inherited by control and test children. Contexts without declared inputs expose
+empty dictionaries. Standalone command callbacks receive their parsed values as
+the `args` and `flags` callback parameters.
 
 ### Calling Atmos commands
 

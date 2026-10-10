@@ -7890,7 +7890,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Enabled controls the local per-command / final-summary resource-usage display (ui.Info). Defaults to true when unset. Never gates the Atmos Pro exec-metadata upload — only local display."
+          "description": "Enabled controls the local per-command / final-summary resource-usage display (ui.Info). Defaults to true when unset, except in standalone Starlark scripts (interpreter mode), where the summary is shown only when explicitly set to true. Never gates the Atmos Pro exec-metadata upload — only local display."
         }
       },
       "type": "object",

@@ -72,6 +72,8 @@ type ControlCommandExecutor struct {
 	// ScriptComponent is the component the enclosing execution context is scoped
 	// to. Embedded script children expose it as `ctx.component`.
 	ScriptComponent *script.ComponentRef
+	// ScriptFlags and ScriptArguments retain parsed invocation values for child scripts.
+	ScriptFlags, ScriptArguments map[string]any
 	// ResolveComponent backs `components.get` in embedded script children.
 	ResolveComponent script.ComponentResolver
 	InstallTools     script.ToolInstaller
@@ -198,6 +200,7 @@ func (executor *ControlCommandExecutor) executeEmbeddedScript(ctx context.Contex
 			InstallTools: executor.InstallTools,
 			Name:         step.Name, Source: step.Script, SourcePath: step.ScriptSource, ProjectRoot: executor.ProjectRoot, WorkingDirectory: executor.workingDirectory(step),
 			Env: inputs, ProcessEnv: stepEnv, DryRun: step.DryRun,
+			Flags: executor.ScriptFlags, Arguments: executor.ScriptArguments,
 			Component: executor.ScriptComponent, ResolveComponent: executor.ResolveComponent,
 			ProcessOverrides: executor.processOverrides(stepEnv),
 			Hook:             executor.ScriptHook,
