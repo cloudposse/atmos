@@ -238,7 +238,86 @@ The git target clones (or fast-forwards) the repository, replaces the managed
 `path` with the rendered manifests, commits that path with provenance trailers
 (`Atmos-Stack`, `Atmos-Component`), and pushes. Re-delivering identical manifests
 is a clean no-op. Credentials come from Atmos Auth (GitHub STS); no tokens are
-written into the manifests. Pull-request publishing is not yet supported.
+written into the manifests.
+
+### Publishing through a pull request
+
+Set `pull_request.enabled` to send each delivery through review rather than
+pushing straight to the deployment branch. Atmos commits the rendered manifests to
+a head branch, pushes it, and opens a pull request into the base branch, or updates
+the existing one. The base is the repository's `branch`; when that is unset, the
+remote's default branch is used.
+
+Atmos detects the forge from the repository `uri`, over HTTPS or SSH:
+
+- **Azure DevOps:** `https://dev.azure.com/<organization>/<project>/_git/<repository>` (or the legacy `https://<organization>.visualstudio.com/...` form), or `git@ssh.dev.azure.com:v3/<organization>/<project>/<repository>`.
+- **GitHub:** `https://github.com/<owner>/<repository>` or `git@github.com:<owner>/<repository>.git`, including your GitHub Enterprise Server host as set by `GITHUB_SERVER_URL`.
+
+Any other URI fails before any Git operation runs.
+
+```yaml
+git:
+  repositories:
+    deployments:
+      uri: https://dev.azure.com/acme/platform/_git/deployments
+      # branch: main                # optional; defaults to the remote's default branch
+
+components:
+  kubernetes:
+    argocd:
+      provision:
+        targets:
+          deployment-repo:
+            kind: git
+            repository: deployments
+            path: "clusters/{{ .vars.cluster }}/argocd"
+            pull_request:
+              enabled: true
+              # branch: "deploy/{{ .vars.cluster }}/argocd"   # default: atmos/<target>/<stack>/<component>
+              title: "Deploy argocd to {{ .vars.cluster }}"
+              labels: [gitops]
+              reviewers: [platform-team]
+              draft: false
+```
+
+<dl>
+  <dt>`enabled`</dt>
+  <dd>Publish through a pull request. The base branch is never pushed.</dd>
+
+  <dt>`branch`</dt>
+  <dd>Head branch name. Defaults to `atmos/<target>/<stack>/<component>`. It must differ from the base branch.</dd>
+
+  <dt>`title`, `body`</dt>
+  <dd>Pull request title and markdown body. By default the title names the component, target, and stack, and the body lists them along with the managed path. Both support Go templates.</dd>
+
+  <dt>`labels`, `reviewers`, `assignees`, `draft`</dt>
+  <dd>Pull request metadata. Azure DevOps does not support assignees.</dd>
+</dl>
+
+If the head branch already exists on the remote, for example because an earlier
+delivery's pull request is still open, Atmos checks it out and adds the new
+delivery as another commit, and the same pull request updates in place.
+Otherwise the head branch is cut fresh from the base. Atmos never force-pushes.
+An identical re-delivery creates no commit, but Atmos still reconciles an
+existing pull request, so rerunning recovers a delivery whose push succeeded but
+whose pull request call failed.
+
+Git operations authenticate the same way as any other git target: the target's
+`auth.identity` when set, plus whatever Git credentials are in the environment.
+In CI that is often an extra header passed through `GIT_CONFIG_*` variables:
+
+```yaml
+env:
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: "http.https://dev.azure.com/.extraheader"
+  GIT_CONFIG_VALUE_0: "AUTHORIZATION: Bearer $(System.AccessToken)"
+```
+
+The pull request API token comes from the environment, the same way it does for
+[vendor update pull requests](/cli/configuration/vendor):
+
+- **GitHub:** `ATMOS_CI_GITHUB_TOKEN`, `ATMOS_PRO_GITHUB_TOKEN` (set by a `github/sts` identity), `GITHUB_TOKEN`, or `GH_TOKEN`.
+- **Azure DevOps:** `AZURE_DEVOPS_EXT_PAT`.
 
 When `split` is unset, Atmos infers delivery mode from `path`. A manifest
 filename writes one exact file, while other paths use directory delivery. Set

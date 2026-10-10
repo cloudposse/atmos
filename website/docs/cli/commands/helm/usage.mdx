@@ -192,6 +192,9 @@ components:
 atmos helm deploy monitoring -s plat-ue2-dev --target deployment-repo
 ```
 
+To route each delivery through review, add `pull_request: { enabled: true }` to the
+git target. See [Publishing through a pull request](/stacks/components/kubernetes#publishing-through-a-pull-request).
+
 ## Subcommands
 
 <dl>
