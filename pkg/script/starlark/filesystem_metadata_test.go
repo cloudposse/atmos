@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/automation"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/script"
@@ -33,11 +34,21 @@ output = [steps.parallel(functions=[inspect])[0], len(fs.glob(env["DIR"] + "/*.m
 
 func TestFileSystemMetadataErrors(t *testing.T) {
 	t.Parallel()
-	for _, source := range []string{`fs.glob("[")`, `fs.stat("missing")`, `fs.readlink("missing")`, `fs.glob()`, `fs.exists(1)`, `fs.stat(".", follow_symlinks="yes")`, `fs.readlink()`, `fs.stat(".").size = 3`} {
-		t.Run(source, func(t *testing.T) {
+	for _, tt := range []struct{ source, want string }{
+		{`fs.glob("[")`, "fs.glob"},
+		{`fs.stat("missing")`, "fs.stat"},
+		{`fs.readlink("missing")`, "fs.readlink"},
+		{`fs.glob()`, "fs.glob"},
+		{`fs.exists(1)`, "fs.exists"},
+		{`fs.stat(".", follow_symlinks="yes")`, "follow_symlinks"},
+		{`fs.readlink()`, "fs.readlink"},
+		{`fs.stat(".").size = 3`, "size"},
+	} {
+		t.Run(tt.source, func(t *testing.T) {
 			t.Parallel()
-			_, err := New().Execute(context.Background(), script.Spec{WorkingDirectory: t.TempDir(), Source: source})
-			require.Error(t, err)
+			_, err := New().Execute(context.Background(), script.Spec{WorkingDirectory: t.TempDir(), Source: tt.source})
+			require.ErrorIs(t, err, errUtils.ErrStarlark)
+			assert.ErrorContains(t, err, tt.want)
 		})
 	}
 	_, err := New().Execute(context.Background(), script.Spec{Source: `fs.stat("missing")`, DryRun: true})
@@ -94,8 +105,8 @@ func TestFileSystemResolveErrors(t *testing.T) {
 		t.Run(tt.source, func(t *testing.T) {
 			t.Parallel()
 			_, err := New().Execute(context.Background(), script.Spec{WorkingDirectory: t.TempDir(), Source: tt.source})
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.want)
+			require.ErrorIs(t, err, errUtils.ErrStarlark)
+			assert.ErrorContains(t, err, tt.want)
 		})
 	}
 }
@@ -105,8 +116,7 @@ func TestFileSystemResolveHonorsCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err := New().Execute(ctx, script.Spec{WorkingDirectory: t.TempDir(), Source: `fs.resolve("x")`})
-	require.Error(t, err)
-	assert.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, context.Canceled)
 }
 
 func TestFileSystemTildePaths(t *testing.T) {

@@ -37,6 +37,11 @@ func TestValidateFlag(t *testing.T) {
 		{name: "int with a non-numeric default", flag: schema.CommandFlag{Name: "a", Type: "int", Default: "many"}, wantErr: errUtils.ErrCustomCommandFlagDefault},
 		{name: "int with a fractional default", flag: schema.CommandFlag{Name: "a", Type: "int", Default: 2.5}, wantErr: errUtils.ErrCustomCommandFlagDefault},
 		{name: "int with a boolean default", flag: schema.CommandFlag{Name: "a", Type: "int", Default: true}, wantErr: errUtils.ErrCustomCommandFlagDefault},
+		{name: "string with a string default", flag: schema.CommandFlag{Name: "a", Default: "2"}},
+		{name: "string with an unquoted integer default", flag: schema.CommandFlag{Name: "a", Default: 2}, wantErr: errUtils.ErrCustomCommandFlagDefault},
+		{name: "string with a boolean default", flag: schema.CommandFlag{Name: "a", Type: "string", Default: true}, wantErr: errUtils.ErrCustomCommandFlagDefault},
+		{name: "bool with a quoted default", flag: schema.CommandFlag{Name: "a", Type: "bool", Default: "true"}, wantErr: errUtils.ErrCustomCommandFlagDefault},
+		{name: "bool with an integer default", flag: schema.CommandFlag{Name: "a", Type: "bool", Default: 1}, wantErr: errUtils.ErrCustomCommandFlagDefault},
 		{name: "int with values", flag: schema.CommandFlag{Name: "a", Type: "int", Values: []string{"1"}}, wantErr: errUtils.ErrCustomCommandFlagType},
 	}
 	for _, tt := range tests {
@@ -107,4 +112,11 @@ func TestParseIntFlagValue(t *testing.T) {
 
 	_, err = ParseIntFlagValue("count", "forty-two")
 	require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+}
+
+func TestValidateFlagNamesTheFlagWithAWrongTypedDefault(t *testing.T) {
+	err := ValidateFlag("deploy", &schema.CommandFlag{Name: "replicas", Default: 2})
+	require.ErrorIs(t, err, errUtils.ErrCustomCommandFlagDefault)
+	assert.Contains(t, err.Error(), "replicas")
+	assert.Contains(t, cerrors.GetAllHints(err)[0], "default:")
 }

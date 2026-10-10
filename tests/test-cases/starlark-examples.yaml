@@ -125,6 +125,19 @@ tests:
       stderr:
         - replicas must be positive
 
+  - name: starlark example custom command rejects a non-integer
+    description: replicas is an int flag, so a word is a usage error rather than a traceback
+    enabled: true
+    snapshot: false
+    workdir: ../examples/starlark-commands
+    command: atmos
+    args: [capacity, --replicas=many]
+    expect:
+      exit_code: 1
+      stderr:
+        - 'not a base-10 integer'
+        - !not 'Traceback'
+
   - name: starlark example hook before plan
     enabled: true
     snapshot: false

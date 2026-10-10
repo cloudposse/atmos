@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/script"
 	starlarkengine "github.com/cloudposse/atmos/pkg/script/starlark"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestStandaloneScriptDispatch(t *testing.T) {
@@ -311,4 +312,48 @@ func TestStandaloneScriptInjectsCIReporter(t *testing.T) {
 
 	require.Len(t, engine.specs, 1)
 	assert.NotNil(t, engine.specs[0].CI)
+}
+
+func TestReadStandaloneSourceAnnouncesInteractiveStdin(t *testing.T) {
+	const announcement = "Reading script from stdin; press Ctrl-D to end."
+	for _, tc := range []struct {
+		name         string
+		interactive  bool
+		stdin        bool
+		wantAnnounce bool
+	}{
+		{name: "terminal stdin announces", interactive: true, stdin: true, wantAnnounce: true},
+		{name: "piped stdin stays quiet", interactive: false, stdin: true, wantAnnounce: false},
+		{name: "file source never announces", interactive: true, stdin: false, wantAnnounce: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			NewTestKit(t)
+			previous := stdinIsTTY
+			stdinIsTTY = func() bool { return tc.interactive }
+			t.Cleanup(func() { stdinIsTTY = previous })
+			path := filepath.Join(t.TempDir(), "tool.star")
+			require.NoError(t, os.WriteFile(path, []byte("from file"), 0o600))
+			file := &script.File{Path: path, Stdin: tc.stdin}
+			var source []byte
+			var err error
+			stdout, stderr := captureStdoutStderr(t, func() {
+				iolib.Reset()
+				require.NoError(t, iolib.Initialize())
+				ui.InitFormatter(iolib.GetContext())
+				source, err = readStandaloneSource(file, strings.NewReader("from stdin"))
+			})
+			require.NoError(t, err)
+			assert.Empty(t, stdout, "the announcement is a UI message, never data")
+			if tc.stdin {
+				assert.Equal(t, "from stdin", string(source))
+			} else {
+				assert.Equal(t, "from file", string(source))
+			}
+			if tc.wantAnnounce {
+				assert.Contains(t, stripANSI(stderr), announcement)
+			} else {
+				assert.NotContains(t, stripANSI(stderr), announcement)
+			}
+		})
+	}
 }

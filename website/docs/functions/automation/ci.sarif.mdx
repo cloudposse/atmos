@@ -40,10 +40,13 @@ The return value is `None`.
 
 - In CI, the file is uploaded to the repository's Code Scanning. The job needs `security-events: write`. Code
   Scanning is free on public repositories and requires GitHub Advanced Security on private ones.
-- Locally, the call prints one line that names the file and says it was not uploaded.
+- Locally, the call prints one line that names the file and the reason it was not uploaded: `ci.results.enabled is off`,
+  `ci.enabled is off`, the fork-gate reason, or `no CI provider detected`.
+- Under `pull_request_target` and `workflow_run`, the upload is held for a pull request from a fork, like comments and
+  checks. See the [fork gate](/functions/automation/ci#fork-gate).
 - The file is sent exactly as written, so it is not masked. Keep secrets out of the report.
-- In CI the call is gated by `ci.results.enabled`. When it is off, the call warns, renders locally, and the script
-  continues. See [gating](/functions/automation/ci#gating) and the [CI configuration](/cli/configuration/ci).
+- Uploads are opt-in. In CI the call is gated by `ci.results.enabled`, which is off by default. When it is off, the call
+  warns, renders locally, and the script continues. See [gating](/functions/automation/ci#gating) and the [CI configuration](/cli/configuration/ci).
 
 ## Examples
 

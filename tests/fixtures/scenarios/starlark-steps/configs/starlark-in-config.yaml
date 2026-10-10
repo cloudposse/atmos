@@ -1,0 +1,5 @@
+# WP5 fixture: !starlark is evaluated only in stack manifests, so atmos.yaml must reject it.
+base_path: "./"
+settings:
+  note: !starlark |
+    return "computed"

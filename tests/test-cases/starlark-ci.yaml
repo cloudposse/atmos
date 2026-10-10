@@ -1,0 +1,244 @@
+# yaml-language-server: $schema=schema.json
+# Acceptance cases for the Starlark `ci` module. Local cases render through the generic provider;
+# the GitHub Actions cases point GITHUB_API_URL at an unroutable address so nothing leaves the
+# machine, and assert on the provider error that proves the request was attempted.
+tests:
+  - name: starlark ci all calls render locally
+    enabled: true
+    snapshot: false
+    description: "Every ci.* function renders on stderr through the generic provider, and stdout carries only the script's own prints."
+    workdir: "fixtures/scenarios/starlark-ci/"
+    env: &local_env
+      NO_COLOR: "1"
+      GITHUB_ACTIONS: "false"
+      CI: "false"
+      ATMOS_CI: "false"
+      ATMOS_CI_PR: "7"
+      ATMOS_CI_OUTPUT: ""
+      ATMOS_CI_SUMMARY: ""
+      ATMOS_CI_ENV: ""
+      ATMOS_CI_PATH: ""
+    command: "atmos"
+    args:
+      - "./scripts/ci-all.star"
+    expect:
+      exit_code: 0
+      stdout:
+        - "context: provider=generic local=True"
+        - "base: none"
+        - "comment auto: id=\\d+ target=pr"
+        - "comment pr: id=\\d+ target=pr"
+        - "comment commit: id=\\d+ target=commit"
+        - "check: name=ft-ci/all state=success id=\\d+"
+        - "inside group"
+        - "group returned 7"
+        - "ci-all done"
+        - !not "PR comment preview"
+        - !not "export FT_REGION"
+        - !not "answer=42"
+      stderr:
+        - "Plain summary"
+        - "Rendered report"
+        - "alpha"
+        - "answer=42"
+        - "export FT_REGION=us-east-1"
+        - "export PATH=/opt/ft/bin"
+        - "main.tf:3: warning"
+        - "deprecated module"
+        - "PR comment preview"
+        - "commit comment preview"
+        - "Plan for"
+        - "Check run created: ft-ci/all"
+        - "Check run completed: ft-ci/all"
+        - "Group title"
+        - "SARIF"
+        - !not "is off; rendered locally"
+
+  - name: starlark ci all calls are deterministic
+    enabled: true
+    snapshot: false
+    description: "A second run prints the same stdout, so nothing in the module depends on wall-clock or run order."
+    workdir: "fixtures/scenarios/starlark-ci/"
+    env: *local_env
+    command: "atmos"
+    args:
+      - "./scripts/ci-all.star"
+    expect:
+      exit_code: 0
+      stdout:
+        - "comment auto: id=\\d+ target=pr"
+        - "ci-all done"
+
+  - name: starlark ci direct custom command renders locally
+    enabled: true
+    snapshot: false
+    description: "A direct script step in a custom command renders its summary, commit comment, and check locally without any gate warning."
+    workdir: "fixtures/scenarios/starlark-ci/"
+    env: *local_env
+    command: "atmos"
+    args:
+      - "ft-ci-direct"
+    expect:
+      exit_code: 0
+      stdout:
+        - "child done"
+      stderr:
+        - "child report"
+        - "commit comment preview"
+        - "Check run created: ft-ci/child"
+        - !not "is off; rendered locally"
+
+  - name: starlark ci parallel child under GitHub Actions honors the configuration
+    enabled: true
+    snapshot: false
+    description: "Regression guard for the parallel child that used to get a reporter with no configuration: under GitHub Actions with ci.comments.enabled the child attempts a real post (it fails against the unroutable API) instead of warning that comments are off."
+    workdir: "fixtures/scenarios/starlark-ci/"
+    env: &actions_env
+      NO_COLOR: "1"
+      GITHUB_ACTIONS: "true"
+      GITHUB_REPOSITORY: "owner/repo"
+      GITHUB_SHA: "abcdef0123456789abcdef0123456789abcdef01"
+      GITHUB_EVENT_NAME: "push"
+      GITHUB_REF: "refs/heads/main"
+      GITHUB_API_URL: "http://127.0.0.1:9"
+      GITHUB_TOKEN: "dummy-token"
+      GITHUB_STEP_SUMMARY: ""
+      CI: "true"
+    command: "atmos"
+    args:
+      - "ft-ci-parallel"
+    expect:
+      exit_code: 1
+      stderr:
+        - 'ci\.comment: failed to (list|post)'
+        - !not "is off; rendered locally"
+        - !not "ci.comments.enabled is off"
+
+  - name: starlark ci matrix child under GitHub Actions honors the configuration
+    enabled: true
+    snapshot: false
+    description: "Same guard for a matrix child."
+    workdir: "fixtures/scenarios/starlark-ci/"
+    env: *actions_env
+    command: "atmos"
+    args:
+      - "ft-ci-matrix"
+    expect:
+      exit_code: 1
+      stderr:
+        - 'ci\.comment: failed to (list|post)'
+        - !not "is off; rendered locally"
+
+  - name: starlark ci direct step under GitHub Actions honors the configuration
+    enabled: true
+    snapshot: false
+    description: "The direct-step baseline for the parallel and matrix guards behaves the same way."
+    workdir: "fixtures/scenarios/starlark-ci/"
+    env: *actions_env
+    command: "atmos"
+    args:
+      - "ft-ci-direct"
+    expect:
+      exit_code: 1
+      stderr:
+        - 'ci\.comment: failed to (list|post)'
+        - !not "is off; rendered locally"
+
+  - name: starlark ci data without template is an argument error
+    enabled: true
+    snapshot: false
+    description: "There is no configured default template, so data= without template= fails and names template=."
+    workdir: "fixtures/scenarios/starlark-ci/"
+    env: *local_env
+    command: "atmos"
+    args:
+      - "./scripts/ci-data-only.star"
+    expect:
+      exit_code: 1
+      stdout:
+        - !not "must not run"
+      stderr:
+        - "ci.summary: data requires template="
+
+  - name: starlark ci empty literal and template are mutually exclusive
+    enabled: true
+    snapshot: false
+    description: "An empty markdown string still counts as passed, so it cannot be combined with template=."
+    workdir: "fixtures/scenarios/starlark-ci/"
+    env: *local_env
+    command: "atmos"
+    args:
+      - "./scripts/ci-empty-and-template.star"
+    expect:
+      exit_code: 1
+      stderr:
+        - "markdown and template are mutually exclusive"
+
+  - name: starlark ci typo in data key names the key
+    enabled: true
+    snapshot: false
+    description: "A template that reads a key the data does not supply fails and names the key instead of rendering <no value>."
+    workdir: "fixtures/scenarios/starlark-ci/"
+    env: *local_env
+    command: "atmos"
+    args:
+      - "./scripts/ci-typo.star"
+    expect:
+      exit_code: 1
+      stdout:
+        - !not "must not run"
+      stderr:
+        - "Stack"
+        - !not "<no value>"
+
+  - name: starlark ci missing template names the path and base path
+    enabled: true
+    snapshot: false
+    description: "A template that does not exist reports the resolved path and the ci.templates.base_path value."
+    workdir: "fixtures/scenarios/starlark-ci/"
+    env: *local_env
+    command: "atmos"
+    args:
+      - "./scripts/ci-missing-template.star"
+    expect:
+      exit_code: 1
+      stderr:
+        - "does-not-exist.md"
+        - 'ci\.templates\.base_\s*path'
+        - "templates"
+
+  - name: starlark ci annotate line without file is an argument error
+    enabled: true
+    snapshot: false
+    description: "A line number without a file fails with an argument error."
+    workdir: "fixtures/scenarios/starlark-ci/"
+    env: *local_env
+    command: "atmos"
+    args:
+      - "./scripts/ci-annotate-range.star"
+    expect:
+      exit_code: 1
+      stderr:
+        - "ci.annotate: line requires file="
+
+  - name: starlark defer runs after fail and the carried stdlib extras behave
+    enabled: true
+    snapshot: false
+    description: "defer runs after fail(), digest.sha256 matches the known hex, exec.which returns None for a missing binary, and fs.resolve expands ~."
+    workdir: "fixtures/scenarios/starlark-ci/"
+    env:
+      NO_COLOR: "1"
+      HOME: "/tmp/starlark-ci-home"
+      USERPROFILE: "/tmp/starlark-ci-home"
+    command: "atmos"
+    args:
+      - "./scripts/a21.star"
+    expect:
+      exit_code: 1
+      stdout:
+        - "sha256\\(abc\\)=ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        - "which miss: None"
+        - '(?m)^resolve: [^~\n]*[/\\]x\r?$'
+        - "deferred ran"
+      stderr:
+        - "boom after defer"

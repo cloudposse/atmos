@@ -523,7 +523,9 @@ func decodeMappingNodeWithYamlFunctions(node *yaml.Node, sourceFile string) (any
 		result[keyNode.Value] = value
 	}
 	recordScriptSource(node, result, sourceFile)
-	recordStepLiteralFields(node, result)
+	if err := recordCommandFields(node, result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 

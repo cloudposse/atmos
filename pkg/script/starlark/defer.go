@@ -2,12 +2,18 @@ package starlark
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"os/signal"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.starlark.net/starlark"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/signals"
 )
 
 const deferKey = "atmos.starlark.defer"
@@ -119,4 +125,82 @@ func (s *session) deferThread(ctx context.Context, t *starlark.Thread) (*starlar
 		stop()
 		cancel()
 	}
+}
+
+// interruptExitCode is the conventional status of a process ended by SIGINT (128 + 2).
+const interruptExitCode = 130
+
+// notifyInterrupt delivers SIGINT to c until the returned function is called. Tests replace it.
+var notifyInterrupt = func(c chan<- os.Signal) (stop func()) {
+	signal.Notify(c, os.Interrupt)
+	return func() { signal.Stop(c) }
+}
+
+// forceExit ends the process at once on a second interrupt, for a user who will not wait for the
+// deferred calls. Tests replace it.
+var forceExit = func() {
+	signals.RunExitCleanups()
+	errUtils.OsExit(interruptExitCode)
+}
+
+// interruptWatch turns Ctrl-C into cancellation of one script session. Atmos normally exits on
+// SIGINT before any context is cancelled, which would skip the script's deferred calls. While the
+// watch is active that exit is suspended; the first interrupt cancels the session so deferred
+// calls run within their grace period, and a second interrupt exits immediately.
+type interruptWatch struct {
+	cancel   context.CancelFunc
+	received chan os.Signal
+	stopSig  func()
+	release  func()
+	count    atomic.Int32
+	done     chan struct{}
+	stopOnce sync.Once
+}
+
+// watchInterrupt starts watching for SIGINT and returns the context the session must run under.
+func watchInterrupt(parent context.Context) (context.Context, *interruptWatch) {
+	ctx, cancel := context.WithCancel(parent)
+	w := &interruptWatch{cancel: cancel, received: make(chan os.Signal, 2), done: make(chan struct{})}
+	w.release = signals.SuspendInterruptExit()
+	w.stopSig = notifyInterrupt(w.received)
+	go w.listen()
+	return ctx, w
+}
+
+func (w *interruptWatch) listen() {
+	for {
+		select {
+		case <-w.received:
+			if w.count.Add(1) > 1 {
+				forceExit()
+				return
+			}
+			w.cancel()
+		case <-w.done:
+			return
+		}
+	}
+}
+
+// interrupted reports whether an interrupt arrived while the session ran.
+func (w *interruptWatch) interrupted() bool { return w.count.Load() > 0 }
+
+// stop releases the signal handling and the context. It is safe to call more than once.
+func (w *interruptWatch) stop() {
+	w.stopOnce.Do(func() {
+		w.stopSig()
+		close(w.done)
+		w.release()
+		w.cancel()
+	})
+}
+
+// finishInterrupted completes a session that an interrupt cancelled. Deferred calls run first,
+// within their grace period. A failing cleanup is reported; otherwise the exit is silent, like a
+// shell's, because the user asked for it. Either way the status is 130.
+func (s *session) finishInterrupted(ctx context.Context, thread *starlark.Thread) error {
+	if err := s.runDeferred(ctx, thread, nil); err != nil {
+		return errUtils.WithExitCode(scriptError(ctx, err, s.spec.ProjectRoot), interruptExitCode)
+	}
+	return fmt.Errorf("%w: %w", errUtils.ErrScriptInterrupted, errUtils.ExitCodeError{Code: interruptExitCode, Silent: true})
 }

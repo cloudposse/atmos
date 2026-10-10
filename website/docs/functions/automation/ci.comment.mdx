@@ -9,14 +9,15 @@ description: Create or update a pull request comment.
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-    The `ci.comment` function posts a comment on a pull request. Give the comment a key and later runs update the same
-    comment instead of adding a new one each time. Locally, the comment is previewed on stderr and never posted.
+    The `ci.comment` function posts a comment on the pull request, or on the commit when the run has no pull request.
+    Give the comment a key and later runs update the same comment instead of adding a new one each time. Locally, the
+    comment is previewed on stderr and never posted.
 </Intro>
 
 ## Usage
 
 ```python
-ci.comment(body = "", key = "", behavior = "upsert", pr = 0, template = "", data = None)
+ci.comment(body = "", key = "", behavior = "upsert", pr = 0, target = "auto", template = "", data = None)
 ```
 
 ## Arguments
@@ -24,8 +25,8 @@ ci.comment(body = "", key = "", behavior = "upsert", pr = 0, template = "", data
 <dl>
     <dt>`body`</dt>
     <dd>
-        The comment text, as Markdown in a string. Required unless `template` or `data` is given, and it cannot be
-        combined with them.
+        The comment text, as Markdown in a string. Required unless `template` is given, and it cannot be combined with
+        `template` or `data`, even when it is an empty string.
     </dd>
 
     <dt>`key`</dt>
@@ -38,23 +39,32 @@ ci.comment(body = "", key = "", behavior = "upsert", pr = 0, template = "", data
     <dd>
         (Optional) What to do when a comment with the key already exists. The value `"upsert"` (the default) updates it
         and creates one when none exists, `"create"` always adds a new comment, and `"update"` only changes a comment
-        that already exists.
+        that already exists. The `"update"` behavior needs a `key`, because the key is how the comment is found. In
+        CI, `"update"` fails when no comment with the key exists yet, and the local preview fails the same way.
     </dd>
 
     <dt>`pr`</dt>
     <dd>(Optional) The pull request number to comment on, as an integer. It defaults to the current pull request.</dd>
 
+    <dt>`target`</dt>
+    <dd>
+        (Optional) Where the comment goes, as a string. The value `"auto"` (the default) posts to the pull request when
+        one is known and to a comment on the commit (`ci.context.sha`) otherwise. The value `"pr"` always posts to the
+        pull request and fails when none is known. The value `"commit"` always posts a comment on the commit, even
+        when the run has a pull request. Any other value fails with an argument error.
+    </dd>
+
     <dt>`template`</dt>
     <dd>
         (Optional) The name of a [template file](#templates) to render into the comment body, instead of passing
         `body`. It is a file name under [`ci.templates.base_path`](/cli/configuration/ci/templates), or an absolute
-        path.
+        path. There is no default template, so `data` always needs a `template`.
     </dd>
 
     <dt>`data`</dt>
     <dd>
         (Optional) A dict that becomes the template context. Keys are read in the template as `.key`. Passing `data`
-        without `template` renders the template that [`ci.comments.template`](/cli/configuration/ci/comments) names.
+        without `template` fails with an argument error that says `template=` is required.
     </dd>
 </dl>
 
@@ -62,14 +72,17 @@ ci.comment(body = "", key = "", behavior = "upsert", pr = 0, template = "", data
 
 A script can keep the layout of a comment in a template file and pass only the values:
 
-- An explicit `template=` is used when given.
-- Otherwise, a call that passes `data` renders the template that [`ci.comments.template`](/cli/configuration/ci/comments)
-  names. A call with neither `template` nor `data` posts `body` as written.
-- The name is resolved against [`ci.templates.base_path`](/cli/configuration/ci/templates). When no file has exactly
-  that name, the name with a `.md` suffix is tried.
+- A call with `template=` renders that file, with `data` as the context. A call with only `body` posts the text as
+  written.
+- There is no configured default template. The [`ci.comments.template`](/cli/configuration/ci/comments) key belongs to
+  the comments Atmos posts for commands, and scripts never read it.
+- The name is resolved against [`ci.templates.base_path`](/cli/configuration/ci/templates). A relative `base_path`
+  resolves against the Atmos `base_path`. When no file has exactly that name, the name with a `.md` suffix is tried.
 - Templates use Go template syntax with the same functions as the built-in plan templates. The `data` dict is the
   template context.
-- The `key`, `behavior`, and `pr` arguments work the same with a rendered body.
+- A key that the template reads but `data` does not contain fails the render and names the key, so a typo does not
+  post `<no value>`.
+- The `key`, `behavior`, `pr`, and `target` arguments work the same with a rendered body.
 
 See [script report templates](/cli/configuration/ci/templates#script-report-templates) for the configuration.
 
@@ -79,19 +92,28 @@ A struct that describes the comment:
 
 <dl>
     <dt>`id`</dt>
-    <dd>The identifier of the comment.</dd>
+    <dd>The identifier of the comment. A comment that was only previewed locally has a synthetic id that starts at 1.</dd>
 
     <dt>`url`</dt>
     <dd>A link to the comment, as a string. It is empty when the comment was only previewed locally.</dd>
 
     <dt>`created`</dt>
     <dd>A boolean that is `True` when the call created a new comment and `False` when it updated one.</dd>
+
+    <dt>`target`</dt>
+    <dd>The place the comment landed, as a string: `"pr"` or `"commit"`. With `target = "auto"` it tells you which one was chosen.</dd>
 </dl>
 
 ## Behavior
 
-- In CI, the comment is posted to the pull request through the provider's API. Posting needs `pull-requests: write` on
-  GitHub Actions.
+- In CI, the comment is posted through the provider's API. A pull request comment needs `pull-requests: write` on
+  GitHub Actions, and a commit comment needs `contents: write`.
+- A commit comment is attached to `ci.context.sha`. It appears on the commit page and, for a commit that belongs to an
+  open pull request, in that pull request's timeline. Keys work the same way, so a keyed commit comment is updated on
+  the next run for the same commit.
+- A run with no pull request, such as a `push`, comments on the commit with the default `target = "auto"`. Under
+  `workflow_run` and `pull_request_target`, the pull request number comes from the event payload, so `"auto"` still
+  finds the pull request.
 - Locally, the comment is previewed on stderr and never posted. The returned `url` is empty.
 - The body is masked before it leaves the process.
 - Comments are opt-in. In CI the call is gated by [`ci.comments.enabled`](/cli/configuration/ci/comments), which is
@@ -109,6 +131,22 @@ ci.comment("### Plan\n\n3 to add, 1 to change, 0 to destroy.", key = "plan")
 ```
 
 Every run updates the same comment, so the pull request never collects a stack of stale ones.
+
+### Comment on a push
+
+```python
+ci.comment("Deployed **" + ci.context.sha[:7] + "** to prod.", key = "deploy")
+```
+
+This needs no guard. On a pull request run it comments on the pull request. On a `push` run it comments on the commit.
+
+### Require a pull request
+
+```python
+ci.comment("Preview ready.", key = "preview", target = "pr")
+```
+
+The call fails when the run has no pull request, which is useful when a missing pull request is a bug in the workflow.
 
 ### Post to a specific pull request
 
@@ -139,10 +177,12 @@ ci.comment(template = "release.md", data = {"version": "1.4.0", "stack": "prod"}
 
 - An API error, a missing token, or a pull request number that does not exist fails the script. See
   [errors](/functions/automation/ci#errors).
-- An unknown `behavior` fails with an argument error that names `ci.comment`.
-- Passing `body` together with `template` or `data`, a `data` value that is not a dict, or `data` without any template
-  to render fails with an argument error.
-- A template that does not exist, or that fails to render, fails the script.
+- An unknown `behavior` or `target` fails with an argument error that names `ci.comment`.
+- Passing `body` together with `template` or `data` (an empty `body` counts), a `data` value that is not a dict, or
+  `data` without `template` fails with an argument error.
+- `target = "pr"` with no pull request fails with a pull-request-unknown error.
+- A template that does not exist fails the script with an error that names the resolved path and the value of
+  `ci.templates.base_path`. A template that reads a key missing from `data`, or that fails to render, fails the script.
 
 ## Related
 

@@ -1,0 +1,17 @@
+# WP5 fixture: a !starlark value that reads a whole section. Select with
+# ATMOS_STACKS_INCLUDED_PATHS='ft/dynamic.yaml'. Its guard runs `exit 3`, so evaluating it fails.
+vars:
+  stage: dynamic
+
+components:
+  terraform:
+    # Reads the whole vars section: the unbounded read evaluates everything in it.
+    dynamic-read:
+      metadata:
+        component: mock
+      vars:
+        guard: !exec exit 3
+        label: plain
+      settings:
+        note: !starlark |
+          return json.encode(ctx.vars)

@@ -42,37 +42,44 @@ func TestStandaloneScriptAcceptsLeadingGlobalFlags(t *testing.T) {
 		name    string
 		args    func(dir string) []string
 		globals func(dir string) []string
+		// scriptIndex is the position of the script path in args.
+		scriptIndex int
 	}{
 		{
 			name: "chdir with equals",
 			args: func(dir string) []string {
 				return []string{"atmos", "--chdir=" + dir, "tool.star", "one", "--chdir=script"}
 			},
-			globals: func(dir string) []string { return []string{"--chdir=" + dir} },
+			globals:     func(dir string) []string { return []string{"--chdir=" + dir} },
+			scriptIndex: 2,
 		},
 		{
-			name:    "chdir with a separate value",
-			args:    func(dir string) []string { return []string{"atmos", "--chdir", dir, "./tool.star", "one"} },
-			globals: func(dir string) []string { return []string{"--chdir", dir} },
+			name:        "chdir with a separate value",
+			args:        func(dir string) []string { return []string{"atmos", "--chdir", dir, "./tool.star", "one"} },
+			globals:     func(dir string) []string { return []string{"--chdir", dir} },
+			scriptIndex: 3,
 		},
 		{
-			name:    "chdir shorthand",
-			args:    func(dir string) []string { return []string{"atmos", "-C", dir, "./tool.star"} },
-			globals: func(dir string) []string { return []string{"-C", dir} },
+			name:        "chdir shorthand",
+			args:        func(dir string) []string { return []string{"atmos", "-C", dir, "./tool.star"} },
+			globals:     func(dir string) []string { return []string{"-C", dir} },
+			scriptIndex: 3,
 		},
 		{
 			name: "logs level with a separate value and a bool flag",
 			args: func(dir string) []string {
 				return []string{"atmos", "--logs-level", "Debug", "--no-color", "--chdir=" + dir, "tool.star"}
 			},
-			globals: func(dir string) []string { return []string{"--logs-level", "Debug", "--no-color", "--chdir=" + dir} },
+			globals:     func(dir string) []string { return []string{"--logs-level", "Debug", "--no-color", "--chdir=" + dir} },
+			scriptIndex: 5,
 		},
 		{
 			name: "double dash ends the global flags",
 			args: func(dir string) []string {
 				return []string{"atmos", "--chdir=" + dir, "--", "tool.star", "--chdir=script"}
 			},
-			globals: func(dir string) []string { return []string{"--chdir=" + dir} },
+			globals:     func(dir string) []string { return []string{"--chdir=" + dir} },
+			scriptIndex: 3,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -82,7 +89,8 @@ func TestStandaloneScriptAcceptsLeadingGlobalFlags(t *testing.T) {
 			t.Chdir(origin) // Restores the working directory when the test ends.
 			dir, err := filepath.EvalSymlinks(t.TempDir())
 			require.NoError(t, err)
-			writeStandaloneScript(t, dir, "tool.star", `print("ran")`)
+			// The script sits where the user stands; --chdir moves Atmos somewhere else.
+			scriptPath := writeStandaloneScript(t, origin, "tool.star", `print("ran")`)
 
 			original := tc.args(dir)
 			os.Args = original
@@ -97,8 +105,11 @@ func TestStandaloneScriptAcceptsLeadingGlobalFlags(t *testing.T) {
 			require.NoError(t, err)
 			resolved, err := filepath.EvalSymlinks(cwd)
 			require.NoError(t, err)
-			assert.Equal(t, dir, resolved, "the script path is resolved after --chdir")
-			assert.Equal(t, original, reexec.Args(), "a re-exec forwards the original command line")
+			assert.Equal(t, dir, resolved, "--chdir is applied")
+			// A re-exec runs after --chdir was stripped, so it receives the path the user meant.
+			wantReexec := append([]string(nil), original...)
+			wantReexec[tc.scriptIndex] = scriptPath
+			assert.Equal(t, wantReexec, reexec.Args(), "a re-exec forwards the command line with the script anchored where the user typed it")
 
 			restore()
 			assert.Equal(t, original, os.Args)
@@ -106,6 +117,71 @@ func TestStandaloneScriptAcceptsLeadingGlobalFlags(t *testing.T) {
 			assert.Zero(t, reexec.ScriptArgs(), "the recorded script is cleared on restore")
 		})
 	}
+}
+
+// A relative script path means what the user typed it against: the directory they stood in when
+// they ran Atmos, before --chdir or ATMOS_CHDIR moved the process.
+func TestStandaloneScriptRelativePathIgnoresChdir(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args func(dir string) []string
+		env  func(t *testing.T, dir string)
+	}{
+		{name: "flag", args: func(dir string) []string { return []string{"atmos", "--chdir=" + dir, "./tool.star", "arg"} }},
+		{
+			name: "environment",
+			args: func(string) []string { return []string{"atmos", "./tool.star", "arg"} },
+			env:  func(t *testing.T, dir string) { t.Setenv("ATMOS_CHDIR", dir) },
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			NewTestKit(t)
+			resetEarlyChdir(t)
+			origin := t.TempDir()
+			t.Chdir(origin)
+			dir, err := filepath.EvalSymlinks(t.TempDir())
+			require.NoError(t, err)
+			// A same-named script in the target directory must not win over the one beside the user.
+			writeStandaloneScript(t, dir, "tool.star", `print("wrong script")`)
+			writeStandaloneScript(t, origin, "tool.star", `print("right script")`)
+			if tc.env != nil {
+				tc.env(t, dir)
+			}
+			os.Args = tc.args(dir)
+			restore, err := prepareStandaloneScript()
+			require.NoError(t, err)
+			defer restore()
+
+			cwd, err := os.Getwd()
+			require.NoError(t, err)
+			resolved, err := filepath.EvalSymlinks(cwd)
+			require.NoError(t, err)
+			assert.Equal(t, dir, resolved)
+			command := &cobra.Command{}
+			command.SetContext(context.Background())
+			stdout, _ := captureStdoutStderr(t, func() {
+				iolib.Reset()
+				require.NoError(t, iolib.Initialize())
+				data.InitWriter(iolib.GetContext())
+				require.NoError(t, RootCmd.RunE(command, nil))
+			})
+			assert.Equal(t, "right script\n", stdout)
+		})
+	}
+
+	t.Run("usage hints keep the spelling the user typed", func(t *testing.T) {
+		NewTestKit(t)
+		resetEarlyChdir(t)
+		origin := t.TempDir()
+		t.Chdir(origin)
+		dir := t.TempDir()
+		writeStandaloneScript(t, origin, "tool.star", `print("ran")`)
+		os.Args = []string{"atmos", "--chdir=" + dir, "./tool.star"}
+		file, err := detectStandaloneFile([]string{"--chdir=" + dir}, []string{"./tool.star"})
+		require.NoError(t, err)
+		require.NotNil(t, file)
+		assert.Equal(t, "./tool.star", file.Invoked)
+	})
 }
 
 func TestStandaloneScriptLeavesNonScriptsToNormalCommandHandling(t *testing.T) {

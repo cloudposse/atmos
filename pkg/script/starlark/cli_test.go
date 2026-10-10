@@ -209,3 +209,27 @@ func TestCommandContextRejectsUnsupportedHostInputTypes(t *testing.T) {
 		})
 	}
 }
+
+// Help is the last thing a script does: statements after cli.command must not run, and deferred
+// calls still do.
+func TestStandaloneHelpEndsTheScript(t *testing.T) {
+	t.Parallel()
+	var stdout bytes.Buffer
+	result, err := New().Execute(t.Context(), script.Spec{
+		File: &script.File{Path: filepath.Join(t.TempDir(), "main.star"), Args: []string{"--help"}}, Stdout: &stdout,
+		ParseCommand: func(context.Context, script.CommandSpec) (script.CommandInput, error) {
+			return script.CommandInput{Help: true}, nil
+		},
+		Source: `
+def main(args, flags):
+    print("main must not run")
+defer(lambda: print("deferred ran"))
+cli.command(main)
+print("trailing side effect")
+output = "late"
+`,
+	})
+	require.NoError(t, err)
+	assert.False(t, result.HasOutput, "help prints no output value")
+	assert.Equal(t, "deferred ran\n", stdout.String())
+}

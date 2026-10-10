@@ -34,8 +34,10 @@ The return value is `None`.
 
 - On GitHub Actions, the directory is written to the path file that the runner reads between steps. It does not
   change the `PATH` of the script that calls it.
-- Locally, the call prints `export PATH='dir':"$PATH"` on stderr. When `ATMOS_CI_PATH` names a file, the directory is
-  appended to that file, one per line.
+- Locally, the call prints `export PATH=dir:"$PATH"` on stderr, with the directory shell-quoted only when it needs
+  quoting. When `ATMOS_CI_PATH` names a file, the directory is appended to that file, one per line.
+- Under `pull_request_target` and `workflow_run`, the call is held for a pull request from a fork. See the
+  [fork gate](/functions/automation/ci#fork-gate).
 - In CI the call is gated by [`ci.output.enabled`](/cli/configuration/ci/output), which also gates `ci.output` and
   `ci.env`. When it is off, the call warns, renders locally, and the script continues. See
   [gating](/functions/automation/ci#gating).

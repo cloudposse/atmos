@@ -3,6 +3,7 @@ package starlark
 import (
 	"context"
 	"errors"
+	"io"
 	"path/filepath"
 	"strings"
 
@@ -23,8 +24,9 @@ type processScope struct {
 }
 
 const (
-	outputStreamMode  = "stream"
-	outputCaptureMode = "capture"
+	outputStreamMode   = "stream"
+	outputCaptureMode  = "capture"
+	outputViewportMode = "viewport"
 )
 
 // runOptions are the subprocess policies shared by exec.run, component.exec, and atmos.*.
@@ -35,15 +37,19 @@ type runOptions struct {
 
 func newRunOptions() runOptions { return runOptions{check: true, output: outputStreamMode} }
 
-// streaming reports whether subprocess output is forwarded to the step output.
+// streaming reports whether subprocess output is forwarded to the step output. The viewport mode
+// shows the output live as well, so it counts as streaming.
 func (o *runOptions) streaming() (bool, error) {
 	switch o.output {
-	case outputStreamMode, outputCaptureMode:
-		return o.output == outputStreamMode, nil
+	case outputStreamMode, outputCaptureMode, outputViewportMode:
+		return o.output != outputCaptureMode, nil
 	default:
-		return false, invalidArg("output must be %q or %q, got %q", outputStreamMode, outputCaptureMode, o.output)
+		return false, invalidArg("output must be %q, %q, or %q, got %q", outputStreamMode, outputCaptureMode, outputViewportMode, o.output)
 	}
 }
+
+// viewport reports whether the output is shown in the host's live viewport.
+func (o *runOptions) viewport() bool { return o.output == outputViewportMode }
 
 func (s *session) execScoped(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple, scope processScope) (starlark.Value, error) {
 	var argv starlark.Value
@@ -75,7 +81,7 @@ func (s *session) execScoped(thread *starlark.Thread, b *starlark.Builtin, args 
 	if !filepath.IsAbs(dir) {
 		dir = filepath.Join(scope.dir, dir)
 	}
-	return s.runProcess(thread, &processCall{argv: command, dir: dir, env: env, check: opts.check, stream: stream, policy: policy})
+	return s.runProcess(thread, &processCall{argv: command, dir: dir, env: env, check: opts.check, stream: stream, viewport: opts.viewport(), policy: policy})
 }
 
 type processCall struct {
@@ -83,6 +89,7 @@ type processCall struct {
 	dir              string
 	env              []string
 	check, stream    bool
+	viewport         bool
 	allowPlanChanges bool
 	policy           automation.ExecutionPolicy
 	// dataHint overrides the hint shown when result.data is read from non-JSON stdout.
@@ -90,12 +97,24 @@ type processCall struct {
 }
 
 func (s *session) runProcess(thread *starlark.Thread, call *processCall) (starlark.Value, error) {
-	result, err := script.RunProcess(threadContext(thread), s.engine.runner, &script.ProcessCall{
+	process := &script.ProcessCall{
 		Argv: call.argv, Dir: call.dir, Env: s.tools.Environment(call.env),
 		Check: call.check, Stream: call.stream, AllowPlanChanges: call.allowPlanChanges,
 		Stdout: s.writer(thread, stdoutStream), Stderr: s.writer(thread, stderrStream),
 		Policy: call.policy,
-	})
+	}
+	var result script.ProcessOutput
+	var err error
+	if s.useViewport(thread, call) {
+		err = s.spec.Viewport(strings.Join(call.argv, " "), func(stdout, stderr io.Writer) error {
+			process.Stdout, process.Stderr = stdout, stderr
+			var runErr error
+			result, runErr = script.RunProcess(threadContext(thread), s.engine.runner, process)
+			return runErr
+		})
+	} else {
+		result, err = script.RunProcess(threadContext(thread), s.engine.runner, process)
+	}
 	if err != nil {
 		return nil, s.processError(thread, call, err)
 	}
@@ -104,6 +123,13 @@ func (s *session) runProcess(thread *starlark.Thread, call *processCall) (starla
 		processResult.hint = call.dataHint
 	}
 	return processResult, nil
+}
+
+// useViewport reports whether a call shows its output in the host's viewport. Parallel tasks stream
+// instead, because their output is attributed line by line and one terminal cannot host several
+// viewports.
+func (s *session) useViewport(thread *starlark.Thread, call *processCall) bool {
+	return call.viewport && s.spec.Viewport != nil && thread.Local(outputKey) == nil
 }
 
 // processError classifies a failed process call. A timeout names the command and the limit; the

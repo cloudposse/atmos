@@ -40,8 +40,9 @@ The return value is `None`.
 
 - On GitHub Actions, the pair is written to the step output file. A multiline value is written in a form that keeps
   its line breaks intact.
-- Locally, the pair prints as `name=value` on stderr. When `ATMOS_CI_OUTPUT` names a file, the pair is appended to
-  that file instead.
+- Locally, the pair prints as `name=value` on stderr, and a multiline value prints in the heredoc form that
+  GitHub Actions reads. When `ATMOS_CI_OUTPUT` names a file, the pair is appended to that file instead. The variable is
+  read each time the call runs, so a step's `env:` block can set it.
 - Values are written exactly as given, because later steps consume them. To keep a value out of logs, call
   [`ci.mask`](/functions/automation/ci.mask) first. See [masking](/functions/automation/ci#masking).
 - In CI the call is gated by [`ci.output.enabled`](/cli/configuration/ci/output), which also gates `ci.env` and

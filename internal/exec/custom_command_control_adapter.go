@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/ci"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
@@ -75,6 +76,9 @@ func newCustomCommandControlExecutor(control *CustomCommandControlContext) *work
 	return &workflow.ControlCommandExecutor{
 		ScriptSteps:  stepPkg.NewAutomationLibrary(vars, workflowDefinition),
 		InstallTools: stepPkg.ScriptToolInstaller(&control.AtmosConfig),
+		// Script children report into CI with the command's own configuration. Without it the
+		// engine falls back to a reporter with no configuration, which reads every gate as off.
+		CI: ci.NewReporter(&control.AtmosConfig),
 		// Custom commands have no dry-run mode; children always execute.
 		DryRun:                 false,
 		ScriptComponent:        stepPkg.ScriptComponentRef(vars),
