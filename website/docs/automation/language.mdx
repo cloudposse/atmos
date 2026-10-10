@@ -66,6 +66,8 @@ print("Total workers: {}".format(capacity(3, 4)))
 
 This prints `Total workers: 12`. Use `fail(message)` to stop a script with an
 error. Atmos reports the source location and traceback. Use
+[`defer(fn)`](/functions/automation/defer) to register cleanup that runs when the
+script finishes, even after a failure. Use
 [`sum()`](/automation/reference/builtin-functions#sum) to total numbers and
 [`round()`](/automation/reference/builtin-functions#round) to round a result.
 
@@ -100,9 +102,12 @@ to an environment variable.
 | [`components.get`](/functions/automation/components.get) | Resolve component configuration for a named component and stack. |
 | [`exec.run`](/functions/automation/exec.run) | Run an external program with an argument list and capture its result. |
 | [`steps.task`](/functions/automation/steps.task), [`steps.parallel`](/functions/automation/steps.parallel) | Describe function calls, execute concurrent work, and apply retries and timeouts. |
+| [`defer`](/functions/automation/defer) | Register cleanup that runs when the script or task finishes, even after a failure or cancellation. |
 | [`fs.read_file`](/functions/automation/fs.read_file) | Read a local file as text. |
 | [`json.encode`](/functions/automation/json.encode), [`json.decode`](/functions/automation/json.decode) | Convert between structured values and JSON text. |
 | [`regex.search`](/functions/automation/regex.search), [`regex.findall`](/functions/automation/regex.findall), [`regex.replace`](/functions/automation/regex.replace) | Match and transform text using regular expressions. |
+| [`digest.sha256`](/functions/automation/digest.sha256), [`digest.sha512`](/functions/automation/digest.sha512), [`digest.sha1`](/functions/automation/digest.sha1), [`digest.md5`](/functions/automation/digest.md5) | Compute digests of strings and file contents. |
+| [`exec.which`](/functions/automation/exec.which) | Find the executable that `exec.run` would start. |
 | [`dependencies.tools`](/functions/automation/dependencies.tools) | Request tools through Atmos's toolchain integration. |
 | [`ui.info`](/functions/automation/ui.info), [`ui.success`](/functions/automation/ui.success), [`ui.warning`](/functions/automation/ui.warning) | Write status messages for the person running the program. |
 | [`errors.build`](/functions/automation/errors.build) | Raise actionable errors with Atmos's explanations, hints, examples, context, and exit codes. |

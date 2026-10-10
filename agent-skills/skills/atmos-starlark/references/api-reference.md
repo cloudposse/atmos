@@ -35,6 +35,10 @@ more depth. If a name is not listed here, check that page before concluding it d
   and also captures it; `output="capture"` captures without showing. It inherits the
   effective execution environment without changing the global working directory or
   environment. Relative `working_directory` resolves against the step working directory.
+- `exec.which(name)`: absolute path of the executable `exec.run` would start for `name`, or `None`.
+  Searches the same `PATH` as `exec.run` (including `dependencies.tools` directories); a name with a
+  path separator resolves relative to the working directory. Use it for prerequisite checks instead of
+  running a tool just to see whether it exists.
 - `component.exec(argv, working_directory=, env={...}, output=, check=)`: same, but runs in the
   component's physical directory and uses the component env (then command, step, and per-call
   overrides). Use the handle rather than inferring a path from a logical name.
@@ -84,6 +88,15 @@ more depth. If a name is not listed here, check that page before concluding it d
   descriptor for `steps.parallel(tasks=[...])`. `retry` keys: `max_attempts`, `initial_delay`,
   `backoff_strategy`, `max_delay`.
 
+## Cleanup
+
+- `defer(fn, *args, **kwargs)`: registers a call to run when the enclosing script or `steps.parallel`
+  task finishes, last in first out, after a normal return, `fail()`, or cancellation (then with a
+  30 s grace context so `exec.run`/`atmos.*` still work). Arguments are captured at registration. The
+  body error stays primary; a failing deferred call is reported after it. This is the `finally` /
+  `trap EXIT` equivalent; `when: always` is the YAML-step counterpart. Never write cleanup after a
+  `fail()` and expect it to run.
+
 ## Step library
 
 - `steps.run(type, **fields)` and `steps.<type>(**fields)` (for example `steps.input`, `steps.choose`,
@@ -96,9 +109,15 @@ more depth. If a name is not listed here, check that page before concluding it d
   Use `json.indent(text, prefix=, indent=)` to pretty-print JSON text, and `json.encode_indent(value)`
   to encode and format in one call.
 - `fs.read_file(path)`: read a local file as a string (relative to the step working
-  directory, also inside loaded functions; absolute paths accepted). There is no write API.
+  directory, also inside loaded functions; absolute paths accepted; a leading `~` expands to the home
+  directory in every `fs.*` call). There is no write API.
   Use `fs.glob(pattern)`, `fs.stat(path)`, `fs.exists(path)`, and `fs.readlink(path)` to inspect the
-  filesystem.
+  filesystem. `fs.resolve(path)` returns the absolute path (tilde expanded, relative paths joined to the
+  working directory, cleaned) without touching the filesystem, so use it instead of hand-rolled
+  `~` and absolute-path checks.
+- `digest.sha256(data)`, `digest.sha512(data)`, `digest.sha1(data)`, `digest.md5(data)`: lowercase hex digest of a
+  string. Strings are bytes, so `digest.sha256(fs.read_file(path))` fingerprints a binary file exactly.
+  There is no incremental API; sha1 and md5 exist for interoperability (Git ids, S3 ETags), not security.
 - `errors.build(message)`: error builder with `.with_title`, `.with_explanation`, `.with_hint`,
   `.with_example`, `.with_context`, `.with_exit_code`, and a final `.fail()`.
 - `regex.search(pattern, text)`: boolean match anywhere. `regex.findall(pattern, text)`:
@@ -112,6 +131,31 @@ more depth. If a name is not listed here, check that page before concluding it d
 - `ui.info(message)` (`▶`), `ui.success(message)` (`✓`), `ui.warning(message)` (`⚠`): stderr.
 - `log.trace/debug/info/warn/error(message, **fields)`: Atmos logger. Field names must be
   identifiers. `step` and `task` fields are added automatically. Never the step value.
+
+## CI
+
+- `ci.context`: read-only struct, resolved on first access: `provider`, `local` (no CI provider
+  detected; the generic provider renders locally), `event`, `sha`, `branch`, `repo`, `actor`,
+  `run_id`, `run_url`, `elevated` (`pull_request_target`/`workflow_run`), and `pr` (`number`,
+  `head`, `base`, `url`) or `None`. `ci.base()`: the affected-detection base
+  (`ref`, `sha`, `head_sha`, `target_branch`, `source`) or `None`.
+- Writes, one call each, with a local rendering on stderr when no provider is detected:
+  `ci.summary(markdown)`, `ci.output(name, value)`, `ci.env(name, value)`, `ci.path(dir)`,
+  `ci.mask(value)` (registers with Atmos masking at once; `::add-mask::` in CI),
+  `ci.annotate(level, message, file="", line=0, end_line=0, title="")` (`error|warning|notice`),
+  `ci.comment(body, key="", behavior="upsert", pr=0)` → struct `id`, `url`, `created` (a `key`
+  makes later runs update the same comment; locally a preview, never posted),
+  `ci.check(name, state="pending", description="", url="")` → handle with `name`, `state`, `id`,
+  `url`, and `update(state, description="", url="")` (a commit status on GitHub; no body),
+  `ci.group(title, fn)` → `fn()`'s result inside a collapsible log group, and
+  `ci.sarif(path, category="")`.
+- In CI each write honors the same switches as native reporting (`ci.enabled` plus
+  `ci.summary.enabled`, `ci.output.enabled` (also env/path), `ci.annotations.enabled`,
+  `ci.results.enabled`, `ci.checks.enabled`, `ci.comments.enabled`, `ci.groups.mode`). A
+  gated-off call warns naming the flag and renders locally; it never fails the script. Comments
+  and checks are held on elevated events unless `ci.allow_unsafe_fork_execution` is set.
+- Distinct from `atmos.ci(...)`, which runs the `atmos ci` CLI command group as a subprocess.
+  Reference: [ci](https://atmos.tools/functions/automation/ci).
 
 ## Toolchain
 

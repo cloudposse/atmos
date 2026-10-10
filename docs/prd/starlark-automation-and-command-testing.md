@@ -506,6 +506,9 @@ web-server fixtures with Starlark.
 | `Path.read_text()` in 26 files | `fs.read_file(path)` | Implemented; working-directory-relative, injectable and usable in parallel functions. |
 | Regex operations in 17 files, including ANSI cleanup and progress assertions | `regex.search`, `regex.replace`, `regex.findall` | Implemented with Go/RE2 syntax, full-match results and literal replacement. Python lookbehind patterns must be rewritten. |
 | JSON cast events, payloads and manifest checks | `json.encode/decode` | Already implemented. |
+| `hashlib` fingerprints of built artifacts | `digest.sha256`, `digest.sha512`, `digest.sha1`, `digest.md5` | Implemented; hex digest of a string, so `digest.sha256(fs.read_file(path))` covers files. No incremental `update()`. |
+| `shutil.which` prerequisite checks | `exec.which(name)` | Implemented; searches the same `PATH` as `exec.run` and returns `None` when absent. |
+| `try` / `finally` teardown of emulators, stacks, and locks | `defer(fn, *args, **kwargs)` | Implemented; last-in-first-out at script or task end, after `fail()` and cancellation (30 s grace). The body error stays primary. |
 | `Path.write_text()` in 21 files, notably cast sanitizers | Atomic `fs.write_file(path, content)` | Proposed; define permissions, replacement and parallel-writer behavior before exposing. |
 | File inspection in validators and repository checks | `fs.exists`, sorted `fs.glob`, `fs.stat`, `fs.readlink` | Implemented; byte sizes and explicit symlink behavior. No recursive globbing or write API. |
 | `subprocess.run` in screengrab generation | `exec.run(argv, env=..., working_directory=..., check=False, output="capture")` | Implemented; explicit nonzero-result policy and capture without streaming. |

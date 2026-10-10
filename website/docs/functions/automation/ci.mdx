@@ -1,0 +1,194 @@
+---
+title: "ci"
+sidebar_position: 25.5
+sidebar_label: "ci"
+sidebar_class_name: command
+description: Report from a script into the CI provider that is running it, and render the same calls locally when no provider is detected.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `ci` module lets a script report into the CI provider that is running it: job summaries, step outputs,
+    environment exports, annotations, pull request comments, commit statuses, log groups, and SARIF uploads. When no
+    provider is detected, the same calls render on your terminal, so one script runs unchanged on a laptop and in CI.
+</Intro>
+
+The `ci` module is predeclared in every Atmos Automation Language script: standalone scripts and the script steps of
+custom commands, workflows, and hooks alike. It is not the same as [`atmos.ci`](/functions/automation/atmos.ci), which
+runs the `atmos ci` command group as a subprocess.
+
+## Calls
+
+| Call | Purpose |
+| --- | --- |
+| [`ci.context`](#the-context) | Read where the script is running: provider, event, commit, branch, repository, run, and pull request. |
+| [`ci.base`](/functions/automation/ci.base) | Read the base that affected detection compares against. |
+| [`ci.summary`](/functions/automation/ci.summary) | Append Markdown to the job summary. |
+| [`ci.output`](/functions/automation/ci.output) | Set a step output for later steps and jobs. |
+| [`ci.env`](/functions/automation/ci.env) | Export an environment variable to later steps. |
+| [`ci.path`](/functions/automation/ci.path) | Prepend a directory to `PATH` for later steps. |
+| [`ci.mask`](/functions/automation/ci.mask) | Redact a value from everything printed afterwards, including runner logs. |
+| [`ci.annotate`](/functions/automation/ci.annotate) | Attach an error, warning, or notice to a file and line in the pull request diff. |
+| [`ci.comment`](/functions/automation/ci.comment) | Create or update a pull request comment. |
+| [`ci.check`](/functions/automation/ci.check) | Report a named status on the commit, and update it as the work progresses. |
+| [`ci.group`](/functions/automation/ci.group) | Wrap a function's output in a collapsible log group. |
+| [`ci.sarif`](/functions/automation/ci.sarif) | Upload a SARIF file to Code Scanning. |
+
+## The context
+
+Reading `ci.context` returns a read-only struct that describes where the script is running. It resolves the first time
+you read it, so scripts that never read it pay nothing.
+
+<dl>
+    <dt>`provider`</dt>
+    <dd>The detected CI provider as a string, such as `"github-actions"`, or `"generic"` when none is detected.</dd>
+
+    <dt>`local`</dt>
+    <dd>A boolean that is `True` when no CI provider is detected and the `generic` provider is rendering locally.</dd>
+
+    <dt>`event`</dt>
+    <dd>The event that triggered the run, such as `"push"` or `"pull_request"`, as a string.</dd>
+
+    <dt>`sha`</dt>
+    <dd>The commit being built, as a string.</dd>
+
+    <dt>`branch`</dt>
+    <dd>The branch being built, as a string.</dd>
+
+    <dt>`repo`</dt>
+    <dd>The repository in `owner/name` form, as a string.</dd>
+
+    <dt>`actor`</dt>
+    <dd>The user or bot that triggered the run, as a string.</dd>
+
+    <dt>`run_id`</dt>
+    <dd>The identifier of the run, as a string.</dd>
+
+    <dt>`run_url`</dt>
+    <dd>A link to the run, as a string.</dd>
+
+    <dt>`elevated`</dt>
+    <dd>
+        A boolean that is `True` under the elevated `pull_request_target` and `workflow_run` events. See the
+        [fork gate](#fork-gate).
+    </dd>
+
+    <dt>`pr`</dt>
+    <dd>
+        A struct with `number`, `head`, `base`, and `url` for the current pull request, or `None` when the run is not
+        for a pull request.
+    </dd>
+</dl>
+
+```python
+ctx = ci.context
+if ctx.local:
+    ui.info("Running locally; CI reports are previews only")
+elif ctx.pr != None:
+    ui.info("Reporting on pull request #" + str(ctx.pr.number))
+```
+
+## Gating
+
+Inside CI, every write honors the same switches as the native reporting that Atmos performs for Terraform commands:
+[`ci.enabled`](/cli/configuration/ci) plus a flag for each feature.
+
+| Call | Flag |
+| --- | --- |
+| `ci.summary` | [`ci.summary.enabled`](/cli/configuration/ci/summary) |
+| `ci.output`, `ci.env`, `ci.path` | [`ci.output.enabled`](/cli/configuration/ci/output) |
+| `ci.annotate` | `ci.annotations.enabled` |
+| `ci.sarif` | `ci.results.enabled` |
+| `ci.check` | [`ci.checks.enabled`](/cli/configuration/ci/checks) |
+| `ci.comment` | [`ci.comments.enabled`](/cli/configuration/ci/comments) |
+| `ci.group` | [`ci.groups.mode`](/cli/configuration/ci/groups) |
+
+Comments and checks are opt-in and stay off until you set `enabled: true`. Summaries, outputs, and annotations are on
+by default once `ci.enabled` is true.
+
+A call whose flag is off does not fail. It warns, names the flag, renders locally, and the script continues:
+
+```text
+ci.comment: ci.comments.enabled is off; rendered locally
+```
+
+Locally the flags are irrelevant and there is no warning. See [CI configuration](/cli/configuration/ci) for the full
+list of keys.
+
+## Fork gate
+
+Under `pull_request_target` and `workflow_run`, the workflow runs with a privileged token while the code may come
+from a fork. In that situation `ci.comment` and `ci.check` do not post unless the
+[`ci.allow_unsafe_fork_execution`](/cli/configuration/ci) key is `true`. They warn and render locally instead. Read `ci.context.elevated` to find out
+whether a script is in that situation, and skip work that only makes sense when posting is allowed.
+
+## Masking
+
+Summaries, comments, and check descriptions are masked by Atmos before they leave the process. Step outputs,
+environment exports, and SARIF bodies are written exactly as given, because later steps consume them. To keep a value
+out of logs, register it with [`ci.mask`](/functions/automation/ci.mask) before you print or export it.
+
+## Errors
+
+A real provider failure fails the script with the usual Starlark error presentation. Examples are an API error, a
+missing token, or a pull request number that does not exist. Gating never fails a script.
+
+## Permissions
+
+On GitHub Actions, the job token needs these permissions for the calls that write to GitHub APIs:
+
+| Call | Permission |
+| --- | --- |
+| `ci.comment` | `pull-requests: write` |
+| `ci.check` | `statuses: write` |
+| `ci.sarif` | `security-events: write` |
+
+## Local parity
+
+Without a detected CI provider, the `generic` provider renders every call on your terminal, so you can develop and
+debug a reporting script before it ever runs in CI.
+
+- Summaries render as terminal Markdown on stderr.
+- Outputs print as `name=value` on stderr, environment exports as `export NAME='value'`, and path additions as
+  `export PATH='dir':"$PATH"`.
+- Annotations print as `file:line: level: message`.
+- Comments are previewed and never posted, and the returned `url` is empty.
+
+To capture the values in files instead, set the `ATMOS_CI_OUTPUT`, `ATMOS_CI_SUMMARY`, `ATMOS_CI_ENV`, or `ATMOS_CI_PATH`
+environment variable. The generic provider appends to each file that is set. On a CI platform that Atmos does not recognize, pass the workflow-level `--ci` flag or set `ATMOS_CI=true` to force CI mode. The generic provider then writes to
+those files.
+
+## Example
+
+This script builds a service, tests it, and reports the result to the pull request, the job summary, and the commit:
+
+```python
+ctx = ci.context
+build = ci.check("build", state = "in_progress", description = "Building")
+
+def run_tests():
+    return exec.run(["go", "test", "./...", "-json"], check = False)
+
+result = ci.group("Test", run_tests)
+
+if result.exit_code != 0:
+    ci.annotate("error", "Tests failed", file = "main.go", line = 1, title = "go test")
+    build.update("failure", description = "Tests failed")
+    ci.summary("## Test results\n\nTests failed with exit code " + str(result.exit_code) + ".")
+    fail("tests failed")
+
+ci.output("artifact", "dist/app.tar.gz")
+build.update("success", description = "Built and tested " + ctx.sha[:7])
+
+if ctx.pr != None:
+    ci.comment("Built **" + ctx.sha[:7] + "** and all tests passed.", key = "build-report")
+```
+
+On a laptop the same script prints the group heading, the status, and the comment preview on stderr.
+
+## Related
+
+- [`atmos.ci`](/functions/automation/atmos.ci) runs the `atmos ci` command group as a subprocess.
+- [CI configuration](/cli/configuration/ci) lists every key that gates these calls.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#step-output).

@@ -19,6 +19,7 @@ Atmos.
 | In Python | In Atmos Automation Language |
 | --- | --- |
 | `try` / `except` / `raise` | `fail("message")` stops the script. Nothing catches it. Use `exec.run(..., check=False)` to inspect a failing command. |
+| `try` / `finally`, `atexit.register` | [`defer(fn, *args)`](/functions/automation/defer) registers cleanup that runs when the script or task finishes, last in first out, even after `fail()` or cancellation. |
 | `import os` | `load("file.star", "name")` for your own code. Atmos names such as `exec`, `fs`, `json`, `regex`, and `env` are already available. |
 | `class` | Use dictionaries and functions. |
 | `x ** 2` | `x * x`, or a loop. There is no `**` operator and no `pow()`. |
@@ -38,7 +39,9 @@ Atmos.
 
 **No `try`, `except`, `finally`, or `raise`.** Errors propagate to the top and stop the script.
 The `fail()` function is the only way to raise one. See
-[Errors and tracebacks](/automation/reference/execution-model#errors-and-tracebacks).
+[Errors and tracebacks](/automation/reference/execution-model#errors-and-tracebacks). For the
+`finally` case, [`defer`](/functions/automation/defer) registers cleanup that runs when the script
+or task finishes, whatever the outcome.
 
 **No `import`.** Use [`load`](/functions/automation/load) to bring names from another `.star` file:
 
@@ -206,6 +209,8 @@ The Python standard library and Python packages are not part of the runtime, and
 | Python | In Atmos Automation Language |
 | --- | --- |
 | `subprocess` | [`exec.run`](/functions/automation/exec.run) and [`atmos.run`](/functions/automation/atmos.run). |
+| `shutil.which` | [`exec.which`](/functions/automation/exec.which), which searches the same `PATH` that `exec.run` uses. |
+| `hashlib` | [`digest.sha256`](/functions/automation/digest.sha256), [`digest.sha512`](/functions/automation/digest.sha512), [`digest.sha1`](/functions/automation/digest.sha1), and [`digest.md5`](/functions/automation/digest.md5). Each takes a string and returns lowercase hex; there is no incremental `update()`. |
 | `os.environ` | [`env`](/functions/automation/env), a read-only dictionary of the step's declared inputs. |
 | `open(path).read()` | [`fs.read_file`](/functions/automation/fs.read_file). File writes are not available. |
 | `json` | [`json.encode`](/functions/automation/json.encode), [`json.decode`](/functions/automation/json.decode), [`json.indent`](/functions/automation/json.indent). |

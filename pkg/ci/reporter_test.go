@@ -314,7 +314,7 @@ func TestReporter_SummaryAndOutputRouting(t *testing.T) {
 
 func TestReporter_CapabilityRouting(t *testing.T) {
 	annotation := Annotation{Path: "main.tf", StartLine: 3, Level: AnnotationWarning, Message: "m"}
-	report := SARIFReport{Body: []byte("{}"), Category: "c"}
+	report := SARIFReport{Body: []byte("{}"), Category: "c", Path: "reports/scan.sarif"}
 	enableAll := func(c *schema.CIConfig) { c.Results.Enabled = boolPtr(true) }
 	disableAll := func(c *schema.CIConfig) {
 		c.Output.Enabled = boolPtr(false)

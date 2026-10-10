@@ -1,0 +1,71 @@
+---
+title: "ci.mask"
+sidebar_position: 25.5
+sidebar_label: "ci.mask"
+sidebar_class_name: command
+description: Redact a value from everything printed afterwards.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `ci.mask` function registers a value as a secret. Everything Atmos prints afterwards redacts it, and in CI the
+    runner redacts it from its own logs too.
+</Intro>
+
+## Usage
+
+```python
+ci.mask(value)
+```
+
+## Arguments
+
+<dl>
+    <dt>`value`</dt>
+    <dd>Required. The sensitive value to redact, as a string.</dd>
+</dl>
+
+## Returns
+
+The return value is `None`.
+
+## Behavior
+
+- The value is registered with Atmos output masking immediately, so every line printed after the call redacts it. This
+  includes `ui.*`, `print`, summaries, comments, and the output of later commands.
+- In CI, the call also emits the runner's mask command, so the runner redacts the value from its logs, including the
+  output of steps that run after the script.
+- Masking applies from the call onward. Text that was already printed is not changed, so mask a value before you print it.
+- The value still reaches [`ci.output`](/functions/automation/ci.output) and [`ci.env`](/functions/automation/ci.env)
+  unchanged, so later steps can use it.
+- The call is not gated by the `ci.*.enabled` flags. Masking is a safety measure, so it always applies.
+
+## Examples
+
+### Mask a token before using it
+
+```python
+token = exec.run(["vault", "read", "-field=token", "secret/ci"], output = "capture").stdout.strip()
+ci.mask(token)
+ui.info("Fetched token " + token)
+```
+
+The message prints with the token redacted.
+
+### Mask and export a value for later steps
+
+```python
+password = exec.run(["pwgen", "32", "1"], output = "capture").stdout.strip()
+ci.mask(password)
+ci.env("DB_PASSWORD", password)
+```
+
+## Errors
+
+- A missing or non-string `value` fails with an argument error that names `ci.mask`.
+
+## Related
+
+- [`ci`](/functions/automation/ci) describes the module and explains [masking](/functions/automation/ci#masking).
+- [`exec.run`](/functions/automation/exec.run) with `output = "capture"` keeps secret-bearing output off the screen.

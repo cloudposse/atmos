@@ -1,0 +1,70 @@
+---
+title: "digest.sha256"
+sidebar_position: 23
+sidebar_label: "digest.sha256"
+sidebar_class_name: command
+description: Compute the SHA-256 digest of a string or file contents as lowercase hex.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `digest.sha256` function returns the SHA-256 digest of a string as lowercase hexadecimal. Pair it
+    with [`fs.read_file`](/functions/automation/fs.read_file) to fingerprint an artifact, compare a build
+    against a published copy, or derive a cache key from file contents.
+</Intro>
+
+## Usage
+
+```python
+digest.sha256(data)
+```
+
+## Arguments
+
+<dl>
+    <dt>`data`</dt>
+    <dd>
+        Required. The string to hash. Strings are byte strings, so the contents of a binary file returned by
+        `fs.read_file` hash exactly as the bytes on disk, and text hashes as its UTF-8 encoding.
+    </dd>
+</dl>
+
+## Returns
+
+The digest as a 64-character lowercase hexadecimal string.
+
+## Examples
+
+### Fingerprint a build artifact
+
+```python
+artifact_sha256 = digest.sha256(fs.read_file(".build/handler.zip"))
+ci.output("artifact_sha256", artifact_sha256)
+```
+
+### Confirm two builds are byte-identical
+
+```python
+first = digest.sha256(fs.read_file("dist/v1/app.zip"))
+again = digest.sha256(fs.read_file("dist/v1-rebuild/app.zip"))
+if first != again:
+    fail("the rebuild is not reproducible")
+```
+
+### Derive a cache key from inputs
+
+```python
+key = "deps-" + digest.sha256(fs.read_file("go.sum"))[:16]
+```
+
+## Errors
+
+- A missing argument, or an argument that is not a string, fails with an argument error.
+
+## Related
+
+- [`digest.sha512`](/functions/automation/digest.sha512), [`digest.sha1`](/functions/automation/digest.sha1), and
+  [`digest.md5`](/functions/automation/digest.md5) compute other digests with the same signature.
+- [`fs.read_file`](/functions/automation/fs.read_file) reads the bytes to hash.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script)

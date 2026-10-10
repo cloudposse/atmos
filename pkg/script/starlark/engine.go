@@ -16,12 +16,14 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/script"
 	climodule "github.com/cloudposse/atmos/pkg/script/starlark/stdlib/cli"
+	digestmodule "github.com/cloudposse/atmos/pkg/script/starlark/stdlib/digest"
 	regexmodule "github.com/cloudposse/atmos/pkg/script/starlark/stdlib/regex"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -96,6 +98,12 @@ type session struct {
 	componentMu sync.Mutex
 	components  map[script.ComponentRef]*componentEntry
 	tools       *script.Tools
+
+	// ciReporter backs the ci module. It is never nil: hosts without a CI reporter get the
+	// local-only one. ciCtxValue caches the lazily resolved ci.context.
+	ciReporter ci.Reporter
+	ciCtxOnce  sync.Once
+	ciCtxValue starlark.Value
 }
 
 // Execute runs a script and returns its optional top-level output value: a string is
@@ -128,7 +136,7 @@ func (e *Engine) Execute(ctx context.Context, spec script.Spec) (script.Result, 
 		return script.Result{}, scriptError(ctx, err, s.spec.ProjectRoot)
 	}
 	globals, err := starlark.ExecFileOptions(fileOptions, thread, programName(&spec), spec.Source, s.globals)
-	if err != nil {
+	if err = s.runDeferred(ctx, thread, err); err != nil {
 		return script.Result{}, scriptError(ctx, err, s.spec.ProjectRoot)
 	}
 	return s.output(ctx, thread, globals)
@@ -139,6 +147,10 @@ func newSession(ctx context.Context, e *Engine, spec *script.Spec) *session {
 		engine: e, spec: *spec, ctx: ctx, modules: make(map[string]starlark.StringDict),
 		loading: make(map[string]bool), components: make(map[script.ComponentRef]*componentEntry),
 		tools: script.NewTools(spec.InstallTools),
+	}
+	s.ciReporter = spec.CI
+	if s.ciReporter == nil {
+		s.ciReporter = ci.NewReporter(nil)
 	}
 	s.globals = s.predeclared()
 	return s
@@ -228,6 +240,7 @@ func (s *session) predeclared() starlark.StringDict {
 	return starlark.StringDict{
 		"sum":    starlark.NewBuiltin("sum", numericSum),
 		"round":  starlark.NewBuiltin("round", numericRound),
+		"defer":  starlark.NewBuiltin("defer", deferCall),
 		"errors": module("errors", starlark.StringDict{"build": starlark.NewBuiltin("errors.build", buildError)}),
 		"cli": climodule.New(func(t *starlark.Thread, command script.CommandSpec) (script.CommandInput, error) {
 			if s.spec.ParseCommand == nil || t.Local(outputKey) != nil {
@@ -250,8 +263,13 @@ func (s *session) predeclared() starlark.StringDict {
 		"fs":           s.filesystemModule(),
 		"regex":        regexmodule.New(),
 		"steps":        s.stepsModule(),
-		"exec":         module("exec", starlark.StringDict{"run": starlark.NewBuiltin("exec.run", s.exec)}),
-		"log":          module("log", s.logMembers()),
+		"digest":       digestmodule.New(),
+		"exec": module("exec", starlark.StringDict{
+			"run":   starlark.NewBuiltin("exec.run", s.exec),
+			"which": starlark.NewBuiltin("exec.which", s.which),
+		}),
+		"log": module("log", s.logMembers()),
+		"ci":  s.ciModule(),
 	}
 }
 

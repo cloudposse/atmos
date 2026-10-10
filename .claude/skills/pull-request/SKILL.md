@@ -173,6 +173,37 @@ gh pr create --body-file /tmp/pr-body.md
 
 (Alternatively, the single-quoted heredoc already disables shell expansion, so plain unescaped backticks work — but `--body-file` is more robust because file content survives shell quoting unchanged.)
 
+## Stacked PRs (GitHub stacks, not just base-branch chains)
+
+A PR whose base is another feature branch is only a **chain**. GitHub's native stacked pull
+requests are a separate, first-class object (`PullRequestStack`, with a stack number and ordered
+entries), and tools such as Conductor read that object, not the base branches. A chained PR shows
+the banner "This pull request can be stacked with other pull requests" and `stack: null` in the
+API until it is linked.
+
+Register or grow a stack with the `gh stack` extension (`gh extension install github/gh-stack`);
+there is no GraphQL mutation for it:
+
+```bash
+# Create or update a stack from existing PRs or branches, listed bottom to top.
+gh stack link 3263 3264 3266 3261 3274
+
+# Append a new PR or branch to the top of an existing stack (first argument is the stack number).
+gh stack link 3267 3312
+
+# Confirm what GitHub recorded (position 1 is closest to main).
+gh api graphql -f query='{ repository(owner:"cloudposse", name:"atmos") { pullRequest(number:3307) {
+  stack { number size entries(first:30) { nodes { position pullRequest { number } } } } } } }'
+```
+
+`gh stack link` never removes PRs from a stack and keeps draft status unless you pass `--open`.
+After `link`, `gh stack view` still reports "not part of a stack" because `link` deliberately skips
+local tracking; that is expected. Never claim a set of PRs is a stack from branch ancestry alone.
+
+When a PR in the middle of a stack changes, rebase every PR above it (verify replayed commits
+with `git patch-id --stable`) and push each with `--force-with-lease`; the stack object itself
+needs no update.
+
 ## Updating an existing PR
 
 If a PR has already been opened without a label, or with the wrong one:

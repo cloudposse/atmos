@@ -1,0 +1,86 @@
+---
+title: "ci.base"
+sidebar_position: 25.5
+sidebar_label: "ci.base"
+sidebar_class_name: command
+description: Read the base commit that affected detection compares against.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `ci.base` function returns the base that Atmos uses for affected detection: the reference, commit, and target
+    branch that the current run is compared against. Use it to scope your own checks to the same set of changes.
+</Intro>
+
+## Usage
+
+```python
+base = ci.base()
+```
+
+## Arguments
+
+The function takes no arguments.
+
+## Returns
+
+A struct, or `None` when no base can be determined:
+
+<dl>
+    <dt>`ref`</dt>
+    <dd>The base reference, such as `"origin/main"`, as a string.</dd>
+
+    <dt>`sha`</dt>
+    <dd>The base commit that changes are compared against, as a string.</dd>
+
+    <dt>`head_sha`</dt>
+    <dd>The head commit of the run, as a string.</dd>
+
+    <dt>`target_branch`</dt>
+    <dd>The branch the change is headed for, as a string.</dd>
+
+    <dt>`source`</dt>
+    <dd>A string that says where the base came from, such as an event payload or an explicit setting.</dd>
+</dl>
+
+## Behavior
+
+- In CI, the base is resolved from the provider's event data with the same rules that
+  [`atmos describe affected`](/cli/commands/describe/affected#ci-auto-detection) uses, so a script and the native
+  affected detection always agree.
+- Locally, the generic provider reads `ATMOS_CI_BASE_REF`. When nothing can be resolved, the call returns `None`.
+- The call only reads. It is not gated by any `ci.*.enabled` flag and never warns.
+
+See [the `ci` module](/functions/automation/ci) for the shared behavior rules.
+
+## Examples
+
+### Show what the run compares against
+
+```python
+base = ci.base()
+if base == None:
+    ui.warning("No base commit found; checking everything")
+else:
+    ui.info("Comparing " + base.head_sha[:7] + " against " + base.ref + " (" + base.source + ")")
+```
+
+### Pass the base to a command
+
+```python
+base = ci.base()
+args = ["describe", "affected", "--format=json"]
+if base != None:
+    args.append("--base=" + base.sha)
+affected = atmos.run(args, output = "capture")
+```
+
+## Errors
+
+- A missing base is not an error. The call returns `None`, so check for it before reading the fields.
+
+## Related
+
+- [`ci`](/functions/automation/ci) describes the module, its context, and the gating rules.
+- [`atmos describe affected`](/cli/commands/describe/affected) computes the affected components.

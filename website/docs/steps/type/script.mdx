@@ -283,6 +283,9 @@ output = steps.parallel(
 | `regex.search(pattern, text)` | Return whether the pattern matches anywhere in the text. |
 | `regex.findall(pattern, text)` | Return complete matches in order, regardless of capture groups. |
 | `regex.replace(pattern, replacement, text)` | Replace every match with literal replacement text. |
+| `digest.sha256(data)`, `digest.sha512(data)`, `digest.sha1(data)`, `digest.md5(data)` | Return the lowercase hex digest of a string or of file contents. |
+| `exec.which(name)` | Return the absolute path of the executable `exec.run` would start, or `None`. |
+| `defer(fn, *args, **kwargs)` | Register a call to run when the script or task finishes, last in first out, even after a failure. |
 
 Regular expressions use Go/RE2 syntax and support inline flags such as `(?m)`.
 Lookaround and pattern backreferences are unsupported. Replacement text is literal:

@@ -1,0 +1,73 @@
+---
+title: "ci.group"
+sidebar_position: 25.5
+sidebar_label: "ci.group"
+sidebar_class_name: command
+description: Wrap a function's output in a collapsible log group.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `ci.group` function runs a function inside a collapsible log group, so the runner's log view folds the noisy
+    output under a single title. Locally, it prints a heading line before the function runs.
+</Intro>
+
+## Usage
+
+```python
+ci.group(title, fn)
+```
+
+## Arguments
+
+<dl>
+    <dt>`title`</dt>
+    <dd>Required. The title shown on the collapsed group, as a string.</dd>
+
+    <dt>`fn`</dt>
+    <dd>Required. A function that takes no arguments. Define a small wrapper function to pass arguments through.</dd>
+</dl>
+
+## Returns
+
+The value that `fn()` returns, so a group can wrap work whose result you need afterwards.
+
+## Behavior
+
+- In CI, the group opens before the function runs and closes after it returns.
+- Locally, the call prints a heading line with the title and then runs the function.
+- In CI the call is gated by [`ci.groups.mode`](/cli/configuration/ci/groups). When the mode is `off`, the call warns,
+  renders a heading locally, and still runs the function. See [gating](/functions/automation/ci#gating).
+- The function always runs, whatever the gate says.
+
+## Examples
+
+### Group a noisy command
+
+```python
+def install():
+    return exec.run(["npm", "ci"])
+
+ci.group("Install dependencies", install)
+```
+
+### Use the result
+
+```python
+def count_stacks():
+    return len(json.decode(exec.run(["atmos", "list", "stacks", "--format=json"], output = "capture").stdout))
+
+total = ci.group("Count stacks", count_stacks)
+ui.info("Found " + str(total) + " stacks")
+```
+
+## Errors
+
+- A missing title or a `fn` that is not callable fails with an argument error that names `ci.group`.
+- An error raised inside `fn` fails the script as usual.
+
+## Related
+
+- [`ci`](/functions/automation/ci) describes the module and the shared behavior rules.
+- [CI log groups](/cli/configuration/ci/groups) configures how Atmos groups its own command output.

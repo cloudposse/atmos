@@ -1,0 +1,39 @@
+---
+title: "fs.resolve"
+sidebar_label: "fs.resolve"
+sidebar_class_name: command
+description: Resolve a path to an absolute path without touching the filesystem.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>Resolve a path to an absolute path without touching the filesystem.</Intro>
+
+## Usage
+
+```python
+fs.resolve(path)
+```
+
+<dl>
+  <dt>`path`</dt><dd>The path to resolve. A leading `~` expands to the home directory.
+  A relative path resolves against the script's working directory. An empty path fails.</dd>
+</dl>
+
+Returns the absolute, cleaned path as a string. The path does not need to
+exist: `fs.resolve` never reads the filesystem. It follows the same rules as
+every other `fs.*` function, and all of them accept a leading `~`. `~user`
+is not expanded and is treated as a relative name.
+
+Use it to normalize a user-supplied path once, then check or read the result:
+
+```python
+target = fs.resolve(env["TARGET_DIR"])
+if not fs.exists(target):
+    errors.build("Target directory not found: " + target).with_hint("Create it or pass an existing directory.").fail()
+```
+
+Calls honor cancellation.
+
+See [`fs.exists`](/functions/automation/fs.exists) and
+[reading files](/functions/automation/fs.read_file).
