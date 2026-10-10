@@ -41,7 +41,7 @@ func TestComponentFunc_CloudFormationBranch_PopulatesOutputs(t *testing.T) {
 		Return(map[string]any{"VpcId": "vpc-123"}, nil)
 	stubCloudFormationOutputsGetter(t, mockGetter)
 
-	result, err := componentFunc(&atmosConfig, nil, "vpc", "test")
+	result, err := componentFunc(t.Context(), &atmosConfig, nil, "vpc", "test")
 	require.NoError(t, err)
 
 	sections, ok := result.(map[string]any)
@@ -59,7 +59,7 @@ func TestComponentFunc_CloudFormationBranch_OutputsError(t *testing.T) {
 	atmosConfig := setupAwsCloudFormationOutputFixture(t)
 	stubCloudFormationOutputsGetter(t, nil) // any call would nil-panic, proving it's never reached.
 
-	_, err := componentFunc(&atmosConfig, nil, "no-stack-name", "test")
+	_, err := componentFunc(t.Context(), &atmosConfig, nil, "no-stack-name", "test")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "atmos.Component")
 }
@@ -83,7 +83,7 @@ func TestComponentFunc_CloudFormationBranch_PassesResolvedAuthContext(t *testing
 	stubCloudFormationOutputsGetter(t, mockGetter)
 
 	parentContext := &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "enclosing-identity"}}
-	_, err := componentFunc(&atmosConfig, &schema.ConfigAndStacksInfo{AuthContext: parentContext}, "vpc", "test")
+	_, err := componentFunc(t.Context(), &atmosConfig, &schema.ConfigAndStacksInfo{AuthContext: parentContext}, "vpc", "test")
 	require.NoError(t, err)
 	require.NotNil(t, gotAuth, "the enclosing AuthContext must reach cloudFormationOutputsForSections")
 	assert.Equal(t, "enclosing-identity", gotAuth.Profile)
@@ -107,13 +107,13 @@ func TestComponentFunc_CloudFormationBranch_CacheKeyIncludesIdentity(t *testing.
 	stubCloudFormationOutputsGetter(t, mockGetter)
 
 	identityA := &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "identity-a"}}
-	resultA, err := componentFunc(&atmosConfig, &schema.ConfigAndStacksInfo{AuthContext: identityA}, "vpc", "test")
+	resultA, err := componentFunc(t.Context(), &atmosConfig, &schema.ConfigAndStacksInfo{AuthContext: identityA}, "vpc", "test")
 	require.NoError(t, err)
 	outputsA := resultA.(map[string]any)[cfg.OutputsSectionName].(map[string]any)
 	assert.Equal(t, "vpc-identity-a", outputsA["VpcId"])
 
 	identityB := &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "identity-b"}}
-	resultB, err := componentFunc(&atmosConfig, &schema.ConfigAndStacksInfo{AuthContext: identityB}, "vpc", "test")
+	resultB, err := componentFunc(t.Context(), &atmosConfig, &schema.ConfigAndStacksInfo{AuthContext: identityB}, "vpc", "test")
 	require.NoError(t, err)
 	outputsB := resultB.(map[string]any)[cfg.OutputsSectionName].(map[string]any)
 	assert.Equal(t, "vpc-identity-b", outputsB["VpcId"])
@@ -131,7 +131,7 @@ func TestComponentFunc_CloudFormationBranch_ReusesIdentityCache(t *testing.T) {
 	}
 	for _, profile := range []string{"first", "second", "first", "second"} {
 		info := &schema.ConfigAndStacksInfo{AuthContext: &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: profile}}}
-		value, err := componentFunc(&ac, info, "vpc", "test")
+		value, err := componentFunc(t.Context(), &ac, info, "vpc", "test")
 		require.NoError(t, err)
 		require.Equal(t, profile, value.(map[string]any)[cfg.OutputsSectionName].(map[string]any)["VpcId"])
 	}
@@ -149,7 +149,7 @@ func TestComponentFunc_CacheLoggingPreservesResults(t *testing.T) {
 			ac := setupAwsCloudFormationOutputFixture(t)
 			stubCloudFormationOutputsGetter(t, NewMockCloudFormationOutputsGetter(gomock.NewController(t)))
 			componentFuncSyncMap.Store("test-vpc-", sections)
-			value, err := componentFunc(&ac, nil, "vpc", "test")
+			value, err := componentFunc(t.Context(), &ac, nil, "vpc", "test")
 			require.NoError(t, err)
 			require.Equal(t, sections, value)
 		})
@@ -182,7 +182,7 @@ func TestComponentFunc_CloudFormationBranch_CacheSeparatesAWSFiles(t *testing.T)
 
 	for _, i := range []int{0, 1, 2, 1, 0, 2} {
 		info := &schema.ConfigAndStacksInfo{AuthContext: &schema.AuthContext{AWS: &contexts[i]}}
-		value, err := componentFunc(&ac, info, "vpc", "test")
+		value, err := componentFunc(t.Context(), &ac, info, "vpc", "test")
 		require.NoError(t, err)
 		assert.Equal(t, outputs[i], value.(map[string]any)[cfg.OutputsSectionName].(map[string]any)["VpcId"])
 	}

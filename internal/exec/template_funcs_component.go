@@ -3,6 +3,7 @@ package exec
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -53,7 +54,9 @@ func (defaultComponentFuncOutputsExecutor) ExecuteWithSections(
 // verified without invoking Terraform or a remote backend.
 var componentFuncOutputsExecutor ComponentFuncOutputsExecutor = defaultComponentFuncOutputsExecutor{}
 
+// componentFunc resolves a template component and bounds CloudFormation output reads by ctx.
 func componentFunc(
+	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	component string,
@@ -164,7 +167,7 @@ func componentFunc(
 
 		sections = lo.Assign(sections, outputs)
 	} else if componentType == cfg.CloudFormationComponentType {
-		cfnOutputs, err := cloudFormationOutputsForSections(atmosConfig, component, sections, authContext)
+		cfnOutputs, err := cloudFormationOutputsForSections(ctx, atmosConfig, component, sections, authContext)
 		if err != nil {
 			return nil, fmt.Errorf("atmos.Component(%s, %s) failed to get aws/cloudformation outputs: %w", component, stack, err)
 		}

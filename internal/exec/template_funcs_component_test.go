@@ -62,7 +62,7 @@ func TestComponentFunc(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test terraform component `component-2`
-	d, err := componentFunc(&atmosConfig, nil, "component-2", "nonprod")
+	d, err := componentFunc(t.Context(), &atmosConfig, nil, "component-2", "nonprod")
 	assert.NoError(t, err)
 
 	y, err := u.ConvertToYAML(d)
@@ -73,7 +73,7 @@ func TestComponentFunc(t *testing.T) {
 	assert.Contains(t, y, "baz: component-1-b--component-1-c")
 
 	// Test helmfile component `component-3`
-	d, err = componentFunc(&atmosConfig, nil, "component-3", "nonprod")
+	d, err = componentFunc(t.Context(), &atmosConfig, nil, "component-3", "nonprod")
 	assert.NoError(t, err)
 
 	y, err = u.ConvertToYAML(d)
@@ -84,7 +84,7 @@ func TestComponentFunc(t *testing.T) {
 	assert.Contains(t, y, "baz: component-1-b")
 
 	// Test helmfile component `component-4`
-	d, err = componentFunc(&atmosConfig, nil, "component-4", "nonprod")
+	d, err = componentFunc(t.Context(), &atmosConfig, nil, "component-4", "nonprod")
 	assert.NoError(t, err)
 
 	y, err = u.ConvertToYAML(d)
@@ -255,6 +255,7 @@ func TestComponentFunc_AuthlessTargetPassesParentAuthContextToTerraformOutput(t 
 	})
 
 	_, err = componentFunc(
+		t.Context(),
 		&atmosConfig,
 		&schema.ConfigAndStacksInfo{AuthContext: parentContext},
 		"mixed-inherit-component",

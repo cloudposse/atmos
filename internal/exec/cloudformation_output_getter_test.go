@@ -124,7 +124,7 @@ func TestResolveCloudFormationRegion(t *testing.T) {
 func TestCloudFormationOutputsForSections_MissingStackName(t *testing.T) {
 	stubCloudFormationOutputsGetter(t, nil) // any call would nil-panic, proving it's never reached.
 
-	_, err := cloudFormationOutputsForSections(&schema.AtmosConfiguration{}, "vpc", map[string]any{}, nil)
+	_, err := cloudFormationOutputsForSections(t.Context(), &schema.AtmosConfiguration{}, "vpc", map[string]any{}, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrMissingAwsCloudFormationStackName)
 	assert.Contains(t, err.Error(), "vpc")
@@ -149,7 +149,7 @@ func TestCloudFormationOutputsForSections_NilAuthContext(t *testing.T) {
 		cfg.StackNameSectionName: "vpc",
 		cfg.SettingsSectionName:  map[string]any{"aws_cloudformation": map[string]any{"region": "us-east-1"}},
 	}
-	got, err := cloudFormationOutputsForSections(&schema.AtmosConfiguration{}, "vpc", sections, nil)
+	got, err := cloudFormationOutputsForSections(t.Context(), &schema.AtmosConfiguration{}, "vpc", sections, nil)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{"VpcId": "vpc-123"}, got)
 	assert.Nil(t, gotAuth, "a nil AuthContext must forward a nil AWSAuthContext, not panic")
@@ -174,7 +174,7 @@ func TestCloudFormationOutputsForSections_PopulatedAuthContext(t *testing.T) {
 	stubCloudFormationOutputsGetter(t, mockGetter)
 
 	sections := map[string]any{cfg.StackNameSectionName: "vpc"}
-	_, err := cloudFormationOutputsForSections(&schema.AtmosConfiguration{}, "vpc", sections, authContext)
+	_, err := cloudFormationOutputsForSections(t.Context(), &schema.AtmosConfiguration{}, "vpc", sections, authContext)
 	require.NoError(t, err)
 	assert.Same(t, awsAuth, gotAuth)
 }

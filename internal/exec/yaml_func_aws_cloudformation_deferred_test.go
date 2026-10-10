@@ -120,7 +120,7 @@ func TestCloudFormationDeferredAuthInheritsCallerConfiguration(t *testing.T) {
 					var value any
 					var err error
 					if useTemplate {
-						value, err = componentFunc(&ac, info, "vpc", "test")
+						value, err = componentFunc(t.Context(), &ac, info, "vpc", "test")
 						require.NoError(t, err)
 						value = value.(map[string]any)["outputs"].(map[string]any)["VpcId"]
 					} else {

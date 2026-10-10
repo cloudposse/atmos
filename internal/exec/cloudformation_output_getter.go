@@ -15,10 +15,8 @@ import (
 )
 
 // cloudFormationOutputsTimeout bounds the DescribeStacks lookup issued by
-// cloudFormationOutputsForSections, matching the same
-// context.Background()-replaced-with-a-deadline pattern used elsewhere in
-// this package (e.g. helmfile/packer output getters) so a stalled endpoint
-// can't block a template render indefinitely.
+// cloudFormationOutputsForSections while preserving any earlier caller deadline
+// and cancellation, so a stalled endpoint cannot block a template indefinitely.
 const cloudFormationOutputsTimeout = 5 * time.Minute
 
 // CloudFormationOutputsGetter defines the interface for getting a deployed
@@ -83,6 +81,7 @@ func resolveCloudFormationRegion(sections map[string]any) string {
 // component's — callers resolve this via resolveCloudFormationOutputAuth /
 // resolveComponentFuncAuthManager before calling in).
 func cloudFormationOutputsForSections(
+	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	component string,
 	sections map[string]any,
@@ -100,7 +99,7 @@ func cloudFormationOutputsForSections(
 		awsAuthContext = authContext.AWS
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), cloudFormationOutputsTimeout)
+	ctx, cancel := context.WithTimeout(ctx, cloudFormationOutputsTimeout)
 	defer cancel()
 
 	return GetCloudFormationOutputs(ctx, resolveCloudFormationRegion(sections), stackName, awsAuthContext)
