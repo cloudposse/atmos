@@ -12,6 +12,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/creack/pty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -80,9 +81,11 @@ func TestCLIPrompterTerminalCachedChoices(t *testing.T) {
 			assert.False(t, prompter.HasCachedDecision(scopedFakeTool{name: "Bash", key: "Bash(atmos version)"}))
 			output, err := os.ReadFile(outputPath)
 			require.NoError(t, err)
-			assert.Contains(t, string(output), "Allow execution?")
-			assert.Contains(t, string(output), "atmos list stacks")
-			assert.Equal(t, tc.saved, strings.Contains(string(output), "(saved to "))
+			// CI enables color even for redirected output; assert the visible text.
+			text := ansi.Strip(string(output))
+			assert.Contains(t, text, "Allow execution?")
+			assert.Contains(t, text, "atmos list stacks")
+			assert.Equal(t, tc.saved, strings.Contains(text, "(saved to "), "receipt: %q", text)
 		})
 	}
 }
@@ -103,8 +106,9 @@ func TestCLIPrompterTerminalWithoutCache(t *testing.T) {
 			assert.Equal(t, tc.allowed, allowed)
 			output, err := os.ReadFile(outputPath)
 			require.NoError(t, err)
-			assert.Contains(t, string(output), "Allow execution?")
-			assert.NotContains(t, string(output), "(saved to ")
+			text := ansi.Strip(string(output))
+			assert.Contains(t, text, "Allow execution?")
+			assert.NotContains(t, text, "(saved to ")
 		})
 	}
 }
