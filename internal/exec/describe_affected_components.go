@@ -934,8 +934,9 @@ func checkCloudFormationSettingsAffected(
 	)
 }
 
-// addCloudFormationSectionAffected checks the aws/cloudformation-specific
-// first-class sections (stack_name, template, parameters, capabilities, tags,
+// addCloudFormationSectionAffected checks shared vars, env, source, and provision
+// sections together with aws/cloudformation-specific first-class sections
+// (stack_name, template, parameters, capabilities, tags,
 // stack_policy, role_arn, notification_arns, disable_rollback,
 // termination_protection, timeout_in_minutes) for inline config changes
 // between the remote and current stacks, mirroring addHelmSectionAffected.
@@ -954,6 +955,10 @@ func addCloudFormationSectionAffected(
 		name   string
 		reason string
 	}{
+		{sectionNameVars, affectedReasonStackVars},
+		{sectionNameEnv, affectedReasonStackEnv},
+		{sectionNameSource, affectedReasonStackSource},
+		{sectionNameProvision, affectedReasonStackProvision},
 		{sectionNameStackName, affectedReasonStackStackName},
 		{sectionNameTemplate, affectedReasonStackTemplate},
 		{sectionNameParameters, affectedReasonStackParameters},

@@ -880,6 +880,8 @@ func TestExecute_Single_Render_Success(t *testing.T) {
 		},
 		processStacks: func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
 			info.ComponentIsEnabled = true
+			info.ComponentIsAbstract = true
+			info.ComponentIsLocked = true
 			info.ComponentSection = map[string]any{"stack_name": "vpc", "template": "template.yaml"}
 			return info, nil
 		},

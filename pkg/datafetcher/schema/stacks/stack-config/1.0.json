@@ -1188,6 +1188,9 @@
             "timeout_in_minutes": {
               "type": "integer"
             },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
             "vars": {
               "$ref": "#/definitions/vars"
             },

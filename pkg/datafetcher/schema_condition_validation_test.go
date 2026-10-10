@@ -256,6 +256,20 @@ func TestManifestSchema_CloudFormationComponentManifest(t *testing.T) {
 	}
 }
 
+func TestManifestSchema_CloudFormationInvalidLocals(t *testing.T) {
+	for schemaName, schemaData := range map[string][]byte{
+		"embedded":     loadEmbeddedSchemaBytes(t),
+		"stack-config": loadStackConfigSchemaBytes(t),
+	} {
+		t.Run(schemaName, func(t *testing.T) {
+			manifest := cloudFormationComponentManifest()
+			components := manifest["components"].(map[string]any)["aws/cloudformation"].(map[string]any)
+			components["vpc"].(map[string]any)["locals"] = []any{"region"}
+			assertSchemaInvalid(t, schemaData, manifest)
+		})
+	}
+}
+
 func cloudFormationComponentManifest() map[string]any {
 	return map[string]any{
 		"components": map[string]any{
@@ -264,6 +278,7 @@ func cloudFormationComponentManifest() map[string]any {
 					"metadata": map[string]any{
 						"type": "real",
 					},
+					"locals":     map[string]any{"region": "us-east-2"},
 					"stack_name": "acme-plat-ue2-dev-vpc",
 					"template":   "template.yaml",
 					"parameters": map[string]any{

@@ -3,6 +3,7 @@ package output
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1010,14 +1011,11 @@ func findSubstringIndex(s, substr string, startIdx int) int {
 	if startIdx >= len(s) {
 		return -1
 	}
-	idx := len(s[:startIdx]) + len(substr)
-	for i := startIdx; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
+	idx := strings.Index(s[startIdx:], substr)
+	if idx < 0 {
+		return -1
 	}
-	_ = idx // Avoid unused variable warning.
-	return -1
+	return startIdx + idx
 }
 
 // TestFormatOutputs_Table tests the table format output.

@@ -77,6 +77,10 @@ func executeSingle(ctx *component.ExecutionContext, atmosConfig *schema.AtmosCon
 		return nil
 	}
 
+	if err := validateComponentOperation(info, operation); err != nil {
+		return err
+	}
+
 	if err := (&ComponentProvider{}).ValidateComponent(info.ComponentSection); err != nil {
 		return err
 	}
@@ -102,6 +106,24 @@ func executeSingle(ctx *component.ExecutionContext, atmosConfig *schema.AtmosCon
 	}
 
 	return runWithHooks(ctx, atmosConfig, info, operation, spec)
+}
+
+// operationsMutatingStack identifies operations that cannot run on locked components.
+// Diff remains available because previewing a change does not deploy it.
+var operationsMutatingStack = map[Operation]bool{
+	OperationApply:  true,
+	OperationDelete: true,
+}
+
+// validateComponentOperation enforces metadata restrictions before execution side effects.
+func validateComponentOperation(info *schema.ConfigAndStacksInfo, operation Operation) error {
+	if info.ComponentIsAbstract && operation != OperationRender {
+		return fmt.Errorf("%w: abstract component %q cannot be provisioned", errUtils.ErrInvalidSpecificAwsCloudFormationComponent, info.ComponentFromArg)
+	}
+	if info.ComponentIsLocked && operationsMutatingStack[operation] {
+		return fmt.Errorf("%w: component %q is locked", errUtils.ErrInvalidSpecificAwsCloudFormationComponent, info.ComponentFromArg)
+	}
+	return nil
 }
 
 // resolveSpecAndTemplate builds the SDK-ready stackSpec and — for every
