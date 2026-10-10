@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	stdio "io"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -56,6 +57,28 @@ func initIO(t *testing.T, uiStderr ...*bytes.Buffer) *bytes.Buffer {
 	return stdout
 }
 
+// captureOSStderr redirects os.Stderr, which the global I/O context writes workflow commands to, into
+// a temporary file. The returned function reads everything written so far.
+func captureOSStderr(t *testing.T) func() string {
+	t.Helper()
+
+	f, err := os.CreateTemp(t.TempDir(), "stderr")
+	require.NoError(t, err)
+	original := os.Stderr
+	os.Stderr = f
+	t.Cleanup(func() {
+		os.Stderr = original
+		_ = f.Close()
+	})
+
+	return func() string {
+		t.Helper()
+		data, err := os.ReadFile(f.Name())
+		require.NoError(t, err)
+		return string(data)
+	}
+}
+
 // ptr returns a pointer to v.
 func ptr[T any](v T) *T { return &v }
 
@@ -65,7 +88,7 @@ func isolateLocalEnv(t *testing.T) {
 	t.Helper()
 
 	for _, k := range []string{
-		"GITHUB_ACTIONS", "ATMOS_CI_OUTPUT", "ATMOS_CI_SUMMARY", "ATMOS_CI_ENV", "ATMOS_CI_PATH",
+		"CI", "ATMOS_CI", "GITHUB_ACTIONS", "ATMOS_CI_OUTPUT", "ATMOS_CI_SUMMARY", "ATMOS_CI_ENV", "ATMOS_CI_PATH",
 		"ATMOS_CI_PR", "ATMOS_CI_BASE_REF", "ATMOS_CI_REPOSITORY", "ATMOS_CI_RUN_URL", "ATMOS_CI_RUN_ID",
 	} {
 		t.Setenv(k, "")
@@ -113,13 +136,26 @@ func localCases() []localCase {
 			call: func(_ *testing.T, r ci.Reporter) (ci.Receipt, error) {
 				return r.Comment(context.Background(), ci.CommentRequest{Body: "plan looks fine", Key: "plan"})
 			},
-			want: []string{"PR comment preview (upsert)", "plan looks fine"},
+			// With no pull request known, target=auto comments on the commit.
+			want: []string{"commit comment preview (upsert", "plan looks fine"},
 			check: func(t *testing.T, rc ci.Receipt) {
 				require.NotNil(t, rc.Comment)
 				assert.True(t, rc.Comment.Created)
 				assert.Empty(t, rc.Comment.URL)
 				assert.Contains(t, rc.Comment.Body, "<!-- atmos:ci:plan -->")
 				assert.Contains(t, rc.Comment.Body, "plan looks fine")
+				assert.Equal(t, ci.CommentTargetCommit, rc.Comment.Target)
+			},
+		},
+		{
+			name: "Comment on a pull request",
+			call: func(_ *testing.T, r ci.Reporter) (ci.Receipt, error) {
+				return r.Comment(context.Background(), ci.CommentRequest{Body: "plan looks fine", Key: "plan", PR: 42})
+			},
+			want: []string{"PR comment preview (upsert, PR #42)", "plan looks fine"},
+			check: func(t *testing.T, rc ci.Receipt) {
+				require.NotNil(t, rc.Comment)
+				assert.Equal(t, ci.CommentTargetPR, rc.Comment.Target)
 			},
 		},
 		{
@@ -127,7 +163,7 @@ func localCases() []localCase {
 			call: func(_ *testing.T, r ci.Reporter) (ci.Receipt, error) {
 				return r.Annotate(ci.Annotation{Path: "main.tf", StartLine: 12, Level: ci.AnnotationError, Message: "bucket is public"})
 			},
-			want: []string{"main.tf:12", "bucket is public"},
+			want: []string{"main.tf:12: error: bucket is public"},
 		},
 		{
 			name: "Output",

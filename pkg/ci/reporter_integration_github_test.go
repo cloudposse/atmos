@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -50,8 +51,9 @@ type harness struct {
 	local *bytes.Buffer
 	// stdout receives data and log-group markers.
 	stdout *bytes.Buffer
-	// uiStderr receives annotations.
+	// uiStderr receives annotations; stderr captures raw add-mask commands.
 	uiStderr *bytes.Buffer
+	stderr   func() string
 }
 
 func newHarness(t *testing.T, cfg *schema.AtmosConfiguration, serverOpts []ghtest.Option, envOpts ...ghtest.EnvOption) *harness {
@@ -60,6 +62,7 @@ func newHarness(t *testing.T, cfg *schema.AtmosConfiguration, serverOpts []ghtes
 	isolateLocalEnv(t)
 	uiStderr := &bytes.Buffer{}
 	stdout := initIO(t, uiStderr)
+	stderr := captureOSStderr(t)
 	s := ghtest.NewServer(t, serverOpts...)
 	env := ghtest.SetEnv(t, s, envOpts...)
 	// Resolve the SHA from GITHUB_SHA rather than the surrounding git checkout.
@@ -75,7 +78,20 @@ func newHarness(t *testing.T, cfg *schema.AtmosConfiguration, serverOpts []ghtes
 		local:    local,
 		stdout:   stdout,
 		uiStderr: uiStderr,
+		stderr:   stderr,
 	}
+}
+
+// commands returns workflow commands from both streams, one per line. Log
+// lines the logger writes to the same stream are not workflow commands and are left out.
+func (h *harness) commands() string {
+	var b strings.Builder
+	for _, line := range strings.Split(h.stdout.String()+h.uiStderr.String()+h.stderr(), "\n") {
+		if strings.HasPrefix(line, "::") {
+			b.WriteString(line + "\n")
+		}
+	}
+	return b.String()
 }
 
 // prEnv is the standard pull request run used by most tests.
@@ -98,7 +114,8 @@ func (h *harness) assertNothingWritten(t *testing.T) {
 	assert.Empty(t, ghtest.ReadFile(t, h.env.Output))
 	assert.Empty(t, ghtest.ReadFile(t, h.env.EnvFile))
 	assert.Empty(t, ghtest.ReadFile(t, h.env.Path))
-	assert.Empty(t, h.stdout.String(), "no workflow command may be emitted")
+	assert.Empty(t, h.stdout.String(), "no workflow command may reach stdout")
+	assert.Empty(t, h.commands(), "no workflow command may be emitted")
 }
 
 func TestReporter_GitHubContext(t *testing.T) {
@@ -247,7 +264,7 @@ func TestReporter_GitHubWrites(t *testing.T) {
 		assert.Equal(t, "pending", statuses[0].State, "an empty state means pending")
 	})
 
-	t.Run("mask emits add-mask on the data stream", func(t *testing.T) {
+	t.Run("mask emits an unmasked add-mask on stderr", func(t *testing.T) {
 		t.Cleanup(atmosio.Reset)
 		h := newHarness(t, fullCIConfig(), nil, envOpts...)
 		const secret = "mask-me-integration-value"
@@ -255,7 +272,8 @@ func TestReporter_GitHubWrites(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, github.ProviderName, rc.Provider)
 		assert.False(t, rc.Local)
-		assert.Contains(t, h.stdout.String(), "::add-mask::"+secret)
+		assert.Contains(t, h.stderr(), "::add-mask::"+secret, "the command must carry the secret, not the masker's placeholder")
+		assert.Empty(t, h.stdout.String(), "workflow commands stay off the data channel")
 	})
 
 	t.Run("annotations use stderr and groups bracket stdout", func(t *testing.T) {
@@ -407,9 +425,9 @@ func TestReporter_GatedByOwnSwitch(t *testing.T) {
 	}
 }
 
-// TestReporter_GatedByMasterSwitch verifies that ci.enabled=false gates every feature. Each call
-// reports its own feature key (for example ci.comments.enabled), not ci.enabled, because every
-// per-feature switch folds the master switch into its answer. Mask never reports a gate: it
+// TestReporter_GatedByMasterSwitch verifies that ci.enabled=false gates every feature and that the
+// receipt names ci.enabled, the switch that is actually off, rather than the per-feature key (every
+// per-feature switch folds the master switch into its answer). Mask never reports a gate: it
 // always registers the secret locally.
 func TestReporter_GatedByMasterSwitch(t *testing.T) {
 	for _, gc := range gateCalls() {
@@ -422,8 +440,8 @@ func TestReporter_GatedByMasterSwitch(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.True(t, rc.Local)
-			assert.Equal(t, gc.feature, rc.Gate)
-			assert.NotEqual(t, ci.FeatureEnabled, rc.Gate)
+			assert.Equal(t, ci.FeatureEnabled, rc.Gate, "the master switch is the one that is off")
+			assert.True(t, rc.Gated())
 			assert.Contains(t, h.local.String(), gc.want)
 			h.assertNothingWritten(t)
 		})
@@ -604,14 +622,13 @@ func TestReporter_ErrorsKeepSentinels(t *testing.T) {
 		assert.ErrorIs(t, err, errUtils.ErrCISARIFUploadFailed)
 	})
 
-	t.Run("unknown pull request", func(t *testing.T) {
+	t.Run("unknown pull request when the target is pr", func(t *testing.T) {
 		// A push event carries no pull request, and the request names none.
 		h := newHarness(t, fullCIConfig(), nil, ghtest.WithRepository("owner/repo"))
 
-		_, err := h.reporter.Comment(ctx, ci.CommentRequest{Body: "body", Key: "plan", PR: 0})
+		_, err := h.reporter.Comment(ctx, ci.CommentRequest{Body: "body", Key: "plan", PR: 0, Target: ci.CommentTargetPR})
 
-		require.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrCIPullRequestUnknown)
+		require.ErrorIs(t, err, errUtils.ErrCIPullRequestUnknown)
 		assert.Empty(t, h.server.Comments())
 	})
 

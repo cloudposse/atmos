@@ -22,6 +22,9 @@ type (
 	refKey struct{ owner, repo, ref string }
 )
 
+// commitKey identifies the commit comments of one commit.
+type commitKey struct{ owner, repo, sha string }
+
 // firstCommentID is the first ID assigned to a created comment.
 const firstCommentID = 1000
 
@@ -38,7 +41,9 @@ type Server struct {
 
 	// comments is the current state of each issue's comments, in creation order.
 	comments map[issueKey][]Comment
-	// commentWrites is the log of created and edited comments, in order.
+	// commitComments is the current state of each commit's comments, in creation order.
+	commitComments map[commitKey][]Comment
+	// commentWrites is the log of created and edited comments (issue and commit), in order.
 	commentWrites []Comment
 	nextCommentID int64
 
@@ -65,10 +70,11 @@ func NewServer(t testing.TB, opts ...Option) *Server {
 	t.Helper()
 
 	s := &Server{
-		comments:      map[issueKey][]Comment{},
-		nextCommentID: firstCommentID,
-		checkRuns:     map[refKey][]CheckRun{},
-		pulls:         map[repoKey][]PullRequest{},
+		comments:       map[issueKey][]Comment{},
+		commitComments: map[commitKey][]Comment{},
+		nextCommentID:  firstCommentID,
+		checkRuns:      map[refKey][]CheckRun{},
+		pulls:          map[repoKey][]PullRequest{},
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -107,6 +113,16 @@ func (s *Server) CommentsFor(owner, repo string, n int) []Comment {
 	defer s.mu.Unlock()
 
 	return append([]Comment(nil), s.comments[issueKey{owner, repo, n}]...)
+}
+
+// CommitCommentsFor returns the current comments of a commit, including seeded ones, with edits applied.
+func (s *Server) CommitCommentsFor(owner, repo, sha string) []Comment {
+	defer perf.Track(nil, "ghtest.Server.CommitCommentsFor")()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return append([]Comment(nil), s.commitComments[commitKey{owner, repo, sha}]...)
 }
 
 // Statuses returns every commit status written, in the order received.
@@ -151,6 +167,11 @@ func (s *Server) addComment(c *Comment) Comment {
 	}
 	if c.HTMLURL == "" {
 		c.HTMLURL = commentURL(c)
+	}
+	if c.SHA != "" {
+		key := commitKey{c.Owner, c.Repo, c.SHA}
+		s.commitComments[key] = append(s.commitComments[key], *c)
+		return *c
 	}
 	key := issueKey{c.Owner, c.Repo, c.Number}
 	s.comments[key] = append(s.comments[key], *c)

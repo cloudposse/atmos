@@ -31,6 +31,20 @@ func WithSeedComments(owner, repo string, n int, comments ...Comment) Option {
 	}
 }
 
+// WithSeedCommitComments pre-populates the comments of a commit so that an upsert can find an
+// existing marker. Seeded comments are not recorded as writes.
+func WithSeedCommitComments(owner, repo, sha string, comments ...Comment) Option {
+	defer perf.Track(nil, "ghtest.WithSeedCommitComments")()
+
+	return func(s *Server) {
+		for i := range comments {
+			c := comments[i]
+			c.Owner, c.Repo, c.SHA, c.Number = owner, repo, sha, 0
+			s.addComment(&c)
+		}
+	}
+}
+
 // WithFailure makes every request whose method matches and whose path starts
 // with pathPrefix fail with the given HTTP status and a GitHub-style
 // {"message": ...} body. An empty method or "*" matches any method. The first

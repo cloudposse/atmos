@@ -11,13 +11,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// commentMarkerPrefix and commentMarkerSuffix wrap a comment key into the HTML marker
-// providers use to find an existing comment.
-const (
-	commentMarkerPrefix = "<!-- atmos:ci:"
-	commentMarkerSuffix = " -->"
-)
-
 // terminalConclusion maps a final check run state to its conclusion. It mirrors the
 // terraform plugin's mapping (success or failure), with cancelled kept distinct.
 func terminalConclusion(state CheckRunState) (string, bool) {
@@ -61,7 +54,8 @@ type gatedTarget struct {
 // (comments and checks), applying the fork-execution gate to detected providers.
 // Under an elevated event (pull_request_target, workflow_run) the write is held only when the
 // pull request comes from a fork, unless ci.allow_unsafe_fork_execution is set. A same-repository
-// pull request, or a run with no pull request, posts normally.
+// pull request, or a run with no pull request, posts normally. Env, path, and SARIF writes go
+// through routeTo and are held by the same rule.
 // The returned provider is nil when nothing can render the write.
 func (r *reporter) gated(f Feature, enabled func(*schema.AtmosConfiguration) bool) (gatedTarget, error) {
 	p, rc := r.target(f, enabled)
@@ -72,62 +66,12 @@ func (r *reporter) gated(f Feature, enabled func(*schema.AtmosConfiguration) boo
 	if err != nil {
 		return gatedTarget{receipt: rc}, err
 	}
-	allowFork := r.cfg != nil && r.cfg.CI.AllowUnsafeForkExecution
-	if !rc.Local && ciCtx.ElevatedEvent && ciCtx.PullRequest != nil && ciCtx.PullRequest.Fork && !allowFork {
+	if !rc.Local && r.forkHeld(ciCtx) {
 		log.Debug("Skipping CI write for a fork pull request on an elevated event without ci.allow_unsafe_fork_execution", "feature", f)
 		l := r.local()
 		return gatedTarget{provider: l, receipt: r.localReceipt(l, FeatureForkGate), ciCtx: ciCtx}, nil
 	}
 	return gatedTarget{provider: p, receipt: rc, ciCtx: ciCtx}, nil
-}
-
-// buildCommentOptions assembles provider options for a comment request.
-func buildCommentOptions(req CommentRequest, ciCtx *Context, local bool) (*PostCommentOptions, error) {
-	opts := &PostCommentOptions{
-		Owner:    ciCtx.RepoOwner,
-		Repo:     ciCtx.RepoName,
-		PRNumber: req.PR,
-		Body:     req.Body,
-		Behavior: CommentBehaviorCreate,
-	}
-	if opts.PRNumber == 0 && ciCtx.PullRequest != nil {
-		opts.PRNumber = ciCtx.PullRequest.Number
-	}
-	if req.Key != "" {
-		opts.Marker = commentMarkerPrefix + req.Key + commentMarkerSuffix
-		opts.Body = opts.Marker + "\n" + req.Body
-		behavior, err := provider.NormalizeBehavior(req.Behavior)
-		if err != nil {
-			return nil, err
-		}
-		opts.Behavior = behavior
-	}
-	if !local && opts.PRNumber <= 0 {
-		return nil, errUtils.Build(errUtils.ErrCIPullRequestUnknown).
-			WithHint("Pass the pull request number explicitly, for example pr=123").
-			Err()
-	}
-	return opts, nil
-}
-
-func (r *reporter) Comment(ctx context.Context, req CommentRequest) (Receipt, error) {
-	defer perf.Track(r.cfg, "ci.Reporter.Comment")()
-
-	g, err := r.gated(FeatureComments, CommentsEnabled)
-	if err != nil || g.provider == nil {
-		return g.receipt, err
-	}
-	p, rc, ciCtx := g.provider, g.receipt, g.ciCtx
-	opts, err := buildCommentOptions(req, ciCtx, rc.Local)
-	if err != nil {
-		return rc, err
-	}
-	comment, err := p.PostComment(ctx, opts)
-	if err != nil {
-		return rc, wrapErr(errUtils.ErrCICommentPostFailed, err)
-	}
-	rc.Comment = comment
-	return rc, nil
 }
 
 func (r *reporter) Check(ctx context.Context, req CheckRequest) (Receipt, error) {
@@ -142,6 +86,7 @@ func (r *reporter) Check(ctx context.Context, req CheckRequest) (Receipt, error)
 	if state == "" {
 		state = CheckRunStatePending
 	}
+	detailsURL := checkURL(req, ciCtx)
 	check, err := p.CreateCheckRun(ctx, &CreateCheckRunOptions{
 		Owner:      ciCtx.RepoOwner,
 		Repo:       ciCtx.RepoName,
@@ -149,12 +94,12 @@ func (r *reporter) Check(ctx context.Context, req CheckRequest) (Receipt, error)
 		Name:       req.Name,
 		Status:     state,
 		Title:      req.Description,
-		DetailsURL: checkURL(req, ciCtx),
+		DetailsURL: detailsURL,
 	})
 	if err != nil {
 		return rc, wrapErr(errUtils.ErrCICheckRunCreateFailed, err)
 	}
-	rc.Check = check
+	rc.Check = withDetailsURL(check, detailsURL)
 	return rc, nil
 }
 
@@ -175,6 +120,7 @@ func (r *reporter) UpdateCheck(ctx context.Context, req CheckRequest) (Receipt, 
 		Repo:       ciCtx.RepoName,
 		SHA:        ciCtx.SHA,
 		Name:       req.Name,
+		ID:         req.ID,
 		Status:     state,
 		Title:      req.Description,
 		DetailsURL: checkURL(req, ciCtx),
@@ -188,7 +134,7 @@ func (r *reporter) UpdateCheck(ctx context.Context, req CheckRequest) (Receipt, 
 	if err != nil {
 		return rc, wrapErr(errUtils.ErrCICheckRunUpdateFailed, err)
 	}
-	rc.Check = check
+	rc.Check = withDetailsURL(check, opts.DetailsURL)
 	return rc, nil
 }
 
@@ -198,4 +144,13 @@ func checkURL(req CheckRequest, ciCtx *Context) string {
 		return req.URL
 	}
 	return ciCtx.RunURL
+}
+
+// withDetailsURL fills in the details URL a provider did not report, so the receipt always names
+// where the check links to.
+func withDetailsURL(check *CheckRun, url string) *CheckRun {
+	if check != nil && check.DetailsURL == "" {
+		check.DetailsURL = url
+	}
+	return check
 }

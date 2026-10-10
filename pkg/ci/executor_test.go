@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	plugin "github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -1099,4 +1100,87 @@ func TestExecute_SummaryContentFlowsToOutput(t *testing.T) {
 	summaryOutput, ok := fcp.writer.outputs["summary"]
 	assert.True(t, ok, "output variables should include 'summary'")
 	assert.Equal(t, fcp.writer.summaries[0], summaryOutput, "summary output should match rendered summary")
+}
+
+// invalidURLProvider is a detected provider whose environment validation fails.
+type invalidURLProvider struct {
+	mockProvider
+}
+
+func (p *invalidURLProvider) ValidateConfig() error {
+	return fmt.Errorf("%w: GITHUB_API_URL=%q", errUtils.ErrInvalidURL, "not-a-url")
+}
+
+func TestExecute_InvalidProviderConfigIsAHardError(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+	Register(&invalidURLProvider{mockProvider: mockProvider{name: "github-actions", detected: true}})
+
+	ClearPlugins()
+	handlerCalled := false
+	require.NoError(t, RegisterPlugin(&stubPlugin{
+		componentType: "terraform",
+		bindings: []plugin.HookBinding{{
+			Event: "before.terraform.plan",
+			Handler: func(*plugin.HookContext) error {
+				handlerCalled = true
+				return nil
+			},
+		}},
+	}))
+
+	err := Execute(ExecuteOptions{
+		Event:       "before.terraform.plan",
+		AtmosConfig: &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+		Info:        &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc"},
+	})
+	require.ErrorIs(t, err, errUtils.ErrInvalidURL)
+	assert.False(t, handlerCalled, "no handler runs when the provider environment is invalid")
+}
+
+func TestExecute_HandlerInvalidURLErrorPropagates(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+	Register(&capturingProvider{mockProvider: mockProvider{name: "generic", detected: false}})
+
+	ClearPlugins()
+	require.NoError(t, RegisterPlugin(&stubPlugin{
+		componentType: "terraform",
+		bindings: []plugin.HookBinding{{
+			Event: "before.terraform.plan",
+			Handler: func(*plugin.HookContext) error {
+				return fmt.Errorf("%w: GITHUB_API_URL=%q", errUtils.ErrInvalidURL, "not-a-url")
+			},
+		}},
+	}))
+
+	err := Execute(ExecuteOptions{
+		Event:       "before.terraform.plan",
+		ForceCIMode: true,
+		AtmosConfig: &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+		Info:        &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc"},
+	})
+	require.ErrorIs(t, err, errUtils.ErrInvalidURL)
+}
+
+func TestExecute_InvalidProviderConfigSkipsUnhandledEvents(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+	Register(&invalidURLProvider{mockProvider: mockProvider{name: "github-actions", detected: true}})
+
+	ClearPlugins()
+	require.NoError(t, RegisterPlugin(&stubPlugin{
+		componentType: "terraform",
+		bindings:      []plugin.HookBinding{{Event: "before.terraform.plan"}},
+	}))
+	for _, event := range []string{"before.terraform.apply", "before.terraform.plan", "before.unknown.plan"} {
+		t.Run(event, func(t *testing.T) {
+			err := Execute(ExecuteOptions{
+				Event:       event,
+				AtmosConfig: &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+				Info:        &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc"},
+			})
+			require.NoError(t, err, "an event without a handler cannot use the invalid API URL")
+		})
+	}
 }

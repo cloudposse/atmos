@@ -5,8 +5,11 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
+	"sync/atomic"
 	"testing"
 
+	cockroachdb "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -53,7 +56,17 @@ type capableFake struct {
 	envs        [][2]string
 	paths       []string
 	masked      []string
+	commits     []PostCommitCommentOptions
+	commitErr   error
 	boundTo     io.Writer
+}
+
+func (f *capableFake) PostCommitComment(_ context.Context, o *PostCommitCommentOptions) (*Comment, error) {
+	f.commits = append(f.commits, *o)
+	if f.commitErr != nil {
+		return nil, f.commitErr
+	}
+	return &Comment{ID: int64(len(f.commits)), Body: o.Body, Created: true}, nil
 }
 
 func (f *capableFake) Annotate(a []Annotation) error {
@@ -124,6 +137,11 @@ func newFake(t *testing.T, ctrl *gomock.Controller, name string, detect bool) (*
 
 func newHarness(t *testing.T, detected, local kind) *harness {
 	t.Helper()
+	// A forced CI mode would make the generic provider the detected one, and a parent Atmos
+	// process (the CI job that runs these tests inside a log group) would make every group nested.
+	t.Setenv("ATMOS_CI", "")
+	t.Setenv("CI", "")
+	t.Setenv(logGroupSentinelEnvVar, "")
 	restore := SwapRegistryForTest()
 	t.Cleanup(restore)
 	ctrl := gomock.NewController(t)
@@ -191,8 +209,9 @@ func TestReporterTarget(t *testing.T) {
 			wantLocal    bool
 			wantGate     Feature
 		}{
-			{"nil config", nil, true, "generic", true, f.feature},
-			{"ci disabled", &schema.AtmosConfiguration{}, true, "generic", true, f.feature},
+			// With the master switch off, every per-feature switch reads off too; the master switch is the one named.
+			{"nil config", nil, true, "generic", true, FeatureEnabled},
+			{"ci disabled", &schema.AtmosConfiguration{}, true, "generic", true, FeatureEnabled},
 			{"feature off", ciConfig(f.off), true, "generic", true, f.feature},
 			{"feature on", ciConfig(f.on), true, "detected", false, ""},
 			{"no detection feature on", ciConfig(f.on), false, "generic", true, ""},
@@ -348,6 +367,7 @@ func TestReporter_CapabilityRouting(t *testing.T) {
 
 	t.Run("enabled routes to the detected provider", func(t *testing.T) {
 		h := newHarness(t, kindCapable, kindCapable)
+		h.ciCtx(&Context{})
 		receipts := exercise(t, NewReporter(ciConfig(enableAll)))
 
 		for _, rc := range receipts {
@@ -365,6 +385,7 @@ func TestReporter_CapabilityRouting(t *testing.T) {
 
 	t.Run("gated routes to the local provider and records the gate", func(t *testing.T) {
 		h := newHarness(t, kindCapable, kindCapable)
+		h.ciCtx(&Context{})
 		receipts := exercise(t, NewReporter(ciConfig(disableAll)))
 
 		gates := []Feature{FeatureOutput, FeatureOutput, FeatureAnnotations, FeatureResults, FeatureGroups}
@@ -374,7 +395,9 @@ func TestReporter_CapabilityRouting(t *testing.T) {
 		assert.Equal(t, [][2]string{{"A", "1"}}, h.local.envs)
 		assert.Equal(t, []string{"/bin"}, h.local.paths)
 		assert.Equal(t, [][]Annotation{{annotation}}, h.local.annotations)
-		assert.Equal(t, []SARIFReport{report}, h.local.sarif)
+		gatedReport := report
+		gatedReport.SkipReason = "ci.results.enabled is off"
+		assert.Equal(t, []SARIFReport{gatedReport}, h.local.sarif, "the local rendering says which switch is off")
 		assert.Equal(t, []string{"title"}, h.local.groups)
 		assert.Equal(t, 1, h.local.ends)
 		assert.Empty(t, h.detected.envs)
@@ -393,6 +416,7 @@ func TestReporter_CapabilityRouting(t *testing.T) {
 
 	t.Run("detected provider without the capability falls through to local", func(t *testing.T) {
 		h := newHarness(t, kindPlain, kindCapable)
+		h.ciCtx(&Context{})
 		receipts := exercise(t, NewReporter(ciConfig(enableAll)))
 
 		for _, rc := range receipts {
@@ -404,7 +428,8 @@ func TestReporter_CapabilityRouting(t *testing.T) {
 	})
 
 	t.Run("neither provider implements the capability", func(t *testing.T) {
-		newHarness(t, kindPlain, kindPlain)
+		h := newHarness(t, kindPlain, kindPlain)
+		h.ciCtx(&Context{})
 		receipts := exercise(t, NewReporter(ciConfig(enableAll)))
 
 		for _, rc := range receipts {
@@ -414,6 +439,7 @@ func TestReporter_CapabilityRouting(t *testing.T) {
 
 	t.Run("gated with no local capability is a silent no-op", func(t *testing.T) {
 		h := newHarness(t, kindCapable, kindPlain)
+		h.ciCtx(&Context{})
 		receipts := exercise(t, NewReporter(ciConfig(disableAll)))
 
 		gates := []Feature{FeatureOutput, FeatureOutput, FeatureAnnotations, FeatureResults, FeatureGroups}
@@ -430,6 +456,7 @@ func TestReporter_CapabilityErrors(t *testing.T) {
 	boom := errors.New("boom")
 	newReporter := func(t *testing.T) Reporter {
 		h := newHarness(t, kindCapable, kindNone)
+		h.ciCtx(&Context{})
 		h.detected.err = boom
 		return NewReporter(ciConfig(func(c *schema.CIConfig) { c.Results.Enabled = boolPtr(true) }))
 	}
@@ -585,7 +612,7 @@ func TestReporter_Comment(t *testing.T) {
 		require.ErrorIs(t, err, errUtils.ErrCICommentPostFailed)
 	})
 
-	t.Run("empty key forces create without a marker", func(t *testing.T) {
+	t.Run("empty key creates without a marker", func(t *testing.T) {
 		h := newHarness(t, kindPlain, kindPlain)
 		h.ciCtx(runCtx)
 		h.detectedPlain.EXPECT().PostComment(ctx, &PostCommentOptions{
@@ -596,8 +623,36 @@ func TestReporter_Comment(t *testing.T) {
 			Behavior: CommentBehaviorCreate,
 		}).Return(&Comment{}, nil)
 
-		_, err := NewReporter(ciConfig(commentsOn)).Comment(ctx, CommentRequest{Body: "plain", Behavior: CommentBehaviorUpdate})
+		_, err := NewReporter(ciConfig(commentsOn)).Comment(ctx, CommentRequest{Body: "plain"})
 		require.NoError(t, err)
+	})
+
+	t.Run("update without a key is an argument error", func(t *testing.T) {
+		h := newHarness(t, kindPlain, kindPlain)
+		h.ciCtx(runCtx)
+
+		rc, err := NewReporter(ciConfig(commentsOn)).Comment(ctx, CommentRequest{Body: "plain", Behavior: CommentBehaviorUpdate})
+
+		require.ErrorIs(t, err, errUtils.ErrCICommentKeyRequired)
+		assert.Nil(t, rc.Comment)
+	})
+
+	t.Run("update without a key is an argument error even when the write is gated", func(t *testing.T) {
+		h := newHarness(t, kindPlain, kindPlain)
+		h.ciCtx(runCtx)
+
+		_, err := NewReporter(ciConfig(nil)).Comment(ctx, CommentRequest{Body: "plain", Behavior: CommentBehaviorUpdate})
+
+		require.ErrorIs(t, err, errUtils.ErrCICommentKeyRequired)
+	})
+
+	t.Run("invalid target is rejected before posting", func(t *testing.T) {
+		h := newHarness(t, kindPlain, kindPlain)
+		h.ciCtx(runCtx)
+
+		_, err := NewReporter(ciConfig(commentsOn)).Comment(ctx, CommentRequest{Body: "b", Target: "issue"})
+
+		require.ErrorIs(t, err, errUtils.ErrCICommentTargetInvalid)
 	})
 
 	t.Run("request PR overrides the context PR", func(t *testing.T) {
@@ -614,14 +669,101 @@ func TestReporter_Comment(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("detected provider without a PR is an error", func(t *testing.T) {
+	t.Run("target pr without a PR is an error with a host-neutral hint", func(t *testing.T) {
 		h := newHarness(t, kindPlain, kindPlain)
 		h.ciCtx(&Context{RepoOwner: "acme", RepoName: "infra"})
 
-		rc, err := NewReporter(ciConfig(commentsOn)).Comment(ctx, CommentRequest{Body: "b"})
+		rc, err := NewReporter(ciConfig(commentsOn)).Comment(ctx, CommentRequest{Body: "b", Target: CommentTargetPR})
 
 		require.ErrorIs(t, err, errUtils.ErrCIPullRequestUnknown)
 		assert.Nil(t, rc.Comment)
+		hints := strings.Join(cockroachdb.GetAllHints(err), "\n")
+		assert.Contains(t, hints, "pull request number")
+		assert.NotContains(t, hints, "pr=123", "pr=123 is Starlark syntax and has no place in the host-neutral reporter")
+	})
+
+	t.Run("auto without a PR comments on the commit", func(t *testing.T) {
+		h := newHarness(t, kindCapable, kindNone)
+		h.ciCtx(&Context{RepoOwner: "acme", RepoName: "infra", SHA: "abc123"})
+
+		rc, err := NewReporter(ciConfig(commentsOn)).Comment(ctx, CommentRequest{Body: "b", Key: "deploy"})
+
+		require.NoError(t, err)
+		require.Len(t, h.detected.commits, 1)
+		assert.Equal(t, PostCommitCommentOptions{
+			Owner: "acme", Repo: "infra", SHA: "abc123",
+			Marker: "<!-- atmos:ci:deploy -->", Body: "<!-- atmos:ci:deploy -->\nb", Behavior: CommentBehaviorUpsert,
+		}, h.detected.commits[0])
+		require.NotNil(t, rc.Comment)
+		assert.Equal(t, CommentTargetCommit, rc.Comment.Target)
+		assert.False(t, rc.Local)
+	})
+
+	t.Run("auto with a PR comments on the pull request", func(t *testing.T) {
+		h := newHarness(t, kindCapable, kindNone)
+		h.ciCtx(runCtx)
+		h.detectedPlain.EXPECT().PostComment(ctx, gomock.Any()).Return(&Comment{ID: 1}, nil)
+
+		rc, err := NewReporter(ciConfig(commentsOn)).Comment(ctx, CommentRequest{Body: "b", Target: CommentTargetAuto})
+
+		require.NoError(t, err)
+		assert.Empty(t, h.detected.commits)
+		require.NotNil(t, rc.Comment)
+		assert.Equal(t, CommentTargetPR, rc.Comment.Target)
+	})
+
+	t.Run("target commit comments on the commit even when a PR is known", func(t *testing.T) {
+		h := newHarness(t, kindCapable, kindNone)
+		h.ciCtx(runCtx)
+
+		rc, err := NewReporter(ciConfig(commentsOn)).Comment(ctx, CommentRequest{Body: "b", Target: CommentTargetCommit})
+
+		require.NoError(t, err)
+		require.Len(t, h.detected.commits, 1)
+		assert.Equal(t, "abc123", h.detected.commits[0].SHA)
+		assert.Equal(t, CommentTargetCommit, rc.Comment.Target)
+	})
+
+	t.Run("a commit comment without a SHA is an error", func(t *testing.T) {
+		h := newHarness(t, kindCapable, kindNone)
+		h.ciCtx(&Context{RepoOwner: "acme", RepoName: "infra"})
+
+		_, err := NewReporter(ciConfig(commentsOn)).Comment(ctx, CommentRequest{Body: "b"})
+
+		require.ErrorIs(t, err, errUtils.ErrCICommitUnknown)
+		assert.Empty(t, h.detected.commits)
+	})
+
+	t.Run("a provider without commit comments falls back to local rendering", func(t *testing.T) {
+		h := newHarness(t, kindPlain, kindCapable)
+		h.ciCtx(&Context{RepoOwner: "acme", RepoName: "infra", SHA: "abc123"})
+
+		rc, err := NewReporter(ciConfig(commentsOn)).Comment(ctx, CommentRequest{Body: "b"})
+
+		require.NoError(t, err)
+		assert.True(t, rc.Local)
+		assert.Len(t, h.local.commits, 1)
+	})
+
+	t.Run("a provider without commit comments and no local fallback is not supported", func(t *testing.T) {
+		h := newHarness(t, kindPlain, kindPlain)
+		h.ciCtx(&Context{RepoOwner: "acme", RepoName: "infra", SHA: "abc123"})
+
+		_, err := NewReporter(ciConfig(commentsOn)).Comment(ctx, CommentRequest{Body: "b"})
+
+		require.ErrorIs(t, err, errUtils.ErrCIOperationNotSupported)
+	})
+
+	t.Run("commit comment errors carry the sentinel", func(t *testing.T) {
+		h := newHarness(t, kindCapable, kindNone)
+		h.ciCtx(&Context{RepoOwner: "acme", RepoName: "infra", SHA: "abc123"})
+		boom := errors.New("api down")
+		h.detected.commitErr = boom
+
+		_, err := NewReporter(ciConfig(commentsOn)).Comment(ctx, CommentRequest{Body: "b"})
+
+		require.ErrorIs(t, err, errUtils.ErrCICommentPostFailed)
+		require.ErrorIs(t, err, boom)
 	})
 
 	t.Run("local rendering accepts a missing PR", func(t *testing.T) {
@@ -633,7 +775,7 @@ func TestReporter_Comment(t *testing.T) {
 			Behavior: CommentBehaviorCreate,
 		}).Return(want, nil)
 
-		rc, err := NewReporter(ciConfig(commentsOn)).Comment(ctx, CommentRequest{Body: "b"})
+		rc, err := NewReporter(ciConfig(commentsOn)).Comment(ctx, CommentRequest{Body: "b", Target: CommentTargetPR})
 
 		require.NoError(t, err)
 		assert.Equal(t, Receipt{Provider: "generic", Local: true, Comment: want}, rc)
@@ -644,7 +786,7 @@ func TestReporter_Comment(t *testing.T) {
 		h.localPlain.EXPECT().Context().Return(nil, errUtils.ErrCIProviderNotDetected).AnyTimes()
 		h.localPlain.EXPECT().PostComment(ctx, gomock.Any()).Return(&Comment{}, nil)
 
-		_, err := NewReporter(ciConfig(commentsOn)).Comment(ctx, CommentRequest{Body: "b"})
+		_, err := NewReporter(ciConfig(commentsOn)).Comment(ctx, CommentRequest{Body: "b", Target: CommentTargetPR})
 		require.NoError(t, err)
 	})
 
@@ -656,7 +798,7 @@ func TestReporter_Comment(t *testing.T) {
 		rc, err := NewReporter(ciConfig(nil)).Comment(ctx, CommentRequest{Body: "b"})
 
 		require.NoError(t, err)
-		assert.Equal(t, Receipt{Provider: "generic", Local: true, Gate: FeatureComments, Comment: &Comment{}}, rc)
+		assert.Equal(t, Receipt{Provider: "generic", Local: true, Gate: FeatureComments, Comment: &Comment{Target: CommentTargetPR}}, rc)
 	})
 
 	t.Run("provider errors carry the sentinel", func(t *testing.T) {
@@ -783,6 +925,129 @@ func TestReporter_ForkGate(t *testing.T) {
 	})
 }
 
+// TestReporter_ForkGateScope pins which writes the posting gate holds for a fork pull request on an
+// elevated event. Env, path, and SARIF publish beyond the job, so they are held with comments and checks.
+// Summary, output, annotations, groups, and masks stay inside the job and are not.
+func TestReporter_ForkGateScope(t *testing.T) {
+	ctx := context.Background()
+	fork := &Context{ElevatedEvent: true, RepoOwner: "acme", RepoName: "infra", SHA: "s", PullRequest: &PRInfo{Number: 1, Fork: true}}
+	annotation := Annotation{Path: "main.tf", StartLine: 1, Level: AnnotationError, Message: "m"}
+	report := SARIFReport{Body: []byte("{}"), Category: "c"}
+	cfg := func(allow bool) *schema.AtmosConfiguration {
+		c := ciConfig(func(c *schema.CIConfig) {
+			c.Results.Enabled = boolPtr(true)
+			c.Comments.Enabled = boolPtr(true)
+		})
+		c.CI.AllowUnsafeForkExecution = allow
+		return c
+	}
+
+	t.Run("env path and sarif are held", func(t *testing.T) {
+		h := newHarness(t, kindCapable, kindCapable)
+		h.ciCtx(fork)
+		r := NewReporter(cfg(false))
+
+		rcEnv, err := r.Env("A", "1")
+		require.NoError(t, err)
+		rcPath, err := r.Path("/bin")
+		require.NoError(t, err)
+		rcSARIF, err := r.SARIF(ctx, report)
+		require.NoError(t, err)
+
+		for _, rc := range []Receipt{rcEnv, rcPath, rcSARIF} {
+			assert.Equal(t, Receipt{Provider: "generic", Local: true, Gate: FeatureForkGate}, rc)
+		}
+		assert.Empty(t, h.detected.envs)
+		assert.Empty(t, h.detected.paths)
+		assert.Empty(t, h.detected.sarif)
+		assert.Equal(t, [][2]string{{"A", "1"}}, h.local.envs)
+		require.Len(t, h.local.sarif, 1)
+		assert.Contains(t, h.local.sarif[0].SkipReason, "fork pull request")
+	})
+
+	t.Run("summary output annotate group and mask are not held", func(t *testing.T) {
+		h := newHarness(t, kindCapable, kindCapable)
+		h.ciCtx(fork)
+		r := NewReporter(cfg(false))
+
+		rc, err := r.Annotate(annotation)
+		require.NoError(t, err)
+		assert.Equal(t, Receipt{Provider: "detected"}, rc)
+		end, rc, err := r.Group("g")
+		require.NoError(t, err)
+		end()
+		assert.Equal(t, Receipt{Provider: "detected"}, rc)
+		rc, err = r.Summary("s")
+		require.NoError(t, err)
+		assert.Equal(t, Receipt{Provider: "detected"}, rc)
+		rc, err = r.Output("k", "v")
+		require.NoError(t, err)
+		assert.Equal(t, Receipt{Provider: "detected"}, rc)
+		secret := "fork-scope-mask-secret-77"
+		rc, err = r.Mask(secret)
+		require.NoError(t, err)
+		assert.Equal(t, Receipt{Provider: "detected"}, rc)
+
+		assert.Len(t, h.detected.annotations, 1)
+		assert.Equal(t, []string{secret}, h.detected.masked)
+		assert.Len(t, h.detectedWriter.summaries, 1)
+	})
+
+	t.Run("unsafe fork execution releases env path and sarif", func(t *testing.T) {
+		h := newHarness(t, kindCapable, kindCapable)
+		h.ciCtx(fork)
+		r := NewReporter(cfg(true))
+
+		_, err := r.Env("A", "1")
+		require.NoError(t, err)
+		_, err = r.Path("/bin")
+		require.NoError(t, err)
+		_, err = r.SARIF(ctx, report)
+		require.NoError(t, err)
+
+		assert.Len(t, h.detected.envs, 1)
+		assert.Len(t, h.detected.paths, 1)
+		assert.Len(t, h.detected.sarif, 1)
+	})
+
+	t.Run("a context failure holds the write", func(t *testing.T) {
+		h := newHarness(t, kindCapable, kindCapable)
+		h.detectedPlain.EXPECT().Context().Return(nil, errors.New("no context")).AnyTimes()
+		r := NewReporter(cfg(false))
+
+		rc, err := r.Env("A", "1")
+
+		require.NoError(t, err)
+		assert.Equal(t, FeatureForkGate, rc.Gate)
+		assert.Empty(t, h.detected.envs)
+	})
+
+	t.Run("a fork pull request on a plain pull_request event is not gated", func(t *testing.T) {
+		h := newHarness(t, kindPlain, kindPlain)
+		h.ciCtx(&Context{ElevatedEvent: false, RepoOwner: "acme", RepoName: "infra", SHA: "s", PullRequest: &PRInfo{Number: 1, Fork: true}})
+		h.detectedPlain.EXPECT().PostComment(ctx, gomock.Any()).Return(&Comment{}, nil)
+
+		rc, err := NewReporter(cfg(false)).Comment(ctx, CommentRequest{Body: "b"})
+
+		require.NoError(t, err)
+		assert.Equal(t, "detected", rc.Provider)
+		assert.False(t, rc.Local)
+		assert.Empty(t, rc.Gate)
+	})
+
+	t.Run("a commit comment for a fork pull request on an elevated event is held", func(t *testing.T) {
+		h := newHarness(t, kindCapable, kindCapable)
+		h.ciCtx(fork)
+
+		rc, err := NewReporter(cfg(false)).Comment(ctx, CommentRequest{Body: "b", Target: CommentTargetCommit})
+
+		require.NoError(t, err)
+		assert.Equal(t, Receipt{Provider: "generic", Local: true, Gate: FeatureForkGate, Comment: rc.Comment}, rc)
+		assert.Empty(t, h.detected.commits)
+		assert.Len(t, h.local.commits, 1)
+	})
+}
+
 func TestReporter_Check(t *testing.T) {
 	ctx := context.Background()
 	checksOn := func(c *schema.CIConfig) { c.Checks.Enabled = boolPtr(true) }
@@ -885,7 +1150,7 @@ func TestReporter_Check(t *testing.T) {
 		rc, err := NewReporter(ciConfig(nil)).Check(ctx, CheckRequest{Name: "n"})
 
 		require.NoError(t, err)
-		assert.Equal(t, Receipt{Provider: "generic", Local: true, Gate: FeatureChecks, Check: &CheckRun{ID: 3}}, rc)
+		assert.Equal(t, Receipt{Provider: "generic", Local: true, Gate: FeatureChecks, Check: &CheckRun{ID: 3, DetailsURL: runCtx.RunURL}}, rc)
 	})
 
 	t.Run("provider errors carry the sentinels", func(t *testing.T) {
@@ -1035,4 +1300,272 @@ func TestWrapErr(t *testing.T) {
 
 	already := wrapErr(errUtils.ErrCIMaskFailed, wrapped)
 	assert.Equal(t, wrapped.Error(), already.Error())
+}
+
+func TestReporter_UpdateCheckPassesTheHandle(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t, kindPlain, kindPlain)
+	h.ciCtx(&Context{RepoOwner: "acme", RepoName: "infra", SHA: "abc123", RunURL: "https://ci.example/run/1"})
+	r := NewReporter(ciConfig(func(c *schema.CIConfig) { c.Checks.Enabled = boolPtr(true) }))
+
+	t.Run("sends the ID and fills the details URL", func(t *testing.T) {
+		h.detectedPlain.EXPECT().UpdateCheckRun(ctx, gomock.Any()).DoAndReturn(
+			func(_ context.Context, o *UpdateCheckRunOptions) (*CheckRun, error) {
+				assert.EqualValues(t, 77, o.ID)
+				return &CheckRun{ID: o.ID}, nil
+			},
+		)
+
+		rc, err := r.UpdateCheck(ctx, CheckRequest{Name: "n", ID: 77, State: CheckRunStateSuccess})
+
+		require.NoError(t, err)
+		assert.EqualValues(t, 77, rc.Check.ID)
+		assert.Equal(t, "https://ci.example/run/1", rc.Check.DetailsURL, "the receipt names where the check links to")
+	})
+
+	t.Run("a provider that reports the URL keeps it", func(t *testing.T) {
+		h.detectedPlain.EXPECT().CreateCheckRun(ctx, gomock.Any()).Return(&CheckRun{ID: 1, DetailsURL: "https://provider.example/1"}, nil)
+
+		rc, err := r.Check(ctx, CheckRequest{Name: "n"})
+
+		require.NoError(t, err)
+		assert.Equal(t, "https://provider.example/1", rc.Check.DetailsURL)
+	})
+}
+
+// resetLogGroupDepth restores the process-wide log group slot after a test that holds it open.
+func resetLogGroupDepth(t *testing.T) {
+	t.Helper()
+	t.Setenv(logGroupSentinelEnvVar, "")
+	atomic.StoreInt32(&logGroupDepth, 0)
+	t.Cleanup(func() { atomic.StoreInt32(&logGroupDepth, 0) })
+}
+
+func TestReporter_GroupNesting(t *testing.T) {
+	t.Run("a nested group renders a plain heading instead of a nested marker", func(t *testing.T) {
+		resetLogGroupDepth(t)
+		h := newHarness(t, kindCapable, kindCapable)
+		h.ciCtx(&Context{})
+		r := NewReporter(ciConfig(nil))
+
+		endOuter, rcOuter, err := r.Group("outer")
+		require.NoError(t, err)
+		endInner, rcInner, err := r.Group("inner")
+		require.NoError(t, err)
+
+		assert.Equal(t, Receipt{Provider: "detected"}, rcOuter)
+		assert.Equal(t, Receipt{Provider: "generic", Local: true}, rcInner)
+		assert.Equal(t, []string{"outer"}, h.detected.groups, "only the outermost group emits provider markers")
+		assert.Equal(t, []string{"inner"}, h.local.groups, "the inner title is still shown")
+
+		endInner()
+		assert.Zero(t, h.detected.ends, "closing the plain heading must not close the outer group")
+		endOuter()
+		assert.Equal(t, 1, h.detected.ends)
+	})
+
+	t.Run("closing releases the slot and double close is harmless", func(t *testing.T) {
+		resetLogGroupDepth(t)
+		h := newHarness(t, kindCapable, kindCapable)
+		h.ciCtx(&Context{})
+		r := NewReporter(ciConfig(nil))
+
+		end, _, err := r.Group("first")
+		require.NoError(t, err)
+		end()
+		end()
+		_, rc, err := r.Group("second")
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"first", "second"}, h.detected.groups)
+		assert.False(t, rc.Local)
+		assert.Equal(t, 1, h.detected.ends)
+	})
+
+	t.Run("a group inside a process that a parent group already covers is plain", func(t *testing.T) {
+		resetLogGroupDepth(t)
+		h := newHarness(t, kindCapable, kindCapable)
+		h.ciCtx(&Context{})
+		// Set after newHarness, which blanks the sentinel so the ambient CI job cannot leak one in.
+		t.Setenv(logGroupSentinelEnvVar, "1")
+
+		end, rc, err := NewReporter(ciConfig(nil)).Group("child")
+		require.NoError(t, err)
+		end()
+
+		assert.True(t, rc.Local)
+		assert.Empty(t, h.detected.groups)
+		assert.Equal(t, []string{"child"}, h.local.groups)
+	})
+
+	t.Run("a failed start releases the slot", func(t *testing.T) {
+		resetLogGroupDepth(t)
+		h := newHarness(t, kindCapable, kindNone)
+		h.ciCtx(&Context{})
+		h.detected.err = errors.New("boom")
+		r := NewReporter(ciConfig(nil))
+
+		_, _, err := r.Group("g")
+		require.Error(t, err)
+		h.detected.err = nil
+		_, rc, err := r.Group("again")
+
+		require.NoError(t, err)
+		assert.False(t, rc.Local)
+	})
+}
+
+func TestNewReporter_ForcedCIMode(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("ATMOS_CI makes the generic provider the detected one", func(t *testing.T) {
+		h := newHarness(t, kindNone, kindCapable)
+		t.Setenv("ATMOS_CI", "true")
+		h.localPlain.EXPECT().Context().Return(&Context{Provider: "generic"}, nil).AnyTimes()
+		r := NewReporter(ciConfig(nil))
+
+		rc, err := r.Annotate(Annotation{Message: "m"})
+		require.NoError(t, err)
+		assert.Equal(t, Receipt{Provider: "generic"}, rc, "a forced CI mode is not the pure-local mode: Local is false")
+
+		c, err := r.Context()
+		require.NoError(t, err)
+		assert.Equal(t, "generic", c.Provider)
+		assert.Len(t, h.local.annotations, 1)
+	})
+
+	t.Run("CI makes the generic provider the detected one", func(t *testing.T) {
+		h := newHarness(t, kindNone, kindCapable)
+		t.Setenv("CI", "true")
+
+		rc, err := NewReporter(ciConfig(nil)).Annotate(Annotation{Message: "m"})
+
+		require.NoError(t, err)
+		assert.False(t, rc.Local)
+		assert.Len(t, h.local.annotations, 1)
+	})
+
+	for _, falsy := range []string{"false", "0", "no", ""} {
+		t.Run("ATMOS_CI="+falsy+" stays local", func(t *testing.T) {
+			newHarness(t, kindNone, kindCapable)
+			t.Setenv("ATMOS_CI", falsy)
+
+			rc, err := NewReporter(ciConfig(nil)).Annotate(Annotation{Message: "m"})
+
+			require.NoError(t, err)
+			assert.True(t, rc.Local)
+		})
+	}
+
+	t.Run("gates apply in forced CI mode", func(t *testing.T) {
+		h := newHarness(t, kindNone, kindCapable)
+		t.Setenv("ATMOS_CI", "true")
+		h.ciCtx(&Context{})
+		disabled := ciConfig(func(c *schema.CIConfig) { c.Annotations.Enabled = boolPtr(false) })
+
+		rc, err := NewReporter(disabled).Annotate(Annotation{Message: "m"})
+
+		require.NoError(t, err)
+		assert.Equal(t, Receipt{Provider: "generic", Local: true, Gate: FeatureAnnotations}, rc)
+	})
+
+	t.Run("the master switch is named when it is off", func(t *testing.T) {
+		h := newHarness(t, kindNone, kindCapable)
+		t.Setenv("ATMOS_CI", "true")
+		h.ciCtx(&Context{})
+
+		rc, err := NewReporter(&schema.AtmosConfiguration{}).Annotate(Annotation{Message: "m"})
+
+		require.NoError(t, err)
+		assert.Equal(t, FeatureEnabled, rc.Gate)
+	})
+
+	t.Run("a detected provider wins over forced mode", func(t *testing.T) {
+		h := newHarness(t, kindCapable, kindCapable)
+		t.Setenv("ATMOS_CI", "true")
+
+		rc, err := NewReporter(ciConfig(nil)).Annotate(Annotation{Message: "m"})
+
+		require.NoError(t, err)
+		assert.Equal(t, Receipt{Provider: "detected"}, rc)
+		assert.Len(t, h.detected.annotations, 1)
+	})
+
+	t.Run("forced mode binds renderings to WithOutput", func(t *testing.T) {
+		h := newHarness(t, kindNone, kindCapable)
+		t.Setenv("ATMOS_CI", "true")
+		buf := &bytes.Buffer{}
+
+		_, err := NewReporter(ciConfig(nil)).WithOutput(buf).Annotate(Annotation{Message: "m"})
+
+		require.NoError(t, err)
+		assert.Same(t, buf, h.local.boundTo)
+	})
+
+	t.Run("forced mode posts comments through the generic provider", func(t *testing.T) {
+		h := newHarness(t, kindNone, kindCapable)
+		t.Setenv("ATMOS_CI", "true")
+		h.localPlain.EXPECT().Context().Return(&Context{RepoOwner: "acme", RepoName: "infra", SHA: "abc123"}, nil).AnyTimes()
+		cfg := ciConfig(func(c *schema.CIConfig) { c.Comments.Enabled = boolPtr(true) })
+
+		rc, err := NewReporter(cfg).Comment(ctx, CommentRequest{Body: "b"})
+
+		require.NoError(t, err)
+		assert.False(t, rc.Local)
+		assert.Len(t, h.local.commits, 1)
+	})
+}
+
+func TestNewReporterForProvider(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("uses the given provider and the preseeded context", func(t *testing.T) {
+		h := newHarness(t, kindNone, kindPlain)
+		given := NewMockProvider(gomock.NewController(t))
+		given.EXPECT().Name().Return("given").AnyTimes()
+		want := &Context{RepoOwner: "acme", RepoName: "infra", PullRequest: &PRInfo{Number: 3}}
+		given.EXPECT().PostComment(ctx, gomock.Any()).Return(&Comment{ID: 5}, nil)
+		_ = h
+
+		rc, err := NewReporterForProvider(ciConfig(func(c *schema.CIConfig) { c.Comments.Enabled = boolPtr(true) }), given, want).
+			Comment(ctx, CommentRequest{Body: "b", Key: "plan:vpc:dev"})
+
+		require.NoError(t, err)
+		assert.Equal(t, "given", rc.Provider)
+		assert.False(t, rc.Local)
+		assert.EqualValues(t, 5, rc.Comment.ID)
+	})
+
+	t.Run("holds a fork pull request on an elevated event", func(t *testing.T) {
+		h := newHarness(t, kindNone, kindPlain)
+		given := NewMockProvider(gomock.NewController(t))
+		given.EXPECT().Name().Return("given").AnyTimes()
+		h.localPlain.EXPECT().PostComment(ctx, gomock.Any()).Return(&Comment{}, nil)
+		forkCtx := &Context{ElevatedEvent: true, RepoOwner: "acme", RepoName: "infra", PullRequest: &PRInfo{Number: 3, Fork: true}}
+
+		rc, err := NewReporterForProvider(ciConfig(func(c *schema.CIConfig) { c.Comments.Enabled = boolPtr(true) }), given, forkCtx).
+			Comment(ctx, CommentRequest{Body: "b", Target: CommentTargetPR})
+
+		require.NoError(t, err)
+		assert.Equal(t, FeatureForkGate, rc.Gate)
+	})
+
+	t.Run("reads the context from the provider when none is given", func(t *testing.T) {
+		newHarness(t, kindNone, kindNone)
+		given := NewMockProvider(gomock.NewController(t))
+		given.EXPECT().Name().Return("given").AnyTimes()
+		want := &Context{RunID: "9"}
+		given.EXPECT().Context().Return(want, nil)
+
+		got, err := NewReporterForProvider(nil, given, nil).Context()
+
+		require.NoError(t, err)
+		assert.Same(t, want, got)
+	})
+}
+
+func TestReceipt_Gated(t *testing.T) {
+	assert.False(t, Receipt{}.Gated())
+	assert.False(t, Receipt{Local: true}.Gated())
+	assert.True(t, Receipt{Local: true, Gate: FeatureChecks}.Gated())
 }

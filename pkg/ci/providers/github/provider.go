@@ -64,6 +64,13 @@ func (p *Provider) ensureClient() error {
 	return p.clientErr
 }
 
+// ValidateConfig fails the run early when the configured API base URL is unusable.
+func (p *Provider) ValidateConfig() error {
+	defer perf.Track(nil, "github.Provider.ValidateConfig")()
+
+	return ValidateAPIURL()
+}
+
 // Name returns the provider name.
 func (p *Provider) Name() string {
 	defer perf.Track(nil, "github.Provider.Name")()
@@ -79,6 +86,18 @@ func (p *Provider) Detect() bool {
 }
 
 // Context returns CI metadata from GitHub Actions environment variables.
+//
+// SHA is the commit that is actually checked out: git HEAD of the working directory, falling back to
+// GITHUB_SHA when HEAD cannot be read. Commit statuses and commit comments land on it. By default that
+// equals GITHUB_SHA (the merge commit for pull_request events); a workflow that checks out the pull
+// request head (for example under pull_request_target) gets the head commit, which is the commit
+// a reviewer sees. Tests that need GITHUB_SHA to win run outside a git checkout.
+//
+// The pull request number comes from the event payload (pull_request.number, or
+// workflow_run.pull_requests[0].number), because GitHub sets GITHUB_REF to the base branch for
+// pull_request_target and workflow_run. GITHUB_REF is the fallback. A pull request is a fork when its head
+// repository's full name differs from the base repository's; a deleted fork or an unreadable payload
+// counts as a fork.
 func (p *Provider) Context() (*provider.Context, error) {
 	defer perf.Track(nil, "github.Provider.Context")()
 
@@ -122,15 +141,16 @@ func (p *Provider) Context() (*provider.Context, error) {
 	}
 	ctx.Branch = branch
 
-	// Parse PR info from GITHUB_REF for pull_request events.
+	// Parse PR info from the event payload (falling back to GITHUB_REF) for pull_request events.
 	if ctx.EventName == "pull_request" || ctx.EventName == "pull_request_target" {
-		ctx.PullRequest = parsePRInfo()
+		ctx.PullRequest = pullRequestFromEvent()
 	}
 
 	// A workflow_run triggered by a fork carries no pull_request object, so the fork-execution
-	// gate would never see it. Surface it as a fork pull request instead of failing open.
+	// gate would never see it. Surface it as a fork pull request instead of failing open. A pull
+	// request that is already known is never replaced by a run that only describes the same one.
 	if ctx.EventName == "workflow_run" {
-		ctx.PullRequest = parseForkWorkflowRun(ctx.Repository)
+		ctx.PullRequest = mergeWorkflowRunPullRequest(ctx.PullRequest, workflowRunPullRequest(ctx.Repository))
 	}
 
 	// pull_request_target and workflow_run run with the base repository's
@@ -163,45 +183,6 @@ func resolveGitSHA() string {
 	}
 	log.Debug("Failed to resolve SHA from git HEAD, falling back to GITHUB_SHA", "error", err)
 	return os.Getenv("GITHUB_SHA")
-}
-
-// parsePRInfo extracts PR information from environment variables.
-func parsePRInfo() *provider.PRInfo {
-	refName := os.Getenv("GITHUB_REF_NAME")
-	baseRef := os.Getenv("GITHUB_BASE_REF")
-	headRef := os.Getenv("GITHUB_HEAD_REF")
-
-	// Extract PR number from ref (refs/pull/<number>/merge).
-	ref := os.Getenv("GITHUB_REF")
-	var prNumber int
-	if strings.HasPrefix(ref, "refs/pull/") {
-		parts := strings.Split(ref, "/")
-		if len(parts) >= 3 {
-			prNumber, _ = strconv.Atoi(parts[2])
-		}
-	}
-
-	// If GITHUB_REF_NAME is in format "123/merge", extract number.
-	if prNumber == 0 && strings.HasSuffix(refName, "/merge") {
-		numStr := strings.TrimSuffix(refName, "/merge")
-		prNumber, _ = strconv.Atoi(numStr)
-	}
-
-	repo := os.Getenv("GITHUB_REPOSITORY")
-	serverURL := ghtoken.RepoEndpoints().ServerURL
-
-	var prURL string
-	if prNumber > 0 && repo != "" {
-		prURL = serverURL + "/" + repo + "/pull/" + strconv.Itoa(prNumber)
-	}
-
-	return &provider.PRInfo{
-		Number:  prNumber,
-		HeadRef: headRef,
-		BaseRef: baseRef,
-		URL:     prURL,
-		Fork:    payloadPRFromFork(),
-	}
 }
 
 // GetStatus returns the CI status for the current branch.

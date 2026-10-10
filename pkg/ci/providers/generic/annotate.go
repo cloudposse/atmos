@@ -11,7 +11,7 @@ import (
 // Ensure Provider implements provider.Annotator.
 var _ provider.Annotator = (*Provider)(nil)
 
-// Annotate renders each annotation as one line, locating it as path:line when known.
+// Annotate renders each annotation as one line: path:line: level: message, locating it by path and line when known.
 func (p *Provider) Annotate(annotations []provider.Annotation) error {
 	defer perf.Track(nil, "generic.Provider.Annotate")()
 
@@ -31,7 +31,9 @@ func (p *Provider) Annotate(annotations []provider.Annotation) error {
 	return nil
 }
 
-// formatAnnotation builds "path:line: title: message", omitting empty parts.
+// formatAnnotation builds "path:line: level: message (title)", omitting empty parts. The level word
+// is always present so the severity survives in logs that do not render the icon; an unknown level
+// reads as a warning, as it does on GitHub.
 func formatAnnotation(a *provider.Annotation) string {
 	var location string
 	switch {
@@ -41,8 +43,20 @@ func formatAnnotation(a *provider.Annotation) string {
 		location = a.Path
 	}
 
+	level := string(a.Level)
+	switch a.Level {
+	case provider.AnnotationError, provider.AnnotationWarning, provider.AnnotationNotice:
+	default:
+		level = string(provider.AnnotationWarning)
+	}
+
+	message := a.Message
+	if a.Title != "" {
+		message += " (" + a.Title + ")"
+	}
+
 	parts := make([]string, 0, 3)
-	for _, part := range []string{location, a.Title, a.Message} {
+	for _, part := range []string{location, level, message} {
 		if part != "" {
 			parts = append(parts, part)
 		}

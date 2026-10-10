@@ -103,8 +103,8 @@ func TestOnAfterTerraformAggregateRendersSummaryOutputsCommentAndChecks(t *testi
 	assert.Contains(t, outputs["summary"], "Terraform Plan Summary")
 
 	require.Len(t, mp.commentCalls, 1)
-	assert.Equal(t, "<!-- atmos:ci:plan:aggregate:dev -->", mp.commentCalls[0].Marker)
-	assert.Contains(t, mp.commentCalls[0].Body, "<!-- atmos:ci:plan:aggregate:dev -->")
+	assert.Equal(t, "<!-- atmos:ci:aggregate:plan:dev -->", mp.commentCalls[0].Marker)
+	assert.Contains(t, mp.commentCalls[0].Body, "<!-- atmos:ci:aggregate:plan:dev -->")
 
 	require.Len(t, mp.updateRunCalls, 5)
 	assert.Equal(t, "atmos/plan/dev/app", mp.updateRunCalls[0].Name)
@@ -187,7 +187,7 @@ func TestOnAfterTerraformAggregateUsesCommandSpecificRendering(t *testing.T) {
 			}
 
 			require.Len(t, mp.commentCalls, 1)
-			assert.Equal(t, "<!-- atmos:ci:"+tt.command+":aggregate:dev -->", mp.commentCalls[0].Marker)
+			assert.Equal(t, "<!-- atmos:ci:aggregate:"+tt.command+":dev -->", mp.commentCalls[0].Marker)
 			require.Len(t, mp.updateRunCalls, 1)
 			assert.Equal(t, "atmos/"+tt.command+"/dev/vpc", mp.updateRunCalls[0].Name)
 		})
@@ -688,7 +688,7 @@ func TestAggregateHelpersCoverFallbacks(t *testing.T) {
 
 	assert.Equal(t, "all", aggregateStackValue(nil))
 	assert.Equal(t, "all", aggregateStackValue(&schema.ConfigAndStacksInfo{}))
-	assert.Equal(t, "<!-- atmos:ci:plan:aggregate:all -->", buildAggregateCommentMarker("plan", ""))
+	assert.Equal(t, "aggregate:plan:all", buildAggregateCommentKey("plan", ""))
 }
 
 func TestAggregateMarkdownStaysBelowGitHubSummaryLimit(t *testing.T) {
@@ -835,4 +835,11 @@ func TestPostAggregateCommentSkipsAndReturnsErrors(t *testing.T) {
 		assert.Contains(t, err.Error(), "api error")
 		assert.Len(t, mp.commentCalls, 1)
 	})
+}
+
+func TestAggregateCommentKeyDoesNotCollideWithComponentNamedAggregate(t *testing.T) {
+	t.Parallel()
+	for _, command := range []string{"plan", "apply", "destroy", "test"} {
+		assert.NotEqual(t, buildCommentKey(command, "aggregate", "dev"), buildAggregateCommentKey(command, "dev"))
+	}
 }

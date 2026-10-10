@@ -9,6 +9,10 @@ ci:
   enabled: true
   summary:
     enabled: true
+  # Uncomment to also post one pull request comment per image, updated in place on every build and push.
+  # The job needs `pull-requests: write and contents: write`. Nothing is previewed in the log while comments are off.
+  # comments:
+  #   enabled: true
 
 # Global container runtime defaults (the top-level `container:` namespace).
 container:

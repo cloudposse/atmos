@@ -3,6 +3,7 @@ package templates
 
 import (
 	"bytes"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -13,6 +14,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// containerComponentType is the component type of container image summaries.
+const containerComponentType = "container"
 
 // templateFuncs provides custom template functions for CI summary templates.
 var templateFuncs = template.FuncMap{
@@ -53,12 +57,16 @@ func (l *Loader) Load(componentType, command string, defaultTemplates fs.FS) (st
 	defer perf.Track(l.atmosConfig, "templates.Loader.Load")()
 
 	// 1. Check explicit override from config.
-	if content := l.loadFromConfigOverride(componentType, command); content != "" {
+	content, found, err := l.loadFromConfigOverride(componentType, command)
+	if err != nil {
+		return "", err
+	}
+	if found {
 		return content, nil
 	}
 
 	// 2. Check base_path directory by convention.
-	if content := l.loadFromBasePath(componentType, command); content != "" {
+	if content = l.loadFromBasePath(componentType, command); content != "" {
 		return content, nil
 	}
 
@@ -67,27 +75,56 @@ func (l *Loader) Load(componentType, command string, defaultTemplates fs.FS) (st
 }
 
 // loadFromConfigOverride attempts to load template from config overrides.
-func (l *Loader) loadFromConfigOverride(componentType, command string) string {
+//
+// A configured override that cannot be read falls through to the next layer for the native
+// plugin component types, which have always tolerated it. The container component is strict: a
+// configured ci.templates.container.<command> file that is missing is an error, so a typo in the
+// path cannot silently revert to the embedded default. The embedded default is used for the
+// container only when the key is unset.
+func (l *Loader) loadFromConfigOverride(componentType, command string) (string, bool, error) {
 	if l.atmosConfig == nil {
-		return ""
+		return "", false, nil
 	}
 
 	overrides := l.getComponentOverrides(componentType)
 	if overrides == nil {
-		return ""
+		return "", false, nil
 	}
 
 	filename, ok := overrides[command]
 	if !ok || filename == "" {
-		return ""
+		return "", false, nil
 	}
 
 	path := l.resolvePath(filename)
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return ""
+		if componentType == containerComponentType {
+			return "", false, l.overrideNotFoundError(componentType, command, filename, path, err)
+		}
+		return "", false, nil
 	}
-	return string(content)
+	return string(content), true, nil
+}
+
+// overrideNotFoundError describes a configured template override that cannot be read.
+func (l *Loader) overrideNotFoundError(componentType, command, filename, path string, cause error) error {
+	return errUtils.Build(errUtils.ErrCITemplateNotFound).
+		WithCause(cause).
+		WithExplanation(fmt.Sprintf("The template configured as ci.templates.%s.%s does not exist at %s (ci.templates.base_path: %s)", componentType, command, path, l.basePathDescription())).
+		WithContext("configured", filename).
+		WithContext("resolved_path", path).
+		WithContext("ci.templates.base_path", l.basePathDescription()).
+		WithHint("Create the file, fix the path, or remove the key to use the built-in template").
+		Err()
+}
+
+// basePathDescription returns the effective templates base path for error messages.
+func (l *Loader) basePathDescription() string {
+	if l.basePath == "" {
+		return "(unset)"
+	}
+	return l.basePath
 }
 
 // loadFromBasePath attempts to load template from base path by convention.
@@ -119,11 +156,25 @@ func (l *Loader) loadFromEmbedded(componentType, command string, defaultTemplate
 	return string(content), nil
 }
 
-// Render renders a template with the given context.
+// Render renders a template with the given context. A missing map key renders as "<no value>",
+// which native plugin templates rely on; script-authored report templates use RenderStrict.
 func (l *Loader) Render(templateContent string, ctx any) (string, error) {
 	defer perf.Track(l.atmosConfig, "templates.Loader.Render")()
 
-	tmpl, err := template.New("ci-summary").Funcs(templateFuncs).Parse(templateContent)
+	return l.render(templateContent, ctx)
+}
+
+// RenderStrict renders a template and fails on a missing map key, naming the key, so a typo in a
+// script's data keys or a template placeholder cannot silently render "<no value>".
+func (l *Loader) RenderStrict(templateContent string, ctx any) (string, error) {
+	defer perf.Track(l.atmosConfig, "templates.Loader.RenderStrict")()
+
+	return l.render(templateContent, ctx, "missingkey=error")
+}
+
+// render parses and executes a template with the given template options.
+func (l *Loader) render(templateContent string, ctx any, options ...string) (string, error) {
+	tmpl, err := template.New("ci-summary").Funcs(templateFuncs).Option(options...).Parse(templateContent)
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrTemplateEvaluation).
 			WithCause(err).
@@ -169,7 +220,7 @@ func (l *Loader) getComponentOverrides(componentType string) map[string]string {
 		return cfg.Helm
 	case "helmfile":
 		return cfg.Helmfile
-	case "container":
+	case containerComponentType:
 		return cfg.Container
 	default:
 		return nil

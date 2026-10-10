@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/github/actions"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -13,6 +14,8 @@ import (
 // EnsureGitSafeDirectory adds GITHUB_WORKSPACE to git's safe.directory list
 // when running in a GitHub Actions container. Container jobs run as a different
 // user than the checkout owner, causing git to reject the repo as "dubious ownership".
+// It is idempotent: the entry is added only when the global list does not already hold it,
+// so repeated calls leave the runner's git config unchanged.
 func EnsureGitSafeDirectory() error {
 	if !actions.IsGitHubActions() {
 		return nil
@@ -27,10 +30,16 @@ func EnsureGitSafeDirectory() error {
 	// Clean the path to satisfy gosec taint analysis (G702).
 	workspace = filepath.Clean(workspace)
 
+	if safeDirectoryConfigured(workspace) {
+		log.Debug("GITHUB_WORKSPACE is already in git safe.directory.", "path", workspace)
+		return nil
+	}
+
 	log.Debug("Adding GITHUB_WORKSPACE to git safe.directory.", "path", workspace)
 
 	cmd := exec.Command("git", "config", "--global", "--add", "safe.directory", workspace) //nolint:gosec // workspace is cleaned above.
-	cmd.Stdout = os.Stdout
+	// git's own output goes to stderr so it can never corrupt data written to stdout.
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
@@ -38,4 +47,24 @@ func EnsureGitSafeDirectory() error {
 	}
 
 	return nil
+}
+
+// safeDirectoryConfigured reports whether workspace is already a global safe.directory entry.
+// Any failure to read the list reads as "not configured", so the caller falls back to adding it.
+func safeDirectoryConfigured(workspace string) bool {
+	out, err := exec.Command("git", "config", "--global", "--get-all", "safe.directory").Output()
+	if err != nil {
+		return false
+	}
+	// Remove the output terminator without dropping empty values that reset the list.
+	configured := false
+	for _, line := range strings.Split(strings.TrimSuffix(string(out), "\n"), "\n") {
+		switch line {
+		case "":
+			configured = false
+		case workspace:
+			configured = true
+		}
+	}
+	return configured
 }

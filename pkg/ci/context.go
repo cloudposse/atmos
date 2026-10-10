@@ -19,6 +19,10 @@ type (
 	Comment = provider.Comment
 	// CommentBehavior controls how PostComment reconciles against existing comments.
 	CommentBehavior = provider.CommentBehavior
+	// CommentTarget selects whether a comment lands on the pull request or on the commit.
+	CommentTarget = provider.CommentTarget
+	// PostCommitCommentOptions contains options for posting or upserting a commit comment.
+	PostCommitCommentOptions = provider.PostCommitCommentOptions
 	// PostCommentOptions contains options for posting or upserting a PR/MR comment.
 	PostCommentOptions = provider.PostCommentOptions
 	// CheckRun is a provider check run (status check).
@@ -36,6 +40,13 @@ const (
 	CommentBehaviorCreate = provider.CommentBehaviorCreate
 	CommentBehaviorUpdate = provider.CommentBehaviorUpdate
 	CommentBehaviorUpsert = provider.CommentBehaviorUpsert
+)
+
+// Re-exported comment targets (see provider.CommentTarget).
+const (
+	CommentTargetAuto   = provider.CommentTargetAuto
+	CommentTargetPR     = provider.CommentTargetPR
+	CommentTargetCommit = provider.CommentTargetCommit
 )
 
 // Re-exported check run states (see provider.CheckRunState).

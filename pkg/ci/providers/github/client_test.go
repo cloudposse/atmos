@@ -72,7 +72,7 @@ func TestNewClient_TokenPrecedenceUnchanged(t *testing.T) {
 	_, err := NewClient()
 	require.ErrorIs(t, err, errUtils.ErrGitHubTokenNotFound)
 
-	t.Setenv("GH_TOKEN", "gh")
+	t.Setenv("GH_TOKEN", "gh-token-for-tests")
 	client, err := NewClient()
 	require.NoError(t, err)
 	assert.NotNil(t, client)
