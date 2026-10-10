@@ -3,6 +3,7 @@ package starlark
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -150,9 +151,10 @@ func (s *session) check(ctx context.Context) error {
 }
 
 // output converts the top-level output global: strings pass through raw, everything else is JSON.
+// None means "no output", so a script whose command callback returns nothing prints nothing.
 func (s *session) output(ctx context.Context, thread *starlark.Thread, globals starlark.StringDict) (script.Result, error) {
 	value, ok := globals["output"]
-	if !ok {
+	if !ok || value == starlark.None {
 		return script.Result{}, nil
 	}
 	if text, isString := value.(starlark.String); isString {
@@ -162,11 +164,19 @@ func (s *session) output(ctx context.Context, thread *starlark.Thread, globals s
 	if err != nil {
 		reason := strings.TrimPrefix(evalMessage(err), "json.encode: ")
 		failed := fail(errUtils.ErrStarlarkOutputEncode, "`output` must be a string or JSON-encodable value: %s", reason)
-		failed = errUtils.Build(failed).
-			WithHintf("Assign a string, number, bool, list, dict, or None to `output` in step %q.", s.spec.Name).Err()
+		failed = errUtils.Build(failed).WithHint(s.outputHint()).Err()
 		return script.Result{}, scriptError(ctx, failed, s.spec.ProjectRoot)
 	}
 	return script.Result{Value: string(encoded.(starlark.String)), HasOutput: true}, nil
+}
+
+// outputHint names what `output` may hold. None is deliberately absent: it means no output.
+func (s *session) outputHint() string {
+	const accepted = "Assign a string, number, bool, list, or dict to `output`"
+	if s.spec.ParseCommand != nil {
+		return fmt.Sprintf("%s in script %q, or leave it unset (or None) to print nothing.", accepted, s.spec.Name)
+	}
+	return fmt.Sprintf("%s in step %q, or leave it unset (or None) to produce no output.", accepted, s.spec.Name)
 }
 
 // programName is the filename Starlark records for the entry script. A script read from a file is
@@ -220,7 +230,13 @@ func (s *session) predeclared() starlark.StringDict {
 			if s.spec.ParseCommand == nil || t.Local(outputKey) != nil {
 				return script.CommandInput{}, fail(errUtils.ErrStarlarkInvalidArgument, "cli.command is available only in a standalone script's main thread")
 			}
-			return s.spec.ParseCommand(threadContext(t), command)
+			input, err := s.spec.ParseCommand(threadContext(t), command)
+			if errors.Is(err, errUtils.ErrScriptUsage) {
+				// The host already presented this as a usage error; keep it from being
+				// re-reported as a script crash with a traceback.
+				return input, &usageFailure{err: err}
+			}
+			return input, err
 		}),
 		"dependencies": module("dependencies", starlark.StringDict{"tools": starlark.NewBuiltin("dependencies.tools", s.installTools)}),
 		"atmos":        s.atmosModule(),

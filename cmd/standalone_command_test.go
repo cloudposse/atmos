@@ -78,7 +78,7 @@ func TestStandaloneCommandEnvironmentPrecedence(t *testing.T) {
 	t.Setenv("STANDALONE_REPLICAS", "7")
 	t.Setenv("STANDALONE_VERBOSE", "true")
 	t.Setenv("STANDALONE_STAGE", "dev")
-	t.Setenv("STANDALONE_TAGS", "blue green")
+	t.Setenv("STANDALONE_TAGS", "blue,green")
 	spec := script.CommandSpec{Flags: []flags.Flag{
 		&flags.IntFlag{Name: "replicas", Default: 2, EnvVars: []string{"STANDALONE_REPLICAS"}},
 		&flags.BoolFlag{Name: "verbose", EnvVars: []string{"STANDALONE_VERBOSE"}},
@@ -113,10 +113,10 @@ func TestStandaloneCommandValidation(t *testing.T) {
 		{name: "required flag", spec: script.CommandSpec{Flags: []flags.Flag{&flags.StringFlag{Name: "stage", Required: true}}}, want: "stage"},
 		{name: "choices", spec: script.CommandSpec{Flags: []flags.Flag{&flags.StringFlag{Name: "stage", ValidValues: []string{"dev", "prod"}}}}, argv: []string{"--stage=invalid"}, want: "invalid"},
 		{name: "slice choices", spec: script.CommandSpec{Flags: []flags.Flag{&flags.StringSliceFlag{Name: "tags", ValidValues: []string{"blue", "green"}}}}, argv: []string{"--tags=blue,red"}, want: "red"},
-		{name: "required argument", spec: script.CommandSpec{Args: []*flags.PositionalArgSpec{{Name: "service", Required: true}}}, want: "accepts 1 arg(s)"},
-		{name: "surplus argument", spec: script.CommandSpec{Args: []*flags.PositionalArgSpec{{Name: "service"}}}, argv: []string{"api", "worker"}, want: "at most 1 arg(s)"},
-		{name: "no arguments", argv: []string{"extra"}, want: "accepts 0 arg(s)"},
-		{name: "surplus after separator", spec: script.CommandSpec{Args: []*flags.PositionalArgSpec{{Name: "service"}}}, argv: []string{"api", "--", "worker"}, want: "at most 1 arg(s)"},
+		{name: "required argument", spec: script.CommandSpec{Args: []*flags.PositionalArgSpec{{Name: "service", Required: true}}}, want: "missing required argument `<service>`"},
+		{name: "surplus argument", spec: script.CommandSpec{Args: []*flags.PositionalArgSpec{{Name: "service"}}}, argv: []string{"api", "worker"}, want: "at most 1 positional argument"},
+		{name: "no arguments", argv: []string{"extra"}, want: "takes no positional arguments"},
+		{name: "surplus after separator", spec: script.CommandSpec{Args: []*flags.PositionalArgSpec{{Name: "service"}}}, argv: []string{"api", "--", "worker"}, want: "at most 1 positional argument"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -259,7 +259,7 @@ func TestStandaloneCommandRequiredTypedFlags(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, input.Help)
 	t.Setenv("STANDALONE_REQUIRED_COUNT", "0")
-	t.Setenv("STANDALONE_REQUIRED_TAGS", "blue green")
+	t.Setenv("STANDALONE_REQUIRED_TAGS", "blue,green")
 	input, err = parse()
 	require.NoError(t, err)
 	assert.Equal(t, 0, input.Flags["count"])

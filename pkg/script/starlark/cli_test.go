@@ -114,7 +114,7 @@ output = cli.command(main, validate=validate)
 				assert.False(t, result.HasOutput)
 			} else {
 				assert.Equal(t, 1, calls)
-				assert.Equal(t, "null", result.Value)
+				assert.False(t, result.HasOutput, "help prints no output value")
 			}
 			assert.Empty(t, stdout.String())
 			assert.Empty(t, stderr.String())

@@ -36,7 +36,7 @@ cli.flag(
     <dd>
         Required. The flag name without dashes, which is also its key in the `flags` dictionary. The user passes it
         as `--name`. A name starts with a letter and contains only letters, digits, underscores, and hyphens. The
-        name `help` is reserved.
+        name `help` is reserved, and names are case-insensitive, so `Stage` and `stage` cannot both be declared.
     </dd>
 
     <dt>`type`</dt>
@@ -74,7 +74,9 @@ cli.flag(
     <dd>
         (Optional) The name of an environment variable that supplies the value when the flag is not on the command
         line. The first non-empty value wins. Command-line values override the environment, which overrides the
-        default.
+        default. Environment values parse exactly like command-line values: a `string_list` splits on commas with
+        CSV quoting (`TAGS=a,b` is `["a", "b"]`) and an `int` accepts base-10 digits only. With `choices`, every
+        list element is checked.
     </dd>
 </dl>
 
@@ -85,7 +87,9 @@ A declaration value for the `flags` list of [`cli.command`](/functions/automatio
 ## Command-line forms
 
 - The forms `--replicas=3`, `--replicas 3`, and `-r 3` set an integer or string flag.
-- The form `--verbose` sets a boolean flag to `True`, and `--verbose=false` sets it to `False`.
+- The form `--verbose` sets a boolean flag to `True`, and `--verbose=false` sets it to `False`. A boolean flag never
+  consumes the next word, so `--verbose false` is rejected with a hint to write `--verbose=false`.
+- An `int` flag reads base-10 digits only. `--count 010` is ten, and `--count 0x10` is an error.
 - A `string_list` flag accepts comma-separated values, repeated flags, or both: `--tag=a,b --tag=c` produces
   `["a", "b", "c"]`.
 
@@ -122,9 +126,16 @@ cli.command(
 - An invalid name, an invalid shorthand, an unsupported `type`, or a default of the wrong type fails with an
   argument error when `cli.flag` is called.
 - Setting `choices` on an `int` or `bool` flag fails.
-- Duplicate flag names or shorthands in one `cli.command` call fail.
-- A missing required flag, an unknown flag, or an invalid value stops the program with a usage error before your
-  functions run.
+- Duplicate flag names or shorthands in one `cli.command` call fail, and names that differ only by case count as
+  duplicates.
+- A missing required flag, an unknown flag, an invalid value, or a value outside `choices` stops the program with a
+  usage error before your functions run. A usage error has no traceback, suggests `--help`, and exits with status 2.
+
+## Help output
+
+`--help` annotates each flag: `(required)` for a required flag, `(one of: dev, prod)` for `choices`, and
+`[env: DEPLOY_ENV]` for an `env` binding, for example
+`--environment string   (one of: dev, prod) [env: DEPLOY_ENV] (default "dev")`.
 
 ## Related
 

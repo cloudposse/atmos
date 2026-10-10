@@ -194,10 +194,11 @@ func TestStandaloneStdinExecution(t *testing.T) {
 		{name: "separator", source: `output = ctx.args`, args: []string{"-", "--", "foo", "bar"}, want: "[\"foo\",\"bar\"]\n"},
 		{name: "script flags", source: `output = ctx.args`, args: []string{"-", "--help", "--chdir=script-owned", "--interpreter=script-owned"}, want: "[\"--help\",\"--chdir=script-owned\",\"--interpreter=script-owned\"]\n"},
 		{name: "load from working directory", source: "load(\"helper.star\", \"message\")\noutput = message", args: []string{"--interpreter=starlark", "-"}, want: "loaded from cwd\n"},
+		{name: "globals before stdin", source: `output = ctx.args`, args: []string{"--logs-level", "Off", "--interpreter=starlark", "-", "--chdir=script-owned"}, want: "[\"--chdir=script-owned\"]\n"},
 		{name: "traceback", source: `fail("stdin failure")`, args: []string{"-"}, errorText: "stdin failure"},
 		{name: "empty source", args: []string{"-"}},
 		{name: "parsed arguments", source: "def main(args, flags):\n    print(args[\"name\"])\ncli.command(main, args=[cli.arg(\"name\")])", args: []string{"-", "--", "hello"}, want: "hello\n"},
-		{name: "missing required argument", source: "def main(args, flags):\n    fail(\"must not run\")\ncli.command(main, args=[cli.arg(\"name\")])", args: []string{"-"}, errorText: "accepts 1 arg(s), received 0"},
+		{name: "missing required argument", source: "def main(args, flags):\n    fail(\"must not run\")\ncli.command(main, args=[cli.arg(\"name\")])", args: []string{"-"}, errorText: "missing required argument `<name>`"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			NewTestKit(t)

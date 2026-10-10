@@ -50,14 +50,14 @@ cli.command(
     <dt>`args`</dt>
     <dd>
         (Optional) A list or tuple of [`cli.arg`](/functions/automation/cli.arg) declarations, in the order the
-        positional arguments appear on the command line. Names must be unique, and required arguments must come
-        before optional ones.
+        positional arguments appear on the command line. Names must be unique, ignoring case, and required
+        arguments must come before optional ones.
     </dd>
 
     <dt>`flags`</dt>
     <dd>
-        (Optional) A list or tuple of [`cli.flag`](/functions/automation/cli.flag) declarations. Flag names and
-        shorthands must be unique. The flag `help` and shorthand `h` are reserved for the built-in help.
+        (Optional) A list or tuple of [`cli.flag`](/functions/automation/cli.flag) declarations. Flag names (ignoring
+        case) and shorthands must be unique. The flag `help` and shorthand `h` are reserved for the built-in help.
     </dd>
 
     <dt>`validate`</dt>
@@ -73,6 +73,9 @@ cli.command(
 The value returned by `run`. When the user passes `--help`, Atmos prints the usage and returns `None` without
 calling `validate` or `run`.
 
+Assign the result to [`output`](/functions/automation/output) to print it. A result of `None`, which is what `--help`
+and a `run` function that returns nothing produce, means no output, so nothing is printed.
+
 The `args` dictionary has one key per declared argument. An optional argument that was not supplied is `None`.
 The `flags` dictionary has one key per declared flag, with typed values: strings, integers, booleans, or lists of
 strings. A required flag that was not supplied is absent from the dictionary, but parsing fails before that can
@@ -82,26 +85,39 @@ hyphenated flag is read as `flags["dry-run"]`.
 ## Command-line behavior
 
 Everything after the script file name belongs to the script. Atmos does not treat `--config`, `--help`, or any other
-token as an Atmos option once it follows the script name.
+token as an Atmos option once it follows the script name. Atmos global flags, such as `--chdir=dir` or
+`--logs-level Debug`, go between `atmos` and the script path.
 
 - Flags accept the long form (`--replicas=3` or `--replicas 3`) and the declared one-letter shorthand (`-r 3`).
 - A `string_list` flag accepts comma-separated values, repeated flags, or both, so `--tag=a,b --tag=c` yields
-  `["a", "b", "c"]`.
+  `["a", "b", "c"]`. Values use CSV quoting, and an `env` binding parses the same way: `TAGS=a,b` yields `["a", "b"]`.
+  With `choices`, every element is checked.
+- An `int` flag accepts base-10 digits only, on the command line and in an `env` binding. `010` is ten, and `0x10`
+  is rejected.
+- A boolean flag never consumes the next word. `--verbose false` is rejected because `false` would become a
+  positional argument; write `--verbose=false`.
 - A token of `--` ends flag parsing. Every later token is validated as a declared positional argument.
 - Command-line values override a flag's `env` binding, which overrides its default.
-- An unknown flag, an invalid value, a missing required argument, or too many arguments stops the program with a
-  usage error before `validate` or `run` is called.
+- An unknown flag, an invalid value, a missing required flag or argument, a value outside `choices`, or too many
+  arguments stops the program with a usage error before `validate` or `run` is called. A usage error shows the
+  problem (for example ``missing required argument `<service>` ``), the usage line, and the hint
+  `Run ./tool --help for usage.`. It has no traceback and exits with status 2.
+- Help marks required flags `(required)`, lists choices as `(one of: dev, prod)`, and shows an environment binding as
+  `[env: DEPLOY_STAGE]`.
 
 Top-level code in the script still runs before `cli.command`, and any code after it runs once `run` returns. Keep work
 with side effects inside `run`, so that `--help` and rejected input do not trigger it.
 
 ## Errors
 
+Errors that your own code raises, such as `fail()`, a runtime error, or `validate` returning `False`, are reported as
+script failures with a traceback. Tracebacks show paths relative to the working directory when the script is under it.
+
 - A script can call `cli.command` once per run. A second call fails.
 - It is available only in a standalone script's main thread. Calling it from a script step, a custom command, a
   workflow, a hook, or inside a [`steps.parallel`](/functions/automation/steps.parallel) task fails.
-- A declaration of the wrong kind in `args` or `flags`, a duplicate name or shorthand, or a required argument that
-  follows an optional one fails with an argument error.
+- A declaration of the wrong kind in `args` or `flags`, a duplicate name or shorthand (names that differ only by case
+  count as duplicates), or a required argument that follows an optional one fails with an argument error.
 
 ## Examples
 
