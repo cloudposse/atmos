@@ -41,12 +41,14 @@ local sources, explicit pruning, and recovery.
 ### Migrating Claude Code Automation
 
 Existing MCP configurations previously caused Claude Code to approve every tool automatically.
-Both `atmos ai ask` and `atmos ai exec` now enforce
-[Atmos tool permissions](/cli/configuration/ai/providers#claude-code-tool-approval).
+The `atmos ai chat`, `atmos ai ask`, and `atmos ai exec` commands now enforce
+[Atmos tool permissions](/cli/configuration/ai/providers#claude-code-tool-approval) for
+requests Claude delegates to Atmos. Native and provider-preapproved requests follow Claude’s
+own permission policy.
 With the default confirmation policy, unattended runs fail when a tool needs approval.
 
 Before upgrading CI jobs, set an explicit policy. For example, `allow` avoids prompts while
-still enforcing blocked tools:
+still enforcing blocked tools on delegated requests:
 
 ```yaml
 ai:

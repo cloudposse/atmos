@@ -67,7 +67,10 @@ atmos ai ask [question]
   <dd>Disable automatic context discovery</dd>
 
   <dt>`--no-tools`</dt>
-  <dd>Disable tool execution for faster, simpler queries</dd>
+  <dd>Disable Atmos tool execution for faster, simpler queries. CLI providers retain their native tools.</dd>
+
+  <dt>`--session <name-or-id>`, `-s`</dt>
+  <dd>Resume a saved session by name or ID, or create one with this name. Requires `ai.sessions.enabled: true`. Saves questions and answers so subsequent `ask`, `exec`, and `chat` invocations can continue the conversation. Environment variable: `ATMOS_AI_SESSION`.</dd>
 
   <dt>`--mcp <servers>`</dt>
   <dd>MCP servers to use (comma-separated). Skips automatic server routing and starts only the specified servers. Can be repeated: `--mcp aws-iam --mcp aws-billing`. Use [`atmos mcp list`](/cli/commands/mcp/list) to see available server names. Environment variable: `ATMOS_AI_MCP`</dd>
@@ -247,9 +250,9 @@ When the AI needs to run a tool, for example `atmos list stacks`, `ask` pauses a
   Allow execution?
   "Always" choices are saved to .atmos/ai.settings.local.json
   > Allow once
-    Always allow this exact request
+    Always allow Bash(atmos list stacks)
     Deny once
-    Always deny this exact request
+    Always deny Bash(atmos list stacks)
 
 ↑ up • ↓ down • / filter • enter submit
 ```
@@ -262,7 +265,7 @@ Use the arrow keys to choose an option and press Enter.
   <dd>Run the tool this time only.</dd>
 
   <dt>**Always allow**</dt>
-  <dd>Run the tool and remember the decision in `.atmos/ai.settings.local.json`. For `Bash`, the decision is scoped to the exact command, for example `Bash(atmos list stacks)`. A different command still prompts.</dd>
+  <dd>Run the tool and remember the decision in `.atmos/ai.settings.local.json`. For `Bash`, the decision is scoped to the exact command, for example `Bash(atmos list stacks)`. A different command still prompts. The option label shows the saved scope; tools without a specifier, including MCP tools, are remembered for all arguments.</dd>
 
   <dt>**Deny once**</dt>
   <dd>Refuse this call. The model continues and explains what it could not do.</dd>

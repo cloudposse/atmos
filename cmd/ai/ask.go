@@ -91,13 +91,11 @@ var askCmd = &cobra.Command{
 		}
 
 		// Gather context if explicitly configured (skip interactive prompt since tools handle introspection).
-		finalQuestion := question
+		var stackContext string
 		if atmosConfig.AI.SendContext {
-			stackContext, err := ai.GatherStackContext(&atmosConfig)
+			stackContext, err = ai.GatherStackContext(&atmosConfig)
 			if err != nil {
 				log.Debug("Could not gather stack context", "error", err)
-			} else {
-				finalQuestion = fmt.Sprintf("%s\n\n%s", stackContext, question)
 			}
 		}
 
@@ -149,10 +147,11 @@ var askCmd = &cobra.Command{
 			sessionID:    sessionID,
 			timeout:      timeout,
 			toolsEnabled: !noTools && toolExecutor != nil,
+			stackContext: stackContext,
 		}
 
 		history := append([]types.Message(nil), sess.History()...)
-		answer, err := turn.run(finalQuestion, question, history)
+		answer, err := turn.run(question, question, history)
 		if err != nil {
 			return err
 		}

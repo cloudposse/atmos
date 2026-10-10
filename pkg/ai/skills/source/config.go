@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -43,14 +44,18 @@ func Edit(config *schema.AtmosConfiguration, o EditOptions) (string, error) {
 		return "", err
 	}
 	if o.Operation != editRemove {
-		if err = validateEdited(updated, o.Label); err != nil {
+		if err = validateEdited(config, file, updated, o.Label); err != nil {
 			return "", err
 		}
 	}
 	if o.DryRun {
 		return string(updated), nil
 	}
-	if err = writeAtomic(file, updated); err != nil {
+	info, err := os.Stat(file)
+	if err != nil {
+		return "", err
+	}
+	if err = writeAtomicMode(file, updated, info.Mode().Perm()); err != nil {
 		return "", err
 	}
 	message := "Updated " + file
@@ -147,16 +152,58 @@ func setField(raw []byte, path, field, value string) ([]byte, error) {
 	}
 }
 
-func validateEdited(raw []byte, label string) error {
+func validateEdited(config *schema.AtmosConfiguration, file string, raw []byte, label string) error {
+	file, err := filepath.Abs(file)
+	if err != nil {
+		return err
+	}
+	value := schema.AISkillConfig{}
+	if current := config.AI.Skills[label]; current != nil {
+		value = *current
+	}
+	files := cfg.EffectiveConfigFilesAscending(config)
+	found := false
+	for _, candidate := range files {
+		content := raw
+		candidate, err := filepath.Abs(candidate)
+		if err != nil {
+			return err
+		}
+		if candidate == file {
+			found = true
+		} else {
+			var err error
+			content, err = os.ReadFile(candidate)
+			if err != nil {
+				return err
+			}
+		}
+		if err := mergeEditedDeclaration(content, label, &value); err != nil {
+			return err
+		}
+	}
+	if !found {
+		if err := mergeEditedDeclaration(raw, label, &value); err != nil {
+			return err
+		}
+	}
+	normalized := normalize(&value)
+	return validateDeclaration(&normalized)
+}
+
+// Decode each declaration into the accumulated value: absent fields inherit
+// lower layers while present scalars, tags and lists replace their old values.
+func mergeEditedDeclaration(raw []byte, label string, value *schema.AISkillConfig) error {
 	var document struct {
 		AI struct {
-			Skills map[string]schema.AISkillConfig `yaml:"skills"`
+			Skills map[string]yaml.Node `yaml:"skills"`
 		} `yaml:"ai"`
 	}
 	if err := yaml.Unmarshal(raw, &document); err != nil {
 		return err
 	}
-	value := document.AI.Skills[label]
-	normalized := normalize(&value)
-	return validateDeclaration(&normalized)
+	if node, ok := document.AI.Skills[label]; ok {
+		return node.Decode(value)
+	}
+	return nil
 }

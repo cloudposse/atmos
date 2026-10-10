@@ -144,6 +144,9 @@ func (e *Engine) recordSelected(r *Record, o *Options) bool {
 	if isAdHoc(r.Source) != e.AdHoc || r.Project != e.Project {
 		return false
 	}
+	if o.Uninstall && !filterMatches(o.Track, r.Track) {
+		return false
+	}
 	if !filterMatches(o.Source, r.Source) || !filterMatches(o.Name, r.Name) || !filterMatches(o.Scope, r.Scope) {
 		return false
 	}

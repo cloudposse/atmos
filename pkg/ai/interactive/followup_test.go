@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -105,4 +108,19 @@ func TestConversation_Continue(t *testing.T) {
 func TestTerminalAvailable_FalseWithoutTerminals(t *testing.T) {
 	// Tests run without a terminal on stdin, so follow-ups must be off; this is what keeps CI and pipes safe.
 	assert.False(t, terminalAvailable())
+}
+
+func TestTerminalAvailable_ForcedOutputDoesNotEnableInput(t *testing.T) {
+	previous := viper.Get("force-tty")
+	viper.Set("force-tty", true)
+	t.Cleanup(func() { viper.Set("force-tty", previous) })
+	assert.False(t, terminalAvailable())
+}
+
+func TestFollowUpForm_EscapeAborts(t *testing.T) {
+	var question string
+	form := newFollowUpForm(&question)
+	_, _ = form.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	assert.Equal(t, huh.StateAborted, form.State)
+	assert.Empty(t, question)
 }

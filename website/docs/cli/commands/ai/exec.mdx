@@ -104,7 +104,7 @@ built-in tools such as `Bash` and `Edit`. That implicit approval has been remove
 commands. Existing CI jobs may need an explicit permission policy before upgrading.
 :::
 
-For unattended execution, set `allow` to avoid prompts while retaining the blocked list:
+For unattended execution, set `allow` to avoid prompts while retaining the blocked list for requests delegated to Atmos:
 
 ```yaml
 ai:
@@ -116,7 +116,7 @@ ai:
 
 To pre-approve only specific tools in Claude Code, configure
 `ai.providers.claude-code.allowed_tools`, for example `["Read", "Bash(atmos list stacks)"]`.
-The `yolo` mode bypasses all Atmos permission checks, including blocked tools.
+Claude-native and provider-preapproved requests follow Claude’s permission policy and do not reach Atmos’s blocked-list check. The `yolo` mode bypasses all Atmos permission checks, including blocked tools.
 See [Claude Code tool approval](/cli/configuration/ai/providers#claude-code-tool-approval)
 for cached decisions and interactive behavior.
 

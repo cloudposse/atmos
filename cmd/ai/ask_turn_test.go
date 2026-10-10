@@ -81,6 +81,22 @@ func assertAskPrompt(t *testing.T, prompts []string, question string) {
 }
 
 func TestAskTurn_Run(t *testing.T) {
+	t.Run("stack context reaches every turn without changing plain history", func(t *testing.T) {
+		client := &scriptedAskClient{response: "I have the context."}
+		turn := newTestAskTurn(t, client)
+		turn.stackContext = "field_test_token: unique-stack-value-731"
+		_, err := turn.run("Read my context", "Read my context", nil)
+		require.NoError(t, err)
+		history := []types.Message{{Role: types.RoleUser, Content: "Read my context"}, {Role: types.RoleAssistant, Content: client.response}}
+		_, err = turn.run("What is the token?", "What is the token?", history)
+		require.NoError(t, err)
+		require.Len(t, client.sentPrompts, 2)
+		for _, prompt := range client.sentPrompts {
+			assert.Contains(t, prompt, turn.stackContext)
+		}
+		assert.Equal(t, history, client.sentHistory[1])
+	})
+
 	t.Run("returns the answer text", func(t *testing.T) {
 		client := &scriptedAskClient{response: "You have 289 stacks."}
 

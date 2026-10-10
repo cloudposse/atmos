@@ -155,7 +155,7 @@ func (p *CLIPrompter) Prompt(ctx context.Context, tool Tool, params map[string]i
 
 	// Prompts require a TTY; fail loudly instead of silently defaulting to deny.
 	// Checked before anything is printed so non-interactive logs stay free of a dangling request.
-	if !terminal.New().IsTTY(terminal.Stdin) {
+	if !terminal.HasRealTTYInput() {
 		return false, errUtils.ErrInteractiveNotAvailable
 	}
 
@@ -199,18 +199,12 @@ func runRequestForm(form *huh.Form) error {
 
 // alwaysAllowLabel names the "always allow" choice for the tool, saying what it covers.
 func alwaysAllowLabel(tool Tool) string {
-	if _, scoped := tool.(ScopedTool); scoped {
-		return "Always allow this exact request"
-	}
-	return "Always allow " + prettyToolName(tool.Name())
+	return "Always allow " + prettyToolName(cacheKeyFor(tool))
 }
 
 // alwaysDenyLabel names the "always deny" choice for the tool, saying what it covers.
 func alwaysDenyLabel(tool Tool) string {
-	if _, scoped := tool.(ScopedTool); scoped {
-		return "Always deny this exact request"
-	}
-	return "Always deny " + prettyToolName(tool.Name())
+	return "Always deny " + prettyToolName(cacheKeyFor(tool))
 }
 
 // promptWithCache presents the four cached-permission choices via a huh select

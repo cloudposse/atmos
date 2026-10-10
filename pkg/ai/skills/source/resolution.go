@@ -89,7 +89,7 @@ func (e *Engine) checkLocalSources(resolution *Resolution) error {
 		if filepath.IsAbs(repo.Source) {
 			local = repo.Source
 		}
-		digest, err := treeDigest(local)
+		digest, err := filteredTreeDigest(local, relativeExclusions(local, e.sourceExclusions))
 		if err != nil {
 			return err
 		}

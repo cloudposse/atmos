@@ -21,24 +21,30 @@ import (
 )
 
 const (
-	sourceSetOperation = "set"
-	sourceDryRunFlag   = "dry-run"
+	sourceAddOperation       = "add"
+	sourceUninstallOperation = "uninstall"
+	sourceSetOperation       = "set"
+	sourceDryRunFlag         = "dry-run"
 )
 
 func init() {
-	for _, operation := range []string{"add", sourceSetOperation, "remove"} {
+	for _, operation := range []string{sourceAddOperation, sourceSetOperation, "remove"} {
 		ai.SkillCmd.AddCommand(newSourceEditCommand(operation))
 	}
 	ai.SkillCmd.AddCommand(newSyncCommand())
 }
 
 func newSourceEditCommand(operation string) *cobra.Command {
-	uses := map[string]string{"add": "add <source> --name <label>", sourceSetOperation: "set <label> <field> <value>", "remove": "remove <label>"}
+	uses := map[string]string{sourceAddOperation: "add <source> --name <label>", sourceSetOperation: "set <label> <field> <value>", "remove": "remove <label>"}
 	cmd := &cobra.Command{Use: uses[operation], Short: operation + " a skill source declaration (configuration only)", Args: cobra.ExactArgs(1)}
 	if operation == sourceSetOperation {
 		cmd.Args = cobra.ExactArgs(3)
 	}
-	parser := flags.NewStandardParser(flags.WithStringFlag("name", "", "", "Source label"), flags.WithBoolFlag(sourceDryRunFlag, "", false, "Preview without writing configuration"))
+	options := []flags.Option{flags.WithBoolFlag(sourceDryRunFlag, "", false, "Preview without writing configuration")}
+	if operation == sourceAddOperation {
+		options = append(options, flags.WithStringFlag("name", "", "", "Source label"))
+	}
+	parser := flags.NewStandardParser(options...)
 	parser.RegisterFlags(cmd)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		v := viper.New()
@@ -55,7 +61,7 @@ func newSourceEditCommand(operation string) *cobra.Command {
 			return err
 		}
 		o := source.EditOptions{Operation: operation, Label: args[0], File: file, DryRun: v.GetBool(sourceDryRunFlag)}
-		if operation == "add" {
+		if operation == sourceAddOperation {
 			o.Label = v.GetString("name")
 			o.Value = args[0]
 		}
@@ -83,12 +89,19 @@ func sourceFlags() *flags.StandardParser {
 	)
 }
 
-//nolint:revive // The command binds both flag groups before handling recovery or reconciliation.
 func newSyncCommand() *cobra.Command {
 	cmd := &cobra.Command{Use: "sync [label]", Short: "Reconcile declared skill sources", Args: cobra.MaximumNArgs(1)}
 	parser := sourceFlags()
 	parser.RegisterFlags(cmd)
-	common := flags.NewStandardParser(flags.WithStringFlag("scope", "", "", "Override declaration scope"), flags.WithStringSliceFlag("client", "c", nil, "Limit target clients"), flags.WithBoolFlag("force", "", false, "Replace modified owned copies"), flags.WithBoolFlag("recover", "", false, "Recover an interrupted skill transaction"))
+	common := flags.NewStandardParser(
+		flags.WithStringFlag(scopeFlag, "", "", "Override declaration scope"),
+		flags.WithEnvVars(scopeFlag, "ATMOS_AI_SKILL_SCOPE"),
+		flags.WithStringSliceFlag(clientFlag, "c", nil, "Limit target clients"),
+		flags.WithEnvVars(clientFlag, "ATMOS_AI_SKILL_CLIENT"),
+		flags.WithBoolFlag("force", "", false, "Replace modified owned copies"),
+		flags.WithEnvVars("force", "ATMOS_AI_SKILL_FORCE"),
+		flags.WithBoolFlag("recover", "", false, "Recover an interrupted skill transaction"),
+	)
 	common.RegisterFlags(cmd)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		v := viper.New()
@@ -117,9 +130,7 @@ func newSyncCommand() *cobra.Command {
 			opts.Source = args[0]
 		}
 		statuses, err := engine.Run(cmd.Context(), opts)
-		if err == nil || len(statuses) > 0 {
-			printSourceStatuses(statuses)
-		}
+		printSourceOutcome(statuses, &opts, err)
 		return err
 	}
 	return cmd
@@ -127,18 +138,39 @@ func newSyncCommand() *cobra.Command {
 
 func sourceOptions(cmd *cobra.Command, v *viper.Viper) source.Options {
 	o := source.Options{Path: v.GetString("path"), Source: v.GetString("source"), Track: v.GetString("track"), DryRun: v.GetBool(sourceDryRunFlag), Frozen: v.GetBool("frozen"), Check: v.GetBool("check"), Prune: v.GetBool("prune"), Force: v.GetBool("force")}
-	if cmd.Flags().Changed("scope") || sourceEnvironment("ATMOS_AI_SKILL_SCOPE") {
-		o.Scope = v.GetString("scope")
+	if cmd.Flags().Changed(scopeFlag) || sourceEnvironment("ATMOS_AI_SKILL_SCOPE") {
+		o.Scope = v.GetString(scopeFlag)
 	} else if v.GetBool("global") {
 		o.Scope = "user"
 	}
-	if cmd.Flags().Changed("client") || sourceEnvironment("ATMOS_AI_SKILL_CLIENT") {
-		o.Clients = v.GetStringSlice("client")
+	if cmd.Flags().Changed(clientFlag) || sourceEnvironment("ATMOS_AI_SKILL_CLIENT") {
+		o.Clients = v.GetStringSlice(clientFlag)
 	}
 	if v.GetBool("all-clients") {
 		o.Clients = marketplace.SupportedClients
 	}
+	if o.Path != "" {
+		// Manual destinations do not retain ignored distribution overrides.
+		o.Scope, o.Clients = "", nil
+	}
 	return o
+}
+
+func printSourceOutcome(statuses []source.Status, opts *source.Options, err error) {
+	if err != nil && len(statuses) == 0 {
+		return
+	}
+	if err == nil && !opts.DryRun && !opts.Check {
+		for i := range statuses {
+			switch statuses[i].Status {
+			case "missing", "stale", "drifted":
+				statuses[i].Status = "installed"
+			case "remove":
+				statuses[i].Status = "removed"
+			}
+		}
+	}
+	printSourceStatuses(statuses)
 }
 
 func printSourceStatuses(statuses []source.Status) {
@@ -166,11 +198,12 @@ func printSourceStatuses(statuses []source.Status) {
 
 // sourceInvocation keeps CLI orchestration separate from reconciliation.
 type sourceInvocation struct {
-	cmd    *cobra.Command
-	args   []string
-	v      *viper.Viper
-	engine *source.Engine
-	opts   source.Options
+	cmd       *cobra.Command
+	args      []string
+	v         *viper.Viper
+	engine    *source.Engine
+	opts      source.Options
+	confirmed bool
 }
 
 // runDeclared dispatches owned installations through the reconciliation engine.
@@ -192,18 +225,26 @@ func runDeclared(cmd *cobra.Command, args []string, v *viper.Viper) (bool, error
 		return true, err
 	}
 	call := &sourceInvocation{cmd: cmd, args: args, v: v, engine: engine, opts: opts}
+	if err = call.resolveScope(); err != nil {
+		return true, err
+	}
 	if err = call.selectSource(); err != nil {
 		return true, err
 	}
+	return call.dispatch()
+}
+
+func (call *sourceInvocation) dispatch() (bool, error) {
+	cmd := call.cmd
 	call.opts.Update = cmd.Name() == "update"
-	call.opts.Uninstall = cmd.Name() == "uninstall"
+	call.opts.Uninstall = cmd.Name() == sourceUninstallOperation
 	if call.opts.Source != "" {
 		return true, call.runSelected()
 	}
 	switch cmd.Name() {
 	case "install":
 		return true, call.installAdHoc()
-	case "uninstall":
+	case sourceUninstallOperation:
 		return call.uninstallAll()
 	default:
 		return call.updateAll()
@@ -247,24 +288,62 @@ func (c *sourceInvocation) runSelected() error {
 }
 
 func (c *sourceInvocation) run() error {
-	statuses, err := c.engine.Run(c.cmd.Context(), c.opts)
-	if err != nil {
-		if len(statuses) > 0 {
-			printSourceStatuses(statuses)
-		}
+	if c.opts.Update && c.opts.Frozen {
+		return fmt.Errorf("%w: frozen cannot update", source.ErrInvalid)
+	}
+	if err := c.confirm(); err != nil {
 		return err
 	}
-	if !c.opts.DryRun && !c.opts.Check {
-		for i := range statuses {
-			switch statuses[i].Status {
-			case "missing", "stale", "drifted":
-				statuses[i].Status = "installed"
-			case "remove":
-				statuses[i].Status = "removed"
-			}
-		}
+	statuses, err := c.engine.Run(c.cmd.Context(), c.opts)
+	printSourceOutcome(statuses, &c.opts, err)
+	return err
+}
+
+// resolveScope keeps destructive defaults in the project and honors declared install scopes.
+func (c *sourceInvocation) resolveScope() error {
+	if c.opts.Scope != "" || c.opts.Path != "" || c.cmd.Name() == "update" {
+		return nil
 	}
-	printSourceStatuses(statuses)
+	if c.hasDeclaredInstallScope() {
+		return nil
+	}
+	skip := c.opts.Check || c.opts.DryRun || c.v.GetBool("yes")
+	if c.cmd.Name() == sourceUninstallOperation {
+		skip = skip || c.opts.Force
+	}
+	scope, err := resolveSkillScope(c.cmd, c.v, skip)
+	c.opts.Scope = scope
+	return err
+}
+
+func (c *sourceInvocation) hasDeclaredInstallScope() bool {
+	label := c.opts.Source
+	if label == "" && len(c.args) > 0 {
+		label = c.args[0]
+	}
+	d := c.engine.Config.AI.Skills[label]
+	return c.cmd.Name() == "install" && d != nil && d.Scope != ""
+}
+
+func (c *sourceInvocation) confirm() error {
+	if c.confirmed || c.opts.DryRun || c.opts.Check {
+		return nil
+	}
+	skip, title, cancelled := c.v.GetBool("yes"), "Install selected skills?", marketplace.ErrInstallationCancelled
+	switch c.cmd.Name() {
+	case sourceUninstallOperation:
+		skip, title, cancelled = c.opts.Force, "Uninstall selected skills?", marketplace.ErrUninstallationCancelled
+	case "update":
+		title, cancelled = "Update selected skills?", marketplace.ErrUpdateCancelled
+	}
+	confirmed, err := flags.PromptForConfirmation(title, skip)
+	if err != nil {
+		return err
+	}
+	if !confirmed {
+		return cancelled
+	}
+	c.confirmed = true
 	return nil
 }
 
@@ -314,22 +393,12 @@ func adHocDeclaration(raw string) (*schema.AISkillConfig, error) {
 	return source.ParseAdHoc(raw)
 }
 
-//nolint:revive // Guard legacy dispatch and confirmation before reconciling both ownership groups.
 func (c *sourceInvocation) uninstallAll() (bool, error) {
 	if len(c.args) > 0 {
 		if c.opts.DryRun || c.opts.Check || c.opts.Frozen {
 			return true, fmt.Errorf("%w: reinstall legacy skills to establish ownership before reconciliation", source.ErrInvalid)
 		}
 		return false, nil
-	}
-	if !c.opts.Force && !c.opts.DryRun && !c.opts.Check {
-		confirmed, err := flags.PromptForConfirmation("Uninstall recorded skills?", false)
-		if err != nil {
-			return true, err
-		}
-		if !confirmed {
-			return true, marketplace.ErrUninstallationCancelled
-		}
 	}
 	if err := c.run(); err != nil {
 		return true, err
@@ -345,6 +414,9 @@ func (c *sourceInvocation) uninstallAll() (bool, error) {
 //nolint:revive // Reconcile declarations and local ad-hoc records before the legacy compatibility adapter.
 func (c *sourceInvocation) updateAll() (bool, error) {
 	if len(c.args) > 0 {
+		if c.opts.DryRun || c.opts.Check || c.opts.Frozen {
+			return true, fmt.Errorf("%w: reinstall legacy skills to establish ownership before reconciliation", source.ErrInvalid)
+		}
 		return false, nil
 	}
 	if c.opts.Scope == "" {
@@ -415,7 +487,11 @@ func (c *sourceInvocation) rejectAmbiguousLabel(name string) error {
 	}
 	_, bundled := marketplace.LookupBundledSkill(name)
 	local, statErr := os.Stat(filepath.Join(c.engine.Project, name))
-	if bundled || len(owners) > 0 || (statErr == nil && local.IsDir()) {
+	foreignOwner := false
+	for _, owner := range owners {
+		foreignOwner = foreignOwner || owner != name
+	}
+	if bundled || foreignOwner || (statErr == nil && local.IsDir()) {
 		return fmt.Errorf("%w: ambiguous name %s; use --source", source.ErrInvalid, name)
 	}
 	return nil

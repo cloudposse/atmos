@@ -47,6 +47,10 @@ func within(root, relative string) (string, error) {
 }
 
 func treeDigest(root string) (string, error) {
+	return filteredTreeDigest(root, nil)
+}
+
+func filteredTreeDigest(root string, excluded []string) (string, error) {
 	if err := safePath(root); err != nil {
 		return "", err
 	}
@@ -60,7 +64,7 @@ func treeDigest(root string) (string, error) {
 		if walkErr != nil {
 			return walkErr
 		}
-		skip, err := validateTreeEntry(path, d)
+		skip, err := validateSnapshotEntry(path, d, excluded)
 		if err != nil || skip {
 			return err
 		}
@@ -98,8 +102,22 @@ func validateTreeEntry(path string, d fs.DirEntry) (bool, error) {
 	return false, nil
 }
 
-//nolint:revive // Keep sequential validation and I/O errors next to the operation they guard.
+func validateSnapshotEntry(path string, d fs.DirEntry, excluded []string) (bool, error) {
+	if contains(excluded, path) {
+		if d.IsDir() {
+			return true, filepath.SkipDir
+		}
+		return true, nil
+	}
+	return validateTreeEntry(path, d)
+}
+
 func copyTree(root, target string) error {
+	return copyFilteredTree(root, target, nil)
+}
+
+//nolint:revive // Keep sequential validation and I/O errors next to the operation they guard.
+func copyFilteredTree(root, target string, excluded []string) error {
 	if err := safePath(root); err != nil {
 		return err
 	}
@@ -120,7 +138,7 @@ func copyTree(root, target string) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		skip, err := validateTreeEntry(path, d)
+		skip, err := validateSnapshotEntry(path, d, excluded)
 		if err != nil {
 			return err
 		}

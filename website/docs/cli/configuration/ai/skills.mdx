@@ -547,7 +547,8 @@ atmos version track lock prod
 atmos ai skill sync --track prod
 ```
 
-The `add`, `set`, and `remove` commands preserve YAML comments and tags. Use `--dry-run` to
+The `add`, `set`, and `remove` commands preserve YAML comments, tags, and existing file permissions.
+Partial declarations are validated against the merged configuration. Use `--dry-run` to
 preview edits. If a declaration occurs in multiple configuration layers, removal requires a
 single explicit `--config` file and reports declarations remaining in other layers.
 
@@ -556,7 +557,9 @@ single explicit `--config` file and reports declarations remaining in other laye
 Commit `skills.lock.yaml` and the configured version lock. The skills lock pins every contributing
 Git repository, including external marketplace plugins, and records skill content digests.
 Unchanged declarations reuse locked commits. Local directory sources use content digests;
-run `update` to accept changed local content.
+run `update` to accept changed local content. A project-root `source: .` excludes generated
+`.atmos` state, `skills.lock.yaml`, and installation destinations owned by this project from
+its snapshot. Authored files, including other hidden files, remain part of the source digest.
 
 For managed refs, advance the version track before synchronizing:
 

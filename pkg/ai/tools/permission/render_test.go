@@ -375,10 +375,11 @@ func TestAlwaysLabels(t *testing.T) {
 		{name: "Read", key: "Read(/repo/go.mod)"},
 		{name: "Glob", key: "Glob(**/*.go)"},
 		{name: "WebFetch", key: "WebFetch(https://example.com)"},
+		{name: "mcp__field_test__write_marker", key: "mcp__field_test__write_marker"},
 	} {
 		t.Run(tool.name, func(t *testing.T) {
-			assert.Equal(t, "Always allow this exact request", alwaysAllowLabel(tool))
-			assert.Equal(t, "Always deny this exact request", alwaysDenyLabel(tool))
+			assert.Equal(t, "Always allow "+prettyToolName(tool.key), alwaysAllowLabel(tool))
+			assert.Equal(t, "Always deny "+prettyToolName(tool.key), alwaysDenyLabel(tool))
 		})
 	}
 	assert.Equal(t, "Always allow atmos_list_stacks", alwaysAllowLabel(plainFakeTool{name: "atmos_list_stacks"}))

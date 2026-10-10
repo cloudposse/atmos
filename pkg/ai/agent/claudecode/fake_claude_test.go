@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -15,25 +18,29 @@ const (
 	// The fakeScenarioEnv variable selects the scripted behavior of the fake `claude`.
 	fakeScenarioEnv = "_ATMOS_CLAUDE_FAKE"
 	// The fakeLogEnv variable names a file where the fake records argv, stdin lines, and MCP config checks.
-	fakeLogEnv = "_ATMOS_CLAUDE_FAKE_LOG"
+	fakeLogEnv           = "_ATMOS_CLAUDE_FAKE_LOG"
+	fakeDescendantDirEnv = "_ATMOS_CLAUDE_DESCENDANT_DIR"
 )
 
 // Fake scenarios.
 const (
-	scenarioPlain          = "plain"
-	scenarioTools          = "tools"
-	scenarioAsk            = "ask"
-	scenarioAskTwo         = "ask_two"
-	scenarioEmpty          = "empty"
-	scenarioMaxTurns       = "max_turns"
-	scenarioIsError        = "is_error"
-	scenarioGarbage        = "garbage"
-	scenarioHuge           = "huge"
-	scenarioDenials        = "denials"
-	scenarioHang           = "hang"
-	scenarioResultThenHang = "result_then_hang"
-	scenarioCrash          = "crash"
-	scenarioNoResult       = "no_result"
+	scenarioPlain            = "plain"
+	scenarioTools            = "tools"
+	scenarioAsk              = "ask"
+	scenarioAskTwo           = "ask_two"
+	scenarioEmpty            = "empty"
+	scenarioMaxTurns         = "max_turns"
+	scenarioIsError          = "is_error"
+	scenarioGarbage          = "garbage"
+	scenarioHuge             = "huge"
+	scenarioDenials          = "denials"
+	scenarioHang             = "hang"
+	scenarioResultThenHang   = "result_then_hang"
+	scenarioCrash            = "crash"
+	scenarioNoResult         = "no_result"
+	scenarioDescendant       = "descendant"
+	scenarioDescendantResult = "descendant_result"
+	scenarioDescendantChild  = "descendant_child"
 )
 
 // hugeSize is the size of the oversized lines emitted by the "huge" scenario (above bufio's 64KB default).
@@ -211,6 +218,49 @@ func (f *fakeClaude) play(scenario string) int {
 		return 2
 	case scenarioNoResult:
 		return 0
+	case scenarioDescendant, scenarioDescendantResult:
+		return f.playDescendant(scenario)
+	case scenarioDescendantChild:
+		return playDescendantChild()
+	}
+	return 0
+}
+
+const descendantPoll = 10 * time.Millisecond
+
+func (f *fakeClaude) playDescendant(scenario string) int {
+	child := exec.Command(os.Args[0])
+	child.Env = append(os.Environ(), fakeScenarioEnv+"="+scenarioDescendantChild, fakeLogEnv+"=")
+	child.Stdout, child.Stderr = os.Stdout, os.Stderr
+	if err := child.Start(); err != nil {
+		return 1
+	}
+	dir := os.Getenv(fakeDescendantDirEnv)
+	for deadline := time.Now().Add(time.Minute); time.Now().Before(deadline); time.Sleep(descendantPoll) {
+		if _, err := os.Stat(filepath.Join(dir, "ready")); err == nil {
+			emit(toolUse("child-ready", "Bash", obj{"command": "child ready"}))
+			if scenario == scenarioDescendantResult {
+				emit(successResult("result with lingering child"))
+			}
+			time.Sleep(time.Minute)
+			return 0
+		}
+	}
+	return 1
+}
+
+func playDescendantChild() int {
+	dir := os.Getenv(fakeDescendantDirEnv)
+	if err := os.WriteFile(filepath.Join(dir, "ready"), []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
+		return 1
+	}
+	for deadline := time.Now().Add(time.Minute); time.Now().Before(deadline); time.Sleep(descendantPoll) {
+		if _, err := os.Stat(filepath.Join(dir, "trigger")); err == nil {
+			if err := os.WriteFile(filepath.Join(dir, "side-effect"), []byte("child survived"), 0o600); err != nil {
+				return 1
+			}
+			return 0
+		}
 	}
 	return 0
 }

@@ -2,8 +2,10 @@ package interactive
 
 import (
 	"errors"
+	"os"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -75,24 +77,14 @@ func (c Conversation) Continue(history []types.Message, turn TurnFunc) error {
 
 // terminalAvailable reports whether a person can type a follow-up and see the result.
 func terminalAvailable() bool {
-	term := terminal.New()
-	return term.IsTTY(terminal.Stdin) && term.IsTTY(terminal.Stdout) && !telemetry.IsCI()
+	return terminal.HasRealTTYInput() && terminal.IsTTYWriter(os.Stdout) && !telemetry.IsCI()
 }
 
 // promptFollowUp asks for the next question.
 func promptFollowUp() (string, error) {
 	var question string
 
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewInput().
-				Title("Follow up?").
-				Placeholder("Type a reply, or press Enter to finish").
-				Value(&question),
-		),
-	).WithTheme(uiutils.NewAtmosHuhTheme())
-
-	if err := form.Run(); err != nil {
+	if err := newFollowUpForm(&question).Run(); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
 			return "", errUtils.ErrUserAborted
 		}
@@ -100,4 +92,18 @@ func promptFollowUp() (string, error) {
 	}
 
 	return question, nil
+}
+
+// newFollowUpForm binds Escape and Ctrl-C to finish the conversation.
+func newFollowUpForm(question *string) *huh.Form {
+	keymap := huh.NewDefaultKeyMap()
+	keymap.Quit = key.NewBinding(key.WithKeys("ctrl+c", "esc"))
+	return huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Follow up?").
+				Placeholder("Type a reply, or press Enter to finish").
+				Value(question),
+		),
+	).WithTheme(uiutils.NewAtmosHuhTheme()).WithKeyMap(keymap)
 }

@@ -39,6 +39,10 @@ func (e *Engine) pending() error {
 }
 
 func writeAtomic(path string, data []byte) error {
+	return writeAtomicMode(path, data, privateFileMode)
+}
+
+func writeAtomicMode(path string, data []byte, mode os.FileMode) error {
 	if err := safePath(path); err != nil {
 		return err
 	}
@@ -52,6 +56,10 @@ func writeAtomic(path string, data []byte) error {
 	temp := f.Name()
 	defer os.Remove(temp)
 	if _, err = f.Write(data); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err = f.Chmod(mode); err != nil {
 		_ = f.Close()
 		return err
 	}

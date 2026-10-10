@@ -104,11 +104,12 @@ type Fetcher interface {
 
 // Engine owns dependencies and project identity, never global process configuration.
 type Engine struct {
-	AdHoc         bool
-	Config        *schema.AtmosConfiguration
-	Project, Home string
-	Fetcher       Fetcher
-	manualRoots   []string
+	AdHoc            bool
+	Config           *schema.AtmosConfiguration
+	Project, Home    string
+	Fetcher          Fetcher
+	manualRoots      []string
+	sourceExclusions []string
 	// Rename permits deterministic injection of apply and rollback failures.
 	Rename func(string, string) error
 }

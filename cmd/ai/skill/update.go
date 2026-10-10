@@ -109,6 +109,8 @@ func init() {
 	// distribution flags -- update re-runs the same install/distribution
 	// logic under the hood once it's decided a reinstall is actually needed.
 	updateParser = flags.NewStandardParser(
+		flags.WithBoolFlag("force", "", false, "Replace modified owned skill copies"),
+		flags.WithEnvVars("force", "ATMOS_AI_SKILL_FORCE"),
 		flags.WithBoolFlag("yes", "y", false, "Skip confirmation prompt"),
 		flags.WithEnvVars("yes", "ATMOS_AI_SKILL_YES"),
 		flags.WithStringFlag("path", "", "", "Override the skill install directory (default: .atmos/skills/content; --scope user: ~/.atmos/skills/content). Relative paths resolve against CWD."),

@@ -23,11 +23,17 @@ type askTurn struct {
 	sessionID    string
 	timeout      time.Duration
 	toolsEnabled bool
+	stackContext string
 }
 
 // run sends one question, shows progress while the AI works, prints the answer, and returns its text.
 // Prompt is what the AI receives; question is the plain text recorded in a persisted session.
 func (t *askTurn) run(prompt, question string, history []types.Message) (string, error) {
+	// Reuse the gathered project context on every turn while persisting plain questions.
+	if t.stackContext != "" {
+		prompt = t.stackContext + "\n\n" + prompt
+	}
+
 	// Providers that enforce the timeout themselves exclude the time spent waiting at an
 	// approval prompt, so they get a context without a deadline.
 	ctx, cancel := t.interactive.NewContext(t.timeout)

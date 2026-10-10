@@ -132,6 +132,10 @@ func (e *Engine) runPlan(ctx context.Context, o *Options) (reconcilePlan, error)
 	if err != nil {
 		return plan, err
 	}
+	e.sourceExclusions = e.generatedSourcePaths(states)
+	if fetcher, ok := e.Fetcher.(*GitFetcher); ok {
+		fetcher.ExcludedPaths = e.sourceExclusions
+	}
 	temp, cleanup, err := resolutionTemp(o)
 	defer cleanup()
 	if err != nil {
@@ -341,8 +345,34 @@ func (e *Engine) retainManualUpdates(o *Options, states map[string]*State, wante
 			updated := *r
 			updated.Digest, updated.Track = w.Record.Digest, w.Record.Track
 			wanted[r.Path] = desired{Record: &updated, Tree: w.Tree}
+			// A manual installation must not start distributing to detected or
+			// declared clients merely because it is updated without --path.
+			retainInstalledClients(wanted, states, r)
 		}
 	}
+}
+
+func retainInstalledClients(wanted map[string]desired, states map[string]*State, manual *Record) {
+	for path, candidate := range wanted {
+		c := candidate.Record
+		if c.Source != manual.Source || c.Name != manual.Name || c.Scope != manual.Scope || c.Client == canonicalClient || c.ManualRoot != "" {
+			continue
+		}
+		if !hasInstalledDestination(states, path) {
+			delete(wanted, path)
+		}
+	}
+}
+
+func hasInstalledDestination(states map[string]*State, path string) bool {
+	for _, state := range states {
+		for _, record := range state.Records {
+			if record.Path == path {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (e *Engine) prepareManualRoots(o *Options, states map[string]*State) error {

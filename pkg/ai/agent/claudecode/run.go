@@ -60,6 +60,11 @@ func (c *Client) execClaude(ctx context.Context, prompt, systemPrompt string) (s
 
 	cmd := exec.CommandContext(runCtx, c.binaryPath, args...) //nolint:gosec // Binary path is from user config or exec.LookPath.
 	cmd.WaitDelay = waitDelay
+	tree, err := prepareProcessTree(cmd)
+	if err != nil {
+		return "", execFailed(err, "")
+	}
+	defer tree.close()
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
@@ -78,6 +83,11 @@ func (c *Client) execClaude(ctx context.Context, prompt, systemPrompt string) (s
 		return "", execFailed(err, "")
 	}
 	if err := cmd.Start(); err != nil {
+		return "", execFailed(err, "")
+	}
+	if err := tree.started(); err != nil {
+		_ = cmd.Cancel()
+		_ = cmd.Wait()
 		return "", execFailed(err, "")
 	}
 

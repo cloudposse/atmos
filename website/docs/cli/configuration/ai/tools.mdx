@@ -81,19 +81,19 @@ ai:
 
 <dl>
   <dt>`tools.enabled`</dt>
-  <dd>Enable or disable the tool subsystem for `atmos ai chat`/`ask`/`exec` (default: `false`). When disabled, the AI can only answer from its training data and conversation context. This does **not** affect `atmos mcp start` — see [MCP note](#mcp-server-note) below.</dd>
+  <dd>Enable or disable the tool subsystem for `atmos ai chat`/`ask`/`exec` (default: `false`). When disabled, Atmos does not register its tools. CLI providers can still use their native tools. This does **not** affect `atmos mcp start` — see [MCP note](#mcp-server-note) below.</dd>
 
   <dt>`tools.mode`</dt>
-  <dd>How Atmos approves tool calls (default: `require_confirmation`). One value selects the whole approval behavior: `require_confirmation` prompts for each tool that needs approval; `allow` never prompts and still honors `blocked`; `yolo` never prompts and bypasses the `blocked` and `restricted` checks (use with care). An unknown value is an error that lists the valid values. When `mode` is set it takes precedence over the deprecated `yolo_mode` and `require_confirmation` settings below, which are then ignored. Applies to `atmos ai chat`, `ask`, and `exec`, including tool requests from the `claude-code` provider.</dd>
+  <dd>How Atmos approves tool calls (default: `require_confirmation`). One value selects the whole approval behavior: `require_confirmation` prompts for each tool that needs approval; `allow` never prompts and still honors `blocked`; `yolo` never prompts and bypasses the `blocked` and `restricted` checks (use with care). An unknown value is an error that lists the valid values. When `mode` is set it takes precedence over the deprecated `yolo_mode` and `require_confirmation` settings below, which are then ignored. Applies to `atmos ai chat`, `ask`, and `exec`, including approval requests delegated by the `claude-code` provider.</dd>
 
   <dt>`tools.allowed`</dt>
-  <dd>When non-empty, restricts which tools exist at all — only tools matching one of these name patterns are registered; every other tool simply isn't available this session. Listed tools also skip the confirmation prompt. Supports wildcard patterns like `atmos_describe_*`. Empty/unset (default: `[]`) means every tool is registered, subject to normal confirmation rules.</dd>
+  <dd>When non-empty, restricts which Atmos tools are registered — only tools matching one of these name patterns are registered; other Atmos tools are unavailable this session. Listed tools also skip the confirmation prompt. Supports wildcard patterns like `atmos_describe_*`. Empty/unset (default: `[]`) means every tool is registered, subject to normal confirmation rules.</dd>
 
   <dt>`tools.restricted`</dt>
   <dd>List of tools (from whatever `allowed` already let through) that always prompt unless they are also in `allowed` (default: `[]`). Applies when `mode` is `require_confirmation`; `mode: allow` and `mode: yolo` never prompt. Use this to protect write and execute operations.</dd>
 
   <dt>`tools.blocked`</dt>
-  <dd>List of tools completely blocked from execution (default: `[]`). The AI cannot invoke these tools, except when `mode: yolo` bypasses the check.</dd>
+  <dd>List of tools denied by Atmos’s permission checker (default: `[]`), except when `mode: yolo` bypasses the check. CLI-provider requests that are approved natively or preapproved by the provider do not reach this checker.</dd>
 
   <dt>`tools.yolo_mode` (deprecated)</dt>
   <dd>Deprecated alias for `mode: yolo` when set to `true`. Ignored when `mode` is set.</dd>
@@ -366,8 +366,9 @@ made it that far:
 6. Default         → Prompt
 ```
 
-The same flow applies to every tool request, whether the request comes from Atmos's own tool loop
-(API providers) or from the `claude-code` provider. When Claude Code asks to run a tool such as
+The same flow applies to Atmos's own tool loop (API providers) and to approval requests
+delegated by the `claude-code` provider. Claude-native and provider-preapproved requests follow
+Claude’s own permission policy and do not reach this flow. When Claude Code asks to run a tool such as
 `Bash`, `Edit`, or an MCP tool, Atmos checks the request against this flow and prompts you in the
 terminal if approval is needed. Claude waits for your answer and continues in the same run. See
 [Claude Code provider](/cli/configuration/ai/providers#cli-provider-settings) for the provider-side
@@ -419,7 +420,7 @@ For the `Bash` tool, "Always allow" applies to the exact command you approved, n
 Bash(atmos list stacks)
 ```
 
-Running `atmos list stacks` again no longer prompts. A different command, for example `atmos describe stacks`, still prompts. Claude Code also scopes `Read`, `Edit`, `Write`, `NotebookEdit`, `Glob`, `Grep`, and `WebFetch` approvals to the request’s file path, notebook path, search path or pattern, or URL. Examples include `Read(/repo/go.mod)` and `Glob(**/*.go)`. Atmos’s own tools and requests without a specifier are remembered by bare tool name.
+Running `atmos list stacks` again no longer prompts. A different command, for example `atmos describe stacks`, still prompts. Claude Code also scopes `Read`, `Edit`, `Write`, `NotebookEdit`, `Glob`, `Grep`, and `WebFetch` approvals to the request’s file path, notebook path, search path or pattern, or URL. Examples include `Read(/repo/go.mod)` and `Glob(**/*.go)`. Atmos’s own tools and requests without a specifier, including MCP tools, are remembered by bare tool name, covering later calls with different arguments. Path-scoped rules also cover later changes to that file’s contents. The prompt’s Always choices name the scope being saved.
 
 ### Non-Interactive Runs
 

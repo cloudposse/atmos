@@ -1151,16 +1151,9 @@ func TestUninstallCmd_StandardParserServer(t *testing.T) {
 	})
 }
 
-// TestUninstallCmd_RunE_ForceCleansUpUserScopeEvenWithProjectSignalPresent
-// guards against the exact bug reported live: installing to user scope, then
-// running `uninstall --force` (no explicit --scope) from a project directory
-// that happens to have its own project-level client signal (e.g. this repo's
-// own .claude/) silently defaulted scope to "project" and skipped the real
-// (user-scope) distributed copy entirely -- and, worse, could target
-// unrelated real files sitting at the wrong-but-real project path. Uninstall
-// must check both scopes so the actual distributed copy always gets cleaned
-// up regardless of which scope's signal happens to be detectable from CWD.
-func TestUninstallCmd_RunE_ForceCleansUpUserScopeEvenWithProjectSignalPresent(t *testing.T) {
+// Recorded user installations require an explicit user scope for removal.
+// A coincidental project client signal must not broaden destructive defaults.
+func TestUninstallCmd_RunE_ForceRequiresExplicitUserScope(t *testing.T) {
 	// clearFlag resets a flag's value to its default AND clears pflag's own
 	// Changed bit -- plain Flags().Set() would leave Changed true, which
 	// explicitSkillScope/resolveUninstallScopes read to mean "the user
@@ -1230,6 +1223,8 @@ func TestUninstallCmd_RunE_ForceCleansUpUserScopeEvenWithProjectSignalPresent(t 
 	require.NoError(t, uninstallCmd.Flags().Set("force", "true"))
 	require.NoError(t, uninstallCmd.RunE(uninstallCmd, []string{}))
 
-	assert.NoDirExists(t, userDistPath,
-		"the real user-scope distributed copy must be cleaned up even though CWD's own project-scope .claude/ signal exists")
+	assert.DirExists(t, userDistPath, "project-default uninstall must preserve user installations")
+	require.NoError(t, uninstallCmd.Flags().Set("scope", "user"))
+	require.NoError(t, uninstallCmd.RunE(uninstallCmd, []string{}))
+	assert.NoDirExists(t, userDistPath, "explicit user scope removes the owned user installation")
 }

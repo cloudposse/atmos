@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
@@ -560,11 +561,8 @@ func TestInstallCmd_RunE_WithFlags(t *testing.T) {
 		var buf bytes.Buffer
 		_, _ = io.Copy(&buf, r)
 
-		// The command should proceed past flag parsing but fail at download.
-		// This exercises the flag-getting code paths.
-		assert.Error(t, err)
-		// Should fail at download, not at flag parsing.
-		assert.Contains(t, err.Error(), "download")
+		// Force permits replacing owned content; it must not skip confirmation.
+		assert.ErrorIs(t, err, errUtils.ErrInteractiveNotAvailable)
 	})
 
 	t.Run("with yes flag set", func(t *testing.T) {
@@ -790,6 +788,8 @@ func TestInstallCmd_RunE_InstallerInitFailure(t *testing.T) {
 
 	t.Run("fails when home directory is unwritable", func(t *testing.T) {
 		resetFlags()
+		require.NoError(t, installCmd.Flags().Set("yes", "true"))
+		t.Cleanup(resetFlags)
 
 		// Create a temp directory and make it unwritable.
 		tempHome := t.TempDir()
@@ -916,9 +916,13 @@ func TestInstallCmd_RunE_AllFlagCombinations(t *testing.T) {
 			var buf bytes.Buffer
 			_, _ = io.Copy(&buf, r)
 
-			// All should fail at download.
+			// Download requires explicit confirmation, independently of force.
 			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "download")
+			if tt.yes {
+				assert.Contains(t, err.Error(), "download")
+			} else {
+				assert.ErrorIs(t, err, errUtils.ErrInteractiveNotAvailable)
+			}
 		})
 	}
 }
@@ -930,14 +934,8 @@ func TestInstallCmd_RunE_InstallOptionsPassthrough(t *testing.T) {
 	uiOutput := setupSkillCommandUI(t)
 
 	// Reset flags before test.
-	forceFlag := installCmd.Flags().Lookup("force")
-	if forceFlag != nil {
-		_ = forceFlag.Value.Set("true")
-	}
-	yesFlag := installCmd.Flags().Lookup("yes")
-	if yesFlag != nil {
-		_ = yesFlag.Value.Set("true")
-	}
+	require.NoError(t, installCmd.Flags().Set("force", "true"))
+	require.NoError(t, installCmd.Flags().Set("yes", "true"))
 
 	// Run the command.
 	err := installCmd.RunE(installCmd, []string{"github.com/cloudposse/test-skill@v2.0.0"})

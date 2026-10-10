@@ -19,6 +19,9 @@ import (
 type GitFetcher struct {
 	Config     *schema.AtmosConfiguration
 	Downloader downloader.ContextFileDownloader
+	// ExcludedPaths are generated paths owned by the current project. They are
+	// omitted only from local repository snapshots, never from installed trees.
+	ExcludedPaths []string
 }
 
 func localPath(source, base string) (string, bool) {
@@ -47,7 +50,8 @@ func (f *GitFetcher) Fetch(ctx context.Context, repo Repository, dest string) (R
 		if filepath.IsAbs(repo.Source) {
 			path = repo.Source
 		}
-		if err := copyTree(path, dest); err != nil {
+		excluded := relativeExclusions(path, f.ExcludedPaths)
+		if err := copyFilteredTree(path, dest, excluded); err != nil {
 			return repo, err
 		}
 		digest, err := treeDigest(dest)

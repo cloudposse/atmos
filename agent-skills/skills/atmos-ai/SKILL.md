@@ -68,8 +68,11 @@ ai:
 `ai.tools.mode` controls tool approval. `require_confirmation` prompts, `allow` never prompts
 (`ai.tools.blocked` still applies), and `yolo` bypasses blocked/restricted checks. The older
 `yolo_mode` and `require_confirmation` booleans are deprecated aliases; `mode` wins when set.
-With `claude-code`, `atmos ai ask` shows an approval prompt in the terminal and continues in the
-same run; in CI without a terminal, set `ai.tools.mode: allow` or add the tool to
+With `claude-code`, `atmos ai chat`, `ask`, and `exec` show an approval prompt in the terminal and continues in the
+same run. Claude-native and provider-preapproved requests follow Claude’s own policy and do
+not reach Atmos’s checker. `--no-tools` and `ai.tools.enabled` only control Atmos tools.
+Always choices display the command/path/tool scope being cached; a bare MCP tool name covers
+all arguments. In CI without a terminal, set `ai.tools.mode: allow` or add the tool to
 `ai.providers.claude-code.allowed_tools`.
 
 ## AI Uses Atmos: MCP and Skills
