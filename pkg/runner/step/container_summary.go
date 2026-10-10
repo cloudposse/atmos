@@ -3,13 +3,14 @@ package step
 import (
 	"context"
 
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/container"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func writeContainerImageSummary(config *schema.AtmosConfiguration, info *container.ImageInfo, opts container.ImageSummaryOptions) {
-	if !containerSummaryEnabled(config) || info == nil {
+	if !ci.SummaryEnabled(config) || info == nil {
 		return
 	}
 	md := container.RenderImageSummaryMarkdown(info, opts)
@@ -22,7 +23,7 @@ func writeContainerImageSummary(config *schema.AtmosConfiguration, info *contain
 }
 
 func writePushedImageSummaries(ctx context.Context, runtime container.Runtime, config *schema.AtmosConfiguration, pushes []*container.PushResult) {
-	if !containerSummaryEnabled(config) {
+	if !ci.SummaryEnabled(config) {
 		return
 	}
 	for _, pushed := range pushes {
@@ -39,11 +40,4 @@ func writePushedImageSummaries(ctx context.Context, runtime container.Runtime, c
 			Digest: pushed.Digest,
 		})
 	}
-}
-
-func containerSummaryEnabled(config *schema.AtmosConfiguration) bool {
-	if config == nil || !config.CI.Enabled {
-		return false
-	}
-	return config.CI.Summary.Enabled == nil || *config.CI.Summary.Enabled
 }

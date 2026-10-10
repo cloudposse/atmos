@@ -4,13 +4,28 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
 
+	"github.com/google/go-github/v59/github"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	ciprovider "github.com/cloudposse/atmos/pkg/ci/internal/provider"
 )
+
+// newPRSearchTestProvider serves the search-specific HTTP fixtures.
+func newPRSearchTestProvider(t *testing.T, handler http.Handler) *Provider {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	serverURL, err := url.Parse(server.URL + "/")
+	require.NoError(t, err)
+	ghClient := github.NewClient(nil)
+	ghClient.BaseURL = serverURL
+	return NewProviderWithClient(&Client{client: ghClient})
+}
 
 // prSearchMux returns a mux that serves the authenticated user, a single-result
 // issue search, the full PR, and a passing check-run for that PR's head SHA. It
@@ -77,7 +92,7 @@ func assertEnrichedPR7(t *testing.T, prs []*ciprovider.PRStatus) {
 
 func TestProvider_SearchPRsWithQuery(t *testing.T) {
 	var gotQuery string
-	p := newTestProvider(t, prSearchMux(&gotQuery))
+	p := newPRSearchTestProvider(t, prSearchMux(&gotQuery))
 
 	prs, err := p.searchPRsWithQuery(context.Background(), "owner", "repo", "repo:owner/repo is:pr is:open")
 	require.NoError(t, err)
@@ -88,7 +103,7 @@ func TestProvider_SearchPRsWithQuery(t *testing.T) {
 
 func TestProvider_GetPRsCreatedByUser(t *testing.T) {
 	var gotQuery string
-	p := newTestProvider(t, prSearchMux(&gotQuery))
+	p := newPRSearchTestProvider(t, prSearchMux(&gotQuery))
 
 	prs, err := p.getPRsCreatedByUser(context.Background(), "owner", "repo")
 	require.NoError(t, err)
@@ -100,7 +115,7 @@ func TestProvider_GetPRsCreatedByUser(t *testing.T) {
 
 func TestProvider_GetPRsRequestingReview(t *testing.T) {
 	var gotQuery string
-	p := newTestProvider(t, prSearchMux(&gotQuery))
+	p := newPRSearchTestProvider(t, prSearchMux(&gotQuery))
 
 	prs, err := p.getPRsRequestingReview(context.Background(), "owner", "repo")
 	require.NoError(t, err)
@@ -121,7 +136,7 @@ func TestProvider_GetPRsForUser_UserFetchError(t *testing.T) {
 	mux.HandleFunc("/search/issues", func(http.ResponseWriter, *http.Request) {
 		searched = true
 	})
-	p := newTestProvider(t, mux)
+	p := newPRSearchTestProvider(t, mux)
 
 	_, err := p.getPRsCreatedByUser(context.Background(), "owner", "repo")
 	require.Error(t, err)
@@ -138,7 +153,7 @@ func TestProvider_SearchPRsWithQuery_SearchError(t *testing.T) {
 	mux.HandleFunc("/search/issues", func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "boom", http.StatusInternalServerError)
 	})
-	p := newTestProvider(t, mux)
+	p := newPRSearchTestProvider(t, mux)
 
 	_, err := p.searchPRsWithQuery(context.Background(), "owner", "repo", "repo:owner/repo is:pr")
 	require.Error(t, err)
@@ -161,7 +176,7 @@ func TestProvider_SearchPRsWithQuery_FullPRFetchErrorKeepsBarePR(t *testing.T) {
 	mux.HandleFunc("/repos/owner/repo/pulls/9", func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "boom", http.StatusInternalServerError)
 	})
-	p := newTestProvider(t, mux)
+	p := newPRSearchTestProvider(t, mux)
 
 	prs, err := p.searchPRsWithQuery(context.Background(), "owner", "repo", "repo:owner/repo is:pr")
 	require.NoError(t, err)
@@ -192,7 +207,7 @@ func TestProvider_GetStatus_WithUserPRsAndReviewRequests(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"state": "success", "statuses": []map[string]any{}})
 	})
 
-	p := newTestProvider(t, mux)
+	p := newPRSearchTestProvider(t, mux)
 
 	status, err := p.getStatus(context.Background(), ciprovider.StatusOptions{
 		Owner:                 "owner",
@@ -235,7 +250,7 @@ func TestProvider_GetStatus_UserPRErrorsAreNonFatal(t *testing.T) {
 		http.Error(w, "boom", http.StatusInternalServerError)
 	})
 
-	p := newTestProvider(t, mux)
+	p := newPRSearchTestProvider(t, mux)
 
 	status, err := p.getStatus(context.Background(), ciprovider.StatusOptions{
 		Owner:                 "owner",

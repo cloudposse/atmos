@@ -566,10 +566,23 @@ toolchain at a corporate release proxy or mirror.
   <dt>`GITHUB_API_URL`</dt>
   <dd>
     Base URL of the GitHub (or GHES) REST API for your own repositories. Default:
-    `https://api.github.com`; on GHES this is typically `https://<host>/api/v3`.
+    `https://api.github.com`; on GHES this is typically `https://<host>/api/v3`. The
+    native CI GitHub provider also uses it for PR comments and commit statuses.
 
     ```shell
     GITHUB_API_URL=https://github.example.com/api/v3
+    ```
+  </dd>
+
+  <dt>`ATMOS_CI_GITHUB_API_URL`</dt>
+  <dd>
+    Overrides the GitHub REST API base URL for the native CI GitHub provider only. Takes
+    precedence over `GITHUB_API_URL`, which lets you point CI reporting at a different API host
+    without changing how imports and vendoring resolve GitHub. The value must be an absolute
+    `http(s)` URL; an invalid value fails instead of sending the token to an unintended host.
+
+    ```shell
+    ATMOS_CI_GITHUB_API_URL=https://github.example.com/api/v3
     ```
   </dd>
 

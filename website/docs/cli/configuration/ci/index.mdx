@@ -152,10 +152,19 @@ GitHub Actions workflow linting is available through [`atmos ci validate`](/cli/
 | `ATMOS_CI` | Explicitly enable CI mode (`true`/`false`) |
 | `ATMOS_CI_COMMENTS_ENABLED` | Override `ci.comments.enabled` (`true`/`false`) |
 | `ATMOS_CI_GROUPS_MODE` | Override `ci.groups.mode` (`auto`/`invocation`/`off`) |
+| `ATMOS_CI_GITHUB_API_URL` | Override the GitHub REST API base URL used by the GitHub CI provider (for example, GitHub Enterprise Server: `https://github.example.com/api/v3`). Takes precedence over `GITHUB_API_URL`. An invalid URL is an error. |
+| `ATMOS_CI_PR` | Pull request number for the generic provider (positive integer). Used when comments or checks target a PR outside GitHub Actions. |
+| `ATMOS_CI_BASE_REF` | Base branch for the generic provider. Also read when resolving the base commit for affected detection. |
+| `ATMOS_CI_EVENT` | Event name for the generic provider (for example, `push` or `pull_request`) |
+| `ATMOS_CI_RUN_ID` | Run or job ID for the generic provider. Falls back to `CI_JOB_ID`, then `BUILD_ID`. |
+| `ATMOS_CI_RUN_URL` | Link to the run or job for the generic provider. Falls back to `CI_JOB_URL`, then `BUILD_URL`. |
+| `ATMOS_CI_ENV` | File the generic provider appends environment exports to, in GitHub Actions `KEY=value` format. Without it, `export KEY='value'` lines are printed to stderr. |
+| `ATMOS_CI_PATH` | File the generic provider appends `PATH` additions to, one directory per line. Without it, an `export PATH=...` line is printed to stderr. |
 | `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION` | Opt out of the [`atmos git clone` fork-PR safety gate](/cli/commands/git/clone#fork-pr-safety-gate) (`true`/`false`, **unsafe**) |
 | `CI` | Standard CI environment variable (set by most CI providers) |
 | `GITHUB_ACTIONS` | Set by GitHub Actions runner |
 | `GITHUB_TOKEN` / `GH_TOKEN` | GitHub API token (required for status checks and PR comments) |
+| `GITHUB_API_URL` | GitHub REST API base URL (set by GitHub Actions; the enterprise API URL on GitHub Enterprise Server). Honored unless `ATMOS_CI_GITHUB_API_URL` is set. Default: `https://api.github.com`. |
 | `GITHUB_OUTPUT` | File path for CI output variables (set by GitHub Actions) |
 | `GITHUB_STEP_SUMMARY` | File path for job summaries (set by GitHub Actions) |
 | `GITHUB_REPOSITORY` | Repository name in `owner/repo` format |

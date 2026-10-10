@@ -71,6 +71,24 @@ func DetectOrError() (provider.Provider, error) {
 	return p, nil
 }
 
+// ResolveProvider returns the detected CI provider, or the generic provider when none
+// is detected. Unlike Detect, it never returns nil once generic is registered: generic is
+// the local renderer on a workstation and the fallback for unknown CI under --ci.
+func ResolveProvider() provider.Provider {
+	defer perf.Track(nil, "ci.ResolveProvider")()
+
+	if p := Detect(); p != nil {
+		return p
+	}
+
+	generic, err := Get("generic")
+	if err != nil {
+		log.Debug("No CI platform detected and generic provider is not registered", "error", err)
+		return nil
+	}
+	return generic
+}
+
 // List returns all registered provider names.
 func List() []string {
 	defer perf.Track(nil, "provider.List")()

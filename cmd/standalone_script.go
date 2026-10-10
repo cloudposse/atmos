@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	execpkg "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
@@ -143,6 +144,7 @@ func runStandaloneScript(cmd *cobra.Command, file *script.File) error {
 	result, err := engine.Execute(cmd.Context(), script.Spec{
 		Steps:        runnerstep.NewAutomationLibrary(vars, nil),
 		InstallTools: runnerstep.ScriptToolInstaller(&atmosConfig),
+		CI:           ci.NewReporter(&atmosConfig),
 		ParseCommand: standaloneCommandParser(file, streams.Data()),
 		// SourcePath anchors imports and tracebacks for files; stdin has no source path.
 		Name: name, SourcePath: sourcePath, ProjectRoot: standaloneProjectRoot(),
