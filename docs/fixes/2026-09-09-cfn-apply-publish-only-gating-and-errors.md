@@ -14,8 +14,9 @@ unwrapped AWS SDK error (`ValidationError: Stack [...] does not exist`) when the
 absent and the selected provision target did not deploy a stack directly — a `kind: aws/s3` target selected via
 `--target`, or any other non-`aws/cloudformation` target kind (e.g. `kind: git`). `runApply`
 unconditionally ran the stack-policy, termination-protection, and outputs follow-up steps after
-`deliverApply` returned, regardless of whether a direct stack deploy had actually happened. Fixed
-by gating those three follow-up steps behind `deliverApply`'s `*changeSetResult` return value.
+`deliverApply` returned, regardless of whether the direct CloudFormation path had returned a
+result without error. Fixed by gating those three follow-up steps behind `deliverApply`'s
+`*changeSetResult` return value.
 Separately, a user explicitly asked for friendlier error messages after hitting the raw AWS error
 verbatim; a narrowly-scoped helper now recognizes AWS's "stack does not exist" validation-error
 shape and adds an explanation + actionable hint via the error builder, reusing this package's
@@ -26,8 +27,8 @@ existing `isStackNotFoundError` pattern-recognition helper.
 `pkg/component/aws/cloudformation/provision.go`'s `deliverApply` resolves the selected provision
 target for an `apply` and has three possible outcomes:
 
-1. `kind: aws/cloudformation` (the default/implicit target) — deploys directly via `deployDirect`
-  and its changeset flow, returning a non-nil `*changeSetResult`.
+1. `kind: aws/cloudformation` (the default/implicit target) — uses `deployDirect` and its
+  changeset flow, returning a non-nil `*changeSetResult` on success, including a no-op.
 2. `kind: aws/s3` selected explicitly (e.g. `--target artifacts`) — publish-only: uploads the
   template to S3 and returns immediately with `result == nil`. No stack is created or touched.
 3. Any other kind (e.g. `kind: git`) — packages through S3, then delivers via the generic target
@@ -55,27 +56,29 @@ wrapping pattern — contrasted with the curated errors elsewhere in the same pa
 `delete.go`'s termination-protection/retain-resources gates) that use the full error-builder
 pattern with an explanation and hint.
 
-## Proposed implementation (PR #3157)
+## Changes
+
+**Proposed implementation (PR #3157).**
 
 **Bug 1 (primary) — `pkg/component/aws/cloudformation/executor.go`, `runApply` (~line 397-448):**
 
-`result != nil` is a reliable signal for "a direct stack deploy just happened, successfully."
-Verified by reading `deliverApply`, `deployDirect`, `createChangeSet`, and `waitForChangeSet` in
-full:
+After the error check, `result != nil` means the direct CloudFormation path returned a result
+without an error, including when the operation was a no-op. It does not prove that a stack
+deploy occurred. Verified by reading `deliverApply`, `deployDirect`, `createChangeSet`, and
+`waitForChangeSet` in full:
 
 - `deliverApply` only ever returns a non-nil `result` from the `selected.Kind ==
   cfg.CloudFormationComponentType` branch (`deployDirect`'s outcome); both other branches
   (`aws/s3` publish-only, and the generic external-target delivery) explicitly return `nil` for
   `result`.
-- `deployDirect` returns whatever `createChangeSet` returns. `createChangeSet` delegates to
-  `waitForChangeSet`, which constructs its `*changeSetResult` before its very first `return` and
-  returns that same non-nil pointer on every subsequent return path — including the no-op case,
-  the timeout case, and the context-cancellation case. The single path that returns `nil, err`
-  (a `DescribeChangeSet` API call failure) always pairs `nil` with a non-nil `err`.
+- `deployDirect` returns the non-nil result from `createChangeSet` immediately when
+  `result.NoOp` is true, without executing the changeset. Otherwise it executes the changeset
+  and waits for the stack operation to complete. Both successful paths return a non-nil result;
+  failures return a non-nil error.
 - `runApply` already checks `if err != nil { return summary, err }` *before* looking at `result`,
   so by the time the code reaches the `result` check, any path that could produce `(nil, non-nil
-  err)` has already returned. This means `result != nil` and "a direct stack deploy just
-  succeeded" are equivalent at that point — no separate boolean needed.
+  err)` has already returned. At this point, `result != nil` identifies a direct CloudFormation
+  result without an error, including a no-op — no separate boolean needed.
 
 `runApply` now returns immediately after merging `deliverApply`'s summary when `result == nil`,
 skipping `setStackPolicy`, `applyTerminationProtection`, and `describeStackOutputs` entirely for
@@ -121,7 +124,13 @@ stack-scoped follow-up calls that can legitimately target a non-existent stack):
 `output.go` no longer needs the `fmt` or `errUtils` imports after this change and had both
 removed.
 
-## Development validation (implementation revision)
+## Validation
+
+The documentation-only correction was checked against PR #3157 commit `a2feba08b` and the
+CloudFormation CLI configuration reference. The fix-log validator, MDX parser, and
+`git diff --check` passed. No implementation tests were rerun for this prose-only correction.
+
+**Development validation (implementation revision).**
 
 - `go build ./...` — passes.
 - `go vet ./pkg/component/aws/cloudformation/...` — passes.
