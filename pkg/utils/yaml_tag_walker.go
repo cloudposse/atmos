@@ -29,6 +29,8 @@ import (
 type TagContext struct {
 	AtmosConfig *schema.AtmosConfiguration
 	File        string
+	parent      *yaml.Node
+	dataSection bool
 	// Walk recurses into node's own children under the SAME policy this
 	// handler was invoked with -- used by handlers (e.g. !append) that must
 	// resolve nested tags inside content they rewrite before finishing.
@@ -48,6 +50,10 @@ type TagHandler func(ctx TagContext, node *yaml.Node, val string) (skipChildren 
 // TagWalkPolicy controls walkYAMLTags' behavior for a tag with no entry in
 // Handlers.
 type TagWalkPolicy struct {
+	// Prepare optionally records host metadata before children are processed.
+	// Its returned callback runs after successful processing of the children.
+	Prepare func(TagContext, *yaml.Node) func()
+
 	// Handlers maps a tag name (e.g. "!include") to its resolver. Every key
 	// must be a tag fntag.IsValidYAML accepts.
 	Handlers map[string]TagHandler
@@ -64,31 +70,48 @@ type TagWalkPolicy struct {
 // valid tag with no handler). An invalid tag (one fntag.IsValidYAML
 // rejects) is always a hard error, regardless of policy.
 func WalkYAMLTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string, policy TagWalkPolicy) error {
+	return walkYAMLTags(TagContext{AtmosConfig: atmosConfig, File: file}, node, policy)
+}
+
+func walkYAMLTags(ctx TagContext, node *yaml.Node, policy TagWalkPolicy) error {
 	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
-		return WalkYAMLTags(atmosConfig, node.Content[0], file, policy)
+		return walkYAMLTags(ctx, node.Content[0], policy)
 	}
 
-	ctx := TagContext{
-		AtmosConfig: atmosConfig,
-		File:        file,
-	}
 	ctx.Walk = func(n *yaml.Node) error {
-		return WalkYAMLTags(atmosConfig, n, file, policy)
+		return walkYAMLTags(ctx, n, policy)
 	}
 
-	for _, n := range node.Content {
-		skipChildren, err := dispatchTag(ctx, n, policy, file)
+	var after func()
+	if policy.Prepare != nil {
+		after = policy.Prepare(ctx, node)
+	}
+	for i, n := range node.Content {
+		child := childTagContext(ctx, node, i, policy)
+		skipChildren, err := dispatchTag(child, n, policy, ctx.File)
 		if err != nil {
 			return err
 		}
 
 		if !skipChildren && len(n.Content) > 0 {
-			if err := ctx.Walk(n); err != nil {
+			if err := child.Walk(n); err != nil {
 				return err
 			}
 		}
 	}
+	if after != nil {
+		after()
+	}
 	return nil
+}
+
+// childTagContext preserves location metadata when a handler walks rewritten content.
+func childTagContext(ctx TagContext, parent *yaml.Node, index int, policy TagWalkPolicy) TagContext {
+	child := ctx
+	child.parent = parent
+	child.dataSection = ctx.dataSection || isScriptSourceDataValue(parent, index)
+	child.Walk = func(value *yaml.Node) error { return walkYAMLTags(child, value, policy) }
+	return child
 }
 
 // dispatchTag resolves a single node's own tag (not its children) per
@@ -289,6 +312,7 @@ var (
 func getStackManifestTagPolicy() TagWalkPolicy {
 	stackManifestTagPolicyOnce.Do(func() {
 		stackManifestTagPolicyVal = TagWalkPolicy{
+			Prepare: prepareScriptSource,
 			Handlers: map[string]TagHandler{
 				AtmosYamlFuncLiteral:    handleLiteralTag,
 				AtmosYamlFuncAppend:     handleAppendTag,

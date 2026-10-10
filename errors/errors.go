@@ -7,6 +7,20 @@ import (
 	schemaPkg "github.com/cloudposse/atmos/pkg/schema"
 )
 
+// ErrStarlark identifies embedded Starlark execution or configuration failures.
+var ErrStarlark = errors.New("starlark execution failed")
+
+var (
+	// ErrStarlarkInvalidArgument identifies invalid arguments passed to an embedded Starlark builtin.
+	ErrStarlarkInvalidArgument = errors.New("invalid starlark argument")
+	// ErrStarlarkTaskTimeout identifies a Starlark task that exceeded its deadline.
+	ErrStarlarkTaskTimeout = errors.New("starlark task timed out")
+	// ErrStarlarkProcessFailed identifies a subprocess started by Starlark that failed or never started.
+	ErrStarlarkProcessFailed = errors.New("starlark process failed")
+	// ErrStarlarkOutputEncode identifies a top-level Starlark `output` value that cannot be encoded.
+	ErrStarlarkOutputEncode = errors.New("starlark output encoding failed")
+)
+
 const (
 	// ErrWrapFormat is the standard format string for wrapping errors with context.
 	// Use with fmt.Errorf to wrap a sentinel error with an underlying error:
@@ -361,13 +375,14 @@ var (
 	ErrGitArtifactRead             = errors.New("failed to read provision artifact")
 
 	// I/O and output errors.
-	ErrBuildIOConfig  = errors.New("failed to build I/O config")
-	ErrUnknownStream  = errors.New("unknown I/O stream")
-	ErrWriteToStream  = errors.New("failed to write to stream")
-	ErrMaskingContent = errors.New("failed to mask content")
-	ErrHeadLookup     = errors.New("HEAD not found")
-	ErrInvalidFormat  = errors.New("invalid format")
-	ErrOutputFormat   = errors.New("output format error")
+	ErrBuildIOConfig        = errors.New("failed to build I/O config")
+	ErrUnknownStream        = errors.New("unknown I/O stream")
+	ErrWriteToStream        = errors.New("failed to write to stream")
+	ErrMaskingContent       = errors.New("failed to mask content")
+	ErrUnboundedMaskPattern = errors.New("mask patterns that can match carriage returns or newlines must have a finite maximum match length")
+	ErrHeadLookup           = errors.New("HEAD not found")
+	ErrInvalidFormat        = errors.New("invalid format")
+	ErrOutputFormat         = errors.New("output format error")
 
 	// File operation errors.
 	ErrRefusingToDeleteSymlink = ErrRefuseDeleteSymbolicLink
@@ -1825,6 +1840,9 @@ var (
 	// a negative count, which would otherwise silently behave as unlimited.
 	ErrMockFailWithTimesNegative = errors.New("httpmock: FailWithTimes called with negative times; use FailWith for an unlimited failure")
 )
+
+// Test step (`type: test`) failure sentinel.
+var ErrTestsFailed = errors.New("tests failed")
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
 // This allows the root command to exit with the same code as the subcommand.

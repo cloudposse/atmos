@@ -29,6 +29,11 @@ type masker struct {
 	patterns    []*regexp.Regexp // Regex patterns to mask.
 	enabled     bool
 	replacement string // Custom replacement string (default: MaskReplacement).
+
+	// snap caches the sorted literals and compiled regexes derived from literals and patterns.
+	// It is rebuilt lazily after any registration or Clear (nil means stale) so that Mask does
+	// not re-sort literals or recompile regexes on every call.
+	snap *maskSnapshot
 }
 
 // newMasker creates a new Masker.
@@ -66,7 +71,10 @@ func (m *masker) RegisterValue(value string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.literals[value] = true
+	if !m.literals[value] {
+		m.literals[value] = true
+		m.snap = nil
+	}
 }
 
 func (m *masker) RegisterSecret(secret string) {
@@ -127,21 +135,25 @@ func (m *masker) RegisterPattern(pattern string) error {
 		return fmt.Errorf("invalid regex pattern: %w", err)
 	}
 
-	m.RegisterRegex(re)
-	return nil
+	return m.RegisterRegex(re)
 }
 
-func (m *masker) RegisterRegex(pattern *regexp.Regexp) {
+func (m *masker) RegisterRegex(pattern *regexp.Regexp) error {
 	defer perf.Track(nil, "io.masker.RegisterRegex")()
 
 	if pattern == nil {
-		return
+		return nil
+	}
+	if _, err := maskPatternSpan(pattern); err != nil {
+		return err
 	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.patterns = append(m.patterns, pattern)
+	m.snap = nil
+	return nil
 }
 
 func (m *masker) RegisterAWSAccessKey(accessKeyID string) {
@@ -156,7 +168,7 @@ func (m *masker) RegisterAWSAccessKey(accessKeyID string) {
 	// If this looks like an AWS access key, also mask the paired secret when labeled.
 	if len(accessKeyID) == awsAccessKeyIDLength && (strings.HasPrefix(accessKeyID, "AKIA") || strings.HasPrefix(accessKeyID, "ASIA")) {
 		// Match common labeling to reduce false positives.
-		_ = m.RegisterPattern(`(?i)\bAWS_SECRET_ACCESS_KEY\b[=:]\s*[A-Za-z0-9/+=]{40}`)
+		_ = m.RegisterPattern(`(?i)\bAWS_SECRET_ACCESS_KEY\b[=:][ \t]*[A-Za-z0-9/+=]{40}`)
 	}
 }
 
@@ -167,95 +179,47 @@ func (m *masker) Mask(input string) string {
 		return input
 	}
 
+	snap, enabled, replacement := m.view()
+	if !enabled {
+		return input
+	}
+
+	return snap.mask(input, replacement)
+}
+
+// HoldbackLen implements Masker.HoldbackLen.
+func (m *masker) HoldbackLen(input string, lineBoundary bool) int {
+	defer perf.Track(nil, "io.masker.HoldbackLen")()
+
+	if input == "" {
+		return 0
+	}
+
+	snap, enabled, _ := m.view()
+	if !enabled {
+		return 0
+	}
+
+	return snap.holdbackLen(input, lineBoundary)
+}
+
+// view returns the current immutable snapshot together with the enabled flag and replacement,
+// building the snapshot first when a registration invalidated it.
+func (m *masker) view() (snap *maskSnapshot, enabled bool, replacement string) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if !m.enabled {
-		return input
+	if m.snap != nil {
+		snap, enabled, replacement = m.snap, m.enabled, m.replacement
+		m.mu.RUnlock()
+		return snap, enabled, replacement
 	}
+	m.mu.RUnlock()
 
-	masked := input
-
-	// Mask literals (exact matches).
-	// Sort by length (longest first) to avoid partial replacements.
-	// Collect literals into slice.
-	literals := make([]string, 0, len(m.literals))
-	for literal := range m.literals {
-		if literal != "" {
-			literals = append(literals, literal)
-		}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.snap == nil {
+		m.snap = buildMaskSnapshot(m.literals, m.patterns)
 	}
-
-	// Sort by length descending (longest first).
-	// This prevents shorter literals from being replaced before longer ones.
-	for i := 0; i < len(literals); i++ {
-		for j := i + 1; j < len(literals); j++ {
-			if len(literals[j]) > len(literals[i]) {
-				literals[i], literals[j] = literals[j], literals[i]
-			}
-		}
-	}
-
-	// Replace literals in order (longest first).
-	for _, literal := range literals {
-		masked = strings.ReplaceAll(masked, literal, m.replacement)
-		masked = maskIndentedMultilineLiteral(masked, literal, m.replacement)
-		masked = maskFoldedLiteral(masked, literal, m.replacement)
-	}
-
-	// Mask regex patterns.
-	// Escape $ as $$ to prevent backreference interpretation in replacements.
-	quotedReplacement := strings.ReplaceAll(m.replacement, "$", "$$")
-	for _, pattern := range m.patterns {
-		masked = pattern.ReplaceAllString(masked, quotedReplacement)
-	}
-
-	return masked
-}
-
-// maskFoldedLiteral masks long scalar values after a YAML emitter folds an ordinary space into
-// a newline plus indentation. All non-whitespace bytes must still match exactly.
-func maskFoldedLiteral(input, literal, replacement string) string {
-	if len(literal) < 32 || !strings.ContainsAny(literal, " \t") {
-		return input
-	}
-
-	var pattern strings.Builder
-	for _, char := range literal {
-		if char == ' ' || char == '\t' {
-			pattern.WriteString(`(?:[ \t]|\r?\n[ \t]+)`)
-		} else {
-			pattern.WriteString(regexp.QuoteMeta(string(char)))
-		}
-	}
-
-	re := regexp.MustCompile(pattern.String())
-	quotedReplacement := strings.ReplaceAll(replacement, "$", "$$")
-	return re.ReplaceAllString(input, quotedReplacement)
-}
-
-// maskIndentedMultilineLiteral masks a registered multiline value after serializers such as
-// YAML have indented its continuation lines. The payload lines must still match exactly; only
-// indentation introduced after a newline is ignored.
-func maskIndentedMultilineLiteral(input, literal, replacement string) string {
-	normalized := strings.ReplaceAll(literal, "\r\n", "\n")
-	normalized = strings.TrimRight(normalized, "\n")
-	if !strings.Contains(normalized, "\n") {
-		return input
-	}
-
-	lines := strings.Split(normalized, "\n")
-	var pattern strings.Builder
-	for i, line := range lines {
-		if i > 0 {
-			pattern.WriteString(`\r?\n[ \t]*`)
-		}
-		pattern.WriteString(regexp.QuoteMeta(line))
-	}
-
-	re := regexp.MustCompile(pattern.String())
-	quotedReplacement := strings.ReplaceAll(replacement, "$", "$$")
-	return re.ReplaceAllString(input, quotedReplacement)
+	return m.snap, m.enabled, m.replacement
 }
 
 // ContainsSecret reports whether value contains any registered secret literal as a
@@ -290,6 +254,7 @@ func (m *masker) Clear() {
 
 	m.literals = make(map[string]bool)
 	m.patterns = make([]*regexp.Regexp, 0)
+	m.snap = nil
 }
 
 func (m *masker) Count() int {

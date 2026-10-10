@@ -14,8 +14,16 @@ import (
 var defaultLogger atomic.Value
 
 func init() {
-	// Initialize with charm's default logger.
-	charmLogger := charm.Default()
+	// Initialize with charm's default logger options (timestamps on), bound to stderr
+	// through a writer that hides the file descriptor. charm.Default() would build a
+	// color-caching renderer on os.Stderr, which queries the terminal (OSC 10/11) and
+	// blocks for seconds when the terminal never answers.
+	charmLogger := newCharmLogger(os.Stderr, true)
+
+	// Install it as charm's default logger so that code calling charm's package-level
+	// functions (log.Info, log.Warn, ...) shares this logger's level, styles, and output,
+	// and so charm never lazily creates its own (querying) default logger.
+	charm.SetDefault(charmLogger)
 
 	// Best-effort NO_COLOR detection during early initialization.
 	// This happens before flags are parsed or atmos.yaml is loaded,
@@ -42,5 +50,5 @@ func SetDefault(logger *AtmosLogger) {
 
 // New creates a new AtmosLogger with default settings.
 func New() *AtmosLogger {
-	return NewAtmosLogger(charm.New(os.Stderr))
+	return NewAtmosLogger(newCharmLogger(os.Stderr, false))
 }

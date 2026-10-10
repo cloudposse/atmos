@@ -953,13 +953,10 @@ jobs:
     # (above) gives more total cores across the matrix than one big runner
     # would, without paying for oversized single instances.
     runs-on: ubuntu-latest
-    # Each shard now runs roughly 1/4 of the package list rather than the
-    # unsharded ~27-minute-plus suite, but every shard still pays the same
-    # fixed per-job overhead (checkout, toolchain installs, apt-get, cache
-    # restore) that used to be amortized over one long-running job -- so this
-    # is generous headroom above that fraction, not a straight 75÷4 division
-    # (the acceptance shard matrix above budgets the same way).
-    timeout-minutes: 30
+    # Cache misses can spend most of 30 minutes compiling before these shards
+    # finish testing. Keep the Go test timeouts, but allow compilation, setup,
+    # and the race tests to complete within the job's overall budget.
+    timeout-minutes: 60
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0

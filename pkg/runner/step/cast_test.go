@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -23,7 +24,7 @@ import (
 )
 
 // sessionReadyWaitTimeout bounds every session test's "write a command, wait
-// for its echo" round trip below. It self-execs the test binary as a fake
+// for its response" round trip below. It self-execs the test binary as a fake
 // shell over a real PTY (see sessionShellHelperEnv) -- Windows process
 // creation and ConPTY setup are well-documented to be markedly slower than
 // POSIX fork/exec, and a CI runner already busy running the rest of this
@@ -33,6 +34,10 @@ import (
 // scheduled; 5s gives real headroom without materially slowing the suite
 // (each of these tests only pays the cost once, on its own success path).
 const sessionReadyWaitTimeout = "5s"
+
+// Match the helper's complete response line, not the PTY echo of "printf ready".
+// The input echo can arrive before the helper starts, especially under -race.
+const sessionReadyOutputRegex = `(?m)^ready\r?$`
 
 // sessionReadyWaitTimeoutDuration is sessionReadyWaitTimeout pre-parsed, so a
 // test that must bound a *parent* context around a session wait action (as
@@ -1784,7 +1789,7 @@ func TestRunCastSessionModeInterleavesSimulateNarration(t *testing.T) {
 			{Type: schema.TaskTypeSimulate, Text: "# narration line", Rate: "0"},
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
-			{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
+			{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
 		},
 	}, NewVariables())
 	if err != nil {
@@ -2165,7 +2170,7 @@ func TestRunCastSessionModeExecutesScriptedActions(t *testing.T) {
 		Steps: []schema.WorkflowStep{
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
-			{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
+			{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
 		},
 	}, NewVariables(), nil)
 	if err != nil {
@@ -2174,35 +2179,42 @@ func TestRunCastSessionModeExecutesScriptedActions(t *testing.T) {
 }
 
 func TestCastHandlerExecutesSessionModeEndToEnd(t *testing.T) {
-	if err := iolib.Initialize(); err != nil {
-		t.Fatalf("initialize io: %v", err)
-	}
-	shell, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv(sessionShellHelperEnv, "1")
-	castPath := filepath.Join(t.TempDir(), "session.cast")
+	for _, delayed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("delayed_start=%t", delayed), func(t *testing.T) {
+			if delayed {
+				t.Setenv(sessionShellDelayEnv, "1")
+			}
+			if err := iolib.Initialize(); err != nil {
+				t.Fatalf("initialize io: %v", err)
+			}
+			shell, err := os.Executable()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv(sessionShellHelperEnv, "1")
+			castPath := filepath.Join(t.TempDir(), "session.cast")
 
-	_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
-		Name:  "demo",
-		Type:  schema.TaskTypeCast,
-		Mode:  "session",
-		Shell: shell,
-		CastOutput: &schema.CastOutput{
-			Cast: castPath,
-		},
-		Steps: []schema.WorkflowStep{
-			{Type: "write", Text: "printf ready", Rate: "0"},
-			{Type: "key", Key: "enter"},
-			{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
-		},
-	}, NewVariables())
-	if err != nil {
-		t.Fatalf("execute session-mode cast: %v", err)
-	}
-	if _, err := os.Stat(castPath); err != nil {
-		t.Fatalf("cast file missing: %v", err)
+			_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
+				Name:  "demo",
+				Type:  schema.TaskTypeCast,
+				Mode:  "session",
+				Shell: shell,
+				CastOutput: &schema.CastOutput{
+					Cast: castPath,
+				},
+				Steps: []schema.WorkflowStep{
+					{Type: "write", Text: "printf ready", Rate: "0"},
+					{Type: "key", Key: "enter"},
+					{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
+				},
+			}, NewVariables())
+			if err != nil {
+				t.Fatalf("execute session-mode cast: %v", err)
+			}
+			if _, err := os.Stat(castPath); err != nil {
+				t.Fatalf("cast file missing: %v", err)
+			}
+		})
 	}
 }
 
@@ -2228,7 +2240,7 @@ func TestCastHandlerSessionModeFallsThroughToRealExecution(t *testing.T) {
 		Steps: []schema.WorkflowStep{
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
-			{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
+			{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
 			{
 				Name:    "plan",
 				Type:    schema.TaskTypeAtmos,
@@ -2284,7 +2296,7 @@ func TestCastHandlerNestedSessionStepFallsThroughToRealExecution(t *testing.T) {
 				Steps: []schema.WorkflowStep{
 					{Type: "write", Text: "printf ready", Rate: "0"},
 					{Type: "key", Key: "enter"},
-					{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
+					{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
 				},
 			},
 			{
@@ -2336,7 +2348,7 @@ func TestCastHandlerNestedSessionExecInheritsWorkflowOutput(t *testing.T) {
 			Steps: []schema.WorkflowStep{
 				{Type: "write", Text: "printf ready", Rate: "0"},
 				{Type: "key", Key: "enter"},
-				{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
+				{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
 				{Name: "workflow-child", Type: schema.TaskTypeShell, Command: "printf workflow-child"},
 			},
 		}},
@@ -2436,7 +2448,7 @@ func TestRunCastStepModeSkipsPromptForSimulateAfterSessionBlock(t *testing.T) {
 				Steps: []schema.WorkflowStep{
 					{Type: "write", Text: "printf ready", Rate: "0"},
 					{Type: "key", Key: "enter"},
-					{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
+					{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
 				},
 			},
 			{Type: schema.TaskTypeSimulate, Text: "# narration after the session", Rate: "0"},

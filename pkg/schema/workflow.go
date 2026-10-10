@@ -345,6 +345,17 @@ type WorkflowStep struct {
 	Identity         string       `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 	Needs            []string     `yaml:"needs,omitempty" json:"needs,omitempty" mapstructure:"needs"`
 	When             Condition    `yaml:"when,omitempty" json:"when,omitempty" mapstructure:"when"`
+
+	// ScriptEnv preserves explicitly declared script inputs when a runner merges process env.
+	ScriptEnv map[string]string `yaml:"-" json:"-" mapstructure:"-"`
+	// ScriptProcessOverrides preserves command-level env precedence for component processes.
+	ScriptProcessOverrides map[string]string `yaml:"-" json:"-" mapstructure:"-"`
+	// ScriptSource is the absolute path of the file the script body was read from (a local
+	// !include or !include.raw). It is set by the loaders, never by users, and anchors the
+	// script's load() calls and tracebacks. The mapstructure key carries it through merged
+	// custom command configuration; it has no YAML or JSON key.
+	ScriptSource string `yaml:"-" json:"-" mapstructure:"script_source"`
+
 	// Continue controls whether a failure of this step is forgiven: subsequent steps still run
 	// and the overall workflow exit status is unaffected (like GitHub Actions'
 	// continue-on-error). Evaluated against this step's own outcome after it runs, unlike When

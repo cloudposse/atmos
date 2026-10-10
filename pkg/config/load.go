@@ -1589,12 +1589,16 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 		}
 	}
 
-	// Process YAML functions
-	if err := preprocessAtmosYamlFunc(content, tempViper); err != nil {
+	// Process YAML functions. Custom commands are decoded separately, anchored to this config
+	// file and the project base path, so their !include paths do not depend on the working directory.
+	if err := preprocessAtmosYamlFuncExceptCommands(content, tempViper); err != nil {
 		return errors.Join(errUtils.ErrPreprocessYAMLFunctions, err)
 	}
 	if processedCommands == nil {
-		processedCommands = tempViper.Get(commandsKey)
+		processedCommands, err = extractCommandsWithYamlFunctionsForFile(content, configFilePath)
+		if err != nil {
+			return errors.Join(errUtils.ErrPreprocessYAMLFunctions, err)
+		}
 	}
 
 	// Marshal to YAML
@@ -2036,11 +2040,7 @@ func mergeConfigFile(
 		return err
 	}
 
-	preprocessContent, err := yamlContentWithoutTopLevelKey(content, commandsKey)
-	if err != nil {
-		return err
-	}
-	err = preprocessAtmosYamlFunc(preprocessContent, v)
+	err = preprocessAtmosYamlFuncExceptCommands(content, v)
 	if err != nil {
 		return err
 	}
@@ -2057,25 +2057,26 @@ func mergeConfigFile(
 	return nil
 }
 
-func yamlContentWithoutTopLevelKey(content []byte, key string) ([]byte, error) {
-	var root yaml.Node
-	if err := yaml.Unmarshal(content, &root); err != nil {
-		return nil, err
+// preprocessAtmosYamlFuncExceptCommands runs preprocessAtmosYamlFunc over everything but the
+// top-level `commands` key, which extractCommandsWithYamlFunctionsForFile decodes with its own
+// include scope.
+func preprocessAtmosYamlFuncExceptCommands(content []byte, v *viper.Viper) error {
+	var root goyaml.Node
+	if err := goyaml.Unmarshal(content, &root); err != nil {
+		return err
 	}
-	if len(root.Content) == 0 || root.Content[0].Kind != yaml.MappingNode {
-		return content, nil
-	}
-
-	mapping := root.Content[0]
-	for i := 0; i < len(mapping.Content); i += 2 {
-		if mapping.Content[i].Value != key {
-			continue
+	if len(root.Content) > 0 && root.Content[0].Kind == goyaml.MappingNode {
+		mapping := root.Content[0]
+		for i := 0; i < len(mapping.Content); i += 2 {
+			if mapping.Content[i].Value == commandsKey {
+				mapping.Content = append(mapping.Content[:i], mapping.Content[i+2:]...)
+				break
+			}
 		}
-		mapping.Content = append(mapping.Content[:i], mapping.Content[i+2:]...)
-		return yaml.Marshal(&root)
 	}
-
-	return content, nil
+	// Process the parsed tree directly: aliases can refer to anchors under commands,
+	// so serializing the filtered tree would leave dangling aliases on the next parse.
+	return processNode(&root, v, "")
 }
 
 func extractCommandsWithYamlFunctionsForFile(content []byte, sourceFile string) (interface{}, error) {
@@ -2141,7 +2142,7 @@ func mergeConfigFileWithImports(path string, v *viper.Viper) error {
 		return err
 	}
 	if len(imports) > 0 {
-		if err = preprocessAtmosYamlFunc(content, tempViper); err != nil {
+		if err = preprocessAtmosYamlFuncExceptCommands(content, tempViper); err != nil {
 			return err
 		}
 		overlayProfileSettings(v, tempViper.AllSettings(), "")

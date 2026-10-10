@@ -52,8 +52,16 @@ func isGitHubTransientError(err error) bool {
 		return true
 	}
 
-	// Fallback for API calls that don't use handleGitHubAPIError.
+	// net/http can return its unexported HTTP/2 stream error while decoding a
+	// response body, after the request succeeded. Match only remote cancellation;
+	// protocol errors and application decoding failures must still fail the test.
 	errMsg := err.Error()
+	if strings.HasPrefix(errMsg, "stream error: stream ID ") &&
+		strings.HasSuffix(errMsg, "; CANCEL; received from peer") {
+		return true
+	}
+
+	// Fallback for API calls that don't use handleGitHubAPIError.
 	return strings.Contains(errMsg, "rate limit exceeded") ||
 		strings.Contains(errMsg, "API rate limit")
 }
@@ -95,6 +103,27 @@ func TestIsGitHubTransientError_TransportFailure(t *testing.T) {
 	assert.False(t, isGitHubTransientError(&github.ErrorResponse{
 		Response: &http.Response{StatusCode: http.StatusNotFound},
 	}))
+}
+
+// HTTP/2 response-body cancellations escape net/http without a *url.Error.
+func TestIsGitHubTransientError_ResponseStreamCancellation(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"peer cancelled response", errors.New("stream error: stream ID 25; CANCEL; received from peer"), true},
+		{"different stream", errors.New("stream error: stream ID 1; CANCEL; received from peer"), true},
+		{"protocol failure", errors.New("stream error: stream ID 25; PROTOCOL_ERROR; received from peer"), false},
+		{"local cancellation", context.Canceled, false},
+		{"application cancellation", errors.New("request CANCEL; received from peer"), false},
+		{"decoding failure", errors.New("invalid character 'x' looking for beginning of value"), false},
+		{"no error", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, isGitHubTransientError(tc.err))
+		})
+	}
 }
 
 // TestNewGitHubClientUnauthenticated tests creating an unauthenticated GitHub client.
