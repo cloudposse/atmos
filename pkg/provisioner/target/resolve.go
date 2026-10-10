@@ -46,15 +46,26 @@ type SelectedTarget struct {
 func SelectTarget(provisionSection map[string]any, flagTarget string) (*SelectedTarget, error) {
 	defer perf.Track(nil, "target.SelectTarget")()
 
+	return SelectTargetWithDefault(provisionSection, flagTarget, DefaultClusterTargetName, KindKubernetes)
+}
+
+// SelectTargetWithDefault is SelectTarget generalized over the implicit
+// default target's name/kind, for component types whose zero-config delivery
+// isn't the Kubernetes cluster (e.g. aws/cloudformation's implicit
+// `kind: aws/cloudformation` direct-deploy target). SelectTarget is the
+// Kubernetes/Helm-flavored convenience wrapper around this.
+func SelectTargetWithDefault(provisionSection map[string]any, flagTarget, defaultName, defaultKind string) (*SelectedTarget, error) {
+	defer perf.Track(nil, "target.SelectTargetWithDefault")()
+
 	targets := targetsFromSection(provisionSection)
 
-	name := selectedTargetName(provisionSection, flagTarget)
+	name := selectedTargetNameWithDefault(provisionSection, flagTarget, defaultName)
 
 	cfg, found := targets[name]
 	if !found {
-		if name == DefaultClusterTargetName {
-			// Implicit cluster delivery: no explicit definition required.
-			return &SelectedTarget{Name: DefaultClusterTargetName, Kind: KindKubernetes}, nil
+		if name == defaultName {
+			// Implicit delivery: no explicit definition required.
+			return &SelectedTarget{Name: defaultName, Kind: defaultKind}, nil
 		}
 		return nil, fmt.Errorf("%w: %q (configured: %v)", errUtils.ErrProvisionTargetNotFound, name, configuredTargetNames(targets))
 	}
@@ -67,8 +78,9 @@ func SelectTarget(provisionSection map[string]any, flagTarget string) (*Selected
 	return &SelectedTarget{Name: name, Kind: kind, Config: cfg}, nil
 }
 
-// selectedTargetName applies the flag > provision.default > implicit cluster precedence.
-func selectedTargetName(provisionSection map[string]any, flagTarget string) string {
+// selectedTargetNameWithDefault applies the flag > provision.default > implicit
+// default precedence.
+func selectedTargetNameWithDefault(provisionSection map[string]any, flagTarget, defaultName string) string {
 	if flagTarget != "" {
 		return flagTarget
 	}
@@ -77,7 +89,7 @@ func selectedTargetName(provisionSection map[string]any, flagTarget string) stri
 			return def
 		}
 	}
-	return DefaultClusterTargetName
+	return defaultName
 }
 
 // targetsFromSection extracts the provision.targets map as name -> config blocks.
