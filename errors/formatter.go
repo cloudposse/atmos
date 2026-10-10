@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
+	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -741,7 +742,7 @@ func formatContextForMarkdown(err error) string {
 func shouldUseColor() bool {
 	// Build terminal config from all sources (flags, env vars, atmos.yaml).
 	termConfig := &terminal.Config{
-		NoColor:    viper.GetBool("no-color"),
+		NoColor:    terminalenv.ResolveNoColor(os.Args[1:], viper.GetBool("no-color")),
 		Color:      viper.GetBool("color"),
 		ForceColor: viper.GetBool("force-color"),
 

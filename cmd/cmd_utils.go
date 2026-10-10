@@ -48,6 +48,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/taskgraph"
 	"github.com/cloudposse/atmos/pkg/taskgraph/adapters"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/upgrade"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -1932,6 +1933,11 @@ func isVersionCommandWithArgs(args []string) bool {
 			// A real command token (or an unrecognized flag) ends the scan.
 			return false
 		}
+		// "--no-color false" carries an explicit boolean value in the next arg.
+		if !consumesValue && boolFlagHasSeparateValue(arg, args, i) {
+			i++
+			continue
+		}
 		if consumesValue {
 			i++ // The flag's value is the next arg.
 		}
@@ -1956,6 +1962,16 @@ func isSkippableRootFlag(arg string) (skip, consumesValue bool) {
 	return false, false
 }
 
+// boolFlagHasSeparateValue reports whether arg is a bare root boolean flag followed
+// by an explicit "true"/"false" literal in args[i+1] (for example "--logs-color false").
+// Any other following argument is a command or another flag, not the flag's value.
+func boolFlagHasSeparateValue(arg string, args []string, i int) bool {
+	return isRootBoolFlag(arg) && !strings.Contains(arg, equalsSign) &&
+		i+1 < len(args) && terminalenv.IsBoolLiteral(args[i+1])
+}
+
+// isRootBoolFlag recognizes root boolean flags, including aliases and inline values,
+// so command discovery can distinguish flag values from command names.
 func isRootBoolFlag(arg string) bool {
 	flagName := strings.SplitN(arg, equalsSign, 2)[0]
 	switch flagName {
@@ -1968,6 +1984,7 @@ func isRootBoolFlag(arg string) bool {
 		"--interactive",
 		"--mask",
 		"--no-color",
+		"--logs-color",
 		"--profiler-enabled",
 		"--verbose",
 		"-v":

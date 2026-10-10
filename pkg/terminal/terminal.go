@@ -10,6 +10,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal/env"
 	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
@@ -177,6 +178,8 @@ func New(opts ...Option) Terminal {
 	return t
 }
 
+// initializeColorProfile gives global opt-outs priority over forced color, then
+// detects the profile using stderr's terminal status with stdout as a fallback.
 func (t *terminal) initializeColorProfile() {
 	// Check Stderr first (where UI is written), fall back to Stdout.
 	isTTYOut := t.IsTTY(Stderr)
@@ -185,11 +188,11 @@ func (t *terminal) initializeColorProfile() {
 	}
 
 	switch {
-	case t.config.EnvNoColor:
-		// NO_COLOR always wins, even over --force-color
+	case t.config.EnvNoColor || t.config.NoColor:
+		// NO_COLOR and --no-color always win, even over --force-color.
 		t.colorProfile = ColorNone
 	case t.forceColor:
-		// Force color profile if --force-color is set (but NO_COLOR takes precedence)
+		// Force color only when neither global opt-out is active.
 		t.colorProfile = ColorTrue
 	default:
 		t.colorProfile = t.config.DetectColorProfile(isTTYOut)
@@ -490,7 +493,7 @@ func resolveForceColor(configForceColor bool) bool {
 func buildConfig() *Config {
 	cfg := &Config{
 		// From flags (bound via viper in cmd/root.go)
-		NoColor:  viperguard.GetBool("no-color"),
+		NoColor:  env.ResolveNoColor(os.Args[1:], viperguard.GetBool("no-color")),
 		Color:    viperguard.GetBool("color"),
 		ForceTTY: viperguard.GetBool("force-tty"),
 
@@ -520,21 +523,18 @@ func buildConfig() *Config {
 
 // ShouldUseColor determines if color should be used based on config priority.
 // Priority (highest to lowest):
-// 1. NO_COLOR env var - disables all color
-// 2. CLICOLOR=0 - disables color (unless CLICOLOR_FORCE or --force-color is set)
-// 3. CLICOLOR_FORCE - forces color even for non-TTY
-// 4. --force-color flag - forces color even for non-TTY
-// 5. --no-color flag - disables color
-// 6. --color flag - enables color (only if TTY)
-// 7. Atmos.yaml terminal.no_color (deprecated) - disables color
-// 8. Atmos.yaml terminal.color - enables color (only if TTY)
-// 9. CI=true env var - enables color (CI systems support ANSI color)
-// 10. Default (true for TTY, false for non-TTY).
+// 1. NO_COLOR or --no-color disables all color.
+// 2. CLICOLOR=0 disables color unless forced.
+// 3. CLICOLOR_FORCE or --force-color forces color even for non-TTY output.
+// 4. --color enables color for TTY output.
+// 5. Atmos terminal settings control color, respecting TTY detection.
+// 6. CI enables color by default.
+// 7. Otherwise use TTY detection.
 //
 //nolint:revive // Cyclomatic complexity acceptable for priority-based configuration logic.
 func (c *Config) ShouldUseColor(isTTY bool) bool {
-	// 1. NO_COLOR env var always wins
-	if c.EnvNoColor {
+	// NO_COLOR and --no-color always win, including over forced color.
+	if c.EnvNoColor || c.NoColor {
 		return false
 	}
 
@@ -551,11 +551,6 @@ func (c *Config) ShouldUseColor(isTTY bool) bool {
 	// 4. --force-color flag overrides TTY detection
 	if c.ForceColor {
 		return true
-	}
-
-	// 5. --no-color flag
-	if c.NoColor {
-		return false
 	}
 
 	// 6. --color flag (respects TTY - only enables color if TTY)

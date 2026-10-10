@@ -344,6 +344,9 @@ func (p *AtmosFlagParser) preprocessNoOptDefValFlags(args []string) []string {
 	// Use the preprocess pipeline for native flag preprocessing.
 	pipeline := preprocess.NewPipeline(
 		preprocess.NewNoOptDefValPreprocessor(flagInfos),
+		// Fold "--bool-flag true|false" into "--bool-flag=true|false" so the literal
+		// is not left behind as a stray positional argument.
+		preprocess.NewBoolValuePreprocessor(flagInfos),
 	)
 	return pipeline.Run(args)
 }

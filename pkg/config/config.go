@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -81,6 +82,8 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	return atmosConfig, nil
 }
 
+// setLogConfig applies early logging, color, and pager overrides before stack processing.
+// It also configures the global log level so authentication pre-hooks honor those settings.
 func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	// TODO: This is a quick patch to mitigate the issue we can look for better code later
 	// Issue: https://linear.app/cloudposse/issue/DEV-3093/create-a-cli-command-core-library
@@ -105,17 +108,10 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	if v, ok := flagKeyValue["verbose"]; ok && v == "true" {
 		atmosConfig.Logs.Level = "Debug"
 	}
-	if val, ok := flagKeyValue["no-color"]; ok {
-		valLower := strings.ToLower(val)
-		switch valLower {
-		case "true":
-			atmosConfig.Settings.Terminal.NoColor = true
-			atmosConfig.Settings.Terminal.Color = false
-		case "false":
-			atmosConfig.Settings.Terminal.NoColor = false
-			atmosConfig.Settings.Terminal.Color = true
-		}
-		// If value is neither "true" nor "false", leave defaults unchanged
+	// Resolve boolean color flags without consuming the following command name.
+	if options := terminalenv.ColorOptionsFromArgs(os.Args[1:]); options.NoColorSet {
+		atmosConfig.Settings.Terminal.NoColor = options.NoColor
+		atmosConfig.Settings.Terminal.Color = !options.NoColor
 	}
 
 	// Handle --pager global flag
@@ -161,6 +157,22 @@ func parseFlags() map[string]string {
 	return parseFlagsFromArgs(os.Args)
 }
 
+// rootBoolFlags lists the global boolean flags (without the leading dashes) that
+// parseFlagsFromArgs must not let consume the next argument unless it is an explicit
+// true/false literal.
+var rootBoolFlags = map[string]bool{
+	"ai":               true,
+	"force-color":      true,
+	"force-tty":        true,
+	"heatmap":          true,
+	"interactive":      true,
+	"logs-color":       true,
+	"mask":             true,
+	"no-color":         true,
+	"profiler-enabled": true,
+	"verbose":          true,
+}
+
 // parseFlagsFromArgs parses flags from the given args slice.
 // This function is exposed for testing purposes.
 func parseFlagsFromArgs(args []string) map[string]string {
@@ -178,6 +190,14 @@ func parseFlagsFromArgs(args []string) map[string]string {
 			// Case like --flag=value
 			parts := strings.SplitN(arg, "=", 2)
 			flags[parts[0]] = parts[1]
+		case rootBoolFlags[arg]:
+			// Boolean flag: only an explicit true/false literal is its value, so that
+			// "--verbose version" does not swallow the command name.
+			flags[arg] = "true"
+			if i+1 < len(args) && terminalenv.IsBoolLiteral(args[i+1]) {
+				flags[arg] = strings.ToLower(args[i+1])
+				i++ // Skip the next argument as it's the value.
+			}
 		case i+1 < len(args) && !strings.HasPrefix(args[i+1], "--"):
 			// Case like --flag value
 			flags[arg] = args[i+1]

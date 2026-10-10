@@ -288,9 +288,19 @@ These flags are available for every Atmos command:
         - Can also use `ATMOS_LOGS_FILE` environment variable
     </dd>
 
+    <dt>`--logs-color`</dt>
+    <dd>
+        Control Atmos log color independently of terminal UI output.
+        - Boolean: `true` (default) enables color when available; `false` disables log color
+        - Preserves terminal and CI color detection, including for log files
+        - Use `--force-color` to force enabled log color, or `--logs-color=false` for plain logs
+        - Can also use `ATMOS_LOGS_COLOR` or `logs.color` in `atmos.yaml`
+        - `--no-color` and nonempty `NO_COLOR` always override this setting
+    </dd>
+
     <dt>`--no-color`</dt>
     <dd>
-        Disable colored terminal output.
+        Disable colored terminal output and ANSI escapes in Atmos logs, including startup logs.
         - Useful for CI/CD environments or when piping output
         - Can also use `ATMOS_NO_COLOR` or `NO_COLOR` environment variables
         - The `NO_COLOR` env var follows the standard from https://no-color.org/
@@ -688,12 +698,22 @@ All global flags can be set using environment variables. The precedence order is
 
     <dt>`ATMOS_NO_COLOR` / `NO_COLOR`</dt>
     <dd>
-        Disable colored output (any non-empty value disables color).
+        Disable colored output. `ATMOS_NO_COLOR` is boolean; any nonempty `NO_COLOR` disables color, including `NO_COLOR=0`.
         - `NO_COLOR` is a standard environment variable supported by many CLI tools (https://no-color.org/)
         - Maintained for portability across different systems and CI/CD environments
-        - **Highest precedence**: Takes precedence over `ATMOS_FORCE_COLOR`, `CLICOLOR_FORCE`, `ATMOS_COLOR`, and `COLOR` settings
+        - Nonempty `NO_COLOR` takes precedence over `CLICOLOR`, `ATMOS_FORCE_COLOR`, `CLICOLOR_FORCE`, `ATMOS_COLOR`, and `COLOR` settings
         - Overrides `--force-color` flag
         - Both `ATMOS_NO_COLOR` and `NO_COLOR` are fully supported
+        - `--no-color=false` can override `ATMOS_NO_COLOR`, but cannot override nonempty `NO_COLOR`
+    </dd>
+
+    <dt>`CLICOLOR`</dt>
+    <dd>
+        Controls automatic color: `0` disables it unless forced; `1` (or another nonzero value)
+        permits color on supported terminals and in color-capable CI environments.
+        It does not force color into pipes or files. Empty values leave detection unchanged.
+        Nonempty `NO_COLOR` wins when both are set, so `CLICOLOR=1 NO_COLOR=1` produces plain output.
+        See [color precedence](/cli/configuration/settings/terminal#color-configuration-precedence).
     </dd>
 
     <dt>`ATMOS_FORCE_TTY`</dt>

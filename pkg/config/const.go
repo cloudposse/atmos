@@ -181,6 +181,7 @@ const (
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
+	LogsColorFlag = "--logs-color"
 
 	QueryFlag    = "--query"
 	AffectedFlag = "--affected"

@@ -177,6 +177,9 @@ jobs:
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
             *.pool.ntp.org:123
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       - name: Announce build target
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
@@ -425,6 +428,9 @@ jobs:
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
             *.pool.ntp.org:123
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -659,6 +665,9 @@ jobs:
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
             *.pool.ntp.org:123
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -1076,6 +1085,9 @@ jobs:
             storage.googleapis.com:443
             google.golang.org:443
             modernc.org:443
+            raw.githubusercontent.com:443
+            go.dev:443
+            dl.google.com:443
 
       # A whole-run cancellation (e.g. superseded by a newer push to the same
       # PR) skips the `test` matrix before it ever dispatches shard jobs, so
@@ -1436,6 +1448,8 @@ jobs:
             storage.googleapis.com:443
             tuf-repo-cdn.sigstore.dev:443
             us.i.posthog.com:443
+            go.dev:443
+            golang.org:443
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1756,6 +1770,10 @@ jobs:
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
             *.pool.ntp.org:123
+            raw.githubusercontent.com:443
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -2216,6 +2234,10 @@ jobs:
             release-assets.githubusercontent.com:443
             storage.googleapis.com:443
             us.i.posthog.com:443
+            raw.githubusercontent.com:443
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
