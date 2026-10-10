@@ -65,6 +65,12 @@ func (h *ShellHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 		return nil, err
 	}
 
+	// Render a templated `output:` before anything runs, so an unknown mode fails the step.
+	step, err = resolveOutputStep(step, vars)
+	if err != nil {
+		return nil, err
+	}
+
 	// Enforce the step's timeout: the interpreter and its child processes stop with the context.
 	deadline, err := StartStepDeadline(ctx, step, vars)
 	if err != nil {
@@ -191,6 +197,12 @@ func (h *ShellHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 	}
 
 	envVars, err := h.resolveEnv(step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	// Render a templated `output:` before anything runs, so an unknown mode fails the step.
+	step, err = resolveOutputStep(step, vars)
 	if err != nil {
 		return nil, err
 	}

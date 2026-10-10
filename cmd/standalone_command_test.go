@@ -284,7 +284,7 @@ func TestStandaloneCommandRejectsMalformedTypedEnvironment(t *testing.T) {
 			spec := script.CommandSpec{Flags: []flags.Flag{test.flag}}
 			_, err := standaloneCommandParser(&script.File{Path: "env.star"}, &stdout)(t.Context(), spec)
 			require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
-			assert.Contains(t, err.Error(), "environment value for --value")
+			assert.Contains(t, err.Error(), "from STANDALONE_BAD_VALUE for flag --value")
 			input, err := standaloneCommandParser(&script.File{Path: "env.star", Args: []string{test.cli}}, &stdout)(t.Context(), spec)
 			require.NoError(t, err)
 			assert.Equal(t, test.want, input.Flags["value"])

@@ -515,6 +515,9 @@ func processStackContextPrefix(
 	// The explicit name takes precedence over any generated name.
 	// Still populate Context from vars to avoid stale values from previous iterations.
 	if stackManifestName != "" {
+		if err := ensureLiteralStackIdentity(stackName, stackManifestName, configAndStacksInfo.ComponentSection); err != nil {
+			return err
+		}
 		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 		configAndStacksInfo.ContextPrefix = stackManifestName
 		configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
@@ -524,7 +527,7 @@ func processStackContextPrefix(
 
 	switch {
 	case atmosConfig.Stacks.NameTemplate != "":
-		tmpl, err := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
+		tmpl, err := processStackNameTemplate(atmosConfig, stackName, atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 		if err != nil {
 			return err
 		}
@@ -549,6 +552,10 @@ func processStackContextPrefix(
 		configAndStacksInfo.ContextPrefix = stackName
 	}
 
+	if err := ensureLiteralStackIdentity(stackName, configAndStacksInfo.ContextPrefix, configAndStacksInfo.ComponentSection); err != nil {
+		return err
+	}
+
 	configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
 	configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
 	return nil
@@ -556,20 +563,24 @@ func processStackContextPrefix(
 
 // findComponentInStacks searches for a component across all stacks and returns matching stacks.
 // Returns the count of found stacks, list of stack names, config info for the found component,
-// and a map of filename->canonicalName for stacks where the canonical name differs from the filename.
+// a map of filename->canonicalName for stacks where the canonical name differs from the filename,
+// and the first stack-identity error hit while resolving a stack's name. That error only matters
+// when no stack matched: the component exists in a stack whose name cannot be computed, which is
+// a different problem from the component not existing.
 func findComponentInStacks(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stacksMap map[string]any,
 	deferredContexts AllStacksDeferredContexts,
 	authManager auth.AuthManager,
-) (int, []string, schema.ConfigAndStacksInfo, map[string]string) {
+) (int, []string, schema.ConfigAndStacksInfo, map[string]string, error) {
 	type componentCandidate struct {
 		stackFile string
 		info      schema.ConfigAndStacksInfo
 	}
 
 	var candidates []componentCandidate
+	var identityErr error
 	// Track filename -> canonical name mappings for suggestion purposes.
 	stackNameMappings := make(map[string]string)
 
@@ -609,6 +620,9 @@ func findComponentInStacks(
 		}
 
 		if err := processStackContextPrefix(atmosConfig, &candidateInfo, stackName, stackManifestName); err != nil {
+			if errors.Is(err, errUtils.ErrStarlarkStackIdentity) && identityErr == nil {
+				identityErr = err
+			}
 			continue
 		}
 
@@ -661,7 +675,7 @@ func findComponentInStacks(
 	}
 
 	if len(candidates) == 0 {
-		return 0, nil, schema.ConfigAndStacksInfo{}, stackNameMappings
+		return 0, nil, schema.ConfigAndStacksInfo{}, stackNameMappings, identityErr
 	}
 
 	componentConfigs := make([]map[string]any, 0, len(candidates))
@@ -673,13 +687,13 @@ func findComponentInStacks(
 	}
 
 	if !componentConfigsEqual(componentConfigs) {
-		return len(candidates), foundStacks, candidates[0].info, stackNameMappings
+		return len(candidates), foundStacks, candidates[0].info, stackNameMappings, nil
 	}
 
 	// candidates are resolved in lexical manifest-path order. Keep the first
 	// equivalent definition as the canonical source for stable execution,
 	// sources, and provenance output.
-	return 1, []string{candidates[0].stackFile}, candidates[0].info, stackNameMappings
+	return 1, []string{candidates[0].stackFile}, candidates[0].info, stackNameMappings, nil
 }
 
 // ProcessStacks processes stack config.
@@ -792,7 +806,7 @@ func processStacks(
 			return configAndStacksInfo, err
 		}
 	} else {
-		foundStackCount, foundStacks, foundConfigAndStacksInfo, stackNameMappings := findComponentInStacks(
+		foundStackCount, foundStacks, foundConfigAndStacksInfo, stackNameMappings, identityErr := findComponentInStacks(
 			atmosConfig,
 			&configAndStacksInfo,
 			stacksMap,
@@ -856,7 +870,7 @@ func processStacks(
 				// Update ComponentFromArg with resolved name and retry the loop.
 				configAndStacksInfo.ComponentFromArg = resolvedComponent
 
-				foundStackCount, foundStacks, foundConfigAndStacksInfo, stackNameMappings = findComponentInStacks(
+				foundStackCount, foundStacks, foundConfigAndStacksInfo, stackNameMappings, identityErr = findComponentInStacks(
 					atmosConfig,
 					&configAndStacksInfo,
 					stacksMap,
@@ -872,6 +886,9 @@ func processStacks(
 
 		// If still not found after path resolution attempt (or if path resolution was skipped), return error.
 		if foundStackCount == 0 {
+			if identityErr != nil {
+				return configAndStacksInfo, identityErr
+			}
 			// Check if the user provided a filename that has a different canonical name.
 			// This helps users who try to use the filename when the stack has an explicit name.
 			if canonicalName, found := stackNameMappings[configAndStacksInfo.Stack]; found {
@@ -940,6 +957,7 @@ func processStacks(
 	}
 
 	configAndStacksInfo.ComponentSection[sourcesSectionName] = sources
+	configAndStacksInfo.StackLocalsSection = stackLocalsForComponent(rawStackConfigs, configAndStacksInfo.StackFile, configAndStacksInfo.ComponentType)
 
 	// Component dependencies.
 	componentDeps, componentDepsAll, err := FindComponentDependencies(configAndStacksInfo.StackFile, sources)

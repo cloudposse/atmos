@@ -232,11 +232,24 @@ func TestCustomCommandRejectsUnsupportedFlagType(t *testing.T) {
 			}, parentCmd)
 			require.ErrorIs(t, err, tt.wantErr)
 
-			err = processCustomCommands(schema.AtmosConfiguration{}, []schema.Command{{
-				Name:  "bad-flag",
-				Flags: []schema.CommandFlag{tt.flag},
-			}}, parentCmd)
-			require.ErrorIs(t, err, tt.wantErr, "registration of the whole command set must fail loudly")
+			// One invalid command must not abort registration of the rest, or every command
+			// (including --help) would break. It is registered as a stub that reports the error
+			// when invoked by name.
+			err = processCustomCommands(schema.AtmosConfiguration{}, []schema.Command{
+				{Name: "bad-flag", Flags: []schema.CommandFlag{tt.flag}},
+				{Name: "good", Steps: []schema.Task{{Name: "noop", Type: schema.TaskTypeShell, Command: "true"}}},
+			}, parentCmd)
+			require.NoError(t, err)
+
+			good, _, findErr := parentCmd.Find([]string{"good"})
+			require.NoError(t, findErr)
+			assert.Equal(t, "good", good.Name())
+
+			stub, _, findErr := parentCmd.Find([]string{"bad-flag"})
+			require.NoError(t, findErr)
+			require.Equal(t, "bad-flag", stub.Name())
+			require.NotNil(t, stub.RunE, "the stub must report the stored error when invoked")
+			assert.ErrorIs(t, stub.RunE(stub, []string{"--ratio=1"}), tt.wantErr)
 		})
 	}
 }
@@ -292,7 +305,7 @@ func TestCustomCommandShellStepTimeout(t *testing.T) {
 		Steps: []schema.Task{{
 			Name:    "slow",
 			Type:    schema.TaskTypeShell,
-			Timeout: 500 * time.Millisecond,
+			Timeout: "500ms",
 			Env:     map[string]string{"EXE": exe},
 			Command: `"$EXE"`,
 		}},
@@ -326,7 +339,7 @@ func TestCustomCommandShellStepTimeoutBoundsRetries(t *testing.T) {
 		Steps: []schema.Task{{
 			Name:    "flaky",
 			Type:    schema.TaskTypeShell,
-			Timeout: 500 * time.Millisecond,
+			Timeout: "500ms",
 			Retry:   &schema.RetryConfig{MaxAttempts: &maxAttempts, InitialDelay: &delay, BackoffStrategy: schema.BackoffConstant},
 			Env:     map[string]string{"EXE": exe, "_ATMOS_TEST_EXIT_ONE": "1"},
 			Command: `"$EXE"`,

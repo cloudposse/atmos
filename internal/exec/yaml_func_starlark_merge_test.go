@@ -12,7 +12,7 @@ import (
 
 func TestStarlarkYAMLInheritedValues(t *testing.T) {
 	config := &schema.AtmosConfiguration{}
-	expression := `!starlark return {"Environment": ctx.vars["stage"]}`
+	expression := starlarkTestSource(`return {"Environment": ctx.vars["stage"]}`)
 	cases := []struct {
 		name           string
 		base, override any

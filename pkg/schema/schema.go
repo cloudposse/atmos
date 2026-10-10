@@ -2181,6 +2181,11 @@ type ConfigAndStacksInfo struct {
 	// InitSkipped records that the implicit terraform init was skipped this
 	// invocation because the init fingerprint was up to date.
 	InitSkipped bool `yaml:"-" json:"-" mapstructure:"-"`
+
+	// StackLocalsSection holds the stack manifest's file-level locals that apply to this
+	// component's type. Component locals live in ComponentSection; the Starlark context
+	// layers them over these. Transient runtime state — not serialized.
+	StackLocalsSection map[string]any `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // GetComponentEnvSection returns the component's env section map.

@@ -46,7 +46,7 @@ func protectNode(node *yaml.Node, file, prefix string, replacements *[]string) {
 	if node.Tag == "!literal" {
 		return
 	}
-	if node.Kind == yaml.ScalarNode && (node.Tag == Tag || (node.Tag == "!!str" && Is(node.Value))) {
+	if node.Kind == yaml.ScalarNode && (node.Tag == Tag || (node.Tag == "!!str" && IsEncoded(node.Value))) {
 		value := node.Value
 		if node.Tag == Tag {
 			value = FromNode(node, file).Encode()

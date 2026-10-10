@@ -368,6 +368,9 @@ type WorkflowStep struct {
 	// (evaluated before, against the running status). Unset means no forgiveness (today's
 	// fail-stop behavior, unchanged).
 	Continue Condition `yaml:"continue,omitempty" json:"continue,omitempty" mapstructure:"continue"`
+	// LoadError records a decode problem that must not fail config loading (see Task.LoadError). The
+	// step executor reports it. It has no YAML, JSON, or mapstructure key.
+	LoadError error `yaml:"-" json:"-" mapstructure:"-"`
 	// Interactive attaches host stdin to the step and lets the step handle Ctrl-C (like docker -i).
 	Interactive bool `yaml:"interactive,omitempty" json:"interactive,omitempty" mapstructure:"interactive"`
 	// Tty allocates a pseudo-terminal for the step (like docker -t). Combine with interactive for full terminal sessions.
@@ -572,6 +575,9 @@ func (step *WorkflowStep) UnmarshalYAML(value *yaml.Node) error {
 	// Decode into a zero-value temp first so a reused receiver does not retain
 	// fields omitted from this YAML node (Decode merges into the destination).
 	var fresh plain
+	if err := ValidateRetryNode(value); err != nil {
+		return err
+	}
 	nodes, sanitized := splitStepPolymorphicNodes(value)
 	if err := sanitized.Decode(&fresh); err != nil {
 		return err

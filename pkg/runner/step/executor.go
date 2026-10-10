@@ -2,6 +2,7 @@ package step
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -89,6 +90,12 @@ func (e *StepExecutor) Execute(ctx context.Context, step *schema.WorkflowStep) (
 	// Default step name if not provided.
 	if step.Name == "" {
 		step.Name = "unnamed_step"
+	}
+
+	// A decode problem recorded at load time (for example an unknown `retry:` key) fails the step
+	// instead of letting it run with the key silently ignored.
+	if step.LoadError != nil {
+		return nil, loadErrorWithValidation(step)
 	}
 
 	// Default step type if not provided.
@@ -214,6 +221,10 @@ func IsExtendedStepType(stepType string) bool {
 func ValidateStep(step *schema.WorkflowStep) error {
 	defer perf.Track(nil, "step.ValidateStep")()
 
+	if step.LoadError != nil {
+		return loadErrorWithValidation(step)
+	}
+
 	stepType := step.Type
 	if stepType == "" {
 		stepType = "shell"
@@ -269,4 +280,13 @@ func ValidateWorkflow(workflow *schema.WorkflowDefinition) []error {
 	}
 
 	return errs
+}
+
+// loadErrorWithValidation reports the problem recorded when the step was loaded together with
+// whatever the step's handler finds missing or invalid, so a misspelled required field shows both
+// the unknown field and the missing one.
+func loadErrorWithValidation(step *schema.WorkflowStep) error {
+	cleaned := *step
+	cleaned.LoadError = nil
+	return errors.Join(step.LoadError, ValidateStep(&cleaned))
 }

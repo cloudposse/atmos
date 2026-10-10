@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/script"
 	"github.com/cloudposse/atmos/pkg/script/starlark/internal/convert"
@@ -88,13 +90,23 @@ func call(t *starlark.Thread, input script.CommandInput, validate starlark.Value
 			return nil, err
 		}
 		if valid == starlark.False {
-			return nil, convert.InvalidArgument("cli.command: input validation failed")
+			return nil, validationFailure(input)
 		}
 		if valid != starlark.None && valid != starlark.True {
 			return nil, convert.InvalidArgument("cli.command: validate must return None or a bool")
 		}
 	}
 	return starlark.Call(t, run, callbackArgs, nil)
+}
+
+// validationFailure reports a validate callback that returned False. The user's input was rejected,
+// so it is a usage error with the usage line and a --help hint, not a script crash with a traceback.
+func validationFailure(input script.CommandInput) error {
+	cause := fmt.Errorf("%w: input validation failed", errUtils.ErrScriptUsage)
+	if input.Usage == nil {
+		return &script.UsageFailure{Err: cause}
+	}
+	return &script.UsageFailure{Err: input.Usage(cause)}
 }
 
 func argumentDeclarations(spec *script.CommandSpec, arguments starlark.Value) error {

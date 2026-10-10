@@ -1,11 +1,9 @@
 package hooks
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -25,11 +23,16 @@ func Run(cfg *schema.GitConfig, hookName string, hookArgs []string, opts ...RunO
 		return NotConfiguredError(hookName, cfg.Hooks)
 	}
 
-	if (strings.TrimSpace(entry.Command) != "") == (len(entry.Steps) > 0) {
-		return errUtils.Build(errUtils.ErrInvalidConfig).WithHint("Configure exactly one of command or a non-empty steps list for a Git hook.").WithContext("hook", hookName).Err()
+	if err := validateHookConfig(hookName, entry); err != nil {
+		return wrapHookError(hookName, err)
 	}
 	if len(entry.Steps) > 0 {
-		return runSteps(entry, hookArgs, opts)
+		return runSteps(hookName, entry, hookArgs, opts)
+	}
+
+	dir, mergedEnv, err := resolveHookEnvironment()
+	if err != nil {
+		return wrapHookError(hookName, err)
 	}
 
 	command := buildHookCommand(entry.Command, hookArgs)
@@ -38,9 +41,8 @@ func Run(cfg *schema.GitConfig, hookName string, hookArgs []string, opts ...RunO
 	// ShellRunner inherits os.Stdin via interp.StdIO(os.Stdin, ...) so hooks that
 	// read from stdin (pre-push, pre-receive) work correctly.
 	// ExitCodeError is returned when the child exits non-zero, preserving the code.
-	mergedEnv := os.Environ()
-	if err := u.ShellRunner(command, hookName, ".", mergedEnv, os.Stdout); err != nil {
-		return fmt.Errorf("%w", err)
+	if err := u.ShellRunner(command, hookName, dir, mergedEnv, os.Stdout); err != nil {
+		return wrapHookError(hookName, err)
 	}
 
 	return nil

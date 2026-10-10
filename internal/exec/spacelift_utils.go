@@ -49,15 +49,24 @@ func ResolveSpaceliftContextPrefix(
 
 	switch {
 	case naming.NameTemplate != "":
-		return ProcessTmpl(
+		section := map[string]any{cfg.VarsSectionName: componentVars}
+		prefix, err := processStackNameTemplate(
 			atmosConfig,
-			"spacelift-stack-name-template",
+			stackName,
 			naming.NameTemplate,
-			map[string]any{cfg.VarsSectionName: componentVars},
+			section,
 			atmosConfig.Templates.Settings.IgnoreMissingTemplateValues,
 		)
+		if err != nil {
+			return "", err
+		}
+		return prefix, ensureLiteralStackIdentity(stackName, prefix, section)
 	case naming.NamePattern != "":
-		return cfg.GetContextPrefix(stackName, *context, naming.NamePattern, stackName)
+		prefix, err := cfg.GetContextPrefix(stackName, *context, naming.NamePattern, stackName)
+		if err != nil {
+			return "", err
+		}
+		return prefix, ensureLiteralStackIdentity(stackName, prefix, map[string]any{cfg.VarsSectionName: componentVars})
 	default:
 		return strings.ReplaceAll(stackName, "/", "-"), nil
 	}
@@ -156,7 +165,7 @@ func BuildSpaceliftStackNameFromComponentConfig(
 		context.Component = strings.Replace(configAndStacksInfo.ComponentFromArg, "/", "-", -1)
 
 		if atmosConfig.Stacks.NameTemplate != "" {
-			contextPrefix, err = ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
+			contextPrefix, err = processStackNameTemplate(atmosConfig, configAndStacksInfo.Stack, atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 			if err != nil {
 				return "", err
 			}
@@ -165,6 +174,9 @@ func BuildSpaceliftStackNameFromComponentConfig(
 			if err != nil {
 				return "", err
 			}
+		}
+		if err = ensureLiteralStackIdentity(configAndStacksInfo.Stack, contextPrefix, configAndStacksInfo.ComponentSection); err != nil {
+			return "", err
 		}
 
 		spaceliftStackName, _, err = BuildSpaceliftStackName(spaceliftSettingsSection, context, contextPrefix)

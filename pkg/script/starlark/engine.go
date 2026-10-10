@@ -237,7 +237,7 @@ func (s *session) predeclared() starlark.StringDict {
 			if errors.Is(err, errUtils.ErrScriptUsage) {
 				// The host already presented this as a usage error; keep it from being
 				// re-reported as a script crash with a traceback.
-				return input, &usageFailure{err: err}
+				return input, &script.UsageFailure{Err: err}
 			}
 			return input, err
 		}),

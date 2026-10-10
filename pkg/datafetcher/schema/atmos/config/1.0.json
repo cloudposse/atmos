@@ -9689,18 +9689,13 @@
         "timeout": {
           "anyOf": [
             {
-              "type": "string",
-              "description": "Go duration string (e.g. \"500ms\", \"30s\", \"5m\")."
-            },
-            {
-              "type": "integer",
-              "description": "Duration in nanoseconds."
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
-          "description": "Timeout specifies the maximum duration for the task. Zero means no timeout."
+          "description": "Timeout specifies the maximum duration for the task as a Go duration string (for example\n\"30s\"). It may be a template; the step runner renders and parses it when the step starts, so\na templated value does not fail config loading. Empty means no timeout."
         },
         "stack": {
           "anyOf": [

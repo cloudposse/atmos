@@ -56,13 +56,13 @@ func TestTasks_UnmarshalYAML_StructuredSyntax(t *testing.T) {
 	assert.Equal(t, "validate", tasks[0].Name)
 	assert.Equal(t, "terraform validate", tasks[0].Command)
 	assert.Equal(t, TaskTypeShell, tasks[0].Type)
-	assert.Equal(t, 30*time.Second, tasks[0].Timeout)
+	assert.Equal(t, "30s", tasks[0].Timeout)
 
 	assert.Equal(t, "plan", tasks[1].Name)
 	assert.Equal(t, "terraform plan vpc", tasks[1].Command)
 	assert.Equal(t, TaskTypeAtmos, tasks[1].Type)
 	assert.Equal(t, "dev-us-east-1", tasks[1].Stack)
-	assert.Equal(t, 5*time.Minute, tasks[1].Timeout)
+	assert.Equal(t, "5m", tasks[1].Timeout)
 }
 
 func TestTasks_UnmarshalYAML_MixedSyntax(t *testing.T) {
@@ -89,7 +89,7 @@ func TestTasks_UnmarshalYAML_MixedSyntax(t *testing.T) {
 	assert.Equal(t, "structured", tasks[1].Name)
 	assert.Equal(t, "echo with timeout", tasks[1].Command)
 	assert.Equal(t, TaskTypeShell, tasks[1].Type) // defaults to shell.
-	assert.Equal(t, 10*time.Second, tasks[1].Timeout)
+	assert.Equal(t, "10s", tasks[1].Timeout)
 
 	// Third: simple string.
 	assert.Equal(t, "another simple command", tasks[2].Command)
@@ -241,12 +241,16 @@ func TestTasks_UnmarshalYAML_InvalidStructuredDecode(t *testing.T) {
 	// This tests line 93-94: error case when node.Decode fails.
 	input := `
 - command: valid
-  timeout: not-a-duration
+  retry:
+    max_attempts: 2
+    delay: 4s
 `
 	var tasks Tasks
 	err := yaml.Unmarshal([]byte(input), &tasks)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to decode task at index 0")
+	assert.ErrorIs(t, err, ErrInvalidRetryConfig)
+	assert.Contains(t, err.Error(), `unknown retry field "delay"`)
 }
 
 func TestTask_ToWorkflowStep(t *testing.T) {
@@ -269,7 +273,7 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 		Retry: &RetryConfig{
 			MaxAttempts: &maxAttempts,
 		},
-		Timeout: 30 * time.Second,
+		Timeout: "30s",
 		Export:  &export,
 	}
 
@@ -350,7 +354,7 @@ func TestTaskWorkflowStepControlFieldsRoundTrip(t *testing.T) {
 		Needs:            []string{"prepare"},
 		Output:           "grouped",
 		ParallelOutput:   &ParallelOutputConfig{Mode: "grouped", Order: "definition", ShowSummary: &showSummary, Prefix: "{{ .step.name }}"},
-		Timeout:          2 * time.Minute,
+		Timeout:          "2m",
 		Steps:            []WorkflowStep{{Name: "plan", Type: TaskTypeAtmos, Command: "terraform plan"}},
 		MaxConcurrency:   3,
 		Matrix:           map[string][]string{"stack": {"dev", "prod"}},
@@ -378,7 +382,7 @@ func TestTaskWorkflowStepControlFieldsRoundTrip(t *testing.T) {
 	}
 
 	step := task.ToWorkflowStep()
-	assert.Equal(t, "2m0s", step.Timeout)
+	assert.Equal(t, "2m", step.Timeout)
 	assert.Equal(t, task.ParallelOutput, step.ParallelOutput)
 	assert.Equal(t, task.Steps, step.Steps)
 	assert.Equal(t, task.MaxConcurrency, step.MaxConcurrency)
@@ -455,9 +459,10 @@ func TestTask_InputsArtifactsPreconditionsRoundTrip(t *testing.T) {
 	}
 }
 
-func TestTaskFromWorkflowStepIgnoresInvalidTimeout(t *testing.T) {
-	task := TaskFromWorkflowStep(&WorkflowStep{Timeout: "not-a-duration"})
-	assert.Zero(t, task.Timeout)
+// A timeout is kept verbatim (it may be a template); it is parsed when the step runs.
+func TestTaskFromWorkflowStepKeepsTimeoutVerbatim(t *testing.T) {
+	task := TaskFromWorkflowStep(&WorkflowStep{Timeout: "{{ .Flags.t }}"})
+	assert.Equal(t, "{{ .Flags.t }}", task.Timeout)
 }
 
 func TestTasksDecodeHook_StructuredParallelOutput(t *testing.T) {
@@ -760,7 +765,10 @@ func TestTasksDecodeHook_InvalidOutputType(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.Error(t, decoder.Decode(input))
+	// The bad step is recorded, not fatal, so it cannot take down config loading.
+	require.NoError(t, decoder.Decode(input))
+	require.Len(t, result.Steps, 1)
+	require.Error(t, result.Steps[0].LoadError)
 }
 
 func TestTasksDecodeHook_TypedRootSlice(t *testing.T) {
@@ -916,7 +924,7 @@ func TestTasksDecodeHook_StructuredMaps(t *testing.T) {
 	assert.Equal(t, "test", result.Steps[0].Name)
 	assert.Equal(t, "echo test", result.Steps[0].Command)
 	assert.Equal(t, TaskTypeAtmos, result.Steps[0].Type)
-	assert.Equal(t, 30*time.Second, result.Steps[0].Timeout)
+	assert.Equal(t, "30s", result.Steps[0].Timeout)
 }
 
 func TestTasksDecodeHook_MixedSyntax(t *testing.T) {
@@ -962,9 +970,10 @@ func TestTasksDecodeHook_InvalidItemType(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = decoder.Decode(input)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unexpected task node kind")
+	require.NoError(t, decoder.Decode(input))
+	require.Len(t, result.Steps, 1)
+	require.Error(t, result.Steps[0].LoadError)
+	assert.Contains(t, result.Steps[0].LoadError.Error(), "unexpected task node kind")
 }
 
 func TestDecodeTasksFromSlice_EmptySlice(t *testing.T) {
@@ -993,9 +1002,12 @@ func TestDecodeTasksFromSlice_MapItems(t *testing.T) {
 
 func TestDecodeTasksFromSlice_ErrorPropagation(t *testing.T) {
 	// Test error propagation from decodeTaskItem.
-	_, err := decodeTasksFromSlice([]any{3.14}) // Float is not valid.
-	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrTaskUnexpectedNodeKind)
+	// A step that cannot be decoded is kept as a placeholder carrying the error, so one bad step
+	// does not fail config loading for every command.
+	tasks, err := decodeTasksFromSlice([]any{3.14}) // Float is not valid.
+	require.NoError(t, err)
+	require.Len(t, tasks, 1)
+	assert.ErrorIs(t, tasks[0].LoadError, ErrTaskUnexpectedNodeKind)
 }
 
 func TestDecodeTaskItem_String(t *testing.T) {
@@ -1014,7 +1026,7 @@ func TestDecodeTaskItem_Map(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "test", task.Name)
 	assert.Equal(t, "do something", task.Command)
-	assert.Equal(t, time.Minute, task.Timeout)
+	assert.Equal(t, "1m", task.Timeout)
 	assert.Equal(t, TaskTypeShell, task.Type) // Default.
 }
 
@@ -1055,7 +1067,7 @@ func TestDecodeTaskFromMap_ValidMap(t *testing.T) {
 	assert.Equal(t, "prod", task.Stack)
 	assert.Equal(t, "/app", task.WorkingDirectory)
 	assert.Equal(t, "admin", task.Identity)
-	assert.Equal(t, 5*time.Minute, task.Timeout)
+	assert.Equal(t, "5m", task.Timeout)
 }
 
 func TestDecodeTaskFromMap_DefaultsTypeToShell(t *testing.T) {
@@ -1089,15 +1101,24 @@ func TestDecodeTaskFromMap_WithRetry(t *testing.T) {
 	assert.Equal(t, 10*time.Second, *task.Retry.MaxDelay)
 }
 
-func TestDecodeTaskFromMap_InvalidTimeout(t *testing.T) {
+// A templated timeout must survive config-load decoding; it is rendered and parsed when the step
+// runs, so a template here must not break every command.
+func TestDecodeTaskFromMap_TemplatedTimeout(t *testing.T) {
 	m := map[string]any{
 		"command": "echo hello",
-		"timeout": "not-a-duration",
+		"timeout": "{{ .Flags.t }}",
 	}
 
-	_, err := decodeTaskFromMap(m, 2)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to decode task at index 2")
+	task, err := decodeTaskFromMap(m, 2)
+	require.NoError(t, err)
+	assert.Equal(t, "{{ .Flags.t }}", task.Timeout)
+}
+
+func TestTaskUnmarshalYAML_TemplatedTimeout(t *testing.T) {
+	var tasks Tasks
+	require.NoError(t, yaml.Unmarshal([]byte("- command: echo hi\n  timeout: '{{ .Flags.t }}'\n"), &tasks))
+	require.Len(t, tasks, 1)
+	assert.Equal(t, "{{ .Flags.t }}", tasks[0].Timeout)
 }
 
 func TestDecodeTaskFromMap_InvalidStructuredOutput(t *testing.T) {
@@ -1491,7 +1512,8 @@ func TestContainerStepWithBlock_RejectsUnknownField(t *testing.T) {
 			),
 		})
 		require.NoError(t, err)
-		err = decoder.Decode(generic)
+		require.NoError(t, decoder.Decode(generic))
+		err = fromMapstructure.LoadError()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "platforms")
 	})
@@ -1649,7 +1671,8 @@ func TestContainerStepOverride_RejectsUnknownField(t *testing.T) {
 			),
 		})
 		require.NoError(t, err)
-		err = decoder.Decode(generic)
+		require.NoError(t, decoder.Decode(generic))
+		err = fromMapstructure.LoadError()
 		require.Error(t, err)
 		assert.True(t, errors.Is(err, ErrInvalidWorkflowContainer))
 		assert.Contains(t, err.Error(), "imgae")
@@ -1904,4 +1927,68 @@ func TestDecodeTaskFromMap_ContainerBlockMarshalErrorHasSentinel(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrInvalidWorkflowContainer)
 	assert.ErrorIs(t, err, errContainerValueMarshal)
+}
+
+func TestWorkflowStepUnmarshalYAML_UnknownRetryKey(t *testing.T) {
+	var step WorkflowStep
+	err := yaml.Unmarshal([]byte("command: echo hi\nretry:\n  max_attempts: 2\n  delay: 4s\n"), &step)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidRetryConfig)
+	assert.Contains(t, err.Error(), `unknown retry field "delay"`)
+}
+
+func TestWorkflowStepUnmarshalYAML_ValidRetry(t *testing.T) {
+	var step WorkflowStep
+	require.NoError(t, yaml.Unmarshal([]byte("command: echo hi\nretry:\n  max_attempts: 2\n  initial_delay: 4s\n"), &step))
+	require.NotNil(t, step.Retry)
+	assert.Equal(t, 2, *step.Retry.MaxAttempts)
+}
+
+// An unknown retry key must not fail config loading (it would take down every command); it is
+// recorded on the task so the registrar reports it.
+func TestDecodeTaskFromMap_UnknownRetryKeyIsRecordedNotFatal(t *testing.T) {
+	task, err := decodeTaskFromMap(map[string]any{
+		"command": "echo hi",
+		"retry":   map[string]any{"max_attempts": 2, "delay": "4s"},
+	}, 1)
+	require.NoError(t, err)
+	require.Error(t, task.LoadError)
+	assert.ErrorIs(t, task.LoadError, ErrInvalidRetryConfig)
+	assert.Contains(t, task.LoadError.Error(), `unknown retry field "delay"`)
+	assert.Equal(t, task.LoadError, Tasks{task}.LoadError())
+	assert.Equal(t, task.LoadError, task.ToWorkflowStep().LoadError)
+}
+
+func TestDecodeTaskFromMap_ValidRetryHasNoLoadError(t *testing.T) {
+	task, err := decodeTaskFromMap(map[string]any{
+		"command": "echo hi",
+		"retry":   map[string]any{"max_attempts": 2, "initial_delay": "4s"},
+	}, 1)
+	require.NoError(t, err)
+	assert.NoError(t, task.LoadError)
+	assert.NoError(t, Tasks{task}.LoadError())
+}
+
+func TestDecodeTaskFromMap_UnknownFieldIsRecordedNotFatal(t *testing.T) {
+	task, err := decodeTaskFromMap(map[string]any{
+		"type":        "script",
+		"interpreter": "starlark",
+		"scritp":      `print("x")`,
+	}, 0)
+	require.NoError(t, err)
+	require.ErrorIs(t, task.LoadError, ErrTaskUnknownField)
+	assert.Contains(t, task.LoadError.Error(), `unknown field "scritp"`)
+}
+
+func TestDecodeTasksFromSlice_UndecodableStepKeepsItsNameAndDoesNotFail(t *testing.T) {
+	tasks, err := decodeTasksFromSlice([]any{
+		map[string]any{"name": "ok", "command": "echo ok"},
+		map[string]any{"name": "bad", "command": "echo", "interactive": []any{"not-a-bool"}},
+	})
+	require.NoError(t, err)
+	require.Len(t, tasks, 2)
+	assert.NoError(t, tasks[0].LoadError)
+	assert.Equal(t, "bad", tasks[1].Name)
+	require.Error(t, tasks[1].LoadError)
+	assert.Equal(t, tasks[1].LoadError, tasks.LoadError())
 }

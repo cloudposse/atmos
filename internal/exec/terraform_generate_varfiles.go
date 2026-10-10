@@ -30,7 +30,7 @@ func ExecuteTerraformGenerateVarfiles(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateVarfiles")()
 
-	stacksMap, _, deferredContexts, err := FindStacksMap(atmosConfig, false)
+	stacksMap, rawStackConfigs, deferredContexts, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
 	}
@@ -128,6 +128,7 @@ func ExecuteTerraformGenerateVarfiles(
 
 				configAndStacksInfo := schema.ConfigAndStacksInfo{
 					ComponentFromArg:          componentName,
+					ComponentType:             cfg.TerraformComponentType,
 					ComponentMetadataSection:  metadataSection,
 					ComponentVarsSection:      varsSection,
 					ComponentSettingsSection:  settingsSection,
@@ -199,12 +200,14 @@ func ExecuteTerraformGenerateVarfiles(
 				configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
 				configAndStacksInfo.ComponentSection["atmos_manifest"] = stackFileName
 
-				// Terraform workspace
+				// Terraform workspace. Batch generation starts from a physical manifest before
+				// evaluating computed vars. Keep its provisional workspace physical as well;
+				// BuildTerraformWorkspace runs again after finishValues with the resolved context.
 				workspace, err := BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
-				if err != nil {
+				if err != nil && !errors.Is(err, errUtils.ErrStarlarkStackIdentity) {
 					return err
 				}
-				if containsStarlark(workspace) {
+				if errors.Is(err, errUtils.ErrStarlarkStackIdentity) || containsStarlark(workspace) {
 					workspace = strings.ReplaceAll(stackFileName, "/", "-")
 				}
 				componentSection["workspace"] = workspace
@@ -264,6 +267,7 @@ func ExecuteTerraformGenerateVarfiles(
 				}
 
 				configAndStacksInfo.ComponentSection = componentSectionConverted
+				configAndStacksInfo.StackLocalsSection = stackLocalsForComponent(rawStackConfigs, stackFileName, cfg.TerraformComponentType)
 				yamlSkip, finishValues := prepareConfigurationValues(atmosConfig, &configAndStacksInfo, nil, nil)
 				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, yamlSkip, &configAndStacksInfo)
 				if err != nil {

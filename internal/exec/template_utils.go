@@ -61,6 +61,21 @@ func ProcessTmpl(
 ) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmpl")()
 
+	return processTmpl(atmosConfig, tmplName, tmplValue, tmplData, templateProcessOptions{ignoreMissing: ignoreMissingTemplateValues})
+}
+
+type templateProcessOptions struct {
+	ignoreMissing bool
+	prepare       func(*template.Template)
+}
+
+// processTmpl allows a caller to guard parsed expressions before executing them.
+func processTmpl(
+	atmosConfig *schema.AtmosConfiguration,
+	tmplName, tmplValue string,
+	tmplData any,
+	options templateProcessOptions,
+) (rendered string, renderErr error) {
 	protectedSource, restoreSource, protectErr := starlarksource.Protect(tmplValue, tmplName)
 	if protectErr != nil {
 		return "", protectErr
@@ -94,11 +109,14 @@ func ProcessTmpl(
 
 	option := "missingkey=error"
 
-	if ignoreMissingTemplateValues {
+	if options.ignoreMissing {
 		option = "missingkey=default"
 	}
 
 	t.Option(option)
+	if options.prepare != nil {
+		options.prepare(t)
+	}
 
 	var res bytes.Buffer
 	err = t.Execute(&res, tmplData)

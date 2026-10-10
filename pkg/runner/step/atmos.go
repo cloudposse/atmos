@@ -7,8 +7,10 @@ import (
 	"os/exec"
 	"strings"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/script"
 )
 
 // AtmosHandler executes atmos commands.
@@ -37,6 +39,12 @@ func (h *AtmosHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 	defer perf.Track(nil, "step.AtmosHandler.Execute")()
 
 	opts, err := h.prepareExecution(ctx, step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	// Render a templated `output:` before anything runs, so an unknown mode fails the step.
+	step, err = resolveOutputStep(step, vars)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +179,9 @@ func (h *AtmosHandler) runAtmosCommand(ctx context.Context, stepName string, opt
 	if opts.workDir != "" {
 		cmd.Dir = opts.workDir
 	}
-	cmd.Env = append(os.Environ(), opts.envVars...)
+	// Global --profile/--identity selections live only in this process; forward them so the
+	// nested atmos command runs with the same ones. Step env comes last and so wins.
+	cmd.Env = append(script.ProcessEnvironment(os.Environ(), script.SelectionEnv(cfg.GetActiveProfiles(nil), cfg.GlobalViper().GetString(cfg.IdentityFlagName))), opts.envVars...)
 
 	writer := NewOutputModeWriter(output.mode, stepName, output.viewport, output.show)
 	writer.writers = opts.writers
@@ -200,6 +210,12 @@ func (h *AtmosHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 	defer perf.Track(nil, "step.AtmosHandler.ExecuteWithWorkflow")()
 
 	opts, err := h.prepareExecution(ctx, step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	// Render a templated `output:` before anything runs, so an unknown mode fails the step.
+	step, err = resolveOutputStep(step, vars)
 	if err != nil {
 		return nil, err
 	}

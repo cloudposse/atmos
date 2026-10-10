@@ -11,12 +11,12 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	execpkg "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/reexec"
 	runnerstep "github.com/cloudposse/atmos/pkg/runner/step"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/script"
 )
 
@@ -29,6 +29,11 @@ import (
 func prepareStandaloneScript() (func(), error) {
 	globals, rest, ok := script.SplitGlobalFlags(os.Args[1:], rootFlagTakesValue)
 	if !ok || !script.MayBeFile(rest) {
+		// Not a script invocation Atmos can place. Name a leading-flag mistake rather than letting
+		// the script path surface later as an unknown command.
+		if err := script.DiagnoseLeadingFlags(os.Args[1:], rootFlagOrLocalTakesValue, rootFlagOptionalValue); err != nil {
+			return nil, err
+		}
 		return func() {}, nil
 	}
 	previousArgs := os.Args
@@ -83,16 +88,37 @@ func rootFlagTakesValue(name string, short bool) (takes, found bool) {
 	return flag.NoOptDefVal == "", true
 }
 
-// suppressMetricsSummaryByDefault turns the local resource-usage summary off for
-// standalone scripts unless the user explicitly set settings.metrics.enabled.
-// A script is the user's own CLI tool, so Atmos-internal telemetry such as the
-// final "Total for this invocation" line must be opt-in there. An explicit true
-// or false is preserved; every other Atmos command keeps the default of enabled.
-func suppressMetricsSummaryByDefault(config *schema.AtmosConfiguration) {
-	if config.Settings.Metrics.Enabled == nil {
-		disabled := false
-		config.Settings.Metrics.Enabled = &disabled
+// rootFlagOrLocalTakesValue extends rootFlagTakesValue with the root command's local flags and the
+// help flag, which are valid before any command and so never "unknown" to a user.
+func rootFlagOrLocalTakesValue(name string, short bool) (takes, found bool) {
+	if takes, found = rootFlagTakesValue(name, short); found {
+		return takes, found
 	}
+	if name == "help" || name == "h" {
+		return false, true
+	}
+	var flag *pflag.Flag
+	if short {
+		flag = RootCmd.Flags().ShorthandLookup(name)
+	} else {
+		flag = RootCmd.Flags().Lookup(name)
+	}
+	if flag == nil {
+		return false, false
+	}
+	return flag.NoOptDefVal == "", true
+}
+
+// rootFlagOptionalValue reports whether a global flag takes a value only in the `--flag=value`
+// form, such as --profile and --identity. Boolean flags are excluded: they never take a value.
+func rootFlagOptionalValue(name string, short bool) bool {
+	var flag *pflag.Flag
+	if short {
+		flag = RootCmd.PersistentFlags().ShorthandLookup(name)
+	} else {
+		flag = RootCmd.PersistentFlags().Lookup(name)
+	}
+	return flag != nil && flag.NoOptDefVal != "" && flag.Value.Type() != "bool"
 }
 
 func runStandaloneScript(cmd *cobra.Command, file *script.File) error {
@@ -105,8 +131,8 @@ func runStandaloneScript(cmd *cobra.Command, file *script.File) error {
 	if !ok {
 		return fmt.Errorf("%w: embedded interpreter %q is unavailable", errUtils.ErrScript, file.Interpreter)
 	}
-	suppressMetricsSummaryByDefault(&atmosConfig)
-	processEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
+	cfg.DisableMetricsSummaryByDefault(&atmosConfig)
+	processEnv := script.ProcessEnvironment(envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env), standaloneSelectionEnv(cmd))
 	vars := runnerstep.NewVariables()
 	vars.SetAtmosConfig(&atmosConfig)
 	vars.SetScriptComponentInfoResolver(execpkg.ScriptComponentInfoResolver(&atmosConfig, nil))
@@ -132,6 +158,31 @@ func runStandaloneScript(cmd *cobra.Command, file *script.File) error {
 		return data.Writeln(result.Value)
 	}
 	return nil
+}
+
+// standaloneSelectionEnv carries the profile and identity chosen with global flags written before
+// the script path (`atmos --profile=dev ./tool`) into the environment of nested `atmos.*` calls.
+func standaloneSelectionEnv(cmd *cobra.Command) map[string]string {
+	identity := ""
+	if cmd.Flags().Changed(cfg.IdentityFlagName) {
+		identity = GetIdentityFromFlags(cmd, os.Args)
+	}
+	return script.SelectionEnv(cfg.GetActiveProfiles(&atmosConfig), identity)
+}
+
+// colorScanArgs returns the arguments that may carry Atmos global flags. For a standalone script
+// invocation (`atmos [globals] ./tool.star args`) only the leading global flags qualify: everything
+// after the script path belongs to the script, so a script's own `--force-color` must not switch
+// Atmos color on. Any other invocation is scanned in full.
+func colorScanArgs(args []string) []string {
+	if len(args) < 2 {
+		return args
+	}
+	globals, rest, ok := script.SplitGlobalFlags(args[1:], rootFlagTakesValue)
+	if !ok || !script.MayBeFile(rest) {
+		return args
+	}
+	return globals
 }
 
 // standaloneProjectRoot is the directory tracebacks are shown relative to: the current working
