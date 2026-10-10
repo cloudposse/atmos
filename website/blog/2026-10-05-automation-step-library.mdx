@@ -1,0 +1,90 @@
+---
+slug: automation-step-library
+title: "From shell glue to testable automation"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Over the past year, we've used Atmos custom commands and workflows extensively
+at Cloud Posse. That experience keeps bringing us back to the code between the
+tools: the project-specific logic that turns individual commands into a delivery
+process. Much of it lives in shell scripts. We want to give it the same
+structure, reuse, and testing we expect from application code.
+
+The [Atmos Automation Language](/automation/language), based on Starlark, lets
+us write that logic with ordinary functions and structured data, call the
+capabilities Atmos already provides, and [test it](/automation/testing) with
+Atmos itself.
+
+<!--truncate-->
+
+## Give project automation a language {#the-problem}
+
+[Custom commands](/cli/configuration/commands) give a team familiar entry points,
+and [workflows](/workflows) organize the process. The language gives you a way
+to express the decisions within it.
+
+Declarative workflows and Makefiles give tasks and their dependencies a clear
+structure. A language is useful for the decisions between those tasks: iterate
+over affected projects, inspect a command's results, choose what runs next, and
+reuse the logic elsewhere.
+
+In YAML workflows and Makefiles, that logic often lives in embedded shell or
+expressions inside configuration. The Atmos Automation Language gives it
+ordinary variables, loops, conditionals, functions, and structured data. You can
+read the logic directly and test a function independently of the deployment
+that calls it.
+
+Keep workflows for orchestration and use the language where code expresses the
+work clearly. Atmos supplies the tools and conventions to execute both as part
+of the same delivery process.
+
+## Compose your delivery process {#the-fix}
+
+Write the project logic in the Atmos Automation Language and call Atmos's
+existing capabilities from your script. Use consistent prompts, formatted
+output, and structured errors to give your team a familiar CLI experience.
+Reuse functions across your automation and run independent tasks in parallel.
+
+The interpreter and test runner ship in the Atmos binary. Distribute your
+scripts with your project and invoke them from a terminal or a CI job. Configure
+the tools and credentials they use for each environment.
+
+Direct access to the [step library](/functions/automation/steps.run) extends what
+these scripts can do. Calls such as `steps.input`, `steps.http`,
+`steps.container`, and `steps.archive` use the same fields as YAML steps and
+return values, metadata, and named outputs. You can compose those existing
+operations inside your functions and loops.
+
+Scripts can run as standalone tools or within custom commands, workflows, and
+hooks. Steps keep their existing prerequisites: container operations need a
+configured runtime, prompts need a terminal or a default, and background-job
+controls require the workflow runner.
+
+## How to Use It
+
+Save this as `select-service.star`:
+
+```python
+service = steps.input(prompt = "Service name?", default = "api").value
+selection = steps.choose(
+    prompt = "Environment?",
+    options = ["dev", "prod"],
+    default = "dev",
+).value
+ui.success("Selected " + service + " in " + selection)
+```
+
+Run it with `atmos ./select-service.star`. It prompts in a terminal and uses the
+configured defaults without one. Collect input before starting
+[parallel tasks](/functions/automation/steps.parallel).
+
+For a step type selected at runtime, call `steps.run(type, **fields)`. See the
+[step-library reference](/functions/automation/steps.run) for available functions,
+result fields, and execution-context requirements.
+
+## Get Involved
+
+Try expressing part of your build, test, or deployment process in the language and
+[open an issue](https://github.com/cloudposse/atmos/issues) if an operation needs
+better support in the language.

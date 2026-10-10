@@ -43,6 +43,7 @@ func (controlBridge) RunControl(ctx context.Context, step *schema.WorkflowStep, 
 		return nil, err
 	}
 	childExecutor := &ControlCommandExecutor{
+		ScriptSteps:            stepPkg.NewAutomationLibrary(vars, nil),
 		InstallTools:           stepPkg.ScriptToolInstaller(vars.AtmosConfig),
 		DryRun:                 step.DryRun,
 		ScriptHook:             vars.ScriptHook,

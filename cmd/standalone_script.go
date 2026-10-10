@@ -115,6 +115,7 @@ func runStandaloneScript(cmd *cobra.Command, file *script.File) error {
 		name, sourcePath = "<stdin>", ""
 	}
 	result, err := engine.Execute(cmd.Context(), script.Spec{
+		Steps:        runnerstep.NewAutomationLibrary(vars, nil),
 		InstallTools: runnerstep.ScriptToolInstaller(&atmosConfig),
 		ParseCommand: standaloneCommandParser(file, streams.Data()),
 		// SourcePath anchors imports and tracebacks for files; stdin has no source path.

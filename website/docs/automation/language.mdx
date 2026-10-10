@@ -134,11 +134,14 @@ presentation as Atmos's own errors. Add an explanation, recovery hints, and an
 example before calling `.fail()`. These errors follow Atmos's normal reporting
 path, including Sentry when configured.
 
-Workflows and custom commands can collect input with [`input`](/steps/type/input),
-[`choose`](/steps/type/choose), and [`confirm`](/steps/type/confirm) steps. Pass a
-prompt's value into a script through `env`, and assign `output` to pass the
-script's result onward. See [prompts and step outputs](/automation/workflows#collect-input-and-pass-results-between-steps)
-for a complete example.
+Call the [step library](/functions/automation/steps.run) directly from scripts:
+`steps.input(prompt = "Service?", default = "api").value` returns an input value.
+The same module exposes choice and confirmation prompts, HTTP requests, container
+operations, archives, and the other registered step handlers. Calls return values,
+metadata, and named outputs that you can pass to the next operation.
+
+You can also combine YAML prompts and script steps in a workflow or custom command.
+See [prompts and step outputs](/automation/workflows#collect-input-and-pass-results-between-steps).
 
 ## Files and shared code
 

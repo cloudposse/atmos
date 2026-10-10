@@ -29,6 +29,9 @@ type ComponentInfoResolver func(ctx context.Context, component, stack, component
 
 // Variables holds step outputs accessible via Go templates.
 type Variables struct {
+	// Automation calls inherit nesting depth and terminal restrictions across embedded scripts.
+	automationDepth    int
+	automationParallel bool
 	// Steps maps step names to their results.
 	Steps map[string]*StepResult
 	// Env contains environment variables.
@@ -336,35 +339,6 @@ func (v *Variables) ProtectTemplateRoots(roots ...string) {
 	for _, root := range roots {
 		v.protectedRoots[root] = struct{}{}
 	}
-}
-
-// SetTotalStages sets the total number of stage steps in the workflow.
-func (v *Variables) SetTotalStages(total int) {
-	defer perf.Track(nil, "step.Variables.SetTotalStages")()
-
-	v.totalStages = total
-}
-
-// GetTotalStages returns the total number of stage steps.
-func (v *Variables) GetTotalStages() int {
-	defer perf.Track(nil, "step.Variables.GetTotalStages")()
-
-	return v.totalStages
-}
-
-// IncrementStageIndex increments and returns the current stage index.
-func (v *Variables) IncrementStageIndex() int {
-	defer perf.Track(nil, "step.Variables.IncrementStageIndex")()
-
-	v.stageIndex++
-	return v.stageIndex
-}
-
-// GetStageIndex returns the current stage index.
-func (v *Variables) GetStageIndex() int {
-	defer perf.Track(nil, "step.Variables.GetStageIndex")()
-
-	return v.stageIndex
 }
 
 // templateData returns the data structure for Go template execution.

@@ -3,6 +3,7 @@ package step
 import (
 	"context"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 	"time"
@@ -171,9 +172,18 @@ func firstString(values []string) string {
 	return values[0]
 }
 
-func (h *ContainerHandler) writeOutput(step *schema.WorkflowStep, workflow *schema.WorkflowDefinition, stdout, stderr string) {
+func (h *ContainerHandler) writeOutput(step *schema.WorkflowStep, workflow *schema.WorkflowDefinition, stdout, stderr string, writers ...OutputWriters) {
 	mode := GetOutputMode(step, workflow)
 	if mode == OutputModeNone {
+		return
+	}
+	if len(writers) > 0 && (writers[0].Stdout != nil || writers[0].Stderr != nil) {
+		writer := &OutputModeWriter{mode: mode, writers: writers[0]}
+		_, _, _ = writer.executeScoped(func(out, diagnostic io.Writer) error {
+			_, _ = io.WriteString(out, stdout)
+			_, _ = io.WriteString(diagnostic, stderr)
+			return nil
+		})
 		return
 	}
 	if stdout != "" {

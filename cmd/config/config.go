@@ -31,6 +31,7 @@ root; use the global --config flag to target a specific file.`,
 }
 
 func init() {
+	configGetCmd.Flags().StringP("format", "f", "raw", "Output format: raw or json")
 	configCmd.AddCommand(configGetCmd)
 	configCmd.AddCommand(configSetCmd)
 	configCmd.AddCommand(configDeleteCmd)

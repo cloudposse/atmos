@@ -17,7 +17,7 @@ import Intro from '@site/src/components/Intro'
 ## Usage
 
 ```python
-exec.run(argv, working_directory = ..., env = ..., output = "stream", check = True)
+exec.run(argv, working_directory = ..., env = ..., output = "stream", check = True, timeout = "", retry = None)
 ```
 
 ## Arguments
@@ -56,11 +56,38 @@ exec.run(argv, working_directory = ..., env = ..., output = "stream", check = Tr
     </dd>
 </dl>
 
-## Returns
-
-A result with three fields:
+The `timeout` and `retry` options apply to this individual process call:
 
 <dl>
+    <dt>`timeout`</dt>
+    <dd>A positive duration such as `"30s"` or `"5m"`. It bounds the entire call,
+    including all attempts and retry delays. Omit it for no additional deadline;
+    an enclosing task or script can still cancel the call.</dd>
+    <dt>`retry`</dt>
+    <dd>A dictionary using the same policy fields as
+    [`steps.task`](/functions/automation/steps.task#retry-policy), including
+    `max_attempts`, `initial_delay`, and `backoff_strategy`. Optional `conditions`
+    are regular expressions matched against the failed attempt's stdout and stderr.
+    At least one must match when supplied. Omit the policy to run once.</dd>
+</dl>
+
+Only ordinary nonzero exits are retried. Cancellation, timeout, failure to start,
+signals, and I/O errors stop the call. With `check=False`, an ordinary nonzero exit
+is returned immediately and does not trigger retries. Captured output contains
+only the final attempt; streaming displays each attempt as it runs. Retrying
+repeats the command's effects, so use it only for operations safe to repeat.
+Set `max_attempts` or `timeout` to bound a retry policy.
+
+## Returns
+
+A result with captured output and a decoded JSON view:
+
+<dl>
+    <dt>`data`</dt>
+    <dd>The JSON value decoded from `stdout` on first access. Objects become dictionaries, arrays become lists,
+    and JSON scalars retain their types. Decoded collections are read-only and safe to share with parallel tasks.
+    Empty or invalid JSON raises an error only when you access this attribute.</dd>
+
     <dt>`stdout`</dt>
     <dd>Everything the program wrote to standard output, as a string.</dd>
 
@@ -73,8 +100,14 @@ A result with three fields:
 
 With `output="stream"`, the program's stdout also goes to the script's own stdout, so it becomes the step's value when
 the script does not assign [`output`](/functions/automation/output). Use `output="capture"` to keep it out of the
-step value. [`atmos.run`](/functions/automation/atmos.run), the other `atmos.*` wrappers, and
-[`component.exec`](/functions/automation/component.exec) accept the same options and return the same result.
+step value. [`component.exec`](/functions/automation/component.exec) accepts the same options.
+The [`atmos.run`](/functions/automation/atmos.run) function and other `atmos.*` wrappers
+share the result fields and capture/check options; use a
+[`steps.task`](/functions/automation/steps.task) to apply a timeout or retry policy to those wrappers.
+
+Reading `data` does not change `stdout`. Use `json.decode(result.stdout)` when you need a mutable copy.
+Serializing the whole result with `json.encode(result)` preserves the raw fields and does not access `data`.
+With `check=False`, inspect `exit_code` before reading `data` if the command may return a non-JSON error.
 
 ## Errors
 
@@ -90,6 +123,18 @@ Tools pinned with [`dependencies.tools`](/functions/automation/dependencies.tool
 that follows.
 
 ## Examples
+
+### Bound a command and retry transient failures
+
+```python
+result = exec.run(
+    ["curl", "--fail", "https://example.com/"],
+    output = "capture",
+    timeout = "30s",
+    retry = {"max_attempts": 3, "initial_delay": "1s"},
+)
+print(result.stdout)
+```
 
 ### Run a program and use its output
 

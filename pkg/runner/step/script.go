@@ -100,6 +100,7 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 	// Script steps share the command-step output defaults: raw mode and no step labels unless
 	// the step or workflow opts in through output or show.labels.
 	writer := NewCommandOutputWriter(step, workflow)
+	writer.writers = vars.OutputWriters
 	var embedded script.Result
 	stdout, stderr, err := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
 		if engine, ok := script.Get(invocation.interpreter); ok {
@@ -113,6 +114,8 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 			}
 			var runErr error
 			embedded, runErr = engine.Execute(ctx, script.Spec{
+				Steps:        NewAutomationLibrary(vars, workflow),
+				Parallel:     vars.automationParallel,
 				InstallTools: ScriptToolInstaller(vars.AtmosConfig),
 				Name:         step.Name, Source: invocation.script, WorkingDirectory: invocation.workDir,
 				SourcePath: step.ScriptSource, ProjectRoot: scriptProjectRoot(vars),

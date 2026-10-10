@@ -23,6 +23,7 @@ type OutputModeWriter struct {
 	stepName string
 	viewport *schema.ViewportConfig
 	show     *schema.ShowConfig
+	writers  OutputWriters
 }
 
 // NewOutputModeWriter creates a new OutputModeWriter.
@@ -45,6 +46,9 @@ func NewOutputModeWriter(mode OutputMode, stepName string, viewport *schema.View
 func (w *OutputModeWriter) Execute(cmd *exec.Cmd) (string, string, error) {
 	defer perf.Track(nil, "step.OutputModeWriter.Execute")()
 
+	if w.writers.Stdout != nil || w.writers.Stderr != nil {
+		return w.executeScoped(func(stdout, stderr io.Writer) error { cmd.Stdout, cmd.Stderr = stdout, stderr; return cmd.Run() })
+	}
 	switch w.mode {
 	case OutputModeViewport:
 		return w.executeViewport(cmd)
@@ -65,6 +69,9 @@ func (w *OutputModeWriter) Execute(cmd *exec.Cmd) (string, string, error) {
 func (w *OutputModeWriter) ExecuteWithIO(runner func(stdout, stderr io.Writer) error) (string, string, error) {
 	defer perf.Track(nil, "step.OutputModeWriter.ExecuteWithIO")()
 
+	if w.writers.Stdout != nil || w.writers.Stderr != nil {
+		return w.executeScoped(runner)
+	}
 	switch w.mode {
 	case OutputModeViewport:
 		return w.executeViewportWithIO(runner)

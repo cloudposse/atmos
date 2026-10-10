@@ -56,6 +56,29 @@ functions take named `command`, `component`, and `stack` arguments;
 `atmos.toolchain` takes `command` and an optional `tool`. Their individual pages
 document these signatures and any exceptions.
 
+### Query defaults
+
+The `atmos.list(...)`, `atmos.describe(...)`, `atmos.config("get", ...)`,
+`atmos.stack("config", "get", ...)`, and `atmos.stack("get", ...)` wrappers default
+to captured output and request JSON when the selected subcommand supports
+`--format`. Read `result.data` for decoded values and `result.stdout` for raw JSON:
+
+```python
+result = atmos.describe("affected", flags = {"base": "origin/main"})
+for item in result.data:
+    print(item["component"], item["stack"])
+```
+
+Pass `output = "stream"` to display output live, or override the format with
+`flags = {"format": "yaml"}` for commands that support YAML. An explicit format
+in `flags`, positional arguments, or `args` takes precedence. The config getters
+support `"raw"` and `"json"`. Reading `data` requires valid JSON regardless of the
+selected format.
+
+Other wrappers keep streaming by default. The `atmos.run` function passes your
+arguments unchanged and retains the CLI's output format and streaming default.
+These scripting defaults do not change the defaults of commands run in a terminal.
+
 ### Flag translation
 
 These rules apply to the wrappers' `flags` dictionaries. With `atmos.run`, pass
@@ -111,7 +134,8 @@ For example, `atmos.vendor("pull", flags = {"component": "vpc"})` runs
 
 ## Returns
 
-A result with three fields: `stdout` and `stderr` (strings) and `exit_code` (an integer). See
+A result with `stdout` and `stderr` (strings), `exit_code` (an integer), and `data`
+(the JSON value decoded from `stdout` on first access). Raw output remains available even when it is not JSON. See
 [`exec.run`](/functions/automation/exec.run#returns) for the details that all process-running functions share.
 
 ## Errors
@@ -137,7 +161,7 @@ result = atmos.run(
     ["describe", "component", "vpc", "--stack=dev", "--format=json"],
     output = "capture",
 )
-component = json.decode(result.stdout)
+component = result.data
 print(component["vars"]["cidr_block"])
 ```
 

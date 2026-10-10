@@ -46,6 +46,12 @@ operators, and the universal built-ins, is described in the
 | Errors | [`errors.build`](/functions/automation/errors.build) |
 | Built-in values | [`ctx`](/functions/automation/ctx), [`env`](/functions/automation/env), [`output`](/functions/automation/output), [`load`](/functions/automation/load) |
 
+## Step library
+
+Call [`steps.input`, `steps.http`, `steps.container`, and the other step functions](/functions/automation/steps.run)
+with the same fields used in YAML. Each call returns a value, metadata, and named
+outputs. Use `steps.run(type, **fields)` when the step type is selected at runtime.
+
 ## Atmos command wrappers {#atmos-command-wrappers}
 
 Use a command wrapper such as `atmos.vendor("pull")` to run the matching Atmos

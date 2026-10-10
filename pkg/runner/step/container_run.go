@@ -69,7 +69,7 @@ func (h *ContainerHandler) executeRun(ctx context.Context, step *schema.Workflow
 	}
 
 	if !step.Tty && !step.Interactive {
-		h.writeOutput(step, workflow, result.Stdout, result.Stderr)
+		h.writeOutput(step, workflow, result.Stdout, result.Stderr, vars.OutputWriters)
 	}
 
 	stepResult := NewStepResult(result.Stdout).
