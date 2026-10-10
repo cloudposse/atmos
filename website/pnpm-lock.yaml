@@ -220,7 +220,7 @@ importers:
         version: 8.4.0
       prettier:
         specifier: ^3.9.6
-        version: 3.9.6
+        version: 3.9.9
 
 packages:
 
@@ -5461,8 +5461,8 @@ packages:
       preact-render-to-string:
         optional: true
 
-  prettier@3.9.6:
-    resolution: {integrity: sha512-OpN0zzVdiaiAhxpuuj5efpIS4sY9j7bY6uR5mnj5yPzGkdkjNKSJeUThPb60Jw29QuAZgA4o+/iB49kFiaBX6g==}
+  prettier@3.9.9:
+    resolution: {integrity: sha512-Z/CJHIkdujO/OtN7nXUii0Rf3VT5SRuhjBA82Xvu2XhBUgX3nhP67T0LHceBdQLex7OOFGTox+Q5Yg8Jk2Qivg==}
     engines: {node: '>=14'}
     hasBin: true
 
@@ -13510,7 +13510,7 @@ snapshots:
 
   preact@10.29.8: {}
 
-  prettier@3.9.6: {}
+  prettier@3.9.9: {}
 
   pretty-error@4.0.0:
     dependencies:
