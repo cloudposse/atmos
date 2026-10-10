@@ -97,11 +97,17 @@ func TestPausableTimer_PauseIsIdempotent(t *testing.T) {
 	timer := newPausableTimer(time.Hour, func() { t.Error("must not fire") })
 	defer timer.stop()
 
+	// Pretend a minute has already run. Relying on the wall clock to advance between two calls is
+	// not safe: Windows can return the same timestamp for both.
+	timer.mu.Lock()
+	timer.startedAt = time.Now().Add(-time.Minute)
+	timer.mu.Unlock()
+
 	timer.pause()
 	timer.mu.Lock()
 	afterFirst := timer.remaining
 	timer.mu.Unlock()
-	require.Less(t, afterFirst, time.Hour, "the elapsed time was charged")
+	require.LessOrEqual(t, afterFirst, 59*time.Minute, "the elapsed minute was charged")
 
 	time.Sleep(20 * time.Millisecond)
 	timer.pause()
