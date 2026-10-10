@@ -23,6 +23,10 @@ but did not cover a raw value that differs from the effective Viper value.
   preservation of an unrelated dotted identity.
 - Document source-tracking helpers and regression tests flagged by review.
 - Update the trace snapshot to count repeated source merges, fixing a CI failure.
+- Cover the source-merge helpers' unusable-input paths (invalid YAML, a
+  non-mapping identity, an unsupported YAML function) and the main-config
+  fallback used when a load has no tracker, so one bad entry is shown not to
+  discard its siblings.
 
 ## Validation
 
