@@ -86,6 +86,8 @@ func (w *colorWriter) Read(p []byte) (int, error) {
 	return 0, io.EOF
 }
 
+// Write filters ANSI when the shared policy requires plain output and reports the
+// original input length on success, preserving io.Writer semantics after filtering.
 func (w *colorWriter) Write(p []byte) (int, error) {
 	if !w.policy.plain.Load() {
 		return w.Writer.Write(p)
@@ -101,6 +103,8 @@ func (w *colorWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// setColorOutput wraps a new destination with the shared ANSI filter and reapplies
+// opt-outs after Charm replaces its renderer and detects the destination's color support.
 func (l *AtmosLogger) setColorOutput(w io.Writer) {
 	l.color.mu.Lock()
 	defer l.color.mu.Unlock()

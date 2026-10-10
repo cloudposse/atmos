@@ -22,6 +22,7 @@ func TestColorOptionsFromArgs(t *testing.T) {
 		{"NO_COLOR is authoritative", []string{"--no-color=false"}, "0", "true", ColorOptions{NoColor: true, NoColorSet: true, LogsColor: "true"}},
 		{"logging CLI beats env", []string{"--logs-color=false", "version"}, "", "true", ColorOptions{LogsColor: "false"}},
 		{"logging bare boolean", []string{"--logs-color", "version"}, "", "false", ColorOptions{LogsColor: "true"}},
+		{"environment boolean normalized", []string{"version"}, "", "0", ColorOptions{LogsColor: "false"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("NO_COLOR", tt.noColorEnv)

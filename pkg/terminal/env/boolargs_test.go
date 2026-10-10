@@ -53,6 +53,7 @@ func TestNormalizeBoolFlagValues(t *testing.T) {
 		{"rewrite then separator", []string{"--no-color", "false", "--", "--logs-color", "false"}, []string{"--no-color=false", "--", "--logs-color", "false"}},
 		{"flag directly before separator", []string{"--no-color", "--", "false"}, []string{"--no-color", "--", "false"}},
 		{"empty", []string{}, []string{}},
+		{"positional boolean pair untouched", []string{"component", "true"}, []string{"component", "true"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			input := append([]string{}, tt.args...)

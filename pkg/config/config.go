@@ -82,6 +82,8 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	return atmosConfig, nil
 }
 
+// setLogConfig applies early logging, color, and pager overrides before stack processing.
+// It also configures the global log level so authentication pre-hooks honor those settings.
 func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	// TODO: This is a quick patch to mitigate the issue we can look for better code later
 	// Issue: https://linear.app/cloudposse/issue/DEV-3093/create-a-cli-command-core-library

@@ -10,8 +10,12 @@ import (
 	"github.com/creack/pty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	iolib "github.com/cloudposse/atmos/pkg/io"
 )
 
+// TestStyledTextRespectsCLICOLOR verifies both logo output paths honor automatic color,
+// explicit forcing, and global opt-outs on a color-capable terminal.
 func TestStyledTextRespectsCLICOLOR(t *testing.T) {
 	master, slave, err := pty.Open()
 	require.NoError(t, err)
@@ -38,6 +42,12 @@ func TestStyledTextRespectsCLICOLOR(t *testing.T) {
 			t.Setenv("CLICOLOR_FORCE", tt.force)
 			var output bytes.Buffer
 			require.NoError(t, PrintStyledTextToSpecifiedOutput(&output, "A"))
+			assert.Equal(t, tt.wantColor, bytes.Contains(output.Bytes(), []byte("\x1b")))
+			output.Reset()
+			originalData := iolib.Data
+			iolib.Data = &output
+			t.Cleanup(func() { iolib.Data = originalData })
+			require.NoError(t, PrintStyledText("A"))
 			assert.Equal(t, tt.wantColor, bytes.Contains(output.Bytes(), []byte("\x1b")))
 		})
 	}

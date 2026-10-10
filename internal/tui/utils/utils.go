@@ -125,6 +125,8 @@ func sanitizeForFigurine(text string) string {
 	return b.String()
 }
 
+// PrintStyledTextToSpecifiedOutput writes figurine text to out when stdout supports color
+// or color is forced. Global color opt-outs suppress the decorative text entirely.
 func PrintStyledTextToSpecifiedOutput(out io.Writer, text string) error {
 	// Helper to check if a value is truthy
 	// Truthy values: "1", "true" (case-insensitive) - standard Go bool values

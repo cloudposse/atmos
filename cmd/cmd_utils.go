@@ -1970,6 +1970,8 @@ func boolFlagHasSeparateValue(arg string, args []string, i int) bool {
 		i+1 < len(args) && terminalenv.IsBoolLiteral(args[i+1])
 }
 
+// isRootBoolFlag recognizes root boolean flags, including aliases and inline values,
+// so command discovery can distinguish flag values from command names.
 func isRootBoolFlag(arg string) bool {
 	flagName := strings.SplitN(arg, equalsSign, 2)[0]
 	switch flagName {

@@ -178,6 +178,8 @@ func New(opts ...Option) Terminal {
 	return t
 }
 
+// initializeColorProfile gives global opt-outs priority over forced color, then
+// detects the profile using stderr's terminal status with stdout as a fallback.
 func (t *terminal) initializeColorProfile() {
 	// Check Stderr first (where UI is written), fall back to Stdout.
 	isTTYOut := t.IsTTY(Stderr)

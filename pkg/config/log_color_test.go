@@ -132,6 +132,9 @@ func TestLoggingColorInvalidEnvironmentOverriddenByValidFlag(t *testing.T) {
 }
 
 func TestValidateLogsColorConfig(t *testing.T) {
+	t.Run("no logs map keeps default", func(t *testing.T) {
+		require.NoError(t, validateLogsColorConfig(viper.New()))
+	})
 	// Prerequisite: Viper coerces the invalid value to false, which is why raw validation is needed.
 	t.Run("prerequisite viper coerces invalid value to false", func(t *testing.T) {
 		v := newColorViper(t, "logs: {color: nope}")
@@ -175,6 +178,19 @@ func TestValidateLogsColorConfig(t *testing.T) {
 		require.ErrorIs(t, err, errUtils.ErrInvalidLogsColor)
 		assertColorErrorDetail(t, err, "logs.color", "[true]", "`logs.color`")
 	})
+}
+
+// TestLoggingConfigRejectsInvalidColor checks that the enclosing logging setup preserves
+// the actionable color error and stops before applying unrelated logging overrides.
+func TestLoggingConfigRejectsInvalidColor(t *testing.T) {
+	setArgs(t)
+	restoreLogger(t)
+	t.Setenv("ATMOS_LOGS_COLOR", "auto")
+	cfg := schema.AtmosConfiguration{Logs: schema.Logs{Level: "Warning"}}
+	err := setLoggingConfig(&cfg, &schema.ConfigAndStacksInfo{LogsLevel: "Debug"})
+	require.ErrorIs(t, err, errUtils.ErrInvalidLogsColor)
+	assertColorErrorDetail(t, err, "ATMOS_LOGS_COLOR", "auto", "unset it")
+	assert.Equal(t, "Warning", cfg.Logs.Level)
 }
 
 // TestInitCliConfigRejectsInvalidLogsColor verifies the full load path reports a bad logs.color

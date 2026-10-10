@@ -9,6 +9,7 @@ import (
 	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
 )
 
+// globalColorDisabled combines configured and early command-line opt-outs before applying forced color.
 func globalColorDisabled(config *schema.AtmosConfiguration) bool {
 	// Terminal.NoColor already reflects an explicit --no-color flag (setLogConfig overrides
 	// environment-derived values), and ResolveNoColor covers the startup path that runs
