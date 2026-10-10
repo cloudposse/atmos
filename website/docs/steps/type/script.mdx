@@ -5,6 +5,7 @@ slug: /steps/type/script
 ---
 
 import Intro from '@site/src/components/Intro'
+import CastEmbed from '@site/src/components/CastEmbed'
 
 <Intro>
 The `script` step type runs inline code with an explicit interpreter. Use it for a small,
@@ -27,10 +28,757 @@ steps:
 
 | Field | Description |
 | --- | --- |
-| `interpreter` | Required executable that evaluates `script`. Supports templates. |
+| `interpreter` | Required executable, or `starlark` for the embedded runtime. Supports templates. |
 | `script` | Required inline program text. Supports templates. |
 | `working_directory` | Optional process directory. |
 | `env` | Optional environment map. |
 
 Do not set `command` on a `script` step. Use `type: shell` for a real shell command and
 `type: script` when the interpreter and body are the intentional interface.
+
+## Atmos Automation Language {#embedded-starlark}
+
+Atmos Automation Language is a Python-like language for automating commands,
+workflows, and lifecycle hooks. Built on Starlark and embedded in Atmos, it provides
+component context, parallel execution, retries, and timeouts.
+
+Set `interpreter: starlark` to run a script inside Atmos without installing another
+interpreter. Use functions for reusable logic and `steps.parallel` for concurrent calls:
+
+```yaml
+steps:
+  - name: calculate
+    type: script
+    interpreter: starlark
+    env:
+      REGION: us-east-1
+    script: |
+      def api():
+          return {"service": "api", "region": env["REGION"]}
+
+      def worker():
+          return {"service": "worker", "region": env["REGION"]}
+
+      output = steps.parallel(
+          functions = [api, worker],
+          max_concurrency = 2,
+      )
+```
+
+Pass function references (`api`), not calls (`api()`). The returned list follows
+input order, even when branches finish in another order. Atmos waits for every
+branch before returning.
+
+### Step output
+
+Assign the top-level `output` global to set the step's value. A string is used as-is,
+and any other value is JSON-encoded:
+
+```python
+output = "abc"                       # {{ .steps.<name>.value }} is: abc
+```
+
+Or, for a structured value:
+
+```python
+output = {"service": "api"}          # {{ .steps.<name>.value }} is: {"service":"api"}
+```
+
+A value that cannot be encoded as JSON, such as a function, fails the step with the
+error `output must be a string or JSON-encodable value`. Without `output`, the captured
+stdout (everything passed to `print()`) is the step's value.
+
+Atmos treats stdout as data and stderr as messages for people, so use `print()` for values
+the step produces and `ui.info()`, `ui.success()`, or `ui.warning()` for status and progress
+messages. `ui.*` output goes to stderr and never becomes the step's value.
+
+### Logging
+
+Use `log.trace()`, `log.debug()`, `log.info()`, `log.warn()`, and `log.error()` for
+diagnostics that matter when you troubleshoot a run but not when it succeeds. Each call
+takes a message and optional keyword arguments, which are written as structured key/value
+pairs through the Atmos logger. The logger honors `--logs-level` (or `ATMOS_LOGS_LEVEL`) and
+`logs.file`, so a call below the configured level prints nothing. Output never goes to stdout
+and never becomes the step's value, and secrets known to Atmos are masked.
+
+| Function | Use it for | Where it goes |
+| --- | --- | --- |
+| `print()` | Data the step produces. | stdout. Becomes the step's value when `output` is unset. |
+| `ui.info()`, `ui.success()`, `ui.warning()` | Status and progress for people. | stderr, themed. |
+| `log.*()` | Diagnostics for troubleshooting. | The Atmos log, only at the configured log level. |
+
+```python
+log.debug("resolved component", component="api", attempts=2)
+log.warn("falling back to the default region", region="us-east-2")
+```
+
+```text
+$ atmos workflow deploy --logs-level=Debug
+ DEBU  resolved component step=deploy component=api attempts=2
+```
+
+Every message includes a `step` field with the step name. Inside `steps.parallel`, a `task`
+field names the running task, for example `task=grp/inner` for a nested group. Field values
+can be strings, numbers, booleans, or `None`; any other value is logged using its `str()`
+form. Field names must be identifiers, and a field you pass named `step` or `task` replaces
+the automatic one.
+
+### Language features
+
+Top-level `if`, `for`, and `while` statements, `set()`, and recursion are available,
+in the entry script and in loaded modules:
+
+```python
+def fact(n):
+    return 1 if n <= 1 else n * fact(n - 1)
+
+squares = []
+for i in range(4):
+    squares.append(fact(i))
+
+output = squares
+```
+
+Module-level names are assigned once. Rebinding a global, such as `x = 1` followed
+by `x = 2`, `n += 1` at the top level, or assigning `output` in both branches of an
+`if`/`else`, fails with `cannot reassign global`. Choose the value with a conditional
+expression, or compute it inside a function:
+
+```python
+# A conditional expression.
+output = "blue" if env["REGION"] == "us-east-1" else "green"
+```
+
+```python
+# A function that returns the value.
+def main():
+    if env["REGION"] == "us-east-1":
+        return "blue"
+    return "green"
+
+output = main()
+```
+
+To carry changing state, mutate a dictionary or list instead of rebinding a name.
+Mutate it before handing it to `steps.parallel`, because everything reachable from a
+parallel task becomes immutable at dispatch:
+
+```python
+state = {"n": 0}
+for name in ["api", "worker"]:
+    state["n"] += 1
+
+def count():
+    return state["n"]
+
+output = steps.parallel(functions = [count])
+```
+
+### Parameterized tasks, retries, and timeouts
+
+Use `steps.task` to describe work without executing it:
+
+```python
+def deploy(name):
+    result = exec.run(["deployment-tool", "deploy", name])
+    return result.stdout
+
+output = steps.parallel(
+    tasks = [
+        steps.task(
+            name = name,
+            function = deploy,
+            args = [name],
+            retry = {
+                "max_attempts": 3,
+                "initial_delay": "2s",
+            },
+            timeout = "5m",
+        )
+        for name in ["api", "worker", "scheduler"]
+    ],
+    max_concurrency = 2,
+    fail_fast = True,
+)
+```
+
+| API | Behavior |
+| --- | --- |
+| `steps.parallel(functions=..., tasks=..., max_concurrency=4, fail_fast=False)` | Supply exactly one collection; empty collections return `[]`. Nested groups each have their own limit. |
+| `steps.task(name, function, args=[], kwargs={}, retry=None, timeout="")` | Named deferred call. Names must be unique within a parallel group. |
+| `exec.run(argv, working_directory=..., env={...}, output="stream", check=True)` | Runs an argument list without a shell. Returns `.stdout`, `.stderr`, and `.exit_code`. By default, output streams live and failure raises an error. |
+| `ui.info(message)`, `ui.success(message)`, `ui.warning(message)` | Write through Atmos's UI channel. |
+| `log.trace(message, **fields)`, `log.debug(...)`, `log.info(...)`, `log.warn(...)`, `log.error(...)` | Write diagnostics to the Atmos logger, filtered by the configured log level. See [Logging](#logging). |
+| `json.encode(value)`, `json.decode(text)` | Convert structured values and JSON. |
+| `fs.read_file(path)` | Read local file contents as a string. Relative paths use the step working directory, including calls from loaded modules. Absolute paths are accepted. |
+| `regex.search(pattern, text)` | Return whether the pattern matches anywhere in the text. |
+| `regex.findall(pattern, text)` | Return complete matches in order, regardless of capture groups. |
+| `regex.replace(pattern, replacement, text)` | Replace every match with literal replacement text. |
+
+Regular expressions use Go/RE2 syntax and support inline flags such as `(?m)`.
+Lookaround and pattern backreferences are unsupported. Replacement text is literal:
+`$1` is written as `$1`, without capture expansion. File reads use the same injectable
+reader as module loading, allowing tests to supply file contents without disk access.
+File writes and directory discovery are not available yet.
+
+Both `exec.run` and `component.exec` take these options:
+
+<dl>
+  <dt>`output`</dt>
+  <dd>
+    The default, `"stream"`, shows the subprocess output live in the step output and also
+    captures it. Use `"capture"` to capture stdout and stderr without showing them, which
+    is useful when inspecting secret-bearing responses.
+  </dd>
+  <dt>`check`</dt>
+  <dd>
+    The default, `True`, raises when the process exits nonzero; the error names the
+    command and exit code and lists the last lines of stderr. Pass `False` to get the result
+    back and assert on `.exit_code`, `.stdout`, and `.stderr` yourself.
+  </dd>
+  <dt>`working_directory`, `env`</dt>
+  <dd>
+    The process directory and extra environment variables for this call.
+  </dd>
+</dl>
+
+A process that cannot start, such as a missing command or a nonexistent directory,
+always raises, regardless of `check`. Cancellation, signals, and transport errors
+also raise.
+
+To test an expected command failure, pass `check=False`, then assert both its
+exit code and its diagnostic:
+
+```python
+def expect_timeout(argv):
+    result = exec.run(argv, check=False, output="capture")
+    if result.exit_code == 0:
+        fail("expected the command to fail")
+    if "deadline exceeded" not in result.stdout + result.stderr:
+        fail("command failed for an unexpected reason")
+```
+
+A handled nonzero exit does not itself trigger task retries. Call `fail()` when
+the result should fail the current task and enter its retry policy.
+
+Terminal output uses the shared Atmos I/O layer: `print()` writes to the step's
+stdout channel, `ui.*` formats messages on its stderr channel, and subprocesses
+stream through those same writers. Step output settings, masking, test capture,
+and cast recording therefore apply. Captured values remain available to scripts;
+masking applies when displaying them. File reads use the injectable filesystem
+reader, independently of terminal output. There is no Starlark stdin/prompt API yet.
+
+For example, a Starlark validator can read a recorded cast, decode its output
+events, and check the text without a Python interpreter:
+
+```python
+def validate_cast(path):
+    lines = fs.read_file(path).splitlines()
+    events = [json.decode(line) for line in lines[1:] if line.strip()]
+    text = "".join([event[2] for event in events if event[1] in ["o", "e"]])
+    plain = regex.replace(r"\x1b\[[0-9;]*m", "", text)
+    if "All 3 component plans ready." not in plain:
+        fail("missing successful component plans")
+
+validate_cast("release-plan.cast")
+```
+
+Retries repeat the entire failed function, including its earlier successful operations.
+Successful sibling branches are not repeated. A task's `timeout` bounds the whole task,
+including retries and delays. Retry fields use the Atmos retry configuration; the
+`conditions` field for matching subprocess output does not apply to function tasks.
+Set `max_attempts` or a `timeout` on every task that has a `retry` policy: a policy
+without `max_attempts` keeps retrying until the task succeeds, its timeout expires, or
+the workflow is canceled. Without a retry policy, a task runs once. A task that exceeds
+its `timeout` fails with `task "<name>" timed out after <duration>`.
+
+By default, all independent branches finish and failures are aggregated. With
+`fail_fast=True`, a branch that exhausts its retries cancels running branches and
+skips queued branches. The group still waits for cancellation to finish.
+
+Shared globals, closures, and task arguments become immutable before dispatch.
+Create mutable lists and dictionaries inside each function and return results.
+Process directories and environment overrides belong to each invocation; they do
+not change Atmos's own working directory or environment.
+
+### Live output
+
+Script output appears line by line as the script produces it, so a long-running
+script shows progress while it runs. Inside a `steps.parallel` group with more than
+one task, Atmos prefixes each line with the task name and keeps every line intact,
+so output from concurrent tasks never interleaves mid-line:
+
+```text
+[api] deploying api
+[worker] deploying worker
+[api] api ready
+[worker] worker ready
+```
+
+### Loading files
+
+Use the existing YAML include function for a script body:
+
+```yaml
+steps:
+  - name: deploy
+    type: script
+    interpreter: starlark
+    working_directory: .
+    script: !include scripts/deploy.star
+```
+
+A script read from a local file knows where that file lives. Its `load()` calls resolve
+relative to that file, whether the path is bare (`lib/helpers.star`) or starts with
+`./` or `../`, and so do the `load()` calls of the modules it loads. Each kind of path
+resolves like this:
+
+| Path used in | Resolves against |
+| --- | --- |
+| `!include` in a workflow manifest or a custom command | `./x` and `../x`: the directory of the file that contains the tag. `x/y`: the Atmos project [`base_path`](/cli/configuration#base-path), including a `--base-path` flag or `ATMOS_BASE_PATH` override. Absolute paths are used as written. The result is the same wherever you run Atmos from. |
+| `!include` in a stack manifest [hook](/stacks/hooks) (`kind: step` or `kind: steps`) | The same lookup as any stack manifest `!include`: relative to the manifest file, then to the project `base_path`. |
+| `load()` in a script read from a file (`!include`, `!include.raw`, or a standalone `.star` file) | The directory of that file. |
+| `load()` in an inline `script: \|` body | The step's `working_directory`. |
+| `fs.read_file` and `exec.run` | The step's `working_directory`. |
+
+With this project layout:
+
+```text
+atmos.yaml                      # base_path: "./"
+scripts/
+  deploy.star
+  lib/
+    helpers.star
+stacks/workflows/deploy.yaml
+```
+
+the workflow includes the script by its path from the project base path, and the script
+loads its helper relative to its own file:
+
+```yaml title="stacks/workflows/deploy.yaml"
+workflows:
+  deploy:
+    steps:
+      - name: deploy
+        type: script
+        interpreter: starlark
+        script: !include scripts/deploy.star
+```
+
+```python title="scripts/deploy.star"
+load("lib/helpers.star", "deploy")
+
+output = deploy("api")
+```
+
+```python title="scripts/lib/helpers.star"
+def deploy(name):
+    return {"service": name, "status": "ready"}
+```
+
+Tracebacks for a script read from a file name that file and the line within it,
+relative to the project base path when available, for example `scripts/deploy.star:3:5`.
+Files outside the project retain their absolute paths. If a Go template in the script emits extra lines, the
+reported lines refer to the rendered script.
+
+A hook script included from a stack manifest knows its file too. When a `script` that
+has an `interpreter` sibling comes from a local `!include` or `!include.raw` file
+(without a YQ expression, and never from a remote source), Atmos records the file in an
+internal `script_source` key next to it, plus a `script_source_sha256` fingerprint of the
+included content:
+
+```yaml title="stacks/deploy/dev.yaml"
+components:
+  terraform:
+    mock:
+      hooks:
+        check:
+          kind: step
+          type: script
+          events: [before.terraform.plan]
+          with:
+            interpreter: starlark
+            script: !include scripts/hooks/check.star
+```
+
+`atmos describe component` and `atmos describe stacks` show the recorded provenance
+under the hook, as the path relative to the project base path when the file is inside
+the project (an absolute path otherwise):
+
+```yaml
+hooks:
+  check:
+    with:
+      interpreter: starlark
+      script: "..."
+      script_source: scripts/hooks/check.star
+      script_source_sha256: 3f1c...e9a2
+```
+
+Atmos owns both keys: do not write them by hand. An include in the same mapping
+replaces any value you set. The hook runner honors `script_source` only while the step's
+`script` still hashes to `script_source_sha256`, so provenance cannot go stale. Stack
+inheritance deep-merges maps: when a child stack replaces an included `script` with an
+inline one, the merged hook still shows the base's `script_source` and fingerprint
+in `describe` output, but the fingerprint no longer matches and Atmos ignores the
+inherited source. The inline script resolves `load()` against the step's
+`working_directory`, with no need to remove the inherited keys. A script that contains Go
+templates still matches, because the fingerprint is checked against the script before
+templates are rendered.
+
+Modules are cached per invocation; cyclic loads fail with an error. Loaded functions
+can be used in `steps.parallel` and `steps.task`.
+
+### Working directory and environment
+
+The `working_directory` must exist; Atmos checks it before the script runs and fails
+the step with a hint when it is missing. It applies to `fs.read_file`, `exec.run`, and
+`load()` in inline scripts. A `component.exec` call defaults to the component directory instead.
+
+The `env` dictionary contains explicitly declared step inputs. Child processes
+inherit the effective execution environment, including authentication and command
+environment settings.
+
+### Containers and dry runs
+
+Embedded Starlark runs inside Atmos, so it cannot run in a container. A script step
+under an enabled workflow or step `container` fails validation before the workflow
+starts. Set `container: false` on the step:
+
+```yaml
+workflows:
+  build:
+    container:
+      image: alpine:3.20
+    steps:
+      - name: plan
+        type: script
+        interpreter: starlark
+        container: false
+        script: !include scripts/plan.star
+```
+
+With `atmos workflow --dry-run`, Atmos parses each Starlark script step, so syntax
+errors are reported, and runs nothing: no code, no processes. Script steps inside
+`parallel` and `matrix` groups run nothing either.
+
+### Errors
+
+A script failure is reported as a single-line message, with the Starlark traceback
+shown below it. For example, `fail("missing generated config")` produces:
+
+```text
+Error: workflow step execution failed: max attempts (1) exceeded, last error: starlark execution failed: fail:
+missing generated config
+
+ Traceback (most recent call last):
+   s:1:5: in <toplevel>
+ Error in fail: fail: missing generated config
+```
+
+A failed `exec.run` adds the last lines of the command's stderr, and a task that
+exceeds its `timeout` reads `task "<name>" timed out after <duration>`.
+
+### Custom components
+
+This recording shows a Starlark custom command planning three custom application
+components using a loaded function, deferred tasks, and a concurrency limit of two.
+The command reads resolved stack configuration without changing infrastructure.
+
+<CastEmbed src="/casts/demo/fixtures/starlark/release-plan.cast" title="Starlark custom commands and parallel functions" chrome controls scrubber />
+
+Resolve a component with `components.get(name, stack, type)`. In workflows and
+hooks, pass the stack explicitly. A custom command that declares a `component:`
+already has its component and stack in scope as `ctx.component`:
+
+```yaml
+commands:
+  - name: deploy-peers
+    arguments:
+      - name: component
+        provides: component
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        provides: stack
+        required: true
+    component:
+      type: application
+    steps:
+      - name: deploy
+        type: script
+        interpreter: starlark
+        script: |
+          stack = ctx.component.stack
+
+          def deploy(name, stack):
+              peer = components.get(
+                  name = name,
+                  stack = stack,
+                  type = "application",
+              )
+              return peer.exec(["./deploy"]).stdout
+
+          output = steps.parallel(
+              tasks = [
+                  steps.task(name=n, function=deploy, args=[n, stack], timeout="5m")
+                  for n in ["api", "worker"]
+              ],
+              max_concurrency = 2,
+          )
+```
+
+### Where `ctx.component` is set
+
+The execution context decides what `ctx.component` holds:
+
+| Context | `ctx.component` |
+| --- | --- |
+| Custom command with `component:` | The command's component. Atmos resolves it on first access, so scripts that never use it never pay for the lookup. |
+| Hook | The hook's component, plus `ctx.hook` and `ctx.operation`. |
+| Workflow | `None`, because no component is in scope. |
+
+`parallel` and `matrix` children inherit `ctx.component` and `components.get` from the
+step that contains them. Atmos resolves each `components.get` result once per run and
+reuses it, including across parallel tasks.
+
+Lazy `ctx.component` attribute access uses the invocation deadline, because the
+Starlark attribute interface does not receive the calling task. To bound component
+resolution by a task timeout, call `components.get` inside that task with explicit
+name, stack, and type values. A caller waiting for another task to resolve the same
+component can cancel independently. Read any `ctx.component` reference fields before
+starting parallel tasks; accessing them inside the task also triggers lazy resolution.
+
+In a workflow, `ctx.component` is `None`, so a script that reads `ctx.component.stack`
+fails with `NoneType has no .stack field or method`. Name the stack explicitly instead:
+
+```yaml
+workflows:
+  deploy-peers:
+    steps:
+      - name: deploy
+        type: script
+        interpreter: starlark
+        script: |
+          def deploy(name):
+              peer = components.get(name = name, stack = "dev", type = "application")
+              return peer.exec(["./deploy"]).stdout
+
+          output = steps.parallel(
+              tasks = [
+                  steps.task(name=n, function=deploy, args=[n], timeout="5m")
+                  for n in ["api", "worker"]
+              ],
+              max_concurrency = 2,
+          )
+```
+
+Handles expose `name`, `type`, `stack`, `implementation`, `path`, `vars`, `settings`,
+`metadata`, `env`, and `config`. Their configuration is resolved through Atmos's
+inheritance and YAML-function pipeline and is read-only. The logical `name` can
+differ from the implementation directory when components inherit shared code.
+
+The `component.exec` function accepts the same arguments as `exec.run` and defaults to
+the component directory. It inherits the invocation environment, overlays component
+env, preserves custom-command and explicit step env overrides, and finally applies
+per-call env overrides. Component lookups are serialized; the parallel runner
+executes independent processes concurrently.
+
+Arbitrary typed-step dispatch and Starlark test-file discovery are not available yet.
+
+### Standalone executable scripts {#standalone-script-spike}
+
+Use an Atmos shebang to run an automation program directly:
+
+```python
+#!/usr/bin/env atmos
+dependencies.tools("jq", "1.7.1")
+
+ui.info("Script arguments: %s" % ctx.args)
+exec.run(["jq", "--version"])
+```
+
+After `chmod +x deploy.star`, run `./deploy.star dev`, or use
+`atmos ./deploy.star dev`. A leading `.star` file or an explicit path with an Atmos
+shebang selects script execution. No arguments preserve the default CLI screen;
+bare extensionless names remain CLI commands. Script arguments such as `--help`
+belong to the script and are exposed through immutable `ctx.args`.
+
+`ctx.script.path` and `ctx.script.directory` identify the script file; steps whose script
+comes from a local `!include` set them too. Local `load()` paths resolve against the
+script file; commands retain the caller's working directory.
+Each `dependencies.tools(name, version)` call installs a missing tool through the
+existing dependency manager and updates PATH for subsequent process calls in this
+invocation. Declare tools before parallel tasks; declarations inside branches are
+rejected. Repeated identical pins are cached; conflicting versions fail. Single-file scripts can themselves be packaged
+as `type: http`, `format: raw` toolchain entries and installed with
+`atmos toolchain install owner/tool@version`. The Atmos interpreter must be on PATH.
+
+Pass the script filename directly to `atmos`, before any script arguments. Global
+Atmos options before the script filename are not supported.
+
+Use `atmos.toolchain("install", "jq@1.7.1")` for an explicit toolchain CLI operation.
+It returns `stdout`, `stderr`, and `exit_code`, with the same output and error
+policies as `atmos.run`. Optional `flags={...}` and `args=[...]` pass CLI options.
+This operation does not change the calling script's PATH; use `dependencies.tools`
+when subsequent script calls need the installed tool.
+
+### Calling Atmos commands
+
+Built-in commands are callable directly by name. Pass CLI positional arguments as
+strings, options through `flags`, and additional literal arguments through `args`:
+
+```python
+atmos.vendor("pull", flags={"component": "vpc", "stack": "dev"})
+atmos.scaffold("generate", "service-template", "services/api", flags={"dry-run": True})
+components_json = atmos.list("components", flags={"stack": "dev", "format": "json"}, output="capture")
+component = atmos.describe("component", "api", flags={"stack": "dev"}, output="capture")
+atmos.config("get", args=["base_path"])
+atmos.version()
+```
+
+Generic wrappers are available for `about`, `ai`, `ansible`, `atlantis`, `auth`,
+`aws`, `azure`, `cast`, `ci`, `completion`, `composition`, `config`, `container`,
+`describe`, `devcontainer`, `docs`, `emulator`, `env`, `gcp`, `git`, `helmfile`,
+`help`, `init`, `kubernetes`, `list`, `lsp`, `mcp`, `packer`, `pro`, `profile`,
+`sbom`, `scaffold`, `secret`, `stack`, `store`, `support`, `theme`, `validate`,
+`vendor`, `version`, and `workflow`. These wrappers retain each command's native
+behavior, including authentication and experimental notices. They return process
+results; decode JSON stdout with `json.decode` when structured values are needed.
+
+Use `atmos.toolchain(command, tool="", flags={}, args=[])` for tool operations.
+Use `atmos.run(argv)` for any Atmos command, including custom commands. Use
+`atmos.terraform(command, component=..., stack=...)` and
+`atmos.helm(command, component=..., stack=...)` for component operations:
+
+```python
+plan = atmos.terraform(
+    "plan",
+    component = "vpc",
+    stack = "dev",
+    flags = {"detailed-exitcode": True},
+)
+
+validation = atmos.run([
+    "casts", "validate", "demo", "fixtures", "starlark", "release-plan",
+])
+```
+
+These calls invoke the current Atmos executable through the same process runner
+as `exec.run`. Arguments are passed directly without shell parsing. These
+functions accept `working_directory`, `env`, `output="stream"`, and `check=True`, and
+return `.stdout`, `.stderr`, and `.exit_code`. Failures raise unless `check=False`;
+launch, cancellation, signal, and transport errors always raise. A Terraform plan
+with `flags={"detailed-exitcode": True}` accepts exit code `2` as changes detected.
+The generic `atmos.run` uses ordinary exit-code handling.
+
+Command wrappers and component helpers accept a `flags` dictionary and an `args` list. Bare flag names
+become `--name`; use an explicit prefix for native tool flags, such as `"-var"`.
+The `detailed-exitcode` flag automatically uses Terraform's single-dash spelling. Values
+may be strings, integers, booleans, or lists to repeat a flag. A value of `True` emits
+the flag, and `False` emits `=false`. Spaces and shell metacharacters remain literal
+argument text.
+
+Atmos calls default to the invocation directory, preserving configuration discovery
+even when a script runs in a component directory. An explicit relative
+`working_directory` is relative to that invocation directory. The child inherits
+the effective process environment; parent CLI-only flags are not automatically
+replayed. Pass extra CLI options through `args` or `atmos.run` when needed.
+
+Atmos calls work inside ordinary functions passed to `steps.parallel`. Apply retries
+and timeouts using `steps.task`; retries repeat the function containing the call.
+Calls trigger the normal command lifecycle, including hooks. When invoking a command
+from a hook, use event scoping or the command's supported hook-skipping options to
+avoid recursively invoking the same hook.
+
+### Lifecycle hook context
+
+Starlark scripts work in `kind: step`, `kind: steps`, and `type: test` [hooks](/stacks/hooks).
+They receive read-only lifecycle context, including in parallel functions:
+
+| Object | Fields |
+| --- | --- |
+| `ctx.component` | `name`, `type`, `stack`, `implementation`, `path`, `vars`, `settings`, `metadata`, `env`, `config`, and `exec` |
+| `ctx.hook` | `name` and canonical `event`, such as `after.terraform.apply` |
+| `ctx.operation` | `command`, `status`, `exit_code`, `error`, `stdout`, `stderr` |
+
+The component contains the hook runner's execution snapshot, including inherited
+settings. It does not re-resolve the stack or fetch Terraform outputs. Its path
+matches the hook runner's component working directory, including provisioned workdirs.
+Use dictionary access for settings and vars. To look up a different component, call
+`components.get(name, stack, type)` with an explicit stack, just as in a workflow.
+
+For before hooks, operation status, exit code, and error are `None`. After hooks
+expose the supplied outcome; an absent error is `None`. The command is the canonical
+operation, such as `terraform apply`. These fields describe the parent operation,
+not processes launched by the hook. Ordinary lifecycle hooks do not capture parent
+stdout/stderr, so those fields are `None`. Terraform state and outputs are not
+automatically attached.
+
+Outside hooks, `ctx.hook` and `ctx.operation` are `None`. A hook without an individual
+component binding, including aggregate hooks, has `ctx.component == None`.
+
+For example, configure a reusable smoke test through inherited settings:
+
+```yaml
+settings:
+  post_apply:
+    enabled: true
+    command: ["./smoke-test", "--strict"]
+
+hooks:
+  smoke-test:
+    events: [after.terraform.apply]
+    kind: step
+    type: script
+    on_failure: fail
+    with:
+      interpreter: starlark
+      script: !include scripts/post-apply.star
+```
+
+```python title="scripts/post-apply.star"
+def post_apply():
+    policy = ctx.component.settings.get("post_apply", {})
+    if not policy.get("enabled", False):
+        return
+    if ctx.operation.status != "success":
+        return
+    ctx.component.exec(policy.get("command", ["./smoke-test"]))
+    ui.success("Smoke tests passed.")
+
+post_apply()
+```
+
+The same context is available when a hook runs Starlark checks through a `type: test`
+step:
+
+```yaml
+hooks:
+  verify:
+    events: [after.terraform.apply]
+    kind: step
+    type: test
+    on_failure: fail
+    with:
+      steps:
+        - name: component is tagged
+          type: script
+          interpreter: starlark
+          script: |
+            if "owner" not in ctx.component.vars.get("tags", {}):
+                fail("missing owner tag on " + ctx.component.name)
+```
+
+### Secrets, stores, and error reporting
+
+Direct Starlark APIs for secret access, store reads/writes, and Terraform
+state/output reads are not available yet. Scripts can consume values resolved
+by existing YAML functions through explicit inputs or component configuration.
+
+Unhandled Starlark errors propagate through Atmos's normal command error path,
+including Sentry capture when configured. Handled failures and retries that
+eventually succeed do not produce a final parent-command error. An Atmos subprocess
+can still report its own errors independently. Dedicated Starlark stack frames and
+parallel-task metadata are not yet mapped into Sentry events.

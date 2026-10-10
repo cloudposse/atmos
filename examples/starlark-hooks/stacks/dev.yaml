@@ -1,0 +1,27 @@
+vars:
+  stage: dev
+
+components:
+  terraform:
+    api:
+      metadata:
+        component: service
+      vars:
+        owner: platform
+      hooks:
+        require-owner:
+          events: [before.terraform.plan]
+          kind: step
+          type: script
+          on_failure: fail
+          with:
+            show:
+              labels: false
+            interpreter: starlark
+            script: |
+              owner = ctx.component.vars.get("owner", "")
+              if not owner:
+                  fail("Set an owner before planning " + ctx.component.name)
+              ui.success("Owner check passed: {} belongs to {} ({}).".format(
+                  ctx.component.name, owner, ctx.component.stack,
+              ))

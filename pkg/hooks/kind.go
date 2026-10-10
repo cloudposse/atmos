@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	runnerstep "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -62,6 +63,10 @@ type ExecContext struct {
 	// supplies serialized component writers. Nil uses the process streams.
 	Stdout io.Writer
 	Stderr io.Writer
+	// ComponentResolver backs `components.get` in embedded script steps. Nil selects
+	// the execution-pipeline resolver (see scriptComponentResolver); callers and tests
+	// inject their own to avoid loading stacks.
+	ComponentResolver runnerstep.ComponentInfoResolver
 
 	// OutputFile is the temp file path the tool wrote structured output to.
 	// Populated by CommandEngine before calling ResultHandler.

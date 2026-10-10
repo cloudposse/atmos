@@ -3,6 +3,11 @@ commands:
     description: Regenerate every committed website cast demo
     env: !include cast-defaults.yaml .env.command
     steps:
+      - type: script
+        name: starlark
+        interpreter: starlark
+        script: |
+          atmos.run(["casts", "generate", "demo", "fixtures", "starlark", "release-plan"])
       - type: shell
         name: native-terraform
         command: atmos casts generate demo fixtures native-terraform
@@ -37,6 +42,11 @@ commands:
     description: Validate every committed website cast demo
     env: !include cast-defaults.yaml .env.command
     steps:
+      - type: script
+        name: starlark
+        interpreter: starlark
+        script: |
+          atmos.run(["casts", "validate", "demo", "fixtures", "starlark", "release-plan"])
       - type: shell
         name: native-terraform
         command: atmos casts validate demo fixtures native-terraform

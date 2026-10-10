@@ -191,6 +191,16 @@ steps:
         mode: prompt
 ```
 
+## Validating recordings
+
+Prefer `type: script` with `interpreter: starlark` for cast validation, including
+when updating Python-based validators. Parse the recording with `fs.read_file` and
+`json.decode`, join output-event payloads, then assert the expected result and
+absence of secrets/local paths. Use `regex` for ANSI normalization and `fail` for
+failed assertions; no Python process is needed. Run validation after successful
+recording and required cleanup, and retain playback review for timing/layout.
+See the portable [Starlark validation example](../atmos-asciicast/references/atmos-asciicast-authoring.md#validate-casts-with-starlark).
+
 ## Common Patterns
 
 - **Committed docs screengrabs**: record demo commands to a `.cast` file, commit it, and render

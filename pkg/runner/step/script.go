@@ -2,14 +2,20 @@ package step
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"os"
+	osexec "os/exec"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/script"
+	_ "github.com/cloudposse/atmos/pkg/script/starlark" // Register the embedded interpreter.
 )
 
 // ScriptHandler executes inline scripts with an explicit interpreter.
@@ -43,6 +49,9 @@ func (h *ScriptHandler) Validate(step *schema.WorkflowStep) error {
 	if err := h.ValidateRequired(step, "interpreter", step.Interpreter); err != nil {
 		return err
 	}
+	if _, embedded := script.Get(step.Interpreter); embedded && step.Container.IsEnabled() {
+		return fmt.Errorf("%w: embedded starlark requires container: false", errUtils.ErrStarlark)
+	}
 	return h.ValidateRequired(step, "script", step.Script)
 }
 
@@ -65,6 +74,11 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 	if err != nil {
 		return nil, err
 	}
+	// The raw interpreter may be a template, so Validate cannot tell whether it is embedded.
+	// Check the rendered interpreter here, where the container opt-in is still visible.
+	if _, embedded := script.Get(invocation.interpreter); embedded && step.Container.IsEnabled() {
+		return nil, fmt.Errorf("%w: embedded %s requires container: false", errUtils.ErrStarlark, strings.TrimSpace(invocation.interpreter))
+	}
 	env, err := h.resolveEnv(step, vars)
 	if err != nil {
 		return nil, err
@@ -79,7 +93,29 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 	}
 
 	writer := NewOutputModeWriter(mode, step.Name, GetViewportConfig(step, workflow), GetShowConfig(step, workflow))
+	var embedded script.Result
 	stdout, stderr, err := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+		if engine, ok := script.Get(invocation.interpreter); ok {
+			inputs := step.Env
+			if step.ScriptEnv != nil {
+				inputs = step.ScriptEnv
+			}
+			resolved, resolveErr := vars.ResolveEnvMap(inputs)
+			if resolveErr != nil {
+				return resolveErr
+			}
+			var runErr error
+			embedded, runErr = engine.Execute(ctx, script.Spec{
+				InstallTools: ScriptToolInstaller(vars.AtmosConfig),
+				Name:         step.Name, Source: invocation.script, WorkingDirectory: invocation.workDir,
+				SourcePath: step.ScriptSource, ProjectRoot: scriptProjectRoot(vars),
+				Env: resolved, ProcessEnv: env, Stdout: stdout, Stderr: stderr, DryRun: step.DryRun,
+				Component: ScriptComponentRef(vars), ResolveComponent: ScriptComponentResolver(vars),
+				ProcessOverrides: step.ScriptProcessOverrides,
+				Hook:             vars.ScriptHook,
+			})
+			return runErr
+		}
 		return process.RunScript(ctx, &process.ScriptSpec{
 			Interpreter: invocation.interpreter,
 			Script:      invocation.script,
@@ -90,6 +126,7 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 		}, stdout, stderr)
 	})
 	if err != nil {
+		err = WrapScriptInterpreterError(invocation.interpreter, err)
 		return NewStepResult(stdout).
 			WithError(stderr).
 			WithMetadata("stdout", stdout).
@@ -97,10 +134,37 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 			WithMetadata(exitCodeMetadata, getExitCode(err)), err
 	}
 
-	return NewStepResult(stdout).
+	value := stdout
+	if embedded.HasOutput {
+		value = embedded.Value
+	}
+	return NewStepResult(value).
 		WithMetadata("stdout", stdout).
 		WithMetadata("stderr", stderr).
 		WithMetadata(exitCodeMetadata, 0), nil
+}
+
+// WrapScriptInterpreterError adds a naming hint when an external interpreter could not be
+// started because its name differs only by case from a registered embedded interpreter
+// (for example `Starlark`). It does nothing on the success path and for any other failure,
+// so the lookup runs only after an interpreter was already not found.
+func WrapScriptInterpreterError(interpreter string, err error) error {
+	defer perf.Track(nil, "step.WrapScriptInterpreterError")()
+
+	if err == nil || !errors.Is(err, osexec.ErrNotFound) {
+		return err
+	}
+	name := strings.TrimSpace(interpreter)
+	lower := strings.ToLower(name)
+	if lower == name {
+		return err
+	}
+	if _, embedded := script.Get(lower); !embedded {
+		return err
+	}
+	return errUtils.Build(err).
+		WithHintf("Did you mean `%s`? Embedded interpreter names are case-sensitive.", lower).
+		Err()
 }
 
 func (h *ScriptHandler) resolveInvocation(step *schema.WorkflowStep, vars *Variables) (scriptInvocation, error) {

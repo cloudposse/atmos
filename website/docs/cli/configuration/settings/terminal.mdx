@@ -175,6 +175,16 @@ Atmos automatically degrades color output based on terminal capabilities:
 - When redirecting: `atmos terraform output > file.txt` - color automatically disabled
 - When using `--force-color`: Color preserved even when piping
 
+## Terminals That Never Answer Queries
+
+Terminal UI libraries (such as Bubble Tea and termenv, which Atmos and many other CLI tools use) ask the terminal for its foreground color, background color, and cursor position at startup, then wait for the reply. Atmos answers these queries itself for the pseudo-terminals it owns, such as recorded sessions and child commands that run without forwarded input.
+
+Terminals and harnesses that never answer these queries (some CI runners, remote shells, and AI tool harnesses) can make startup wait about 5 seconds for each query. In those environments, set `TERM=screen-256color` (or `tmux-256color`) so the libraries skip the queries:
+
+```shell
+TERM=screen-256color atmos terraform plan vpc -s dev
+```
+
 ## Syntax Highlighting
 
 You can customize the syntax highlighting behavior for terminal output using the following settings:

@@ -15,6 +15,9 @@ hooks (`kind: step`), and cast recordings. When a task involves `steps:`, step
 use this skill together with the surface-specific skill (`atmos-workflows`,
 `atmos-custom-commands`, or `atmos-hooks`).
 
+For `interpreter: starlark`, also load `atmos-starlark` for the embedded API,
+parallel functions, immutable inputs, and module loading.
+
 ## Core Model
 
 A step is a typed action with native fields. Do not treat steps as a place to
@@ -66,7 +69,7 @@ steps:
     output: none
     retry:
       max_attempts: 3
-      delay: 2s
+      initial_delay: 2s
     script: |
       print("ok")
 ```

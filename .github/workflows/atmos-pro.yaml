@@ -71,6 +71,9 @@ jobs:
 
       # Generate NOTICE file on all PRs to ensure it stays up-to-date
       - name: Generate NOTICE file
+        # Pass public event metadata, never a token, to PR-controlled Go code.
+        env:
+          ATMOS_NOTICE_REPO_DESCRIPTION: ${{ github.event.repository.description }}
         run: go tool mage notice:generate
 
       # Format HCL files in test fixtures and examples

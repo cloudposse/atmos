@@ -2,6 +2,7 @@ package toolchain
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/filelock"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 const (
@@ -209,17 +211,134 @@ func addToolToVersionsInternal(filePath, tool, version string, asDefault bool) e
 }
 
 func withToolVersionsLock(filePath string, fn func() error) error {
+	lock, err := toolVersionsLock(filePath)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(filePath), toolVersionsDirectoryPermissions); err != nil {
 		return fmt.Errorf("create .tool-versions directory: %w", err)
 	}
-	return filelock.New(filePath+".lock").WithExclusive(context.Background(), fn)
+	return lock.WithExclusive(context.Background(), fn)
 }
 
 func withToolVersionsSharedLock(filePath string, fn func() error) error {
-	if err := os.MkdirAll(filepath.Dir(filePath), toolVersionsDirectoryPermissions); err != nil {
-		return fmt.Errorf("create .tool-versions directory: %w", err)
+	lock, err := toolVersionsLock(filePath)
+	if err != nil {
+		return err
 	}
-	return filelock.New(filePath+".lock").WithShared(context.Background(), fn)
+	return lock.WithShared(context.Background(), fn)
+}
+
+// toolVersionsLock keeps coordination state outside the project, so even a
+// read-only project can be read under a shared lock. Never remove these files:
+// replacing a lock inode would let concurrent processes acquire different locks.
+func toolVersionsLock(filePath string) (*filelock.Lock, error) {
+	return toolVersionsLockWithCasePolicy(filePath, toolVersionsPreserveCase)
+}
+
+func toolVersionsLockWithCasePolicy(filePath string, preserveCase func(string) (bool, error)) (*filelock.Lock, error) {
+	defer perf.Track(nil, "toolchain.toolVersionsLockWithCasePolicy")()
+
+	absolutePath, err := filepath.Abs(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve .tool-versions path: %w", err)
+	}
+	canonicalPath, err := canonicalToolVersionsPath(absolutePath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve .tool-versions symlinks: %w", err)
+	}
+	canonicalPath, err = canonicalToolVersionsCase(canonicalPath, preserveCase)
+	if err != nil {
+		return nil, fmt.Errorf("resolve .tool-versions path casing: %w", err)
+	}
+	dir, err := xdg.GetXDGDataDir(filepath.Join("locks", "tool-versions"), toolVersionsDirectoryPermissions)
+	if err != nil {
+		return nil, fmt.Errorf("create .tool-versions lock directory: %w", err)
+	}
+	return filelock.New(filepath.Join(dir, fmt.Sprintf("%x.lock", sha256.Sum256([]byte(canonicalPath))))), nil
+}
+
+// canonicalToolVersionsCase preserves names only when the parent directory's
+// metadata establishes case-sensitive lookups. Unknown filesystems fold names
+// conservatively, which may serialize distinct manifests but never splits aliases.
+// Missing suffixes inherit the nearest existing directory's behavior, so a first
+// writer and later readers use the same key.
+// Native metadata queries avoid creating probe files in read-only projects.
+// The policy never depends on directory contents, so creating a file cannot
+// change a held lock's identity.
+func canonicalToolVersionsCase(path string, preserveCase func(string) (bool, error)) (string, error) {
+	volume := filepath.VolumeName(path)
+	separator := string(filepath.Separator)
+	parent := volume + separator
+	key := strings.ToLower(volume) + separator
+	sensitive := true
+	for _, name := range strings.Split(strings.TrimPrefix(path[len(volume):], separator), separator) {
+		parentSensitive, err := preserveCase(parent)
+		if err == nil {
+			sensitive = parentSensitive
+		} else if !os.IsNotExist(err) {
+			return "", err
+		}
+		parent = filepath.Join(parent, name)
+		if !sensitive {
+			name = strings.ToLower(name)
+		}
+		key = filepath.Join(key, name)
+	}
+	return key, nil
+}
+
+// toolVersionsFallbackCasePolicy validates access and conservatively folds lock
+// keys when the filesystem cannot establish its case behavior. This affects
+// coordination only; manifest I/O always retains the original path spelling.
+func toolVersionsFallbackCasePolicy(path string) (bool, error) {
+	_, err := os.Stat(path)
+	return false, err
+}
+
+// canonicalToolVersionsPath resolves existing symlinks, including a dangling
+// manifest symlink, and preserves missing path suffixes. Thus first-time writers
+// use the same lock before and after creating a manifest or its parent directory.
+func canonicalToolVersionsPath(path string) (string, error) {
+	defer perf.Track(nil, "toolchain.canonicalToolVersionsPath")()
+
+	resolved, err := filepath.EvalSymlinks(path)
+	if err == nil || !os.IsNotExist(err) {
+		return resolved, err
+	}
+	info, statErr := os.Lstat(path)
+	if statErr == nil && info.Mode()&os.ModeSymlink != 0 {
+		return canonicalToolVersionsSymlink(path)
+	}
+	parentPath := filepath.Dir(path)
+	if parentPath == path {
+		return "", err
+	}
+	parent, parentErr := canonicalToolVersionsPath(parentPath)
+	if parentErr != nil {
+		return "", parentErr
+	}
+	// A missing suffix is creatable only below directories. Some platforms
+	// report a missing path when an existing ancestor is actually a file.
+	if parentInfo, statErr := os.Stat(parent); statErr == nil && !parentInfo.IsDir() {
+		return "", err
+	}
+	return filepath.Join(parent, filepath.Base(path)), nil
+}
+
+// canonicalToolVersionsSymlink resolves a dangling manifest link relative to its
+// own directory so readers and first-time writers coordinate on the same path.
+func canonicalToolVersionsSymlink(path string) (string, error) {
+	defer perf.Track(nil, "toolchain.canonicalToolVersionsSymlink")()
+
+	target, err := os.Readlink(path)
+	if err != nil {
+		return "", err
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(filepath.Dir(path), target)
+	}
+	return canonicalToolVersionsPath(target)
 }
 
 // findDuplicateKey checks whether adding a tool/version combination would create a duplicate

@@ -738,7 +738,7 @@ func TestLoadWorkflowConfig_InvalidYAML(t *testing.T) {
 	// Unbalanced flow-mapping brace makes this unparsable YAML, not merely a schema mismatch.
 	require.NoError(t, os.WriteFile(workflowPath, []byte("workflows: {deploy: [1, 2"), 0o644))
 
-	config, err := LoadWorkflowConfig(workflowPath)
+	config, err := LoadWorkflowConfig(&schema.AtmosConfiguration{}, workflowPath)
 
 	require.Error(t, err)
 	assert.Nil(t, config)
@@ -764,7 +764,7 @@ func TestLoadWorkflowConfig_UnreadableFile(t *testing.T) {
 	require.NoError(t, os.Chmod(workflowPath, 0o000))
 	t.Cleanup(func() { _ = os.Chmod(workflowPath, 0o644) }) // Restore so t.TempDir() cleanup can remove it.
 
-	config, err := LoadWorkflowConfig(workflowPath)
+	config, err := LoadWorkflowConfig(&schema.AtmosConfiguration{}, workflowPath)
 
 	require.Error(t, err)
 	assert.Nil(t, config)

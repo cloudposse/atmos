@@ -29,7 +29,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
-	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
@@ -85,6 +84,8 @@ type workflowStepErrorContext struct {
 	Command          string
 	CommandType      string
 	FinalStack       string
+	// Interpreter is the interpreter of a `type: script` step, which has no command string.
+	Interpreter string
 }
 
 // buildWorkflowStepError builds an error with resume hints when a workflow step fails.
@@ -139,8 +140,9 @@ func buildWorkflowStepError(err error, ctx *workflowStepErrorContext) error {
 	builder := errUtils.Build(errUtils.ErrWorkflowStepFailed).
 		WithCause(err).
 		WithTitle("Workflow Error").
-		WithExplanationf("The following command failed to execute:\n\n```shell\n%s\n```", failedCmd).
 		WithHintf("To resume the workflow from this step, run:\n\n```shell\n%s\n```", resumeCommand)
+
+	builder = withFailedStepExplanation(builder, failedCmd, ctx)
 
 	// Extract exit code from the underlying error if available.
 	if exitCode := errUtils.GetExitCode(err); exitCode != 0 {
@@ -148,6 +150,22 @@ func buildWorkflowStepError(err error, ctx *workflowStepErrorContext) error {
 	}
 
 	return builder.Err()
+}
+
+// withFailedStepExplanation says which step failed. Script steps carry no command string, so they
+// are described by name and interpreter; any other step with no command gets no explanation rather
+// than an empty code block.
+func withFailedStepExplanation(builder *errUtils.ErrorBuilder, failedCmd string, ctx *workflowStepErrorContext) *errUtils.ErrorBuilder {
+	switch {
+	case failedCmd != "":
+		return builder.WithExplanationf("The following command failed to execute:\n\n```shell\n%s\n```", failedCmd)
+	case ctx.CommandType == schema.TaskTypeScript && strings.TrimSpace(ctx.Interpreter) != "":
+		return builder.WithExplanationf("The script step `%s` (interpreter: `%s`) failed to execute.", ctx.StepName, strings.TrimSpace(ctx.Interpreter))
+	case ctx.CommandType == schema.TaskTypeScript:
+		return builder.WithExplanationf("The script step `%s` failed to execute.", ctx.StepName)
+	default:
+		return builder
+	}
 }
 
 // prepareStepEnvironment prepares environment variables for a workflow step.
@@ -452,6 +470,12 @@ func ExecuteWorkflow(
 			WithContext("workflow", workflow).
 			WithExitCode(1).
 			Err()
+	}
+
+	// Reject embedded interpreters (Starlark) under an enabled container up front, so the
+	// failure is reported before any earlier step has already run.
+	if err := workflowPkg.ValidateEmbeddedInterpreters(fmt.Sprintf("Workflow `%s`", workflow), workflowDefinition); err != nil {
+		return err
 	}
 
 	log.Debug("Executing workflow", "workflow", workflow, "path", workflowPath)
@@ -870,11 +894,9 @@ func ExecuteWorkflow(
 							}, func() error {
 								writer := stepPkg.NewCommandOutputWriter(&step, workflowDefinition)
 								_, _, runErr := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
-									return ExecuteShellWithWriters(&ExecuteShellSpec{
+									return executeShellMasked(&ExecuteShellSpec{
 										Command: command, Name: commandName, Dir: workDir, EnvVars: stepEnv, DryRun: dryRun,
-										Stdout: io.MultiWriter(ioLayer.MaskWriter(stdout), stdoutCapture),
-										Stderr: io.MultiWriter(ioLayer.MaskWriter(stderr), stderrCapture),
-									})
+									}, stdout, stderr, stdoutCapture, stderrCapture)
 								})
 								return runErr
 							})
@@ -943,7 +965,23 @@ func ExecuteWorkflow(
 						WithExitCode(1).
 						Err()
 				}
+				// One option set for every extended-step call below so toolchain PATH and the
+				// auth manager are never dropped on any dispatch path.
+				extendedOpts := extendedStepOptions{
+					DryRun:        dryRun,
+					FinalStack:    finalStack,
+					AtmosConfig:   &atmosConfig,
+					ToolchainPATH: tenv.PATH(),
+					AuthManager:   authManager,
+				}
 				if commandType == schema.TaskTypeScript {
+					// Container checks and the container command must see the effective
+					// interpreter, not a raw template that could hide an embedded one.
+					if err = workflowPkg.RenderScriptInterpreter(&step, func(value string) (string, error) {
+						return resolveWorkflowStepCommand(value, stepEnv)
+					}); err != nil {
+						break
+					}
 					stepPkg.RenderCommand(&step, workflowDefinition, process.FormatScriptDisplay(step.Interpreter, step.Script))
 					switch {
 					case workflowPkg.StepContainerOverride(&step):
@@ -985,21 +1023,15 @@ func ExecuteWorkflow(
 							})
 						})
 					default:
-						err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedStepOptions{
-							DryRun:      dryRun,
-							FinalStack:  finalStack,
-							AtmosConfig: &atmosConfig,
+						// The script step handler does not retry itself, so honor `retry:` here
+						// exactly like custom commands (cmd/cmd_utils.go) and the container paths above.
+						err = retry.Do(context.Background(), step.Retry, func() error {
+							return executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedOpts)
 						})
 					}
 					break
 				}
-				err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedStepOptions{
-					DryRun:        dryRun,
-					FinalStack:    finalStack,
-					AtmosConfig:   &atmosConfig,
-					ToolchainPATH: tenv.PATH(),
-					AuthManager:   authManager,
-				})
+				err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedOpts)
 			}
 			if err != nil {
 				return err
@@ -1035,6 +1067,7 @@ func ExecuteWorkflow(
 					Command:          command,
 					CommandType:      commandType,
 					FinalStack:       finalStack,
+					Interpreter:      step.Interpreter,
 				})
 			}
 
@@ -1168,6 +1201,7 @@ func configureStepScannerContext(vars *stepPkg.Variables, atmosConfig *schema.At
 	}
 	vars.SetAtmosConfig(atmosConfig)
 	vars.SetToolchainPATH(toolchainPATH)
+	vars.SetScriptComponentInfoResolver(ScriptComponentInfoResolver(atmosConfig, authManager))
 	vars.SetComponentInfoResolver(func(_ context.Context, component, stack, componentType string) (*schema.ConfigAndStacksInfo, error) {
 		info := schema.ConfigAndStacksInfo{
 			ComponentFromArg: component,
@@ -1279,7 +1313,7 @@ func ExecuteDescribeWorkflows(
 			continue
 		}
 
-		workflowManifest, err := u.UnmarshalYAML[schema.WorkflowManifest](string(fileContent))
+		workflowManifest, err := workflowPkg.LoadManifest(&atmosConfig, workflowPath, fileContent)
 		if err != nil {
 			// Skip files that can't be parsed as YAML.
 			log.Warn("Skipping invalid workflow file", "file", f, "error", err)

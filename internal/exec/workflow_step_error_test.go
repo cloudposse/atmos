@@ -162,3 +162,49 @@ func TestBuildWorkflowStepErrorPreservesInnerHintsAndContext(t *testing.T) {
 	assert.Contains(t, formatted, "step", "inner context key must survive the workflow step wrapping")
 	assert.Contains(t, formatted, "pack", "inner context value must survive the workflow step wrapping")
 }
+
+func TestBuildWorkflowStepErrorScriptStepHasNoEmptyCommandBlock(t *testing.T) {
+	err := buildWorkflowStepError(errors.New("script failed"), &workflowStepErrorContext{
+		WorkflowPath:     "/workflows/probe.yaml",
+		WorkflowBasePath: "/workflows",
+		Workflow:         "probe",
+		StepName:         "calc",
+		CommandType:      "script",
+		Interpreter:      "starlark",
+	})
+
+	require.ErrorIs(t, err, errUtils.ErrWorkflowStepFailed)
+	formatted := atmosansi.Strip(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
+	assert.NotContains(t, formatted, "The following command failed to execute")
+	assert.Contains(t, formatted, "calc")
+	assert.Contains(t, formatted, "starlark")
+	assert.Contains(t, formatted, "--from-step 'calc'", "the resume hint must be kept")
+}
+
+func TestBuildWorkflowStepErrorOmitsExplanationForEmptyNonScriptCommand(t *testing.T) {
+	err := buildWorkflowStepError(errors.New("failed"), &workflowStepErrorContext{
+		WorkflowPath:     "/workflows/probe.yaml",
+		WorkflowBasePath: "/workflows",
+		Workflow:         "probe",
+		StepName:         "empty",
+		CommandType:      "shell",
+	})
+
+	formatted := atmosansi.Strip(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
+	assert.NotContains(t, formatted, "The following command failed to execute")
+	assert.Contains(t, formatted, "--from-step 'empty'")
+}
+
+func TestBuildWorkflowStepErrorScriptStepWithoutInterpreter(t *testing.T) {
+	err := buildWorkflowStepError(errors.New("failed"), &workflowStepErrorContext{
+		WorkflowPath:     "/workflows/probe.yaml",
+		WorkflowBasePath: "/workflows",
+		Workflow:         "probe",
+		StepName:         "bare",
+		CommandType:      "script",
+	})
+
+	formatted := atmosansi.Strip(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
+	assert.Contains(t, formatted, "script step")
+	assert.NotContains(t, formatted, "interpreter:")
+}

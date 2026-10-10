@@ -46,6 +46,8 @@ type ControlChildResult struct {
 	Stdout   string
 	Stderr   string
 	Canceled bool
+	// Value overrides stdout for interpreters with structured output.
+	Value *string
 }
 
 type ControlChildExecutor func(ctx context.Context, child *ControlChild, output ControlChildOutput) (*ControlChildResult, error)
@@ -84,6 +86,7 @@ type ControlResult struct {
 	Err       error
 	Canceled  bool
 	Completed int64
+	Value     *string
 }
 
 func ExecuteControlStep(ctx context.Context, parent *schema.WorkflowStep, executor ControlChildExecutor, opts ControlExecutionOptions) error {
@@ -175,6 +178,7 @@ func newControlDispatcher(cfg *controlDispatchConfig) scheduler.Dispatcher {
 func controlNodeResult(name string, completed int64, execResult *ControlChildResult, err error) *ControlResult {
 	nodeResult := &ControlResult{Name: name, Completed: completed}
 	if execResult != nil {
+		nodeResult.Value = execResult.Value
 		nodeResult.Stdout = execResult.Stdout
 		nodeResult.Stderr = execResult.Stderr
 		nodeResult.Canceled = execResult.Canceled
@@ -379,23 +383,19 @@ func countControlResults(aggregate *scheduler.AggregateResult) controlResultCoun
 
 func resolveControlStep(step *schema.WorkflowStep, matrix map[string]string, dataFunc ControlTemplateDataFunc) (schema.WorkflowStep, error) {
 	resolved := *step
+	// Script and Interpreter are rendered like every other string field so a templated
+	// parallel/matrix script child behaves as the sequential script step does.
+	for _, field := range []*string{
+		&resolved.Command, &resolved.Script, &resolved.Interpreter,
+		&resolved.Stack, &resolved.Timeout, &resolved.WorkingDirectory,
+	} {
+		rendered, err := resolveControlTemplate(*field, step.Name, matrix, dataFunc)
+		if err != nil {
+			return resolved, err
+		}
+		*field = rendered
+	}
 	var err error
-	resolved.Command, err = resolveControlTemplate(step.Command, step.Name, matrix, dataFunc)
-	if err != nil {
-		return resolved, err
-	}
-	resolved.Stack, err = resolveControlTemplate(step.Stack, step.Name, matrix, dataFunc)
-	if err != nil {
-		return resolved, err
-	}
-	resolved.Timeout, err = resolveControlTemplate(step.Timeout, step.Name, matrix, dataFunc)
-	if err != nil {
-		return resolved, err
-	}
-	resolved.WorkingDirectory, err = resolveControlTemplate(step.WorkingDirectory, step.Name, matrix, dataFunc)
-	if err != nil {
-		return resolved, err
-	}
 	if len(step.Env) > 0 {
 		envMap := make(map[string]string, len(step.Env))
 		for key, value := range step.Env {

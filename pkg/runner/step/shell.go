@@ -105,15 +105,21 @@ type shellRunSpec struct {
 // workflow executor already used, instead of depending on the host `/bin/sh`.
 func (h *ShellHandler) runInterpreter(ctx context.Context, writer *OutputModeWriter, spec shellRunSpec) (string, string, error) {
 	return writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
-		return u.ShellRunnerWithWriters(&u.ShellRunnerSpec{
+		// Streaming maskers hold back a possible secret prefix between reads so a secret split
+		// across two writes is still masked. Flush before the output mode finishes the streams.
+		maskedStdout := iolib.NewStreamingMaskWriter(stdout)
+		maskedStderr := iolib.NewStreamingMaskWriter(stderr)
+		err := u.ShellRunnerWithWriters(&u.ShellRunnerSpec{
 			Context: ctx,
 			Command: spec.command,
 			Name:    spec.stepName,
 			Dir:     spec.workDir,
 			Env:     spec.env,
-			Stdout:  iolib.MaskWriter(stdout),
-			Stderr:  iolib.MaskWriter(stderr),
+			Stdout:  maskedStdout,
+			Stderr:  maskedStderr,
 		})
+		flushDisplay(maskedStdout, maskedStderr)
+		return err
 	})
 }
 

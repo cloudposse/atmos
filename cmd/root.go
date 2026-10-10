@@ -586,7 +586,7 @@ var RootCmd = &cobra.Command{
 		// The global masker may have been created before CLI flags were parsed (e.g. by early
 		// output), so its enabled state reflects the `--mask` default, not the parsed flag.
 		// Reconcile it now that flags are available so `--mask=false` reliably disables masking.
-		reconcileMaskingForCommand(cmd)
+		reconcileMaskingForCommand(cmd, &tmpConfig)
 		ioCtx := iolib.GetContext()
 		ui.InitFormatter(ioCtx)
 		data.InitWriter(ioCtx)
@@ -697,8 +697,14 @@ var RootCmd = &cobra.Command{
 // honors a command-local --mask flag when a subcommand shadows the root flag.
 // Several component command groups register their own persistent common flags;
 // Viper remains bound to the root flag, so the changed local value must win.
-func reconcileMaskingForCommand(cmd *cobra.Command) {
+func reconcileMaskingForCommand(cmd *cobra.Command, config *schema.AtmosConfiguration) {
 	iolib.ReconcileMasking()
+	// Config discovery uses an invocation-local Viper instance. The global I/O
+	// context may predate it, so register the resolved literals and patterns here
+	// while retaining the already-reconciled flag/environment masking policy.
+	if config != nil {
+		iolib.ApplyMaskingConfig(&iolib.Config{AtmosConfig: *config, DisableMasking: !iolib.MaskingEnabled()})
+	}
 	if cmd == nil {
 		return
 	}
@@ -1874,6 +1880,11 @@ func Execute() error {
 	executionID, restoreInvocation := proexec.BeginInvocation()
 	defer restoreInvocation()
 	defer perf.Track(&atmosConfig, "cmd.Execute")()
+	restoreScript, scriptErr := prepareStandaloneScript()
+	if scriptErr != nil {
+		return scriptErr
+	}
+	defer restoreScript()
 	defer castcmd.FinalizeRecording()
 	resetExperimentalCommandNotices(RootCmd)
 
@@ -1982,6 +1993,10 @@ func Execute() error {
 			return err
 		}
 	}
+
+	// All package init functions, custom commands, and configured aliases have
+	// registered by now. Snapshot only once the host command tree is complete.
+	registerScriptCommands(RootCmd)
 
 	// Boa styling is already applied via RootCmd.SetHelpFunc() which is inherited by all subcommands.
 	// No need to recursively set UsageFunc as that would override Boa's handling.

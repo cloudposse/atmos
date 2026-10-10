@@ -4,24 +4,52 @@ import (
 	"context"
 	"fmt"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestFailureError preserves a failure already displayed by a completed test report.
 // Callers can avoid an additional error box while retaining failure policies.
-type TestFailureError struct{ Err error }
+//
+// Err holds every leaf failure joined together so errors.Is and errors.As keep matching them. The
+// report already shows each leaf error, so Error returns a one-line summary built from Failed and
+// Total instead of repeating the joined text.
+type TestFailureError struct {
+	Err    error
+	Failed int
+	Total  int
+}
 
-// Error returns the underlying failure already shown by the test reporter.
+// Error returns a summary such as "2 of 7 tests failed". Failures that happen before any leaf ran
+// (for example while preparing the test environment) have no failed leaves, so the underlying
+// message is kept.
 func (e *TestFailureError) Error() string {
 	defer perf.Track(nil, "step.TestFailureError.Error")()
-	return e.Err.Error()
+
+	if e.Failed <= 0 {
+		if e.Err == nil {
+			return errUtils.ErrTestsFailed.Error()
+		}
+		return e.Err.Error()
+	}
+	noun := "tests"
+	if e.Total == 1 {
+		noun = "test"
+	}
+	return fmt.Sprintf("%d of %d %s failed", e.Failed, e.Total, noun)
 }
 
 // Unwrap preserves error matching through the displayed-failure marker.
 func (e *TestFailureError) Unwrap() error {
 	defer perf.Track(nil, "step.TestFailureError.Unwrap")()
 	return e.Err
+}
+
+// Is reports whether target is ErrTestsFailed.
+func (e *TestFailureError) Is(target error) bool {
+	defer perf.Track(nil, "step.TestFailureError.Is")()
+	return target == errUtils.ErrTestsFailed
 }
 
 // TestRunner connects the shared registry to the workflow scheduler.

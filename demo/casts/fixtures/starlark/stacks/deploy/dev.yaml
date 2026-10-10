@@ -1,0 +1,24 @@
+import:
+  - catalog/application
+
+vars:
+  stage: dev
+
+components:
+  application:
+    api:
+      metadata:
+        inherits: [defaults]
+        component: service
+      vars:
+        replicas: 2
+    worker:
+      metadata:
+        inherits: [defaults]
+        component: service
+      vars:
+        replicas: 3
+    scheduler:
+      metadata:
+        inherits: [defaults]
+        component: service
