@@ -75,6 +75,7 @@ func NewTestKit(tb testing.TB) *TestKit {
 	tb.Setenv("ATMOS_XDG_CACHE_HOME", tb.TempDir())
 	// Shared command startup prepends installed project tools to the process PATH.
 	tb.Setenv("PATH", os.Getenv("PATH"))
+	tb.Setenv(installedProjectPathEnv, os.Getenv(installedProjectPathEnv))
 
 	return &TestKit{TB: tb}
 }
