@@ -156,6 +156,7 @@ commands:
     description: Deploy components in parallel
     arguments:
       - name: group
+        required: true
     flags:
       - name: dry-run
         type: bool

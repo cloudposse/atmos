@@ -83,7 +83,7 @@ Values reachable by parallel tasks become immutable when dispatched. See the
 | --- | --- |
 | [Custom CLI app](/automation/standalone-cli-apps) | `cli.command` parses declarations and calls `main(args, flags)`; `ctx.args` provides raw script arguments. |
 | [Custom Atmos command](/automation/custom-commands) | `ctx.flags` and `ctx.arguments` contain parsed inputs from the command's YAML declarations. |
-| [Workflow step](/automation/workflows) | `env` contains explicitly declared step inputs; the workflow supplies its execution environment. |
+| [Workflow step](/automation/workflows) | `ctx.flags` and `ctx.arguments` contain inherited parsed command inputs, when available. `env` contains explicitly declared step inputs. |
 | [Lifecycle hook](/automation/lifecycle-hooks) | `ctx.component`, `ctx.hook`, and `ctx.operation` describe the component and operation. |
 
 `ctx.flags` and `ctx.arguments` are read-only dictionaries. Use parsed inputs
