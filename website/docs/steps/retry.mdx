@@ -51,6 +51,8 @@ steps:
 
 Omitting a parameter disables that limit or uses the default behavior. Explicit zero values are invalid where a positive duration or count is required.
 
+Atmos rejects unknown `retry` keys instead of ignoring them. The key for the wait before the first retry is `initial_delay`; `delay` is not a key, so a policy that uses it fails validation.
+
 ## Retries and `timeout`
 
 For `shell`, `atmos`, `script`, and `tflint` steps, the step's `timeout` bounds the whole step, not each attempt. One deadline covers every attempt and every backoff wait. When it elapses, Atmos cancels the running attempt, starts no further attempts, and fails the step with `step timed out`. Use `max_elapsed_time` to cap retries on their own. The [`http`](/steps/type/http) step type is different: its `timeout` is a per-attempt request limit.

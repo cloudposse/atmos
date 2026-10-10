@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=schema.json
+# Only values produced by the YAML loader's !starlark tag are code; any other string is data.
+tests:
+  - name: starlark values quoted tag text stays data
+    enabled: true
+    snapshot: false
+    description: A quoted string that begins with !starlark must not be executed.
+    workdir: fixtures/scenarios/starlark-steps/
+    command: atmos
+    args:
+      - describe
+      - component
+      - inject
+      - -s
+      - computed
+      - --format
+      - json
+    expect:
+      exit_code: 0
+      stdout:
+        - '"note": "!starlark return ''injected''"'
+
+  - name: starlark values list source survives unset item
+    enabled: true
+    snapshot: false
+    description: A !starlark list item after an !unset item resolves and never leaks its encoded source.
+    workdir: fixtures/scenarios/starlark-steps/
+    command: atmos
+    args:
+      - describe
+      - component
+      - lists
+      - -s
+      - computed
+      - --format
+      - json
+    expect:
+      exit_code: 0
+      stdout:
+        - '"l_unset": \[\s*"a",\s*"c"\s*\]'
+        - !not 'atmos-starlark-source'

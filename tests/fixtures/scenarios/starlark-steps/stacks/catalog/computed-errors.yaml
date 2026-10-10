@@ -1,0 +1,228 @@
+# One failure per component, so each can be described independently. Not every entry is
+# expected to fail. NOT in included_paths on purpose: import it from a throwaway stack, e.g.
+#   import: [catalog/computed-errors]
+#   vars: {stage: errors}
+# otherwise every `describe stacks` in this fixture would fail.
+components:
+  terraform:
+    # Syntax error (file/line expected).
+    e-syntax:
+      metadata: {component: mock}
+      vars:
+        x: !starlark |
+          y = (1 +
+          return y
+    # Step budget exhausted (while is an optional Starlark feature).
+    e-while:
+      metadata: {component: mock}
+      vars:
+        x: !starlark |
+          while True:
+              pass
+          return 1
+    e-for-budget:
+      metadata: {component: mock}
+      vars:
+        x: !starlark |
+          n = 0
+          for i in range(10000000):
+              n += 1
+          return n
+    # Integer outside 64-bit range.
+    e-bigint:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return 1 << 70
+    e-uint64-ok:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return (1 << 64) - 1
+    e-int64-min:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return -(1 << 63)
+    e-set:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return set([1])
+    e-tuple:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return (1, 2)
+    e-intkey:
+      metadata: {component: mock}
+      vars:
+        x: !starlark |
+          return {1: "x"}
+    e-function:
+      metadata: {component: mock}
+      vars:
+        x: !starlark |
+          def f():
+              return 1
+          return f
+    e-nan:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return float("nan")
+    e-inf:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return float("inf")
+    e-cyclic-collection:
+      metadata: {component: mock}
+      vars:
+        x: !starlark |
+          a = []
+          a.append(a)
+          return a
+    e-missing-key:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return ctx.vars["nope"]
+    e-missing-attr:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return ctx.nope
+    e-undefined-name:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return undefined_name + 1
+    e-div-zero:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return 1 // 0
+    e-fail:
+      metadata: {component: mock}
+      vars:
+        x: !starlark |
+          fail("custom failure message")
+    e-cycle-2field:
+      metadata: {component: mock}
+      vars:
+        a: !starlark return ctx.vars["b"] + 1
+        b: !starlark return ctx.vars["a"] + 1
+    e-cycle-3field:
+      metadata: {component: mock}
+      vars:
+        a: !starlark return ctx.vars["b"]
+        b: !starlark return ctx.vars["c"]
+        c: !starlark return ctx.vars["a"]
+    e-self-ref:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return ctx.vars["x"]
+    e-self-dict:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return dict(ctx.vars)
+    e-self-items:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return [k for k, v in ctx.vars.items()]
+    e-self-json:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return json.encode(ctx.vars)
+    e-return-ctx-vars:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return ctx.vars
+    e-load:
+      metadata: {component: mock}
+      vars:
+        x: !starlark |
+          load("lib.star", "y")
+          return y
+    e-exec-module:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return exec.run("echo hi")
+    e-fs-module:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return fs.read_file("marker.txt")
+    e-steps-module:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return steps.parallel
+    e-mutate-ctx:
+      metadata: {component: mock}
+      vars:
+        x: !starlark |
+          ctx.vars["y"] = 1
+          return 1
+    e-mutate-nested:
+      metadata: {component: mock}
+      vars:
+        settings_probe: {a: [1]}
+        x: !starlark |
+          ctx.vars["settings_probe"]["a"].append(2)
+          return 1
+    e-empty-str:
+      metadata: {component: mock}
+      vars:
+        x: !starlark ""
+    e-bare:
+      metadata: {component: mock}
+      vars:
+        x: !starlark
+    e-quoted-bare:
+      metadata: {component: mock}
+      vars:
+        x: "!starlark"
+    e-comment-only:
+      metadata: {component: mock}
+      vars:
+        x: !starlark |
+          # nothing here
+    e-return-ctx:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return ctx
+    e-return-type-str:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return type(ctx.vars)
+    e-bytes:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return b"abc"
+    e-unicode:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return "héllo ✓ " + chr(0x1F600)
+    e-big-list:
+      metadata: {component: mock}
+      vars:
+        x: !starlark return [i for i in range(100000)]
+    e-deep-recursion:
+      metadata: {component: mock}
+      vars:
+        x: !starlark |
+          def f(n):
+              return f(n + 1)
+          return f(0)
+    e-memory-str:
+      metadata: {component: mock}
+      vars:
+        x: !starlark |
+          s = "abcdefghij"
+          for i in range(30):
+              s = s + s
+          return len(s)
+
+    # !terraform.output against a missing component, with and without !starlark present.
+    mixed-tf:
+      metadata:
+        component: mock
+      vars:
+        message: mixed-tf
+        sl: !starlark return 1
+        tf_missing: !terraform.output nonexistent-component computed some_output
+    mixed-tf-nosl:
+      metadata:
+        component: mock
+      vars:
+        message: mixed-tf-nosl
+        tf_missing: !terraform.output nonexistent-component computed some_output

@@ -1,0 +1,2 @@
+#!atmos
+print("bare shebang greeter3", ctx.args)

@@ -1,0 +1,23 @@
+# Inheritance: import the computed stack and override stage/region. Docs: inherited expressions
+# read the consuming component's values; returned dicts are not deep-merged.
+import:
+  - deploy/computed
+
+vars:
+  stage: computed-child
+  region: eu-west-1
+
+components:
+  terraform:
+    mock:
+      metadata:
+        description: child-owner
+      vars:
+        resource_tags:
+          Extra: static-override-is-not-deep-merged
+    mock-docs:
+      metadata:
+        description: child-owner
+    deps:
+      vars:
+        minimum_replicas: 10

@@ -1,0 +1,393 @@
+# Field-test fixture for git.hooks.<name>.steps. Models tests/fixtures/scenarios/starlark-steps.
+base_path: "./"
+
+logs:
+  file: "/dev/stderr"
+  level: Warning
+
+git:
+  hooks:
+    pre-commit:
+      steps:
+        - name: check-symlinks
+          type: script
+          interpreter: starlark
+          script: |
+            entries = exec.run(["git", "ls-files", "-s", "-z"], output = "capture").stdout
+            broken = []
+            for entry in entries.split("\x00"):
+                if not entry:
+                    continue
+                metadata, _, path = entry.partition("\t")
+                if metadata.split(" ")[0] == "120000" and not fs.exists(path):
+                    broken.append(path)
+            if broken:
+                (errors.build("Broken tracked symlinks")
+                    .with_explanation("\n".join(broken))
+                    .with_hint("Restore the targets or remove obsolete symlinks.")
+                    .fail())
+
+        - name: check-agent-file-sizes
+          type: script
+          interpreter: starlark
+          script: |
+            limits = [
+                ("CLAUDE.md", 40000),
+                (".conductor/*/CLAUDE.md", 40000),
+                (".claude/agents/*.md", 25000),
+            ]
+            oversized = []
+            for pattern, limit in limits:
+                for path in fs.glob(pattern):
+                    if not fs.exists(path):
+                        continue
+                    info = fs.stat(path)
+                    if info.is_file and info.size > limit:
+                        oversized.append("{}: {} bytes (limit {})".format(path, info.size, limit))
+            if oversized:
+                (errors.build("Agent instruction files exceed size limits")
+                    .with_explanation("\n".join(oversized))
+                    .with_hint("Move detailed guidance into linked docs; preserve mandatory instructions.")
+                    .fail())
+
+    commit-msg:
+      steps:
+        - name: check-message
+          type: script
+          interpreter: starlark
+          script: |
+            print("ctx.args =", ctx.args)
+            msg = fs.read_file(ctx.args[0])
+            first = msg.strip().split("\n")[0]
+            if not (first.startswith("feat:") or first.startswith("fix:")):
+                (errors.build("Commit message needs a feat:/fix: prefix")
+                    .with_explanation("Got: " + first)
+                    .with_hint("Start the message with 'feat:' or 'fix:'.")
+                    .fail())
+            ui.success("commit message ok")
+
+    pre-push:
+      steps:
+        - name: show-args
+          type: script
+          interpreter: starlark
+          script: |
+            print("ctx.args =", ctx.args)
+            data = fs.read_file("/dev/stdin")
+            print("stdin bytes:", len(data))
+            print("stdin:", data)
+
+    pre-push-cat:
+      steps:
+        - name: cat-stdin
+          type: script
+          interpreter: starlark
+          script: |
+            print("ctx.args =", ctx.args)
+            r = exec.run(["cat"], output = "capture")
+            print("stdin via exec.run cat:", repr(r.stdout))
+
+    mixed:
+      steps:
+        - name: discover
+          type: shell
+          command: printf 'vpc\n'
+          outputs:
+            component: "{{ .value }}"
+        - name: setenv
+          type: env
+          vars:
+            MIXED_VAR: from-env-step
+        - type: script
+          interpreter: starlark
+          env:
+            COMP: "{{ .steps.discover.outputs.component }}"
+          script: |
+            print("unnamed script step; COMP =", env["COMP"])
+            print("env keys:", sorted(env.keys()))
+            r = exec.run(["sh", "-c", "echo MIXED_VAR=$MIXED_VAR"], output = "capture")
+            print(r.stdout.strip())
+        - type: shell
+          command: echo "second unnamed shell step; discover={{ .steps.discover.value }}"
+
+    env-share:
+      steps:
+        - name: setenv
+          type: env
+          vars:
+            SHARED_VAR: from-env-step
+        - name: shell-sees
+          type: shell
+          command: 'echo "shell child: SHARED_VAR=$SHARED_VAR; template: {{ .env.SHARED_VAR }}"'
+        - name: script-sees
+          type: script
+          interpreter: starlark
+          script: |
+            r = exec.run(["sh", "-c", "echo script child: SHARED_VAR=$SHARED_VAR"], output = "capture")
+            print(r.stdout.strip())
+            print("env global:", env)
+        - name: script-tmpl
+          type: script
+          interpreter: starlark
+          env:
+            V: "{{ .env.SHARED_VAR }}"
+          script: |
+            print("declared env V =", env["V"])
+
+    args-test:
+      steps:
+        - name: show
+          type: script
+          interpreter: starlark
+          script: |
+            print("ctx.args =", ctx.args)
+            print("ctx.hook =", ctx.hook)
+            print("ctx.flags =", ctx.flags)
+            print("ctx.script =", ctx.script)
+
+    env-test:
+      steps:
+        - name: show-env
+          type: script
+          interpreter: starlark
+          script: |
+            print("env =", env)
+            r = exec.run(["sh", "-c", "echo HOME=$HOME FOO=$FOO"], output = "capture")
+            print("child:", r.stdout.strip())
+
+    timeout-test:
+      steps:
+        - name: slow
+          type: script
+          interpreter: starlark
+          timeout: 1s
+          script: |
+            exec.run(["sleep", "5"])
+
+    prompt-test:
+      steps:
+        - name: ask
+          type: script
+          interpreter: starlark
+          script: |
+            v = steps.input(prompt = "Name?", default = "dflt").value
+            c = steps.confirm(prompt = "Sure?", default = True).value
+            print("input =", v, "confirm =", c)
+            nodefault = steps.input(prompt = "No default?").value
+            print("nodefault =", repr(nodefault))
+
+    prompt-yaml:
+      steps:
+        - name: ask
+          type: input
+          prompt: Name?
+          default: dflt
+        - name: nodef
+          type: input
+          prompt: No default?
+
+    tty-test:
+      steps:
+        - name: progressive
+          type: script
+          interpreter: starlark
+          script: |
+            ui.info("line one")
+            exec.run(["sh", "-c", "date +%s >&2; sleep 1"])
+            ui.info("line two")
+            exec.run(["sh", "-c", "date +%s >&2; sleep 1"])
+            ui.info("line three")
+            exec.run(["sh", "-c", "date +%s >&2"])
+
+    color-test:
+      steps:
+        - name: colors
+          type: script
+          interpreter: starlark
+          script: |
+            ui.success("success line")
+            ui.warning("warning line")
+            ui.info("info line")
+
+    broken-both:
+      command: echo hi
+      steps:
+        - name: a
+          type: script
+          interpreter: starlark
+          script: print("a")
+
+    broken-empty:
+      steps: []
+
+    broken-when:
+      steps:
+        - name: w
+          type: script
+          interpreter: starlark
+          when: 'true'
+          script: print("w")
+
+    broken-needs:
+      steps:
+        - name: n1
+          type: shell
+          command: echo 1
+        - name: n2
+          type: shell
+          needs: [n1]
+          command: echo 2
+
+    broken-typo:
+      steps:
+        - name: t
+          type: starlark
+          script: print("t")
+
+    broken-dup:
+      steps:
+        - name: same
+          type: shell
+          command: echo 1
+        - name: same
+          type: shell
+          command: echo 2
+
+    broken-identity:
+      steps:
+        - name: i
+          type: shell
+          identity: some-identity
+          command: echo i
+
+    broken-container-override:
+      steps:
+        - name: c
+          type: shell
+          command: echo c
+          container:
+            image: alpine:3
+
+    broken-interpreter:
+      steps:
+        - name: s
+          type: script
+          interpreter: Starlark
+          script: print("s")
+
+    broken-later-step:
+      steps:
+        - name: first-runs-first
+          type: shell
+          command: echo "SHOULD NOT PRINT if preflight rejects later steps"
+        - name: bad
+          type: starlark
+          script: print("x")
+
+    broken-field-typo:
+      steps:
+        - name: f
+          type: script
+          interpreter: starlark
+          scritp: print("typo'd field")
+
+    broken-hook-typo:
+      stepz:
+        - name: f
+          type: shell
+          command: echo hi
+
+    broken-no-script:
+      steps:
+        - name: f
+          type: script
+          interpreter: starlark
+
+    broken-starlark-syntax:
+      steps:
+        - name: f
+          type: script
+          interpreter: starlark
+          script: |
+            x = (1 +
+            print("unterminated"
+
+    broken-starlark-runtime:
+      steps:
+        - name: f
+          type: script
+          interpreter: starlark
+          script: |
+            x = undefined_name + 1
+
+    broken-template:
+      steps:
+        - name: f
+          type: script
+          interpreter: starlark
+          script: |
+            print("{{ .nonexistent.thing }}")
+
+    broken-shell-fail:
+      steps:
+        - name: boom
+          type: shell
+          command: echo before-fail; exit 7
+        - name: never
+          type: shell
+          command: echo SHOULD-NOT-RUN
+
+    stdin-shell:
+      steps:
+        - name: cat
+          type: shell
+          command: 'echo "shell stdin: [$(cat)]"'
+
+    command-hook:
+      command: 'echo "command hook args:$#: $*"; cat'
+
+    command-dollar1:
+      command: 'printf "arg1=[%s] all=[%s]\n" "$1" "$*" --'
+
+    retry-test:
+      steps:
+        - name: flaky
+          type: shell
+          command: 'echo attempt-$(date +%s); exit 1'
+          retry:
+            max_attempts: 3
+            initial_delay: 100ms
+
+    unnamed-fail:
+      steps:
+        - command: echo "no type, no name (defaults to shell?)"
+        - type: script
+          interpreter: starlark
+          script: |
+            fail("second unnamed step failed")
+
+    unnamed-collide:
+      steps:
+        - command: echo first-unnamed
+        - name: step_1
+          type: shell
+          command: echo explicit-step_1
+
+    parallel-test:
+      steps:
+        - name: par
+          type: script
+          interpreter: starlark
+          script: |
+            def a():
+                return fs.exists("CLAUDE.md")
+            def b():
+                return exec.run(["git", "rev-parse", "--show-toplevel"], output = "capture").stdout.strip()
+            print(steps.parallel(functions = [a, b]))
+
+    timeout-shell:
+      steps:
+        - name: slow-shell
+          type: shell
+          timeout: 1s
+          command: sleep 5

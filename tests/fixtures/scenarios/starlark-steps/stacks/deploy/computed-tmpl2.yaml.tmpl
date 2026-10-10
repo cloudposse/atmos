@@ -1,0 +1,14 @@
+vars:
+  stage: computed-tmpl2
+components:
+  terraform:
+    mock:
+      vars:
+        message: tmpl2
+        unclosed: !starlark |
+          return "{{ unclosed and {% weird"
+        sl_val: !starlark return 41 + 1
+        go_if: !starlark |
+          return "{{ if .vars.stage }}yes{{ end }}"
+        sprig_in_body: !starlark |
+          return "{{ upper \"x\" }}"

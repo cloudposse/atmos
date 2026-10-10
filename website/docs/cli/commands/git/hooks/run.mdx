@@ -10,7 +10,7 @@ import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Execute the command or ordered steps configured for a Git hook under [`git.hooks`](/cli/configuration/git#local-git-hooks). This is what the `.git/hooks/*` shims installed by [`atmos git hooks install`](/cli/commands/git/hooks/install) invoke, but it can also be run directly — useful for testing a hook without triggering it through Git.
+Execute the command or ordered steps configured for a Git hook under [`git.hooks`](/cli/configuration/git#local-git-hooks). This is what the `.git/hooks/*` shims installed by [`atmos git hooks install`](/cli/commands/git/hooks/install) invoke, but it can also be run directly — useful for testing a hook without triggering it through Git. Steps run from the repository root, even when you invoke the hook from a subdirectory.
 </Intro>
 
 <CastPlayer title="atmos git hooks run --help" src="/casts/screengrabs/atmos-git-hooks-run--help.cast" static chrome />
@@ -51,7 +51,7 @@ atmos git hooks run commit-msg .git/COMMIT_EDITMSG
 ## Behavior
 
 - Loads the Atmos configuration for the current repository and selects the hook's `command` or `steps`.
-- Runs `steps` in order through the registered step library. Embedded Starlark runs inside Atmos; a failed step stops the hook. Hook arguments are available as `ctx.args`.
+- Runs `steps` in order through the registered step library, from the repository root even when invoked from a subdirectory. The step metrics summary is off by default for hooks. Embedded Starlark runs inside Atmos; a failed step stops the hook. Hook arguments are available as `ctx.args`.
 - Runs `command` hooks through the shared shell runner with the inherited process environment, including `PATH`. Prepare any tools or identity credentials before invoking the hook.
 - Forwards hook arguments **and stdin** to `command` hooks — hooks such as `pre-push` and `pre-receive` receive their input on stdin, not argv. For `steps` hooks, stdin handling depends on the step type.
 - Propagates the command's exit code, so a failing hook command blocks the Git operation exactly as a hand-written hook would.

@@ -1,0 +1,19 @@
+# Stack identity derived from a !starlark value (docs: "does not generate ... stack identities").
+vars:
+  stage: !starlark return "computed-stage"
+  region: us-east-2
+
+terraform:
+  backend_type: local
+  backend:
+    local:
+      path: !starlark |
+        return "state-" + ctx.vars["stage"] + ".tfstate"
+
+components:
+  terraform:
+    mock:
+      vars:
+        message: hello-computed-stage
+        resource_tags: !starlark |
+          return {"Stage": ctx.vars["stage"], "Stack": ctx.stack}

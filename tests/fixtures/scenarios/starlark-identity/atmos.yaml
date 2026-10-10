@@ -1,0 +1,21 @@
+# Stack identity derived from a !starlark value must fail with a clear error. The stack name
+# comes from vars.stage, so this fixture is kept apart from starlark-steps: one such manifest
+# makes `list stacks` and `describe stacks` fail for every stack in the project.
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    command: tofu
+    apply_auto_approve: false
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{.vars.stage}}"
+
+logs:
+  file: "/dev/stderr"
+  level: Warning

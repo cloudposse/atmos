@@ -32,9 +32,9 @@ steps:
 | `script` | Required inline program text. Supports templates. |
 | `working_directory` | Optional process directory. Supports templates. |
 | `env` | Optional environment map. Only these declared values are rendered as templates. |
-| `output` | Optional output mode: `raw`, `log`, `viewport`, or `none`. Any other value is rejected before the step runs. Script steps default to `raw`. |
+| `output` | Optional output mode: `raw`, `log`, `viewport`, or `none`. A literal value that is not one of these is rejected before the step runs. A templated value is rendered first and validated after rendering, so an unknown rendered mode fails the step. Script steps default to `raw`. See [`output`](/steps/output). |
 | `show` | Optional display settings such as `show.labels`. See [Step labels](#step-labels). |
-| `retry` | Optional retry policy that reruns the whole step on failure. |
+| `retry` | Optional retry policy that reruns the whole step on failure. Unknown keys are rejected; the key for the first wait is `initial_delay`, and `delay` is not a key. See [`retry`](/steps/retry). |
 | `timeout` | Optional duration such as `30s` or `5m`. Atmos stops the interpreter and its subprocesses when it elapses and fails the step with `step timed out`. The timeout bounds the whole step, including every [`retry`](/steps/retry) attempt and the wait between attempts, so retries never extend it. |
 | `when` | Optional [condition](/steps#conditional-execution) that decides whether the step runs. |
 | `outputs` | Optional named values derived from the step result, available as `{{ .steps.<name>.outputs.<key> }}`. |
@@ -288,7 +288,6 @@ Regular expressions use Go/RE2 syntax and support inline flags such as `(?m)`.
 Lookaround and pattern backreferences are unsupported. Replacement text is literal:
 `$1` is written as `$1`, without capture expansion. File reads use the same injectable
 reader as module loading, allowing tests to supply file contents without disk access.
-File writes and directory discovery are not available yet.
 
 Both `exec.run` and `component.exec` take these options:
 
@@ -335,7 +334,7 @@ stdout channel, `ui.*` formats messages on its stderr channel, and subprocesses
 stream through those same writers. Step output settings, masking, test capture,
 and cast recording therefore apply. Captured values remain available to scripts;
 masking applies when displaying them. File reads use the injectable filesystem
-reader, independently of terminal output. There is no Starlark stdin/prompt API yet.
+reader, independently of terminal output.
 
 For example, a Starlark validator can read a recorded cast, decode its output
 events, and check the text without a Python interpreter:
@@ -676,8 +675,6 @@ env, preserves custom-command and explicit step env overrides, and finally appli
 per-call env overrides. Component lookups are serialized; the parallel runner
 executes independent processes concurrently.
 
-Arbitrary typed-step dispatch and Starlark test-file discovery are not available yet.
-
 ### Standalone executable scripts {#standalone-scripts}
 
 Use an Atmos shebang to run an automation program directly:
@@ -706,10 +703,12 @@ rejected. Repeated identical pins are cached; conflicting versions fail. Single-
 as `type: http`, `format: raw` toolchain entries and installed with
 `atmos toolchain install owner/tool@version`. The Atmos interpreter must be on PATH.
 
-Pass the script filename directly to `atmos`, before any script arguments. Global
-Atmos options before the script filename are not supported.
+Pass the script filename to `atmos`, before any script arguments. Global Atmos options
+such as `--chdir=dir` may appear before the script filename. Options that take a value,
+such as `--profile` and `--identity`, must use the `--flag=value` form there. Everything
+after the script filename belongs to the script.
 
-Use `atmos.toolchain("install", "jq@1.7.1")` for an explicit toolchain CLI operation.
+Use `atmos.toolchain("install", "jqlang/jq@1.7.1")` for an explicit toolchain CLI operation.
 It returns `stdout`, `stderr`, and `exit_code`, with the same output and error
 policies as `atmos.run`. Optional `flags={...}` and `args=[...]` pass CLI options.
 This operation does not change the calling script's PATH; use `dependencies.tools`
@@ -799,16 +798,14 @@ atmos.vendor("pull", flags={"component": "vpc", "stack": "dev"})
 atmos.scaffold("generate", "service-template", "services/api", flags={"dry-run": True})
 components_json = atmos.list("components", flags={"stack": "dev", "format": "json"}, output="capture")
 component = atmos.describe("component", "api", flags={"stack": "dev"}, output="capture")
+atmos.config("get", "base_path")
 atmos.config("get", args=["base_path"])
 atmos.version()
 ```
 
-Generic wrappers are available for `about`, `ai`, `ansible`, `atlantis`, `auth`,
-`aws`, `azure`, `cast`, `ci`, `completion`, `composition`, `config`, `container`,
-`describe`, `devcontainer`, `docs`, `emulator`, `env`, `gcp`, `git`, `helmfile`,
-`help`, `init`, `kubernetes`, `list`, `lsp`, `mcp`, `packer`, `pro`, `profile`,
-`sbom`, `scaffold`, `secret`, `stack`, `store`, `support`, `theme`, `validate`,
-`vendor`, `version`, and `workflow`. These wrappers retain each command's native
+A generic wrapper exists for every registered top-level Atmos command, plus its aliases,
+such as `atmos.list`, `atmos.describe`, `atmos.vendor`, `atmos.stack`, and `atmos.workflow`.
+See [`atmos.run`](/functions/automation/atmos.run) for the full call contract. These wrappers retain each command's native
 behavior, including authentication and experimental notices. They return process
 results; decode JSON stdout with `json.decode` when structured values are needed.
 

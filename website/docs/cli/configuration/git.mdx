@@ -18,7 +18,7 @@ The `git` section in `atmos.yaml` makes Git a foundational Atmos capability — 
 - Authenticate through Atmos Auth identities and integrations — credentials are never embedded in URIs
 - Clone is always *reconcile*: idempotent and safe under restored CI caches
 - Automatic workdirs under the Atmos XDG cache root are captured by the native CI cache for free
-- Configure local Git hooks (`pre-commit`, `commit-msg`, ...) that delegate to Atmos workflows
+- Configure local Git hooks (`pre-commit`, `commit-msg`, ...) that run a `command` or a list of `steps`
 </KeyPoints>
 
 ## Basic Configuration
@@ -370,16 +370,18 @@ Choose exactly one of `command` or a non-empty `steps` list. Install the shim wi
 `atmos git hooks install`, then run it directly with `atmos git hooks run pre-commit`.
 Existing command hooks keep their argument and stdin forwarding behavior.
 
-Steps run in order and stop at the first failure. They share named outputs and
-step environment changes. Each step supports its handler's timeout and retry
+Steps run in order and stop at the first failure. They run from the repository root,
+even when you invoke the hook from a subdirectory. They share named outputs. A
+`type: env` step exports variables to the processes and templates of later steps
+(for example `{{ .env.X }}`). The `env` global of a Starlark step contains only the
+`env:` that step declares, not variables exported by earlier steps. Each step supports its handler's timeout and retry
 behavior; embedded scripts also have access to `steps.parallel`.
 Git hook arguments are available as `ctx.args` in embedded scripts, for example
 the commit-message path supplied to `commit-msg`. Git's `pre-commit` hook supplies
 no filenames: query the Git index explicitly when a check needs tracked or staged paths.
 
-Relative paths resolve from the invocation directory, unless a step sets
-`working_directory`. Git normally invokes client-side hooks from the working-tree
-root. These checks read working-tree files; Atmos does not stash unstaged changes
+Relative paths resolve from the repository root, unless a step sets
+`working_directory`. These checks read working-tree files; Atmos does not stash unstaged changes
 or limit checks to the staged contents automatically.
 
 Hook step lists use synchronous execution. Workflow scheduling fields (`needs`,

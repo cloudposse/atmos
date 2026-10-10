@@ -48,4 +48,6 @@ atmos stack get settings.spacelift.workspace_enabled -s plat-ue2-prod -c vpc
   <dd>The stack name.</dd>
   <dt>`--component` / `-c` (string, required)</dt>
   <dd>The component name.</dd>
+  <dt>`--file` (string)</dt>
+  <dd>Read the value from this manifest file with the same YAML path instead of the merged stack configuration. Values inherited from other manifests are not included, and provenance is not shown. A file that cannot be read is an error.</dd>
 </dl>

@@ -1,0 +1,31 @@
+# Field-test hook: prints the parent operation's outcome and runs a captured component.exec.
+# Not imported by stacks/deploy (owned by another agent); import it from a scratch copy:
+#   import: [catalog/ft-hooks]
+components:
+  terraform:
+    mock:
+      hooks:
+        ft-after-plan:
+          kind: step
+          type: script
+          events: [after.terraform.plan]
+          when: always
+          on_failure: warn
+          with:
+            interpreter: starlark
+            script: |
+              op = ctx.operation
+              print("ft-hook command=%r status=%r exit_code=%r error=%r stdout=%r stderr=%r" % (
+                  op.command, op.status, op.exit_code, op.error, op.stdout, op.stderr))
+              r = ctx.component.exec(["tofu", "version"], output = "capture")
+              print("ft-hook tofu exit=%d first-line=%r" % (r.exit_code, r.stdout.splitlines()[0]))
+        ft-before-plan:
+          kind: step
+          type: script
+          events: [before.terraform.plan]
+          on_failure: warn
+          with:
+            interpreter: starlark
+            script: |
+              op = ctx.operation
+              print("ft-before command=%r status=%r exit_code=%r error=%r" % (op.command, op.status, op.exit_code, op.error))

@@ -55,6 +55,9 @@ atmos git hooks install --force
 ## Behavior
 
 - Installs **all** configured hooks when no hook names are provided; only the requested hooks otherwise.
+- Validates each hook before writing its shim: exactly one of `command` or `steps` must be set, and a `steps` list must be a valid step list. An invalid hook fails the install.
+- Warns for names under `git.hooks` that are not Git hook names, because Git never runs such a hook.
+- Reports shims that are already installed when you re-run the command.
 - **Refuses to overwrite** an existing hook unless `--force` is passed.
 - Marks generated shim scripts executable.
 - Resolves the hooks directory through Git (`git rev-parse --git-path hooks`), so linked worktrees — where `.git` is a file and hooks live in the common dir — work correctly.
