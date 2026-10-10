@@ -3,6 +3,7 @@ package schema
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -83,23 +84,25 @@ type Command struct {
 	Internal bool `yaml:"internal,omitempty" json:"internal,omitempty" mapstructure:"internal"`
 }
 
-// CopyScriptSources copies the loader-set ScriptSource of every step, nested group step, and
-// subcommand from src onto c. The two commands must have the same shape, as after a JSON
-// round trip, which drops ScriptSource because it has no JSON key.
-func (c *Command) CopyScriptSources(src *Command) {
+// CopyLoaderFields copies the loader-set ScriptSource and LiteralFields of every step, nested
+// group step, and subcommand from src onto c. The two commands must have the same shape, as after
+// a JSON round trip, which drops these fields because they have no JSON key.
+func (c *Command) CopyLoaderFields(src *Command) {
 	for i := 0; i < len(c.Steps) && i < len(src.Steps); i++ {
 		c.Steps[i].ScriptSource = src.Steps[i].ScriptSource
-		copyStepScriptSources(c.Steps[i].Steps, src.Steps[i].Steps)
+		c.Steps[i].LiteralFields = slices.Clone(src.Steps[i].LiteralFields)
+		copyStepLoaderFields(c.Steps[i].Steps, src.Steps[i].Steps)
 	}
 	for i := 0; i < len(c.Commands) && i < len(src.Commands); i++ {
-		c.Commands[i].CopyScriptSources(&src.Commands[i])
+		c.Commands[i].CopyLoaderFields(&src.Commands[i])
 	}
 }
 
-func copyStepScriptSources(dst, src []WorkflowStep) {
+func copyStepLoaderFields(dst, src []WorkflowStep) {
 	for i := 0; i < len(dst) && i < len(src); i++ {
 		dst[i].ScriptSource = src[i].ScriptSource
-		copyStepScriptSources(dst[i].Steps, src[i].Steps)
+		dst[i].LiteralFields = slices.Clone(src[i].LiteralFields)
+		copyStepLoaderFields(dst[i].Steps, src[i].Steps)
 	}
 }
 
@@ -131,9 +134,11 @@ func (a *CommandArgument) EffectiveProvides() string {
 
 // CommandFlag defines a flag for a custom command.
 type CommandFlag struct {
-	Name        string `yaml:"name" json:"name" mapstructure:"name"`
-	Shorthand   string `yaml:"shorthand" json:"shorthand" mapstructure:"shorthand"`
-	Type        string `yaml:"type" json:"type" mapstructure:"type"`
+	Name      string `yaml:"name" json:"name" mapstructure:"name"`
+	Shorthand string `yaml:"shorthand" json:"shorthand" mapstructure:"shorthand"`
+	// Type is the data type of the flag: "string" (the default), "bool", or "int". An int flag is an
+	// integer in templates and script contexts. Any other type fails when the command loads.
+	Type        string `yaml:"type" json:"type" mapstructure:"type" jsonschema:"enum=,enum=string,enum=bool,enum=int"`
 	Description string `yaml:"description" json:"description" mapstructure:"description"`
 	Usage       string `yaml:"usage" json:"usage" mapstructure:"usage"`
 	Required    bool   `yaml:"required" json:"required" mapstructure:"required"`

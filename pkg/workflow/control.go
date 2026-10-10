@@ -1,17 +1,16 @@
 package workflow
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"text/template"
 
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependency"
+	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -58,7 +57,11 @@ type ControlStoreResultFunc func(result *scheduler.Result)
 
 type ControlExecutionOptions struct {
 	TemplateData ControlTemplateDataFunc
-	StoreResult  ControlStoreResultFunc
+	// RenderTemplate renders each child's template fields. Callers set it to the parent context's
+	// renderer so children see the same template functions and pass count as sequential steps. When
+	// nil, children render with plain text/template.
+	RenderTemplate ControlRenderFunc
+	StoreResult    ControlStoreResultFunc
 }
 
 type controlOutputConfig struct {
@@ -110,7 +113,7 @@ func ExecuteControlStep(ctx context.Context, parent *schema.WorkflowStep, execut
 
 	dispatcher := newControlDispatcher(&controlDispatchConfig{
 		executor:     executor,
-		dataFunc:     opts.TemplateData,
+		templates:    newControlTemplates(opts),
 		outputCfg:    outputCfg,
 		failCfg:      failCfg,
 		cancel:       cancel,
@@ -145,7 +148,7 @@ func ExecuteControlStep(ctx context.Context, parent *schema.WorkflowStep, execut
 
 type controlDispatchConfig struct {
 	executor     ControlChildExecutor
-	dataFunc     ControlTemplateDataFunc
+	templates    *controlTemplates
 	outputCfg    controlOutputConfig
 	failCfg      controlFailConfig
 	cancel       context.CancelFunc
@@ -156,14 +159,14 @@ type controlDispatchConfig struct {
 func newControlDispatcher(cfg *controlDispatchConfig) scheduler.Dispatcher {
 	return scheduler.DispatcherFunc(func(ctx context.Context, node *dependency.Node) (scheduler.Result, error) {
 		child := node.Metadata["child"].(controlNode)
-		resolved, err := resolveControlStep(&child.step, child.matrix, cfg.dataFunc)
+		resolved, err := resolveControlStep(&child.step, child.matrix, cfg.templates)
 		if err != nil {
 			return scheduler.Result{Value: &ControlResult{Name: child.step.Name, Err: err, Status: string(scheduler.StatusFailed)}}, err
 		}
 		child.step = resolved
 		childOutput := ControlChildOutput{
 			Mode:   cfg.outputCfg.mode,
-			Prefix: controlPrefix(cfg.outputCfg, child.step.Name, child.matrix, cfg.dataFunc),
+			Prefix: controlPrefix(cfg.outputCfg, child.step.Name, child.matrix, cfg.templates),
 		}
 		execResult, dispatchErr := cfg.executor(ctx, &ControlChild{Step: child.step, Matrix: child.matrix}, childOutput)
 		nodeResult := controlNodeResult(child.step.Name, cfg.completedSeq.Add(1), execResult, dispatchErr)
@@ -381,47 +384,47 @@ func countControlResults(aggregate *scheduler.AggregateResult) controlResultCoun
 	return counts
 }
 
-func resolveControlStep(step *schema.WorkflowStep, matrix map[string]string, dataFunc ControlTemplateDataFunc) (schema.WorkflowStep, error) {
+func resolveControlStep(step *schema.WorkflowStep, matrix map[string]string, templates *controlTemplates) (schema.WorkflowStep, error) {
 	resolved := *step
 	// Script and Interpreter are rendered like every other string field so a templated
-	// parallel/matrix script child behaves as the sequential script step does.
-	for _, field := range []*string{
-		&resolved.Command, &resolved.Script, &resolved.Interpreter,
-		&resolved.Stack, &resolved.Timeout, &resolved.WorkingDirectory,
+	// parallel/matrix script child behaves as the sequential script step does. A field written
+	// with !literal is used exactly as written.
+	for _, field := range []struct {
+		name  string
+		value *string
+	}{
+		{"command", &resolved.Command},
+		{"script", &resolved.Script},
+		{"interpreter", &resolved.Interpreter},
+		{"stack", &resolved.Stack},
+		{"timeout", &resolved.Timeout},
+		{"working_directory", &resolved.WorkingDirectory},
 	} {
-		rendered, err := resolveControlTemplate(*field, step.Name, matrix, dataFunc)
-		if err != nil {
-			return resolved, err
+		if step.IsLiteral(field.name) {
+			continue
 		}
-		*field = rendered
+		rendered, err := templates.resolve(*field.value, step.Name, matrix)
+		if err != nil {
+			return resolved, stepPkg.TemplateFieldError(step, field.name, err)
+		}
+		*field.value = rendered
 	}
-	var err error
 	if len(step.Env) > 0 {
 		envMap := make(map[string]string, len(step.Env))
 		for key, value := range step.Env {
-			envMap[key], err = resolveControlTemplate(value, step.Name, matrix, dataFunc)
-			if err != nil {
-				return resolved, err
+			if step.IsLiteralEnv(key) {
+				envMap[key] = value
+				continue
 			}
+			rendered, err := templates.resolve(value, step.Name, matrix)
+			if err != nil {
+				return resolved, stepPkg.TemplateFieldError(step, "env."+key, err)
+			}
+			envMap[key] = rendered
 		}
 		resolved.Env = envMap
 	}
 	return resolved, nil
-}
-
-func resolveControlTemplate(input, stepName string, matrix map[string]string, dataFunc ControlTemplateDataFunc) (string, error) {
-	if input == "" || (!strings.Contains(input, "{{") && !strings.Contains(input, "}}")) {
-		return input, nil
-	}
-	tmpl, err := template.New("workflow-control").Parse(input)
-	if err != nil {
-		return "", err
-	}
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, controlTemplateData(stepName, matrix, dataFunc)); err != nil {
-		return "", err
-	}
-	return buf.String(), nil
 }
 
 func controlTemplateData(stepName string, matrix map[string]string, dataFunc ControlTemplateDataFunc) map[string]any {

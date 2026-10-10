@@ -1,11 +1,14 @@
 package exec
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -135,5 +138,45 @@ func TestResolveWorkflowStepEnvs(t *testing.T) {
 		_, resolvedStep, err := resolveWorkflowStepEnvs(nil, stepEnv, []string{"ATMOS_TEST_BASE=base"})
 		require.NoError(t, err)
 		assert.Equal(t, "env-step-x", resolvedStep["DERIVED"])
+	})
+}
+
+// TestExecuteWorkflowKeepsLiteralStepFields verifies a workflow shell step written with !literal
+// uses its command and env values exactly as written, while its other env values still render, and
+// that the same command without the marker is rendered (and fails on the undefined function).
+func TestExecuteWorkflowKeepsLiteralStepFields(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping integration test in short mode: spawns actual shell process")
+	}
+
+	testDir := "../../tests/fixtures/scenarios/atmos-auth-mock"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	out := filepath.Join(t.TempDir(), "out.txt")
+	command := `printf %s "{{ y }}|$LIT|$TPL" > ` + filepath.ToSlash(out)
+
+	t.Run("literal command and env value are kept", func(t *testing.T) {
+		definition := &schema.WorkflowDefinition{Steps: []schema.WorkflowStep{{
+			Name:          "write",
+			Type:          "shell",
+			Command:       command,
+			Env:           map[string]string{"LIT": "{{ keep }}", "TPL": `{{ "rendered" }}`},
+			LiteralFields: []string{"command", "env.LIT"},
+		}}}
+		require.NoError(t, ExecuteWorkflow(atmosConfig, "literal", "literal.yaml", definition, false, "", "", ""))
+
+		got, err := os.ReadFile(out)
+		require.NoError(t, err)
+		assert.Equal(t, "{{ y }}|{{ keep }}|rendered", string(got))
+	})
+
+	t.Run("the same command without the marker is rendered and fails", func(t *testing.T) {
+		definition := &schema.WorkflowDefinition{Steps: []schema.WorkflowStep{{
+			Name: "write", Type: "shell", Command: command,
+		}}}
+		require.Error(t, ExecuteWorkflow(atmosConfig, "plain", "plain.yaml", definition, false, "", "", ""))
 	})
 }

@@ -448,6 +448,9 @@ func processScalarNodeValue(node *yaml.Node) (any, error) {
 	switch node.Tag {
 	case u.AtmosYamlFuncUnset:
 		return nil, nil
+	case u.AtmosYamlFuncLiteral:
+		// !literal keeps the value exactly as written.
+		return node.Value, nil
 	case u.AtmosYamlFuncEnv:
 		return processEnvTag(strFunc, node.Value)
 	case u.AtmosYamlFuncExec:
@@ -520,6 +523,7 @@ func decodeMappingNodeWithYamlFunctions(node *yaml.Node, sourceFile string) (any
 		result[keyNode.Value] = value
 	}
 	recordScriptSource(node, result, sourceFile)
+	recordStepLiteralFields(node, result)
 	return result, nil
 }
 
@@ -628,6 +632,12 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 		// In this case, we simply don't set any value and clear the tag.
 		log.Debug("Unsetting configuration key", "path", currentPath)
 		node.Tag = "" // Avoid re-processing.
+		return nil
+	case u.AtmosYamlFuncLiteral:
+		// !literal keeps the value exactly as written. Viper already holds that value, because it
+		// reads an explicitly tagged scalar as a plain string, so there is nothing to set. Pin the
+		// node to a string so a later decode of the node cannot re-type the value (for example 123).
+		node.Tag = "!!str"
 		return nil
 	case u.AtmosYamlFuncEnv:
 		return handleEnv(node, v, currentPath)

@@ -63,7 +63,9 @@ func executeWorkflowControlStep(ctx context.Context, control *workflowControlCon
 	}
 	return workflow.ExecuteControlStep(ctx, parent, childExecutor.Execute, workflow.ControlExecutionOptions{
 		TemplateData: workflowControlTemplateData,
-		StoreResult:  storeWorkflowControlResult,
+		// Children render with the workflow's renderer and pass count, like sequential steps.
+		RenderTemplate: workflowControlRender,
+		StoreResult:    storeWorkflowControlResult,
 	})
 }
 
@@ -111,4 +113,13 @@ func storeWorkflowControlResult(result *scheduler.Result) {
 		stepResult.WithSkipped()
 	}
 	stepExecutorState.Variables().Set(result.NodeID, stepResult)
+}
+
+// workflowControlRender renders a control child's template field with the workflow's own
+// renderer and pass count, the same way a sequential workflow step is rendered.
+func workflowControlRender(name, input string, data map[string]any) (string, error) {
+	if stepExecutorState == nil {
+		stepExecutorState = stepPkg.NewStepExecutor()
+	}
+	return stepExecutorState.Variables().ResolveWithData(name, input, data)
 }

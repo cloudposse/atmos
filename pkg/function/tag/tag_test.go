@@ -98,6 +98,7 @@ func TestAtmosConfigYAML(t *testing.T) {
 		"!cwd",
 		"!random",
 		"!unset",
+		"!literal",
 	}
 
 	assert.Equal(t, expected, configTags)

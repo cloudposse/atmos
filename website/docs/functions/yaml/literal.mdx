@@ -133,6 +133,53 @@ components:
             config: !literal "{{external.config}}"
 ```
 
+### Step Definitions and `atmos.yaml`
+
+`!literal` works in `atmos.yaml` and in the step definitions of custom commands, workflows, and hooks. Atmos renders step fields as Go templates when a step runs, so a Starlark script or shell command that contains `{{ }}` text would fail with a template error. Tag the field with `!literal` and Atmos runs it exactly as written.
+
+```yaml
+commands:
+  - name: report
+    description: Print a summary
+    steps:
+      - name: summary
+        type: script
+        interpreter: starlark
+        # The braces below are Starlark, not Atmos templates.
+        script: !literal |
+          rows = [{"name": "vpc", "status": "ok"}]
+          for row in rows:
+              print("{} is {}".format(row["name"], row["status"]))
+          print("Atmos templates look like {{ .vars.stage }}")
+      - name: echo
+        command: !literal echo "Atmos templates look like {{ .vars.stage }}"
+```
+
+The same tag works on steps in a workflow manifest, including steps nested in `parallel` and `matrix` groups, and on the steps of a `step` or `steps` hook.
+
+These step fields honor `!literal`:
+
+<dl>
+    <dt>`script`</dt>
+    <dd>The body of a `script` step, in every step context.</dd>
+
+    <dt>`command`</dt>
+    <dd>The command of a shell step, and the string `command` of a custom command step.</dd>
+
+    <dt>`interpreter`</dt>
+    <dd>The interpreter of a `script` step.</dd>
+
+    <dt>`working_directory`</dt>
+    <dd>The working directory of a step.</dd>
+
+    <dt>`env` values</dt>
+    <dd>Each value in a step's `env` map, tagged on its own, such as `GREETING: !literal "{{ not a template }}"`.</dd>
+</dl>
+
+Other fields of the same step keep rendering as templates, so you can combine a literal `script` with a templated `env` value. Only a field that carries the tag directly is literal: tagging a whole `env` map or `steps` list has no effect on the entries inside it.
+
+`!literal` on stack `vars`, `settings`, `env`, and similar data keeps its existing behavior: Atmos clears the tag and keeps the value as written.
+
 ## Why `!literal` is Needed
 
 Atmos processes Go templates and Gomplate expressions in stack configurations. When your configuration contains `{{...}}` or `${...}` syntax intended for downstream tools, Atmos attempts to evaluate these expressions, causing errors or unexpected behavior.

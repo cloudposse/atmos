@@ -8,7 +8,8 @@ Everything below is predeclared; there is nothing to import. See the
 
 - `ctx.args`: immutable list of raw script arguments (standalone scripts only).
 - `ctx.flags`, `ctx.arguments`: immutable parsed inputs for script steps. Custom command
-  string and bool flags keep their types; workflow flags are strings. In standalone scripts
+  string, bool, and `type: int` flags keep their types; workflow flags are strings and always
+  include `stack`. In standalone scripts
   both are empty; use the `cli.command` callback instead.
 - `ctx.script`: `.path` and `.directory` of the physical file for standalone scripts and
   file-backed included script steps; `None` for inline steps.

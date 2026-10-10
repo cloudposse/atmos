@@ -89,6 +89,13 @@ commands:
         command: terraform deploy {{ .Arguments.component }} -s {{ .Flags.stack }}
 ```
 
+Flag `type` is `string` (default), `bool`, or `int`. An `int` flag registers as an integer flag
+(`--count int` in help), its `default` must be a whole number, and it reaches templates and
+`ctx.flags` as an integer. Any other type fails when Atmos loads the command, with an error that
+lists the supported types. An argument that is not `required` and has no `default` may be omitted
+and is an empty string in `{{ .Arguments.<name> }}` and `ctx.arguments`. Argument values keep
+commas, empty strings, and non-ASCII text intact.
+
 ### Tool Dependencies
 
 ```yaml
@@ -174,16 +181,30 @@ commands:
               atmos.terraform("deploy", ctx.arguments["group"], ctx.flags["stack"])
 ```
 
-- Read declared flags and arguments from `ctx.flags` (string and bool types preserved) and
-  `ctx.arguments`. `ctx.args` is empty, and trailing arguments after `--` are not exposed to
-  scripts.
+- Read declared flags and arguments from `ctx.flags` (string, bool, and `int` types preserved)
+  and `ctx.arguments` (an omitted optional argument is `""`). `ctx.args` is empty, and trailing
+  arguments after `--` are not exposed to scripts.
 - Do not template flag values into the script source (`{{ .Flags.x }}`): the script body is
   rendered as a Go template first, so a literal `{{` in Starlark source breaks the step.
   `ctx.flags` and `ctx.arguments` are safe for any value.
 - `cli.command`, `cli.arg`, and `cli.flag` are only for standalone scripts
   (`atmos ./tool.star`); declare the command interface in YAML here.
 - Script steps default to raw output with no step labels; `show: {labels: true}` restores them.
-  A `timeout:` on the script step is not enforced; use `steps.task(..., timeout="30s")`.
+  `output:` must be `raw`, `log`, `viewport`, or `none`; any other value (such as `capture`) fails
+  before the step runs.
+- A `timeout:` on a script, shell, or atmos step is enforced: the step is canceled and fails with
+  `step timed out`. Per-task limits inside a script still use `steps.task(..., timeout="30s")`.
+- Atmos renders only the values declared under the step's `env:` as templates. The ambient process
+  environment reaches the script and its child processes verbatim, so an inherited
+  `FOO='{{ bad'` is harmless. In `ctx`-side Starlark, `env` holds only the step's own `env:`
+  entries, not command-level `env:` entries.
+- Sprig and Gomplate functions work the same in sequential steps and in `parallel`/`matrix`
+  children.
+- A script step's dict or list `output` reaches later steps as JSON text
+  (`{{ .steps.<name>.value }}` is `{"n":3}`), never Go map syntax. Single-quote it in shell
+  commands (`echo '{{ .steps.x.value }}'`) because JSON contains double quotes.
+- A template error names the step and field, and the source file for an `!include`d script, with
+  a hint to tag the field `!literal` when the body contains `{{`.
 
 ## Routing
 

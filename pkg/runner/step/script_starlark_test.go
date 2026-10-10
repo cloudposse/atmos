@@ -19,7 +19,7 @@ func TestScriptStarlark(t *testing.T) {
 	handler, ok := Get("script")
 	require.True(t, ok)
 	result, err := handler.Execute(context.Background(), &schema.WorkflowStep{
-		Name: "embedded", Type: schema.TaskTypeScript, Interpreter: "starlark", Output: "capture",
+		Name: "embedded", Type: schema.TaskTypeScript, Interpreter: "starlark", Output: "none",
 		Env: map[string]string{"EXPLICIT": "yes"},
 		Script: `
 def value():
@@ -47,7 +47,7 @@ func TestScriptStarlarkPrintFallbackAndFailure(t *testing.T) {
 		{`fail("bad script")`, "", true},
 	} {
 		result, err := (&ScriptHandler{}).Execute(context.Background(), &schema.WorkflowStep{
-			Name: "embedded", Interpreter: "starlark", Script: tc.source, Output: "capture",
+			Name: "embedded", Interpreter: "starlark", Script: tc.source, Output: "none",
 		}, NewVariables())
 		if tc.fail {
 			require.ErrorIs(t, err, errUtils.ErrStarlark)
@@ -75,7 +75,7 @@ func TestScriptStarlarkReadsParsedCommandInputs(t *testing.T) {
 		"Arguments": map[string]string{"service": "api", "literal": "{{ fail \"must stay data\" }}"},
 	})
 	result, err := (&ScriptHandler{}).Execute(t.Context(), &schema.WorkflowStep{
-		Name: "inputs", Interpreter: "starlark", Output: "capture",
+		Name: "inputs", Interpreter: "starlark", Output: "none",
 		Script: `output = {
     "replicas": int(ctx.flags["replicas"]),
     "enabled": ctx.flags["enabled"],
@@ -93,7 +93,7 @@ func TestScriptStarlarkReadsWorkflowFlags(t *testing.T) {
 	vars := NewVariables()
 	vars.SetFlag("stack", "dev")
 	result, err := (&ScriptHandler{}).Execute(t.Context(), &schema.WorkflowStep{
-		Interpreter: "starlark", Output: "capture",
+		Interpreter: "starlark", Output: "none",
 		Script: `output = {"stack": ctx.flags["stack"], "arguments": ctx.arguments}`,
 	}, vars)
 	require.NoError(t, err)
@@ -109,7 +109,7 @@ func TestScriptStarlarkInputsSurviveClonedParallelBranches(t *testing.T) {
 	})
 	branch := vars.Clone()
 	result, err := (&ScriptHandler{}).Execute(t.Context(), &schema.WorkflowStep{
-		Interpreter: "starlark", Output: "capture",
+		Interpreter: "starlark", Output: "none",
 		Script: `def inspect():
     return [ctx.flags["enabled"], ctx.arguments["service"]]
 output = steps.parallel(functions=[inspect, inspect])`,
@@ -127,7 +127,7 @@ func TestScriptStarlarkLowercaseFlagTemplateRoot(t *testing.T) {
 	vars := NewVariables()
 	vars.SetTemplateData(map[string]any{"flags": map[string]string{"stack": "prod"}})
 	result, err := (&ScriptHandler{}).Execute(t.Context(), &schema.WorkflowStep{
-		Interpreter: "starlark", Output: "capture", Script: `output = ctx.flags["stack"]`,
+		Interpreter: "starlark", Output: "none", Script: `output = ctx.flags["stack"]`,
 	}, vars)
 	require.NoError(t, err)
 	assert.Equal(t, "prod", result.Value)
