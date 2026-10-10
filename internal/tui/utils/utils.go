@@ -9,6 +9,7 @@ import (
 
 	"github.com/alecthomas/chroma/v2/quick"
 	"github.com/arsham/figurine/figurine"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
@@ -200,6 +201,14 @@ func RenderMarkdown(markdownText string, style string) (string, error) {
 	}
 
 	return out, nil
+}
+
+// NewAtmosKeyMap returns the huh key map for Atmos prompts. In addition to ctrl+c, esc and ctrl+d
+// cancel the prompt, so the usual ways of backing out of a terminal prompt all work.
+func NewAtmosKeyMap() *huh.KeyMap {
+	keyMap := huh.NewDefaultKeyMap()
+	keyMap.Quit = key.NewBinding(key.WithKeys("ctrl+c", "esc", "ctrl+d"))
+	return keyMap
 }
 
 // NewAtmosConfirm returns a huh Confirm field pre-configured with Atmos conventions.

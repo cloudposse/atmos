@@ -250,7 +250,7 @@ ai:
 
   tools:
     enabled: true
-    require_confirmation: true
+    mode: require_confirmation
     # Only these tools are registered/exposed at all, and they skip confirmation:
     allowed:
       - atmos_describe_component
