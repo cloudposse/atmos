@@ -131,7 +131,7 @@ Positional arguments are defined as a list under `arguments`:
 arguments:
   - name: string           # Required: Argument name
     description: string    # Optional: Help text
-    required: boolean      # Optional: With neither required nor default, the argument is required; write required: false to make it optional
+    required: boolean      # Optional: Set to false to allow omission
     default: string        # Optional: Default value if not provided
 ```
 
@@ -150,11 +150,12 @@ steps:
 
 ### Required vs Optional
 
-If `required: true` and no value is provided, the command fails unless a `default` is specified.
-An argument with neither `required:` nor `default:` is required; write `required: false` to make it optional. An
-optional argument with no `default` can be omitted: its value is an empty
-string in `{{ .Arguments.<name> }}` and in `ctx.arguments`. Values keep commas, empty strings,
-and non-ASCII text intact.
+Arguments are required by default. Use `required: false` to make an argument optional,
+or set `default` to supply a value when the user omits it.
+
+An optional argument without a default becomes an empty string in
+`{{ .Arguments.<name> }}` and `ctx.arguments`. Values preserve commas, empty strings,
+and non-ASCII text.
 
 ```yaml
 arguments:
