@@ -8,7 +8,7 @@ castTitle: "Custom command defined in atmos.yaml"
 ---
 
 Atmos is now a language for automation. Introducing the
-[Atmos Automation Language](/automation/language): a Python-like language based
+[Atmos Automation Language](/scripting/language): a Python-like language based
 on Starlark for writing, composing, and testing your build, test, and deployment
 processes.
 
@@ -60,7 +60,7 @@ workflow, or hook. The interpreter is included in Atmos.
 
 ### Why Starlark?
 
-See [why Atmos uses Starlark](/automation/language#why-starlark) for the language's
+See [why Atmos uses Starlark](/scripting/language#why-starlark) for the language's
 syntax, built-in capabilities, and execution model.
 
 ## How to Use It
@@ -111,7 +111,7 @@ example module has no providers or resources and needs no cloud credentials.
 Move shared code into `.star` files. Include a script in a YAML step with
 `script: !include scripts/plan.star`, and use `load()` inside the script to import
 functions from other files. Imports resolve relative to the file containing
-the `load()` statement. See [files and shared code](/automation/language#files-and-shared-code).
+the `load()` statement. See [files and shared code](/scripting/language#files-and-shared-code).
 
 The [release-plan example](/steps/type/script#custom-components) loads a shared
 function and reads three components with at most two tasks running at once.
@@ -150,7 +150,7 @@ steps, and YAML expressions for computing configuration values.
 
 ## Next steps {#get-involved}
 
-Follow the [custom command guide](/automation/custom-commands),
-[workflow guide](/automation/workflows), or [hook guide](/automation/lifecycle-hooks)
-to add a script to your project. Use the [testing guide](/automation/testing)
+Follow the [custom command guide](/scripting/custom-commands),
+[workflow guide](/scripting/workflows), or [hook guide](/scripting/lifecycle-hooks)
+to add a script to your project. Use the [testing guide](/scripting/testing)
 to check its behavior and report failures.

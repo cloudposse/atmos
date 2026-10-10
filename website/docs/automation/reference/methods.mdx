@@ -1,4 +1,5 @@
 ---
+slug: /scripting/reference/methods
 title: Methods
 sidebar_label: Methods
 sidebar_position: 6
@@ -8,9 +9,8 @@ description: Reference for the methods of strings, lists, dictionaries, sets, an
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Strings, lists, dictionaries, sets, and bytes values carry methods that you call with dot
-notation, such as `"a,b".split(",")` or `items.append(3)`. This page lists every method with its
-signature, behavior, and an example.
+Call methods with dot notation, such as `"a,b".split(",")` or `items.append(3)`.
+This page lists methods for strings, lists, dictionaries, sets, and bytes.
 </Intro>
 
 ## Conventions
@@ -22,7 +22,7 @@ arguments, and `dict.update`, which takes keyword arguments as new keys. A param
 Methods that change a value (`append`, `update`, `pop`, and the like) fail on a frozen value with a
 message such as `append: cannot append to frozen list`. Values loaded from another file, and values
 shared with `steps.parallel` tasks, are frozen. See
-[Execution Model](/automation/reference/execution-model#frozen-values). Changing a list or dictionary
+[Execution Model](/scripting/reference/execution-model#frozen-values). Changing a list or dictionary
 while a `for` loop iterates over it also fails, for example
 `append: cannot append to list during iteration`.
 
@@ -402,11 +402,11 @@ print(list(data.elems()))  # [97, 98, 99]
 
 Bytes values also support `len`, indexing and slicing (which return `bytes` values), `+`, and
 `in`. The `in` operator accepts an integer or a `bytes` value on its left. The `str()` function
-decodes bytes as UTF-8. See [Data Types](/automation/reference/data-types) for the full list of
+decodes bytes as UTF-8. See [Data Types](/scripting/reference/data-types) for the full list of
 operations.
 
 ## Where to go next
 
 For the universal functions such as `len`, `sorted`, and `enumerate`, see
-[Built-in Functions](/automation/reference/builtin-functions). For how frozen values restrict
-mutation, see [Execution Model](/automation/reference/execution-model#frozen-values).
+[Built-in Functions](/scripting/reference/builtin-functions). For how frozen values restrict
+mutation, see [Execution Model](/scripting/reference/execution-model#frozen-values).

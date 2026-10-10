@@ -170,7 +170,7 @@ vars:
 ```
 
 The evaluator includes Starlark builtins, `sum`, `round`, and the `json` module.
-See the [language overview](/automation/language) for the language's syntax and
+See the [language overview](/scripting/language) for the language's syntax and
 Starlark background.
 
 Return `None`, a boolean, string, finite number, list, or dictionary with string
@@ -201,7 +201,7 @@ can resolve dependencies that require authentication or execute commands.
 
 This configuration evaluator provides `ctx`, language builtins, and `json`.
 Automation modules such as `exec`, `fs`, and `steps`, and module loading with
-`load()`, are unavailable here. Use [automation scripts](/automation) for
+`load()`, are unavailable here. Use [automation scripts](/scripting) for
 commands, prompts, and other operations. Existing YAML functions referenced
 through `ctx` retain their own behavior, including any external reads they
 perform.

@@ -58,7 +58,7 @@ The step-level YAML [`outputs`](/steps/outputs) field also works with script ste
 It declares named results derived from the script's value, which later steps read
 as `.steps.<name>.outputs.<key>`. For a script returning a dictionary, an output
 template such as `{{ (fromJson .value).image }}` extracts its `image` field. See
-the [prompt and named-output example](/automation/workflows#collect-input-and-pass-results-between-steps).
+the [prompt and named-output example](/scripting/workflows#collect-input-and-pass-results-between-steps).
 
 ## Examples
 
@@ -161,4 +161,4 @@ Assigning `output` a second time fails with `cannot reassign global output`.
 
 - [`print`](/functions/automation/print) writes the default step value.
 - [`json.encode`](/functions/automation/json.encode) defines how non-string values are encoded.
-- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#step-output)
+- [Atmos Automation Language](/scripting/language) and the [script step](/steps/type/script#step-output)

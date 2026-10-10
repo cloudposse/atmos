@@ -1,28 +1,102 @@
 ---
-title: Automate with workflows
+title: Workflows
 sidebar_label: Workflows
-description: Combine Atmos commands, tools, and Atmos Automation Language programs into repeatable runbooks.
-slug: /automation/workflows
+description: Define named sequences of steps in YAML. Add scripts, pass results, and run workflows locally or in CI.
+slug: /scripting/workflows
 ---
 
 import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
 
 <Intro>
-Build a container image, push it to a registry, deploy it, and check the result
-through one workflow your team can run locally and in CI.
+A workflow is a named sequence of steps defined in YAML. Run it with
+`atmos workflow <name> -f <file>` for repeatable tasks such as validation,
+deployment, or maintenance.
 </Intro>
 
-A workflow runs a named sequence of steps from a YAML file. Use
-`atmos workflow <name> -f <file>` to run it. Workflows compose Atmos commands,
-external tools, scripts, and tests into a release process or operational runbook.
-Keep that sequence in your repository so developers and CI run the same process.
-Keep the automation logic in the workflow and its shared scripts; let your CI
-system decide when to trigger it and which approvals it requires.
-Write a step in the Atmos Automation Language when it needs conditions,
-calculations, or shared functions.
+Workflows combine Atmos commands, external tools, scripts, and tests. Run the
+same workflow locally or from CI; keep CI triggers and approvals in your CI
+system.
 
-## Define and run a workflow
+<span id="compose-the-rest-of-the-process" />
+
+## Workflow syntax
+
+Configure `workflows.base_path` in `atmos.yaml` to locate workflow files.
+Each file contains a `workflows` map, keyed by workflow name:
+
+```yaml
+workflows:
+  greet:
+    description: Print a greeting
+    steps:
+      - name: report
+        type: script
+        interpreter: starlark
+        script: ui.success("Hello from a workflow")
+```
+
+`steps` run in order by default. Each step's `type` selects a task; a Starlark
+script step uses `type: script` and `interpreter: starlark`. Add `parallel` or
+`matrix` groups for independent work. See the [workflow reference](/workflows)
+for file discovery and the [step reference](/steps) for execution settings.
+
+## Inputs and results
+
+A script reads its declared `env` values and returns a step value by assigning
+`output`. Later steps can reference `.steps.<name>.value`, or named results from
+an `outputs` mapping. Structured values cross step boundaries as JSON; decode
+them with `json.decode` in a receiving script.
+
+Prompt steps can collect values interactively. Set explicit defaults for CI;
+a prompt without a default fails when no terminal is available.
+
+## Test the workflow
+
+Group script assertions, command checks, and HTTP checks under a `type: test`
+step. Atmos displays their results and shows failing output, so the workflow can
+verify its own results as part of the runbook. A test group can also run in a
+custom command or lifecycle hook.
+
+See [testing automation](/scripting/testing) for a complete suite and checks
+written in Starlark.
+
+## Share program logic
+
+Move a reusable program into a `.star` file and include it in the script step.
+Use `load()` within that program to share functions with custom commands, hooks,
+or standalone CLI apps. File-backed imports resolve beside the script rather
+than whichever directory invoked the workflow.
+
+See [source files and includes](/steps/type/script#loading-files)
+for inline scripts, included step lists, and path resolution.
+
+## Run parallel functions
+
+Within a script, `steps.task` describes a function
+call and `steps.parallel` runs a collection with a concurrency limit. Task
+results retain input order, and output identifies the task that produced it.
+
+Each task can have its own retry and timeout policy. Retrying runs the entire
+function again; choose operations that are safe to repeat. See the
+[task API](/steps/type/script#parameterized-tasks-retries-and-timeouts)
+for parameterized calls and cancellation behavior.
+
+## Preview and execution environment
+
+Add `--dry-run` to the workflow command to validate the script syntax
+without executing its code. Embedded scripts in parallel and matrix children
+also remain unexecuted during a dry run.
+
+An embedded script runs inside Atmos. When a workflow uses containers, set
+`container: false` on its Starlark script steps. External commands started by a
+script still need their tools and credentials available in the execution environment.
+
+Continue with the [language overview](/scripting/language), or explore the
+[release-plan walkthrough](/steps/type/script#custom-components)
+for reusable functions and component-aware parallel work.
+
+## Example: calculate capacity {#define-and-run-a-workflow}
 
 With Atmos installed and on your `PATH`, save this configuration as `atmos.yaml`.
 It tells Atmos to look for workflow files in the `workflows` directory:
@@ -61,16 +135,16 @@ atmos workflow capacity -f capacity
 
 The program prints `Total workers: 12`. `capacity` here is a workflow name;
 it does not register an `atmos capacity` subcommand. Use
-[custom commands](/automation/custom-commands) when you want that interface.
+[custom commands](/scripting/custom-commands) to register an Atmos subcommand.
 
-## Collect input and pass results between steps
+## Example: collect input and pass results {#collect-input-and-pass-results-between-steps}
 
 Use [`input`](/steps/type/input), [`choose`](/steps/type/choose), and
 [`confirm`](/steps/type/confirm) steps to collect values through Atmos's native
 prompts. Each answer becomes a step value. Pass it into a script through `env`,
 then assign the script's `output` to provide a result for later steps.
 
-With the same `atmos.yaml` as above, save this as `workflows/release-inputs.yaml`:
+With `workflows.base_path: workflows` in `atmos.yaml`, save this as `workflows/release-inputs.yaml`:
 
 ```yaml title="workflows/release-inputs.yaml"
 workflows:
@@ -117,58 +191,3 @@ entry and decode it with `json.decode` in the next script. Status messages from
 Inside a script, ordinary function returns and `steps.parallel` results can be
 passed directly to other functions without JSON encoding. See [`output`](/functions/automation/output)
 for accepted values and stdout behavior.
-
-## Compose the rest of the process
-
-Add steps before or after the script to run commands, validate results, or report
-progress. Steps run in order by default. Use the available control steps to run
-independent work in parallel or across a matrix.
-
-The [workflow reference](/workflows) covers file discovery and manifest structure.
-The [step reference](/steps) covers step types and execution settings,
-including retries and timeouts.
-
-## Test the workflow
-
-Group script assertions, command checks, and HTTP checks under a `type: test`
-step. Atmos displays their results and shows failing output, so the workflow can
-verify its own results as part of the runbook. A test group can also run in a
-custom command or lifecycle hook.
-
-See [testing automation](/automation/testing) for a complete suite and checks
-written in the Atmos Automation Language.
-
-## Share program logic
-
-Move a reusable program into a `.star` file and include it in the script step.
-Use `load()` within that program to share functions with custom commands, hooks,
-or standalone CLI apps. File-backed imports resolve beside the script rather
-than whichever directory invoked the workflow.
-
-See [source files and includes](/steps/type/script#loading-files)
-for inline scripts, included step lists, and path resolution.
-
-## Run parallel functions
-
-Within an Atmos Automation Language program, `steps.task` describes a function
-call and `steps.parallel` runs a collection with a concurrency limit. Task
-results retain input order, and output identifies the task that produced it.
-
-Each task can have its own retry and timeout policy. Retrying runs the entire
-function again; choose operations that are safe to repeat. See the
-[task API](/steps/type/script#parameterized-tasks-retries-and-timeouts)
-for parameterized calls and cancellation behavior.
-
-## Preview and execution environment
-
-Run `atmos workflow capacity -f capacity --dry-run` to validate the script syntax
-without executing its code. Embedded scripts in parallel and matrix children
-also remain unexecuted during a dry run.
-
-An embedded script runs inside Atmos. When a workflow uses containers, set
-`container: false` on its Starlark script steps. External commands started by a
-script still need their tools and credentials available in the execution environment.
-
-Continue with the [language overview](/automation/language), or explore the
-[release-plan walkthrough](/steps/type/script#custom-components)
-for reusable functions and component-aware parallel work.

@@ -220,7 +220,7 @@ per-feature key (`ci.comments.enabled`, `ci.checks.enabled`, and so on) only whe
 
 ## Reporting from scripts
 
-Scripts written in the [Atmos Automation Language](/automation/language) report into CI through the [`ci` module](/functions/automation/ci). The module writes job summaries, step outputs, environment exports, annotations, pull request comments, commit statuses, log groups, and SARIF uploads, and the same `ci.*.enabled` flags that gate Atmos's native reporting gate these calls. When no CI provider is detected, the calls render on your terminal instead. Report templates for scripts are named in the call itself, with no configured default; see [templates](/cli/configuration/ci/templates#script-report-templates).
+Scripts written in the [Atmos Automation Language](/scripting/language) report into CI through the [`ci` module](/functions/automation/ci). The module writes job summaries, step outputs, environment exports, annotations, pull request comments, commit statuses, log groups, and SARIF uploads, and the same `ci.*.enabled` flags that gate Atmos's native reporting gate these calls. When no CI provider is detected, the calls render on your terminal instead. Report templates for scripts are named in the call itself, with no configured default; see [templates](/cli/configuration/ci/templates#script-report-templates).
 
 ## Related
 
