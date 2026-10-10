@@ -222,15 +222,15 @@ var journal = []Entry{
 	{
 		// toolchain.install is a brand-new key (PR #3346), journaled the same way as
 		// components.terraform.init.mode above: it governs behavior Atmos already had a fixed
-		// answer for (only explicit dependencies.tools were installed; component runs never read
-		// .tool-versions), just not a configurable one. A project pinned before this date keeps
-		// that behavior with no explicit toolchain.install: declared needed.
+		// answer for (only explicit dependencies.tools were installed for component runs),
+		// just not a configurable one. A project pinned before this date keeps that download
+		// policy. Installed project selections remain the baseline under every policy.
 		Date:        "2026-10-09",
 		Key:         "toolchain.install",
 		Kind:        KindValue,
 		Old:         "declared",
 		New:         "auto",
-		Description: "Component runs install their own pinned command from .tool-versions and use other already-installed listed tools; pinned projects keep using only declared dependencies.",
+		Description: "Component runs install their own pinned command from .tool-versions; pinned projects install only explicit dependencies. Every command inherits installed project selections under every policy.",
 		Ref:         "https://github.com/cloudposse/atmos/pull/3346",
 	},
 }

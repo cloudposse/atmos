@@ -12,6 +12,9 @@ import (
 // toolchain.install policy decides how the project's .tool-versions manifest is
 // applied to it (see manifestUseFor).
 type defaultsRequest struct {
+	// installedOnly prepares the shared command baseline without downloading tools,
+	// regardless of the policy used later by a scoped execution environment.
+	installedOnly bool
 	// workflow marks a workflow run. Workflows declare every manifest tool, so
 	// they install all of it under the declared and auto policies.
 	workflow bool
@@ -24,11 +27,9 @@ type defaultsRequest struct {
 type manifestUse int
 
 const (
-	// The manifestIgnored use does not read the manifest at all.
-	manifestIgnored manifestUse = iota
 	// The manifestPresentOnly use adds manifest tools that are already installed
 	// and never installs any.
-	manifestPresentOnly
+	manifestPresentOnly manifestUse = iota
 	// The manifestSelected use installs the manifest tools the run selects and
 	// adds the other manifest tools only when they are already installed.
 	manifestSelected
@@ -55,7 +56,7 @@ type toolPlan struct {
 // manifestUseFor maps the install policy and run kind to the manifest handling.
 //
 //	never:    manifest tools are PATH-only; nothing is installed.
-//	declared: workflows install every manifest tool; every other run ignores the manifest.
+//	declared: workflows install every manifest tool; other runs use installed manifest tools.
 //	auto:     workflows install every manifest tool; other runs install what they select.
 //	always:   every run installs every manifest tool.
 func manifestUseFor(policy schema.ToolchainInstall, workflow bool) manifestUse {
@@ -68,13 +69,23 @@ func manifestUseFor(policy schema.ToolchainInstall, workflow bool) manifestUse {
 		if workflow {
 			return manifestInstallAll
 		}
-		return manifestIgnored
+		return manifestPresentOnly
 	default:
 		if workflow {
 			return manifestInstallAll
 		}
 		return manifestSelected
 	}
+}
+
+// ForInstalledProjectTools builds the baseline inherited by every Atmos command.
+// It exposes only installed versions selected by the project manifest, regardless
+// of the installation policy. Scoped environments overlay explicit dependencies
+// and apply their installation policy separately.
+func ForInstalledProjectTools(atmosConfig *schema.AtmosConfiguration, opts ...envOption) (*ToolchainEnvironment, error) {
+	defer perf.Track(atmosConfig, "dependencies.ForInstalledProjectTools")()
+
+	return newEnvironmentWithDefaults(atmosConfig, nil, defaultsRequest{installedOnly: true}, opts...)
 }
 
 // newEnvironmentWithDefaults overlays resolved explicit dependencies on the
@@ -94,13 +105,12 @@ func newEnvironmentWithDefaults(
 		return nil, err
 	}
 	use := manifestUseFor(policy, req.workflow)
-
-	var manifest map[string]string
-	if use != manifestIgnored {
-		manifest, err = LoadToolVersionsDependencies(atmosConfig)
-		if err != nil {
-			return nil, err
-		}
+	if req.installedOnly {
+		use = manifestPresentOnly
+	}
+	manifest, err := LoadToolVersionsDependencies(atmosConfig)
+	if err != nil {
+		return nil, err
 	}
 
 	cfg := &envConfig{}

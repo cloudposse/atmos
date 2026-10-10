@@ -495,10 +495,15 @@ var RootCmd = &cobra.Command{
 			initcmd.SetAtmosConfig(&tmpConfig)
 		}
 
-		// Proxy links are available to every child process launched by Atmos.
+		// Installed project tools and proxy links are available to every child process launched by Atmos.
 		// Keep this at the shared command boundary so built-in commands,
 		// workflows, hooks, and custom commands inherit the same PATH/context.
 		if err == nil {
+			if toolsErr := applyInstalledProjectTools(&tmpConfig); toolsErr != nil {
+				// Keep diagnostic and toolchain repair commands usable. Execution
+				// environments report manifest errors after applying explicit overrides.
+				log.Debug("Could not prepare installed project tools", "error", toolsErr)
+			}
 			if proxyErr := toolchain.ApplyProxyEnvironment(&tmpConfig); proxyErr != nil {
 				errUtils.CheckErrorPrintAndExit(proxyErr, "Failed to prepare toolchain proxies", "")
 			}

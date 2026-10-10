@@ -117,15 +117,15 @@ toolchain:
       when they are already installed. A missing `dependencies.tools` entry is an error with a hint to run
       `atmos toolchain install`. A missing `.tool-versions` tool is skipped, and the system `PATH` is used.
     - `declared`: installs only explicit `dependencies.tools`. Workflows also install every
-      `.tool-versions` tool, because a workflow can call any project tool. Components, custom commands, and
-      hooks do not read `.tool-versions` at all.
+      `.tool-versions` tool, because a workflow can call any project tool. Other runs inherit installed
+      project selections without installing missing defaults.
     - `auto` (default): `declared`, plus the run's own executable (and `helm` for Helmfile components) when
       `.tool-versions` pins it. Other `.tool-versions` tools join `PATH` only when they are already installed.
     - `always`: installs every `.tool-versions` tool for every run: components, custom commands, hooks, and
       workflows.
 
     Default: `auto`. Projects pinned to an [edition](/cli/configuration/edition) dated before
-    2026-10-09 get `declared`, which keeps the previous behavior. Precedence, highest first: the
+    2026-10-09 get `declared`, which preserves their automatic download policy. Precedence, highest first: the
     `ATMOS_TOOLCHAIN_INSTALL` environment variable, `toolchain.install` in `atmos.yaml`, then the
     edition-aware default. An unknown value fails when the configuration loads and lists the valid values.
     See [Install Policy](#install) for what each value installs per run type.
@@ -151,12 +151,11 @@ what each value installs for each kind of run:
 | Custom command or hook | Nothing | Explicit `dependencies.tools` | Explicit `dependencies.tools` | Explicit `dependencies.tools` and every `.tool-versions` tool |
 | Workflow | Nothing | Explicit `dependencies.tools` and every `.tool-versions` tool | Explicit `dependencies.tools` and every `.tool-versions` tool | Explicit `dependencies.tools` and every `.tool-versions` tool |
 
-Beyond what it installs, each policy treats the rest of `.tool-versions` differently:
-
-- `never` puts `.tool-versions` tools on `PATH` when they are already installed and skips the rest.
-  A missing explicit `dependencies.tools` entry is an error that points to `atmos toolchain install`.
-- `declared` does not read `.tool-versions` for components, custom commands, and hooks.
-- `auto` puts the other `.tool-versions` tools on `PATH` only when they are already installed.
+Every Atmos command inherits already-installed versions selected by `.tool-versions` on `PATH`,
+under every policy. Cached tools absent from the file, and other cached versions, are not added.
+Explicit `dependencies.tools` override this baseline. Shared command startup never installs tools;
+the table above controls downloads when a component, custom command, hook, or workflow runs.
+Under `never`, a missing explicit dependency is an error that points to `atmos toolchain install`.
 
 Entries that Atmos cannot use (`system`, `ref:` and `path:` versions, unresolvable names) are skipped
 under every policy, explicit `dependencies.tools` always override `.tool-versions`, and conflicting

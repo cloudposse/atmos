@@ -2,6 +2,8 @@
 
 **Date:** 2026-10-09
 
+> **2026-10-10 update:** The later [shared command baseline fix](2026-10-10-shared-project-tool-path.md) separates PATH selection from downloads. It supersedes the `declared` behavior recorded below: all commands now inherit installed project selections under every policy.
+
 ## Summary
 
 Every command and component type now uses `.tool-versions` as a baseline. Components install their

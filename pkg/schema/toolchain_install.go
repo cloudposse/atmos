@@ -11,8 +11,8 @@ const (
 	// `.tool-versions` tools are used only when they are already installed.
 	ToolchainInstallNever ToolchainInstall = "never"
 	// ToolchainInstallDeclared installs only explicit `dependencies.tools`. Workflows
-	// also install every `.tool-versions` tool. Components, custom commands, and hooks
-	// do not read `.tool-versions` at all.
+	// also install every `.tool-versions` tool. Other commands inherit already-installed
+	// versions selected by `.tool-versions` without installing missing defaults.
 	ToolchainInstallDeclared ToolchainInstall = "declared"
 	// ToolchainInstallAuto installs explicit `dependencies.tools` plus the run's own
 	// executable from `.tool-versions` when it is pinned there. Other `.tool-versions`

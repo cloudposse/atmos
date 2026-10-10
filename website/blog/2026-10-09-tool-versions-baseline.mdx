@@ -18,7 +18,8 @@ Fixing that naively would create new problems. Many `.tool-versions` files are s
 The project's `.tool-versions` is now a baseline for every command and [component type](/stacks/dependencies#project-defaults), with installs limited to what a run actually executes:
 
 - **Components** install their own executable when the file pins it — `terraform`, `tofu` when the component sets `command: tofu`, `helmfile` (plus `helm`), `packer`, or `ansible`. Other tools in the file are added to `PATH` only if they're already installed. Nothing else is downloaded during a component run, including read-only commands like `describe`, `plan --dry-run`, and `terraform version`.
-- **Custom commands and hooks** put already-installed tools from the file on `PATH` and install only their own `dependencies.tools`.
+- **Every Atmos command** inherits already-installed versions selected by the file on `PATH`. Cached tools absent from the file, and other cached versions, are not added.
+- **Custom commands and hooks** install only their own `dependencies.tools`.
 - **Workflows** keep their existing behavior: they install every listed tool that is missing before the first step.
 
 How much Atmos installs on its own is a setting, so you can make it more or less eager (see [Control What Atmos Installs](#control-what-atmos-installs)).
@@ -46,11 +47,11 @@ components:
 
 Running `legacy-vpc` uses 1.8.5 and leaves `.tool-versions` untouched. If your configuration points at a different manifest, [`toolchain.file_path`](/cli/configuration/toolchain) is now honored everywhere.
 
-If a component previously relied on a binary from `PATH` while `.tool-versions` pinned a different version, it now runs the pinned version. Remove or update the pin, or set `dependencies.tools` on the component, to keep the old binary. Or restore the previous behavior for the whole project with `toolchain.install: declared`, described next.
+If a component previously relied on a binary from `PATH` while `.tool-versions` pinned a different version, it now runs the pinned version. Remove or update the pin, or set `dependencies.tools` on the component, to keep the old binary.
 
 ## Control What Atmos Installs
 
-The new [`toolchain.install`](/cli/configuration/toolchain#install) setting decides which tools Atmos installs on its own:
+The new [`toolchain.install`](/cli/configuration/toolchain#install) setting controls downloads separately from version selection. Every command inherits installed project selections under every policy; explicit `dependencies.tools` override them. The setting decides which missing tools Atmos installs on its own:
 
 ```yaml title="atmos.yaml"
 toolchain:
@@ -58,11 +59,11 @@ toolchain:
 ```
 
 - `never` installs nothing. Tools are used only when they are already installed, and a missing `dependencies.tools` entry fails with a hint to run `atmos toolchain install`. Use it on air-gapped runners or when an image bakes in every tool.
-- `declared` installs only explicit `dependencies.tools` (and, for workflows, every `.tool-versions` tool). Components, custom commands, and hooks ignore `.tool-versions`, exactly as before this change.
+- `declared` installs only explicit `dependencies.tools` (and, for workflows, every `.tool-versions` tool). Other runs use already-installed project selections without installing missing defaults.
 - `auto` is the default and the behavior described above.
 - `always` installs every tool in `.tool-versions` for every run, including custom commands and hooks.
 
-Projects pinned to an [edition](/cli/configuration/edition) dated before 2026-10-09 keep `declared` automatically, so upgrading Atmos does not change what an existing pinned project downloads or runs. Set `ATMOS_TOOLCHAIN_INSTALL` to override the setting for a single run.
+Projects pinned to an [edition](/cli/configuration/edition) dated before 2026-10-09 keep `declared` automatically, preserving their automatic download policy. Installed project selections still supply the baseline under every policy. Set `ATMOS_TOOLCHAIN_INSTALL` to override the setting for a single run.
 
 ## Get Involved
 

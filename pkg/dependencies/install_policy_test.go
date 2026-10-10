@@ -96,14 +96,14 @@ func TestInstallPolicyManifestHandling(t *testing.T) {
 			},
 		},
 		{
-			name:   "declared ignores the manifest except for workflows",
+			name:   "declared keeps installed manifest tools and installs workflow defaults",
 			policy: schema.ToolchainInstallDeclared,
 			want: map[runKind]outcome{
-				runComponent:    {},
-				runSections:     {},
+				runComponent:    {path: jqOnly},
+				runSections:     {path: jqOnly},
 				runWorkflow:     {install: allManifestTools, path: allManifestTools},
-				runCommand:      {},
-				runDependencies: {},
+				runCommand:      {path: jqOnly},
+				runDependencies: {path: jqOnly},
 			},
 		},
 		{
@@ -298,82 +298,45 @@ func TestInstallPolicyNeverResolvesConstraintsFromInstalledVersions(t *testing.T
 	})
 }
 
-func TestInstallPolicyDeclaredDoesNotReadTheManifest(t *testing.T) {
-	// A manifest path that is a directory cannot be read. Policies that consult
-	// the manifest fail; declared never opens it for non-workflow runs.
-	tests := []struct {
-		policy  schema.ToolchainInstall
-		kind    runKind
-		wantErr bool
-	}{
-		{policy: schema.ToolchainInstallDeclared, kind: runComponent},
-		{policy: schema.ToolchainInstallDeclared, kind: runSections},
-		{policy: schema.ToolchainInstallDeclared, kind: runCommand},
-		{policy: schema.ToolchainInstallDeclared, kind: runDependencies},
-		{policy: schema.ToolchainInstallDeclared, kind: runWorkflow, wantErr: true},
-		{policy: schema.ToolchainInstallAuto, kind: runComponent, wantErr: true},
-		{policy: schema.ToolchainInstallNever, kind: runCommand, wantErr: true},
-		{policy: schema.ToolchainInstallAlways, kind: runDependencies, wantErr: true},
-	}
-	for _, tt := range tests {
-		t.Run(string(tt.policy)+"/"+string(tt.kind), func(t *testing.T) {
-			config, root := defaultsFixture(t, "")
-			config.Toolchain.Install = tt.policy
-			manifest := filepath.Join(root, ".tool-versions")
-			require.NoError(t, os.Remove(manifest))
-			require.NoError(t, os.Mkdir(manifest, 0o755))
-			_, option := recordingProvisioner(t, config)
+func TestInstallPolicyAlwaysReadsTheManifest(t *testing.T) {
+	// Installation policy never hides an unreadable project baseline.
+	for _, policy := range schema.ToolchainInstallValues {
+		for _, kind := range allRunKinds {
+			t.Run(string(policy)+"/"+string(kind), func(t *testing.T) {
+				config, root := defaultsFixture(t, "")
+				config.Toolchain.Install = policy
+				manifest := filepath.Join(root, ".tool-versions")
+				require.NoError(t, os.Remove(manifest))
+				require.NoError(t, os.Mkdir(manifest, 0o755))
+				_, option := recordingProvisioner(t, config)
 
-			_, err := buildFor(config, tt.kind, nil, option)
+				_, err := buildFor(config, kind, nil, option)
 
-			if tt.wantErr {
 				require.ErrorContains(t, err, "failed to load .tool-versions")
-				return
-			}
-			require.NoError(t, err)
-		})
+			})
+		}
 	}
 }
 
-func TestInstallPolicyDeclaredLeavesInstalledManifestToolsOffThePath(t *testing.T) {
-	// The manifest's terraform is installed, and a different terraform sits on the
-	// system PATH. Under declared the manifest is invisible, so the system binary wins.
-	// Under auto, always, and never the manifest's installed terraform wins.
+func TestInstallPolicyAlwaysSelectsInstalledManifestTools(t *testing.T) {
+	// Installed project selections win over system PATH under every download policy.
 	decoyDir := t.TempDir()
 	decoyName := "terraform"
 	if runtime.GOOS == "windows" {
 		decoyName += ".exe"
 	}
-	decoy := filepath.Join(decoyDir, decoyName)
-	require.NoError(t, os.WriteFile(decoy, []byte("decoy"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(decoyDir, decoyName), []byte("decoy"), 0o755))
 
-	tests := []struct {
-		policy      schema.ToolchainInstall
-		wantDecoy   bool
-		wantEnvVars bool
-	}{
-		{policy: schema.ToolchainInstallDeclared, wantDecoy: true},
-		{policy: schema.ToolchainInstallNever, wantEnvVars: true},
-		{policy: schema.ToolchainInstallAuto, wantEnvVars: true},
-		{policy: schema.ToolchainInstallAlways, wantEnvVars: true},
-	}
-	for _, tt := range tests {
-		t.Run(string(tt.policy), func(t *testing.T) {
+	for _, policy := range schema.ToolchainInstallValues {
+		t.Run(string(policy), func(t *testing.T) {
 			config, _ := defaultsFixture(t, "hashicorp/terraform 1.15.9\n")
-			config.Toolchain.Install = tt.policy
+			config.Toolchain.Install = policy
 			stub := installedDefaultBinary(t, config, "hashicorp", "terraform", "1.15.9")
 			t.Setenv("PATH", decoyDir)
 
 			env, err := ForComponent(config, "terraform", nil, nil)
 			require.NoError(t, err)
 
-			if tt.wantDecoy {
-				assert.Equal(t, decoy, env.Resolve("terraform"))
-				assert.Empty(t, env.PATH())
-				assert.Nil(t, env.EnvVars())
-				assert.Empty(t, env.ToolchainDirs())
-				return
-			}
 			assert.Equal(t, stub, env.Resolve("terraform"))
 			assert.Equal(t, []string{filepath.Dir(stub)}, env.ToolchainDirs())
 			assert.NotNil(t, env.EnvVars())
