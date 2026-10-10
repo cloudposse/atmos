@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -100,6 +103,11 @@ type PIMClient interface {
 
 	// GetRequestStatus returns the current provisioning status of a request by resource name.
 	GetRequestStatus(ctx context.Context, requestName string) (string, error)
+
+	// PolicyMaxDuration returns the maximum activation duration allowed by the role's
+	// PIM policy at the client's scope. found is false when no policy assignment or
+	// activation expiration rule is configured for the role.
+	PolicyMaxDuration(ctx context.Context, roleDefinitionID string) (maxDuration time.Duration, found bool, err error)
 }
 
 // httpDoer is the minimal HTTP surface the ARM client depends on, so tests can inject a
@@ -286,7 +294,11 @@ func (c *armPIMClient) do(ctx context.Context, method, path, filter string, body
 	if err != nil {
 		return nil, err
 	}
+	return c.doRequest(req, path)
+}
 
+// doRequest performs a prepared HTTP request and returns the response body on 2xx.
+func (c *armPIMClient) doRequest(req *http.Request, displayPath string) ([]byte, error) {
 	resp, err := c.doer.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrAzurePIMRequestFailed, err)
@@ -299,9 +311,25 @@ func (c *armPIMClient) do(ctx context.Context, method, path, filter string, body
 	}
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("%w: %s %s returned %d: %s", errUtils.ErrAzurePIMRequestFailed, method, path, resp.StatusCode, snippet(raw))
+		return nil, fmt.Errorf("%w: %s %s returned %d: %s", errUtils.ErrAzurePIMRequestFailed, req.Method, displayPath, resp.StatusCode, snippet(raw))
 	}
 	return raw, nil
+}
+
+// authorizeRequest enforces that the request targets the expected ARM origin and attaches credentials.
+func (c *armPIMClient) authorizeRequest(req *http.Request) error {
+	// Fail closed before attaching the bearer token: the scope or continuation URL can
+	// redirect the request to an attacker-controlled host (URL user-information injection).
+	// Refuse to send credentials anywhere other than the intended ARM origin.
+	if req.URL.Scheme != c.expectedScheme || req.URL.Host != c.expectedHost || req.URL.User != nil {
+		return fmt.Errorf("%w: refusing to send credentials to %q://%q (expected %q://%q)",
+			errUtils.ErrAzurePIMInvalidScope, req.URL.Scheme, req.URL.Host, c.expectedScheme, c.expectedHost)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	return nil
 }
 
 // newRequest builds the ARM request, enforces the credential-bearing request stays on the
@@ -328,19 +356,55 @@ func (c *armPIMClient) newRequest(ctx context.Context, method, path, filter stri
 		return nil, fmt.Errorf("%w: building request: %w", errUtils.ErrAzurePIMRequestFailed, err)
 	}
 
-	// Fail closed before attaching the bearer token: the scope is interpolated into the URL,
-	// so a crafted value (for example `@attacker.example/...`) can demote the ARM host to URL
-	// user-information and redirect the request to an attacker-controlled host. Refuse to send
-	// credentials anywhere other than the intended ARM origin.
-	if req.URL.Scheme != c.expectedScheme || req.URL.Host != c.expectedHost || req.URL.User != nil {
-		return nil, fmt.Errorf("%w: refusing to send credentials to %q://%q (expected %q://%q)",
-			errUtils.ErrAzurePIMInvalidScope, req.URL.Scheme, req.URL.Host, c.expectedScheme, c.expectedHost)
+	if err := c.authorizeRequest(req); err != nil {
+		return nil, err
+	}
+	return req, nil
+}
+
+// newContinuationRequest builds an ARM request for a pagination continuation link (nextLink).
+// It preserves continuation query parameters, resolves relative URLs against baseURL,
+// ensures api-version is present, and enforces the same-origin check before attaching credentials.
+func (c *armPIMClient) newContinuationRequest(ctx context.Context, continuationURL string) (*http.Request, error) {
+	parsedURL, err := url.Parse(continuationURL)
+	if err != nil {
+		return nil, fmt.Errorf("%w: parsing continuation URL %q: %w", errUtils.ErrAzurePIMRequestFailed, continuationURL, err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+c.token)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	if !parsedURL.IsAbs() {
+		baseURL, err := url.Parse(c.baseURL)
+		if err != nil {
+			return nil, fmt.Errorf("%w: parsing base URL %q: %w", errUtils.ErrAzurePIMRequestFailed, c.baseURL, err)
+		}
+		parsedURL = baseURL.ResolveReference(parsedURL)
+	}
+
+	if parsedURL.Query().Get("api-version") == "" && c.apiVersion != "" {
+		if parsedURL.RawQuery == "" {
+			parsedURL.RawQuery = "api-version=" + url.QueryEscape(c.apiVersion)
+		} else {
+			parsedURL.RawQuery += "&api-version=" + url.QueryEscape(c.apiVersion)
+		}
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsedURL.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("%w: building continuation request: %w", errUtils.ErrAzurePIMRequestFailed, err)
+	}
+
+	if err := c.authorizeRequest(req); err != nil {
+		return nil, err
+	}
 	return req, nil
+}
+
+// doContinuation performs a GET request against an ARM pagination continuation link.
+func (c *armPIMClient) doContinuation(ctx context.Context, continuationURL string) ([]byte, error) {
+	req, err := c.newContinuationRequest(ctx, continuationURL)
+	if err != nil {
+		return nil, err
+	}
+	return c.doRequest(req, continuationURL)
 }
 
 // snippet trims an ARM error body to a short, log-safe excerpt.
@@ -396,4 +460,298 @@ func goDurationToISO8601(d time.Duration) string {
 		fmt.Fprintf(&sb, "%dS", seconds)
 	}
 	return sb.String()
+}
+
+// armPolicyAssignmentEnvelope is the ARM list response shape for roleManagementPolicyAssignments.
+type armPolicyAssignmentEnvelope struct {
+	Value    []armPolicyAssignmentItem `json:"value"`
+	NextLink string                    `json:"nextLink"`
+}
+
+// armPolicyAssignmentItem captures a roleManagementPolicyAssignment resource.
+type armPolicyAssignmentItem struct {
+	Name       string                        `json:"name"`
+	Properties armPolicyAssignmentProperties `json:"properties"`
+}
+
+// armPolicyAssignmentProperties captures the assignment's role definition and rules.
+type armPolicyAssignmentProperties struct {
+	RoleDefinitionID string                    `json:"roleDefinitionId"`
+	EffectiveRules   []armPolicyAssignmentRule `json:"effectiveRules"`
+	Rules            []armPolicyAssignmentRule `json:"rules"`
+}
+
+// armPolicyAssignmentRule captures rule properties across policy rule types.
+type armPolicyAssignmentRule struct {
+	ID              string                        `json:"id"`
+	RuleType        string                        `json:"ruleType"`
+	MaximumDuration string                        `json:"maximumDuration"`
+	Target          armPolicyAssignmentRuleTarget `json:"target"`
+}
+
+// armPolicyAssignmentRuleTarget captures target metadata (e.g. caller: EndUser, level: Assignment).
+type armPolicyAssignmentRuleTarget struct {
+	Caller string `json:"caller"`
+	Level  string `json:"level"`
+}
+
+// isActivationExpirationRule reports whether a policy rule governs the maximum duration
+// of an EndUser self-activation assignment.
+func isActivationExpirationRule(r *armPolicyAssignmentRule) bool {
+	if !strings.EqualFold(r.RuleType, "RoleManagementPolicyExpirationRule") {
+		return false
+	}
+	if r.MaximumDuration == "" {
+		return false
+	}
+
+	caller := strings.TrimSpace(r.Target.Caller)
+	level := strings.TrimSpace(r.Target.Level)
+	hasCaller := caller != ""
+	hasLevel := level != ""
+
+	if hasCaller && hasLevel {
+		return strings.EqualFold(caller, "EndUser") && strings.EqualFold(level, "Assignment")
+	}
+	if hasCaller {
+		return strings.EqualFold(caller, "EndUser")
+	}
+	if hasLevel {
+		return strings.EqualFold(level, "Assignment")
+	}
+
+	// Target is absent; fallback to ID matching.
+	if strings.EqualFold(r.ID, "Expiration_EndUser_Assignment") || strings.Contains(strings.ToLower(r.ID), "enduser") {
+		return true
+	}
+	return false
+}
+
+// PolicyMaxDuration implements PIMClient.
+func (c *armPIMClient) PolicyMaxDuration(ctx context.Context, roleDefinitionID string) (time.Duration, bool, error) {
+	defer perf.Track(nil, "azure.armPIMClient.PolicyMaxDuration")()
+
+	assignments, err := c.listPolicyAssignments(ctx)
+	if err != nil {
+		return 0, false, err
+	}
+	for i := range assignments {
+		if !sameRoleDefinition(assignments[i].Properties.RoleDefinitionID, roleDefinitionID) {
+			continue
+		}
+		rules := assignments[i].Properties.EffectiveRules
+		if len(rules) == 0 {
+			rules = assignments[i].Properties.Rules
+		}
+		for j := range rules {
+			if isActivationExpirationRule(&rules[j]) {
+				d, err := parseISO8601Duration(rules[j].MaximumDuration)
+				if err != nil {
+					return 0, false, fmt.Errorf("%w: parsing policy maximumDuration %q: %w", errUtils.ErrAzurePIMRequestFailed, rules[j].MaximumDuration, err)
+				}
+				return d, true, nil
+			}
+		}
+	}
+	return 0, false, nil
+}
+
+// listPolicyAssignments retrieves role management policy assignments for the client's scope,
+// following ARM continuation links to combine assignment values from every page before returning.
+func (c *armPIMClient) listPolicyAssignments(ctx context.Context) ([]armPolicyAssignmentItem, error) {
+	path := fmt.Sprintf("%s/providers/Microsoft.Authorization/roleManagementPolicyAssignments", c.scope)
+	raw, err := c.do(ctx, http.MethodGet, path, "", nil)
+	if err != nil {
+		return nil, err
+	}
+	var env armPolicyAssignmentEnvelope
+	if err := json.Unmarshal(raw, &env); err != nil {
+		return nil, fmt.Errorf("%w: decoding roleManagementPolicyAssignments: %w", errUtils.ErrAzurePIMRequestFailed, err)
+	}
+
+	items := env.Value
+	nextLink := strings.TrimSpace(env.NextLink)
+	visited := map[string]bool{}
+
+	for nextLink != "" {
+		if visited[nextLink] {
+			return nil, fmt.Errorf("%w: cyclic continuation link %q in roleManagementPolicyAssignments", errUtils.ErrAzurePIMRequestFailed, nextLink)
+		}
+		visited[nextLink] = true
+
+		rawPage, err := c.doContinuation(ctx, nextLink)
+		if err != nil {
+			return nil, err
+		}
+		var pageEnv armPolicyAssignmentEnvelope
+		if err := json.Unmarshal(rawPage, &pageEnv); err != nil {
+			return nil, fmt.Errorf("%w: decoding roleManagementPolicyAssignments page: %w", errUtils.ErrAzurePIMRequestFailed, err)
+		}
+		items = append(items, pageEnv.Value...)
+		nextLink = strings.TrimSpace(pageEnv.NextLink)
+	}
+
+	return items, nil
+}
+
+// addUnit converts val of the given unit into nanoseconds and accumulates it into total,
+// guarding against values that exceed or overflow the time.Duration range.
+func addUnit(total time.Duration, val float64, unit time.Duration) (time.Duration, error) {
+	if val < 0 || math.IsNaN(val) || math.IsInf(val, 0) {
+		return 0, errors.New("invalid ISO-8601 duration: value must be non-negative")
+	}
+	ns := val * float64(unit)
+	if ns < 0 || ns > float64(math.MaxInt64) || float64(total)+ns > float64(math.MaxInt64) {
+		return 0, errors.New("ISO-8601 duration overflows time.Duration")
+	}
+	added := time.Duration(ns)
+	if added < 0 || math.MaxInt64-added < total {
+		return 0, errors.New("ISO-8601 duration overflows time.Duration")
+	}
+	return total + added, nil
+}
+
+// parseISO8601Duration parses an ISO-8601 duration string into a time.Duration.
+// It supports day (D), hour (H), minute (M), and second (S) designators, as well as
+// week (W), month (M), and year (Y).
+func parseISO8601Duration(s string) (time.Duration, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, errors.New("empty ISO-8601 duration")
+	}
+	if !strings.HasPrefix(s, "P") && !strings.HasPrefix(s, "p") {
+		return 0, fmt.Errorf("invalid ISO-8601 duration %q: missing 'P' prefix", s)
+	}
+	s = s[1:]
+	if s == "" {
+		return 0, errors.New("invalid ISO-8601 duration: empty after 'P'")
+	}
+
+	var datePart, timePart string
+	tIdx := strings.IndexAny(s, "Tt")
+	if tIdx >= 0 {
+		datePart = s[:tIdx]
+		timePart = s[tIdx+1:]
+		if timePart == "" && datePart == "" {
+			return 0, errors.New("invalid ISO-8601 duration: no designators found")
+		}
+	} else {
+		datePart = s
+	}
+
+	var total time.Duration
+	foundDesignator := false
+
+	if datePart != "" {
+		cur := ""
+		for _, r := range datePart {
+			switch {
+			case (r >= '0' && r <= '9') || r == '.':
+				cur += string(r)
+			case r == 'Y' || r == 'y':
+				val, err := strconv.ParseFloat(cur, 64)
+				if err != nil || cur == "" {
+					return 0, fmt.Errorf("invalid ISO-8601 duration: bad year in %q", datePart)
+				}
+				total, err = addUnit(total, val, 365*24*time.Hour)
+				if err != nil {
+					return 0, err
+				}
+				cur = ""
+				foundDesignator = true
+			case r == 'M' || r == 'm':
+				val, err := strconv.ParseFloat(cur, 64)
+				if err != nil || cur == "" {
+					return 0, fmt.Errorf("invalid ISO-8601 duration: bad month in %q", datePart)
+				}
+				total, err = addUnit(total, val, 30*24*time.Hour)
+				if err != nil {
+					return 0, err
+				}
+				cur = ""
+				foundDesignator = true
+			case r == 'W' || r == 'w':
+				val, err := strconv.ParseFloat(cur, 64)
+				if err != nil || cur == "" {
+					return 0, fmt.Errorf("invalid ISO-8601 duration: bad week in %q", datePart)
+				}
+				total, err = addUnit(total, val, 7*24*time.Hour)
+				if err != nil {
+					return 0, err
+				}
+				cur = ""
+				foundDesignator = true
+			case r == 'D' || r == 'd':
+				val, err := strconv.ParseFloat(cur, 64)
+				if err != nil || cur == "" {
+					return 0, fmt.Errorf("invalid ISO-8601 duration: bad day in %q", datePart)
+				}
+				total, err = addUnit(total, val, 24*time.Hour)
+				if err != nil {
+					return 0, err
+				}
+				cur = ""
+				foundDesignator = true
+			default:
+				return 0, fmt.Errorf("invalid ISO-8601 duration character %q in date part", r)
+			}
+		}
+		if cur != "" {
+			return 0, fmt.Errorf("invalid ISO-8601 duration: unparsed number %q in date part", cur)
+		}
+	}
+
+	if timePart != "" {
+		cur := ""
+		for _, r := range timePart {
+			switch {
+			case (r >= '0' && r <= '9') || r == '.':
+				cur += string(r)
+			case r == 'H' || r == 'h':
+				val, err := strconv.ParseFloat(cur, 64)
+				if err != nil || cur == "" {
+					return 0, fmt.Errorf("invalid ISO-8601 duration: bad hour in %q", timePart)
+				}
+				total, err = addUnit(total, val, time.Hour)
+				if err != nil {
+					return 0, err
+				}
+				cur = ""
+				foundDesignator = true
+			case r == 'M' || r == 'm':
+				val, err := strconv.ParseFloat(cur, 64)
+				if err != nil || cur == "" {
+					return 0, fmt.Errorf("invalid ISO-8601 duration: bad minute in %q", timePart)
+				}
+				total, err = addUnit(total, val, time.Minute)
+				if err != nil {
+					return 0, err
+				}
+				cur = ""
+				foundDesignator = true
+			case r == 'S' || r == 's':
+				val, err := strconv.ParseFloat(cur, 64)
+				if err != nil || cur == "" {
+					return 0, fmt.Errorf("invalid ISO-8601 duration: bad second in %q", timePart)
+				}
+				total, err = addUnit(total, val, time.Second)
+				if err != nil {
+					return 0, err
+				}
+				cur = ""
+				foundDesignator = true
+			default:
+				return 0, fmt.Errorf("invalid ISO-8601 duration character %q in time part", r)
+			}
+		}
+		if cur != "" {
+			return 0, fmt.Errorf("invalid ISO-8601 duration: unparsed number %q in time part", cur)
+		}
+	}
+
+	if !foundDesignator {
+		return 0, errors.New("invalid ISO-8601 duration: no valid designators found")
+	}
+
+	return total, nil
 }
