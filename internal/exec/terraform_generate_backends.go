@@ -232,6 +232,12 @@ func ExecuteTerraformGenerateBackends(
 					}
 				}
 
+				// A computed name is not final yet. Keep derived metadata from being
+				// interpreted as another Starlark program during value evaluation.
+				if containsStarlark(stackName) {
+					stackName = stackFileName
+				}
+
 				configAndStacksInfo.ComponentSection["atmos_component"] = componentName
 				configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
 				configAndStacksInfo.ComponentSection["stack"] = stackName
@@ -288,7 +294,9 @@ func ExecuteTerraformGenerateBackends(
 					errUtils.CheckErrorPrintAndExit(err, "", "")
 				}
 
-				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, nil, &configAndStacksInfo)
+				configAndStacksInfo.ComponentSection = componentSectionConverted
+				yamlSkip, finishValues := prepareConfigurationValues(atmosConfig, &configAndStacksInfo, nil, nil)
+				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, yamlSkip, &configAndStacksInfo)
 				if err != nil {
 					return err
 				}
@@ -305,6 +313,14 @@ func ExecuteTerraformGenerateBackends(
 				if err := resolveDeferredYamlFunctions(atmosConfig, &configAndStacksInfo, &settingsSectionStruct, componentTemplateContext, nil, nil); err != nil {
 					return err
 				}
+				if err := finishValues(); err != nil {
+					return err
+				}
+				if err := refreshTerraformGeneratorContext(atmosConfig, &configAndStacksInfo, stackFileName); err != nil {
+					return err
+				}
+				context = configAndStacksInfo.Context
+				stackName = configAndStacksInfo.Stack
 				componentSection = configAndStacksInfo.ComponentSection
 
 				if i, ok := componentSection[cfg.BackendSectionName].(map[string]any); ok {

@@ -584,11 +584,12 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		if !isComponentEnabled(secs.metadata, componentName) {
 			skip = disabledComponentTerraformSkip(p.skip)
 		}
+		yamlSkip, finishValues := prepareConfigurationValues(p.atmosConfig, &info, skip, p.evaluationSections(&info))
 		componentSection, err = processComponentSectionYAMLFunctions(
 			p.atmosConfig,
 			&info,
 			componentSection,
-			skip,
+			yamlSkip,
 			p.onWarning,
 			!p.resolveSecrets && iolib.MaskingEnabled(),
 			p.evaluationSections(&info),
@@ -602,6 +603,10 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		if err != nil {
 			return err
 		}
+		if err := finishValues(); err != nil {
+			return err
+		}
+		componentSection = info.ComponentSection
 	}
 	if hasLiteralMocks {
 		componentSection[cfg.MocksSectionName] = literalMocks
@@ -1195,10 +1200,10 @@ func processComponentSectionTemplates(
 // The evalSections parameter is the opt-in evaluation-scope filter (see deferred.IsSectionRequired): when
 // non-nil, only the top-level sections it names are walked for
 // `!terraform.state`/`!terraform.output`/`!store`/etc. YAML functions. Skipped sections are
-// restored untouched afterward. Stage 2's YAML-function resolution has no cross-section
-// dependency -- each tag resolves independently of its siblings (only a shared ResolutionContext
-// exists, for cycle detection) -- so narrowing its input map is safe without needing a separate
-// "context" the way Go-template rendering does.
+// restored untouched afterward. Starlark values can read dependencies outside the
+// selected sections through info.ComponentSection; the configuration resolver
+// overlays the rendered evaluation input onto that context without changing the
+// excluded fields in the returned component.
 func processComponentSectionYAMLFunctions(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,

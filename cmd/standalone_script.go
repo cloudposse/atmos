@@ -154,5 +154,5 @@ func readStandaloneSource(file *script.File, input io.Reader) ([]byte, error) {
 		return io.ReadAll(input)
 	}
 	// Standalone scripts intentionally accept user-selected file paths, including outside cwd.
-	return os.ReadFile(file.Path) //nolint:gosec // The caller explicitly selected this source file.
+	return os.ReadFile(file.Path) // The caller explicitly selected this source file.
 }

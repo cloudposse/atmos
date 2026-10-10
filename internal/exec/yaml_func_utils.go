@@ -120,6 +120,11 @@ func processNodesWithContext(
 	stackInfo *schema.ConfigAndStacksInfo,
 	onWarning func(DegradationWarning),
 ) (map[string]any, error) {
+	if containsStarlark(data) {
+		resolver := newConfigurationResolver(atmosConfig, data, withConfigurationContext(currentStack, stackInfo), withConfigurationFunctions(skip, resolutionCtx))
+		resolver.warning = onWarning
+		return resolver.resolveMap(nil, data)
+	}
 	newMap := make(map[string]any)
 	var firstErr error
 
@@ -498,6 +503,9 @@ func processCustomTagsWithContext(
 	resolutionCtx *ResolutionContext,
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (any, error) {
+	if matchesPrefix(input, "!starlark", skip) {
+		return newConfigurationResolver(atmosConfig, nil, withConfigurationContext(currentStack, stackInfo), withConfigurationFunctions(skip, resolutionCtx)).resolveString(input)
+	}
 	if err := prepareDeferredYAMLAuth(atmosConfig, input, skip, stackInfo); err != nil {
 		return nil, err
 	}

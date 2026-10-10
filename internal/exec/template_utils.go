@@ -20,6 +20,7 @@ import (
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -57,8 +58,19 @@ func ProcessTmpl(
 	tmplValue string,
 	tmplData any,
 	ignoreMissingTemplateValues bool,
-) (string, error) {
+) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmpl")()
+
+	protectedSource, restoreSource, protectErr := starlarksource.Protect(tmplValue, tmplName)
+	if protectErr != nil {
+		return "", protectErr
+	}
+	tmplValue = protectedSource
+	defer func() {
+		if renderErr == nil {
+			rendered = restoreSource(rendered)
+		}
+	}()
 
 	d := data.Data{}
 	ctx := context.TODO()
@@ -232,8 +244,19 @@ func ProcessTmplWithDatasources(
 	tmplValue string,
 	tmplData any,
 	ignoreMissingTemplateValues bool,
-) (string, error) {
+) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmplWithDatasources")()
+
+	protectedSource, restoreSource, protectErr := starlarksource.Protect(tmplValue, tmplName)
+	if protectErr != nil {
+		return "", protectErr
+	}
+	tmplValue = protectedSource
+	defer func() {
+		if renderErr == nil {
+			rendered = restoreSource(rendered)
+		}
+	}()
 
 	if !atmosConfig.Templates.Settings.Enabled {
 		log.Debug("ProcessTmplWithDatasources: not processing templates since templating is disabled in 'atmos.yaml'", logKeyTemplate, tmplName)
