@@ -39,6 +39,9 @@ const (
 	modeSleep = "sleep"
 	// Mode input waits for stdin to close before exiting successfully.
 	modeInput = "input"
+	// Mode holder spawns a grandchild (modeSleep) that inherits stdout, so the pipe stays open after
+	// the child is killed, and then sleeps.
+	modeHolder = "holder"
 	// Mode detach spawns a grandchild that inherits stdout and keeps running,
 	// then exits 0 immediately.
 	modeDetach = "detach"
@@ -59,6 +62,10 @@ func runProcessHelper(mode string) {
 		}
 		writePIDFile(dir, "parent")
 		spawnGrandchild(modeSleep, false)
+		time.Sleep(helperSleep)
+	case modeHolder:
+		writePIDFile(dir, "parent")
+		spawnGrandchild(modeSleep, true)
 		time.Sleep(helperSleep)
 	case modeStubbornParent:
 		writePIDFile(dir, "parent")

@@ -57,8 +57,8 @@ func TestAutomationLibraryValidation(t *testing.T) {
 		{nil, "request is required"},
 		{&automation.StepCall{Type: "unknown"}, "unknown step type"},
 		{&automation.StepCall{Type: "input"}, "required field"},
-		{&automation.StepCall{Type: "join", Configuration: map[string]any{"missing": "value"}}, "unknown step field"},
-		{&automation.StepCall{Type: "join", Configuration: map[string]any{"count": "invalid"}}, "cannot unmarshal"},
+		{&automation.StepCall{Type: "join", Configuration: map[string]any{"missing": "value"}}, `unknown field "missing" for step type "join"`},
+		{&automation.StepCall{Type: "join", Configuration: map[string]any{"options": "not-a-list"}}, "cannot unmarshal"},
 		{&automation.StepCall{Type: "parallel", Configuration: map[string]any{"steps": []any{map[string]any{"typo": true}}}}, "unknown step field"},
 	} {
 		require.ErrorContains(t, library.Validate(tc.call), tc.message)

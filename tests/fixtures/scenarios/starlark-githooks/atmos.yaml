@@ -391,3 +391,27 @@ git:
           type: shell
           timeout: 1s
           command: sleep 5
+
+    script-fail:
+      steps:
+        - name: fails
+          type: script
+          interpreter: starlark
+          script: |
+            print("before-script-fail")
+            fail("hook script failed")
+
+    script-exit-5:
+      steps:
+        - name: custom-exit
+          type: script
+          interpreter: starlark
+          script: |
+            print("before-custom-exit")
+            errors.build("custom exit code").with_exit_code(5).fail()
+
+    args-shell:
+      steps:
+        - name: show
+          type: shell
+          command: 'echo "count=$# first=[$1] second=[$2] env=[$ATMOS_GIT_HOOK_ARGS]"'

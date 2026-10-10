@@ -1447,7 +1447,6 @@ type CIChecksStatusesConfig struct {
 type CICommentsConfig struct {
 	Enabled  *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Behavior string `yaml:"behavior,omitempty" json:"behavior,omitempty" mapstructure:"behavior"` // create, update, upsert
-	Template string `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
 }
 
 // CITemplatesConfig configures CI summary templates per component type.

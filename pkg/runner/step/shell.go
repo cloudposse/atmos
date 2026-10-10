@@ -16,7 +16,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const exitCodeMetadata = "exit_code"
@@ -94,7 +93,11 @@ func (h *ShellHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 
 	writer := NewOutputModeWriter(mode, step.Name, step.Viewport, GetShowConfig(step, nil))
 	writer.writers = vars.OutputWriters
-	stdout, stderr, err := h.runInterpreter(ctx, writer, shellRunSpec{stepName: step.Name, command: command, workDir: workDir, env: envVars})
+	stdout, stderr, err := h.runInterpreter(ctx, writer, shellRunSpec{stepName: step.Name, command: command, workDir: workDir, env: envVars, params: vars.ScriptArgs, stdin: vars.HookStdin.take()})
+	if err == nil {
+		// The interpreter reports a background job that the deadline killed as success.
+		err = deadline.Expired()
+	}
 	if err != nil {
 		err = deadline.Wrap(err)
 		return NewStepResult(stdout).
@@ -116,6 +119,10 @@ type shellRunSpec struct {
 	command  string
 	workDir  string
 	env      []string
+	// params are the positional parameters ($1, "$@"), which carry Git hook arguments.
+	params []string
+	// stdin is the input of the script. Nil leaves the process's standard input.
+	stdin io.Reader
 }
 
 // runInterpreter executes a shell command through the in-process mvdan/sh
@@ -129,12 +136,15 @@ func (h *ShellHandler) runInterpreter(ctx context.Context, writer *OutputModeWri
 		// across two writes is still masked. Flush before the output mode finishes the streams.
 		maskedStdout := iolib.NewStreamingMaskWriter(stdout)
 		maskedStderr := iolib.NewStreamingMaskWriter(stderr)
-		err := u.ShellRunnerWithWriters(&u.ShellRunnerSpec{
-			Context: ctx,
+		// External commands start through the process runner, so a step timeout or cancellation ends
+		// each command's whole process tree and not only the command the script started.
+		err := process.RunShellInterpreter(ctx, &process.ShellInterpreterSpec{
 			Command: spec.command,
 			Name:    spec.stepName,
 			Dir:     spec.workDir,
 			Env:     spec.env,
+			Params:  spec.params,
+			Stdin:   spec.stdin,
 			Stdout:  maskedStdout,
 			Stderr:  maskedStderr,
 		})
@@ -229,7 +239,11 @@ func (h *ShellHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 
 	writer := NewOutputModeWriter(mode, step.Name, viewport, show)
 	writer.writers = vars.OutputWriters
-	stdout, stderr, err := h.runInterpreter(ctx, writer, shellRunSpec{stepName: step.Name, command: command, workDir: workDir, env: envVars})
+	stdout, stderr, err := h.runInterpreter(ctx, writer, shellRunSpec{stepName: step.Name, command: command, workDir: workDir, env: envVars, params: vars.ScriptArgs, stdin: vars.HookStdin.take()})
+	if err == nil {
+		// The interpreter reports a background job that the deadline killed as success.
+		err = deadline.Expired()
+	}
 	if err != nil {
 		err = deadline.Wrap(err)
 		return NewStepResult(stdout).

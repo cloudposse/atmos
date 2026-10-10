@@ -87,7 +87,8 @@ func (h BaseHandler) ttyRequiredError(step *schema.WorkflowStep) error {
 	return errUtils.Build(errUtils.ErrStepTTYRequired).
 		WithContext("step", step.Name).
 		WithContext("type", step.Type).
-		WithExplanation(fmt.Sprintf("The step type '%s' requires a TTY for user input", step.Type)).
+		WithExplanation(fmt.Sprintf("The step type '%s' prompts for input and needs a terminal on both stdin and stdout, which this run does not have, and the step sets no `default:`", step.Type)).
+		WithHint("Set `default:` on the step so it runs without a terminal, for example in a Git hook, in CI, or when stdin is redirected").
 		WithHint("Use --dry-run to preview workflow without interactive steps").
 		WithHint("Set default values in workflow configuration").
 		WithHint("Use environment variables instead of interactive prompts in CI").

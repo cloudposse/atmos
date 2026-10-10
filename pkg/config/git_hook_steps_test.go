@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/casemap"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -169,6 +170,144 @@ func TestMergeRecursiveStepCaseKeys(t *testing.T) {
 		mergeRecursiveStepCaseKeys([]byte("commands: [{name: c, steps: [{vars: {Other: x}}]}]"), caseMaps)
 		assert.Equal(t, casemap.CaseMap{"abc": "AbC", "other": "Other"}, caseMaps.Get(stepVarsCaseKey))
 		assert.Equal(t, casemap.CaseMap{"outx": "OutX"}, caseMaps.Get(stepOutputsCaseKey))
+	})
+}
+
+// atmos.yaml is merged after its atmos.d fragments, so it can redefine a hook a fragment defined
+// with `steps:`. Setting the decoded steps on Viper's override layer used to shadow atmos.yaml, so
+// a hook could not be switched to `command:` (or to different steps) by a later source.
+func TestLaterSourceSwitchesGitHookFromStepsToCommand(t *testing.T) {
+	t.Setenv("ATMOS_BASE_PATH", "")
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "atmos.d", "hooks.yaml"), `git:
+  hooks:
+    pre-commit:
+      steps:
+        - name: first
+          type: shell
+          command: echo from-steps
+    commit-msg:
+      steps:
+        - name: kept
+          type: shell
+          command: echo kept
+`)
+	writeTestFile(t, filepath.Join(root, "atmos.yaml"), `base_path: "./"
+git:
+  hooks:
+    pre-commit:
+      command: echo from-command
+`)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", root)
+	t.Chdir(t.TempDir())
+
+	config, err := InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+	hook := config.Git.Hooks["pre-commit"]
+	assert.Equal(t, "echo from-command", hook.Command)
+	assert.Empty(t, hook.Steps, "the later definition replaces the steps instead of running both")
+	require.Len(t, config.Git.Hooks["commit-msg"].Steps, 1, "hooks the later source does not mention are untouched")
+}
+
+// The reverse switch: a later source defines steps for a hook an earlier source gave a command.
+func TestLaterSourceSwitchesGitHookFromCommandToSteps(t *testing.T) {
+	t.Setenv("ATMOS_BASE_PATH", "")
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "atmos.d", "hooks.yaml"), `git:
+  hooks:
+    pre-commit:
+      command: echo from-command
+`)
+	writeTestFile(t, filepath.Join(root, "atmos.yaml"), `base_path: "./"
+git:
+  hooks:
+    pre-commit:
+      steps:
+        - name: only
+          type: shell
+          command: echo from-steps
+`)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", root)
+	t.Chdir(t.TempDir())
+
+	config, err := InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+	hook := config.Git.Hooks["pre-commit"]
+	assert.Empty(t, hook.Command)
+	require.Len(t, hook.Steps, 1)
+	assert.Equal(t, "only", hook.Steps[0].Name)
+}
+
+// A later source that defines steps for the same hook replaces the earlier steps.
+func TestLaterSourceReplacesGitHookSteps(t *testing.T) {
+	t.Setenv("ATMOS_BASE_PATH", "")
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "atmos.d", "hooks.yaml"), `git:
+  hooks:
+    pre-commit:
+      steps:
+        - name: first
+          type: shell
+          command: echo one
+        - name: second
+          type: shell
+          command: echo two
+`)
+	writeTestFile(t, filepath.Join(root, "atmos.yaml"), `base_path: "./"
+git:
+  hooks:
+    pre-commit:
+      steps:
+        - name: only
+          type: shell
+          command: echo replaced
+`)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", root)
+	t.Chdir(t.TempDir())
+
+	config, err := InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+	steps := config.Git.Hooks["pre-commit"].Steps
+	require.Len(t, steps, 1)
+	assert.Equal(t, "only", steps[0].Name)
+}
+
+func TestStarlarkTagIsRejectedInAtmosYaml(t *testing.T) {
+	t.Setenv("ATMOS_BASE_PATH", "")
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "atmos.yaml"), `base_path: "./"
+settings:
+  note: !starlark |
+    return "computed"
+`)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", root)
+	t.Chdir(t.TempDir())
+
+	_, err := InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.ErrorIs(t, err, errUtils.ErrStarlarkUnsupportedInConfig)
+	assert.Contains(t, err.Error(), "atmos.yaml")
+	assert.Contains(t, err.Error(), "settings.note")
+}
+
+func TestStarlarkTagIsRejectedWhereverItAppears(t *testing.T) {
+	for name, content := range map[string]string{
+		"nested mapping":    "a:\n  b:\n    c: !starlark return 1\n",
+		"list item":         "list:\n  - one\n  - !starlark return 2\n",
+		"git hook step env": "git:\n  hooks:\n    pre-commit:\n      steps:\n        - type: shell\n          command: x\n          env:\n            A: !starlark return 3\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			v := viper.New()
+			v.SetConfigType("yaml")
+			err := preprocessAtmosYamlFuncExceptCommands([]byte(content), v, "profile.yaml")
+			require.ErrorIs(t, err, errUtils.ErrStarlarkUnsupportedInConfig)
+			assert.Contains(t, err.Error(), "profile.yaml")
+		})
+	}
+	t.Run("a quoted string that starts with the tag is data", func(t *testing.T) {
+		v := viper.New()
+		v.SetConfigType("yaml")
+		err := preprocessAtmosYamlFuncExceptCommands([]byte(`note: "!starlark return 1"`), v, "atmos.yaml")
+		require.NoError(t, err)
 	})
 }
 
