@@ -881,6 +881,16 @@ backends, the toolchain installer, and the aqua-registry client).
   <dd>
     Directory where Atmos installs managed tools.
   </dd>
+
+  <dt>`ATMOS_TOOLCHAIN_INSTALL`</dt>
+  <dd>
+    Controls which tools Atmos installs automatically: `never`, `declared`, `auto`, or `always`.
+    Defaults to `auto`, or `declared` for projects pinned to a [config edition](/cli/configuration/edition)
+    before 2026-10-09. An invalid value fails at configuration load.
+    See [`toolchain.install`](/cli/configuration/toolchain#install).
+
+    - **YAML Path:** `toolchain.install`
+  </dd>
 </dl>
 
 ## XDG Base Directories

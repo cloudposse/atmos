@@ -12811,6 +12811,27 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "install": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "",
+                "never",
+                "declared",
+                "auto",
+                "always"
+              ]
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Install controls which tools Atmos installs automatically when a command, workflow,\nhook, or component run needs them: `never` installs nothing, `declared` installs only\nexplicit `dependencies.tools` (and, for workflows, every `.tool-versions` tool), `auto`\n(default since 2026-10-09; a project pinned to an earlier edition gets `declared`\nrestored) also installs a component's own executable when `.tool-versions` pins it, and\n`always` installs every `.tool-versions` tool for every run."
         }
       },
       "type": "object",

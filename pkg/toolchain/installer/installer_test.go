@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -355,6 +356,27 @@ func TestDefaultToolResolver_ResolveShortNameErrors(t *testing.T) {
 
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrToolNotInRegistry)
+	})
+
+	t.Run("index unavailable is reported distinctly from not found", func(t *testing.T) {
+		cause := fmt.Errorf("%w: %w", errUtils.ErrToolRegistryIndexUnavailable, errors.New("dial tcp: connection refused"))
+		defaultRegistry = func() registry.ToolRegistry {
+			return &testShortNameRegistry{err: cause}
+		}
+
+		_, _, err := (&DefaultToolResolver{}).Resolve("terraform")
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrToolRegistryIndexUnavailable)
+		assert.NotErrorIs(t, err, errUtils.ErrToolNotInRegistry)
+		assert.Contains(t, err.Error(), "connection refused")
+
+		assert.Contains(t, cockroachErrors.GetAllDetails(err),
+			"Could not load the Aqua registry index to resolve 'terraform'")
+		hints := strings.Join(cockroachErrors.GetAllHints(err), "\n")
+		assert.Contains(t, hints, "owner/repo")
+		assert.Contains(t, hints, "aliases")
+		assert.Contains(t, hints, "proxy")
 	})
 
 	t.Run("non-not-found resolver errors are propagated", func(t *testing.T) {

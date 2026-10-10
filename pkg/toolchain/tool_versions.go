@@ -2,13 +2,16 @@ package toolchain
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/filelock"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -32,16 +35,40 @@ func LoadToolVersions(filePath string) (*ToolVersions, error) {
 		return nil, err
 	}
 
+	return loadToolVersionsShared(filePath, false)
+}
+
+// LoadToolVersionsLenient loads a .tool-versions file like LoadToolVersions, but
+// skips malformed lines (a tool without a version) with a warning instead of
+// failing. Use it only for read-only consumers such as project tool defaults;
+// callers that rewrite the file must use LoadToolVersions so no line is dropped.
+func LoadToolVersionsLenient(filePath string) (*ToolVersions, error) {
+	defer perf.Track(nil, "toolchain.LoadToolVersionsLenient")()
+
+	if _, err := os.Stat(filePath); err != nil {
+		return nil, err
+	}
+	return loadToolVersionsShared(filePath, true)
+}
+
+// loadToolVersionsShared reads the manifest under the shared lock with the requested parsing strictness.
+func loadToolVersionsShared(filePath string, lenient bool) (*ToolVersions, error) {
 	var toolVersions *ToolVersions
 	err := withToolVersionsSharedLock(filePath, func() error {
 		var err error
-		toolVersions, err = loadToolVersionsUnlocked(filePath)
+		toolVersions, err = loadToolVersionsFile(filePath, lenient)
 		return err
 	})
 	return toolVersions, err
 }
 
+// loadToolVersionsUnlocked strictly parses a manifest without acquiring an additional lock.
 func loadToolVersionsUnlocked(filePath string) (*ToolVersions, error) {
+	return loadToolVersionsFile(filePath, false)
+}
+
+// loadToolVersionsFile reads and parses versions, optionally warning and skipping malformed lines.
+func loadToolVersionsFile(filePath string, lenient bool) (*ToolVersions, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
@@ -59,6 +86,10 @@ func loadToolVersionsUnlocked(filePath string) (*ToolVersions, error) {
 		}
 		parts := strings.Fields(line)
 		if len(parts) < 2 {
+			if lenient {
+				log.Warn("Skipping malformed .tool-versions line: missing version", "file", filePath, "line", i+1, "content", line)
+				continue
+			}
 			return nil, fmt.Errorf("%w: invalid format at line %d: '%s' (missing version)", ErrInvalidToolSpec, i+1, line)
 		}
 		tool := parts[0]
@@ -215,11 +246,40 @@ func withToolVersionsLock(filePath string, fn func() error) error {
 	return filelock.New(filePath+".lock").WithExclusive(context.Background(), fn)
 }
 
+// withToolVersionsSharedLock runs fn under a shared lock on the manifest's
+// sibling .lock file. Reads must keep working when the manifest lives on a
+// read-only checkout or filesystem (the lock file cannot be created there), so
+// a permission or read-only-filesystem failure to take the lock degrades to an
+// unlocked read. Errors returned by fn itself are never swallowed, and writers
+// (withToolVersionsLock) keep requiring the lock.
 func withToolVersionsSharedLock(filePath string, fn func() error) error {
+	ran := false
+	run := func() error {
+		ran = true
+		return fn()
+	}
+
+	err := lockToolVersionsShared(filePath, run)
+	if err == nil || ran || !isLockUnavailableError(err) {
+		return err
+	}
+
+	log.Debug("Tool versions lock unavailable, reading without lock", "file", filePath, "error", err)
+	return fn()
+}
+
+// lockToolVersionsShared acquires the shared lock for filePath and runs fn.
+func lockToolVersionsShared(filePath string, fn func() error) error {
 	if err := os.MkdirAll(filepath.Dir(filePath), toolVersionsDirectoryPermissions); err != nil {
 		return fmt.Errorf("create .tool-versions directory: %w", err)
 	}
 	return filelock.New(filePath+".lock").WithShared(context.Background(), fn)
+}
+
+// isLockUnavailableError reports whether err means the lock file cannot be
+// created or opened because of permissions or a read-only filesystem.
+func isLockUnavailableError(err error) bool {
+	return errors.Is(err, fs.ErrPermission) || isReadOnlyFilesystemError(err)
 }
 
 // findDuplicateKey checks whether adding a tool/version combination would create a duplicate

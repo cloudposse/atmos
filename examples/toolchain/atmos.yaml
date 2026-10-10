@@ -104,9 +104,11 @@ commands:
     description: Demonstrate toolchain integration with custom commands
     commands:
       # Example 1: Implicit dependencies from .tool-versions
-      # No dependencies declared - uses tools from .tool-versions automatically
+      # No dependencies declared - tools from .tool-versions that are already installed
+      # (for example by `atmos toolchain install`) are on PATH. Custom commands never
+      # download .tool-versions tools; only their own `dependencies.tools` are installed.
       - name: which
-        description: Verify toolchain tools are in PATH (uses .tool-versions)
+        description: Verify installed toolchain tools are in PATH (uses .tool-versions)
         steps:
           - "echo 'jq:' && which jq"
           - "echo 'yq:' && which yq"

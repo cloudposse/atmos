@@ -350,3 +350,27 @@ func TestToolVersionsFileManager_GetTools_ErrorWrapping(t *testing.T) {
 	assert.Contains(t, err.Error(), "GetTools: failed to load")
 	assert.Contains(t, err.Error(), tmpFile)
 }
+
+func TestNewToolVersionsFileManager_PathPrecedence(t *testing.T) {
+	tests := []struct {
+		name      string
+		toolchain schema.Toolchain
+		want      string
+	}{
+		{name: "neither set uses default", toolchain: schema.Toolchain{}, want: ".tool-versions"},
+		{name: "file_path only", toolchain: schema.Toolchain{FilePath: "primary"}, want: "primary"},
+		{name: "versions_file only", toolchain: schema.Toolchain{VersionsFile: "alternative"}, want: "alternative"},
+		{
+			name:      "file_path wins over versions_file",
+			toolchain: schema.Toolchain{FilePath: "primary", VersionsFile: "alternative"},
+			want:      "primary",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mgr := NewToolVersionsFileManager(&schema.AtmosConfiguration{Toolchain: tt.toolchain})
+			assert.Equal(t, tt.want, mgr.filePath)
+		})
+	}
+}

@@ -169,8 +169,12 @@ func ExtractDependenciesFromConfig(config map[string]any) map[string]string {
 func LoadToolVersionsDependencies(atmosConfig *schema.AtmosConfiguration) (map[string]string, error) {
 	defer perf.Track(atmosConfig, "dependencies.LoadToolVersionsDependencies")()
 
+	// Select this project's manifest before reading it, even when no explicit
+	// dependencies have initialized the toolchain environment yet.
+	toolchain.SetAtmosConfig(atmosConfig)
 	toolVersionsPath := toolchain.GetToolVersionsFilePath()
-	toolVersions, err := toolchain.LoadToolVersions(toolVersionsPath)
+	// Defaults are best-effort: malformed lines are skipped with a warning.
+	toolVersions, err := toolchain.LoadToolVersionsLenient(toolVersionsPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// No .tool-versions file is fine - return empty map.

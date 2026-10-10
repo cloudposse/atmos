@@ -2,6 +2,7 @@ package dependencies
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	execPkg "os/exec"
 	"path/filepath"
@@ -29,9 +30,18 @@ type ToolchainEnvironment struct {
 }
 
 // ForComponent creates a ToolchainEnvironment by resolving dependencies from
-// component stack configuration. The componentType is "terraform", "helmfile",
-// or "packer". Pass nil for stackSection/componentSection when no component
+// component stack configuration over the project's .tool-versions manifest. The
+// componentType is "terraform", "helmfile", "packer", "ansible", "helm", or
+// "kubernetes". Pass nil for stackSection/componentSection when no component
 // context is available (e.g. version commands).
+//
+// Explicit dependencies.tools always win. What else is installed follows
+// toolchain.install. With the default (auto), only the component's own
+// executable (and the helm companion for helmfile) is installed from the
+// manifest, and only when the manifest defines it; every other manifest tool is
+// added to PATH only if it is already installed. With declared, installed manifest
+// tools join PATH without downloading missing defaults; with always every manifest
+// tool is installed, and with never nothing is installed.
 func ForComponent(
 	atmosConfig *schema.AtmosConfiguration,
 	componentType string,
@@ -40,42 +50,95 @@ func ForComponent(
 ) (*ToolchainEnvironment, error) {
 	defer perf.Track(atmosConfig, "dependencies.ForComponent")()
 
+	return forComponent(atmosConfig, componentType, stackSection, componentSection)
+}
+
+// forComponent is ForComponent with injectable options for tests.
+func forComponent(
+	atmosConfig *schema.AtmosConfiguration,
+	componentType string,
+	stackSection map[string]any,
+	componentSection map[string]any,
+	opts ...envOption,
+) (*ToolchainEnvironment, error) {
 	resolver := NewResolver(atmosConfig)
 	deps, err := resolver.ResolveComponentDependencies(componentType, stackSection, componentSection)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve component dependencies: %w", err)
 	}
 
-	return newEnvironment(atmosConfig, deps)
+	req := defaultsRequest{selected: selectedComponentTools(atmosConfig, componentType, componentSection)}
+	return newEnvironmentWithDefaults(atmosConfig, deps, req, opts...)
 }
 
 // ForSections creates a ToolchainEnvironment from pre-loaded configuration
 // sections (e.g. from DescribeComponent). Dependencies are extracted from
-// the sections using ExtractDependenciesFromConfig.
+// the sections using ExtractDependenciesFromConfig and override project tool
+// defaults. The component type and executable are read from the sections'
+// component_info.component_type and command entries, with the same selection
+// rules as ForComponent.
 func ForSections(atmosConfig *schema.AtmosConfiguration, sections map[string]any) (*ToolchainEnvironment, error) {
 	defer perf.Track(atmosConfig, "dependencies.ForSections")()
 
+	return forSections(atmosConfig, sections)
+}
+
+// forSections is ForSections with injectable options for tests.
+func forSections(atmosConfig *schema.AtmosConfiguration, sections map[string]any, opts ...envOption) (*ToolchainEnvironment, error) {
 	deps := ExtractDependenciesFromConfig(sections)
-	return newEnvironment(atmosConfig, deps)
+	req := defaultsRequest{selected: selectedComponentTools(atmosConfig, componentTypeFromSections(sections), sections)}
+	return newEnvironmentWithDefaults(atmosConfig, deps, req, opts...)
 }
 
 // NewEnvironmentFromDeps creates a ToolchainEnvironment from a pre-loaded dependency map.
 // This is used when dependencies are already resolved (e.g., from LoadToolVersionsDependencies).
+// It installs every tool in the map and never reads the project's .tool-versions manifest.
+// With toolchain.install set to never it installs nothing: tools in the map that are
+// already installed join PATH, and the rest are skipped.
 func NewEnvironmentFromDeps(atmosConfig *schema.AtmosConfiguration, deps map[string]string) (*ToolchainEnvironment, error) {
 	defer perf.Track(atmosConfig, "dependencies.NewEnvironmentFromDeps")()
-	return newEnvironment(atmosConfig, deps)
+
+	return newEnvironmentFromDeps(atmosConfig, deps)
+}
+
+// newEnvironmentFromDeps is NewEnvironmentFromDeps with injectable options for tests.
+func newEnvironmentFromDeps(atmosConfig *schema.AtmosConfiguration, deps map[string]string, opts ...envOption) (*ToolchainEnvironment, error) {
+	policy, err := InstallPolicy(atmosConfig)
+	if err != nil {
+		return nil, err
+	}
+	if policy != schema.ToolchainInstallNever {
+		return newEnvironment(atmosConfig, deps, opts...)
+	}
+
+	cfg := &envConfig{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+	present := installedOnly(deps, newToolIdentity(atmosConfig, cfg))
+	return newEnvironmentWithPresent(atmosConfig, nil, present, opts...)
+}
+
+// ForDependencies creates a ToolchainEnvironment from explicit dependencies over
+// the project's .tool-versions manifest, for runs that do not select a tool of
+// their own (custom commands, hooks). Explicit dependencies are installed and
+// override manifest entries for the same tool. What else is installed follows
+// toolchain.install: by default manifest tools are added to PATH only if they are
+// already installed and are never downloaded.
+func ForDependencies(atmosConfig *schema.AtmosConfiguration, deps map[string]string, opts ...envOption) (*ToolchainEnvironment, error) {
+	defer perf.Track(atmosConfig, "dependencies.ForDependencies")()
+
+	return newEnvironmentWithDefaults(atmosConfig, deps, defaultsRequest{}, opts...)
 }
 
 // ForWorkflow creates a ToolchainEnvironment for workflow execution.
-// Merges .tool-versions with workflow-specific dependencies.
+// A workflow can call any project tool, so with toolchain.install set to declared,
+// auto (the default), or always every usable .tool-versions entry is installed if
+// missing. With never nothing is installed and manifest tools join PATH only if
+// they are already installed. Workflow-specific dependencies override manifest
+// entries for the same tool.
 func ForWorkflow(atmosConfig *schema.AtmosConfiguration, workflowDef *schema.WorkflowDefinition, opts ...envOption) (*ToolchainEnvironment, error) {
 	defer perf.Track(atmosConfig, "dependencies.ForWorkflow")()
-
-	// Load project-wide tools from .tool-versions.
-	toolVersionsDeps, err := LoadToolVersionsDependencies(atmosConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load .tool-versions: %w", err)
-	}
 
 	// Get workflow-specific dependencies.
 	resolver := NewResolver(atmosConfig)
@@ -84,13 +147,23 @@ func ForWorkflow(atmosConfig *schema.AtmosConfiguration, workflowDef *schema.Wor
 		return nil, fmt.Errorf("failed to resolve workflow dependencies: %w", err)
 	}
 
-	// Merge: .tool-versions as base, workflow deps override.
-	deps, err := MergeDependencies(toolVersionsDeps, workflowDeps)
+	return newEnvironmentWithDefaults(atmosConfig, workflowDeps, defaultsRequest{workflow: true}, opts...)
+}
+
+// ForCommand creates a ToolchainEnvironment for a custom command. The command's
+// own dependencies are installed and override .tool-versions entries for the same
+// tool; other manifest tools follow toolchain.install (by default they join PATH
+// only if installed).
+func ForCommand(atmosConfig *schema.AtmosConfiguration, commandDef *schema.Command, opts ...envOption) (*ToolchainEnvironment, error) {
+	defer perf.Track(atmosConfig, "dependencies.ForCommand")()
+
+	resolver := NewResolver(atmosConfig)
+	commandDeps, err := resolver.ResolveCommandDependencies(commandDef)
 	if err != nil {
-		return nil, fmt.Errorf("failed to merge dependencies: %w", err)
+		return nil, fmt.Errorf("failed to resolve command dependencies: %w", err)
 	}
 
-	return newEnvironment(atmosConfig, deps, opts...)
+	return ForDependencies(atmosConfig, commandDeps, opts...)
 }
 
 // Resolve returns the absolute path for a command name. If the command was
@@ -165,6 +238,7 @@ type envConfig struct {
 	ensureTools    func(deps map[string]string) error
 	resolveFunc    func(tool string) (owner, repo string, err error)
 	findBinaryPath func(owner, repo, version string, binaryName ...string) (string, error)
+	listInstalled  func(owner, repo string) ([]string, error)
 	entrypointDirs func(owner, repo, version string) []string
 	buildPATH      func(atmosConfig *schema.AtmosConfiguration, deps map[string]string) (string, error)
 }
@@ -190,6 +264,14 @@ func withResolveFunc(fn func(tool string) (owner, repo string, err error)) envOp
 func withFindBinaryPath(fn func(owner, repo, version string, binaryName ...string) (string, error)) envOption {
 	return func(c *envConfig) {
 		c.findBinaryPath = fn
+	}
+}
+
+// withListInstalled overrides the lookup of installed versions of a tool, used to
+// resolve version constraints without installing anything.
+func withListInstalled(fn func(owner, repo string) ([]string, error)) envOption {
+	return func(c *envConfig) {
+		c.listInstalled = fn
 	}
 }
 
@@ -243,11 +325,20 @@ func withProvisioner(p ToolProvisioner) envOption {
 func newEnvironment(atmosConfig *schema.AtmosConfiguration, deps map[string]string, opts ...envOption) (*ToolchainEnvironment, error) {
 	defer perf.Track(atmosConfig, "dependencies.newEnvironment")()
 
+	return newEnvironmentWithPresent(atmosConfig, deps, nil, opts...)
+}
+
+// newEnvironmentWithPresent installs the tools in install, then resolves
+// executable paths and builds the augmented PATH for install plus present.
+// The present tools are already installed: they are never passed to the
+// installer, so they can neither trigger a download nor fall back to a bare
+// version directory on PATH.
+func newEnvironmentWithPresent(atmosConfig *schema.AtmosConfiguration, install, present map[string]string, opts ...envOption) (*ToolchainEnvironment, error) {
 	env := &ToolchainEnvironment{
 		resolved: make(map[string]string),
 	}
 
-	if len(deps) == 0 {
+	if len(install) == 0 && len(present) == 0 {
 		return env, nil
 	}
 
@@ -261,14 +352,13 @@ func newEnvironment(atmosConfig *schema.AtmosConfiguration, deps map[string]stri
 	toolchain.SetAtmosConfig(atmosConfig)
 
 	// Install missing tools.
-	ensureTools := cfg.ensureTools
-	if ensureTools == nil {
-		installer := NewInstaller(atmosConfig)
-		ensureTools = installer.EnsureTools
+	if err := installMissingTools(atmosConfig, cfg, install); err != nil {
+		return nil, err
 	}
-	if err := ensureTools(deps); err != nil {
-		return nil, fmt.Errorf("failed to install dependencies: %w", err)
-	}
+
+	// The installer resolves version constraints in place, so combine the maps
+	// only after installation.
+	deps := combineDeps(install, present)
 
 	// Resolve every dependency to an absolute binary path.
 	resolveBinaryPaths(env, cfg, deps)
@@ -288,6 +378,35 @@ func newEnvironment(atmosConfig *schema.AtmosConfiguration, deps map[string]stri
 	}
 
 	return env, nil
+}
+
+// installMissingTools hands install to the configured installer. It is a no-op
+// when there is nothing to install.
+func installMissingTools(atmosConfig *schema.AtmosConfiguration, cfg *envConfig, install map[string]string) error {
+	if len(install) == 0 {
+		return nil
+	}
+	ensureTools := cfg.ensureTools
+	if ensureTools == nil {
+		installer := NewInstaller(atmosConfig)
+		ensureTools = installer.EnsureTools
+	}
+	if err := ensureTools(install); err != nil {
+		return fmt.Errorf("failed to install dependencies: %w", err)
+	}
+	return nil
+}
+
+// combineDeps returns install unchanged when present is empty, otherwise a new
+// map holding both.
+func combineDeps(install, present map[string]string) map[string]string {
+	if len(present) == 0 {
+		return install
+	}
+	combined := make(map[string]string, len(install)+len(present))
+	maps.Copy(combined, install)
+	maps.Copy(combined, present)
+	return combined
 }
 
 // resolveBinaryPaths resolves each dependency to an absolute binary path
