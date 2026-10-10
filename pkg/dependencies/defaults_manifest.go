@@ -34,6 +34,7 @@ type defaultGroup struct {
 	version string
 }
 
+// key returns the first sorted manifest key as the group's deterministic representative.
 func (g *defaultGroup) key() string { return g.keys[0] }
 
 // sortedKeys returns the keys of m in sorted order for deterministic output.

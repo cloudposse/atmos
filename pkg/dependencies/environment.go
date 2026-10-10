@@ -39,9 +39,9 @@ type ToolchainEnvironment struct {
 // toolchain.install. With the default (auto), only the component's own
 // executable (and the helm companion for helmfile) is installed from the
 // manifest, and only when the manifest defines it; every other manifest tool is
-// added to PATH only if it is already installed. With declared the manifest is
-// not read, with always every manifest tool is installed, and with never nothing
-// is installed.
+// added to PATH only if it is already installed. With declared, installed manifest
+// tools join PATH without downloading missing defaults; with always every manifest
+// tool is installed, and with never nothing is installed.
 func ForComponent(
 	atmosConfig *schema.AtmosConfiguration,
 	componentType string,

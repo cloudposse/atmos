@@ -42,6 +42,7 @@ func InstallsAutomatically(atmosConfig *schema.AtmosConfiguration) (bool, error)
 	return policy != schema.ToolchainInstallNever, nil
 }
 
+// invalidInstallPolicyError reports the invalid value with the supported policies and override locations.
 func invalidInstallPolicyError(policy schema.ToolchainInstall) error {
 	values := make([]string, 0, len(schema.ToolchainInstallValues))
 	for _, value := range schema.ToolchainInstallValues {
@@ -86,6 +87,7 @@ func requireInstalled(plan *toolPlan, ids *toolIdentity) error {
 	return nil
 }
 
+// notInstalledError lists unavailable explicit dependencies and explains how to install them.
 func notInstalledError(missing []string) error {
 	return errUtils.Build(errUtils.ErrToolNotInstalled).
 		WithExplanationf("These dependencies are not installed: %s.", strings.Join(missing, ", ")).

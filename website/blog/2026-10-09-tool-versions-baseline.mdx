@@ -4,7 +4,7 @@ title: "Your .tool-versions Now Picks the Terraform Every Component Runs"
 authors: [osterman]
 tags: [enhancement]
 ---
-You pin `hashicorp/terraform 1.9.0` in `.tool-versions`, run `atmos terraform plan`, and Atmos quietly runs whatever Terraform happens to be first on your `PATH` — a Homebrew upgrade, a teammate's tfenv shim, or an older binary on a CI runner. The [Terraform versions guide](/howto/manage-terraform-versions) promised the pinned version; components didn't deliver it. Now every command and component uses `.tool-versions` as its baseline.
+You pin `hashicorp/terraform 1.15.8` in `.tool-versions`, run `atmos terraform plan`, and Atmos quietly runs whatever Terraform happens to be first on your `PATH` — a Homebrew upgrade, a teammate's tfenv shim, or an older binary on a CI runner. The [Terraform versions guide](/howto/manage-terraform-versions) promised the pinned version; components didn't deliver it. Now every command and component uses `.tool-versions` as its baseline.
 <!--truncate-->
 
 ## The Problem
@@ -24,17 +24,17 @@ The project's `.tool-versions` is now a baseline for every command and [componen
 
 How much Atmos installs on its own is a setting, so you can make it more or less eager (see [Control What Atmos Installs](#control-what-atmos-installs)).
 
-Explicit `dependencies.tools` always win, even when one side uses a short name or alias and the other uses `owner/repo`. Entries Atmos can't use — `system`, `ref:` and `path:` versions, unknown tools, lines without a version, or `~> 1.9.0` written with a space — are skipped instead of failing the run. Two entries for the same tool with different versions (`tofu 1.12.6` and `opentofu/opentofu 1.11.0`) now stop with an error naming both, instead of picking one at random.
+Explicit `dependencies.tools` always win, even when one side uses a short name or alias and the other uses `owner/repo`. Entries Atmos can't use — `system`, `ref:` and `path:` versions, unknown tools, lines without a version, or `~> 1.15.0` written with a space — are skipped instead of failing the run. Two entries for the same tool with different versions (`tofu 1.12.6` and `opentofu/opentofu 1.11.0`) now stop with an error naming both, instead of picking one at random.
 
 ## How to Use It
 
 Pin the tool once:
 
 ```text title=".tool-versions"
-hashicorp/terraform 1.9.0
+hashicorp/terraform 1.15.8
 ```
 
-Every component without an override runs Terraform 1.9.0, installing it on first use. Override a single component when it needs something else:
+Every component without an override runs Terraform 1.15.8, installing it on first use. Override a single component when it needs something else:
 
 ```yaml title="stacks/deploy/prod.yaml"
 components:
@@ -42,10 +42,10 @@ components:
     legacy-vpc:
       dependencies:
         tools:
-          terraform: "1.8.5"
+          terraform: "1.15.6"
 ```
 
-Running `legacy-vpc` uses 1.8.5 and leaves `.tool-versions` untouched. If your configuration points at a different manifest, [`toolchain.file_path`](/cli/configuration/toolchain) is now honored everywhere.
+Running `legacy-vpc` uses 1.15.6 and leaves `.tool-versions` untouched. If your configuration points at a different manifest, [`toolchain.file_path`](/cli/configuration/toolchain) is now honored everywhere.
 
 If a component previously relied on a binary from `PATH` while `.tool-versions` pinned a different version, it now runs the pinned version. Remove or update the pin, or set `dependencies.tools` on the component, to keep the old binary.
 

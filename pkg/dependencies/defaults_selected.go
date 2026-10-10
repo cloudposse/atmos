@@ -54,6 +54,7 @@ func componentExecutable(atmosConfig *schema.AtmosConfiguration, componentType s
 	return defaultExecutable(componentType)
 }
 
+// configuredCommand returns the component type's executable override from atmos.yaml, if supported.
 func configuredCommand(components *schema.Components, componentType string) string {
 	switch componentType {
 	case cfg.TerraformComponentType:

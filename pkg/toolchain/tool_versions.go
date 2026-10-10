@@ -51,6 +51,7 @@ func LoadToolVersionsLenient(filePath string) (*ToolVersions, error) {
 	return loadToolVersionsShared(filePath, true)
 }
 
+// loadToolVersionsShared reads the manifest under the shared lock with the requested parsing strictness.
 func loadToolVersionsShared(filePath string, lenient bool) (*ToolVersions, error) {
 	var toolVersions *ToolVersions
 	err := withToolVersionsSharedLock(filePath, func() error {
@@ -61,10 +62,12 @@ func loadToolVersionsShared(filePath string, lenient bool) (*ToolVersions, error
 	return toolVersions, err
 }
 
+// loadToolVersionsUnlocked strictly parses a manifest without acquiring an additional lock.
 func loadToolVersionsUnlocked(filePath string) (*ToolVersions, error) {
 	return loadToolVersionsFile(filePath, false)
 }
 
+// loadToolVersionsFile reads and parses versions, optionally warning and skipping malformed lines.
 func loadToolVersionsFile(filePath string, lenient bool) (*ToolVersions, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {

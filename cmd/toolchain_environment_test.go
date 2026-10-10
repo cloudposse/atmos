@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestRootCommandInheritsInstalledProjectTools verifies the shared baseline and scoped overrides under every install policy.
 func TestRootCommandInheritsInstalledProjectTools(t *testing.T) {
 	for _, policy := range schema.ToolchainInstallValues {
 		t.Run(string(policy), func(t *testing.T) {
@@ -75,6 +76,50 @@ func TestRootCommandInheritsInstalledProjectTools(t *testing.T) {
 	}
 }
 
+// TestRootCommandContinuesWithoutUsableManifest keeps diagnostic commands usable when baseline preparation fails.
+func TestRootCommandContinuesWithoutUsableManifest(t *testing.T) {
+	for _, kind := range []string{"unreadable", "conflicting"} {
+		t.Run(kind, func(t *testing.T) {
+			_ = NewTestKit(t)
+			root := t.TempDir()
+			config := &schema.AtmosConfiguration{BasePathAbsolute: root}
+			installPath := useNeverInstallToolchain(t, config)
+			require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte("{}\n"), 0o600))
+			manifest := filepath.Join(root, ".tool-versions")
+			if kind == "unreadable" {
+				require.NoError(t, os.Mkdir(manifest, 0o755))
+			} else {
+				require.NoError(t, os.WriteFile(manifest, []byte("terraform 1.15.8\nhashicorp/terraform 1.15.6\n"), 0o600))
+			}
+			t.Setenv("ATMOS_CLI_CONFIG_PATH", root)
+			t.Setenv("ATMOS_BASE_PATH", root)
+			t.Setenv("ATMOS_TOOLCHAIN_INSTALL_PATH", installPath)
+			t.Setenv("ATMOS_TOOLCHAIN_INSTALL", "never")
+			t.Chdir(root)
+			originalPath := os.Getenv("PATH")
+			ran := false
+			command := &cobra.Command{
+				Use: "test-diagnostic-tool-path",
+				Run: func(_ *cobra.Command, _ []string) {
+					ran = true
+					assert.Equal(t, originalPath, os.Getenv("PATH"))
+				},
+			}
+			RootCmd.AddCommand(command)
+			t.Cleanup(func() { RootCmd.RemoveCommand(command) })
+			RootCmd.SetArgs([]string{command.Name()})
+
+			require.NoError(t, RootCmd.Execute())
+			assert.True(t, ran, "a manifest error must not prevent diagnostic commands from running")
+			assert.NoDirExists(t, installPath, "startup must not provision any tools")
+			// Scoped execution still surfaces the error instead of silently falling back.
+			_, err := dependencies.ForComponent(config, "terraform", nil, nil)
+			require.Error(t, err)
+		})
+	}
+}
+
+// TestInstalledProjectToolsLeavesPathWithoutDefaults verifies missing and unreadable manifests leave inherited PATH intact.
 func TestInstalledProjectToolsLeavesPathWithoutDefaults(t *testing.T) {
 	for _, unreadable := range []bool{false, true} {
 		t.Run(map[bool]string{false: "absent", true: "unreadable"}[unreadable], func(t *testing.T) {
@@ -99,6 +144,7 @@ func TestInstalledProjectToolsLeavesPathWithoutDefaults(t *testing.T) {
 	}
 }
 
+// installCommandTool creates an executable fixture for PATH resolution without downloading a tool.
 func installCommandTool(t *testing.T, installPath, owner, repo, version string) string {
 	t.Helper()
 	dir := filepath.Join(installPath, "bin", owner, repo, version)
