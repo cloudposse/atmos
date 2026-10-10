@@ -170,6 +170,11 @@ type ComponentProcessorResult struct {
 	// BaseComponentRetry holds the retry configuration inherited from base components
 	// (deep-merged across the full inheritance chain by ProcessBaseComponentConfig).
 	BaseComponentRetry map[string]any
+	// ComponentUnsetSections, ComponentOverridesUnsetSections and BaseComponentUnsetSections
+	// name the sections set to `!unset` at the component, overrides and base component layers.
+	ComponentUnsetSections          []string
+	ComponentOverridesUnsetSections []string
+	BaseComponentUnsetSections      []string
 }
 
 // processComponent processes a component extracting common configuration sections.

@@ -1231,7 +1231,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -1259,7 +1259,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -1346,7 +1346,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -1519,7 +1519,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -1641,7 +1641,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -1655,7 +1655,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -1972,7 +1972,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -2170,7 +2170,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -2622,7 +2622,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -2652,7 +2652,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -2692,7 +2692,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -2859,7 +2859,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",

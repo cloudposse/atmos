@@ -1,0 +1,27 @@
+# Stack-level (global) layers that a component-level `!unset` drops.
+vars:
+  stage: dev
+
+retry:
+  max_attempts: 2
+
+components:
+  terraform:
+    vpc-base:
+      metadata:
+        type: abstract
+        component: vpc
+      vars:
+        cidr: 10.0.0.0/16
+      retry:
+        max_attempts: 3
+        backoff_strategy: constant
+
+    # A base component that unsets retry drops vpc-base and the global retry.
+    vpc-base-no-retry:
+      metadata:
+        type: abstract
+        component: vpc
+        inherits:
+          - vpc-base
+      retry: !unset
