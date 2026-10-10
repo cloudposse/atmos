@@ -70,7 +70,10 @@ func PrintStyledText(text string) error {
 	}
 
 	// Fall back to automatic color detection.
-	// supportscolor automatically detects TTY and other standard environment variables.
+	// supportscolor detects TTY but does not honor CLICOLOR=0, so check it first.
+	if enabled := terminalenv.IsColorEnabled(); enabled != nil && !*enabled {
+		return nil
+	}
 	if supportscolor.Stdout().SupportsColor {
 		return writeStyledFigurine(iolib.Data, text)
 	}
@@ -156,6 +159,10 @@ func PrintStyledTextToSpecifiedOutput(out io.Writer, text string) error {
 
 	// Check if colors are supported or forced
 	forceColor := viper.GetBool("force-color") || isTruthy(atmosForceColor) || isTruthy(cliColorForce) || isTruthy(forceColorEnv)
+	// CLICOLOR=0 disables automatic color, but explicit forcing can override it.
+	if enabled := terminalenv.IsColorEnabled(); !forceColor && enabled != nil && !*enabled {
+		return nil
+	}
 	if supportscolor.Stdout().SupportsColor || forceColor {
 		// Write to the specified output writer, not os.Stdout
 		return writeStyledFigurine(out, text)

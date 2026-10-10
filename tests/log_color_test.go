@@ -44,6 +44,12 @@ func TestLogColorStartup(t *testing.T) {
 		{"force-color enables logs", nil, []string{"--logs-color=true", "--force-color"}, true, false},
 		{"global veto beats logging true", []string{"CI=true", "GITHUB_ACTIONS=true"}, []string{"--logs-color=true", "--no-color"}, false, true},
 		// CLICOLOR=1 only advertises color support; it must not act as an opt-out.
+		{"CLICOLOR=0 disables CI color", []string{"CI=true", "GITHUB_ACTIONS=true", "CLICOLOR=0"}, nil, false, true},
+		{"CLICOLOR=1 preserves CI color", []string{"CI=true", "GITHUB_ACTIONS=true", "CLICOLOR=1"}, nil, true, false},
+		{"CLICOLOR=1 does not force a pipe", []string{"CLICOLOR=1"}, nil, false, true},
+		{"NO_COLOR beats CLICOLOR=1", []string{"CI=true", "GITHUB_ACTIONS=true", "CLICOLOR=1", "NO_COLOR=1"}, nil, false, true},
+		{"NO_COLOR zero still beats CLICOLOR=1", []string{"CLICOLOR=1", "NO_COLOR=0", "CLICOLOR_FORCE=1"}, nil, false, true},
+		{"empty NO_COLOR allows CLICOLOR=1", []string{"CI=true", "GITHUB_ACTIONS=true", "CLICOLOR=1", "NO_COLOR="}, nil, true, false},
 		{"CLICOLOR=1 with force-color", []string{"CLICOLOR=1"}, []string{"--force-color"}, true, false},
 		{"CLICOLOR=1 with CLICOLOR_FORCE", []string{"CLICOLOR=1", "CLICOLOR_FORCE=1"}, nil, true, false},
 		{"CLICOLOR=0 with force-color", []string{"CLICOLOR=0"}, []string{"--force-color"}, true, false},

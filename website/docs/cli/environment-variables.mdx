@@ -90,7 +90,25 @@ These environment variables configure Atmos behavior and can override settings i
 
   <dt>`NO_COLOR`</dt>
   <dd>
-    Standard convention to disable colored output. Recognized alongside `ATMOS_NO_COLOR`.
+    Any nonempty value disables color in Atmos logs and UI, including `NO_COLOR=0`.
+    Takes precedence over `CLICOLOR`, `CLICOLOR_FORCE`, and `--force-color`.
+    An empty value is treated as unset.
+  </dd>
+
+  <dt>`CLICOLOR`</dt>
+  <dd>
+    Controls automatic color without forcing it. `CLICOLOR=0` disables color unless
+    explicitly forced; `CLICOLOR=1` (or another nonzero value) permits color when
+    supported by the terminal or CI environment. It does not force color into pipes
+    or files. An empty value leaves automatic detection unchanged.
+    If both `NO_COLOR` and `CLICOLOR=1` are set, nonempty `NO_COLOR` wins and output
+    stays plain. See [color precedence](/cli/configuration/settings/terminal#color-configuration-precedence).
+  </dd>
+
+  <dt>`CLICOLOR_FORCE`</dt>
+  <dd>
+    Use `CLICOLOR_FORCE=1` to force color even in pipes or files, overriding
+    `CLICOLOR=0`. Nonempty `NO_COLOR` and `--no-color` still disable color.
   </dd>
 
   <dt>`ATMOS_FORCE_COLOR`</dt>

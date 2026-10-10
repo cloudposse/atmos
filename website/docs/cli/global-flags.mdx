@@ -698,12 +698,22 @@ All global flags can be set using environment variables. The precedence order is
 
     <dt>`ATMOS_NO_COLOR` / `NO_COLOR`</dt>
     <dd>
-        Disable colored output (any non-empty value disables color).
+        Disable colored output. `ATMOS_NO_COLOR` is boolean; any nonempty `NO_COLOR` disables color, including `NO_COLOR=0`.
         - `NO_COLOR` is a standard environment variable supported by many CLI tools (https://no-color.org/)
         - Maintained for portability across different systems and CI/CD environments
-        - **Highest precedence**: Takes precedence over `ATMOS_FORCE_COLOR`, `CLICOLOR_FORCE`, `ATMOS_COLOR`, and `COLOR` settings
+        - Nonempty `NO_COLOR` takes precedence over `CLICOLOR`, `ATMOS_FORCE_COLOR`, `CLICOLOR_FORCE`, `ATMOS_COLOR`, and `COLOR` settings
         - Overrides `--force-color` flag
         - Both `ATMOS_NO_COLOR` and `NO_COLOR` are fully supported
+        - `--no-color=false` can override `ATMOS_NO_COLOR`, but cannot override nonempty `NO_COLOR`
+    </dd>
+
+    <dt>`CLICOLOR`</dt>
+    <dd>
+        Controls automatic color: `0` disables it unless forced; `1` (or another nonzero value)
+        permits color on supported terminals and in color-capable CI environments.
+        It does not force color into pipes or files. Empty values leave detection unchanged.
+        Nonempty `NO_COLOR` wins when both are set, so `CLICOLOR=1 NO_COLOR=1` produces plain output.
+        See [color precedence](/cli/configuration/settings/terminal#color-configuration-precedence).
     </dd>
 
     <dt>`ATMOS_FORCE_TTY`</dt>

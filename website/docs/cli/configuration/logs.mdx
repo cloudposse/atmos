@@ -71,6 +71,10 @@ atmos --logs-level=debug --logs-file=/tmp/atmos.log --logs-color=false version
 ```
 
 To disable colors in both logs and UI output, use `--no-color` or set `NO_COLOR=1`.
+`CLICOLOR=0` also disables automatic color, but can be overridden by forced color.
+`CLICOLOR=1` permits automatic color without forcing it into pipes or files. If
+`CLICOLOR=1` and nonempty `NO_COLOR` are both set, `NO_COLOR` wins and logs stay plain.
+See [color precedence](/cli/configuration/settings/terminal#color-configuration-precedence).
 Logging color controls apply to Atmos's own logs, not output from child processes.
 
 ## Logs in CI/CD Pipelines

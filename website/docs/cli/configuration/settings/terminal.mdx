@@ -113,6 +113,24 @@ Atmos follows a clear precedence order for terminal settings, with command-line 
 Log color has one more control, `logs.color` (`--logs-color`, `ATMOS_LOGS_COLOR`). Setting it to `false` keeps
 logs plain while terminal output stays colored. See [Logs](/cli/configuration/logs).
 
+`CLICOLOR` remains supported independently of `NO_COLOR`. `CLICOLOR=1` (or another nonzero value)
+permits automatic color on supported terminals and in color-capable CI environments such as GitHub
+Actions; it does not force color into pipes or files. `CLICOLOR=0` disables automatic color, including
+the version logo, unless color is explicitly forced. An empty `CLICOLOR` leaves detection unchanged.
+
+When the variables contradict each other, nonempty `NO_COLOR` wins:
+
+```shell
+CLICOLOR=1 NO_COLOR=1 atmos version                 # Plain output
+CLICOLOR=1 NO_COLOR=0 atmos version                 # Also plain: NO_COLOR is nonempty
+CLICOLOR=1 NO_COLOR= atmos version                  # Automatic terminal/CI detection
+CLICOLOR=0 atmos version                           # Plain output
+CLICOLOR=0 atmos --force-color version              # Forced color
+CLICOLOR=0 NO_COLOR=1 atmos --force-color version   # Plain output: NO_COLOR wins
+```
+
+These rules apply to Atmos output; child processes may implement their own color conventions.
+
 ## Force Flags for Screenshot Generation
 
 Atmos provides force flags to generate consistent terminal output regardless of the environment. These are particularly useful for screenshot generation, documentation, and testing.
