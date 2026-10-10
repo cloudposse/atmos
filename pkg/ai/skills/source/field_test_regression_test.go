@@ -76,11 +76,14 @@ func TestConfigEditPreservesMode(t *testing.T) {
 	file := filepath.Join(dir, "atmos.yaml")
 	write(t, file, "ai:\n  skills:\n    Team:\n      source: org/repo\n")
 	require.NoError(t, os.Chmod(file, 0o640))
-	_, err := Edit(&schema.AtmosConfiguration{BasePath: dir}, EditOptions{Operation: "set", Label: "Team", Field: "ref", Value: "main", File: file})
+	before, err := os.Stat(file)
+	require.NoError(t, err)
+	_, err = Edit(&schema.AtmosConfiguration{BasePath: dir}, EditOptions{Operation: "set", Label: "Team", Field: "ref", Value: "main", File: file})
 	require.NoError(t, err)
 	info, err := os.Stat(file)
 	require.NoError(t, err)
-	require.Equal(t, os.FileMode(0o640), info.Mode().Perm())
+	// Windows exposes the read-only attribute rather than Unix permission bits.
+	require.Equal(t, before.Mode().Perm(), info.Mode().Perm())
 }
 
 func TestExplicitLowerLayerEditRespectsHigherPrecedence(t *testing.T) {
