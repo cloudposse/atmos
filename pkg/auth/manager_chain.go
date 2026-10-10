@@ -174,8 +174,8 @@ func (m *manager) findFirstValidCachedCredentials() int {
 			continue
 		}
 
-		// Validate credentials are not expired.
-		valid, expTime := m.isCredentialValid(identityName, cachedCreds)
+		// Validate credentials are eligible for chain reuse and are not expired.
+		valid, expTime := m.isChainCredentialValid(identityName, cachedCreds)
 		if valid {
 			if expTime != nil {
 				log.Debug("Found valid cached credentials", logKeyChainIndex, i, identityNameKey, identityName, logKeyExpirationChain, *expTime)
@@ -219,7 +219,7 @@ func (m *manager) findFirstValidCachedCredentials() int {
 					"required_buffer", minCredentialValidityBuffer)
 			}
 		} else {
-			// This shouldn't happen - isCredentialValid returns valid=true when expTime=nil.
+			// Credentials may be unsuitable as chain input even without an expiration.
 			log.Debug("Credentials are invalid", logKeyChainIndex, i, identityNameKey, identityName)
 		}
 	}
@@ -268,10 +268,9 @@ func (m *manager) isCredentialValid(identityName string, cachedCreds types.ICred
 
 // authenticateFromIndex performs authentication starting from the given index in the chain.
 func (m *manager) authenticateFromIndex(ctx context.Context, startIndex int) (types.ICredentials, error) {
-	// Standalone identities (aws/user, aws/ambient, generic ambient, emulator-bound) form
-	// a single-element chain with no provider step. Dispatch to them polymorphically via
-	// the StandaloneIdentity interface instead of special-casing each concrete kind, so the
-	// generic manager stays free of imports on concrete identity implementations.
+	// A standalone identity can be the target itself or the root of a longer chain.
+	// Preserve direct authentication for a standalone target; longer chains dispatch
+	// their root through the same interface when no reusable credentials are available.
 	if len(m.chain) == 1 {
 		if standalone, ok := m.identities[m.chain[0]].(types.StandaloneIdentity); ok && standalone.IsStandalone() {
 			return standalone.AuthenticateStandalone(ctx)
@@ -282,35 +281,27 @@ func (m *manager) authenticateFromIndex(ctx context.Context, startIndex int) (ty
 	return m.authenticateProviderChain(ctx, startIndex)
 }
 
-// authenticateProviderChain handles authentication for provider-based identity chains.
+// authenticateProviderChain handles chains rooted at a provider or standalone identity.
 func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int) (types.ICredentials, error) {
 	var currentCreds types.ICredentials
 	var err error
 
 	// Determine actual starting point for authentication.
-	// When startIndex is -1 (no valid cached credentials), this returns 0 (start from provider).
+	// When startIndex is -1 (no valid cached credentials), this returns 0 (start from root).
 	// When startIndex is >= 0, this returns the same index (valid cached credentials exist).
 	actualStartIndex := m.determineStartingIndex(startIndex)
 
 	// Retrieve cached credentials if starting from a cached point.
 	// Important: Only fetch cached credentials if we had valid ones (startIndex >= 0).
 	// If startIndex was -1 (no valid cached creds), actualStartIndex becomes 0 but we should NOT
-	// fetch cached credentials - we should start fresh from provider authentication.
+	// fetch cached credentials - we should start fresh from root authentication.
 	if startIndex >= 0 && actualStartIndex >= 0 {
 		currentCreds, actualStartIndex = m.fetchCachedCredentials(actualStartIndex)
 	}
 
-	// Step 1: Authenticate with provider if needed.
-	// Only authenticate provider if we don't have cached provider credentials.
-	if actualStartIndex == 0 { //nolint:nestif
-		// Allow provider to inspect the chain and prepare pre-auth preferences.
-		if provider, exists := m.providers[m.chain[0]]; exists {
-			if err := provider.PreAuthenticate(m); err != nil {
-				errUtils.CheckErrorAndPrint(err, "Pre Authenticate", "")
-				return nil, fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, m.chain[0], err)
-			}
-		}
-		currentCreds, err = m.authenticateWithProvider(ctx, m.chain[0])
+	// Step 1: Authenticate the root if no reusable cached credentials are available.
+	if actualStartIndex == 0 {
+		currentCreds, err = m.authenticateChainRoot(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -324,13 +315,19 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 func (m *manager) fetchCachedCredentials(startIndex int) (types.ICredentials, int) {
 	// Guard against nil credential store (can happen in unit tests).
 	if m.credentialStore == nil {
-		log.Debug("No credential store available, starting from provider")
+		log.Debug("No credential store available, starting from chain root")
 		return nil, 0
 	}
 
 	currentCreds, err := m.getChainCredentials(m.chain, startIndex)
 	if err != nil {
-		log.Debug("Failed to retrieve cached credentials, starting from provider", "error", err)
+		log.Debug("Failed to retrieve cached credentials, starting from chain root", "error", err)
+		return nil, 0
+	}
+	// Storage may have changed since cache discovery, including a session expiring
+	// and falling back to long-lived user keys. Revalidate before skipping this step.
+	if valid, _ := m.isChainCredentialValid(m.chain[startIndex], currentCreds); !valid {
+		log.Debug("Cached credentials no longer reusable, starting from chain root")
 		return nil, 0
 	}
 	// Return cached credentials as OUTPUT of step at startIndex, so authentication
@@ -344,7 +341,7 @@ func (m *manager) fetchCachedCredentials(startIndex int) (types.ICredentials, in
 // determineStartingIndex determines where to start authentication based on cached credentials.
 func (m *manager) determineStartingIndex(startIndex int) int {
 	if startIndex == -1 {
-		return 0 // Start from provider if no valid cached credentials
+		return 0 // Start from chain root if no valid cached credentials.
 	}
 	return startIndex
 }

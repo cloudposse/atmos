@@ -86,9 +86,9 @@ func TestDescribeCommandsWithIdentityFlag(t *testing.T) {
 	}
 
 	t.Run("describe component without identity flag should work normally", func(t *testing.T) {
-		t.Chdir("fixtures/scenarios/atmos-include-yaml-function")
+		t.Chdir("fixtures/scenarios/basic")
 
-		_, err := runDescribeIdentityCommand(t, "describe", "component", "component-1", "--stack", "nonprod")
+		_, err := runDescribeIdentityCommand(t, "describe", "component", "mycomponent", "--stack", "nonprod")
 
 		// Should succeed (component exists in test fixtures).
 		assert.NoError(t, err, "describe component without identity should succeed")

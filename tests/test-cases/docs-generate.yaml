@@ -20,13 +20,17 @@ tests:
       file_contains:
         "README.md":
           - "## Requirements"
-          - "## Providers" 
+          - "## Providers"
 
   - name: "atmos docs generate input variants"
     enabled: true
     snapshot: false
     description: "Ensure all 3 input types are supported"
     workdir: "fixtures/scenarios/docs-generate/input-variants/"
+    env:
+      ATMOS_TEST_README_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/raw/cloudposse/atmos/main/README.yaml"
+      GITHUB_SERVER_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}"
+      GITHUB_API_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/api/v3"
     command: "atmos"
     args:
       - "docs"

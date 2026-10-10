@@ -1742,9 +1742,16 @@ jobs:
           # (software update, CDN, certificate revocation, time sync) are
           # listed below the job-specific endpoints; see the `test` job's
           # allowed-endpoints comment for the rationale.
+          # Allow setup-go's version manifest and official fallback download
+          # chain, plus module checksum verification on runners with cold caches.
           allowed-endpoints: >
             api.github.com:443
             github.com:443
+            raw.githubusercontent.com:443
+            golang.org:443
+            go.dev:443
+            dl.google.com:443
+            sum.golang.org:443
             proxy.golang.org:443
             release-assets.githubusercontent.com:443
             storage.googleapis.com:443
