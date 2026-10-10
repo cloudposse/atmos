@@ -397,3 +397,128 @@ func TestProviderContextElevatedEvent(t *testing.T) {
 		})
 	}
 }
+
+func TestProviderContextPullRequestFork(t *testing.T) {
+	repo := func(fullName string, fork bool) map[string]any {
+		return map[string]any{"full_name": fullName, "fork": fork}
+	}
+	pullRequest := func(head, base any) map[string]any {
+		return map[string]any{"pull_request": map[string]any{
+			"head": map[string]any{"ref": "feature", "repo": head},
+			"base": map[string]any{"ref": "main", "repo": base},
+		}}
+	}
+
+	tests := []struct {
+		name     string
+		event    string
+		payload  map[string]any
+		wantFork bool
+	}{
+		{"same repository", "pull_request", pullRequest(repo("acme/infra", false), repo("acme/infra", false)), false},
+		{"head flagged as fork", "pull_request", pullRequest(repo("acme/infra", true), repo("acme/infra", false)), true},
+		{"head repository name differs", "pull_request_target", pullRequest(repo("forker/infra", false), repo("acme/infra", false)), true},
+		{"head repository deleted", "pull_request_target", pullRequest(nil, repo("acme/infra", false)), false},
+		{"no repository objects", "pull_request", map[string]any{"pull_request": map[string]any{"head": map[string]any{}}}, false},
+		{"no pull_request object", "pull_request", map[string]any{}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GITHUB_EVENT_NAME", tt.event)
+			t.Setenv("GITHUB_EVENT_PATH", writeEventPayload(t, tt.payload))
+			t.Setenv("GITHUB_REF", "refs/pull/7/merge")
+			t.Setenv("GITHUB_REPOSITORY", "acme/infra")
+
+			ctx, err := NewProvider().Context()
+
+			require.NoError(t, err)
+			require.NotNil(t, ctx.PullRequest)
+			assert.Equal(t, 7, ctx.PullRequest.Number)
+			assert.Equal(t, tt.wantFork, ctx.PullRequest.Fork)
+		})
+	}
+
+	t.Run("unreadable payload is not a fork", func(t *testing.T) {
+		t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+		t.Setenv("GITHUB_EVENT_PATH", "")
+		t.Setenv("GITHUB_REF", "refs/pull/7/merge")
+
+		ctx, err := NewProvider().Context()
+
+		require.NoError(t, err)
+		require.NotNil(t, ctx.PullRequest)
+		assert.False(t, ctx.PullRequest.Fork)
+	})
+}
+
+func TestProviderContextWorkflowRunFork(t *testing.T) {
+	run := func(headRepo any, pullRequests []any) map[string]any {
+		return map[string]any{"workflow_run": map[string]any{
+			"head_branch":     "fork-branch",
+			"head_repository": headRepo,
+			"pull_requests":   pullRequests,
+		}}
+	}
+
+	tests := []struct {
+		name    string
+		payload map[string]any
+		want    *struct {
+			number  int
+			headRef string
+			baseRef string
+		}
+	}{
+		{
+			name:    "same repository run has no pull request",
+			payload: run(map[string]any{"full_name": "acme/infra", "fork": false}, nil),
+		},
+		{
+			name:    "no head repository has no pull request",
+			payload: run(nil, nil),
+		},
+		{
+			name:    "fork run by name",
+			payload: run(map[string]any{"full_name": "forker/infra"}, nil),
+			want: &struct {
+				number  int
+				headRef string
+				baseRef string
+			}{0, "fork-branch", ""},
+		},
+		{
+			name: "fork run flagged with pull request details",
+			payload: run(map[string]any{"full_name": "acme/infra", "fork": true}, []any{
+				map[string]any{"number": float64(9), "base": map[string]any{"ref": "main"}},
+			}),
+			want: &struct {
+				number  int
+				headRef string
+				baseRef string
+			}{9, "fork-branch", "main"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GITHUB_EVENT_NAME", "workflow_run")
+			t.Setenv("GITHUB_EVENT_PATH", writeEventPayload(t, tt.payload))
+			t.Setenv("GITHUB_REPOSITORY", "acme/infra")
+
+			ctx, err := NewProvider().Context()
+
+			require.NoError(t, err)
+			assert.True(t, ctx.ElevatedEvent)
+			if tt.want == nil {
+				assert.Nil(t, ctx.PullRequest)
+				return
+			}
+			require.NotNil(t, ctx.PullRequest)
+			assert.True(t, ctx.PullRequest.Fork)
+			assert.Equal(t, tt.want.number, ctx.PullRequest.Number)
+			assert.Equal(t, tt.want.headRef, ctx.PullRequest.HeadRef)
+			assert.Equal(t, tt.want.baseRef, ctx.PullRequest.BaseRef)
+		})
+	}
+}

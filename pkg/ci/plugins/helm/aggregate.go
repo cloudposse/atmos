@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	ci "github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -56,7 +57,7 @@ func (p *Plugin) onAfterAggregate(ctx *plugin.HookContext) error {
 			log.Debug("Skipping aggregate Helm CI hook: no results")
 			return nil
 		}
-		if !isSummaryEnabled(ctx.Config) {
+		if !ci.SummaryEnabled(ctx.Config) {
 			return nil
 		}
 		writer := ctx.Provider.OutputWriter()
@@ -69,7 +70,7 @@ func (p *Plugin) onAfterAggregate(ctx *plugin.HookContext) error {
 		}
 		return writer.WriteSummary(renderHelmAggregateFailureMarkdown(command, ctx.CommandError, ctx.ExitCode))
 	}
-	if !isSummaryEnabled(ctx.Config) {
+	if !ci.SummaryEnabled(ctx.Config) {
 		return nil
 	}
 	writer := ctx.Provider.OutputWriter()
@@ -220,12 +221,14 @@ func writeHelmAggregateCounts(builder *strings.Builder, command string, counts *
 	if command == "apply" {
 		rows = append(rows, helmAggregateCountRow{label: "Succeeded", count: counts.Succeeded})
 	} else {
-		rows = append(rows,
+		rows = append(
+			rows,
 			helmAggregateCountRow{label: "Changed", count: counts.Changed},
 			helmAggregateCountRow{label: "No changes", count: counts.NoChanges},
 		)
 	}
-	rows = append(rows,
+	rows = append(
+		rows,
 		helmAggregateCountRow{label: "Failed", count: counts.Failed},
 		helmAggregateCountRow{label: "Skipped", count: counts.Skipped},
 	)

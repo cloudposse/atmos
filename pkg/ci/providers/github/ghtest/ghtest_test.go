@@ -204,6 +204,45 @@ func TestSetEnv_PullRequestTargetIsElevated(t *testing.T) {
 	assert.True(t, ctx.ElevatedEvent)
 	require.NotNil(t, ctx.PullRequest)
 	assert.Equal(t, 7, ctx.PullRequest.Number)
+	assert.False(t, ctx.PullRequest.Fork, "WithPullRequest describes a same-repository pull request")
+}
+
+func TestSetEnv_ForkPullRequest(t *testing.T) {
+	s := ghtest.NewServer(t)
+	env := ghtest.SetEnv(
+		t, s,
+		ghtest.WithRepository("acme/infra"),
+		ghtest.WithEvent("pull_request_target", map[string]any{"action": "synchronize"}),
+		ghtest.WithForkPullRequest(8, "fork-branch", "main"),
+	)
+
+	ctx, err := github.NewProvider().Context()
+	require.NoError(t, err)
+	assert.True(t, ctx.ElevatedEvent)
+	require.NotNil(t, ctx.PullRequest)
+	assert.Equal(t, 8, ctx.PullRequest.Number)
+	assert.Equal(t, "fork-branch", ctx.PullRequest.HeadRef)
+	assert.True(t, ctx.PullRequest.Fork)
+
+	var payload struct {
+		PullRequest struct {
+			Head struct {
+				Repo struct {
+					FullName string `json:"full_name"`
+					Fork     bool   `json:"fork"`
+				} `json:"repo"`
+			} `json:"head"`
+			Base struct {
+				Repo struct {
+					FullName string `json:"full_name"`
+				} `json:"repo"`
+			} `json:"base"`
+		} `json:"pull_request"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(ghtest.ReadFile(t, env.EventPath)), &payload))
+	assert.True(t, payload.PullRequest.Head.Repo.Fork)
+	assert.Equal(t, "forker/infra", payload.PullRequest.Head.Repo.FullName)
+	assert.Equal(t, "acme/infra", payload.PullRequest.Base.Repo.FullName)
 }
 
 // TestEndToEnd_ProviderWritesAreRecorded drives the real provider, built by

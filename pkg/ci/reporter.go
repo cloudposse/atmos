@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	"github.com/cloudposse/atmos/pkg/ci/templates"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -90,6 +91,8 @@ type Reporter interface {
 	Base() (*BaseResolution, error)
 	// Summary appends markdown to the job summary.
 	Summary(markdown string) (Receipt, error)
+	// RenderSummary renders the summary template (name, or ci.summary.template when empty) with data.
+	RenderSummary(name string, data any) (string, error)
 	// Output writes a CI output variable.
 	Output(key, value string) (Receipt, error)
 	// Env exports an environment variable to later steps of the same job.
@@ -102,6 +105,8 @@ type Reporter interface {
 	Annotate(annotation Annotation) (Receipt, error)
 	// Comment posts or updates a PR/MR comment.
 	Comment(ctx context.Context, req CommentRequest) (Receipt, error)
+	// RenderComment renders the comment template (name, or ci.comments.template when empty) with data.
+	RenderComment(name string, data any) (string, error)
 	// Check creates a commit status or check run.
 	Check(ctx context.Context, req CheckRequest) (Receipt, error)
 	// UpdateCheck updates a commit status or check run.
@@ -257,6 +262,34 @@ func (r *reporter) Summary(markdown string) (Receipt, error) {
 	return r.write(FeatureSummary, SummaryEnabled, errUtils.ErrCISummaryWriteFailed, func(w provider.OutputWriter) error {
 		return w.WriteSummary(markdown)
 	})
+}
+
+func (r *reporter) RenderSummary(name string, data any) (string, error) {
+	defer perf.Track(r.cfg, "ci.Reporter.RenderSummary")()
+
+	if name == "" && r.cfg != nil {
+		name = r.cfg.CI.Summary.Template
+	}
+	if name == "" {
+		return "", errUtils.Build(errUtils.ErrCITemplateNotFound).
+			WithExplanation("no template given and ci.summary.template is not set").
+			Err()
+	}
+	return templates.RenderReport(r.cfg, name, data)
+}
+
+func (r *reporter) RenderComment(name string, data any) (string, error) {
+	defer perf.Track(r.cfg, "ci.Reporter.RenderComment")()
+
+	if name == "" && r.cfg != nil {
+		name = r.cfg.CI.Comments.Template
+	}
+	if name == "" {
+		return "", errUtils.Build(errUtils.ErrCITemplateNotFound).
+			WithExplanation("no template given and ci.comments.template is not set").
+			Err()
+	}
+	return templates.RenderReport(r.cfg, name, data)
 }
 
 func (r *reporter) Output(key, value string) (Receipt, error) {

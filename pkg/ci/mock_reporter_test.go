@@ -432,6 +432,84 @@ func (c *MockReporterPathCall) DoAndReturn(f func(string) (Receipt, error)) *Moc
 	return c
 }
 
+// RenderComment mocks base method.
+func (m *MockReporter) RenderComment(name string, data any) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RenderComment", name, data)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RenderComment indicates an expected call of RenderComment.
+func (mr *MockReporterMockRecorder) RenderComment(name, data any) *MockReporterRenderCommentCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RenderComment", reflect.TypeOf((*MockReporter)(nil).RenderComment), name, data)
+	return &MockReporterRenderCommentCall{Call: call}
+}
+
+// MockReporterRenderCommentCall wrap *gomock.Call
+type MockReporterRenderCommentCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockReporterRenderCommentCall) Return(arg0 string, arg1 error) *MockReporterRenderCommentCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockReporterRenderCommentCall) Do(f func(string, any) (string, error)) *MockReporterRenderCommentCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockReporterRenderCommentCall) DoAndReturn(f func(string, any) (string, error)) *MockReporterRenderCommentCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// RenderSummary mocks base method.
+func (m *MockReporter) RenderSummary(name string, data any) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RenderSummary", name, data)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RenderSummary indicates an expected call of RenderSummary.
+func (mr *MockReporterMockRecorder) RenderSummary(name, data any) *MockReporterRenderSummaryCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RenderSummary", reflect.TypeOf((*MockReporter)(nil).RenderSummary), name, data)
+	return &MockReporterRenderSummaryCall{Call: call}
+}
+
+// MockReporterRenderSummaryCall wrap *gomock.Call
+type MockReporterRenderSummaryCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockReporterRenderSummaryCall) Return(arg0 string, arg1 error) *MockReporterRenderSummaryCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockReporterRenderSummaryCall) Do(f func(string, any) (string, error)) *MockReporterRenderSummaryCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockReporterRenderSummaryCall) DoAndReturn(f func(string, any) (string, error)) *MockReporterRenderSummaryCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // SARIF mocks base method.
 func (m *MockReporter) SARIF(ctx context.Context, report SARIFReport) (Receipt, error) {
 	m.ctrl.T.Helper()

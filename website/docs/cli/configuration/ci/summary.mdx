@@ -42,6 +42,11 @@ ci:
     [templates base path](/cli/configuration/ci/templates). For native Kubernetes components
     this loads `<base_path>/kubernetes/<template>.md`.
 
+    The same key is the default template for script calls: `ci.summary(data = {...})` in an
+    [automation script](/functions/automation/ci.summary) renders `<base_path>/<template>` (or
+    `<base_path>/<template>.md`) with the data as context when the call names no `template` itself.
+    See [script report templates](/cli/configuration/ci/templates#script-report-templates).
+
     **Default:** `summary`
   </dd>
 </dl>

@@ -25,6 +25,7 @@ ci:
   comments:
     enabled: true
     behavior: upsert
+    template: "release.md"
 ```
 </File>
 
@@ -39,6 +40,17 @@ ci:
     **Default:** `false` (explicit opt-in)
 
     **Environment variable:** `ATMOS_CI_COMMENTS_ENABLED` — overrides this setting when set.
+  </dd>
+
+  <dt>`ci.comments.template`</dt>
+  <dd>
+    The default template for script calls: `ci.comment(data = {...})` in an
+    [automation script](/functions/automation/ci.comment) renders `<base_path>/<template>` (or
+    `<base_path>/<template>.md`) with the data as context when the call names no `template` itself.
+    The path is relative to the [templates base path](/cli/configuration/ci/templates#script-report-templates).
+    Native Terraform plan comments do not read this key; they reuse the plan summary template.
+
+    **Default:** none
   </dd>
 
   <dt>`ci.comments.behavior`</dt>

@@ -115,6 +115,14 @@ The value must be an absolute `http(s)` URL; a trailing slash is added when miss
 
 `Context.RunURL` links to the current run: `<GITHUB_SERVER_URL>/<repository>/actions/runs/<run id>`. It is empty when `GITHUB_SERVER_URL`, the repository, or the run ID is unavailable. It replaces the terraform plugin's private `getGitHubActionsRunURL` and is the default details URL for `Reporter.Check`.
 
+## Context: pull request fork detection
+
+For `pull_request` and `pull_request_target` events, `Context.PullRequest.Fork` is read from the event payload (`$GITHUB_EVENT_PATH`). The head repository is a fork when `pull_request.head.repo.fork` is true or when `head.repo.full_name` differs from `base.repo.full_name`. A missing or unreadable payload, a deleted head repository, or missing repository objects report false.
+
+A `workflow_run` event has no `pull_request` object. When `workflow_run.head_repository` is a fork, or its `full_name` differs from the repository, the provider reports a fork pull request (`Fork` true, the head branch from `workflow_run.head_branch`, and the number and base from `workflow_run.pull_requests[0]` when present, otherwise 0). Without this the fork gate would never see the fork. A same-repository `workflow_run` leaves `PullRequest` nil.
+
+The reporter's fork gate uses `Fork` together with `ElevatedEvent`. See [Interfaces](../../framework/interfaces.md).
+
 ## Environment Export and Masking
 
 The GitHub provider implements two optional capabilities used by the [Reporter](../../framework/interfaces.md#reporter-script-and-step-facing-seam):

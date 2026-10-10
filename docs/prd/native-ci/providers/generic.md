@@ -36,7 +36,7 @@ The generic provider populates `ci.Context` from environment variables. `SHA` an
 | `EventName` | `$ATMOS_CI_EVENT` |
 | `RunID` | `$ATMOS_CI_RUN_ID` or `$CI_JOB_ID` or `$BUILD_ID` |
 | `RunURL` | `$ATMOS_CI_RUN_URL` or `$CI_JOB_URL` or `$BUILD_URL` |
-| `PullRequest` | `$ATMOS_CI_PR` (positive integer); `nil` when unset or invalid. `BaseRef` comes from `$ATMOS_CI_BASE_REF`, the same variable `ResolveBase` reads. |
+| `PullRequest` | `$ATMOS_CI_PR` (positive integer); `nil` when unset or invalid. `BaseRef` comes from `$ATMOS_CI_BASE_REF`, the same variable `ResolveBase` reads. `Fork` comes from `$ATMOS_CI_PR_FORK`, parsed as a boolean (`true`, `1`); unset or invalid means false. |
 
 Fields NOT populated: `RunNumber`, `Workflow`, `Job`, `Ref`.
 
@@ -75,13 +75,13 @@ The generic `PostComment` is deliberately lenient because a laptop run usually h
 
 Failures wrap `ErrCIEnvWriteFailed`.
 
+### Output and summary files
+
+`OutputWriter()` reads `ATMOS_CI_OUTPUT` and `ATMOS_CI_SUMMARY` each time it is called, like `ATMOS_CI_ENV` and `ATMOS_CI_PATH`. `NewProvider` caches no environment, so a change made after construction applies to the next writer.
+
 ### Output binding
 
-The generic provider implements the optional `OutputBinder` capability (`BindOutput(io.Writer) Provider`). Hosts such as script steps bind it to their own writer so local renderings keep parallel-task line prefixing and secret masking instead of going to the global UI channel. `BindOutput` returns a copy that shares the file settings and the two atomic counters (check-run IDs and comment IDs), so IDs stay unique across bound copies.
-
-### Known inconsistency
-
-`ATMOS_CI_OUTPUT` and `ATMOS_CI_SUMMARY` are still read when the output writer is created (init), whereas `ATMOS_CI_ENV` and `ATMOS_CI_PATH` are read at call time. Unifying these is tracked as a follow-up.
+The generic provider implements the optional `OutputBinder` capability (`BindOutput(io.Writer) Provider`). Hosts such as script steps bind it to their own writer so local renderings keep parallel-task line prefixing and secret masking instead of going to the global UI channel. `BindOutput` returns a copy that shares the two atomic counters (check-run IDs and comment IDs), so IDs stay unique across bound copies.
 
 ## Implementation
 

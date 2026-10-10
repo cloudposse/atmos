@@ -38,7 +38,7 @@ The `ci` module is predeclared in every script: standalone scripts and the scrip
 
 | Call | Purpose | In CI | Locally |
 |------|---------|-------|---------|
-| `ci.context` | Read provider, event, SHA, branch, repository, actor, run ID, run URL, whether the event is elevated, and the pull request (`number`, `head`, `base`, `url`, or `None`). Read-only; resolves on first read. | Values from the provider | Values from `ATMOS_CI_*` variables and the local git repository; `local` is true |
+| `ci.context` | Read provider, event, SHA, branch, repository, actor, run ID, run URL, whether the event is elevated, and the pull request (`number`, `head`, `base`, `url`, `fork`, or `None`). Read-only; resolves on first read. | Values from the provider | Values from `ATMOS_CI_*` variables and the local git repository; `local` is true |
 | `ci.base` | Read the base that affected detection compares against. | Resolved base | Resolved base |
 | `ci.summary(markdown)` | Append Markdown to the job summary. | Written to the provider's summary | Rendered as terminal Markdown on stderr |
 | `ci.output(name, value)` | Set a step output for later steps and jobs. | Written to the provider's output file | Printed as `name=value` on stderr |
@@ -99,7 +99,9 @@ A disabled call never fails and never silently does nothing. It warns, naming th
 
 ## Fork gate
 
-Under `pull_request_target` and `workflow_run`, the job holds privileged credentials while the triggering code can come from a fork. In that situation `ci.comment` and `ci.check` do not post unless `ci.allow_unsafe_fork_execution` is true. They warn and render locally instead. This is the same opt-in and the same grep-able name as the [fork-PR trust gate](./fork-pr-trust-gate.md). `ci.context.elevated` lets a script detect the situation and skip work that only makes sense when posting is allowed.
+Under `pull_request_target` and `workflow_run`, the job holds privileged credentials while the triggering code can come from a fork. In that situation comments and checks are held only when the pull request comes from a fork (`ci.context.pr.fork`), unless `ci.allow_unsafe_fork_execution` is set. A held `ci.comment` or `ci.check` warns and renders locally instead. A pull request from the same repository posts normally under these events. This is the same opt-in and the same grep-able name as the [fork-PR trust gate](./fork-pr-trust-gate.md). `ci.context.elevated` and `ci.context.pr.fork` let a script detect the situation and skip work that only makes sense when posting is allowed.
+
+The provider decides `fork` from the event payload. The GitHub provider sets it when `pull_request.head.repo.fork` is true or `head.repo.full_name` differs from `base.repo.full_name`. For a `workflow_run` event, which carries no `pull_request` object, it uses `workflow_run.head_repository` the same way and reports a fork pull request (with number 0 when GitHub supplies none), so the gate does not fail open. The generic provider reads `ATMOS_CI_PR_FORK`.
 
 ## Masking policy
 
@@ -149,13 +151,11 @@ This implementation has not merged into `main`. Resolve required fixes in the ac
 - Container image summary through the same path, so image build and push steps report through `ci.summary`.
 - The `ci.summary.template` and `ci.comments.template` settings applied to script calls, so teams can standardize layout for script-authored reports.
 - A laptop opt-in to post for real, for debugging a comment against a draft pull request.
-- The `pr.fork` field populated from the event payload, so scripts can tell a fork pull request apart without relying on the event name.
-- Housekeeping found during implementation: dead `providers/github/loggroup.go`, plugin-local gating copies, and the generic provider reading `ATMOS_CI_OUTPUT`/`ATMOS_CI_SUMMARY` at init instead of call time.
 
 ## Testing
 
 - Local rendering for every call through the generic provider, asserting the exact stderr and file output.
 - Gating: for each call, a disabled flag warns with the flag name and renders locally; an enabled flag reaches the provider.
-- Fork gate: `ci.comment` and `ci.check` hold under `pull_request_target` and `workflow_run`, and post with `ci.allow_unsafe_fork_execution` set.
+- Fork gate: `ci.comment` and `ci.check` hold for a fork pull request under `pull_request_target` and `workflow_run`, post for a same-repository pull request, and post for a fork with `ci.allow_unsafe_fork_execution` set.
 - GitHub provider against a fake API server, including `GITHUB_API_URL` and `ATMOS_CI_GITHUB_API_URL` precedence.
 - Negative path: gating and the fork gate do not fail the script; a provider API error does.

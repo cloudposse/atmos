@@ -169,6 +169,8 @@ func (l *Loader) getComponentOverrides(componentType string) map[string]string {
 		return cfg.Helm
 	case "helmfile":
 		return cfg.Helmfile
+	case "container":
+		return cfg.Container
 	default:
 		return nil
 	}

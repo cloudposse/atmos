@@ -1464,6 +1464,9 @@ type CITemplatesConfig struct {
 	// Helmfile contains template overrides for helmfile commands.
 	// Keys are command names (e.g., "diff", "apply"), values are template file paths.
 	Helmfile map[string]string `yaml:"helmfile,omitempty" json:"helmfile,omitempty" mapstructure:"helmfile"`
+
+	// Container maps a container operation name (`image`) to a template file name under base_path.
+	Container map[string]string `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`
 }
 
 type Helmfile struct {
