@@ -46,7 +46,9 @@ func installPRFakes(t *testing.T) *fakePublisher {
 		return "github", pullRequestAddress{Owner: "acme", Repository: "deployments"}, nil
 	}
 	defaultBranch = func(context.Context, string, string) (string, error) { return "main", nil }
-	t.Cleanup(func() { newPullRequestPublisher, pullRequestAddressFor, defaultBranch = prevPublisher, prevAddress, prevDefault })
+	t.Cleanup(func() {
+		newPullRequestPublisher, pullRequestAddressFor, defaultBranch = prevPublisher, prevAddress, prevDefault
+	})
 	return publisher
 }
 
@@ -331,15 +333,19 @@ func TestDeliverPullRequestFailsBeforeGitOperations(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name:    "publisher factory error",
-			branch:  "main",
-			setup:   func() { newPullRequestPublisher = func(string) (atmosgit.PullRequestPublisher, error) { return nil, errFactory } },
+			name:   "publisher factory error",
+			branch: "main",
+			setup: func() {
+				newPullRequestPublisher = func(string) (atmosgit.PullRequestPublisher, error) { return nil, errFactory }
+			},
 			wantErr: errFactory,
 		},
 		{
-			name:    "default branch error",
-			branch:  "",
-			setup:   func() { defaultBranch = func(context.Context, string, string) (string, error) { return "", errDefault } },
+			name:   "default branch error",
+			branch: "",
+			setup: func() {
+				defaultBranch = func(context.Context, string, string) (string, error) { return "", errDefault }
+			},
 			wantErr: errDefault,
 		},
 	}
