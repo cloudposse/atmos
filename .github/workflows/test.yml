@@ -63,7 +63,7 @@ env:
   # matrix.shard list below, which must stay in sync with this count).
   TEST_SHARD_COUNT: "10"
   # Number of parallel shards the `race` job's package list is split into
-  # (see magefiles/race_matrix.go's Test.RaceMatrix and the `race` job's
+  # (see magefiles/test/race_matrix.go's Test.RaceMatrix and the `race` job's
   # hardcoded "shard N/4" name below, which must stay in sync with this
   # count -- the job `name:` context can't read workflow `env`, same reason
   # TEST_SHARD_COUNT above needs its own comment).
@@ -835,12 +835,9 @@ jobs:
           path: pacts/*.json
           if-no-files-found: error
 
-  # magefiles/ carries the `mage` build tag (invoked only via `go tool mage`),
-  # so it's silently excluded from the default `go build ./...`/`go test
-  # ./...` scope every other job here uses. Run it as its own lightweight job
-  # (parallel to `build`, needing only the Go toolchain, not the built
-  # `atmos` binary) so it gets real CI + Codecov signal instead of running
-  # only locally.
+  # Mage's entrypoint and tooling tests carry the `mage` build tag. Imported
+  # target implementations are ordinary Go packages. Run all tooling tests in
+  # this dedicated job with coverage and race instrumentation.
   magefiles:
     name: "[magefiles] unit tests"
     runs-on: ubuntu-latest
@@ -887,7 +884,7 @@ jobs:
   # itself: `go list ./...` order is stable (sorted by import path), so a
   # naive round-robin split-per-shard-job would pin the same cluster of
   # packages to the same shard on every run. Doing the split in one place
-  # lets it shuffle the full list first (magefiles/race_matrix.go's
+  # lets it shuffle the full list first (magefiles/test/race_matrix.go's
   # Test.RaceMatrix, seeded from github.run_id so the assignment still
   # varies run to run) and hand each shard its own package list directly,
   # rather than trusting N independent jobs to recompute an identical split.
@@ -1032,7 +1029,7 @@ jobs:
           # reason (see their own "Use the GitHub token" comment).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # This shard's package list, precomputed by race-plan above.
-          # racePackagesFromEnv (magefiles/test_race.go) treats a non-empty
+          # racePackagesFromEnv (magefiles/test/race.go) treats a non-empty
           # TEST the same as every other manual TEST override in this repo.
           TEST: ${{ matrix.packages }}
         run: atmos test race

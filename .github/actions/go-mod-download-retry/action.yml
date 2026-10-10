@@ -7,7 +7,7 @@ description: >
   unreachable outright, not a mid-stream reset. Makes up to three attempts
   with a cooldown between each, matching the convention already used for
   artifact downloads (.github/actions/download-artifact-retry) and
-  magefiles/build.go's runGoModDownload. See
+  magefiles/build/build.go's runGoModDownload. See
   docs/fixes/2026-08-25-build-atmos-go-mod-download-retry.md.
 
 inputs:

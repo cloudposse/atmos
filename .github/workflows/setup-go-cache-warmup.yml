@@ -169,7 +169,7 @@ jobs:
       # Warm the same cache namespaces the real jobs compile in. Flags must
       # match the real invocations or Go's action IDs differ and the warm
       # entries go unused: atmos builds with CGO_ENABLED=0 + GOFIPS140=latest
-      # (see .goreleaser.yml, magefiles/build.go, docs/prd/fips-140-mode.md).
+      # (see .goreleaser.yml, magefiles/build/build.go, docs/prd/fips-140-mode.md).
       - name: Warm the build cache (go build ./...)
         env:
           CGO_ENABLED: "0"

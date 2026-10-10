@@ -1,0 +1,21 @@
+name: Quality Gate Signal
+
+# Fork review events have read-only tokens. This workflow executes no checkout;
+# completion wakes the trusted default-branch Quality Report workflow.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+
+permissions: {}
+
+jobs:
+  signal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - name: Notify trusted quality reporter
+        run: 'true'

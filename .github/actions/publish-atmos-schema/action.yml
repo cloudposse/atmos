@@ -40,7 +40,7 @@ runs:
     # CGO_ENABLED=0: `go run .` builds the whole atmos binary graph, which pulls in
     # cgo-linked hardware-security-key deps (e.g. github.com/bearsh/hid) that need
     # system libudev headers this runner doesn't have. atmos itself always builds with
-    # CGO disabled (see .goreleaser.yml, magefiles/build.go); match that here too.
+    # CGO disabled (see .goreleaser.yml, magefiles/build/build.go); match that here too.
     # GOFIPS140=latest: match every other Go-toolchain build invocation in the repo
     # (see docs/prd/fips-140-mode.md) so this throwaway schema-generation process
     # behaves identically to a real atmos build/test binary.

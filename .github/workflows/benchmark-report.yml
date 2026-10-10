@@ -1,0 +1,62 @@
+name: Benchmark Report
+
+on:
+  workflow_run:
+    workflows: [Benchmarks]
+    types: [completed]
+
+permissions: {}
+
+# Serialize reporters for a PR head, including reruns. Mage rejects stale PR
+# heads and attempts before publishing. Fork associations are resolved via API.
+concurrency:
+  group: atmos-quality-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      statuses: read
+      pull-requests: write
+      issues: write
+    env:
+      GOPROXY: https://proxy.golang.org
+      GITHUB_TOKEN: ${{ github.token }}
+      BENCHMARK_RUN_ID: ${{ github.event.workflow_run.id }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >-
+            github.com:443
+            api.github.com:443
+            *.blob.core.windows.net:443
+            *.actions.githubusercontent.com:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+      # Never check out the PR or run anything downloaded from its artifacts.
+      - name: Check out trusted reporter
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Set up Go and restore build cache
+        uses: ./.github/actions/setup-go-cache
+      - name: Compare snapshots and update sticky comment
+        run: go tool mage bench:report "$GITHUB_REPOSITORY" "$BENCHMARK_RUN_ID"
+      - name: Save full comparisons
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: benchmark-report-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/benchmarks/report/
+          retention-days: 90
+          if-no-files-found: ignore

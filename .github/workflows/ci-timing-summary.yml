@@ -8,6 +8,8 @@ on:
   workflow_run:
     workflows:
       - Algolia
+      - Benchmarks
+      - Quality Gate Signal
       - atmos.ci
       - autofix.ci
       - Claude Quality Checks

@@ -1,0 +1,106 @@
+name: Quality Gate
+
+on:
+  workflow_run:
+    workflows:
+      - Algolia
+      - Benchmarks
+      - Quality Gate Signal
+      - atmos.ci
+      - autofix.ci
+      - Claude Quality Checks
+      - CodeQL
+      - Dependency Review
+      - Feature release
+      - Go Version Change Detection
+      - install.sh smoke
+      - landing-demos
+      - Link Check
+      - Native CI
+      - Planfile Artifacts E2E
+      - Planfile Verify E2E
+      - PR Size Labeler
+      - Pre-commit
+      - Release Documentation Check
+      - Screengrabs
+      - Tests
+      - TruffleHog secret scan
+      - Validate Agent Skills
+      - Validate Codeowners
+      - Validation E2E
+      - Verify Repository Symlinks
+      - Verify SHA Pinning
+      - Version Tracker
+      - vhs
+      - Website Preview Build
+    types: [in_progress, completed]
+  check_run:
+    types: [completed]
+  status:
+  issue_comment:
+    types: [created, edited, deleted]
+  # Actions has no review-thread resolution trigger. Reconcile these changes
+  # and third-party events not delivered to Actions on a best-effort schedule.
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+# The benchmark reporter shares this group: one writer owns the composite
+# comment and its labels, even when a review and benchmark finish together.
+concurrency:
+  group: atmos-quality-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    if: >-
+      (github.event_name != 'workflow_run' ||
+        (github.event.workflow_run.name != 'Quality Gate' &&
+         github.event.workflow_run.name != 'Benchmark Report' &&
+         github.event.workflow_run.name != 'CI Timing Summary')) &&
+      (github.event_name != 'check_run' || github.event.check_run.app.slug != 'github-actions') &&
+      (github.event_name != 'issue_comment' ||
+        (github.event.issue.pull_request && github.event.comment.user.login != 'github-actions[bot]'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      statuses: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >-
+            github.com:443
+            api.github.com:443
+            *.blob.core.windows.net:443
+            *.actions.githubusercontent.com:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+      - name: Check out trusted reporter
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Set up Go and restore build cache
+        uses: ./.github/actions/setup-go-cache
+      - name: Reconcile current-head quality gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: go tool mage quality:report "$GITHUB_REPOSITORY"
+      - name: Save recovered benchmark comparisons
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: quality-gate-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/benchmarks/report/
+          retention-days: 90
+          if-no-files-found: ignore
