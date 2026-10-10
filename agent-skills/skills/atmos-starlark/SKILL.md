@@ -43,7 +43,7 @@ Documentation: [Language reference](https://atmos.tools/automation/language),
 | Custom command step | `atmos <name>` (command declared in `atmos.yaml`) | `ctx.flags` (string, bool, and `int` types preserved), `ctx.arguments` (an omitted optional argument is `""`). `ctx.args` is empty; arguments after `--` are not exposed to scripts. |
 | Workflow step | `atmos workflow <name>` | `ctx.flags` (string map). `env` holds only the step's declared `env`. |
 | Hook step | lifecycle event (`kind: step`, `kind: steps`, `type: test`) | `ctx.component`, `ctx.hook`, `ctx.operation`. |
-| Git hook step | `git.hooks.<name>.steps` run by the installed Git shim | `ctx.args` holds the hook's arguments from Git, such as the commit message path for `commit-msg`. |
+| Git hook step | `git.hooks.<name>.steps` run by the installed Git shim | `ctx.args` holds the hook's arguments from Git, such as the commit message path for `commit-msg`. Shell steps get `"$@"` and `ATMOS_GIT_HOOK_ARGS`; `ATMOS_GIT_HOOK_STDIN` is a temp-file path for hooks that receive stdin. |
 
 Details for each entry point:
 
@@ -105,7 +105,9 @@ workflows:
   values into script source.
 - Atmos renders step script bodies as Go templates before Starlark runs, so `{{` in source
   fails. Write `script: !literal |` for any script that contains braces; it runs the body exactly
-  as written. Split the delimiter (`"{" + "{"`) only for included scripts, which are still rendered.
+  as written. A script loaded with `!include.raw` is also used as written; one loaded with `!include` is still rendered (move
+  the braces into a `load()`ed module, or use `!include.raw`). `!literal` also works on `command`, `interpreter`,
+  `working_directory`, `timeout`, and single `env` values; on any other step field it fails config load.
 - Output channels: `print` writes data to stdout. `ui.info` (`▶`), `ui.success` (`✓`), and
   `ui.warning` (`⚠`) write human status to stderr. `log.trace/debug/info/warn/error(message, **fields)`
   writes diagnostics through the Atmos logger with `step` (and, in parallel tasks, `task`)
@@ -139,11 +141,15 @@ workflows:
 - `atmos.<command>(...)` exists for every registered Atmos command, including custom
   commands and aliases. Run `print(dir(atmos))` to list them. Positional arguments are
   literal CLI arguments; keyword-only options are `flags`, `args`, `working_directory`,
-  `env`, `output`, and `check`. Example: `atmos.describe("component", "api", flags={"stack": "dev"})`.
+  `env`, `output`, and `check`. `output` is `"stream"` (default), `"capture"`, or `"viewport"` (falls back to streaming
+  without a TTY or in parallel tasks); `exec.run` and `component.exec` take the same modes. A failed `check=True` call
+  that reaches the top of the script exits Atmos with the child's exit code. `--profile` and `--identity` reach nested
+  `atmos.*` calls in every script context. Example: `atmos.describe("component", "api", flags={"stack": "dev"})`.
 - Names that are not valid identifiers (hyphenated command names) are called through
   `atmos.run(["my-command", "arg"])`.
 - `atmos.terraform(command, component, stack, flags=, args=, working_directory=, env=, output=, check=)`
-  and `atmos.helm(...)` take structured component arguments. Prefer `deploy` over `apply`
+  and `atmos.helm(...)` take structured component arguments; `atmos.tf` is `atmos.terraform` with the same signature
+  (keyword `component=`, `stack=`, `detailed-exitcode` tolerance). Prefer `deploy` over `apply`
   in non-interactive scripts.
 - Wrappers run the current Atmos binary as a subprocess and return a process result
   (`.stdout`, `.stderr`, `.exit_code`, and `.data`, the lazily decoded JSON of stdout).
@@ -186,7 +192,9 @@ functions and parallel tasks. `ctx.component.exec` uses the hook's component wor
 hook env overrides component env, followed by command, step, and per-call overrides.
 Do not assume Terraform outputs/state are attached or refreshed automatically.
 Atmos commands called from a hook run their normal lifecycle; scope events or use
-supported hook-skipping flags to avoid re-entering the same hook.
+supported hook-skipping flags to avoid re-entering the same hook. `ATMOS_HOOK_DEPTH` counts nesting; a hook at depth 8
+fails with `hook recursion limit exceeded`. `print()` in a hook reaches stdout, so hooks on data commands (for example
+`terraform output -json`) must use `ui.*` for human messages.
 
 ## Parallel functions
 
@@ -224,6 +232,9 @@ failed attempt's output. A task timeout failure reads `task "<name>" timed out a
 Use `steps.task(..., timeout="30s")` for per-task limits. A `timeout:` on the YAML script step
 is enforced: the interpreter and its subprocesses are canceled and the step fails with
 `step timed out`.
+
+Ctrl-C cancels the script, runs `defer` calls with a 30 s grace, and exits 130 without an error box; a second Ctrl-C
+exits at once. This holds in every embedded script session.
 
 Script output is live: lines appear as they are produced. Inside `steps.parallel` with
 more than one task, each line is prefixed `[<task name>] ` and lines never interleave

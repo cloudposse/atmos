@@ -110,7 +110,7 @@ The safe no-arg checkout (base repository at its base ref) is never gated, and n
 
 **Recommended:** use a `pull_request` workflow (which withholds fork secrets) for clone-and-plan of fork contributions; reserve `pull_request_target` / `workflow_run` for trusted, secret-free steps.
 
-To bypass the gate deliberately, set the intentionally named `--allow-unsafe-fork` flag, `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION=true`, or `ci.allow_unsafe_fork_execution: true` in `atmos.yaml`.
+To bypass the gate deliberately, set the intentionally named `--allow-unsafe-fork` flag, `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION=true`, or `ci.allow_unsafe_fork_execution: true` in `atmos.yaml`. The environment variable and the config key set the same value, and they also release the [posting gate](/cli/configuration/ci#fork-posting-gate) that holds CI comments, statuses, exports, and SARIF uploads for fork pull requests.
 
 :::warning Fetch depth and `atmos describe affected`
 

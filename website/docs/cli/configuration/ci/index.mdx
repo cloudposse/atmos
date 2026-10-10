@@ -49,18 +49,22 @@ ci:
   <dt>`ci.enabled`</dt>
   <dd>
     Explicitly enable or disable CI mode. When not set, CI mode is auto-detected from
-    environment variables (`CI=true` or `GITHUB_ACTIONS=true`).
+    environment variables (`CI=true` or `GITHUB_ACTIONS=true`). Reporting writes (summaries, outputs, annotations,
+    comments, checks, and the [`ci` module](/functions/automation/ci) calls) happen only when this key is `true`.
+    Atmos never turns it on for you inside a CI run, so set it explicitly in `atmos.yaml`. When it is off, a warning
+    names `ci.enabled` as the switch to turn on.
 
     **Default:** Auto-detected
   </dd>
 
   <dt>`ci.allow_unsafe_fork_execution`</dt>
   <dd>
-    Opt out of the fork-PR safety gate that makes [`atmos git clone`](/cli/commands/git/clone#fork-pr-safety-gate)
-    refuse to clone untrusted fork content under the elevated `pull_request_target` and
-    `workflow_run` events. **Unsafe** — leave disabled unless a fork-facing workflow has a
-    documented reason to bypass it. Equivalent to the `--allow-unsafe-fork` flag and
-    `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION` environment variable.
+    Opt out of both fork-PR safety gates. Under the elevated `pull_request_target` and `workflow_run` events, the
+    [clone gate](/cli/commands/git/clone#fork-pr-safety-gate) makes `atmos git clone` refuse to clone untrusted fork
+    content, and the [posting gate](#fork-posting-gate) holds comments, commit statuses, environment and `PATH`
+    exports, and SARIF uploads for a fork pull request. **Unsafe**: leave disabled unless a fork-facing workflow has a
+    documented reason to bypass them. Equivalent to the `--allow-unsafe-fork` flag of `atmos git clone` and to the
+    `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION` environment variable, which sets this same key.
 
     **Default:** `false`
   </dd>
@@ -140,6 +144,18 @@ CI mode is auto-enabled when any of these environment variables are set:
 
 Override with the `--ci` flag, `ATMOS_CI`, or `ci.enabled` configuration.
 
+Forced CI mode (`--ci`, `ATMOS_CI=true`, or `CI=true` when no CI platform is recognized) makes the `generic` provider the
+detected provider. The `ci.*` switches then apply as they do on a recognized platform, `ci.context.local` is `false`, and
+the files named by `ATMOS_CI_OUTPUT`, `ATMOS_CI_SUMMARY`, `ATMOS_CI_ENV`, and `ATMOS_CI_PATH` are written when set.
+Without forced CI mode, commands run locally render their CI output on the terminal and write nothing.
+
+Annotations and `::add-mask::` are written to stderr. Log-group markers are written to stdout to surround command
+output. Set `ci.groups.mode: off` when piping stdout to a data parser. `::add-mask::` is emitted only when
+`ci.enabled` is true.
+
+An invalid `GITHUB_API_URL` or `ATMOS_CI_GITHUB_API_URL` fails the command, both in scripts and in the `--ci` flow of
+Terraform commands, instead of sending the token to an unintended host.
+
 Terraform commands use native CI for summaries, outputs, checks, comments, and planfile storage.
 Native Helm and Helmfile commands use native CI for job summaries only.
 
@@ -153,15 +169,19 @@ GitHub Actions workflow linting is available through [`atmos ci validate`](/cli/
 | `ATMOS_CI_COMMENTS_ENABLED` | Override `ci.comments.enabled` (`true`/`false`) |
 | `ATMOS_CI_GROUPS_MODE` | Override `ci.groups.mode` (`auto`/`invocation`/`off`) |
 | `ATMOS_CI_GITHUB_API_URL` | Override the GitHub REST API base URL used by the GitHub CI provider (for example, GitHub Enterprise Server: `https://github.example.com/api/v3`). Takes precedence over `GITHUB_API_URL`. An invalid URL is an error. |
-| `ATMOS_CI_PR` | Pull request number for the generic provider (positive integer). Used when comments or checks target a PR outside GitHub Actions. |
-| `ATMOS_CI_PR_FORK` | Whether the pull request head lives in a fork, for the generic provider (`true` or `false`). Comments and checks are held on elevated events only for fork pull requests. |
+| `ATMOS_CI_PR` | Pull request number for the generic provider (positive integer). Makes the local comment and check preview target that pull request. Nothing is posted outside a recognized CI provider. |
+| `ATMOS_CI_PR_FORK` | Whether the pull request head lives in a fork, for the generic provider (`true` or `false`). Fills `ci.context.pr.fork` only; the generic provider never holds anything because of it. |
+| `ATMOS_CI_REPOSITORY` | Repository in `owner/name` form for the generic provider. The `atmos terraform plan --ci` comment preview needs it together with `ATMOS_CI_PR`. |
 | `ATMOS_CI_BASE_REF` | Base branch for the generic provider. Also read when resolving the base commit for affected detection. |
+| `ATMOS_CI_SHA`, `ATMOS_CI_BRANCH`, `ATMOS_CI_ACTOR`, `ATMOS_CI_SERVER_URL`, `ATMOS_CI_REPOSITORY_URL` | Commit, branch, actor, server URL, and clone URL for the generic provider. See [environment variables](/cli/environment-variables#ci-reporting). |
 | `ATMOS_CI_EVENT` | Event name for the generic provider (for example, `push` or `pull_request`) |
 | `ATMOS_CI_RUN_ID` | Run or job ID for the generic provider. Falls back to `CI_JOB_ID`, then `BUILD_ID`. |
 | `ATMOS_CI_RUN_URL` | Link to the run or job for the generic provider. Falls back to `CI_JOB_URL`, then `BUILD_URL`. |
-| `ATMOS_CI_ENV` | File the generic provider appends environment exports to, in GitHub Actions `KEY=value` format. Without it, `export KEY='value'` lines are printed to stderr. |
+| `ATMOS_CI_ENV` | File the generic provider appends environment exports to, in GitHub Actions `KEY=value` format. Without it, `export KEY=value` lines are printed to stderr, with the value shell-quoted only when it needs quoting. |
 | `ATMOS_CI_PATH` | File the generic provider appends `PATH` additions to, one directory per line. Without it, an `export PATH=...` line is printed to stderr. |
-| `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION` | Opt out of the [`atmos git clone` fork-PR safety gate](/cli/commands/git/clone#fork-pr-safety-gate) (`true`/`false`, **unsafe**) |
+| `ATMOS_CI_OUTPUT` | File the generic provider appends step outputs to, in GitHub Actions `key=value` format. Without it, outputs print to stderr. |
+| `ATMOS_CI_SUMMARY` | File the generic provider appends job summary Markdown to. Without it, the summary renders on stderr. |
+| `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION` | Sets `ci.allow_unsafe_fork_execution`: opts out of the [`atmos git clone` fork-PR safety gate](/cli/commands/git/clone#fork-pr-safety-gate) and of the [posting gate](#fork-posting-gate) (`true`/`false`, **unsafe**) |
 | `CI` | Standard CI environment variable (set by most CI providers) |
 | `GITHUB_ACTIONS` | Set by GitHub Actions runner |
 | `GITHUB_TOKEN` / `GH_TOKEN` | GitHub API token (required for status checks and PR comments) |
@@ -171,9 +191,36 @@ GitHub Actions workflow linting is available through [`atmos ci validate`](/cli/
 | `GITHUB_REPOSITORY` | Repository name in `owner/repo` format |
 | `GITHUB_SHA` | Current commit SHA |
 
+## Fork posting gate {#fork-posting-gate}
+
+Under the elevated `pull_request_target` and `workflow_run` events a workflow runs with a privileged token, so a pull
+request from a fork must not drive writes. For such a pull request Atmos holds:
+
+- pull request and commit comments,
+- commit statuses and check updates,
+- environment exports (`ci.env`) and `PATH` additions (`ci.path`), and
+- SARIF uploads.
+
+A held call warns, renders locally, and the command continues. Summaries, step outputs, annotations, log groups, and
+masks only affect the current job and are never held. The gate applies to scripts that use the
+[`ci` module](/functions/automation/ci) and to the native Terraform plan comments and commit statuses alike.
+
+A pull request counts as a fork when the head and base repository `full_name` differ. A head repository that was deleted
+and an event payload that cannot be read are both treated as a fork, so the gate holds rather than posts. A repository
+that is itself a fork of another one is not penalized: a pull request between branches of that repository posts
+normally. A plain `pull_request` event from a fork is never gated, because GitHub already gives that event a read-only
+token. Under `pull_request_target` and `workflow_run`, the pull request number comes from the event payload and falls
+back to `GITHUB_REF`.
+
+The gate uses the same opt-out as the clone gate. Set `ci.allow_unsafe_fork_execution` or
+`ATMOS_ALLOW_UNSAFE_FORK_EXECUTION` only when a fork-facing workflow has a documented reason to post.
+
+When a call is held because a switch is off, the warning names `ci.enabled` if the master switch is off, and the
+per-feature key (`ci.comments.enabled`, `ci.checks.enabled`, and so on) only when `ci.enabled` is on.
+
 ## Reporting from scripts
 
-Scripts written in the [Atmos Automation Language](/automation/language) report into CI through the [`ci` module](/functions/automation/ci). The module writes job summaries, step outputs, environment exports, annotations, pull request comments, commit statuses, log groups, and SARIF uploads, and the same `ci.*.enabled` flags that gate Atmos's native reporting gate these calls. When no CI provider is detected, the calls render on your terminal instead.
+Scripts written in the [Atmos Automation Language](/automation/language) report into CI through the [`ci` module](/functions/automation/ci). The module writes job summaries, step outputs, environment exports, annotations, pull request comments, commit statuses, log groups, and SARIF uploads, and the same `ci.*.enabled` flags that gate Atmos's native reporting gate these calls. When no CI provider is detected, the calls render on your terminal instead. Report templates for scripts are named in the call itself, with no configured default; see [templates](/cli/configuration/ci/templates#script-report-templates).
 
 ## Related
 

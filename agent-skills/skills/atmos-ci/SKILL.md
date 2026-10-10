@@ -394,6 +394,14 @@ components:
 
 `settings.depends_on` is legacy. If found, recommend migration to `dependencies.components`.
 
+## Reporting From Scripts
+
+Scripts in the Atmos Automation Language report into CI through the predeclared `ci` module
+(`ci.summary`, `ci.output`, `ci.env`, `ci.path`, `ci.mask`, `ci.annotate`, `ci.comment`, `ci.check`,
+`ci.group`, `ci.sarif`, `ci.context`). It is not `atmos.ci`, which runs the `atmos ci` command group.
+See [Reporting from scripts](references/native-ci.md#reporting-from-scripts) for feature gates,
+local rendering, fork restrictions, comment targets, and templates.
+
 ## Integrations
 
 Atlantis remains a supported integration target, but keep Atmos as the source of truth. For Atlantis,

@@ -115,20 +115,28 @@ The value must be an absolute `http(s)` URL; a trailing slash is added when miss
 
 `Context.RunURL` links to the current run: `<GITHUB_SERVER_URL>/<repository>/actions/runs/<run id>`. It is empty when `GITHUB_SERVER_URL`, the repository, or the run ID is unavailable. It replaces the terraform plugin's private `getGitHubActionsRunURL` and is the default details URL for `Reporter.Check`.
 
-## Context: pull request fork detection
+## Context: pull request number and fork detection
 
-For `pull_request` and `pull_request_target` events, `Context.PullRequest.Fork` is read from the event payload (`$GITHUB_EVENT_PATH`). The head repository is a fork when `pull_request.head.repo.fork` is true or when `head.repo.full_name` differs from `base.repo.full_name`. A missing or unreadable payload, a deleted head repository, or missing repository objects report false.
+For `pull_request` and `pull_request_target` events, `Context.PullRequest` is read from the event payload (`$GITHUB_EVENT_PATH`), with `GITHUB_REF` as the fallback. Under `pull_request_target` GitHub sets `GITHUB_REF` to the base branch, so the number comes from `pull_request.number` in the payload and falls back to `refs/pull/<n>/merge` only when the payload carries none.
 
-A `workflow_run` event has no `pull_request` object. When `workflow_run.head_repository` is a fork, or its `full_name` differs from the repository, the provider reports a fork pull request (`Fork` true, the head branch from `workflow_run.head_branch`, and the number and base from `workflow_run.pull_requests[0]` when present, otherwise 0). Without this the fork gate would never see the fork. A same-repository `workflow_run` leaves `PullRequest` nil.
+`Context.PullRequest.Fork` is true when `head.repo.full_name` differs from `base.repo.full_name`. `head.repo.fork` is not consulted: it says the head repository is a fork of something, not that the pull request comes from a fork, so a repository that is itself a fork does not hold its own same-repository pull requests. The gate fails closed. A deleted head repository (`head.repo` is null) and an unreadable or missing payload report a fork.
 
-The reporter's fork gate uses `Fork` together with `ElevatedEvent`. See [Interfaces](../../framework/interfaces.md).
+A `workflow_run` event has no `pull_request` object. The provider reads `workflow_run.pull_requests[0]` for the number and base, and `workflow_run.head_repository` for the fork decision with the same `full_name` rule (a missing `head_repository` is a fork; the head branch comes from `workflow_run.head_branch`). A same-repository `workflow_run` reports the pull request the payload names, or leaves `PullRequest` nil when it names none. GitHub leaves `workflow_run.pull_requests` empty for fork runs, so a fork run has number 0 unless the payload supplies one. A pull request that is already known is never replaced by a run that only describes the same one. Repository names are compared case-insensitively.
+
+The reporter's fork gate uses `Fork` together with `ElevatedEvent` to hold comments, commit statuses, environment and `PATH` exports, and SARIF uploads. See [Interfaces](../../framework/interfaces.md) and the [posting gate](../../framework/fork-pr-trust-gate.md#fr-34-posting-gate-for-fork-pull-requests).
+
+## Comments, commit comments, and statuses
+
+- **Pull request comments** use the issue comments endpoints and need `pull-requests: write`.
+- **Commit comments** (`CommitCommenter`) use `POST/GET /repos/{owner}/{repo}/commits/{sha}/comments` and `PATCH /repos/{owner}/{repo}/comments/{id}`, find an earlier comment by its marker, and need `contents: write`. The reporter chooses them for `target="commit"`, and for `target="auto"` when no pull request number is known.
+- **Statuses.** `ci.check` and the native checks write commit statuses (`statuses: write`). GitHub has four states, so `pending` and `in_progress` map to `pending`, `success` to `success`, `failure` to `failure`, and `error` and `cancelled` to `error`. The returned handle keeps the requested state and the details URL (the request URL, else the run URL). Statuses are keyed by context, so an update does not need the id.
 
 ## Environment Export and Masking
 
 The GitHub provider implements two optional capabilities used by the [Reporter](../../framework/interfaces.md#reporter-script-and-step-facing-seam):
 
-- **`EnvExporter`.** `WriteEnv(key, value)` appends a `ghactions.FormatValue`-formatted entry (collision-safe heredoc for multiline values) to the file named by `$GITHUB_ENV`. `AddPath(dir)` appends `dir` to the file named by `$GITHUB_PATH`. When the variable is unset the call returns an error wrapping `ErrCIEnvWriteFailed` rather than falling back to stdout, because the export could not take effect.
-- **`ValueMasker`.** `MaskValue(value)` emits `::add-mask::<escaped value>` on the data stream (stdout), using the same escaper as annotations, because the runner parses workflow commands from the step log. An empty value is ignored. Write failures wrap `ErrCIMaskFailed`.
+- **`EnvExporter`.** `WriteEnv(key, value)` appends a `provider.FormatOutputLine`-formatted entry (collision-safe heredoc for multiline values) to the file named by `$GITHUB_ENV`. `AddPath(dir)` appends `dir` to the file named by `$GITHUB_PATH`. When the variable is unset the call returns an error wrapping `ErrCIEnvWriteFailed` rather than falling back to stdout, because the export could not take effect.
+- **`ValueMasker`.** `MaskValue(value)` emits `::add-mask::<escaped value>` on stderr, using the same escaper as annotations. The runner parses workflow commands from both streams, and stderr keeps stdout clean for piped data. An empty value is ignored. Write failures wrap `ErrCIMaskFailed`.
 
 ## GitHub API Endpoints
 

@@ -120,9 +120,12 @@ the body. The interpreter enforces a computation-step budget and honors context
 cancellation. These are execution controls, not hard process-memory isolation.
 
 The tag is supported in stack manifest component values and inherited data
-sections. `atmos.yaml` and scaffold manifests reject it with their existing
-context-specific supported-tag errors; they do not supply a merged component
-context. Executable scripts in those hosts continue using script steps.
+sections. `atmos.yaml`, profiles, and imported configuration reject it with an error that names the file and key;
+scaffold manifests reject it with their existing context-specific supported-tag errors. They do not supply a merged
+component context. Selective commands (`list --columns`, `describe stacks --sections/--query`,
+`describe component --query`) evaluate only the fields a value reads through bounded `ctx` forms
+(`ctx.<section>["key"]`, `.get("literal")`, `ctx.stack`, `ctx.component`, `ctx.component_type`) and fall back to full
+evaluation for anything else; a full `describe component` evaluates everything. Executable scripts in those hosts continue using script steps.
 
 ## Architecture
 

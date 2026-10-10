@@ -23,6 +23,7 @@ Rules:
   normal Atmos command lookup and fails as an unknown command. A path that is not a script (an
   existing directory such as `./stacks`, a missing file, a file without the shebang) falls
   through to normal command handling.
+- Extensions match ignoring case: `TOOL.STAR` and `Tool.Star` run like `tool.star`.
 - The `.star` extension is optional when the script runs by path or through its shebang. It
   is what lets editors and GitHub recognize the file as Starlark. For extensionless files, put
   the shebang on line 1 and a file-type hint on line 2, for example
@@ -31,7 +32,8 @@ Rules:
   `ft=`/`mode:` values of `starlark` or `bazel`, so use `.gitattributes`
   (`bin/tool linguist-language=Starlark`) for extensionless files there. The hint line does not
   affect shebang detection.
-- Accepted shebangs: `#!/usr/bin/env atmos`, `#!/usr/bin/env -S atmos`, and an absolute path
+- Accepted shebangs: `#!/usr/bin/env atmos`, `#!/usr/bin/env -S atmos` (trailing global flags are accepted, for example
+  `#!/usr/bin/env -S atmos --logs-level=Debug`), and an absolute path
   whose last element is `atmos` (`#!/usr/local/bin/atmos`). Other forms are not detected.
   `atmos` must be on `PATH` for the `env` forms.
 - Symlinks are resolved before running. `ctx.script.path` is the real file, and `load()`
@@ -41,12 +43,14 @@ Rules:
   `--flag value`: `atmos --chdir=x deploy.star`, `atmos --logs-level Debug ./deploy.star`. The
   first word that is not a global flag starts the script; everything after it belongs to the
   script, including flags that look like Atmos flags. A leading `--` ends the global flags.
-  A relative script path resolves after `--chdir` is applied. Flags with an optional value
+  A relative script path resolves against the directory you stood in before `--chdir` or `ATMOS_CHDIR` moved the process. Flags with an optional value
   (`--identity`) must use `--flag=value`. An unknown flag before the script is not a script
   invocation and fails like any other unknown flag.
 - With `ATMOS_USE_VERSION` or `version.use`, the re-exec forwards the script path and its
   arguments unchanged.
 - `atmos` with no arguments keeps the normal Atmos screen.
+- `atmos -` reads the script from stdin (`atmos - args < tool.star`). On a TTY, Atmos prints "Reading script from stdin; press Ctrl-D to end." on stderr.
+- Ctrl-C cancels the script, runs `defer` calls (30 s grace), and exits 130 with no error box; a second Ctrl-C exits at once.
 - Atmos configuration (`atmos.yaml`) is discovered from the current working directory with
   the usual search rules, not from the script's directory. A script that does not touch
   stacks or components runs with no `atmos.yaml` at all. `components.get`, `atmos.terraform`,
@@ -102,7 +106,7 @@ cli.command(
   returns what `run` returns (and `None` for `--help`), so `output = cli.command(...)` emits
   that value. A `None` result means no output: nothing prints for `--help` or when `run`
   returns nothing. For ordinary output, call `print` inside `run`.
-- `name` (default: the script file name) must start with a letter and contain only letters,
+- `name` (default: the script file name without its extension) must start with a letter and contain only letters,
   digits, `_`, and `-`. `description` appears in help.
 - `validate(args, flags)` is optional. Call `fail("message")` or return `False` to reject
   input. Returning `None` or `True` accepts it; any other return value is an error.
@@ -121,7 +125,8 @@ cli.command(
 
 - `type` is `"string"`, `"int"`, `"bool"`, or `"string_list"`.
 - `required=True` cannot have a `default`. A `bool` flag cannot be required; use a default.
-- `choices` works only for `string` and `string_list`.
+- `choices` works only for `string` and `string_list`. A `default` outside `choices` is a declaration error, and an
+  empty `--stage=` is checked against `choices`. A repeated `--flag` keeps the last value (`string_list` collects all).
 - Flag names must be unique ignoring case (`Stage` and `stage` collide and are rejected).
 - `shorthand` is one letter and cannot be `h`. Shorthands must be unique.
 - `help` is reserved (and `-h`). Every script gets `--help` automatically.
@@ -129,7 +134,7 @@ cli.command(
 
 ## Parsing behavior to know
 
-- `--help` or `-h` prints the help and skips both `validate` and `run`. Help marks required
+- `--help` or `-h` prints the help, skips both `validate` and `run`, and ends the script (statements after `cli.command` do not run). Help marks required
   flags `(required)`, lists choices as `(one of: dev, prod)`, and shows env bindings as
   `[env: NAME]`. Top-level code
   still runs before help, so keep side effects (network calls, deployments, file writes)

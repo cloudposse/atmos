@@ -11,7 +11,7 @@ import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 The `ci.checks` section configures commit status checks that show real-time operation progress.
-On GitHub Actions, these use the Check Runs API. On GitLab CI, they use the Commit Status API.
+On GitHub Actions, these are commit statuses, set through the Commit Status API.
 </Intro>
 
 <Experimental />
@@ -37,7 +37,7 @@ ci:
   <dd>
     Post commit status checks when operations start and complete.
 
-    **Requires:** `checks: write` permission (GitHub) or API token with commit status scope (GitLab)
+    **Requires:** `statuses: write` permission (GitHub)
 
     **Default:** `false`
   </dd>
@@ -54,7 +54,7 @@ ci:
   <dd>
     Post commit status check summary operation on a component.
 
-    **Requires:** `checks: write` permission (GitHub) or API token with commit status scope (GitLab)
+    **Requires:** `statuses: write` permission (GitHub)
 
     **Default:** `true`
   </dd>
@@ -63,7 +63,7 @@ ci:
   <dd>
     Post commit status check if a resource creation is involved.
 
-    **Requires:** `checks: write` permission (GitHub) or API token with commit status scope (GitLab)
+    **Requires:** `statuses: write` permission (GitHub)
 
     **Default:** `true`
   </dd>
@@ -72,7 +72,7 @@ ci:
   <dd>
     Post commit status check if a resource update is involved.
 
-    **Requires:** `checks: write` permission (GitHub) or API token with commit status scope (GitLab)
+    **Requires:** `statuses: write` permission (GitHub)
 
     **Default:** `true`
   </dd>
@@ -81,7 +81,7 @@ ci:
   <dd>
     Post commit status check if a resource delete is involved.
 
-    **Requires:** `checks: write` permission (GitHub) or API token with commit status scope (GitLab)
+    **Requires:** `statuses: write` permission (GitHub)
 
     **Default:** `true`
   </dd>
@@ -90,7 +90,7 @@ ci:
 
 ## How It Works
 
-When enabled, Atmos creates and updates check runs during Terraform operations:
+When enabled, Atmos creates and updates commit statuses during Terraform operations:
 
 **While running:**
 ```
@@ -107,13 +107,35 @@ When enabled, Atmos creates and updates check runs during Terraform operations:
 ✗ Atmos  Plan failed — vpc in plat-ue2-dev
 ```
 
+## GitHub state mapping
+
+GitHub commit statuses have four states: `pending`, `success`, `failure`, and `error`. Atmos check states map onto them
+as follows, so a status never shows `in_progress` or `cancelled` on GitHub:
+
+| Atmos state | GitHub status |
+| --- | --- |
+| `pending`, `in_progress` | `pending` |
+| `success` | `success` |
+| `failure` | `failure` |
+| `error`, `cancelled` | `error` |
+
+A status is identified by its name, so an update replaces the status that has the same name on the commit. The handle
+that [`ci.check`](/functions/automation/ci.check) returns keeps the state you requested and reports the details URL:
+the URL you passed, or the link to the run when you passed none.
+
+## Fork pull requests
+
+Under the elevated `pull_request_target` and `workflow_run` events, statuses for a pull request from a fork are held.
+Native Terraform statuses go through the same gate as `ci.check` calls from scripts. See the
+[fork posting gate](/cli/configuration/ci#fork-posting-gate).
+
 ## GitHub Actions Permissions
 
-Status checks require the `checks: write` permission:
+Commit statuses require the `statuses: write` permission:
 
 ```yaml
 permissions:
-  checks: write
+  statuses: write
 ```
 
 ## Related

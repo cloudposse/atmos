@@ -72,8 +72,12 @@ steps:
 
 `!literal` works the same in custom commands, workflows, hooks, and in `parallel` and `matrix`
 children. It applies to the field it tags: a literal `script` next to a templated `interpreter`
-or `env` value still renders the other fields. It also works on `interpreter`, `working_directory`,
-and individual `env` values. A script loaded with `!include` is still rendered as a template.
+or `env` value still renders the other fields. It also works on `interpreter`, `working_directory`, `timeout`,
+and individual `env` values. A script loaded with `!include` is still rendered as a template, while one loaded with
+[`!include.raw`](/functions/yaml/include.raw) is used exactly as written. If the template error hint for an included
+script says it contains `{{`, move that text into a `load()`ed module or use `!include.raw`. Another field that carries
+`!literal` fails when the configuration loads; the error names the field and the step. See
+[`!literal`](/functions/yaml/literal).
 
 ## Atmos Automation Language {#embedded-starlark}
 
@@ -299,13 +303,16 @@ Both `exec.run` and `component.exec` take these options:
   <dd>
     The default, `"stream"`, shows the subprocess output live in the step output and also
     captures it. Use `"capture"` to capture stdout and stderr without showing them, which
-    is useful when inspecting secret-bearing responses.
+    is useful when inspecting secret-bearing responses. Use `"viewport"` to show the live output in a bounded
+    terminal viewport; it streams instead when there is no terminal or the call runs in a parallel task. The
+    `atmos.*` wrappers accept the same three modes.
   </dd>
   <dt>`check`</dt>
   <dd>
     The default, `True`, raises when the process exits nonzero; the error names the
     command and exit code and lists the last lines of stderr. Pass `False` to get the result
-    back and assert on `.exit_code`, `.stdout`, and `.stderr` yourself.
+    back and assert on `.exit_code`, `.stdout`, and `.stderr` yourself. A failure that reaches the top of the
+    script ends Atmos with the child's exit code.
   </dd>
   <dt>`working_directory`, `env`</dt>
   <dd>
@@ -557,17 +564,30 @@ errors are reported, and runs nothing: no code, no processes. Script steps insid
 
 ### Errors
 
-A script failure is reported as a single-line message, with the Starlark traceback
-shown below it. For example, `fail("missing generated config")` produces:
+A script failure is reported under a `# Workflow Error` heading. The message comes first, the Starlark traceback
+follows it, and an explanation and a hint end the report.
+For example, `fail("missing generated config")` in the `plan` step of a workflow produces:
 
 ```text
-Error: workflow step execution failed: max attempts (1) exceeded, last error: starlark execution failed: fail:
+# Workflow Error
+
+**Error:** workflow step execution failed: max attempts (1) exceeded, last error: starlark execution failed: fail:
 missing generated config
 
  Traceback (most recent call last):
-   s:1:5: in <toplevel>
- Error in fail: fail: missing generated config
+   plan:1:5: in <toplevel>
+ Error in fail: missing generated config
+
+The script step plan (interpreter: starlark) failed to execute.
+
+💡 To resume the workflow from this step, run:
+
+ atmos workflow build -f deploy --from-step 'plan'
 ```
+
+The traceback names the step, the line, and the column. The last traceback line, `Error in fail:`, repeats the reason
+you passed to `fail()`. The explanation names the step and its interpreter, and the hint shows how to resume the
+workflow from the failed step.
 
 A failed `exec.run` adds the last lines of the command's stderr, and a task that
 exceeds its `timeout` reads `task "<name>" timed out after <duration>`.
@@ -740,8 +760,9 @@ cli.command(
 ```
 
 After saving this as `replicas.star` and making it executable, run
-`./replicas.star api -r 3` or `./replicas.star --help`. Help skips both callbacks;
-parse failures and failed validation prevent `main` from running. Keep work with
+`./replicas.star api -r 3` or `./replicas.star --help`. Help skips both callbacks and ends the script after
+printing the usage, so statements after the `cli.command` call do not run; parse failures and failed validation
+prevent `main` from running. Keep work with
 side effects inside `main`, since ordinary top-level statements still execute
 when the script loads.
 
@@ -749,12 +770,14 @@ when the script loads.
 | --- | --- |
 | `cli.arg(name, ...)` | `description`, `required` (default `True`). Required arguments precede optional ones. Omitted optional arguments are `None`. |
 | `cli.flag(name, ...)` | `type` (`"string"`, `"int"`, `"bool"`, or `"string_list"`), `default`, `shorthand`, `description`, `required`, `choices`, and an optional `env` binding. |
-| `cli.command(run=main, ...)` | `name` (defaults to the script filename), `description`, `args`, `flags`, and an optional `validate` callback. Call once per standalone invocation, outside parallel tasks. |
+| `cli.command(run=main, ...)` | `name` (defaults to the script filename without its extension), `description`, `args`, `flags`, and an optional `validate` callback. Call once per standalone invocation, outside parallel tasks. |
 
 `main(args, flags)` and `validate(args, flags)` receive immutable dictionaries.
 Names are dictionary keys, including hyphenated flags. Integers and booleans arrive
 as typed values; `string_list` flags accept comma-separated or repeated values.
-`choices` applies to string and string-list flags. A required flag must be supplied
+`choices` applies to string and string-list flags; a `default` outside the choices is a declaration error, and an
+empty value typed as `--stage=` is checked against them. A repeated flag keeps the last value, except `string_list`,
+which collects every occurrence. A required flag must be supplied
 on the command line or through its declared environment binding; it cannot also
 declare a default. Boolean flags use defaults and cannot be required.
 
@@ -831,7 +854,8 @@ validation = atmos.run([
 ```
 
 These calls invoke the current Atmos executable through the same process runner
-as `exec.run`. Arguments are passed directly without shell parsing. These
+as `exec.run`. The `--profile` and `--identity` selections given to the parent command are forwarded to these nested
+calls in every script context: custom commands, workflows, hooks, and standalone scripts. Arguments are passed directly without shell parsing. These
 functions accept `working_directory`, `env`, `output="stream"`, and `check=True`, and
 return `.stdout`, `.stderr`, and `.exit_code`. Failures raise unless `check=False`;
 launch, cancellation, signal, and transport errors always raise. A Terraform plan

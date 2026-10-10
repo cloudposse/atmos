@@ -46,13 +46,36 @@ steps:
   <dd>Jitter factor from `0.0` to `1.0` added to delays.</dd>
 
   <dt>`conditions`</dt>
-  <dd>List of regular expressions identifying which failures are retryable. For the [`http`](/steps/type/http) step type, patterns are matched against `"<status-code> <response-body>"`, letting you retry responses that would otherwise fail fast (e.g., a specific `4xx`). Omit to use each step type's default retry classification.</dd>
+  <dd>List of regular expressions identifying which failures are retryable. Every step type honors it except [`http`](/steps/type/http), which does its own status and body matching: for `http`, patterns are matched against `"<status-code> <response-body>"`, letting you retry responses that would otherwise fail fast (e.g., a specific `4xx`). Omit to use each step type's default retry classification. See [Retry conditions](#retry-conditions).</dd>
 </dl>
 
 Omitting a parameter disables that limit or uses the default behavior. Explicit zero values are invalid where a positive duration or count is required.
 
 Atmos rejects unknown `retry` keys instead of ignoring them. The key for the wait before the first retry is `initial_delay`; `delay` is not a key, so a policy that uses it fails validation.
 
+## Retry conditions
+
+When `conditions` is set, a failed attempt is retried only if at least one pattern matches. Each entry is a regular expression, optionally written between slashes (`/connection reset/`). Atmos matches the pattern against the attempt's stdout, its stderr, and the error text, so a message printed by the command and a message raised by Atmos both count. A failure that matches no pattern ends the retry loop at once, with no further attempts and no backoff wait.
+
+```yaml
+steps:
+  - name: apply
+    type: shell
+    command: terraform apply -auto-approve
+    retry:
+      max_attempts: 5
+      initial_delay: 5s
+      conditions:
+        - /RequestLimitExceeded/
+        - "timeout while waiting"
+```
+
+An invalid pattern is a configuration error that Atmos reports before the step runs. A step exit, a user abort, and a cancellation are never retried, whatever the conditions say.
+
+Conditions mean the same thing everywhere a step retries, including the `shell` and `atmos` steps of workflows and custom commands.
+
 ## Retries and `timeout`
 
 For `shell`, `atmos`, `script`, and `tflint` steps, the step's `timeout` bounds the whole step, not each attempt. One deadline covers every attempt and every backoff wait. When it elapses, Atmos cancels the running attempt, starts no further attempts, and fails the step with `step timed out`. Use `max_elapsed_time` to cap retries on their own. The [`http`](/steps/type/http) step type is different: its `timeout` is a per-attempt request limit.
+
+Every timeout overrun reads `step timed out`, and the explanation names the step and its type, for example `Step 'apply' (type shell) did not finish within its timeout of 5m`.

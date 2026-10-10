@@ -1,6 +1,6 @@
 ---
 name: atmos-yaml-functions
-description: "YAML functions: !terraform.state, !terraform.output, !store, !store.get, !secret, !emulator, !env, !exec, !include, !template, !append, !unset, !literal, !random, !aws.*, !git.*, !cwd, !repo-root"
+description: "YAML functions: !terraform.state, !terraform.output, !store, !store.get, !secret, !emulator, !env, !exec, !include, !template, !append, !unset, !literal, !starlark, !random, !aws.*, !git.*, !cwd, !repo-root"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -40,6 +40,7 @@ templates first, then executes the YAML functions.
 | `!append` | Append values to inherited lists without replacing the whole list |
 | `!unset` | Remove inherited keys or values from merged config |
 | `!literal` | Preserve values verbatim, bypassing all template processing |
+| `!starlark` | Compute typed values with Starlark from the component's merged config (`ctx`); stack manifests only |
 | `!random` | Generate cryptographically secure random integers |
 | `!cwd` | Get the current working directory |
 | `!repo-root` | Get the repository root directory |

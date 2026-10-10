@@ -854,6 +854,90 @@ backends, the toolchain installer, and the aqua-registry client).
   </dd>
 </dl>
 
+## CI Reporting Variables {#ci-reporting}
+
+These variables feed the `generic` CI provider, which Atmos uses when no CI platform is recognized and when
+CI mode is forced with the `--ci` flag or `ATMOS_CI=true`. They let a laptop or an unsupported CI platform supply the
+facts that GitHub Actions provides on its own. See [CI configuration](/cli/configuration/ci) and the
+[`ci` module](/functions/automation/ci).
+
+<dl>
+  <dt>`ATMOS_CI_PR`</dt>
+  <dd>
+    Pull request number (a positive integer). Makes the local comment and check preview target that pull request.
+    Nothing is posted outside a recognized CI provider. Without it, the generic provider reports no pull request.
+  </dd>
+
+  <dt>`ATMOS_CI_PR_FORK`</dt>
+  <dd>
+    Whether the pull request head lives in a fork (`true` or `false`). Read only when `ATMOS_CI_PR` is set. It fills
+    `ci.context.pr.fork` and never gates anything on the generic provider.
+  </dd>
+
+  <dt>`ATMOS_CI_EVENT`</dt>
+  <dd>Event name, such as `push` or `pull_request`.</dd>
+
+  <dt>`ATMOS_CI_RUN_ID`</dt>
+  <dd>Run or job identifier. Falls back to `CI_JOB_ID`, then `BUILD_ID`.</dd>
+
+  <dt>`ATMOS_CI_RUN_URL`</dt>
+  <dd>Link to the run or job. Falls back to `CI_JOB_URL`, then `BUILD_URL`.</dd>
+
+  <dt>`ATMOS_CI_REPOSITORY`</dt>
+  <dd>
+    Repository in `owner/name` form. Falls back to `CI_PROJECT_PATH`. The `atmos terraform plan --ci` comment preview
+    needs it, together with `ATMOS_CI_PR`.
+  </dd>
+
+  <dt>`ATMOS_CI_SHA`</dt>
+  <dd>Commit SHA. Falls back to `GIT_COMMIT`, `CI_COMMIT_SHA`, `COMMIT_SHA`, then the checked-out commit.</dd>
+
+  <dt>`ATMOS_CI_BRANCH`</dt>
+  <dd>Branch name. Falls back to `GIT_BRANCH`, `CI_COMMIT_REF_NAME`, `BRANCH_NAME`, then the checked-out branch.</dd>
+
+  <dt>`ATMOS_CI_ACTOR`</dt>
+  <dd>User that triggered the run. Falls back to `CI_COMMIT_AUTHOR`, then `USER`.</dd>
+
+  <dt>`ATMOS_CI_SERVER_URL`</dt>
+  <dd>Base URL of the CI server. Falls back to `CI_SERVER_URL`.</dd>
+
+  <dt>`ATMOS_CI_REPOSITORY_URL`</dt>
+  <dd>Clone URL of the repository. Falls back to `CI_REPOSITORY_URL`, then `GIT_URL`.</dd>
+
+  <dt>`ATMOS_CI_BASE_REF`</dt>
+  <dd>Base branch for affected detection and for `ci.base()`.</dd>
+
+  <dt>`ATMOS_CI_OUTPUT`</dt>
+  <dd>
+    File the generic provider appends step outputs to, in GitHub Actions `key=value` format. Multiline values use the
+    heredoc form. Without it, outputs print to stderr.
+  </dd>
+
+  <dt>`ATMOS_CI_SUMMARY`</dt>
+  <dd>File the generic provider appends job summary Markdown to. Without it, the summary renders on stderr.</dd>
+
+  <dt>`ATMOS_CI_ENV`</dt>
+  <dd>
+    File the generic provider appends environment exports to, in GitHub Actions `KEY=value` format. Without it,
+    `export KEY=value` lines print to stderr, with the value shell-quoted only when it needs quoting.
+  </dd>
+
+  <dt>`ATMOS_CI_PATH`</dt>
+  <dd>
+    File the generic provider appends `PATH` additions to, one directory per line. Without it, an `export PATH=...`
+    line prints to stderr.
+  </dd>
+
+  <dt>`ATMOS_ALLOW_UNSAFE_FORK_EXECUTION`</dt>
+  <dd>
+    Sets `ci.allow_unsafe_fork_execution`. It releases both the clone gate of
+    [`atmos git clone`](/cli/commands/git/clone#fork-pr-safety-gate) and the posting gate that holds comments, commit
+    statuses, environment and `PATH` exports, and SARIF uploads for fork pull requests under the elevated
+    `pull_request_target` and `workflow_run` events. **Unsafe**: leave it unset unless a fork-facing workflow has a
+    documented reason to bypass the gates.
+  </dd>
+</dl>
+
 ## Telemetry
 
 <dl>
@@ -951,6 +1035,44 @@ backends, the toolchain installer, and the aqua-registry client).
   <dt>`ATMOS_INCLUDE_DEPENDENTS`</dt>
   <dd>
     Include dependent components in `describe affected` output.
+  </dd>
+
+  <dt>`ATMOS_GIT_HOOK_ARGS`</dt>
+  <dd>
+    Set by Atmos while a Git hook runs. The arguments Git passed to the hook, joined by single spaces. Shell steps also
+    receive them as `"$@"`, which keeps arguments with spaces intact. See [Git hooks](/cli/configuration/git).
+  </dd>
+
+  <dt>`ATMOS_GIT_HOOK_STDIN`</dt>
+  <dd>
+    Set by Atmos while a `pre-push`, `pre-receive`, `post-receive`, `post-rewrite`, `reference-transaction`, or
+    `proc-receive` hook runs. The path of a temporary file that holds the data Git piped to the hook. Atmos removes the
+    file when the hook ends. The first shell step still receives the same data on standard input.
+  </dd>
+
+  <dt>`ATMOS_HOOK_DEPTH`</dt>
+  <dd>
+    Set by Atmos for the commands a hook runs. It counts how many hooks deep the running command is. A hook that
+    runs at depth 8 is allowed; attempting to start a ninth nested hook fails with `hook recursion limit exceeded`,
+    naming the hook and its event. This bounds recursion when a hook runs the command it is attached to.
+  </dd>
+
+  <dt>`ATMOS_CONFIG_GET_FORMAT`</dt>
+  <dd>
+    Default for the `--format` flag of [`atmos config get`](/cli/commands/config/config-get): `raw` or `json`.
+    Default: `raw`.
+  </dd>
+
+  <dt>`ATMOS_STACK_GET_FORMAT`</dt>
+  <dd>
+    Default for the `--format` flag of [`atmos stack get`](/cli/commands/stack/stack-get): `raw` or `json`.
+    Default: `raw`.
+  </dd>
+
+  <dt>`ATMOS_STACK_CONFIG_GET_FORMAT`</dt>
+  <dd>
+    Default for the `--format` flag of [`atmos stack config get`](/cli/commands/stack/config/get): `raw` or `json`.
+    Default: `raw`.
   </dd>
 </dl>
 

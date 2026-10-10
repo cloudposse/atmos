@@ -40,7 +40,7 @@ atmos stack config get vars.region -s plat-ue2-prod -c vpc
 
 <dl>
   <dt>`--format` / `-f` (string)</dt>
-  <dd>Output format: `raw` (default) or `json`. JSON preserves scalar and collection types, including quoted strings that look like booleans or numbers.</dd>
+  <dd>Output format: `raw` (default) or `json`. JSON preserves scalar and collection types, including quoted strings that look like booleans or numbers. Environment variable: `ATMOS_STACK_CONFIG_GET_FORMAT`. The flag overrides the variable.</dd>
   <dt>`--stack` / `-s` (string, required)</dt>
   <dd>The stack name.</dd>
   <dt>`--component` / `-c` (string, required)</dt>

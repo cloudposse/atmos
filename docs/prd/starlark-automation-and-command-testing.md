@@ -272,15 +272,19 @@ rather than independent replacements. Typed-step dispatch already reuses the sha
   commas are preserved. Omitted optional YAML arguments without defaults become
   empty strings; omitted standalone `cli.arg` values become `None`.
 - Step fields remain templated unless marked `!literal`. The tag protects `script`,
-  `command`, `interpreter`, `working_directory`, and individual declared `env`
-  values through custom commands, workflows, hooks, parallel, and matrix execution.
-  Loader-owned `literal_fields` metadata carries this intent to the runner.
+  `command`, `interpreter`, `working_directory`, `timeout`, and individual declared `env`
+  values (including plain-string steps, command-level `env`, and `env` on parallel and matrix parents) through custom commands, workflows, hooks, parallel, and matrix execution.
+  Loader-owned `literal_fields` metadata carries this intent to the runner. `!literal` on any other step field
+  fails config load naming the field and step. A script or command loaded with `!include.raw` is used as written.
 - Only declared environment values are rendered; ambient process environment values
   pass through verbatim. Protecting `script` does not implicitly protect adjacent
   fields. Template failures identify the step, field, and included source when
   available, and suggest `!literal` for source containing template braces.
 - A script step's `timeout:` applies to the interpreter and subprocess context;
-  expiration is reported through the step timeout contract. Unknown step `output:`
+  expiration is reported through the step timeout contract (`step timed out`, naming the step and its type).
+  Shell and atmos steps, and every shell-runner caller, end the whole process tree on timeout or cancel. The first
+  Ctrl-C cancels an embedded script, runs `defer` calls with a 30 second grace, and exits 130 without an error box; a
+  second Ctrl-C exits immediately. `retry.conditions` is honored by every step type except `http`. Unknown step `output:`
   modes fail validation. The step output modes and `exec.run(output="capture")`
   are different interfaces: `output: capture` is not a valid step mode.
 
@@ -382,7 +386,10 @@ part of this interface. The `.star` extension is optional for an explicit script
 path with a recognized shebang.
 
 Leading global flags such as `atmos --chdir=dir ./tool.star arg` apply normally.
-`--chdir` (or `ATMOS_CHDIR`) is applied before resolving a relative script path.
+A relative script path resolves against the directory the user stood in before `--chdir` (or `ATMOS_CHDIR`) moves
+the process. `.STAR` and `.Star` extensions run like `.star`, and a shebang such as
+`#!/usr/bin/env -S atmos --logs-level=Debug` is accepted. `atmos -` on a terminal prints
+`Reading script from stdin; press Ctrl-D to end.` on stderr.
 Arguments after the filename belong to the script and are isolated before CLI/config
 argument processing and exposed as immutable `ctx.args`. `ctx.script.path` and
 `.directory` identify the physical script
