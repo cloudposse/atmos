@@ -87,10 +87,10 @@ func promptFollowUp() (string, error) {
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Follow up?").
-				Placeholder("Type a reply, or press Enter to finish").
+				Placeholder("Type a reply, or press Enter or Esc to finish").
 				Value(&question),
 		),
-	).WithTheme(uiutils.NewAtmosHuhTheme())
+	).WithKeyMap(uiutils.NewAtmosKeyMap()).WithTheme(uiutils.NewAtmosHuhTheme())
 
 	if err := form.Run(); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {

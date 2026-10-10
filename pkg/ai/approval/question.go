@@ -216,7 +216,7 @@ func typeAnswer(q Question) (string, error) {
 
 // runField runs one field as its own form and maps a user abort to errUtils.ErrUserAborted.
 func runField(field huh.Field) error {
-	form := huh.NewForm(huh.NewGroup(field)).WithTheme(uiutils.NewAtmosHuhTheme())
+	form := huh.NewForm(huh.NewGroup(field)).WithKeyMap(uiutils.NewAtmosKeyMap()).WithTheme(uiutils.NewAtmosHuhTheme())
 	if err := form.Run(); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
 			return errUtils.ErrUserAborted

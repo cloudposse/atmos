@@ -282,7 +282,7 @@ Use the arrow keys to choose an option and press Enter.
   <dd>Refuse the call and remember the decision in `.atmos/ai.settings.local.json`.</dd>
 </dl>
 
-Press **Ctrl-C** at the prompt to abort the run.
+Press **Esc**, **Ctrl-D**, or **Ctrl-C** at the prompt to abort the run.
 
 To skip prompts for tools you trust, list them in `ai.tools.allowed`, or set `ai.tools.mode` in your `atmos.yaml`:
 
@@ -321,7 +321,7 @@ You have 112 stacks with components deployed.
 ```
 </Terminal>
 
-Use the arrow keys and press Enter. Choose **Other…** to type an answer that is not listed. Some questions allow several choices; use Space to mark each one. Your answer goes back to the AI, which continues in the same run. Press **Ctrl-C** to abort the run.
+Use the arrow keys and press Enter. Choose **Other…** to type an answer that is not listed. Some questions allow several choices; use Space to mark each one. Your answer goes back to the AI, which continues in the same run. Press **Esc**, **Ctrl-D**, or **Ctrl-C** to abort the run.
 
 A question is not a tool permission, so `ai.tools.mode`, `allowed`, and `blocked` do not apply to it. In CI and other places without a terminal, the AI is told nobody can answer and carries on with reasonable assumptions.
 
@@ -341,7 +341,7 @@ break the count down by tenant or region if you'd like.
 ```
 </Terminal>
 
-Type a reply and press Enter to ask another question. Each follow-up carries the earlier questions and answers as context, so short replies like "yes, by tenant" work. Press Enter on an empty line, Esc, or Ctrl-C to finish.
+Type a reply and press Enter to ask another question. Each follow-up carries the earlier questions and answers as context, so short replies like "yes, by tenant" work. To finish, press Enter on an empty line, or press Esc, Ctrl-D, or Ctrl-C.
 
 The follow-up prompt appears only when both input and output are a terminal and the command is not running in CI. When you pipe the output or run in a script, `ask` prints the answer and exits, as it always did.
 

@@ -237,7 +237,7 @@ func (p *CLIPrompter) promptWithCache(tool Tool, params map[string]interface{}) 
 				).
 				Value(&response),
 		),
-	).WithTheme(requestTheme())
+	).WithKeyMap(uiutils.NewAtmosKeyMap()).WithTheme(requestTheme())
 
 	if err := runRequestForm(form); err != nil {
 		return false, err
@@ -261,7 +261,7 @@ func (p *CLIPrompter) promptWithoutCache(tool Tool, params map[string]interface{
 				Negative("Deny").
 				Value(&allowed),
 		),
-	).WithTheme(requestTheme())
+	).WithKeyMap(uiutils.NewAtmosKeyMap()).WithTheme(requestTheme())
 
 	if err := runRequestForm(form); err != nil {
 		return false, err
