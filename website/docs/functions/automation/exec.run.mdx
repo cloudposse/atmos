@@ -1,0 +1,141 @@
+---
+title: "exec.run"
+sidebar_position: 11
+sidebar_label: "exec.run"
+sidebar_class_name: command
+description: Run an external program from an argument list and capture its result.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `exec.run` function runs an external program with an argument list, without a shell, and returns its
+    standard output, standard error, and exit code. By default the output streams live and a nonzero exit code raises
+    an error.
+</Intro>
+
+## Usage
+
+```python
+exec.run(argv, working_directory = ..., env = ..., output = "stream", check = True)
+```
+
+## Arguments
+
+<dl>
+    <dt>`argv`</dt>
+    <dd>
+        Required. A non-empty list or tuple of strings. The first element is the program and the rest are its
+        arguments, passed exactly as written. A single string such as `"ls -l"` is rejected: split it into a list.
+    </dd>
+
+    <dt>`working_directory`</dt>
+    <dd>
+        (Optional) The directory to run in. Defaults to the script's working directory: the step's
+        `working_directory`, or the process directory when none is set. A relative path resolves against that
+        directory.
+    </dd>
+
+    <dt>`env`</dt>
+    <dd>
+        (Optional) A dictionary of extra environment variables with string keys and string values. These layer over
+        the inherited execution environment, and a value given here replaces an inherited variable of the same name.
+    </dd>
+
+    <dt>`output`</dt>
+    <dd>
+        (Optional) `"stream"` (the default) shows the program's output live and also captures it. The value `"capture"`
+        captures stdout and stderr without showing them, which suits secret-bearing responses. Any other value is an
+        error.
+    </dd>
+
+    <dt>`check`</dt>
+    <dd>
+        (Optional) Defaults to `True`: a nonzero exit code raises an error. Pass `False` to receive the result
+        and inspect `exit_code` yourself.
+    </dd>
+</dl>
+
+## Returns
+
+A result with three fields:
+
+<dl>
+    <dt>`stdout`</dt>
+    <dd>Everything the program wrote to standard output, as a string.</dd>
+
+    <dt>`stderr`</dt>
+    <dd>Everything the program wrote to standard error, as a string.</dd>
+
+    <dt>`exit_code`</dt>
+    <dd>The exit code, as an integer.</dd>
+</dl>
+
+With `output="stream"`, the program's stdout also goes to the script's own stdout, so it becomes the step's value when
+the script does not assign [`output`](/functions/automation/output). Use `output="capture"` to keep it out of the
+step value. [`atmos.run`](/functions/automation/atmos.run), the other `atmos.*` wrappers, and
+[`component.exec`](/functions/automation/component.exec) accept the same options and return the same result.
+
+## Errors
+
+- An empty list, a non-list `argv`, or a non-string element fails with an argument error.
+- With `check=True`, a nonzero exit code raises an error that names the command and the exit code, and shows the last
+  lines of stderr.
+- A program that cannot start, such as a missing command or a nonexistent directory, always raises, whatever `check`
+  says. A canceled run and a program stopped by a signal raise as well.
+- A handled nonzero exit does not trigger a [`steps.task`](/functions/automation/steps.task) retry. Call `fail()`
+  when the result should fail the task.
+
+Tools pinned with [`dependencies.tools`](/functions/automation/dependencies.tools) are on the `PATH` of every call
+that follows.
+
+## Examples
+
+### Run a program and use its output
+
+```python
+result = exec.run(["git", "rev-parse", "--short", "HEAD"], output = "capture")
+sha = result.stdout.strip()
+output = {"sha": sha}
+```
+
+### Set the directory and environment
+
+```python
+exec.run(
+    ["./deploy.sh", "api"],
+    working_directory = "scripts",
+    env = {"AWS_REGION": "us-east-1", "DEPLOY_ENV": "dev"},
+)
+```
+
+### Assert an expected failure
+
+```python
+result = exec.run(["terraform", "validate"], check = False, output = "capture")
+if result.exit_code == 0:
+    fail("expected validation to fail")
+if "Missing required argument" not in result.stderr:
+    fail("validation failed for an unexpected reason:\n" + result.stderr)
+```
+
+### Run several programs in parallel
+
+```python
+def lint(directory):
+    return exec.run(["tflint"], working_directory = directory, output = "capture").stdout
+
+output = steps.parallel(
+    tasks = [steps.task(name = d, function = lint, args = [d]) for d in ["vpc", "eks", "rds"]],
+    max_concurrency = 2,
+)
+```
+
+Inside a parallel group with more than one task, each streamed line is prefixed with the task name.
+
+## Related
+
+- [`component.exec`](/functions/automation/component.exec) runs a program in a component's directory.
+- [`atmos.run`](/functions/automation/atmos.run) runs Atmos itself.
+- [`dependencies.tools`](/functions/automation/dependencies.tools) installs tools before you run them.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script)

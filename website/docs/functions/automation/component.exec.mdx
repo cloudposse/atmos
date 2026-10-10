@@ -1,0 +1,115 @@
+---
+title: "component.exec"
+sidebar_position: 10
+sidebar_label: "component.exec"
+sidebar_class_name: command
+description: Run a program in a component's directory with the component's environment.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `exec` method of a component handle runs a program in the component's own directory, with the component's
+    environment applied. Use it instead of guessing a path from a component name.
+</Intro>
+
+## Usage
+
+The method is available on the handle returned by [`components.get`](/functions/automation/components.get) and on
+[`ctx.component`](/functions/automation/ctx.component):
+
+```python
+component.exec(argv, working_directory = ..., env = ..., output = "stream", check = True)
+```
+
+## Arguments
+
+The method takes the same arguments as [`exec.run`](/functions/automation/exec.run#arguments), with different
+defaults for the directory and environment.
+
+<dl>
+    <dt>`argv`</dt>
+    <dd>Required. A non-empty list or tuple of strings: the program and its arguments, run without a shell.</dd>
+
+    <dt>`working_directory`</dt>
+    <dd>
+        (Optional) Defaults to the component's directory, which is the handle's `path`. A relative path resolves
+        against the component directory.
+    </dd>
+
+    <dt>`env`</dt>
+    <dd>
+        (Optional) Extra environment variables for this call. They are applied last, so they override everything
+        else.
+    </dd>
+
+    <dt>`output`</dt>
+    <dd>(Optional) `"stream"` (the default) or `"capture"`.</dd>
+
+    <dt>`check`</dt>
+    <dd>(Optional) Defaults to `True`: a nonzero exit code raises an error.</dd>
+</dl>
+
+## Environment layering
+
+The program inherits the invocation's execution environment, and Atmos then layers, in this order:
+
+1. The component's `env` section.
+2. For a hook, the hook's environment overrides.
+3. The command or step overrides in effect for the script.
+4. The script's [`env`](/functions/automation/env) inputs.
+5. The `env` argument of the call.
+
+Each layer replaces variables of the same name from the layers before it.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`exec.run`](/functions/automation/exec.run#returns) for the
+shared behavior of streaming, capturing, and failure handling.
+
+## Examples
+
+### Run a script that ships with the component
+
+```python
+api = components.get("api", "dev", "container")
+api.exec(["./smoke-test", "--strict"])
+```
+
+### Capture output from the component directory
+
+```python
+station = components.get("station", "dev", "terraform")
+files = station.exec(["ls", "-1"], output = "capture").stdout.splitlines()
+print(files)
+```
+
+### Use the component in a hook
+
+```python
+def post_apply():
+    if ctx.operation.status != "success":
+        return
+    ctx.component.exec(ctx.component.settings.get("smoke_command", ["./smoke-test"]))
+    ui.success("Smoke tests passed for " + ctx.component.name)
+
+post_apply()
+```
+
+### Run in every stack
+
+```python
+def smoke(stack):
+    return components.get("api", stack, "container").exec(["./smoke-test"], output = "capture").exit_code
+
+output = steps.parallel(
+    tasks = [steps.task(name = s, function = smoke, args = [s]) for s in ["dev", "prod"]],
+)
+```
+
+## Related
+
+- [`components.get`](/functions/automation/components.get) returns the handle.
+- [`ctx.component`](/functions/automation/ctx.component) is the handle already in scope in commands and hooks.
+- [`exec.run`](/functions/automation/exec.run) runs a program from the script's own working directory.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#custom-components)

@@ -1,0 +1,123 @@
+---
+title: "atmos.kubernetes"
+sidebar_position: 8
+sidebar_label: "atmos.kubernetes"
+sidebar_class_name: command
+description: Run an atmos kubernetes command, such as render, diff, or apply, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.kubernetes` function runs `atmos kubernetes` through the current Atmos executable. Use it to render,
+    validate, diff, apply, and delete Kubernetes-native Atmos components from automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.kubernetes(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+Also available as `atmos.k8s`.
+
+## Subcommands
+
+Pass the subcommand and the component name as strings before the keyword arguments. The call
+`atmos.kubernetes("render", "demo", flags = {"stack": "dev"})` runs `atmos kubernetes render demo --stack=dev`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`render`](/cli/commands/kubernetes/render) | Render Kubernetes manifests. |
+| [`validate`](/cli/commands/kubernetes/validate) | Validate rendered Kubernetes manifests. |
+| [`plan`](/cli/commands/kubernetes/plan) | Preview server-side Kubernetes manifest changes. |
+| [`diff`](/cli/commands/kubernetes/diff) | Show server-side Kubernetes manifest changes. |
+| [`apply`](/cli/commands/kubernetes/apply) | Apply Kubernetes manifests. |
+| [`deploy`](/cli/commands/kubernetes/deploy) | Deploy Kubernetes manifests. |
+| [`delete`](/cli/commands/kubernetes/delete) | Delete Kubernetes manifests. |
+
+See the [`atmos kubernetes` command reference](/cli/commands/kubernetes/usage) for the complete list of subcommands and
+flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `kubernetes`, in order: the subcommand, then the
+        component name. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"stack"` becomes
+        `--stack`, and the registered shorthand `"s"` resolves to the same flag. Other flags include `"all"`,
+        `"affected"`, `"base"`, `"labels"`, `"tags"`, `"target"`, and the global `"identity"`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Render a component
+
+```python
+manifests = atmos.kubernetes("render", "demo", flags = {"stack": "dev"}, output = "capture")
+print(manifests.stdout)
+```
+
+This runs `atmos kubernetes render demo --stack=dev` and returns the rendered manifests in `stdout`.
+
+### Diff, then apply with an identity
+
+```python
+atmos.kubernetes("diff", "demo", flags = {"stack": "dev", "identity": "local-k3s"})
+atmos.kubernetes("apply", "demo", flags = {"stack": "dev", "identity": "local-k3s"})
+```
+
+### Apply everything in a stack
+
+```python
+atmos.kubernetes("apply", flags = {"all": True, "stack": "dev"})
+```
+
+This runs `atmos kubernetes apply --all --stack=dev`, which processes every Kubernetes component in dependency order.
+
+### Apply only affected components
+
+```python
+atmos.kubernetes("apply", flags = {"affected": True, "base": "origin/main"})
+```
+
+:::note
+The Kubernetes commands are experimental, and Atmos prints its experimental notice when the script runs them.
+Authentication through the `identity` flag works the same way as on the command line.
+:::
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos kubernetes`](/cli/commands/kubernetes/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

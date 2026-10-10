@@ -1,0 +1,125 @@
+---
+title: "atmos.sbom"
+sidebar_position: 8
+sidebar_label: "atmos.sbom"
+sidebar_class_name: command
+description: Run an atmos sbom command, such as generate, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.sbom` function runs `atmos sbom` through the current Atmos executable. Use it to generate CycloneDX
+    or SPDX software bills of materials from Atmos lock files and attach them to a build or release from automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.sbom(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
+`atmos.sbom("generate")` runs `atmos sbom generate`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| `generate` | Generate a CycloneDX or SPDX SBOM from project lock files. |
+
+See the [`atmos sbom` command reference](/cli/commands/sbom/usage) for the complete list of subcommands and flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `sbom`, in order: the subcommand and its
+        positional arguments. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"format"` becomes
+        `--format`, and registered shorthands resolve to their long form. For `generate`, useful keys include
+        `"format"` (`cyclonedx-json` or `spdx-json` ), `"scope"` (`terraform` or `dependencies` ), `"mode"`
+        (`provenance` or `ntia` ), `"output"` (a file to write instead of standard output), and `"upload"`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults. The `output` keyword argument controls how the
+        function handles process output; it is separate from an `"output"` key inside `flags`, which becomes the
+        `--output` flag of `atmos sbom generate`.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Write an SBOM to a file
+
+```python
+atmos.sbom("generate", flags = {"format": "spdx-json", "output": "build/sbom.spdx.json"})
+```
+
+This runs `atmos sbom generate --format=spdx-json --output=build/sbom.spdx.json`.
+
+### Inspect the components in the document
+
+Without an output file, the SBOM goes to standard output. Capture it and decode it to work with the components in a
+script.
+
+```python
+result = atmos.sbom("generate", flags = {"scope": "dependencies"}, output = "capture")
+bom = json.decode(result.stdout)
+ui.info("The SBOM lists " + str(len(bom["components"])) + " components.")
+```
+
+### Generate an NTIA-conformant SBOM
+
+The `ntia` mode requires the subject name, supplier, and version.
+
+```python
+atmos.sbom(
+    "generate",
+    flags = {
+        "mode": "ntia",
+        "subject-name": "platform",
+        "subject-supplier": "Example Corp",
+        "subject-version": "1.4.0",
+        "output": "sbom.cdx.json",
+    },
+)
+```
+
+## Notes
+
+:::note
+The `atmos sbom` command is experimental. The wrappers keep the command's native behavior, so the experimental notice
+appears on standard error.
+:::
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos sbom`](/cli/commands/sbom/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

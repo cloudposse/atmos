@@ -1,0 +1,116 @@
+---
+title: "atmos.composition"
+sidebar_position: 8
+sidebar_label: "atmos.composition"
+sidebar_class_name: command
+description: Run an atmos composition command, such as list, validate, or up, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.composition` function runs `atmos composition` through the current Atmos executable. Use it to list
+    declared compositions, check which services a stack fulfills, and start, stop, or inspect the members of a
+    composition from automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.composition(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
+`atmos.composition("validate", "storefront", flags = {"stack": "dev"})` runs
+`atmos composition validate storefront --stack=dev`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| `list` | List declared compositions and stack fulfillment. |
+| `validate` | Report a composition's fulfilled and not-provided services for a stack. |
+| `up` | Bring composition members in a stack up. |
+| `start` | Start composition members in a stack. |
+| `stop` | Stop composition members in a stack. |
+| `restart` | Restart composition members in a stack. |
+| `down` | Bring composition members in a stack down. |
+| `rm` | Remove composition members in a stack. |
+| `ps` | List composition members in a stack. |
+| `logs` | Show logs from composition members in a stack. |
+
+See the [`atmos composition` command reference](/cli/commands/composition/usage) for the complete list of subcommands
+and flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `composition`, in order: the subcommand and its positional arguments, such as the composition name. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). The `stack` key becomes `--stack` and
+        applies to every subcommand that operates on a stack, `format` and `sort` apply to `list`, and `follow` and
+        `tail` apply to `logs`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Check that a stack fulfills a composition
+
+```python
+check = atmos.composition("validate", "storefront", flags = {"stack": "dev"}, output = "capture", check = False)
+if check.exit_code != 0:
+    fail("The dev stack does not fulfill the storefront composition:\n" + check.stderr)
+ui.success("The dev stack fulfills the storefront composition.")
+```
+
+### Read the declared compositions as data
+
+```python
+listing = atmos.composition("list", flags = {"format": "json"}, output = "capture")
+for composition in json.decode(listing.stdout):
+    print(composition["Composition"], "->", composition["Services"])
+```
+
+The `list` subcommand prints one object per composition, with the keys `Composition`, `Description`, `Services`,
+and `Stacks`.
+
+### Start a composition
+
+```python
+atmos.composition("up", "storefront", flags = {"stack": "local"})
+```
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos composition`](/cli/commands/composition/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

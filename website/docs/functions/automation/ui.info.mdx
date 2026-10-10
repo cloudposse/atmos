@@ -1,0 +1,85 @@
+---
+title: "ui.info"
+sidebar_position: 23
+sidebar_label: "ui.info"
+sidebar_class_name: command
+description: Show a status or progress message to the person running the program.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `ui.info` function shows a status or progress message to the person running the program. Use it to say what the script is doing; use [`ui.success`](/functions/automation/ui.success) and [`ui.warning`](/functions/automation/ui.warning) for outcomes and cautions.
+</Intro>
+
+## Usage
+
+```python
+ui.info(message)
+```
+
+## Arguments
+
+<dl>
+    <dt>`message`</dt>
+    <dd>
+        Required. The text to show, as a string. It can be passed positionally or as `message = ...`. Passing a
+        value of another type, such as an integer, fails with an argument error, so convert it with `str()` first.
+    </dd>
+</dl>
+
+## Returns
+
+The return value is `None`. The message is a side effect and never becomes the step value.
+
+## Behavior
+
+- The message is written to the status channel (stderr) with Atmos UI formatting: a themed `▶` marker
+  followed by the text. Colors adapt to the terminal.
+- Standard output is reserved for data, so `ui.info` never changes what `print` or [`output`](/functions/automation/output)
+  produce, so a program's result can be piped or captured without status lines mixed in.
+- Inside [`steps.parallel`](/functions/automation/steps.parallel) tasks, each message is written as one whole line
+  and prefixed with the task name, such as `[dev] `. Lines from different tasks can arrive in any order but never
+  interleave within a line. A group with a single task writes without a prefix.
+- Secrets that Atmos knows about are masked in the displayed text.
+
+## Examples
+
+### Show a message
+
+```python
+stacks = ["dev", "staging", "prod"]
+ui.info("Planning " + str(len(stacks)) + " stacks")
+
+output = "planned"
+```
+
+```text
+▶ Planning 3 stacks
+```
+
+### Use it in parallel tasks
+
+```python
+def check(stack):
+    ui.info("Checking " + stack)
+    return stack
+
+steps.parallel(tasks = [steps.task(s, check, args = [s]) for s in ["dev", "prod"]])
+```
+
+```text
+[dev] ▶ Checking dev
+[prod] ▶ Checking prod
+```
+
+## Errors
+
+- Calling the function without a message, or with a message that is not a string, fails with an argument error that
+  names `ui.info`.
+
+## Related
+
+- [`ui.success`](/functions/automation/ui.success) and [`ui.warning`](/functions/automation/ui.warning) cover the other status levels.
+- [`print`](/functions/automation/print) writes data to stdout, and [`log.info`](/functions/automation/log.info) writes diagnostics to the Atmos log.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#step-output)

@@ -1,0 +1,167 @@
+---
+title: "cli.command"
+sidebar_position: 1
+sidebar_label: "cli.command"
+sidebar_class_name: command
+description: Declare a standalone program's command line, validate its inputs, and call its entry function.
+---
+
+import Intro from '@site/src/components/Intro'
+import EmbedFile from '@site/src/components/EmbedFile'
+
+<Intro>
+    The `cli.command` function turns a standalone Atmos script into a command-line program. It parses
+    the arguments and flags you declare with [`cli.arg`](/functions/automation/cli.arg) and
+    [`cli.flag`](/functions/automation/cli.flag), handles `--help`, validates the input, and then calls your
+    entry function with the parsed values.
+</Intro>
+
+## Usage
+
+```python
+cli.command(
+    run,
+    name = "<script file name>",
+    description = "",
+    args = [],
+    flags = [],
+    validate = None,
+)
+```
+
+## Arguments
+
+<dl>
+    <dt>`run`</dt>
+    <dd>
+        Required. The function to call after the input parses and validates. It receives two dictionaries,
+        `args` and `flags`, and its return value becomes the return value of `cli.command`.
+    </dd>
+
+    <dt>`name`</dt>
+    <dd>
+        (Optional) The program name shown in usage output. Defaults to the script's file name. A name starts with a
+        letter and contains only letters, digits, underscores, and hyphens.
+    </dd>
+
+    <dt>`description`</dt>
+    <dd>(Optional) A short description shown in the help output.</dd>
+
+    <dt>`args`</dt>
+    <dd>
+        (Optional) A list or tuple of [`cli.arg`](/functions/automation/cli.arg) declarations, in the order the
+        positional arguments appear on the command line. Names must be unique, and required arguments must come
+        before optional ones.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A list or tuple of [`cli.flag`](/functions/automation/cli.flag) declarations. Flag names and
+        shorthands must be unique. The flag `help` and shorthand `h` are reserved for the built-in help.
+    </dd>
+
+    <dt>`validate`</dt>
+    <dd>
+        (Optional) A function called with the same `args` and `flags` dictionaries before `run`. It accepts
+        the input by returning `None` or `True`, and rejects it by returning `False` or by calling `fail()` with an
+        explanation. Any other return value is an error.
+    </dd>
+</dl>
+
+## Returns
+
+The value returned by `run`. When the user passes `--help`, Atmos prints the usage and returns `None` without
+calling `validate` or `run`.
+
+The `args` dictionary has one key per declared argument. An optional argument that was not supplied is `None`.
+The `flags` dictionary has one key per declared flag, with typed values: strings, integers, booleans, or lists of
+strings. A required flag that was not supplied is absent from the dictionary, but parsing fails before that can
+reach your function. Both dictionaries are read-only and their keys are sorted. Names are used as written, so a
+hyphenated flag is read as `flags["dry-run"]`.
+
+## Command-line behavior
+
+Everything after the script file name belongs to the script. Atmos does not treat `--config`, `--help`, or any other
+token as an Atmos option once it follows the script name.
+
+- Flags accept the long form (`--replicas=3` or `--replicas 3`) and the declared one-letter shorthand (`-r 3`).
+- A `string_list` flag accepts comma-separated values, repeated flags, or both, so `--tag=a,b --tag=c` yields
+  `["a", "b", "c"]`.
+- A token of `--` ends flag parsing. Every later token is validated as a declared positional argument.
+- Command-line values override a flag's `env` binding, which overrides its default.
+- An unknown flag, an invalid value, a missing required argument, or too many arguments stops the program with a
+  usage error before `validate` or `run` is called.
+
+Top-level code in the script still runs before `cli.command`, and any code after it runs once `run` returns. Keep work
+with side effects inside `run`, so that `--help` and rejected input do not trigger it.
+
+## Errors
+
+- A script can call `cli.command` once per run. A second call fails.
+- It is available only in a standalone script's main thread. Calling it from a script step, a custom command, a
+  workflow, a hook, or inside a [`steps.parallel`](/functions/automation/steps.parallel) task fails.
+- A declaration of the wrong kind in `args` or `flags`, a duplicate name or shorthand, or a required argument that
+  follows an optional one fails with an argument error.
+
+## Examples
+
+### Declare arguments, flags, and validation
+
+<EmbedFile filePath="examples/starlark-script/capacity.star" language="python" />
+
+Save the program as `capacity.star`, make it executable, and run it:
+
+```shell
+./capacity.star api --replicas=3
+./capacity.star --help
+```
+
+### Optional arguments and list flags
+
+```python
+#!/usr/bin/env atmos
+def main(args, flags):
+    target = args["environment"] or "dev"
+    for tag in flags["tag"]:
+        print("{}: {}".format(target, tag))
+
+cli.command(
+    run = main,
+    args = [cli.arg("environment", required = False)],
+    flags = [cli.flag("tag", type = "string_list", shorthand = "t")],
+)
+```
+
+```shell
+./tags.star prod --tag=blue,green -t canary
+```
+
+```text
+prod: blue
+prod: green
+prod: canary
+```
+
+### Return structured output
+
+The value returned by `run` is the value of `cli.command`, so assign it to [`output`](/functions/automation/output)
+to print structured data:
+
+```python
+#!/usr/bin/env atmos
+def main(args, flags):
+    return {"service": args["service"], "replicas": flags["replicas"]}
+
+output = cli.command(
+    run = main,
+    args = [cli.arg("service")],
+    flags = [cli.flag("replicas", type = "int", default = 2)],
+)
+```
+
+## Related
+
+- [`cli.arg`](/functions/automation/cli.arg) and [`cli.flag`](/functions/automation/cli.flag) declare the inputs.
+- [`ctx`](/functions/automation/ctx) exposes the raw script arguments in `ctx.args`.
+- [Standalone CLI apps](/automation/standalone-cli-apps) walks through building a program.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#declaring-a-standalone-command) describe the surrounding runtime.

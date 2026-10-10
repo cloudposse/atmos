@@ -1,0 +1,96 @@
+---
+title: "atmos.about"
+sidebar_position: 8
+sidebar_label: "atmos.about"
+sidebar_class_name: command
+description: Run atmos about from a script to print the Atmos overview.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.about` function runs `atmos about` through the current Atmos executable. It prints the overview of
+    Atmos, its features, and its benefits.
+</Intro>
+
+## Usage
+
+```python
+atmos.about(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+The `atmos about` command has no subcommands. The call `atmos.about()` runs `atmos about` and returns the overview
+text. The only flag the command registers is `--help`.
+
+See the [`atmos about` command reference](/cli/commands/about) for details.
+
+:::note
+The output is written for people to read, so calling `atmos.about` from a script is rarely useful. It works for
+automation that captures the overview text, for example to include it in generated documentation.
+:::
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `about`, in order. The command takes no
+        positional arguments. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"help"` becomes
+        `--help`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Capture the overview text
+
+```python
+result = atmos.about(output = "capture")
+print(result.stdout)
+```
+
+With `output = "capture"` the text is returned in `stdout` and is not shown while the command runs.
+
+### Show the overview to the user
+
+```python
+atmos.about()
+```
+
+The default `output = "stream"` shows the overview live and also captures it in the returned result.
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos about`](/cli/commands/about) documents the command.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

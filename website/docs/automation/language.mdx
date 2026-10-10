@@ -1,55 +1,53 @@
 ---
 title: Atmos Automation Language
-sidebar_label: Language Reference
-description: Syntax, built-in helpers, inputs, output, and execution behavior for Atmos Automation Language.
+sidebar_label: Language Overview
+description: Syntax, built-in helpers, inputs, output, and execution behavior for the Atmos Automation Language.
 slug: /automation/language
 ---
 
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Atmos Automation Language is a Python-like language built on Starlark and
-embedded in Atmos. Use Atmos Automation Language when you want to add decisions,
-calculations, or reusable functions to your CLI apps, custom commands, workflows,
-and lifecycle hooks.
+The Atmos Automation Language is a Python-like DSL based on Starlark for
+building, shipping, and deploying with Atmos. Write reusable, testable functions
+for the process your team runs locally and in CI.
 </Intro>
 
-Use `.star` files for reusable programs. In a YAML script step, select the
-language with `type: script` and `interpreter: starlark`.
+Atmos executes your code as a standalone `.star` program or as a script step
+in a custom command, workflow, or lifecycle hook. Run a file with
+`atmos ./my-tool.star`. For an inline YAML script step, set
+`type: script` and `interpreter: starlark`. The interpreter and built-in functions
+ship with Atmos.
+
+This page introduces the language and how Atmos runs it. For complete syntax
+and data types, see the [language reference](/automation/reference).
 
 ## Why Starlark?
 
-Automation is code your whole team needs to read, review, and maintain. Starlark
-provides a small, shared language for that work, whatever languages your team
-uses to build applications.
+Starlark provides functions, loops, conditions, and structured data with
+Python-like syntax. You can pass a component's configuration between functions,
+inspect a command result, and test a calculation without converting everything
+to shell text. Shared functions let your release process grow without copying
+logic between Bash scripts and CI jobs.
 
-The motivation is similar to HCL's focus on structured, declarative
-configuration: a deliberately focused language gives teams fewer conventions
-to learn and agree on. Starlark brings that approach to programmable logic,
-with functions, conditions, loops, and structured values for expressing the
-work between configuration and execution.
+Its smaller feature set gives teams fewer language features to learn when
+writing and reviewing automation. It is a separate language:
+Atmos scripts do not run arbitrary Python code or import Python packages.
 
-- **Familiar syntax, a smaller language.** Python-like syntax makes scripts
-  approachable, while a deliberately limited feature set keeps the language
-  easier to learn and review. Starlark is its own language; Python packages
-  are not part of its runtime.
-- **Predictable logic.** Calculations and transformations using only their
-  supplied inputs produce repeatable results, making them straightforward to
-  test. Values shared with parallel tasks are frozen to prevent those tasks
-  from changing shared state.
-- **Capabilities supplied by Atmos.** The embedding application defines what
-  scripts can do. Atmos supplies explicit helpers for component configuration,
-  commands, processes, files, and output, so automation follows the same
-  conventions across entry points.
-- **An included runtime.** The interpreter and built-in helpers ship with
-  Atmos. Scripts using them need no separate Python or Node.js installation.
-  External commands still require their own tools and credentials.
+Atmos supplies functions for reading files, running commands, and working with
+component configuration. These built-ins use the same interfaces in standalone
+scripts, workflow steps, custom commands, and hooks. Scripts that use only the
+built-ins need no separate Python or Node.js installation; commands they launch
+still need their own tools and credentials.
 
-These choices follow Starlark's [design principles](https://github.com/bazelbuild/starlark#design-principles).
-Predictable language evaluation does not make an entire automation script
-deterministic: files, credentials, and subprocess results depend on the outside
-world. Atmos scripts can perform real operations through the supplied helpers;
-the interpreter is not a security boundary for untrusted scripts.
+Calculations using only their supplied inputs produce repeatable results.
+Values shared with parallel tasks are frozen so those tasks cannot change shared
+state. File reads and subprocess results still depend on the environment, so an
+entire automation script is not necessarily deterministic. The interpreter is not
+a security boundary for untrusted scripts.
+
+See Starlark's [design principles](https://github.com/bazelbuild/starlark#design-principles)
+for the language's design rationale.
 
 ## Syntax and values
 
@@ -66,7 +64,9 @@ print("Total workers: {}".format(capacity(3, 4)))
 ```
 
 This prints `Total workers: 12`. Use `fail(message)` to stop a script with an
-error. Atmos reports the source location and traceback.
+error. Atmos reports the source location and traceback. Use
+[`sum()`](/automation/reference/builtin-functions#sum) to total numbers and
+[`round()`](/automation/reference/builtin-functions#round) to round a result.
 
 The runtime supports top-level conditionals and loops, `while`, `set()`, and
 recursive functions. It does not run arbitrary Python programs or import Python
@@ -94,20 +94,23 @@ to an environment variable.
 
 | Helper | Purpose |
 | --- | --- |
-| `cli.command`, `cli.arg`, `cli.flag` | Declare a standalone program's interface, validate inputs, and invoke its callback. |
-| `atmos` | Invoke registered Atmos commands, including Terraform, Helm, and project commands through `atmos.run`. |
-| `components.get` | Resolve component configuration for a named component and stack. |
-| `exec.run` | Run an external program with an argument list and capture its result. |
-| `steps.task`, `steps.parallel` | Describe function calls, execute concurrent work, and apply retries and timeouts. |
-| `fs.read_file` | Read a local file as text. |
-| `json.encode`, `json.decode` | Convert between structured values and JSON text. |
-| `regex.search`, `regex.findall`, `regex.replace` | Match and transform text using regular expressions. |
-| `dependencies.tools` | Request tools through Atmos's toolchain integration. |
-| `ui` | Write status messages for the person running the program. |
-| `log` | Emit diagnostics at the configured Atmos log level. |
+| [`cli.command`](/functions/automation/cli.command), [`cli.arg`](/functions/automation/cli.arg), [`cli.flag`](/functions/automation/cli.flag) | Declare a standalone program's interface, validate inputs, and invoke its callback. |
+| [`atmos.run`](/functions/automation/atmos.run), [`atmos.terraform`](/functions/automation/atmos.terraform), [`atmos.helm`](/functions/automation/atmos.helm), [`atmos.toolchain`](/functions/automation/atmos.toolchain), and one wrapper per command, such as [`atmos.vendor`](/functions/automation/atmos.vendor) | Invoke registered Atmos commands, including Terraform, Helm, and project commands through `atmos.run`. |
+| [`components.get`](/functions/automation/components.get) | Resolve component configuration for a named component and stack. |
+| [`exec.run`](/functions/automation/exec.run) | Run an external program with an argument list and capture its result. |
+| [`steps.task`](/functions/automation/steps.task), [`steps.parallel`](/functions/automation/steps.parallel) | Describe function calls, execute concurrent work, and apply retries and timeouts. |
+| [`fs.read_file`](/functions/automation/fs.read_file) | Read a local file as text. |
+| [`json.encode`](/functions/automation/json.encode), [`json.decode`](/functions/automation/json.decode) | Convert between structured values and JSON text. |
+| [`regex.search`](/functions/automation/regex.search), [`regex.findall`](/functions/automation/regex.findall), [`regex.replace`](/functions/automation/regex.replace) | Match and transform text using regular expressions. |
+| [`dependencies.tools`](/functions/automation/dependencies.tools) | Request tools through Atmos's toolchain integration. |
+| [`ui.info`](/functions/automation/ui.info), [`ui.success`](/functions/automation/ui.success), [`ui.warning`](/functions/automation/ui.warning) | Write status messages for the person running the program. |
+| [`errors.build`](/functions/automation/errors.build) | Raise actionable errors with Atmos's explanations, hints, examples, context, and exit codes. |
+| [`log.trace`](/functions/automation/log.trace), [`log.debug`](/functions/automation/log.debug), [`log.info`](/functions/automation/log.info), [`log.warn`](/functions/automation/log.warn), [`log.error`](/functions/automation/log.error) | Emit diagnostics at the configured Atmos log level. |
 
-The [script API reference](/steps/type/script#parameterized-tasks-retries-and-timeouts)
-details call signatures, return values, and failure behavior. The
+The [automation functions reference](/functions/automation) documents every helper
+and built-in value with its signature, arguments, return value, and examples. The
+[script API reference](/steps/type/script#parameterized-tasks-retries-and-timeouts)
+also details call signatures, return values, and failure behavior. The
 [Atmos command reference](/steps/type/script#calling-atmos-commands)
 explains command arguments and flags.
 
@@ -121,9 +124,21 @@ as written; other values must be JSON-encodable. Without `output`, a script
 step uses captured stdout as its value. Status and diagnostic output do not
 become the step value.
 
-Output streams while the program runs and uses Atmos's secret masking. Log
-messages respect the configured log level and can include structured fields.
+Output streams while the program runs. When masking is enabled, Atmos masks
+registered secrets and matches for configured masking patterns in displayed
+output. Log messages respect the configured log level and can include structured fields.
 See [output and logging](/steps/type/script#step-output).
+
+Use [`errors.build`](/functions/automation/errors.build) to give failures the same
+presentation as Atmos's own errors. Add an explanation, recovery hints, and an
+example before calling `.fail()`. These errors follow Atmos's normal reporting
+path, including Sentry when configured.
+
+Workflows and custom commands can collect input with [`input`](/steps/type/input),
+[`choose`](/steps/type/choose), and [`confirm`](/steps/type/confirm) steps. Pass a
+prompt's value into a script through `env`, and assign `output` to pass the
+script's result onward. See [prompts and step outputs](/automation/workflows#collect-input-and-pass-results-between-steps)
+for a complete example.
 
 ## Files and shared code
 

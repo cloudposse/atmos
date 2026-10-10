@@ -1,0 +1,135 @@
+---
+title: "atmos.version"
+sidebar_position: 8
+sidebar_label: "atmos.version"
+sidebar_class_name: command
+description: Run an atmos version command, such as list, show, or track, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.version` function runs `atmos version` through the current Atmos executable. Use it to read the
+    running Atmos version, list and inspect releases, install or uninstall Atmos versions, and manage version tracks
+    from automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.version(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The bare call
+`atmos.version()` runs `atmos version`, which shows the running version. The call `atmos.version("show", "v1.194.0")`
+runs `atmos version show v1.194.0`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`list`](/cli/commands/version/list) | List Atmos releases. |
+| [`show`](/cli/commands/version/show) | Show details for a specific Atmos release. |
+| [`install`](/cli/commands/version/install) | Install a specific version of Atmos. |
+| [`uninstall`](/cli/commands/version/uninstall) | Uninstall a specific version of Atmos. |
+| [`track`](/cli/commands/version/track) | Manage tracked external versions with the Atmos Version Tracker. Also available as `tracks`. |
+
+The `track` subcommand has its own subcommands, such as [`status`](/cli/commands/version/track/status),
+[`lock`](/cli/commands/version/track/lock), [`update`](/cli/commands/version/track/update),
+[`apply`](/cli/commands/version/track/apply), [`verify`](/cli/commands/version/track/verify),
+[`diff`](/cli/commands/version/track/diff), [`list`](/cli/commands/version/track/list),
+[`show`](/cli/commands/version/track/show), [`get`](/cli/commands/version/track/get),
+[`add`](/cli/commands/version/track/add), [`set`](/cli/commands/version/track/set), and
+[`remove`](/cli/commands/version/track/remove). Pass them after `"track"`, as in
+`atmos.version("track", "verify")`.
+
+See the [`atmos version` command reference](/cli/commands/version/usage) for the complete list of subcommands and
+flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `version`, in order: the subcommand and its
+        positional arguments, such as a release version for `show` or `install`. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"format"` becomes
+        `--format`, and registered shorthands such as `"c"` resolve to `--check`. Common keys are `"format"` and
+        `"check"` for the bare command, and `"limit"`, `"offset"`, `"since"`, `"include-prereleases"`, and
+        `"installed"` for `list`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Read the running version as data
+
+```python
+result = atmos.version(flags = {"format": "json"}, output = "capture")
+info = json.decode(result.stdout)
+ui.info("Running Atmos " + info["version"] + " on " + info["os"] + "/" + info["arch"])
+```
+
+### List recent releases
+
+```python
+releases = atmos.version("list", flags = {"limit": 5, "format": "json"}, output = "capture")
+print(json.decode(releases.stdout))
+```
+
+This runs `atmos version list --limit=5 --format=json`.
+
+### Verify version tracks in a pipeline
+
+```python
+result = atmos.version("track", "verify", output = "capture", check = False)
+if result.exit_code != 0:
+    fail("Version tracks are not locked, current, and applied:\n" + result.stderr)
+```
+
+### Install a specific Atmos version
+
+```python
+atmos.version("install", "1.194.0")
+```
+
+## Notes
+
+:::note
+The `list` and `show` subcommands, and the `"check"` key in `flags`, contact GitHub, so they need network access.
+The `"check"` key becomes the `--check` flag of `atmos version` and is separate from the `check` keyword argument,
+which controls whether a nonzero exit code raises an error.
+:::
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos version`](/cli/commands/version/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

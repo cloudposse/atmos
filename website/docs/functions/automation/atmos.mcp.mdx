@@ -1,0 +1,118 @@
+---
+title: "atmos.mcp"
+sidebar_position: 8
+sidebar_label: "atmos.mcp"
+sidebar_class_name: command
+description: Run an atmos mcp command, such as list, test, or tools, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.mcp` function runs `atmos mcp` through the current Atmos executable. Use it to inspect, test, and
+    configure the Model Context Protocol servers in `atmos.yaml` and the AI clients that use them.
+</Intro>
+
+## Usage
+
+```python
+atmos.mcp(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and its positional arguments as strings before the keyword arguments. The call
+`atmos.mcp("tools", "aws-docs")` runs `atmos mcp tools aws-docs`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`list`](/cli/commands/mcp/list) | List configured MCP servers. |
+| [`status`](/cli/commands/mcp/status) | Show the status of all MCP servers. |
+| [`tools`](/cli/commands/mcp/tools) | List the tools from an MCP server. |
+| [`test`](/cli/commands/mcp/test) | Test connectivity to an MCP server. |
+| [`restart`](/cli/commands/mcp/restart) | Validate that an MCP server can stop and restart cleanly. |
+| [`add`](/cli/commands/mcp/add) | Add an MCP server to `mcp.servers` in `atmos.yaml`. |
+| [`remove`](/cli/commands/mcp/remove) | Remove an MCP server from `mcp.servers` in `atmos.yaml`. |
+| [`export`](/cli/commands/mcp/export) | Export `.mcp.json` from the MCP server configuration. |
+| [`install`](/cli/commands/mcp/install) | Install configured MCP servers into AI client config files. |
+| [`uninstall`](/cli/commands/mcp/uninstall) | Remove installed MCP servers from AI client config files. |
+| [`start`](/cli/commands/mcp/start) | Start the Atmos MCP server. |
+
+See the [`atmos mcp` command reference](/cli/commands/mcp/start) for each subcommand's flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `mcp`, in order: the subcommand and its
+        positional arguments, such as a server name. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"format"` becomes
+        `--format`. For `start`, the keys `"transport"`, `"host"`, and `"port"` become `--transport`, `--host`
+        , and `--port`. For `tools`, the keys `"format"`, `"columns"`, and `"sort"` shape the output.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### List the configured servers
+
+```python
+servers = atmos.mcp("list", output = "capture")
+print(servers.stdout)
+```
+
+### Read the tools of a server as JSON
+
+```python
+tools = atmos.mcp("tools", "aws-docs", flags = {"format": "json"}, output = "capture")
+for tool in json.decode(tools.stdout):
+    print(tool)
+```
+
+### Fail when a server is unreachable
+
+```python
+probe = atmos.mcp("test", "aws-docs", output = "capture", check = False)
+if probe.exit_code != 0:
+    fail("The aws-docs MCP server did not respond:\n" + probe.stderr)
+```
+
+:::note
+Inspection subcommands such as `list`, `status`, `tools`, and `test` finish on their own and suit scripts. The `start`
+subcommand runs the server until it is stopped, so the script waits at that call until the server exits. Atmos prints
+its experimental notice when the script runs MCP commands.
+:::
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos mcp`](/cli/commands/mcp/start) documents the server and each subcommand.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

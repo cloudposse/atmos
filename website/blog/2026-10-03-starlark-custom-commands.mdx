@@ -7,55 +7,70 @@ cast: "/casts/examples/starlark-commands/capacity.cast"
 castTitle: "Custom command defined in atmos.yaml"
 ---
 
-Small automation tasks often need a separate interpreter, shell quoting, and commands
-that turn structured configuration back into text. [Atmos Automation Language](/automation)
-is a Python-like language for automating commands, workflows, and lifecycle hooks.
-Built on Starlark and embedded in Atmos, it lets you extend your project CLI,
-coordinate workflow tasks, or check a component before an operation starts.
-For executable apps with their own CLI, see the separate
+Build, ship, and deploy containers the same way locally and in CI. The
+[Atmos Automation Language](/automation/language) is a Python-like DSL based on
+Starlark for writing that process as reusable, testable code. Compose image
+builds, registry pushes, deployments, and checks using your existing Atmos
+stacks, identities, and toolchain.
+
+Install pinned tool dependencies, assume configured identities, call Atmos
+commands and external tools, and parallelize work with retries and timeouts.
+Combine scripts with native prompt steps, pass structured results between steps,
+and give users Atmos's formatted output and actionable errors.
+
+Keep the release logic in your project and have developers and CI invoke the
+same command. Atmos supplies structured data, command execution, parallel tasks,
+and test steps, reducing the shell plumbing you maintain as Bash scripts grow.
+
+For standalone `.star` apps with their own arguments and help, see the
 [Atmos interpreter announcement](/changelog/atmos-interpreter).
 
 <!--truncate-->
 
 import CastEmbed from '@site/src/components/CastEmbed'
+import EmbedFile from '@site/src/components/EmbedFile'
 
-## The Problem
+## Keep your release process in one place {#the-problem}
 
-Even a short script has inputs to parse and failures to explain. Project commands
-add flags and defaults; lifecycle checks also need the component's resolved
-configuration. Repeating shell commands and parsing their output makes those small
-pieces harder to reuse and test.
+Release logic often ends up spread across Bash scripts and CI configuration.
+Changing it means following environment variables, parsing command output, and
+reproducing failures from pipeline logs. With Atmos, you can put that logic in
+functions, pass structured values between them, and test their behavior locally.
+CI invokes the process you already use during development.
 
-## The Fix
+Use custom commands for your team's entry points, workflows to compose the
+process, and lifecycle hooks for checks tied to component operations. They all
+run the same language and can load shared functions.
 
-Declare a `type: script` step with `interpreter: starlark` inside a custom command,
-workflow, or hook. These entry points share the embedded interpreter and built-in
-helpers. Hooks receive their component context
-automatically. Larger programs can share functions and run independent tasks with
-bounded concurrency.
+## Run scripts inside Atmos {#the-fix}
+
+Set `type: script` and `interpreter: starlark` on a step inside a custom command,
+workflow, or hook. The interpreter is included in Atmos.
 
 ### Why Starlark?
 
-A shared automation language should be easy for the whole team to learn and
-review. Like HCL's deliberate focus on configuration, Starlark keeps its scope
-small while providing functions, loops, and structured values for programmable
-automation. Familiar Python-like syntax and an interpreter included in Atmos
-let teams share that logic across projects written in different languages.
-
-Atmos supplies the commands and helpers scripts can use. Pure calculations are
-repeatable; operations that read files or invoke tools depend on the environment.
-See [why Atmos uses Starlark](/automation/language#why-starlark) for the benefits
-and boundaries.
+See [why Atmos uses Starlark](/automation/language#why-starlark) for the language's
+syntax, built-in capabilities, and execution model.
 
 ## How to Use It
 
 ### Add an Atmos subcommand
 
-A [custom command](/cli/configuration/commands) gives the same kind of small program
-an `atmos capacity` entry point. YAML defines the `capacity` command and its `--replicas`
-flag. The Starlark step converts and validates the flag value, then calculates total
-worker capacity. The step reads the parsed value directly from `ctx.flags`, keeping
-user input out of the script source without an environment-variable mapping.
+Save this configuration as `atmos.yaml`. It defines a `capacity` command with a
+`--replicas` flag and a script that calculates total worker capacity:
+
+<EmbedFile filePath="examples/starlark-commands/atmos.yaml" />
+
+With Atmos installed, run from the directory containing that file:
+
+```shell
+atmos capacity --replicas 3
+```
+
+The command prints `3 replicas x 4 workers = 12 workers`. The script reads
+`ctx.flags["replicas"]`, converts it to an integer, and rejects counts below one.
+Run `atmos capacity --help` for the command's generated help. This example needs
+no stacks or external tools.
 
 <CastEmbed src="/casts/examples/starlark-commands/capacity.cast" title="Custom command: atmos capacity --replicas 3" chrome controls scrubber />
 
@@ -63,69 +78,39 @@ user input out of the script source without an environment-variable mapping.
 
 ### Guard an operation with a hook
 
-A [lifecycle hook](/stacks/hooks) attaches that logic to a component operation. This
-example checks `ctx.component.vars` for an owner before Terraform plans. The `dev`
-stack passes; the `unowned` stack inherits the component but clears its owner, so
-the hook stops the plan. The tiny module has no providers or resources and needs
-no cloud credentials.
+A lifecycle hook runs automatically when Atmos reaches a component event.
+The [owner-check example](/examples/starlark-hooks) reads `ctx.component.vars`
+before a Terraform plan and requires the component to have an owner.
+
+With Atmos and Terraform installed, run these commands from the example's directory:
+
+```shell
+atmos terraform plan api -s dev
+atmos terraform plan api -s unowned
+```
+
+The `dev` stack passes the check and Terraform reports no changes. The `unowned`
+stack fails with `Set an owner before planning api`, stopping the plan. The
+example module has no providers or resources and needs no cloud credentials.
 
 <CastEmbed src="/casts/examples/starlark-hooks/owner-check.cast" title="Check ownership before Terraform plans" chrome controls scrubber />
 
-[View the full example](/examples/starlark-hooks)
+### Share functions between scripts {#grow-into-reusable-functions}
 
-### Grow into reusable functions
+Move shared code into `.star` files. Include a script in a YAML step with
+`script: !include scripts/plan.star`, and use `load()` inside the script to import
+functions from other files. Imports resolve relative to the file containing
+the `load()` statement. See [files and shared code](/automation/language#files-and-shared-code).
 
-Keep the program in a file with the existing [include mechanism](/steps/type/script#loading-files):
-
-```yaml
-steps:
-  - name: plan
-    type: script
-    interpreter: starlark
-    script: !include scripts/plan.star
-```
-
-An included script [loads its helpers](/steps/type/script#loading-files) the way
-you would expect: `load("components.star", ...)` inside `scripts/plan.star` resolves next to
-that file, and the result is the same whether you run Atmos from the repository root or from
-a component directory. Tracebacks name the file and line, such as `scripts/plan.star:7:8`.
-Inline scripts written directly in YAML keep resolving against the step's working directory.
-
-The larger release-plan demo runs `atmos release-plan api -s dev`. Its loaded function reads three
-custom application components with at most two tasks running concurrently. The joined
-results retain input order and include inherited versions and component-specific
-replica counts. This command only reads configuration; it does not deploy anything.
+The [release-plan example](/steps/type/script#custom-components) loads a shared
+function and reads three components with at most two tasks running at once.
+It prints their configuration without deploying anything:
 
 <CastEmbed src="/casts/demo/fixtures/starlark/release-plan.cast" title="Starlark custom commands and parallel functions" chrome controls scrubber />
 
-The recording's validator also runs in Starlark. It uses `fs.read_file`, `json.decode`,
-and `regex` helpers to inspect cast events, check component output, and reject leaked
-local paths. File reads are relative to the step working directory. Regular expressions
-use Go/RE2 syntax; replacements are literal text.
+## Next steps {#get-involved}
 
-Each output channel has one job. Use `print` for data, since it becomes the step's value when
-no `output` is assigned. Use `ui.info` and its siblings for status messages, and the
-[`log` builtin](/steps/type/script#logging) for diagnostics that appear only at the
-configured log level. Script output [streams live](/steps/type/script#live-output) as
-each line is produced, and lines from concurrent tasks carry the task name. Secret masking
-applies to that streamed output too, even when a value arrives across separate writes.
-
-Assertions read like ordinary Python. [Top-level `if` and `for`](/steps/type/script#language-features)
-work in a script, so a [test step](/steps/type/test) can write
-`if data["status"] != "ok": fail(...)` directly. When a suite fails, the error summarizes it as
-"2 of 7 tests failed" and the report above it shows each failing case.
-
-Starlark hooks can read inherited behavior controls through `ctx.component.settings`,
-identify their event with `ctx.hook`, and inspect the parent result through
-`ctx.operation`. Use `atmos.terraform("plan", component="vpc", stack="dev")` or
-`atmos.helm(...)` for component operations. Other built-in commands are available
-as functions too: `atmos.scaffold("generate", "template", "target")`, `atmos.vendor("pull")`,
-`atmos.list("components")`, `atmos.describe("stacks")`, and `atmos.config("get", "base_path")`.
-Use `atmos.run([...])` for any custom command. These calls share process capture, cancellation, and task retry behavior.
-Before-hook results and uncaptured parent streams are explicitly `None`.
-
-## Get Involved
-
-Try a small command using the [Starlark reference](/steps/type/script) and
-the `atmos-starlark` agent skill. Keep task retries around repeatable operations:
-a retry repeats the whole function, while successful sibling tasks remain complete.
+Follow the [custom command guide](/automation/custom-commands),
+[workflow guide](/automation/workflows), or [hook guide](/automation/lifecycle-hooks)
+to add a script to your project. Use the [testing guide](/automation/testing)
+to check its behavior and report failures.

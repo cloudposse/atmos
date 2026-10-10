@@ -1,0 +1,110 @@
+---
+title: "atmos.completion"
+sidebar_position: 8
+sidebar_label: "atmos.completion"
+sidebar_class_name: command
+description: Run atmos completion from a script to generate a shell completion script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.completion` function runs `atmos completion` through the current Atmos executable. It generates the
+    completion script for Bash, Zsh, Fish, or PowerShell.
+</Intro>
+
+## Usage
+
+```python
+atmos.completion(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the shell name as the positional argument. The call `atmos.completion("zsh")` runs `atmos completion zsh`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| `bash` | Generate the completion script for Bash. |
+| `zsh` | Generate the completion script for Zsh. |
+| `fish` | Generate the completion script for Fish. |
+| `powershell` | Generate the completion script for PowerShell. |
+
+The subcommands register only the `--help` flag. See the [`atmos completion` command reference](/cli/commands/completion)
+for how to load the script into each shell.
+
+:::note
+The script is meant to be loaded by an interactive shell, so calling `atmos.completion` from a script is useful only
+when the automation produces the script for another purpose, such as packaging it into an installer or an image. Use
+`output = "capture"` to receive the script in `stdout` instead of printing it.
+:::
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `completion`, in order. Pass the shell name:
+        `"bash"`, `"zsh"`, `"fish"`, or `"powershell"`. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"help"` becomes
+        `--help`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Capture the Zsh completion script
+
+```python
+result = atmos.completion("zsh", output = "capture")
+print(result.stdout.splitlines()[0])
+```
+
+The first line of the Zsh script is `#compdef atmos`.
+
+### Generate every script
+
+```python
+def generate_all():
+    scripts = {}
+    for shell in ["bash", "zsh", "fish", "powershell"]:
+        scripts[shell] = atmos.completion(shell, output = "capture").stdout
+    return scripts
+
+scripts = generate_all()
+for shell, script in scripts.items():
+    print(shell, len(script.splitlines()), "lines")
+```
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos completion`](/cli/commands/completion) documents the command.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

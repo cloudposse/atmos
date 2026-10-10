@@ -1,0 +1,137 @@
+---
+title: "atmos.auth"
+sidebar_position: 8
+sidebar_label: "atmos.auth"
+sidebar_class_name: command
+description: Run an atmos auth command, such as login, env, or exec, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.auth` function runs `atmos auth` through the current Atmos executable. Use it to log in with an
+    identity, inspect authentication status, export temporary credentials, and run commands under an identity from
+    automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.auth(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
+`atmos.auth("login", flags = {"identity": "prod"})` runs `atmos auth login --identity=prod`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`login`](/cli/commands/auth/login) | Authenticate with a configured identity. |
+| [`whoami`](/cli/commands/auth/whoami) | Show the current authentication status. |
+| [`list`](/cli/commands/auth/list) | List authentication providers and identities. |
+| [`validate`](/cli/commands/auth/validate) | Validate the authentication configuration. |
+| [`env`](/cli/commands/auth/env) | Export temporary cloud credentials as environment variables. |
+| [`exec`](/cli/commands/auth/exec) | Run a command with the identity's environment variables. |
+| [`shell`](/cli/commands/auth/shell) | Launch an interactive shell with the identity's environment variables. |
+| [`console`](/cli/commands/auth/console) | Open the cloud provider web console in a browser. |
+| [`logout`](/cli/commands/auth/logout) | End a session by clearing its stored data. |
+| [`user`](/cli/commands/auth/user) | Manage cloud provider user credentials in the local keychain, with `configure`. |
+
+See the [`atmos auth` command reference](/cli/commands/auth/usage) for the complete list of subcommands and flags. The
+`auth` command is experimental, so some calls print an experimental notice on standard error.
+
+:::note
+The `shell` and `console` subcommands, and `user configure`, are interactive or open a browser, so they suit a person
+at a terminal more than a script. A `login` that needs a browser or an SSO device prompt also needs a person to
+complete it. For unattended runs, use identities that authenticate without interaction, and prefer `exec` or `env`
+to hand credentials to another process.
+:::
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `auth`, in order: the subcommand and its positional
+        arguments. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"identity"`
+        becomes `--identity`, and registered shorthands resolve to their long form, so `"i"` resolves to
+        `--identity` and `"f"` to `--format` for `env`. Other flags include `--login` for `env`, `--format` for
+        `list`, and `--all` for `logout`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>
+        (Optional) A list or tuple of strings appended after the flags. For `exec`, start the list with `"--"`
+        followed by the command to run, such as `args = ["--", "aws", "s3", "ls"]`.
+    </dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Validate the authentication configuration
+
+```python
+result = atmos.auth("validate", output = "capture", check = False)
+if result.exit_code != 0:
+    fail("The authentication configuration is invalid:\n" + result.stderr)
+ui.success("The authentication configuration is valid.")
+```
+
+### List identities as data
+
+```python
+listing = atmos.auth("list", flags = {"format": "json"}, output = "capture")
+identities = json.decode(listing.stdout)
+print(identities)
+```
+
+### Log in, then run a command under the identity
+
+```python
+atmos.auth("login", flags = {"identity": "prod"})
+atmos.auth("exec", flags = {"identity": "prod"}, args = ["--", "aws", "s3", "ls"])
+```
+
+The second call runs `atmos auth exec --identity=prod -- aws s3 ls`.
+
+### Pass temporary credentials to another call
+
+```python
+credentials = atmos.auth("env", flags = {"format": "json", "identity": "prod", "login": True}, output = "capture")
+atmos.terraform("plan", "vpc", "dev", env = json.decode(credentials.stdout))
+```
+
+The `json` format returns the environment variables as an object of string values, which `env` accepts directly.
+Use `output = "capture"` so the credentials are returned to the script and not shown on the terminal.
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos auth`](/cli/commands/auth/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

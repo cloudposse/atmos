@@ -1,0 +1,111 @@
+---
+title: "atmos.vendor"
+sidebar_position: 8
+sidebar_label: "atmos.vendor"
+sidebar_class_name: command
+description: Run an atmos vendor command, such as pull or verify, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.vendor` function runs `atmos vendor` through the current Atmos executable. Use it to pull, verify,
+    update, and inspect vendored components and stack dependencies from automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.vendor(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
+`atmos.vendor("pull")` runs `atmos vendor pull`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`pull`](/cli/commands/vendor/pull) | Pull vendored components and stack dependencies. |
+| [`update`](/cli/commands/vendor/vendor-update) | Update vendored component versions to the latest allowed release. |
+| [`verify`](/cli/commands/vendor/vendor-verify) | Verify vendored files match `vendor.lock.yaml`. |
+| [`diff`](/cli/commands/vendor/vendor-diff) | Show the Git diff between two versions of a vendored component. |
+| [`get`](/cli/commands/vendor/vendor-get) | Read the pinned version of a vendored component. |
+| [`set`](/cli/commands/vendor/vendor-set) | Set the pinned version of a vendored component. |
+| [`clean`](/cli/commands/vendor/vendor-clean) | Remove lock-owned vendored files. |
+| `list` | List vendor configurations. |
+| `config` | Read, edit, and list raw vendor manifest configuration. |
+
+See the [`atmos vendor` command reference](/cli/commands/vendor/usage) for the complete list of subcommands and
+flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `vendor`, in order: the subcommand and its
+        positional arguments. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"component"`
+        becomes `--component`, and registered shorthands resolve to their long form.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Pull one component
+
+```python
+atmos.vendor("pull", flags = {"component": "vpc", "stack": "dev"})
+```
+
+This runs `atmos vendor pull --component=vpc --stack=dev`.
+
+### Fail a pipeline when vendored files drift
+
+```python
+result = atmos.vendor("verify", output = "capture", check = False)
+if result.exit_code != 0:
+    fail("Vendored files do not match vendor.lock.yaml:\n" + result.stderr)
+ui.success("Vendored files match the lock file.")
+```
+
+### Check for available updates
+
+```python
+updates = atmos.vendor("update", flags = {"check": True, "format": "json"}, output = "capture")
+print(updates.stdout)
+```
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos vendor`](/cli/commands/vendor/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

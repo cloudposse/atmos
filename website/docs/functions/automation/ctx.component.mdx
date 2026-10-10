@@ -1,0 +1,113 @@
+---
+title: "ctx.component"
+sidebar_position: 36
+sidebar_label: "ctx.component"
+sidebar_class_name: command
+description: The component a custom command or lifecycle hook is scoped to.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `ctx.component` value is the component handle for the component in scope: the component a custom command
+    declares, or the component a lifecycle hook runs for. It has the same attributes as the handle returned by
+    [`components.get`](/functions/automation/components.get).
+</Intro>
+
+## Usage
+
+```python
+ctx.component.name
+ctx.component.stack
+ctx.component.vars["region"]
+ctx.component.exec(["./smoke-test"])
+```
+
+## Returns
+
+A read-only component handle, or `None` when no component is in scope. The handle exposes `name`, `type`, `stack`,
+`implementation`, `path`, `vars`, `settings`, `metadata`, `env`, `config`, and the
+[`exec`](/functions/automation/component.exec) method.
+
+| Entry point | `ctx.component` |
+| --- | --- |
+| Custom command that declares `component:` | The command's component. Atmos resolves it on first attribute access, so a script that never reads it never pays for the lookup. |
+| Custom command without `component:` | `None` |
+| Lifecycle hook | The hook's component, built from the hook runner's snapshot, which includes inherited settings. It does not re-resolve the stack or fetch Terraform outputs. |
+| Aggregate hook without a component binding | `None` |
+| Workflow or standalone script | `None` |
+
+Steps inside `parallel` and `matrix` groups inherit the component of the step that contains them.
+
+Reading an attribute of `None`, for example `ctx.component.stack` in a workflow, fails with
+`NoneType has no .stack field or method`. Check the value first, or resolve the component explicitly with
+[`components.get`](/functions/automation/components.get).
+
+Lazy resolution uses the script's invocation deadline. To bound a lookup with a task timeout, call `components.get`
+inside the task. Read the reference fields you need from `ctx.component` before starting parallel tasks.
+
+## Examples
+
+### Deploy a command's component and its peers
+
+```yaml
+commands:
+  - name: deploy-peers
+    arguments:
+      - name: component
+        provides: component
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        provides: stack
+        required: true
+    component:
+      type: application
+    steps:
+      - name: deploy
+        type: script
+        interpreter: starlark
+        script: |
+          stack = ctx.component.stack
+
+          def deploy(name, stack):
+              peer = components.get(name = name, stack = stack, type = "application")
+              return peer.exec(["./deploy"]).stdout
+
+          output = steps.parallel(
+              tasks = [
+                  steps.task(name = n, function = deploy, args = [n, stack], timeout = "5m")
+                  for n in ["api", "worker"]
+              ],
+              max_concurrency = 2,
+          )
+```
+
+### Guard for a missing component
+
+```python
+if ctx.component == None:
+    fail("run this script from a command or hook that has a component")
+ui.info("Checking {} in {}".format(ctx.component.name, ctx.component.stack))
+```
+
+### Use inherited settings in a hook
+
+```python
+def post_apply():
+    policy = ctx.component.settings.get("post_apply", {})
+    if not policy.get("enabled", False):
+        return
+    ctx.component.exec(policy.get("command", ["./smoke-test"]))
+
+post_apply()
+```
+
+## Related
+
+- [`components.get`](/functions/automation/components.get) resolves any component by name, stack, and type.
+- [`component.exec`](/functions/automation/component.exec) runs a program in the component directory.
+- [`ctx.hook`](/functions/automation/ctx.hook) and [`ctx.operation`](/functions/automation/ctx.operation) describe the hook.
+- [`ctx`](/functions/automation/ctx) lists every context attribute.
+- [Script step: where `ctx.component` is set](/steps/type/script#where-ctxcomponent-is-set)

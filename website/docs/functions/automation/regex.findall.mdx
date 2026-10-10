@@ -1,0 +1,97 @@
+---
+title: "regex.findall"
+sidebar_position: 21
+sidebar_label: "regex.findall"
+sidebar_class_name: command
+description: Return every non-overlapping match of a regular expression.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `regex.findall` function returns every non-overlapping match of a regular expression, in the order they appear.
+    Use it to extract identifiers, numbers, or fields from command output and file contents.
+</Intro>
+
+## Usage
+
+```python
+regex.findall(pattern, text)
+```
+
+## Arguments
+
+<dl>
+    <dt>`pattern`</dt>
+    <dd>
+        Required. The regular expression, as a string, in RE2 syntax. Inline flags such as `(?i)` and `(?m)` work.
+        Lookahead, lookbehind, and backreferences in the pattern are not available.
+    </dd>
+
+    <dt>`text`</dt>
+    <dd>Required. The string to search.</dd>
+</dl>
+
+Both arguments are required and can be passed positionally or by keyword.
+
+## Returns
+
+A list of strings, one for each complete match. Capture groups do not change the result: each element is the whole
+matched text, not the contents of a group. When nothing matches, the result is an empty list.
+
+## Examples
+
+### Extract numbers
+
+```python
+output = regex.findall("[0-9]+", "a1 b22 c333")
+```
+
+```text
+["1","22","333"]
+```
+
+### Capture groups return the whole match
+
+```python
+print(regex.findall("(\\w+)@(\\w+)\\.com", "ann@acme.com bob@corp.com"))
+```
+
+```text
+["ann@acme.com", "bob@corp.com"]
+```
+
+To pick out one part of each match, run the pattern again on the matched text, or write a pattern that matches only
+the part you want.
+
+### Read values from a file
+
+```python
+text = fs.read_file("app.yaml")
+region = regex.findall("region: (.*)", text)
+```
+
+Here `region` is `["region: us-east-2"]` for a file that contains the line `region: us-east-2`. Take the part after
+the colon with `split` or a second pattern.
+
+### No matches
+
+```python
+print(regex.findall("zzz", "abc"))
+```
+
+```text
+[]
+```
+
+## Errors
+
+- A pattern that is not valid RE2 fails with `invalid regex: ...` followed by the reason.
+- A missing argument, or an argument that is not a string, fails with an argument error.
+
+## Related
+
+- [`regex.search`](/functions/automation/regex.search) tests whether a pattern matches.
+- [`regex.replace`](/functions/automation/regex.replace) rewrites matched text.
+- [`fs.read_file`](/functions/automation/fs.read_file) supplies text to search.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script)

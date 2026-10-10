@@ -1,0 +1,118 @@
+---
+title: "print"
+sidebar_position: 31
+sidebar_label: "print"
+sidebar_class_name: command
+description: Write data to the script's standard output.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `print` function writes its arguments as one line to the script's standard output. Use it for the data a
+    script produces. Standard output is also the step value when the script does not assign
+    [`output`](/functions/automation/output).
+</Intro>
+
+## Usage
+
+```python
+print(*args, sep = " ")
+```
+
+## Arguments
+
+<dl>
+    <dt>`*args`</dt>
+    <dd>
+        (Optional) Any number of values. Strings are written as they are. Other values are written in their
+        display form, such as `True`, `None`, `[1, "x"]`, or `{"k": "v"}`.
+    </dd>
+
+    <dt>`sep`</dt>
+    <dd>(Optional) Keyword-only. The text placed between values. Defaults to a single space.</dd>
+</dl>
+
+## Returns
+
+The return value is `None`.
+
+## Behavior
+
+- Each call writes one line, ending with a newline. A call with no arguments writes an empty line.
+- The line goes to the script's stdout channel, subject to the step's output settings and secret masking. For a
+  standalone script, that is the program's standard output.
+- When a step does not assign [`output`](/functions/automation/output), everything the script printed becomes the
+  step value, including the trailing newline.
+- Inside [`steps.parallel`](/functions/automation/steps.parallel) tasks, each line is written whole and prefixed with
+  the task name, such as `[dev] `. Lines from different tasks can arrive in any order but never interleave within a
+  line. A group with a single task writes without a prefix.
+
+Status messages for people belong on stderr: use [`ui.info`](/functions/automation/ui.info),
+[`ui.success`](/functions/automation/ui.success), and [`ui.warning`](/functions/automation/ui.warning). Diagnostics
+for troubleshooting belong in the log: use [`log.info`](/functions/automation/log.info) and its siblings.
+
+| Function | Channel | Becomes the step value |
+| --- | --- | --- |
+| `print` | stdout | Yes, when `output` is unset |
+| `ui.info`, `ui.success`, `ui.warning` | stderr | No |
+| `log.trace` through `log.error` | The Atmos log, at the configured level | No |
+
+## Examples
+
+### Print several values
+
+```python
+print("a", 1, True, None, [1, "x"], {"k": "v"})
+print("a", "b", "c", sep = ", ")
+print("no separator", sep = "")
+print()
+```
+
+```text
+a 1 True None [1, "x"] {"k": "v"}
+a, b, c
+no separator
+
+```
+
+### Use printed text as the step value
+
+```yaml
+steps:
+  - name: calc
+    type: script
+    interpreter: starlark
+    script: |
+      print("only stdout")
+  - name: show
+    type: shell
+    command: echo 'value={{ .steps.calc.value }}'
+```
+
+```text
+only stdout
+value=only stdout
+```
+
+### Print from parallel tasks
+
+```python
+def one(n):
+    print("task", n)
+
+steps.parallel(tasks = [steps.task(str(n), one, args = [n]) for n in [1, 2]])
+```
+
+```text
+[1] task 1
+[2] task 2
+```
+
+The two lines can appear in either order.
+
+## Related
+
+- [`output`](/functions/automation/output) sets the step value explicitly.
+- [`ui.info`](/functions/automation/ui.info) and [`log.info`](/functions/automation/log.info) write to other channels.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#step-output)

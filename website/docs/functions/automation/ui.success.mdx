@@ -1,0 +1,81 @@
+---
+title: "ui.success"
+sidebar_position: 24
+sidebar_label: "ui.success"
+sidebar_class_name: command
+description: Show a success message to the person running the program.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `ui.success` function shows a success message to the person running the program. Use it to confirm that a unit of work finished; use [`ui.info`](/functions/automation/ui.info) for progress and [`ui.warning`](/functions/automation/ui.warning) for cautions.
+</Intro>
+
+## Usage
+
+```python
+ui.success(message)
+```
+
+## Arguments
+
+<dl>
+    <dt>`message`</dt>
+    <dd>
+        Required. The text to show, as a string. It can be passed positionally or as `message = ...`. Passing a
+        value of another type, such as an integer, fails with an argument error, so convert it with `str()` first.
+    </dd>
+</dl>
+
+## Returns
+
+The return value is `None`. The message is a side effect and never becomes the step value.
+
+## Behavior
+
+- The message is written to the status channel (stderr) with Atmos UI formatting: a themed `✓` marker
+  followed by the text. Colors adapt to the terminal.
+- Standard output is reserved for data, so `ui.success` never changes what `print` or [`output`](/functions/automation/output)
+  produce, so a program's result can be piped or captured without status lines mixed in.
+- Inside [`steps.parallel`](/functions/automation/steps.parallel) tasks, each message is written as one whole line
+  and prefixed with the task name, such as `[dev] `. Lines from different tasks can arrive in any order but never
+  interleave within a line. A group with a single task writes without a prefix.
+- Secrets that Atmos knows about are masked in the displayed text.
+
+## Examples
+
+### Show a message
+
+```python
+ui.success("Configuration is valid")
+```
+
+```text
+✓ Configuration is valid
+```
+
+### Use it in parallel tasks
+
+```python
+def deploy(stack):
+    ui.success("Deployed vpc to " + stack)
+
+steps.parallel(tasks = [steps.task(s, deploy, args = [s]) for s in ["dev", "prod"]])
+```
+
+```text
+[dev] ✓ Deployed vpc to dev
+[prod] ✓ Deployed vpc to prod
+```
+
+## Errors
+
+- Calling the function without a message, or with a message that is not a string, fails with an argument error that
+  names `ui.success`.
+
+## Related
+
+- [`ui.info`](/functions/automation/ui.info) and [`ui.warning`](/functions/automation/ui.warning) cover the other status levels.
+- [`print`](/functions/automation/print) writes data to stdout, and [`log.info`](/functions/automation/log.info) writes diagnostics to the Atmos log.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#step-output)

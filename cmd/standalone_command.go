@@ -25,6 +25,9 @@ func standaloneCommandParser(file *script.File, stdout io.Writer) script.Command
 
 	argv := append([]string(nil), file.Args...)
 	filename := filepath.Base(file.Path)
+	if file.Stdin {
+		filename = "stdin"
+	}
 	return func(ctx context.Context, spec script.CommandSpec) (script.CommandInput, error) {
 		if err := ctx.Err(); err != nil {
 			return script.CommandInput{}, err

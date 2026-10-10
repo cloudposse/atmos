@@ -1,0 +1,129 @@
+---
+title: "atmos.init"
+sidebar_position: 8
+sidebar_label: "atmos.init"
+sidebar_class_name: command
+description: Run atmos init from a script to scaffold a new Atmos project from a template.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.init` function runs `atmos init` through the current Atmos executable. Use it to scaffold a new Atmos
+    project from a built-in or remote template as part of provisioning automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.init(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+The `init` command has no subcommands. Its positional arguments are the template and the target directory, so
+`atmos.init("basic", "./my-project")` runs `atmos init basic ./my-project`. The built-in templates include `basic`,
+`simple`, `atmos`, `aws/app`, `aws/landing-zone`, `gcp/landing-zone`, and `azure/landing-zone`. A template can also be a
+Git repository address.
+
+The flags this command accepts include:
+
+| Flag | Purpose |
+| --- | --- |
+| `--set` | Set a template value as `key=value`. Repeat the flag for several values. |
+| `--force` | Overwrite existing files. |
+| `--interactive` | Turn interactive template selection and prompts on or off. |
+| `--no-git` | Skip creating a Git repository and the initial commit. |
+| `--ref` | Git ref to use for a template repository source. |
+| `--update` | Update an existing target directory with a 3-way merge instead of failing. |
+
+See the [`atmos init` command reference](/cli/commands/init) for the complete list of flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `init`, in order: the template, then the target
+        directory. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"no-git"` becomes
+        `--no-git`, and registered shorthands such as `"f"` resolve to the long form `--force`. A list is the
+        natural way to pass several `set` values.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) The same process options as [`atmos.run`](/functions/automation/atmos.run#arguments). The call
+        runs from the directory Atmos was started in by default, so a relative target directory is created there.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Scaffold a project without prompts
+
+```python
+atmos.init(
+    "basic",
+    "./my-project",
+    flags = {
+        "set": ["project_name=my-project"],
+        "interactive": False,
+        "no-git": True,
+    },
+)
+```
+
+This runs `atmos init basic ./my-project --interactive=false --no-git --set=project_name=my-project`.
+
+### Scaffold into a chosen directory
+
+```python
+atmos.init(
+    "aws/app",
+    "my-app",
+    flags = {"set": ["project_name=my-app"], "interactive": False},
+    working_directory = "/workspace/projects",
+)
+```
+
+### Handle an existing directory
+
+```python
+result = atmos.init("simple", "./my-project", flags = {"interactive": False}, output = "capture", check = False)
+if result.exit_code != 0:
+    ui.warning("Project was not created:\n" + result.stderr)
+```
+
+:::note
+The command is experimental. Without a template and target directory it asks for them interactively, which needs a
+terminal. Pass both positionals and set `interactive` to `False` when the script runs unattended.
+:::
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos init`](/cli/commands/init) documents every flag and template.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

@@ -1,0 +1,64 @@
+---
+title: "ctx.args"
+sidebar_position: 33
+sidebar_label: "ctx.args"
+sidebar_class_name: command
+description: The raw command-line arguments passed to a standalone script.
+---
+
+import Intro from '@site/src/components/Intro'
+import EmbedFile from '@site/src/components/EmbedFile'
+
+<Intro>
+    The `ctx.args` value is a read-only list of the strings that follow the script file name on the command line.
+</Intro>
+
+## Usage
+
+```python
+ctx.args
+```
+
+## Returns
+
+A frozen list of strings. In a standalone script, it holds every token after the script file name, exactly as typed,
+including tokens such as `--help` or `--config` that look like Atmos options: everything after the script name belongs to
+the script. In every other entry point, such as a custom command, workflow step, or hook, the list is empty.
+
+A script that declares its interface with [`cli.command`](/functions/automation/cli.command) can still read the raw tokens
+here. The parsed values arrive in the arguments of its entry function.
+
+## Examples
+
+### Require one argument
+
+<EmbedFile filePath="examples/starlark-script/summarize.star" language="python" />
+
+Run it with `./summarize.star services.json`.
+
+### Handle a variable number of arguments
+
+```python
+#!/usr/bin/env atmos
+if len(ctx.args) == 0:
+    fail("usage: ./check.star <stack>...")
+
+for stack in ctx.args:
+    ui.info("Checking " + stack)
+```
+
+```shell
+./check.star dev staging
+```
+
+```text
+▶ Checking dev
+▶ Checking staging
+```
+
+## Related
+
+- [`cli.command`](/functions/automation/cli.command) parses arguments and flags into typed values.
+- [`ctx.script`](/functions/automation/ctx.script) names the script file.
+- [`ctx`](/functions/automation/ctx) lists every context attribute.
+- [Standalone CLI apps](/automation/standalone-cli-apps)

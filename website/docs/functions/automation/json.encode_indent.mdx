@@ -1,0 +1,97 @@
+---
+title: "json.encode_indent"
+sidebar_position: 19
+sidebar_label: "json.encode_indent"
+sidebar_class_name: command
+description: Convert a value to indented, human-readable JSON.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `json.encode_indent` function converts a value to JSON and formats it with line breaks and indentation. It is
+    equivalent to calling [`json.encode`](/functions/automation/json.encode) and passing the result to
+    [`json.indent`](/functions/automation/json.indent).
+</Intro>
+
+## Usage
+
+```python
+json.encode_indent(x, prefix = "", indent = "\t")
+```
+
+## Arguments
+
+<dl>
+    <dt>`x`</dt>
+    <dd>Required. The value to encode. It must be passed positionally.</dd>
+
+    <dt>`prefix`</dt>
+    <dd>(Optional) Keyword-only. Text added at the start of every line after the first. Defaults to `""`.</dd>
+
+    <dt>`indent`</dt>
+    <dd>(Optional) Keyword-only. The text used for one level of indentation. Defaults to a tab character.</dd>
+</dl>
+
+## Returns
+
+A string containing the formatted JSON. The value is encoded by the same rules as
+[`json.encode`](/functions/automation/json.encode#encoding-rules), so dictionary keys appear in sorted order.
+
+## Examples
+
+### Print a readable document
+
+```python
+data = {"name": "vpc", "count": 3, "tags": ["a", "b"], "note": None}
+print(json.encode_indent(data, indent = "  "))
+```
+
+```text
+{
+  "count": 3,
+  "name": "vpc",
+  "note": null,
+  "tags": [
+    "a",
+    "b"
+  ]
+}
+```
+
+### Add a prefix to every line
+
+```python
+print(json.encode_indent([1, {"a": 2}], prefix = "> ", indent = "    "))
+```
+
+```text
+[
+>     1,
+>     {
+>         "a": 2
+>     }
+> ]
+```
+
+### Return a readable step value
+
+```python
+output = json.encode_indent({"service": "api", "replicas": 3}, indent = "  ")
+```
+
+A string assigned to [`output`](/functions/automation/output) is used as written, so the step value keeps the
+indentation. Assigning the dictionary directly produces compact JSON.
+
+## Errors
+
+- A value that cannot be encoded fails with the same errors as `json.encode`, with the message prefixed
+  `json.encode_indent:`.
+- Passing `prefix` or `indent` positionally fails, because both are keyword-only.
+
+## Related
+
+- [`json.encode`](/functions/automation/json.encode) produces compact JSON.
+- [`json.indent`](/functions/automation/json.indent) formats JSON text you already have.
+- [`json.decode`](/functions/automation/json.decode) parses JSON text.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#step-output)

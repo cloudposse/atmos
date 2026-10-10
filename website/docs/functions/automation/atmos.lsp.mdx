@@ -1,0 +1,99 @@
+---
+title: "atmos.lsp"
+sidebar_position: 8
+sidebar_label: "atmos.lsp"
+sidebar_class_name: command
+description: Run atmos lsp start from a script to launch the Atmos Language Server.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.lsp` function runs `atmos lsp` through the current Atmos executable. Its one subcommand starts the
+    Atmos Language Server Protocol server used for editor integration.
+</Intro>
+
+## Usage
+
+```python
+atmos.lsp(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand as a string before the keyword arguments. The call `atmos.lsp("start")` runs `atmos lsp start`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`start`](/cli/commands/lsp/start) | Start the Atmos LSP server. |
+
+See the [`atmos lsp start` command reference](/cli/commands/lsp/start) for details.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `lsp`, in order: the subcommand. Every value must
+        be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). For `start`, the key `"transport"`
+        becomes `--transport` and accepts `stdio`, `tcp`, or `websocket`, and the key `"address"` becomes
+        `--address` for the `tcp` and `websocket` transports.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Start a TCP server
+
+```python
+atmos.lsp("start", flags = {"transport": "tcp", "address": "localhost:7777"})
+```
+
+This runs `atmos lsp start --address=localhost:7777 --transport=tcp`. The call returns when the server exits.
+
+### Start a WebSocket server on another port
+
+```python
+atmos.lsp("start", flags = {"transport": "websocket", "address": "localhost:9000"})
+```
+
+:::note
+The language server runs until it is stopped, so the script waits at this call for the whole lifetime of the server.
+With the default `stdio` transport the server speaks to an editor over standard input and output, which a script
+rarely provides. Editors normally launch `atmos lsp start` themselves, and a script has little reason to call it
+unless it supervises a `tcp` or `websocket` server.
+:::
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos lsp start`](/cli/commands/lsp/start) documents the server and its transports.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

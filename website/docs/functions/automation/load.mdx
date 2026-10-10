@@ -1,0 +1,138 @@
+---
+title: "load"
+sidebar_position: 42
+sidebar_label: "load"
+sidebar_class_name: command
+description: Import functions and values from another Atmos Automation Language file.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `load` statement imports names from another file so scripts can share functions and constants. It is a
+    statement of the language rather than a function: it appears at the top level of a file, and it binds the names you
+    list into that file.
+</Intro>
+
+## Usage
+
+```python
+load("file.star", "name", alias = "name")
+```
+
+## Arguments
+
+<dl>
+    <dt>`"file.star"`</dt>
+    <dd>
+        Required. The path of the module to load, as a string literal. A relative path, including one with `..`
+        segments, resolves against the directory of the file that contains the `load` statement. For an inline
+        script in a YAML step, it resolves against the step's `working_directory`. An absolute path is used as given.
+    </dd>
+
+    <dt>`"name"`</dt>
+    <dd>
+        (Optional, repeatable) The name of a global in the module to bind under the same name. At least one name or alias
+        is needed for the statement to be useful.
+    </dd>
+
+    <dt>`alias = "name"`</dt>
+    <dd>(Optional, repeatable) Binds the module's global `name` under a different local name, `alias`.</dd>
+</dl>
+
+## Behavior
+
+- Each module is evaluated once per run and cached by its cleaned absolute path, so loading it from several files
+  does not run it again.
+- A module can load other modules. Relative paths in a module resolve against that module's own directory.
+- Cyclic loads fail with `cyclic load of <path>`.
+- The globals of a loaded module are frozen. A loaded list or dictionary cannot be modified by the importer.
+- A module sees the same predeclared names as the entry script, such as `ui`, `exec`, `json`, `regex`, `fs`, `log`,
+  and `steps`, so shared helpers can call them.
+- Functions loaded from a module can be passed to [`steps.parallel`](/functions/automation/steps.parallel) and
+  [`steps.task`](/functions/automation/steps.task).
+
+## Examples
+
+### Share helpers between files
+
+The file `lib/text.star`:
+
+```python
+def slug(value):
+    return regex.replace("[^a-z0-9]+", "-", value.lower())
+```
+
+The file `lib/naming.star`, which loads another module and uses `ui`:
+
+```python
+load("text.star", "slug")
+
+PREFIX = "acme"
+
+def resource_name(stack, component):
+    ui.info("naming " + component)
+    return PREFIX + "-" + slug(stack) + "-" + component
+```
+
+The file `app/main.star`, which loads with a relative path, renames an import, and calls the loaded function from parallel
+tasks:
+
+```python
+load("../lib/naming.star", "resource_name", prefix = "PREFIX")
+
+names = steps.parallel(functions = [
+    lambda: resource_name("Prod US East", "vpc"),
+    lambda: resource_name("Dev", "eks"),
+])
+print(prefix)
+output = names
+```
+
+```text
+[lambda[0]] ▶ naming vpc
+[lambda[1]] ▶ naming eks
+acme
+["acme-prod-us-east-vpc","acme-dev-eks"]
+```
+
+The lines that start with `[lambda` appear on stderr and can arrive in either order. The other lines are on stdout.
+
+### Load from an inline script
+
+```yaml
+workflows:
+  loaded:
+    steps:
+      - name: label
+        type: script
+        interpreter: starlark
+        working_directory: scripts
+        script: |
+          load("helpers.star", "region_label")
+          output = region_label("us-east-1")
+```
+
+With `scripts/helpers.star` containing:
+
+```python
+def region_label(region):
+    return "region:" + region
+```
+
+The step value is `region:us-east-1`.
+
+## Errors
+
+- A module that cannot be read fails with `cannot read module: ...`, followed by the operating system reason and the
+  resolved path. The message is prefixed with `cannot load <name>`.
+- Modules that load each other, directly or through a chain, fail with `cyclic load of <path>`.
+- Modifying a value imported from a module, such as appending to a loaded list, fails with
+  `cannot append to frozen list`.
+- A name that the module does not define fails when the statement runs.
+
+## Related
+
+- [`fs.read_file`](/functions/automation/fs.read_file) reads plain files and resolves paths the same way.
+- [`steps.parallel`](/functions/automation/steps.parallel) runs loaded functions concurrently.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#loading-files)

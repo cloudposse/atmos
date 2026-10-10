@@ -1,0 +1,103 @@
+---
+title: "atmos.gcp"
+sidebar_position: 8
+sidebar_label: "atmos.gcp"
+sidebar_class_name: command
+description: Run an atmos gcp command, such as gke token, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.gcp` function runs `atmos gcp` through the current Atmos executable. Use it to generate short-lived
+    Google Cloud credentials for GKE through Atmos Auth from automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.gcp(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
+`atmos.gcp("gke", "token", flags = {"identity": "example-deployer"})` runs
+`atmos gcp gke token --identity=example-deployer`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`gke token`](/cli/commands/gcp/gke/token) | Generate a GKE bearer token as a Kubernetes ExecCredential. |
+
+See the [`atmos gcp gke` reference](/cli/commands/gcp/gke) and the [`atmos gcp` command reference](/cli/commands/gcp/usage)
+for details.
+
+:::note
+The `gke token` subcommand is normally invoked by `kubectl` from an Atmos-generated kubeconfig. Calling it from a
+script is useful when another tool needs the credential document. Capture the output and avoid printing it, because
+it contains a short-lived access token. The call requires a configured GCP identity and network access to Google
+Cloud.
+:::
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `gcp`, in order: the subcommand path and its positional arguments. For GKE credentials, pass `"gke"` and `"token"`. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). The `identity` key becomes
+        `--identity` (shorthand `i` ) and names the Atmos GCP identity to authenticate with. When it is omitted,
+        Atmos selects the inherited or sole configured identity.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Fetch a GKE credential
+
+```python
+credential = atmos.gcp("gke", "token", flags = {"identity": "example-deployer"}, output = "capture")
+document = json.decode(credential.stdout)
+print(document["kind"])
+```
+
+The command prints a Kubernetes `ExecCredential` document as JSON.
+
+### Use the inherited identity
+
+```python
+credential = atmos.gcp("gke", "token", output = "capture")
+```
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos gcp`](/cli/commands/gcp/usage) documents the command, and [`atmos gcp gke token`](/cli/commands/gcp/gke/token) documents the token subcommand.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

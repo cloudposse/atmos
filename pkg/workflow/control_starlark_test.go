@@ -52,7 +52,7 @@ func TestControlStarlarkRejectsContainer(t *testing.T) {
 	child := &ControlChild{Step: schema.WorkflowStep{Type: schema.TaskTypeScript, Interpreter: "starlark", Script: `fail("not run")`}}
 	executor := &ControlCommandExecutor{WorkflowDefinition: &schema.WorkflowDefinition{Container: &schema.WorkflowContainer{Image: "example"}}}
 	_, err := executor.Execute(context.Background(), child, ControlChildOutput{})
-	require.ErrorIs(t, err, errUtils.ErrStarlark)
+	require.ErrorIs(t, err, errUtils.ErrScript)
 	require.ErrorContains(t, err, "container: false")
 	params := &ContainerStepParams{WorkflowDef: executor.WorkflowDefinition, Step: &child.Step}
 	require.ErrorContains(t, RunStepContainerOverride(context.Background(), params), "container: false")

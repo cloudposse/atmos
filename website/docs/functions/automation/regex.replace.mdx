@@ -1,0 +1,114 @@
+---
+title: "regex.replace"
+sidebar_position: 22
+sidebar_label: "regex.replace"
+sidebar_class_name: command
+description: Replace every match of a regular expression with literal text.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `regex.replace` function replaces every match of a regular expression with a fixed string. Use it to
+    normalize names, strip unwanted characters, and clean up text from commands and files.
+</Intro>
+
+## Usage
+
+```python
+regex.replace(pattern, replacement, text)
+```
+
+## Arguments
+
+<dl>
+    <dt>`pattern`</dt>
+    <dd>
+        Required. The regular expression, as a string, in RE2 syntax. Inline flags such as `(?i)` and `(?m)` work.
+        Lookahead, lookbehind, and backreferences in the pattern are not available.
+    </dd>
+
+    <dt>`replacement`</dt>
+    <dd>
+        Required. The text that replaces each match. It is used exactly as written: a `$1` or `${name}` in the
+        replacement stays in the result as those characters, and backslashes and dollar signs need no escaping. Use
+        an empty string to delete matches.
+    </dd>
+
+    <dt>`text`</dt>
+    <dd>Required. The string to rewrite.</dd>
+</dl>
+
+All three arguments are required and can be passed positionally or by keyword.
+
+## Returns
+
+A new string with every match replaced. When nothing matches, the result equals `text`.
+
+## Examples
+
+### Normalize a name
+
+```python
+print(regex.replace("-+", "_", "us-east--1"))
+```
+
+```text
+us_east_1
+```
+
+### Collapse whitespace
+
+```python
+print(regex.replace("\\s+", " ", "a   b \t c"))
+```
+
+```text
+a b c
+```
+
+### Delete matches
+
+```python
+print(regex.replace("a", "", "banana"))
+```
+
+```text
+bnn
+```
+
+### Replacement text is literal
+
+Capture groups cannot be referenced from the replacement. Text such as `$2-$1` is inserted as it is:
+
+```python
+print(regex.replace("(\\w+)-(\\d)", "$2-$1", "us-1"))
+```
+
+```text
+$2-$1
+```
+
+### Build a slug
+
+```python
+def slug(value):
+    return regex.replace("[^a-z0-9]+", "-", value.lower())
+
+output = slug("Prod US East")
+```
+
+```text
+prod-us-east
+```
+
+## Errors
+
+- A pattern that is not valid RE2 fails with `invalid regex: ...` followed by the reason.
+- A missing argument, or an argument that is not a string, fails with an argument error.
+
+## Related
+
+- [`regex.search`](/functions/automation/regex.search) tests whether a pattern matches.
+- [`regex.findall`](/functions/automation/regex.findall) returns the matched text.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script)

@@ -1,0 +1,465 @@
+---
+title: Data Types
+sidebar_label: Data Types
+sidebar_position: 2
+slug: /automation/reference/data-types
+description: Values in the Atmos Automation Language, including None, booleans, numbers, strings, bytes, lists, tuples, dictionaries, sets, functions, truthiness, mutability, and freezing.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Every value in the Atmos Automation Language has a type. This page describes each
+built-in type, how to create values of that type, which operations they support,
+and how mutability and freezing affect what a program can change.
+</Intro>
+
+The built-in `type()` function returns the name of a value's type as a string:
+
+```python
+print(type(None))      # NoneType
+print(type(True))      # bool
+print(type(1))         # int
+print(type(1.5))       # float
+print(type("a"))       # string
+print(type(b"a"))      # bytes
+print(type([]))        # list
+print(type(()))        # tuple
+print(type({}))        # dict
+print(type(set()))     # set
+print(type(range(3)))  # range
+print(type(len))       # builtin_function_or_method
+print(type(lambda: 1)) # function
+```
+
+## Summary
+
+| Type | Example | Mutable | Hashable |
+| --- | --- | --- | --- |
+| `NoneType` | `None` | No | Yes |
+| `bool` | `True`, `False` | No | Yes |
+| `int` | `42`, `0xFF` | No | Yes |
+| `float` | `3.14`, `1e3` | No | Yes |
+| `string` | `"text"` | No | Yes |
+| `bytes` | `b"\x00\x01"` | No | Yes |
+| `list` | `[1, 2, 3]` | Yes | No |
+| `tuple` | `(1, "a")` | No | Only if every element is hashable |
+| `dict` | `{"k": "v"}` | Yes | No |
+| `set` | `set([1, 2])` | Yes | No |
+| `function` | `def f(): ...` | No | Yes |
+
+A hashable value can be a dictionary key or a set element. Using an unhashable
+value as a key raises an error such as `unhashable type: list`.
+
+## None
+
+The type `NoneType` has one value, `None`. It represents "no value" and is
+what a function returns when it has no `return` statement. Compare against it
+with `==`; the `is` operator is [reserved](/automation/reference/lexical-elements#reserved-words).
+
+```python
+def find(items, wanted):
+    for item in items:
+        if item == wanted:
+            return item
+
+print(find([1, 2], 3))          # None
+print(find([1, 2], 3) == None)  # True
+```
+
+## Booleans
+
+The two boolean values are `True` and `False`. Comparisons produce booleans, and
+`bool(x)` converts any value using the [truthiness rules](#truthiness) below.
+
+Booleans and integers are separate types: adding `True + 1` is an error, and
+the comparison `True == 1` is `False`. Convert explicitly with `int(True)`.
+
+## Integers
+
+Integers have arbitrary precision. They never overflow, so results are exact
+however large they grow:
+
+```python
+def power_of_two(n):
+    result = 1
+    for _ in range(n):
+        result = result * 2
+    return result
+
+print(power_of_two(100))  # 1267650600228229401496703205376
+```
+
+Integer division behaves as follows:
+
+- Division with `/` always returns a float: `7 / 2` is `3.5` and `4 / 2` is `2.0`.
+- Floor division with `//` rounds toward negative infinity: `-7 // 2` is `-4`.
+- The remainder operator `%` takes the sign of the right operand, so `-7 % 3` is `2` and `7 % -3` is `-2`.
+- Dividing by zero is an error.
+
+Bitwise operators (`&`, `|`, `^`, `~`, `<<`, `>>`) work on integers only. A
+left shift count must be below 512. Convert other values with `int()`: it
+accepts floats (truncating toward zero), booleans, and strings, with an
+optional base.
+
+```python
+print(int("42"))        # 42
+print(int("ff", 16))    # 255
+print(int(-3.9))        # -3
+print(int(True))        # 1
+```
+
+## Floats
+
+Floats are IEEE 754 double-precision numbers. A float and an integer compare
+by exact numeric value, so `1 == 1.0` is `True`. Arithmetic that mixes the two
+produces a float.
+
+Float division by zero is an error rather than infinity, but overflow
+produces infinity, and `float("inf")`, `float("-inf")`, and `float("nan")`
+create the special values.
+
+```python
+print(1 / 3)               # 0.3333333333333333
+print(7.5 // 2)            # 3.0
+print(-7.5 % 2)            # 0.5
+print(float("1e3"))        # 1000.0
+print(1e308 * 10)          # +inf
+```
+
+See [Lexical Elements](/automation/reference/lexical-elements#floating-point-numbers)
+for how floats are printed.
+
+## Strings
+
+A string is an immutable sequence of text, stored as UTF-8. Create strings
+with [string literals](/automation/reference/lexical-elements#string-literals),
+with `str(value)`, or with methods such as `format()` and `join()`.
+
+Strings support these operations:
+
+- Concatenation with `+` and repetition with `*`: `"ab" * 2` is `"abab"`.
+- Substring tests with `in`: `"an" in "banana"` is `True`.
+- Comparison with `<`, `==`, and the other comparison operators. Ordering is
+  lexicographic, so `"Z" < "a"` is `True`.
+- Indexing and slicing, described below.
+- Formatting with `%` and `.format()`. See
+  [Expressions and Operators](/automation/reference/expressions-operators#string-formatting).
+- Methods such as `split`, `strip`, `replace`, `startswith`, `lower`, and
+  `upper`. See [Methods](/automation/reference/methods).
+
+Indexing and slicing operate on bytes, and `len()` returns the number of
+bytes. For ASCII text each character is one byte, but a character such as
+`é` takes two:
+
+```python
+s = "héllo"
+print(len(s))                   # 6
+print(s[0])                     # h
+print(s[-1])                    # o
+print(s[0:3])                   # hé
+print(list(s.codepoints()))     # ["h", "é", "l", "l", "o"]
+print(len(list(s.codepoints())))  # 5
+```
+
+A string is not directly iterable, and `list("abc")` is an error. Choose how to
+iterate: `.elems()` yields each byte as a one-byte string, and `.codepoints()`
+yields each Unicode character. The `.elem_ords()` and `.codepoint_ords()`
+variants yield integers.
+
+```python
+for ch in "ab".codepoints():
+    print(ch)
+# a
+# b
+```
+
+Because strings are immutable, `s[0] = "x"` is an error. Build a new string
+with slicing, `replace`, or concatenation instead.
+
+## Bytes
+
+A `bytes` value is an immutable sequence of byte values, created with the
+`b"..."` literal or with `bytes(value)`. It supports `+`, `*`, `in`,
+`len()`, comparison, and slicing. Indexing returns a one-byte `bytes` value.
+The `.elems()` method yields each byte as an integer. A bytes value is not
+directly iterable.
+
+```python
+data = b"abc"
+print(len(data))                  # 3
+print(data[1:])                   # bc
+print(97 in data)                 # True
+print(list(data.elems()))         # [97, 98, 99]
+```
+
+## Lists
+
+A list is an ordered, mutable sequence. Write one with square brackets, or
+build one with a [comprehension](/automation/reference/expressions-operators#comprehensions).
+
+```python
+def demo():
+    items = ["api", "worker"]
+    items.append("cron")
+    items[0] = "web"
+    items.extend(["queue"])
+    return items
+
+print(demo())            # ["web", "worker", "cron", "queue"]
+```
+
+List operations:
+
+- Indexing with `items[i]`, where negative indexes count from the end, and
+  slicing with `items[start:stop:step]`.
+- Assignment to an existing index, `items[i] = value`. Assigning to a slice or
+  an index that is out of range is an error.
+- Concatenation with `+` and repetition with `*`: `[0] * 3` is `[0, 0, 0]`.
+- Methods: `append`, `extend`, `insert`, `pop`, `remove`, `index`, and `clear`.
+- Ordered comparison, element by element: `[1, 2] < [1, 3]` is `True`.
+
+Adding to a list or changing an element while iterating over that same list is
+an error (`cannot append to list during iteration`). Iterate over a copy such as
+`items[:]` when the loop needs to change the list.
+
+## Tuples
+
+A tuple is an immutable ordered sequence. Write tuples with parentheses; a
+one-element tuple needs a trailing comma.
+
+```python
+point = (3, 4)
+single = (1,)
+empty = ()
+x, y = point
+print(x + y)             # 7
+print(point + (5,))      # (3, 4, 5)
+print(point == (3, 4))   # True
+```
+
+Tuples support indexing, slicing, `+`, `*`, `in`, `len()`, and comparison.
+A tuple of hashable values is itself hashable, which makes tuples useful as
+dictionary keys. Converting between sequences uses `list(t)` and `tuple(l)`.
+Unparenthesized tuples are legal on the right side of an assignment and in
+`return`, but a bare trailing comma such as `x = 1,` is a syntax error.
+
+## Dictionaries
+
+A dictionary maps keys to values and keeps keys in insertion order. Write one
+with braces, or with the `dict()` function.
+
+```python
+def demo():
+    env_vars = {"REGION": "us-east-1", "STAGE": "dev"}
+    env_vars["TIER"] = "web"
+    env_vars["STAGE"] = "prod"
+    return env_vars, list(env_vars), len(env_vars)
+
+print(demo())
+# ({"REGION": "us-east-1", "STAGE": "prod", "TIER": "web"}, ["REGION", "STAGE", "TIER"], 3)
+```
+
+Dictionary behavior:
+
+- Reading a missing key with `d[key]` is an error. Use `d.get(key)`, which
+  returns `None`, or `d.get(key, default)`.
+- Iterating a dictionary, and the `in` operator, work on keys. Use
+  `.items()`, `.keys()`, and `.values()` for other views; each returns a list.
+- Overwriting an existing key keeps its original position. A new key goes at
+  the end.
+- A key must be hashable. The integer `1` and the float `1.0` are the same key.
+- Repeating a key in a dictionary literal is an error (`duplicate key`).
+- Two dictionaries are equal when they hold the same keys and values, whatever
+  the order.
+- The expression `d | other` returns a new dictionary with the entries of `other` taking
+  precedence, and `d |= other` updates in place.
+- Assigning, inserting, or deleting keys while iterating the same dictionary is
+  an error, even when the key already exists. Loop over `list(d)` to change a
+  dictionary inside the loop.
+
+Other methods are `pop`, `popitem`, `setdefault`, `update`, and `clear`. See
+[Methods](/automation/reference/methods).
+
+## Sets
+
+A set is a collection of unique hashable values. Iterating or printing a set
+follows insertion order. Create one with `set(iterable)`; there is no set
+literal.
+
+```python
+def demo():
+    a = set([1, 2, 2, 3])
+    b = set([3, 4])
+    return len(a), a | b, a & b, a - b, a ^ b
+
+print(demo())
+# (3, set([1, 2, 3, 4]), set([3]), set([1, 2]), set([1, 2, 4]))
+```
+
+Sets support `in`, `len()`, iteration, and these operators: `|` (union),
+`&` (intersection), `-` (difference), and `^` (symmetric difference). Methods
+include `add`, `remove`, `discard`, `pop`, `update`, `union`, `intersection`,
+`difference`, `symmetric_difference`, `issubset`, `issuperset`, and `clear`.
+Adding to a set while iterating it is an error.
+
+Elements must be hashable, so a set of lists is an error but a set of tuples
+works. The empty set is `set()`; `{}` is an empty dictionary.
+
+## Ranges
+
+Calling `range(stop)`, `range(start, stop)`, or `range(start, stop, step)` returns an
+immutable sequence of integers computed on demand. It supports indexing, `len()`,
+`in`, and iteration.
+
+```python
+print(list(range(3)))          # [0, 1, 2]
+print(list(range(1, 10, 3)))   # [1, 4, 7]
+print(list(range(5, 0, -2)))   # [5, 3, 1]
+```
+
+## Functions
+
+Functions defined with `def` or `lambda` are values: they can be assigned to
+names, stored in lists and dictionaries, passed as arguments, and returned from
+other functions. A function defined inside another function keeps access to the
+outer function's variables (a closure).
+
+```python
+def make_adder(n):
+    def add(x):
+        return x + n
+    return add
+
+add5 = make_adder(5)
+handlers = {"add5": add5, "double": lambda x: x * 2}
+print(add5(1))               # 6
+print(handlers["double"](4)) # 8
+```
+
+Built-in functions such as `len` and methods such as `"".upper` have the type
+`builtin_function_or_method`. See [Statements](/automation/reference/statements#function-definitions)
+for defining functions and [Built-in Functions](/automation/reference/builtin-functions)
+for the functions that ship with the language.
+
+## Modules and structs
+
+Atmos supplies several predeclared values that come from the runtime rather than from literals.
+
+- Modules such as `exec`, `fs`, `steps`, `components`, `regex`, `json`, `ui`,
+  `log`, `atmos`, `cli`, and `dependencies` have type `module`. Read members
+  with dot syntax: `exec.run`, `json.encode`. A module cannot be modified,
+  and reading a name it does not define is an error. See the
+  [automation functions](/functions/automation/exec.run) reference.
+- Structs have type `struct`. Fields are read with dot syntax. A struct's
+  fields cannot be assigned or deleted, and `dir(value)` lists them.
+  The result of [`exec.run`](/functions/automation/exec.run) is a struct with
+  `stdout`, `stderr`, and `exit_code` fields. [`ctx`](/functions/automation/ctx)
+  is a struct whose fields describe the invocation.
+- The `env` value is a read-only dictionary of the explicit step inputs. See
+  [`env`](/functions/automation/env).
+
+```python
+result = exec.run(["echo", "hi"], output="capture")
+print(type(result))           # struct
+print(result.exit_code)       # 0
+print(result.stdout.strip())  # hi
+print(type(exec))             # module
+print(type(env))              # dict
+```
+
+## Truthiness
+
+Conditions in `if`, `while`, `and`, `or`, `not`, comprehensions, and
+conditional expressions accept any value. The following values are false:
+
+- `None`
+- `False`
+- the integer `0` and the floats `0.0` and `-0.0`
+- the empty string `""` and empty bytes `b""`
+- empty collections: `[]`, `()`, `{}`, and `set()`
+- an empty range such as `range(0)`
+
+All other values are true, including the string `"0"`, the string `"False"`,
+the list `[0]`, and `float("nan")`. Use `bool(x)` to convert explicitly.
+
+```python
+for value in [None, 0, "", [], {}, "0", [0], 1.5]:
+    print(repr(value), bool(value))
+# None False
+# 0 False
+# "" False
+# [] False
+# {} False
+# "0" True
+# [0] True
+# 1.5 True
+```
+
+## Equality and ordering
+
+Equality with `==` compares by value: lists, tuples, dictionaries, and sets are equal when
+their contents are equal. A list never equals a tuple, even with the same
+elements. Integers and floats compare by numeric value.
+
+The ordering operators `<`, `<=`, `>`, and `>=` work between numbers, between
+strings, between bytes, and between lists or tuples, which compare
+element by element. Ordering mixed types, such as `1 < "a"`, or ordering
+dictionaries, is an error. The `sorted()` function raises the same error for a list that
+mixes strings and numbers.
+
+## Mutability and freezing
+
+Strings, numbers, booleans, `None`, tuples, and bytes cannot change. Lists,
+dictionaries, and sets can change in place. Variables hold references, so two
+names can refer to one list:
+
+```python
+def demo():
+    a = [1, 2]
+    b = a
+    b.append(3)
+    return a            # a sees the change
+
+print(demo())           # [1, 2, 3]
+```
+
+Pass a copy when a function should not affect the caller's list: `list(a)` or
+`a[:]` for lists, `dict(d)` for dictionaries.
+
+A frozen value rejects every change, including changes to values nested
+inside it. Attempting one fails with an error such as `cannot append to frozen
+list` or `cannot insert into frozen hash table`. Values become frozen in
+these situations:
+
+- **After a file finishes loading.** Every top-level value in a file brought in
+  with [`load()`](/automation/reference/statements#load) becomes frozen. The
+  importing file can read these values, but cannot modify them.
+- **When parallel work starts.** Values that tasks started by
+  [`steps.parallel`](/functions/automation/steps.parallel) can reach become
+  frozen. Prepare shared lists and dictionaries before dispatching tasks.
+- **For values Atmos supplies.** `env`, `ctx.flags`, and `ctx.arguments` are
+  frozen dictionaries.
+- **Temporarily during iteration.** A collection being looped over rejects
+  structural changes until the loop ends.
+
+```python
+shared = {"regions": ["us-east-1"]}
+shared["regions"].append("eu-west-1")   # allowed: not frozen yet
+
+def count():
+    return len(shared["regions"])
+
+output = steps.parallel(functions = [count])
+shared["extra"] = 1   # error: cannot insert into frozen hash table
+```
+
+Copy a frozen collection into a new one to get a modifiable version.
+For example, `dict(env)` returns a normal dictionary you can change.
+
+## Next steps
+
+- [Expressions and Operators](/automation/reference/expressions-operators): operate on these values.
+- [Statements](/automation/reference/statements): assign, loop, and define functions.
+- [Methods](/automation/reference/methods): the methods each type provides.
+- [Built-in Functions](/automation/reference/builtin-functions): `len`, `sorted`, `range`, and more.

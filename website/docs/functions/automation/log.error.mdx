@@ -1,0 +1,96 @@
+---
+title: "log.error"
+sidebar_position: 30
+sidebar_label: "log.error"
+sidebar_class_name: command
+description: Write an error-level diagnostic message to the Atmos log.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `log.error` function writes a message to the Atmos log at the error level. Use it for a failure that you handled in the script and still want recorded, with the details needed to diagnose it.
+</Intro>
+
+## Usage
+
+```python
+log.error(message, **fields)
+```
+
+## Arguments
+
+<dl>
+    <dt>`message`</dt>
+    <dd>
+        Required. Exactly one positional argument: the message, as a string. Passing more than one positional
+        argument, or a value that is not a string, fails with an argument error.
+    </dd>
+
+    <dt>`**fields`</dt>
+    <dd>
+        (Optional) Any number of keyword arguments, written to the log as structured key/value pairs after the
+        message. Field names must be identifiers: letters, digits, and underscores, not starting with a digit.
+        A value that is `None`, a boolean, an integer, a float, or a string keeps its native type. Any other value,
+        such as a list or dictionary, is logged using its `str()` form.
+    </dd>
+</dl>
+
+## Returns
+
+The return value is `None`. The call is a side effect and never becomes the step value.
+
+## Behavior
+
+- The message goes to the Atmos logger, so it honors `--logs-level` (or `ATMOS_LOGS_LEVEL`) and `logs.file`. Below
+  the configured level, the call prints nothing. See [logs configuration](/cli/configuration/logs) for the levels
+  and the log destination.
+- Log output never goes to stdout, so it cannot change what `print` or [`output`](/functions/automation/output)
+  produce.
+- Every message carries a `step` field: the step name for a workflow or custom command step, or the script path for a
+  standalone script.
+- Inside [`steps.parallel`](/functions/automation/steps.parallel) tasks, a `task` field names the running task, for
+  example `task=dev`, or `task=grp/inner` for nested groups. A group with a single task adds no `task` field.
+- If you pass a field named `step` or `task`, your value replaces the automatic one.
+- Secrets that Atmos knows about are masked in the message and in field values.
+
+## Examples
+
+### Log a handled failure
+
+```python
+result = exec.run(["sh", "-c", "exit 3"], check = False, output = "capture")
+if result.exit_code != 0:
+    log.error("health check failed", exit_code = result.exit_code)
+```
+
+```text
+ ERRO  health check failed step=fail exit_code=3
+```
+
+Logging an error does not stop the script or change its exit code. Call `fail()` to stop it.
+
+### Fields set by Atmos
+
+```python
+def apply(stack):
+    log.error("applying", stack = stack)
+
+steps.parallel(tasks = [steps.task(s, apply, args = [s]) for s in ["dev", "prod"]])
+```
+
+Each line carries the `step` field and a `task` field naming the task that wrote it, for example
+`step=apply task=dev stack=dev`.
+
+## Errors
+
+- A call with no message, with more than one positional argument, or with a message that is not a string fails with an
+  argument error that names `log.error`.
+- A field name that is not an identifier, such as `bad-name`, fails with an argument error that quotes the name.
+
+## Related
+
+- Other levels: [`log.trace`](/functions/automation/log.trace), [`log.debug`](/functions/automation/log.debug), [`log.info`](/functions/automation/log.info), [`log.warn`](/functions/automation/log.warn).
+- [`ui.info`](/functions/automation/ui.info), [`ui.success`](/functions/automation/ui.success), and [`ui.warning`](/functions/automation/ui.warning) show status to the person running the program.
+- [`print`](/functions/automation/print) writes data to stdout.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#logging)

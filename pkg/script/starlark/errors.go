@@ -14,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/script"
 	"github.com/cloudposse/atmos/pkg/script/starlark/internal/convert"
 )
 
@@ -25,8 +26,6 @@ const (
 	reassignGlobalMessage = "cannot reassign global"
 	reassignGlobalHint    = "Starlark globals are assigned once. Use a conditional expression (`x = a if cond else b`) " +
 		"or compute the value in a function (`def main(): ... return v` then `output = main()`)."
-	// Upper limit of captured stderr lines echoed into process failure explanations.
-	maxStderrLines = 20
 )
 
 // failure is a single-line script error classified by a sentinel. Its message is exactly msg,
@@ -150,6 +149,7 @@ func scriptError(ctx context.Context, err error, projectRoot string) error {
 		cause = recursionFailure(cause)
 	}
 	builder := errUtils.Build(errUtils.ErrStarlark).WithCause(displayError(projectRoot, cause))
+	script.EnrichDiagnostics(builder, cause)
 	var eval *starlark.EvalError
 	if errors.As(err, &eval) {
 		builder.WithExplanation(fenced(backtraceText(eval, projectRoot)))

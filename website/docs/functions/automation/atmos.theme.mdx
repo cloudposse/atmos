@@ -1,0 +1,108 @@
+---
+title: "atmos.theme"
+sidebar_position: 8
+sidebar_label: "atmos.theme"
+sidebar_class_name: command
+description: Run an atmos theme command, such as list or show, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.theme` function runs `atmos theme` through the current Atmos executable. Use it to list the available
+    terminal themes and show the details and color palette of a theme from automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.theme(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
+`atmos.theme("show", "Dracula")` runs `atmos theme show Dracula`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`list`](/cli/commands/theme/list) | List available terminal themes. |
+| [`show`](/cli/commands/theme/show) | Show details and a preview of a specific theme. |
+
+See the [`atmos theme` command reference](/cli/commands/theme/usage) for the complete list of subcommands and flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `theme`, in order: the subcommand and its
+        positional arguments, such as the theme name for `show`. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"recommended"`
+        becomes `--recommended`. The `list` subcommand accepts `"recommended"`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### List the recommended themes
+
+```python
+atmos.theme("list", flags = {"recommended": True})
+```
+
+This runs `atmos theme list --recommended`.
+
+### Show one theme
+
+```python
+atmos.theme("show", "Dracula")
+```
+
+### Capture the theme list
+
+```python
+themes = atmos.theme("list", output = "capture")
+print(themes.stdout)
+```
+
+## Notes
+
+:::note
+The theme commands print tables and color previews intended for people, so they are mostly useful in a script that
+walks a user through choosing a theme. Choosing a theme is done with the `settings.terminal.theme` setting in
+`atmos.yaml` or the `ATMOS_THEME` environment variable. The output is not machine-readable data.
+:::
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos theme`](/cli/commands/theme/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)
