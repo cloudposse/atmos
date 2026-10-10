@@ -23,19 +23,21 @@ const (
 // ReleaseSpec describes one fake GitHub release served by the mock's
 // /api/v3/repos/{owner}/{repo}/releases[/latest] endpoints.
 type ReleaseSpec struct {
-	TagName    string
-	Prerelease bool
-	Draft      bool
+	TagName     string
+	PublishedAt string
+	Prerelease  bool
+	Draft       bool
 }
 
 // releaseJSON is the subset of GitHub's release JSON shape that go-github (pkg/github) and
 // the aqua registry's hand-rolled JSON decoding (pkg/toolchain/registry/aqua/version.go) read:
-// tag_name, prerelease, draft.
+// tag_name, name, published_at, prerelease, draft.
 type releaseJSON struct {
-	TagName    string `json:"tag_name"`
-	Name       string `json:"name"`
-	Draft      bool   `json:"draft"`
-	Prerelease bool   `json:"prerelease"`
+	TagName     string `json:"tag_name"`
+	Name        string `json:"name"`
+	PublishedAt string `json:"published_at,omitempty"`
+	Draft       bool   `json:"draft"`
+	Prerelease  bool   `json:"prerelease"`
 }
 
 // tagJSON is the subset of GitHub's tag JSON shape aqua's getLatestTag reads: name.
@@ -130,7 +132,7 @@ func (m *GitHubMockServer) writeLatestRelease(w http.ResponseWriter, r *http.Req
 
 	for _, rel := range releases {
 		if !rel.Draft && !rel.Prerelease {
-			writeJSON(w, releaseJSON{TagName: rel.TagName, Name: rel.TagName})
+			writeJSON(w, releaseJSON{TagName: rel.TagName, Name: rel.TagName, PublishedAt: rel.PublishedAt})
 			return
 		}
 	}
@@ -178,7 +180,7 @@ func (m *GitHubMockServer) writeReleasesList(w http.ResponseWriter, r *http.Requ
 	pageItems := releases[start:end]
 	out := make([]releaseJSON, len(pageItems))
 	for i, rel := range pageItems {
-		out[i] = releaseJSON{TagName: rel.TagName, Name: rel.TagName, Draft: rel.Draft, Prerelease: rel.Prerelease}
+		out[i] = releaseJSON{TagName: rel.TagName, Name: rel.TagName, PublishedAt: rel.PublishedAt, Draft: rel.Draft, Prerelease: rel.Prerelease}
 	}
 	writeJSON(w, out)
 }
