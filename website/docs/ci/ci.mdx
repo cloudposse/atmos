@@ -263,7 +263,8 @@ CloudFormation commands emit these variables, following the same `ci.output.enab
 - `stack_status`, when the operation observed a final status (`delete`)
 - `drifted`, `drift_status`, and `drifted_resource_count` (`drift detect`, `drift describe`)
 - `output_<Key>` for each stack Output after `apply`/`deploy`. These bypass the `ci.output.variables`
-  allow-list and carry the masked values, so NoEcho-dependent outputs are never exported in clear text.
+  allow-list and carry masked values by default. `--mask=false` disables presentation masking and may
+  export NoEcho-dependent outputs in clear text.
 
 ### [Checks](/cli/configuration/ci/checks)
 
