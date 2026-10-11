@@ -60,7 +60,7 @@ type Result struct {
 // FallbackSummary), renders the org template's <details> shape, and updates
 // the release while preserving its tag. An update or response-verification error
 // may occur after GitHub has applied the write; callers should log the error
-// rather than report success - see magefiles/ci_release_notes.go.
+// rather than report success - see magefiles/release/release_notes.go.
 func SummarizeRelease(ctx context.Context, client HTTPClient, p *SummarizeParams) (Result, error) {
 	defer perf.Track(nil, "releasenotes.SummarizeRelease")()
 
