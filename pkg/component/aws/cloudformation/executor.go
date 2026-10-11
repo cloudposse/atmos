@@ -111,8 +111,9 @@ func executeSingle(ctx *component.ExecutionContext, atmosConfig *schema.AtmosCon
 // operationsMutatingStack identifies operations that cannot run on locked components.
 // Diff remains available because previewing a change does not deploy it.
 var operationsMutatingStack = map[Operation]bool{
-	OperationApply:  true,
-	OperationDelete: true,
+	OperationApply:            true,
+	OperationDelete:           true,
+	OperationChangesetExecute: true,
 }
 
 // validateComponentOperation enforces metadata restrictions before execution side effects.
