@@ -112,6 +112,7 @@
     }
   },
   "logs": {
+    "color": true,
     "file": "/dev/stderr",
     "level": "Info"
   },
