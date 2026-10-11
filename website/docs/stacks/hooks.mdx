@@ -923,6 +923,14 @@ A **pre-flight check** runs once per command invocation:
 3. Build a PATH augmentation that points at the installed pinned versions.
 4. Verify each hook's binary is resolvable.
 
+Under every [install policy](/cli/configuration/toolchain#install), installed versions selected by the
+project's `.tool-versions` file join that PATH too, and a
+`dependencies.tools` entry overrides the `.tool-versions` entry for the same tool. Hooks do not
+download `.tool-versions` tools unless `toolchain.install` is `always`; declare the tool in
+`dependencies.tools` to have Atmos install it. With `declared`, hooks use installed project selections without downloading missing defaults. With
+`never`, hooks install nothing and a `dependencies.tools` entry that is not installed is an error.
+See [Project Defaults](/stacks/dependencies#project-defaults).
+
 If any binary is missing, the run aborts **before** Terraform with a
 clear error including a hint to declare it in `dependencies.tools`. You
 won't lose a 90-second plan to find out a hook is misconfigured.
