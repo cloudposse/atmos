@@ -17,10 +17,11 @@ import (
 )
 
 type FakeAPI struct {
-	T       *testing.T
-	Get     func(string, any) error
-	Write   func(string, string, io.Reader) error
-	Archive []byte
+	T        *testing.T
+	Get      func(string, any) error
+	Write    func(string, string, io.Reader) error
+	Archive  []byte
+	Download func(string) (*http.Response, error)
 }
 
 func (f *FakeAPI) DoWithContext(_ context.Context, method, path string, body io.Reader, response interface{}) error {
@@ -35,6 +36,9 @@ func (f *FakeAPI) DoWithContext(_ context.Context, method, path string, body io.
 
 func (f *FakeAPI) RequestWithContext(_ context.Context, method, path string, _ io.Reader) (*http.Response, error) {
 	require.Equal(f.T, http.MethodGet, method)
+	if f.Download != nil {
+		return f.Download(path)
+	}
 	return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(f.Archive))}, nil
 }
 

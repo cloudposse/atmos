@@ -59,25 +59,29 @@ func benchExtract(data []byte, dir string) error {
 	if err != nil {
 		return err
 	}
-	seen := map[string]bool{}
+	contentsByName := map[string][]byte{}
 	for _, file := range reader.File {
 		if file.Name != "manifest.json" && file.Name != "bench.txt" {
 			return Error("unexpected benchmark artifact entry: %q", file.Name)
 		}
-		if seen[file.Name] || !file.Mode().IsRegular() || file.UncompressedSize64 > benchArchiveLimit/2 {
+		if _, duplicate := contentsByName[file.Name]; duplicate || !file.Mode().IsRegular() || file.UncompressedSize64 > benchArchiveLimit/2 {
 			return Error("invalid benchmark archive entry")
 		}
-		seen[file.Name] = true
 		contents, err := benchReadArchiveEntry(file)
 		if err != nil {
 			return err
 		}
-		if err = os.WriteFile(filepath.Join(dir, file.Name), contents, PrivateFile); err != nil { // #nosec G305 -- Entry name is restricted above to two literal filenames.
+		contentsByName[file.Name] = contents
+	}
+	if len(contentsByName) != 2 {
+		return Error("benchmark artifact is missing measurements or manifest")
+	}
+	// Only trusted literal filenames reach the filesystem, after the entire
+	// archive has passed validation. Archive names are lookup keys only.
+	for _, name := range []string{"manifest.json", "bench.txt"} {
+		if err = os.WriteFile(filepath.Join(dir, name), contentsByName[name], PrivateFile); err != nil {
 			return err
 		}
-	}
-	if !seen["manifest.json"] || !seen["bench.txt"] {
-		return Error("benchmark artifact is missing measurements or manifest")
 	}
 	return nil
 }

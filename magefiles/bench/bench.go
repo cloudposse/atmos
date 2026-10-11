@@ -113,7 +113,7 @@ func benchWriteJSON(path string, value any) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(data, '\n'), PrivateFile)
+	return os.WriteFile(path, append(data, '\n'), PrivateFile) // #nosec G703 -- Trusted callers choose report destinations; archive names never supply paths.
 }
 
 func benchSamples() (int, error) {
