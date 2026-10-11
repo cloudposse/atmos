@@ -58,6 +58,7 @@ The journal ships with 10 entries reaching back to February 2025 (source of trut
 | 2026-07-13 | `list.error_mode` | `strict` | `warn` | [changelog/list-describe-graceful-degradation](https://atmos.tools/changelog/list-describe-graceful-degradation) |
 | 2026-07-17 | `describe.component.filter` | `full` | `schema` | this PR ([changelog/config-editions](https://atmos.tools/changelog/config-editions)) |
 | 2026-07-16 | `describe.provenance` | `false` | `true` | this PR ([changelog/config-editions](https://atmos.tools/changelog/config-editions)) |
+| 2026-10-09 | `toolchain.install` | `declared` | `auto` | [#3346](https://github.com/cloudposse/atmos/pull/3346) — brand-new key journaled because it governs behavior that previously had a fixed answer (see `components.terraform.init.mode`) |
 
 The `2026-07-16`/`2026-07-17` and de-shadowed `logs.level` defaults become newly effective for
 un-pinned projects in this PR: log level `Info` → `Warning`, provenance annotations on by
@@ -281,3 +282,4 @@ current schema.
 | 2026-09-24 | 1.3 | Recorded project-relative toolchain paths and automatic-install metadata policy as behavior-gating candidates. |
 | 2026-09-25 | 1.4 | Recorded automatic exception reporting for existing Pro-enabled stacks as a behavior-gating candidate. |
 | 2026-10-07 | 1.5 | Recorded the Pro upload runtime budget fallback as a behavior-gating candidate. |
+| 2026-10-09 | 1.6 | Journaled `toolchain.install` (`declared` to `auto`): a brand-new key that governs how `.tool-versions` is used by component runs, which previously had a fixed answer. |
