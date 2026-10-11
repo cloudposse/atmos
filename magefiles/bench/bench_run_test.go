@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cloudposse/atmos/magefiles/internal/githubtest"
 	"github.com/cloudposse/atmos/magefiles/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
@@ -127,11 +128,16 @@ func benchSetUpRun(t *testing.T) string {
 
 func TestBenchRunRecordsCompleteSnapshot(t *testing.T) {
 	benchSetUpRun(t)
+	t.Setenv("ATMOS_BENCH_PR_HEAD_SHA", githubtest.SHA)
+	t.Setenv("ATMOS_BENCH_BASE_SHA", githubtest.Base)
 	out := filepath.Join(t.TempDir(), "candidate")
 	require.NoError(t, (Bench{}).Run(out))
 	snapshot, err := benchLoad(out)
 	require.NoError(t, err)
 	require.True(t, snapshot.Manifest.Complete)
+	require.Equal(t, githubtest.SHA, snapshot.Manifest.PRHeadSHA)
+	require.Equal(t, githubtest.Base, snapshot.Manifest.BaseSHA)
+	require.NotEqual(t, snapshot.Manifest.PRHeadSHA, snapshot.Manifest.SHA, "measured checkout and PR association are distinct")
 	require.Len(t, snapshot.Manifest.Fingerprints, len(benchSuites))
 	require.Equal(t, "go1.26.9", snapshot.Manifest.GoVersion)
 	require.NotEmpty(t, snapshot.Manifest.CPU)

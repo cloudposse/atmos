@@ -238,11 +238,14 @@ measurements and full reports before attributing a change to code.
 
 ### Workflows, trust, and rollout
 
-`Benchmarks` measures the explicit PR head, main pushes, and manual dispatches
+`Benchmarks` measures the event's immutable PR merge revision, main pushes, and manual dispatches
 on `ubuntu-24.04` using repository-pinned Go and existing cache restoration.
-The PR head is measured without merging main: comparisons include branch
-divergence and do not isolate the PR's changes. Main snapshots may contain
-changes absent from an older PR branch.
+For PRs, `SHA` identifies the measured merge revision, `PRHeadSHA` separately
+identifies the PR head, and `BaseSHA` records `github.event.pull_request.base.sha`.
+The trusted reporter verifies the merge's two parents against the recorded base
+and workflow's PR head, then selects snapshots reachable from that base.
+Older snapshots can also reflect intervening main changes. Stale-head and fork
+association checks continue to use the PR head, not the measured merge SHA.
 Superseded PR runs cancel; main runs finish. Measurement artifacts use unique
 run/attempt names and 90-day retention; partial measurements remain available
 for diagnostics but never qualify as baselines.

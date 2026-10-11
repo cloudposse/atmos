@@ -266,11 +266,13 @@ func Escape(value string) string {
 func benchMarkdown(report benchReport) string {
 	var out bytes.Buffer
 	fmt.Fprint(&out, Marker+"\n## Atmos performance\n\n")
-	if report.Candidate.Mode == benchFieldMode {
+	switch {
+	case report.Candidate.Mode == benchFieldMode:
 		fmt.Fprintf(&out, "Candidate revision: `%s`. Every row compares this binary against the rebuilt reference revision.\n\n", Escape(report.Candidate.SHA))
-	} else {
-		fmt.Fprintf(&out, "Current PR: `%s`. Every row compares this same PR build against the named main snapshot.\n\n", Escape(report.Candidate.SHA))
-		fmt.Fprint(&out, "The PR head is measured without merging main. Comparisons include branch divergence and do not isolate the PR's changes; main snapshots can contain changes absent from this branch.\n\n")
+	case report.Candidate.PRHeadSHA != "":
+		fmt.Fprintf(&out, "Current PR head: `%s`. Measured merge revision: `%s`, based on main `%s`. Every row compares this same merged build against the named main snapshot. Older snapshots also include intervening main changes.\n\n", Escape(report.Candidate.PRHeadSHA), Escape(report.Candidate.SHA), Escape(report.Candidate.BaseSHA))
+	default:
+		fmt.Fprintf(&out, "Candidate revision: `%s`. Every row compares this same build against the named main snapshot.\n\n", Escape(report.Candidate.SHA))
 	}
 	headline := benchHeadline(&report)
 	fmt.Fprintf(&out, "**%s** Threshold: %.1f%% and p < 0.05.\n\nCross-run runner variability can affect timing. Historical comparisons reuse the same PR samples and are not independent confirmations.\n\n", headline, report.Threshold)

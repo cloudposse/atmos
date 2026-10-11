@@ -72,6 +72,7 @@ type benchManifest struct {
 	Mode, SourceRef, HarnessSHA                             string
 	Schema                                                  int
 	SHA, Repository, RunID, Attempt, Event, Branch, BaseSHA string
+	PRHeadSHA                                               string
 	Started                                                 time.Time
 	RunCreated                                              time.Time
 	GoVersion, GOOS, GOARCH, CPU, Runner, Image, BuildFlags string
@@ -195,7 +196,8 @@ func benchNewManifest(root string) (*benchManifest, error) {
 		Schema: benchSchema, Started: time.Now().UTC(), GOOS: runtime.GOOS, GOARCH: runtime.GOARCH,
 		Repository: os.Getenv("GITHUB_REPOSITORY"), RunID: os.Getenv("GITHUB_RUN_ID"), Attempt: os.Getenv("GITHUB_RUN_ATTEMPT"),
 		Event: os.Getenv("GITHUB_EVENT_NAME"), Branch: os.Getenv("GITHUB_REF_NAME"), BaseSHA: os.Getenv("ATMOS_BENCH_BASE_SHA"),
-		Runner: os.Getenv("RUNNER_OS") + "/" + os.Getenv("RUNNER_ARCH"), Image: os.Getenv("ImageOS"),
+		PRHeadSHA: os.Getenv("ATMOS_BENCH_PR_HEAD_SHA"),
+		Runner:    os.Getenv("RUNNER_OS") + "/" + os.Getenv("RUNNER_ARCH"), Image: os.Getenv("ImageOS"),
 		BuildFlags: "CGO_ENABLED=0 GOFLAGS= GOMAXPROCS=2", Procs: 2, Benchtime: "1s", Fingerprints: map[string]string{},
 	}
 	var err error

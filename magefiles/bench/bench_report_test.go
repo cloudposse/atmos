@@ -18,12 +18,19 @@ import (
 )
 
 func TestBenchReportRunValidationAndPublication(t *testing.T) {
-	for _, scenario := range []string{"success", "failure", "stale", "invalid run", "missing artifact", "malformed", "wrong provenance", "base not on main", "API error", "publish error"} {
+	for _, scenario := range []string{"success", "fork", "base advanced", "wrong merge", "failure", "stale", "invalid run", "missing artifact", "malformed", "wrong provenance", "base not on main", "API error", "publish error"} {
 		t.Run(scenario, func(t *testing.T) {
 			benchSetUpRun(t)
 			run := githubtest.Run()
 			run.Event = "pull_request"
+			if scenario == "fork" {
+				run.HeadRepository.FullName = "contributor/atmos"
+			}
 			pr := githubtest.PR(run)
+			if scenario == "base advanced" {
+				pr.Base.SHA = strings.Repeat("d", 40)
+				pr.MergeSHA = strings.Repeat("e", 40)
+			}
 			if scenario == "failure" {
 				run.Conclusion = "failure"
 			}
@@ -51,7 +58,15 @@ func TestBenchReportRunValidationAndPublication(t *testing.T) {
 					}
 					return githubtest.Respond(run, response)
 				case strings.Contains(path, "/pulls?"):
+					require.Contains(t, path, "/commits/"+run.HeadSHA+"/pulls?", "association must use the PR head, not the merge")
 					return githubtest.Respond([]githubapi.PR{pr}, response)
+				case strings.Contains(path, "/git/commits/"):
+					require.True(t, strings.HasSuffix(path, "/"+benchTestMerge))
+					head := run.HeadSHA
+					if scenario == "wrong merge" {
+						head = githubtest.Base
+					}
+					return githubtest.Respond(map[string]any{"sha": benchTestMerge, "parents": []map[string]string{{"sha": githubtest.Base}, {"sha": head}}}, response)
 				case strings.Contains(path, "/artifacts?"):
 					artifacts := []benchArtifact{{ID: 1, Name: benchArtifactName(&run)}}
 					if scenario == "missing artifact" {
@@ -62,6 +77,10 @@ func TestBenchReportRunValidationAndPublication(t *testing.T) {
 					status := "identical"
 					if scenario == "base not on main" {
 						status = "diverged"
+					}
+					if scenario == "base advanced" {
+						require.Contains(t, path, pr.Base.SHA+"..."+githubtest.Base)
+						status = "behind"
 					}
 					return githubtest.Respond(map[string]string{"status": status}, response)
 				case strings.Contains(path, "/workflows/"):
@@ -76,6 +95,7 @@ func TestBenchReportRunValidationAndPublication(t *testing.T) {
 				published++
 				require.Equal(t, 42, number)
 				require.Equal(t, run.ID, reported.ID)
+				require.Equal(t, pr.Head.SHA, reported.HeadSHA)
 				require.Contains(t, body, "Comparison unavailable")
 				require.Contains(t, body, "<!-- atmos-benchmark-run:10:2 -->")
 				if scenario == "failure" {
@@ -87,7 +107,7 @@ func TestBenchReportRunValidationAndPublication(t *testing.T) {
 				return nil
 			})
 			switch scenario {
-			case "success", "failure":
+			case "success", "fork", "base advanced", "failure":
 				require.NoError(t, err)
 				require.Equal(t, 1, published)
 			case "stale":
@@ -115,6 +135,60 @@ func TestBenchPRAndArtifactPaginationErrors(t *testing.T) {
 	}
 	_, err = benchFindArtifact(context.Background(), fake, githubtest.Repo, &run)
 	require.ErrorContains(t, err, "pagination limit")
+}
+
+func TestBenchMergeProvenance(t *testing.T) {
+	for _, scenario := range []string{"valid", "old head-only artifact", "unmerged head", "wrong head", "invalid SHA", "invalid base", "wrong commit", "non-merge", "extra parent", "wrong base parent", "wrong head parent", "API failure"} {
+		t.Run(scenario, func(t *testing.T) {
+			run := githubtest.Run()
+			run.Event = "pull_request"
+			m := benchTestSnapshot(100).Manifest
+			m.Repository, m.RunID, m.Attempt, m.Event = githubtest.Repo, "10", "2", run.Event
+			m.SHA, m.BaseSHA, m.PRHeadSHA = benchTestMerge, githubtest.Base, run.HeadSHA
+			sha, parents := benchTestMerge, []map[string]string{{"sha": githubtest.Base}, {"sha": run.HeadSHA}}
+			switch scenario {
+			case "old head-only artifact":
+				m.SHA, m.PRHeadSHA = run.HeadSHA, ""
+			case "unmerged head":
+				m.SHA = run.HeadSHA
+			case "wrong head":
+				m.PRHeadSHA = githubtest.Base
+			case "invalid SHA":
+				m.SHA = "../../untrusted"
+			case "invalid base":
+				m.BaseSHA = "main"
+			case "wrong commit":
+				sha = githubtest.Base
+			case "non-merge":
+				parents = parents[:1]
+			case "extra parent":
+				parents = append(parents, map[string]string{"sha": githubtest.SHA})
+			case "wrong base parent":
+				parents[0]["sha"] = run.HeadSHA
+			case "wrong head parent":
+				parents[1]["sha"] = githubtest.Base
+			}
+			calls := 0
+			fake := &githubtest.FakeAPI{T: t, Get: func(path string, response any) error {
+				calls++
+				require.Equal(t, "repos/"+githubtest.Repo+"/git/commits/"+benchTestMerge, path)
+				if scenario == "API failure" {
+					return errors.New("GitHub unavailable")
+				}
+				return githubtest.Respond(map[string]any{"sha": sha, "parents": parents}, response)
+			}}
+			err := benchValidateCandidate(context.Background(), fake, githubtest.Repo, &m, &run)
+			if scenario == "valid" {
+				require.NoError(t, err)
+				require.Equal(t, 1, calls)
+				return
+			}
+			require.Error(t, err)
+			if scenario == "old head-only artifact" || scenario == "unmerged head" || scenario == "wrong head" || scenario == "invalid SHA" || scenario == "invalid base" {
+				require.Zero(t, calls, "reject malformed provenance before making API requests")
+			}
+		})
+	}
 }
 
 func TestBenchArchiveRejectsBeforeWriting(t *testing.T) {

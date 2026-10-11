@@ -22,6 +22,7 @@ jobs:
     env:
       GOPROXY: https://proxy.golang.org
       ATMOS_BENCH_BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+      ATMOS_BENCH_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -41,7 +42,8 @@ jobs:
       - name: Check out measured revision
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          # For pull_request, github.sha is the event's immutable merge revision.
+          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Set up Go and restore build cache
         uses: ./.github/actions/setup-go-cache

@@ -22,6 +22,7 @@ import (
 
 const (
 	benchTestMetric = "example/bench|CLI/DescribeAffected/instances=100-2|sec/op"
+	benchTestMerge  = "cccccccccccccccccccccccccccccccccccccccc"
 )
 
 func benchTestSnapshot(value float64) *benchSnapshot {
@@ -49,6 +50,7 @@ func benchSaveTestSnapshot(t *testing.T, dir string, s *benchSnapshot) {
 
 func TestBenchCompareEverySnapshotToCandidate(t *testing.T) {
 	head := benchTestSnapshot(120)
+	head.Manifest.SHA, head.Manifest.PRHeadSHA, head.Manifest.BaseSHA = benchTestMerge, githubtest.SHA, githubtest.Base
 	newer, older := benchTestSnapshot(130), benchTestSnapshot(100)
 	older.Manifest.SHA = githubtest.Base
 	newResult := benchCompareSnapshots(newer, head, 10)
@@ -60,7 +62,9 @@ func TestBenchCompareEverySnapshotToCandidate(t *testing.T) {
 	require.Equal(t, newResult.Metrics[0].Candidate, oldResult.Metrics[0].Candidate)
 	body := benchMarkdown(benchReport{Candidate: &head.Manifest, Threshold: 10, Comparisons: []benchComparison{newResult, oldResult}})
 	require.Contains(t, body, "No significant regressions detected against the newest")
-	require.Contains(t, body, "Comparisons include branch divergence and do not isolate the PR's changes")
+	require.Contains(t, body, "Current PR head: `"+githubtest.SHA+"`")
+	require.Contains(t, body, "Measured merge revision: `"+benchTestMerge+"`")
+	require.Contains(t, body, "based on main `"+githubtest.Base+"`")
 	require.Contains(t, body, "+20.00%")
 	require.Contains(t, body, "**warning**")
 	warning := "**warning**: 1 metrics against snapshot `" + githubtest.Base + "`"
@@ -189,6 +193,9 @@ func benchSnapshotArchive(t *testing.T, run githubapi.Run) []byte {
 	s.Manifest.Event = run.Event
 	s.Manifest.SHA = run.HeadSHA
 	s.Manifest.BaseSHA = githubtest.Base
+	if run.Event == "pull_request" {
+		s.Manifest.SHA, s.Manifest.PRHeadSHA = benchTestMerge, run.HeadSHA
+	}
 	dir := t.TempDir()
 	benchSaveTestSnapshot(t, dir, s)
 	files := map[string][]byte{}

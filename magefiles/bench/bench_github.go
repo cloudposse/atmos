@@ -155,7 +155,7 @@ func (Bench) Fetch(repo, ref, outputDir string) error {
 		if err = githubapi.Get(ctx, client, path, &run); err != nil {
 			return err
 		}
-		if err = benchValidateRun(&candidate.Manifest, repo, &run); err != nil {
+		if err = benchValidateCandidate(ctx, client, repo, &candidate.Manifest, &run); err != nil {
 			return err
 		}
 		candidate.Cutoff = run.Created
@@ -296,8 +296,43 @@ func (f *benchFetcher) consider(run *githubapi.Run) error {
 }
 
 func benchValidateRun(m *benchManifest, repo string, run *githubapi.Run) error {
-	if m.Repository != repo || m.SHA != run.HeadSHA || m.RunID != strconv.FormatInt(run.ID, Decimal) || m.Attempt != strconv.Itoa(run.Attempt) || m.Event != run.Event || m.Started.Before(run.Created) || m.Started.After(run.Updated) {
+	head := m.SHA
+	if run.Event == "pull_request" {
+		if !benchHasMergeRevision(m) {
+			return Error("artifact must record a merge revision and immutable main base SHA")
+		}
+		head = m.PRHeadSHA
+	}
+	if m.Repository != repo || head != run.HeadSHA || m.RunID != strconv.FormatInt(run.ID, Decimal) || m.Attempt != strconv.Itoa(run.Attempt) || m.Event != run.Event || m.Started.Before(run.Created) || m.Started.After(run.Updated) {
 		return Error("artifact provenance does not match workflow run")
+	}
+	return nil
+}
+
+func benchHasMergeRevision(m *benchManifest) bool {
+	return githubapi.SHAPattern.MatchString(m.SHA) && githubapi.SHAPattern.MatchString(m.BaseSHA) && m.SHA != m.PRHeadSHA
+}
+
+// PR association uses the workflow's head SHA, while measurements use a merge
+// commit. Verify its parents through GitHub, never through downloaded PR code.
+func benchValidateCandidate(ctx context.Context, client githubapi.API, repo string, m *benchManifest, run *githubapi.Run) error {
+	if err := benchValidateRun(m, repo, run); err != nil {
+		return err
+	}
+	if run.Event != "pull_request" {
+		return nil
+	}
+	var commit struct {
+		SHA     string `json:"sha"`
+		Parents []struct {
+			SHA string `json:"sha"`
+		} `json:"parents"`
+	}
+	if err := githubapi.Get(ctx, client, fmt.Sprintf("repos/%s/git/commits/%s", repo, m.SHA), &commit); err != nil {
+		return err
+	}
+	if commit.SHA != m.SHA || len(commit.Parents) != 2 || commit.Parents[0].SHA != m.BaseSHA || commit.Parents[1].SHA != run.HeadSHA {
+		return Error("measured merge revision does not match the recorded base and PR head")
 	}
 	return nil
 }
@@ -401,11 +436,8 @@ func benchSuccessfulReport(ctx context.Context, client githubapi.API, repo strin
 	if err != nil {
 		return "", err
 	}
-	if err = benchValidateRun(&candidate.Manifest, repo, run); err != nil {
+	if err = benchValidateCandidate(ctx, client, repo, &candidate.Manifest, run); err != nil {
 		return "", err
-	}
-	if !githubapi.SHAPattern.MatchString(candidate.Manifest.BaseSHA) {
-		return "", Error("missing immutable main base SHA")
 	}
 	ancestor, err := benchAncestor(ctx, client, repo, pr.Base.SHA, candidate.Manifest.BaseSHA)
 	if err != nil {
