@@ -39,6 +39,7 @@ import (
 	configcmd "github.com/cloudposse/atmos/cmd/config"
 	_ "github.com/cloudposse/atmos/cmd/container"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
+	_ "github.com/cloudposse/atmos/cmd/doctor"
 	_ "github.com/cloudposse/atmos/cmd/emulator"
 	_ "github.com/cloudposse/atmos/cmd/env"
 	_ "github.com/cloudposse/atmos/cmd/gcp"
@@ -1928,6 +1929,12 @@ func Execute() error {
 	// fully initialized yet (custom commands/aliases not added). This is safe because
 	// --chdir is a global persistent flag defined in init().
 	if err := processEarlyChdirFlag(); err != nil {
+		return err
+	}
+	// Doctor must inspect malformed and executable YAML without evaluating it.
+	// Dispatch before configuration, project init, authentication, or tool installation.
+	if args, ok := skipLeadingRootFlags(os.Args[1:]); ok && len(args) > 0 && args[0] == "doctor" {
+		_, err := internal.Execute(RootCmd)
 		return err
 	}
 	if err := preflightProjectInit(RootCmd, os.Args[1:]); err != nil {

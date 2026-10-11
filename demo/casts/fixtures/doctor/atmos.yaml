@@ -1,0 +1,12 @@
+stacks:
+  base_path: stacks
+commands:
+  - name: inspect
+    arguments:
+      - name: target
+        type: component
+    steps:
+      - echo "Inspect component"
+components:
+  terraform:
+    init_run_reconfigure: false

@@ -1,0 +1,159 @@
+---
+title: atmos doctor
+sidebar_label: doctor
+sidebar_class_name: command
+description: Diagnose project health and apply verified configuration migrations.
+---
+
+import Intro from '@site/src/components/Intro';
+import ActionCard from '@site/src/components/ActionCard';
+import PrimaryCTA from '@site/src/components/PrimaryCTA';
+import CastPlayer from '@site/src/components/CastPlayer';
+
+<Intro>
+`atmos doctor` checks authored project configuration, deprecations, and upstream
+repository health. `atmos doctor --fix` applies supported migrations only after
+verifying their runtime field behavior and unrelated YAML values.
+</Intro>
+
+<ActionCard title="Configure Validation Schemas">
+    Choose schemas and file patterns for project validation.
+    <div>
+      <PrimaryCTA to="/cli/configuration/schemas">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<CastPlayer src="/casts/demo/fixtures/doctor/doctor.cast" title="Diagnose and verify repairs" chrome controls scrubber />
+
+## Usage
+
+```shell
+atmos doctor
+atmos doctor --fix --dry-run
+atmos doctor --fix
+atmos doctor --format=json
+atmos doctor --fail-on=warning
+atmos doctor --only=deprecations
+atmos doctor --only=sources
+atmos doctor --affected --base=origin/main
+atmos doctor --exclude='tests/fixtures/**'
+atmos doctor --list-checks
+atmos doctor --offline
+```
+
+## Flags
+
+<dl>
+  <dt>`--fix`</dt>
+  <dd>Apply eligible, verified repairs. Disabled by default.</dd>
+  <dt>`--dry-run`</dt>
+  <dd>Stage and verify repairs without writing files or backups. Requires `--fix`.</dd>
+  <dt>`--format`</dt>
+  <dd>Choose `text` (default), `rich`, `json`, or `sarif`.</dd>
+  <dt>`--fail-on`</dt>
+  <dd>Fail on `error` (default), `warning`, or `none`. Operational failures always fail.</dd>
+  <dt>`--only`</dt>
+  <dd>Comma-separated check IDs or categories. All built-in checks run by default.</dd>
+  <dt>`--exclude`</dt>
+  <dd>Repeatable project-relative glob pattern. Supports `**`.</dd>
+  <dt>`--affected`</dt>
+  <dd>Scope checks to changed inputs, expanding configuration and stack changes to their dependent checks.</dd>
+  <dt>`--base`</dt>
+  <dd>Git comparison base for `--affected`. Uses the existing validation base selection when omitted.</dd>
+  <dt>`--list-checks`</dt>
+  <dd>List the built-in check catalog without inspecting the project.</dd>
+  <dt>`--offline`</dt>
+  <dd>Disable repository metadata requests. Disabled by default.</dd>
+</dl>
+
+## Checks and repairs
+
+<dl>
+<dt><code>schema</code></dt>
+<dd>Configuration, authored stack, and configured custom schemas.</dd>
+<dt><code>imports</code></dt>
+<dd>Local source discovery and unresolved-input diagnostics.</dd>
+<dt><code>stacks</code></dt>
+<dd>Production inheritance and duplicate-instance checks for complete static inputs.</dd>
+<dt><code>editorconfig</code></dt>
+<dd>Existing EditorConfig validation.</dd>
+<dt><code>github-actions</code></dt>
+<dd>Existing actionlint validation.</dd>
+<dt><code>deprecated-field</code></dt>
+<dd>Schema-annotated deprecations, with replacement guidance.</dd>
+<dt><code>command-provides</code></dt>
+<dd>Argument <code>type</code> and flag <code>semantic_type</code> to <code>provides</code>, for <code>stack</code> or <code>component</code>.</dd>
+<dt><code>hook-event</code></dt>
+<dd>Recognized hyphenated lifecycle events to dotted events.</dd>
+<dt><code>terraform-reconfigure</code></dt>
+<dd>Explicit <code>init_run_reconfigure: false</code> to <code>init.reconfigure: never</code>, or <code>true</code> to <code>auto</code>.</dd>
+<dt><code>modernization</code></dt>
+<dd>Advisory legacy CI action and component-monorepo findings.</dd>
+<dt><code>source-repository</code></dt>
+<dd>Vendor and source-provisioned upstream repository health.</dd>
+</dl>
+
+Select check IDs or categories (`validation`, `deprecations`, `modernization`,
+`sources`) with `--only`. Ordinary custom-command flag `type` is not deprecated.
+
+Doctor reads YAML without running hooks, project commands, authentication flows,
+provisioning, or automatic tool installation. It does not evaluate templates,
+remote imports, remote state, secrets, or executable YAML functions to justify a
+repair. Remote custom schemas and schemas with external references are reported as incomplete;
+their complete input closure cannot yet be captured. Excluded sources, layered
+configurations, and profiles can leave
+verification incomplete. The report states this explicitly. Full runtime
+validation remains available through `atmos validate stacks`.
+
+Stack naming and dependency migrations are manual. In particular, legacy missing
+dependencies can succeed with a warning, while modern required dependencies fail.
+Changing these fields based only on schema validity would change behavior.
+
+## Source repository health
+
+Doctor checks literal vendor sources and component `source`/`source.uri` declarations.
+GitHub and configured GitHub Enterprise metadata checks use existing credentials,
+timeouts, and one request per repository per check phase. Other hosts and dynamic
+URLs are reported as incomplete coverage. Use `--offline` to disable network checks.
+
+Archived repositories produce warnings. Confirmed removal is distinguished from
+an inaccessible repository. A GitHub 404 can mean private content or missing
+permissions, so doctor does not call it confirmed deletion. Rate limits, access
+denials, and network failures are inconclusive. Source URLs are never rewritten.
+
+## Verification and recovery
+
+Repairs are staged in memory at their original logical paths. Doctor compares
+actual runtime field consumers, all unrelated YAML nodes, and candidate schema
+results using fresh validators. Conflicting destination fields, lost comments,
+unsupported anchors, and failed comparisons prevent the repair. There is no flag
+to bypass verification. A dry run writes neither project files nor backups.
+
+Before writing, doctor warns about affected dirty, staged, untracked, or ignored
+files, or unavailable Git. `--fix` authorizes eligible edits without another prompt.
+Doctor never changes Git state.
+
+Exact originals are saved beneath the Atmos XDG data directory at
+`doctor/backups/<run-id>`, with private permissions. `manifest.json` records each
+original path, permission mode, backup filename, and before/after SHA-256 hashes.
+To recover, compare the current file to `after_sha256`, copy its `.original` backup
+to the recorded path, and restore the recorded permission mode. Review later edits
+before overwriting them.
+
+All backups finish before the first write. Each replacement is atomic, but a
+multi-file run is not a transaction. Failures or cancellation stop further writes;
+the report identifies files already changed and retains their backups. Symlinked
+sources currently require manual review.
+
+## Output and exit codes
+
+Human progress and reports use stderr. Terminals show live spinners and persistent
+completed rows; non-terminal output uses plain status lines. JSON and SARIF use
+stdout and suppress live rendering. JSON includes fix decisions, changed files,
+verification coverage, backup location, and operational failures.
+
+Warnings are advisory by default. `--fail-on=warning` makes them blocking;
+`--fail-on=none` suppresses finding-based failure. Exit codes are `0` when the
+threshold is satisfied, `1` for blocking findings, `2` for operational/invocation
+failures, and `130` for cancellation. Fixed findings no longer count toward the
+threshold; dry runs evaluate the unchanged files.

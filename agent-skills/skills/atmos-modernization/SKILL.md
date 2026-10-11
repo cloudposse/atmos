@@ -37,12 +37,33 @@ the umbrella term for replacing legacy patterns with supported, current patterns
 
 ## Process
 
-1. Inspect current project behavior with `atmos describe stacks`, `atmos list components`, and
+1. Start with `atmos doctor` (or `--offline` to avoid network metadata checks).
+   Use `atmos doctor --fix --dry-run` to inspect eligibility, then `--fix` for verified repairs.
+   These commands do not evaluate executable YAML functions or resolve remote state/secrets.
+2. Inspect current project behavior with `atmos describe stacks`, `atmos list components`, and
   `atmos validate stacks`.
-2. Replace one class of legacy pattern at a time.
-3. Preserve resolved stack output unless the modernization intentionally changes behavior.
-4. Validate with `atmos describe component <component> -s <stack>` before changing CI.
-5. Update CI last, after stack config and auth patterns are current.
+3. Replace one class of legacy pattern at a time.
+4. Preserve resolved stack output unless the modernization intentionally changes behavior.
+5. Validate with `atmos describe component <component> -s <stack>` before changing CI.
+6. Update CI last, after stack config and auth patterns are current.
+
+Doctor's schema replacement descriptions are guidance, not executable transforms.
+Automatic repairs are limited to recognized custom-command semantic fields, hook
+event spellings, and explicit Terraform reconfigure settings in verifiable inputs.
+`init_run_reconfigure: false` maps to `init.reconfigure: never`; `true` maps to `auto`.
+Conflicts, imports/profiles, and dynamic inputs remain manual or verification-incomplete.
+Doctor preserves exact originals in its displayed XDG backup directory even in Git;
+Git status is a recovery warning, not evidence of semantic equivalence.
+
+Do not assume `settings.depends_on` is equivalent to `dependencies.components`:
+legacy missing targets warn and succeed, while modern required targets fail.
+Adding `required: false` also changes edge metadata. Naming and dependency repairs
+remain manual until production-consumer contracts and project equivalence pass.
+
+Use `atmos doctor --only=sources` to check vendor and source-provisioned upstream
+repositories. Archived sources need manual review. A GitHub 404 can mean a private
+repository or insufficient access; it does not establish that the repository was
+deleted. Doctor never guesses replacement URLs.
 
 ## YAML Function Quoting
 
