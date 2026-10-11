@@ -270,3 +270,39 @@ func TestDeferredStoreTemplateBypassesUnsafeCacheKeys(t *testing.T) {
 		require.False(t, ok)
 	})
 }
+
+// benchmarkReadStore deliberately has no latency: the call count catches loss of
+// memoization without introducing sleeps or a live cloud backend into CI.
+type benchmarkReadStore struct{ reads int }
+
+func (s *benchmarkReadStore) Set(_, _, _ string, _ any) error { return nil }
+func (s *benchmarkReadStore) Get(_, component, _ string) (any, error) {
+	s.reads++
+	return component, nil
+}
+func (s *benchmarkReadStore) GetKey(_ string) (any, error) { return nil, nil }
+
+func BenchmarkDeferredStoreRepeated(b *testing.B) {
+	components := make([]string, 11)
+	for i := range components {
+		components[i] = fmt.Sprintf("target-%d", i)
+	}
+	consumers := make([]schema.ConfigAndStacksInfo, 2200)
+	for i := range consumers {
+		consumers[i] = schema.ConfigAndStacksInfo{Stack: "dev", Component: fmt.Sprintf("consumer-%d", i)}
+	}
+	b.ResetTimer()
+	for range b.N {
+		backend := &benchmarkReadStore{}
+		ac := newDeferredTemplateStoreConfig(backend)
+		for i := range consumers {
+			value, err := (AtmosFuncs{atmosConfig: ac, configAndStacksInfo: &consumers[i]}).Store("remote", "global", components[i%11], "id")
+			if err != nil || value != components[i%11] {
+				b.Fatalf("store result: %v, %v", value, err)
+			}
+		}
+		if backend.reads != 11 {
+			b.Fatalf("2200 lookups made %d backend reads; want 11", backend.reads)
+		}
+	}
+}
