@@ -24,6 +24,7 @@ import (
 	diagnostic "github.com/cloudposse/atmos/pkg/doctor"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/signals"
@@ -102,11 +103,13 @@ func run(cmd *cobra.Command, _ []string) error {
 	} else {
 		report, runErr = runStreaming(ctx, &engine, &o)
 	}
-	if err := render(&report, format); err != nil {
-		return errUtils.WithExitCode(err, 2)
-	}
+	renderErr := render(&report, format)
+	// Cancellation wins over a failed write so Ctrl-C always exits with the SIGINT code.
 	if errors.Is(runErr, context.Canceled) {
 		return errUtils.ExitCodeError{Code: errUtils.ExitCodeSIGINT, Silent: true}
+	}
+	if renderErr != nil {
+		return errUtils.WithExitCode(renderErr, 2)
 	}
 	if code := report.ExitCode(threshold); code != 0 {
 		return errUtils.ExitCodeError{Code: code, Silent: true}
@@ -155,6 +158,11 @@ func commandOptions(cmd *cobra.Command) (diagnostic.Options, error) {
 		base, _ := cmd.Flags().GetString("base")
 		var err error
 		o.Selected, err = validation.AffectedFiles(base)
+		if err != nil {
+			return o, err
+		}
+		// Git reports affected paths relative to the worktree root, not the working directory.
+		o.SelectedRoot, err = atmosgit.GetRoot()
 		if err != nil {
 			return o, err
 		}

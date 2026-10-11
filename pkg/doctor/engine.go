@@ -121,12 +121,38 @@ func (e *Engine) configure(o *Options) error {
 	if err != nil {
 		return err
 	}
+	if err = rebaseSelected(o); err != nil {
+		return err
+	}
 	if e.FS == nil {
 		e.FS = filesystem.NewOSFileSystem()
 	}
 	if e.Repositories == nil {
 		e.Repositories = GitHubRepositoryChecker{}
 	}
+	return nil
+}
+
+// rebaseSelected converts repository-relative affected paths to paths relative to
+// the canonical doctor root, so a project in a repository subdirectory still matches.
+func rebaseSelected(o *Options) error {
+	if o.SelectedRoot == "" {
+		return nil
+	}
+	base, err := filepath.EvalSymlinks(o.SelectedRoot)
+	if err != nil {
+		return err
+	}
+	rebased := make([]string, 0, len(o.Selected))
+	for _, path := range o.Selected {
+		rel, err := filepath.Rel(o.Root, filepath.Join(base, filepath.FromSlash(path)))
+		if err != nil {
+			continue // Different volume; the path cannot be inside the doctor root.
+		}
+		rebased = append(rebased, filepath.ToSlash(rel))
+	}
+	o.Selected = rebased
+	o.SelectedRoot = ""
 	return nil
 }
 

@@ -148,10 +148,13 @@ func (e *Engine) customSchemas(ctx context.Context, p *project, o *Options, r *R
 		if err != nil {
 			return err
 		}
+		before := len(r.Findings)
 		if err = e.checkSchemaFiles(ctx, p, o, r, schemaCheck{v, source, paths}); err != nil {
 			return err
 		}
-		r.Checks = append(r.Checks, Check{ID: "schema/" + key, Status: checkStatus(r, ruleSchema), Files: len(paths)})
+		// Each schema check reports only the findings it added.
+		added := Report{Findings: r.Findings[before:]}
+		r.Checks = append(r.Checks, Check{ID: "schema/" + key, Status: checkStatus(&added, ruleSchema), Files: len(paths)})
 	}
 	return nil
 }
@@ -233,7 +236,7 @@ type schemaCheck struct {
 // captureSchema bounds schema resolution to a captured local document or bundled schema.
 // External references require a transitive source snapshot before they can justify repairs.
 func (e *Engine) captureSchema(p *project, source string) (string, string, error) {
-	if strings.Contains(source, "{{") || strings.HasPrefix(source, "!") {
+	if containsTemplate(source, p.templateMarkers()) || strings.HasPrefix(source, "!") {
 		return source, "Dynamic schema source was not evaluated", nil
 	}
 	if strings.HasPrefix(source, "atmos://") {

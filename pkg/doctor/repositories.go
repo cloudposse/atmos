@@ -24,9 +24,9 @@ func (GitHubRepositoryChecker) Check(ctx context.Context, uri string) Repository
 	return RepositoryHealth{h.Status, h.Message}
 }
 
-func repositoryURI(value string) string {
+func repositoryURI(value string, markers []string) string {
 	value = strings.TrimPrefix(value, "git::")
-	if strings.Contains(value, "{{") {
+	if containsTemplate(value, markers) {
 		return ""
 	}
 	if strings.HasPrefix(value, "git@") {
@@ -91,7 +91,7 @@ func (e *Engine) checkRepositories(ctx context.Context, p *project, o *Options, 
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		health, relevant := e.sourceHealth(ctx, o, &ref, cache)
+		health, relevant := e.sourceHealth(ctx, o, &ref, sourceCache{markers: p.templateMarkers(), health: cache})
 		if !relevant {
 			continue
 		}
@@ -118,12 +118,19 @@ func (e *Engine) checkRepositories(ctx context.Context, p *project, o *Options, 
 	return ctx.Err()
 }
 
-func (e *Engine) sourceHealth(ctx context.Context, o *Options, ref *sourceReference, cache map[string]RepositoryHealth) (RepositoryHealth, bool) {
+// sourceCache shares repository results and template markers across one check phase.
+type sourceCache struct {
+	markers []string
+	health  map[string]RepositoryHealth
+}
+
+func (e *Engine) sourceHealth(ctx context.Context, o *Options, ref *sourceReference, sc sourceCache) (RepositoryHealth, bool) {
+	cache := sc.health
 	n := ref.node
-	if n.Tag != "!!str" || strings.Contains(n.Value, "{{") || strings.HasPrefix(n.Value, "!") {
+	if n.Tag != "!!str" || containsTemplate(n.Value, sc.markers) || strings.HasPrefix(n.Value, "!") {
 		return RepositoryHealth{repositoryInconclusive, "Dynamic repository source was not evaluated"}, true
 	}
-	uri := repositoryURI(n.Value)
+	uri := repositoryURI(n.Value, sc.markers)
 	if !strings.Contains(uri, "://") {
 		return RepositoryHealth{}, false
 	}

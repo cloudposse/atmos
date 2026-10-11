@@ -24,6 +24,7 @@ const (
 	ruleImports                  = "imports"
 	ruleStacks                   = "stacks"
 	dot                          = "."
+	defaultTemplateMarker        = "{{"
 	privateDirectoryMode         = 0o700
 	privateFileMode              = 0o600
 )

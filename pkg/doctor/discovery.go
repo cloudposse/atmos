@@ -272,7 +272,7 @@ func (e *Engine) readDocument(p *project, o *Options, r *Report, path, kind stri
 		r.Findings = append(r.Findings, Finding{RuleID: ruleSchema, Category: categoryValidation, Severity: validation.SeverityError, File: rel, Message: err.Error(), Status: statusManual})
 		d.node = nil
 	}
-	d.dynamic = dynamicDocument(d.node)
+	d.dynamic = dynamicDocument(d.node, p.templateMarkers())
 	if d.dynamic {
 		p.complete = false
 	}
@@ -475,10 +475,10 @@ func resolveLocalImport(d *document, p *project, r *Report, item *yaml.Node) []s
 	return matches
 }
 
-func dynamicDocument(node *yaml.Node) bool {
+func dynamicDocument(node *yaml.Node, markers []string) bool {
 	dynamic := false
 	walk(node, nil, func(n *yaml.Node, _ []string) {
-		if strings.HasPrefix(n.Tag, "!") && !strings.HasPrefix(n.Tag, "!!") || strings.Contains(n.Value, "{{") || strings.HasPrefix(n.Value, "!") {
+		if strings.HasPrefix(n.Tag, "!") && !strings.HasPrefix(n.Tag, "!!") || containsTemplate(n.Value, markers) || strings.HasPrefix(n.Value, "!") {
 			dynamic = true
 		}
 	})

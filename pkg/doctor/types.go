@@ -105,7 +105,10 @@ type Options struct {
 	Only             []string
 	Exclude          []string
 	Selected         []string
-	Affected         bool
+	// SelectedRoot is the absolute directory that Selected paths are relative to,
+	// typically the Git worktree root. Empty means Selected is relative to Root.
+	SelectedRoot string
+	Affected     bool
 }
 
 // RepositoryChecker inspects repository metadata without cloning or installing tools.
