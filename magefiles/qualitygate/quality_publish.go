@@ -91,7 +91,9 @@ func (q *qualityClient) render(pr *githubapi.PR, existing *githubapi.Comment, pe
 	if performance == "" {
 		performance = qualityPreservePerformance(existing, pr.Head.SHA)
 	}
-	gates := q.evaluate(pr)
+	evaluator := *q
+	evaluator.benchmarkReportFailed = strings.Contains(performance, qualityBenchmarkError)
+	gates := evaluator.evaluate(pr)
 	body, ready := qualityMarkdown(pr, gates, performance)
 	if run != nil {
 		body += fmt.Sprintf("\n<!-- atmos-benchmark-run:%d:%d -->\n", run.ID, run.Attempt)
@@ -208,7 +210,7 @@ func qualityMarkdown(pr *githubapi.PR, gates []qualityGate, performance string) 
 	}
 	qualityDetails(&out, gates)
 	out.WriteString(qualityGuidance(pr, gates, performance))
-	fmt.Fprint(&out, "### Additional information\n\nPerformance comparisons are advisory and do not affect Quality Gate readiness.\n\n")
+	fmt.Fprint(&out, "### Additional information\n\nPerformance slowdowns are advisory. Benchmark execution and reporting errors block Quality Gate readiness.\n\n")
 	performance = strings.TrimSpace(strings.TrimPrefix(performance, bench.Marker))
 	budget := bench.CommentLimit - out.Len()
 	performance = bench.TruncateReport(performance, budget)

@@ -123,7 +123,7 @@ and mutually exclusive `quality:ready` / `quality:not-ready` labels. Label
 names, colors, and descriptions live in `.github/settings.yml`, alongside the
 repository's existing labels and labels referenced by its automation.
 
-A non-draft PR is ready when all six requirements pass:
+A non-draft PR is ready when all requirements pass:
 
 - All current PR workflows, check runs, and commit statuses have finished
   successfully (neutral and skipped CI results are allowed). Failures,
@@ -139,10 +139,14 @@ A non-draft PR is ready when all six requirements pass:
   unresolved threads still count. General conversation comments have no GitHub
   resolution state and are not included.
 - Fewer than 150 files changed (149 passes; 150 fails).
+- No benchmark report processing error is recorded for the current head.
 
 Performance slowdowns are advisory and do not block this gate. Benchmark
-execution failures still count as CI failures. This automation does not modify
-branch protection or merge PRs.
+execution failures still count as CI failures. Malformed or incomplete benchmark
+reports refresh the other gates, show “comparison unavailable,” and block readiness.
+Reconciliation retries failed reports and continues through other PRs before
+returning aggregated errors. Missing historical baselines do not block readiness.
+This automation does not modify branch protection or merge PRs.
 
 ### Adding a quality gate
 
@@ -236,6 +240,9 @@ measurements and full reports before attributing a change to code.
 
 `Benchmarks` measures the explicit PR head, main pushes, and manual dispatches
 on `ubuntu-24.04` using repository-pinned Go and existing cache restoration.
+The PR head is measured without merging main: comparisons include branch
+divergence and do not isolate the PR's changes. Main snapshots may contain
+changes absent from an older PR branch.
 Superseded PR runs cancel; main runs finish. Measurement artifacts use unique
 run/attempt names and 90-day retention; partial measurements remain available
 for diagnostics but never qualify as baselines.

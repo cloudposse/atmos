@@ -119,7 +119,21 @@ func defaultQualityRegistry() (*gateRegistry, error) {
 			EvidencePath: "/files",
 			Remediation:  "Split the change into focused PRs so this PR changes at most 149 files and CodeRabbit can review it. Preserve dependencies between the resulting PRs, then request review of the updated head.",
 		},
+		gateDefinition{
+			ID:           "benchmark-report",
+			Name:         "Benchmark report integrity",
+			Check:        checkBenchmarkReport,
+			EvidencePath: "/checks",
+			Remediation:  "Inspect the benchmark reporter job logs. Repair malformed or incomplete measurements, artifact provenance, or reporting failures and rerun the affected workflow. Reconciliation will retry the report. Missing historical baselines and measured slowdowns alone do not fail this gate.",
+		},
 	)
+}
+
+func checkBenchmarkReport(q *qualityClient, _ *githubapi.PR) (qualityGate, error) {
+	if q.benchmarkReportFailed {
+		return qualityGate{Detail: "Benchmark report processing failed; comparison unavailable"}, nil
+	}
+	return qualityGate{Passed: true, Detail: "No benchmark report processing error recorded for this head"}, nil
 }
 
 func checkFileCount(_ *qualityClient, pr *githubapi.PR) (qualityGate, error) {

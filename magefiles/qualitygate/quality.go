@@ -3,6 +3,7 @@ package qualitygate
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -24,6 +25,7 @@ const (
 	qualityNotReady         = "quality:not-ready"
 	qualityPerformanceStart = "<!-- atmos-quality-performance:start -->"
 	qualityPerformanceEnd   = "<!-- atmos-quality-performance:end -->"
+	qualityBenchmarkError   = "<!-- atmos-benchmark-report-error -->"
 )
 
 type qualityGate struct {
@@ -33,9 +35,10 @@ type qualityGate struct {
 }
 
 type qualityClient struct {
-	ctx  context.Context
-	api  githubapi.API
-	repo string
+	ctx                   context.Context
+	api                   githubapi.API
+	repo                  string
+	benchmarkReportFailed bool
 }
 
 func (q *qualityClient) get(path string, response any) error {
@@ -59,12 +62,13 @@ func (Quality) Report(repo string) error {
 	if err != nil {
 		return err
 	}
+	var failures []error
 	for _, number := range prs {
 		if err = q.reconcile(number); err != nil {
-			return err
+			failures = append(failures, fmt.Errorf("PR #%d: %w", number, err))
 		}
 	}
-	return nil
+	return errors.Join(failures...)
 }
 
 //nolint:revive // Explicit event precedence handles reviews, external checks, and workflow runs.
@@ -174,16 +178,31 @@ func (q *qualityClient) reconcile(number int) error {
 	if len(response.Runs) > 0 {
 		run := &response.Runs[0]
 		if bench.PRMatches(&pr, run, q.repo) && run.Status == "completed" && !qualityReported(existing, &pr, run) {
-			return bench.ReportRun(q.ctx, q.api, q.repo, run.ID, q.refresh)
+			return q.recoverBenchmarkReport(number, run)
 		}
 	}
 	return q.refresh(number, "", nil)
+}
+
+// Keep evidence fresh after a reporting failure without marking the run handled.
+// Refresh retains the original run so stale heads and newer attempts cannot be overwritten.
+func (q *qualityClient) recoverBenchmarkReport(number int, run *githubapi.Run) error {
+	err := bench.ReportRun(q.ctx, q.api, q.repo, run.ID, q.refresh)
+	if err == nil {
+		return nil
+	}
+	performance := qualityBenchmarkError + "\nComparison unavailable: benchmark report processing failed. See the reporter job logs; reconciliation will retry."
+	refreshErr := q.refresh(number, performance, run)
+	return errors.Join(fmt.Errorf("benchmark report: %w", err), refreshErr)
 }
 
 func qualityReported(existing *githubapi.Comment, pr *githubapi.PR, run *githubapi.Run) bool {
 	if existing == nil || !strings.Contains(existing.Body, qualityHeadMarker(pr.Head.SHA)) {
 		return false
 	}
+	if qualityNewer(existing.Body, run) {
+		return true
+	}
 	marker := fmt.Sprintf("<!-- atmos-benchmark-run:%d:%d -->", run.ID, run.Attempt)
-	return strings.Contains(existing.Body, marker) || qualityNewer(existing.Body, run)
+	return strings.Contains(existing.Body, marker) && !strings.Contains(existing.Body, qualityBenchmarkError)
 }

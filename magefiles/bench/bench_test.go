@@ -60,6 +60,7 @@ func TestBenchCompareEverySnapshotToCandidate(t *testing.T) {
 	require.Equal(t, newResult.Metrics[0].Candidate, oldResult.Metrics[0].Candidate)
 	body := benchMarkdown(benchReport{Candidate: &head.Manifest, Threshold: 10, Comparisons: []benchComparison{newResult, oldResult}})
 	require.Contains(t, body, "No significant regressions detected against the newest")
+	require.Contains(t, body, "Comparisons include branch divergence and do not isolate the PR's changes")
 	require.Contains(t, body, "+20.00%")
 	require.Contains(t, body, "**warning**")
 	warning := "**warning**: 1 metrics against snapshot `" + githubtest.Base + "`"

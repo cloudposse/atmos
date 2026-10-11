@@ -270,6 +270,7 @@ func benchMarkdown(report benchReport) string {
 		fmt.Fprintf(&out, "Candidate revision: `%s`. Every row compares this binary against the rebuilt reference revision.\n\n", Escape(report.Candidate.SHA))
 	} else {
 		fmt.Fprintf(&out, "Current PR: `%s`. Every row compares this same PR build against the named main snapshot.\n\n", Escape(report.Candidate.SHA))
+		fmt.Fprint(&out, "The PR head is measured without merging main. Comparisons include branch divergence and do not isolate the PR's changes; main snapshots can contain changes absent from this branch.\n\n")
 	}
 	headline := benchHeadline(&report)
 	fmt.Fprintf(&out, "**%s** Threshold: %.1f%% and p < 0.05.\n\nCross-run runner variability can affect timing. Historical comparisons reuse the same PR samples and are not independent confirmations.\n\n", headline, report.Threshold)
