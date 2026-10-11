@@ -98,7 +98,7 @@ func defaultQualityRegistry() (*gateRegistry, error) {
 			Name:         "CodeRabbit approval (current head)",
 			Check:        (*qualityClient).review,
 			EvidencePath: "",
-			Remediation:  "Read CodeRabbit's outstanding feedback, address each finding or explain a justified disagreement, and obtain a fresh CodeRabbit approval on the latest commit. A comment or approval of an earlier commit is insufficient.",
+			Remediation:  "Post `@coderabbitai review` as a new top-level PR comment to request a review of the latest changes. " + qualityApprovalRequest,
 		},
 		gateDefinition{
 			ID:           "signatures",

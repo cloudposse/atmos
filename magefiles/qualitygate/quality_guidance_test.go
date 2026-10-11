@@ -66,6 +66,10 @@ func TestQualityReviewActionsDistinguishMissingApprovalFromChanges(t *testing.T)
 		qualityReviewGuidance(&gate)
 		require.Contains(t, gate.Problem, tc.problem)
 		require.Contains(t, gate.NextAction, tc.action)
+		require.Contains(t, gate.NextAction, "`@coderabbitai review`")
+		require.Contains(t, gate.NextAction, "`@coderabbitai approve` as a new top-level PR comment")
+		require.Contains(t, gate.NextAction, "Once all findings are addressed and verified")
+		require.Contains(t, gate.NextAction, "also resolves CodeRabbit's review threads")
 	}
 	gate := qualityGate{Passed: true}
 	qualityReviewGuidance(&gate)
