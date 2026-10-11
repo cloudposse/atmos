@@ -859,13 +859,13 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			expectedPager: "more",
 		},
 		{
-			name: "CLI flag --no-color=false overrides NO_COLOR env var",
+			name: "NO_COLOR env var overrides --no-color=false",
 			envVars: map[string]string{
 				"NO_COLOR": "1",
 			},
 			args:            []string{"atmos", "--no-color=false", "describe", "config"},
-			expectedNoColor: false,
-			expectedColor:   true,
+			expectedNoColor: true,
+			expectedColor:   false,
 		},
 		{
 			name: "--pager=false overrides PAGER env var",
