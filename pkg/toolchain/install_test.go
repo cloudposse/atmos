@@ -16,6 +16,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/toolchain/installer"
+	"github.com/cloudposse/atmos/tests/testhelpers/httpmock"
 )
 
 // newTestSpinner creates a spinner model for testing.
@@ -371,47 +373,70 @@ func latestInstallServer(t *testing.T) string {
 
 // TestRunInstall_WithLatestKeyword tests RunInstall with the "latest" version keyword.
 func TestRunInstall_WithLatestKeyword(t *testing.T) {
+	for _, binaryName := range []string{"terraform", "terraform.exe"} {
+		t.Run(binaryName, func(t *testing.T) {
+			testRunInstallWithLatestKeyword(t, binaryName)
+		})
+	}
+}
+
+func testRunInstallWithLatestKeyword(t *testing.T, binaryName string) {
+	t.Helper()
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
-	t.Setenv("ATMOS_XDG_CACHE_HOME", t.TempDir())
 	t.Chdir(tempDir)
-	serverURL := latestInstallServer(t)
-	t.Setenv("ATMOS_TOOLCHAIN_GITHUB_API_URL", serverURL)
-	t.Setenv("ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL", serverURL)
 
-	// Create a .tool-versions file.
+	mock := httpmock.NewGitHubMockServer(t)
+	mock.Setenv(t)
+	for _, entry := range httpmock.IsolatedCacheEnv(t) {
+		key, value, _ := strings.Cut(entry, "=")
+		t.Setenv(key, value)
+	}
+	mock.RegisterAquaTool(&httpmock.AquaTool{
+		Owner: "hashicorp", Repo: "terraform", VersionPrefix: "v",
+		Asset: binaryName, Format: "raw", BinaryName: binaryName,
+	})
+	// Latest resolution must ignore newer drafts and prereleases.
+	mock.RegisterRelease("hashicorp", "terraform", httpmock.ReleaseSpec{TagName: "v2.0.0", Draft: true})
+	mock.RegisterRelease("hashicorp", "terraform", httpmock.ReleaseSpec{TagName: "v1.12.0-rc1", Prerelease: true})
+	mock.RegisterRelease("hashicorp", "terraform", httpmock.ReleaseSpec{TagName: "v1.11.4"})
+	// Raw release downloads append .exe on Windows, so serve that exact asset name.
+	assetName := installer.EnsureWindowsExeExtension(binaryName)
+	mock.RegisterReleaseAsset("hashicorp", "terraform", "v1.11.4", assetName, []byte("test terraform binary"))
+
+	// Create a .tool-versions file
 	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
-	toolVersions := &ToolVersions{Tools: map[string][]string{}}
-	require.NoError(t, SaveToolVersions(toolVersionsPath, toolVersions))
+	toolVersions := &ToolVersions{
+		Tools: map[string][]string{},
+	}
+	err := SaveToolVersions(toolVersionsPath, toolVersions)
+	require.NoError(t, err)
 
-	// Isolate installation and registry caches so this test cannot overwrite the tools
-	// used by other packages or depend on a previously cached public release.
+	// Set Atmos config. InstallPath MUST be isolated to a per-test temp dir: RunInstall
+	// performs a real install via NewInstaller(), and without an explicit InstallPath,
+	// GetInstallPath() falls back to the real, shared, XDG toolchain cache directory --
+	// the exact directory CI's "atmos toolchain install --default" step populates and
+	// the whole acceptance suite depends on for the rest of the run. A test writing real
+	// downloaded binaries there races with every other concurrently-running package's
+	// test process reading from it.
 	prevConfig := atmosConfig
 	installPath := filepath.Join(tempDir, ".atmos", "tools")
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{
-		VersionsFile: toolVersionsPath, InstallPath: installPath,
-		Aliases: map[string]string{"terraform": "hashicorp/terraform"},
-		Registries: []schema.ToolchainRegistry{{Name: "local", Type: "atmos", Tools: map[string]any{
-			"hashicorp/terraform": map[string]any{
-				"type": "http", "url": serverURL + "/terraform/{{.Version}}", "format": "raw",
-			},
-		}}},
-	}})
-	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath, InstallPath: installPath}})
+	defer func() {
+		SetAtmosConfig(prevConfig)
+	}()
 
-	// Resolve the latest stable release, excluding the newer draft and prerelease.
+	// Resolve latest through the local registry/API and install its release asset.
 	require.NoError(t, RunInstall("terraform@latest", false, false, true, false))
 
-	// Read the isolated declaration file, not the CWD-dependent default used by other tests.
 	updatedToolVersions, err := LoadToolVersions(toolVersionsPath)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"latest"}, updatedToolVersions.Tools["terraform"])
-	// The declaration retains the requested keyword while installation uses the resolved version.
-	binary, err := NewInstaller().FindBinaryPath("hashicorp", "terraform", "1.11.4")
+	// GetBinaryPath uses an explicit filename verbatim, including its platform suffix.
+	binaryPath := NewInstaller().GetBinaryPath("hashicorp", "terraform", "1.11.4", assetName)
+	content, err := os.ReadFile(binaryPath)
 	require.NoError(t, err)
-	content, err := os.ReadFile(binary)
-	require.NoError(t, err)
-	assert.Equal(t, "test executable", string(content))
+	assert.Equal(t, "test terraform binary", string(content))
 }
 
 // TestRunInstall_Reinstall tests RunInstall with reinstallFlag=true.

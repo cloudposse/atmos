@@ -419,6 +419,17 @@ var (
 	ErrDependencyResolution = errors.New("dependency resolution failed")
 	ErrToolInstall          = errors.New("tool installation failed")
 
+	// ErrToolVersionsConflict reports .tool-versions entries that identify the same
+	// tool (for example `tofu` and `opentofu/opentofu`) but pin different versions.
+	ErrToolVersionsConflict = errors.New("conflicting .tool-versions entries for the same tool")
+
+	// ErrInvalidToolchainInstall reports an unknown toolchain.install policy.
+	ErrInvalidToolchainInstall = errors.New("invalid toolchain.install (expected never, declared, auto, or always)")
+
+	// ErrToolNotInstalled reports an explicit dependency that is not installed while
+	// toolchain.install is never, which forbids installing it.
+	ErrToolNotInstalled = errors.New("required tool is not installed and toolchain.install is never")
+
 	// Helm plugin errors.
 	ErrInvalidHelmPluginSpec = errors.New("invalid helm plugin specification")
 	ErrHelmPluginInstall     = errors.New("helm plugin installation failed")
@@ -437,6 +448,7 @@ var (
 	ErrLatestFileNotFound                 = errors.New("latest version file not found")
 	ErrRegistryNotReachable               = errors.New("registry not reachable")
 	ErrToolNotInRegistry                  = errors.New("tool not in registry")
+	ErrToolRegistryIndexUnavailable       = errors.New("tool registry index unavailable")
 	ErrToolPlatformNotSupported           = errors.New("tool does not support this platform")
 	ErrAliasNotFound                      = errors.New("alias not found")
 	ErrBinaryNotExecutable                = errors.New("binary not executable")
@@ -972,7 +984,8 @@ var (
 	ErrCacheDir       = errors.New("cache directory creation failed")
 
 	// Logger errors.
-	ErrInvalidLogLevel = errors.New("invalid log level")
+	ErrInvalidLogLevel  = errors.New("invalid log level")
+	ErrInvalidLogsColor = errors.New("invalid logs color")
 
 	// File operation errors.
 	ErrCopyFile            = errors.New("failed to copy file")

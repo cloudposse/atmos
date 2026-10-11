@@ -3,6 +3,8 @@ name: atmos.ci
 on: pull_request
 env:
   GOFUMPT_VERSION: v0.9.1
+  # Keep dependency downloads on the proxy, including the license tool.
+  GOPROXY: https://proxy.golang.org
 permissions:
   contents: read
   id-token: write
@@ -26,6 +28,10 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # Container shell steps use a different HOME from checkout's temporary
+      # Git configuration. Trust only this checkout for pre-commit and Go VCS.
+      - name: Trust the checked-out repository
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       # Install Go and toolchain dependencies
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
@@ -33,7 +39,7 @@ jobs:
       - run: go mod tidy
       - name: Install Go tools
         run: |
-          go install mvdan.cc/gofumpt@${GOFUMPT_VERSION}
+          go install "mvdan.cc/gofumpt@${GOFUMPT_VERSION}"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Install toolchain dependencies

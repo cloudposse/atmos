@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"go.yaml.in/yaml/v3"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/cloudposse/atmos/pkg/config/casemap"
 	"github.com/cloudposse/atmos/pkg/profiler"
@@ -20,8 +21,10 @@ type AtmosSectionMapType = map[string]any
 // DeferredEvaluationContext holds invocation-local evaluated values, independently
 // of the authentication implementation. The resolver identifies the invocation.
 type DeferredEvaluationContext struct {
-	Manager any
-	Values  sync.Map
+	Manager      any
+	Values       sync.Map
+	StoreValues  sync.Map
+	StoreFlights singleflight.Group
 }
 
 // DescribeSettings contains settings for the describe command output.
@@ -432,6 +435,13 @@ type Toolchain struct {
 	Registries      []ToolchainRegistry       `yaml:"registries,omitempty" json:"registries,omitempty" mapstructure:"registries"`
 	Aliases         map[string]string         `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
 	Proxies         map[string]ToolchainProxy `yaml:"proxies,omitempty" json:"proxies,omitempty" mapstructure:"proxies"`
+	// Install controls which tools Atmos installs automatically when a command, workflow,
+	// hook, or component run needs them: `never` installs nothing, `declared` installs only
+	// explicit `dependencies.tools` (and, for workflows, every `.tool-versions` tool), `auto`
+	// (default since 2026-10-09; a project pinned to an earlier edition gets `declared`
+	// restored) also installs a component's own executable when `.tool-versions` pins it, and
+	// `always` installs every `.tool-versions` tool for every run.
+	Install ToolchainInstall `yaml:"install,omitempty" json:"install,omitempty" mapstructure:"install" jsonschema:"enum=,enum=never,enum=declared,enum=auto,enum=always"`
 }
 
 // ToolchainProxy exposes a toolchain binary under a command name. The tool is
@@ -1651,6 +1661,7 @@ type Workflows struct {
 }
 
 type Logs struct {
+	Color *bool  `yaml:"color,omitempty" json:"color,omitempty" mapstructure:"color"`
 	File  string `yaml:"file" json:"file" mapstructure:"file"`
 	Level string `yaml:"level" json:"level" mapstructure:"level"`
 }
@@ -1767,6 +1778,7 @@ type ArgsAndFlagsInfo struct {
 	RedirectStdErr            string
 	LogsLevel                 string
 	LogsFile                  string
+	LogsColor                 string
 	SettingsListMergeStrategy string
 	Query                     string
 	Affected                  bool
@@ -2052,6 +2064,7 @@ type ConfigAndStacksInfo struct {
 	RedirectStdErr            string
 	LogsLevel                 string
 	LogsFile                  string
+	LogsColor                 string
 	SettingsListMergeStrategy string
 	Query                     string
 	AtmosConfigFilesFromArg   []string

@@ -1,4 +1,5 @@
 tests:
+  # Cover direct HTTP and GitHub Enterprise includes through the local server.
   - name: "!include function test"
     enabled: true
     tty: false

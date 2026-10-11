@@ -948,10 +948,6 @@ func TestMain(m *testing.M) {
 	// canaries are unaffected.
 	var githubMock *httpmock.GitHubMockServer
 	githubMock, githubMockClose = httpmock.NewGitHubMockServerStandalone()
-	// Toolchain info snapshots need a stable release list even when GitHub is rate-limited.
-	githubMock.RegisterRelease("replicatedhq", "replicated", httpmock.ReleaseSpec{TagName: "v1.2.3", PublishedAt: "2026-01-01T00:00:00Z"})
-	githubMock.RegisterRelease("junegunn", "fzf", httpmock.ReleaseSpec{TagName: "v1.2.3", PublishedAt: "2026-01-01T00:00:00Z"})
-	githubMock.RegisterRelease("jqlang", "jq", httpmock.ReleaseSpec{TagName: "jq-1.7.1", PublishedAt: "2026-01-01T00:00:00Z"})
 	os.Setenv("ATMOS_TEST_GITHUB_MOCK_URL", githubMock.URL()) //nolint:lintroller // Set before m.Run(); no *testing.T available in TestMain; must persist process-wide for every subtest.
 
 	// Serve checked-in remote inputs over HTTP so include and docs tests exercise downloads
@@ -967,6 +963,20 @@ func TestMain(m *testing.M) {
 			errUtils.Exit(1)
 		}
 		githubMock.RegisterRawFile("cloudposse", "atmos", "main", fixturePath, string(content))
+	}
+
+	// Keep toolchain info snapshots independent of upstream releases and API quotas.
+	for _, tool := range []struct{ owner, repo, tag, prefix string }{
+		{"replicatedhq", "replicated", "v0.124.1", "v"},
+		{"junegunn", "fzf", "v0.67.0", "v"},
+		{"jqlang", "jq", "jq-1.7.1", "jq-"},
+	} {
+		githubMock.RegisterAquaTool(&httpmock.AquaTool{
+			Owner: tool.owner, Repo: tool.repo, VersionPrefix: tool.prefix,
+		})
+		githubMock.RegisterRelease(tool.owner, tool.repo, httpmock.ReleaseSpec{
+			TagName: tool.tag, PublishedAt: "2025-12-17T00:00:00Z",
+		})
 	}
 
 	// Auto-start the Floci cloud emulators for the opt-in Floci E2E tests. This is a

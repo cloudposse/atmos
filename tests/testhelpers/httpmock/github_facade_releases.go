@@ -34,8 +34,8 @@ type ReleaseSpec struct {
 // tag_name, name, published_at, prerelease, draft.
 type releaseJSON struct {
 	TagName     string `json:"tag_name"`
-	PublishedAt string `json:"published_at,omitempty"`
 	Name        string `json:"name"`
+	PublishedAt string `json:"published_at,omitempty"`
 	Draft       bool   `json:"draft"`
 	Prerelease  bool   `json:"prerelease"`
 }
