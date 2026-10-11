@@ -390,7 +390,7 @@ func TestQualityGuidanceOnlyUnmetGates(t *testing.T) {
 		}
 	}
 	guidance := qualityGuidance(&pr, gates, "")
-	require.Contains(t, guidance, "🤖 Prompt to fix Quality Gate failures")
+	require.Contains(t, guidance, "🤖 Next steps for this PR")
 	require.Contains(t, guidance, pr.Head.SHA)
 	require.Contains(t, guidance, "at most 149 files")
 	require.Contains(t, guidance, "existing repository thresholds")

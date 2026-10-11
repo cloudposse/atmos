@@ -170,6 +170,13 @@ incomplete definitions fail validation; check errors fail closed. Do not copy
 third-party check text into remediation instructions. Gates are compiled from
 trusted repository code; artifacts cannot register executable plugins.
 
+Checks should return a concrete `Problem` and state-specific `NextAction` for
+unmet gates. Pending CI calls for waiting; a failed job calls for inspecting its
+logs; absent Codecov evidence must not be described as failed coverage. `Signals`
+name the actual blocking results and are quoted as evidence, never instructions.
+`Remediation` is the fallback for simple gates. Keep raw check/review text out of
+`Problem` and `NextAction`; construct those from trusted policy and parsed state.
+
 | Target | Behavior |
 | --- | --- |
 | `bench:run <outputDir>` | Build Atmos, prepare offline fixtures, collect raw measurements and a provenance manifest. Requires a fresh output directory. |

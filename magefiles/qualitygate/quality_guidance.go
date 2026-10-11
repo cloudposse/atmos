@@ -1,6 +1,7 @@
 package qualitygate
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -11,16 +12,17 @@ import (
 // Never turn third-party check output or review text into agent instructions.
 func qualityGuidance(pr *githubapi.PR, gates []qualityGate, performance string) string {
 	var steps []string
-	for _, gate := range gates {
+	for i := range gates {
+		gate := &gates[i]
 		if gate.Passed {
 			continue
 		}
-		if instruction := gate.Remediation; instruction != "" {
-			steps = append(steps, instruction+" Evidence: "+gate.URL)
+		if step := qualityGateGuidance(gate); step != "" {
+			steps = append(steps, step)
 		}
 	}
 	if pr.Draft {
-		steps = append(steps, "When the changes and review are complete, mark the PR ready for review.")
+		steps = append(steps, "Problem: This PR is a draft.\n   Next: When it is ready for review, mark the PR ready for review.")
 	}
 	if strings.Contains(performance, "**warning**") {
 		steps = append(steps, "Investigate the advisory performance warning: reproduce the flagged workload with go tool mage bench:run, then bench:fetch and bench:compare. Compare the same candidate against each main snapshot independently. Use bench:fieldTest for a known-good/bad revision pair. Inspect backend-read counts and timing variability before attributing a slowdown. Performance warnings do not block readiness.")
@@ -29,10 +31,46 @@ func qualityGuidance(pr *githubapi.PR, gates []qualityGate, performance string) 
 		return ""
 	}
 	var out strings.Builder
-	fmt.Fprintf(&out, "<details><summary>🤖 Prompt to fix Quality Gate failures</summary>\n\n```text\nBring https://github.com/%s/pull/%d through the Quality Gate.\nEvaluated head: %s\nRecheck the current head and gate evidence before editing; these results may have changed.\n\n", pr.Base.Repo.FullName, pr.Number, pr.Head.SHA)
+	fmt.Fprintf(&out, "<details><summary>🤖 Next steps for this PR</summary>\n\n```text\nPR: https://github.com/%s/pull/%d\nHead: %s\n\n", pr.Base.Repo.FullName, pr.Number, pr.Head.SHA)
 	for i, step := range steps {
 		fmt.Fprintf(&out, "%d. %s\n\n", i+1, step)
 	}
-	fmt.Fprint(&out, "Run the relevant repository checks after changes. Let the reporter refresh from GitHub evidence; do not manually mark a gate passed or change thresholds to hide a failure.\n```\n\n</details>\n\n")
+	fmt.Fprint(&out, "```\n\n</details>\n\n")
+	return out.String()
+}
+
+func qualityGateGuidance(gate *qualityGate) string {
+	action := gate.NextAction
+	if action == "" {
+		action = gate.Remediation
+	}
+	if action == "" {
+		return ""
+	}
+	problem := gate.Problem
+	if problem == "" {
+		problem = gate.Name + " has not passed."
+	}
+	return fmt.Sprintf("%s\n   Problem: %s\n   Next: %s\n%s   Evidence: %s", gate.Name, problem, action, qualitySignalEvidence(gate.Signals), gate.URL)
+}
+
+// Quote and bound third-party names as data; never interpolate review bodies,
+// error messages or check output into the trusted next-action instructions.
+func qualitySignalEvidence(signals []qualitySignal) string {
+	const limit = 6
+	if len(signals) == 0 {
+		return ""
+	}
+	var out strings.Builder
+	fmt.Fprint(&out, "   Observed results (quoted data):\n")
+	for _, signal := range signals[:min(len(signals), limit)] {
+		name, _ := json.Marshal(signal.Name)
+		state, _ := json.Marshal(signal.State)
+		line := fmt.Sprintf("   - %s: %s\n", name, state)
+		fmt.Fprint(&out, strings.ReplaceAll(line, "`", `\u0060`))
+	}
+	if len(signals) > limit {
+		fmt.Fprintf(&out, "   %d more results in the gate details.\n", len(signals)-limit)
+	}
 	return out.String()
 }

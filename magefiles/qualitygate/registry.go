@@ -62,6 +62,8 @@ func (r *gateRegistry) evaluate(q *qualityClient, pr *githubapi.PR) []qualityGat
 		if err != nil {
 			gate.Passed = false
 			gate.Detail = "Unavailable: " + err.Error()
+			gate.Problem = definition.Name + " could not be evaluated because GitHub evidence was unavailable."
+			gate.NextAction = "Retry the reporter and inspect its API error if retrieval still fails. This is missing evidence, not a confirmed failure in the PR."
 		}
 		definition.decorate(pr, &gate)
 		gates = append(gates, gate)
@@ -131,7 +133,7 @@ func defaultQualityRegistry() (*gateRegistry, error) {
 
 func checkBenchmarkReport(q *qualityClient, _ *githubapi.PR) (qualityGate, error) {
 	if q.benchmarkReportFailed {
-		return qualityGate{Detail: "Benchmark report processing failed; comparison unavailable"}, nil
+		return qualityGate{Detail: "Benchmark report processing failed; comparison unavailable", Problem: "The benchmark reporter could not validate or process this commit's measurements.", NextAction: "Inspect the benchmark reporter job's error, correct the rejected artifact or reporting failure, and rerun the affected workflow."}, nil
 	}
 	return qualityGate{Passed: true, Detail: "No benchmark report processing error recorded for this head"}, nil
 }

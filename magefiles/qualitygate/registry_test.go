@@ -73,7 +73,8 @@ func TestRegisteredGatesDriveReportAndGuidance(t *testing.T) {
 	body, ready = qualityMarkdown(&pr, gates, "")
 	require.False(t, ready)
 	require.Contains(t, body, "Unavailable: evidence unavailable")
-	require.Contains(t, body, "Restore evidence.")
+	require.Contains(t, body, "GitHub evidence was unavailable")
+	require.Contains(t, body, "Retry the reporter")
 }
 
 func TestDefaultRegistryContainsEveryRequiredGate(t *testing.T) {

@@ -186,31 +186,25 @@ func qualityPreservePerformance(existing *githubapi.Comment, sha string) string 
 func qualityMarkdown(pr *githubapi.PR, gates []qualityGate, performance string) (string, bool) {
 	var out strings.Builder
 	ready := !pr.Draft
-	for _, gate := range gates {
+	for i := range gates {
+		gate := &gates[i]
 		ready = ready && (gate.Passed || gate.Advisory)
 	}
-	status, badge, label := "not ready", "Not_ready-orange", qualityNotReady
+	status, badge, label := "not ready", "Not_ready-d93f0b", qualityNotReady
 	if ready {
-		status, badge, label = "passed", "Passed-brightgreen", qualityReady
+		status, badge, label = "passed", "Passed-0e8a16", qualityReady
 	}
-	fmt.Fprintf(&out, "%s\n## Quality Gate %s\n\n![Quality Gate %s](https://img.shields.io/badge/Quality_Gate-%s)\n\n", qualityMarker, status, status, badge)
-	for _, gate := range gates {
-		icon := "⏳"
-		if gate.Advisory && !gate.Passed {
-			icon = "⚠️"
-		}
-		if gate.Passed {
-			icon = "✅"
-		}
-		fmt.Fprintf(&out, "%s [%s](%s)\n\n", icon, gate.Name, gate.URL)
-	}
-	fmt.Fprintf(&out, "Current commit: `%s` · `%s`\n%s\n\n", pr.Head.SHA, label, qualityHeadMarker(pr.Head.SHA))
+	fmt.Fprintf(&out, "%s\n<h2>Quality Gate &nbsp; <a href=\"https://github.com/%s/pull/%d/checks\"><img height=\"28\" align=\"top\" alt=\"Quality Gate %s\" src=\"https://img.shields.io/badge/%s?style=for-the-badge\" /></a></h2>\n\n", qualityMarker, pr.Base.Repo.FullName, pr.Number, status, badge)
+	qualityGateList(&out, gates)
+	fmt.Fprintf(&out, "<sub>Current commit: <code>%s</code> · <code>%s</code></sub>\n%s\n\n", pr.Head.SHA, label, qualityHeadMarker(pr.Head.SHA))
 	if pr.Draft {
 		fmt.Fprint(&out, "Draft PRs are not ready for merge.\n\n")
 	}
 	qualityDetails(&out, gates)
 	out.WriteString(qualityGuidance(pr, gates, performance))
-	fmt.Fprint(&out, "### Additional information\n\nPerformance slowdowns are advisory. Benchmark execution and reporting errors block Quality Gate readiness.\n\n")
+	if performance == "Performance measurements pending for this commit." {
+		performance = ""
+	}
 	performance = strings.TrimSpace(strings.TrimPrefix(performance, bench.Marker))
 	budget := bench.CommentLimit - out.Len()
 	performance = bench.TruncateReport(performance, budget)
@@ -218,9 +212,28 @@ func qualityMarkdown(pr *githubapi.PR, gates []qualityGate, performance string) 
 	return out.String(), ready
 }
 
+func qualityGateList(out *strings.Builder, gates []qualityGate) {
+	for i := range gates {
+		gate := &gates[i]
+		icon := "⏳"
+		if gate.Advisory && !gate.Passed {
+			icon = "⚠️"
+		}
+		if gate.Passed {
+			icon = "✅"
+		}
+		fmt.Fprintf(out, "%s [%s](%s)", icon, gate.Name, gate.URL)
+		if !gate.Passed && gate.Problem != "" {
+			fmt.Fprintf(out, " — %s", bench.Escape(gate.Problem))
+		}
+		fmt.Fprint(out, "\n\n")
+	}
+}
+
 func qualityDetails(out *strings.Builder, gates []qualityGate) {
 	fmt.Fprint(out, "<details><summary>Quality Gate details</summary>\n\n| Gate | Status | Evidence |\n|---|---|---|\n")
-	for _, gate := range gates {
+	for i := range gates {
+		gate := &gates[i]
 		state := "Not ready"
 		if gate.Advisory {
 			state = "Advisory warning"

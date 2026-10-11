@@ -44,7 +44,64 @@ func qualityCIGate(states map[string]string) qualityGate {
 	} else if len(pending) > 0 {
 		gate.Detail = strings.Join(pending, "; ")
 	}
+	qualityCIGuidance(&gate, states)
 	return gate
+}
+
+func qualityCIGuidance(gate *qualityGate, states map[string]string) {
+	gate.Signals = qualityBlockingSignals(states, true)
+	if gate.Passed {
+		return
+	}
+	if len(states) == 0 {
+		gate.Problem = "No CI results have been reported for this commit."
+		gate.NextAction = "Wait for the PR workflows to start. If none are scheduled, inspect the workflow triggers and Actions permissions."
+		return
+	}
+	waiting := qualityPendingSignals(gate.Signals)
+	failed := len(gate.Signals) - waiting
+	gate.Problem = fmt.Sprintf("%d CI results are still pending; no failed results are currently reported.", waiting)
+	gate.NextAction = "Wait for the listed checks and workflows to finish, then re-evaluate this head."
+	if failed > 0 {
+		gate.Problem = fmt.Sprintf("%d CI results are unsuccessful; %d are still pending.", failed, waiting)
+		gate.NextAction = "Open the logs for the unsuccessful results listed below. Fix the reported cause and rerun those jobs; for cancelled or infrastructure-failed jobs, verify the cause before retrying."
+	}
+}
+
+func qualityBlockingSignals(states map[string]string, allowNeutral bool) []qualitySignal {
+	var failed, pending []qualitySignal
+	for _, name := range sortedQualityKeys(states) {
+		state := states[name]
+		if state == "success" || (allowNeutral && (state == "skipped" || state == "neutral")) {
+			continue
+		}
+		signal := qualitySignal{Name: name, State: state}
+		if qualityPendingState(state) {
+			pending = append(pending, signal)
+		} else {
+			failed = append(failed, signal)
+		}
+	}
+	return append(failed, pending...)
+}
+
+func qualityPendingState(state string) bool {
+	switch state {
+	case "pending", "queued", "in_progress", "waiting", "requested", "pending_deployment":
+		return true
+	default:
+		return false
+	}
+}
+
+func qualityPendingSignals(signals []qualitySignal) int {
+	count := 0
+	for _, signal := range signals {
+		if qualityPendingState(signal.State) {
+			count++
+		}
+	}
+	return count
 }
 
 // Some PR jobs attach their checks to GitHub's current synthetic merge commit.
@@ -213,7 +270,26 @@ func qualityCoverageGate(states map[string]string) qualityGate {
 	if len(details) > 0 {
 		gate.Detail = strings.Join(details, "; ")
 	}
+	qualityCoverageGuidance(&gate, states)
 	return gate
+}
+
+func qualityCoverageGuidance(gate *qualityGate, states map[string]string) {
+	gate.Signals = qualityBlockingSignals(states, false)
+	if gate.Passed {
+		return
+	}
+	switch {
+	case len(states) == 0:
+		gate.Problem = "Codecov has not reported a result for this commit; its coverage verdict is unknown."
+		gate.NextAction = "Wait for this commit's coverage uploads, then recheck Codecov. If uploads have already finished, inspect the upload logs for the missing result."
+	case qualityPendingSignals(gate.Signals) == len(gate.Signals):
+		gate.Problem = "Codecov is still processing this commit's coverage; no failing coverage result is currently reported."
+		gate.NextAction = "Wait for the pending Codecov results below to complete."
+	default:
+		gate.Problem = "Codecov has returned a non-passing result for this commit."
+		gate.NextAction = "Open the non-passing Codecov results below. For failed coverage, identify the uncovered changed lines and add tests for those behaviors using the existing repository thresholds. For a skipped or neutral result, restore a completed coverage evaluation."
+	}
 }
 
 func (q *qualityClient) coverageStatuses(sha string, states map[string]string) error {
@@ -270,10 +346,28 @@ func (q *qualityClient) review(pr *githubapi.PR) (qualityGate, error) {
 			gate.Detail = review.State
 		}
 		if len(reviews) < githubapi.PageSize {
+			qualityReviewGuidance(&gate)
 			return gate, nil
 		}
 	}
 	return gate, bench.Error("review pagination limit exceeded")
+}
+
+func qualityReviewGuidance(gate *qualityGate) {
+	if gate.Passed {
+		return
+	}
+	switch gate.Detail {
+	case "CHANGES_REQUESTED":
+		gate.Problem = "CodeRabbit requested changes on this commit."
+		gate.NextAction = "Address the findings in that review or explain a justified disagreement, then request a new CodeRabbit review."
+	case "DISMISSED":
+		gate.Problem = "CodeRabbit's review of this commit was dismissed."
+		gate.NextAction = "Request a new CodeRabbit review on this head."
+	default:
+		gate.Problem = "CodeRabbit has not approved this commit."
+		gate.NextAction = "Wait for CodeRabbit's current-head review. If no review is running, request one; approval of an earlier commit does not satisfy this gate."
+	}
 }
 
 func (q *qualityClient) graph(query string, variables map[string]any, response any) error {
@@ -342,7 +436,7 @@ func (q *qualityClient) signatures(pr *githubapi.PR) (qualityGate, error) {
 			}
 		}
 		if !result.Commits.Page.HasNext {
-			return qualityGate{Passed: total > 0 && invalid == 0, Detail: fmt.Sprintf("%d/%d commits have GitHub-verified signatures", total-invalid, total)}, nil
+			return qualityGate{Passed: total > 0 && invalid == 0, Detail: fmt.Sprintf("%d/%d commits have GitHub-verified signatures", total-invalid, total), Problem: fmt.Sprintf("GitHub verified %d of %d commit signatures; %d are missing or invalid.", total-invalid, total, invalid)}, nil
 		}
 		cursor = &result.Commits.Page.End
 	}
@@ -391,7 +485,7 @@ func (q *qualityClient) threads(pr *githubapi.PR) (qualityGate, error) {
 			}
 		}
 		if !result.Threads.Page.HasNext {
-			return qualityGate{Passed: unresolved == 0, Detail: fmt.Sprintf("%d unresolved review threads (outdated threads still count)", unresolved)}, nil
+			return qualityGate{Passed: unresolved == 0, Detail: fmt.Sprintf("%d unresolved review threads (outdated threads still count)", unresolved), Problem: fmt.Sprintf("%d review threads remain unresolved, including outdated threads.", unresolved)}, nil
 		}
 		cursor = &result.Threads.Page.End
 	}

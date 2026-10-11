@@ -30,8 +30,15 @@ const (
 
 type qualityGate struct {
 	ID, Name, Detail, URL, Remediation string
+	Problem, NextAction                string
+	Signals                            []qualitySignal
 	Advisory                           bool
 	Passed                             bool
+}
+
+// Signals are evidence from GitHub, never instructions for an agent.
+type qualitySignal struct {
+	Name, State string
 }
 
 type qualityClient struct {
@@ -149,9 +156,14 @@ const qualityFileLimit = 150
 
 func qualityFileCount(pr *githubapi.PR) (qualityGate, error) {
 	if pr.ChangedFiles == nil || *pr.ChangedFiles < 0 {
-		return qualityGate{Detail: "Changed-file count unavailable"}, nil
+		return qualityGate{Detail: "Changed-file count unavailable", Problem: "GitHub did not return a changed-file count.", NextAction: "Retry the PR metadata lookup before changing the PR's scope."}, nil
 	}
-	return qualityGate{Passed: *pr.ChangedFiles < qualityFileLimit, Detail: fmt.Sprintf("%d changed files; maximum 149", *pr.ChangedFiles)}, nil
+	gate := qualityGate{Passed: *pr.ChangedFiles < qualityFileLimit, Detail: fmt.Sprintf("%d changed files; maximum 149", *pr.ChangedFiles)}
+	if !gate.Passed {
+		gate.Problem = fmt.Sprintf("This PR changes %d files, exceeding CodeRabbit's review limit of 149.", *pr.ChangedFiles)
+		gate.NextAction = fmt.Sprintf("Move at least %d changed files into a separate PR to reach at most 149 files, then request review again.", *pr.ChangedFiles-qualityFileLimit+1)
+	}
+	return gate, nil
 }
 
 // Recover benchmark reports displaced from Actions' single pending concurrency
