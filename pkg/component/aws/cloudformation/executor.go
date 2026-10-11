@@ -246,20 +246,20 @@ func runRemoteOperation(octx *opContext, operation Operation, client CloudFormat
 	}
 }
 
-// runDiff creates (or reuses) a changeset and renders the predicted changes
-// without executing it.
+// runDiff previews a changeset and removes its temporary CloudFormation resources.
 func runDiff(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
 	if err := prepareTemplateForAPI(octx, spec, summary); err != nil {
 		return summary, err
 	}
 	result, err := createChangeSet(octx.Ctx, client, spec)
 	if err != nil {
-		return summary, err
+		return summary, joinCleanupError(err, discardChangeSet(octx.Ctx, client, spec.StackName, result))
 	}
 	summary["changeset_id"] = result.ChangeSetID
 	summary["no_op"] = result.NoOp
 	summary["changes"] = result.Changes
-	return summary, renderDiffSummary(spec.StackName, result)
+	renderErr := renderDiffSummary(spec.StackName, result)
+	return summary, joinCleanupError(renderErr, discardChangeSet(octx.Ctx, client, spec.StackName, result))
 }
 
 // renderDiffSummary writes the changeset's predicted resource changes to the

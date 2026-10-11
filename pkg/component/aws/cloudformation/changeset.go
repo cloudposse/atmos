@@ -44,6 +44,8 @@ type changeSetResult struct {
 	// OnStackFailure was already set on CreateChangeSet (CREATE-only), which
 	// AWS's API forbids combining with ExecuteChangeSet's DisableRollback.
 	ChangeSetType cfntypes.ChangeSetType
+	// StackStub records that this invocation created a previously absent stack.
+	StackStub bool
 }
 
 // changeSetNameMaxLength is CloudFormation's hard limit on ChangeSetName length
@@ -83,28 +85,48 @@ func sanitizeChangeSetSuffix(s string) string {
 	return b.String()
 }
 
+// stackState is the observed state of a stack by name: whether CloudFormation
+// knows it at all, and its status when it does.
+type stackState struct {
+	Found  bool
+	Status cfntypes.StackStatus
+}
+
+// describeStackState looks the stack up by name. A "does not exist" response is
+// not an error: it reports Found == false.
+func describeStackState(ctx context.Context, client CloudFormationClient, stackName string) (stackState, error) {
+	defer perf.Track(nil, "cloudformation.describeStackState")()
+
+	out, err := client.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{StackName: awsString(stackName)})
+	if err != nil {
+		if isStackNotFoundError(err) {
+			return stackState{}, nil
+		}
+		return stackState{}, err
+	}
+	if len(out.Stacks) == 0 {
+		return stackState{}, nil
+	}
+	return stackState{Found: true, Status: out.Stacks[0].StackStatus}, nil
+}
+
+// exists reports whether the stack has real resources to update. A stack left in
+// REVIEW_IN_PROGRESS (a CREATE changeset was made but never executed, then
+// abandoned) has no resources yet, so a fresh CREATE changeset is generated.
+func (s stackState) exists() bool {
+	return s.Found && s.Status != cfntypes.StackStatusReviewInProgress
+}
+
 // stackExists reports whether the stack already exists (and is not itself
 // mid-deletion), determining whether the changeset should be CREATE or UPDATE type.
 func stackExists(ctx context.Context, client CloudFormationClient, stackName string) (bool, error) {
 	defer perf.Track(nil, "cloudformation.stackExists")()
 
-	out, err := client.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{StackName: awsString(stackName)})
+	state, err := describeStackState(ctx, client, stackName)
 	if err != nil {
-		if isStackNotFoundError(err) {
-			return false, nil
-		}
 		return false, err
 	}
-	for i := range out.Stacks {
-		if out.Stacks[i].StackStatus == cfntypes.StackStatusReviewInProgress {
-			// A stack left in REVIEW_IN_PROGRESS (a CREATE changeset was made but
-			// never executed, then abandoned) has no real resources yet — treat
-			// as not-existing so a fresh CREATE changeset can be generated.
-			continue
-		}
-		return true, nil
-	}
-	return false, nil
+	return state.exists(), nil
 }
 
 // stackNotFoundMessage matches the stack-specific messages returned by CloudFormation.
@@ -146,13 +168,13 @@ func wrapAPICallError(stackName string, err error) error {
 func createChangeSet(ctx context.Context, client CloudFormationClient, spec *stackSpec) (*changeSetResult, error) {
 	defer perf.Track(nil, "cloudformation.createChangeSet")()
 
-	exists, err := stackExists(ctx, client, spec.StackName)
+	state, err := describeStackState(ctx, client, spec.StackName)
 	if err != nil {
 		return nil, err
 	}
 
 	changeSetType := cfntypes.ChangeSetTypeCreate
-	if exists {
+	if state.exists() {
 		changeSetType = cfntypes.ChangeSetTypeUpdate
 	}
 
@@ -183,11 +205,25 @@ func createChangeSet(ctx context.Context, client CloudFormationClient, spec *sta
 		input.OnStackFailure = cfntypes.OnStackFailureDoNothing
 	}
 
-	if _, err := client.CreateChangeSet(ctx, input); err != nil {
+	created, err := client.CreateChangeSet(ctx, input)
+	if err != nil {
 		return nil, fmt.Errorf(wrapFmt, errUtils.ErrAwsCloudFormationChangeSetFailed, err)
 	}
 
-	return waitForChangeSet(ctx, client, spec.StackName, name, changeSetType)
+	result, err := waitForChangeSet(ctx, client, spec.StackName, name, changeSetType)
+	// Preserve ownership even if the first polling request fails or is cancelled.
+	// Callers decide whether to discard the changeset; apply still needs it.
+	if result == nil {
+		result = &changeSetResult{ChangeSetName: name, ChangeSetType: changeSetType}
+	}
+	if result.ChangeSetID == "" {
+		result.ChangeSetID = stringValue(created.Id)
+	}
+	if result.StackID == "" {
+		result.StackID = stringValue(created.StackId)
+	}
+	result.StackStub = changeSetType == cfntypes.ChangeSetTypeCreate && !state.Found
+	return result, err
 }
 
 // changeSetPollDecision is the outcome of inspecting one DescribeChangeSet poll.
