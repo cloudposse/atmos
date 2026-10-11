@@ -28,6 +28,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/osargs"
 	"github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -76,7 +77,12 @@ func resetMergedConfigFiles(v *viper.Viper) {
 // trackMergedConfigFile records a config file path, merged while loading v,
 // for case-sensitive key extraction.
 func trackMergedConfigFile(v *viper.Viper, path string) {
-	mergedFilesReg.track(v, path)
+	content, err := os.ReadFile(path)
+	if err != nil {
+		log.Trace("Skipping source tracking for unreadable file", "file", path, "error", err)
+		return
+	}
+	mergedFilesReg.track(v, path, content)
 }
 
 // LoadedConfigFiles returns the physical config files merged during the most
@@ -86,7 +92,7 @@ func trackMergedConfigFile(v *viper.Viper, path string) {
 // Only meaningful for callers that run a single LoadConfig call and read the
 // result immediately afterward (e.g. `atmos config list`) -- it is not safe
 // to correlate with a specific concurrent LoadConfig call. Concurrent callers
-// needing a specific call's files should use collectConfigFilesForCasePreservation(v, ...).
+// needing a specific call's files should use collectConfigSourcesForCasePreservation(v, ...).
 func LoadedConfigFiles() []string {
 	return lastLoadedFiles.get()
 }
@@ -1568,7 +1574,7 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 	}
 
 	configFilePath := tempViper.ConfigFileUsed()
-	trackMergedConfigFile(v, configFilePath)
+	defer mergedFilesReg.attach(v, tempViper)()
 
 	// Read the config file's content
 	content, err := readConfigFileContent(configFilePath)
@@ -1610,6 +1616,8 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 	if processedCommands != nil {
 		v.Set(commandsKey, processedCommands)
 	}
+	// The main file is applied after its imports and must be reconstructed last.
+	mergedFilesReg.track(v, configFilePath, content)
 	return nil
 }
 
@@ -2015,9 +2023,6 @@ func mergeConfigFile(
 		return err
 	}
 
-	// Track this file for case-sensitive key extraction.
-	trackMergedConfigFile(v, path)
-
 	// Save existing commands before merge.
 	existingCommands := v.Get(commandsKey)
 
@@ -2054,6 +2059,8 @@ func mergeConfigFile(
 		v.Set(commandsKey, merged)
 	}
 
+	// Retain successful merges before temporary import files are removed.
+	mergedFilesReg.track(v, path, content)
 	return nil
 }
 
@@ -2409,30 +2416,27 @@ var caseSensitivePaths = []string{
 	"auth.identities",        // Auth identity names (e.g., SuperAdmin)
 }
 
-// collectConfigFilesForCasePreservation gathers all config files to process for case preservation.
-// It combines the files tracked for v's LoadConfig call with the main config
-// file (if not already tracked).
-func collectConfigFilesForCasePreservation(v *viper.Viper, mainConfig string) []string {
-	tracked := mergedFilesReg.snapshot(v)
-	filesToProcess := make([]string, 0, len(tracked)+1)
-	filesToProcess = append(filesToProcess, tracked...)
-
-	// Include the main config file if it wasn't already tracked.
-	if mainConfig != "" && !slices.Contains(filesToProcess, mainConfig) {
-		filesToProcess = append(filesToProcess, mainConfig)
+// collectConfigSourcesForCasePreservation returns source snapshots in merge order.
+// Direct callers without a tracker fall back to the main configuration file.
+func collectConfigSourcesForCasePreservation(v *viper.Viper, mainConfig string) []mergedConfigSource {
+	sources := mergedFilesReg.snapshot(v)
+	for _, source := range sources {
+		if source.path == mainConfig {
+			return sources
+		}
 	}
-
-	return filesToProcess
+	if mainConfig != "" {
+		if content, err := os.ReadFile(mainConfig); err == nil {
+			sources = append(sources, mergedConfigSource{path: mainConfig, content: string(content)})
+		}
+	}
+	return sources
 }
 
-// mergeCaseMapsFromFile reads a config file and merges its case mappings into the accumulated result.
+// mergeCaseMapsFromSource merges a retained source's case mappings into the accumulated result.
 // Later files override earlier ones (same precedence as config merging).
-func mergeCaseMapsFromFile(configFile string, mergedCaseMaps *casemap.CaseMaps) {
-	rawYAML, err := os.ReadFile(configFile)
-	if err != nil {
-		log.Trace("Skipping case map extraction for unreadable file", "file", configFile, "error", err)
-		return
-	}
+func mergeCaseMapsFromSource(source mergedConfigSource, mergedCaseMaps *casemap.CaseMaps) {
+	configFile, rawYAML := source.path, []byte(source.content)
 
 	fileCaseMaps, err := casemap.ExtractFromYAML(rawYAML, caseSensitivePaths)
 	if err != nil {
@@ -2620,20 +2624,20 @@ func commandEnvValueCommand(value map[string]any) (any, bool) {
 // It processes all merged config files (main config + imports) with later files taking precedence.
 // This function operates on a best-effort basis - errors are logged but don't fail config loading.
 func preserveCaseSensitiveMaps(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) {
-	filesToProcess := collectConfigFilesForCasePreservation(v, v.ConfigFileUsed())
-	if len(filesToProcess) == 0 {
+	sources := collectConfigSourcesForCasePreservation(v, v.ConfigFileUsed())
+	if len(sources) == 0 {
 		return
 	}
 
 	mergedCaseMaps := casemap.New()
-	for _, configFile := range filesToProcess {
-		mergeCaseMapsFromFile(configFile, mergedCaseMaps)
+	for _, source := range sources {
+		mergeCaseMapsFromSource(source, mergedCaseMaps)
 	}
 
 	atmosConfig.CaseMaps = mergedCaseMaps
 	populateLegacyIdentityCaseMap(mergedCaseMaps, atmosConfig)
 
-	log.Trace("Preserved case-sensitive map keys", "paths", caseSensitivePaths, "files_processed", len(filesToProcess))
+	log.Trace("Preserved case-sensitive map keys", "paths", caseSensitivePaths, "files_processed", len(sources))
 }
 
 // promoteAtmosEnvFromConfig promotes ATMOS_-prefixed keys from the base config `env:`
@@ -2659,8 +2663,8 @@ func caseSensitiveEnvFromViper(v *viper.Viper) map[string]string {
 	}
 
 	caseMaps := casemap.New()
-	for _, configFile := range collectConfigFilesForCasePreservation(v, v.ConfigFileUsed()) {
-		mergeCaseMapsFromFile(configFile, caseMaps)
+	for _, source := range collectConfigSourcesForCasePreservation(v, v.ConfigFileUsed()) {
+		mergeCaseMapsFromSource(source, caseMaps)
 	}
 	envCase := caseMaps.Get(envKey)
 
@@ -2847,87 +2851,76 @@ func parseDotenvIncludeFile(includeValue string) (string, bool) {
 	return includeFile, ext == ".env"
 }
 
-// fixAuthIdentities re-parses auth.identities from raw YAML to fix Viper's dot-splitting behavior.
-// Viper treats dots in map keys as nested paths (e.g., "product.usa" becomes "product" -> "usa"),
-// which breaks identity names containing dots. This function reads the raw YAML files directly
-// to extract identities with their original key names preserved.
+// fixAuthIdentities reconstructs identities from retained YAML without Viper's
+// dot-splitting. Merge raw maps before decoding so partial overrides preserve
+// imported fields, including explicit false and other zero-value overrides.
 func fixAuthIdentities(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "config.fixAuthIdentities")()
 
-	// Get list of all config files that were merged.
-	filesToProcess := collectConfigFilesForCasePreservation(v, v.ConfigFileUsed())
-	if len(filesToProcess) == 0 {
-		return nil
+	identityMaps := make(map[string]map[string]any)
+	for _, source := range collectConfigSourcesForCasePreservation(v, v.ConfigFileUsed()) {
+		mergeAuthIdentitiesFromSource(source, identityMaps)
 	}
 
-	// Parse each file and extract auth.identities directly from YAML.
 	mergedIdentities := make(map[string]schema.Identity)
-
-	for _, configFile := range filesToProcess {
-		rawYAML, err := os.ReadFile(configFile)
+	for name, identityData := range identityMaps {
+		var identity schema.Identity
+		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+			Result:           &identity,
+			WeaklyTypedInput: true,
+			DecodeHook:       getAtmosDecodeHookFunc(),
+		})
 		if err != nil {
-			log.Trace("Skipping identity extraction for unreadable file", "file", configFile, "error", err)
+			log.Trace("Failed to create decoder for identity", "name", name, "error", err)
 			continue
 		}
-
-		// Parse raw YAML as nodes to get auth.identities without Viper's dot-splitting
-		// while preserving Atmos YAML function tags inside identity credentials.
-		var rawNode goyaml.Node
-		if err := goyaml.Unmarshal(rawYAML, &rawNode); err != nil {
-			log.Trace("Failed to parse YAML for identity extraction", "file", configFile, "error", err)
+		if err := decoder.Decode(identityData); err != nil {
+			log.Warn("Failed to decode identity", "name", name, "error", err)
+			if existing, ok := atmosConfig.Auth.Identities[name]; ok {
+				mergedIdentities[name] = existing
+			}
 			continue
 		}
-
-		identitiesNode := findYAMLMappingPath(&rawNode, "auth", "identities")
-		if identitiesNode == nil || identitiesNode.Kind != goyaml.MappingNode {
-			continue
-		}
-
-		// Convert each identity to schema.Identity and merge with existing.
-		for i := 0; i < len(identitiesNode.Content); i += 2 {
-			identityName := identitiesNode.Content[i].Value
-			identityDataRaw, err := decodeNodeWithYamlFunctions(identitiesNode.Content[i+1])
-			if err != nil {
-				log.Trace("Failed to process YAML functions for identity", "name", identityName, "error", err)
-				continue
-			}
-			identityData, ok := identityDataRaw.(map[string]interface{})
-			if !ok {
-				log.Trace("Skipping invalid identity", "name", identityName, "file", configFile)
-				continue
-			}
-
-			// Convert to schema.Identity using mapstructure.
-			var identity schema.Identity
-			decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-				Result:           &identity,
-				WeaklyTypedInput: true,
-				DecodeHook:       getAtmosDecodeHookFunc(),
-			})
-			if err != nil {
-				log.Trace("Failed to create decoder for identity", "name", identityName, "error", err)
-				continue
-			}
-
-			if err := decoder.Decode(identityData); err != nil {
-				log.Trace("Failed to decode identity", "name", identityName, "error", err)
-				continue
-			}
-
-			// Lowercase the identity name for case-insensitive lookup (Viper lowercases all keys).
-			lowercaseName := strings.ToLower(identityName)
-			mergedIdentities[lowercaseName] = identity
-
-			log.Trace("Extracted identity with dots in name", "name", identityName, "lowercaseName", lowercaseName, "file", configFile)
-		}
+		mergedIdentities[name] = identity
 	}
 
 	// Replace the incorrectly parsed identities with the correctly parsed ones.
 	if len(mergedIdentities) > 0 {
 		atmosConfig.Auth.Identities = mergedIdentities
 	}
-
 	return nil
+}
+
+// mergeAuthIdentitiesFromSource preserves literal identity names and YAML functions.
+func mergeAuthIdentitiesFromSource(source mergedConfigSource, identities map[string]map[string]any) {
+	var rawNode goyaml.Node
+	if err := goyaml.Unmarshal([]byte(source.content), &rawNode); err != nil {
+		log.Trace("Failed to parse YAML for identity extraction", "file", source.path, "error", err)
+		return
+	}
+	identitiesNode := findYAMLMappingPath(&rawNode, "auth", "identities")
+	if identitiesNode == nil || identitiesNode.Kind != goyaml.MappingNode {
+		return
+	}
+	for i := 0; i < len(identitiesNode.Content); i += 2 {
+		name := strings.ToLower(identitiesNode.Content[i].Value)
+		raw, err := decodeNodeWithYamlFunctionsForFile(identitiesNode.Content[i+1], source.path)
+		if err != nil {
+			log.Trace("Failed to process YAML functions for identity", "name", name, "error", err)
+			continue
+		}
+		identityData, ok := raw.(map[string]any)
+		if !ok {
+			log.Trace("Skipping invalid identity", "name", name, "file", source.path)
+			continue
+		}
+		merged, err := merge.MergeWithOptions(nil, []map[string]any{identities[name], identityData}, false, false)
+		if err != nil {
+			log.Trace("Failed to merge identity", "name", name, "error", err)
+			continue
+		}
+		identities[name] = merged
+	}
 }
 
 // findYAMLMappingPath walks a YAML document or mapping node to the node reached by
