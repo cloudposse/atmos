@@ -196,7 +196,7 @@ commands:
         env: *go_auto_env
         steps:
           - type: shell
-            command: go test -tags=mage -coverprofile=magefiles-coverage.out ./magefiles/...
+            command: go test -tags=mage -coverpkg=./magefiles/... -coverprofile=magefiles-coverage.out ./magefiles/...
 
       - name: generate-auth-http-store-mocks
         description: Regenerate auth/http/store mocks using go:generate directives

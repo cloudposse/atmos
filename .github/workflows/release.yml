@@ -73,7 +73,7 @@ jobs:
     # OPENAI_API_KEY secret is configured, otherwise CodeRabbit's summary or
     # a truncated description - and rewrites the release (contents: write)
     # as collapsible per-PR notes. It never fails the release: any error is
-    # logged and the skeleton stays (see magefiles/ci_release_notes.go).
+    # logged and the skeleton stays (see magefiles/release/release_notes.go).
     permissions:
       contents: write
       pull-requests: read

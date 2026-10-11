@@ -2,7 +2,7 @@ name: Classify Infra Failures
 description: >
   Classifies every non-success job of a workflow-run attempt as an
   infrastructure zombie or a real failure and returns a rerun verdict.
-  `go tool mage ci:classifyInfraFailures` (magefiles/ci_rerun.go) fetches the
+  `go tool mage ci:classifyInfraFailures` (magefiles/ci/rerun.go) fetches the
   attempt's jobs itself, paginating repos/{repo}/actions/runs/{id}/attempts/{n}/jobs
   via the go-gh REST client (internal/ci/rerun.FetchJobs; GH_TOKEN
   authenticates it, same as `gh` itself), then prints one TSV line per

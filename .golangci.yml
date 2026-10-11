@@ -20,12 +20,7 @@
 version: "2"
 run:
   tests: true
-  # magefiles/*.go carry `//go:build mage` so `go tool mage` only compiles
-  # them under that tag. Without this, golangci-lint's default build set
-  # excludes them entirely (either silently skipping this repo's own build
-  # tooling, or, for invocations that explicitly scope to ./magefiles,
-  # failing typechecking with "build constraints exclude all Go files in
-  # .../magefiles" instead of linting the package).
+  # Include the tagged Mage entrypoint along with its imported target packages.
   build-tags:
     - mage
   # golangci-lint takes a machine-global single-instance lock. Parallel
@@ -98,7 +93,7 @@ linters:
             - "!**/pkg/github/**"
             # The S3 deployment Mage target is an AWS-specific build tool and
             # intentionally uses the AWS SDK instead of shelling out to a CLI.
-            - "!**/magefiles/s3_deploy*.go"
+            - "!**/magefiles/s3/**"
             - "$test"
           deny:
             # AWS: Identity and auth-related SDKs
@@ -323,7 +318,8 @@ linters:
           - gocognit
           - gosec
           - revive
-        path: _test\.go$
+        # Shared Mage test fixtures are imported by tagged tests only.
+        path: _test\.go$|^magefiles/internal/(testutil|githubtest)/
       - linters:
           - cyclop
         path: (.+)_test\.go
@@ -359,7 +355,8 @@ linters:
         text: "viper\\.BindEnv|viper\\.BindPFlag"
       - linters:
           - forbidigo
-        path: _test\.go$
+        # Shared Mage test fixtures are imported by tagged tests only.
+        path: _test\.go$|^magefiles/internal/(testutil|githubtest)/
         text: "viper\\.BindEnv|viper\\.BindPFlag"
       # Legacy direct process output. New production code should use the Atmos
       # I/O layer so stdout/stderr routing and masking stay consistent.
@@ -417,8 +414,7 @@ linters:
           - forbidigo
         path: ^cmd/terraform/planfile/
         text: "os\\.Getenv"
-      # Mage build tooling (magefiles/ — only compiled via the `mage` build
-      # tag, invoked through `go tool mage`). It's a standalone dev-tooling
+      # Mage build tooling (magefiles/, invoked through `go tool mage`). It's a standalone dev-tooling
       # entrypoint outside the Atmos CLI/UI runtime and config pipeline, so
       # the Atmos I/O-layer, env-binding, and perf.Track conventions (written
       # for shipped product code) don't apply here.
