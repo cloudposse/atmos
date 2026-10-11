@@ -66,8 +66,8 @@ func stackNameFromID(id string) string {
 
 // buildStackTree walks a stack's resources, recursing into every nested stack
 // (AWS::CloudFormation::Stack resources) up to maxNestedStackDepth.
-func buildStackTree(ctx context.Context, client CloudFormationClient, stackName string, depth int) (*stackNode, error) {
-	return buildStackSubtree(ctx, client, stackName, "", depth)
+func buildStackTree(ctx context.Context, client CloudFormationClient, stackName string) (*stackNode, error) {
+	return buildStackSubtree(ctx, client, stackName, "", 0)
 }
 
 // buildStackSubtree is buildStackTree for one node, recording the node's logical ID in its parent.
@@ -198,7 +198,7 @@ func renderStackTreeChildren(children []*stackNode, prefix string) {
 
 // runTree renders the nested-stack dependency tree for a component.
 func runTree(ctx context.Context, client CloudFormationClient, stackName string, summary map[string]any) (map[string]any, error) {
-	root, err := buildStackTree(ctx, client, stackName, 0)
+	root, err := buildStackTree(ctx, client, stackName)
 	if err != nil {
 		return summary, err
 	}
@@ -220,7 +220,7 @@ type logsOptions struct {
 // timeline instead of a flat chronological list. Follow continuously tails new
 // events instead of returning after one pass.
 func runLogs(ctx context.Context, client CloudFormationClient, stackName string, opts logsOptions, summary map[string]any) (map[string]any, error) {
-	root, err := buildStackTree(ctx, client, stackName, 0)
+	root, err := buildStackTree(ctx, client, stackName)
 	if err != nil {
 		return summary, err
 	}
@@ -336,7 +336,7 @@ func followLogs(ctx context.Context, client CloudFormationClient, rootStackName 
 // already-tracked stack's existing seen map is left untouched, so events
 // already emitted are never re-emitted after a refresh.
 func refreshFollowedStacks(ctx context.Context, client CloudFormationClient, rootStackName string, names []string, seen map[string]map[string]bool) ([]string, error) {
-	root, err := buildStackTree(ctx, client, rootStackName, 0)
+	root, err := buildStackTree(ctx, client, rootStackName)
 	if err != nil {
 		return names, err
 	}

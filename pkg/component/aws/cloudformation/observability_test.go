@@ -26,7 +26,7 @@ func TestBuildStackTree_FlatStack(t *testing.T) {
 		},
 	}, nil)
 
-	node, err := buildStackTree(context.Background(), client, "root", 0)
+	node, err := buildStackTree(context.Background(), client, "root")
 	require.NoError(t, err)
 	assert.Equal(t, "root", node.StackName)
 	assert.Empty(t, node.Children)
@@ -45,7 +45,7 @@ func TestBuildStackTree_OneLevelNesting(t *testing.T) {
 		client.EXPECT().ListStackResources(gomock.Any(), &cloudformation.ListStackResourcesInput{StackName: awsString("child-1")}).Return(&cloudformation.ListStackResourcesOutput{}, nil),
 	)
 
-	node, err := buildStackTree(context.Background(), client, "root", 0)
+	node, err := buildStackTree(context.Background(), client, "root")
 	require.NoError(t, err)
 	require.Len(t, node.Children, 1)
 	assert.Equal(t, "child-1", node.Children[0].StackName)
@@ -70,7 +70,7 @@ func TestBuildStackTree_MultipleLevelsNesting(t *testing.T) {
 		client.EXPECT().ListStackResources(gomock.Any(), &cloudformation.ListStackResourcesInput{StackName: awsString("grandchild-1")}).Return(&cloudformation.ListStackResourcesOutput{}, nil),
 	)
 
-	node, err := buildStackTree(context.Background(), client, "root", 0)
+	node, err := buildStackTree(context.Background(), client, "root")
 	require.NoError(t, err)
 	require.Len(t, node.Children, 1)
 	require.Len(t, node.Children[0].Children, 1)
@@ -91,7 +91,7 @@ func TestBuildStackTree_StillCreatingChildSkipped(t *testing.T) {
 		},
 	}, nil)
 
-	node, err := buildStackTree(context.Background(), client, "root", 0)
+	node, err := buildStackTree(context.Background(), client, "root")
 	require.NoError(t, err)
 	assert.Empty(t, node.Children)
 }
@@ -102,7 +102,7 @@ func TestBuildStackTree_APIError(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().ListStackResources(gomock.Any(), gomock.Any()).Return(nil, errors.New("throttled"))
 
-	_, err := buildStackTree(context.Background(), client, "root", 0)
+	_, err := buildStackTree(context.Background(), client, "root")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
@@ -121,7 +121,7 @@ func TestBuildStackTree_RecursiveCallError(t *testing.T) {
 		client.EXPECT().ListStackResources(gomock.Any(), &cloudformation.ListStackResourcesInput{StackName: awsString("child-1")}).Return(nil, errors.New("throttled")),
 	)
 
-	_, err := buildStackTree(context.Background(), client, "root", 0)
+	_, err := buildStackTree(context.Background(), client, "root")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
@@ -150,7 +150,7 @@ func TestBuildStackTree_MaxDepthGuard(t *testing.T) {
 	done := make(chan *stackNode, 1)
 	errCh := make(chan error, 1)
 	go func() {
-		node, err := buildStackTree(context.Background(), client, "root", 0)
+		node, err := buildStackTree(context.Background(), client, "root")
 		if err != nil {
 			errCh <- err
 			return

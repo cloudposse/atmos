@@ -20,12 +20,8 @@ func templateOfSize(n int) string {
 	return head + strings.Repeat("a", n-len(head))
 }
 
-func s3TargetBlock(extra map[string]any) map[string]any {
-	block := map[string]any{"kind": kindAwsS3, "bucket": "templates", "region": "us-east-1"}
-	for k, v := range extra {
-		block[k] = v
-	}
-	return block
+func s3TargetBlock() map[string]any {
+	return map[string]any{"kind": kindAwsS3, "bucket": "templates", "region": "us-east-1"}
 }
 
 func dryRunSection(template string, targets map[string]any, extra map[string]any) map[string]any {
@@ -90,7 +86,7 @@ func TestDryRunRejectsInvalidPackagingConfiguration(t *testing.T) {
 		},
 		{
 			name:      "apply with an unknown target",
-			section:   dryRunSection("Resources: {}", map[string]any{"artifacts": s3TargetBlock(nil)}, nil),
+			section:   dryRunSection("Resources: {}", map[string]any{"artifacts": s3TargetBlock()}, nil),
 			flags:     map[string]any{"target": "missing"},
 			operation: OperationApply,
 			wantErr:   errUtils.ErrProvisionTargetNotFound,
@@ -109,7 +105,7 @@ func TestDryRunRejectsInvalidPackagingConfiguration(t *testing.T) {
 func TestDryRunAcceptsValidPackagingConfiguration(t *testing.T) {
 	atLimit := templateOfSize(templateInlineSizeLimit)
 	large := templateOfSize(templateInlineSizeLimit + 1)
-	artifacts := map[string]any{"artifacts": s3TargetBlock(nil)}
+	artifacts := map[string]any{"artifacts": s3TargetBlock()}
 	noRegion := map[string]any{"artifacts": map[string]any{"kind": kindAwsS3, "bucket": "templates"}}
 	tests := []struct {
 		name      string
