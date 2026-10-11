@@ -852,7 +852,9 @@ jobs:
         uses: ./.github/actions/setup-go-cache
 
       - name: Run magefiles unit tests with coverage
-        run: go test -tags=mage -race -coverprofile=magefiles-coverage.out ./magefiles/...
+        # Shared Mage packages are exercised by their callers' tests. Instrument
+        # those imports too, so their executed lines reach the uploaded profile.
+        run: go test -tags=mage -race -coverpkg=./magefiles/... -coverprofile=magefiles-coverage.out ./magefiles/...
 
       - name: Upload magefiles coverage report artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
