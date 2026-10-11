@@ -29,6 +29,7 @@
 
 # Atmos binary (only in root directory)
 /atmos
+/build/benchmarks/
 
 # Demo binaries and large audio files
 tools/director/director
@@ -57,6 +58,8 @@ tools/gomodcheck/.gomodcheck
 **/.build-harness
 **/build-harness
 **/build
+# Mage build targets are source code, not build output.
+!/magefiles/build/
 **/dist
 **/.helmfile/
 .DS_Store
