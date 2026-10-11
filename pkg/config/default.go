@@ -146,6 +146,8 @@ var (
 		Initialized: true,
 		Toolchain: schema.Toolchain{
 			UseLockFile: true, // Changed from false to true since PR toolchain-lockfile-default (journaled in pkg/edition).
+			// Install is intentionally unset: toolchain.install is journaled in pkg/edition and its
+			// default lives in setDefaultConfiguration, so an edition pin can roll it back.
 		},
 		Version: schema.Version{
 			Check: schema.VersionCheck{

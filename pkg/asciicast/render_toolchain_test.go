@@ -4,11 +4,14 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 // TestRunRendererRejectsEmptyBinary covers the guard clause in runRenderer
@@ -125,5 +128,118 @@ func TestRunRendererRoutesOutputThroughIOMasking(t *testing.T) {
 	}
 	if !strings.Contains(string(stderrBytes), iolib.MaskReplacement) {
 		t.Fatalf("expected stderr to contain the mask replacement, got %q", stderrBytes)
+	}
+}
+
+// withRenderToolInstallPolicy overrides whether toolchain.install permits downloading the
+// managed renderers.
+func withRenderToolInstallPolicy(t *testing.T, allowed bool, err error) {
+	t.Helper()
+	previous := renderToolInstallAllowed
+	renderToolInstallAllowed = func() (bool, error) { return allowed, err }
+	t.Cleanup(func() { renderToolInstallAllowed = previous })
+}
+
+func TestResolveRenderToolsSkipsInstallWhenPolicyIsNever(t *testing.T) {
+	withRenderToolInstallPolicy(t, false, nil)
+	var located []string
+	withRenderToolchainHooks(
+		t,
+		func(map[string]string) error {
+			t.Fatal("toolchain.install=never must not install the managed renderers")
+			return nil
+		},
+		func(spec renderToolSpec) (string, error) {
+			located = append(located, spec.binary)
+			return filepath.Join(t.TempDir(), spec.binary), nil
+		},
+	)
+
+	tools, err := resolveRenderToolsFromToolchain(renderToolRequirements{agg: true, ffmpeg: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tools.agg == "" || tools.ffmpeg == "" {
+		t.Fatalf("installed renderers must still resolve: %#v", tools)
+	}
+	if strings.Join(located, ",") != "agg,ffmpeg" {
+		t.Fatalf("located %v, want agg and ffmpeg", located)
+	}
+}
+
+func TestResolveRenderToolsReportsMissingRendererWhenPolicyIsNever(t *testing.T) {
+	withRenderToolInstallPolicy(t, false, nil)
+	withRenderToolchainHooks(
+		t,
+		func(map[string]string) error {
+			t.Fatal("toolchain.install=never must not install the managed renderers")
+			return nil
+		},
+		func(renderToolSpec) (string, error) { return "", errors.New("not found") },
+	)
+
+	_, err := resolveRenderToolsFromToolchain(renderToolRequirements{agg: true})
+
+	if !errors.Is(err, errUtils.ErrToolNotInstalled) {
+		t.Fatalf("expected ErrToolNotInstalled, got %v", err)
+	}
+	if errors.Is(err, errUtils.ErrToolInstall) {
+		t.Fatalf("a forbidden install is not an install failure: %v", err)
+	}
+	formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+	if !strings.Contains(formatted, "atmos toolchain install "+aggTool+"@"+aggVersion) {
+		t.Fatalf("expected an install hint naming the renderer, got %s", formatted)
+	}
+}
+
+func TestResolveRenderToolsInstallsWhenPolicyAllows(t *testing.T) {
+	withRenderToolInstallPolicy(t, true, nil)
+	installed := false
+	withRenderToolchainHooks(
+		t,
+		func(map[string]string) error { installed = true; return nil },
+		func(spec renderToolSpec) (string, error) { return filepath.Join(t.TempDir(), spec.binary), nil },
+	)
+
+	if _, err := resolveRenderToolsFromToolchain(renderToolRequirements{agg: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !installed {
+		t.Fatal("an allowed policy must install the managed renderers")
+	}
+}
+
+func TestResolveRenderToolsPropagatesInvalidPolicy(t *testing.T) {
+	want := errors.New("invalid policy")
+	withRenderToolInstallPolicy(t, false, want)
+	withRenderToolchainHooks(
+		t,
+		func(map[string]string) error { t.Fatal("must not install"); return nil },
+		func(renderToolSpec) (string, error) { t.Fatal("must not locate"); return "", nil },
+	)
+
+	_, err := resolveRenderToolsFromToolchain(renderToolRequirements{agg: true})
+
+	if !errors.Is(err, want) {
+		t.Fatalf("expected the policy error, got %v", err)
+	}
+}
+
+func TestRenderToolInstallAllowedReadsToolchainConfig(t *testing.T) {
+	previous := toolchain.GetAtmosConfig()
+	t.Cleanup(func() { toolchain.SetAtmosConfig(previous) })
+
+	for policy, want := range map[schema.ToolchainInstall]bool{
+		"":                              true, // An unset policy is auto, which installs.
+		schema.ToolchainInstallNever:    false,
+		schema.ToolchainInstallDeclared: true,
+		schema.ToolchainInstallAuto:     true,
+		schema.ToolchainInstallAlways:   true,
+	} {
+		toolchain.SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{Install: policy}})
+		got, err := renderToolInstallAllowed()
+		if err != nil || got != want {
+			t.Fatalf("policy %q: got (%v, %v), want (%v, nil)", policy, got, err, want)
+		}
 	}
 }
