@@ -354,7 +354,7 @@ settings:
 	v := viper.New()
 	v.SetConfigType("yaml")
 	require.NoError(t, v.ReadConfig(bytes.NewReader(content)))
-	require.NoError(t, preprocessAtmosYamlFuncExceptCommands(content, v))
+	require.NoError(t, preprocessAtmosYamlFuncExceptCommands(content, v, "atmos.yaml"))
 	assert.Equal(t, "shared-name", v.GetString("settings.name"))
 	assert.Equal(t, "anchored-label", v.GetString("settings.metadata.label"))
 	assert.Equal(t, "resolved", v.GetString("settings.enabled"))
