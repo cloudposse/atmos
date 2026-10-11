@@ -25,15 +25,28 @@ func captureStdout(t *testing.T, fn func()) string {
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
 	os.Stdout = w
+	defer func() {
+		os.Stdout = oldStdout
+		_ = w.Close()
+		_ = r.Close()
+	}()
 
 	fn()
 
 	require.NoError(t, w.Close())
-	os.Stdout = oldStdout
 
 	buf := make([]byte, 8192)
 	n, _ := r.Read(buf)
 	return string(buf[:n])
+}
+
+func TestCaptureStdoutRestoresAfterPanic(t *testing.T) {
+	original := os.Stdout
+	t.Cleanup(func() { os.Stdout = original })
+	require.Panics(t, func() { captureStdout(t, func() { panic("callback stopped") }) })
+	assert.Same(t, original, os.Stdout)
+	assert.Equal(t, "captured", captureStdout(t, func() { _, _ = os.Stdout.WriteString("captured") }))
+	assert.Same(t, original, os.Stdout)
 }
 
 func TestDefaultConfigInitializer_InitConfigAndAuth_FailsFastWithoutRealConfig(t *testing.T) {
