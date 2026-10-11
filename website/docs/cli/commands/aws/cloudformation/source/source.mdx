@@ -13,7 +13,7 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-Use these commands to manage `aws/cloudformation` component sources with just-in-time (JIT) vendoring. This enables components to declare their source location inline using the top-level `source` field without requiring a separate `component.yaml` file. Sources are automatically provisioned when running `aws cloudformation` commands—just run `atmos aws cloudformation plan` and the source is downloaded on first use.
+Use these commands to manage `aws/cloudformation` component sources with just-in-time (JIT) vendoring. This enables components to declare their source location inline using the top-level `source` field without requiring a separate `component.yaml` file. Commands that load a component template can provision its source on first use; for example, run `atmos aws cloudformation plan`.
 </Intro>
 
 <Experimental />
@@ -39,7 +39,9 @@ atmos aws cloudformation source <subcommand> [options]
 
 ## Automatic Provisioning
 
-Sources are automatically provisioned when running any `aws cloudformation` command. If a component has `source` configured and the target directory doesn't exist, Atmos downloads the source before running the operation:
+The template-loading commands `render`, `validate`, `diff`/`plan`, `apply`/`deploy`, `fmt`, and `changeset create` provision a configured source when needed before loading the template. `source pull` explicitly downloads the source. `source delete`, `source describe`, and `source list` manage or inspect source state without downloading it. Dry runs do not provision sources.
+
+For example, if a component has `source` configured and its target directory doesn't exist:
 
 ```shell
 # Source is automatically provisioned on first use
