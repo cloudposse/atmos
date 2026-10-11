@@ -248,7 +248,7 @@ func processTagAwsCloudFormationOutputWithContext(
 	}
 	defer cleanup()
 
-	authDisabled := authdeferred.AuthDisabled(atmosConfig.AuthManager) || (stackInfo != nil && stackInfo.AuthDisabled)
+	authDisabled := cloudFormationOutputAuthDisabled(atmosConfig, stackInfo)
 	resolvedAuthManager, err := resolveCloudFormationOutputAuth(atmosConfig, component, stack, stackInfo)
 	if err != nil {
 		return nil, err
@@ -283,10 +283,15 @@ func processTagAwsCloudFormationOutputWithContext(
 	return outputs[output], nil
 }
 
+// cloudFormationOutputAuthDisabled honors both configuration and caller authentication opt-outs.
+func cloudFormationOutputAuthDisabled(ac *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) bool {
+	return authdeferred.AuthDisabled(ac.AuthManager) || (info != nil && info.AuthDisabled)
+}
+
 // resolveCloudFormationOutputAuth resolves the target identity before any output
 // read. Resolver errors are fatal; they must not select the caller's credentials.
 func resolveCloudFormationOutputAuth(ac *schema.AtmosConfiguration, component, stack string, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
-	if authdeferred.AuthDisabled(ac.AuthManager) || (info != nil && info.AuthDisabled) {
+	if cloudFormationOutputAuthDisabled(ac, info) {
 		return nil, nil
 	}
 	var parent auth.AuthManager
