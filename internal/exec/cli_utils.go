@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -17,6 +18,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -69,6 +71,7 @@ var commonFlags = []string{
 	cfg.RedirectStdErrFlag,
 	cfg.LogsLevelFlag,
 	cfg.LogsFileFlag,
+	cfg.LogsColorFlag,
 	cfg.QueryFlag,
 	cfg.SettingsListMergeStrategyFlag,
 	cfg.ProcessTemplatesFlag,
@@ -188,6 +191,7 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.RedirectStdErr = argsAndFlagsInfo.RedirectStdErr
 	configAndStacksInfo.LogsLevel = argsAndFlagsInfo.LogsLevel
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
+	configAndStacksInfo.LogsColor = argsAndFlagsInfo.LogsColor
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 	// Fallback: Cobra strips flags from the args passed to RunE, so when this
 	// flag is provided on the command line after the subcommand, the legacy
@@ -558,6 +562,32 @@ var valueTakingCommonFlags = func() map[string]bool {
 	return set
 }()
 
+// boolOnlyCommonFlags is the subset of commonFlags that are boolean. In space form they
+// consume the next argument only when it is exactly "true" or "false" (case-insensitive).
+var boolOnlyCommonFlags = map[string]bool{
+	cfg.DryRunFlag:           true,
+	cfg.SkipInitFlag:         true,
+	cfg.LogsColorFlag:        true,
+	cfg.AffectedFlag:         true,
+	cfg.AllFlag:              true,
+	cfg.ProcessTemplatesFlag: true,
+	cfg.ProcessFunctionsFlag: true,
+	cfg.ProfilerEnabledFlag:  true,
+	cfg.HeatmapFlag:          true,
+}
+
+// hasBoolFlagLiteral reports whether the argument after args[i] is an explicit
+// "true" or "false" value for the boolean flag at args[i].
+func hasBoolFlagLiteral(args []string, i int) bool {
+	return i+1 < len(args) && terminalenv.IsBoolLiteral(args[i+1])
+}
+
+// boolFlagArgValue returns the value of the bare boolean flag at args[i]:
+// false when it is followed by the literal "false", true otherwise.
+func boolFlagArgValue(args []string, i int) bool {
+	return !hasBoolFlagLiteral(args, i) || !strings.EqualFold(args[i+1], "false")
+}
+
 // parseFlagValue extracts the value for a CLI flag from the current argument.
 // It handles both space-separated ("--flag value") and equals-separated ("--flag=value") forms.
 // Returns ("", false, nil) when arg does not match flag.
@@ -699,6 +729,14 @@ func processArgsAndFlags(
 			}
 		}
 
+		// --logs-color is boolean and must never consume the next positional argument,
+		// other than an explicit true/false literal ("--logs-color false").
+		if arg == cfg.LogsColorFlag {
+			info.LogsColor = strconv.FormatBool(boolFlagArgValue(inputArgsAndFlags, i))
+		} else if value, found := strings.CutPrefix(arg, cfg.LogsColorFlag+"="); found {
+			info.LogsColor = value
+		}
+
 		// --identity has special optional/empty-value semantics.
 		parseIdentityFlag(&info, arg, inputArgsAndFlags, i)
 
@@ -713,15 +751,15 @@ func processArgsAndFlags(
 		// tool (terraform/tofu/helmfile).  No ArgsAndFlagsInfo field exists for them.
 		switch arg {
 		case cfg.DryRunFlag:
-			info.DryRun = true
+			info.DryRun = boolFlagArgValue(inputArgsAndFlags, i)
 		case cfg.SkipInitFlag:
-			info.SkipInit = true
+			info.SkipInit = boolFlagArgValue(inputArgsAndFlags, i)
 		case cfg.HelpFlag1, cfg.HelpFlag2:
 			info.NeedHelp = true
 		case cfg.AffectedFlag:
-			info.Affected = true
+			info.Affected = boolFlagArgValue(inputArgsAndFlags, i)
 		case cfg.AllFlag:
-			info.All = true
+			info.All = boolFlagArgValue(inputArgsAndFlags, i)
 		}
 
 		// Collect indices of atmos-specific flags to strip from pass-through args.
@@ -735,6 +773,13 @@ func processArgsAndFlags(
 				// identity value.
 				if f == cfg.FromPlanFlag || f == cfg.IdentityFlag || f == cfg.IdentityFlagShort {
 					if i+1 < len(inputArgsAndFlags) && !strings.HasPrefix(inputArgsAndFlags[i+1], "-") {
+						indexesToRemove = append(indexesToRemove, i+1)
+					}
+				} else if boolOnlyCommonFlags[f] {
+					// Boolean flags only consume the next arg when it is an explicit
+					// true/false literal ("--logs-color false"); anything else belongs
+					// to the command (or the underlying tool) and must be kept.
+					if hasBoolFlagLiteral(inputArgsAndFlags, i) {
 						indexesToRemove = append(indexesToRemove, i+1)
 					}
 				} else if valueTakingCommonFlags[f] {

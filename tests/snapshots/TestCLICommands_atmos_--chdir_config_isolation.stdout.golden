@@ -67,6 +67,7 @@ stacks:
   inherit:
     metadata: true
 logs:
+  color: true
   file: /dev/stderr
   level: Warning
 diagnostics:
