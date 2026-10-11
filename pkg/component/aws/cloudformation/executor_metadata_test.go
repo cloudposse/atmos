@@ -30,7 +30,7 @@ func TestExecuteSingle_MetadataRestrictions(t *testing.T) {
 							info.ComponentIsEnabled = true
 							info.ComponentIsAbstract = metadata == "abstract"
 							info.ComponentIsLocked = metadata == "locked"
-							info.ComponentSection = map[string]any{"stack_name": "vpc", "template": "template.yaml"}
+							info.ComponentSection = map[string]any{"stack_name": "vpc", "path": "template.yaml"}
 							return info, nil
 						},
 						setupComponentAuthForCLI: func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
