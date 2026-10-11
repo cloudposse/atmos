@@ -34,6 +34,19 @@ func validateComponentConfig(config map[string]any) error {
 	}
 
 	stackName, _ := config[cfg.StackNameSectionName].(string)
+	if err := validateComponentTemplate(config, stackName); err != nil {
+		return err
+	}
+
+	if stackName == "" {
+		return errUtils.ErrMissingAwsCloudFormationStackName
+	}
+
+	return nil
+}
+
+// validateComponentTemplate checks template selection and inline content before stack-name validation.
+func validateComponentTemplate(config map[string]any, stackName string) error {
 	templateRaw := config[cfg.TemplateSectionName]
 	path, _ := config[cfg.TemplatePathSectionName].(string)
 	templatePresent := isTemplatePresent(templateRaw)
@@ -49,10 +62,6 @@ func validateComponentConfig(config map[string]any) error {
 		if err := sanityCheckInlineTemplate(templateRaw); err != nil {
 			return inlineTemplateError(stackName, templateRaw, err)
 		}
-	}
-
-	if stackName == "" {
-		return errUtils.ErrMissingAwsCloudFormationStackName
 	}
 
 	return nil
