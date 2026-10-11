@@ -216,14 +216,19 @@ func createChangeSet(ctx context.Context, client CloudFormationClient, spec *sta
 	if result == nil {
 		result = &changeSetResult{ChangeSetName: name, ChangeSetType: changeSetType}
 	}
+	retainChangeSetIdentifiers(result, created)
+	result.StackStub = changeSetType == cfntypes.ChangeSetTypeCreate && !state.Found
+	return result, err
+}
+
+// retainChangeSetIdentifiers preserves identifiers returned by creation when polling omits them.
+func retainChangeSetIdentifiers(result *changeSetResult, created *cloudformation.CreateChangeSetOutput) {
 	if result.ChangeSetID == "" {
 		result.ChangeSetID = stringValue(created.Id)
 	}
 	if result.StackID == "" {
 		result.StackID = stringValue(created.StackId)
 	}
-	result.StackStub = changeSetType == cfntypes.ChangeSetTypeCreate && !state.Found
-	return result, err
 }
 
 // changeSetPollDecision is the outcome of inspecting one DescribeChangeSet poll.
