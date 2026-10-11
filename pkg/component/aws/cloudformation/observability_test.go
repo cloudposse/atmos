@@ -503,16 +503,7 @@ func TestRunWatch_Success(t *testing.T) {
 	eventPollInterval = time.Millisecond
 	t.Cleanup(func() { eventPollInterval = oldInterval })
 
-	gomock.InOrder(
-		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
-		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
-			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateInProgress}},
-		}, nil),
-		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
-		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
-			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}},
-		}, nil),
-	)
+	expectWatchStatusTransition(client, cfntypes.StackStatusUpdateInProgress, cfntypes.StackStatusUpdateComplete)
 
 	summary, err := runWatch(context.Background(), client, "root", map[string]any{})
 	require.NoError(t, err)
@@ -528,16 +519,7 @@ func TestRunWatch_FailedStatus(t *testing.T) {
 	eventPollInterval = time.Millisecond
 	t.Cleanup(func() { eventPollInterval = oldInterval })
 
-	gomock.InOrder(
-		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
-		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
-			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateRollbackInProgress}},
-		}, nil),
-		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
-		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
-			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateRollbackComplete}},
-		}, nil),
-	)
+	expectWatchStatusTransition(client, cfntypes.StackStatusUpdateRollbackInProgress, cfntypes.StackStatusUpdateRollbackComplete)
 
 	_, err := runWatch(context.Background(), client, "root", map[string]any{})
 	require.Error(t, err)

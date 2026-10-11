@@ -1650,16 +1650,7 @@ func TestOperationHandlers_Watch_Dispatch(t *testing.T) {
 	eventPollInterval = time.Millisecond
 	t.Cleanup(func() { eventPollInterval = oldInterval })
 
-	gomock.InOrder(
-		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
-		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
-			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateInProgress}},
-		}, nil),
-		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
-		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
-			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}},
-		}, nil),
-	)
+	expectWatchStatusTransition(client, cfntypes.StackStatusUpdateInProgress, cfntypes.StackStatusUpdateComplete)
 
 	spec := &stackSpec{StackName: "vpc"}
 	octx := &opContext{Ctx: context.Background(), Flags: map[string]any{}}
