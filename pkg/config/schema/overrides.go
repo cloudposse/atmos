@@ -179,6 +179,14 @@ func applyPolymorphicOverrides(root *jsonschema.Schema) {
 			// accepted and coerced (Terminal.IsPagerEnabled).
 			"pager": {{Type: typeBoolean}},
 		},
+		"Logs": {
+			// color accepts every strconv.ParseBool spelling (validateLogsColorConfig),
+			// including quoted strings and the integers 0 and 1.
+			"color": {
+				{Type: typeString, Pattern: `^(?:1|0|t|f|T|F|TRUE|True|true|FALSE|False|false)$`},
+				{Type: typeInteger, Enum: []any{0, 1}},
+			},
+		},
 		"ComponentDependency": {
 			// required values are rendered before they are parsed as booleans, so
 			// templates and their resulting strings must be accepted.

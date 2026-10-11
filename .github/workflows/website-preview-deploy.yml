@@ -64,6 +64,10 @@ jobs:
             storage.googleapis.com:443
             cplive-plat-ue2-dev-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
             cloudfront.amazonaws.com:443
+            raw.githubusercontent.com:443
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       - name: Start deployment
         uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8 # v1

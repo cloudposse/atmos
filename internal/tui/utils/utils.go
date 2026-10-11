@@ -19,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
 	mdstyle "github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -53,7 +54,7 @@ func HighlightCode(code string, language string, syntaxTheme string) (string, er
 // PrintStyledText prints a styled text to the terminal.
 func PrintStyledText(text string) error {
 	// Check NO_COLOR first (highest priority).
-	if os.Getenv("NO_COLOR") != "" { //nolint:forbidigo // Standard terminal env var
+	if terminalenv.ResolveNoColor(os.Args[1:], viper.GetBool("no-color")) {
 		return nil
 	}
 
@@ -69,7 +70,10 @@ func PrintStyledText(text string) error {
 	}
 
 	// Fall back to automatic color detection.
-	// supportscolor automatically detects TTY and other standard environment variables.
+	// supportscolor detects TTY but does not honor CLICOLOR=0, so check it first.
+	if enabled := terminalenv.IsColorEnabled(); enabled != nil && !*enabled {
+		return nil
+	}
 	if supportscolor.Stdout().SupportsColor {
 		return writeStyledFigurine(iolib.Data, text)
 	}
@@ -121,6 +125,8 @@ func sanitizeForFigurine(text string) string {
 	return b.String()
 }
 
+// PrintStyledTextToSpecifiedOutput writes figurine text to out when stdout supports color
+// or color is forced. Global color opt-outs suppress the decorative text entirely.
 func PrintStyledTextToSpecifiedOutput(out io.Writer, text string) error {
 	// Helper to check if a value is truthy
 	// Truthy values: "1", "true" (case-insensitive) - standard Go bool values
@@ -149,12 +155,16 @@ func PrintStyledTextToSpecifiedOutput(out io.Writer, text string) error {
 	noColor := os.Getenv("NO_COLOR")                  //nolint:forbidigo // Standard terminal env var
 
 	// If explicitly disabled, return early without printing
-	if viper.GetBool("no-color") || isFalsy(atmosForceColor) || isFalsy(cliColorForce) || isFalsy(forceColorEnv) || noColor != "" {
+	if terminalenv.ResolveNoColor(os.Args[1:], viper.GetBool("no-color")) || isFalsy(atmosForceColor) || isFalsy(cliColorForce) || isFalsy(forceColorEnv) || noColor != "" {
 		return nil
 	}
 
 	// Check if colors are supported or forced
 	forceColor := viper.GetBool("force-color") || isTruthy(atmosForceColor) || isTruthy(cliColorForce) || isTruthy(forceColorEnv)
+	// CLICOLOR=0 disables automatic color, but explicit forcing can override it.
+	if enabled := terminalenv.IsColorEnabled(); !forceColor && enabled != nil && !*enabled {
+		return nil
+	}
 	if supportscolor.Stdout().SupportsColor || forceColor {
 		// Write to the specified output writer, not os.Stdout
 		return writeStyledFigurine(out, text)
