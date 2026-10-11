@@ -166,8 +166,8 @@ func qualityFileCount(pr *githubapi.PR) (qualityGate, error) {
 	return gate, nil
 }
 
-// Recover benchmark reports displaced from Actions' single pending concurrency
-// slot. The schedule makes publication eventual even during a busy CI burst.
+// Recover benchmark reports missed by events or a full Actions concurrency queue.
+// The schedule retries publication even during a busy CI burst.
 func (q *qualityClient) reconcile(number int) error {
 	var pr githubapi.PR
 	if err := q.get(fmt.Sprintf("pulls/%d", number), &pr); err != nil {

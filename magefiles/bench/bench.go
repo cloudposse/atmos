@@ -235,13 +235,7 @@ func benchCPU(root string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for line := range strings.SplitSeq(string(data), "\n") {
-		if strings.HasPrefix(line, "model name") {
-			_, cpu, _ := strings.Cut(line, ":")
-			return strings.TrimSpace(cpu), nil
-		}
-	}
-	return "", Error("cannot identify benchmark CPU")
+	return benchCPUIdentity(string(data))
 }
 
 func benchFingerprint(root string, suite benchSuite) (string, error) {
