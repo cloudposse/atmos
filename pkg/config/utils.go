@@ -896,7 +896,12 @@ func setSchemaDirs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *
 	return nil
 }
 
+// setLoggingConfig resolves log color and applies explicit command-line level and file overrides.
+// Invalid color or level values return an error instead of silently choosing a default.
 func setLoggingConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
+	if err := setLoggingColor(atmosConfig, configAndStacksInfo.LogsColor); err != nil {
+		return err
+	}
 	if len(configAndStacksInfo.LogsLevel) > 0 {
 		normalizedLevel, err := log.ParseLogLevel(configAndStacksInfo.LogsLevel)
 		if err != nil {
