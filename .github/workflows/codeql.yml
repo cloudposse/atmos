@@ -130,10 +130,14 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
+          # setup-go reads its version manifest from raw.githubusercontent.com;
+          # its official fallback follows golang.org -> go.dev -> dl.google.com.
           allowed-endpoints: >
             github.com:443
             api.github.com:443
             release-assets.githubusercontent.com:443
+            raw.githubusercontent.com:443
+            dl.google.com:443
             golang.org:443
             go.dev:443
             go.googlesource.com:443
@@ -147,6 +151,8 @@ jobs:
             gocloud.dev:443
             filippo.io:443
             sigs.k8s.io:443
+            raw.githubusercontent.com:443
+            dl.google.com:443
 
       - name: Checkout code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -217,10 +223,15 @@ jobs:
           # (govulncheck's SSA construction parallelizes via goroutines, which
           # -p doesn't govern) while nearly tripling run time.
           GOMEMLIMIT: "32GiB"
-        run: govulncheck -format sarif ./... > govulncheck.sarif
+        # The target also removes exact duplicate stacks from the report: the
+        # SARIF schema requires them to be unique and the upload rejects the
+        # report otherwise. See internal/ci/vulncheck.
+        run: go tool mage ci:vulncheck govulncheck.sarif
 
       - name: Upload SARIF file
-        if: always()
+        # Setup failures produce no report; preserve the original failure without
+        # adding a misleading missing-file upload error.
+        if: ${{ always() && hashFiles('govulncheck.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           sarif_file: govulncheck.sarif

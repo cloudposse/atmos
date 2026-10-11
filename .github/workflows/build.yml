@@ -63,13 +63,16 @@ jobs:
       # wrapper bug. atmos lives in Homebrew/homebrew-core; bump-formula-pr forks it
       # under the bot and opens the version-bump PR.
       #
-      # Do NOT set HOMEBREW_NO_INSTALL_FROM_API here. It forces a full homebrew-core
-      # tap clone and makes bump-formula-pr resolve the formula from that freshly
-      # cloned tree, which fails with "No available formula with the name atmos"
-      # (verified across v1.228.0/v1.229.0/v1.230.0/v1.230.1 release runs). In the
-      # default API mode, bump-formula-pr resolves atmos via the formulae API,
-      # edits the formula, forks under the bot token, and opens the PR - no tap
-      # clone needed. It still edits and submits the formula correctly.
+      # bump-formula-pr is a developer command that edits the formula's `.rb` file,
+      # so it needs homebrew/core checked out as a local tap. A fresh runner uses
+      # the formulae API with no tap, so bump-formula-pr fails with "No available
+      # formula with the name atmos" (verified across
+      # v1.228.0/v1.229.0/v1.230.0/v1.230.1/v1.231.0 release runs). Dropping
+      # HOMEBREW_NO_INSTALL_FROM_API never fixed this because the tap was still
+      # absent either way. The step below taps homebrew/core explicitly so the
+      # formula file exists; once tapped, bump-formula-pr resolves and edits atmos
+      # and opens the version-bump PR. Leave HOMEBREW_NO_INSTALL_FROM_API unset - it
+      # is unnecessary once the tap is present.
       - name: "Bump Homebrew formula"
         env:
           HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
@@ -85,6 +88,10 @@ jobs:
           # release. Load Homebrew explicitly here instead of relying on a login
           # shell (see docs/fixes).
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          # bump-formula-pr edits the formula `.rb`, so homebrew/core must be tapped
+          # (see the comment above). Without this the bump fails "No available
+          # formula with the name atmos" on every release.
+          brew tap homebrew/core
           brew bump-formula-pr --no-browse --no-audit --version="${TAG#v}" atmos
 
   docker:

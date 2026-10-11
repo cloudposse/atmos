@@ -14,6 +14,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/toolchain/installer"
+	"github.com/cloudposse/atmos/tests/testhelpers/httpmock"
 )
 
 // newTestSpinner creates a spinner model for testing.
@@ -347,8 +349,32 @@ func TestRunInstall_WithCanonicalFormat(t *testing.T) {
 
 // TestRunInstall_WithLatestKeyword tests RunInstall with the "latest" version keyword.
 func TestRunInstall_WithLatestKeyword(t *testing.T) {
+	for _, binaryName := range []string{"terraform", "terraform.exe"} {
+		t.Run(binaryName, func(t *testing.T) {
+			testRunInstallWithLatestKeyword(t, binaryName)
+		})
+	}
+}
+
+func testRunInstallWithLatestKeyword(t *testing.T, binaryName string) {
+	t.Helper()
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
+
+	mock := httpmock.NewGitHubMockServer(t)
+	mock.Setenv(t)
+	for _, entry := range httpmock.IsolatedCacheEnv(t) {
+		key, value, _ := strings.Cut(entry, "=")
+		t.Setenv(key, value)
+	}
+	mock.RegisterAquaTool(&httpmock.AquaTool{
+		Owner: "hashicorp", Repo: "terraform", VersionPrefix: "v",
+		Asset: binaryName, Format: "raw", BinaryName: binaryName,
+	})
+	mock.RegisterRelease("hashicorp", "terraform", httpmock.ReleaseSpec{TagName: "v1.11.4"})
+	// Raw release downloads append .exe on Windows, so serve that exact asset name.
+	assetName := installer.EnsureWindowsExeExtension(binaryName)
+	mock.RegisterReleaseAsset("hashicorp", "terraform", "v1.11.4", assetName, []byte("test terraform binary"))
 
 	// Create a .tool-versions file
 	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
@@ -372,20 +398,17 @@ func TestRunInstall_WithLatestKeyword(t *testing.T) {
 		SetAtmosConfig(prevConfig)
 	}()
 
-	// Test installing with "latest" version
-	// This should resolve to the actual latest version from the registry
-	err = RunInstall("terraform@latest", false, false, true, false)
-	assert.NoError(t, err)
+	// Resolve latest through the local registry/API and install its release asset.
+	require.NoError(t, RunInstall("terraform@latest", false, false, true, false))
 
-	// Verify a version was added (we can't predict the exact version, but it should be
-	// there). Read back from toolVersionsPath (see TestRunInstall_WithValidToolSpec for
-	// why not DefaultToolVersionsFilePath) -- this test's loose assertions (no exact
-	// version check) mean the bug that path caused elsewhere wouldn't have failed here,
-	// just silently passed against the wrong file.
 	updatedToolVersions, err := LoadToolVersions(toolVersionsPath)
 	require.NoError(t, err)
-	assert.Contains(t, updatedToolVersions.Tools, "terraform")
-	assert.NotEmpty(t, updatedToolVersions.Tools["terraform"])
+	assert.Equal(t, []string{"latest"}, updatedToolVersions.Tools["terraform"])
+	// GetBinaryPath uses an explicit filename verbatim, including its platform suffix.
+	binaryPath := NewInstaller().GetBinaryPath("hashicorp", "terraform", "1.11.4", assetName)
+	content, err := os.ReadFile(binaryPath)
+	require.NoError(t, err)
+	assert.Equal(t, "test terraform binary", string(content))
 }
 
 // TestRunInstall_Reinstall tests RunInstall with reinstallFlag=true.
