@@ -22,6 +22,8 @@ func mockRemoteIncludes(t *testing.T) {
 	require.NoError(t, err)
 
 	mock := httpmock.NewGitHubMockServer(t)
+	// The downloader checks the GitHub rate limit through a separate API client.
+	t.Setenv("GITHUB_API_URL", mock.URL()+"/api/v3")
 	mock.RegisterFile("tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml", string(remoteFixture))
 
 	oldClient := utils.TestHTTPClient
