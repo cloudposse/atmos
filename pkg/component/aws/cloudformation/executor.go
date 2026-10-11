@@ -114,6 +114,9 @@ var operationsMutatingStack = map[Operation]bool{
 	OperationApply:            true,
 	OperationDelete:           true,
 	OperationChangesetExecute: true,
+	OperationStackSetCreate:   true,
+	OperationStackSetUpdate:   true,
+	OperationStackSetDelete:   true,
 }
 
 // validateComponentOperation enforces metadata restrictions before execution side effects.
