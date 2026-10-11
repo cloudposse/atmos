@@ -38,8 +38,8 @@ the umbrella term for replacing legacy patterns with supported, current patterns
 ## Process
 
 1. Start with `atmos doctor` (or `--offline` to avoid network metadata checks).
-   Use `atmos doctor --fix --dry-run` to inspect eligibility, then `--fix` for verified repairs.
-   These commands do not evaluate executable YAML functions or resolve remote state/secrets.
+  Use `atmos doctor --fix --dry-run` to inspect eligibility, then `--fix` for verified repairs.
+  These commands do not evaluate executable YAML functions or resolve remote state/secrets.
 2. Inspect current project behavior with `atmos describe stacks`, `atmos list components`, and
   `atmos validate stacks`.
 3. Replace one class of legacy pattern at a time.

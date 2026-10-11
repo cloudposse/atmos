@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -35,6 +36,16 @@ func newProject(t *testing.T) string {
 	root, err := filepath.EvalSymlinks(t.TempDir())
 	require.NoError(t, err)
 	return root
+}
+
+// requirePOSIXMode asserts permission bits where the platform enforces them.
+// Windows reports synthetic modes (0666/0777) that do not reflect the requested bits.
+func requirePOSIXMode(t *testing.T, want, got fs.FileMode) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		return
+	}
+	require.Equal(t, want, got)
 }
 
 func testEngine(t *testing.T) *Engine {
@@ -66,7 +77,7 @@ func TestFixRuntimeContractsRecoveryAndIdempotence(t *testing.T) {
 				}
 				info, err := os.Stat(path)
 				require.NoError(t, err)
-				require.Equal(t, fs.FileMode(0o640), info.Mode().Perm())
+				requirePOSIXMode(t, fs.FileMode(0o640), info.Mode().Perm())
 				manifest, err := os.ReadFile(filepath.Join(report.Backup, "manifest.json"))
 				require.NoError(t, err)
 				var entries []RecoveryEntry
@@ -78,7 +89,7 @@ func TestFixRuntimeContractsRecoveryAndIdempotence(t *testing.T) {
 				require.Equal(t, digest(updated), entries[0].After)
 				info, err = os.Stat(report.Backup)
 				require.NoError(t, err)
-				require.Equal(t, fs.FileMode(0o700), info.Mode().Perm())
+				requirePOSIXMode(t, fs.FileMode(0o700), info.Mode().Perm())
 				second, err := e.Run(context.Background(), Options{Root: root, Fix: true, Offline: true, Only: []string{"deprecations"}})
 				require.NoError(t, err)
 				require.Empty(t, second.ChangedFiles)
