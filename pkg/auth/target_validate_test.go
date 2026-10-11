@@ -63,6 +63,8 @@ func TestResolveTargetAuthStrictBlocks(t *testing.T) {
 			want:     []error{errUtils.ErrProvisionTargetAuthInvalid, errUtils.ErrMultipleDefaultIdentities},
 			contains: "global, target",
 		},
+		{name: "unsupported identity requirement", block: map[string]any{"require_identity": true}, want: []error{errUtils.ErrProvisionTargetAuthUnknownKey, errUtils.ErrInvalidAuthConfig}},
+		{name: "unsupported identity opt-out", block: map[string]any{"require_identity": false}, want: []error{errUtils.ErrProvisionTargetAuthUnknownKey, errUtils.ErrInvalidAuthConfig}},
 		{name: "scalar auth", block: "target", want: []error{errUtils.ErrProvisionTargetAuthInvalid, errUtils.ErrInvalidAuthConfig}},
 		{name: "empty identity", block: map[string]any{"identity": ""}, want: []error{errUtils.ErrProvisionTargetAuthInvalid, errUtils.ErrInvalidAuthConfig}},
 		{name: "numeric identity", block: map[string]any{"identity": 7}, want: []error{errUtils.ErrProvisionTargetAuthInvalid}},

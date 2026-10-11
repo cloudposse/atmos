@@ -44,6 +44,8 @@ func TestSchemaProvisionTargetAuth(t *testing.T) {
 		{name: "include string", auth: "!include auth.yaml", valid: true},
 		{name: "empty mapping", auth: map[string]any{}, valid: true},
 		{name: "unknown key is rejected", auth: map[string]any{"identitty": "shared-services"}},
+		{name: "unsupported identity requirement", auth: map[string]any{"require_identity": true}},
+		{name: "unsupported identity opt-out", auth: map[string]any{"require_identity": false}},
 		{name: "identity wrong type", auth: map[string]any{"identity": 42}},
 		{name: "non include string is rejected", auth: "shared-services"},
 	}

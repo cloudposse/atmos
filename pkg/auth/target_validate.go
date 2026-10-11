@@ -17,9 +17,9 @@ const (
 	targetAuthDefaultKey    = "default"
 )
 
-// targetAuthKeys are the keys a target `auth` block accepts: everything a
-// component `auth` block accepts, plus the `identity` shorthand that selects
-// one identity by name.
+// targetAuthKeys are the shared auth sections supported by targets, plus the
+// identity shorthand. Targets require a selected identity; the component-only
+// require_identity option is not supported here.
 var targetAuthKeys = map[string]bool{
 	targetAuthIdentityKey:   true,
 	targetAuthIdentitiesKey: true,

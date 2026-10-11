@@ -2140,10 +2140,6 @@
               "type": "string",
               "description": "Name of the Atmos Auth identity used for this target (shorthand for selecting an identity defined in global, component, or target auth)."
             },
-            "require_identity": {
-              "type": "boolean",
-              "description": "Require an Atmos Auth identity and reject ambient credentials."
-            },
             "realm": {
               "type": "string",
               "description": "Credential isolation realm."

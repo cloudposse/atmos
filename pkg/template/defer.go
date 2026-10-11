@@ -17,7 +17,8 @@ import (
 //
 // Only plain actions are deferred. Actions that declare or assign variables and control structures
 // (if, range, with) that call the function are left untouched, because emitting part of them would
-// leave the template unbalanced or the declared variables undefined.
+// leave the template unbalanced or the declared variables undefined. Actions referencing variables
+// or a dot rebound by range/with also remain in their original execution scope.
 //
 // A deferred action is emitted in its canonical form (trim markers are not preserved). Field
 // references in a deferred action that are rooted at one of resolveRoots (for example `locals`, which
@@ -34,7 +35,7 @@ func DeferCalls(tree *parse.Tree, namespace, method string, data any, resolveRoo
 
 	d := &callDeferrer{namespace: namespace, method: method, data: data, roots: resolveRoots}
 
-	return d.deferInList(tree.Root)
+	return d.deferInList(tree.Root, false)
 }
 
 // callDeferrer holds the parameters of a single DeferCalls pass.
@@ -46,7 +47,7 @@ type callDeferrer struct {
 }
 
 // deferInList replaces matching actions in list (and in the bodies of control structures) with text nodes.
-func (d *callDeferrer) deferInList(list *parse.ListNode) int {
+func (d *callDeferrer) deferInList(list *parse.ListNode, reboundDot bool) int {
 	if list == nil {
 		return 0
 	}
@@ -55,20 +56,38 @@ func (d *callDeferrer) deferInList(list *parse.ListNode) int {
 	for i, node := range list.Nodes {
 		switch n := node.(type) {
 		case *parse.ActionNode:
-			if len(n.Pipe.Decl) == 0 && d.callsFunction(n.Pipe) {
+			if len(n.Pipe.Decl) == 0 && d.callsFunction(n.Pipe) && !usesScopedContext(n.Pipe, reboundDot) {
 				list.Nodes[i] = &parse.TextNode{NodeType: parse.NodeText, Pos: n.Pos, Text: []byte(d.deferredText(n))}
 				count++
 			}
 		case *parse.IfNode:
-			count += d.deferInList(n.List) + d.deferInList(n.ElseList)
+			count += d.deferInList(n.List, reboundDot) + d.deferInList(n.ElseList, reboundDot)
 		case *parse.RangeNode:
-			count += d.deferInList(n.List) + d.deferInList(n.ElseList)
+			count += d.deferInList(n.List, true) + d.deferInList(n.ElseList, reboundDot)
 		case *parse.WithNode:
-			count += d.deferInList(n.List) + d.deferInList(n.ElseList)
+			count += d.deferInList(n.List, true) + d.deferInList(n.ElseList, reboundDot)
 		}
 	}
 
 	return count
+}
+
+// usesScopedContext identifies values that cannot survive a standalone later render.
+// Variables belong to this execution; range/with fields read a runtime dot, not d.data.
+func usesScopedContext(node parse.Node, reboundDot bool) bool {
+	switch n := node.(type) {
+	case *parse.VariableNode:
+		return true
+	case *parse.FieldNode, *parse.DotNode:
+		return reboundDot
+	case *parse.PipeNode:
+		return slices.ContainsFunc(n.Cmds, func(cmd *parse.CommandNode) bool { return usesScopedContext(cmd, reboundDot) })
+	case *parse.CommandNode:
+		return slices.ContainsFunc(n.Args, func(arg parse.Node) bool { return usesScopedContext(arg, reboundDot) })
+	case *parse.ChainNode:
+		return usesScopedContext(n.Node, reboundDot)
+	}
+	return false
 }
 
 // callsFunction reports whether node contains a call of namespace.method.

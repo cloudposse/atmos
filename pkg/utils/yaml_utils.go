@@ -599,7 +599,7 @@ func rawScalarOutput(data any) (string, bool) {
 	return str + "\n", true
 }
 
-// convertToYAMLOutput converts data to YAML text for printing or writing a describe-style result.
+// convertToYAMLOutput converts data to display text for a describe-style result.
 // It differs from ConvertToYAML only in that a top-level string scalar is emitted verbatim.
 func convertToYAMLOutput(data any, opts YAMLOptions) (string, error) {
 	if raw, ok := rawScalarOutput(data); ok {
@@ -681,7 +681,7 @@ func WriteToFileAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, filePat
 	indent := getIndentFromConfig(atmosConfig)
 	log.Debug("WriteToFileAsYAMLWithConfig", "tabWidth", indent, "filePath", filePath)
 
-	y, err := convertToYAMLOutput(data, YAMLOptions{Indent: indent})
+	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
 	if err != nil {
 		return err
 	}
