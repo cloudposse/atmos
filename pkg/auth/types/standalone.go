@@ -1,5 +1,7 @@
 package types
 
+//go:generate go run go.uber.org/mock/mockgen -source=$GOFILE -destination=mock_standalone.go -package=$GOPACKAGE
+
 import "context"
 
 // Standalone identity kinds: root identities that authenticate without an upstream
@@ -18,8 +20,8 @@ const (
 )
 
 // IsStandaloneIdentityKind reports whether an identity of the given kind authenticates
-// without an upstream provider step (no `via`). Standalone identities form a
-// single-element chain and are dispatched directly by the manager. Covers aws/user,
+// without an upstream provider step (no `via`). Standalone identities can be targets
+// or roots of longer chains and are dispatched directly by the manager. Covers aws/user,
 // aws/ambient, generic ambient, and every emulator-bound kind.
 //
 // This is the config-level (kind string) detection used while building chains, where
