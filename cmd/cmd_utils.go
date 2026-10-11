@@ -48,6 +48,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/taskgraph"
 	"github.com/cloudposse/atmos/pkg/taskgraph/adapters"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/upgrade"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -879,15 +880,14 @@ func executeCustomCommand(
 		return
 	}
 
-	// Resolve and install dependencies declared by this command.
-	resolver := dependencies.NewResolver(&atmosConfig)
-
-	// Get command-specific dependencies.
-	deps, err := resolver.ResolveCommandDependencies(commandConfig)
+	// Resolve the command's toolchain environment: the command's own dependencies are
+	// installed and override the project's .tool-versions entries for the same tool;
+	// other .tool-versions tools join PATH only if they are already installed.
+	toolchainEnv, err := dependencies.ForCommand(&atmosConfig, commandConfig)
 	if err != nil {
 		err = errUtils.Build(errUtils.ErrDependencyResolution).
 			WithCause(err).
-			WithExplanationf("Failed to resolve dependencies for command '%s'", commandConfig.Name).
+			WithExplanationf("Failed to resolve or install dependencies for command '%s'", commandConfig.Name).
 			WithHint("Check the command's dependencies section for valid tool specifications").
 			WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
 			Err()
@@ -895,21 +895,10 @@ func executeCustomCommand(
 		return
 	}
 
-	if len(deps) > 0 {
-		installer := dependencies.NewInstaller(&atmosConfig)
-		if err := installer.EnsureTools(deps); err != nil {
-			err = errUtils.Build(errUtils.ErrDependencyResolution).
-				WithCause(err).
-				WithExplanationf("Failed to install dependencies for command '%s'", commandConfig.Name).
-				WithHint("Check the command's dependencies section for valid tool specifications").
-				WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
-				Err()
-			exitOrRecordDependencyErr(cmd, err, "", "")
-			return
-		}
-
-		log.Debug("Adding configured command dependencies to PATH", customCommandKeyCommand, commandConfig.Name, "tools", deps)
-		if err := dependencies.UpdatePathForTools(&atmosConfig, deps); err != nil {
+	// Steps run in this process, so expose the toolchain PATH to them.
+	if toolchainPATH := toolchainEnv.PATH(); toolchainPATH != "" {
+		log.Debug("Adding command toolchain tools to PATH", customCommandKeyCommand, commandConfig.Name)
+		if err := os.Setenv("PATH", toolchainPATH); err != nil {
 			err = errUtils.Build(errUtils.ErrDependencyResolution).
 				WithCause(err).
 				WithExplanationf("Failed to update PATH for command '%s'", commandConfig.Name).
@@ -981,20 +970,6 @@ func executeCustomCommand(
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			return
 		}
-	}
-
-	// Resolve the toolchain-augmented PATH from the command's already-resolved
-	// dependencies so a `type: tflint` (or other toolchain-aware) step run from
-	// a custom command sees the same pinned binaries a workflow step would,
-	// instead of silently falling back to whatever is on the ambient PATH.
-	toolchainEnv, err := dependencies.NewEnvironmentFromDeps(&atmosConfig, deps)
-	if err != nil {
-		err = errUtils.Build(errUtils.ErrDependencyResolution).
-			WithCause(err).
-			WithExplanationf("Failed to resolve toolchain PATH for command '%s'", commandConfig.Name).
-			Err()
-		exitOrRecordDependencyErr(cmd, err, "", "")
-		return
 	}
 
 	// Initialize step executor once before loop - reused across steps to preserve outputs.
@@ -1932,6 +1907,11 @@ func isVersionCommandWithArgs(args []string) bool {
 			// A real command token (or an unrecognized flag) ends the scan.
 			return false
 		}
+		// "--no-color false" carries an explicit boolean value in the next arg.
+		if !consumesValue && boolFlagHasSeparateValue(arg, args, i) {
+			i++
+			continue
+		}
 		if consumesValue {
 			i++ // The flag's value is the next arg.
 		}
@@ -1956,6 +1936,16 @@ func isSkippableRootFlag(arg string) (skip, consumesValue bool) {
 	return false, false
 }
 
+// boolFlagHasSeparateValue reports whether arg is a bare root boolean flag followed
+// by an explicit "true"/"false" literal in args[i+1] (for example "--logs-color false").
+// Any other following argument is a command or another flag, not the flag's value.
+func boolFlagHasSeparateValue(arg string, args []string, i int) bool {
+	return isRootBoolFlag(arg) && !strings.Contains(arg, equalsSign) &&
+		i+1 < len(args) && terminalenv.IsBoolLiteral(args[i+1])
+}
+
+// isRootBoolFlag recognizes root boolean flags, including aliases and inline values,
+// so command discovery can distinguish flag values from command names.
 func isRootBoolFlag(arg string) bool {
 	flagName := strings.SplitN(arg, equalsSign, 2)[0]
 	switch flagName {
@@ -1968,6 +1958,7 @@ func isRootBoolFlag(arg string) bool {
 		"--interactive",
 		"--mask",
 		"--no-color",
+		"--logs-color",
 		"--profiler-enabled",
 		"--verbose",
 		"-v":
