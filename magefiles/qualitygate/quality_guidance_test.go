@@ -67,13 +67,27 @@ func TestQualityReviewActionsDistinguishMissingApprovalFromChanges(t *testing.T)
 		require.Contains(t, gate.Problem, tc.problem)
 		require.Contains(t, gate.NextAction, tc.action)
 		require.Contains(t, gate.NextAction, "`@coderabbitai review`")
-		require.Contains(t, gate.NextAction, "`@coderabbitai approve` as a new top-level PR comment")
-		require.Contains(t, gate.NextAction, "Once all findings are addressed and verified")
-		require.Contains(t, gate.NextAction, "also resolves CodeRabbit's review threads")
+		require.NotContains(t, gate.NextAction, "@coderabbitai approve")
+		require.NotContains(t, gate.NextAction, "@coderabbitai resolve")
 	}
 	gate := qualityGate{Passed: true}
 	qualityReviewGuidance(&gate)
 	require.Empty(t, gate.NextAction)
+}
+
+func TestQualityReviewFallbackRequestsReviewWithoutBypassingFindings(t *testing.T) {
+	registry, err := defaultQualityRegistry()
+	require.NoError(t, err)
+	for i := range registry.definitions {
+		definition := &registry.definitions[i]
+		if definition.ID == "review" {
+			require.Contains(t, definition.Remediation, "`@coderabbitai review`")
+			require.NotContains(t, definition.Remediation, "@coderabbitai approve")
+			require.NotContains(t, definition.Remediation, "@coderabbitai resolve")
+			return
+		}
+	}
+	t.Fatal("review gate missing from registry")
 }
 
 func TestQualityCommentUsesInlineBadgeAndOmitsEmptyPerformance(t *testing.T) {

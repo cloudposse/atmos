@@ -353,8 +353,6 @@ func (q *qualityClient) review(pr *githubapi.PR) (qualityGate, error) {
 	return gate, bench.Error("review pagination limit exceeded")
 }
 
-const qualityApprovalRequest = "Once all findings are addressed and verified, request approval by posting `@coderabbitai approve` as a new top-level PR comment. This also resolves CodeRabbit's review threads."
-
 func qualityReviewGuidance(gate *qualityGate) {
 	if gate.Passed {
 		return
@@ -370,7 +368,6 @@ func qualityReviewGuidance(gate *qualityGate) {
 		gate.Problem = "CodeRabbit has not approved this commit."
 		gate.NextAction = "Wait for CodeRabbit's current-head review. If no review is running, post `@coderabbitai review` as a new top-level PR comment."
 	}
-	gate.NextAction += " " + qualityApprovalRequest
 }
 
 func (q *qualityClient) graph(query string, variables map[string]any, response any) error {
