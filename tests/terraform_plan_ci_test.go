@@ -19,10 +19,8 @@ func TestTerraformPlanCI(t *testing.T) {
 	// Skip if terraform is not installed.
 	RequireTerraform(t)
 
-	// Build the atmos binary.
-	runner := testhelpers.NewAtmosRunner("")
-	require.NoError(t, runner.Build(), "Failed to build atmos binary")
-	t.Cleanup(runner.Cleanup)
+	// Reuse the shared atmos binary; a per-test runner cleanup would delete it for other tests.
+	runner := sharedAtmosRunner(t)
 
 	// Resolve the fixture directory.
 	repoRoot, err := testhelpers.FindRepoRoot()
@@ -60,10 +58,8 @@ func TestTerraformPlanCIUploadAndPlanfileList(t *testing.T) {
 	// Skip if terraform is not installed.
 	RequireTerraform(t)
 
-	// Build the atmos binary.
-	runner := testhelpers.NewAtmosRunner("")
-	require.NoError(t, runner.Build(), "Failed to build atmos binary")
-	t.Cleanup(runner.Cleanup)
+	// Reuse the shared atmos binary; a per-test runner cleanup would delete it for other tests.
+	runner := sharedAtmosRunner(t)
 
 	// Resolve the fixture directory.
 	repoRoot, err := testhelpers.FindRepoRoot()

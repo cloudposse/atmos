@@ -11,6 +11,7 @@ import (
 // AtmosLogger wraps the Charm Bracelet logger to provide a consistent interface for Atmos while maintaining full compatibility.
 type AtmosLogger struct {
 	charm *charm.Logger
+	color *colorPolicy
 }
 
 // NewAtmosLogger creates a new AtmosLogger instance wrapping the given charm logger.
@@ -18,7 +19,7 @@ func NewAtmosLogger(charmLogger *charm.Logger) *AtmosLogger {
 	if charmLogger == nil {
 		charmLogger = charm.Default()
 	}
-	return &AtmosLogger{charm: charmLogger}
+	return &AtmosLogger{charm: charmLogger, color: &colorPolicy{}}
 }
 
 // Trace logs a trace message.
@@ -103,7 +104,7 @@ func (l *AtmosLogger) GetLevel() Level {
 
 // SetOutput sets the output writer.
 func (l *AtmosLogger) SetOutput(w io.Writer) {
-	l.charm.SetOutput(w)
+	l.setColorOutput(w)
 }
 
 // SetStyles sets the log styles.
@@ -113,17 +114,21 @@ func (l *AtmosLogger) SetStyles(styles *charm.Styles) {
 
 // SetColorProfile sets the color profile.
 func (l *AtmosLogger) SetColorProfile(profile termenv.Profile) {
-	l.charm.SetColorProfile(profile)
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
+	l.color.profile = profile
+	l.color.profileSet = true
+	l.applyColorProfile()
 }
 
 // WithPrefix returns a new logger with the given prefix.
 func (l *AtmosLogger) WithPrefix(prefix string) *AtmosLogger {
-	return &AtmosLogger{charm: l.charm.WithPrefix(prefix)}
+	return &AtmosLogger{charm: l.charm.WithPrefix(prefix), color: l.color}
 }
 
 // With returns a new logger with the given key-value pairs.
 func (l *AtmosLogger) With(keyvals ...interface{}) *AtmosLogger {
-	return &AtmosLogger{charm: l.charm.With(keyvals...)}
+	return &AtmosLogger{charm: l.charm.With(keyvals...), color: l.color}
 }
 
 // GetLevelString returns the string representation of the current log level handling our custom levels appropriately.
