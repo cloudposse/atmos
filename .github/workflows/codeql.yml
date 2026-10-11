@@ -130,10 +130,14 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
+          # setup-go reads its version manifest from raw.githubusercontent.com;
+          # its official fallback follows golang.org -> go.dev -> dl.google.com.
           allowed-endpoints: >
             github.com:443
             api.github.com:443
             release-assets.githubusercontent.com:443
+            raw.githubusercontent.com:443
+            dl.google.com:443
             golang.org:443
             go.dev:443
             go.googlesource.com:443
@@ -223,7 +227,9 @@ jobs:
         run: go tool mage ci:vulncheck govulncheck.sarif
 
       - name: Upload SARIF file
-        if: always()
+        # Setup failures produce no report; preserve the original failure without
+        # adding a misleading missing-file upload error.
+        if: ${{ always() && hashFiles('govulncheck.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           sarif_file: govulncheck.sarif
