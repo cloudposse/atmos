@@ -26,6 +26,7 @@ go tool mage -h <target>
 | `ci:checkshardresults` | `<repo> <runID> <runAttempt> <check>` | Wait for all acceptance shards behind a required check and fail unless all succeed. |
 | `ci:classifyinfrafailures` | `<repo> <runID> <runAttempt>` | Classify unsuccessful GitHub Actions jobs as infrastructure failures or real failures. |
 | `ci:reruninfrafailures` | `<repo> <runID> <event> <headSHA> <prNumbers>` | Rerun failed or cancelled jobs after verifying that a pull request run is still current. |
+| `ci:vulncheck` | `<output>` | Scan every package with the installed `govulncheck` and write a SARIF report to `output`. Exact duplicate stacks, which GitHub code scanning rejects, are removed; a failed scan or malformed output fails the target and leaves an existing report untouched. |
 | `coverage:collect` | none | Run the packages in `TEST` with native subprocess coverage and merge the counters. |
 | `coverage:merge` | `<inputs>` | Merge a comma-separated list of native Go coverage directories. |
 | `coverage:mergeshards` | none | Merge all downloaded Linux coverage shards. |

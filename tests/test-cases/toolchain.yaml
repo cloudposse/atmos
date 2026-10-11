@@ -80,6 +80,8 @@ tests:
     workdir: "fixtures/scenarios/toolchain-registry"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_TOOLCHAIN_GITHUB_API_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/api/v3"
+      ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/aqua"
       COLUMNS: "120"
     command: "atmos"
     args:
@@ -135,6 +137,8 @@ tests:
     workdir: "fixtures/scenarios/toolchain-registry"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_TOOLCHAIN_GITHUB_API_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/api/v3"
+      ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/aqua"
       COLUMNS: "120"
     command: "atmos"
     args:
@@ -167,6 +171,8 @@ tests:
     workdir: "fixtures/scenarios/toolchain-registry"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_TOOLCHAIN_GITHUB_API_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/api/v3"
+      ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/aqua"
       COLUMNS: "120"
     command: "atmos"
     args:
