@@ -62,6 +62,10 @@ jobs:
             cloudfront.amazonaws.com:443
             api.scorecard.dev:443
             www.bestpractices.dev:443
+            raw.githubusercontent.com:443
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials
