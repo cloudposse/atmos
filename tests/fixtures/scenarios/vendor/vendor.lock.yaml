@@ -1,0 +1,74 @@
+version: 1
+artifacts:
+  0455b89b090dd930e78d63646fd4176b302c22200d90a332e232d1d0763b35cd:
+    name: github/stargazers
+    kind: remote
+    target: components/terraform/github/stargazers/main
+    source:
+      declared: github.com/cloudposse/atmos.git//examples/demo-library/github/stargazers
+      resolved: github.com/cloudposse/atmos.git//examples/demo-library/github/stargazers
+      digest: sha256:3d1e1c012bee1308c79fd1e591bbb98cf25f691504c99264a1e381aec6017f9d
+    files:
+      - path: README.md
+        type: file
+        mode: 420
+        sha256: 9e878cb50de79284fc45569e6348412a5a31fb5516a97d46c9a6a6ecc6bb32e7
+      - path: main.tf
+        type: file
+        mode: 420
+        sha256: 353d5ae2689e64b7db8265fec0d28a90efbe3fb4451c5d1e6dc5ff48c2d86c21
+      - path: outputs.tf
+        type: file
+        mode: 420
+        sha256: 216eda29de1883b805b7969664f9877590f1929213f1609746cf4c8ee791dbde
+      - path: providers.tf
+        type: file
+        mode: 420
+        sha256: 006d6c497c77bec286ddcb25dd1ddc8afa3bec243e1dea0378cbe866156e715f
+      - path: variables.tf
+        type: file
+        mode: 420
+        sha256: f84e07819aaaa91ab1252d9f16f9b558a96ccaf144e0c186121b395fee312b44
+      - path: versions.tf
+        type: file
+        mode: 420
+        sha256: 7aa8ac7b6ae680ea6328e0416d2ca3f346f1092c4559d8538da41c64d3ffac9c
+    order: 1
+    included_paths:
+      - '**/*.tf'
+      - '**/*.tfvars'
+      - '**/*.md'
+  f7574ed33f764b2dd6b1915b9627a6fb33d22d151d6bff2938e6a857a7a4c804:
+    name: weather
+    kind: remote
+    target: components/terraform/weather/main
+    source:
+      declared: git::https://github.com/cloudposse/atmos.git//examples/demo-library/weather
+      resolved: git::https://github.com/cloudposse/atmos.git//examples/demo-library/weather
+      digest: sha256:d3bc0d14fc696a9261b987cba8874f623f4ccbb217942d1b10ec4f64c8db3ef0
+    files:
+      - path: README.md
+        type: file
+        mode: 420
+        sha256: 9ba0537339c17c3d392fc78f1ed8acf7a23266aee0189244a03c8102b483859f
+      - path: main.tf
+        type: file
+        mode: 420
+        sha256: 66cd3a7bab30cbd67a91807dd2ed9207e28e309d678961f5b41ff3a7b1bce2bb
+      - path: outputs.tf
+        type: file
+        mode: 420
+        sha256: d9d075904c7e0fc358f586d561106956e41a46180aae325c369ee271c029e5c0
+      - path: providers.tf
+        type: file
+        mode: 420
+        sha256: 29ede873e592fc9e55217da43bfd9560ad320d9417ee5b1679b314546b8e1adb
+      - path: variables.tf
+        type: file
+        mode: 420
+        sha256: e8a805ebcb0d22e4f08bf00de44f173aab8a4ad865a9eed4771677beaf159018
+      - path: versions.tf
+        type: file
+        mode: 420
+        sha256: 7aa8ac7b6ae680ea6328e0416d2ca3f346f1092c4559d8538da41c64d3ffac9c
+    order: 2
