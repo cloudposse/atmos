@@ -16,7 +16,7 @@ contributors building the policy engine and its integrations.
 
 :::warning Experimental API and limited command integration
 
-Terraform commands now have an opt-in [saved-plan gate](/cli/commands/terraform/plan-policies) using
+Terraform commands now have an opt-in [saved-plan gate](/policies/terraform-plan) using
 `ATMOS_POLICY_DIR` and a narrow inline CEL manifest loader. There is no `atmos policy` command,
 general library/trust resolver, or first-class component `policy:` integration. The API may change.
 Existing [`settings.validation` behavior](/cli/commands/validate/component) is unchanged; do not migrate
@@ -215,8 +215,9 @@ can return a hook reference for TFLint. That decision alone does **not** mean TF
 
 The `pkg/hooks` lifecycle integration now resolves governing `spec.hooks` through existing kind/step
 execution, preserves mandatory requirements against workspace skips and weaker failure modes, and
-keeps authorization separate. See [Policy Library](/contribute/policy-library) for supported component
-types, the static-definition restrictions, and tests. Review reevaluation
+keeps authorization separate. See [Policies](/policies) for supported inputs and
+[Hooks](/policies/hooks) for static-definition restrictions. Tests are listed in
+[Developing Policy Examples](/contribute/policy-library). Review reevaluation
 must not replay plan/apply hooks. A failed callback after apply cannot undo the completed apply,
 and arbitrary HTTP callbacks cannot promise exactly-once delivery.
 

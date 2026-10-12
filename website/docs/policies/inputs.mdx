@@ -1,0 +1,98 @@
+---
+title: Policy Inputs and Expressions
+sidebar_label: Inputs and Expressions
+description: CEL variables, operation input fields, missing values, and policy evaluation outcomes.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Each rule evaluates a boolean CEL expression against a captured input object. Expressions do not
+execute commands, make network requests, read files, or collect additional inputs.
+</Intro>
+
+## Expression variables
+
+| Variable | Type | Contents |
+|---|---|---|
+| `input` | Object | Data for the rule's `on` kind |
+| `params` | Object | Rule's `with` values; empty object by default |
+| `ci` | Object or `null` | [Provider-native CI snapshot](/policies/ci); `null` when no provider is detected |
+| `request.kind` | String | `terraform.plan` or `operation` for these command integrations |
+| `request.revisions` | Object | `governing`, `base`, `head`; empty strings when not supplied |
+
+`ci` is a snapshot object, not the boolean `ci` variable used by ordinary hook/workflow conditions.
+Command integrations do not populate `request.revisions`; do not treat these fields as verified Git evidence.
+
+## Operation input
+
+Use `on: operation` for Terraform, Helmfile, Helm, and Kubernetes lifecycle events.
+
+```json
+{
+  "event": "after.terraform.plan",
+  "component_type": "terraform",
+  "command": "plan",
+  "component": "vpc",
+  "stack": "prod-us-east-1",
+  "status": "success",
+  "exit_code": 2,
+  "dry_run": false
+}
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `event` | String | Canonical `before.<component_type>.<command>` or `after.<component_type>.<command>` lifecycle event |
+| `component_type` | String | `terraform`, `helmfile`, `helm`, or `kubernetes` |
+| `command` | String | Operation represented by the normalized event; deploy aliases use apply events |
+| `component` | String | Component argument |
+| `stack` | String | Selected stack |
+| `status` | String | `success` or `failure`; before-events begin with `success`. A Terraform plan exit code of `2` counts as success unless policy enforcement failed |
+| `exit_code` | Integer | Recorded command exit code; not proof that policies passed |
+| `dry_run` | Boolean | Whether this invocation is a dry-run |
+
+Select the lifecycle event explicitly:
+
+```cel
+input.event == 'before.helm.delete' && input.stack.startsWith('prod-')
+```
+
+See [Hooks](/policies/hooks) for event selection and failure behavior. Operation input contains
+execution metadata, not resolved component settings or a changed-files/affected-component inventory.
+
+## Terraform plan input
+
+With `on: terraform.plan`, `input` is the native saved-plan JSON object. See
+[Terraform Plans](/policies/terraform-plan#terraform-plan-input) for extraction and validation rules.
+
+```cel
+has(input.resource_changes) && input.resource_changes.exists(r,
+  r.mode == 'managed' && 'delete' in r.change.actions)
+```
+
+## Missing and unknown values
+
+| Condition | Handling |
+|---|---|
+| Optional field absent | Use `has(object.field)` before accessing it |
+| Field present with `null` | Check `object.field != null` before reading nested values |
+| Terraform value unknown until apply | Inspect `change.after_unknown`; missing planned data is not evidence of compliance |
+| CI data required for a decision | Declare `required_ci`; do not substitute an empty object |
+| Expression error or non-boolean result | Block the command |
+
+Use presence checks only when absence is acceptable. For a required attribute, deny when it is
+missing, null, empty, or unknown. See the [required Owner tag example](/policies/examples).
+
+## Evaluation results
+
+| Result | Effect |
+|---|---|
+| Predicate `false` | This rule does not apply |
+| Predicate `true`, `action: deny` | Block; another rule cannot override the denial |
+| Predicate `true`, `action: hooks` | Require the selected hooks according to their execution/success flags |
+| Wrong input kind | Rule does not apply to this request |
+| Missing required input, invalid expression, or evaluation error | Block |
+
+CEL evaluation has a runtime cost limit of 100,000. Expressions over large inputs may hit this
+limit and block rather than evaluate without a bound.

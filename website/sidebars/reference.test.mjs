@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 import test from 'node:test';
 import sidebars from '../sidebars.js';
 import ci from './ci.js';
@@ -19,10 +19,31 @@ test('Reference exposes CLI essentials and capabilities without extra category l
   assert.deepEqual(sidebars.cli.slice(2, 6).map(item => item.label), [
     'Commands', 'Global Flags', 'Environment Variables', 'Versioning',
   ]);
-  assert.deepEqual(sidebars.cli.slice(7, 11).map(item => item.label), [
-    'CI/CD', 'Atmos AI & MCP', 'Atmos Pro', 'Editor Integration',
+  assert.deepEqual(sidebars.cli.slice(7, 12).map(item => item.label), [
+    'CI/CD', 'Policies', 'Atmos AI & MCP', 'Atmos Pro', 'Editor Integration',
   ]);
   assert.equal(sidebars.cli.some(item => ['CLI', 'GitHub Actions', 'Stack Guides'].includes(item.label)), false);
+});
+
+test('Policies has a Reference landing page and technical guides outside command navigation', () => {
+  const policies = sidebars.cli.find(item => item.label === 'Policies');
+  assert.equal(policies.type, 'category');
+  assert.equal(policies.link.id, 'policies/index');
+  assert.deepEqual(policies.items, [
+    'policies/configuration', 'policies/inputs', 'policies/terraform-plan',
+    'policies/hooks', 'policies/ci', 'policies/examples',
+  ]);
+  for (const id of [policies.link.id, ...policies.items]) {
+    const content = readFileSync(new URL(`../docs/${id}.mdx`, import.meta.url), 'utf8');
+    assert.match(content, /<Intro>/, `${id} needs an introduction`);
+    assert.doesNotMatch(content, /PRD|unimplemented|first slice|remain work/,
+      `${id} should document usage, not implementation progress`);
+  }
+  assert.equal(existsSync(new URL('../docs/cli/commands/terraform/plan-policies.mdx', import.meta.url)), false,
+    'A conceptual guide must not appear as a Terraform command');
+  const config = readFileSync(new URL('../docusaurus.config.js', import.meta.url), 'utf8');
+  assert.match(config, /from: '\/cli\/commands\/terraform\/plan-policies', to: '\/policies\/terraform-plan'/,
+    'Existing plan-policy URLs must keep working');
 });
 
 test('CI/CD exposes workflow guides and orders capabilities from setup to review', () => {

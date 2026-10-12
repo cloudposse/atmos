@@ -17,11 +17,11 @@ This capability review separates those requirements for the experimental Atmos p
 :::warning Limited end-to-end enforcement
 
 The package evaluates supplied snapshots through a Go API. An opt-in
-[Terraform saved-plan gate](/cli/commands/terraform/plan-policies) now collects native plan JSON and
+[Terraform saved-plan gate](/policies/terraform-plan) now collects native plan JSON and
 enforces CEL denial rules. Native CI now collects supplied GitHub Actions metadata/events, and existing
 Terraform/Helmfile/Helm/Kubernetes lifecycle points enforce operation rules and selected hooks.
 Fresh API facts, approval verification, other component admission and native artifact collectors remain
-gaps. See [Policy Library](/contribute/policy-library) for the exact component matrix and tests.
+gaps. See [Policies](/policies) for supported inputs and [Developing Policy Examples](/contribute/policy-library) for tests.
 See [Developing the Policy Engine](/contribute/policy-engine) for the implemented API.
 
 :::
