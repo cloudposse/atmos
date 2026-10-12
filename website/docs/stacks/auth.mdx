@@ -296,6 +296,34 @@ auth:
 ```
 </File>
 
+An `aws/ambient` identity can also declare `env` entries. These are exported by `atmos auth env`
+and applied to subprocesses started by `atmos auth exec`, `atmos auth shell`, and Terraform commands
+using the identity. For subprocesses, identity `env` takes precedence over global `env` in
+`atmos.yaml`, which takes precedence over the inherited shell environment. Identity `env` also
+overrides region variables set by `principal.region`. Empty values are preserved, and the last
+entry wins when a key is repeated.
+
+For example, to override the access key passed to LocalStack while keeping its endpoint in global configuration:
+
+<File title="atmos.yaml">
+```yaml
+env:
+  AWS_ENDPOINT_URL: http://localhost:4566
+
+auth:
+  identities:
+    localstack:
+      kind: aws/ambient
+      env:
+        - key: AWS_ACCESS_KEY_ID
+          value: "123456789012"
+```
+</File>
+
+These overrides apply to the exported and subprocess environments. Atmos still resolves credentials
+for its own authentication through the AWS SDK's default credential chain; for a local emulator,
+you can supply dummy credentials in the shell before running Atmos.
+
 For a generic cloud-agnostic passthrough that simply preserves all environment variables as-is, use `ambient`:
 
 <File title="atmos.yaml">

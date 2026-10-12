@@ -11,6 +11,7 @@ permissions: {}
 # heads and attempts before publishing. Fork associations are resolved via API.
 concurrency:
   group: atmos-quality-report
+  queue: max
   cancel-in-progress: false
 
 jobs:
