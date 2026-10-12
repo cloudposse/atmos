@@ -313,6 +313,73 @@ func TestQualityPublishAndStaleProtection(t *testing.T) {
 	}
 }
 
+func TestQualityConcurrentWriterRerendersBeforePublish(t *testing.T) {
+	// Each attempt reads the comment three times: render, pre-labels, pre-PATCH.
+	// changedFrom is the read where another reporter's comment first appears.
+	scenarios := []struct {
+		name         string
+		changedFrom  int
+		reads        int
+		labelWrites  int
+		keepsWriter  bool
+		alwaysChange bool
+	}{
+		{name: "unchanged", reads: 3, labelWrites: 1},
+		{name: "changed during evaluation", changedFrom: 2, reads: 5, labelWrites: 1, keepsWriter: true},
+		{name: "changed during label update", changedFrom: 3, reads: 6, labelWrites: 2, keepsWriter: true},
+		{name: "always changing", reads: 2 * qualityPublishAttempts, alwaysChange: true},
+	}
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			run := githubtest.Run()
+			pr := githubtest.PR(run)
+			count := 149
+			pr.ChangedFiles = &count
+			commentReads, reads := 0, 0
+			base := qualityPublishGetter(t, "update", &pr, &run, &reads)
+			concurrent := qualityMarker + "\n" + qualityHeadMarker(pr.Head.SHA) + "\n" + qualityPerformanceStart + "\nconcurrent benchmark\n" + qualityPerformanceEnd
+			api := &githubtest.FakeAPI{T: t}
+			api.Get = func(path string, response any) error {
+				if !strings.Contains(path, "/comments?") {
+					return base(path, response)
+				}
+				commentReads++
+				body := qualityMarker
+				switch {
+				case scenario.alwaysChange:
+					body = fmt.Sprintf("%s\n<!-- writer:%d -->", concurrent, commentReads)
+				case scenario.changedFrom > 0 && commentReads >= scenario.changedFrom:
+					body = concurrent
+				}
+				return githubtest.Respond([]map[string]any{{"id": 17, "body": body, "user": map[string]string{"login": "github-actions[bot]", "type": "Bot"}}}, response)
+			}
+			var published []string
+			labelWrites := 0
+			api.Write = func(method, path string, body io.Reader) error {
+				if method == http.MethodPost && strings.HasSuffix(path, "/labels") {
+					labelWrites++
+				}
+				if strings.Contains(path, "comments") {
+					var payload map[string]string
+					require.NoError(t, json.NewDecoder(body).Decode(&payload))
+					published = append(published, payload["body"])
+				}
+				return nil
+			}
+			q := qualityClient{ctx: context.Background(), api: &qualityGraphAPI{FakeAPI: api, t: t, scenario: "valid"}, repo: githubtest.Repo}
+			require.NoError(t, q.refresh(pr.Number, "", nil))
+			require.Equal(t, scenario.reads, commentReads)
+			require.Equal(t, scenario.labelWrites, labelWrites)
+			if scenario.alwaysChange {
+				require.Empty(t, published, "a stale snapshot must never overwrite a fresher report")
+				return
+			}
+			require.Len(t, published, 1)
+			require.Equal(t, scenario.keepsWriter, strings.Contains(published[0], "concurrent benchmark"), "a re-render must keep the other writer's result")
+		})
+	}
+}
+
 func qualityPublishGetter(t *testing.T, scenario string, pr *githubapi.PR, run *githubapi.Run, reads *int) func(string, any) error {
 	t.Helper()
 	return func(path string, response any) error {
