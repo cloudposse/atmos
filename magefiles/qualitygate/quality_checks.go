@@ -360,13 +360,13 @@ func qualityReviewGuidance(gate *qualityGate) {
 	switch gate.Detail {
 	case "CHANGES_REQUESTED":
 		gate.Problem = "CodeRabbit requested changes on this commit."
-		gate.NextAction = "Address the findings in that review or explain a justified disagreement, then post `@coderabbitai review` as a new top-level PR comment to request another review."
+		gate.NextAction = "Address the findings in that review or explain a justified disagreement, then request another review using the commands documented at https://docs.coderabbit.ai/guides/commands#manually-request-code-reviews."
 	case "DISMISSED":
 		gate.Problem = "CodeRabbit's review of this commit was dismissed."
-		gate.NextAction = "Request a new CodeRabbit review on this head by posting `@coderabbitai review` as a new top-level PR comment."
+		gate.NextAction = "Request a new CodeRabbit review on this head using the commands documented at https://docs.coderabbit.ai/guides/commands#manually-request-code-reviews."
 	default:
 		gate.Problem = "CodeRabbit has not approved this commit."
-		gate.NextAction = "Wait for CodeRabbit's current-head review. If no review is running, post `@coderabbitai review` as a new top-level PR comment."
+		gate.NextAction = "Wait for CodeRabbit's current-head review. If no review is running, request one using the commands documented at https://docs.coderabbit.ai/guides/commands#manually-request-code-reviews."
 	}
 }
 
