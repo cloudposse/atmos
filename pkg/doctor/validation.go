@@ -14,6 +14,7 @@ import (
 
 	civalidate "github.com/cloudposse/atmos/pkg/ci/validate"
 	"github.com/cloudposse/atmos/pkg/ci/validate/githubactions"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/validation"
 	"github.com/cloudposse/atmos/pkg/validator"
 )
@@ -236,7 +237,7 @@ type schemaCheck struct {
 // captureSchema bounds schema resolution to a captured local document or bundled schema.
 // External references require a transitive source snapshot before they can justify repairs.
 func (e *Engine) captureSchema(p *project, source string) (string, string, error) {
-	if containsTemplate(source, p.templateMarkers()) || strings.HasPrefix(source, "!") {
+	if containsTemplate(source, []string{tags.DefaultLeftDelim}) || strings.HasPrefix(source, "!") {
 		return source, "Dynamic schema source was not evaluated", nil
 	}
 	if strings.HasPrefix(source, "atmos://") {

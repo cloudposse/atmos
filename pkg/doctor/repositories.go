@@ -91,7 +91,7 @@ func (e *Engine) checkRepositories(ctx context.Context, p *project, o *Options, 
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		health, relevant := e.sourceHealth(ctx, o, &ref, sourceCache{markers: p.templateMarkers(), health: cache})
+		health, relevant := e.sourceHealth(ctx, o, &ref, sourceCache{markers: p.templateMarkers(ref.document), health: cache})
 		if !relevant {
 			continue
 		}

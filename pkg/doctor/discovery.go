@@ -272,7 +272,7 @@ func (e *Engine) readDocument(p *project, o *Options, r *Report, path, kind stri
 		r.Findings = append(r.Findings, Finding{RuleID: ruleSchema, Category: categoryValidation, Severity: validation.SeverityError, File: rel, Message: err.Error(), Status: statusManual})
 		d.node = nil
 	}
-	d.dynamic = dynamicDocument(d.node, p.templateMarkers())
+	d.dynamic = dynamicDocument(d.node, p.templateMarkers(d))
 	if d.dynamic {
 		p.complete = false
 	}
@@ -449,7 +449,7 @@ func resolveLocalImport(d *document, p *project, r *Report, item *yaml.Node) []s
 		return nil
 	}
 	value := item.Value
-	if !staticImport(item) {
+	if !staticImport(item, p.templateMarkers(d)) {
 		r.Findings = append(r.Findings, incomplete(d.path, "Dynamic or remote import was not evaluated"))
 		return nil
 	}
@@ -485,8 +485,8 @@ func dynamicDocument(node *yaml.Node, markers []string) bool {
 	return dynamic
 }
 
-func staticImport(item *yaml.Node) bool {
-	return item.Kind == yaml.ScalarNode && item.Tag == "!!str" && !strings.ContainsAny(item.Value, "{}") && !strings.Contains(item.Value, "://") && !strings.HasPrefix(item.Value, "git::")
+func staticImport(item *yaml.Node, markers []string) bool {
+	return item.Kind == yaml.ScalarNode && item.Tag == "!!str" && !containsTemplate(item.Value, markers) && !strings.Contains(item.Value, "://") && !strings.HasPrefix(item.Value, "git::")
 }
 
 func importDeclaration(item *yaml.Node) (*yaml.Node, bool) {
