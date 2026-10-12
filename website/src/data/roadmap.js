@@ -41,8 +41,8 @@ export const roadmapConfig = {
     { id: 'q4-2025', label: 'Q4 2025', status: 'completed' },
     { id: 'q1-2026', label: 'Q1 2026', status: 'completed' },
     { id: 'q2-2026', label: 'Q2 2026', status: 'completed' },
-    { id: 'q3-2026', label: 'Q3 2026', status: 'current' },
-    { id: 'q4-2026', label: 'Q4 2026', status: 'planned' },
+    { id: 'q3-2026', label: 'Q3 2026', status: 'completed' },
+    { id: 'q4-2026', label: 'Q4 2026', status: 'current' },
     { id: 'q1-2027', label: 'Q1 2027', status: 'planned' },
   ],
 
@@ -593,6 +593,7 @@ export const roadmapConfig = {
       progress: 100,
       status: 'shipped',
       milestones: [
+        { label: 'Experimental CEL policy gates and required hooks', status: 'shipped', quarter: 'q4-2026', changelog: 'policy-gates-and-hooks', docs: '/cli/commands/terraform/plan-policies', description: 'Opt-in policies inspect saved Terraform plan JSON and select required lifecycle hooks for Terraform, Helmfile, native Helm, and native Kubernetes. Native CI supplies GitHub Actions metadata and event snapshots without API permissions. Includes tested demonstration bundles; live approvals, reusable library resolution, and additional evaluators are not implemented.', benefits: 'Reject unsafe plans and require scanners or callbacks in the current job, with explicit component capabilities and fail-closed handling of missing required inputs.' },
         { label: 'Native GitHub OIDC enables automatic role assumptions', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/auth/providers', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Secretless CI/CD with native OIDC—no AWS access keys stored in GitHub secrets.', category: 'featured', priority: 'high', benefits: 'No long-lived credentials to rotate. Security posture improves and audit burden decreases.' },
         { label: 'Native GitHub Actions PATH integration', status: 'shipped', quarter: 'q1-2026', pr: 1979, docs: '/cli/commands/toolchain/env', changelog: 'github-actions-toolchain-path', description: 'Native `github` format for `atmos toolchain env` that outputs paths compatible with $GITHUB_PATH, with automatic file detection and append mode.', category: 'featured', priority: 'high', benefits: 'Add toolchain paths to GitHub Actions PATH with a single command. No shell tricks or manual file handling required.' },
         { label: 'GitHub Actions format for auth credentials', status: 'shipped', quarter: 'q1-2026', pr: 1984, changelog: 'auth-env-github-format', description: 'Direct output to $GITHUB_ENV with --format=github flag, eliminating shell pipelines for credential export.', benefits: 'Export auth credentials in one command. No grep/sed pipelines or manual file redirection.' },

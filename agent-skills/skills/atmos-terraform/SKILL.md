@@ -317,6 +317,25 @@ atmos terraform generate planfile vpc -s dev --format=json
 atmos terraform generate planfile vpc -s dev --format=yaml --file=planfile.yaml
 ```
 
+### Experimental Saved-Plan Policies
+
+`ATMOS_POLICY_DIR` opts Terraform execution into strict inline CEL `terraform.plan` denial rules
+from explicit `atmos/v1`, `kind: Policy` documents. This is not an `atmos.yaml` setting or a
+component attachment. The gate checks complete native `show -json` plan data after planning and
+again before applying a private copy of the same saved binary. It requires compatible format-1.x
+plan JSON; do not infer support for remote-only or encrypted plan modes without checking the binary.
+
+When the directory is configured, recommend `plan` then `apply --from-plan` or `apply --planfile`.
+Implicit apply/deploy, direct destroy, and skipped planfiles fail closed. For destruction, use
+`plan -destroy` then saved-plan apply. These checks run without requiring `--affected`. Dry-run
+does not evaluate a plan and must not be described as policy approval.
+
+Do not suggest unsetting the directory to bypass a governing policy. Protect the directory,
+workflow, binaries and environment; local configuration alone is not a tamper-resistant boundary.
+For policy-selected hooks, GitHub event context, samples/tests and capability limits, use
+`atmos-policy`. Attachments, Starlark and approvals remain proposed; legacy validation is unchanged.
+See https://atmos.tools/cli/commands/terraform/plan-policies for the exact manifest and limits.
+
 ## Authentication Configuration
 
 Terraform commands can use Atmos auth identities from `atmos.yaml` or component-level `auth.identity`.
@@ -459,7 +478,8 @@ component, each overriding the layer below field-by-field. See
 1. **Use the two-stage plan/apply workflow for production.** Run `plan` first, review the output, then
     `apply --from-plan` to ensure exactly the reviewed changes are applied.
 
-2. **Use `deploy` for automated pipelines.** It combines plan and apply with auto-approve, ideal for CI/CD.
+2. **Use `deploy` for automated pipelines when appropriate.** It combines plan and apply with
+   auto-approve. With saved-plan policies enabled, use an explicit plan followed by saved-plan apply.
 
 3. **Always preview multi-component operations with `--dry-run`** before executing `--all` or `--affected`.
 

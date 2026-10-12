@@ -1,0 +1,143 @@
+---
+title: Policy Capabilities and Integration Gaps
+sidebar_label: Policy Capabilities
+sidebar_position: 5
+description: What the current policy predicates can express, which capabilities need collectors or executors, and which contracts need extension.
+id: policy-capabilities
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+A policy feature requires more than an expression language. It needs trustworthy inputs, a decision
+contract capable of representing the result, and an integration that enforces or executes that result.
+This capability review separates those requirements for the experimental Atmos policy engine.
+</Intro>
+
+:::warning Limited end-to-end enforcement
+
+The package evaluates supplied snapshots through a Go API. An opt-in
+[Terraform saved-plan gate](/cli/commands/terraform/plan-policies) now collects native plan JSON and
+enforces CEL denial rules. Native CI now collects supplied GitHub Actions metadata/events, and existing
+Terraform/Helmfile/Helm/Kubernetes lifecycle points enforce operation rules and selected hooks.
+Fresh API facts, approval verification, other component admission and native artifact collectors remain
+gaps. See [Policy Library](/contribute/policy-library) for the exact component matrix and tests.
+See [Developing the Policy Engine](/contribute/policy-engine) for the implemented API.
+
+:::
+
+## Capability matrix
+
+| Policy family | Current expression capability | Missing integration or contract |
+|---|---|---|
+| Required tags, allowed labels, resource/provider/type allowlists, version allowlists | CEL can check membership, presence, and values; native plan gate is implemented | General configuration gates remain missing; semantic-version ranges need deliberate parsing rather than string ordering |
+| Prevent stateful deletion; require create-before-destroy | CEL can inspect resource types and ordered action lists through the saved-plan gate | Policy authors must explicitly handle unknown values; component attachments are not implemented |
+| Cap changed resources, files, or affected instances | CEL filtering and `size()` can express counts | Complete inventories, including deletions and indirect effects |
+| Weighted blast radius | Fixed known weights can be expressed with counts and arithmetic | No general list-sum helper is enabled; arbitrary weight aggregation needs preprocessing, a pure helper, or another adapter |
+| Monthly cost limits and increases | CEL can compare supplied amounts and calculate ratios | Cost-result collection, numeric conversion, missing estimates, currency and zero-baseline handling |
+| Scanner severity and failed-check thresholds | CEL can inspect supplied scanner JSON and count matches | Scanner execution, verified completion, result schemas, and reevaluation after results exist |
+| Require approved modules | CEL can inspect a supplied flat resource-to-module inventory | Recursive arbitrary-depth configuration traversal is not built in; a collector must preserve ancestry and module provenance |
+| Working hours, freezes, command allowlists, runner restrictions | CEL can inspect a supplied timestamp, command, and runner facts | Trusted invocation/runner data and admission points; self-asserted labels do not prove worker isolation |
+| Protected label changes, sensitive resources, drift requiring review | CEL can select an approval requirement | Approval verification, freshness, author exclusion, and trusted reviewer lists |
+| Multiple approvals, rejection thresholds, alternative approver groups | Boolean conditions can inspect supplied evidence; static approval requirements can be emitted | No approval resolver or defined composition semantics for the opaque approval specification |
+| PR-only execution, branch/tag/label/path/fork selection | CEL can express the selection predicates | Native event/fact collectors, permission checks, and execution routing; selecting a fork never authorizes privileged execution of its code |
+| Comment-driven operations | CEL can match supplied comment text and a trusted actor | Verified event association, actor authorization, replay protection, and command execution |
+| Failure/drift notifications, callbacks, PR summaries | CEL can select predefined hook references | Hook execution, credentials, delivery handling, and rendering; predicates cannot currently return dynamically generated recipients or payloads |
+| Cancel superseded runs, retry failures, trigger dependencies | Conditions can be evaluated from supplied run state | Run discovery, typed scheduling actions, execution, concurrency, durable history, and duplicate handling |
+| Login rules, access grants, role/team rewriting | Some identity predicates can be expressed over supplied claims | No session/access-grant or identity-mutation contract; this is not implemented by a CLI policy gate |
+| Compare sanitized secrets without exposing them | Ordinary comparisons work only if comparable safe values are supplied | No agreed secret-tokenization or sanitized-comparison helper; do not expose plaintext merely to make the predicate work |
+
+These are implementation assessments, not drop-in compatibility guarantees. Rego policy files cannot
+be loaded by the new package today. Legacy component Rego validation remains a separate working path.
+
+## What needs language work
+
+The CEL adapter enables the standard environment without additional extension libraries. It supports
+boolean logic, comparisons, membership, regular-expression matching, map/list access, `exists`,
+`all`, `filter`, `map`, `size`, and timestamp operations over supplied values.
+
+It does not currently provide general list `sum`, recursive tree `walk`, CIDR containment,
+`lowerAscii`, `split`, or a sanitized-value helper. These are concrete adapter gaps, not reasons to
+give expressions network, filesystem, or process access. A trusted collector can prepare suitable
+facts, or an adapter can add narrowly scoped pure helpers with tests and resource limits.
+
+Not every rule needs a new language. For example, a limit on the number of changed production
+instances is a filter-and-count predicate. A generic weighted sum over arbitrary input weights needs
+more support, even though a fixed-weight version can be written using arithmetic on several counts.
+
+## What needs a richer result contract
+
+`Evaluator.Evaluate` returns a boolean. Matching rules select **static** `Effects` supplied in the
+trusted definition. Each rule produces at most one finding with a predefined reason; it does not
+return an arbitrary list of matched resources or interpolate their addresses into messages.
+
+The current result therefore does not directly represent:
+
+- Multiple dynamically generated findings per resource, with individual locations and messages.
+- A warning/advisory severity or a run-state transition requiring confirmation.
+- Computed hook references, recipients, callback bodies, or PR-comment content.
+- Run cancellation, retry counts, downstream target lists, release versions, or scheduler updates.
+- Identity grants or rewritten session claims.
+
+A small fixed set of alternatives can use separate rules and predefined hook references. General
+dynamic output needs a typed, validated result contract or trusted executor-side rendering. It should
+not be smuggled into a reason string or interpreted as executable code.
+
+“Warn” also needs a precise meaning. An informational warning and a blocking human-approval
+requirement are different behaviors. Use explicit approval obligations for the latter. An allow from
+another rule must never cancel a denial or independently required approval.
+
+Adding Starlark behind the current boolean interface would not address these output gaps. Language
+adapters and the common result contract must evolve together if richer outputs are introduced.
+
+## What is missing in Native CI
+
+`pkg/ci.CollectPolicySnapshot` now dispatches through the existing Native CI provider registry.
+GitHub's optional snapshot capability collects native environment metadata and the supplied event,
+with availability/completeness/provenance. Tests exercise registry dispatch, event ingestion, malformed
+and missing events, and credential exclusion. Collection requires no token or additional API permission.
+
+The existing `pkg/ci` framework already handles provider registration/detection, limited run context,
+base resolution, and reporting. Its policy bridge supplies snapshots to plan and lifecycle requests.
+The evaluator remains pure. Completing the integration still requires:
+
+1. More provider adapters without erasing provider-native metadata or fabricating webhook payloads.
+2. Separately fetched facts, pagination/completeness, and capability/permission errors.
+3. A bridge/orchestrator that requests facts, supplies a snapshot to `pkg/policy`, and reevaluates when
+   relevant events or facts change. Avoid a dependency cycle between collection and evaluation.
+4. Approval verification and mandatory gate reporting that propagate enforcement errors rather than
+   inheriting best-effort notification behavior.
+5. Provider fixture tests and command integration tests, not only evaluator tests over supplied data.
+
+Keep collection/reporting in Native CI and evaluation pure. An input contract in `pkg/policy` is
+useful scaffolding, but not evidence that live facts or approvals are implemented.
+
+## Credential and trust boundaries
+
+Open-source GitHub integration is planned around `GITHUB_TOKEN`, with each capability documenting
+its required workflow permissions and reduced-permission behavior. Named reviewers and trusted
+maintained reviewer lists fit that boundary. Live organization-team enrichment and custom GitHub App
+integration remain Atmos Pro responsibilities. A reviewer request or repository label is not proof
+of team membership or affirmative approval.
+
+Likewise, local rule evaluation cannot enforce hosted login, prove a runner's isolation, recover
+facts missing from a redacted plan, or guarantee event delivery. Hooks can perform authorized work
+after integration, but arbitrary callbacks do not acquire exactly-once semantics merely because a
+policy selected them.
+
+## Suggested implementation sequence
+
+Start with trustworthy data and a real enforcement path, then expand expression convenience:
+
+1. Connect GitHub Native CI snapshots and command admission to the existing evaluator.
+2. Build on the saved-plan gate with complete affected inputs and scanner-result ingestion.
+3. Implement named-reviewer approval verification and mandatory-hook execution evidence.
+4. Define warning semantics and structured findings before adding dynamic-output adapters.
+5. Add pure CEL helpers and language adapters where representative policies need them.
+
+These are proposed next steps, not changes implemented by this documentation.
+
+Open source governs the current execution/job, including combining its rules and inspecting a
+complete affected inventory before fan-out. Aggregating subsequent component/job/workflow results,
+global budgets, deployment completeness, and coordinated retries belongs to Atmos Pro. Existing
+Native CI aggregate reporting is not removed by this policy boundary.

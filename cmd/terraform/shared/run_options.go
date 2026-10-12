@@ -52,6 +52,7 @@ type RunOptions struct {
 	// distinguish `--verify-plan=false` from the flag being unset, so the
 	// tri-state resolution reads the Cobra flag directly via
 	// resolveVerifyPlanMode (cmd/terraform/utils.go).
+	FromPlan         bool
 	PlanFile         string
 	PlanSkipPlanfile bool
 	DeployRunInit    bool
@@ -106,6 +107,7 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 		InitMode:                v.GetString("init-mode"),
 		InitReconfigure:         v.GetString("init-reconfigure"),
 		InitUpgrade:             v.GetString("init-upgrade"),
+		FromPlan:                v.GetString("from-plan") != "",
 		PlanFile:                v.GetString("planfile"),
 		PlanSkipPlanfile:        v.GetBool("skip-planfile"),
 		DeployRunInit:           v.GetBool("deploy-run-init"),
@@ -129,6 +131,11 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 		return nil, err
 	}
 	opts.Labels = labels
+	// Cobra consumes --from-plan before the legacy argument parser sees it.
+	// Its no-value sentinel selects the canonical plan; a value selects a path.
+	if fromPlan := v.GetString("from-plan"); fromPlan != "" && fromPlan != "true" && opts.PlanFile == "" {
+		opts.PlanFile = fromPlan
+	}
 
 	if opts.UseMocks, opts.MocksMode, err = cfg.ParseUseMocksValue(v.GetString("use-mocks"), cfg.UseMocksFlagAndEnvSource); err != nil {
 		return nil, err
@@ -234,6 +241,9 @@ func ApplyRunOptions(info *schema.ConfigAndStacksInfo, opts *RunOptions) {
 		info.InitUpgrade = opts.InitUpgrade
 	}
 
+	if opts.FromPlan {
+		info.UseTerraformPlan = true
+	}
 	if opts.PlanFile != "" {
 		info.PlanFile = opts.PlanFile
 		info.UseTerraformPlan = true
