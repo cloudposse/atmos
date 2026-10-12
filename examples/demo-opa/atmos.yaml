@@ -1,0 +1,40 @@
+# Minimal Atmos configuration focused on Open Policy Agent (OPA) validation.
+# This example is intentionally small so the policy workflow is the only moving
+# part: there are no cloud credentials, backends, or providers to configure.
+# Run `atmos validate component vpc -s dev` to see the policies in action.
+
+# Base path for components, stacks, and workflows configurations.
+base_path: "./"
+
+components:
+  terraform:
+    # The `vpc` component is a credential-free mock: it only computes values from
+    # its variables so the policies have realistic input without provisioning
+    # anything. Validation never runs Terraform, so no provider setup is needed.
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  # Each stack is named after its stage (`dev`, `prod`), which keeps the
+  # `atmos validate component vpc -s <stage>` commands short and readable.
+  name_template: "{{.vars.stage}}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# Validation schemas for OPA (used to validate Atmos components).
+schemas:
+  # https://www.openpolicyagent.org
+  opa:
+    # Can also be set using 'ATMOS_SCHEMAS_OPA_BASE_PATH' ENV var, or '--schemas-opa-dir' command-line argument.
+    # Supports both absolute and relative paths.
+    base_path: "stacks/schemas/opa"
