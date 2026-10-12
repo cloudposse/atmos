@@ -54,6 +54,8 @@ const config = {
         [
             '@docusaurus/plugin-client-redirects', {
                 redirects: [
+                    // Policy guides belong in Reference, not the command list.
+                    {from: '/cli/commands/terraform/plan-policies', to: '/policies/terraform-plan'},
                     // Advanced Quick Start: "Configure Repository" + "Configure CLI"
                     // were merged into a single "Configure the Project" step.
                     {

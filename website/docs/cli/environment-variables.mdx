@@ -418,6 +418,18 @@ These environment variables configure Atmos behavior and can override settings i
   </dd>
 </dl>
 
+## Policy Variables
+
+<dl>
+  <dt><code>ATMOS_POLICY_DIR</code></dt>
+  <dd>
+    Directory containing <code>atmos/v1</code> <code>Policy</code> documents. No default;
+    unset or empty disables directory-based policies. Use an absolute, protected path in CI.
+    There is no corresponding <code>atmos.yaml</code> field.
+    See <a href="/policies/configuration">Policy Configuration</a> for loading rules and schema.
+  </dd>
+</dl>
+
 ## Logging and Profiling Variables
 
 <dl>

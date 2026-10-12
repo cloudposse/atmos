@@ -32,7 +32,7 @@ This command generates an execution plan that shows:
 
 By default, Atmos saves the plan to a file using a standardized naming convention: `<context>-<component>.planfile`. This planfile can later be used with `atmos terraform apply --from-plan` to ensure that only the reviewed changes are applied.
 
-With [`ATMOS_POLICY_DIR` configured](/cli/commands/terraform/plan-policies), Atmos evaluates CEL
+With [`ATMOS_POLICY_DIR` configured](/policies/terraform-plan), Atmos evaluates CEL
 policies against the saved plan's native JSON before publishing the planfile. This requires saved
 planfiles and runs independently of `--affected`.
 

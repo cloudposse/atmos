@@ -1,15 +1,14 @@
 ---
 related_docs:
   - label: Saved plan policies
-    url: /cli/commands/terraform/plan-policies
-  - label: Policy capabilities
-    url: /contribute/policy-capabilities
+    url: /policies/terraform-plan
+  - label: Policy reference
+    url: /policies
 ---
 
 # Policy demonstrations
 
-These are original, parameterized CEL examples for the experimental policy implementation in
-this branch. They demonstrate [saved-plan policies](https://atmos.tools/cli/commands/terraform/plan-policies)
+These parameterized CEL examples demonstrate [saved-plan policies](https://atmos.tools/policies/terraform-plan)
 and lifecycle hooks, not the reusable policy library. They are opt-in controls, not a default compliance baseline. Review the resource
 types, limits, event selection, executable paths, tool pins, and credentials before adopting them.
 

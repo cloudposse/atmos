@@ -1,0 +1,111 @@
+---
+title: Policy Configuration
+sidebar_label: Configuration
+description: Policy directory loading and the atmos/v1 Policy document schema.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Store policies in YAML or JSON files and set `ATMOS_POLICY_DIR` to their directory.
+Policy documents are separate from `atmos.yaml` and stack configuration.
+</Intro>
+
+## Directory
+
+```shell
+export ATMOS_POLICY_DIR=/trusted/policy.d
+```
+
+<dl>
+  <dt><code>ATMOS_POLICY_DIR</code></dt>
+  <dd>Path to the policy directory. No default; unset or empty disables directory-based policies.
+  Use an absolute path in CI.</dd>
+</dl>
+
+| Loading rule | Behavior |
+|---|---|
+| File types | Regular `.yaml`, `.yml`, `.json` files; other extensions are ignored |
+| Order | Filename order, then rule-name order within each document |
+| Documents | Exactly one document per file; maximum 1 MiB per file |
+| Subdirectories | Not searched |
+| Templates and imports | Not expanded; documents contain literal values |
+| Invalid directory | Missing, unreadable, or containing no rules blocks the command |
+| Invalid document | Unknown fields, duplicate rule identities, invalid expressions, and unsupported field values block the command |
+
+## Document schema
+
+```yaml title="policy.d/limits.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: limits
+spec:
+  policies:
+    limit-changes:
+      on: terraform.plan
+      engine: cel
+      action: deny
+      reason: Too many managed resources change in this plan
+      with:
+        maximum: 10
+      rule: >-
+        has(input.resource_changes) && input.resource_changes.filter(r,
+          r.mode == 'managed' && r.change.actions != ['no-op']).size() > params.maximum
+```
+
+<dl>
+  <dt><code>apiVersion</code></dt>
+  <dd>Required string. Must be <code>atmos/v1</code>.</dd>
+  <dt><code>kind</code></dt>
+  <dd>Required string. Must be <code>Policy</code>.</dd>
+  <dt><code>metadata.name</code></dt>
+  <dd>Required nonempty string. Namespaces rule and hook identifiers. The example rule is
+  identified as <code>limits/limit-changes</code>.</dd>
+  <dt><code>spec.policies</code></dt>
+  <dd>Required nonempty map of rule names to rule definitions.</dd>
+  <dt><code>spec.hooks</code></dt>
+  <dd>Optional map of hook names to <a href="/policies/hooks">governing hook definitions</a>.
+  These definitions do not merge with component hooks.</dd>
+  <dt><code>spec.tools</code></dt>
+  <dd>Optional map of tool names to version strings for hook dependencies. Installation uses
+  these pins, not component tool overrides. Conflicting pins across documents are errors.</dd>
+</dl>
+
+## Rule fields
+
+<dl>
+  <dt><code>on</code></dt>
+  <dd>Required string: <code>terraform.plan</code> or <code>operation</code>. Selects the input kind.</dd>
+  <dt><code>engine</code></dt>
+  <dd>Optional string. Supported value and default: <code>cel</code>.</dd>
+  <dt><code>rule</code></dt>
+  <dd>Required CEL expression returning a boolean. <code>true</code> selects the action;
+  <code>false</code> makes the rule not applicable. Maximum expression size: 64 KiB.</dd>
+  <dt><code>action</code></dt>
+  <dd>Required string. <code>deny</code> blocks the operation when selected.
+  <code>hooks</code> selects hook requirements and is valid only with <code>on: operation</code>.</dd>
+  <dt><code>reason</code></dt>
+  <dd>Optional static string. CLI denial errors identify blocking rule IDs, not resource values.</dd>
+  <dt><code>with</code></dt>
+  <dd>Optional JSON-compatible object exposed as <code>params</code>. Default: an empty object.</dd>
+  <dt><code>required_ci</code></dt>
+  <dd>Optional list of <a href="/policies/ci#required-inputs">CI input requirements</a>, checked
+  before the predicate. Missing or incomplete required evidence blocks evaluation.</dd>
+  <dt><code>hooks</code></dt>
+  <dd>Required nonempty list for <code>action: hooks</code>; invalid with <code>action: deny</code>.
+  See <a href="/policies/hooks#hook-requirements">hook requirement fields</a>.</dd>
+</dl>
+
+## Enforcement
+
+For a mandatory CI gate:
+
+1. Check out the governing policies from a protected revision into a separate directory.
+2. Set `ATMOS_POLICY_DIR` in the trusted workflow and run Atmos with the required rules loaded.
+3. Require the policy-running job to pass before merging. Do not use `continue-on-error` for enforcement.
+4. Protect policy files, workflow definitions, tool binaries, hook dependencies, and their configuration
+   with required review. Protect `CODEOWNERS` itself when it supplies ownership rules.
+
+The directory does not establish its own trust. A caller who can unset `ATMOS_POLICY_DIR`, change
+its contents, modify the workflow, or run the underlying tool directly can bypass this gate.
