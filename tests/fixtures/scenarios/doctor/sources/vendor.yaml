@@ -1,0 +1,27 @@
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: doctor-sources
+spec:
+  sources:
+    # Canonical templated form (archived monorepo).
+    - component: vpc-templated
+      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}"
+      version: "1.398.0"
+      targets: ["components/terraform/vpc"]
+    # Same archived repo, literal ref.
+    - component: vpc-literal
+      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0"
+      targets: ["components/terraform/vpc2"]
+    - component: label
+      source: "git::https://github.com/cloudposse/terraform-null-label.git?ref=0.25.0"
+      targets: ["components/terraform/label"]
+    - component: label-again
+      source: "github.com/cloudposse/terraform-null-label.git?ref=0.25.0"
+      targets: ["components/terraform/label2"]
+    - component: missing
+      source: "github.com/cloudposse/this-repo-does-not-exist-doctor-test.git?ref=v1"
+      targets: ["components/terraform/missing"]
+    - component: gitlab
+      source: "git::https://gitlab.com/gitlab-org/gitlab-runner.git?ref=v1"
+      targets: ["components/terraform/gl"]

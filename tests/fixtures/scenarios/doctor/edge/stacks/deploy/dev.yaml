@@ -1,0 +1,7 @@
+vars:
+  stage: dev
+  description: "!important: rendered by {{ templates }} docs elsewhere"
+hooks:
+  h:
+    events: [after-terraform-apply]
+    command: store
