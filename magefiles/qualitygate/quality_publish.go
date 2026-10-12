@@ -64,19 +64,42 @@ func (q *qualityClient) refresh(number int, performance string, run *githubapi.R
 	if run != nil && !bench.PRMatches(&pr, run, q.repo) {
 		return nil
 	}
-	existing, err := q.existing(number)
-	if err != nil {
-		return err
+	// Scheduled and event reporters for one PR can run concurrently. Publish only
+	// when the comment is unchanged since rendering; otherwise re-render from the
+	// other writer's result so a stale snapshot never overwrites a fresher one.
+	for range qualityPublishAttempts {
+		existing, err := q.existing(number)
+		if err != nil {
+			return err
+		}
+		if qualityObsolete(existing, run) {
+			return nil
+		}
+		body, ready := q.render(&pr, existing, performance, run)
+		valid, err := q.stillCurrent(&pr, run)
+		if err != nil || !valid {
+			return err
+		}
+		latest, err := q.existing(number)
+		if err != nil {
+			return err
+		}
+		if qualitySameComment(existing, latest) {
+			return q.publish(number, existing, body, ready)
+		}
 	}
-	if qualityObsolete(existing, run) {
-		return nil
+	// Another writer keeps publishing newer state; its report supersedes this one.
+	return nil
+}
+
+// Bounds re-rendering when another reporter publishes during evaluation.
+const qualityPublishAttempts = 3
+
+func qualitySameComment(before, after *githubapi.Comment) bool {
+	if before == nil || after == nil {
+		return before == after
 	}
-	body, ready := q.render(&pr, existing, performance, run)
-	valid, err := q.stillCurrent(&pr, run)
-	if err != nil || !valid {
-		return err
-	}
-	return q.publish(number, existing, body, ready)
+	return before.ID == after.ID && before.Body == after.Body
 }
 
 func qualityObsolete(existing *githubapi.Comment, run *githubapi.Run) bool {

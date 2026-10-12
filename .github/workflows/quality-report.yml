@@ -48,10 +48,12 @@ on:
 
 permissions: {}
 
-# One writer per PR owns the composite comment and its labels; the benchmark
-# reporter shares the group. Each run reconciles current GitHub state, so a newer
-# pending run replaces an older one instead of queueing every CI event. Fork PRs
-# lack workflow_run.pull_requests and key on the head SHA. Schedules use "all".
+# Group per PR so CI bursts coalesce: each run reconciles current GitHub state,
+# so a newer pending run replaces an older one instead of queueing every event.
+# The benchmark reporter shares the group. Fork PRs lack
+# workflow_run.pull_requests and key on the head SHA; schedules use "all". Those
+# groups can overlap one PR, so the reporter re-checks its comment before
+# publishing and re-renders if another writer changed it.
 concurrency:
   group: >-
     atmos-quality-report-${{

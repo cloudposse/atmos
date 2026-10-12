@@ -313,6 +313,60 @@ func TestQualityPublishAndStaleProtection(t *testing.T) {
 	}
 }
 
+func TestQualityConcurrentWriterRerendersBeforePublish(t *testing.T) {
+	for _, scenario := range []string{"unchanged", "changed once", "always changing"} {
+		t.Run(scenario, func(t *testing.T) {
+			run := githubtest.Run()
+			pr := githubtest.PR(run)
+			count := 149
+			pr.ChangedFiles = &count
+			commentReads, reads := 0, 0
+			base := qualityPublishGetter(t, "update", &pr, &run, &reads)
+			concurrent := qualityMarker + "\n" + qualityHeadMarker(pr.Head.SHA) + "\n" + qualityPerformanceStart + "\nconcurrent benchmark\n" + qualityPerformanceEnd
+			api := &githubtest.FakeAPI{T: t}
+			api.Get = func(path string, response any) error {
+				if !strings.Contains(path, "/comments?") {
+					return base(path, response)
+				}
+				commentReads++
+				// Another reporter publishes between this run's read and its re-check.
+				body := qualityMarker
+				switch {
+				case scenario == "changed once" && commentReads >= 2:
+					body = concurrent
+				case scenario == "always changing":
+					body = fmt.Sprintf("%s\n<!-- writer:%d -->", concurrent, commentReads)
+				}
+				return githubtest.Respond([]map[string]any{{"id": 17, "body": body, "user": map[string]string{"login": "github-actions[bot]", "type": "Bot"}}}, response)
+			}
+			var published []string
+			api.Write = func(method, path string, body io.Reader) error {
+				if strings.Contains(path, "comments") {
+					var payload map[string]string
+					require.NoError(t, json.NewDecoder(body).Decode(&payload))
+					published = append(published, payload["body"])
+				}
+				return nil
+			}
+			q := qualityClient{ctx: context.Background(), api: &qualityGraphAPI{FakeAPI: api, t: t, scenario: "valid"}, repo: githubtest.Repo}
+			require.NoError(t, q.refresh(pr.Number, "", nil))
+			switch scenario {
+			case "unchanged":
+				require.Equal(t, 2, commentReads)
+				require.Len(t, published, 1)
+				require.NotContains(t, published[0], "concurrent benchmark")
+			case "changed once":
+				require.Equal(t, 4, commentReads, "a changed comment must trigger one re-render")
+				require.Len(t, published, 1)
+				require.Contains(t, published[0], "concurrent benchmark", "the re-render must keep the other writer's result")
+			case "always changing":
+				require.Equal(t, 2*qualityPublishAttempts, commentReads)
+				require.Empty(t, published, "a stale snapshot must never overwrite a fresher report")
+			}
+		})
+	}
+}
+
 func qualityPublishGetter(t *testing.T, scenario string, pr *githubapi.PR, run *githubapi.Run, reads *int) func(string, any) error {
 	t.Helper()
 	return func(path string, response any) error {
