@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -35,6 +36,11 @@ const (
 )
 
 // captureIO routes the data (stdout) and UI (stderr) channels to buffers.
+// Strip ANSI styling so assertions hold on terminals and CI runners that advertise color.
+func plainText(b *bytes.Buffer) string {
+	return ansi.Strip(b.String())
+}
+
 func captureIO(t *testing.T) (stdout, stderr *bytes.Buffer) {
 	t.Helper()
 	var out, errBuf bytes.Buffer
@@ -130,7 +136,7 @@ func TestListChecks(t *testing.T) {
 		require.NoError(t, listChecks("text"))
 		assert.Empty(t, stdout.String())
 		for _, rule := range rules {
-			assert.Contains(t, stderr.String(), rule.ID+" ["+rule.Category+"]: "+rule.Description)
+			assert.Contains(t, plainText(stderr), rule.ID+" ["+rule.Category+"]: "+rule.Description)
 		}
 	})
 
@@ -217,7 +223,7 @@ func TestRunFindingsThresholdsAndFormats(t *testing.T) {
 			err := executeDoctor(t, tt.args...)
 
 			requireExitCode(t, err, tt.wantExit)
-			combined := stdout.String() + stderr.String()
+			combined := plainText(stdout) + plainText(stderr)
 			assert.Contains(t, combined, "command-provides")
 			assert.Contains(t, combined, "Legacy command-provides declaration")
 		})
@@ -292,7 +298,7 @@ func TestRunDryRunLeavesProjectUntouched(t *testing.T) {
 
 	require.NoError(t, executeDoctor(t, "--offline", "--fix", "--dry-run"))
 
-	assert.Contains(t, stderr.String(), "Dry run: project files and backups were not written.")
+	assert.Contains(t, plainText(stderr), "Dry run: project files and backups were not written.")
 	content, err := os.ReadFile(filepath.Join(root, "atmos.yaml"))
 	require.NoError(t, err)
 	assert.Equal(t, legacyCommandConfig, string(content))

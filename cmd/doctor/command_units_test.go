@@ -72,10 +72,10 @@ func TestRenderSummary(t *testing.T) {
 			require.NoError(t, renderSummary(&tt.report))
 			assert.Empty(t, stdout.String())
 			for _, want := range tt.want {
-				assert.Contains(t, stderr.String(), want)
+				assert.Contains(t, plainText(stderr), want)
 			}
 			for _, absent := range tt.absent {
-				assert.NotContains(t, stderr.String(), absent)
+				assert.NotContains(t, plainText(stderr), absent)
 			}
 		})
 	}
@@ -224,7 +224,7 @@ func TestRenderFindingsHidesFixedAndShowsGuidance(t *testing.T) {
 
 	renderFindings(&report)
 
-	output := stderr.String()
+	output := plainText(stderr)
 	assert.NotContains(t, output, "applied-rule")
 	assert.Contains(t, output, "stacks.yaml:7 open-rule [error, manual] needs attention")
 	assert.Contains(t, output, "cannot be verified")
