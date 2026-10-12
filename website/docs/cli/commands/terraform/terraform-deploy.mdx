@@ -19,7 +19,7 @@ Use this command to deploy Terraform changes for an Atmos component in a stack w
 
 :::note Saved plan policies
 
-When [`ATMOS_POLICY_DIR` is configured](/cli/commands/terraform/plan-policies), deployment must reach
+When [`ATMOS_POLICY_DIR` is configured](/policies/terraform-plan), deployment must reach
 Terraform execution with an explicit saved plan. Implicit plan-and-apply is rejected. Use `plan`
 followed by `apply --from-plan` or `apply --planfile`; saved artifacts are reevaluated before apply.
 

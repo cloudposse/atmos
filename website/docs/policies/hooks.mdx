@@ -1,0 +1,130 @@
+---
+title: Policy-Driven Hooks
+sidebar_label: Hooks
+description: Define governing hooks and select them with operation policies at component lifecycle events.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use `action: hooks` with `on: operation` to select hooks at component lifecycle events.
+Define the hooks in the policy document's `spec.hooks` map.
+</Intro>
+
+## Require TFLint after a plan
+
+```yaml title="policy.d/lint.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: platform
+spec:
+  hooks:
+    lint:
+      kind: command
+      command: tflint
+      args: [--recursive]
+  policies:
+    lint-plan:
+      on: operation
+      action: hooks
+      rule: input.event == 'after.terraform.plan' && input.status == 'success'
+      hooks:
+        - ref: lint
+          event: after.terraform.plan
+          required: true
+          require_success: true
+```
+
+Install TFLint on the runner or pin it through `spec.tools`. Run Atmos with the directory enabled:
+
+```shell
+export ATMOS_POLICY_DIR="$PWD/policy.d"
+atmos terraform plan vpc -s dev
+```
+
+The hook runs after a successful plan, including a detailed exit code of `2`. A failing TFLint
+process fails the command. `--skip-hooks` cannot skip this required hook.
+
+## Hook requirements
+
+<dl>
+  <dt><code>ref</code></dt>
+  <dd>Required string. Hook name in the same document, or qualified <code>document-name/hook-name</code>.
+  Resolution uses governing <code>spec.hooks</code>, not workspace component hooks.</dd>
+  <dt><code>event</code></dt>
+  <dd>Required string. Must match the current lifecycle event after alias normalization.
+  Selecting a different event is an error, not a request to schedule future work.</dd>
+  <dt><code>required</code></dt>
+  <dd>Optional boolean; default <code>false</code>. If <code>true</code>, skip flags cannot suppress execution.</dd>
+  <dt><code>require_success</code></dt>
+  <dd>Optional boolean; default <code>false</code>. If <code>true</code>, a hook failure blocks
+  regardless of its <code>on_failure</code> setting. Otherwise, the hook's normal failure handling applies.</dd>
+</dl>
+
+Set both booleans to `true` for a mandatory successful check. Neither flag allows a hook to
+override a separate policy denial.
+
+## Hook definitions
+
+`spec.hooks` uses the existing [hook kinds and fields](/stacks/hooks): command arguments, tool
+configuration, outputs, `on_failure`, and `kind: step` / `kind: steps` execution.
+Use ordered steps and their [retry settings](/steps/retry) when needed.
+
+| Setting | Policy hook behavior |
+|---|---|
+| `when`, `events` on the hook | Rejected; select the event and condition in the rule |
+| Nested `when`, `background`, `continue_on_error`, `on_failure` inside `with` | Rejected |
+| Go templates and YAML functions | Not rendered in governing definitions; use literal values |
+| `spec.tools` | Governing version pins; component dependency overrides are not merged |
+| Execution order | Document filename, rule name, then hook reference list order |
+| Repeated references | Execute for each selected requirement; not deduplicated |
+
+## HTTP callback after apply
+
+```yaml title="policy.d/callback.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: notifications
+spec:
+  hooks:
+    applied:
+      kind: step
+      type: http
+      with:
+        url: https://example.invalid/deployment-completed
+        method: POST
+  policies:
+    notify-helm-apply:
+      on: operation
+      action: hooks
+      rule: input.event == 'after.helm.apply' && input.status == 'success'
+      hooks:
+        - ref: applied
+          event: after.helm.apply
+          required: true
+          require_success: true
+```
+
+Replace the example URL with your endpoint. See the [HTTP step fields](/steps/type/http) for
+request options; template examples on that page do not apply to static governing hook definitions.
+
+## Lifecycle and failure behavior
+
+| Condition | Behavior |
+|---|---|
+| Policy denial or evaluation error | Block authorization before selected hooks execute |
+| Missing hook definition, unavailable kind, or required tool failure | Fail the command |
+| Dry-run | Report selected hooks without executing them |
+| Plan reevaluation before saved-plan apply | Does not replay after-plan hooks |
+| Required-success post-apply hook fails | Command fails, but the completed apply is not rolled back |
+| Repeated invocation | May execute the hook again; HTTP receivers must handle duplicates |
+
+Operation policies use the per-component Terraform, Helmfile, Helm, and Kubernetes
+[lifecycle events](/stacks/hooks#supported-lifecycle-events), not scaffold or aggregate events.
+To select cleanup after a failed operation, match `input.status == 'failure'` at an after-event.
+See [Examples](/policies/examples) for cleanup and production scanner rules.
+
+Protect hook binaries, scanner configuration, tool registries, and credentials along with the
+policy documents. Policy selection does not change a tool or HTTP hook's credential requirements.

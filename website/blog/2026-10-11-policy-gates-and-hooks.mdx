@@ -6,7 +6,7 @@ tags: [feature, experimental]
 ---
 
 A successful infrastructure command does not prove that a plan respected your safety rules or that
-the required scanner ran. Experimental Atmos policies let you reject saved Terraform plans and
+the required scanner ran. Experimental [Atmos policies](/policies) let you reject saved Terraform plans and
 require lifecycle hooks using CEL expressions, with native GitHub Actions context available locally
 inside the job.
 
@@ -27,9 +27,8 @@ cannot be skipped with `--skip-hooks`; requiring execution and requiring success
 
 GitHub Actions policies can inspect allowlisted runner metadata and the supplied native event
 without API credentials or additional token permissions. Missing required context blocks evaluation.
-This release does not fetch live reviews, verify approvals, aggregate component jobs, or implement
-Starlark, component attachments, or reusable library resolution. The tested bundles are demonstrations,
-not a reusable policy catalog.
+The event records the trigger, not current review state. Policies evaluate the input and required
+hooks for the current invocation.
 
 ## How to Use It
 
@@ -67,8 +66,9 @@ Protect the governing directory, workflow, environment, and executable dependenc
 feature is not a sandbox against someone who controls the runner. A failed post-apply hook can fail
 the command, but cannot undo the completed apply.
 
-See [Saved Plan Policies](/cli/commands/terraform/plan-policies) for the manifest and trust boundary,
-and [Policy Capabilities](/contribute/policy-capabilities) for component-specific support.
+See [Policy Configuration](/policies/configuration) for the manifest and trust boundary,
+[Terraform Plans](/policies/terraform-plan) for saved-plan checks, and [Hooks](/policies/hooks)
+for required lifecycle actions.
 
 ## Get Involved
 

@@ -19,7 +19,7 @@ Use this command to destroy Terraform-managed infrastructure for an Atmos compon
 
 :::note Saved plan policies
 
-When [`ATMOS_POLICY_DIR` is configured](/cli/commands/terraform/plan-policies), direct destroy is
+When [`ATMOS_POLICY_DIR` is configured](/policies/terraform-plan), direct destroy is
 rejected. Use `plan -destroy` followed by `apply --from-plan` so policies can inspect the saved
 destruction plan before it is executed.
 
