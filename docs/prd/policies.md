@@ -607,8 +607,8 @@ The local execution sequence is:
 1. `plan` writes a fresh private artifact; exits 0 and 2 are successful plan outcomes, not verdicts.
 2. Decode and evaluate that artifact. Publish the requested saved plan only if evaluation passes.
 3. Before `apply --from-plan` / `apply --planfile`, privately snapshot the selected binary again,
-   evaluate it against the current governing rules, and apply **that snapshot**, not a mutable source
-   path. No persisted “passed” flag or result from another job authorizes a different plan.
+    evaluate it against the current governing rules, and apply **that snapshot**, not a mutable source
+    path. No persisted “passed” flag or result from another job authorizes a different plan.
 
 Reject malformed, missing, state-only, unsupported-major-format, errored, or explicitly incomplete
 plans. A no-change plan is still evaluated. Unknown values remain unknown: authors must explicitly
@@ -666,27 +666,27 @@ built-in named library + a no-code DSL), with label-based attachment and composi
 
 1. **`kind: PolicyDefinition`** — a reusable, parameterized rule authored once with a parameters schema.
 2. **`kind: PolicyLibrary`** — a named, pinnable **collection of definitions**, sourced from a **remote
-   repo** (or local path). This is the distribution mechanism: Atmos ships a built-in `atmos/*` library
-   in the binary; Cloud Posse and orgs publish more; a repo declares the libraries it draws from. A
-   library resolves the namespace that `use:` references. (Details + example below.)
+    repo** (or local path). This is the distribution mechanism: Atmos ships a built-in `atmos/*` library
+    in the binary; Cloud Posse and orgs publish more; a repo declares the libraries it draws from. A
+    library resolves the namespace that `use:` references. (Details + example below.)
 3. **Instances** reference a definition by name (`use: <library>/<type>/<name>`) and pass parameters
-   (`with:`) + `action` — **no file paths** in the common case. Inline `rule:`/`rego:` remains a one-off
-   escape hatch.
+    (`with:`) + `action` — **no file paths** in the common case. Inline `rule:`/`rego:` remains a one-off
+    escape hatch.
 4. **Targeting by tag/label selector (the attachment mechanism)** — instead of wiring policy into each
-   component, a policy declares a `match:` selector over component `metadata.tags`/`metadata.labels` and
-   attaches to every matching component (the Atmos-native autoattach). A central policy says "applies to
-   everything labeled `compliance: pci`" without touching a single component. **Reuse:** `pkg/tags`
-   (`MatchesTags` any/all, `MatchesLabels`, coercion) + the composable `pkg/list/filter` chain; the
-   autoattach precedent is `pkg/component/graph.go` `filterGraphByTagsAndLabels` (uniform across all
-   component types), reading `metadata` from the resolved section (`internal/exec/yaml_func_tags.go:13`).
-   **Rich matching = CEL selectors** (`pkg/condition`): `match:` accepts simple tag/label equality as
-   sugar and a CEL expression for anything richer (`'pci' in metadata.tags && metadata.labels.stage ==
-   'prod'`), no bespoke operator grammar. **Stack-level targeting rides on global-scope metadata defaults
-   (PR #2808)** — a stack-root `metadata.tags`/`labels` inherits to every component, so "all components in
-   a `prod` stack" is just a stack-root label; no separate stack-tags concept. **Trustworthy for enforced
-   rules:** evaluate the selector independently against before and after objects, retaining a match
-   from either version. Do not union metadata. This relies on complete analysis; removing a governing
-   label is separately reviewable, and new unlabeled objects need a baseline coverage rule.
+    component, a policy declares a `match:` selector over component `metadata.tags`/`metadata.labels` and
+    attaches to every matching component (the Atmos-native autoattach). A central policy says "applies to
+    everything labeled `compliance: pci`" without touching a single component. **Reuse:** `pkg/tags`
+    (`MatchesTags` any/all, `MatchesLabels`, coercion) + the composable `pkg/list/filter` chain; the
+    autoattach precedent is `pkg/component/graph.go` `filterGraphByTagsAndLabels` (uniform across all
+    component types), reading `metadata` from the resolved section (`internal/exec/yaml_func_tags.go:13`).
+    **Rich matching = CEL selectors** (`pkg/condition`): `match:` accepts simple tag/label equality as
+    sugar and a CEL expression for anything richer (`'pci' in metadata.tags && metadata.labels.stage ==
+    'prod'`), no bespoke operator grammar. **Stack-level targeting rides on global-scope metadata defaults
+    (PR #2808)** — a stack-root `metadata.tags`/`labels` inherits to every component, so "all components in
+    a `prod` stack" is just a stack-root label; no separate stack-tags concept. **Trustworthy for enforced
+    rules:** evaluate the selector independently against before and after objects, retaining a match
+    from either version. Do not union metadata. This relies on complete analysis; removing a governing
+    label is separately reviewable, and new unlabeled objects need a baseline coverage rule.
 
 A parameterized definition — CEL and its OPA equivalent are near line-for-line; params arrive as
 `params` (CEL) / `input.parameters` (Rego):
@@ -1003,7 +1003,7 @@ Use a trusted rule's selector on each version independently:
 
 ```text
 applies = matches(rule@governing, object@before)
-       OR matches(rule@governing, object@after)
+        OR matches(rule@governing, object@after)
 ```
 
 Handle absent versions explicitly. This retains coverage for known objects without the incorrect
@@ -1267,17 +1267,17 @@ same ~4 spots as `settings`/`hooks`:
 
 1. **Name constant** — `PolicySectionName = "policy"` in `pkg/config/const.go` (near line 95).
 2. **Collect/extract** — `ComponentPolicy`/`BaseComponentPolicy`/`ComponentOverridesPolicy` on
-   `ComponentProcessorResult` (`stack_processor_process_stacks_helpers.go:61`); extract in
-   `extractComponentSections` (`…_extraction.go:14`), overrides (`…_overrides.go:56`), inheritance
-   (`stack_processor_utils.go:2440`).
+    `ComponentProcessorResult` (`stack_processor_process_stacks_helpers.go:61`); extract in
+    `extractComponentSections` (`…_extraction.go:14`), overrides (`…_overrides.go:56`), inheritance
+    (`stack_processor_utils.go:2440`).
 3. **Deep-merge + assemble** — a `policy` merge block in `mergeComponentConfigurations`
-   (`stack_processor_merge.go:68`, order global→base→component→overrides) and
-   `comp[cfg.PolicySectionName] = finalPolicy` (`…_merge.go:480-517`) + `GlobalPolicy` wiring. Unlike
-   `validation` (nested in `settings`), a sibling `policy:` does **not** inherit for free — it needs its
-   own block.
+    (`stack_processor_merge.go:68`, order global→base→component→overrides) and
+    `comp[cfg.PolicySectionName] = finalPolicy` (`…_merge.go:480-517`) + `GlobalPolicy` wiring. Unlike
+    `validation` (nested in `settings`), a sibling `policy:` does **not** inherit for free — it needs its
+    own block.
 4. **Surface in describe** — `extractDescribeComponentSections`
-   (`describe_stacks_component_processor.go:546`) and the `ComponentSection` literal (`…:641-654`); plus
-   the section reader in `internal/exec/utils.go:180`.
+    (`describe_stacks_component_processor.go:546`) and the `ComponentSection` literal (`…:641-654`); plus
+    the section reader in `internal/exec/utils.go:180`.
 
 ## Testing
 
