@@ -138,10 +138,12 @@ It says nothing about what happens once the stack's lower layers get rebased ont
 of `main` — which is exactly what GitHub's own mergeability check (and `gh stack rebase`) account
 for, and what actually determines whether the stack can merge. If `main` has moved forward since
 the stack was built, a real conflict can exist between "phase N rebased onto phase N-1 rebased onto
-current main" even though "phase N vs phase N-1's original commits" shows none. Check whether
-`main` has advanced past the stack's base with `git merge-base --is-ancestor origin/main
-origin/<bottom-layer-branch>` before trusting a clean pairwise diff as proof of anything — if it's
-not an ancestor, `main` has moved and the pairwise check is not asking the right question.
+current main" even though "phase N vs phase N-1's original commits" shows none. Run `git fetch origin`
+immediately before checking whether `main` has advanced past the stack's base with
+`git merge-base --is-ancestor origin/main origin/<bottom-layer-branch>`. The ancestry check reads
+local remote-tracking refs, so skipping the fetch can hide new remote commits. If the freshly
+fetched `origin/main` is not an ancestor, the stack does not include current `main` and the pairwise
+check is not asking the right question.
 
 **Rule:** the moment GitHub reports a conflict, go straight to `gh stack rebase` — it reproduces
 the real, current mergeability question (does each layer still rebase cleanly onto its rebased
