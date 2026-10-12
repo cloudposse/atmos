@@ -104,7 +104,9 @@ sent to terminal/CI captures or diagnostic recording. There is no fallback to st
 
 Atmos redirects governed planning to a fresh private artifact. Terraform exit codes 0 and 2 allow
 policy evaluation; they do not imply policy success. Only after policies pass is the requested output
-file atomically replaced with a mode-0600 saved plan. On failure, a preexisting output is left
+file replaced with the approved saved plan. On Unix, replacement is atomic and the file has mode 0600.
+On Windows, access follows the destination directory's inherited ACLs; protect that directory, and do
+not assume atomic replacement. On policy or planning failure, a preexisting output is left
 unchanged: it is **not** evidence that the new plan passed. Temporary files are removed on exit.
 Terraform's plan text may mention the temporary path; use your requested output path for apply.
 

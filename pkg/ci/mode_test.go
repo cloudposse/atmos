@@ -30,9 +30,26 @@ func TestReportingGates(t *testing.T) {
 }
 
 func TestModeEnabledFromFlag(t *testing.T) {
+	// Test the flag independently of providers auto-registered in the test binary.
+	t.Cleanup(SwapRegistryForTest())
+
 	cmd := &cobra.Command{}
 	cmd.Flags().Bool("ci", false, "")
 	assert.False(t, ModeEnabled(cmd))
 	assert.NoError(t, cmd.Flags().Set("ci", "true"))
 	assert.True(t, ModeEnabled(cmd))
+}
+
+func TestModeEnabledFromProvider(t *testing.T) {
+	t.Cleanup(SwapRegistryForTest())
+	p := &mockProvider{name: "mode", detected: false}
+	Register(p)
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("ci", false, "")
+
+	assert.False(t, ModeEnabled(cmd))
+	assert.False(t, ModeEnabled(nil))
+	p.detected = true
+	assert.True(t, ModeEnabled(cmd))
+	assert.True(t, ModeEnabled(nil))
 }

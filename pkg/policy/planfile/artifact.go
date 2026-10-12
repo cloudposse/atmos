@@ -83,8 +83,9 @@ func copyArtifact(source, destination string) error {
 	return closeErr
 }
 
-// publish replaces the requested output atomically, only after policy success.
-// The staging file is on the destination filesystem and always mode 0600.
+// publish replaces the requested output only after policy success.
+// The staging file is on the destination filesystem, with mode 0600 on POSIX.
+// Windows uses inherited ACLs, and os.Rename does not promise atomic replacement there.
 func publish(source, destination string) error {
 	file, err := os.CreateTemp(filepath.Dir(destination), ".atmos-approved-plan-*")
 	if err != nil {
