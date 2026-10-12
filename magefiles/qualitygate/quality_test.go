@@ -259,7 +259,7 @@ func TestQualityLabelsPreserveUnrelatedLabels(t *testing.T) {
 }
 
 func TestQualityPublishAndStaleProtection(t *testing.T) {
-	for _, scenario := range []string{"create", "update", "fork", "spoofed comment", "stale head", "newer report", "newer attempt", "draft changed"} {
+	for _, scenario := range []string{"create", "update", "update marked", "fork", "spoofed comment", "stale head", "newer report", "newer attempt", "draft changed"} {
 		t.Run(scenario, func(t *testing.T) {
 			run := githubtest.Run()
 			run.Event = "pull_request"
@@ -276,7 +276,7 @@ func TestQualityPublishAndStaleProtection(t *testing.T) {
 			api.Write = func(method, path string, body io.Reader) error {
 				writes++
 				if strings.Contains(path, "comments") {
-					if scenario == "update" {
+					if scenario == "update" || scenario == "update marked" {
 						require.Equal(t, "PATCH", method)
 						require.Contains(t, path, "issues/comments/17")
 					} else {
@@ -291,13 +291,19 @@ func TestQualityPublishAndStaleProtection(t *testing.T) {
 			q := qualityClient{ctx: context.Background(), api: &qualityGraphAPI{FakeAPI: api, t: t, scenario: "valid"}, repo: githubtest.Repo}
 			summary := filepath.Join(t.TempDir(), "summary.md")
 			t.Setenv("GITHUB_STEP_SUMMARY", summary)
-			require.NoError(t, q.refresh(pr.Number, "benchmark comparisons", &run))
+			if scenario == "update marked" {
+				require.NoError(t, q.refresh(pr.Number, "", nil))
+			} else {
+				require.NoError(t, q.refresh(pr.Number, "benchmark comparisons", &run))
+			}
 			if strings.HasPrefix(scenario, "newer") || scenario == "stale head" || scenario == "draft changed" {
 				require.Zero(t, writes)
 				return
 			}
 			require.Equal(t, 3, writes)
 			require.Contains(t, commentBody, "Quality Gate passed")
+			require.True(t, strings.HasPrefix(commentBody, qualityMarker+"\n<!-- coderabbit do not respond to this -->\n"))
+			require.Equal(t, 1, strings.Count(commentBody, "<!-- coderabbit do not respond to this -->"))
 			require.Contains(t, commentBody, qualityReady)
 			require.Contains(t, commentBody, "benchmark comparisons")
 			summaryBody, err := os.ReadFile(summary)
@@ -323,7 +329,7 @@ func qualityPublishGetter(t *testing.T, scenario string, pr *githubapi.PR, run *
 			return githubtest.Respond(current, response)
 		case strings.Contains(path, "/comments?"):
 			comments := []map[string]any{}
-			if scenario == "update" || scenario == "newer report" || scenario == "spoofed comment" {
+			if scenario == "update" || scenario == "update marked" || scenario == "newer report" || scenario == "spoofed comment" {
 				user := "github-actions[bot]"
 				if scenario == "spoofed comment" {
 					user = "contributor"
@@ -331,6 +337,9 @@ func qualityPublishGetter(t *testing.T, scenario string, pr *githubapi.PR, run *
 				comments = append(comments, map[string]any{"id": 17, "body": qualityMarker + "\n<!-- atmos-benchmark-run:11:1 -->", "user": map[string]string{"login": user, "type": "Bot"}})
 				if scenario == "update" {
 					comments[0]["body"] = qualityMarker
+				}
+				if scenario == "update marked" {
+					comments[0]["body"] = qualityMarker + "\n<!-- coderabbit do not respond to this -->\n" + qualityHeadMarker(pr.Head.SHA) + "\n" + qualityPerformanceStart + "\nbenchmark comparisons\n" + qualityPerformanceEnd
 				}
 			}
 			return githubtest.Respond(comments, response)
