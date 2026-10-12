@@ -1,0 +1,177 @@
+---
+title: Policy Library
+sidebar_position: 6
+description: Tested CEL policy examples, component-specific capabilities, and proposed additions to the Atmos policy library.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The sample library provides small, parameterized policies with tests for every example.
+Policy evaluation is component-independent; available inputs and enforcement points are not.
+</Intro>
+
+## Runnable examples
+
+Source: `examples/policies/`. These are original CEL examples, not a compatibility layer for
+another product. They use the explicit `ATMOS_POLICY_DIR` loader, not the proposed remote-library
+`use:` syntax. Review examples before enabling them; none is enabled by default.
+
+| Family | Examples | Required capability |
+|---|---|---|
+| Terraform | Stateful deletion protection, create-before-destroy, change-count limit, forbidden resource types, approved instance types, required Owner tag | Private saved-plan JSON extraction |
+| GitHub | Reject fork PR plans in a privileged job | Complete supplied native Actions event |
+| Lifecycle | Mandatory TFLint after successful plan; additional production scanner; HTTP callback after Helm apply; cleanup after failed Kubernetes apply; deny production Helm deletion | Existing component lifecycle hook entry point |
+
+Terraform action lists encode replacement order, and unknown planned values have a separate mask.
+The examples deliberately test both. A deleted noncompliant resource can be permitted remediation
+rather than a new policy violation. [Terraform JSON format](https://developer.hashicorp.com/terraform/internals/json-format)
+
+Run the actual distributed policies through the test suite:
+
+```shell
+go test ./pkg/policy -run TestSampleLibrary -v
+go test ./pkg/hooks -run 'TestPolicyHooksLifecycle|TestPolicyHookFailuresBlock'
+go test ./pkg/ci/... -run TestPolicySnapshot
+```
+
+Adding a sample without table-driven cases fails `TestSampleLibrary`. Cases cover matching and
+nonmatching inputs, threshold boundaries, replacement ordering, deletion remediation, absent/null/
+unknown attributes, lifecycle outcomes, and missing required CI evidence. Hook integration tests
+use local HTTP endpoints, not production services or installed scanners.
+
+## Component capabilities: current versus target
+
+| Component | Current operation policies / required hooks | Current native artifact policy | Proposed additional inputs |
+|---|---|---|---|
+| Terraform/OpenTofu execution path | Existing Terraform lifecycle events | Saved Terraform-compatible plan JSON | Cost/scanner outputs with completion evidence |
+| Helmfile | Existing Helmfile lifecycle events | None | Rendered manifests and release changes |
+| Native Helm | Existing Helm lifecycle events | None | Rendered manifests and release changes |
+| Native Kubernetes | Existing Kubernetes lifecycle events | None | Rendered objects, server-side diff, deletion inventory |
+| Packer | Not wired | None | Build configuration, artifact metadata, image scan |
+| Ansible | Not wired | None | Playbook/task inventory and execution recap |
+| Container / emulator | Not wired | None | Resolved runtime spec and image identity |
+| Custom components | Not wired | None | Explicitly registered, versioned input contracts |
+| Repository without components | Go snapshot API only; no standalone policy CLI yet | Not applicable | Git changes, native events, current review facts |
+
+This is not yet all-component enforcement. The target is one engine with capability-aware
+integrations, not a requirement that every component invent a Terraform-like plan. A request for
+an unavailable required capability must error. An unrelated input kind is not applicable.
+Ansible check mode can skip unsupported modules; it must not be represented as complete predicted
+infrastructure state. [Ansible check-mode limitations](https://docs.ansible.com/projects/ansible/latest/playbook_guide/playbooks_checkmode.html)
+
+Ordinary operation policies do not depend on `--affected`. An affected policy requires an explicitly
+collected affected inventory; a Helm apply without `--affected` still evaluates its operation rules.
+Legacy `settings.validation` remains unchanged; the first-class `policy:` attachment migration is
+proposed, not implemented by the directory loader.
+
+## Policy-driven hook contract in this slice
+
+`spec.hooks` contains governing definitions using existing hook kinds. `spec.tools` optionally pins
+their executable dependencies through the existing installer without merging workspace tool pins.
+Operation rules select hooks with `action: hooks`. For example:
+
+```yaml
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: platform
+spec:
+  hooks:
+    lint:
+      kind: command
+      command: tflint
+      args: [--recursive]
+  policies:
+    lint-plan:
+      on: operation
+      action: hooks
+      rule: input.event == 'after.terraform.plan' && input.status == 'success'
+      hooks:
+        - ref: lint
+          event: after.terraform.plan
+          required: true
+          require_success: true
+```
+
+The operation input contains `event` (canonical dotted lifecycle name), `component_type`, `command`,
+`component`, `stack`, `status`, `exit_code`, and `dry_run`. Existing lifecycle aliases normalize, so
+deploy aliases use the corresponding apply event. This is lifecycle admission, not pre-configuration
+function/source admission or a resolved-configuration collector.
+
+Both booleans are necessary for a mandatory successful check. `required` prevents `--skip-hooks`
+from skipping it; `require_success` overrides a weaker `on_failure`. Missing definitions/kinds,
+missing required evidence, and failed mandatory-success hooks block. Hook success cannot cancel
+a denial. Rules execute in file/rule order and hook references in list order. Distinct requirements
+are not deduplicated. Use existing `kind: steps` for explicit ordered steps and existing retries.
+
+Selection happens at the current lifecycle point; a selected hook targeting another event errors.
+Keep selection in the policy: hook `when`/`events` and nested skip/background controls are rejected.
+This first slice executes static governing definitions without template/YAML-function rendering.
+Ordinary component hooks retain their existing behavior. Protect hook executable paths, toolchain
+registries, scanner configuration, and credentials, not just the policy YAML.
+
+Dry-run reports intended hooks without execution and is not evidence of compliance. Plan rechecks
+before apply do not replay after-plan hooks. An after-apply failure can fail the command or gate,
+but the apply has already happened. Repeated CLI invocations can repeat callbacks; use receiver-side
+idempotency when needed. No exactly-once delivery or durable event deduplication is promised.
+
+## Native CI inputs and permissions
+
+The optional `pkg/ci.PolicySnapshotProvider` capability uses the existing provider registry.
+GitHub's `github-actions/v1` snapshot preserves an explicit environment allowlist in metadata and
+the supplied `GITHUB_EVENT_PATH` JSON separately in the event dataset. It never dumps arbitrary
+environment variables or includes tokens. Collection executes no Atmos configuration or Git command.
+Missing/invalid/oversized event files are unavailable/incomplete, never fabricated empty events.
+Use `required_ci` to require provider/schema/dataset before evaluating a predicate.
+
+The current collector makes no API calls and needs no token permission. Checking out policy/config
+normally needs `contents: read`. Existing Native CI status publication is separate and needs
+`statuses: write`. `GITHUB_TOKEN` alone suffices; no PAT or App is required. Fork and Dependabot
+workflows can receive reduced permissions; required facts must not become optional on denial.
+[GitHub workflow permissions](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions)
+
+Fresh reviews/files/PR details (`pull-requests: read`), workflow runs (`actions: read`), check runs
+(`checks: read`), and reviewer/comment actions (`pull-requests: write`) are extension work, not
+implemented by this local-event collector. No live organization-team membership lookup is claimed.
+The native event is historical triggering evidence, not an approval verification result.
+
+## Proposed additions and tests
+
+These are research-backed proposals, **not runnable policies in this release**. Each requires an
+input collector or execution capability beyond the current library. Add executable examples only
+with fixtures and integration tests for that capability.
+
+| Proposed example | Required input / integration | Minimum acceptance cases |
+|---|---|---|
+| Deny privileged pods or host namespace access | Helm/Helmfile/Kubernetes rendered-object collector | Safe pod allows; privileged/host PID/network denies; init and ephemeral containers included |
+| Enforce non-root users, seccomp and capability restrictions | Versioned Pod Security profile | Restricted profile passes; exception expires; OS/version differences handled explicitly |
+| Require approved image registries and immutable digests | Rendered container specs, including init/ephemeral containers | Approved digest allows; mutable tag/wrong registry denies; missing image errors |
+| Require production resource requests/limits | Workload and pod-template inventory | Complete resources allow; missing CPU/memory denies; non-workload documents ignored |
+| Protect namespaces, PVCs and CRDs against deletion | Complete before/after object inventory | Update allows; delete/replacement requires approval; missing inventory errors |
+| Limit Ansible failure/unreachable hosts | Native recap plus completeness | No failures allows; unreachable blocks; absent host result is not success |
+| Require known Packer artifact provenance | Builder configuration and image artifact metadata | Approved builder/base image allows; unknown source blocks; missing artifact errors |
+| Deny privileged containers or host mounts | Resolved container runtime spec | Nonprivileged allows; host socket/mount denies; environment expansion cannot hide paths |
+| Protect labels while permitting additions | Structured before/after metadata and reviewer verifier | New ordinary label allows; protected remove/modify awaits review; absent versus null differs |
+| Detect indirect policy detachment | Complete attachment inventories and governing revision | Selector/import/discovery/parameter change requires review; policy deletion caught; ambiguous move blocks |
+| Protect workflow permission changes | Structured Actions workflow diff | Unchanged/read-only allows; write grant/unsafe event change requires review; renamed workflow still detected |
+| Require immutable Action references | Parsed workflow steps and reusable workflows | Commit SHA allows; mutable reference denies; local actions handled separately |
+| Require fresh designated reviewer approval | Current paginated PR review facts | Current head/non-author allows; dismissed/stale/self review blocks; partial/API-denied results error |
+| Request a reviewer or update one PR comment | Approval resolver and typed GitHub action hook | Pending selects action; satisfied selects none; insufficient permission errors; duplicate event updates same comment |
+| Limit changed/affected instances before fanout | Complete files/components/instances inventory | Boundary count allows; excess blocks; deletes included; incomplete analysis errors |
+| Enforce a current-component cost budget | Cost artifact bound to evaluated plan | Below cap allows; above denies; missing estimate/currency mismatch/zero baseline handled |
+| Require scanner completion and cap findings | Scanner report bound to current input | Clean completed scan allows; severe findings deny; empty/missing/stale/failed scan is not clean |
+| Approved deployment window | Trusted captured timestamp/timezone | In-window allows; boundary/DST tested; missing time errors; evaluator does not read clock |
+
+Kubernetes security examples should use versioned native semantics rather than a generic cloud
+resource schema. Digest selection identifies immutable image content; it does not itself establish
+image trust. [Pod Security Standards](https://kubernetes.io/docs/concepts/security/pod-security-standards/),
+[container image references](https://kubernetes.io/docs/concepts/containers/images/)
+
+Workflow-change examples address the fact that privileged workflow execution can execute attacker
+code. A label or approval must not be treated as permission to run untrusted PR code with secrets.
+[GitHub Actions secure-use guidance](https://docs.github.com/en/actions/reference/security/secure-use)
+
+These proposals govern the current invocation/job or a complete repository analysis before fanout.
+Combining outcomes across separate component jobs, global deployment budgets, durable retries, and
+service-side identity/approval orchestration remain Atmos Pro responsibilities.

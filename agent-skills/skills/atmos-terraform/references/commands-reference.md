@@ -14,6 +14,12 @@ but do not require `--stack`. Use `--` to pass flags directly to Terraform witho
 
 ## Core Lifecycle Commands
 
+With experimental `ATMOS_POLICY_DIR` plan policies configured, plan must produce a saved artifact;
+apply/deploy must use `--from-plan` or `--planfile`. Direct destroy is blocked: use `plan -destroy`
+then saved-plan apply. The gate evaluates native plan JSON regardless of `--affected`, and reevaluates
+before applying a private copy of the selected artifact. Dry-run does not evaluate policies. See the
+skill's saved-plan policy section for the trust boundary and unsupported features.
+
 ### init
 
 Initialize the Terraform working directory for a component in a stack.

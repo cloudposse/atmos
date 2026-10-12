@@ -1,0 +1,65 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: terraform-safety
+spec:
+  policies:
+    protect-stateful-resources:
+      on: terraform.plan
+      action: deny
+      reason: Stateful resources must not be deleted or replaced
+      with:
+        types: [aws_db_instance, aws_rds_cluster, aws_s3_bucket]
+      rule: >-
+        has(input.resource_changes) && input.resource_changes.exists(r,
+          r.mode == 'managed' && r.type in params.types && 'delete' in r.change.actions)
+    create-before-destroy:
+      on: terraform.plan
+      action: deny
+      reason: Replacements must create before destroying
+      rule: >-
+        has(input.resource_changes) && input.resource_changes.exists(r,
+          r.mode == 'managed' && r.change.actions == ['delete', 'create'])
+    limit-change-count:
+      on: terraform.plan
+      action: deny
+      reason: Too many managed resources change in this plan
+      with:
+        maximum: 10
+      rule: >-
+        has(input.resource_changes) && input.resource_changes.filter(r,
+          r.mode == 'managed' && r.change.actions != ['no-op']).size() > params.maximum
+    disallow-resource-types:
+      on: terraform.plan
+      action: deny
+      reason: Long-lived IAM users and access keys are not permitted
+      with:
+        types: [aws_iam_user, aws_iam_access_key]
+      rule: >-
+        has(input.resource_changes) && input.resource_changes.exists(r,
+          r.mode == 'managed' && r.type in params.types && r.change.after != null)
+    allowed-instance-types:
+      on: terraform.plan
+      action: deny
+      reason: Instance type must be known and approved before apply
+      with:
+        allowed: [t3.micro, t3.small]
+      rule: >-
+        has(input.resource_changes) && input.resource_changes.exists(r,
+          r.mode == 'managed' && r.type == 'aws_instance' && r.change.after != null &&
+          (!has(r.change.after.instance_type) ||
+           !(r.change.after.instance_type in params.allowed) ||
+           (has(r.change.after_unknown.instance_type) && r.change.after_unknown.instance_type == true)))
+    require-owner-tag:
+      on: terraform.plan
+      action: deny
+      reason: Managed EC2 instances require a known nonempty Owner tag
+      rule: >-
+        has(input.resource_changes) && input.resource_changes.exists(r,
+          r.mode == 'managed' && r.type == 'aws_instance' && r.change.after != null &&
+          (!has(r.change.after.tags) || r.change.after.tags == null ||
+           !has(r.change.after.tags.Owner) || r.change.after.tags.Owner == null ||
+           r.change.after.tags.Owner == '' ||
+           (has(r.change.after_unknown.tags) &&
+             (r.change.after_unknown.tags == true ||
+              (has(r.change.after_unknown.tags.Owner) && r.change.after_unknown.tags.Owner == true)))))

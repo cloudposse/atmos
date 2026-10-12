@@ -17,6 +17,14 @@ Use this command to deploy Terraform changes for an Atmos component in a stack w
 
 <CastPlayer title="atmos terraform deploy --help" src="/casts/screengrabs/atmos-terraform-deploy--help.cast" static chrome />
 
+:::note Saved plan policies
+
+When [`ATMOS_POLICY_DIR` is configured](/cli/commands/terraform/plan-policies), deployment must reach
+Terraform execution with an explicit saved plan. Implicit plan-and-apply is rejected. Use `plan`
+followed by `apply --from-plan` or `apply --planfile`; saved artifacts are reevaluated before apply.
+
+:::
+
 ## Usage
 
 Execute the `terraform deploy` subcommand like this:
