@@ -32,7 +32,7 @@ Other Helm operations and non-production stacks do not match. This is an operati
 
 ## Policy
 
-[View and copy policy.yaml](/policies/library/lifecycle-deny-production-delete/policy.yaml).
+[View and copy policy.yaml](https://atmos.tools/policies/library/lifecycle-deny-production-delete/policy.yaml).
 
 ## Use
 
@@ -46,11 +46,11 @@ export ATMOS_POLICY_DIR="$PWD/policy.d"
 
 Review the settings above before executing a component command. In CI, select policies from a
 protected, pinned revision; do not trust definitions from the candidate PR. See
-[enforcement configuration](/policies/configuration#enforcement).
+[enforcement configuration](https://atmos.tools/policies/configuration#enforcement).
 
 ## Tests
 
-[View test inputs and expected results](/policies/library/lifecycle-deny-production-delete/tests/cases.json).
+[View test inputs and expected results](https://atmos.tools/policies/library/lifecycle-deny-production-delete/tests/cases.json).
 
 | Case | Expected decision |
 |---|---|

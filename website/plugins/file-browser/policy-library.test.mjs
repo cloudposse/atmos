@@ -38,6 +38,8 @@ test('the policy gallery discovers individually documented and tested policies',
   const paths = new Set(routes.map(route => route.path));
   assert.equal(paths.size, routes.length, 'Generated routes must be unique');
   assert.ok(paths.has('/policies/library'));
+  const configuration = readFileSync(path.join(siteDir, 'docs/policies/configuration.mdx'), 'utf8');
+  assert.match(configuration, /^## Enforcement$/m);
 
   for (const entry of content.tree.examples) {
     const base = `/policies/library/${entry.name}`;
@@ -50,8 +52,18 @@ test('the policy gallery discovers individually documented and tested policies',
     for (const section of ['Contract', 'Configuration', 'Policy', 'Use', 'Tests']) {
       assert.ok(readme.includes(`## ${section}\n`), `${entry.name}: missing ${section}`);
     }
-    for (const [, link] of readme.matchAll(/\]\((\/policies\/library\/[^)]+)\)/g)) {
-      assert.ok(paths.has(link), `${entry.name}: broken library link ${link}`);
+    const links = [...readme.matchAll(/\]\(([^)]+)\)/g)].map(match => match[1]);
+    for (const target of [`${base}/policy.yaml`, `${base}/tests/cases.json`, '/policies/configuration#enforcement']) {
+      assert.ok(links.includes(`https://atmos.tools${target}`), `${entry.name}: missing documentation link ${target}`);
+    }
+    for (const link of links) {
+      // READMEs also render on GitHub and are checked outside Docusaurus by Lychee.
+      // Root-relative website routes are interpreted as missing repository files there.
+      assert.ok(!link.startsWith('/'), `${entry.name}: use an absolute documentation URL: ${link}`);
+      if (link.startsWith('https://atmos.tools/policies/library/')) {
+        const url = new URL(link);
+        assert.ok(paths.has(url.pathname), `${entry.name}: broken library link ${link}`);
+      }
     }
     const fixtures = JSON.parse(readFileSync(path.join(libraryDir, entry.name, 'tests/cases.json'), 'utf8'));
     assert.ok(fixtures.some(fixture => ['deny', 'allow'].includes(fixture.status)), `${entry.name}: matching case required`);

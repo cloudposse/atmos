@@ -32,7 +32,7 @@ Pure deletions are outside this rule. Combine with stateful-resource protection 
 
 ## Policy
 
-[View and copy policy.yaml](/policies/library/terraform-create-before-destroy/policy.yaml).
+[View and copy policy.yaml](https://atmos.tools/policies/library/terraform-create-before-destroy/policy.yaml).
 
 ## Use
 
@@ -46,11 +46,11 @@ export ATMOS_POLICY_DIR="$PWD/policy.d"
 
 Review the settings above before executing a component command. In CI, select policies from a
 protected, pinned revision; do not trust definitions from the candidate PR. See
-[enforcement configuration](/policies/configuration#enforcement).
+[enforcement configuration](https://atmos.tools/policies/configuration#enforcement).
 
 ## Tests
 
-[View test inputs and expected results](/policies/library/terraform-create-before-destroy/tests/cases.json).
+[View test inputs and expected results](https://atmos.tools/policies/library/terraform-create-before-destroy/tests/cases.json).
 
 | Case | Expected decision |
 |---|---|
