@@ -34,10 +34,11 @@ type benchComparison struct {
 }
 
 type benchReport struct {
-	Candidate   *benchManifest
-	Threshold   float64
-	Comparisons []benchComparison
-	Unavailable []string
+	Candidate        *benchManifest
+	CandidateMetrics []benchMetricSummary
+	Threshold        float64
+	Comparisons      []benchComparison
+	Unavailable      []string
 }
 
 func benchReadValues(path string) (map[string][]float64, error) {
@@ -122,20 +123,13 @@ func benchValidateInventory(s *benchSnapshot) error {
 }
 
 func benchCompatible(a, b *benchManifest) bool {
-	if a.Mode != b.Mode {
-		return false
-	}
-	return a.Schema == b.Schema && a.GoVersion == b.GoVersion && benchEnvironmentMatches(a, b) && a.BuildFlags == b.BuildFlags && a.Procs == b.Procs && a.Benchtime == b.Benchtime
-}
-
-func benchEnvironmentMatches(a, b *benchManifest) bool {
-	return a.GOOS == b.GOOS && a.GOARCH == b.GOARCH && a.CPU == b.CPU && a.Runner == b.Runner && a.Image == b.Image
+	return len(benchCompatibilityReasons(a, b)) == 0
 }
 
 func benchCompareSnapshots(base, candidate *benchSnapshot, threshold float64) benchComparison {
 	result := benchComparison{Baseline: &base.Manifest}
-	if !benchCompatible(&base.Manifest, &candidate.Manifest) {
-		result.Unavailable = append(result.Unavailable, "Incompatible toolchain, build settings, or runner environment")
+	if reasons := benchCompatibilityReasons(&base.Manifest, &candidate.Manifest); len(reasons) > 0 {
+		result.Unavailable = reasons
 		return result
 	}
 	keys := slices.Clone(candidate.Manifest.Metrics)
@@ -210,7 +204,7 @@ func (Bench) Compare(snapshotsDir, candidateDir, outputDir string) error {
 	if err != nil {
 		return err
 	}
-	report := benchReport{Candidate: &candidate.Manifest, Threshold: threshold}
+	report := benchReport{Candidate: &candidate.Manifest, CandidateMetrics: benchSummaries(candidate), Threshold: threshold}
 	if err = benchLoadUnavailable(snapshotsDir, &report); err != nil {
 		return err
 	}
@@ -230,7 +224,7 @@ func (Bench) Compare(snapshotsDir, candidateDir, outputDir string) error {
 	if err = benchWriteJSON(filepath.Join(outputDir, "report.json"), report); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(outputDir, "report.md"), []byte(benchMarkdown(report)), PrivateFile)
+	return os.WriteFile(filepath.Join(outputDir, "report.md"), []byte(benchMarkdown(&report)), PrivateFile)
 }
 
 func benchLoadUnavailable(snapshotsDir string, report *benchReport) error {
@@ -263,22 +257,14 @@ func Escape(value string) string {
 	return strings.NewReplacer("&", "&amp;", "[", "&#91;", "]", "&#93;", "<", "&lt;", ">", "&gt;", benchMetricSeparator, "&#124;", "`", "&#96;", "\n", " ", "\r", " ", "@", "&#64;").Replace(value)
 }
 
-func benchMarkdown(report benchReport) string {
+func benchMarkdown(report *benchReport) string {
 	var out bytes.Buffer
 	fmt.Fprint(&out, Marker+"\n## Atmos performance\n\n")
-	switch {
-	case report.Candidate.Mode == benchFieldMode:
-		fmt.Fprintf(&out, "Candidate revision: `%s`. Every row compares this binary against the rebuilt reference revision.\n\n", Escape(report.Candidate.SHA))
-	case report.Candidate.PRHeadSHA != "":
-		fmt.Fprintf(&out, "Current PR head: `%s`. Measured merge revision: `%s`, based on main `%s`. Every row compares this same merged build against the named main snapshot. Older snapshots also include intervening main changes.\n\n", Escape(report.Candidate.PRHeadSHA), Escape(report.Candidate.SHA), Escape(report.Candidate.BaseSHA))
-	default:
-		fmt.Fprintf(&out, "Candidate revision: `%s`. Every row compares this same build against the named main snapshot.\n\n", Escape(report.Candidate.SHA))
-	}
-	headline := benchHeadline(&report)
-	fmt.Fprintf(&out, "**%s** Threshold: %.1f%% and p < 0.05.\n\nCross-run runner variability can affect timing. Historical comparisons reuse the same PR samples and are not independent confirmations.\n\n", headline, report.Threshold)
-	benchSnapshotWarnings(&out, &report)
-	benchTables(&out, &report)
-	benchWarnings(&out, &report)
+	fmt.Fprintf(&out, "**%s**\n\n", benchHeadline(report))
+	benchSnapshotWarnings(&out, report)
+	benchTables(&out, report)
+	benchWarnings(&out, report)
+	benchReportDetails(&out, report)
 	body := out.String()
 	if report.Candidate.Mode == benchFieldMode {
 		body = strings.NewReplacer("main baseline", "reference baseline", "same PR samples", "same candidate samples", "Main snapshot (UTC)", "Reference snapshot (UTC)", "| Main | Current PR | PR change |", "| Reference | Candidate | Change |").Replace(body)
@@ -327,30 +313,63 @@ func benchHeadline(report *benchReport) string {
 
 func benchTables(out *bytes.Buffer, report *benchReport) {
 	for _, affected := range []bool{true, false} {
+		comparisons, measurements := benchTableRows(report, affected)
+		if len(comparisons) == 0 && len(measurements) == 0 {
+			continue
+		}
 		if affected {
 			fmt.Fprint(out, "### Describe affected\n\n")
 		} else {
 			fmt.Fprint(out, "<details><summary>All other benchmarks</summary>\n\n")
 		}
-		fmt.Fprintln(out, "| Benchmark / metric | Main snapshot (UTC) | Main | Current PR | PR change | Significance |\n|---|---|---:|---:|---:|---|")
-		for i := range report.Comparisons {
-			comparison := &report.Comparisons[i]
-			for _, metric := range comparison.Metrics {
-				if strings.Contains(metric.Metric, "DescribeAffected") != affected {
-					continue
-				}
-				benchTableRow(out, comparison, &metric)
-			}
+		if len(comparisons) > 0 {
+			fmt.Fprintln(out, "| Benchmark / metric | Main snapshot (UTC) | Main | Current PR | PR change | Significance |\n|---|---|---:|---:|---:|---|")
+			fmt.Fprintln(out, comparisons)
 		}
-		fmt.Fprintln(out)
+		if len(measurements) > 0 {
+			if len(comparisons) > 0 {
+				fmt.Fprint(out, "Current measurements without a matching baseline:\n\n")
+			}
+			fmt.Fprintln(out, "| Benchmark | Current measurement | Unit |\n|---|---:|---|")
+			fmt.Fprintln(out, measurements)
+		}
 		if !affected {
 			fmt.Fprint(out, "</details>\n\n")
 		}
 	}
 }
 
+func benchTableRows(report *benchReport, affected bool) (string, string) {
+	var comparisons, measurements bytes.Buffer
+	compared := map[string]bool{}
+	for i := range report.Comparisons {
+		comparison := &report.Comparisons[i]
+		for _, metric := range comparison.Metrics {
+			compared[metric.Metric] = true
+			if strings.Contains(metric.Metric, "DescribeAffected") == affected {
+				benchTableRow(&comparisons, comparison, &metric)
+			}
+		}
+	}
+	for _, metric := range report.CandidateMetrics {
+		if !compared[metric.Metric] && strings.Contains(metric.Metric, "DescribeAffected") == affected {
+			name, unit := benchMetricLabel(metric.Metric)
+			fmt.Fprintf(&measurements, "| %s | %.5g | %s |\n", Escape(name), metric.Value, Escape(unit))
+		}
+	}
+	return comparisons.String(), measurements.String()
+}
+
 func benchWarnings(out *bytes.Buffer, report *benchReport) {
-	fmt.Fprint(out, "<details><summary>Unavailable comparisons and statistical warnings</summary>\n\n")
+	var warnings bytes.Buffer
+	benchWarningLines(&warnings, report)
+	if warnings.Len() == 0 {
+		return
+	}
+	fmt.Fprintf(out, "<details><summary>Unavailable comparisons and statistical warnings</summary>\n\n%s\n</details>\n\n", warnings.String())
+}
+
+func benchWarningLines(out *bytes.Buffer, report *benchReport) {
 	for _, reason := range report.Unavailable {
 		fmt.Fprintf(out, "- %s\n", Escape(reason))
 	}
@@ -365,7 +384,6 @@ func benchWarnings(out *bytes.Buffer, report *benchReport) {
 			}
 		}
 	}
-	fmt.Fprintln(out, "\n</details>")
 }
 
 func benchTableRow(out *bytes.Buffer, comparison *benchComparison, metric *benchMetricComparison) {

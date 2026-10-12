@@ -51,6 +51,7 @@ permissions: {}
 # comment and its labels, even when a review and benchmark finish together.
 concurrency:
   group: atmos-quality-report
+  queue: max
   cancel-in-progress: false
 
 jobs:
