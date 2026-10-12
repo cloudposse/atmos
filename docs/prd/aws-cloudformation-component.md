@@ -451,13 +451,19 @@ scaffolding logic belongs in `pkg/component/aws/cloudformation/`.
 
 `plan`/`diff` implicitly create a changeset (`CreateChangeSet` + `DescribeChangeSet`) and render the
 predicted resource changes without executing them, mirroring how `terraform plan` and `helm diff`
-behave. Because that preview changeset is never executed, `plan`/`diff` deletes it (`DeleteChangeSet`)
-after rendering the summary — regardless of whether the diff was a no-op or showed real changes — so a
-read-only preview never leaks an AWS changeset object against the account's changeset quota. Cleanup
-runs best-effort: a `DeleteChangeSet` failure is surfaced as a warning, not a command error, since the
-diff itself already succeeded and was rendered, and a stray leftover changeset never blocks a
-subsequent `plan`/`diff`/`apply` (each run generates its own uniquely-named changeset and doesn't
-depend on the previous one being gone). When the previewed stack doesn't exist yet, `CreateChangeSet`
+behave. If `DescribeChangeSet` reports `FAILED` with a recognized no-changes `StatusReason` (such as
+"No updates are to be performed" or "didn't contain changes"), render an empty preview and treat the
+operation as successful once cleanup succeeds. Other `FAILED` reasons remain command errors.
+
+Because the preview changeset is never executed, `plan`/`diff` deletes it (`DeleteChangeSet`) after
+rendering the summary, including a no-op preview. Cleanup also runs when polling or rendering fails,
+provided a preview changeset was created. Use bounded cleanup and retry transient deletion errors;
+if deletion still fails, return a command error identifying the changeset so the operator can retry
+its deletion or reconcile the leftover changeset. Preserve any original preview error alongside the
+cleanup error. Unique names prevent name collisions, but leftover changesets still consume quota:
+accumulating them can cause a later `CreateChangeSet` to fail with `LimitExceeded`.
+
+When the previewed stack doesn't exist yet, `CreateChangeSet`
 is called with `ChangeSetType=CREATE`, which as a side effect creates a placeholder root stack in
 `REVIEW_IN_PROGRESS` state — `DeleteChangeSet` does **not** remove that stack, only the changeset
 object. For this case, cleanup must also call `DeleteStack` on the placeholder after deleting the
@@ -469,7 +475,7 @@ gone before returning control. Returning early would let a subsequent real `appl
 delete placeholder: `ChangeSetType=CREATE` is only valid against a stack that doesn't exist yet, not
 one sitting in `DELETE_IN_PROGRESS`/`REVIEW_IN_PROGRESS`, so that `apply` would fail. Both the
 `DeleteStack` call itself and the wait are surfaced as a command error (or a retryable cleanup
-result), not a silent warning like the changeset cleanup — including a `DELETE_FAILED` terminal
+result), as with changeset cleanup — including a `DELETE_FAILED` terminal
 state or a wait timeout — since a leaked `REVIEW_IN_PROGRESS`/`DELETE_FAILED` stack is more disruptive
 than a leaked changeset. Previews that target an existing stack never create this placeholder and
 only need the existing `DeleteChangeSet` cleanup.
