@@ -48,8 +48,8 @@ spec:
         has(input.resource_changes) && input.resource_changes.exists(r,
           r.mode == 'managed' && r.type == 'aws_instance' && r.change.after != null &&
           (!has(r.change.after.instance_type) ||
-           !(r.change.after.instance_type in params.allowed) ||
-           (has(r.change.after_unknown.instance_type) && r.change.after_unknown.instance_type == true)))
+            !(r.change.after.instance_type in params.allowed) ||
+            (has(r.change.after_unknown.instance_type) && r.change.after_unknown.instance_type == true)))
     require-owner-tag:
       on: terraform.plan
       action: deny
@@ -58,8 +58,8 @@ spec:
         has(input.resource_changes) && input.resource_changes.exists(r,
           r.mode == 'managed' && r.type == 'aws_instance' && r.change.after != null &&
           (!has(r.change.after.tags) || r.change.after.tags == null ||
-           !has(r.change.after.tags.Owner) || r.change.after.tags.Owner == null ||
-           r.change.after.tags.Owner == '' ||
-           (has(r.change.after_unknown.tags) &&
-             (r.change.after_unknown.tags == true ||
+            !has(r.change.after.tags.Owner) || r.change.after.tags.Owner == null ||
+            r.change.after.tags.Owner == '' ||
+            (has(r.change.after_unknown.tags) &&
+              (r.change.after_unknown.tags == true ||
               (has(r.change.after_unknown.tags.Owner) && r.change.after_unknown.tags.Owner == true)))))

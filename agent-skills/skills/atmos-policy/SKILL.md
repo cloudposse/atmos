@@ -39,19 +39,19 @@ Distinguish input kind, component type, and CI provider:
 ## Author and test
 
 1. Start with the actual files under `examples/policies/{terraform,github,lifecycle}` when working
-   in this repository. Read `examples/policies/README.md` for setup and limitations. For installed
-   usage consult the Policy Library and Saved Plan Policies documentation matching the version.
+    in this repository. Read `examples/policies/README.md` for setup and limitations. For installed
+    usage consult the Policy Library and Saved Plan Policies documentation matching the version.
 2. Choose a supported input and effect. A true CEL predicate selects its effect; a false predicate
-   is **not applicable**, not denial. Use `action: deny` for a violation predicate, not a safety
-   predicate. `action: hooks` is supported on operation inputs.
+    is **not applicable**, not denial. Use `action: deny` for a violation predicate, not a safety
+    predicate. `action: hooks` is supported on operation inputs.
 3. Keep predicates pure. Available roots are `input`, `params`, `ci`, and `request`. Supply
-   parameters with `with`. No network, shell, filesystem, clock, or automation host is exposed.
+    parameters with `with`. No network, shell, filesystem, clock, or automation host is exposed.
 4. Treat missing, null, and unknown separately. Read Terraform `after_unknown` alongside `after`.
-   Deletion includes replacement action lists. Decide whether a removal is forbidden or allowed
-   remediation. Do not print plan JSON or sensitive values to explain a violation.
+    Deletion includes replacement action lists. Decide whether a removal is forbidden or allowed
+    remediation. Do not print plan JSON or sensitive values to explain a violation.
 5. Add table-driven cases to `pkg/policy/library_test.go` for each distributed rule: matching and
-   non-matching inputs, threshold boundaries, null/missing/unknown data, and relevant input kinds.
-   The suite reads the distributed YAML and rejects examples without tests.
+    non-matching inputs, threshold boundaries, null/missing/unknown data, and relevant input kinds.
+    The suite reads the distributed YAML and rejects examples without tests.
 6. Run targeted tests, not production applies or callbacks:
 
 ```shell

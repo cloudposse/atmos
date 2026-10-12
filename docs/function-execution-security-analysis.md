@@ -14,11 +14,11 @@ there.
 Two structural gaps frame the analysis:
 
 1. **No policy controls over function usage.** There is no mechanism to allow, deny, or gate which
-   YAML functions or template functions may run — only a per-invocation `--skip` and coarse
-   engine-level on/off toggles.
+    YAML functions or template functions may run — only a per-invocation `--skip` and coarse
+    engine-level on/off toggles.
 2. **No trust boundary between local and remote config.** A remotely-imported stack (or a remote
-   `atmos.yaml`) is processed with the same trust as a file the user authored. If it carries `!exec`
-   or an executing template, the command runs locally with the user's environment and credentials.
+    `atmos.yaml`) is processed with the same trust as a file the user authored. If it carries `!exec`
+    or an executing template, the command runs locally with the user's environment and credentials.
 
 ### Severity legend
 
