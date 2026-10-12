@@ -33,7 +33,8 @@ on:
       - Version Tracker
       - vhs
       - Website Preview Build
-    types: [in_progress, completed]
+    # Completion is enough: Quality Gate Signal marks a new head pending.
+    types: [completed]
   check_run:
     types: [completed]
   status:
@@ -42,16 +43,25 @@ on:
   # Actions has no review-thread resolution trigger. Reconcile these changes
   # and third-party events not delivered to Actions on a best-effort schedule.
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 permissions: {}
 
-# The benchmark reporter shares this group: one writer owns the composite
-# comment and its labels, even when a review and benchmark finish together.
+# One writer per PR owns the composite comment and its labels; the benchmark
+# reporter shares the group. Each run reconciles current GitHub state, so a newer
+# pending run replaces an older one instead of queueing every CI event. Fork PRs
+# lack workflow_run.pull_requests and key on the head SHA. Schedules use "all".
 concurrency:
-  group: atmos-quality-report
-  queue: max
+  group: >-
+    atmos-quality-report-${{
+      github.event.issue.number ||
+      github.event.workflow_run.pull_requests[0].number ||
+      github.event.check_run.pull_requests[0].number ||
+      github.event.workflow_run.head_sha ||
+      github.event.check_run.head_sha ||
+      github.event.sha ||
+      'all' }}
   cancel-in-progress: false
 
 jobs:
