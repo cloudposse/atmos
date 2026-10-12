@@ -9,9 +9,13 @@ permissions: {}
 
 # Serialize reporters for a PR head, including reruns. Mage rejects stale PR
 # heads and attempts before publishing. Fork associations are resolved via API.
+# Shares the Quality Gate per-PR group. If a newer Quality Gate run replaces this
+# pending run, its reconcile publishes the unreported benchmark comparison.
 concurrency:
-  group: atmos-quality-report
-  queue: max
+  group: >-
+    atmos-quality-report-${{
+      github.event.workflow_run.pull_requests[0].number ||
+      github.event.workflow_run.head_sha }}
   cancel-in-progress: false
 
 jobs:
