@@ -5,6 +5,7 @@ package bench
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -98,6 +99,11 @@ func TestBenchFetchFailuresAndExpirationRace(t *testing.T) {
 				data, err := os.ReadFile(filepath.Join(dir, "unavailable.json"))
 				require.NoError(t, err)
 				require.Contains(t, string(data), scenario)
+				if scenario == "incompatible" {
+					var reasons []string
+					require.NoError(t, json.Unmarshal(data, &reasons))
+					require.Contains(t, reasons[0], `incompatible CPU: baseline="test-cpu", candidate="another CPU"`)
+				}
 			} else {
 				require.Error(t, err)
 			}

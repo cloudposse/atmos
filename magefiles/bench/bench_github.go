@@ -280,7 +280,9 @@ func (f *benchFetcher) consider(run *githubapi.Run) error {
 	}
 	comparison := benchCompareSnapshots(snapshot, f.candidate, benchDefaultThreshold)
 	if len(comparison.Metrics) == 0 {
-		f.unavailable = append(f.unavailable, fmt.Sprintf("%s: incompatible environment or benchmark definitions", run.HeadSHA))
+		for _, reason := range comparison.Unavailable {
+			f.unavailable = append(f.unavailable, fmt.Sprintf("%s: %s", run.HeadSHA, reason))
+		}
 		return nil
 	}
 	snapshot.Manifest.RunCreated = run.Created

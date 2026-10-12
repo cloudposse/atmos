@@ -65,7 +65,7 @@ func TestBenchComparisonIncludesCompatibilityReasons(t *testing.T) {
 	base := benchTestSnapshot(100)
 	base.Manifest.CPU = "other CPU"
 	report := benchReport{Candidate: &head.Manifest, Comparisons: []benchComparison{benchCompareSnapshots(base, head, 10)}}
-	body := benchMarkdown(report)
+	body := benchMarkdown(&report)
 	require.Contains(t, body, "unavailable")
-	require.Contains(t, body, "environment")
+	require.Contains(t, body, `incompatible CPU: baseline="other CPU", candidate="test-cpu"`)
 }
