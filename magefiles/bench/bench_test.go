@@ -60,7 +60,7 @@ func TestBenchCompareEverySnapshotToCandidate(t *testing.T) {
 	require.InDelta(t, -7.6923, *newResult.Metrics[0].Percent, .001)
 	require.InDelta(t, 20, *oldResult.Metrics[0].Percent, .001)
 	require.Equal(t, newResult.Metrics[0].Candidate, oldResult.Metrics[0].Candidate)
-	body := benchMarkdown(benchReport{Candidate: &head.Manifest, Threshold: 10, Comparisons: []benchComparison{newResult, oldResult}})
+	body := benchMarkdown(&benchReport{Candidate: &head.Manifest, Threshold: 10, Comparisons: []benchComparison{newResult, oldResult}})
 	require.Contains(t, body, "No significant regressions detected against the newest")
 	require.Contains(t, body, "Current PR head: `"+githubtest.SHA+"`")
 	require.Contains(t, body, "Measured merge revision: `"+benchTestMerge+"`")
@@ -285,7 +285,7 @@ func TestBenchFetchBootstrap(t *testing.T) {
 	}}
 	dir := t.TempDir()
 	require.NoError(t, benchFetch(context.Background(), api, githubtest.Repo, githubtest.Base, dir, benchTestSnapshot(100)))
-	body := benchMarkdown(benchReport{Candidate: &benchTestSnapshot(100).Manifest, Threshold: 10})
+	body := benchMarkdown(&benchReport{Candidate: &benchTestSnapshot(100).Manifest, Threshold: 10})
 	require.Contains(t, body, "Comparison unavailable")
 }
 

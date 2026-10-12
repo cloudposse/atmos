@@ -66,7 +66,8 @@ func TestQualityReviewActionsDistinguishMissingApprovalFromChanges(t *testing.T)
 		qualityReviewGuidance(&gate)
 		require.Contains(t, gate.Problem, tc.problem)
 		require.Contains(t, gate.NextAction, tc.action)
-		require.Contains(t, gate.NextAction, "`@coderabbitai review`")
+		require.Contains(t, gate.NextAction, "https://docs.coderabbit.ai/guides/commands#manually-request-code-reviews")
+		require.NotContains(t, gate.NextAction, "@coderabbitai")
 		require.NotContains(t, gate.NextAction, "@coderabbitai approve")
 		require.NotContains(t, gate.NextAction, "@coderabbitai resolve")
 	}
@@ -81,7 +82,8 @@ func TestQualityReviewFallbackRequestsReviewWithoutBypassingFindings(t *testing.
 	for i := range registry.definitions {
 		definition := &registry.definitions[i]
 		if definition.ID == "review" {
-			require.Contains(t, definition.Remediation, "`@coderabbitai review`")
+			require.Contains(t, definition.Remediation, "https://docs.coderabbit.ai/guides/commands#manually-request-code-reviews")
+			require.NotContains(t, definition.Remediation, "@coderabbitai")
 			require.NotContains(t, definition.Remediation, "@coderabbitai approve")
 			require.NotContains(t, definition.Remediation, "@coderabbitai resolve")
 			return

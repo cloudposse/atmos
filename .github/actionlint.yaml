@@ -4,3 +4,15 @@ self-hosted-runner:
     - tag=atmos
     - extras=s3-cache
     - private=false
+
+# GitHub supports queue: max, but the Actionlint version bundled in the CI
+# bootstrap Atmos binary does not yet recognize it. Remove these exceptions
+# when that parser supports concurrency.queue; keep all other checks enabled.
+# https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency
+paths:
+  .github/workflows/benchmark-report.yml:
+    ignore:
+      - '^unexpected key "queue" for "concurrency" section\. expected one of "cancel-in-progress", "group"$'
+  .github/workflows/quality-report.yml:
+    ignore:
+      - '^unexpected key "queue" for "concurrency" section\. expected one of "cancel-in-progress", "group"$'
