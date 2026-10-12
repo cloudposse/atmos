@@ -291,7 +291,8 @@ func TestSetupColorProfileIgnoresScriptFlags(t *testing.T) {
 	t.Chdir(root)
 	writeStandaloneScript(t, root, "tool.star", `print("ran")`)
 	viper.Set("force-color", false)
-	t.Cleanup(func() { viper.Set("force-color", false) })
+	// Remove the override: setting false would still mask later --force-color flags.
+	t.Cleanup(func() { viper.Set("force-color", nil) })
 
 	t.Setenv("CLICOLOR_FORCE", "")
 	require.NoError(t, os.Unsetenv("CLICOLOR_FORCE"))
