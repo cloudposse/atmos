@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: dev
+
+import:
+  - catalog/vpc/defaults
+
+components:
+  terraform:
+    vpc:
+      vars:
+        # Invalid on purpose: the hyphen violates the VPC name regex policy
+        # (`^[a-zA-Z0-9]{2,20}$`).
+        name: common-vpc
+        map_public_ip_on_launch: false
+        # Three Availability Zones violates the `dev` policy, which allows only 2,
+        # so `atmos validate component vpc -s dev` fails on purpose.
+        availability_zones:
+          - us-east-2a
+          - us-east-2b
+          - us-east-2c
