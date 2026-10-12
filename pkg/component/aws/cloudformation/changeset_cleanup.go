@@ -52,7 +52,35 @@ func removeStubStack(ctx context.Context, client CloudFormationClient, stackName
 	if err != nil {
 		return fmt.Errorf("%w: remove preview stack %q: %w", errUtils.ErrAwsCloudFormationAPICallFailed, stackName, err)
 	}
+	if err := waitForStubDeletion(ctx, client, stackName); err != nil {
+		return fmt.Errorf("%w: wait for preview stack %q deletion: %w", errUtils.ErrAwsCloudFormationChangeSetFailed, stackName, err)
+	}
 	return nil
+}
+
+// waitForStubDeletion observes completion within the caller's cleanup deadline.
+// Deleted stacks can remain describable by their immutable ID as DELETE_COMPLETE.
+func waitForStubDeletion(ctx context.Context, client CloudFormationClient, stackName string) error {
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		state, err := describeStackState(ctx, client, stackName)
+		if err != nil {
+			return err
+		}
+		if !state.Found || state.Status == cfntypes.StackStatusDeleteComplete {
+			return nil
+		}
+		if state.Status == cfntypes.StackStatusDeleteFailed {
+			return fmt.Errorf("%w: stack reached %s", errUtils.ErrAwsCloudFormationChangeSetFailed, state.Status)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(eventPollInterval):
+		}
+	}
 }
 
 // joinCleanupError retains the original diagnostic metadata when cleanup succeeds.

@@ -85,7 +85,7 @@ func TestRunDiff_Cleanup(t *testing.T) {
 				}
 				inspect := client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("stack-id")}).After(cleanup).Return(after, tc.inspectErr)
 				if tc.after == cfntypes.StackStatusReviewInProgress && tc.inspectErr == nil {
-					client.EXPECT().DeleteStack(gomock.Any(), &cloudformation.DeleteStackInput{StackName: awsString("stack-id")}).After(inspect).Return(&cloudformation.DeleteStackOutput{}, tc.deleteStackErr)
+					expectOwnedPreviewStubDeletion(t, client, inspect, tc.deleteStackErr)
 				}
 			}
 			summary, err := runDiff(&opContext{Ctx: ctx}, client, &stackSpec{StackName: "vpc", TemplateBody: "Resources: {}"}, map[string]any{})
@@ -113,4 +113,19 @@ func TestRunDiff_PreservesOriginalError(t *testing.T) {
 	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(nil, original)
 	_, err := runDiff(&opContext{Ctx: context.Background()}, client, &stackSpec{StackName: "vpc", TemplateBody: "Resources: {}"}, map[string]any{})
 	require.Same(t, original, err)
+}
+
+// expectOwnedPreviewStubDeletion verifies that an owned stub is deleted and cleanup waits independently of cancellation.
+func expectOwnedPreviewStubDeletion(t *testing.T, client *MockCloudFormationClient, inspected *gomock.Call, deleteErr error) {
+	t.Helper()
+	deleted := client.EXPECT().DeleteStack(gomock.Any(), &cloudformation.DeleteStackInput{StackName: awsString("stack-id")}).After(inspected).Return(&cloudformation.DeleteStackOutput{}, deleteErr)
+	if deleteErr != nil {
+		return
+	}
+	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("stack-id")}).After(deleted).DoAndReturn(
+		func(cleanupCtx context.Context, _ *cloudformation.DescribeStacksInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
+			require.NoError(t, cleanupCtx.Err(), "cancelled previews still wait for cleanup")
+			return stackStatusOutput(cfntypes.StackStatusDeleteComplete), nil
+		},
+	)
 }
