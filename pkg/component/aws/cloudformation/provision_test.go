@@ -349,6 +349,7 @@ func TestDeployDirect_ExecuteChangeSetError(t *testing.T) {
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusReviewInProgress}},
 		}, nil),
 		client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("vpc")}).Return(&cloudformation.DescribeStacksOutput{}, nil),
 	)
 
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}

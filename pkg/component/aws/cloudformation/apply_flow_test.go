@@ -69,12 +69,13 @@ func completedChangeSet() *cloudformation.DescribeChangeSetOutput {
 
 // expectStubCleanup models discarding a changeset plus the empty stack a CREATE
 // changeset registered: delete the changeset, confirm the stack is still
-// REVIEW_IN_PROGRESS, then delete it.
+// REVIEW_IN_PROGRESS, then delete it and wait until deletion completes.
 func expectStubCleanup(client *MockCloudFormationClient) []any {
 	return []any{
 		client.EXPECT().DeleteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteChangeSetOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(stackWithStatus(cfntypes.StackStatusReviewInProgress), nil),
 		client.EXPECT().DeleteStack(gomock.Any(), &cloudformation.DeleteStackInput{StackName: awsString("vpc")}).Return(&cloudformation.DeleteStackOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("vpc")}).Return(stackWithStatus(cfntypes.StackStatusDeleteComplete), nil),
 	}
 }
 
