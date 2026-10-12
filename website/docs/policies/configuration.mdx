@@ -40,6 +40,7 @@ apiVersion: atmos/v1
 kind: Policy
 metadata:
   name: limits
+  description: Limit the number of managed resources changed by one Terraform plan.
 spec:
   policies:
     limit-changes:
@@ -62,6 +63,9 @@ spec:
   <dt><code>metadata.name</code></dt>
   <dd>Required nonempty string. Namespaces rule and hook identifiers. The example rule is
   identified as <code>limits/limit-changes</code>.</dd>
+  <dt><code>metadata.description</code></dt>
+  <dd>Optional plain-English string describing the policy document's purpose. Multiline text is
+  accepted. It is descriptive metadata, not a CEL expression, template, or denial reason.</dd>
   <dt><code>spec.policies</code></dt>
   <dd>Required nonempty map of rule names to rule definitions.</dd>
   <dt><code>spec.hooks</code></dt>

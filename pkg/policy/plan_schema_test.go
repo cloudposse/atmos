@@ -21,6 +21,18 @@ func TestPlanManifestSchema(t *testing.T) {
 	var document map[string]any
 	require.NoError(t, yaml.Unmarshal([]byte(testPlanManifest), &document))
 	require.NoError(t, schema.Validate(document))
+	document["metadata"].(map[string]any)["description"] = "Protect resources from accidental deletion."
+	require.NoError(t, schema.Validate(document))
+	document["metadata"].(map[string]any)["description"] = map[string]any{"invalid": "object"}
+	require.Error(t, schema.Validate(document))
+	root, entries := policyCatalogEntries(t)
+	for _, entry := range entries {
+		data, err := os.ReadFile(filepath.Join(root, entry, "policy.yaml"))
+		require.NoError(t, err)
+		var manifest map[string]any
+		require.NoError(t, yaml.Unmarshal(data, &manifest))
+		require.NoError(t, schema.Validate(manifest), entry)
+	}
 	for _, family := range []string{"terraform", "github", "lifecycle"} {
 		data, err := os.ReadFile(filepath.Join("..", "..", "examples", "policies", family, "policy.yaml"))
 		require.NoError(t, err)

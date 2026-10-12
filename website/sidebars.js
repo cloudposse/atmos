@@ -243,6 +243,7 @@ module.exports = {
             label: 'Policies',
             link: {type: 'doc', id: 'policies/index'},
             items: [
+                {type: 'link', label: 'Library', href: '/policies/library'},
                 'policies/configuration',
                 'policies/inputs',
                 'policies/terraform-plan',

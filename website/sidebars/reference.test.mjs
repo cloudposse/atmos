@@ -28,10 +28,11 @@ test('Policies has a Reference landing page and technical guides outside command
   assert.equal(policies.type, 'category');
   assert.equal(policies.link.id, 'policies/index');
   assert.deepEqual(policies.items, [
+    {type: 'link', label: 'Library', href: '/policies/library'},
     'policies/configuration', 'policies/inputs', 'policies/terraform-plan',
     'policies/hooks', 'policies/ci', 'policies/examples',
   ]);
-  for (const id of [policies.link.id, ...policies.items]) {
+  for (const id of [policies.link.id, ...policies.items.filter(item => typeof item === 'string')]) {
     const content = readFileSync(new URL(`../docs/${id}.mdx`, import.meta.url), 'utf8');
     assert.match(content, /<Intro>/, `${id} needs an introduction`);
     assert.doesNotMatch(content, /PRD|unimplemented|first slice|remain work/,

@@ -1,0 +1,73 @@
+[
+  {
+    "name": "selected",
+    "request": {
+      "kind": "operation",
+      "input": {
+        "event": "after.helm.apply",
+        "component_type": "helm",
+        "command": "apply",
+        "component": "example",
+        "stack": "dev",
+        "status": "success",
+        "exit_code": 0,
+        "dry_run": false
+      }
+    },
+    "status": "allow",
+    "hooks": [
+      {
+        "ref": "lifecycle-callback-after-apply/applied",
+        "event": "after.helm.apply",
+        "required": true,
+        "require_success": true
+      }
+    ]
+  },
+  {
+    "name": "not selected",
+    "request": {
+      "kind": "operation",
+      "input": {
+        "event": "after.helm.apply",
+        "component_type": "helm",
+        "command": "apply",
+        "component": "example",
+        "stack": "dev",
+        "status": "failure",
+        "exit_code": 1,
+        "dry_run": false
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "unrelated event",
+    "request": {
+      "kind": "operation",
+      "input": {
+        "event": "before.terraform.init",
+        "component_type": "terraform",
+        "command": "init",
+        "component": "example",
+        "stack": "dev",
+        "status": "success",
+        "exit_code": 0,
+        "dry_run": false
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "different input kind",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": []
+      }
+    },
+    "status": "not_applicable"
+  }
+]

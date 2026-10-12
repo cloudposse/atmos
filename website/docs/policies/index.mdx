@@ -34,6 +34,7 @@ apiVersion: atmos/v1
 kind: Policy
 metadata:
   name: safety
+  description: Prevent accidental deletion or replacement of managed resources.
 spec:
   policies:
     prevent-deletion:
@@ -64,8 +65,11 @@ not an unreviewed pull-request checkout.
 
 ## Reference
 
+Browse the [Policy Library](/policies/library) for individual policies, parameters, and tested input cases.
+
 | Page | Contents |
 |---|---|
+| [Library](/policies/library) | Searchable catalog with one definition, reference page, and test suite per policy |
 | [Configuration](/policies/configuration) | Directory loading, manifest fields, rule actions, enforcement setup |
 | [Inputs and Expressions](/policies/inputs) | CEL variables, operation fields, missing values, evaluation results |
 | [Terraform Plans](/policies/terraform-plan) | Plan JSON, saved-plan commands, failure handling |

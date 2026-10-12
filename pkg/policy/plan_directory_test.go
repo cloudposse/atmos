@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -8,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 const testPlanManifest = `apiVersion: atmos/v1
@@ -40,6 +43,48 @@ func TestLoadPlanDirectory(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(directory, "duplicate.yml"), []byte(testPlanManifest), 0o600))
 	_, err = LoadPlanDirectory(directory)
 	require.Error(t, err)
+}
+
+func TestPolicyMetadataDescription(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		field       string
+		description string
+	}{
+		{name: "omitted"},
+		{name: "empty", field: "  description: ''\n"},
+		{name: "plain English", field: "  description: Prevent accidental deletion of infrastructure.\n", description: "Prevent accidental deletion of infrastructure."},
+		{name: "literal text", field: "  description: 'input.command == apply; {{ .env.SECRET }}'\n", description: "input.command == apply; {{ .env.SECRET }}"},
+		{name: "multiline", field: "  description: |-\n    Protect resources.\n    Check the saved plan.\n", description: "Protect resources.\nCheck the saved plan."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			manifest := strings.Replace(testPlanManifest, "  name: platform\n", "  name: platform\n"+tc.field, 1)
+			directory := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(directory, "policy.yaml"), []byte(manifest), 0o600))
+			rules, err := LoadPlanDirectory(directory)
+			require.NoError(t, err)
+			require.Len(t, rules, 1)
+			require.Equal(t, tc.description, rules[0].Description)
+			require.Equal(t, "No resource deletions", rules[0].Effects.Reason)
+			encoded, err := json.Marshal(rules[0])
+			require.NoError(t, err)
+			var decoded Rule
+			require.NoError(t, json.Unmarshal(encoded, &decoded))
+			require.Equal(t, tc.description, decoded.Description)
+			decision, err := testEngine(t).Evaluate(context.Background(), &Request{
+				Kind: TerraformPlan, Input: json.RawMessage(`{"format_version":"1.2","planned_values":{}}`),
+			}, rules)
+			require.NoError(t, err)
+			require.Equal(t, NotApplicable, decision.Status, "description must not change evaluation")
+		})
+	}
+	t.Run("invalid description", func(t *testing.T) {
+		manifest := strings.Replace(testPlanManifest, "  name: platform", "  name: platform\n  description: {invalid: object}", 1)
+		directory := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(directory, "policy.yaml"), []byte(manifest), 0o600))
+		_, err := LoadPlanDirectory(directory)
+		require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+	})
 }
 
 func TestPlanDirectoryRejectsUnsupportedDeclarations(t *testing.T) {

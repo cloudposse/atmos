@@ -1,11 +1,11 @@
 ---
 name: atmos-policy
-description: "Use when authoring or testing Atmos CEL policies, saved-plan guardrails, policy-selected hooks, or provider-native policy inputs. Distinguish implemented component capabilities from proposed policies. For existing settings.validation, JSON Schema, and OPA validation commands, use atmos-validation."
+description: "Use when selecting, authoring, or testing Atmos library policies, CEL saved-plan guardrails, policy-selected hooks, or provider-native policy inputs. For existing settings.validation, JSON Schema, and OPA validation commands, use atmos-validation."
 ---
 
 # Atmos Policy
 
-Use this skill for the experimental policy engine and sample library, not for general validation
+Use this skill for the experimental policy engine and reusable library, not for general validation
 or ordinary lifecycle-hook configuration. Use `atmos-hooks` for non-policy hook definitions and
 `atmos-validation` for existing JSON Schema/OPA `settings.validation` behavior.
 
@@ -38,23 +38,28 @@ Distinguish input kind, component type, and CI provider:
 
 ## Author and test
 
-1. Start with the actual files under `examples/policies/{terraform,github,lifecycle}` when working
-    in this repository. Read `examples/policies/README.md` for setup and limitations. For installed
-    usage consult the Policy Library and Saved Plan Policies documentation matching the version.
+1. Start with `policy-library/<name>/`: each entry has a `README.md`, one `policy.yaml`, and
+    `tests/cases.json`. Browse `/policies/library` in the matching-version documentation.
+    `examples/policies/{terraform,github,lifecycle}` are demonstration bundles, not the library.
+    Copy only selected manifests into a protected, flat `ATMOS_POLICY_DIR`; loading is not recursive.
 2. Choose a supported input and effect. A true CEL predicate selects its effect; a false predicate
     is **not applicable**, not denial. Use `action: deny` for a violation predicate, not a safety
     predicate. `action: hooks` is supported on operation inputs.
 3. Keep predicates pure. Available roots are `input`, `params`, `ci`, and `request`. Supply
     parameters with `with`. No network, shell, filesystem, clock, or automation host is exposed.
+    Include `metadata.description` with the document's plain-English purpose. It is optional
+    literal text, separate from the CEL `rule` and denial `reason`; catalog entries require it.
 4. Treat missing, null, and unknown separately. Read Terraform `after_unknown` alongside `after`.
     Deletion includes replacement action lists. Decide whether a removal is forbidden or allowed
     remediation. Do not print plan JSON or sensitive values to explain a violation.
-5. Add table-driven cases to `pkg/policy/library_test.go` for each distributed rule: matching and
-    non-matching inputs, threshold boundaries, null/missing/unknown data, and relevant input kinds.
-    The suite reads the distributed YAML and rejects examples without tests.
+5. Add colocated `tests/cases.json` fixtures for each catalog entry: matching and non-matching
+    inputs, threshold boundaries, null/missing/unknown data, relevant input kinds, and exact hook
+    requirements. `TestPolicyCatalog` loads the actual manifests and checks combined identities.
+    Demonstration bundles retain table-driven cases in `pkg/policy/library_test.go`.
 6. Run targeted tests, not production applies or callbacks:
 
 ```shell
+go test ./pkg/policy -run TestPolicyCatalog -v
 go test ./pkg/policy -run TestSampleLibrary -v
 go test ./pkg/hooks -run 'TestPolicyHooksLifecycle|TestPolicyHookFailuresBlock'
 go test ./pkg/ci/... -run TestPolicySnapshot
@@ -95,5 +100,6 @@ is tamper-proof. Do not suggest privileged execution of fork code under `pull_re
 
 Keep local/current-job evaluation in OSS. Cross-component/job outcome aggregation, durable
 coordination, organization identity enrichment, and webhook orchestration belong to Atmos Pro.
-When proposing a policy requiring missing capabilities, label it **proposed** and name the missing
-collector/executor instead of presenting it as runnable YAML.
+Keep unimplemented designs in `docs/prd/policies.md`, not website docs or runnable catalog entries.
+The library governs Atmos operations and consumed artifacts; do not duplicate Kubernetes admission
+rules. Required external validators retain ownership of their resource-security rules.

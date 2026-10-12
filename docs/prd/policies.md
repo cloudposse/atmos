@@ -43,7 +43,7 @@ The security analysis that motivated the effort is documented separately in
 
 ## Concepts
 
-### Component capability contract and sample library
+### Component capability contract and policy library
 
 The product target includes **all component types**, with shared command/configuration capabilities
 and optional provider-native artifact capabilities. Component adapters must advertise their input
@@ -54,22 +54,31 @@ evaluation error; an unrelated input kind is not applicable. Lifecycle policies 
 
 Current: Terraform-compatible saved plans plus the existing Terraform/Helmfile/Helm/Kubernetes
 lifecycle entry points. Proposed: Packer, Ansible, container, emulator and custom-component admission,
-rendered Kubernetes/release artifacts, scanner/cost reports, and repository-only command integration.
+externally validated preview artifacts, scanner/cost reports, and repository-only command integration.
 Ansible check mode is not a complete saved plan; unavailable or skipped predictions must remain
 explicit. Legacy validation behavior remains unchanged during this incremental rollout.
 
-Ship a **tested sample library** (`examples/policies/`) before remote library distribution. The first
-12 examples cover resource deletion/replacement/count/type/tag restrictions, fork-event selection,
+Ship a **tested, browsable policy library** (`policy-library/`) independently of remote library
+resolution. Each entry contains one `policy.yaml`, a technical `README.md`, and colocated input/expected
+decision fixtures in `tests/cases.json`. The website reuses the Agent Skills file-browser gallery at
+`/policies/library`, with search and categories derived from per-entry metadata. Keep the initial UI
+small: no policy installer, featured promotion, or additional control panel. End-to-end demonstrations
+remain separate under `examples/policies/`.
+
+The directory manifest supports optional `metadata.description`: plain-English document purpose,
+preserved on resolved rules independently of the CEL predicate and denial `reason`. Every catalog
+entry supplies a description. Descriptions are literal text, never evaluated or templated.
+
+The first 12 catalog entries cover resource deletion/replacement/count/type/tag restrictions, fork-event selection,
 mandatory TFLint, production scanning, post-apply HTTP callbacks, failure cleanup, and Helm operation
 denial. Every distributed rule has allowing/non-applicable and blocking/selecting cases against the
 actual YAML. Add boundary, null/unknown, and missing-input cases as appropriate; a sample without tests
 fails the suite. Hook selection tests are supplemented by executor tests (dry-run, skip bypass,
 failure propagation, event mismatch, and no replay during unrelated lifecycle events).
 
-The [library capability and research catalog](../../website/docs/contribute/policy-library.mdx)
-records proposed native Kubernetes, Ansible, Packer, container, CI, change, cost and scanner examples,
-their missing collectors/executors, and acceptance cases for each. Proposals must not be shipped as
-apparently executable examples or advertised as enforced merely because CEL can express them.
+Website documentation and catalog entries describe implemented behavior only. Unimplemented
+integrations, research candidates, and rollout proposals belong exclusively in this PRD. A policy
+must not appear as executable merely because CEL can express its condition.
 
 The current hook slice resolves only governing `spec.hooks`, optionally pins `spec.tools`, preserves
 existing kind/step execution and retries, and distinguishes required execution from required success.
@@ -77,7 +86,49 @@ It rejects nested skip/background controls and does not render hook templates/YA
 Broader trusted rendering, typed hook results, pre-operation validation of future obligations, and
 durable duplicate handling remain design work. Post-apply failure cannot undo completed changes.
 
-The `atmos-policy` consumer skill must track these implementation boundaries and sample tests.
+The `atmos-policy` consumer skill must track these implementation boundaries and catalog tests.
+
+### Policy responsibility boundary
+
+Atmos owns decisions about its execution and change workflow: whether an operation may proceed,
+which saved plan is acceptable, what review evidence is required, and which checks/hooks must run.
+It does not replace platform-native admission or runtime security enforcement.
+
+Do not build a parallel Kubernetes security catalog for privileged Pods, seccomp/non-root settings,
+image trust, resource quotas, or persistent-volume protection. Those controls belong in the platform
+policy layer and must apply to clients other than Atmos. An Atmos policy can require an external
+validator to run and succeed; that tool or the cluster retains ownership of its resource-security
+rules. Optional preflight checks do not establish authoritative cluster enforcement.
+
+The library can include checks on artifacts Atmos actually consumes (such as Terraform saved plans),
+but their documentation must identify the invocation boundary rather than claim continuous
+infrastructure compliance. Ansible recap and image-provenance processing are tool/report integrations,
+not grounds for growing a second resource-security engine in the CLI.
+
+### Deferred integration research (PRD only)
+
+The following are design candidates, not runnable catalog entries. Add an entry only after its
+collector/executor and enforcement tests exist. These govern one invocation or complete repository
+analysis before fanout; cross-run aggregation and durable coordination remain Pro responsibilities.
+
+| Proposed example | Required input / integration | Minimum acceptance cases |
+|---|---|---|
+| Protect labels while permitting additions | Structured before/after metadata and reviewer verifier | New ordinary label allows; protected remove/modify awaits review; absent versus null differs |
+| Detect indirect policy detachment | Complete attachment inventories and governing revision | Selector/import/discovery/parameter change requires review; policy deletion caught; ambiguous move blocks |
+| Protect workflow permission changes | Structured Actions workflow diff | Unchanged/read-only allows; write grant/unsafe event change requires review; renamed workflow still detected |
+| Require immutable Action references | Parsed workflow steps and reusable workflows | Commit SHA allows; mutable reference denies; local actions handled separately |
+| Require fresh designated reviewer approval | Current paginated PR review facts | Current head/non-author allows; dismissed/stale/self review blocks; partial/API-denied results error |
+| Request a reviewer or update one PR comment | Approval resolver and typed GitHub action hook | Pending selects action; satisfied selects none; insufficient permission errors; duplicate event updates same comment |
+| Limit changed/affected instances before fanout | Complete files/components/instances inventory | Boundary count allows; excess blocks; deletes included; incomplete analysis errors |
+| Enforce a current-component cost budget | Cost artifact bound to evaluated plan | Below cap allows; above denies; missing estimate/currency mismatch/zero baseline handled |
+| Require scanner completion and cap findings | Scanner report bound to current input | Clean completed scan allows; severe findings deny; empty/missing/stale/failed scan is not clean |
+| Approved deployment window | Trusted captured timestamp/timezone | In-window allows; boundary/DST tested; missing time errors; evaluator does not read clock |
+
+Additional language work may include pure aggregation, recursive traversal, CIDR containment, and
+explicit sanitized-value helpers. Richer results need typed dynamic findings and hook payloads;
+another boolean evaluator alone does not provide them. Named-reviewer verification requires fresh,
+complete evidence, while live organization-team enrichment remains outside the token-only model.
+Do not expose these candidates as supported settings in website documentation.
 
 ### Terminology
 

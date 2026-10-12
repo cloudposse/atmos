@@ -25,7 +25,8 @@ type planPolicyDocument struct {
 	APIVersion string `yaml:"apiVersion"`
 	Kind       string `yaml:"kind"`
 	Metadata   struct {
-		Name string `yaml:"name"`
+		Name        string `yaml:"name"`
+		Description string `yaml:"description"`
 	} `yaml:"metadata"`
 	Spec struct {
 		Policies map[string]planPolicyItem `yaml:"policies"`
@@ -215,6 +216,7 @@ func (d *planPolicyDocument) rules() ([]Rule, error) {
 		if err != nil {
 			return nil, err
 		}
+		rule.Description = d.Metadata.Description
 		rules = append(rules, rule)
 	}
 	return rules, nil
