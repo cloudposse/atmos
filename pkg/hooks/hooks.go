@@ -24,6 +24,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -67,14 +68,20 @@ type Hooks struct {
 
 	// outcome is the lifecycle operation result (success/failure) for the next
 	// RunAll, set by SetOutcome. Zero value defaults to success.
-	outcome Outcome
+	outcome      Outcome
+	policyBundle *policy.Bundle
+	policyCI     *policy.CISnapshot
 }
 
 func (h Hooks) HasHooks() bool {
-	return len(h.items) > 0
+	return len(h.items) > 0 || h.policyBundle != nil
 }
 
 func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*Hooks, error) {
+	return getGovernedHooks(atmosConfig, info)
+}
+
+func getComponentHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*Hooks, error) {
 	if info.ComponentFromArg == "" || info.Stack == "" {
 		return &Hooks{
 			config: atmosConfig,
@@ -150,6 +157,9 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 	outcome := h.outcome
 	if outcome.Status == "" {
 		outcome.Status = RunSuccess
+	}
+	if err := h.runPolicyHooks(&hookRunContext{event: event, atmosConfig: atmosConfig, info: info, cmd: cmd, args: args, outcome: outcome}); err != nil {
+		return err
 	}
 
 	log.Debug("Running hooks", "count", len(h.items), logKeyStatus, outcome.Status)

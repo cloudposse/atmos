@@ -1,0 +1,141 @@
+---
+title: Saved Plan Policies
+sidebar_label: Plan Policies
+description: Enforce experimental CEL policies against a saved Terraform plan before applying it.
+id: plan-policies
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Evaluate policies against the native JSON representation of a saved Terraform plan. Atmos checks
+the plan after planning and checks it again before applying the same saved artifact.
+</Intro>
+
+:::warning Experimental, opt-in feature
+
+This is the first Terraform integration of the policy engine, not the complete policies PRD.
+It supports inline CEL denial rules loaded from one explicit directory. The loader also accepts
+operation policies selecting governing hooks; see [Policy Library](/contribute/policy-library).
+Component `policy:` attachments, remote libraries, selectors, Starlark, live API facts, and approval
+verification remain unimplemented. Existing `settings.validation` is unchanged.
+
+:::
+
+## Configure
+
+Set `ATMOS_POLICY_DIR` to a directory containing policy documents. In CI, use an absolute path to
+policies checked out from your trusted governing revision—not the unreviewed candidate revision.
+The directory is read before Terraform command configuration processing; it is not templated,
+imported, or merged with component configuration.
+
+```yaml title="policy.d/terraform.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: platform
+spec:
+  policies:
+    protect-stateful-resources:
+      on: terraform.plan
+      engine: cel
+      action: deny
+      reason: Stateful resources must not be deleted or replaced
+      with:
+        resource_types: [aws_db_instance, aws_s3_bucket, aws_dynamodb_table]
+      rule: |
+        has(input.resource_changes) && input.resource_changes.exists(r,
+          r.type in params.resource_types && 'delete' in r.change.actions)
+```
+
+```shell
+export ATMOS_POLICY_DIR=/trusted/policy.d
+atmos terraform plan vpc -s dev
+atmos terraform apply vpc -s dev --from-plan
+
+# Custom paths are resolved relative to the component working directory.
+atmos terraform plan vpc -s dev -out=reviewed.plan
+atmos terraform apply vpc -s dev --planfile reviewed.plan
+```
+
+The directory's `.yaml`, `.yml`, and `.json` regular files are read in filename order, one document
+per file. Rule names are sorted within each document. Duplicate document-name/rule-name identities,
+unknown fields, unsupported input kinds/actions/languages, invalid CEL, and an empty or unreadable
+configured directory are errors. Other file extensions are ignored. Subdirectories are not searched.
+Each document is limited to 1 MiB. There is no automatic system/user/project directory discovery yet.
+
+<dl>
+  <dt><code>ATMOS_POLICY_DIR</code></dt>
+  <dd>No default. Unset or empty disables this opt-in integration. All loaded rules apply to every
+  governed Terraform plan and saved-plan apply, independently of <code>--affected</code>.</dd>
+  <dt><code>on</code></dt>
+  <dd>Required; <code>terraform.plan</code> for this gate, or <code>operation</code> for lifecycle policies.</dd>
+  <dt><code>engine</code></dt>
+  <dd>Optional; defaults to <code>cel</code>, currently the only supported evaluator.</dd>
+  <dt><code>rule</code></dt>
+  <dd>Required boolean CEL expression. True selects the denial; false is not applicable.</dd>
+  <dt><code>action</code></dt>
+  <dd>Required; <code>deny</code> for plan rules. Operation rules also support <code>hooks</code>.
+  There is no warn/off flag for a loaded gate.</dd>
+  <dt><code>with</code></dt>
+  <dd>Optional object exposed as <code>params</code>. Defaults to an empty object.</dd>
+  <dt><code>reason</code></dt>
+  <dd>Optional static description. CLI denial errors identify blocking rule IDs, not resource values.</dd>
+</dl>
+
+## What policies inspect
+
+`input` is the complete native object returned by `terraform show -json` for the saved binary plan,
+not a parsed console summary. It retains `resource_changes`, ordered action lists, before/after
+values, unknown and sensitive markers, output changes, configuration, and future optional fields.
+For example, a replacement can contain both `delete` and `create`; checking only an action list
+equal to `['delete']` would miss it.
+
+Optional fields can be absent, including `resource_changes` for an empty plan. Check presence with
+`has(...)` when absence is acceptable. Explicitly deny unknown required attributes by checking
+`change.after_unknown`; an unknown value is not proof of compliance. A missing-field or other
+evaluation error blocks the command. Terraform's sensitive markers do not redact values from JSON.
+
+Native JSON format `1.x` is supported. Invalid JSON, state-only JSON, explicitly incomplete/errored
+plans, deferred changes, and extraction failures block. Extraction is limited to 64 MiB and is not
+sent to terminal/CI captures or diagnostic recording. There is no fallback to stdout parsing.
+
+## Execution and failure behavior
+
+Atmos redirects governed planning to a fresh private artifact. Terraform exit codes 0 and 2 allow
+policy evaluation; they do not imply policy success. Only after policies pass is the requested output
+file atomically replaced with a mode-0600 saved plan. On failure, a preexisting output is left
+unchanged: it is **not** evidence that the new plan passed. Temporary files are removed on exit.
+Terraform's plan text may mention the temporary path; use your requested output path for apply.
+
+Before saved-plan apply, Atmos copies the selected artifact into a private directory, extracts its
+JSON, reevaluates the current rules, checks that the private artifact did not change during evaluation,
+and applies that private copy. Changing the source path afterward does not substitute a different plan.
+This is not an attestation or a durable approval record.
+
+With plan policies enabled:
+
+- Implicit `apply`/`deploy` and direct `destroy` fail closed. Use `plan` followed by saved-plan apply;
+  for deletions, use `plan -destroy` followed by saved-plan apply.
+- `skip_planfile` / remote-only planning without a saved artifact is unsupported.
+- Nonempty `TF_CLI_ARGS`, `TF_CLI_ARGS_plan`, `TF_CLI_ARGS_apply`, and `TF_CLI_ARGS_show` are rejected.
+  Pass flags explicitly instead. Saved-plan apply accepts only non-planning execution flags.
+- Policy and extraction failures are never converted to success by Native CI exit-code mappings.
+- Dry-run executes no extraction/evaluation and explicitly reports that policies were not evaluated.
+- No GitHub API token or extra permission is needed for local plan evaluation or the supplied native
+  Actions event. Native CI collects allowlisted metadata/event context for policy requests; current
+  reviews and other API facts are not fetched. This does not aggregate component job outcomes.
+
+## Trust boundary
+
+Protect the workflow, governing policy directory, environment, Atmos/Terraform binaries, providers,
+and executable dependencies. Someone who can unset `ATMOS_POLICY_DIR`, alter its contents, replace
+the binaries, or invoke Terraform outside the gate can bypass this opt-in mechanism. Private copies
+prevent accidental path substitution, not attacks by the same OS user or a compromised runner.
+
+Plan policies govern plan/saved-plan-apply paths only. They do not authorize other state-changing
+commands, config functions, or existing arbitrary hooks. Operation rules at supported lifecycle points
+are separate from plan rules; general source/function admission remains work. These gates do not combine outcomes from other component jobs; service-managed
+cross-run policy orchestration belongs to Atmos Pro.
+
+See [Developing the Policy Engine](/contribute/policy-engine) for language-adapter and decision contracts.

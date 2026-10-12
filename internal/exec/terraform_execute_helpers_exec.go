@@ -27,6 +27,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/planfile"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/provisioner"
@@ -45,6 +46,7 @@ type componentExecContext struct {
 	planFile      string
 	workingDir    string
 	tenv          *dependencies.ToolchainEnvironment
+	planPolicy    *planfile.Guard
 }
 
 // prepareComponentExecution consolidates all per-component setup into one call:
@@ -246,7 +248,7 @@ func runMainCommandPhase( //nolint:revive // argument-limit: every parameter is 
 	// (plan/apply/destroy/…) into its own collapsible group, separate from init
 	// and workspace setup.
 	mainErr := ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, info.SubCommand), func() error {
-		return executeMainTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, mainOpts...)
+		return executeGovernedTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, execCtx.planPolicy, mainOpts...)
 	})
 	info.ExecMetadataRawOutput = combineExecMetadataOutput(&execMetadataStdoutBuf, &execMetadataStderrBuf)
 	if mainErr == nil {
@@ -301,7 +303,7 @@ func recoverFromInitRequired( //nolint:revive // argument-limit: every parameter
 		return errors.Join(mainErr, initErr)
 	}
 
-	return retryMainCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, opts...)
+	return retryMainCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, execCtx.planPolicy, opts...)
 }
 
 // retryMainCommand re-runs the main subcommand once after a forced init recovery, resetting the
@@ -312,12 +314,16 @@ func retryMainCommand( //nolint:revive // argument-limit: every parameter is loa
 	allArgsAndFlags []string,
 	componentPath string,
 	uploadStatusFlag bool,
+	gate *planfile.Guard,
 	opts ...ShellCommandOption,
 ) error {
 	var execMetadataStdoutBuf, execMetadataStderrBuf bytes.Buffer
 	mainOpts := append(slices.Clone(opts), withExecMetadataOutputCapture(&execMetadataStdoutBuf, &execMetadataStderrBuf))
 
 	err := ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, info.SubCommand), func() error {
+		if gate != nil {
+			return executeGovernedTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, gate, mainOpts...)
+		}
 		return executeMainTerraformCommandFn(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, mainOpts...)
 	})
 	info.ExecMetadataRawOutput = combineExecMetadataOutput(&execMetadataStdoutBuf, &execMetadataStderrBuf)
@@ -545,6 +551,14 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 		return nil
 	}
 
+	err := runMainTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, opts...)
+	return finishMainTerraformCommand(atmosConfig, info, err, uploadStatusFlag)
+}
+
+func runMainTerraformCommand(
+	atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, allArgsAndFlags []string,
+	componentPath string, opts ...ShellCommandOption,
+) error {
 	// An explicit `atmos terraform init` about to run below (see the matching recordAutoInit
 	// call after ExecuteShellCommandWithRetry) must invalidate any existing marker first: see
 	// executeTerraformInitCommand's matching call for why a failed init must not leave a
@@ -590,7 +604,6 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 		dispatchAfterInitFn(atmosConfig, info, componentPath, opts...)
 		recordAutoInit(newAutoInitInputs(atmosConfig, info, componentPath, constructTerraformComponentVarfileName(info)), allArgsAndFlags)
 	}
-
 	exitCode := resolveExitCode(err)
 
 	// FR-006e: record the terraform/tofu subprocess's own exit code before any
@@ -598,7 +611,15 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 	// (via captureExecMetadataSync) reports the real subprocess outcome even when
 	// Atmos's own returned status is remapped/neutralized further down.
 	info.ExecMetadataRawExitCode = exitCode
+	recordMainTerraformMetrics(atmosConfig, info, capturedMetrics, shellStartedAt)
 
+	return err
+}
+
+func recordMainTerraformMetrics(
+	atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo,
+	capturedMetrics *metricsprocess.ProcessMetrics, shellStartedAt time.Time,
+) {
 	// Combine this invocation's subprocess-tree usage (terraform/tofu plus its
 	// own children) with atmos's own self-usage so both the exec-metadata
 	// upload and the local display reflect the whole command, not just one
@@ -625,7 +646,12 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 			metricsprocess.DisplaySummary(label, combined, atmosConfig)
 		}
 	}
+}
 
+func finishMainTerraformCommand(
+	atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, err error, uploadStatusFlag bool,
+) error {
+	exitCode := resolveExitCode(err)
 	// Upload status only when explicitly requested via --upload-status flag.
 	// Upload failures are logged but never cause the terraform command to fail —
 	// the exit code should reflect the plan/apply result, not telemetry.

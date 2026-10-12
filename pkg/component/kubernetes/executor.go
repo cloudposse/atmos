@@ -88,13 +88,18 @@ func Execute(ctx *component.ExecutionContext, operation Operation) error {
 		return err
 	}
 
+	// Snapshot governing policies and Native CI before component environment overrides.
+	hookSet, err := getHooks(&atmosConfig, &info)
+	if err != nil {
+		return err
+	}
 	restoreEnv, err := prepareComponentEnvironment(&atmosConfig, &info)
 	if err != nil {
 		return err
 	}
 	defer restoreEnv()
 
-	return runWithHooks(ctx, &atmosConfig, &info, operation, source)
+	return runWithPreparedHooks(ctx, &atmosConfig, &info, operation, source, hookSet)
 }
 
 // manifestSource bundles the resolved provider and component path used to load manifests.
@@ -115,6 +120,13 @@ func runWithHooks(
 	if err != nil {
 		return err
 	}
+	return runWithPreparedHooks(ctx, atmosConfig, info, operation, source, hookSet)
+}
+
+//nolint:revive // argument-limit: existing executor arguments plus a pre-environment hook snapshot.
+func runWithPreparedHooks(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo, operation Operation, source manifestSource, hookSet *hooks.Hooks,
+) error {
 	before, after := eventsForCommand(info.SubCommand, operation)
 	if err := runAllHooks(hookSet, before, atmosConfig, info); err != nil {
 		runKubernetesCIHookFunc(after, ctx.Flags, atmosConfig, info, nil, err)
@@ -129,8 +141,10 @@ func runWithHooks(
 
 	result, err := runOperation(ctx, atmosConfig, info, operation, objects)
 	if err != nil {
-		runKubernetesCIHookFunc(after, ctx.Flags, atmosConfig, info, result, err)
-		return err
+		hookSet.SetOutcome(hooks.Outcome{Status: hooks.RunFailure, Err: err, ExitCode: errUtils.GetExitCode(err)})
+		combined := errors.Join(err, runAllHooks(hookSet, after, atmosConfig, info))
+		runKubernetesCIHookFunc(after, ctx.Flags, atmosConfig, info, result, combined)
+		return combined
 	}
 
 	if err := runAllHooks(hookSet, after, atmosConfig, info); err != nil {
