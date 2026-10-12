@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -63,7 +64,11 @@ func TestPlanGatePublish(t *testing.T) {
 			require.Equal(t, "saved binary", string(data))
 			info, err := os.Stat(filepath.Join(directory, "reviewed.plan"))
 			require.NoError(t, err)
-			require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+			require.True(t, info.Mode().IsRegular())
+			// Windows exposes read-only attributes, not POSIX owner/group permissions.
+			if runtime.GOOS != "windows" {
+				require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+			}
 			assertClean(t, directory)
 		})
 	}
