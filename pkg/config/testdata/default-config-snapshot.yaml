@@ -24,6 +24,7 @@ init.git: true
 init.ref: ""
 init.repository: github.com/cloudposse/atmos
 list.error_mode: warn
+logs.color: true
 logs.file: /dev/stderr
 logs.level: Warning
 settings.experimental: warn-daily
@@ -38,5 +39,6 @@ settings.terminal.no_color: false
 settings.terminal.pager: "false"
 settings.terminal.speed: 0
 stacks.inherit.metadata: true
+toolchain.install: auto
 toolchain.use_lock_file: true
 vendor.max_concurrency: 4

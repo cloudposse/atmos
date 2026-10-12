@@ -612,6 +612,12 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		return atmosConfig, fmt.Errorf("apply edition defaults: %w", err)
 	}
 
+	// Viper's SetTypeByDefaultValue coerces any non-boolean logs.color to false during
+	// the unmarshal below, so reject it first while the raw value is still visible.
+	if err := validateLogsColorConfig(v); err != nil {
+		return atmosConfig, err
+	}
+
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err := v.Unmarshal(&atmosConfig, atmosDecodeHook())
@@ -836,6 +842,9 @@ func setEnv(v *viper.Viper) {
 	// Frozen toolchain installs apply to explicit installs and automatic dependencies.
 	bindEnv(v, "toolchain.frozen_lock_file", "ATMOS_TOOLCHAIN_FROZEN_LOCK_FILE")
 
+	// Automatic install policy (never, declared, auto, always).
+	bindEnv(v, "toolchain.install", "ATMOS_TOOLCHAIN_INSTALL")
+
 	// CI cache settings (env overrides for schema fields with no CLI flag).
 	bindEnv(v, "ci.cache.enabled", "ATMOS_CI_CACHE_ENABLED")
 	bindEnv(v, "ci.cache.auto", "ATMOS_CI_CACHE_AUTO")
@@ -932,6 +941,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 	// would shadow these values and break edition rollback (test-enforced).
 	v.SetDefault("logs.file", "/dev/stderr")
 	v.SetDefault("logs.level", "Warning")
+	v.SetDefault("logs.color", true)
 	v.SetDefault("diagnostics.enabled", false)
 	v.SetDefault("diagnostics.file", "")
 	v.SetDefault("diagnostics.include_output", false)
@@ -965,6 +975,14 @@ func setDefaultConfiguration(v *viper.Viper) {
 	// platforms and CI (journaled in pkg/edition; previously opt-in via
 	// use_lock_file: true).
 	v.SetDefault("toolchain.use_lock_file", true)
+
+	// Component runs install their own executable pinned in .tool-versions and use other
+	// already-installed listed tools, since 2026-10-09 (journaled in pkg/edition; previously
+	// only explicit dependencies were installed, since toolchain.install didn't exist). A
+	// project pinned to an edition before that date gets "declared" restored by
+	// applyEditionDefaults. defaultCliConfig deliberately omits the field so a pin is never
+	// shadowed by the config layer.
+	v.SetDefault("toolchain.install", "auto")
 
 	// Atmos Pro defaults
 	v.SetDefault("settings.pro.base_url", AtmosProDefaultBaseUrl)
