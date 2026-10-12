@@ -88,9 +88,12 @@ func TestQualityPaginationLimitsFailClosed(t *testing.T) {
 func TestQualityPublishFailuresAndIdempotency(t *testing.T) {
 	for _, scenario := range []string{"lookup", "labels", "summary", "unchanged"} {
 		t.Run(scenario, func(t *testing.T) {
-			fake := &githubtest.FakeAPI{T: t, Get: func(_ string, response any) error {
+			fake := &githubtest.FakeAPI{T: t, Get: func(path string, response any) error {
 				if scenario == "labels" || scenario == "lookup" {
 					return errors.New("lookup failed")
+				}
+				if strings.Contains(path, "/comments?") {
+					return githubtest.Respond([]map[string]any{{"body": qualityMarker + "same", "user": map[string]string{"login": "github-actions[bot]", "type": "Bot"}}}, response)
 				}
 				return githubtest.Respond(map[string]any{}, response)
 			}}
@@ -104,9 +107,10 @@ func TestQualityPublishFailuresAndIdempotency(t *testing.T) {
 				require.Error(t, q.refresh(42, "", nil))
 				return
 			}
-			err := q.publish(42, &githubapi.Comment{Body: "same"}, "same", true)
+			published, err := q.publish(42, &githubapi.Comment{Body: qualityMarker + "same"}, qualityMarker+"same", true)
 			if scenario == "unchanged" {
 				require.NoError(t, err)
+				require.True(t, published)
 			} else {
 				require.Error(t, err)
 			}
