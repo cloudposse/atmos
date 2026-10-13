@@ -102,9 +102,9 @@ workflows:
 - `ctx.flags` and `ctx.arguments`: immutable parsed command inputs, preserving host types
   in custom commands. Read these directly; do not map flags through `env` or template
   values into script source.
-- Atmos renders step script bodies as Go templates before Starlark runs, so `{{` in source
-  fails. Write `script: !literal |` for any script that contains braces; it runs the body exactly
-  as written. Split the delimiter (`"{" + "{"`) only for included scripts, which are still rendered.
+- Atmos renders step script bodies as Go templates before Starlark runs. Valid `{{ ... }}` actions
+  are rendered; malformed or unresolved actions can fail. Write `script: !literal |` when braces
+  must remain literal. Split the delimiter (`"{" + "{"`) only for included scripts, which are still rendered.
 - Output channels: `print` writes data to stdout. `ui.info` (`▶`), `ui.success` (`✓`), and
   `ui.warning` (`⚠`) write human status to stderr. `log.trace/debug/info/warn/error(message, **fields)`
   writes diagnostics through the Atmos logger with `step` (and, in parallel tasks, `task`)

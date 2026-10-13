@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/taskgraph"
+	"github.com/cloudposse/atmos/pkg/taskgraph/adapters"
 )
 
 // Compile-time sentinels: a rename of a schema field these tests rely on fails the build.
@@ -376,4 +379,19 @@ func TestCustomCommandParallelChildrenUseTheSameTemplateFunctionsAsSequentialSte
 		require.NoError(t, err, name)
 		assert.Equal(t, "X", string(got), name)
 	}
+}
+
+func TestCustomCommandRejectsNegativeStepTimeout(t *testing.T) {
+	_ = NewTestKit(t)
+	ensureIOInitialized(t)
+	workDir := t.TempDir()
+	command := registerCustomCommandForTest(t, workDir, &schema.Command{
+		Name:  "negative-timeout",
+		Steps: schema.Tasks{{Name: "must-not-run", Type: schema.TaskTypeShell, Command: "echo ran > marker", Timeout: -5 * time.Second}},
+	})
+	runner := adapters.CustomCommandRunner(command.Parent(), func(*cobra.Command) bool { return true })
+	err := runner(context.Background(), taskgraph.Ref{Name: command.Name()})
+	require.ErrorIs(t, err, errUtils.ErrStepTimeoutInvalid)
+	_, err = os.Stat(filepath.Join(workDir, "marker"))
+	require.ErrorIs(t, err, os.ErrNotExist, "invalid timeout must prevent execution")
 }

@@ -1522,6 +1522,9 @@ func executeCustomCommand(
 		// tflint steps bounds the whole logical step: one deadline wraps the retry loop, so backoff waits
 		// and later attempts end with the timeout instead of each attempt getting a fresh one.
 		runStepBounded := func() error {
+			if step.Timeout < 0 {
+				return fmt.Errorf("%w: custom command step %d timeout %s must be positive", errUtils.ErrStepTimeoutInvalid, i, step.Timeout)
+			}
 			runRetrying := func(ctx context.Context) error {
 				if step.Retry == nil {
 					return runStep(ctx)
