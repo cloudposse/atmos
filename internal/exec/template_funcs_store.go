@@ -50,9 +50,16 @@ func deferredStoreCacheKey(ac *schema.AtmosConfiguration, info *schema.ConfigAnd
 	if info != nil {
 		stack, section, disabled = info.Stack, info.ComponentSection, info.AuthDisabled
 	}
-	effectiveAuth, err := auth.MergeComponentAuthFromConfig(&ac.Auth, section, ac, cfg.AuthSectionName)
-	if err != nil {
-		return "", false
+	// Hash the global config directly when there are no component overrides.
+	// This is read-only: copying and round-tripping it through mapstructure for
+	// every reference is unnecessary, including for the generated empty auth map.
+	effectiveAuth := &ac.Auth
+	if componentAuth, _ := section[cfg.AuthSectionName].(map[string]any); len(componentAuth) > 0 {
+		var err error
+		effectiveAuth, err = auth.MergeComponentAuthFromConfig(&ac.Auth, section, ac, cfg.AuthSectionName)
+		if err != nil {
+			return "", false
+		}
 	}
 	// Without a configured identity, authentication returns no manager and the
 	// backend uses ambient credentials. The caller stack cannot change that
