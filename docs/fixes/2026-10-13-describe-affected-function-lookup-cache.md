@@ -52,6 +52,11 @@ it did not cover these three Terraform/component lookup paths.
 - Add an offline CLI workload with 200 consumers and 600 references per pass,
   split across all three functions. Cover unchanged repositories, changed
   referenced values, and dependents without requiring Terraform or cloud access.
+- Capture only the goroutine header when locating cycle-detection contexts.
+  Growing a buffer to capture the entire Go stack repeated expensive tracebacks
+  for every reference, even though only the goroutine ID was needed. Both
+  resolution implementations now retain the same context at deep call stacks
+  instead of falling back when the trace exceeds 8 KB.
 
 ## Validation
 
@@ -101,6 +106,15 @@ ATMOS_BENCH_FIELD_FILTER='^BenchmarkCLI$/^DescribeAffected$/^FunctionsRepeated$/
 
 - The static workload does not model Terraform process latency, remote backend
   latency, or OIDC login time.
+
+Investigation of #3379 collected eight CPU profiles per binary plus allocation
+and heatmap profiles using the same fixture. The cache-only build made 1,228
+goroutine-context lookups versus 826 on v1.228.0. Stack capture accounted for
+1.53 s of sampled CPU across those eight runs versus 0.56 s previously;
+deferred target/auth cache binding accounted for only 0.24 s in the new build.
+Profiles are diagnostic evidence, not benchmark timings. A deep-stack isolation
+test failed before the header-only change in both resolution implementations:
+one returned `unknown`, while the other returned a new `unknown-N` identity.
 
 ## Follow-ups
 
