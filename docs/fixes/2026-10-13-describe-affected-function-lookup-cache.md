@@ -57,6 +57,10 @@ it did not cover these three Terraform/component lookup paths.
   for every reference, even though only the goroutine ID was needed. Both
   resolution implementations now retain the same context at deep call stacks
   instead of falling back when the trace exceeds 8 KB.
+- Share ambient-credential store values across caller stacks when neither the
+  effective auth configuration nor the store selects an identity. Retain
+  configuration-root, backend, lookup, disabled-state, and auth partitions;
+  configured identities still retain caller-stack isolation for endpoints.
 
 ## Validation
 
@@ -115,6 +119,17 @@ deferred target/auth cache binding accounted for only 0.24 s in the new build.
 Profiles are diagnostic evidence, not benchmark timings. A deep-stack isolation
 test failed before the header-only change in both resolution implementations:
 one returned `unknown`, while the other returned a new `unknown-N` identity.
+
+The [follow-up report on #3353](https://github.com/cloudposse/atmos/issues/3353#issuecomment-6155242173)
+also reproduced a slowdown with YAML functions disabled and dependents enabled.
+A loopback SSM fixture using those flags, implicit identity selection, 200
+consumers, and 11 keys reproduced 660 reads on v1.232.0 across 20 caller stacks,
+versus 66 reads across two stacks. The initial cache fix reduced those counts
+to 440 and 44 by sharing HEAD/dependents state, but still keyed ambient values
+by caller stack. The new regression tests preserve stack isolation for global,
+component, and explicitly selected identities while permitting ambient reuse.
+The reporter did not establish whether a default Atmos identity is configured;
+the ambient optimization applies only when no identity can be selected.
 
 ## Follow-ups
 

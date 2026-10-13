@@ -54,6 +54,13 @@ func deferredStoreCacheKey(ac *schema.AtmosConfiguration, info *schema.ConfigAnd
 	if err != nil {
 		return "", false
 	}
+	// Without a configured identity, authentication returns no manager and the
+	// backend uses ambient credentials. The caller stack cannot change that
+	// binding; the requested store stack remains part of opts below. Keep caller
+	// isolation whenever an identity can select stack-specific endpoints.
+	if storeConfig.Identity == "" && len(effectiveAuth.Identities) == 0 {
+		stack = ""
+	}
 	encoded, err := json.Marshal(struct {
 		BasePath, ConfigPath, AuthStack string
 		AuthDisabled                    bool

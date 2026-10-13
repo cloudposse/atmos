@@ -231,11 +231,21 @@ covers inspection caching and repeated deferred target descriptions. The
 non-static output/auth-disabled wrapper path and actual OIDC authentication need
 separate unit tests; static backends return before that wrapper is created.
 
+The `StoreCallerStacks/stacks=20/keys=11` workload spreads 200 consumers across
+20 caller stacks, changes their shared component, and enables dependents with
+`--process-functions=false --skip=store.get --skip=store`. Unlike the default
+CLI harness, it leaves identity selection implicit and uses fake ambient AWS
+credentials against a loopback SSM server. It verifies resolved store values,
+all 200 affected identities, and exactly 22 reads (11 per HEAD/BASE root).
+This detects caller-stack cache fragmentation for stores without configured
+auth identities; it does not model a configured default identity or real AWS latency.
+
 Builds and fixture setup are excluded from measurements. Packages run
 sequentially with `GOMAXPROCS=2`, CGO disabled, no race/coverage instrumentation,
 and a one-second calibration for in-process benchmarks. Every CLI sample uses
 one fresh process with isolated home/configuration/application caches, no cloud
-credentials, and authentication, telemetry, version checks, and Pro disabled.
+credentials, and authentication, telemetry, version checks, and Pro disabled
+except for the ambient-store scenario described above.
 CLI results report elapsed time only; harness allocations are not CLI memory.
 In-process results also include bytes and allocations per operation.
 

@@ -16,9 +16,10 @@ import (
 )
 
 type fixture struct {
-	env        []string
-	root, base string
-	instances  int
+	env         []string
+	root, base  string
+	instances   int
+	ambientAuth bool
 }
 
 func writeFixture(tb testing.TB, path, content string) {
@@ -140,7 +141,10 @@ func runCLI(tb testing.TB, binary string, f fixture, home string, args []string)
 	tb.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, binary, append(args, "--identity=false", "--format=json")...)
+	if !f.ambientAuth {
+		args = append(args, "--identity=false")
+	}
+	cmd := exec.CommandContext(ctx, binary, append(args, "--format=json")...)
 	cmd.Dir, cmd.Env = f.root, append(cliEnv(home), f.env...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
@@ -187,6 +191,9 @@ func BenchmarkCLI(b *testing.B) {
 			benchmarkFunctionsCLI(b, binary, change)
 		})
 	}
+	b.Run("DescribeAffected/StoreCallerStacks/stacks=20/keys=11", func(b *testing.B) {
+		benchmarkStoreCallerStacks(b, binary)
+	})
 	b.Run("DescribeAffected/Dependents/instances=1000", func(b *testing.B) { benchmarkDependentsCLI(b, binary) })
 	for _, command := range []string{"DescribeAffected", "DescribeStacks"} {
 		b.Run(command+"/StoreRepeated/calls=2200/keys=11", func(b *testing.B) { benchmarkStoreCLI(b, binary, command) })
