@@ -151,7 +151,7 @@ steps:
 ### Required vs Optional
 
 Arguments are required by default. Use `required: false` to make an argument optional,
-or set `default` to supply a value when the user omits it.
+or set a non-empty `default` to supply a value when the user omits it.
 
 An optional argument without a default becomes an empty string in
 `{{ .Arguments.<name> }}` and `ctx.arguments`. Values preserve commas, empty strings,

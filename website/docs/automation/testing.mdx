@@ -36,7 +36,9 @@ Add a `type: test` step to a workflow or custom command's `steps` list:
 
 `title` labels the group; each child's `name` identifies a check in the results.
 For a lifecycle hook, select `kind: step`, `type: test`, and put the test's
-`title` and `steps` under `with`. See [hook syntax](/scripting/lifecycle-hooks#lifecycle-hook-syntax).
+`title` and `steps` under `with`. Set `on_failure: fail` on the hook to make failed
+checks fail the parent operation or CI job; hooks default to `on_failure: warn`.
+See [hook syntax](/scripting/lifecycle-hooks#lifecycle-hook-syntax).
 
 ## Read results and use them in CI
 
