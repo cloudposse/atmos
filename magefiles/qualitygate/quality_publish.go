@@ -22,6 +22,29 @@ func (q *qualityClient) labels(number int, ready bool) error {
 	if ready {
 		name, opposite, color = qualityReady, qualityNotReady, "0E8A16"
 	}
+	var issue struct {
+		Labels []struct {
+			Name string `json:"name"`
+		} `json:"labels"`
+	}
+	if err := q.get(fmt.Sprintf("issues/%d", number), &issue); err != nil {
+		return err
+	}
+	hasDesired, hasOpposite := false, false
+	for _, label := range issue.Labels {
+		hasDesired = hasDesired || label.Name == name
+		hasOpposite = hasOpposite || label.Name == opposite
+	}
+	// Remove a stale positive label before attempting any other label update.
+	if hasOpposite {
+		err := q.write(http.MethodDelete, fmt.Sprintf("issues/%d/labels/%s", number, url.PathEscape(opposite)), nil)
+		if err != nil && !githubapi.NotFound(err) {
+			return err
+		}
+	}
+	if hasDesired {
+		return nil
+	}
 	var label any
 	if err := q.get("labels/"+url.PathEscape(name), &label); err != nil {
 		if !githubapi.NotFound(err) {
@@ -30,11 +53,6 @@ func (q *qualityClient) labels(number int, ready bool) error {
 		if err = q.write(http.MethodPost, "labels", map[string]string{"name": name, "color": color, "description": "Atmos quality gates for the current PR head"}); err != nil {
 			return err
 		}
-	}
-	// Remove a stale positive label before attempting any other label update.
-	err := q.write(http.MethodDelete, fmt.Sprintf("issues/%d/labels/%s", number, url.PathEscape(opposite)), nil)
-	if err != nil && !githubapi.NotFound(err) {
-		return err
 	}
 	return q.write(http.MethodPost, fmt.Sprintf("issues/%d/labels", number), map[string]any{"labels": []string{name}})
 }
@@ -64,19 +82,46 @@ func (q *qualityClient) refresh(number int, performance string, run *githubapi.R
 	if run != nil && !bench.PRMatches(&pr, run, q.repo) {
 		return nil
 	}
-	existing, err := q.existing(number)
-	if err != nil {
-		return err
+	// Scheduled and event reporters for one PR can run concurrently. Publish only
+	// when the comment is unchanged since rendering; otherwise re-render from the
+	// other writer's result so a stale snapshot never overwrites a fresher one.
+	for range qualityPublishAttempts {
+		existing, err := q.existing(number)
+		if err != nil {
+			return err
+		}
+		if qualityObsolete(existing, run) {
+			return nil
+		}
+		body, ready := q.render(&pr, existing, performance, run)
+		valid, err := q.stillCurrent(&pr, run)
+		if err != nil || !valid {
+			return err
+		}
+		latest, err := q.existing(number)
+		if err != nil {
+			return err
+		}
+		if !qualitySameComment(existing, latest) {
+			continue
+		}
+		published, err := q.publish(number, existing, body, ready)
+		if err != nil || published {
+			return err
+		}
 	}
-	if qualityObsolete(existing, run) {
-		return nil
+	// Another writer keeps publishing newer state; its report supersedes this one.
+	return nil
+}
+
+// Bounds re-rendering when another reporter publishes during evaluation.
+const qualityPublishAttempts = 3
+
+func qualitySameComment(before, after *githubapi.Comment) bool {
+	if before == nil || after == nil {
+		return before == after
 	}
-	body, ready := q.render(&pr, existing, performance, run)
-	valid, err := q.stillCurrent(&pr, run)
-	if err != nil || !valid {
-		return err
-	}
-	return q.publish(number, existing, body, ready)
+	return before.ID == after.ID && before.Body == after.Body
 }
 
 func qualityObsolete(existing *githubapi.Comment, run *githubapi.Run) bool {
@@ -103,21 +148,29 @@ func (q *qualityClient) render(pr *githubapi.PR, existing *githubapi.Comment, pe
 	return body, ready
 }
 
-func (q *qualityClient) publish(number int, existing *githubapi.Comment, body string, ready bool) error {
-	if err := qualitySummary(body); err != nil {
-		return err
-	}
+// Publish reports false without writing the comment when another writer changed
+// it while labels were updated; the caller then re-renders from fresh state.
+// GitHub has no conditional comment write, so the remaining race is one
+// read-to-PATCH round trip, and the next reconcile repairs any lost update.
+func (q *qualityClient) publish(number int, existing *githubapi.Comment, body string, ready bool) (bool, error) {
 	if err := q.labels(number, ready); err != nil {
-		return err
+		return false, err
+	}
+	latest, err := q.existing(number)
+	if err != nil || !qualitySameComment(existing, latest) {
+		return false, err
+	}
+	if err = qualitySummary(body); err != nil {
+		return false, err
 	}
 	if existing != nil && existing.Body == body {
-		return nil
+		return true, nil
 	}
 	method, path := http.MethodPost, fmt.Sprintf("issues/%d/comments", number)
 	if existing != nil {
 		method, path = http.MethodPatch, fmt.Sprintf("issues/comments/%d", existing.ID)
 	}
-	return q.write(method, path, map[string]string{"body": body})
+	return true, q.write(method, path, map[string]string{"body": body})
 }
 
 func (q *qualityClient) stillCurrent(pr *githubapi.PR, run *githubapi.Run) (bool, error) {

@@ -56,6 +56,10 @@ const config = {
                 redirects: [
                     // Policy guides belong in Reference, not the command list.
                     {from: '/cli/commands/terraform/plan-policies', to: '/policies/terraform-plan'},
+                    {
+                        from: '/changelog/starlark-yaml-values',
+                        to: '/changelog/starlark-custom-commands'
+                    },
                     // Advanced Quick Start: "Configure Repository" + "Configure CLI"
                     // were merged into a single "Configure the Project" step.
                     {
@@ -406,6 +410,10 @@ const config = {
                 // URLs (still bookmarked/indexed externally) to their current
                 // /changelog/<slug> location.
                 createRedirects(existingPath) {
+                    // Scripting guides previously lived under /automation.
+                    if (existingPath === '/scripting' || existingPath.startsWith('/scripting/')) {
+                        return [existingPath.replace(/^\/scripting(?=\/|$)/, '/automation')];
+                    }
                     if (existingPath === '/steps' || existingPath.startsWith('/steps/')) {
                         return [existingPath.replace(/^\/steps(?=\/|$)/, '/workflows/steps')];
                     }

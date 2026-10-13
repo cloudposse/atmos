@@ -1,69 +1,31 @@
 name: Quality Gate
 
 on:
-  workflow_run:
-    workflows:
-      - Algolia
-      - Benchmarks
-      - Quality Gate Signal
-      - atmos.ci
-      - autofix.ci
-      - Claude Quality Checks
-      - CodeQL
-      - Dependency Review
-      - Feature release
-      - Go Version Change Detection
-      - install.sh smoke
-      - landing-demos
-      - Link Check
-      - Native CI
-      - Planfile Artifacts E2E
-      - Planfile Verify E2E
-      - PR Size Labeler
-      - Pre-commit
-      - Release Documentation Check
-      - Screengrabs
-      - Tests
-      - TruffleHog secret scan
-      - Validate Agent Skills
-      - Validate Codeowners
-      - Validation E2E
-      - Verify Repository Symlinks
-      - Verify SHA Pinning
-      - Version Tracker
-      - vhs
-      - Website Preview Build
-    types: [in_progress, completed]
-  check_run:
-    types: [completed]
-  status:
-  issue_comment:
-    types: [created, edited, deleted]
+  workflow_call:
   # Actions has no review-thread resolution trigger. Reconcile these changes
-  # and third-party events not delivered to Actions on a best-effort schedule.
+  # and third-party events not delivered to Actions every 15 minutes, for open
+  # main PRs updated within the last 24 hours (including bot activity).
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 permissions: {}
 
-# The benchmark reporter shares this group: one writer owns the composite
-# comment and its labels, even when a review and benchmark finish together.
+# Serialize final reports per PR/head; scheduled recovery has its own group.
 concurrency:
-  group: atmos-quality-report
-  queue: max
+  group: >-
+    atmos-quality-report-${{
+      github.event.issue.number ||
+      github.event.workflow_run.pull_requests[0].number ||
+      github.event.check_run.pull_requests[0].number ||
+      github.event.workflow_run.head_sha ||
+      github.event.check_run.head_sha ||
+      github.event.sha ||
+      'all' }}
   cancel-in-progress: false
 
 jobs:
   report:
-    if: >-
-      (github.event_name != 'workflow_run' ||
-        (github.event.workflow_run.name != 'Quality Gate' &&
-         github.event.workflow_run.name != 'Benchmark Report' &&
-         github.event.workflow_run.name != 'CI Timing Summary')) &&
-      (github.event_name != 'check_run' || github.event.check_run.app.slug != 'github-actions') &&
-      (github.event_name != 'issue_comment' ||
-        (github.event.issue.pull_request && github.event.comment.user.login != 'github-actions[bot]'))
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:

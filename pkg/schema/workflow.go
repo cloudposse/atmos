@@ -345,12 +345,32 @@ type WorkflowStep struct {
 	Identity         string       `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 	Needs            []string     `yaml:"needs,omitempty" json:"needs,omitempty" mapstructure:"needs"`
 	When             Condition    `yaml:"when,omitempty" json:"when,omitempty" mapstructure:"when"`
+
+	// ScriptEnv preserves explicitly declared script inputs when a runner merges process env.
+	ScriptEnv map[string]string `yaml:"-" json:"-" mapstructure:"-"`
+	// ScriptProcessOverrides preserves command-level env precedence for component processes.
+	ScriptProcessOverrides map[string]string `yaml:"-" json:"-" mapstructure:"-"`
+	// ScriptSource is the absolute path of the file the script body was read from (a local
+	// !include or !include.raw). It is set by the loaders, never by users, and anchors the
+	// script's load() calls and tracebacks. The mapstructure key carries it through merged
+	// custom command configuration; it has no YAML or JSON key.
+	ScriptSource string `yaml:"-" json:"-" mapstructure:"script_source"`
+	// LiteralFields lists the fields of this step that were written with the !literal tag: "script",
+	// "command", "interpreter", "working_directory", and "env.NAME" for an individual env value.
+	// The runner uses those fields exactly as written and never renders them as templates. It is
+	// set by the loaders, never by users. The mapstructure key carries it through merged custom
+	// command configuration; it has no YAML or JSON key.
+	LiteralFields []string `yaml:"-" json:"-" mapstructure:"literal_fields"`
+
 	// Continue controls whether a failure of this step is forgiven: subsequent steps still run
 	// and the overall workflow exit status is unaffected (like GitHub Actions'
 	// continue-on-error). Evaluated against this step's own outcome after it runs, unlike When
 	// (evaluated before, against the running status). Unset means no forgiveness (today's
 	// fail-stop behavior, unchanged).
 	Continue Condition `yaml:"continue,omitempty" json:"continue,omitempty" mapstructure:"continue"`
+	// LoadError records a decode problem that must not fail config loading (see Task.LoadError). The
+	// step executor reports it. It has no YAML, JSON, or mapstructure key.
+	LoadError error `yaml:"-" json:"-" mapstructure:"-"`
 	// Interactive attaches host stdin to the step and lets the step handle Ctrl-C (like docker -i).
 	Interactive bool `yaml:"interactive,omitempty" json:"interactive,omitempty" mapstructure:"interactive"`
 	// Tty allocates a pseudo-terminal for the step (like docker -t). Combine with interactive for full terminal sessions.
@@ -555,6 +575,9 @@ func (step *WorkflowStep) UnmarshalYAML(value *yaml.Node) error {
 	// Decode into a zero-value temp first so a reused receiver does not retain
 	// fields omitted from this YAML node (Decode merges into the destination).
 	var fresh plain
+	if err := ValidateRetryNode(value); err != nil {
+		return err
+	}
 	nodes, sanitized := splitStepPolymorphicNodes(value)
 	if err := sanitized.Decode(&fresh); err != nil {
 		return err

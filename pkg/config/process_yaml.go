@@ -448,6 +448,9 @@ func processScalarNodeValue(node *yaml.Node) (any, error) {
 	switch node.Tag {
 	case u.AtmosYamlFuncUnset:
 		return nil, nil
+	case u.AtmosYamlFuncLiteral:
+		// !literal keeps the value exactly as written.
+		return node.Value, nil
 	case u.AtmosYamlFuncEnv:
 		return processEnvTag(strFunc, node.Value)
 	case u.AtmosYamlFuncExec:
@@ -519,6 +522,10 @@ func decodeMappingNodeWithYamlFunctions(node *yaml.Node, sourceFile string) (any
 		}
 		result[keyNode.Value] = value
 	}
+	recordScriptSource(node, result, sourceFile)
+	if err := recordCommandFields(node, result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -562,38 +569,48 @@ func isIncludeTag(tag string) bool {
 }
 
 func processIncludeNodeValueForFile(node *yaml.Node, sourceFile string) (any, error) {
+	// Resolve the path against the config file and the project base path, never the working
+	// directory, so the result is the same wherever Atmos runs from.
+	scope := commandIncludeScope(sourceFile)
+	value := scope.Resolve(node.Value).Value
 	resolved := legacyyaml.Node{
 		Kind:  legacyyaml.ScalarNode,
 		Tag:   node.Tag,
-		Value: node.Value,
+		Value: value,
 	}
-	basePath := includeBasePathForSourceFile(sourceFile)
 	atmosConfig := &schema.AtmosConfiguration{
-		BasePath:         basePath,
-		BasePathAbsolute: basePath,
+		BasePath:         scope.BasePath,
+		BasePathAbsolute: scope.BasePath,
 	}
 	var err error
 	if node.Tag == u.AtmosYamlFuncIncludeRaw {
-		err = u.ProcessIncludeRawTag(atmosConfig, &resolved, node.Value, sourceFile)
+		err = u.ProcessIncludeRawTag(atmosConfig, &resolved, value, sourceFile)
 	} else {
-		err = u.ProcessIncludeTag(atmosConfig, &resolved, node.Value, sourceFile)
+		err = u.ProcessIncludeTag(atmosConfig, &resolved, value, sourceFile)
 	}
 	if err != nil {
 		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
 	}
-	var value any
-	if err := resolved.Decode(&value); err != nil {
+	var decoded any
+	if err := resolved.Decode(&decoded); err != nil {
 		return nil, err
 	}
-	return value, nil
+	return decoded, nil
 }
 
+// includeBasePathForSourceFile returns the directory a config file's bare include paths anchor
+// to when it declares no base path: the config file's own directory, or the parent of the
+// nearest enclosing `atmos.d` or `.atmos.d` directory for files loaded from one (at any depth).
 func includeBasePathForSourceFile(sourceFile string) string {
-	dir := filepath.Dir(sourceFile)
-	if base := filepath.Base(dir); base == ".atmos.d" || base == "atmos.d" {
-		return filepath.Dir(dir)
+	configDir := filepath.Dir(sourceFile)
+	for dir := configDir; ; dir = filepath.Dir(dir) {
+		if base := filepath.Base(dir); base == ".atmos.d" || base == "atmos.d" {
+			return filepath.Dir(dir)
+		}
+		if parent := filepath.Dir(dir); parent == dir {
+			return configDir
+		}
 	}
-	return dir
 }
 
 // processScalarNode processes a YAML scalar node tagged with an Atmos custom function and stores the resolved value in v.
@@ -617,6 +634,12 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 		// In this case, we simply don't set any value and clear the tag.
 		log.Debug("Unsetting configuration key", "path", currentPath)
 		node.Tag = "" // Avoid re-processing.
+		return nil
+	case u.AtmosYamlFuncLiteral:
+		// !literal keeps the value exactly as written. Viper already holds that value, because it
+		// reads an explicitly tagged scalar as a plain string, so there is nothing to set. Pin the
+		// node to a string so a later decode of the node cannot re-type the value (for example 123).
+		node.Tag = "!!str"
 		return nil
 	case u.AtmosYamlFuncEnv:
 		return handleEnv(node, v, currentPath)

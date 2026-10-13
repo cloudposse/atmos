@@ -83,6 +83,7 @@ func printCommonHelpSections(ctx *helpRenderContext, cmd *cobra.Command) {
 	printLogoAndVersion(ctx.writer, ctx.styles)
 	printDescription(ctx.writer, cmd, ctx.styles)
 	printUsageSection(ctx.writer, cmd, ctx.renderer, ctx.styles)
+	printCustomCommandArguments(ctx.writer, cmd, ctx.styles)
 	printAliases(ctx.writer, cmd, ctx.styles)
 	printSubcommandAliases(ctx, cmd)
 	printExamples(ctx.writer, cmd, ctx.renderer, ctx.styles)

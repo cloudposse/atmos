@@ -13,6 +13,7 @@ import (
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/script"
 )
 
 const (
@@ -28,6 +29,9 @@ type ComponentInfoResolver func(ctx context.Context, component, stack, component
 
 // Variables holds step outputs accessible via Go templates.
 type Variables struct {
+	// Automation calls inherit nesting depth and terminal restrictions across embedded scripts.
+	automationDepth    int
+	automationParallel bool
 	// Steps maps step names to their results.
 	Steps map[string]*StepResult
 	// Env contains environment variables.
@@ -42,10 +46,19 @@ type Variables struct {
 	OutputWriters OutputWriters
 	// ResolveTestStep renders a test leaf with its execution-time hook facts.
 	// It receives the branch-local Variables; implementations must not capture mutable parent state.
-	ResolveTestStep func(*schema.WorkflowStep, *Variables) (*schema.WorkflowStep, error)
-	AtmosConfig     *schema.AtmosConfiguration
-	ToolchainPATH   string
-	componentInfo   ComponentInfoResolver
+	ResolveTestStep     func(*schema.WorkflowStep, *Variables) (*schema.WorkflowStep, error)
+	AtmosConfig         *schema.AtmosConfiguration
+	ToolchainPATH       string
+	componentInfo       ComponentInfoResolver
+	scriptComponentInfo ComponentInfoResolver
+	// ScriptHook supplies host-owned lifecycle facts to embedded script steps.
+	ScriptHook *script.HookContext
+	// ScriptArgs holds positional arguments supplied by the host. Embedded scripts read them as
+	// ctx.args and shell steps as $1, $2, and "$@".
+	ScriptArgs []string
+	// HookStdin holds the standard input a Git hook received. The first shell step reads it as its
+	// standard input. It is shared by every branch cloned from this Variables.
+	HookStdin *HookStdin
 	// componentWorkingDir is the effective on-disk working directory of the
 	// hook's component (pkg/hooks.ComponentPath's return value), used only to
 	// anchor a bare-relative (non-dot-prefixed) explicit step.WorkingDirectory
@@ -296,6 +309,16 @@ func (v *Variables) SetTemplateData(data map[string]any) {
 	}
 }
 
+// SetTemplateRoot updates one root while preserving the other invocation inputs.
+func (v *Variables) SetTemplateRoot(name string, value any) {
+	defer perf.Track(nil, "step.Variables.SetTemplateRoot")()
+
+	if v.templateRoots == nil {
+		v.templateRoots = make(map[string]any)
+	}
+	v.templateRoots[name] = value
+}
+
 // SetTemplateRenderer sets the one-pass renderer used by Resolve.
 func (v *Variables) SetTemplateRenderer(renderer TemplateRenderer) {
 	defer perf.Track(nil, "step.Variables.SetTemplateRenderer")()
@@ -322,35 +345,6 @@ func (v *Variables) ProtectTemplateRoots(roots ...string) {
 	for _, root := range roots {
 		v.protectedRoots[root] = struct{}{}
 	}
-}
-
-// SetTotalStages sets the total number of stage steps in the workflow.
-func (v *Variables) SetTotalStages(total int) {
-	defer perf.Track(nil, "step.Variables.SetTotalStages")()
-
-	v.totalStages = total
-}
-
-// GetTotalStages returns the total number of stage steps.
-func (v *Variables) GetTotalStages() int {
-	defer perf.Track(nil, "step.Variables.GetTotalStages")()
-
-	return v.totalStages
-}
-
-// IncrementStageIndex increments and returns the current stage index.
-func (v *Variables) IncrementStageIndex() int {
-	defer perf.Track(nil, "step.Variables.IncrementStageIndex")()
-
-	v.stageIndex++
-	return v.stageIndex
-}
-
-// GetStageIndex returns the current stage index.
-func (v *Variables) GetStageIndex() int {
-	defer perf.Track(nil, "step.Variables.GetStageIndex")()
-
-	return v.stageIndex
 }
 
 // templateData returns the data structure for Go template execution.

@@ -1,22 +1,23 @@
 name: Benchmark Report
 
 on:
-  workflow_run:
-    workflows: [Benchmarks]
-    types: [completed]
+  # Automatic publication is handled by the final quality report, after CI completes.
+  workflow_dispatch:
+    inputs:
+      run-id:
+        description: Completed PR benchmark run to recover manually.
+        required: true
+        type: string
 
 permissions: {}
 
-# Serialize reporters for a PR head, including reruns. Mage rejects stale PR
-# heads and attempts before publishing. Fork associations are resolved via API.
+# Serialize manual recovery for a benchmark run. The publisher verifies its PR head.
 concurrency:
-  group: atmos-quality-report
-  queue: max
+  group: atmos-benchmark-recovery-${{ inputs.run-id }}
   cancel-in-progress: false
 
 jobs:
   report:
-    if: github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:
@@ -29,7 +30,7 @@ jobs:
     env:
       GOPROXY: https://proxy.golang.org
       GITHUB_TOKEN: ${{ github.token }}
-      BENCHMARK_RUN_ID: ${{ github.event.workflow_run.id }}
+      BENCHMARK_RUN_ID: ${{ inputs.run-id }}
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -62,7 +63,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: benchmark-report-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: benchmark-report-${{ inputs.run-id }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: build/benchmarks/report/
           retention-days: 90
           if-no-files-found: ignore

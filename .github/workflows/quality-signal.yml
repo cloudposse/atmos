@@ -1,7 +1,7 @@
 name: Quality Gate Signal
 
 # Fork review events have read-only tokens. This workflow executes no checkout;
-# completion wakes the trusted default-branch Quality Report workflow.
+# completion wakes the trusted default-branch CI Timing Summary coordinator.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]

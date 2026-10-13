@@ -21,6 +21,7 @@ import (
 
 const (
 	// Atmos YAML functions.
+	AtmosYamlFuncStarlark                = "!starlark"
 	AtmosYamlFuncExec                    = "!exec"
 	AtmosYamlFuncSecret                  = "!secret"
 	AtmosYamlFuncStore                   = "!store"
@@ -66,6 +67,7 @@ const (
 
 var (
 	AtmosYamlTags = []string{
+		AtmosYamlFuncStarlark,
 		AtmosYamlFuncExec,
 		AtmosYamlFuncSecret,
 		AtmosYamlFuncStore,
@@ -107,6 +109,7 @@ var (
 	// This optimization replaces the O(n) SliceContainsString calls that were previously
 	// called 75M+ times, causing significant performance overhead.
 	atmosYamlTagsMap = map[string]bool{
+		AtmosYamlFuncStarlark:                true,
 		AtmosYamlFuncExec:                    true,
 		AtmosYamlFuncSecret:                  true,
 		AtmosYamlFuncStore:                   true,
@@ -767,15 +770,27 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 	// This avoids expensive recursive processing for YAML subtrees that don't use custom tags.
 	// Most YAML content doesn't use custom tags, so this optimization significantly reduces
 	// unnecessary recursion and tag checking.
-	if !hasCustomTags(node) {
+	//
+	// The one exception is a literal_fields key: only the loader may write it, so a tree that
+	// holds one still gets the step sanitizing pass even without any custom tag.
+	tagged, hasLiteralFieldsKey := scanTagsAndLiteralFieldsKey(node)
+	if !tagged && !hasLiteralFieldsKey {
 		return nil
 	}
 
-	// We've established there IS a custom tag somewhere in this subtree; walk
-	// it via the shared tag walker (pkg/utils/yaml_tag_walker.go) using the
-	// stack-manifest policy -- resolve !literal/!append/!include/
-	// !include.raw immediately, defer every other valid tag to the later
-	// evaluation phase (internal/exec's processCustomTagsWithContext).
+	// Record which step fields carry !literal before the walk below clears those tags, and strip
+	// any literal_fields a user wrote on a workflow or hook step.
+	markLiteralStepFields(node)
+	if !tagged {
+		return nil
+	}
+
+	// Walk stack tags through the shared policy, including script-source provenance.
+	return processCustomTagsInner(atmosConfig, node, file)
+}
+
+// processCustomTagsInner walks an already-scanned subtree under the stack policy.
+func processCustomTagsInner(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
 	return WalkYAMLTags(atmosConfig, node, file, getStackManifestTagPolicy())
 }
 
@@ -808,6 +823,36 @@ func hasCustomTags(node *yaml.Node) bool {
 	return false
 }
 
+// scanTagsAndLiteralFieldsKey makes one pass over a node tree. It reports whether the tree holds an
+// explicit custom tag (the same test as hasCustomTags) and, when it holds none, whether any mapping
+// has a literal_fields key. The scan stops at the first custom tag, since the caller then runs the
+// full literal-fields pass anyway.
+func scanTagsAndLiteralFieldsKey(node *yaml.Node) (tagged, hasLiteralFieldsKey bool) {
+	if node == nil {
+		return false, false
+	}
+	tag := strings.TrimSpace(node.Tag)
+	if strings.HasPrefix(tag, "!") && !strings.HasPrefix(tag, "!!") {
+		return true, false
+	}
+	if node.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			if node.Content[i].Value == schema.LiteralFieldsKey {
+				hasLiteralFieldsKey = true
+				break
+			}
+		}
+	}
+	for _, child := range node.Content {
+		childTagged, childHasKey := scanTagsAndLiteralFieldsKey(child)
+		if childTagged {
+			return true, false
+		}
+		hasLiteralFieldsKey = hasLiteralFieldsKey || childHasKey
+	}
+	return false, hasLiteralFieldsKey
+}
+
 // UnmarshalYAML unmarshals YAML into a Go type.
 func UnmarshalYAML[T any](input string) (T, error) {
 	return UnmarshalYAMLFromFile[T](&schema.AtmosConfiguration{}, input, "")
@@ -834,11 +879,33 @@ func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input 
 		expand.KeyDelimiters(&node, atmosConfig.Settings.YAML.KeyDelimiter)
 	}
 
-	if err := processCustomTags(atmosConfig, &node, file); err != nil {
+	return decodeYAMLNode[T](atmosConfig, &node, file)
+}
+
+// UnmarshalYAMLFromNode decodes an already parsed YAML node into a Go type, resolving Atmos YAML
+// function tags (such as !include) exactly like UnmarshalYAMLFromFile. Callers that must adjust
+// the parsed tree first (for example, to give !include its own resolution scope) use it to keep
+// the original line and column information in decode errors.
+func UnmarshalYAMLFromNode[T any](atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) (T, error) {
+	defer perf.Track(atmosConfig, "utils.UnmarshalYAMLFromNode")()
+
+	if atmosConfig == nil {
+		return *new(T), ErrNilAtmosConfig
+	}
+	if atmosConfig.Settings.YAML.KeyDelimiter != "" {
+		expand.KeyDelimiters(node, atmosConfig.Settings.YAML.KeyDelimiter)
+	}
+	return decodeYAMLNode[T](atmosConfig, node, file)
+}
+
+// decodeYAMLNode processes the custom tags of a parsed node and decodes it into T.
+func decodeYAMLNode[T any](atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) (T, error) {
+	var zeroValue T
+	if err := processCustomTags(atmosConfig, node, file); err != nil {
 		return zeroValue, err
 	}
 
-	// Decode the yaml.Node into the desired type T
+	// Decode the yaml.Node into the desired type T.
 	var data T
 	if err := node.Decode(&data); err != nil {
 		return zeroValue, err

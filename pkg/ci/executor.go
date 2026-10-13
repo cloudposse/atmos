@@ -1,10 +1,12 @@
 package ci
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
 	_ "github.com/cloudposse/atmos/pkg/ci/artifact/github" // Register github artifact store.
@@ -84,8 +86,19 @@ func Execute(opts ExecuteOptions) error {
 		return nil
 	}
 
+	// A misconfigured provider environment (for example an unparsable API URL) is a
+	// hard error: silently warning would let a run believe it reported when it did not.
+	if v, ok := platform.(provider.ConfigValidator); ok {
+		if err := v.ValidateConfig(); err != nil {
+			return err
+		}
+	}
+
 	hookCtx := buildHookContext(opts, platform)
 	if err := binding.Handler(hookCtx); err != nil {
+		if errors.Is(err, errUtils.ErrInvalidURL) {
+			return err
+		}
 		log.Warn("CI hook handler failed", "event", opts.Event, "error", err)
 	}
 
@@ -95,17 +108,8 @@ func Execute(opts ExecuteOptions) error {
 // detectPlatform detects the CI platform based on environment.
 func detectPlatform(forceCIMode bool) provider.Provider {
 	if forceCIMode {
-		platform := Detect()
-		if platform == nil {
-			log.Debug("CI mode forced but no platform detected, using generic provider")
-			generic, err := Get("generic")
-			if err != nil {
-				log.Warn("Failed to get generic CI provider", "error", err)
-				return nil
-			}
-			return generic
-		}
-		return platform
+		// Forced CI mode falls back to the generic provider when no platform is detected.
+		return ResolveProvider()
 	}
 
 	platform, err := DetectOrError()

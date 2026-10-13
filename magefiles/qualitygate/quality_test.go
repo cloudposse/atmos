@@ -134,6 +134,34 @@ func TestQualityReviewMustApproveCurrentCommit(t *testing.T) {
 	}
 }
 
+func TestQualityReviewSkippedForBotAuthors(t *testing.T) {
+	for _, login := range []string{"renovate[bot]", "dependabot[bot]", "github-actions[bot]", "cloudposse-releaser[bot]"} {
+		t.Run(login, func(t *testing.T) {
+			pr := githubtest.PR(githubtest.Run())
+			pr.User.Login, pr.User.Type = login, "Bot"
+			q := qualityTestClient(t, func(path string, _ any) error {
+				t.Fatalf("unexpected reviews API call: %s", path)
+				return nil
+			})
+			gate, err := q.review(&pr)
+			require.NoError(t, err)
+			require.True(t, gate.Passed)
+			require.Contains(t, gate.Detail, login)
+		})
+	}
+
+	t.Run("human author still requires approval", func(t *testing.T) {
+		pr := githubtest.PR(githubtest.Run())
+		pr.User.Login, pr.User.Type = "octocat", "User"
+		q := qualityTestClient(t, func(_ string, response any) error {
+			return githubtest.Respond([]map[string]any{}, response)
+		})
+		gate, err := q.review(&pr)
+		require.NoError(t, err)
+		require.False(t, gate.Passed)
+	})
+}
+
 func TestQualitySignaturesAndThreads(t *testing.T) {
 	for _, scenario := range []string{"valid", "unsigned", "invalid signature", "unresolved", "dismissed", "head changed", "graphql failure"} {
 		t.Run(scenario, func(t *testing.T) {
@@ -235,26 +263,48 @@ func TestQualityPreservesOnlyCurrentHeadPerformance(t *testing.T) {
 
 func TestQualityLabelsPreserveUnrelatedLabels(t *testing.T) {
 	for _, ready := range []bool{true, false} {
-		var writes []string
-		q := qualityTestClient(t, func(_ string, response any) error {
-			return githubtest.Respond(map[string]string{"name": "existing"}, response)
-		})
-		q.api.(*githubtest.FakeAPI).Write = func(method, path string, body io.Reader) error {
-			writes = append(writes, method+" "+path)
-			if method == http.MethodPost {
-				var payload map[string][]string
-				require.NoError(t, json.NewDecoder(body).Decode(&payload))
-				require.Len(t, payload["labels"], 1)
-			}
-			return nil
-		}
-		require.NoError(t, q.labels(42, ready))
-		opposite := qualityReady
+		name, opposite := qualityNotReady, qualityReady
 		if ready {
-			opposite = qualityNotReady
+			name, opposite = qualityReady, qualityNotReady
 		}
-		require.Contains(t, writes[0], fmt.Sprintf("DELETE repos/%s/issues/42/labels/%s", githubtest.Repo, opposite))
-		require.Len(t, writes, 2)
+		for _, scenario := range []string{"unchanged", "transition", "both", "neither"} {
+			t.Run(fmt.Sprintf("ready=%t/%s", ready, scenario), func(t *testing.T) {
+				labels := []map[string]string{{"name": "unrelated"}}
+				if scenario == "unchanged" || scenario == "both" {
+					labels = append(labels, map[string]string{"name": name})
+				}
+				if scenario == "transition" || scenario == "both" {
+					labels = append(labels, map[string]string{"name": opposite})
+				}
+				var writes []string
+				q := qualityTestClient(t, func(path string, response any) error {
+					if strings.HasSuffix(path, "/issues/42") {
+						return githubtest.Respond(map[string]any{"labels": labels}, response)
+					}
+					require.True(t, scenario == "transition" || scenario == "neither", "unchanged labels need no repository label lookup")
+					require.Equal(t, "repos/"+githubtest.Repo+"/labels/"+name, path)
+					return githubtest.Respond(map[string]string{"name": name}, response)
+				})
+				q.api.(*githubtest.FakeAPI).Write = func(method, path string, body io.Reader) error {
+					writes = append(writes, method+" "+path)
+					if method == http.MethodPost {
+						var payload map[string][]string
+						require.NoError(t, json.NewDecoder(body).Decode(&payload))
+						require.Equal(t, []string{name}, payload["labels"])
+					}
+					return nil
+				}
+				require.NoError(t, q.labels(42, ready))
+				var want []string
+				if scenario == "transition" || scenario == "both" {
+					want = append(want, fmt.Sprintf("DELETE repos/%s/issues/42/labels/%s", githubtest.Repo, opposite))
+				}
+				if scenario == "transition" || scenario == "neither" {
+					want = append(want, fmt.Sprintf("POST repos/%s/issues/42/labels", githubtest.Repo))
+				}
+				require.Equal(t, want, writes)
+			})
+		}
 	}
 }
 
@@ -300,7 +350,7 @@ func TestQualityPublishAndStaleProtection(t *testing.T) {
 				require.Zero(t, writes)
 				return
 			}
-			require.Equal(t, 3, writes)
+			require.Equal(t, 2, writes) // Add the desired label and publish the comment; no absent label deletion.
 			require.Contains(t, commentBody, "Quality Gate passed")
 			require.True(t, strings.HasPrefix(commentBody, qualityMarker+"\n<!-- coderabbit do not respond to this -->\n"))
 			require.Equal(t, 1, strings.Count(commentBody, "<!-- coderabbit do not respond to this -->"))
@@ -309,6 +359,73 @@ func TestQualityPublishAndStaleProtection(t *testing.T) {
 			summaryBody, err := os.ReadFile(summary)
 			require.NoError(t, err)
 			require.Equal(t, commentBody+"\n", string(summaryBody))
+		})
+	}
+}
+
+func TestQualityConcurrentWriterRerendersBeforePublish(t *testing.T) {
+	// Each attempt reads the comment three times: render, pre-labels, pre-PATCH.
+	// changedFrom is the read where another reporter's comment first appears.
+	scenarios := []struct {
+		name         string
+		changedFrom  int
+		reads        int
+		labelWrites  int
+		keepsWriter  bool
+		alwaysChange bool
+	}{
+		{name: "unchanged", reads: 3, labelWrites: 1},
+		{name: "changed during evaluation", changedFrom: 2, reads: 5, labelWrites: 1, keepsWriter: true},
+		{name: "changed during label update", changedFrom: 3, reads: 6, labelWrites: 2, keepsWriter: true},
+		{name: "always changing", reads: 2 * qualityPublishAttempts, alwaysChange: true},
+	}
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			run := githubtest.Run()
+			pr := githubtest.PR(run)
+			count := 149
+			pr.ChangedFiles = &count
+			commentReads, reads := 0, 0
+			base := qualityPublishGetter(t, "update", &pr, &run, &reads)
+			concurrent := qualityMarker + "\n" + qualityHeadMarker(pr.Head.SHA) + "\n" + qualityPerformanceStart + "\nconcurrent benchmark\n" + qualityPerformanceEnd
+			api := &githubtest.FakeAPI{T: t}
+			api.Get = func(path string, response any) error {
+				if !strings.Contains(path, "/comments?") {
+					return base(path, response)
+				}
+				commentReads++
+				body := qualityMarker
+				switch {
+				case scenario.alwaysChange:
+					body = fmt.Sprintf("%s\n<!-- writer:%d -->", concurrent, commentReads)
+				case scenario.changedFrom > 0 && commentReads >= scenario.changedFrom:
+					body = concurrent
+				}
+				return githubtest.Respond([]map[string]any{{"id": 17, "body": body, "user": map[string]string{"login": "github-actions[bot]", "type": "Bot"}}}, response)
+			}
+			var published []string
+			labelWrites := 0
+			api.Write = func(method, path string, body io.Reader) error {
+				if method == http.MethodPost && strings.HasSuffix(path, "/labels") {
+					labelWrites++
+				}
+				if strings.Contains(path, "comments") {
+					var payload map[string]string
+					require.NoError(t, json.NewDecoder(body).Decode(&payload))
+					published = append(published, payload["body"])
+				}
+				return nil
+			}
+			q := qualityClient{ctx: context.Background(), api: &qualityGraphAPI{FakeAPI: api, t: t, scenario: "valid"}, repo: githubtest.Repo}
+			require.NoError(t, q.refresh(pr.Number, "", nil))
+			require.Equal(t, scenario.reads, commentReads)
+			require.Equal(t, scenario.labelWrites, labelWrites)
+			if scenario.alwaysChange {
+				require.Empty(t, published, "a stale snapshot must never overwrite a fresher report")
+				return
+			}
+			require.Len(t, published, 1)
+			require.Equal(t, scenario.keepsWriter, strings.Contains(published[0], "concurrent benchmark"), "a re-render must keep the other writer's result")
 		})
 	}
 }
@@ -359,6 +476,8 @@ func qualityPublishGetter(t *testing.T, scenario string, pr *githubapi.PR, run *
 			return githubtest.Respond([]any{}, response)
 		case strings.Contains(path, "/reviews?"):
 			return githubtest.Respond([]map[string]any{{"state": "APPROVED", "commit_id": pr.Head.SHA, "user": map[string]string{"login": "coderabbitai[bot]"}}}, response)
+		case strings.HasSuffix(path, "/issues/42"):
+			return githubtest.Respond(map[string]any{"labels": []any{}}, response)
 		case strings.Contains(path, "/labels/"):
 			return githubtest.Respond(map[string]string{"name": qualityReady}, response)
 		default:

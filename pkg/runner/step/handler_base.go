@@ -87,7 +87,8 @@ func (h BaseHandler) ttyRequiredError(step *schema.WorkflowStep) error {
 	return errUtils.Build(errUtils.ErrStepTTYRequired).
 		WithContext("step", step.Name).
 		WithContext("type", step.Type).
-		WithExplanation(fmt.Sprintf("The step type %q requires a TTY for user input", step.Type)).
+		WithExplanation(fmt.Sprintf("The step type %q prompts for input and needs a terminal on both stdin and stdout, which this run does not have, and the step sets no `default:`", step.Type)).
+		WithHint("Set `default:` on the step so it runs without a terminal, for example in a Git hook, in CI, or when stdin is redirected").
 		WithHint("Use --dry-run to preview workflow without interactive steps").
 		WithHint("Set default values in workflow configuration").
 		WithHint("Use environment variables instead of interactive prompts in CI").
@@ -127,11 +128,7 @@ func (h BaseHandler) ResolveDefault(ctx context.Context, step *schema.WorkflowSt
 	}
 	resolved, err := vars.Resolve(step.Default)
 	if err != nil {
-		return "", errUtils.Build(errUtils.ErrTemplateEvaluation).
-			WithCause(err).
-			WithContext("step", step.Name).
-			WithContext("field", "default").
-			Err()
+		return "", TemplateFieldError(step, "default", err)
 	}
 	return resolved, nil
 }
@@ -166,11 +163,7 @@ func (h BaseHandler) ResolveContent(ctx context.Context, step *schema.WorkflowSt
 	}
 	resolved, err := vars.Resolve(step.Content)
 	if err != nil {
-		return "", errUtils.Build(errUtils.ErrTemplateEvaluation).
-			WithCause(err).
-			WithContext("step", step.Name).
-			WithContext("field", "content").
-			Err()
+		return "", TemplateFieldError(step, "content", err)
 	}
 	return resolved, nil
 }
@@ -184,11 +177,7 @@ func (h BaseHandler) ResolvePrompt(ctx context.Context, step *schema.WorkflowSte
 	}
 	resolved, err := vars.Resolve(step.Prompt)
 	if err != nil {
-		return "", errUtils.Build(errUtils.ErrTemplateEvaluation).
-			WithCause(err).
-			WithContext("step", step.Name).
-			WithContext("field", "prompt").
-			Err()
+		return "", TemplateFieldError(step, "prompt", err)
 	}
 	return resolved, nil
 }
@@ -200,13 +189,9 @@ func (h BaseHandler) ResolveCommand(ctx context.Context, step *schema.WorkflowSt
 	if step.Command == "" {
 		return "", nil
 	}
-	resolved, err := vars.Resolve(step.Command)
+	resolved, err := vars.ResolveStepField(step, "command", step.Command)
 	if err != nil {
-		return "", errUtils.Build(errUtils.ErrTemplateEvaluation).
-			WithCause(err).
-			WithContext("step", step.Name).
-			WithContext("field", "command").
-			Err()
+		return "", TemplateFieldError(step, "command", err)
 	}
 	return resolved, nil
 }
@@ -336,13 +321,9 @@ func resolveWorkingDirectoryValue(step *schema.WorkflowStep, vars *Variables, ra
 	if raw == "" {
 		return "", nil
 	}
-	resolved, err := vars.Resolve(raw)
+	resolved, err := vars.ResolveStepField(step, "working_directory", raw)
 	if err != nil {
-		return "", errUtils.Build(errUtils.ErrTemplateEvaluation).
-			WithCause(err).
-			WithContext("step", step.Name).
-			WithContext("field", "working_directory").
-			Err()
+		return "", TemplateFieldError(step, "working_directory", err)
 	}
 	if resolved == "" {
 		return "", nil

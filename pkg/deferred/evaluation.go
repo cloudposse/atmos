@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	atmostemplate "github.com/cloudposse/atmos/pkg/template"
@@ -134,6 +135,12 @@ func evaluationReferences(value any, delimiters []string) ([][]string, bool) {
 			paths = append(paths, refs...)
 		}
 	case string:
+		// A !starlark value reads configuration only through ctx. Static reads name their fields;
+		// a read that cannot be bounded (a whole section, a computed key, an alias) preserves the
+		// full rendered context.
+		if starlarksource.Is(v) {
+			return StarlarkReferences(v)
+		}
 		return templateEvaluationReferences(v, delimiters)
 	}
 	return paths, true

@@ -7,6 +7,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/ci/providers/generic"
+	"github.com/cloudposse/atmos/pkg/ci/providers/github"
+	"github.com/cloudposse/atmos/pkg/ci/providers/github/ghtest"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -114,4 +118,64 @@ func TestControlBridge_InteractiveChildRejected(t *testing.T) {
 	err := handler.Validate(step)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, schema.ErrWorkflowControlStepInvalid)
+}
+
+// TestControlBridge_InjectsCIReporterIntoScriptChildren proves the bridge hands every embedded
+// script child a CI reporter, even when the invocation carries no Atmos configuration.
+func TestControlBridge_InjectsCIReporterIntoScriptChildren(t *testing.T) {
+	initControlTestIO(t)
+	engine := registerRecordingEngine(t, "recording-bridge-ci")
+
+	handler, ok := stepPkg.Get(schema.TaskTypeParallel)
+	require.True(t, ok)
+
+	step := &schema.WorkflowStep{
+		Name: "fanout",
+		Type: schema.TaskTypeParallel,
+		Steps: []schema.WorkflowStep{
+			{Name: "child", Type: schema.TaskTypeScript, Interpreter: "recording-bridge-ci", Script: "ignored"},
+		},
+	}
+	_, err := handler.Execute(context.Background(), step, stepPkg.NewVariables())
+	require.NoError(t, err)
+
+	executed := engine.executed()
+	require.Len(t, executed, 1)
+	assert.NotNil(t, executed[0].CI, "the bridge must build a reporter for script children")
+}
+
+// TestControlBridge_ScriptChildrenGetConfiguredCIReporter proves the reporter handed to a child is
+// built from the invocation's Atmos configuration: with ci.enabled the child writes through the
+// detected provider instead of reading every gate as off.
+func TestControlBridge_ScriptChildrenGetConfiguredCIReporter(t *testing.T) {
+	initControlTestIO(t)
+	server := ghtest.NewServer(t)
+	env := ghtest.SetEnv(t, server)
+	t.Chdir(t.TempDir())
+	ghtest.RegisterProvider(t, github.NewProvider())
+	ci.Register(generic.NewProvider())
+	engine := registerRecordingEngine(t, "recording-bridge-ci-configured")
+
+	handler, ok := stepPkg.Get(schema.TaskTypeParallel)
+	require.True(t, ok)
+	vars := stepPkg.NewVariables()
+	vars.SetAtmosConfig(&schema.AtmosConfiguration{BasePath: t.TempDir(), CI: schema.CIConfig{Enabled: true}})
+	step := &schema.WorkflowStep{
+		Name: "fanout",
+		Type: schema.TaskTypeParallel,
+		Steps: []schema.WorkflowStep{
+			{Name: "child", Type: schema.TaskTypeScript, Interpreter: "recording-bridge-ci-configured", Script: "ignored"},
+		},
+	}
+	_, err := handler.Execute(context.Background(), step, vars)
+	require.NoError(t, err)
+
+	executed := engine.executed()
+	require.Len(t, executed, 1)
+	require.NotNil(t, executed[0].CI)
+	rc, err := executed[0].CI.Summary("bridge probe\n")
+	require.NoError(t, err)
+	assert.Equal(t, github.ProviderName, rc.Provider)
+	assert.Empty(t, rc.Gate)
+	assert.Contains(t, ghtest.ReadFile(t, env.Summary), "bridge probe")
 }
