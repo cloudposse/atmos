@@ -19,7 +19,7 @@ Project health checks span configuration schemas, stack validation, formatting, 
 
 ## The Fix
 
-Doctor combines built-in checks in a streaming report. Supported repairs cover custom-command semantic arguments and flags, recognized legacy hook events, and explicit Terraform reconfigure values. Each repair compares runtime field behavior and unrelated YAML values before writing. Unsupported, dynamic, or incomplete inputs stay unchanged with an explanation.
+Doctor combines built-in checks in a streaming report. Supported repairs cover custom-command semantic arguments and flags, recognized legacy hook events, and explicit Terraform reconfigure values. Each repair compares runtime field behavior and unrelated YAML values before writing, and comments on a migrated field move with it. A repair is blocked only by inputs that can change what it means, such as an import, an active profile, or a template in the edited value, and the finding names the file and line responsible. Templates elsewhere in the file do not get in the way. Repaired files can have blank lines or folded scalars reformatted, so review the diff before committing.
 
 Legacy dependency and stack naming migrations remain manual. In particular, a missing legacy dependency can produce a warning where a modern required dependency fails.
 
@@ -37,7 +37,7 @@ atmos doctor --fix
 
 The [verification and recovery report](/cli/commands/doctor#verification-and-recovery) explains repairs and skipped migrations. Before writing, doctor warns about affected Git changes or unavailable Git and saves exact originals in a private backup directory. Each replacement is atomic; partial failures report exactly which files changed.
 
-For CI, use [JSON or SARIF output](/cli/commands/doctor#output-and-exit-codes). Warnings are advisory by default; select `--fail-on=warning` to make them blocking. Use `--offline` to skip repository requests.
+For CI, use [JSON or SARIF output](/cli/commands/doctor#output-and-exit-codes). Warnings are advisory by default; select `--fail-on=warning` to make them blocking. Use `--offline` to skip repository requests; the skipped checks are reported as notices that never trip `--fail-on=warning`. Doctor exits `2` for invocation errors and when it cannot find a project configuration, and with JSON output those errors arrive in an `operational_error` field.
 
 ## Get Involved
 

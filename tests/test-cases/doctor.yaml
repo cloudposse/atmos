@@ -1,0 +1,101 @@
+# yaml-language-server: $schema=schema.json
+# Real-binary tests for `atmos doctor`.
+#
+# The fixture lives inside the repository, so each project run selects the fixture
+# configuration with --config. That keeps the repository's own .atmos.d and the
+# developer's home configuration out of the report, so the snapshots stay stable.
+tests:
+  - name: atmos doctor --list-checks prints the catalog on stdout
+    enabled: true
+    snapshot: false
+    description: "The check catalog is data, so it is written to stdout and does not read the project."
+    workdir: "fixtures/scenarios/doctor/eligible"
+    command: "atmos"
+    args:
+      - "doctor"
+      - "--list-checks"
+    expect:
+      stdout:
+        - "(?m)^schema \\[validation\\]: "
+        - "(?m)^source-repository \\[sources\\]: "
+      stderr:
+        - "^$"
+      exit_code: 0
+
+  - name: atmos doctor --list-checks as JSON
+    enabled: true
+    snapshot: true
+    description: "The JSON catalog is the stable machine-readable list of built-in check IDs."
+    workdir: "fixtures/scenarios/doctor/eligible"
+    command: "atmos"
+    args:
+      - "doctor"
+      - "--list-checks"
+      - "--format=json"
+    expect:
+      exit_code: 0
+
+  - name: atmos doctor --list-checks rejects conflicting flags
+    enabled: true
+    snapshot: false
+    description: "--list-checks only prints the catalog, so a flag that inspects the project is an invocation error."
+    workdir: "fixtures/scenarios/doctor/eligible"
+    command: "atmos"
+    args:
+      - "doctor"
+      - "--list-checks"
+      - "--dry-run"
+    expect:
+      stdout:
+        - "^$"
+      stderr:
+        - "--dry-run cannot be combined with --list-checks"
+      exit_code: 2
+
+  - name: atmos doctor invalid fail-on reports operational_error in JSON
+    enabled: true
+    snapshot: true
+    description: "An invalid option exits 2 and still writes the one JSON report shape, with operational_error set."
+    workdir: "fixtures/scenarios/doctor/eligible"
+    command: "atmos"
+    args:
+      - "doctor"
+      - "--format=json"
+      - "--fail-on=bogus"
+    expect:
+      stdout:
+        - '"operational_error": "invalid doctor options: --fail-on=\\"bogus\\" is not supported"'
+      exit_code: 2
+
+  - name: atmos doctor --offline on the eligible fixture
+    enabled: true
+    snapshot: true
+    description: "Warnings are advisory by default, so a project with fixable deprecations exits 0 and lists every repair as available."
+    workdir: "fixtures/scenarios/doctor/eligible"
+    command: "atmos"
+    args:
+      - "doctor"
+      - "--config=atmos.yaml"
+      - "--offline"
+      - "--format=json"
+    expect:
+      stdout:
+        - '"rule_id": "terraform-reconfigure"'
+        - '"status": "available"'
+      exit_code: 0
+
+  - name: atmos doctor --offline --fail-on=warning on the eligible fixture
+    enabled: true
+    snapshot: false
+    description: "Fixable deprecations are warnings, so --fail-on=warning turns them into a failing exit code."
+    workdir: "fixtures/scenarios/doctor/eligible"
+    command: "atmos"
+    args:
+      - "doctor"
+      - "--config=atmos.yaml"
+      - "--offline"
+      - "--fail-on=warning"
+    expect:
+      stderr:
+        - "findings \\(6 fixable\\)"
+      exit_code: 1

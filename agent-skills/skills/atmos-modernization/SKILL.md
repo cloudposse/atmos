@@ -51,7 +51,11 @@ Doctor's schema replacement descriptions are guidance, not executable transforms
 Automatic repairs are limited to recognized custom-command semantic fields, hook
 event spellings, and explicit Terraform reconfigure settings in verifiable inputs.
 `init_run_reconfigure: false` maps to `init.reconfigure: never`; `true` maps to `auto`.
-Conflicts, imports/profiles, and dynamic inputs remain manual or verification-incomplete.
+Conflicts remain manual. Other configuration layers (imports, `atmos.d`, active profiles,
+home or system configuration) and dynamic values at or under the edited key leave a config
+repair verification-incomplete; the finding names the blocking file and line. Templates elsewhere
+in the file do not block a repair. A repair can reformat blank lines and folded scalars, so review
+the diff. `--offline` notices never count toward `--fail-on=warning`.
 Doctor preserves exact originals in its displayed XDG backup directory even in Git;
 Git status is a recovery warning, not evidence of semantic equivalence.
 
@@ -168,21 +172,37 @@ Treat `settings.depends_on` as migration-only syntax.
 
 ## Component Source Repository Direction
 
-Check `source`, `vendor.yaml`, `component.yaml`, Terraform module sources, and documentation
-examples for `cloudposse/terraform-aws-components`. That monorepo is deprecated; components moved
-to individual repositories in the `cloudposse-terraform-components` organization.
+Check `source`, `vendor.yaml`, every vendor manifest that `vendor.yaml` imports, `component.yaml`,
+Terraform module sources, and documentation examples for `cloudposse/terraform-aws-components`.
+That monorepo is archived; components moved to individual repositories in the
+`cloudposse-terraform-components` organization.
 
+The move keeps the version. The new repositories carry the monorepo's historical tags unchanged,
+and the component code lives in their `src` directory, so only the repository and the path change.
 For example, migrate VPC references from the old monorepo form:
 
 ```yaml
 source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.450.0"
 ```
 
-to the component repository form:
+to the component repository form, with the same `ref` and a `//src` subdirectory:
 
 ```yaml
-source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=1.450.0"
+source: "github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=1.450.0"
 ```
 
-Keep versions pinned when changing sources, and validate the target repository/tag exists before
-updating production stacks.
+A `ref={{ .Version }}` placeholder stays as it is and keeps using the `version` field. Do not bump
+the version while changing the repository.
+
+Look every component up in the map Cloud Posse published instead of deriving the repository name,
+because several names differ: `aws-sso` is `aws-identity-center`, `argocd-repo` is
+`argocd-github-repo`, `datadog-configuration` is `datadog-credentials`, and
+`tgw/cross-region-hub-connector` is `tgw-hub-connector`. Components that were split, such as `tgw`
+and `spacelift`, follow a special procedure, and components removed before the migration, such as
+`eks/efs`, have no successor.
+
+Run `atmos doctor --fix --only=component-monorepo` to make this change. Doctor compares the Git tree
+of `modules/<component>` with `src` in the new repository at the pinned tag and rewrites a source
+only when the files are identical. Preview it first with `atmos doctor --fix --dry-run
+--only=component-monorepo`. Doctor reports sources it cannot verify, with the reason, and leaves
+them unchanged.

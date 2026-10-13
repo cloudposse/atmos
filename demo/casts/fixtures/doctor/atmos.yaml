@@ -1,3 +1,4 @@
+base_path: "./"
 stacks:
   base_path: stacks
 commands:

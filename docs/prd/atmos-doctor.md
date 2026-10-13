@@ -6,8 +6,9 @@ Initial implementation delivered for review. This document defines the acceptanc
 contract; an advisory finding does not imply that its automatic migration is implemented.
 
 The enabled repair domain is deliberately narrow: recognized custom-command semantic
-fields, hook events, and explicit Terraform reconfigure booleans in complete static
-inputs. Dependency and stack naming migrations remain manual. Remote schemas and
+fields, hook events, and explicit Terraform reconfigure booleans. A repair is blocked by
+the inputs that can change what it means (relevance-scoped), not by any dynamic value
+anywhere in the project. Dependency and stack naming migrations remain manual. Remote schemas and
 external schema references remain incomplete until their input closure can be captured.
 GitHub and configured GitHub Enterprise metadata are supported; other source hosts
 report incomplete coverage.
@@ -93,7 +94,18 @@ unmasked values internally; mask displayed evidence.
 
 Do not evaluate remote state, secrets, executable YAML functions, unresolved
 templates, or incomplete profile/import coverage to justify a fix. Report
-`verification-incomplete` and skip. Finite tests do not prove arbitrary future
+`verification-incomplete` and skip. Blocking is relevance-scoped:
+
+- A configuration repair is blocked by layers that can change the edited value (imports,
+  `atmos.d` files, active profiles including `profiles.default`, and ambient home or system
+  configuration), and by a dynamic value at or under the edited key or a key the repair reads.
+- A template or YAML function elsewhere in the file, such as custom command `steps` or
+  `stacks.name_template`, does not block it. Stack, workflow, and vendor files are not layered
+  configuration, so an unverifiable one limits only the checks that read it.
+- Every blocked finding names the blocking `file:line` (or layer). Remediation never suggests
+  `--fix` for a finding that `--fix` cannot resolve.
+- Imported template files (`*.yaml.tmpl`) are reported as not evaluated and never parsed as YAML.
+- A check with no inputs reports `skipped`, never `passed`. Finite tests do not prove arbitrary future
 configurations; guarantees are limited to tested contracts and verified inputs.
 
 ## CLI, findings, rules, and recovery
@@ -114,9 +126,21 @@ atmos doctor --offline
 
 Formats: `text`, `rich`, `json`, `sarif`. Failure threshold: `error` (default),
 `warning`, or `none`. Exit codes: 0 for threshold satisfied, 1 for blocking
-findings, 2 for operational/invocation failures, 130 for cancellation. Evaluate
-after fixes; dry runs evaluate unchanged files. `--fix` authorizes eligible writes
+findings, 2 for operational/invocation failures (including no project configuration
+found), 130 for cancellation. Evaluate after fixes; dry runs evaluate unchanged files.
+`--fix` also exits 1 when a requested repair ends `verification-failed`, whatever the
+threshold; a dry run only applies the threshold. `--fix` authorizes eligible writes
 without another prompt. No flag bypasses semantic verification.
+
+Invalid options and combinations exit 2 before any input is read and name the option and
+its valid values. In `json` and `sarif` they are reported on stdout through
+`operational_error`, the same shape as any other run. `--list-checks` prints the catalog to
+stdout and rejects every flag except `--format` and `--fail-on`. An operational failure in
+one check is recorded against it; the other checks still run and the run exits 2.
+
+Configuration is located exactly as the loader does, without parsing it: parent
+directories, `ATMOS_CLI_CONFIG_PATH`, `--config`/`--config-path` (which disable discovery),
+`atmos.d` relative to the configuration file, and only the active profiles.
 
 Each finding has a stable rule ID, category, severity, location, explanation,
 remediation, documentation link, and eligibility/reason. Reports distinguish
@@ -125,33 +149,61 @@ failures, and include verification coverage and backup location.
 
 ### Initial rules
 
-- Configuration/custom-schema, stack, EditorConfig, and GitHub Actions validation.
+- Configuration/custom-schema, stack, EditorConfig, and GitHub Actions validation
+  (actionlint honors `.github/actionlint.yaml`).
 - Every schema-annotated deprecation.
 - Custom-command argument `type -> provides` and flag `semantic_type -> provides`
   for recognized semantic values. Ordinary flag `type` is not deprecated.
 - Recognized legacy hook-event spelling.
 - Explicit Terraform `init_run_reconfigure`, using current runtime semantics.
 - Naming/dependency transformations only after both verification gates pass.
-- Advisory legacy CI actions and component repository references.
+- Advisory legacy CI actions.
+- `component-monorepo`: component sources in the archived `cloudposse/terraform-aws-components`
+  monorepo move to their `cloudposse-terraform-components` repository at the same version,
+  only when a GitHub tree comparison proves the files identical (see below).
 - Repository health for vendor and source-provisioned component sources: archived
   repositories and unavailable or removed repositories, with explicit access uncertainty.
 
-Repository checks query metadata without cloning, fetching component code, or
-changing source URLs. Start with GitHub and configured GitHub Enterprise endpoints,
+Repository checks cover vendor `source` entries, component `source`/`source.uri`, and
+`component.yaml` `spec.source.uri`. They query metadata without cloning, fetching
+component code, or changing source URLs. Start with GitHub and configured GitHub Enterprise endpoints,
 reusing existing host-scoped credentials. Cache requests per repository for the run
 and enforce timeouts/cancellation. Report unsupported hosts and unresolved source
-templates as incomplete coverage. `--offline` disables network checks.
+templates as incomplete coverage. `--offline` disables network checks and reports notice-level findings, which never count
+toward `--fail-on=warning`.
 
 An archived repository is a warning with manual remediation. A confirmed removal
 is a separate warning. GitHub's 404 can mean a private repository or insufficient
 access: report it as unavailable, never as confirmed deletion. Authentication,
-rate-limit, timeout, and connectivity failures remain inconclusive. Never infer a
-replacement repository or automatically rewrite a source.
+rate-limit, timeout, and connectivity failures remain inconclusive. Repository health never
+infers a replacement repository or rewrites a source; only the `component-monorepo` rule moves a source, from its published map.
 
 Terminal color, docs relocation, auth/version fields, Helmfile patterns, and
 architectural changes remain advisory until dedicated fixers pass their contracts.
 Add missing reconfigure schema metadata. Keep rules, schemas, and modernization
 skills consistent. Never execute replacement prose as migration instructions.
+
+### Component monorepo move
+
+The monorepo is archived and every component has its own repository whose `src` directory
+holds the component code. The successor repositories keep the historical tags, and the Git tree
+of `modules/<component>` equals the tree of `src` at the same tag, so the repair changes the
+repository and the path and never the version.
+
+- The embedded map (`pkg/doctor/monorepo/components.yaml`) is a frozen copy of the map published
+  by `github-action-atmos-component-updater`. Names are never derived, because several differ.
+- Locations: `component.yaml` `spec.source.uri`, every vendor manifest `spec.sources[].source`
+  (discovery follows `spec.imports` as Atmos does), and a stack component's `source` or
+  `source.uri`. Mixins that name the monorepo are reported manually.
+- The version is the literal `ref`, or the `version` field beside a `{{ .Version }}` placeholder.
+  Ranges and placeholders that are not one tag are reported manually.
+- Verification precedes any write: the tree SHAs are compared through the GitHub API with the
+  existing credentials and timeouts, once per component and ref per run. Equal trees make the
+  repair available. Differing trees or a missing tag are `verification-failed`. `--offline`, rate
+  limits, and network failures are `verification-incomplete`.
+- Semantic verification accepts exactly the derived source change; comments on the line are kept.
+- Split components (`tgw`, `spacelift`), components removed before the migration, and sources with
+  templated repositories or paths are reported with a specific manual remediation.
 
 ### Git and backups
 
@@ -162,7 +214,7 @@ Unrelated changes do not trigger warnings. Continue without prompting.
 
 Back up exact pre-fix copies of every edited file under the Atmos XDG data
 directory `doctor/backups/<run-id>`. A private recovery manifest records original
-paths, permissions, and before/after hashes. Display location and recovery
+paths, permissions (an octal string such as `"0644"`), and before/after hashes. Display location and recovery
 instructions. Complete all backups before the first write; backup failure prevents
 writes. Never stash, reset, commit, or otherwise change Git state.
 
@@ -211,7 +263,9 @@ Backup: <backup location>
 - Every enabled fixer passes production-consumer contract and project tests.
 - Known legacy missing-target differences are refused with explanations.
 - Negative controls detect material changes; second --fix is a no-op.
-- Preserve unrelated values, comments, tags, anchors, types, permissions, and style.
+- Preserve unrelated values, comments, tags, anchors, types, and permissions. Comments on a
+  migrated key move to its replacement. Blank lines and folded scalars may be reformatted by
+  the YAML editor; source-preserving output is planned in `yaml-editing-get-set.md` Phase 3.
 - Dry runs write no project files or backups.
 - Cover no-Git, dirty/staged/ignored/untracked files, worktrees, failed backups,
   concurrent edits, cancellation, and partial application.
