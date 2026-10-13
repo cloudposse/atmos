@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/degradation"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/refcache"
 )
 
 // Compile guards for the configuration fields that scope these regressions.
@@ -163,17 +164,21 @@ func TestReferenceCacheSeparatesStaticConfiguration(t *testing.T) {
 func TestInvalidateTerraformStateCacheAllPartitions(t *testing.T) {
 	ResetStateCache()
 	t.Cleanup(ResetStateCache)
-	keys := []terraformReferenceCacheKey{}
+	keys := []refcache.Key{}
 	for _, basePath := range []string{"head", "base"} {
 		for _, configPath := range []string{"config-first", "config-second"} {
 			for _, maskOnly := range []bool{false, true} {
-				key := newTerraformReferenceCacheKey(&schema.AtmosConfiguration{BasePath: basePath, CliConfigPath: configPath}, "dev", "target", maskOnly)
-				keys = append(keys, key)
-				terraformStateCache.Store(key, terraformStateNotProvisionedCacheEntry{})
+				for _, authDisabled := range []bool{false, true} {
+					key := refcache.NewKey(&schema.AtmosConfiguration{BasePath: basePath, CliConfigPath: configPath}, "dev", "target")
+					key.Inspection = maskOnly
+					key.Auth = refcache.AuthScope(nil, nil, authDisabled)
+					keys = append(keys, key)
+					terraformStateCache.Store(key, terraformStateNotProvisionedCacheEntry{})
+				}
 			}
 		}
 	}
-	unrelated := newTerraformReferenceCacheKey(&schema.AtmosConfiguration{}, "other", "target", false)
+	unrelated := refcache.NewKey(&schema.AtmosConfiguration{}, "other", "target")
 	terraformStateCache.Store(unrelated, terraformStateNotProvisionedCacheEntry{})
 	invalidateTerraformStateCache("dev", "target")
 	for _, key := range keys {

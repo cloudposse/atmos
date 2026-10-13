@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
+	"github.com/cloudposse/atmos/pkg/terraform/refcache"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -61,7 +62,14 @@ func componentFunc(
 	maskOnly := configAndStacksInfo != nil && configAndStacksInfo.SecretsMaskOnly
 	authDisabled := authdeferred.AuthDisabled(atmosConfig.AuthManager) || (configAndStacksInfo != nil && configAndStacksInfo.AuthDisabled)
 	functionName := fmt.Sprintf("atmos.Component(%s, %s)", component, stack)
-	cacheKey := newTerraformReferenceCacheKey(atmosConfig, stack, component, maskOnly)
+	var infoAuthContext *schema.AuthContext
+	if configAndStacksInfo != nil {
+		infoAuthContext = configAndStacksInfo.AuthContext
+	}
+	kinds := refcache.KindsFor(maskOnly)
+	cacheKey := refcache.NewKey(atmosConfig, stack, component)
+	cacheKey.Auth = refcache.AuthScope(infoAuthContext, nil, authDisabled)
+	cacheKey.Inspection = maskOnly
 
 	log.Debug("Executing template function", "function", functionName)
 
@@ -119,7 +127,7 @@ func componentFunc(
 	} else {
 		resolvedAuthMgr = resolveComponentFuncAuthManager(atmosConfig, configAndStacksInfo, component, stack, resolveAuthManagerForNestedComponent)
 	}
-	if cached, ok := valueCache.Load(terraformReferenceValueKind(componentReferenceKind, maskOnly)); ok {
+	if cached, ok := valueCache.Load(kinds.Component); ok {
 		return cached, nil
 	}
 
@@ -168,7 +176,7 @@ func componentFunc(
 	}
 
 	// Cache the result.
-	valueCache.Store(terraformReferenceValueKind(componentReferenceKind, maskOnly), sections)
+	valueCache.Store(kinds.Component, sections)
 	if !authdeferred.IsDeferred(atmosConfig.AuthManager) && (!maskOnly || deferred.IsCacheable(sections)) {
 		componentFuncSyncMap.Store(cacheKey, sections)
 	}

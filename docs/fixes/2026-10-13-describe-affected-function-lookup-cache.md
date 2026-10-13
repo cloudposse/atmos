@@ -220,6 +220,32 @@ hooks, and the website build passed. The field test also checks resolved store
 values and all 200 affected identities outside timing. The broad-suite
 limitations above still apply.
 
+### Review follow-up: one reference cache key
+
+Review found two process-wide cache keys that omitted inputs that change the
+result. First, `!terraform.state` and `atmos.Component` entries were keyed
+without the caller's credentials. Callers with different credentials could
+therefore share one entry. This was already true for execution values on main,
+and the inspection partition extended it. Second, `!terraform.output` lookups
+with `SkipInit` and no auth manager describe the target without YAML functions.
+Their static-backend outputs shared a key with fully processed outputs.
+
+Both caches now use one key type, `refcache.Key`, in `pkg/terraform/refcache`.
+It contains the configuration root, the target, the invocation, and the caller's
+auth scope. It also records inspection mode and raw-describe mode. The auth
+scope uses the semantics that `!terraform.output` already had: the manager
+identity plus a digest of the context, never plaintext. Credential-less
+callers still share entries, and callers with equal credential content share
+`atmos.Component` entries. `refcache.DeleteTarget` replaces the two type-switching
+invalidators. `refcache.KindsFor` returns the inspection and execution
+value-cache kinds as constants, with no runtime string joining.
+
+Regression tests check both directions: different credentials miss and equal
+credentials hit, `AuthDisabled` misses, raw-then-processed output lookups
+describe twice, and repeated raw lookups describe once. Describe-affected
+workloads use the invocation-local deferred cache, which this change leaves
+alone.
+
 ## Follow-ups
 
 The Terraform/component benchmark gap tracked in #3379 is resolved. The local
