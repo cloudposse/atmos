@@ -478,6 +478,12 @@ commands:
         default: x
       - name: empty-default
         default: ""
+      - name: numeric-default
+        default: 5
+      - name: boolean-default
+        default: false
+      - name: null-default
+        default: null
     steps:
       - command: echo hi
 `)
@@ -485,13 +491,16 @@ commands:
 	require.True(t, ok)
 	arguments, ok := command["arguments"].([]any)
 	require.True(t, ok)
-	require.Len(t, arguments, 5)
+	require.Len(t, arguments, 8)
 	assert.Equal(t, map[string]any{"name": "bare", "required": true}, arguments[0])
 	assert.Equal(t, map[string]any{"name": "explicit-optional", "required": false}, arguments[1])
 	assert.Equal(t, map[string]any{"name": "explicit-required", "required": true}, arguments[2])
 	assert.Equal(t, map[string]any{"name": "defaulted", "default": "x"}, arguments[3])
 	assert.Equal(t, map[string]any{"name": "empty-default", "default": "", "required": true}, arguments[4],
 		"an empty default is no default")
+	assert.Equal(t, map[string]any{"name": "numeric-default", "default": 5}, arguments[5])
+	assert.Equal(t, map[string]any{"name": "boolean-default", "default": false}, arguments[6])
+	assert.Equal(t, map[string]any{"name": "null-default", "default": nil, "required": true}, arguments[7])
 }
 
 // Only custom commands declare arguments this way; other sections keep their own shape.

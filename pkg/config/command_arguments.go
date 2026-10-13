@@ -41,7 +41,7 @@ func recordArgumentRequirements(node *goyaml.Node, decoded map[string]interface{
 		if !ok || child.Kind != goyaml.MappingNode || mappingValueNode(child, commandKeyRequired) != nil {
 			continue
 		}
-		if defaultValue, _ := argument[commandKeyDefault].(string); defaultValue == "" {
+		if defaultValue := argument[commandKeyDefault]; defaultValue == nil || defaultValue == "" {
 			argument[commandKeyRequired] = true
 		}
 	}
