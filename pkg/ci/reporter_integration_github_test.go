@@ -5,6 +5,11 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
+
+	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -639,4 +644,55 @@ func TestReporter_ErrorsKeepSentinels(t *testing.T) {
 		require.Len(t, h.server.CommentsFor("owner", "repo", 9), 1)
 		assert.Empty(t, h.server.CommentsFor("owner", "repo", 42))
 	})
+}
+
+// Elevated events can check out either the base or PR head. Report the commit actually tested.
+func TestReporter_PullRequestTargetCheckUsesCheckoutSHA(t *testing.T) {
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+	author := &object.Signature{Name: "Test", Email: "test@example.com", When: time.Unix(1, 0)}
+	base, err := worktree.Commit("base", &git.CommitOptions{Author: author, AllowEmptyCommits: true})
+	require.NoError(t, err)
+	head, err := worktree.Commit("head", &git.CommitOptions{Author: author, AllowEmptyCommits: true})
+	require.NoError(t, err)
+	require.NotEqual(t, base, head)
+
+	for _, tc := range []struct {
+		name     string
+		checkout plumbing.Hash
+	}{
+		{name: "base checkout", checkout: base},
+		{name: "PR head checkout", checkout: head},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, worktree.Checkout(&git.CheckoutOptions{Hash: tc.checkout}))
+			h := newHarness(
+				t, fullCIConfig(), nil,
+				ghtest.WithRepository("owner/repo"),
+				ghtest.WithPullRequest(42, "feature", "main"),
+				ghtest.WithSHA(base.String()),
+				ghtest.WithEvent("pull_request_target", map[string]any{
+					"pull_request": map[string]any{
+						"number": 42,
+						"head":   map[string]any{"sha": head.String(), "repo": map[string]any{"full_name": "owner/repo"}},
+						"base":   map[string]any{"sha": base.String(), "repo": map[string]any{"full_name": "owner/repo"}},
+					},
+				}),
+			)
+			t.Chdir(dir)
+			ctx, err := h.reporter.Context()
+			require.NoError(t, err)
+			require.NotNil(t, ctx.PullRequest)
+			assert.Equal(t, 42, ctx.PullRequest.Number)
+			assert.Equal(t, tc.checkout.String(), ctx.SHA)
+
+			_, err = h.reporter.Check(context.Background(), ci.CheckRequest{Name: "atmos/test"})
+			require.NoError(t, err)
+			require.Len(t, h.server.Statuses(), 1)
+			assert.Equal(t, tc.checkout.String(), h.server.Statuses()[0].SHA)
+		})
+	}
 }

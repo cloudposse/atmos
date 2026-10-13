@@ -207,6 +207,66 @@ func TestSetEnv_PullRequestTargetIsElevated(t *testing.T) {
 	assert.False(t, ctx.PullRequest.Fork, "WithPullRequest describes a same-repository pull request")
 }
 
+// TestSetEnv_ElevatedEventsRunAgainstTheBaseBranch verifies the GitHub contract that
+// pull_request_target and workflow_run set GITHUB_REF to the base branch, so only the payload names the pull request.
+func TestSetEnv_ElevatedEventsRunAgainstTheBaseBranch(t *testing.T) {
+	t.Run("pull_request_target", func(t *testing.T) {
+		s := ghtest.NewServer(t)
+		ghtest.SetEnv(
+			t, s,
+			ghtest.WithEvent("pull_request_target", map[string]any{"action": "synchronize"}),
+			ghtest.WithPullRequest(7, "feature", "main"),
+		)
+
+		assert.Equal(t, "refs/heads/main", os.Getenv("GITHUB_REF"))
+		assert.Equal(t, "main", os.Getenv("GITHUB_REF_NAME"))
+		assert.Equal(t, "feature", os.Getenv("GITHUB_HEAD_REF"))
+		assert.Equal(t, "main", os.Getenv("GITHUB_BASE_REF"))
+	})
+
+	t.Run("workflow_run same repository", func(t *testing.T) {
+		s := ghtest.NewServer(t)
+		env := ghtest.SetEnv(
+			t, s,
+			ghtest.WithRepository("acme/infra"),
+			ghtest.WithEvent("workflow_run", nil),
+			ghtest.WithPullRequest(9, "feature", "main"),
+		)
+
+		assert.Equal(t, "refs/heads/main", os.Getenv("GITHUB_REF"))
+		assert.Empty(t, os.Getenv("GITHUB_HEAD_REF"), "workflow_run sets neither GITHUB_HEAD_REF nor GITHUB_BASE_REF")
+		assert.Empty(t, os.Getenv("GITHUB_BASE_REF"))
+
+		ctx, err := github.NewProvider().Context()
+		require.NoError(t, err)
+		assert.True(t, ctx.ElevatedEvent)
+		require.NotNil(t, ctx.PullRequest)
+		assert.Equal(t, 9, ctx.PullRequest.Number)
+		assert.False(t, ctx.PullRequest.Fork)
+
+		var payload map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ghtest.ReadFile(t, env.EventPath)), &payload))
+		assert.Contains(t, payload, "workflow_run")
+		assert.NotContains(t, payload, "pull_request")
+	})
+
+	t.Run("workflow_run fork has no pull request list", func(t *testing.T) {
+		s := ghtest.NewServer(t)
+		ghtest.SetEnv(
+			t, s,
+			ghtest.WithRepository("acme/infra"),
+			ghtest.WithEvent("workflow_run", nil),
+			ghtest.WithForkPullRequest(9, "fork-branch", "main"),
+		)
+
+		ctx, err := github.NewProvider().Context()
+		require.NoError(t, err)
+		require.NotNil(t, ctx.PullRequest)
+		assert.True(t, ctx.PullRequest.Fork)
+		assert.Zero(t, ctx.PullRequest.Number, "GitHub leaves workflow_run.pull_requests empty for fork runs")
+	})
+}
+
 func TestSetEnv_ForkPullRequest(t *testing.T) {
 	s := ghtest.NewServer(t)
 	env := ghtest.SetEnv(
