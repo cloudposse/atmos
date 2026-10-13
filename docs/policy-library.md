@@ -1,20 +1,11 @@
----
-title: Developing Policy Examples
-sidebar_label: Policy Examples
-sidebar_position: 6
-description: Catalog structure, fixture format, and verification commands for policy contributors.
----
+# Developing the Policy Library
 
-import Intro from '@site/src/components/Intro'
-
-<Intro>
-Contributor reference for the [Policy Library](/policies/library) and its executable fixtures.
-</Intro>
+Contributor reference for the [Policy Library](https://atmos.tools/policies/library) and its executable fixtures.
 
 ## Tests
 
 Reusable catalog entries live in `policy-library/<name>/`, each with `README.md`, `policy.yaml`,
-and `tests/cases.json`. The website generates the [Policy Library](/policies/library) directly
+and `tests/cases.json`. The website generates the [Policy Library](https://atmos.tools/policies/library) directly
 from these directories. Frontmatter supplies `title`, `description`, `tags`, and `related_docs`.
 
 ```shell
@@ -40,9 +31,9 @@ Hook integration tests use local HTTP endpoints, not production services or inst
 
 ## Integration references
 
-- [Policy configuration](/policies/configuration): supported manifest fields and loading behavior.
-- [Inputs and expressions](/policies/inputs): user-visible input contracts.
-- [Hooks](/policies/hooks): execution and failure semantics.
-- [CI context](/policies/ci): supplied-event collector and permissions.
-- [Policy capabilities](/contribute/policy-capabilities): implemented contracts and enforcement paths.
-- [Engine API](/contribute/policy-engine): evaluator and collector extension points.
+- [Policy configuration](https://atmos.tools/policies/configuration): supported manifest fields and loading behavior.
+- [Inputs and expressions](https://atmos.tools/policies/inputs): user-visible input contracts.
+- [Hooks](https://atmos.tools/policies/hooks): execution and failure semantics.
+- [CI context](https://atmos.tools/policies/ci): supplied-event collector and permissions.
+- [Policy capabilities](policy-capabilities.md): implemented contracts and enforcement paths.
+- [Engine API](policy-engine.md): evaluator and collector extension points.

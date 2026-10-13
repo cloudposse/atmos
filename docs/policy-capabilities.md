@@ -1,17 +1,7 @@
----
-title: Policy Capabilities
-sidebar_label: Policy Capabilities
-sidebar_position: 5
-description: Implemented policy inputs, evaluation contracts, and command enforcement paths.
-id: policy-capabilities
----
+# Policy Capabilities
 
-import Intro from '@site/src/components/Intro'
-
-<Intro>
 Reference for implemented policy capabilities. The Go evaluator accepts supplied snapshots;
 command integrations collect specific inputs and enforce their decisions.
-</Intro>
 
 ## Command integrations
 
@@ -21,8 +11,8 @@ command integrations collect specific inputs and enforce their decisions.
 | `operation` | Terraform, Helmfile, Helm, and Kubernetes lifecycle metadata | Denial and governing hook requirements at the current lifecycle event |
 | GitHub `ci` context | Allowlisted environment variables and supplied event file through Native CI | `required_ci` validates provider, schema, availability, and completeness before a predicate |
 
-Rules load from `ATMOS_POLICY_DIR`. See [Configuration](/policies/configuration),
-[Inputs](/policies/inputs), and [CI Context](/policies/ci) for the public contracts.
+Rules load from `ATMOS_POLICY_DIR`. See [Configuration](https://atmos.tools/policies/configuration),
+[Inputs](https://atmos.tools/policies/inputs), and [CI Context](https://atmos.tools/policies/ci) for the public contracts.
 
 The Go `AffectedInput` type validates caller-supplied inventories. It is not connected to command
 collection; `describe affected` does not invoke an affected policy gate.
@@ -41,7 +31,7 @@ The adapter enables the standard CEL environment with no custom extension librar
 | Presence | `has(object.field)`; explicit checks for null and unknown values |
 
 Expressions are boolean predicates. Matching selects the rule's static effects; it does not
-compute arbitrary findings, hook payloads, or recipients. See [Inputs and Expressions](/policies/inputs)
+compute arbitrary findings, hook payloads, or recipients. See [Inputs and Expressions](https://atmos.tools/policies/inputs)
 for limits and error behavior.
 
 ## Core and executor responsibilities
@@ -63,5 +53,5 @@ intercept another client calling a platform API. Required hooks run external too
 existing hook executor; their success cannot override another policy's denial.
 
 Protect policy sources, workflow configuration, binaries, and credentials. See
-[enforcement configuration](/policies/configuration#enforcement) and
-[the engine API](/contribute/policy-engine).
+[enforcement configuration](https://atmos.tools/policies/configuration#enforcement) and
+[the engine API](policy-engine.md).

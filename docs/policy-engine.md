@@ -1,27 +1,16 @@
----
-title: Developing the Policy Engine
-sidebar_label: Policy Engine
-sidebar_position: 4
-description: Contributor reference for the policy evaluator, provider-native snapshots, and supplied-input contracts.
-id: policy-engine
----
+# Developing the Policy Engine
 
-import Intro from '@site/src/components/Intro'
-
-<Intro>
 The experimental `pkg/policy` package evaluates rules against collected data and returns decisions,
 approval requirements, and hook requirements. This guide describes the implemented Go API for
 contributors building the policy engine and its integrations.
-</Intro>
 
-:::warning Experimental API and limited command integration
-
-The command integrations use the [directory manifest](/policies/configuration) with CEL rules.
-The broader Go API below accepts caller-supplied inputs and effects; its types do not imply a
-command collector or enforcement path. Existing
-[`settings.validation`](/cli/commands/validate/component) is a separate integration.
-
-:::
+> [!WARNING]
+> Experimental API and limited command integration
+>
+> The command integrations use the [directory manifest](https://atmos.tools/policies/configuration) with CEL rules.
+> The broader Go API below accepts caller-supplied inputs and effects; its types do not imply a
+> command collector or enforcement path. Existing
+> [`settings.validation`](https://atmos.tools/cli/commands/validate/component) is a separate integration.
 
 ## Scope and boundaries
 
@@ -41,7 +30,7 @@ through Atmos's `show` command, which would execute configuration again.
 Callers supply trusted rules and materialized data. Calling this package alone does not establish
 a security boundary or a repository merge gate.
 
-See [Policy Capabilities](/contribute/policy-capabilities) for implemented command integrations.
+See [Policy Capabilities](policy-capabilities.md) for implemented command integrations.
 
 ## Evaluate a rule in Go
 
@@ -54,41 +43,41 @@ This complete program uses the current API. Run it from a checkout containing `p
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
+    "context"
+    "encoding/json"
+    "fmt"
 
-	"github.com/cloudposse/atmos/pkg/policy"
+    "github.com/cloudposse/atmos/pkg/policy"
 )
 
 func main() {
-	engine := &policy.Engine{}
-	if err := engine.Register(policy.CELEngine, &policy.CEL{}); err != nil {
-		panic(err)
-	}
+    engine := &policy.Engine{}
+    if err := engine.Register(policy.CELEngine, &policy.CEL{}); err != nil {
+        panic(err)
+    }
 
-	request := &policy.Request{
-		Kind:  policy.Operation,
-		Input: json.RawMessage(`{"command":"apply","stage":"prod"}`),
-	}
-	rules := []policy.Rule{{
-		ID:         "production-freeze",
-		On:         policy.Operation,
-		Engine:     policy.CELEngine,
-		Expression: "input.command == 'apply' && input.stage == params.stage",
-		Parameters: json.RawMessage(`{"stage":"prod"}`),
-		Effects: policy.Effects{
-			Deny:   true,
-			Reason: "Production changes are frozen",
-		},
-	}}
+    request := &policy.Request{
+        Kind:  policy.Operation,
+        Input: json.RawMessage(`{"command":"apply","stage":"prod"}`),
+    }
+    rules := []policy.Rule{{
+        ID:         "production-freeze",
+        On:         policy.Operation,
+        Engine:     policy.CELEngine,
+        Expression: "input.command == 'apply' && input.stage == params.stage",
+        Parameters: json.RawMessage(`{"stage":"prod"}`),
+        Effects: policy.Effects{
+            Deny:   true,
+            Reason: "Production changes are frozen",
+        },
+    }}
 
-	decision, err := engine.Evaluate(context.Background(), request, rules)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(decision.Status)
-	fmt.Println(decision.Findings[0].Effects.Reason)
+    decision, err := engine.Evaluate(context.Background(), request, rules)
+    if err != nil {
+        panic(err)
+    }
+    fmt.Println(decision.Status)
+    fmt.Println(decision.Findings[0].Effects.Reason)
 }
 ```
 
@@ -106,31 +95,31 @@ The example reports a decision; it does not execute or intercept Terraform.
 ### Request and rule contracts
 
 <dl>
-  <dt><code>Request.Kind</code> and <code>Rule.On</code></dt>
-  <dd>Must match exactly for a rule to run. Input kinds identify what is evaluated, not the component
-  type or CI provider. For example, <code>plan</code> and <code>terraform.plan</code> are distinct;
-  the core does not implicitly normalize or fan out inputs.</dd>
-  <dt><code>Request.Input</code></dt>
-  <dd>A materialized JSON object, including an empty object when appropriate. Null, arrays, and
-  malformed JSON are invalid. The affected input kind has additional completeness checks.</dd>
-  <dt><code>Request.CI</code></dt>
-  <dd>An optional provider-native snapshot, available to any input kind, including early function
-  and source checks. Supplying it must not require executing configuration.</dd>
-  <dt><code>Request.Revisions</code></dt>
-  <dd>Separate governing, base, and head revision identifiers. The governing revision selects trusted
-  policy; the base and head delimit the change comparison. The core does not resolve or authenticate
-  these identifiers.</dd>
-  <dt><code>Rule.ID</code></dt>
-  <dd>A nonempty identifier, unique within the rule list. Every rule must also declare its input kind.</dd>
-  <dt><code>Rule.Description</code></dt>
-  <dd>Plain-English document purpose copied from <code>metadata.description</code> by the directory
-  loader. It is preserved for callers but does not affect evaluation or replace <code>Effects.Reason</code>.</dd>
-  <dt><code>Rule.Expression</code> and <code>Rule.Parameters</code></dt>
-  <dd>A predicate and optional JSON-object parameters. Omitted parameters become an empty object in
-  CEL. A matching predicate selects effects; it is not itself synonymous with denial.</dd>
-  <dt><code>Rule.RequiredCI</code></dt>
-  <dd>Explicit provider, schema, and dataset requirements checked before an applicable rule's
-  predicate. Missing evidence cannot be hidden behind a condition that evaluates to false.</dd>
+    <dt><code>Request.Kind</code> and <code>Rule.On</code></dt>
+    <dd>Must match exactly for a rule to run. Input kinds identify what is evaluated, not the component
+    type or CI provider. For example, <code>plan</code> and <code>terraform.plan</code> are distinct;
+    the core does not implicitly normalize or fan out inputs.</dd>
+    <dt><code>Request.Input</code></dt>
+    <dd>A materialized JSON object, including an empty object when appropriate. Null, arrays, and
+    malformed JSON are invalid. The affected input kind has additional completeness checks.</dd>
+    <dt><code>Request.CI</code></dt>
+    <dd>An optional provider-native snapshot, available to any input kind, including early function
+    and source checks. Supplying it must not require executing configuration.</dd>
+    <dt><code>Request.Revisions</code></dt>
+    <dd>Separate governing, base, and head revision identifiers. The governing revision selects trusted
+    policy; the base and head delimit the change comparison. The core does not resolve or authenticate
+    these identifiers.</dd>
+    <dt><code>Rule.ID</code></dt>
+    <dd>A nonempty identifier, unique within the rule list. Every rule must also declare its input kind.</dd>
+    <dt><code>Rule.Description</code></dt>
+    <dd>Plain-English document purpose copied from <code>metadata.description</code> by the directory
+    loader. It is preserved for callers but does not affect evaluation or replace <code>Effects.Reason</code>.</dd>
+    <dt><code>Rule.Expression</code> and <code>Rule.Parameters</code></dt>
+    <dd>A predicate and optional JSON-object parameters. Omitted parameters become an empty object in
+    CEL. A matching predicate selects effects; it is not itself synonymous with denial.</dd>
+    <dt><code>Rule.RequiredCI</code></dt>
+    <dd>Explicit provider, schema, and dataset requirements checked before an applicable rule's
+    predicate. Missing evidence cannot be hidden behind a condition that evaluates to false.</dd>
 </dl>
 
 Rule lists must already be resolved and trusted. The core does not implement imports, inheritance,
@@ -195,7 +184,7 @@ or check review freshness. A matched approval requirement always remains `awaiti
 a denial or error takes precedence—even if review data is present in the snapshot.
 
 The directory loader has no approval action. The supplied-event collector does not fetch live
-reviews or verify approvals. See [CI Context](/policies/ci) for its data and permission contract.
+reviews or verify approvals. See [CI Context](https://atmos.tools/policies/ci) for its data and permission contract.
 
 ### Hooks
 
@@ -209,9 +198,9 @@ can return a hook reference for TFLint. That decision alone does **not** mean TF
 
 The `pkg/hooks` lifecycle integration now resolves governing `spec.hooks` through existing kind/step
 execution, preserves mandatory requirements against workspace skips and weaker failure modes, and
-keeps authorization separate. See [Policies](/policies) for supported inputs and
-[Hooks](/policies/hooks) for static-definition restrictions. Tests are listed in
-[Developing Policy Examples](/contribute/policy-library). Saved-plan reevaluation before apply
+keeps authorization separate. See [Policies](https://atmos.tools/policies) for supported inputs and
+[Hooks](https://atmos.tools/policies/hooks) for static-definition restrictions. Tests are listed in
+[Developing the Policy Library](policy-library.md). Saved-plan reevaluation before apply
 does not replay after-plan hooks. A failed callback after apply cannot undo the completed apply,
 and arbitrary HTTP callbacks cannot promise exactly-once delivery.
 
@@ -316,6 +305,6 @@ Tests use collected data and synthetic provider snapshots, not live credentials.
 and non-applicable rules, error/deny precedence, independent requirements, missing required facts,
 snapshot isolation, cancellation, and complete versus incomplete affected inventories.
 
-The [catalog test runner](/contribute/policy-library) verifies distributed definitions and fixtures.
+The [catalog test runner](policy-library.md) verifies distributed definitions and fixtures.
 Command enforcement additionally depends on the
-[protected execution configuration](/policies/configuration#enforcement).
+[protected execution configuration](https://atmos.tools/policies/configuration#enforcement).
