@@ -134,6 +134,34 @@ func TestQualityReviewMustApproveCurrentCommit(t *testing.T) {
 	}
 }
 
+func TestQualityReviewSkippedForBotAuthors(t *testing.T) {
+	for _, login := range []string{"renovate[bot]", "dependabot[bot]", "github-actions[bot]", "cloudposse-releaser[bot]"} {
+		t.Run(login, func(t *testing.T) {
+			pr := githubtest.PR(githubtest.Run())
+			pr.User.Login, pr.User.Type = login, "Bot"
+			q := qualityTestClient(t, func(path string, _ any) error {
+				t.Fatalf("unexpected reviews API call: %s", path)
+				return nil
+			})
+			gate, err := q.review(&pr)
+			require.NoError(t, err)
+			require.True(t, gate.Passed)
+			require.Contains(t, gate.Detail, login)
+		})
+	}
+
+	t.Run("human author still requires approval", func(t *testing.T) {
+		pr := githubtest.PR(githubtest.Run())
+		pr.User.Login, pr.User.Type = "octocat", "User"
+		q := qualityTestClient(t, func(_ string, response any) error {
+			return githubtest.Respond([]map[string]any{}, response)
+		})
+		gate, err := q.review(&pr)
+		require.NoError(t, err)
+		require.False(t, gate.Passed)
+	})
+}
+
 func TestQualitySignaturesAndThreads(t *testing.T) {
 	for _, scenario := range []string{"valid", "unsigned", "invalid signature", "unresolved", "dismissed", "head changed", "graphql failure"} {
 		t.Run(scenario, func(t *testing.T) {
