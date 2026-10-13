@@ -15,9 +15,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// Guard the stack naming configuration exercised by these regressions.
-var _ = schema.Stacks{NamePattern: "{stage}", NameTemplate: "{{ .vars.stage }}"}
-
 // TestTerraformGenerators_ResolvedContext exercises the same stack filters and
 // output templates exposed by the batch generate varfiles/backends commands.
 func TestTerraformGenerators_ResolvedContext(t *testing.T) {
