@@ -34,6 +34,15 @@ func benchMetricLabel(key string) (string, string) {
 	return strings.TrimPrefix(parts[0], "github.com/cloudposse/atmos/") + "/" + parts[1], parts[2]
 }
 
+// benchMetricDisplay renders a metric key as "pkg/Benchmark (unit)" without the module prefix.
+func benchMetricDisplay(key string) string {
+	name, unit := benchMetricLabel(key)
+	if unit == "" {
+		return name
+	}
+	return name + " (" + unit + ")"
+}
+
 // Use the same fields for eligibility and diagnostics so a rejected baseline
 // always explains exactly which compatibility requirement it failed.
 func benchCompatibilityReasons(base, candidate *benchManifest) []string {
