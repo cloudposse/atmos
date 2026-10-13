@@ -7,7 +7,9 @@
 Repeated `!terraform.output`, `!terraform.state`, and `atmos.Component` references
 reuse inspection results while keeping them separate from execution results.
 Deferred authentication also reuses the raw target describe and a stable
-auth-disabled manager within the invocation.
+auth-disabled manager within the invocation. Resolution-context lookups capture
+only the goroutine header, and ambient store values can be reused across caller
+stacks without removing identity-specific isolation.
 
 ## Context
 
@@ -98,11 +100,12 @@ finished before measurement, with no other task builds/tests running.
 | v1.232.0 (`26edaff2cc46`) | 1.656393 s | +217.18% |
 | Fixed (`88c7ed44f233`) | 0.656163 s | +25.65% |
 
-The fix reduces this workload's median by **60.39%** versus v1.232.0.
+The initial cache-only fix reduces this workload's median by **60.39%** versus v1.232.0.
 All three pairwise comparisons reported `p=0.00001083`. The residual increase
 against v1.228.0 still exceeds the 10% advisory threshold; it is not a complete
 return to that release's performance. These are local field-test measurements,
 not historical CI results or a reproduction of the customer's end-to-end job.
+The additional fixes below supersede that initial result.
 
 ```console
 ATMOS_BENCH_FIELD_FILTER='^BenchmarkCLI$/^DescribeAffected$/^FunctionsRepeated$/^instances=200$/^change=none$' go tool mage bench:fieldTest v1.228.0,v1.232.0,88c7ed44f233 .context/field-affected-functions
@@ -131,7 +134,47 @@ component, and explicitly selected identities while permitting ambient reuse.
 The reporter did not establish whether a default Atmos identity is configured;
 the ambient optimization applies only when no identity can be selected.
 
+After both additional fixes, a fresh field test with the same environment and
+ten samples per revision measured:
+
+| Revision | Terraform/component references | Store caller stacks | Store reads |
+|---|---:|---:|---:|
+| v1.228.0 | 0.51650 s | 0.58247 s | 11 |
+| v1.229.0 | 1.29437 s | 0.60223 s | 11 |
+| v1.232.0 | 1.58634 s | 1.66528 s | 660 |
+| Fixed (`90de1b148d2e`) | 0.46957 s | 0.68803 s | 22 |
+
+The original residual is eliminated: the Terraform/component workload is
+**9.09% faster than v1.228.0** and **70.40% faster than v1.232.0**. The store
+workload is **58.68% faster than v1.232.0**, with **96.67% fewer backend reads**.
+All comparisons reported `p=0.00001083`.
+
+The store workload retains a **14.25% runtime warning versus v1.229.0** (18.12%
+versus v1.228.0), plus a read-count warning: 22 versus 11. The two configuration
+roots intentionally have independent values; dependents reuse HEAD. Eight CPU
+profiles per store binary locate approximately 0.36 s of cumulative cache-key
+construction in the fixed runs, including 0.27 s in effective-auth merging
+(about 45 ms and 34 ms per invocation respectively). These costs overlap and
+must not be added together. This remaining bookkeeping cost and the additional
+root's reads do not establish the customer's remaining AWS-backed runtime.
+
+```console
+ATMOS_BENCH_FIELD_FILTER='^BenchmarkCLI$/^DescribeAffected$/^(FunctionsRepeated|StoreCallerStacks)$/^(instances=200|stacks=20)$/^(change=none|keys=11)$' go tool mage bench:fieldTest v1.228.0,v1.229.0,v1.232.0,90de1b148d .context/field-residual-functions-store
+```
+
+Deep-stack tests failed before the header-only fix and passed afterward, along
+with focused race tests for cycle detection and deferred cache/auth isolation.
+The ambient caller-stack regression also failed before its fix and passed
+afterward, including negative cases with global, component, and store identities.
+The final binary passed all Terraform/component CLI scenarios and the new store
+scenario via scoped `atmos test --full`; the latter verified resolved values,
+200 exact affected identities, and 22 reads. Mage tests, `go build ./...`, scoped
+`atmos test`, changed-file lint, signed-commit hooks, and the website build passed.
+The earlier broad-suite limitations still apply.
+
 ## Follow-ups
 
-Investigate the remaining historical benchmark gap in #3379. Its cause has not
-been attributed; preserve the advisory warning while profiling it.
+The Terraform/component benchmark gap tracked in #3379 is resolved. Customer
+verification and the remaining store-workload advisory remain associated with
+#3353; preserve that warning and confirm effective auth configuration before
+claiming the ambient-store optimization addresses the reported repository.
