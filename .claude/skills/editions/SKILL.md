@@ -76,13 +76,13 @@ changed from "always add `-reconfigure`" to "add it only when the backend change
 → **This is `KindBehavior`, not `KindValue`.** Follow the behavior-transition contributor
 workflow in `docs/prd/editions.md`:
 1. Add a `KindBehavior` journal entry with a unique transition key, the expected merge date,
-   descriptive `Old` and `New` values, and the PR reference.
+    descriptive `Old` and `New` values, and the PR reference.
 2. Retain both code paths and select them with `edition.BehaviorChanged(atmosConfig.Edition, key)`.
-   Propagate invalid-pin and unknown-key errors. Pins before the date use the old path; pins on
-   or after it and unpinned projects use the new one. No additional YAML toggle is required.
+    Propagate invalid-pin and unknown-key errors. Pins before the date use the old path; pins on
+    or after it and unpinned projects use the new one. No additional YAML toggle is required.
 3. State exactly what the old and new paths do in the feature PRD's migration section and blog.
 4. Test both paths, boundary dates, unpinned behavior, and explicit options. Behavior entries
-   appear in edition inspection but must never become Viper value overrides.
+    appear in edition inspection but must never become Viper value overrides.
 
 Historical candidates in the PRD remain ungated until their own code paths are wired and tested.
 

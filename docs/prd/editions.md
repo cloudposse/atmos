@@ -155,13 +155,13 @@ keys are never journal-gated.
 For a change to a code path rather than a configuration default:
 
 1. Add a `KindBehavior` entry with a unique transition key, its expected merge date, descriptive
-   `Old` and `New` values, and a reference. Each key represents exactly one transition; later
-   changes need a new key. A key cannot mix value and behavior entries.
+    `Old` and `New` values, and a reference. Each key represents exactly one transition; later
+    changes need a new key. A key cannot mix value and behavior entries.
 2. Call `edition.BehaviorChanged(atmosConfig.Edition, key)` and propagate errors before running
-   either path. Retain both paths: pins before the date get the old path, pins on or after it and
-   unpinned projects get the new path. Partial dates use the same end-of-period rounding as values.
+    either path. Retain both paths: pins before the date get the old path, pins on or after it and
+    unpinned projects get the new path. Partial dates use the same end-of-period rounding as values.
 3. Test both paths, the boundary date, unpinned behavior, invalid pins, and any explicit options
-   whose effect must remain independent of the edition.
+    whose effect must remain independent of the edition.
 
 Behavior keys are journal identifiers, not YAML settings. They never enter Viper's defaults
 layer. `Diff`, `Between`, and `DescribePin` include their descriptive old/new values, so users
