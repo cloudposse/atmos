@@ -19,7 +19,7 @@ terraform:
 
 components:
   terraform:
-    # Docs "Try it" example, verbatim.
+    # Metadata variant of the docs "Try it" example, which uses settings.owner.
     mock:
       metadata:
         description: platform

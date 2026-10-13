@@ -56,8 +56,9 @@ more depth. If a name is not listed here, check that page before concluding it d
   argument, not as a `flags` entry. Prefer `deploy` over `apply` in non-interactive scripts.
 - `atmos.toolchain(command, tool=, flags=, args=, ...)`: explicit toolchain commands, for
   example `atmos.toolchain("install", "jqlang/jq@1.7.1")`. It behaves like the CLI and pins the
-  tool in the project's `.tool-versions`, so every later Atmos command in that project installs it
-  automatically. It does not change the script's `PATH`; use `dependencies.tools` for a
+  tool in the project's `.tool-versions`. Commands use installed pins; automatic installation depends
+  on `toolchain.install` (`always` installs all pins on every run). It does not change the script's
+  `PATH`; use `dependencies.tools` for a
   script-scoped pin.
 - Flag mapping: bare keys become `--name`; an explicit dash prefix preserves native tool
   spelling (`"-detailed-exitcode"`). Values are strings, ints, bools, or lists (a list
