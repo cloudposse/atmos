@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	githubci "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	ghendpoints "github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -40,6 +41,8 @@ type client interface {
 type Provider struct {
 	newClient func() (client, error)
 }
+
+var _ atmosgit.PullRequestRepositoryResolver = (*Provider)(nil)
 
 func init() {
 	atmosgit.RegisterPullRequestPublisher(ProviderName, func() (atmosgit.PullRequestPublisher, error) {
@@ -147,4 +150,21 @@ func githubError(err error, response *gh.Response) error {
 		return fmt.Errorf("%w: %w", errUtils.ErrGitHubAuthorization, err)
 	}
 	return fmt.Errorf("%w: %w", errUtils.ErrPullRequestReconciliation, err)
+}
+
+// RepositoryFromURL recognizes github.com and GitHub Enterprise Server (the host named by
+// GITHUB_SERVER_URL) remotes over HTTPS or SSH and returns their owner/repository. Ports are
+// ignored, matching atmosgit.GitHubRepository, since scp-style SSH remotes carry none.
+func (p *Provider) RepositoryFromURL(uri string) (atmosgit.PullRequestRepository, bool) {
+	parts, ok := atmosgit.ParseGenericGitURL(uri)
+	if !ok || strings.Contains(parts.Name, "/") || !isGitHubHost(parts.Host) {
+		return atmosgit.PullRequestRepository{}, false
+	}
+	return atmosgit.PullRequestRepository{Owner: parts.Owner, Repository: parts.Name}, true
+}
+
+// isGitHubHost reports whether host is github.com or the configured GitHub Enterprise Server host.
+func isGitHubHost(host string) bool {
+	host = strings.ToLower(host)
+	return host == "github.com" || host == strings.ToLower(ghendpoints.RepoEndpoints().Hostname())
 }

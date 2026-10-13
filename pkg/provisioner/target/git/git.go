@@ -19,14 +19,17 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	// Blank imports register the "cli" git provider (the only v1 backend) so
+	// atmosgit.NewProvider("cli") resolves wherever the git target is compiled in, and the pull
+	// request publishers pull_request mode picks from a repository URI. The target never names
+	// a forge itself; supporting another forge means importing its provider here.
+	_ "github.com/cloudposse/atmos/pkg/git/providers/azuredevops"
+	_ "github.com/cloudposse/atmos/pkg/git/providers/cli"
+	_ "github.com/cloudposse/atmos/pkg/git/providers/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
-
-	// Blank import registers the "cli" git provider (the only v1 backend) so
-	// atmosgit.NewProvider("cli") resolves wherever the git target is compiled in.
-	_ "github.com/cloudposse/atmos/pkg/git/providers/cli"
 )
 
 const (
