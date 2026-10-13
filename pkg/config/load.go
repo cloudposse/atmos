@@ -503,8 +503,7 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 			// Also search git root for .atmos.d even with default config.
 			// This enables custom commands defined in .atmos.d at the repo root
 			// to work when running from any subdirectory.
-			gitRoot, err := u.ProcessTagGitRoot("!repo-root .")
-			if err == nil && gitRoot != "" && gitRoot != "." {
+			if gitRoot := defaultConfigGitRootDir(""); gitRoot != "" {
 				log.Debug("Loading .atmos.d from git root", "path", gitRoot)
 				if err := mergeDefaultImports(gitRoot, v); err != nil {
 					if !errors.Is(err, errUtils.ErrAtmosDirConfigNotFound) {
@@ -1041,15 +1040,7 @@ func loadConfigSources(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStac
 
 // readSystemConfig load config from system dir.
 func readSystemConfig(v *viper.Viper) error {
-	configFilePath := ""
-	if runtime.GOOS == "windows" {
-		appDataDir := os.Getenv(WindowsAppDataEnvVar)
-		if len(appDataDir) > 0 {
-			configFilePath = appDataDir
-		}
-	} else {
-		configFilePath = SystemDirConfigFilePath
-	}
+	configFilePath := systemConfigDir()
 
 	if len(configFilePath) > 0 {
 		log.Trace("Checking for atmos.yaml in system config", "path", configFilePath)
@@ -1070,11 +1061,10 @@ func readHomeConfig(v *viper.Viper) error {
 
 // readHomeConfigWithProvider loads config from user's HOME dir using a HomeDirProvider.
 func readHomeConfigWithProvider(v *viper.Viper, homeProvider filesystem.HomeDirProvider) error {
-	home, err := homeProvider.Dir()
+	configFilePath, err := homeConfigDir(homeProvider)
 	if err != nil {
 		return err
 	}
-	configFilePath := filepath.Join(home, ".atmos")
 	log.Trace("Checking for atmos.yaml in home directory", "path", configFilePath)
 	err = mergeConfig(v, configFilePath, CliConfigFileName, true)
 	if err != nil {
@@ -1112,51 +1102,12 @@ func readWorkDirConfigOnly(v *viper.Viper) error {
 // readGitRootConfig tries to load atmos.yaml from the git repository root.
 // This is a fallback search - it only runs when CWD does NOT have local Atmos config.
 func readGitRootConfig(v *viper.Viper) error {
-	// Check if git root discovery is disabled.
-	//nolint:forbidigo // ATMOS_GIT_ROOT_BASEPATH is bootstrap config, not application configuration.
-	if os.Getenv("ATMOS_GIT_ROOT_BASEPATH") == "false" {
-		return nil
-	}
-
-	// If ATMOS_CLI_CONFIG_PATH is set, skip git root discovery.
-	// The env var is an explicit override.
-	//nolint:forbidigo // ATMOS_CLI_CONFIG_PATH controls config loading behavior itself.
-	if os.Getenv(AtmosCliConfigPathEnvVar) != "" {
-		return nil
-	}
-
-	// Skip git root search if CWD has local Atmos config.
-	// This ensures --chdir to a directory with its own config uses only that config.
-	cwd, err := osGetwd()
+	gitRoot, err := gitRootConfigSearchDir("")
 	if err != nil {
-		log.Debug("Failed to get CWD for local config check", "error", err)
-	} else {
-		log.Debug("readGitRootConfig checking CWD for local config", cwdKey, cwd)
-		if hasLocalAtmosConfig(cwd) {
-			log.Debug("Skipping git root search (local config exists)", "path", cwd)
-			return nil
-		}
-		log.Debug("No local config found, will search git root", cwdKey, cwd)
+		return err
 	}
-
-	gitRoot, err := u.ProcessTagGitRoot("!repo-root")
-	if err != nil {
-		log.Trace("Git root detection failed", "error", err)
+	if gitRoot == "" {
 		return nil
-	}
-
-	// Skip if git root is empty or same as CWD (already handled by readWorkDirConfigOnly).
-	if gitRoot == "" || gitRoot == "." {
-		return nil
-	}
-
-	// Convert relative path to absolute.
-	if !filepath.IsAbs(gitRoot) {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		gitRoot = filepath.Join(cwd, gitRoot)
 	}
 
 	err = mergeConfig(v, gitRoot, CliConfigFileName, true)
@@ -1176,8 +1127,7 @@ func readGitRootConfig(v *viper.Viper) error {
 func readParentDirConfig(v *viper.Viper) error {
 	// If ATMOS_CLI_CONFIG_PATH is set, don't search parent directories.
 	// This allows tests and users to explicitly control config discovery.
-	//nolint:forbidigo // ATMOS_CLI_CONFIG_PATH controls config loading behavior itself.
-	if os.Getenv(AtmosCliConfigPathEnvVar) != "" {
+	if envConfigPath() != "" {
 		return nil
 	}
 
@@ -1186,20 +1136,9 @@ func readParentDirConfig(v *viper.Viper) error {
 		return err
 	}
 
-	log.Debug("readParentDirConfig checking CWD for local config", cwdKey, wd)
-
-	// Skip parent search if CWD has local Atmos config.
-	// This ensures --chdir to a directory with its own config uses only that config.
-	if hasLocalAtmosConfig(wd) {
-		log.Debug("Skipping parent directory search (local config exists)", "path", wd)
-		return nil
-	}
-	log.Debug("No local config found, will search parent directories", cwdKey, wd)
-
-	// Search parent directories for atmos.yaml.
-	configDir := findAtmosConfigInParentDirs(wd)
+	// Search parent directories for atmos.yaml (skipped when CWD has local config).
+	configDir := parentConfigSearchDir(wd)
 	if configDir == "" {
-		// No config found in any parent directory.
 		return nil
 	}
 
@@ -1259,8 +1198,7 @@ func findAtmosConfigInParentDirs(startDir string) string {
 }
 
 func readEnvAmosConfigPath(v *viper.Viper) error {
-	//nolint:forbidigo // ATMOS_CLI_CONFIG_PATH controls config loading behavior itself.
-	atmosPath := os.Getenv(AtmosCliConfigPathEnvVar)
+	atmosPath := envConfigPath()
 	if atmosPath == "" {
 		return nil
 	}
@@ -1776,32 +1714,8 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 // loadAtmosDFromGitRoot searches for .atmos.d/ at the git repository root
 // and loads its configuration if different from the config directory.
 func loadAtmosDFromGitRoot(dirPath string, dst *viper.Viper) error {
-	gitRoot, err := u.ProcessTagGitRoot("!repo-root .")
-	if err != nil || gitRoot == "" || gitRoot == "." {
-		// Not being able to determine a git root is not a user-facing error: it just
-		// means the opportunistic git-root .atmos.d check is skipped.
-		return nil //nolint:nilerr // git-root detection failure only skips an optional check, not fatal.
-	}
-
-	absGitRoot, absErr := filepath.Abs(gitRoot)
-	absDirPath, dirErr := filepath.Abs(dirPath)
-	if absErr != nil || dirErr != nil {
-		// Same as above: path resolution failure only skips the optional check.
-		return nil //nolint:nilerr // path resolution failure only skips an optional check, not fatal.
-	}
-
-	// Check if git root is the same as config directory.
-	// Use case-insensitive comparison on Windows where paths may differ only in casing.
-	pathsEqual := absGitRoot == absDirPath
-	if runtime.GOOS == "windows" {
-		pathsEqual = strings.EqualFold(absGitRoot, absDirPath)
-	}
-	if pathsEqual {
-		return nil
-	}
-
-	// Skip if excluded for testing.
-	if shouldExcludePathForTesting(absGitRoot) {
+	absGitRoot := atmosDGitRootDir(dirPath, "")
+	if absGitRoot == "" {
 		return nil
 	}
 
@@ -1818,7 +1732,7 @@ func loadAtmosDFromDirectory(dirPath string, dst *viper.Viper) error {
 	var atmosDErr, dotAtmosDErr error
 
 	// Search for `atmos.d/` configurations.
-	atmosDPath := filepath.Join(filepath.FromSlash(dirPath), "atmos.d")
+	atmosDPath := atmosDDirPath(dirPath, AtmosDefaultImportsDirName)
 	if stat, err := os.Stat(atmosDPath); err == nil && stat.IsDir() {
 		log.Debug("Found atmos.d directory, loading configurations", "path", atmosDPath)
 		searchPattern := filepath.Join(atmosDPath, "**", "*")
@@ -1830,7 +1744,7 @@ func loadAtmosDFromDirectory(dirPath string, dst *viper.Viper) error {
 	}
 
 	// Search for `.atmos.d` configurations.
-	dotAtmosDPath := filepath.Join(filepath.FromSlash(dirPath), ".atmos.d")
+	dotAtmosDPath := atmosDDirPath(dirPath, DotAtmosDefaultImportsDirName)
 	if stat, err := os.Stat(dotAtmosDPath); err == nil && stat.IsDir() {
 		log.Debug("Found .atmos.d directory, loading configurations", "path", dotAtmosDPath)
 		searchPattern := filepath.Join(dotAtmosDPath, "**", "*")

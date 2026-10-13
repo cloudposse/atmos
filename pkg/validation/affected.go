@@ -13,6 +13,9 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// nullSeparatedFlag makes git separate listed paths with NUL so unusual file names survive.
+const nullSeparatedFlag = "-z"
+
 var errValidationExcludePatternEmpty = errors.New("validation exclude pattern cannot be empty")
 
 // AffectedFiles returns repository-relative files changed between HEAD and its
@@ -55,21 +58,29 @@ func resolveAffectedMergeBase(base string) (string, error) {
 
 // collectAffectedDiffOutputs gathers and concatenates the NUL-separated path
 // lists that make up the affected set: committed changes since mergeBase,
-// uncommitted changes, and untracked files.
+// unstaged changes, staged changes, and untracked files. Every list is
+// repository-root relative regardless of the current working directory.
 func collectAffectedDiffOutputs(mergeBase string) (string, error) {
-	output, err := runGit("diff", "--name-only", "-z", "--diff-filter=ACMRD", strings.TrimSpace(mergeBase)+"...HEAD")
+	output, err := runGit("diff", "--name-only", nullSeparatedFlag, "--diff-filter=ACMRD", strings.TrimSpace(mergeBase)+"...HEAD")
 	if err != nil {
 		return "", fmt.Errorf("list files changed since %s: %w", strings.TrimSpace(mergeBase), err)
 	}
-	worktree, err := runGit("diff", "--name-only", "-z", "--diff-filter=ACMRD")
+	worktree, err := runGit("diff", "--name-only", nullSeparatedFlag, "--diff-filter=ACMRD")
 	if err != nil {
 		return "", fmt.Errorf("list uncommitted changed files: %w", err)
 	}
-	untracked, err := runGit("ls-files", "--others", "--exclude-standard", "-z")
+	staged, err := runGit("diff", "--cached", "--name-only", nullSeparatedFlag, "--diff-filter=ACMRD")
+	if err != nil {
+		return "", fmt.Errorf("list staged changed files: %w", err)
+	}
+	// ls-files is cwd-scoped and cwd-relative by default; --full-name makes the
+	// paths repository-root relative and the ":/" pathspec makes it cover the
+	// whole repository even when run from a subdirectory.
+	untracked, err := runGit("ls-files", "--others", "--exclude-standard", "--full-name", nullSeparatedFlag, "--", ":/")
 	if err != nil {
 		return "", fmt.Errorf("list untracked files: %w", err)
 	}
-	return output + worktree + untracked, nil
+	return output + worktree + staged + untracked, nil
 }
 
 // dedupeAffectedPaths splits a NUL-separated path list, normalizes separators,

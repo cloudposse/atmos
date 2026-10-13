@@ -146,3 +146,29 @@ func TestTerraform_EffectiveInitUpgrade(t *testing.T) {
 		})
 	}
 }
+
+func TestTerraform_OverrideInitRunReconfigure(t *testing.T) {
+	tests := []struct {
+		name       string
+		configured TerraformInitReconfigure
+		value      bool
+		want       TerraformInitReconfigure
+	}{
+		{"false overrides explicit auto", TerraformInitReconfigureAuto, false, TerraformInitReconfigureNever},
+		{"false overrides explicit always", TerraformInitReconfigureAlways, false, TerraformInitReconfigureNever},
+		{"true overrides explicit never", TerraformInitReconfigureNever, true, TerraformInitReconfigureAuto},
+		{"true overrides explicit always", TerraformInitReconfigureAlways, true, TerraformInitReconfigureAuto},
+		{"false with nothing configured", "", false, TerraformInitReconfigureNever},
+		{"true with nothing configured", "", true, TerraformInitReconfigureAuto},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tf := Terraform{InitRunReconfigure: !tt.value, Init: TerraformInit{Reconfigure: tt.configured}}
+			tf.OverrideInitRunReconfigure(tt.value)
+
+			assert.Equal(t, tt.value, tf.InitRunReconfigure)
+			assert.Equal(t, tt.want, tf.Init.Reconfigure)
+			assert.Equal(t, tt.want, tf.EffectiveInitReconfigure())
+		})
+	}
+}
