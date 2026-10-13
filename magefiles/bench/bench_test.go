@@ -69,7 +69,7 @@ func TestBenchCompareEverySnapshotToCandidate(t *testing.T) {
 	require.Contains(t, body, "**warning**")
 	warning := "**warning**: 1 metrics against snapshot `" + githubtest.Base + "`"
 	require.Contains(t, body, warning)
-	require.Less(t, strings.Index(body, warning), strings.Index(body, "### Describe affected"), "older warnings must survive truncation of detailed tables")
+	require.Less(t, strings.Index(body, warning), strings.Index(body, "<details><summary>Describe affected</summary>"), "older warnings must survive truncation of detailed tables")
 }
 
 func TestBenchStatistics(t *testing.T) {
