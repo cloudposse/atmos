@@ -15,6 +15,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/startup"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -41,7 +42,7 @@ func TestColorProfilesRespectOptOuts(t *testing.T) {
 				command := &cobra.Command{Use: "test"}
 				command.Flags().Bool("no-color", true, "")
 				command.Flags().Bool("force-color", true, "")
-				configureEarlyColorProfile(command)
+				startup.ConfigureEarlyColorProfile(command)
 			}
 			assert.Equal(t, termenv.Ascii, lipgloss.ColorProfile())
 			log.Error("\x1b[31mplain\x1b[0m")

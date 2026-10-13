@@ -57,14 +57,15 @@ func TestEcUnchangedDetectsSourceDrift(t *testing.T) {
 			require.NoError(t, os.Remove(filepath.Join(root, "stacks", "dev.yaml")))
 			projectFile(t, root, "stacks/renamed.yaml", "vars: {}\n")
 		}, ErrChanged, "new source stacks/renamed.yaml"},
-		{"source replaced by a symlink", func(t *testing.T, root string) {
+		// Drift detection compares content and mode only; refusing to write through a link is the job of staging and applying.
+		{"source replaced by a symlink to identical content", func(t *testing.T, root string) {
 			link := filepath.Join(root, "stacks", "dev.yaml")
 			copyPath := projectFile(t, root, "copy/dev.yaml", "vars: {}\n")
 			require.NoError(t, os.Remove(link))
 			if err := os.Symlink(copyPath, link); err != nil {
 				t.Skipf("symlinks are unavailable: %v", err)
 			}
-		}, ErrVerification, "symlink source stacks/dev.yaml"},
+		}, nil, ""},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			root := newProject(t)

@@ -14,6 +14,7 @@ const (
 	statusVerificationFailed     = "verification-failed"
 	statusVerificationIncomplete = "verification-incomplete"
 	statusManual                 = "manual"
+	reasonSymlinkedSource        = "Not fixed automatically because a symlinked source requires manual review; doctor does not write through symlinks"
 	statusFixed                  = "fixed"
 	statusPassed                 = "passed"
 	statusFindings               = "findings"

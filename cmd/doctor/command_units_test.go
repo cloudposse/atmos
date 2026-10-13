@@ -244,6 +244,7 @@ func TestRunReportsOutputWriteFailureAsOperationalError(t *testing.T) {
 	ui.InitFormatter(ctx)
 	data.InitWriter(ctx)
 	t.Cleanup(ui.Reset)
+	keepInjectedIO(t)
 
 	err = executeDoctor(t, "--offline", "--format=json")
 

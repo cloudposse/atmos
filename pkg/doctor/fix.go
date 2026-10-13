@@ -117,6 +117,12 @@ func (e *Engine) stageCandidates(ctx context.Context, p *project, r *Report, edi
 			return nil, err
 		}
 		e.emit(Event{Phase: "Stage fixes", Label: relative(p.root, d.path), Total: len(groups)})
+		if isSymlink(d.path) {
+			// A symlinked document may be read, but a write would replace the link or edit a shared target.
+			rejectSymlinked(r, changes)
+			e.emit(Event{Phase: "Stage fixes", Label: relative(p.root, d.path), Done: true, Status: statusVerificationIncomplete, Total: len(groups)})
+			continue
+		}
 		content, err := transformDocument(d, changes)
 		if err != nil {
 			rejectCandidate(r, changes, err)
@@ -209,6 +215,10 @@ func (e *Engine) applyCandidates(ctx context.Context, p *project, o *Options, r 
 		e.emit(Event{Phase: "Apply", Label: relative(p.root, c.doc.path), Index: i, Total: len(candidates)})
 		if err := e.unchanged(ctx, p, o); err != nil {
 			return err
+		}
+		// A file can become a link after staging; the write must not follow it.
+		if isSymlink(c.doc.path) {
+			return fmt.Errorf("%w: %s became a symlink; doctor does not write through symlinks", ErrChanged, relative(p.root, c.doc.path))
 		}
 		if err := e.FS.WriteFileAtomic(c.doc.path, c.content, c.doc.mode); err != nil {
 			return err
@@ -325,53 +335,6 @@ func schemaErrors(v validator.Validator, source string, content []byte) (map[str
 	return out, nil
 }
 
-func (e *Engine) unchanged(ctx context.Context, p *project, o *Options) error {
-	current, err := e.discover(ctx, o.rediscoveryOptions(), &Report{})
-	if err != nil {
-		return err
-	}
-	if len(current.docs) != len(p.docs) {
-		return fmt.Errorf("%w: source closure changed", ErrChanged)
-	}
-	for _, d := range current.docs {
-		if p.byPath[d.path] == nil {
-			return fmt.Errorf("%w: new source %s", ErrChanged, relative(p.root, d.path))
-		}
-	}
-	if err := e.unchangedSchemas(ctx, p, current, o); err != nil {
-		return err
-	}
-	for _, d := range p.docs {
-		if err := e.unchangedDocument(p, d); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (e *Engine) unchangedDocument(p *project, d *document) error {
-	resolved, err := filepath.EvalSymlinks(d.path)
-	if err != nil {
-		return err
-	}
-	// Refuse symlink edits rather than replacing a link or following a changed target.
-	if resolved != d.path {
-		return fmt.Errorf("%w: symlink source %s requires manual review", ErrVerification, relative(p.root, d.path))
-	}
-	content, err := e.FS.ReadFile(d.path)
-	if err != nil {
-		return err
-	}
-	info, err := e.FS.Stat(d.path)
-	if err != nil {
-		return err
-	}
-	if !bytes.Equal(content, d.content) || info.Mode().Perm() != d.mode {
-		return fmt.Errorf("%w: %s", ErrChanged, relative(p.root, d.path))
-	}
-	return nil
-}
-
 func (e *Engine) backup(candidates []candidate, r *Report) error {
 	var base string
 	var err error
@@ -462,7 +425,8 @@ func retainDecisions(p *project, r, checked *Report) {
 		if f.Status == statusFixed || f.RuleID == "recovery" {
 			retained = append(retained, *f)
 		}
-		if f.Status == statusVerificationFailed {
+		// A rejected repair keeps its decision; the recheck cannot know why staging refused it.
+		if f.Status == statusVerificationFailed || f.Reason == reasonSymlinkedSource {
 			decisions[f.RuleID+"/"+f.File+"/"+f.Path] = *f
 		}
 	}
@@ -474,28 +438,6 @@ func retainDecisions(p *project, r, checked *Report) {
 	}
 	retained = append(retained, checked.Findings...)
 	r.Findings = retained
-}
-
-func (e *Engine) unchangedSchemas(ctx context.Context, p, current *project, o *Options) error {
-	schemaOptions := *o
-	schemaOptions.Only = []string{ruleSchema}
-	schemaOptions.Affected = false
-	if err := e.customSchemas(ctx, current, &schemaOptions, &Report{}, validator.NewYAMLSchemaValidator(&schema.AtmosConfiguration{})); err != nil {
-		return err
-	}
-	if len(current.extra) != len(p.extra) {
-		return fmt.Errorf("%w: custom schema source closure changed", ErrChanged)
-	}
-	for path, before := range p.extra {
-		after, err := e.FS.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if !bytes.Equal(before, after) {
-			return fmt.Errorf("%w: %s", ErrChanged, relative(p.root, path))
-		}
-	}
-	return nil
 }
 
 func (e *Engine) verifyCandidateProject(ctx context.Context, o *Options, r *Report, candidates []candidate) (bool, error) {

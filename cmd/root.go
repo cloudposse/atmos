@@ -109,6 +109,7 @@ import (
 	atmosprofile "github.com/cloudposse/atmos/pkg/profile"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/startup"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
@@ -247,43 +248,6 @@ func processEarlyChdirFlag() error {
 	chdirProcessed = true
 
 	return nil
-}
-
-// syncGlobalFlagsToViper synchronizes global flags from Cobra's FlagSet to Viper.
-// This is necessary because Viper's BindPFlag doesn't immediately sync values when flags are parsed.
-// Call this after Cobra parses flags but before accessing flag values via Viper.
-//
-// Background: When using viper.BindPFlag(), the binding happens at initialization time,
-// but the actual flag value isn't synced to Viper until you call viper.Get*().
-// For some code paths (especially in InitCliConfig), we need the flag values
-// available in Viper before config loading completes.
-//
-// This function explicitly syncs changed flags to Viper, making their values
-// immediately available via viper.Get*() calls.
-func syncGlobalFlagsToViper(cmd *cobra.Command) {
-	v := viper.GetViper()
-
-	// Sync profile flag if explicitly set.
-	if cmd.Flags().Changed("profile") {
-		if profiles, err := cmd.Flags().GetStringSlice("profile"); err == nil {
-			v.Set("profile", profiles)
-		}
-	}
-
-	// Sync identity flag if explicitly set.
-	if cmd.Flags().Changed("identity") {
-		if identity, err := cmd.Flags().GetString("identity"); err == nil {
-			v.Set("identity", identity)
-		}
-	}
-
-	// Sync edition flag if explicitly set, so LoadConfig sees the pin
-	// before it applies edition default overrides.
-	if cmd.Flags().Changed(editionFlagName) {
-		if editionPin, err := cmd.Flags().GetString(editionFlagName); err == nil {
-			v.Set(editionFlagName, editionPin)
-		}
-	}
 }
 
 // processChdirFlag processes the --chdir flag and ATMOS_CHDIR environment variable,
@@ -437,11 +401,9 @@ var RootCmd = &cobra.Command{
 		// This is critical because stack processing during config load may trigger
 		// validation that uses theme styles. We need to set the color profile BEFORE
 		// those styles are accessed to ensure NO_COLOR and other settings are respected.
-		configureEarlyColorProfile(cmd)
-
-		// Sync global flags from Cobra to Viper before InitCliConfig.
-		// This ensures flag values are immediately available in Viper for config loading.
-		syncGlobalFlagsToViper(cmd)
+		// Then sync global flags from Cobra to Viper before InitCliConfig, so flag values are
+		// immediately available in Viper for config loading.
+		startup.PrepareFlags(cmd)
 
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		if cmd.Flags().Changed("logs-color") {
@@ -590,18 +552,7 @@ var RootCmd = &cobra.Command{
 
 		// Initialize I/O context and global formatter after flag parsing.
 		// This ensures flags like --no-color, --redirect-stderr, --mask are respected.
-		// Initialize() sets the global iolib.Data and iolib.UI writers with masking enabled.
-		if ioErr := iolib.Initialize(); ioErr != nil {
-			errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize I/O context: %w", ioErr), "", "")
-		}
-		// The global masker may have been created before CLI flags were parsed (e.g. by early
-		// output), so its enabled state reflects the `--mask` default, not the parsed flag.
-		// Reconcile it now that flags are available so `--mask=false` reliably disables masking.
-		reconcileMaskingForCommand(cmd)
-		ioCtx := iolib.GetContext()
-		ui.InitFormatter(ioCtx)
-		data.InitWriter(ioCtx)
-		data.SetMarkdownRenderer(ui.Format) // Connect markdown rendering to data channel
+		startup.InitializeIOOrExit(cmd)
 
 		if castErr := castcmd.StartRecordingIfRequested(cmd, &tmpConfig, os.Args[1:]); castErr != nil {
 			errUtils.CheckErrorPrintAndExit(castErr, "Failed to start cast recording", "")
@@ -702,29 +653,6 @@ var RootCmd = &cobra.Command{
 		}
 	},
 	RunE: runRootCommand,
-}
-
-// reconcileMaskingForCommand applies the configured masking policy and then
-// honors a command-local --mask flag when a subcommand shadows the root flag.
-// Several component command groups register their own persistent common flags;
-// Viper remains bound to the root flag, so the changed local value must win.
-func reconcileMaskingForCommand(cmd *cobra.Command) {
-	iolib.ReconcileMasking()
-	if cmd == nil {
-		return
-	}
-	for current := cmd; current != nil; current = current.Parent() {
-		maskFlag := current.PersistentFlags().Lookup("mask")
-		if maskFlag == nil || !maskFlag.Changed {
-			continue
-		}
-		enabled, err := strconv.ParseBool(maskFlag.Value.String())
-		if err != nil {
-			return
-		}
-		iolib.GetContext().Masker().SetEnabled(enabled)
-		return
-	}
 }
 
 // debugModePromotion records the outcome of a CI-driven log-level promotion.
@@ -862,37 +790,6 @@ func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
 		errUtils.CheckErrorPrintAndExit(enrichedErr, "", "")
 	}
 	log.Debug("Set", "logs-level", log.GetLevelString(), "logs-file", atmosConfig.Logs.File)
-}
-
-// configureEarlyColorProfile sets the lipgloss color profile based on environment variables.
-// This is called early in PersistentPreRun, before config loading, to ensure that any
-// theme styles accessed during stack processing respect NO_COLOR and other settings.
-func configureEarlyColorProfile(cmd *cobra.Command) {
-	// Check NO_COLOR environment variable (standard terminal env var).
-	//nolint:forbidigo // Standard terminal env var, must use os.Getenv before config loads.
-	if os.Getenv("NO_COLOR") != "" {
-		// NO_COLOR is set - disable all colors
-		ui.SetColorProfile(termenv.Ascii)
-		theme.InvalidateStyleCache() // Regenerate theme styles without colors
-		return
-	}
-
-	// Check --no-color flag (already parsed by cobra at this point)
-	if noColor, _ := cmd.Flags().GetBool("no-color"); noColor {
-		ui.SetColorProfile(termenv.Ascii)
-		theme.InvalidateStyleCache()
-		return
-	}
-
-	// Check --force-color flag
-	if forceColor, _ := cmd.Flags().GetBool("force-color"); forceColor {
-		ui.SetColorProfile(termenv.TrueColor)
-		theme.InvalidateStyleCache()
-		return
-	}
-
-	// Note: Full color profile detection happens later in InitFormatter().
-	// This early configuration just handles the most critical cases (NO_COLOR).
 }
 
 // setupColorProfile configures the global lipgloss color profile based on Atmos configuration.

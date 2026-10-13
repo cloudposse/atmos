@@ -170,15 +170,18 @@ are informational: they do not change the exit code, even with `--fail-on=warnin
 Archived repositories produce warnings. Confirmed removal is distinguished from
 an inaccessible repository. A GitHub 404 can mean private content or missing
 permissions, so doctor does not call it confirmed deletion. Rate limits, access
-denials, and network failures are inconclusive. Source URLs are never rewritten.
+denials, and network failures are inconclusive. The source health check never rewrites
+source URLs; only the `component-monorepo` repair does, after verifying the files are identical.
 
 ## Moving components off the archived monorepo
 
-Cloud Posse archived the `cloudposse/terraform-aws-components` monorepo and moved every
-component into its own repository in the `cloudposse-terraform-components` organization.
-A source that still names the monorepo keeps working today, but it receives no further
-fixes. The `component-monorepo` check finds these sources and moves them without changing
-the version you pinned:
+Cloud Posse archived the `cloudposse/terraform-aws-components` monorepo and moved its
+components to individual repositories in the `cloudposse-terraform-components` organization.
+A few components were split into several repositories or removed before the move, so only
+components with a successor repository can be migrated automatically; the rest are
+reported for manual review. A source that still names the monorepo keeps working today, but
+it receives no further fixes. The `component-monorepo` check finds these sources and moves
+them without changing the version you pinned:
 
 ```yaml
 # vendor.yaml, before
@@ -271,8 +274,9 @@ before overwriting them.
 
 All backups finish before the first write. Each replacement is atomic, but a
 multi-file run is not a transaction. Failures or cancellation stop further writes;
-the report identifies files already changed and retains their backups. Symlinked
-sources currently require manual review.
+the report identifies files already changed and retains their backups. Doctor reads
+symlinked sources but never writes through them. Findings in a symlinked file are
+reported for manual review, and repairs in other files still proceed.
 
 ## Output and exit codes
 

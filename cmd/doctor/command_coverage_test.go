@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -49,7 +50,16 @@ func captureIO(t *testing.T) (stdout, stderr *bytes.Buffer) {
 	ui.InitFormatter(ctx)
 	data.InitWriter(ctx)
 	t.Cleanup(ui.Reset)
+	keepInjectedIO(t)
 	return &out, &errBuf
+}
+
+// keepInjectedIO stops the command's startup from replacing writers a test injected with the process streams.
+func keepInjectedIO(t *testing.T) {
+	t.Helper()
+	previous := configureStartup
+	configureStartup = func(*cobra.Command) error { return nil }
+	t.Cleanup(func() { configureStartup = previous })
 }
 
 // isolateAmbientConfig points home and system configuration discovery at empty directories

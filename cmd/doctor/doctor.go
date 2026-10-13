@@ -23,11 +23,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/signals"
+	"github.com/cloudposse/atmos/pkg/startup"
 	"github.com/cloudposse/atmos/pkg/ui/batch"
 	"github.com/cloudposse/atmos/pkg/validation"
 )
 
 func init() { internal.Register(&CommandProvider{}) }
+
+// configureStartup applies the root's configuration-free startup (global flags, color, masking, and the
+// UI and data writers). It is a variable so tests that inject their own writers can keep them in place.
+var configureStartup = startup.Configure
 
 // CommandProvider supplies the built-in doctor command.
 type CommandProvider struct{}
@@ -51,8 +56,9 @@ func NewCommand() *cobra.Command {
 			}
 			return nil
 		},
-		// Deliberately override the root's config-loading pre-run.
-		PersistentPreRunE: func(*cobra.Command, []string) error { return nil }, RunE: run,
+		// Deliberately override the root's config-loading pre-run, keeping only its configuration-free
+		// setup so parsed global flags (--mask, --no-color, --force-color, --redirect-stderr) still apply.
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error { return configureStartup(cmd) }, RunE: run,
 		SilenceUsage: true, SilenceErrors: true,
 	}
 	f := cmd.Flags()
