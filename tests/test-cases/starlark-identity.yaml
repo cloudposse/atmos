@@ -76,7 +76,7 @@ tests:
   - name: starlark identity generate planfile fails before writing files
     enabled: true
     snapshot: false
-    description: terraform generate planfile must not write a file named after the encoded source.
+    description: terraform generate planfile must not write the requested file when stack identity is invalid.
     workdir: fixtures/scenarios/starlark-identity/
     command: atmos
     args:
@@ -86,7 +86,11 @@ tests:
       - mock
       - -s
       - deploy/computed-stage
+      - --file
+      - identity-error.planfile.json
     expect:
+      file_not_exists:
+        - components/terraform/mock/identity-error.planfile.json
       exit_code: 1
       stderr:
         - 'stack identity cannot be computed'

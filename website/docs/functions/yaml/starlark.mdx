@@ -185,8 +185,8 @@ component names, inheritance rules, or stack identities. It is not supported in
 
 Fields that Atmos reads to compute the stack name cannot use `!starlark`. When
 `stacks.name_template` or `stacks.name_pattern` consumes a field such as `vars.stage`, a `!starlark` value there
-fails with `stack identity cannot be computed with !starlark`. You can still select the stack by its manifest
-path, for example `-s deploy/dev`.
+fails with `stack identity cannot be computed with !starlark`, even when selecting
+the stack by its manifest path. Set identity fields to literal values instead.
 
 The selector fields `metadata.tags` and `metadata.labels` reject `!starlark`.
 They determine component selection before full evaluation, while context reads

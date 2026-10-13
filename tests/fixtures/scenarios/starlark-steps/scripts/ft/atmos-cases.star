@@ -89,7 +89,7 @@ def dir_atmos():
 
 def exec_retry_counter():
     # Fails twice (counter file), succeeds on the third attempt; check=True so retry applies.
-    r = exec.run(["sh", "-c", 'f=%s; n=$(cat $f 2>/dev/null || echo 0); n=$((n+1)); echo $n > $f; echo attempt $n; [ $n -ge 3 ]' % ctx.arguments["extra"]], retry = {"max_attempts": 3, "initial_delay": "50ms"}, output = "capture")
+    r = exec.run(["sh", "-c", 'f="$1"; n=$(cat "$f" 2>/dev/null || echo 0); n=$((n+1)); echo "$n" > "$f"; echo attempt "$n"; [ "$n" -ge 3 ]', "sh", ctx.arguments["extra"]], retry = {"max_attempts": 3, "initial_delay": "50ms"}, output = "capture")
     show(r)
 
 def exec_timeout():

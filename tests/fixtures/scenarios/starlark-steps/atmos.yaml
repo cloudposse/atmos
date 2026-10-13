@@ -317,7 +317,7 @@ commands:
               if fs.exists(path):
                   n = int(fs.read_file(path).strip())
               n += 1
-              exec.run(["sh", "-c", "echo %d > %s" % (n, path)])
+              exec.run(["sh", "-c", 'echo "$1" > "$2"', "sh", str(n), path])
               print("attempt", n)
               if n < 3:
                   fail("attempt %d failed" % n)

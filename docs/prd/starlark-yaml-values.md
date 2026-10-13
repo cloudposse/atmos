@@ -143,7 +143,7 @@ the new scalar tag; resolved values follow the existing manifest schema.
 
 ## Acceptance and Validation
 
-1. The resource-tags example returns a native map with values from vars and metadata.
+1. The resource-tags example returns a native map with values from vars and settings.
 2. Early returns, nested helpers, nulls, empty collections, and large exact integers work.
 3. Overrides and inheritance evaluate independently per consuming component.
 4. Computed dependencies work in either key order; direct and indirect cycles fail.

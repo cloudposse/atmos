@@ -63,9 +63,10 @@ more depth. If a name is not listed here, check that page before concluding it d
   spelling (`"-detailed-exitcode"`). Values are strings, ints, bools, or lists (a list
   repeats the flag). `True` emits a bare flag; `False` emits `--name=false`. `detailed-exitcode`
   on `terraform plan` uses a single dash and accepts exit code 2 without raising.
-- All wrappers return process results (`.stdout`, `.stderr`, `.exit_code`) and preserve native
-  CLI behavior; they do not return parsed data. Default `output` is `"stream"`, default
-  `check` is `True`, and the default working directory is where Atmos was invoked. Parent
+- All wrappers return process results (`.stdout`, `.stderr`, `.exit_code`, `.data`).
+  `.data` parses captured stdout as JSON. The query wrappers listed above default to JSON
+  and `output="capture"`; other wrappers default to `output="stream"`. Default `check` is
+  `True`, and the default working directory is where Atmos was invoked. Parent
   CLI-only flags are not replayed automatically.
 
 ## Stack configuration

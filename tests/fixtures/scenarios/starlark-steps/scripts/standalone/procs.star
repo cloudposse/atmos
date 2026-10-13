@@ -2,6 +2,9 @@
 # Field test: exec.run behaviors. First arg selects the case; second is a counter file path.
 case = ctx.args[0]
 counter = ctx.args[1] if len(ctx.args) > 1 else "/tmp/ft-counter"
+# Default runs start fresh; an explicit counter remains under the caller's control.
+if len(ctx.args) <= 1 and case.startswith("retry"):
+    exec.run(["rm", "-f", counter])
 
 def retry_script():
     return ["sh", "-c", 'f="$1"; n=$(cat "$f" 2>/dev/null || echo 0); n=$((n+1)); echo $n > "$f"; echo "attempt $n boom-transient" >&2; if [ "$n" -ge 3 ]; then echo "{\\"ok\\": true, \\"n\\": $n}"; exit 0; fi; exit 1', "sh", counter]
