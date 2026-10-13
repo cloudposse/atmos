@@ -385,3 +385,22 @@ settings:
 		})
 	}
 }
+
+func TestCommandStarlarkTagReportsSourceAndKeyBeforeExtraction(t *testing.T) {
+	for _, content := range []string{
+		"commands: !starlark return []\n",
+		"commands:\n  - name: broken\n    steps:\n      - command: !starlark return 'x'\n",
+	} {
+		t.Run(content, func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, "profile.yaml")
+			writeTestFile(t, path, content)
+			v := viper.New()
+			v.SetConfigType("yaml")
+			err := mergeConfigFile(path, v)
+			require.ErrorIs(t, err, errUtils.ErrStarlarkUnsupportedInConfig)
+			assert.Contains(t, err.Error(), path)
+			assert.Contains(t, err.Error(), "commands")
+		})
+	}
+}
