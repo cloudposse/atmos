@@ -82,8 +82,9 @@ cli.command(
 `cli.command(run, name=, description=, args=, flags=, validate=)`:
 
 - `run` is required and called as `run(args, flags)` with immutable dicts. `cli.command`
-  returns what `run` returns (and `None` for `--help`), so `output = cli.command(...)` emits
-  that value; a `None` return would print `null`. For ordinary output, call `print` inside `run`.
+  returns what `run` returns (and `None` for `--help`). To emit a returned value, use
+  `result = cli.command(...)`, then `if result != None: output = result`.
+  For ordinary output, call `print` inside `run`.
 - `name` (default: the script file name) must start with a letter and contain only letters,
   digits, `_`, and `-`. `description` appears in help.
 - `validate(args, flags)` is optional. Call `fail("message")` or return `False` to reject
