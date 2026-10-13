@@ -323,6 +323,10 @@ func (q *qualityClient) coverageStatuses(sha string, states map[string]string) e
 }
 
 func (q *qualityClient) review(pr *githubapi.PR) (qualityGate, error) {
+	// Automated PRs (Renovate, Dependabot, the github-actions token, release apps) do not require CodeRabbit approval.
+	if pr.User.Type == "Bot" {
+		return qualityGate{Passed: true, Detail: fmt.Sprintf("Not required: PR opened by automation (%s)", pr.User.Login)}, nil
+	}
 	gate := qualityGate{Detail: "Pending: CodeRabbit has not approved this commit"}
 	for page := 1; page <= githubapi.PageLimit; page++ {
 		var reviews []struct {
