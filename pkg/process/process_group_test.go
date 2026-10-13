@@ -224,7 +224,7 @@ func TestRun_ContextCancelKillsGrandchildAfterLeaderExits(t *testing.T) {
 
 	assert.True(t, res.Canceled)
 	requireGone(t, parent, "child process")
-	requireGone(t, child, "SIGTERM-ignoring grandchild process")
+	require.True(t, processGone(child), "SIGTERM-ignoring grandchild must stop before Run returns")
 	assert.Empty(t, liveChildren(), "cleanup must finish before Run returns")
 }
 

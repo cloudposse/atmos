@@ -68,12 +68,23 @@ func childAlive(pid int, grouped bool) bool {
 // probing and signaling a group cannot provide an atomic identity guarantee. The leader may exit before children
 // that ignore SIGTERM, so its Wait result cannot decide whether cleanup is done.
 func finishGroupCancellation(pid int) {
+	if waitForProcessGroup(pid) {
+		return
+	}
+	_ = killChild(pid, true)
+	// SIGKILL delivery is asynchronous. Allow survivors to exit before releasing
+	// the runner result, but bound the wait for zombies awaiting an external reaper.
+	waitForProcessGroup(pid)
+}
+
+// waitForProcessGroup reports whether the group disappears within the grace period.
+func waitForProcessGroup(pid int) bool {
 	deadline := time.Now().Add(childShutdownGrace)
 	for childAlive(pid, true) {
 		if !time.Now().Before(deadline) {
-			_ = killChild(pid, true)
-			return
+			return false
 		}
 		time.Sleep(childPollInterval)
 	}
+	return true
 }
