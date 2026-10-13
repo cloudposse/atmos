@@ -150,14 +150,14 @@ func (ctx *ResolutionContext) buildCircularDependencyError(newNode DependencyNod
 
 	// Show the full call stack
 	for i, node := range ctx.CallStack {
-		builder.WriteString(fmt.Sprintf("  %d. Component '%s' in stack '%s'\n",
-			i+1, node.Component, node.Stack))
+		fmt.Fprintf(&builder, "  %d. Component %q in stack %q\n",
+			i+1, node.Component, node.Stack)
 		builder.WriteString(fmt.Sprintf("     → %s\n", node.FunctionCall))
 	}
 
 	// Show where the cycle completes
-	builder.WriteString(fmt.Sprintf("  %d. Component '%s' in stack '%s' (cycle detected)\n",
-		len(ctx.CallStack)+1, newNode.Component, newNode.Stack))
+	fmt.Fprintf(&builder, "  %d. Component %q in stack %q (cycle detected)\n",
+		len(ctx.CallStack)+1, newNode.Component, newNode.Stack)
 	builder.WriteString(fmt.Sprintf("     → %s\n\n", newNode.FunctionCall))
 
 	builder.WriteString("To fix this issue:\n")

@@ -20,6 +20,19 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+func TestMissingBaseComponentQuotedIdentifiers(t *testing.T) {
+	config := &schema.AtmosConfiguration{TrackProvenance: true}
+	baseConfig := &schema.BaseComponentConfig{}
+	var chain []string
+	err := ProcessBaseComponentConfig(config, nil, baseConfig, map[string]any{},
+		"app'\"\\\n", "prod\r\nforged", "missing'base", t.TempDir(), true, &chain)
+	require.ErrorIs(t, err, errUtils.ErrInvalidBaseComponentConfig)
+	assert.Contains(t, err.Error(), `component "app'\"\\\n"`)
+	assert.Contains(t, err.Error(), `base component "missing'base"`)
+	assert.Contains(t, err.Error(), `stack "prod\r\nforged"`)
+	assert.NotContains(t, err.Error(), "\n")
+}
+
 func TestProcessBaseComponentConfig(t *testing.T) {
 	// Clear cache before tests to ensure fresh processing.
 	ClearBaseComponentConfigCache()
