@@ -147,6 +147,8 @@ jobs:
     services:
       floci:
         image: floci/floci@sha256:4e451c39c7bb88e3cd4f87e8fc0c25d5b47695a51185d521e2241fa00486e8eb # 1.5.23
+        # Harden Runner can restart Docker after Actions starts service containers.
+        options: --restart=always
         ports:
           - 4566:4566
 
@@ -203,6 +205,15 @@ jobs:
         working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
         run: atmos validate stacks
 
+      # Match the Floci test harness: any HTTP response proves the endpoint is up;
+      # the root path need not return 2xx. Bound retries for a stopped/unready service.
+      - name: Wait for Floci
+        run: >-
+          curl --silent --show-error --output /dev/null
+          --connect-timeout 2 --max-time 5
+          --retry 30 --retry-delay 2 --retry-connrefused --retry-max-time 60
+          http://127.0.0.1:4566/
+
       - name: Mirror Terraform providers
         working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
         env:
@@ -237,6 +248,8 @@ jobs:
     services:
       floci:
         image: floci/floci@sha256:4e451c39c7bb88e3cd4f87e8fc0c25d5b47695a51185d521e2241fa00486e8eb # 1.5.23
+        # Harden Runner can restart Docker after Actions starts service containers.
+        options: --restart=always
         ports:
           - 4566:4566
 
@@ -288,6 +301,15 @@ jobs:
       - name: Validate native CI fixture
         working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
         run: atmos validate stacks
+
+      # Match the Floci test harness: any HTTP response proves the endpoint is up;
+      # the root path need not return 2xx. Bound retries for a stopped/unready service.
+      - name: Wait for Floci
+        run: >-
+          curl --silent --show-error --output /dev/null
+          --connect-timeout 2 --max-time 5
+          --retry 30 --retry-delay 2 --retry-connrefused --retry-max-time 60
+          http://127.0.0.1:4566/
 
       - name: Mirror Terraform providers
         working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
