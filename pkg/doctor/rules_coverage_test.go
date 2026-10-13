@@ -134,14 +134,30 @@ func TestEcMigrationConflictsStayManual(t *testing.T) {
 		})
 	}
 
-	t.Run("only provides and init conflict", func(t *testing.T) {
-		mapping := ecNode(t, "provides: x\ninit: {}\n").Content[0]
-		require.True(t, hasMigrationConflict(mapping, &edit{kind: ruleCommandProvides}))
-		require.True(t, hasMigrationConflict(mapping, &edit{kind: ruleTerraformReconfigure}))
-		require.False(t, hasMigrationConflict(mapping, &edit{kind: ruleHookEvent}))
-		empty := ecNode(t, "name: x\n").Content[0]
-		require.False(t, hasMigrationConflict(empty, &edit{kind: ruleCommandProvides}))
-		require.False(t, hasMigrationConflict(empty, &edit{kind: ruleTerraformReconfigure}))
+	t.Run("only the exact replacement key conflicts", func(t *testing.T) {
+		for _, tt := range []struct {
+			name     string
+			content  string
+			kind     string
+			conflict bool
+		}{
+			{"provides declared", "provides: x\n", ruleCommandProvides, true},
+			{"init.reconfigure declared", "init:\n  reconfigure: auto\n", ruleTerraformReconfigure, true},
+			{"init without reconfigure", "init:\n  pass_vars: true\n", ruleTerraformReconfigure, false},
+			{"empty init", "init: {}\n", ruleTerraformReconfigure, false},
+			{"hook events never conflict", "provides: x\ninit: {}\n", ruleHookEvent, false},
+			{"no replacement for command", "name: x\n", ruleCommandProvides, false},
+			{"no replacement for terraform", "name: x\n", ruleTerraformReconfigure, false},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				mapping := ecNode(t, tt.content).Content[0]
+				reason := migrationConflict(mapping, &edit{kind: tt.kind, old: "type"})
+				require.Equal(t, tt.conflict, reason != "")
+				if tt.conflict {
+					require.Contains(t, reason, "already declared")
+				}
+			})
+		}
 	})
 }
 
@@ -275,25 +291,30 @@ func TestEcModernizationFindings(t *testing.T) {
 	projectFile(t, root, ".github/workflows/ci.yaml", legacyActionWorkflow+"      - uses: actions/checkout@v4\n")
 	projectFile(t, root, "stacks/dev.yaml", "components:\n  terraform:\n    legacy:\n      source: github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=0.1\n    current:\n      source: github.com/cloudposse-terraform-components/aws-vpc.git?ref=1.0\n    vars:\n      settings:\n        source: github.com/cloudposse/terraform-aws-components.git\n")
 	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleModernization}})
-	found := ecFindings(&r, ruleModernization)
-	byMessage := map[string][]Finding{}
-	for _, f := range found {
-		byMessage[f.Message] = append(byMessage[f.Message], f)
-		require.Equal(t, validation.SeverityWarning, f.Severity)
-		require.Equal(t, statusManual, f.Status)
-	}
-	actions := byMessage["Legacy Atmos GitHub Action"]
-	require.Len(t, actions, 1)
+
+	actions := ecFindings(&r, ruleModernization)
+	require.Len(t, actions, 1, "the modernization check reports legacy actions only; component sources belong to component-monorepo")
+	require.Equal(t, "Legacy Atmos GitHub Action", actions[0].Message)
+	require.Equal(t, validation.SeverityWarning, actions[0].Severity)
+	require.Equal(t, statusManual, actions[0].Status)
 	require.Equal(t, ".github/workflows/ci.yaml", actions[0].File)
 	require.Equal(t, 6, actions[0].Line)
 	require.Equal(t, "https://atmos.tools/ci", actions[0].Documentation)
 
-	sources := byMessage["Legacy component monorepo source"]
+	sources := ecFindings(&r, ruleComponentMonorepo)
 	require.Len(t, sources, 2, "every scalar source naming the monorepo is reported, including in arbitrary variables")
+	for _, f := range sources {
+		require.Equal(t, validation.SeverityWarning, f.Severity)
+		require.Equal(t, ruleModernization, f.Category, "the category selects the rule together with the legacy action check")
+		require.Equal(t, monorepoMessage, f.Message)
+	}
 	require.Equal(t, "stacks/dev.yaml", sources[0].File)
 	require.Equal(t, 4, sources[0].Line)
+	require.Equal(t, statusVerificationIncomplete, sources[0].Status, "a component source awaits verification, which --offline skips")
+	require.Equal(t, "components.terraform.legacy.source", sources[0].Path)
 	require.Equal(t, 9, sources[1].Line)
-	require.Len(t, found, 3)
+	require.Equal(t, statusManual, sources[1].Status, "a source key outside a component declaration is reviewed by hand")
+	require.Equal(t, "components.terraform.vars.settings.source", sources[1].Path)
 }
 
 func TestEcDeprecatedNamePatternRequiresEquivalenceProof(t *testing.T) {
@@ -324,6 +345,9 @@ func TestEcRepositoryURINormalization(t *testing.T) {
 		{"local path is returned unchanged", "components/terraform/vpc", "components/terraform/vpc"},
 		{"scp-style without a path is returned unchanged", "git@github.com", "git@github.com"},
 		{"templated value", "github.com/o/{{ .vars.repo }}", ""},
+		{"templated ref only", "github.com/o/r.git//modules/vpc?ref={{.Version}}", "https://github.com/o/r"},
+		{"templated subdirectory only", "github.com/o/r.git//modules/{{ .Component }}?ref=v1", "https://github.com/o/r"},
+		{"templated host", "{{ .host }}/o/r.git?ref=v1", ""},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			require.Equal(t, tt.want, repositoryURI(tt.value, []string{"{{"}))
@@ -419,6 +443,21 @@ func TestEcDynamicRepositorySourcesAreNotProbed(t *testing.T) {
 		require.Equal(t, statusVerificationIncomplete, r.Findings[i].Status)
 	}
 	require.True(t, strings.HasSuffix(r.Findings[0].Path, "source"), r.Findings[0].Path)
+}
+
+func TestEcTemplatedRefSourcesAreStillProbed(t *testing.T) {
+	root := newProject(t)
+	projectFile(t, root, "atmos.yaml", "{}\n")
+	projectFile(t, root, "components/terraform/vpc/component.yaml", "kind: ComponentVendorConfig\nspec:\n  source:\n    uri: github.com/example/repo.git//modules/vpc?ref={{.Version}}\n    version: 1.0.0\n")
+	stub := &repositoryStub{health: RepositoryHealth{"archived", "Upstream repository is archived"}}
+	e := testEngine(t)
+	e.Repositories = stub
+	r, err := e.Run(context.Background(), Options{Root: root, Only: []string{"source-repository"}})
+	require.NoError(t, err)
+	require.Equal(t, []string{"https://github.com/example/repo"}, stub.calls)
+	require.Len(t, r.Findings, 1)
+	require.Equal(t, "Upstream repository is archived", r.Findings[0].Message)
+	require.Equal(t, statusManual, r.Findings[0].Status)
 }
 
 type ecCancelingChecker struct {

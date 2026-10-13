@@ -26,7 +26,7 @@ func (GitHubRepositoryChecker) Check(ctx context.Context, uri string) Repository
 
 func repositoryURI(value string, markers []string) string {
 	value = strings.TrimPrefix(value, "git::")
-	if containsTemplate(value, markers) {
+	if containsTemplate(repositoryPart(value), markers) {
 		return ""
 	}
 	if strings.HasPrefix(value, "git@") {
@@ -35,7 +35,7 @@ func repositoryURI(value string, markers []string) string {
 			value = httpsScheme + parts[0] + "/" + parts[1]
 		}
 	}
-	if !strings.Contains(value, "://") && strings.HasPrefix(value, "github.com/") {
+	if !strings.Contains(value, schemeSeparator) && strings.HasPrefix(value, "github.com/") {
 		value = httpsScheme + value
 	}
 	if strings.HasPrefix(value, "ssh://git@") {
@@ -55,6 +55,24 @@ func repositoryURI(value string, markers []string) string {
 		host = u.Host
 	}
 	return httpsScheme + host + "/" + owner + "/" + repo
+}
+
+// repositoryPart returns the portion of a source that identifies the repository:
+// everything before the ref query and the go-getter "//" module subdirectory.
+// A template only in the ref (`?ref={{.Version}}`) or the subdirectory does not
+// change which repository is checked, so such sources stay verifiable.
+func repositoryPart(value string) string {
+	if i := strings.Index(value, "?"); i >= 0 {
+		value = value[:i]
+	}
+	start := 0
+	if i := strings.Index(value, schemeSeparator); i >= 0 {
+		start = i + len(schemeSeparator)
+	}
+	if i := strings.Index(value[start:], "//"); i >= 0 {
+		value = value[:start+i]
+	}
+	return value
 }
 
 type sourceReference struct {
@@ -106,16 +124,24 @@ func (e *Engine) checkRepositories(ctx context.Context, p *project, o *Options, 
 		r.Findings = append(r.Findings, finding)
 		e.emitFindings(r.Findings[len(r.Findings)-1:])
 	}
-	status, reason := statusPassed, ""
+	r.Checks = append(r.Checks, repositoryCheck(r, count, incompleteCount))
+	return ctx.Err()
+}
+
+// repositoryCheck summarizes the repository check. A check with nothing to inspect is skipped, not passed.
+func repositoryCheck(r *Report, count, incompleteCount int) Check {
+	if count == 0 && !checkHasFindings(r, ruleSourceRepository) {
+		return Check{ID: ruleSourceRepository, Status: statusSkipped, Reason: "No source repository declarations"}
+	}
+	check := Check{ID: ruleSourceRepository, Status: statusPassed, Files: count}
 	if checkHasFindings(r, ruleSourceRepository) {
-		status = statusFindings
+		check.Status = statusFindings
 	}
 	if incompleteCount > 0 {
-		status = "incomplete"
-		reason = "Some upstream repositories could not be verified"
+		check.Status = "incomplete"
+		check.Reason = "Some upstream repositories could not be verified"
 	}
-	r.Checks = append(r.Checks, Check{ID: ruleSourceRepository, Status: status, Files: count, Reason: reason})
-	return ctx.Err()
+	return check
 }
 
 // sourceCache shares repository results and template markers across one check phase.
@@ -127,18 +153,18 @@ type sourceCache struct {
 func (e *Engine) sourceHealth(ctx context.Context, o *Options, ref *sourceReference, sc sourceCache) (RepositoryHealth, bool) {
 	cache := sc.health
 	n := ref.node
-	if n.Tag != "!!str" || containsTemplate(n.Value, sc.markers) || strings.HasPrefix(n.Value, "!") {
+	if n.Tag != "!!str" || containsTemplate(repositoryPart(n.Value), sc.markers) || strings.HasPrefix(n.Value, "!") {
 		return RepositoryHealth{repositoryInconclusive, "Dynamic repository source was not evaluated"}, true
 	}
 	uri := repositoryURI(n.Value, sc.markers)
-	if !strings.Contains(uri, "://") {
+	if !strings.Contains(uri, schemeSeparator) {
 		return RepositoryHealth{}, false
 	}
 	if health, ok := cache[uri]; ok {
 		return health, true
 	}
 	e.emit(Event{Phase: "Check", Label: "Repository metadata"})
-	health := RepositoryHealth{repositoryInconclusive, "Repository checks were disabled with --offline"}
+	health := RepositoryHealth{repositoryInconclusive, repositoryOfflineMessage}
 	if !o.Offline {
 		health = e.Repositories.Check(ctx, uri)
 	}
@@ -156,7 +182,12 @@ func repositoryFinding(ref *sourceReference, health RepositoryHealth) Finding {
 	if health.Status == repositoryInconclusive || health.Status == "unsupported" {
 		status = statusVerificationIncomplete
 	}
-	return Finding{RuleID: ruleSourceRepository, Category: "sources", Severity: validation.SeverityWarning, File: ref.document.path, Line: ref.node.Line, Column: ref.node.Column, Path: displayNodePath(ref.path), Message: health.Message, Status: status, Reason: health.Status, Remediation: "Review the upstream source and access; doctor does not rewrite source URLs"}
+	severity := validation.SeverityWarning
+	if health.Message == repositoryOfflineMessage {
+		// Skipping the network on request is not a problem with the project, so it never trips --fail-on=warning.
+		severity = validation.SeverityNotice
+	}
+	return Finding{RuleID: ruleSourceRepository, Category: "sources", Severity: severity, File: ref.document.path, Line: ref.node.Line, Column: ref.node.Column, Path: displayNodePath(ref.path), Message: health.Message, Status: status, Reason: health.Status, Remediation: "Review the upstream source and access; doctor does not rewrite source URLs"}
 }
 
 func checkHasFindings(r *Report, id string) bool {
@@ -171,13 +202,18 @@ func checkHasFindings(r *Report, id string) bool {
 func sourcePath(kind string, path []string) bool {
 	key := path[len(path)-1]
 	if kind == "vendor" {
-		return key == "source" || (key == "uri" && contains(path, "sources"))
+		return key == "source" || (key == "uri" && (contains(path, "sources") || componentVendorSource(path)))
 	}
 	// Only component source declarations; arbitrary variables named source are data.
 	if key == "uri" {
 		path = path[:len(path)-1]
 	}
 	return len(path) == 4 && path[0] == "components" && path[3] == "source"
+}
+
+// componentVendorSource matches spec.source.uri of a component.yaml (kind ComponentVendorConfig).
+func componentVendorSource(path []string) bool {
+	return pathEndsWith(path, "spec", "source", "uri")
 }
 
 func repositoryUncertain(status string) bool {

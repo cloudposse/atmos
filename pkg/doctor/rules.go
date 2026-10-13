@@ -1,9 +1,8 @@
 package doctor
 
 import (
-	"encoding/json"
 	"fmt"
-	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -13,15 +12,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/validation"
 	"github.com/cloudposse/atmos/pkg/validator"
-	atmosyaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
 type edit struct {
-	doc     *document
-	path    []string
-	kind    string
-	old     string
-	value   string
+	doc   *document
+	path  []string
+	kind  string
+	old   string
+	value string
+	// from is the legacy value the edit replaces, for messages.
+	from    string
 	finding int
 }
 
@@ -39,7 +39,7 @@ func scanDocument(d *document, p *project, o *Options, r *Report, v validator.Va
 		}
 		candidate := findCandidate(d, n, path)
 		if candidate != nil && enabled(o, candidate.kind, categoryDeprecations) {
-			if assessCandidate(p, o, r, candidate) {
+			if assessCandidate(p, r, candidate) {
 				edits = append(edits, *candidate)
 			}
 		}
@@ -50,10 +50,10 @@ func scanDocument(d *document, p *project, o *Options, r *Report, v validator.Va
 
 func renameCandidate(d *document, n *yaml.Node, path []string, old string) *edit {
 	v := mappingValue(n, old)
-	if v == nil || v.Tag != "!!str" || (v.Value != "component" && v.Value != "stack") {
+	if v == nil || v.Tag != "!!str" || (v.Value != semanticComponent && v.Value != semanticStack) {
 		return nil
 	}
-	return &edit{doc: d, path: path, kind: ruleCommandProvides, old: old, value: v.Value}
+	return &edit{doc: d, path: path, kind: ruleCommandProvides, old: old, value: v.Value, from: v.Value}
 }
 
 // Only declared command trees qualify; user data may also contain a key named commands.
@@ -99,16 +99,23 @@ func oneOfComponentType(value string) bool {
 	return false
 }
 
-func hasMigrationConflict(n *yaml.Node, e *edit) bool {
-	if e.kind == ruleCommandProvides {
-		return mappingValue(n, "provides") != nil
+// migrationConflict explains why the replacement already exists, or returns "" when it does not.
+// Only the exact replacement key conflicts: a sibling such as init.pass_vars does not.
+func migrationConflict(n *yaml.Node, e *edit) string {
+	switch e.kind {
+	case ruleCommandProvides:
+		if mappingValue(n, "provides") != nil {
+			return "provides is already declared, so " + e.old + " is redundant; keep the value you intend and delete the other by hand"
+		}
+	case ruleTerraformReconfigure:
+		if mappingValue(mappingValue(n, "init"), "reconfigure") != nil {
+			return "init.reconfigure is already declared and takes precedence over init_run_reconfigure; confirm it is the value you want, then delete init_run_reconfigure by hand"
+		}
 	}
-	if e.kind == ruleTerraformReconfigure {
-		return mappingValue(n, "init") != nil
-	}
-	return false
+	return ""
 }
 
+//nolint:unparam // The generic helper is exercised with other keys in tests.
 func contains(path []string, key string) bool {
 	for _, part := range path {
 		if part == key {
@@ -143,142 +150,6 @@ func displayNodePath(path []string) string {
 	return b.String()
 }
 
-func expressionPath(path []string) string {
-	var b strings.Builder
-	for _, part := range path {
-		if _, err := strconv.Atoi(part); err == nil {
-			fmt.Fprintf(&b, "[%s]", part)
-		} else {
-			fmt.Fprintf(&b, "[%s]", strconv.Quote(part))
-		}
-	}
-	return dot + b.String()
-}
-
-func applyEdit(content []byte, e *edit) ([]byte, error) {
-	p := expressionPath(e.path)
-	switch e.kind {
-	case ruleCommandProvides:
-		return atmosyaml.Stage(e.doc.path, content, "("+p+"["+strconv.Quote(e.old)+"] | key) = \"provides\"")
-	case ruleHookEvent:
-		return atmosyaml.Stage(e.doc.path, content, p+" = "+strconv.Quote(e.value))
-	case ruleTerraformReconfigure:
-		return atmosyaml.Stage(e.doc.path, content, p+".init.reconfigure = "+strconv.Quote(e.value)+" | del("+p+".init_run_reconfigure)")
-	default:
-		return nil, ErrVerification
-	}
-}
-
-// verifyDocument uses the real field consumers and compares every other authored value.
-// It intentionally refuses transformations that lose comments.
-func verifyDocument(before, after []byte, edits []edit) error {
-	a, err := parse(before)
-	if err != nil {
-		return err
-	}
-	b, err := parse(after)
-	if err != nil {
-		return err
-	}
-	if !reflect.DeepEqual(comments(a), comments(b)) {
-		return fmt.Errorf("%w: comments changed", ErrVerification)
-	}
-	am, err := semanticDocument(a, edits)
-	if err != nil {
-		return err
-	}
-	bm, err := semanticDocument(b, edits)
-	if err != nil {
-		return err
-	}
-	if !reflect.DeepEqual(am, bm) {
-		return fmt.Errorf("%w: effective or unrelated YAML values changed", ErrVerification)
-	}
-	return nil
-}
-
-func comments(n *yaml.Node) []string {
-	var values []string
-	var visit func(*yaml.Node)
-	visit = func(n *yaml.Node) {
-		for _, s := range []string{n.HeadComment, n.LineComment, n.FootComment} {
-			if s != "" {
-				values = append(values, s)
-			}
-		}
-		for _, child := range n.Content {
-			visit(child)
-		}
-	}
-	visit(n)
-	return values
-}
-
-func semanticDocument(n *yaml.Node, edits []edit) (any, error) {
-	for _, e := range edits {
-		node := nodeAt(rootNode(n), e.path)
-		if node == nil {
-			return nil, ErrVerification
-		}
-		if err := normalizeNode(node, &e); err != nil {
-			return nil, err
-		}
-	}
-	return canonicalNode(rootNode(n)), nil
-}
-
-func canonicalNode(n *yaml.Node) any {
-	if n == nil {
-		return nil
-	}
-	switch n.Kind {
-	case yaml.MappingNode:
-		m := map[string]any{}
-		for i := 0; i+1 < len(n.Content); i += 2 {
-			key, _ := json.Marshal(canonicalNode(n.Content[i]))
-			m[string(key)] = canonicalNode(n.Content[i+1])
-		}
-		return m
-	case yaml.SequenceNode:
-		result := []any{}
-		for _, child := range n.Content {
-			result = append(result, canonicalNode(child))
-		}
-		return result
-	case yaml.AliasNode:
-		return []string{n.Tag, n.Value, n.Anchor}
-	default:
-		return []string{n.Tag, n.Value, n.Anchor}
-	}
-}
-
-func nodeAt(n *yaml.Node, path []string) *yaml.Node {
-	for _, part := range path {
-		if n == nil {
-			return nil
-		}
-		if n.Kind == yaml.SequenceNode {
-			index, err := strconv.Atoi(part)
-			if err != nil || index < 0 || index >= len(n.Content) {
-				return nil
-			}
-			n = n.Content[index]
-		} else {
-			n = mappingValue(n, part)
-		}
-	}
-	return n
-}
-
-func removeKey(n *yaml.Node, key string) {
-	for i := 0; i+1 < len(n.Content); i += 2 {
-		if n.Content[i].Value == key {
-			n.Content = append(n.Content[:i], n.Content[i+2:]...)
-			return
-		}
-	}
-}
-
 func scanSchema(d *document, o *Options, r *Report, v validator.Validator) error {
 	if d.schema == "" {
 		return nil
@@ -302,11 +173,12 @@ func scanSchema(d *document, o *Options, r *Report, v validator.Validator) error
 func validateDocumentSchema(d *document, r *Report, v validator.Validator) {
 	results, err := v.ValidateYAMLContent(d.schema, d.content)
 	if err != nil {
-		r.Findings = append(r.Findings, Finding{RuleID: ruleSchema, Category: categoryValidation, Severity: validation.SeverityError, File: d.path, Message: err.Error(), Status: statusManual})
+		r.Findings = append(r.Findings, Finding{RuleID: ruleSchema, Category: categoryValidation, Severity: validation.SeverityError, File: d.path, Path: schemaRootField, Line: 1, Column: 1, Message: err.Error(), Status: statusManual})
 		return
 	}
-	for _, failure := range results {
-		r.Findings = append(r.Findings, Finding{RuleID: ruleSchema, Category: categoryValidation, Severity: validation.SeverityError, File: d.path, Path: failure.Field(), Message: failure.Description(), Status: statusManual})
+	for _, failure := range meaningfulFailures(results) {
+		line, column := locateField(d.node, failure.Field())
+		r.Findings = append(r.Findings, Finding{RuleID: ruleSchema, Category: categoryValidation, Severity: validation.SeverityError, File: d.path, Path: failure.Field(), Line: line, Column: column, Message: failure.Description(), Status: statusManual})
 	}
 }
 
@@ -323,9 +195,29 @@ func deprecationFinding(d *document, field validator.DeprecatedField) Finding {
 		if displayNodePath(path) == field.Path {
 			f.Line = n.Line
 			f.Column = n.Column
+			if inertSemanticType(field.Path, n) {
+				f.Remediation = inertRemediation(n.Value)
+			}
 		}
 	})
 	return f
+}
+
+// inertRemediation explains what to do with a deprecated semantic type the runtime ignores.
+func inertRemediation(value string) string {
+	for _, known := range []string{semanticComponent, semanticStack} {
+		if strings.EqualFold(value, known) {
+			return fmt.Sprintf("Replace it with provides: %s by hand; the value is case-sensitive, so %q has no effect", known, value)
+		}
+	}
+	return fmt.Sprintf("Remove it: only %q and %q have an effect, and %q is neither", semanticComponent, semanticStack, value)
+}
+
+// inertSemanticType reports a deprecated command argument type or flag semantic_type whose value is not
+// one the runtime acts on, so migrating it to provides would add a setting that does nothing.
+func inertSemanticType(path string, n *yaml.Node) bool {
+	legacy := strings.HasSuffix(path, "].semantic_type") || strings.HasSuffix(path, "].type") && strings.Contains(path, ".arguments[")
+	return legacy && n.Kind == yaml.ScalarNode && n.Value != semanticComponent && n.Value != semanticStack
 }
 
 func findCandidate(d *document, n *yaml.Node, path []string) *edit {
@@ -343,20 +235,21 @@ func findCandidate(d *document, n *yaml.Node, path []string) *edit {
 		candidate = reconfigureCandidate(d, n, path)
 	}
 	if isLegacyHook(d, n, path) {
-		candidate = &edit{doc: d, path: path, kind: ruleHookEvent, value: strings.ReplaceAll(n.Value, "-", dot)}
+		candidate = &edit{doc: d, path: path, kind: ruleHookEvent, value: strings.ReplaceAll(n.Value, "-", dot), from: n.Value}
 	}
 	return candidate
 }
 
-func assessCandidate(p *project, o *Options, r *Report, candidate *edit) bool {
+func assessCandidate(p *project, r *Report, candidate *edit) bool {
 	d := candidate.doc
 	path := candidate.path
 	n := nodeAt(rootNode(d.node), path)
-	f := Finding{RuleID: candidate.kind, Category: categoryDeprecations, Severity: validation.SeverityWarning, File: d.path, Path: displayNodePath(path), Line: n.Line, Column: n.Column, Message: "Legacy " + candidate.kind + " declaration", Remediation: "Run atmos doctor --fix", Documentation: "https://atmos.tools/cli/commands/doctor", Status: "available", Fixable: true}
-	if d.dynamic || !p.complete || d.kind == documentConfig && p.configCount != 1 || len(o.Profiles) > 0 {
+	f := Finding{RuleID: candidate.kind, Category: categoryDeprecations, Severity: validation.SeverityWarning, File: d.path, Path: displayNodePath(path), Line: n.Line, Column: n.Column, Message: candidate.message(), Remediation: remediationFix, Documentation: "https://atmos.tools/cli/commands/doctor", Status: "available", Fixable: true}
+	if reason := p.blocker(candidate); reason != "" {
 		f.Fixable = false
 		f.Status = statusVerificationIncomplete
-		f.Reason = "Dynamic or layered configuration requires complete effective-input verification"
+		f.Reason = "Not fixed automatically because " + reason
+		f.Remediation = candidate.manualRemediation()
 	}
 	if candidate.old != "" {
 		old := mappingValue(n, candidate.old)
@@ -364,10 +257,11 @@ func assessCandidate(p *project, o *Options, r *Report, candidate *edit) bool {
 			f.Line = old.Line
 			f.Column = old.Column
 		}
-		if hasMigrationConflict(n, candidate) {
+		if conflict := migrationConflict(n, candidate); conflict != "" {
 			f.Fixable = false
 			f.Status = statusManual
-			f.Reason = "The replacement is already declared; preserve both values for manual review"
+			f.Reason = conflict
+			f.Remediation = candidate.conflictRemediation()
 		}
 	}
 	index := replaceDeprecation(r, d, &f)
@@ -381,51 +275,18 @@ func modernizationFinding(d *document, o *Options, r *Report, n *yaml.Node, path
 		if last == "uses" && strings.HasPrefix(n.Value, "cloudposse/github-action-atmos") {
 			r.Findings = append(r.Findings, Finding{RuleID: ruleModernization, Category: ruleModernization, Severity: validation.SeverityWarning, File: d.path, Line: n.Line, Column: n.Column, Message: "Legacy Atmos GitHub Action", Remediation: "Review migration to Native CI and direct Atmos commands", Status: statusManual, Documentation: "https://atmos.tools/ci"})
 		}
-		if last == "source" && strings.Contains(n.Value, "cloudposse/terraform-aws-components") {
-			r.Findings = append(r.Findings, Finding{RuleID: ruleModernization, Category: ruleModernization, Severity: validation.SeverityWarning, File: d.path, Line: n.Line, Column: n.Column, Message: "Legacy component monorepo source", Remediation: "Select the corresponding cloudposse-terraform-components repository and verify its pinned version", Status: statusManual})
-		}
 	}
 }
 
-func normalizeNode(node *yaml.Node, e *edit) error {
-	switch e.kind {
-	case ruleCommandProvides:
-		var effective string
-		if e.old == "type" {
-			var a schema.CommandArgument
-			if err := node.Decode(&a); err != nil {
-				return err
-			}
-			effective = a.EffectiveProvides()
-		} else {
-			var f schema.CommandFlag
-			if err := node.Decode(&f); err != nil {
-				return err
-			}
-			effective = f.EffectiveProvides()
-		}
-		removeKey(node, e.old)
-		removeKey(node, "provides")
-		node.Content = append(node.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "provides"}, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: effective})
-	case ruleHookEvent:
-		node.Value = string(hooks.HookEvent(strings.ReplaceAll(node.Value, "-", dot)).Normalize())
-	case ruleTerraformReconfigure:
-		value := schema.Terraform{InitRunReconfigure: true}
-		if err := node.Decode(&value); err != nil {
-			return err
-		}
-		effective := string(value.EffectiveInitReconfigure())
-		removeKey(node, "init_run_reconfigure")
-		init := mappingValue(node, "init")
-		if init != nil {
-			removeKey(init, "reconfigure")
-			if len(init.Content) == 0 {
-				removeKey(node, "init")
-			}
-		}
-		node.Content = append(node.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "init_run_reconfigure"}, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: effective})
-	}
-	return nil
+// componentSourceKey matches a `source:` declaration and the `uri:` inside a `source:` mapping,
+// which is how component.yaml (ComponentVendorConfig) and source provisioning name their upstream.
+func componentSourceKey(path []string) bool {
+	return pathEndsWith(path, "source") || pathEndsWith(path, "source", "uri")
+}
+
+// pathEndsWith reports whether path ends with the given keys, in order.
+func pathEndsWith(path []string, suffix ...string) bool {
+	return len(path) >= len(suffix) && slices.Equal(path[len(path)-len(suffix):], suffix)
 }
 
 func reconfigureCandidate(d *document, n *yaml.Node, path []string) *edit {

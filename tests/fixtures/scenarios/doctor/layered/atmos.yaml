@@ -1,5 +1,9 @@
-# Eligible doctor fixture: one config layer, no imports, no templates.
+# Layered doctor fixture: atmos.yaml imports another configuration file, so repairs of
+# atmos.yaml are blocked and name the import. Stack files can still be repaired.
 base_path: "./"
+
+import:
+    - config/logging.yaml
 
 components:
     terraform:

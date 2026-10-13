@@ -48,6 +48,13 @@ func requirePOSIXMode(t *testing.T, want, got fs.FileMode) {
 	require.Equal(t, want, got)
 }
 
+// gitCommand builds a git invocation that never signs, so fixtures commit on machines whose
+// global configuration requires an interactive signing agent.
+func gitCommand(dir string, args ...string) *exec.Cmd {
+	prefix := []string{"-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", "-c", "user.name=t", "-c", "user.email=t@example.com", "-C", dir}
+	return exec.Command("git", append(prefix, args...)...)
+}
+
 func testEngine(t *testing.T) *Engine {
 	t.Helper()
 	return &Engine{BackupDir: func() (string, error) { return t.TempDir(), nil }}
@@ -103,7 +110,7 @@ func TestDryRunAndIncompleteInputsNeverWrite(t *testing.T) {
 	for _, tt := range []struct {
 		name, extra string
 		dry         bool
-	}{{"dry", "", true}, {"template", "vars:\n  dynamic: '{{ .value }}'\n", false}, {"tag", "vars:\n  dynamic: !exec 'touch forbidden'\n", false}, {"import", "import: [other.yaml]\n", false}, {"conflict", "", false}} {
+	}{{"dry", "", true}, {"import", "import: [other.yaml]\n", false}, {"conflict", "", false}} {
 		t.Run(tt.name, func(t *testing.T) {
 			root := newProject(t)
 			original := "commands:\n  - name: sample\n    arguments:\n      - name: target\n        type: stack\n" + tt.extra
@@ -267,7 +274,7 @@ func TestGitWarningsOnlyConcernEditedFiles(t *testing.T) {
 			root := newProject(t)
 			git := func(args ...string) string {
 				t.Helper()
-				out, err := exec.Command("git", append([]string{"-C", root}, args...)...).CombinedOutput()
+				out, err := gitCommand(root, args...).CombinedOutput()
 				require.NoError(t, err, string(out))
 				return string(out)
 			}
@@ -516,7 +523,7 @@ func TestGitWorktreeRecovery(t *testing.T) {
 	repository := newProject(t)
 	git := func(args ...string) {
 		t.Helper()
-		output, err := exec.Command("git", append([]string{"-C", repository}, args...)...).CombinedOutput()
+		output, err := gitCommand(repository, args...).CombinedOutput()
 		require.NoError(t, err, string(output))
 	}
 	projectFile(t, repository, "atmos.yaml", "components:\n  terraform:\n    init_run_reconfigure: false\n")

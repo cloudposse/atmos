@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bmatcuk/doublestar/v4"
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/validation"
@@ -30,7 +29,8 @@ type document struct {
 	node    *yaml.Node
 	mode    fs.FileMode
 	schema  string
-	dynamic bool
+	// sites are the values that cannot be evaluated statically: templates and custom YAML tags.
+	sites []dynamicSite
 }
 
 type project struct {
@@ -43,6 +43,11 @@ type project struct {
 	config      map[string]any
 	complete    bool
 	configCount int
+	// limits record why repairs are blocked. complete only says whether every input was captured.
+	limits []limit
+	// profiles are the active profiles: those selected with --profile or ATMOS_PROFILE, or else
+	// the profiles.default value of the base configuration, exactly as the loader chooses them.
+	profiles []string
 }
 
 func parse(content []byte) (*yaml.Node, error) {
@@ -66,61 +71,73 @@ type source struct{ path, kind string }
 func (e *Engine) discover(ctx context.Context, o *Options, r *Report) (*project, error) {
 	p := &project{root: o.Root, byPath: map[string]*document{}, config: map[string]any{}, extra: map[string][]byte{}, complete: true}
 	for _, reason := range o.UnverifiedInputs {
-		p.complete = false
-		r.Findings = append(r.Findings, incomplete("", reason))
+		p.limit(limitConfig, "", 0, reason)
+		addNotice(o, r, incompleteNotice("", reason))
 	}
-	configs, err := configSources(o)
+	layout, err := p.locate(o, r)
 	if err != nil {
 		return nil, err
 	}
-	if err = e.loadSources(ctx, p, o, r, configs); err != nil {
+	if err = e.loadSources(ctx, p, o, r, layout.sources); err != nil {
 		return nil, err
 	}
-	sources, err := projectSources(ctx, p, o)
+	if err = e.loadProfiles(ctx, p, o, r, layout); err != nil {
+		return nil, err
+	}
+	sources, err := projectSources(ctx, p, o, layout.configDir)
 	if err != nil {
 		return nil, err
 	}
 	if err = e.loadSources(ctx, p, o, r, sources); err != nil {
 		return nil, err
 	}
-	sort.Slice(p.docs, func(i, j int) bool { return p.docs[i].path < p.docs[j].path })
-	if p.configCount > 1 || len(o.Profiles) > 0 {
-		p.complete = false
-		r.Findings = append(r.Findings, incomplete("", "Multiple configuration layers or profiles require effective-input verification"))
-	}
-	if p.configCount == 0 {
-		p.complete = false
-		if enabled(o, ruleSchema, categoryValidation) {
-			r.Findings = append(r.Findings, Finding{RuleID: ruleSchema, Category: categoryValidation, Severity: validation.SeverityWarning, Message: "No project Atmos configuration found", Status: statusManual, Remediation: "Select a configuration with --config or run from the project directory"})
-		}
-	}
+	p.finishDiscovery(o, r)
 	return p, nil
 }
 
-func configSources(o *Options) ([]source, error) {
-	var sources []source
-	names := o.ConfigFiles
-	if len(names) == 0 {
-		for _, name := range []string{"atmos.yaml", "atmos.yml", ".atmos.yaml", ".atmos.yml", ".atmos/atmos.yaml"} {
-			path := filepath.Join(o.Root, name)
-			if _, err := os.Stat(path); err == nil {
-				names = append(names, path)
-			}
-		}
+// locate finds the project configuration without parsing it and settles the project root.
+func (p *project) locate(o *Options, r *Report) (*configLayout, error) {
+	layout, err := resolveConfigLayout(o, nil, "", "")
+	if err != nil {
+		return nil, err
 	}
-	for _, name := range names {
-		sources = append(sources, source{absolute(o.Root, name), documentConfig})
+	if !layout.project {
+		p.complete = false
+		return nil, noProjectError(o)
 	}
-	for _, dir := range append([]string{"atmos.d", ".atmos.d", "profiles", ".atmos/profiles"}, o.ConfigDirs...) {
-		paths, err := yamlFiles(absolute(o.Root, dir))
-		if err != nil {
-			return nil, err
-		}
-		for _, path := range paths {
-			sources = append(sources, source{path, documentConfig})
-		}
+	for _, path := range layout.ambient {
+		reason := "Ambient configuration is merged at runtime but is outside the project: " + path
+		p.limit(limitConfig, "", 0, reason)
+		addNotice(o, r, incompleteNotice("", reason))
 	}
-	return sources, nil
+	rerootProject(p, o, layout.root)
+	layout.sources = noteOutsideSources(p, o, r, layout.sources)
+	return layout, nil
+}
+
+// finishDiscovery orders documents and records the layering that limits verification.
+func (p *project) finishDiscovery(o *Options, r *Report) {
+	sort.Slice(p.docs, func(i, j int) bool { return p.docs[i].path < p.docs[j].path })
+	if p.configCount > 1 || len(p.profiles) > 0 {
+		p.complete = false // Repairs name the layer that blocks them; see layerBlocker.
+		addNotice(o, r, incompleteNotice("", "Multiple configuration layers or profiles require effective-input verification"))
+	}
+	if p.configCount == 0 {
+		p.complete = false
+	}
+}
+
+// loadProfiles reads the files of the active profiles, which have the highest configuration precedence.
+func (e *Engine) loadProfiles(ctx context.Context, p *project, o *Options, r *Report, base *configLayout) error {
+	profiles, err := resolveProfiles(o, p, base)
+	if err != nil {
+		return err
+	}
+	for _, name := range profiles.missingProfiles {
+		p.limit(limitConfig, "", 0, "Active profile was not found: "+name)
+		addFinding(o, r, missingProfileFinding(name))
+	}
+	return e.loadSources(ctx, p, o, r, profiles.sources)
 }
 
 func (e *Engine) loadSources(ctx context.Context, p *project, o *Options, r *Report, queue []source) error {
@@ -143,30 +160,45 @@ func (e *Engine) loadSources(ctx context.Context, p *project, o *Options, r *Rep
 				mergeMaps(p.config, values)
 			}
 		}
-		for _, path := range localImports(d, p, r) {
-			queue = append(queue, source{path, item.kind})
-		}
+		queue = append(queue, importedSources(d, p, o, r, item.kind)...)
 	}
 	return nil
 }
 
-func projectSources(ctx context.Context, p *project, o *Options) ([]source, error) {
-	base := o.BasePath
-	if base == "" {
-		base = stringAt(p.config, "base_path")
+// importedSources lists the files a loaded document imports, read as the kind of document that imports them.
+// Vendor manifests import through spec.imports as well as through the top-level import keys.
+func importedSources(d *document, p *project, o *Options, r *Report, kind string) []source {
+	paths := localImports(d, p, o, r)
+	if d.kind == documentVendor {
+		paths = append(paths, vendorImports(d, p, o, r)...)
 	}
-	if base == "" {
-		base = o.Root
+	sources := make([]source, 0, len(paths))
+	for _, path := range paths {
+		sources = append(sources, source{path, kind})
 	}
-	base = absolute(o.Root, base)
+	return sources
+}
+
+func projectSources(ctx context.Context, p *project, o *Options, configDir string) ([]source, error) {
+	if configDir == "" {
+		configDir = p.root
+	}
+	base, err := projectBasePath(o, p, configDir)
+	if err != nil {
+		return nil, err
+	}
+	if base != p.root && within(base, p.root) {
+		// The runtime resolves everything below a base path above the invocation directory.
+		rerootProject(p, o, base)
+	}
 	p.base = base
-	stackDir := stringAt(p.config, ruleStacks, "base_path")
+	stackDir := stringAt(p.config, ruleStacks, keyBasePath)
 	if stackDir == "" {
 		stackDir = ruleStacks
 	}
 	p.stackDir = absolute(base, stackDir)
 	var sources []source
-	for _, directory := range []source{{p.stackDir, "stack"}, {filepath.Join(o.Root, ".github", "workflows"), "workflow"}} {
+	for _, directory := range []source{{p.stackDir, "stack"}, {filepath.Join(p.root, ".github", "workflows"), "workflow"}} {
 		paths, err := yamlFiles(directory.path)
 		if err != nil {
 			return nil, err
@@ -184,7 +216,7 @@ func projectSources(ctx context.Context, p *project, o *Options) ([]source, erro
 
 func vendorSources(ctx context.Context, p *project, base string) ([]source, error) {
 	var sources []source
-	configured := stringAt(p.config, "vendor", "base_path")
+	configured := stringAt(p.config, "vendor", keyBasePath)
 	if configured != "" {
 		path := absolute(base, configured)
 		paths, err := vendorPathFiles(path)
@@ -203,7 +235,7 @@ func vendorSources(ctx context.Context, p *project, base string) ([]source, erro
 			return err
 		}
 		if entry.IsDir() {
-			if path != p.root && skipDirectory(entry.Name()) {
+			if path != p.root && skipProjectDirectory(p, path, entry.Name()) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -240,7 +272,7 @@ func absolute(base, path string) string {
 
 func (e *Engine) readDocument(p *project, o *Options, r *Report, path, kind string) (*document, error) {
 	path = filepath.Clean(path)
-	allowed, err := allowSource(p, o, r, path)
+	allowed, err := allowSource(p, o, r, path, kind)
 	if err != nil || !allowed {
 		return nil, err
 	}
@@ -248,8 +280,8 @@ func (e *Engine) readDocument(p *project, o *Options, r *Report, path, kind stri
 	content, err := e.FS.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			p.complete = false
-			r.Findings = append(r.Findings, Finding{RuleID: ruleImports, Category: categoryValidation, Severity: validation.SeverityError, File: rel, Message: "Local source does not exist", Status: statusManual})
+			p.limitKind(kind, "", 0, "Local source does not exist: "+rel)
+			addFinding(o, r, &Finding{RuleID: ruleImports, Category: categoryValidation, Severity: validation.SeverityError, File: rel, Message: "Local source does not exist", Status: statusManual})
 			return nil, nil
 		}
 		return nil, err
@@ -268,12 +300,13 @@ func (e *Engine) readDocument(p *project, o *Options, r *Report, path, kind stri
 	}
 	d.node, err = parse(content)
 	if err != nil {
-		p.complete = false
-		r.Findings = append(r.Findings, Finding{RuleID: ruleSchema, Category: categoryValidation, Severity: validation.SeverityError, File: rel, Message: err.Error(), Status: statusManual})
+		p.limitKind(kind, path, 0, "Configuration could not be parsed")
+		addFinding(o, r, parseFinding(rel, err))
 		d.node = nil
 	}
-	d.dynamic = dynamicDocument(d.node, p.templateMarkers(d))
-	if d.dynamic {
+	d.sites = dynamicSites(d.node, p.templateMarkers(d))
+	if len(d.sites) > 0 {
+		// Dynamic values only block the repairs that read them; see blocker.
 		p.complete = false
 	}
 	p.docs = append(p.docs, d)
@@ -281,41 +314,62 @@ func (e *Engine) readDocument(p *project, o *Options, r *Report, path, kind stri
 	return d, nil
 }
 
-func localImports(d *document, p *project, r *Report) []string {
-	var paths []string
-	root := rootNode(d.node)
-	for _, key := range []string{"import", ruleImports} {
-		n := mappingValue(root, key)
-		if n == nil {
-			continue
-		}
-		p.complete = false // Layered sources need an effective-config verifier before fixing config keys.
-		items := n.Content
-		if n.Kind == yaml.ScalarNode {
-			items = []*yaml.Node{n}
-		}
-		for _, item := range items {
-			paths = append(paths, resolveLocalImport(d, p, r, item)...)
-		}
-	}
-	return paths
-}
-
-func incomplete(file, reason string) Finding {
-	return Finding{RuleID: ruleImports, Category: categoryValidation, Severity: validation.SeverityWarning, File: file, Message: "Configuration verification incomplete", Status: statusVerificationIncomplete, Reason: reason}
-}
-
 func within(root, path string) bool {
 	rel, err := filepath.Rel(root, path)
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-func skipDirectory(name string) bool {
+// toolDirectory reports version-control and dependency directories, which never hold authored
+// Atmos inputs and are skipped wherever they appear.
+func toolDirectory(name string) bool {
 	switch name {
-	case ".git", ".context", "node_modules", ".terraform", ".atmos", ".cache", "build", "dist":
+	case ".git", ".terraform", "node_modules":
 		return true
 	}
 	return false
+}
+
+// generatedDirectory reports conventional output and scratch directories. They are skipped only
+// directly below the project root, and never when they hold a configured stack, component, or
+// vendor root: the same names are valid inside those trees, where Atmos does read them.
+func generatedDirectory(name string) bool {
+	switch name {
+	case ".context", ".atmos", ".cache", "build", "dist":
+		return true
+	}
+	return false
+}
+
+// skipProjectDirectory decides whether the project-wide vendor manifest walk descends into path.
+func skipProjectDirectory(p *project, path, name string) bool {
+	if toolDirectory(name) {
+		return true
+	}
+	return generatedDirectory(name) && filepath.Dir(path) == p.root && !holdsConfiguredRoot(p, path)
+}
+
+// holdsConfiguredRoot reports whether path contains, or is inside, a configured stack, component, or vendor root.
+func holdsConfiguredRoot(p *project, path string) bool {
+	for _, root := range p.configuredRoots() {
+		if within(path, root) || within(root, path) {
+			return true
+		}
+	}
+	return false
+}
+
+// configuredRoots returns the absolute stack, component, and vendor directories.
+func (p *project) configuredRoots() []string {
+	roots := []string{p.stackDir}
+	for _, kind := range []string{"terraform", "helmfile", "packer", "ansible", "helm", "kubernetes", "container"} {
+		if dir := stringAt(p.config, "components", kind, keyBasePath); dir != "" {
+			roots = append(roots, absolute(p.base, dir))
+		}
+	}
+	if dir := stringAt(p.config, "vendor", keyBasePath); dir != "" {
+		roots = append(roots, absolute(p.base, dir))
+	}
+	return roots
 }
 
 func yamlFiles(dir string) ([]string, error) {
@@ -328,7 +382,7 @@ func yamlFiles(dir string) ([]string, error) {
 			return err
 		}
 		if entry.IsDir() {
-			if path != dir && skipDirectory(entry.Name()) {
+			if path != dir && toolDirectory(entry.Name()) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -346,6 +400,18 @@ func rootNode(n *yaml.Node) *yaml.Node {
 		return n.Content[0]
 	}
 	return n
+}
+
+// mappingKeyLine returns the line of key in a mapping, falling back to its value's line.
+func mappingKeyLine(n *yaml.Node, key string, value *yaml.Node) int {
+	if n != nil && n.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			if n.Content[i].Value == key {
+				return n.Content[i].Line
+			}
+		}
+	}
+	return value.Line
 }
 
 func mappingValue(n *yaml.Node, key string) *yaml.Node {
@@ -414,19 +480,19 @@ func mergeMaps(dst, src map[string]any) {
 	}
 }
 
-func allowSource(p *project, o *Options, r *Report, path string) (bool, error) {
+func allowSource(p *project, o *Options, r *Report, path, kind string) (bool, error) {
 	path = filepath.Clean(path)
 	if _, exists := p.byPath[path]; exists {
 		return false, nil
 	}
 	if !within(p.root, path) {
-		p.complete = false
-		r.Findings = append(r.Findings, incomplete(path, "Source is outside the project; it will not be edited"))
+		p.limitKind(kind, path, 0, "Source is outside the project; it will not be edited")
+		addNotice(o, r, incompleteNotice(path, "Source is outside the project; it will not be edited"))
 		return false, nil
 	}
 	if resolved, resolveErr := filepath.EvalSymlinks(path); resolveErr == nil && resolved != path {
-		p.complete = false
-		r.Findings = append(r.Findings, incomplete(path, "Symlinked sources require manual review"))
+		p.limitKind(kind, path, 0, "Symlinked sources require manual review")
+		addNotice(o, r, incompleteNotice(path, "Symlinked sources require manual review"))
 		if !within(p.root, resolved) {
 			return false, nil
 		}
@@ -437,67 +503,10 @@ func allowSource(p *project, o *Options, r *Report, path string) (bool, error) {
 		return false, err
 	}
 	if len(filtered) == 0 {
-		p.complete = false
+		p.limitKind(kind, path, 0, "Source is excluded by --exclude")
 		return false, nil
 	}
 	return true, nil
-}
-
-func resolveLocalImport(d *document, p *project, r *Report, item *yaml.Node) []string {
-	item, optional := importDeclaration(item)
-	if item == nil {
-		return nil
-	}
-	value := item.Value
-	if !staticImport(item, p.templateMarkers(d)) {
-		r.Findings = append(r.Findings, incomplete(d.path, "Dynamic or remote import was not evaluated"))
-		return nil
-	}
-	base := filepath.Dir(d.path)
-	if d.kind == "stack" {
-		base = p.stackDir
-	}
-	path := value
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(base, path)
-	}
-	if filepath.Ext(path) == "" {
-		path += ".yaml"
-	}
-	matches, err := doublestar.FilepathGlob(path)
-	if err != nil || len(matches) == 0 {
-		if optional && err == nil {
-			return nil
-		}
-		r.Findings = append(r.Findings, Finding{RuleID: ruleImports, Category: categoryValidation, Severity: validation.SeverityError, File: d.path, Line: item.Line, Message: "Local import does not resolve: " + value, Status: statusManual})
-		return nil
-	}
-	return matches
-}
-
-func dynamicDocument(node *yaml.Node, markers []string) bool {
-	dynamic := false
-	walk(node, nil, func(n *yaml.Node, _ []string) {
-		if strings.HasPrefix(n.Tag, "!") && !strings.HasPrefix(n.Tag, "!!") || containsTemplate(n.Value, markers) || strings.HasPrefix(n.Value, "!") {
-			dynamic = true
-		}
-	})
-	return dynamic
-}
-
-func staticImport(item *yaml.Node, markers []string) bool {
-	return item.Kind == yaml.ScalarNode && item.Tag == "!!str" && !containsTemplate(item.Value, markers) && !strings.Contains(item.Value, "://") && !strings.HasPrefix(item.Value, "git::")
-}
-
-func importDeclaration(item *yaml.Node) (*yaml.Node, bool) {
-	if item.Kind != yaml.MappingNode {
-		return item, false
-	}
-	optional := false
-	if skip := mappingValue(item, "skip_if_missing"); skip != nil {
-		_ = skip.Decode(&optional)
-	}
-	return mappingValue(item, "path"), optional
 }
 
 func (e *Engine) documentSchema(p *project, r *Report, kind string) (string, error) {
@@ -513,7 +522,7 @@ func (e *Engine) documentSchema(p *project, r *Report, kind string) (string, err
 	}
 	source, reason, err := e.captureSchema(p, source)
 	if reason != "" {
-		p.complete = false
+		p.limit(limitProject, "", 0, "manifest schema: "+reason)
 		r.Checks = append(r.Checks, Check{ID: "schema/atmos", Status: "incomplete", Reason: reason})
 		return "", err
 	}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sort"
 
+	"github.com/cloudposse/atmos/pkg/doctor/monorepo"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -16,6 +17,10 @@ var (
 	ErrOptions      = errors.New("invalid doctor options")
 	ErrChanged      = errors.New("doctor source changed since inspection")
 	ErrVerification = errors.New("doctor semantic verification failed")
+	// ErrRecoveryManifest reports a backup manifest value that cannot be read.
+	ErrRecoveryManifest = errors.New("invalid doctor recovery manifest")
+	// ErrNoConfiguration reports that no Atmos configuration could be located for the project.
+	ErrNoConfiguration = errors.New("no project Atmos configuration found")
 )
 
 // Rule describes a built-in check. Replacement prose is never executable.
@@ -38,7 +43,8 @@ func Rules() []Rule {
 		{ruleCommandProvides, categoryDeprecations, "Migrate custom-command semantic arguments and flags"},
 		{ruleHookEvent, categoryDeprecations, "Normalize recognized legacy hook events"},
 		{ruleTerraformReconfigure, categoryDeprecations, "Migrate explicit Terraform reconfigure policy"},
-		{ruleModernization, ruleModernization, "Identify legacy CI actions and component repositories"},
+		{ruleModernization, ruleModernization, "Identify legacy Atmos GitHub Actions"},
+		{ruleComponentMonorepo, ruleModernization, "Move archived terraform-aws-components sources to cloudposse-terraform-components at the same version, verified identical"},
 		{ruleSourceRepository, "sources", "Check upstream repositories for archival and availability"},
 	}
 }
@@ -76,6 +82,7 @@ type Report struct {
 	ChangedFiles     []string  `json:"changed_files"`
 	Backup           string    `json:"backup,omitempty"`
 	Recovery         string    `json:"recovery,omitempty"`
+	Fix              bool      `json:"fix"`
 	DryRun           bool      `json:"dry_run"`
 	OperationalError string    `json:"operational_error,omitempty"`
 }
@@ -109,6 +116,21 @@ type Options struct {
 	// typically the Git worktree root. Empty means Selected is relative to Root.
 	SelectedRoot string
 	Affected     bool
+
+	// invocation is the caller's options as they were before discovery moved the project root.
+	// Rediscovery must resolve configuration from them, because a root derived from base_path
+	// (for example the Git root) is not where the configuration was found.
+	invocation *Options
+}
+
+// rediscoveryOptions returns a fresh copy of the options the first discovery started from.
+func (o *Options) rediscoveryOptions() *Options {
+	source := o
+	if o.invocation != nil {
+		source = o.invocation
+	}
+	clone := *source
+	return &clone
 }
 
 // RepositoryChecker inspects repository metadata without cloning or installing tools.
@@ -129,6 +151,8 @@ type Engine struct {
 	BackupDir    func() (string, error)
 	Observe      func(Event)
 	Stacks       StackValidator
+	// Monorepo proves that a component moved out of the archived monorepo has identical files.
+	Monorepo monorepo.Verifier
 }
 
 // StackValidator checks decoded static inputs with the production stack consumers.
@@ -152,11 +176,16 @@ func (r *Report) sort() {
 	})
 }
 
-// ExitCode evaluates remaining findings. Operational failures cannot be suppressed.
+// ExitCode evaluates remaining findings. Operational failures cannot be suppressed, and neither
+// can a requested repair that failed verification: a fix run that did not deliver what was asked
+// for exits 1 whatever the severity threshold. A dry run applies nothing, so it only applies the threshold.
 func (r *Report) ExitCode(threshold string) int {
 	defer perf.Track(nil, "doctor.Report.ExitCode")()
 	if r.OperationalError != "" {
 		return 2
+	}
+	if r.failedRepair() {
+		return 1
 	}
 	for i := range r.Findings {
 		f := &r.Findings[i]
@@ -168,6 +197,20 @@ func (r *Report) ExitCode(threshold string) int {
 		}
 	}
 	return 0
+}
+
+// failedRepair reports whether a repair that a --fix run attempted ended verification-failed.
+// Without --fix nothing was requested, so a failed verification is only a finding.
+func (r *Report) failedRepair() bool {
+	if !r.Fix || r.DryRun {
+		return false
+	}
+	for i := range r.Findings {
+		if r.Findings[i].Status == statusVerificationFailed {
+			return true
+		}
+	}
+	return false
 }
 
 // ValidationReport adapts findings to Atmos's existing rich and SARIF renderers.

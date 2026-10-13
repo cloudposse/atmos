@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,11 +30,43 @@ type candidate struct {
 
 // RecoveryEntry records enough information to restore the exact original bytes.
 type RecoveryEntry struct {
-	Path   string `json:"path"`
-	Copy   string `json:"copy"`
-	Mode   uint32 `json:"mode"`
-	Before string `json:"before_sha256"`
-	After  string `json:"after_sha256"`
+	Path   string       `json:"path"`
+	Copy   string       `json:"copy"`
+	Mode   RecoveryMode `json:"mode"`
+	Before string       `json:"before_sha256"`
+	After  string       `json:"after_sha256"`
+}
+
+// RecoveryMode is a file's permission bits. It is written as the octal string chmod accepts, for
+// example "0644", and reads both that form and the decimal number older manifests recorded.
+type RecoveryMode uint32
+
+// MarshalJSON writes the mode as an octal string.
+func (m RecoveryMode) MarshalJSON() ([]byte, error) {
+	defer perf.Track(nil, "doctor.RecoveryMode.MarshalJSON")()
+
+	return json.Marshal(fmt.Sprintf("%04o", uint32(m)))
+}
+
+// UnmarshalJSON reads an octal string, or the decimal number written by older manifests.
+func (m *RecoveryMode) UnmarshalJSON(data []byte) error {
+	defer perf.Track(nil, "doctor.RecoveryMode.UnmarshalJSON")()
+
+	var text string
+	if err := json.Unmarshal(data, &text); err != nil {
+		var legacy uint32
+		if legacyErr := json.Unmarshal(data, &legacy); legacyErr != nil {
+			return fmt.Errorf("%w: file mode must be an octal string such as \"0644\"", ErrRecoveryManifest)
+		}
+		*m = RecoveryMode(legacy)
+		return nil
+	}
+	value, err := strconv.ParseUint(text, octalBase, modeBits)
+	if err != nil {
+		return fmt.Errorf("%w: file mode %q is not octal", ErrRecoveryManifest, text)
+	}
+	*m = RecoveryMode(value)
+	return nil
 }
 
 func digest(content []byte) string { sum := sha256.Sum256(content); return hex.EncodeToString(sum[:]) }
@@ -43,8 +76,8 @@ func (e *Engine) fix(ctx context.Context, p *project, o *Options, r *Report, edi
 	if err := e.verifySchemaClosure(ctx, p, o); err != nil {
 		return err
 	}
-	if !p.complete {
-		markIncompleteRepairs(r, edits)
+	if l := p.projectLimit(); l != nil {
+		markIncompleteRepairs(p, r, edits, l)
 		return nil
 	}
 	candidates, err := e.stageCandidates(ctx, p, r, edits)
@@ -151,6 +184,7 @@ func rejectCandidate(r *Report, edits []edit, err error) {
 		f.Status = statusVerificationFailed
 		f.Fixable = false
 		f.Reason = err.Error()
+		f.Remediation = change.manualRemediation()
 	}
 }
 
@@ -185,7 +219,7 @@ func (e *Engine) applyCandidates(ctx context.Context, p *project, o *Options, r 
 		for _, change := range c.edits {
 			f := &r.Findings[change.finding]
 			f.Status = statusFixed
-			f.Reason = "Runtime field behavior and unrelated YAML values verified"
+			f.Reason = change.fixedReason()
 		}
 		e.emit(Event{Phase: "Apply", Label: relative(p.root, c.doc.path), Index: i + 1, Total: len(candidates), Done: true, Status: statusFixed})
 	}
@@ -199,7 +233,7 @@ func (e *Engine) recheck(ctx context.Context, p *project, o *Options, r *Report)
 	}
 	fresh := *e
 	fresh.Observe = nil
-	recheckOptions := *o
+	recheckOptions := *o.rediscoveryOptions()
 	recheckOptions.Fix = false
 	checked, err := fresh.Run(ctx, recheckOptions)
 	if err != nil {
@@ -230,7 +264,7 @@ func (f sourceOverlay) ReadFile(path string) ([]byte, error) {
 }
 
 func (e *Engine) verifyProject(ctx context.Context, o *Options, candidates []candidate) error {
-	options := *o
+	options := *o.rediscoveryOptions()
 	options.Fix = false
 	options.DryRun = false
 	options.Only = []string{ruleSchema, ruleImports, ruleStacks}
@@ -292,7 +326,7 @@ func schemaErrors(v validator.Validator, source string, content []byte) (map[str
 }
 
 func (e *Engine) unchanged(ctx context.Context, p *project, o *Options) error {
-	current, err := e.discover(ctx, o, &Report{})
+	current, err := e.discover(ctx, o.rediscoveryOptions(), &Report{})
 	if err != nil {
 		return err
 	}
@@ -363,7 +397,7 @@ func (e *Engine) backup(candidates []candidate, r *Report) error {
 		if err = os.WriteFile(filepath.Join(dir, name), c.doc.content, privateFileMode); err != nil {
 			return err
 		}
-		entries = append(entries, RecoveryEntry{Path: c.doc.path, Copy: name, Mode: uint32(c.doc.mode), Before: digest(c.doc.content), After: digest(c.content)})
+		entries = append(entries, RecoveryEntry{Path: c.doc.path, Copy: name, Mode: RecoveryMode(c.doc.mode.Perm()), Before: digest(c.doc.content), After: digest(c.content)})
 	}
 	manifest, err := json.MarshalIndent(entries, "", "  ")
 	if err != nil {
@@ -409,13 +443,14 @@ func (e *Engine) verifySchemaClosure(ctx context.Context, p *project, o *Options
 	return e.customSchemas(ctx, p, &options, &Report{}, validator.NewYAMLSchemaValidator(&schema.AtmosConfiguration{}))
 }
 
-func markIncompleteRepairs(r *Report, edits []edit) {
+func markIncompleteRepairs(p *project, r *Report, edits []edit, l *limit) {
 	r.Checks = append(r.Checks, Check{ID: "semantic-verification", Status: "incomplete", Reason: "The complete schema and source closure could not be captured"})
 	for _, change := range edits {
 		finding := &r.Findings[change.finding]
 		finding.Status = statusVerificationIncomplete
 		finding.Fixable = false
-		finding.Reason = "A custom schema or source input could not be verified"
+		finding.Reason = "Not fixed automatically because " + l.describe(p.root)
+		finding.Remediation = change.manualRemediation()
 	}
 }
 

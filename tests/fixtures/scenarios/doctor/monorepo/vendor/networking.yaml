@@ -1,0 +1,11 @@
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: doctor-monorepo-networking
+spec:
+  sources:
+    # Imported manifests are read by atmos vendor pull, so doctor repairs them too.
+    - component: vpc-peering
+      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-peering?ref={{.Version}}"
+      version: "1.495.0"
+      targets: ["components/terraform/vpc-peering"]

@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/validation"
 )
 
@@ -129,7 +130,7 @@ func TestEcConfigureResolvesTheRoot(t *testing.T) {
 		root := newProject(t)
 		projectFile(t, root, "atmos.yaml", ecBroken)
 		t.Chdir(root)
-		r := ecRun(t, &Options{Offline: true, Only: []string{ruleImports}})
+		r := ecRun(t, &Options{Offline: true, Only: []string{ruleSchema, ruleImports}})
 		require.Equal(t, []string{"atmos.yaml"}, ecLoaded(&r))
 	})
 
@@ -189,45 +190,64 @@ func TestEcDiscoveryReportsUnverifiedAndMissingConfiguration(t *testing.T) {
 		const reason = "Multiple configuration layers or profiles require effective-input verification"
 		root := newProject(t)
 		projectFile(t, root, "atmos.yaml", "{}\n")
-		r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleImports}, Profiles: []string{"ci"}})
+		r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}, Profiles: []string{"ci"}})
 		require.Len(t, ecIncomplete(&r, reason), 1)
 
 		projectFile(t, root, "atmos.d/extra.yaml", "{}\n")
-		r = ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleImports}})
+		r = ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}})
 		require.Len(t, ecIncomplete(&r, reason), 1)
 	})
 
 	t.Run("single configuration without profiles is complete", func(t *testing.T) {
 		root := newProject(t)
 		projectFile(t, root, "atmos.yaml", "{}\n")
-		r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleImports}})
+		r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}})
 		require.Empty(t, r.Findings)
 	})
 
-	t.Run("missing configuration warns only when schema checks are enabled", func(t *testing.T) {
+	t.Run("missing configuration is an operational error with guidance", func(t *testing.T) {
 		root := newProject(t)
-		r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema}})
-		require.Len(t, r.Findings, 1)
-		require.Equal(t, "No project Atmos configuration found", r.Findings[0].Message)
-		require.Equal(t, validation.SeverityWarning, r.Findings[0].Severity)
-		require.Equal(t, statusManual, r.Findings[0].Status)
-		require.Equal(t, 0, r.ExitCode("error"))
-		require.Equal(t, 1, r.ExitCode("warning"))
-
-		r = ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleModernization}})
-		require.Empty(t, r.Findings)
+		for _, only := range [][]string{nil, {ruleSchema}, {ruleModernization}} {
+			r, err := testEngine(t).Run(context.Background(), Options{Root: root, Offline: true, Only: only})
+			require.ErrorIs(t, err, ErrNoConfiguration)
+			require.Contains(t, err.Error(), "--config")
+			require.Contains(t, err.Error(), "ATMOS_CLI_CONFIG_PATH")
+			require.Equal(t, 2, r.ExitCode("none"))
+			require.Contains(t, r.OperationalError, "no project Atmos configuration found")
+		}
 	})
 }
 
-func TestEcConfigSourcesIncludeEveryLayerDirectory(t *testing.T) {
+func TestEcConfigSourcesFollowTheLoaderOrder(t *testing.T) {
 	root := newProject(t)
 	projectFile(t, root, "atmos.yaml", "{}\n")
-	for _, path := range []string{"atmos.d/a.yaml", ".atmos.d/b.yml", "profiles/dev/c.yaml", ".atmos/profiles/ci/d.yaml", "extra/e.yaml", "node_modules/skipped.yaml", "atmos.d/notes.txt"} {
+	for _, path := range []string{"atmos.d/a.yaml", ".atmos.d/b.yml", "profiles/dev/c.yaml", "profiles/ci/d.yaml", "extra/atmos.yaml", "node_modules/skipped.yaml", "atmos.d/notes.txt"} {
 		projectFile(t, root, path, ecBroken)
 	}
-	absolute := projectFile(t, root, "abs-extra/f.yaml", ecBroken)
-	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleImports}, ConfigDirs: []string{"extra", filepath.Dir(absolute)}})
-	require.Equal(t, []string{".atmos.d/b.yml", ".atmos/profiles/ci/d.yaml", "abs-extra/f.yaml", "atmos.d/a.yaml", "extra/e.yaml", "profiles/dev/c.yaml"}, ecLoaded(&r))
+
+	t.Run("atmos.d layers load and inactive profiles do not", func(t *testing.T) {
+		r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}})
+		require.Equal(t, []string{".atmos.d/b.yml", "atmos.d/a.yaml"}, ecLoaded(&r))
+	})
+
+	t.Run("only active profiles load", func(t *testing.T) {
+		r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}, Profiles: []string{"ci"}})
+		require.Equal(t, []string{".atmos.d/b.yml", "atmos.d/a.yaml", "profiles/ci/d.yaml"}, ecLoaded(&r))
+	})
+
+	t.Run("a missing active profile is reported", func(t *testing.T) {
+		r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}, Profiles: []string{"nope"}})
+		var messages []string
+		for _, f := range ecFindings(&r, ruleImports) {
+			messages = append(messages, f.Message)
+		}
+		require.Contains(t, messages, "Active profile was not found: nope")
+	})
+
+	t.Run("a config directory selection replaces discovery", func(t *testing.T) {
+		r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}, ConfigDirs: []string{"extra"}})
+		require.Equal(t, []string{"extra/atmos.yaml"}, ecLoaded(&r))
+	})
 }
 
 func TestEcExplicitConfigFilesReplaceDefaultDiscovery(t *testing.T) {
@@ -235,14 +255,14 @@ func TestEcExplicitConfigFilesReplaceDefaultDiscovery(t *testing.T) {
 	projectFile(t, root, "atmos.yaml", ecBroken)
 	projectFile(t, root, "custom/main.yaml", ecBroken)
 	absolute := projectFile(t, root, "custom/other.yaml", ecBroken)
-	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleImports}, ConfigFiles: []string{filepath.Join("custom", "main.yaml"), absolute}})
+	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}, ConfigFiles: []string{filepath.Join("custom", "main.yaml"), absolute}})
 	require.Equal(t, []string{"custom/main.yaml", "custom/other.yaml"}, ecLoaded(&r))
 }
 
 func TestEcMissingExplicitConfigFileIsReported(t *testing.T) {
 	root := newProject(t)
 	projectFile(t, root, "atmos.yaml", "{}\n")
-	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleImports}, ConfigFiles: []string{"missing.yaml"}})
+	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}, ConfigFiles: []string{"missing.yaml"}})
 	found := ecFindings(&r, ruleImports)
 	require.Len(t, found, 1)
 	require.Equal(t, "Local source does not exist", found[0].Message)
@@ -251,23 +271,38 @@ func TestEcMissingExplicitConfigFileIsReported(t *testing.T) {
 	require.Equal(t, 1, r.ExitCode("error"))
 }
 
+// ecCancelAfterRead cancels the run once the first source has been read, which places the
+// cancellation after configuration loading and before the vendor manifest walk.
+type ecCancelAfterRead struct {
+	filesystem.FileSystem
+	cancel context.CancelFunc
+}
+
+func (f *ecCancelAfterRead) ReadFile(path string) ([]byte, error) {
+	content, err := f.FileSystem.ReadFile(path)
+	f.cancel()
+	return content, err
+}
+
 func TestEcCancellationStopsDiscovery(t *testing.T) {
 	for _, tt := range []struct {
-		name   string
-		config bool
+		name  string
+		start func(context.CancelFunc) *Engine
 	}{
-		{"while loading sources", true},
-		{"while scanning for vendor manifests", false},
+		{"while loading sources", func(cancel context.CancelFunc) *Engine { cancel(); return testEngine(t) }},
+		{"while scanning for vendor manifests", func(cancel context.CancelFunc) *Engine {
+			e := testEngine(t)
+			e.FS = &ecCancelAfterRead{FileSystem: filesystem.NewOSFileSystem(), cancel: cancel}
+			return e
+		}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			root := newProject(t)
-			if tt.config {
-				projectFile(t, root, "atmos.yaml", "{}\n")
-			}
+			projectFile(t, root, "atmos.yaml", "{}\n")
 			projectFile(t, root, "vendor.yaml", "spec: {}\n")
 			ctx, cancel := context.WithCancel(context.Background())
-			cancel()
-			r, err := testEngine(t).Run(ctx, Options{Root: root, Offline: true})
+			defer cancel()
+			r, err := tt.start(cancel).Run(ctx, Options{Root: root, Offline: true})
 			require.ErrorIs(t, err, context.Canceled)
 			require.Equal(t, 2, r.ExitCode("none"))
 		})
@@ -283,12 +318,12 @@ func TestEcProjectSourcesFollowConfiguredBasePaths(t *testing.T) {
 	projectFile(t, root, "infra/stacks/ignored.yaml", ecBroken)
 
 	t.Run("base_path and stacks.base_path from atmos.yaml", func(t *testing.T) {
-		r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleImports}})
+		r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}})
 		require.Equal(t, []string{"infra/envs/dev.yaml"}, ecLoaded(&r))
 	})
 
 	t.Run("the base path option overrides atmos.yaml", func(t *testing.T) {
-		r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleImports}, BasePath: "other"})
+		r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}, BasePath: "other"})
 		require.Equal(t, []string{"other/envs/prod.yaml"}, ecLoaded(&r))
 	})
 
@@ -296,7 +331,7 @@ func TestEcProjectSourcesFollowConfiguredBasePaths(t *testing.T) {
 		clean := newProject(t)
 		projectFile(t, clean, "atmos.yaml", "{}\n")
 		projectFile(t, clean, "stacks/nested/dev.yml", ecBroken)
-		r := ecRun(t, &Options{Root: clean, Offline: true, Only: []string{ruleImports}})
+		r := ecRun(t, &Options{Root: clean, Offline: true, Only: []string{ruleSchema, ruleImports}})
 		require.Equal(t, []string{"stacks/nested/dev.yml"}, ecLoaded(&r))
 	})
 }
@@ -318,7 +353,7 @@ func TestEcVendorSourcesFollowConfiguredBasePath(t *testing.T) {
 			for _, file := range tt.files {
 				projectFile(t, root, file, ecBroken)
 			}
-			r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleImports}})
+			r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}})
 			require.Equal(t, tt.want, ecLoaded(&r))
 		})
 	}
@@ -327,14 +362,14 @@ func TestEcVendorSourcesFollowConfiguredBasePath(t *testing.T) {
 func TestEcDirectoryWalksSkipGeneratedAndDependencyDirectories(t *testing.T) {
 	root := newProject(t)
 	projectFile(t, root, "atmos.yaml", "{}\n")
-	for _, path := range []string{"deep/vendor.yaml", "deep/component.yml", "stacks/ok.yaml"} {
+	for _, path := range []string{"deep/vendor.yaml", "deep/component.yml", "stacks/ok.yaml", "stacks/.cache/dep.yaml"} {
 		projectFile(t, root, path, ecBroken)
 	}
-	for _, path := range []string{"node_modules/pkg/vendor.yaml", ".git/vendor.yml", "build/component.yaml", ".terraform/vendor.yaml", "dist/vendor.yaml", "stacks/node_modules/dep.yaml", "stacks/.cache/dep.yaml", "other/readme.yaml"} {
+	for _, path := range []string{"node_modules/pkg/vendor.yaml", ".git/vendor.yml", "build/component.yaml", ".terraform/vendor.yaml", "dist/vendor.yaml", "stacks/node_modules/dep.yaml", "other/readme.yaml"} {
 		projectFile(t, root, path, ecBroken)
 	}
-	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleImports}})
-	require.Equal(t, []string{"deep/component.yml", "deep/vendor.yaml", "stacks/ok.yaml"}, ecLoaded(&r))
+	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}})
+	require.Equal(t, []string{"deep/component.yml", "deep/vendor.yaml", "stacks/.cache/dep.yaml", "stacks/ok.yaml"}, ecLoaded(&r), "directories inside the stacks base path are never skipped, except tool directories")
 }
 
 func TestEcLocalImportsResolveRelativeToTheDeclaringDocument(t *testing.T) {
@@ -346,7 +381,7 @@ func TestEcLocalImportsResolveRelativeToTheDeclaringDocument(t *testing.T) {
 	projectFile(t, root, "atmos.d/layer.yaml", "imports: ../shared/common\n")
 	projectFile(t, root, "shared/common.yaml", ecBroken)
 
-	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleImports}})
+	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}})
 	require.Equal(t, []string{"broken/a.yaml", "broken/b.yaml", "nested/with-extension.yaml", "shared/common.yaml"}, ecLoaded(&r))
 
 	unresolved := []Finding{}
@@ -373,7 +408,7 @@ func TestEcStackImportsResolveRelativeToTheStacksDirectory(t *testing.T) {
 	projectFile(t, root, "atmos.yaml", "{}\n")
 	projectFile(t, root, "stacks/dev.yaml", "import: ../shared/base\n")
 	projectFile(t, root, "shared/base.yaml", ecBroken)
-	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleImports}})
+	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}})
 	require.Equal(t, []string{"shared/base.yaml"}, ecLoaded(&r))
 }
 
@@ -381,7 +416,7 @@ func TestEcSourcesOutsideTheProjectAreNotRead(t *testing.T) {
 	root := newProject(t)
 	projectFile(t, root, "atmos.yaml", "{}\n")
 	outside := projectFile(t, newProject(t), "outside.yaml", ecBroken)
-	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleImports}, ConfigFiles: []string{"atmos.yaml", outside}})
+	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}, ConfigFiles: []string{"atmos.yaml", outside}})
 	require.Empty(t, ecLoaded(&r))
 	found := ecIncomplete(&r, "Source is outside the project; it will not be edited")
 	require.Len(t, found, 1)
@@ -398,7 +433,7 @@ func TestEcSymlinkedSourcesRequireManualReview(t *testing.T) {
 	}
 	require.NoError(t, os.Symlink(outside, filepath.Join(root, "outside-link.yaml")))
 
-	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleImports}, ConfigFiles: []string{"inside-link.yaml", "outside-link.yaml"}})
+	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}, ConfigFiles: []string{"inside-link.yaml", "outside-link.yaml"}})
 	found := ecIncomplete(&r, "Symlinked sources require manual review")
 	files := []string{}
 	for _, f := range found {
@@ -417,10 +452,10 @@ func TestEcExcludedSourcesAreNotRead(t *testing.T) {
 	projectFile(t, root, "stacks/keep.yaml", ecBroken)
 	projectFile(t, root, "stacks/generated/gen.yaml", ecBroken)
 
-	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleImports}})
+	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}})
 	require.Equal(t, []string{"stacks/generated/gen.yaml", "stacks/keep.yaml", "stacks/skip.yaml"}, ecLoaded(&r))
 
-	r = ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleImports}, Exclude: []string{"stacks/skip.yaml", "stacks/generated/**"}})
+	r = ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}, Exclude: []string{"stacks/skip.yaml", "stacks/generated/**"}})
 	require.Equal(t, []string{"stacks/keep.yaml"}, ecLoaded(&r))
 }
 
@@ -496,10 +531,10 @@ func TestEcScanCoverageReportsPerRuleStatus(t *testing.T) {
 
 	t.Run("all scan rules are reported with the checked file count", func(t *testing.T) {
 		got := checks(&Report{}, &Options{})
-		for _, id := range []string{ruleSchema, ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure, ruleModernization, ruleImports} {
+		for _, id := range []string{ruleSchema, ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure, ruleModernization, ruleComponentMonorepo, ruleImports} {
 			require.Equal(t, Check{ID: id, Status: statusPassed, Files: 3}, got[id])
 		}
-		require.Len(t, got, 7)
+		require.Len(t, got, 8)
 	})
 
 	t.Run("warnings produce a findings status and errors produce failed", func(t *testing.T) {

@@ -1,4 +1,5 @@
-# Eligible doctor fixture: one config layer, no imports, no templates.
+# Edge-case doctor fixture: an empty stack file, a multi-document workflow, and a stack value
+# whose text contains template delimiters.
 base_path: "./"
 
 components:

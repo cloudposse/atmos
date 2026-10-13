@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/cloudposse/atmos/pkg/doctor/monorepo"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -14,7 +15,7 @@ import (
 )
 
 func (e *Engine) run(ctx context.Context, o *Options) (r Report, err error) {
-	r = Report{Version: 1, Findings: []Finding{}, Checks: []Check{}, ChangedFiles: []string{}, DryRun: o.DryRun}
+	r = Report{Version: 1, Findings: []Finding{}, Checks: []Check{}, ChangedFiles: []string{}, Fix: o.Fix, DryRun: o.DryRun}
 	defer func() { finishReport(&r, o.Root, err) }()
 	if err = validateOptions(o); err != nil {
 		return r, err
@@ -23,32 +24,44 @@ func (e *Engine) run(ctx context.Context, o *Options) (r Report, err error) {
 		return r, err
 	}
 	e.emit(Event{Phase: "Discover", Label: "Project inputs"})
+	invocation := *o
+	o.invocation = &invocation
 	p, err := e.discover(ctx, o, &r)
 	if err != nil {
 		return r, err
 	}
+	broadenAffected(o, p)
+	filterDiscoveryFindings(o, p, &r)
 	e.emitFindings(r.Findings)
 	e.emit(Event{Phase: "Discover", Label: "Project inputs", Done: true, Status: statusPassed})
-	broadenAffected(o, p)
+	err = e.inspect(ctx, p, o, &r)
+	return r, err
+}
+
+// inspect runs every check against the discovered project and applies repairs when requested.
+func (e *Engine) inspect(ctx context.Context, p *project, o *Options, r *Report) error {
 	v := validator.NewYAMLSchemaValidator(&schema.AtmosConfiguration{})
-	edits, err := e.checkDocuments(ctx, p, o, &r, v)
+	edits, err := e.checkDocuments(ctx, p, o, r, v)
 	if err != nil {
-		return r, err
+		return err
 	}
 	before := len(r.Findings)
-	if err = e.checkProjectValidators(ctx, p, o, &r, v); err != nil {
-		return r, err
+	checkErr := e.checkProjectValidators(ctx, p, o, r, v)
+	if err = ctx.Err(); err != nil {
+		return err
 	}
 	e.emitFindings(r.Findings[before:])
-	if err = e.checkRepositories(ctx, p, o, &r); err != nil {
-		return r, err
+	if err = e.checkRepositories(ctx, p, o, r); err != nil {
+		return err
+	}
+	if checkErr != nil {
+		// Each failed check is recorded on the report; repairs never proceed on a partially inspected project.
+		return checkErr
 	}
 	if o.Fix && len(edits) > 0 {
-		if err = e.fix(ctx, p, o, &r, edits); err != nil {
-			return r, err
-		}
+		return e.fix(ctx, p, o, r, edits)
 	}
-	return r, nil
+	return nil
 }
 
 func validateOptions(o *Options) error {
@@ -93,6 +106,25 @@ func relative(root, path string) string {
 	return filepath.ToSlash(rel)
 }
 
+// filterDiscoveryFindings drops discovery-time findings for files outside an --affected selection.
+func filterDiscoveryFindings(o *Options, p *project, r *Report) {
+	if !o.Affected {
+		return
+	}
+	kept := r.Findings[:0]
+	for i := range r.Findings {
+		f := &r.Findings[i]
+		path := f.File
+		if path != "" && !filepath.IsAbs(path) {
+			path = filepath.Join(p.root, filepath.FromSlash(path))
+		}
+		if path == "" || selected(o, p, &document{path: filepath.Clean(path)}) {
+			kept = append(kept, *f)
+		}
+	}
+	r.Findings = kept
+}
+
 func selected(o *Options, p *project, d *document) bool {
 	if !o.Affected {
 		return true
@@ -126,6 +158,9 @@ func (e *Engine) configure(o *Options) error {
 	}
 	if e.FS == nil {
 		e.FS = filesystem.NewOSFileSystem()
+	}
+	if e.Monorepo == nil {
+		e.Monorepo = monorepo.NewTreeVerifier(nil)
 	}
 	if e.Repositories == nil {
 		e.Repositories = GitHubRepositoryChecker{}
@@ -172,6 +207,7 @@ func broadenAffected(o *Options, p *project) {
 func (e *Engine) checkDocuments(ctx context.Context, p *project, o *Options, r *Report, v validator.Validator) ([]edit, error) {
 	var edits []edit
 	checked := 0
+	run := newMonorepoRun(p, o, r)
 	for i, d := range p.docs {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -182,6 +218,11 @@ func (e *Engine) checkDocuments(ctx context.Context, p *project, o *Options, r *
 		e.emit(Event{Phase: "Check", Label: relative(p.root, d.path), Index: i})
 		before := len(r.Findings)
 		planned, scanErr := scanDocument(d, p, o, r, v)
+		if scanErr == nil {
+			var moved []edit
+			moved, scanErr = e.scanMonorepo(ctx, d, run)
+			planned = append(planned, moved...)
+		}
 		if scanErr != nil {
 			return nil, scanErr
 		}
@@ -228,14 +269,39 @@ func (e *Engine) Run(ctx context.Context, o Options) (Report, error) {
 func appendScanCoverage(o *Options, r *Report, checked int) {
 	for _, rule := range Rules() {
 		switch rule.ID {
-		case ruleSchema, ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure, ruleModernization, ruleImports:
+		case ruleSchema, ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure, ruleModernization, ruleComponentMonorepo, ruleImports:
 			if enabled(o, rule.ID, rule.Category) {
 				status := checkStatus(r, rule.ID)
 				if status == statusPassed && checkHasFindings(r, rule.ID) {
 					status = statusFindings
 				}
-				r.Checks = append(r.Checks, Check{ID: rule.ID, Status: status, Files: checked})
+				if checked == 0 && status == statusPassed {
+					r.Checks = append(r.Checks, Check{ID: rule.ID, Status: statusSkipped, Reason: "No documents were selected"})
+					continue
+				}
+				r.Checks = append(r.Checks, scanCheck(r, rule.ID, status, checked))
 			}
 		}
 	}
+}
+
+// scanCheck builds the coverage record of a document scan. A scan that left a component source
+// unverified is incomplete, not passed, so a clean exit never hides an unanswered question.
+func scanCheck(r *Report, id, status string, files int) Check {
+	check := Check{ID: id, Status: status, Files: files}
+	if id == ruleComponentMonorepo && hasStatus(r, id, statusVerificationIncomplete) {
+		check.Status = "incomplete"
+		check.Reason = "Some component sources could not be verified"
+	}
+	return check
+}
+
+// hasStatus reports whether any finding of the rule has the status.
+func hasStatus(r *Report, id, status string) bool {
+	for i := range r.Findings {
+		if r.Findings[i].RuleID == id && r.Findings[i].Status == status {
+			return true
+		}
+	}
+	return false
 }

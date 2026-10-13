@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -19,13 +20,15 @@ func (e *Engine) checkStacks(ctx context.Context, p *project, o *Options, r *Rep
 		r.Checks = append(r.Checks, Check{ID: ruleStacks, Status: "skipped", Reason: "No stack manifests"})
 		return nil
 	}
-	if !e.canCheckStacks(p, o) {
+	if !e.canCheckStacks(p) {
 		r.Checks = append(r.Checks, Check{ID: ruleStacks, Status: "incomplete", Files: count, Reason: "Effective stack validation needs complete static inputs and a stack validator; imports, profiles, excluded sources, and executable/template inputs remain unverified"})
 		return nil
 	}
 	config, err := staticConfig(p)
 	if err != nil {
-		return err
+		// The runtime decodes leniently; a configuration neither decoder accepts is a coverage gap, not a crash.
+		r.Checks = append(r.Checks, Check{ID: ruleStacks, Status: "incomplete", Files: count, Reason: "Configuration could not be decoded for stack validation: " + err.Error()})
+		return nil //nolint:nilerr // Undecodable configuration is recorded as an incomplete check, not an operational failure.
 	}
 	inputs, err := staticInputs(p, config)
 	if err != nil {
@@ -46,11 +49,7 @@ func (e *Engine) checkStacks(ctx context.Context, p *project, o *Options, r *Rep
 
 func staticConfig(p *project) (*schema.AtmosConfiguration, error) {
 	config := schema.AtmosConfiguration{}
-	content, err := yaml.Marshal(p.config)
-	if err != nil {
-		return nil, err
-	}
-	if err = yaml.Unmarshal(content, &config); err != nil {
+	if err := decodeConfig(p.config, &config); err != nil {
 		return nil, err
 	}
 	config.StacksBaseAbsolutePath = p.stackDir
@@ -116,6 +115,25 @@ func stackCount(p *project) int {
 	return count
 }
 
-func (e *Engine) canCheckStacks(p *project, o *Options) bool {
-	return e.Stacks != nil && p.complete && p.configCount == 1 && len(o.Profiles) == 0
+func (e *Engine) canCheckStacks(p *project) bool {
+	return e.Stacks != nil && p.complete && p.configCount == 1 && len(p.profiles) == 0
+}
+
+// decodeConfig decodes merged configuration the way the runtime does. Strict YAML decoding is
+// tried first; values the runtime accepts through weak typing, such as the string "false" for a
+// boolean, fall back to the same lenient decoder Viper applies when Atmos loads configuration.
+func decodeConfig(values map[string]any, config *schema.AtmosConfiguration) error {
+	content, err := yaml.Marshal(values)
+	if err != nil {
+		return err
+	}
+	if err = yaml.Unmarshal(content, config); err == nil {
+		return nil
+	}
+	*config = schema.AtmosConfiguration{}
+	v := viper.New()
+	if err = v.MergeConfigMap(values); err != nil {
+		return err
+	}
+	return v.Unmarshal(config)
 }

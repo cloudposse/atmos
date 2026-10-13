@@ -76,16 +76,18 @@ func TestCustomSchemaChecksReportOnlyTheirOwnFindings(t *testing.T) {
 
 // Atmos renders stack manifests with configured delimiters, but vendor manifests and
 // custom commands always use the Go defaults, and GitHub workflows are not Atmos templates.
+// Templates are placed in the repository name: a template only in the ref does not
+// change which repository is checked.
 func TestTemplateDetectionFollowsEachDocumentKindsDelimiters(t *testing.T) {
 	const custom = "templates:\n  settings:\n    delimiters: [\"[[\", \"]]\"]\n"
 	for _, tc := range []struct {
 		name, config, file, content string
 		probed                      bool
 	}{
-		{"stack source with configured delimiters", custom, "stacks/dev.yaml", "components:\n  terraform:\n    app:\n      source: \"github.com/example/repo.git?ref=[[ .vars.ref ]]\"\n", false},
+		{"stack source with configured delimiters", custom, "stacks/dev.yaml", "components:\n  terraform:\n    app:\n      source: \"github.com/example/[[ .vars.repo ]].git?ref=v1\"\n", false},
 		{"stack source with literal default delimiters", custom, "stacks/dev.yaml", "components:\n  terraform:\n    app:\n      source: \"github.com/example/repo.git?ref={{v1}}\"\n", true},
-		{"stack source with stack-level delimiters", "{}\n", "stacks/dev.yaml", "settings:\n  templates:\n    settings:\n      delimiters: [\"<%\", \"%>\"]\ncomponents:\n  terraform:\n    app:\n      source: \"github.com/example/repo.git?ref=<% .vars.ref %>\"\n", false},
-		{"vendor source with default delimiters", custom, "vendor.yaml", "spec:\n  sources:\n    - source: \"github.com/example/repo.git?ref={{.Version}}\"\n", false},
+		{"stack source with stack-level delimiters", "{}\n", "stacks/dev.yaml", "settings:\n  templates:\n    settings:\n      delimiters: [\"<%\", \"%>\"]\ncomponents:\n  terraform:\n    app:\n      source: \"github.com/example/<% .vars.repo %>.git?ref=v1\"\n", false},
+		{"vendor source with default delimiters", custom, "vendor.yaml", "spec:\n  sources:\n    - source: \"github.com/example/{{ .Component }}.git?ref={{.Version}}\"\n", false},
 		{"vendor source ignores configured delimiters", custom, "vendor.yaml", "spec:\n  sources:\n    - source: \"github.com/example/repo.git?ref=[[.Version]]\"\n", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -128,7 +130,7 @@ func TestLiteralDelimiterTextDoesNotBlockRepairs(t *testing.T) {
 		name, config, workflow, want string
 	}{
 		{"configured delimiters make default text literal", "templates:\n  settings:\n    delimiters: [\"[[\", \"]]\"]\n", "", "available"},
-		{"default delimiters make the stack dynamic", "{}\n", "", statusVerificationIncomplete},
+		{"default delimiters: a template elsewhere in the stack does not block the repair", "{}\n", "", "available"},
 		{"GitHub expressions are not templates", "templates:\n  settings:\n    delimiters: [\"[[\", \"]]\"]\n", "on: push\njobs:\n  x:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ${{ github.ref }}\n", "available"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

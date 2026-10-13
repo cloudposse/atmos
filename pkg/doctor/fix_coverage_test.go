@@ -223,7 +223,7 @@ func TestEcBackupFailuresStopBeforeAnyWrite(t *testing.T) {
 		require.Equal(t, doc.path, entries[0].Path)
 		require.Equal(t, digest([]byte("a: 1\n")), entries[0].Before)
 		require.Equal(t, digest([]byte("a: 2\n")), entries[0].After)
-		require.Equal(t, uint32(0o640), entries[0].Mode)
+		require.Equal(t, RecoveryMode(0o640), entries[0].Mode)
 		copied, err := os.ReadFile(filepath.Join(r.Backup, entries[0].Copy))
 		require.NoError(t, err)
 		require.Equal(t, "a: 1\n", string(copied))
@@ -359,13 +359,16 @@ func TestEcUnverifiableProjectsNeverWrite(t *testing.T) {
 		wantCheck  bool
 	}{
 		// Detected during discovery: the repair is never offered as fixable.
-		{"profiles", ecLegacyReconfigure, []string{"ci"}, "Dynamic or layered configuration requires complete effective-input verification", false},
+		{"profiles", ecLegacyReconfigure, []string{"ci"}, "Not fixed automatically because Configuration is layered: profiles/ci/atmos.yaml is also merged at runtime", false},
 		// Detected after planning: the planned repair is withdrawn and the gap is reported.
-		{"remote custom schema", ecLegacyReconfigure + "schemas:\n  custom:\n    schema: https://example.invalid/schema.json\n    matches: [atmos.yaml]\n", nil, "A custom schema or source input could not be verified", true},
+		{"remote custom schema", ecLegacyReconfigure + "schemas:\n  custom:\n    schema: https://example.invalid/schema.json\n    matches: [atmos.yaml]\n", nil, "Not fixed automatically because schema custom: Remote schema cannot be included in the static source snapshot", true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			root := newProject(t)
 			path := projectFile(t, root, "atmos.yaml", tt.config)
+			if len(tt.profiles) > 0 {
+				projectFile(t, root, "profiles/ci/atmos.yaml", "logs:\n  level: Debug\n")
+			}
 			e := &Engine{BackupDir: func() (string, error) { t.Fatal("an unverifiable project must not be backed up"); return "", nil }}
 			r, err := e.Run(context.Background(), Options{Root: root, Offline: true, Fix: true, Profiles: tt.profiles, Only: []string{categoryDeprecations}})
 			require.NoError(t, err)

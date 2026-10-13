@@ -3,6 +3,8 @@ package doctor
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,20 +21,56 @@ import (
 	"github.com/cloudposse/atmos/pkg/validator"
 )
 
+// projectCheck is one project-wide validator. Its label names the progress event to close if it fails.
+type projectCheck struct {
+	id    string
+	label string
+	run   func() error
+}
+
+// checkProjectValidators runs every project-wide validator. An operational failure in one
+// validator is recorded on that check and the remaining validators still run; the joined error
+// keeps the overall result operational.
 func (e *Engine) checkProjectValidators(ctx context.Context, p *project, o *Options, r *Report, v validator.Validator) error {
-	if err := e.checkStacks(ctx, p, o, r); err != nil {
-		return err
+	checks := []projectCheck{
+		{ruleStacks, "Static stacks", func() error { return e.checkStacks(ctx, p, o, r) }},
+		{ruleGitHubActions, "GitHub Actions", func() error { return e.checkActions(ctx, p, o, r) }},
+		{ruleEditorConfig, "EditorConfig", func() error { return e.checkEditorConfig(p, o, r) }},
+		{"schema/custom", "", func() error { return e.customSchemas(ctx, p, o, r, v) }},
 	}
-	if err := e.checkActions(ctx, p, o, r); err != nil {
-		return err
+	var failures []error
+	for _, check := range checks {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := check.run(); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			e.recordCheckFailure(r, &check, err)
+			failures = append(failures, fmt.Errorf("%s: %w", check.id, err))
+		}
 	}
-	if err := ctx.Err(); err != nil {
-		return err
+	return errors.Join(failures...)
+}
+
+// recordCheckFailure marks a check as failed by an operational error, replacing any partial result.
+func (e *Engine) recordCheckFailure(r *Report, check *projectCheck, err error) {
+	failed := Check{ID: check.id, Status: statusFailed, Reason: err.Error()}
+	replaced := false
+	for i := range r.Checks {
+		if r.Checks[i].ID == check.id {
+			r.Checks[i] = failed
+			replaced = true
+			break
+		}
 	}
-	if err := e.checkEditorConfig(p, o, r); err != nil {
-		return err
+	if !replaced {
+		r.Checks = append(r.Checks, failed)
 	}
-	return e.customSchemas(ctx, p, o, r, v)
+	if check.label != "" {
+		e.emit(Event{Phase: "Check", Label: check.label, Done: true, Status: statusFailed})
+	}
 }
 
 func (e *Engine) checkActions(ctx context.Context, p *project, o *Options, r *Report) error {
@@ -50,11 +88,11 @@ func (e *Engine) checkActions(ctx context.Context, p *project, o *Options, r *Re
 		return nil
 	}
 	e.emit(Event{Phase: "Check", Label: "GitHub Actions"})
-	report, err := (githubactions.Validator{}).Validate(ctx, civalidate.Request{Root: p.root, Paths: paths})
+	report, err := (githubactions.Validator{}).Validate(ctx, civalidate.Request{Root: p.root, Paths: paths, ConfigFile: actionlintConfig(p.root)})
 	if err != nil {
 		return err
 	}
-	appendDiagnostics(r, report)
+	appendActionDiagnostics(r, report)
 	status := checkStatus(r, ruleGitHubActions)
 	r.Checks = append(r.Checks, Check{ID: ruleGitHubActions, Status: status, Files: len(paths)})
 	e.emit(Event{Phase: "Check", Label: "GitHub Actions", Done: true, Status: status})
@@ -129,34 +167,52 @@ func (e *Engine) customSchemas(ctx context.Context, p *project, o *Options, r *R
 		if !ok {
 			continue
 		}
-
-		source, _ := entry[ruleSchema].(string)
-		if source == "" {
-			continue
-		}
-		var reason string
-		var err error
-		source, reason, err = e.captureSchema(p, source)
-		if err != nil {
+		if err := e.customSchema(ctx, &schemaRun{p, o, r, v}, key, entry); err != nil {
 			return err
 		}
-		if reason != "" {
-			p.complete = false
-			r.Checks = append(r.Checks, Check{ID: "schema/" + key, Status: "incomplete", Reason: reason})
-			continue
-		}
-		paths, err := schemaMatchPaths(p, o, entry)
-		if err != nil {
-			return err
-		}
-		before := len(r.Findings)
-		if err = e.checkSchemaFiles(ctx, p, o, r, schemaCheck{v, source, paths}); err != nil {
-			return err
-		}
-		// Each schema check reports only the findings it added.
-		added := Report{Findings: r.Findings[before:]}
-		r.Checks = append(r.Checks, Check{ID: "schema/" + key, Status: checkStatus(&added, ruleSchema), Files: len(paths)})
 	}
+	return nil
+}
+
+// schemaRun carries the shared inputs of the custom schema checks.
+type schemaRun struct {
+	p *project
+	o *Options
+	r *Report
+	v validator.Validator
+}
+
+// customSchema validates the files one schema registry entry matches.
+func (e *Engine) customSchema(ctx context.Context, run *schemaRun, key string, entry map[string]any) error {
+	p, o, r, v := run.p, run.o, run.r, run.v
+	source, _ := entry[ruleSchema].(string)
+	if source == "" {
+		return nil
+	}
+	source, reason, err := e.captureSchema(p, source)
+	if err != nil {
+		return err
+	}
+	if reason != "" {
+		p.limit(limitProject, "", 0, "schema "+key+": "+reason)
+		r.Checks = append(r.Checks, Check{ID: "schema/" + key, Status: "incomplete", Reason: reason})
+		return nil
+	}
+	paths, err := schemaMatchPaths(p, o, entry)
+	if err != nil {
+		return err
+	}
+	before := len(r.Findings)
+	if err = e.checkSchemaFiles(ctx, p, o, r, schemaCheck{v, source, paths}); err != nil {
+		return err
+	}
+	// Each schema check reports only the findings it added.
+	added := Report{Findings: r.Findings[before:]}
+	status := checkStatus(&added, ruleSchema)
+	if len(paths) == 0 {
+		status = statusSkipped
+	}
+	r.Checks = append(r.Checks, Check{ID: "schema/" + key, Status: status, Files: len(paths)})
 	return nil
 }
 
@@ -201,7 +257,7 @@ func (e *Engine) checkSchemaFiles(ctx context.Context, p *project, o *Options, r
 		}
 		node, parseErr := parse(content)
 		if parseErr != nil {
-			r.Findings = append(r.Findings, Finding{RuleID: ruleSchema, Category: categoryValidation, Severity: validation.SeverityError, File: path, Message: parseErr.Error(), Status: statusManual})
+			r.Findings = append(r.Findings, *parseFinding(path, parseErr))
 			continue
 		}
 		d := &document{path: path, content: content, node: node, schema: source}
@@ -243,7 +299,7 @@ func (e *Engine) captureSchema(p *project, source string) (string, string, error
 	if strings.HasPrefix(source, "atmos://") {
 		return source, "", nil
 	}
-	if strings.Contains(source, "://") {
+	if strings.Contains(source, schemeSeparator) {
 		// Remote schemas are mutable inputs, and may themselves fetch executable or
 		// remote references. Diagnosis and repairs report this coverage gap explicitly.
 		return source, "Remote schema cannot be included in the static source snapshot", nil
@@ -290,25 +346,49 @@ func isExternalReference(value any) bool {
 	return ok && !strings.HasPrefix(ref, "#")
 }
 
+// editorConfigPaths returns the existing EditorConfig Checker configuration files, in
+// precedence order, and whether any EditorConfig input exists. Absent defaults are never passed
+// to the checker, which treats a missing file as an error rather than as no configuration.
 func editorConfigPaths(p *project) ([]string, bool, error) {
-	paths := []string{filepath.Join(p.root, ".editorconfig-checker.json"), filepath.Join(p.root, ".ecrc")}
+	candidates := []string{filepath.Join(p.root, ".editorconfig-checker.json"), filepath.Join(p.root, ".ecrc")}
 	settings, _ := p.config["validate"].(map[string]any)
 	editor, _ := settings[ruleEditorConfig].(map[string]any)
 	configured, _ := editor["config_file_paths"].([]any)
 	for _, value := range configured {
 		if path, ok := value.(string); ok {
-			paths = append(paths, absolute(p.root, path))
+			candidates = append(candidates, absolute(p.root, path))
 		}
 	}
-	available := false
-	for _, path := range append([]string{filepath.Join(p.root, ".editorconfig")}, paths...) {
-		if _, err := os.Stat(path); err == nil {
-			available = true
-		} else if !os.IsNotExist(err) {
+	var paths []string
+	for _, path := range candidates {
+		exists, err := regularFile(path)
+		if err != nil {
 			return nil, false, err
 		}
+		if exists {
+			paths = append(paths, path)
+		}
+	}
+	available := len(paths) > 0
+	if !available {
+		exists, err := regularFile(filepath.Join(p.root, ".editorconfig"))
+		if err != nil {
+			return nil, false, err
+		}
+		available = exists
 	}
 	return paths, available, nil
+}
+
+func regularFile(path string) (bool, error) {
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return !info.IsDir(), nil
 }
 
 func referenceKeyword(key string) bool {
