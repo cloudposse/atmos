@@ -1629,8 +1629,17 @@ jobs:
           else
             printf '%s\n' '{"registry-mirrors":["https://mirror.gcr.io"]}' | sudo tee /etc/docker/daemon.json >/dev/null
           fi
-          sudo systemctl restart docker
-          docker info --format '{{json .RegistryConfig.Mirrors}}' | grep -F 'https://mirror.gcr.io'
+          # Registry mirrors support live reload; restarting Docker can fail
+          # after runner hardening and interrupt existing containers.
+          sudo systemctl reload docker
+          for _ in {1..10}; do
+            if docker info --format '{{json .RegistryConfig.Mirrors}}' | grep -F 'https://mirror.gcr.io'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo '::error::Docker did not activate the registry mirror after reload'
+          exit 1
 
       - name: Write a default AWS profile to the AWS config file
         run: |
