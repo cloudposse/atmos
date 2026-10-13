@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,12 +25,14 @@ import (
 func TestRenderSummary(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
+		fix    bool
 		report diagnostic.Report
 		want   []string
 		absent []string
 	}{
 		{
 			name: "counts fixed and remaining findings",
+			fix:  true,
 			report: diagnostic.Report{
 				ChangedFiles: []string{"atmos.yaml"},
 				Findings: []diagnostic.Finding{
@@ -40,6 +43,39 @@ func TestRenderSummary(t *testing.T) {
 			},
 			want:   []string{"Fixed 1 findings in 1 files. 2 findings remain."},
 			absent: []string{"Dry run", "Backup:"},
+		},
+		{
+			name: "check-only run reports fixable findings instead of fixed counts",
+			report: diagnostic.Report{Findings: []diagnostic.Finding{
+				{RuleID: "a", Status: "available", Fixable: true},
+				{RuleID: "b", Status: "available", Fixable: true},
+				{RuleID: "c", Status: "manual"},
+			}},
+			want:   []string{"3 findings (2 fixable). Run atmos doctor --fix to apply 2."},
+			absent: []string{"Fixed", "remain"},
+		},
+		{
+			name:   "check-only run uses the singular for one finding",
+			report: diagnostic.Report{Findings: []diagnostic.Finding{{RuleID: "a", Status: "available", Fixable: true}}},
+			want:   []string{"1 finding (1 fixable). Run atmos doctor --fix to apply 1."},
+		},
+		{
+			name:   "check-only run without fixable findings does not suggest --fix",
+			report: diagnostic.Report{Findings: []diagnostic.Finding{{RuleID: "a", Status: "manual"}}},
+			want:   []string{"1 finding (none fixable)."},
+			absent: []string{"--fix", "Fixed"},
+		},
+		{
+			name:   "check-only run with nothing found",
+			report: diagnostic.Report{},
+			want:   []string{"No findings."},
+			absent: []string{"Fixed", "remain"},
+		},
+		{
+			name:   "fix run with nothing to repair keeps the fixed and remaining counts",
+			fix:    true,
+			report: diagnostic.Report{Findings: []diagnostic.Finding{{RuleID: "a", Status: "manual"}}},
+			want:   []string{"Fixed 0 findings in 0 files. 1 findings remain."},
 		},
 		{
 			name: "explains skipped and incomplete checks only",
@@ -53,6 +89,7 @@ func TestRenderSummary(t *testing.T) {
 		},
 		{
 			name:   "dry run is announced",
+			fix:    true,
 			report: diagnostic.Report{DryRun: true},
 			want:   []string{"Dry run: project files and backups were not written."},
 		},
@@ -69,7 +106,7 @@ func TestRenderSummary(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			stdout, stderr := captureIO(t)
-			require.NoError(t, renderSummary(&tt.report))
+			require.NoError(t, renderSummary(&tt.report, tt.fix))
 			assert.Empty(t, stdout.String())
 			for _, want := range tt.want {
 				assert.Contains(t, plainText(stderr), want)
@@ -234,6 +271,19 @@ func TestRenderFindingsHidesFixedAndShowsGuidance(t *testing.T) {
 	assert.NotContains(t, output, "atmos.yaml:0")
 }
 
+func TestRenderFindingsOmitsLocationWhenFileIsUnknown(t *testing.T) {
+	_, stderr := captureIO(t)
+	report := diagnostic.Report{Findings: []diagnostic.Finding{
+		{RuleID: "imports", Severity: validation.SeverityWarning, Message: "unresolved import", Status: "manual"},
+	}}
+
+	renderFindings(&report)
+
+	output := plainText(stderr)
+	assert.True(t, strings.HasPrefix(output, "imports [warning, manual] unresolved import"), output)
+	assert.NotContains(t, output, ":0")
+}
+
 func TestProgressObserverTranslatesEngineEvents(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
@@ -246,30 +296,72 @@ func TestProgressObserverTranslatesEngineEvents(t *testing.T) {
 	observe(diagnostic.Event{Phase: "Check", Label: "atmos.yaml", Total: 2})
 	finding := diagnostic.Finding{RuleID: "command-provides", Severity: validation.SeverityWarning, File: filepath.Join(wd, "atmos.yaml"), Line: 5, Message: "legacy", Status: "available"}
 	observe(diagnostic.Event{Phase: "Check", Finding: &finding})
-	observe(diagnostic.Event{Phase: "Check", Label: "atmos.yaml", Total: 2, Done: true, Status: "findings"})
+	observe(diagnostic.Event{Phase: "Check", Label: "atmos.yaml", Index: 1, Total: 2, Done: true, Status: "findings"})
 	observe(diagnostic.Event{Phase: "Verify", Label: "candidate", Status: "warning"})
 	observe(diagnostic.Event{Phase: "Verify", Label: "candidate", Done: true, Status: "passed"})
 
-	require.Len(t, got, 7)
+	// Findings are listed once in the final report, so they never stream as progress output.
+	require.Len(t, got, 6)
+	for _, e := range got {
+		assert.Empty(t, e.Severity)
+		assert.NotContains(t, e.Warning, "command-provides")
+	}
 	// The first event of a phase resets progress to that phase's total.
 	assert.Equal(t, batch.Event{Reset: true, Count: 2}, got[0])
 	assert.Equal(t, "atmos.yaml", got[1].Label)
 	assert.Equal(t, 2, got[1].Count)
 	assert.True(t, got[1].Diagnostic)
 	assert.False(t, got[1].Done)
-	// Findings stream as warnings with the file relative to the working directory.
-	assert.Equal(t, batch.Event{Warning: "atmos.yaml:5 command-provides [available] legacy", Severity: "warning"}, got[2])
 	// The same label in the same phase keeps its identifier so it completes the item it started.
-	assert.Equal(t, got[1].ID, got[3].ID)
-	assert.True(t, got[3].Done)
-	assert.Equal(t, "findings", got[3].Outcome)
+	assert.Equal(t, got[1].ID, got[2].ID)
+	assert.True(t, got[2].Done)
+	assert.Equal(t, "findings", got[2].Outcome)
 	// A new phase resets again, and status "warning" becomes a plain warning line.
-	assert.Equal(t, batch.Event{Reset: true}, got[4])
-	assert.Equal(t, batch.Event{Warning: "candidate"}, got[5])
+	assert.Equal(t, batch.Event{Reset: true}, got[3])
+	assert.Equal(t, batch.Event{Warning: "candidate"}, got[4])
 	// Untotaled work completes with an unknown count rather than a stale total.
-	assert.Equal(t, -1, got[6].Count)
-	assert.True(t, got[6].Done)
-	assert.Equal(t, "passed", got[6].Outcome)
+	assert.Equal(t, -1, got[5].Count)
+	assert.True(t, got[5].Done)
+	assert.Equal(t, "passed", got[5].Outcome)
+}
+
+func TestProgressObserverFileOutcomeReflectsFindings(t *testing.T) {
+	t.Chdir(t.TempDir())
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+
+	for _, tt := range []struct {
+		name     string
+		findings []diagnostic.Finding
+		status   string
+		index    int
+		label    string
+		want     string
+	}{
+		{"clean file is only checked", nil, "passed", 1, "clean.yaml", "checked"},
+		{"error finding in the file fails the row", []diagnostic.Finding{{File: "bad.yaml", Severity: validation.SeverityError}}, "passed", 1, "bad.yaml", "failed"},
+		{"warning finding marks the row", []diagnostic.Finding{{File: "warn.yaml", Severity: validation.SeverityWarning}}, "passed", 1, "warn.yaml", "findings"},
+		{"discovery findings carry absolute paths", []diagnostic.Finding{{File: filepath.Join(wd, "atmos.yaml"), Severity: validation.SeverityError}}, "passed", 1, "atmos.yaml", "failed"},
+		{"error outranks an earlier warning", []diagnostic.Finding{{File: "mix.yaml", Severity: validation.SeverityWarning}, {File: "mix.yaml", Severity: validation.SeverityError}}, "passed", 1, "mix.yaml", "failed"},
+		{"findings in another file do not leak", []diagnostic.Finding{{File: "other.yaml", Severity: validation.SeverityError}}, "passed", 1, "clean.yaml", "checked"},
+		{"findings without a file mark no row", []diagnostic.Finding{{Severity: validation.SeverityError}}, "passed", 1, "clean.yaml", "checked"},
+		{"aggregate rows keep the engine status", nil, "passed", 0, "Static stacks", "passed"},
+		{"aggregate failure is preserved", nil, "failed", 0, "GitHub Actions", "failed"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var got []batch.Event
+			observe := progressObserver(func(e batch.Event) { got = append(got, e) })
+			observe(diagnostic.Event{Phase: "Check", Label: tt.label})
+			for i := range tt.findings {
+				observe(diagnostic.Event{Phase: "Check", Finding: &tt.findings[i]})
+			}
+			observe(diagnostic.Event{Phase: "Check", Label: tt.label, Index: tt.index, Done: true, Status: tt.status})
+
+			done := got[len(got)-1]
+			require.True(t, done.Done)
+			assert.Equal(t, tt.want, done.Outcome)
+		})
+	}
 }
 
 func TestProgressObserverMarksUntotaledWorkAsUnknown(t *testing.T) {

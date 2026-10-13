@@ -39,7 +39,7 @@ import (
 	configcmd "github.com/cloudposse/atmos/cmd/config"
 	_ "github.com/cloudposse/atmos/cmd/container"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
-	_ "github.com/cloudposse/atmos/cmd/doctor"
+	doctorcmd "github.com/cloudposse/atmos/cmd/doctor"
 	_ "github.com/cloudposse/atmos/cmd/emulator"
 	_ "github.com/cloudposse/atmos/cmd/env"
 	_ "github.com/cloudposse/atmos/cmd/gcp"
@@ -1933,7 +1933,8 @@ func Execute() error {
 	}
 	// Doctor must inspect malformed and executable YAML without evaluating it.
 	// Dispatch before configuration, project init, authentication, or tool installation.
-	if args, ok := skipLeadingRootFlags(os.Args[1:]); ok && len(args) > 0 && args[0] == "doctor" {
+	// Flag arity comes from the registered root flags, so any root flag may precede the command.
+	if doctorcmd.IsInvocation(os.Args[1:], RootCmd.PersistentFlags()) {
 		_, err := internal.Execute(RootCmd)
 		return err
 	}

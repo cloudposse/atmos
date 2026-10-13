@@ -40,7 +40,7 @@ func TestDoctorPTYChild(t *testing.T) {
 	t.Cleanup(cancel)
 	engine := diagnostic.Engine{Repositories: cancellationRepository{}}
 	report, err := runStreaming(ctx, &engine, &diagnostic.Options{Only: []string{"sources"}})
-	require.NoError(t, render(&report, "text"))
+	require.NoError(t, render(&report, "text", false))
 	if errors.Is(err, context.Canceled) {
 		os.Exit(130)
 	}
@@ -102,6 +102,6 @@ func TestDoctorPTYStreamingResizeAndCancellation(t *testing.T) {
 	require.Equal(t, 130, exit.ExitCode(), output.String())
 	require.Contains(t, output.String(), "Project inputs")
 	require.Contains(t, output.String(), "Repository check canceled")
-	require.Contains(t, output.String(), "Fixed 0 findings in 0 files")
+	require.Contains(t, output.String(), "1 finding (none fixable)")
 	require.NotContains(t, output.String(), "/0 complete")
 }

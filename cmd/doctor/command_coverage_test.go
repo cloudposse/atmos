@@ -131,12 +131,12 @@ func TestListChecks(t *testing.T) {
 	rules := diagnostic.Rules()
 	require.NotEmpty(t, rules)
 
-	t.Run("text lists every check on the UI channel", func(t *testing.T) {
+	t.Run("text lists every check on the data channel", func(t *testing.T) {
 		stdout, stderr := captureIO(t)
 		require.NoError(t, listChecks("text"))
-		assert.Empty(t, stdout.String())
+		assert.Empty(t, stderr.String())
 		for _, rule := range rules {
-			assert.Contains(t, plainText(stderr), rule.ID+" ["+rule.Category+"]: "+rule.Description)
+			assert.Contains(t, plainText(stdout), rule.ID+" ["+rule.Category+"]: "+rule.Description)
 		}
 	})
 
@@ -368,12 +368,22 @@ func TestRunAffectedRejectsUnresolvableBase(t *testing.T) {
 	isolateAmbientConfig(t)
 	root := newProjectDir(t, map[string]string{"atmos.yaml": legacyCommandConfig})
 	initGitRepository(t, root)
-	captureIO(t)
 
-	err := executeDoctor(t, "--offline", "--format=json", "--affected", "--base=no-such-ref-for-doctor")
+	t.Run("text keeps the error message", func(t *testing.T) {
+		captureIO(t)
+		err := executeDoctor(t, "--offline", "--affected", "--base=no-such-ref-for-doctor")
+		requireExitCode(t, err, 2)
+		assert.Contains(t, err.Error(), "no-such-ref-for-doctor")
+	})
 
-	requireExitCode(t, err, 2)
-	assert.Contains(t, err.Error(), "no-such-ref-for-doctor")
+	t.Run("json reports the failure on stdout", func(t *testing.T) {
+		stdout, _ := captureIO(t)
+		err := executeDoctor(t, "--offline", "--format=json", "--affected", "--base=no-such-ref-for-doctor")
+		requireExitCode(t, err, 2)
+		var report diagnostic.Report
+		require.NoError(t, json.Unmarshal(stdout.Bytes(), &report))
+		assert.Contains(t, report.OperationalError, "no-such-ref-for-doctor")
+	})
 }
 
 func TestRunAffectedOutsideGitRepositoryFails(t *testing.T) {
@@ -381,10 +391,12 @@ func TestRunAffectedOutsideGitRepositoryFails(t *testing.T) {
 	root := newProjectDir(t, map[string]string{"atmos.yaml": legacyCommandConfig})
 	// Keep git from discovering a repository in an ancestor of the temporary project.
 	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Dir(root))
-	captureIO(t)
+	stdout, _ := captureIO(t)
 
 	err := executeDoctor(t, "--offline", "--format=json", "--affected", "--base=HEAD")
 
 	requireExitCode(t, err, 2)
-	assert.Contains(t, err.Error(), "resolve validation base")
+	var report diagnostic.Report
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &report))
+	assert.Contains(t, report.OperationalError, "resolve validation base")
 }
