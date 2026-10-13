@@ -44,7 +44,7 @@ Fields NOT populated: `RunNumber`, `Workflow`, `Job`, `Ref`.
 
 | Capability | Supported | Details |
 |-----------|-----------|---------|
-| **OutputWriter** | Yes | `WriteOutput` uses the shared collision-safe heredoc formatter (`pkg/github/actions.FormatValue`, delimiter `ATMOS_EOF_<KEY>`) and appends to the `$ATMOS_CI_OUTPUT` file, or renders the formatted line locally if unset |
+| **OutputWriter** | Yes | `WriteOutput` uses the shared collision-safe heredoc formatter (`provider.FormatOutputLine`, delimiter `EOF`, extended with underscores to avoid collisions) and appends to the `$ATMOS_CI_OUTPUT` file, or renders a plain `key=value` line locally if unset |
 | **Summary** | Yes | Masks the content, then appends to the `$ATMOS_CI_SUMMARY` file; without a file, renders the markdown locally (see [Rendering](#rendering)) |
 | **Check Runs** | Yes | Synthetic in-memory check runs with IDs from a shared `atomic.Int64` counter, logged via `ui` |
 | **PostComment** | Yes (local) | Renders a masked preview and returns a synthetic `Comment` (`Created=true`, empty `URL`, ID from a shared `atomic.Int64` counter). Never posts. |
@@ -69,8 +69,8 @@ The generic `PostComment` is deliberately lenient because a laptop run usually h
 
 | Variable set | Behavior |
 |--------------|----------|
-| `ATMOS_CI_ENV` | `WriteEnv(key, value)` appends a `ghactions.FormatValue`-formatted line to the file |
-| `ATMOS_CI_PATH` | `AddPath(dir)` appends `dir` to the file in the same format |
+| `ATMOS_CI_ENV` | `WriteEnv(key, value)` appends a `provider.FormatOutputLine`-formatted line to the file |
+| `ATMOS_CI_PATH` | `AddPath(dir)` appends `dir` followed by a newline to the file |
 | Unset | `WriteEnv` prints `export KEY='value'`; `AddPath` prints `export PATH='<dir>':"$PATH"` to the UI channel (stderr) or the bound writer, ready to `eval` in a shell |
 
 Failures wrap `ErrCIEnvWriteFailed`.

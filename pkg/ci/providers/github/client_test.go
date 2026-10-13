@@ -1,6 +1,10 @@
 package github
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -76,4 +80,85 @@ func TestNewClient_TokenPrecedenceUnchanged(t *testing.T) {
 	client, err := NewClient()
 	require.NoError(t, err)
 	assert.NotNil(t, client)
+}
+
+// TestNewClient_HTTPSOnlyToken checks the wire request, including redirect hops.
+func TestNewClient_HTTPSOnlyToken(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		secure, redirect bool
+	}{
+		{"HTTP override", false, false},
+		{"HTTPS override", true, false},
+		{"HTTPS redirects to HTTP", true, true},
+		{"HTTP redirects to HTTPS", false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clearAPIURLEnv(t)
+			httpAuth := make(chan string, 1)
+			httpsAuth := make(chan string, 1)
+			var plainURL, secureURL string
+			handler := func(auth chan string, secure bool) http.HandlerFunc {
+				return func(w http.ResponseWriter, r *http.Request) {
+					auth <- r.Header.Get("Authorization")
+					if tc.redirect && secure == tc.secure {
+						target := secureURL
+						if secure {
+							target = plainURL
+						}
+						http.Redirect(w, r, target+"/user", http.StatusFound)
+						return
+					}
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte(`{"login":"test"}`))
+				}
+			}
+			plain := httptest.NewServer(handler(httpAuth, false))
+			defer plain.Close()
+			secure := httptest.NewTLSServer(handler(httpsAuth, true))
+			defer secure.Close()
+			plainURL, secureURL = plain.URL, secure.URL
+			base := plainURL
+			if tc.secure {
+				base = secureURL
+			}
+			t.Setenv("ATMOS_CI_GITHUB_API_URL", base)
+			// Trust only the local test server's certificate without changing authentication.
+			oldTransport := http.DefaultTransport
+			http.DefaultTransport = secure.Client().Transport
+			t.Cleanup(func() { http.DefaultTransport = oldTransport })
+			client, err := NewClient()
+			require.NoError(t, err)
+			user, _, err := client.GitHub().Users.Get(context.Background(), "")
+			require.NoError(t, err)
+			assert.Equal(t, "test", user.GetLogin())
+			if !tc.secure || tc.redirect {
+				assert.Empty(t, <-httpAuth, "HTTP must never receive credentials")
+			}
+			if tc.secure || tc.redirect {
+				assert.Equal(t, "Bearer test-token", <-httpsAuth, "HTTPS keeps authentication")
+			}
+		})
+	}
+}
+
+func TestNewClientWithToken_HTTPStripsAuthorization(t *testing.T) {
+	received := make(chan string, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received <- r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+	client := NewClientWithToken("test-token")
+	base, err := url.Parse(server.URL + "/")
+	require.NoError(t, err)
+	client.GitHub().BaseURL = base
+	req, err := client.GitHub().NewRequest(http.MethodGet, "user", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer copied-on-redirect")
+	_, err = client.GitHub().Do(context.Background(), req, nil)
+	require.NoError(t, err)
+	assert.Empty(t, <-received)
+	assert.Equal(t, "Bearer copied-on-redirect", req.Header.Get("Authorization"), "transport must not mutate caller headers")
 }

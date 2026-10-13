@@ -119,7 +119,7 @@ The value must be an absolute `http(s)` URL; a trailing slash is added when miss
 
 The GitHub provider implements two optional capabilities used by the [Reporter](../../framework/interfaces.md#reporter-script-and-step-facing-seam):
 
-- **`EnvExporter`.** `WriteEnv(key, value)` appends a `ghactions.FormatValue`-formatted entry (collision-safe heredoc for multiline values) to the file named by `$GITHUB_ENV`. `AddPath(dir)` appends `dir` to the file named by `$GITHUB_PATH`. When the variable is unset the call returns an error wrapping `ErrCIEnvWriteFailed` rather than falling back to stdout, because the export could not take effect.
+- **`EnvExporter`.** `WriteEnv(key, value)` appends a `provider.FormatOutputLine`-formatted entry (collision-safe heredoc for multiline values) to the file named by `$GITHUB_ENV`. `AddPath(dir)` appends `dir` to the file named by `$GITHUB_PATH`. When the variable is unset the call returns an error wrapping `ErrCIEnvWriteFailed` rather than falling back to stdout, because the export could not take effect.
 - **`ValueMasker`.** `MaskValue(value)` emits `::add-mask::<escaped value>` on the data stream (stdout), using the same escaper as annotations, because the runner parses workflow commands from the step log. An empty value is ignored. Write failures wrap `ErrCIMaskFailed`.
 
 ## GitHub API Endpoints

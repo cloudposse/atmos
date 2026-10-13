@@ -255,10 +255,8 @@ func TestReporter_LocalContext(t *testing.T) {
 	})
 }
 
-// TestReporter_LocalMaskReceiptNamesProvider documents that a locally handled Mask names the
-// generic provider in its receipt like every other local call. Today Mask returns a receipt with
-// an empty Provider because it registers the secret with the Atmos masker without routing
-// through a provider, so this test fails until the receipt names one.
+// TestReporter_LocalMaskReceiptNamesProvider verifies that a locally handled Mask names the
+// generic provider in its receipt like every other local call.
 func TestReporter_LocalMaskReceiptNamesProvider(t *testing.T) {
 	t.Cleanup(atmosio.Reset)
 	r, _ := newLocalReporter(t, nil)

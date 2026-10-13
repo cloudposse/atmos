@@ -2,6 +2,7 @@ package github
 
 import (
 	"fmt"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
@@ -34,6 +35,9 @@ func (p *Provider) AddPath(dir string) error {
 	path := ghactions.GetPathPath()
 	if path == "" {
 		return fmt.Errorf("%w: GITHUB_PATH is not set", errUtils.ErrCIEnvWriteFailed)
+	}
+	if strings.ContainsAny(dir, "\r\n") {
+		return fmt.Errorf("%w: path must not contain newlines", errUtils.ErrCIEnvWriteFailed)
 	}
 	return provider.AppendFile(path, dir+"\n", errUtils.ErrCIEnvWriteFailed)
 }

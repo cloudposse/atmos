@@ -179,18 +179,22 @@ func capturedAuthHeader(t *testing.T, p *Provider) string {
 	t.Helper()
 
 	var capturedAuth string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"login":"test"}`))
 	}))
 	defer server.Close()
+	originalTransport := http.DefaultTransport
+	http.DefaultTransport = server.Client().Transport
+	t.Cleanup(func() { http.DefaultTransport = originalTransport })
 
 	serverURL, err := url.Parse(server.URL + "/")
 	require.NoError(t, err)
 	p.client.GitHub().BaseURL = serverURL
-	_, _, _ = p.client.GitHub().Users.Get(context.Background(), "")
+	_, _, err = p.client.GitHub().Users.Get(context.Background(), "")
+	require.NoError(t, err)
 
 	return capturedAuth
 }

@@ -112,7 +112,7 @@ Phases are organized by PRD workstream and functional requirement (FR). See [Ove
 4. Local-renderer parity (masked `PostComment` preview, `Annotate`, `ReportSARIF`, `StartLogGroup`/`EndLogGroup`, `WriteEnv`/`AddPath`) — Done
 5. `Context()` gains `EventName`, `RunID`, `RunURL`, and `PullRequest` (from `ATMOS_CI_PR`/`ATMOS_CI_BASE_REF`) — Done
 6. `OutputBinder` capability (`BindOutput(io.Writer)`) for host-routed renderings — Done
-7. `WriteOutput` uses the shared collision-safe `FormatValue` heredoc formatter — Done
+7. `WriteOutput` uses the shared collision-safe `provider.FormatOutputLine` heredoc formatter — Done
 8. `ATMOS_CI_OUTPUT`/`ATMOS_CI_SUMMARY` still read at init rather than call time — Follow-up
 
 ---
@@ -129,7 +129,7 @@ Phases are organized by PRD workstream and functional requirement (FR). See [Ove
 6. `ci.Reporter` seam (`pkg/ci/reporter.go`): `NewReporter`, `Receipt`, single `target(feature, enabledFn)` decision, injected into Starlark scripts as `script.Spec.CI` — Done
 7. Optional capability interfaces `OutputBinder`, `EnvExporter`, `ValueMasker` — Done
 8. GitHub `EnvExporter` (`$GITHUB_ENV`/`$GITHUB_PATH`) and `ValueMasker` (`::add-mask::`) — Done
-9. Shared `AppendFile` and `FormatValue` helpers deduplicated into `FileOutputWriter` — Done
+9. Shared `AppendFile` and `provider.FormatOutputLine` helpers deduplicated into `FileOutputWriter` — Done
 10. Shared comment validation moved to `pkg/ci/internal/provider/comment.go` — Done
 11. New sentinel errors `ErrCIEnvWriteFailed`, `ErrCIMaskFailed`, `ErrCIPullRequestUnknown` — Done
 12. GitHub API base URL resolution in `NewClient()`: `ATMOS_CI_GITHUB_API_URL` > `GITHUB_API_URL` (GHES) > `https://api.github.com/`; invalid values fail with `ErrInvalidURL` — Done
@@ -327,7 +327,7 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 | | `ci.Reporter` seam with `Receipt` and `target()` gating | | Done | |
 | | Generic local-renderer parity and `OutputBinder` | | Done | |
 | | GitHub `EnvExporter` and `ValueMasker` | | Done | |
-| | Shared `AppendFile` + `FormatValue` in `FileOutputWriter` | | Done | |
+| | Shared `AppendFile` + `provider.FormatOutputLine` in `FileOutputWriter` | | Done | |
 | | Shared comment validation in `internal/provider/comment.go` | | Done | |
 | | `ATMOS_CI_GITHUB_API_URL` / `GITHUB_API_URL` API base URL support (GHES) | | Done | |
 | | `ghtest` fake GitHub API + Actions env fixture (`pkg/ci/providers/github/ghtest`) | | Done | |
@@ -654,7 +654,7 @@ The executor uses a **callback-based dispatch** pattern (~250 lines):
 
 ### OutputWriter Implementation
 
-- `FileOutputWriter` (`pkg/ci/internal/provider/output.go`) — writes to `$GITHUB_OUTPUT` (key=value, heredoc for multiline) and `$GITHUB_STEP_SUMMARY` (append), using the shared `AppendFile` and `FormatValue` (`pkg/github/actions`, delimiter `ATMOS_EOF_<KEY>`) helpers
+- `FileOutputWriter` (`pkg/ci/internal/provider/output.go`) — writes to `$GITHUB_OUTPUT` (key=value, heredoc for multiline) and `$GITHUB_STEP_SUMMARY` (append), using the shared `AppendFile` and `provider.FormatOutputLine` (`pkg/ci/internal/provider`, delimiter `EOF`, extended with underscores to avoid collisions) helpers
 - `NoopOutputWriter` — used when not in CI
 - GitHub provider creates `FileOutputWriter` from env vars in `OutputWriter()` method
 - Generic provider creates `FileOutputWriter` from env vars (`ATMOS_CI_OUTPUT`, `ATMOS_CI_SUMMARY`); `ATMOS_CI_ENV` and `ATMOS_CI_PATH` are read at call time by `WriteEnv`/`AddPath`

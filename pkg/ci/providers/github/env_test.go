@@ -71,3 +71,17 @@ func TestProvider_AddPath(t *testing.T) {
 		assert.ErrorIs(t, err, errUtils.ErrCIEnvWriteFailed)
 	})
 }
+
+func TestProvider_AddPathRejectsNewlines(t *testing.T) {
+	for _, dir := range []string{"safe\nother", "safe\rother", "safe\r\nother"} {
+		t.Run(dir, func(t *testing.T) {
+			pathFile := filepath.Join(t.TempDir(), "path")
+			t.Setenv("GITHUB_PATH", pathFile)
+			require.NoError(t, os.WriteFile(pathFile, []byte("existing\n"), 0o600))
+			require.ErrorIs(t, NewProvider().AddPath(dir), errUtils.ErrCIEnvWriteFailed)
+			got, err := os.ReadFile(pathFile)
+			require.NoError(t, err)
+			assert.Equal(t, "existing\n", string(got), "rejected paths must not change the runner file")
+		})
+	}
+}

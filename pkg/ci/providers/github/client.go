@@ -2,7 +2,6 @@
 package github
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -119,11 +118,33 @@ func NewClientWithToken(token string) *Client {
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: token},
 	)
-	tc := oauth2.NewClient(context.Background(), ts)
+	tc := &http.Client{Transport: &httpsTokenTransport{Transport: oauth2.Transport{Source: ts}}}
 
 	return &Client{
 		client: github.NewClient(tc),
 	}
+}
+
+// httpsTokenTransport applies the token policy to every request, including redirects.
+// Local HTTP endpoints remain usable, but must never receive authentication headers.
+type httpsTokenTransport struct {
+	oauth2.Transport
+}
+
+func (t *httpsTokenTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	defer perf.Track(nil, "github.httpsTokenTransport.RoundTrip")()
+
+	if req.URL.Scheme == "https" {
+		return t.Transport.RoundTrip(req)
+	}
+	// Redirects may copy credentials from a previous request; strip them on a clone.
+	plain := req.Clone(req.Context())
+	plain.Header.Del("Authorization")
+	base := t.Base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return base.RoundTrip(plain)
 }
 
 // NewClientWithHTTPClient creates a new GitHub API client with a custom HTTP client.
