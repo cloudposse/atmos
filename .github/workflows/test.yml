@@ -767,6 +767,17 @@ jobs:
       # dogfoods Atmos's own schema validator (the engine behind `atmos validate schema`).
       # That runs in the unit/acceptance test jobs, so no separate CI step is needed here.
 
+      # A Windows runtime heap-corruption failure in this package is not an
+      # assertion failure. Exercise its subprocess paths with pointer checking
+      # on one shard, retaining the full ordinary suite below.
+      - name: Check Windows acceptance orchestration
+        if: matrix.flavor.target == 'windows' && matrix.shard == 1 && ! github.event.pull_request.draft
+        timeout-minutes: 5
+        shell: bash
+        env:
+          GOTRACEBACK: system
+        run: go test -gcflags=all=-d=checkptr=2 -count=3 ./internal/ci/acceptance
+
       # The Mage target owns package/test allocation, precompiled suites, and
       # native coverage collection so both workflow paths stay identical.
       - name: Acceptance tests with coverage
