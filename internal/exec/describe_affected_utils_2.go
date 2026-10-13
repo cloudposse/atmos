@@ -556,8 +556,8 @@ func addAffectedSpaceliftAdminStack(
 
 								if spaceliftWorkspaceEnabled, ok := componentSettingsSpaceliftSection["workspace_enabled"].(bool); !ok || !spaceliftWorkspaceEnabled {
 									return nil, errors.New(fmt.Sprintf(
-										"component '%s' in the stack '%s' has the section 'settings.spacelift.admin_stack_selector' "+
-											"to point to the Spacelift admin component '%s' in the stack '%s', "+
+										"component %q in the stack %q has the section 'settings.spacelift.admin_stack_selector' "+
+											"to point to the Spacelift admin component %q in the stack %q, "+
 											"but that component has Spacelift workspace disabled "+
 											"in the 'settings.spacelift.workspace_enabled' section "+
 											"and can't be added to the affected stacks",
