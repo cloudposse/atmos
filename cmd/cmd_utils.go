@@ -137,12 +137,16 @@ func processCustomCommandsWithWorkingDirectory(
 		// A step that failed to decode without failing the whole config load (for example an
 		// unknown `retry:` key) makes only this command unusable: warn and register a stub.
 		if loadErr := commandCfg.Steps.LoadError(); loadErr != nil {
-			stub := registerInvalidCustomCommand(parentCommand, &commandCfg, customCommandLoadError(commandCfg.Name, loadErr))
+			// Built-in behavior still wins when the custom steps could not be decoded.
+			target := findSubcommand(parentCommand, commandCfg.Name)
+			if target == nil {
+				target = registerInvalidCustomCommand(parentCommand, &commandCfg, customCommandLoadError(commandCfg.Name, loadErr))
+			}
 			workingDirectory := commandCfg.WorkingDirectory
 			if workingDirectory == "" {
 				workingDirectory = parentWorkingDirectory
 			}
-			if err := processCustomCommandsWithWorkingDirectory(atmosConfig, commandCfg.Commands, stub, workingDirectory); err != nil {
+			if err := processCustomCommandsWithWorkingDirectory(atmosConfig, commandCfg.Commands, target, workingDirectory); err != nil {
 				return err
 			}
 			continue

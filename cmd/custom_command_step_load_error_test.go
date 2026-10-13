@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -84,4 +86,62 @@ func TestInvalidCustomCommandPropagatesChildFlagConflict(t *testing.T) {
 			require.ErrorIs(t, stub.RunE(stub, nil), tt.parentError)
 		})
 	}
+}
+
+// A malformed extension must not shadow a built-in or detach its configured children.
+func TestCustomCommandStepLoadErrorPreservesBuiltinAndChildren(t *testing.T) {
+	_ = NewTestKit(t)
+	ensureIOInitialized(t)
+	exited := captureCustomCommandExit(t)
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	workDir := t.TempDir()
+	dumpFile := filepath.Join(workDir, "child-env.txt")
+	parent := &cobra.Command{Use: "atmos"}
+	var preRuns, runs int
+	builtin := &cobra.Command{
+		Use:    "deploy",
+		PreRun: func(_ *cobra.Command, _ []string) { preRuns++ },
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			runs++
+			value, err := cmd.Flags().GetString("native")
+			require.NoError(t, err)
+			assert.Equal(t, "kept", value)
+			return nil
+		},
+	}
+	builtin.Flags().String("native", "", "built-in flag")
+	parent.AddCommand(builtin)
+	loadErr := schema.Tasks{{Name: "invalid", LoadError: schema.ErrInvalidRetryConfig}}
+	require.NoError(t, processCustomCommands(schema.AtmosConfiguration{BasePath: workDir}, []schema.Command{{
+		Name: "deploy", Steps: loadErr, WorkingDirectory: workDir,
+		Commands: []schema.Command{{Name: "child", Steps: schema.Tasks{{
+			Type: schema.TaskTypeScript, Interpreter: "starlark", Script: "exec.run([env[\"EXE\"]])",
+			Env: map[string]string{"EXE": executable, "_ATMOS_TEST_DUMP_ENV": dumpFile, "CHILD_RAN": "yes"},
+		}}}},
+	}}, parent))
+
+	require.Len(t, parent.Commands(), 1, "a load error must not register a second deploy command")
+	require.Same(t, builtin, parent.Commands()[0])
+	child, _, err := parent.Find([]string{"deploy", "child"})
+	require.NoError(t, err)
+	require.Equal(t, "child", child.Name())
+	require.Same(t, builtin, child.Parent())
+
+	parent.SetArgs([]string{"deploy", "--native=kept"})
+	executed, err := parent.ExecuteC()
+	require.NoError(t, err)
+	assert.Same(t, builtin, executed)
+	assert.Equal(t, 1, preRuns)
+	assert.Equal(t, 1, runs)
+
+	parent.SetArgs([]string{"deploy", "child"})
+	executed, err = parent.ExecuteC()
+	require.NoError(t, err)
+	assert.Same(t, child, executed)
+	assert.Equal(t, 1, runs, "executing the child must not invoke the built-in parent")
+	assert.False(t, exited(), "the configured child must complete successfully")
+	dump, err := os.ReadFile(dumpFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(dump), "CHILD_RAN=yes")
 }
