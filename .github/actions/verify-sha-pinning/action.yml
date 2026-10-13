@@ -44,12 +44,17 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Test API retry behavior
+      shell: bash
+      run: node --test "$GITHUB_ACTION_PATH/retry.test.cjs" "$GITHUB_ACTION_PATH/verify.test.cjs"
+
     - name: Verify SHA pins against upstream tags
       id: verify
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         WORKFLOW_DIR: ${{ inputs.workflow-dir }}
         ALLOWLIST_FILE: ${{ inputs.allowlist-file }}
+        VERIFY_ACTION_PATH: ${{ github.action_path }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
@@ -58,7 +63,6 @@ runs:
 
           const workflowDir = process.env.WORKFLOW_DIR;
           const tagShaCache = new Map();
-          let rateLimitError;
 
           // Keep potentially large diagnostics out of process environment variables.
           function writeResults(results) {
@@ -67,7 +71,6 @@ runs:
             fs.writeFileSync(file, JSON.stringify(results));
             core.setOutput('results_file', file);
           }
-          const nonRetryableStatuses = new Set([400, 401, 403, 404, 422]);
 
           // A non-empty string, trimmed.
           function isNonEmptyString(value) {
@@ -118,32 +121,8 @@ runs:
             }
           }
 
-          const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-          async function withRetries(operation, label, maxAttempts = 3) {
-            if (rateLimitError) throw rateLimitError;
-            let lastErr;
-            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-              try {
-                return await operation();
-              } catch (err) {
-                // Quota exhaustion applies to every endpoint, including mismatch diagnostics.
-                if (err.status === 403 && err.response?.headers?.['x-ratelimit-remaining'] === '0') {
-                  rateLimitError = err;
-                  throw err;
-                }
-                if (nonRetryableStatuses.has(err.status)) {
-                  throw err;
-                }
-                lastErr = err;
-                if (attempt < maxAttempts) {
-                  core.warning(`${label} failed on attempt ${attempt}/${maxAttempts}: ${err.message}; retrying`);
-                  await sleep(250 * attempt);
-                }
-              }
-            }
-            throw lastErr;
-          }
+          const { createRetry, isRateLimitError } = require(path.join(process.env.VERIFY_ACTION_PATH, 'retry.cjs'));
+          const withRetries = createRetry({ warning: message => core.warning(message) });
 
           // Find all workflow files
           const files = fs.readdirSync(workflowDir)
@@ -223,7 +202,6 @@ runs:
             }
             // An exhausted installation token cannot resolve any further tags.
             // Cached successes remain usable; unresolved references still fail.
-            if (rateLimitError) throw rateLimitError;
 
             try {
               const ref = await withRetries(
@@ -267,8 +245,16 @@ runs:
                 throw new Error(`Tag "${tag}" not found in ${owner}/${repo}`);
               }
               if (err.status === 403) {
-                // Quota failures stay hard errors even for allowlisted repositories.
-                if (err === rateLimitError) throw err;
+                // A rate-limit 403 isn't a per-repo access-block condition —
+                // it means this token is out of budget for every remaining
+                // lookup, allowlisted repo or not. Let it fail loudly instead
+                // of being silently absorbed by one repo's allowlist entry.
+                // Detected via the documented x-ratelimit-remaining response
+                // header (a structured API signal), never by inspecting the
+                // error's message text.
+                if (isRateLimitError(err)) {
+                  throw err;
+                }
                 throw new AccessBlockedError(
                   `API access blocked (403) resolving tag "${tag}" in ${owner}/${repo}: ${err.message}`,
                   err
@@ -290,7 +276,7 @@ runs:
               );
               details.existsInRepo = true;
             } catch (err) {
-              if (err === rateLimitError) throw err;
+              if (isRateLimitError(err)) throw err;
               details.existsInRepo = (err.status !== 404 && err.status !== 422);
             }
 
@@ -307,7 +293,7 @@ runs:
                   .filter(t => t.commit.sha === pinnedSha)
                   .map(t => t.name);
               } catch (err) {
-                if (err === rateLimitError) throw err;
+                if (isRateLimitError(err)) throw err;
                 // Non-fatal — we still have the existence check
               }
             }
@@ -450,7 +436,6 @@ runs:
         github-token: ${{ inputs.github-token }}
         script: |
           const marker = '<!-- verify-sha-pinning -->';
-          const nonRetryableStatuses = new Set([400, 401, 403, 404, 422]);
           const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
           async function withRetries(operation, label, maxAttempts = 3) {

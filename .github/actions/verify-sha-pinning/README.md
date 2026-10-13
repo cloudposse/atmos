@@ -106,9 +106,9 @@ Handles sub-actions and reusable workflow calls (`owner/repo/sub@sha # tag`), ta
 
 ## Rate limits and diagnostic size
 
-When GitHub returns HTTP 403 with `x-ratelimit-remaining: 0`, the verifier stops
-new tag lookups for that run. Previously verified tags remain cached; unresolved
-references fail verification. A later run can retry after the quota resets.
+The verifier honors GitHub quota-reset and retry headers within a bounded recovery
+budget. If recovery is exhausted, it stops new tag lookups for that run. Previously
+verified tags remain cached; unresolved references fail verification.
 
 The verification step writes complete results to a temporary JSON file. The
 comment step reads that file instead of passing the payload through an environment
@@ -123,7 +123,18 @@ Run the actual action scripts against mocked GitHub responses without network ac
 node --test .github/actions/verify-sha-pinning/offline.test.mjs
 ```
 
-The existing live API smoke test is also available:
+API lookups honor GitHub's `retry-after` and primary quota reset headers before retrying.
+Each lookup has at most three attempts, and the verifier shares a 65-minute rate-limit
+wait budget across all lookups. Exhausted recovery remains a failure and stops further
+API lookups; rate-limit errors are never downgraded through the access-block allowlist.
+
+The retry regression tests use a simulated clock and require no token:
+
+```bash
+node --test --experimental-test-coverage .github/actions/verify-sha-pinning/*.test.cjs
+```
+
+Run the live tag-resolution and policy tests with a token:
 
 ```bash
 GITHUB_TOKEN=$(gh auth token) node .github/actions/verify-sha-pinning/test.mjs
