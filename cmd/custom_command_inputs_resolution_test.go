@@ -239,7 +239,7 @@ func TestCustomCommandRejectsUnsupportedFlagType(t *testing.T) {
 			// (including --help) would break. It is registered as a stub that reports the error
 			// when invoked by name.
 			err = processCustomCommands(schema.AtmosConfiguration{}, []schema.Command{
-				{Name: "bad-flag", Flags: []schema.CommandFlag{tt.flag}},
+				{Name: "bad-flag", Flags: []schema.CommandFlag{tt.flag}, Commands: []schema.Command{{Name: "child"}}},
 				{Name: "good", Steps: []schema.Task{{Name: "noop", Type: schema.TaskTypeShell, Command: "true"}}},
 			}, parentCmd)
 			require.NoError(t, err)
@@ -247,6 +247,12 @@ func TestCustomCommandRejectsUnsupportedFlagType(t *testing.T) {
 			good, _, findErr := parentCmd.Find([]string{"good"})
 			require.NoError(t, findErr)
 			assert.Equal(t, "good", good.Name())
+
+			child, _, childErr := parentCmd.Find([]string{"bad-flag", "child"})
+			require.NoError(t, childErr)
+			require.Equal(t, "child", child.Name())
+			require.NotNil(t, child.Run)
+			child.Run(child, nil)
 
 			stub, _, findErr := parentCmd.Find([]string{"bad-flag"})
 			require.NoError(t, findErr)
@@ -400,7 +406,7 @@ func TestCustomCommandRejectsNegativeStepTimeout(t *testing.T) {
 	workDir := t.TempDir()
 	command := registerCustomCommandForTest(t, workDir, &schema.Command{
 		Name:  "negative-timeout",
-		Steps: schema.Tasks{{Name: "must-not-run", Type: schema.TaskTypeShell, Command: "echo ran > marker", Timeout: -5 * time.Second}},
+		Steps: schema.Tasks{{Name: "must-not-run", Type: schema.TaskTypeShell, Command: "echo ran > marker", Timeout: "-5s"}},
 	})
 	runner := adapters.CustomCommandRunner(command.Parent(), func(*cobra.Command) bool { return true })
 	err := runner(context.Background(), taskgraph.Ref{Name: command.Name()})

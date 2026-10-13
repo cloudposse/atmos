@@ -137,7 +137,14 @@ func processCustomCommandsWithWorkingDirectory(
 		// A step that failed to decode without failing the whole config load (for example an
 		// unknown `retry:` key) makes only this command unusable: warn and register a stub.
 		if loadErr := commandCfg.Steps.LoadError(); loadErr != nil {
-			registerInvalidCustomCommand(parentCommand, &commandCfg, customCommandLoadError(commandCfg.Name, loadErr))
+			stub := registerInvalidCustomCommand(parentCommand, &commandCfg, customCommandLoadError(commandCfg.Name, loadErr))
+			workingDirectory := commandCfg.WorkingDirectory
+			if workingDirectory == "" {
+				workingDirectory = parentWorkingDirectory
+			}
+			if err := processCustomCommandsWithWorkingDirectory(atmosConfig, commandCfg.Commands, stub, workingDirectory); err != nil {
+				return err
+			}
 			continue
 		}
 		commandConfig, err := cloneCommand(&commandCfg)
@@ -176,7 +183,10 @@ func processCustomCommandsWithWorkingDirectory(
 				// `--help`. Warn, and register a stub that reports the same error when the user
 				// invokes this command by name. Flag-name conflicts with built-in flags stay fatal.
 				if errors.Is(err, errUtils.ErrCustomCommandFlagType) || errors.Is(err, errUtils.ErrCustomCommandFlagDefault) {
-					registerInvalidCustomCommand(parentCommand, commandConfig, err)
+					stub := registerInvalidCustomCommand(parentCommand, commandConfig, err)
+					if err := processCustomCommandsWithWorkingDirectory(atmosConfig, commandConfig.Commands, stub, commandConfig.WorkingDirectory); err != nil {
+						return err
+					}
 					continue
 				}
 				return err
@@ -196,9 +206,11 @@ func processCustomCommandsWithWorkingDirectory(
 
 // registerInvalidCustomCommand warns that a custom command is invalid and registers a stub in its
 // place, so the rest of the commands keep working and the error still reaches the user who runs it.
-func registerInvalidCustomCommand(parentCommand *cobra.Command, commandConfig *schema.Command, cause error) {
+func registerInvalidCustomCommand(parentCommand *cobra.Command, commandConfig *schema.Command, cause error) *cobra.Command {
 	log.Warn("Skipping invalid custom command; running it reports the error", customCommandKeyCommand, commandConfig.Name, "error", cause.Error())
-	parentCommand.AddCommand(newInvalidCustomCommandStub(commandConfig, cause))
+	stub := newInvalidCustomCommandStub(commandConfig, cause)
+	parentCommand.AddCommand(stub)
+	return stub
 }
 
 // customCommandLoadError wraps a step decode problem with the command it belongs to and, for a
@@ -1589,9 +1601,6 @@ func executeCustomCommand(
 		// tflint steps bounds the whole logical step: one deadline wraps the retry loop, so backoff waits
 		// and later attempts end with the timeout instead of each attempt getting a fresh one.
 		runStepBounded := func() error {
-			if step.Timeout < 0 {
-				return fmt.Errorf("%w: custom command step %d timeout %s must be positive", errUtils.ErrStepTimeoutInvalid, i, step.Timeout)
-			}
 			runRetrying := func(ctx context.Context) error {
 				if step.Retry == nil {
 					return runStep(ctx)
