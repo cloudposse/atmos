@@ -79,6 +79,9 @@ func benchTestOutput() map[string]string {
 		names := suite.Names
 		if suite.CLI {
 			names = []string{"BenchmarkCLI/DescribeAffected/Dependents/instances=1000"}
+			for _, change := range []string{"none", "target", "dependents"} {
+				names = append(names, "BenchmarkCLI/DescribeAffected/FunctionsRepeated/instances=200/change="+change)
+			}
 			for _, size := range []int{100, 1000, 10000} {
 				for _, change := range []string{"none", "catalog", "component"} {
 					names = append(names, fmt.Sprintf("BenchmarkCLI/DescribeAffected/instances=%d/change=%s", size, change))

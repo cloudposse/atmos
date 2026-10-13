@@ -61,7 +61,7 @@ func componentFunc(
 	maskOnly := configAndStacksInfo != nil && configAndStacksInfo.SecretsMaskOnly
 	authDisabled := authdeferred.AuthDisabled(atmosConfig.AuthManager) || (configAndStacksInfo != nil && configAndStacksInfo.AuthDisabled)
 	functionName := fmt.Sprintf("atmos.Component(%s, %s)", component, stack)
-	stackSlug := fmt.Sprintf("%s-%s", stack, component)
+	cacheKey := newTerraformReferenceCacheKey(atmosConfig, stack, component, maskOnly)
 
 	log.Debug("Executing template function", "function", functionName)
 
@@ -82,11 +82,11 @@ func componentFunc(
 	}
 	defer resolution.Pop(atmosConfig)
 
-	// Inspection must neither consume resolved secrets nor cache display placeholders.
+	// Inspection placeholders and resolved execution values use separate cache partitions.
 	var existingSections any
 	var found bool
-	if !maskOnly && !authdeferred.IsDeferred(atmosConfig.AuthManager) {
-		existingSections, found = componentFuncSyncMap.Load(stackSlug)
+	if !authdeferred.IsDeferred(atmosConfig.AuthManager) {
+		existingSections, found = componentFuncSyncMap.Load(cacheKey)
 	}
 	if found && existingSections != nil {
 		log.Debug("Cache hit for template function", "function", functionName)
@@ -119,10 +119,7 @@ func componentFunc(
 	} else {
 		resolvedAuthMgr = resolveComponentFuncAuthManager(atmosConfig, configAndStacksInfo, component, stack, resolveAuthManagerForNestedComponent)
 	}
-	if maskOnly {
-		valueCache = nil
-	}
-	if cached, ok := valueCache.Load("atmos.Component"); ok {
+	if cached, ok := valueCache.Load(terraformReferenceValueKind("atmos.Component", maskOnly)); ok {
 		return cached, nil
 	}
 
@@ -170,10 +167,10 @@ func componentFunc(
 		sections = lo.Assign(sections, outputs)
 	}
 
-	// Cache the result
-	valueCache.Store("atmos.Component", sections)
-	if !maskOnly && !authdeferred.IsDeferred(atmosConfig.AuthManager) {
-		componentFuncSyncMap.Store(stackSlug, sections)
+	// Cache the result.
+	valueCache.Store(terraformReferenceValueKind("atmos.Component", maskOnly), sections)
+	if !authdeferred.IsDeferred(atmosConfig.AuthManager) && (!maskOnly || deferred.IsCacheable(sections)) {
+		componentFuncSyncMap.Store(cacheKey, sections)
 	}
 
 	log.Debug("Executed template function", "function", functionName)

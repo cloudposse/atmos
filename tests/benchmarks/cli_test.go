@@ -182,6 +182,11 @@ func BenchmarkCLI(b *testing.B) {
 	if binary == "" {
 		b.Skip("run through go tool mage bench:run, or set ATMOS_BENCH_BINARY")
 	}
+	for _, change := range []string{"none", "target", "dependents"} {
+		b.Run("DescribeAffected/FunctionsRepeated/instances=200/change="+change, func(b *testing.B) {
+			benchmarkFunctionsCLI(b, binary, change)
+		})
+	}
 	b.Run("DescribeAffected/Dependents/instances=1000", func(b *testing.B) { benchmarkDependentsCLI(b, binary) })
 	for _, command := range []string{"DescribeAffected", "DescribeStacks"} {
 		b.Run(command+"/StoreRepeated/calls=2200/keys=11", func(b *testing.B) { benchmarkStoreCLI(b, binary, command) })

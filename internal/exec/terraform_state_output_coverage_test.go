@@ -184,7 +184,7 @@ func TestGetTerraformState_CacheHit(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Pre-populate the cache with test data
-	stackSlug := "test-stack-test-component"
+	stackSlug := newTerraformReferenceCacheKey(atmosConfig, "test-stack", "test-component", false)
 	cachedBackend := map[string]any{
 		"vpc_id":    "vpc-12345",
 		"subnet_id": "subnet-67890",
@@ -232,7 +232,7 @@ func TestGetTerraformState_CachesNotProvisionedState(t *testing.T) {
 	assert.Nil(t, result)
 	assert.ErrorIs(t, err, errUtils.ErrTerraformStateNotProvisioned)
 
-	cached, found := terraformStateCache.Load("test-consumer")
+	cached, found := terraformStateCache.Load(newTerraformReferenceCacheKey(&atmosConfig, "test", "consumer", false))
 	require.True(t, found)
 	_, isNotProvisioned := cached.(terraformStateNotProvisionedCacheEntry)
 	require.True(t, isNotProvisioned)
@@ -281,7 +281,7 @@ func TestGetTerraformState_InvalidateClearsNotProvisionedSentinel(t *testing.T) 
 	assert.Nil(t, result)
 	assert.ErrorIs(t, err, errUtils.ErrTerraformStateNotProvisioned)
 
-	cached, found := terraformStateCache.Load("test-consumer")
+	cached, found := terraformStateCache.Load(newTerraformReferenceCacheKey(&atmosConfig, "test", "consumer", false))
 	require.True(t, found)
 	_, isNotProvisioned := cached.(terraformStateNotProvisionedCacheEntry)
 	require.True(t, isNotProvisioned)
@@ -289,12 +289,12 @@ func TestGetTerraformState_InvalidateClearsNotProvisionedSentinel(t *testing.T) 
 	// Invalidating a different stack or component must NOT clear the sentinel.
 	invalidateTerraformStateCache("other-stack", "consumer")
 	invalidateTerraformStateCache("test", "other-component")
-	_, found = terraformStateCache.Load("test-consumer")
+	_, found = terraformStateCache.Load(newTerraformReferenceCacheKey(&atmosConfig, "test", "consumer", false))
 	require.True(t, found, "mismatched stack/component invalidation must leave the sentinel cached")
 
 	// Invalidating the matching stack/component removes the frozen sentinel.
 	invalidateTerraformStateCache("test", "consumer")
-	_, found = terraformStateCache.Load("test-consumer")
+	_, found = terraformStateCache.Load(newTerraformReferenceCacheKey(&atmosConfig, "test", "consumer", false))
 	require.False(t, found, "matching invalidation must remove the not-provisioned sentinel from the cache")
 
 	// A subsequent read finds no cache entry, re-consults the backend (still not
@@ -313,7 +313,7 @@ func TestGetTerraformState_InvalidateClearsNotProvisionedSentinel(t *testing.T) 
 	assert.Nil(t, result)
 	assert.ErrorIs(t, err, errUtils.ErrTerraformStateNotProvisioned)
 
-	cached, found = terraformStateCache.Load("test-consumer")
+	cached, found = terraformStateCache.Load(newTerraformReferenceCacheKey(&atmosConfig, "test", "consumer", false))
 	require.True(t, found, "the backend read after invalidation must re-cache the sentinel")
 	_, isNotProvisioned = cached.(terraformStateNotProvisionedCacheEntry)
 	require.True(t, isNotProvisioned)
@@ -324,7 +324,7 @@ func TestGetTerraformState_SkipCache(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Pre-populate the cache with test data
-	stackSlug := "test-stack-cached-component"
+	stackSlug := newTerraformReferenceCacheKey(atmosConfig, "test-stack", "cached-component", false)
 	cachedBackend := map[string]any{
 		"vpc_id": "vpc-cached",
 	}

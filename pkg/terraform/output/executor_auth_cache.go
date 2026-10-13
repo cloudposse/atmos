@@ -12,6 +12,31 @@ import (
 
 var uncacheableAuthSequence atomic.Uint64
 
+type scopedOutputKey struct {
+	component  string
+	basePath   string
+	configPath string
+	invocation any
+	auth       any
+	maskOnly   bool
+}
+
+// scopedOutputCacheKey keeps inspection placeholders separate from execution
+// values and partitions outputs by configuration paths and invocation manager.
+//
+//nolint:revive // argument-limit: matches the executor cache inputs plus inspection mode.
+func scopedOutputCacheKey(ac *schema.AtmosConfiguration, stack, component string, authContext *schema.AuthContext, authManager any, maskOnly bool) scopedOutputKey {
+	key := scopedOutputKey{component: stackComponentKey(stack, component), auth: outputCacheKey(stack, component, authContext, authManager), maskOnly: maskOnly}
+	if ac != nil {
+		key.basePath, key.configPath = ac.BasePath, ac.CliConfigPath
+		key.invocation = ac.AuthManager
+		if key.invocation != nil && !reflect.ValueOf(key.invocation).Comparable() {
+			key.invocation = uncacheableAuthSequence.Add(1)
+		}
+	}
+	return key
+}
+
 type authenticatedOutputKey struct {
 	component string
 	manager   any

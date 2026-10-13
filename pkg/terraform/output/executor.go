@@ -12,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -76,7 +77,7 @@ type StaticRemoteStateGetter interface {
 
 // OutputOptions configures behavior for terraform output retrieval.
 type OutputOptions struct {
-	// SecretsMaskOnly preserves inspection mode and bypasses the execution output cache.
+	// SecretsMaskOnly preserves inspection mode in a separate output cache partition.
 	SecretsMaskOnly bool
 	// QuietMode suppresses terraform init/workspace output (sends to io.Discard).
 	// Use this when formatting output for scripts to avoid polluting stdout/stderr.
@@ -171,7 +172,7 @@ func (e *Executor) GetAllOutputs(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "output.Executor.GetAllOutputs")()
 
-	stackSlug := outputCacheKey(stack, component, authContext, authManager)
+	stackSlug := scopedOutputCacheKey(atmosConfig, stack, component, authContext, authManager, false)
 	if outputs := checkOutputsCache(stackSlug, component, stack); outputs != nil {
 		return outputs, nil
 	}
@@ -213,7 +214,7 @@ func (e *Executor) GetOutput(
 		}
 	}
 
-	stackSlug := outputCacheKey(stack, component, authContext, authManager)
+	stackSlug := scopedOutputCacheKey(atmosConfig, stack, component, authContext, authManager, false)
 
 	// Check cache first.
 	if !skipCache {
@@ -305,10 +306,10 @@ func (e *Executor) GetOutputWithOptions(
 	}
 
 	maskOnly := opts != nil && opts.SecretsMaskOnly
-	stackSlug := outputCacheKey(stack, component, authContext, authManager)
+	stackSlug := scopedOutputCacheKey(atmosConfig, stack, component, authContext, authManager, maskOnly)
 
 	// Check cache first.
-	if !skipCache && !maskOnly {
+	if !skipCache {
 		if result := resolveOutputFromCache(atmosConfig, stackSlug, component, stack, output); result != nil {
 			return result.value, result.exists, result.err
 		}
@@ -344,7 +345,7 @@ func (e *Executor) GetOutputWithOptions(
 	// Check for static remote state backend.
 	if e.staticRemoteStateGetter != nil {
 		if staticOutputs := e.staticRemoteStateGetter.GetStaticRemoteStateOutputs(&sections); staticOutputs != nil {
-			if !maskOnly {
+			if !maskOnly || deferred.IsCacheable(staticOutputs) {
 				terraformOutputsCache.Store(stackSlug, staticOutputs)
 			}
 			value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
@@ -371,7 +372,7 @@ func (e *Executor) GetOutputWithOptions(
 	}
 
 	// Cache the result.
-	if !maskOnly {
+	if !maskOnly || deferred.IsCacheable(outputs) {
 		terraformOutputsCache.Store(stackSlug, outputs)
 	}
 

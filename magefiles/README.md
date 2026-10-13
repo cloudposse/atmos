@@ -219,6 +219,18 @@ with roots, branches, and leaves across ten stacks. It validates the entire
 nested dependency tree and exercises the resolution path used by Pro uploads
 without uploading anything.
 
+The `FunctionsRepeated/instances=200` affected workload adds 600 references per
+pass to one static target through `!terraform.output`, `!terraform.state`, and
+`atmos.Component`. Consumers use one lookup kind each, so a stale value in one
+path cannot be hidden by another path detecting the change. Scenarios cover
+unchanged repositories, a changed referenced value, and the same change with
+`--include-dependents`. Checks outside timing assert resolved values in HEAD and
+BASE, exact affected instance names, and all 200 dependents. Masking stays enabled
+at its default; static backends need neither cloud access nor Terraform. This
+covers inspection caching and repeated deferred target descriptions. The
+non-static output/auth-disabled wrapper path and actual OIDC authentication need
+separate unit tests; static backends return before that wrapper is created.
+
 Builds and fixture setup are excluded from measurements. Packages run
 sequentially with `GOMAXPROCS=2`, CGO disabled, no race/coverage instrumentation,
 and a one-second calibration for in-process benchmarks. Every CLI sample uses
@@ -325,7 +337,11 @@ can produce statistics and demonstrate detection.
 
 `ATMOS_BENCH_FIELD_FILTER` selects another CLI benchmark expression; for example,
 `^BenchmarkCLI$/^DescribeAffected$/^instances=1000$` replays the three 1,000-instance
-scenarios, and `^BenchmarkCLI$` runs the entire CLI suite. Sample count and
+scenarios, and `^BenchmarkCLI$` runs the entire CLI suite. For repeated function
+lookups use `^BenchmarkCLI$/^DescribeAffected$/^FunctionsRepeated$`. Append
+`/^instances=200$/^change=none$` to isolate timing on historical releases that
+fail the changed-value correctness checks; those failures must remain visible
+and must not be interpreted as a passing performance result. Sample count and
 regression threshold use the ordinary benchmark environment variables. Historical
 field-test manifests record the measured revision, source ref, harness revision,
 and workload fingerprints, and are deliberately incompatible with CI snapshots.
@@ -381,6 +397,7 @@ runner-specific gaps explicit.
 
 | Documented problem | Workload / current coverage |
 | --- | --- |
+| [Inspection and deferred component function caches](../docs/fixes/2026-10-13-describe-affected-function-lookup-cache.md) | 200 consumers / 600 references per pass across output, state, and Component, static backend with default masking; unchanged, changed referenced values, and dependents. HEAD/BASE and complete result assertions guard cache correctness. No cloud/OIDC or non-static output executor latency. |
 | [Deferred store lookups, #3353](../docs/fixes/2026-10-09-deferred-store-template-lookup-cache.md) | Real CLI against loopback SSM, 2,200 references / 11 keys, plus in-process backend-read assertion. Field-test release sequence above verifies the regression and recovery. |
 | [Shared inheritance and cache contention](../docs/fixes/2026-05-23-describe-affected-component-inheritance-perf.md) | Shared imports and two inheritance levels at 100/1,000/10,000 instances; repeated locals extraction; template and YAML-resolution microbenchmarks. |
 | [Native merge and deep copies](../docs/fixes/2026-03-19-deep-merge-native-fixes.md) | Curated deep-copy, two/five-input merge, and production-scale merge benchmarks; inherited CLI fixtures. |

@@ -548,7 +548,7 @@ func TestExecutor_GetOutput_CacheHit(t *testing.T) {
 	atmosConfig := validAtmosConfig(t)
 
 	// Pre-populate cache.
-	stackSlug := stackComponentKey("cached-stack", "cached-component")
+	stackSlug := scopedOutputCacheKey(atmosConfig, "cached-stack", "cached-component", nil, nil, false)
 	terraformOutputsCache.Store(stackSlug, map[string]any{
 		"cached_value": "from-cache",
 	})
@@ -590,7 +590,7 @@ func TestExecutor_GetOutput_CacheHitIsVisible(t *testing.T) {
 	// Pre-populate the cache with two outputs for the same component+stack,
 	// mirroring a real fetch that caches every output at once. Neither
 	// lookup below triggers DescribeComponent -- both are cache hits.
-	stackSlug := stackComponentKey("fixtures", "vpc")
+	stackSlug := scopedOutputCacheKey(atmosConfig, "fixtures", "vpc", nil, nil, false)
 	terraformOutputsCache.Store(stackSlug, map[string]any{
 		"vpc_id":   "vpc-abc123",
 		"vpc_cidr": "10.0.0.0/16",
@@ -682,7 +682,7 @@ func TestExecutor_GetOutput_NonexistentKey(t *testing.T) {
 	atmosConfig := validAtmosConfig(t)
 
 	// Pre-populate cache.
-	stackSlug := stackComponentKey("nonexistent-stack", "nonexistent-component")
+	stackSlug := scopedOutputCacheKey(atmosConfig, "nonexistent-stack", "nonexistent-component", nil, nil, false)
 	terraformOutputsCache.Store(stackSlug, map[string]any{
 		"existing_key": "value",
 	})
@@ -1191,13 +1191,13 @@ func TestExecutor_GetAllOutputs_CacheHit(t *testing.T) {
 	mockDescriber := NewMockComponentDescriber(ctrl)
 	exec := NewExecutor(mockDescriber)
 
+	atmosConfig := validAtmosConfig(t)
+
 	// Pre-populate cache.
-	stackSlug := stackComponentKey("cache-hit-stack", "cache-hit-component")
+	stackSlug := scopedOutputCacheKey(atmosConfig, "cache-hit-stack", "cache-hit-component", nil, nil, false)
 	cachedOutputs := map[string]any{"cached_key": "cached_value"}
 	terraformOutputsCache.Store(stackSlug, cachedOutputs)
 	defer terraformOutputsCache.Delete(stackSlug)
-
-	atmosConfig := validAtmosConfig(t)
 
 	// No DescribeComponent call expected.
 	outputs, err := exec.GetAllOutputs(atmosConfig, "cache-hit-component", "cache-hit-stack", false, nil, nil)
@@ -2137,7 +2137,7 @@ func TestExecutor_GetOutputWithOptions_CacheHit(t *testing.T) {
 
 	atmosConfig := validAtmosConfig(t)
 
-	stackSlug := stackComponentKey("opts-cache-stack", "opts-cache-component")
+	stackSlug := scopedOutputCacheKey(atmosConfig, "opts-cache-stack", "opts-cache-component", nil, nil, false)
 	terraformOutputsCache.Store(stackSlug, map[string]any{"cached_out": "hit-value"})
 	defer terraformOutputsCache.Delete(stackSlug)
 

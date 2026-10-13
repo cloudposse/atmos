@@ -26,7 +26,22 @@ var terraformOutputsCache = sync.Map{}
 func InvalidateComponentOutputs(stack, component string) {
 	defer perf.Track(nil, "output.InvalidateComponentOutputs")()
 
-	terraformOutputsCache.Delete(stackComponentKey(stack, component))
+	base := stackComponentKey(stack, component)
+	terraformOutputsCache.Range(func(key, _ any) bool {
+		var target string
+		switch key := key.(type) {
+		case scopedOutputKey:
+			target = key.component
+		case authenticatedOutputKey:
+			target = key.component
+		case string:
+			target = key
+		}
+		if target == base {
+			terraformOutputsCache.Delete(key)
+		}
+		return true
+	})
 }
 
 // ResetOutputsCache clears the terraform outputs cache.
