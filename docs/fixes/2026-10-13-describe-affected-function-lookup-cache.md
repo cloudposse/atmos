@@ -68,9 +68,41 @@ it did not cover these three Terraform/component lookup paths.
 - `go test -tags=mage ./magefiles/bench -count=1` passed.
 - The final focused race selection passed across output, state/component,
   deferred value/auth caches, secret inspection, and dependency cycle tests.
+- `atmos test --full` scoped to `TestFunctionsCLI` passed all three scenarios
+  against the final benchmark binary. `atmos lint --changed`, pre-commit hooks,
+  and the website build passed.
+- Broad validation was not green: `atmos test` encountered a startup-banner
+  assertion with an inherited suppression flag and a CLI-suite timeout. The
+  banner test passed with that flag removed. The unrestricted `internal/exec`
+  race run timed out waiting on a workflow test that passed in isolation.
+  A short-mode rerun under a pseudo-terminal blocked in a TUI test that assumes
+  no controlling terminal. These broad runs do not establish full-suite success.
+
+Rebuilt local field test of the unchanged workload, using the same current
+harness on darwin/arm64 (Apple M4 Max), Go 1.27.1, `CGO_ENABLED=0`, and
+`GOMAXPROCS=2`. Each median contains ten fresh-process samples; all builds
+finished before measurement, with no other task builds/tests running.
+
+| Revision | Median | Change versus v1.228.0 |
+|---|---:|---:|
+| v1.228.0 (`12823382f0fa`) | 0.522226 s | baseline |
+| v1.232.0 (`26edaff2cc46`) | 1.656393 s | +217.18% |
+| Fixed (`88c7ed44f233`) | 0.656163 s | +25.65% |
+
+The fix reduces this workload's median by **60.39%** versus v1.232.0.
+All three pairwise comparisons reported `p=0.00001083`. The residual increase
+against v1.228.0 still exceeds the 10% advisory threshold; it is not a complete
+return to that release's performance. These are local field-test measurements,
+not historical CI results or a reproduction of the customer's end-to-end job.
+
+```console
+ATMOS_BENCH_FIELD_FILTER='^BenchmarkCLI$/^DescribeAffected$/^FunctionsRepeated$/^instances=200$/^change=none$' go tool mage bench:fieldTest v1.228.0,v1.232.0,88c7ed44f233 .context/field-affected-functions
+```
+
 - The static workload does not model Terraform process latency, remote backend
   latency, or OIDC login time.
 
 ## Follow-ups
 
-None.
+Investigate the remaining historical benchmark gap in #3379. Its cause has not
+been attributed; preserve the advisory warning while profiling it.
