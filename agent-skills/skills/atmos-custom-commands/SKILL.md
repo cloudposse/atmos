@@ -152,8 +152,8 @@ reach the script as values, not as text:
 
 ```yaml
 commands:
-  - name: deploy-all
-    description: Deploy components in parallel
+  - name: deploy-one
+    description: Deploy one component
     arguments:
       - name: group
         required: true
@@ -183,7 +183,9 @@ commands:
 - `cli.command`, `cli.arg`, and `cli.flag` are only for standalone scripts
   (`atmos ./tool.star`); declare the command interface in YAML here.
 - Script steps default to raw output with no step labels; `show: {labels: true}` restores them.
-  A `timeout:` on the script step is not enforced; use `steps.task(..., timeout="30s")`.
+  A `timeout:` on the script step is not enforced. To time an individual task, run
+  `steps.parallel(tasks=[steps.task(name="work", function=work, timeout="30s")])`. The timeout covers
+  `work`, not the surrounding script.
 
 ## Routing
 
