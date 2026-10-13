@@ -687,8 +687,18 @@ declare a default. Boolean flags use defaults and cannot be required.
 Command-line values override environment bindings, which override defaults. The
 environment binding is optional; scripts always read the parsed `flags` dictionary
 directly. `validate` may call `fail()` with an explanation, return `False` to reject
-the input, or return `None` or `True` to accept it. The value returned by `main`
-is the return value of `cli.command`; assign it to `output` to emit structured data.
+the input, or return `None` or `True` to accept it. `cli.command` returns the value
+from `main`, or `None` for help. To emit structured data, assign only non-`None`
+results to `output`:
+
+```python
+result = cli.command(run=main)
+if result != None:
+    output = result
+```
+
+This avoids emitting `null` after help or when `main` returns `None`. Scripts
+without a return value can print from `main`, as in the example above.
 
 Unknown flags and invalid values fail through the native parser. `--` ends flag
 parsing so later values are positional arguments. All arguments after the script
