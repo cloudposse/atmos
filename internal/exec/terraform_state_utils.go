@@ -199,7 +199,7 @@ func GetTerraformState(
 
 	// Read static remote state backend outputs.
 	if remoteStateBackendStaticTypeOutputs != nil {
-		valueCache.Store(terraformReferenceValueKind("terraform.state.static", maskOnly), remoteStateBackendStaticTypeOutputs)
+		valueCache.Store(terraformReferenceValueKind(staticStateReferenceKind, maskOnly), remoteStateBackendStaticTypeOutputs)
 		// Cache the result.
 		if !authdeferred.IsDeferred(atmosConfig.AuthManager) && (!maskOnly || deferred.IsCacheable(remoteStateBackendStaticTypeOutputs)) {
 			terraformStateCache.Store(cacheKey, terraformStateStaticCacheEntry{outputs: remoteStateBackendStaticTypeOutputs})
@@ -224,7 +224,7 @@ func GetTerraformState(
 	}
 
 	// Cache the result now that we know it reflects a real, provisioned backend.
-	valueCache.Store(terraformReferenceValueKind("terraform.state", maskOnly), backend)
+	valueCache.Store(terraformReferenceValueKind(stateReferenceKind, maskOnly), backend)
 	if !authdeferred.IsDeferred(atmosConfig.AuthManager) && (!maskOnly || deferred.IsCacheable(backend)) {
 		terraformStateCache.Store(cacheKey, backend)
 	}
@@ -240,11 +240,11 @@ func GetTerraformState(
 }
 
 func cachedTerraformStateOutput(ac *schema.AtmosConfiguration, lookup *terraformStateLookup, cache *deferred.ValueCache) (any, bool, error) {
-	if cached, ok := cache.Load(terraformReferenceValueKind("terraform.state.static", lookup.maskOnly)); ok {
+	if cached, ok := cache.Load(terraformReferenceValueKind(staticStateReferenceKind, lookup.maskOnly)); ok {
 		result, err := staticTerraformStateOutput(ac, lookup, cached.(map[string]any))
 		return result, true, err
 	}
-	cached, ok := cache.Load(terraformReferenceValueKind("terraform.state", lookup.maskOnly))
+	cached, ok := cache.Load(terraformReferenceValueKind(stateReferenceKind, lookup.maskOnly))
 	if !ok {
 		return nil, false, nil
 	}

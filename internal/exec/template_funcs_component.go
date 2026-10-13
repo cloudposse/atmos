@@ -119,7 +119,7 @@ func componentFunc(
 	} else {
 		resolvedAuthMgr = resolveComponentFuncAuthManager(atmosConfig, configAndStacksInfo, component, stack, resolveAuthManagerForNestedComponent)
 	}
-	if cached, ok := valueCache.Load(terraformReferenceValueKind("atmos.Component", maskOnly)); ok {
+	if cached, ok := valueCache.Load(terraformReferenceValueKind(componentReferenceKind, maskOnly)); ok {
 		return cached, nil
 	}
 
@@ -168,7 +168,7 @@ func componentFunc(
 	}
 
 	// Cache the result.
-	valueCache.Store(terraformReferenceValueKind("atmos.Component", maskOnly), sections)
+	valueCache.Store(terraformReferenceValueKind(componentReferenceKind, maskOnly), sections)
 	if !authdeferred.IsDeferred(atmosConfig.AuthManager) && (!maskOnly || deferred.IsCacheable(sections)) {
 		componentFuncSyncMap.Store(cacheKey, sections)
 	}
