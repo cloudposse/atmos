@@ -23,8 +23,9 @@ the [Language reference](https://atmos.tools/automation/language).
 The script body is rendered as a Go template before Starlark runs. This applies to inline
 `script: |` bodies and to files loaded with `script: !include scripts/x.star`. Consequences:
 
-- `{{` and `}}` in Starlark source are template delimiters. A literal `{{` in a string fails
-  with a template error (for example `function "x" not defined`).
+- Atmos renders valid `{{ ... }}` template actions in Starlark source before running it.
+  Malformed or unresolved actions can fail (for example `function "x" not defined`).
+  A lone `}}` is ordinary text.
   Tag the script with `!literal` to skip rendering: `script: !literal |` runs the body exactly
   as written, in sequential steps, `parallel`/`matrix` children, custom commands, workflows,
   and hooks. Prefer it for any script that contains braces, including `"{}".format(...)`

@@ -185,16 +185,21 @@ commands:
 - Read declared flags and arguments from `ctx.flags` (string, bool, and `int` types preserved)
   and `ctx.arguments` (an omitted optional argument is `""`). `ctx.args` is empty, and trailing
   arguments after `--` are not exposed to scripts.
-- Do not template flag values into the script source (`{{ .Flags.x }}`): the script body is
-  rendered as a Go template first, so a literal `{{` in Starlark source breaks the step.
-  `ctx.flags` and `ctx.arguments` are safe for any value.
+- Read flag values from `ctx.flags` and `ctx.arguments` instead of templating them into script source.
+  Atmos renders valid `{{ ... }}` template actions before running the script; malformed or
+  unresolved actions can fail. A lone `}}` is ordinary text. Use `script: !literal |` or
+  `!include.raw` when the source must remain unchanged.
 - `cli.command`, `cli.arg`, and `cli.flag` are only for standalone scripts
   (`atmos ./tool.star`); declare the command interface in YAML here.
 - Script steps default to raw output with no step labels; `show: {labels: true}` restores them.
   `output:` must be `raw`, `log`, `viewport`, or `none`; any other value (such as `capture`) fails
   before the step runs (`capture`/`stream` errors point to `exec.run`, which takes `stream|capture|viewport`).
-- A `timeout:` on a script, shell, or atmos step is enforced: the step is canceled, its whole process tree ends, and it
-  fails with `step timed out` (`Step '<name>' (type <t>) did not finish within its timeout of <d>`). Per-task limits inside a script still use `steps.task(..., timeout="30s")`.
+- A `timeout:` on a script, shell, or atmos step cancels the step and fails with `step timed out`
+  (`Step '<name>' (type <t>) did not finish within its timeout of <d>`). On Unix, commands
+  without terminal input also terminate their process group. Commands with terminal input
+  and Windows commands terminate only the direct child; descendants may remain running.
+  To time an individual task, run `steps.parallel(tasks=[steps.task(name="work", function=work, timeout="30s")])`.
+  This task timeout covers `work`, not the surrounding script.
 - Atmos renders only the values declared under the step's `env:` as templates. The ambient process
   environment reaches the script and its child processes verbatim, so an inherited
   `FOO='{{ bad'` is harmless. In `ctx`-side Starlark, `env` holds only the step's own `env:`

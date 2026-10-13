@@ -203,9 +203,10 @@ Do not put `command` on a `script` step. The schema requires `interpreter` and
 With `interpreter: starlark`, the script runs inside Atmos (no external interpreter) and
 can call Atmos commands directly. Load `atmos-starlark` for the API. Step-specific rules:
 
-- The `script` body (inline or `!include`d) is rendered as a Go template first. A literal
-  `{{` in Starlark source fails; read inputs from `ctx.flags`, `ctx.arguments`, and `env`
-  instead of templating values into source. Use `script: !literal |` or `!include.raw` to run the body as written;
+- Atmos renders valid `{{ ... }}` template actions in the `script` body (inline or `!include`d)
+  before running it. Malformed or unresolved actions can fail; a lone `}}` is ordinary text.
+  Read inputs from `ctx.flags`, `ctx.arguments`, and `env` instead of templating values into source.
+  Use `script: !literal |` or `!include.raw` to run the body as written;
   `!literal` also works on `command`, `interpreter`, `working_directory`, `timeout`, and single `env` values, and
   fails config load on any other step field.
 - Script steps default to raw output with no `[step]` or `completed` labels, like shell

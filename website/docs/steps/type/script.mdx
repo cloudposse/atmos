@@ -35,10 +35,14 @@ steps:
 | `output` | Optional output mode: `raw`, `log`, `viewport`, or `none`. A literal value that is not one of these is rejected before the step runs. A templated value is rendered first and validated after rendering, so an unknown rendered mode fails the step. Script steps default to `raw`. See [`output`](/steps/output). |
 | `show` | Optional display settings such as `show.labels`. See [Step labels](#step-labels). |
 | `retry` | Optional retry policy that reruns the whole step on failure. Unknown keys are rejected; the key for the first wait is `initial_delay`, and `delay` is not a key. See [`retry`](/steps/retry). |
-| `timeout` | Optional duration such as `30s` or `5m`. Atmos stops the interpreter and its subprocesses when it elapses and fails the step with `step timed out`. The timeout bounds the whole step, including every [`retry`](/steps/retry) attempt and the wait between attempts, so retries never extend it. |
+| `timeout` | Optional duration such as `30s` or `5m`. Atmos cancels the interpreter when it elapses and fails the step with `step timed out`. The timeout bounds the whole step, including every [`retry`](/steps/retry) attempt and the wait between attempts, so retries never extend it. |
 | `when` | Optional [condition](/steps#conditional-execution) that decides whether the step runs. |
 | `outputs` | Optional named values derived from the step result, available as `{{ .steps.<name>.outputs.<key> }}`. |
 | `container` | Rejected for `interpreter: starlark`, which runs inside Atmos. See [Containers and dry runs](#containers-and-dry-runs). |
+
+On timeout, Atmos terminates the process group for Unix commands without terminal input.
+With terminal input, or on Windows, it terminates only the direct child; descendants may
+continue running.
 
 Do not set `command` on a `script` step. Use `type: shell` for a real shell command and
 `type: script` when the interpreter and body are the intentional interface.
