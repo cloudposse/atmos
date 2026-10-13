@@ -521,6 +521,20 @@ func TestReporter_ForkGate(t *testing.T) {
 			h.assertNothingWritten(t)
 		})
 
+		for _, event := range []string{"pull_request_target", "workflow_run"} {
+			t.Run(tc.name+" blocks unknown origin on "+event, func(t *testing.T) {
+				h := newHarness(t, fullCIConfig(), nil, forkEnv()...)
+				t.Setenv("GITHUB_EVENT_NAME", event)
+				t.Setenv("GITHUB_EVENT_PATH", "")
+				rc, err := tc.call(h.reporter)
+				require.NoError(t, err)
+				assert.Equal(t, ci.FeatureForkGate, rc.Gate)
+				assert.True(t, rc.Local)
+				assert.Contains(t, h.local.String(), tc.want)
+				h.assertNothingWritten(t)
+			})
+		}
+
 		t.Run(tc.name+" is sent for a same-repository pull request on an elevated event", func(t *testing.T) {
 			h := newHarness(t, fullCIConfig(), nil, sameRepoEnv()...)
 			c, err := h.reporter.Context()

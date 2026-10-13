@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -420,9 +421,9 @@ func TestProviderContextPullRequestFork(t *testing.T) {
 		{"same repository", "pull_request", pullRequest(repo("acme/infra", false), repo("acme/infra", false)), false},
 		{"head flagged as fork", "pull_request", pullRequest(repo("acme/infra", true), repo("acme/infra", false)), true},
 		{"head repository name differs", "pull_request_target", pullRequest(repo("forker/infra", false), repo("acme/infra", false)), true},
-		{"head repository deleted", "pull_request_target", pullRequest(nil, repo("acme/infra", false)), false},
-		{"no repository objects", "pull_request", map[string]any{"pull_request": map[string]any{"head": map[string]any{}}}, false},
-		{"no pull_request object", "pull_request", map[string]any{}, false},
+		{"head repository deleted", "pull_request_target", pullRequest(nil, repo("acme/infra", false)), true},
+		{"no repository objects", "pull_request", map[string]any{"pull_request": map[string]any{"head": map[string]any{}}}, true},
+		{"no pull_request object", "pull_request", map[string]any{}, true},
 	}
 
 	for _, tt := range tests {
@@ -441,7 +442,7 @@ func TestProviderContextPullRequestFork(t *testing.T) {
 		})
 	}
 
-	t.Run("unreadable payload is not a fork", func(t *testing.T) {
+	t.Run("unreadable payload is treated as a fork", func(t *testing.T) {
 		t.Setenv("GITHUB_EVENT_NAME", "pull_request")
 		t.Setenv("GITHUB_EVENT_PATH", "")
 		t.Setenv("GITHUB_REF", "refs/pull/7/merge")
@@ -450,7 +451,7 @@ func TestProviderContextPullRequestFork(t *testing.T) {
 
 		require.NoError(t, err)
 		require.NotNil(t, ctx.PullRequest)
-		assert.False(t, ctx.PullRequest.Fork)
+		assert.True(t, ctx.PullRequest.Fork)
 	})
 }
 
@@ -477,8 +478,13 @@ func TestProviderContextWorkflowRunFork(t *testing.T) {
 			payload: run(map[string]any{"full_name": "acme/infra", "fork": false}, nil),
 		},
 		{
-			name:    "no head repository has no pull request",
+			name:    "no head repository is treated as a fork",
 			payload: run(nil, nil),
+			want: &struct {
+				number  int
+				headRef string
+				baseRef string
+			}{0, "fork-branch", ""},
 		},
 		{
 			name:    "fork run by name",
@@ -522,5 +528,25 @@ func TestProviderContextWorkflowRunFork(t *testing.T) {
 			assert.Equal(t, tt.want.headRef, ctx.PullRequest.HeadRef)
 			assert.Equal(t, tt.want.baseRef, ctx.PullRequest.BaseRef)
 		})
+	}
+}
+
+func TestProviderContextUnknownForkOrigin(t *testing.T) {
+	for _, event := range []string{"pull_request_target", "workflow_run"} {
+		for _, payload := range []string{"", "not-json", `{}`, `{"pull_request":{"head":{"repo":{}}},"workflow_run":{"head_repository":{}}}`} {
+			t.Run(event+"/"+payload, func(t *testing.T) {
+				t.Setenv("GITHUB_EVENT_NAME", event)
+				t.Setenv("GITHUB_REPOSITORY", "acme/infra")
+				t.Setenv("GITHUB_REF", "refs/pull/7/merge")
+				path := filepath.Join(t.TempDir(), "event.json")
+				require.NoError(t, os.WriteFile(path, []byte(payload), 0o600))
+				t.Setenv("GITHUB_EVENT_PATH", path)
+				ctx, err := NewProvider().Context()
+				require.NoError(t, err)
+				require.NotNil(t, ctx.PullRequest)
+				assert.True(t, ctx.PullRequest.Fork)
+				assert.True(t, ctx.ElevatedEvent)
+			})
+		}
 	}
 }

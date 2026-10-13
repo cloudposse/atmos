@@ -645,34 +645,31 @@ const (
 // payloadPRFromFork reports whether the pull request in the event payload has its head in a
 // fork of the base repository. The head repository is a fork when it is flagged as one or when
 // its full name differs from the base repository's. A missing or unreadable payload, or missing
-// repository objects, report false.
+// repository identities, are treated as forks because their origin cannot be trusted.
 func payloadPRFromFork() bool {
 	payload, err := readEventPayload()
 	if err != nil {
 		log.Debug("Cannot read event payload to detect a fork pull request", "error", err)
-		return false
+		return true
 	}
 	pr, _ := payload["pull_request"].(map[string]any)
 	return prHeadIsFork(pr)
 }
 
 // parseForkWorkflowRun returns a fork pull request description for a workflow_run event whose
-// triggering run came from a fork of the repository, and nil otherwise. GitHub leaves
+// triggering run came from a fork or has unknown origin, and nil for a confirmed same-repository run. GitHub leaves
 // workflow_run.pull_requests empty for fork runs, so the number is 0 unless the payload supplies one.
 func parseForkWorkflowRun(repository string) *provider.PRInfo {
 	payload, err := readEventPayload()
 	if err != nil {
 		log.Debug("Cannot read event payload to detect a fork workflow run", "error", err)
-		return nil
+		return &provider.PRInfo{Fork: true}
 	}
 	run, _ := payload["workflow_run"].(map[string]any)
 	headRepo, _ := run["head_repository"].(map[string]any)
-	if headRepo == nil {
-		return nil
-	}
 	headName, _ := headRepo["full_name"].(string)
 	fork, _ := headRepo["fork"].(bool)
-	if !fork && (headName == "" || repository == "" || headName == repository) {
+	if !fork && headName != "" && repository != "" && headName == repository {
 		return nil
 	}
 
@@ -693,14 +690,15 @@ func parseForkWorkflowRun(repository string) *provider.PRInfo {
 func prHeadIsFork(pr map[string]any) bool {
 	headRepo := nestedRepo(pr, prSideHead)
 	if headRepo == nil {
-		return false
+		// Deleted fork repositories have a null head.repo.
+		return true
 	}
 	if fork, _ := headRepo["fork"].(bool); fork {
 		return true
 	}
 	headName, _ := headRepo["full_name"].(string)
 	baseName, _ := nestedRepo(pr, prSideBase)["full_name"].(string)
-	return headName != "" && baseName != "" && headName != baseName
+	return headName == "" || baseName == "" || headName != baseName
 }
 
 // nestedRepo returns pr[side].repo, or nil when any level is missing.

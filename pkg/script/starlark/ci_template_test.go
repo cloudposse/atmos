@@ -90,6 +90,10 @@ func TestCICommentTemplates(t *testing.T) {
 func TestCITemplateArgumentErrors(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ name, source, message string }{
+		{"empty summary and template", `ci.summary("", template="plan.md")`, "ci.summary: markdown and template are mutually exclusive"},
+		{"empty summary keyword and data", `ci.summary(markdown="", data={"n": 1})`, "ci.summary: markdown and data are mutually exclusive"},
+		{"empty comment and template", `ci.comment("", template="pr.md")`, "ci.comment: body and template are mutually exclusive"},
+		{"empty comment keyword and data", `ci.comment(body="", data={"n": 1})`, "ci.comment: body and data are mutually exclusive"},
 		{"summary markdown and template", `ci.summary("x", template="plan.md")`, "ci.summary: markdown and template are mutually exclusive"},
 		{"summary markdown and data", `ci.summary("x", data={"n": 1})`, "ci.summary: markdown and data are mutually exclusive"},
 		{"summary data must be a dict", `ci.summary(template="plan.md", data=[1])`, "ci.summary: for parameter data: got list, want dict"},

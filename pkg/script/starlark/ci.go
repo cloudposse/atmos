@@ -245,7 +245,7 @@ func resolveCIText(b *starlark.Builtin, src *ciTextSource) (string, error) {
 		}
 		return text, nil
 	}
-	if text != "" {
+	if hasText {
 		other := "template"
 		if src.template == "" {
 			other = "data"
