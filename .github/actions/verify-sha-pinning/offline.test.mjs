@@ -31,9 +31,9 @@ function fixture(t, lines, allowlist = []) {
   return { env, outputs, failures, core };
 }
 
-async function verify(state, getRef) {
+async function verify(state, getRef, repos = {}, paginate) {
   await new AsyncFunction('require', 'process', 'github', 'core', scripts[0])(
-    require, { env: state.env }, { rest: { git: { getRef } } }, state.core);
+    require, { env: state.env }, { rest: { git: { getRef }, repos }, paginate }, state.core);
   return JSON.parse(fs.readFileSync(state.outputs.results_file, 'utf8'));
 }
 
@@ -108,3 +108,37 @@ test('ordinary lookup failures do not suppress verification of other repositorie
   assert.equal(state.outputs.verified_count, 1);
   assert.equal(state.outputs.failed_count, 1);
 });
+
+for (const quotaSource of ['getCommit', 'listTags']) {
+  test(`quota exhaustion during ${quotaSource} stops all later uncached lookups`, async t => {
+    const state = fixture(t, [ref('cached'), ref('mismatch'), ref('later'), ref('cached'), ref('mismatch')], [{
+      action: 'owner/mismatch', description: 'Reviewed access restriction', references: ['https://example.com/review'],
+    }]);
+    const requests = [];
+    const results = await verify(state, async ({ repo }) => {
+      requests.push(`getRef:${repo}`);
+      return { data: { object: { type: 'commit', sha: repo === 'mismatch' ? 'b'.repeat(40) : sha } } };
+    }, {
+      getCommit: async () => {
+        requests.push('getCommit');
+        if (quotaSource === 'getCommit') throw quotaError();
+        return {};
+      },
+      listTags() {},
+    }, async () => {
+      requests.push('listTags');
+      throw quotaError();
+    });
+    assert.deepEqual(requests, ['getRef:cached', 'getRef:mismatch', 'getCommit',
+      ...(quotaSource === 'listTags' ? ['listTags'] : [])]);
+    assert.deepEqual(results.map(r => r.status), ['verified', 'error', 'error', 'verified', 'error']);
+    for (const result of results.filter(r => r.status === 'error')) {
+      assert.match(result.detail, /API rate limit exceeded/);
+    }
+    assert.equal(state.outputs.verified_count, 2);
+    assert.equal(state.outputs.failed_count, 3);
+    assert.equal(state.outputs.allowlisted_count, 0);
+    assert.equal(state.outputs.status, 'fail');
+    assert.equal(state.failures.length, 1);
+  });
+}
