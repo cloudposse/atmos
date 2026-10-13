@@ -12,6 +12,8 @@ import (
 
 // colorPolicy is shared by derived loggers and their output writers.
 type colorPolicy struct {
+	// mu serializes Charm reads, writes, and configuration as well as color state.
+	// Derived loggers share renderers and writers, so they must share this lock too.
 	mu          sync.Mutex
 	logDisabled bool
 	disabled    bool
