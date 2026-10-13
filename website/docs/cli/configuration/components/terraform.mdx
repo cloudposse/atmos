@@ -143,8 +143,6 @@ components:
 
     The legacy environment variable and flag below still override configuration, including an explicit `init.reconfigure` (command-line flag over environment variable over configuration): `false` selects `never` and `true` selects `auto`. When both a legacy and a newer setting are given at the same level, the newer `init.reconfigure` environment variable or `--init-reconfigure` flag wins.
 
-    Use [`atmos doctor --fix --dry-run`](/cli/commands/doctor#verification-and-recovery) to verify whether an explicit legacy value can be migrated safely. Layered or dynamic inputs require manual review.
-
     **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE`
     **Command-line flag:** `--init-run-reconfigure`
     **Default:** `true`
