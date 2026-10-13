@@ -27,7 +27,7 @@ function fixture(t, lines, allowlist = []) {
     setOutput: (key, value) => { outputs[key] = value; },
     setFailed: message => failures.push(message),
   };
-  const env = { RUNNER_TEMP: root, WORKFLOW_DIR: workflows, ALLOWLIST_FILE: allowlistFile };
+  const env = { VERIFY_ACTION_PATH: path.dirname(new URL(import.meta.url).pathname), RUNNER_TEMP: root, WORKFLOW_DIR: workflows, ALLOWLIST_FILE: allowlistFile };
   return { env, outputs, failures, core };
 }
 
