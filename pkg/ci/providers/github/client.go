@@ -17,7 +17,8 @@ import (
 
 // Client wraps the GitHub API client.
 type Client struct {
-	client *github.Client
+	client         *github.Client
+	tokenTransport *httpsTokenTransport
 }
 
 // NewClient creates a new GitHub API client.
@@ -76,6 +77,7 @@ func (c *Client) applyAPIURLFromEnv() error {
 
 	c.client.BaseURL = baseURL
 	c.client.UploadURL = baseURL
+	c.tokenTransport.apiURL = baseURL
 
 	return nil
 }
@@ -118,33 +120,34 @@ func NewClientWithToken(token string) *Client {
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: token},
 	)
-	tc := &http.Client{Transport: &httpsTokenTransport{Transport: oauth2.Transport{Source: ts}}}
-
-	return &Client{
-		client: github.NewClient(tc),
-	}
+	transport := &httpsTokenTransport{Transport: oauth2.Transport{Source: ts}}
+	client := github.NewClient(&http.Client{Transport: transport})
+	transport.apiURL = client.BaseURL
+	return &Client{client: client, tokenTransport: transport}
 }
 
 // httpsTokenTransport applies the token policy to every request, including redirects.
+// Only the configured HTTPS API host and port receive authentication headers.
 // Local HTTP endpoints remain usable, but must never receive authentication headers.
 type httpsTokenTransport struct {
 	oauth2.Transport
+	apiURL *url.URL
 }
 
 func (t *httpsTokenTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	defer perf.Track(nil, "github.httpsTokenTransport.RoundTrip")()
 
-	if req.URL.Scheme == "https" {
+	if req.URL.Scheme == "https" && t.apiURL.Scheme == "https" && strings.EqualFold(req.URL.Host, t.apiURL.Host) {
 		return t.Transport.RoundTrip(req)
 	}
 	// Redirects may copy credentials from a previous request; strip them on a clone.
-	plain := req.Clone(req.Context())
-	plain.Header.Del("Authorization")
+	unauthenticated := req.Clone(req.Context())
+	unauthenticated.Header.Del("Authorization")
 	base := t.Base
 	if base == nil {
 		base = http.DefaultTransport
 	}
-	return base.RoundTrip(plain)
+	return base.RoundTrip(unauthenticated)
 }
 
 // NewClientWithHTTPClient creates a new GitHub API client with a custom HTTP client.

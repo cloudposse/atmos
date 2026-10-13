@@ -2,9 +2,11 @@ package github
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -136,7 +138,11 @@ func TestNewClient_HTTPSOnlyToken(t *testing.T) {
 				assert.Empty(t, <-httpAuth, "HTTP must never receive credentials")
 			}
 			if tc.secure || tc.redirect {
-				assert.Equal(t, "Bearer test-token", <-httpsAuth, "HTTPS keeps authentication")
+				if tc.secure {
+					assert.Equal(t, "Bearer test-token", <-httpsAuth, "configured HTTPS API keeps authentication")
+				} else {
+					assert.Empty(t, <-httpsAuth, "redirects outside the configured API must not receive credentials")
+				}
 			}
 		})
 	}
@@ -161,4 +167,85 @@ func TestNewClientWithToken_HTTPStripsAuthorization(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, <-received)
 	assert.Equal(t, "Bearer copied-on-redirect", req.Header.Get("Authorization"), "transport must not mutate caller headers")
+}
+
+// TestNewClient_HTTPSRedirectTokenScope checks credentials at both ends of redirects.
+func TestNewClient_HTTPSRedirectTokenScope(t *testing.T) {
+	for _, targetKind := range []string{"same API", "different port", "different hostname"} {
+		t.Run(targetKind, func(t *testing.T) {
+			clearAPIURLEnv(t)
+			received := make(chan string, 2)
+			finish := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				received <- r.Header.Get("Authorization")
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"login":"test"}`))
+			})
+			other := httptest.NewTLSServer(finish)
+			defer other.Close()
+			var target string
+			api := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/redirected" {
+					finish.ServeHTTP(w, r)
+					return
+				}
+				received <- r.Header.Get("Authorization")
+				http.Redirect(w, r, target+"/redirected", http.StatusFound)
+			}))
+			defer api.Close()
+			target = api.URL
+			if targetKind == "different port" {
+				target = other.URL
+			}
+			if targetKind == "different hostname" {
+				target = strings.Replace(other.URL, "127.0.0.1", "example.com", 1)
+			}
+			t.Setenv("ATMOS_CI_GITHUB_API_URL", api.URL)
+			oldTransport := http.DefaultTransport
+			transport := api.Client().Transport.(*http.Transport).Clone()
+			transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+				// Route the certificate's DNS name to the local server without disabling TLS verification.
+				address = strings.Replace(address, "example.com:", "127.0.0.1:", 1)
+				return (&net.Dialer{}).DialContext(ctx, network, address)
+			}
+			http.DefaultTransport = transport
+			t.Cleanup(transport.CloseIdleConnections)
+			t.Cleanup(func() { http.DefaultTransport = oldTransport })
+			client, err := NewClient()
+			require.NoError(t, err)
+			req, err := client.GitHub().NewRequest(http.MethodGet, "user", nil)
+			require.NoError(t, err)
+			// Exercise stripping copied headers as well as preventing token reinjection.
+			req.Header.Set("Authorization", "Bearer caller-token")
+			_, err = client.GitHub().Do(context.Background(), req, nil)
+			require.NoError(t, err)
+			assert.Equal(t, "Bearer test-token", <-received)
+			if targetKind == "same API" {
+				assert.Equal(t, "Bearer test-token", <-received)
+			} else {
+				assert.Empty(t, <-received)
+			}
+			assert.Equal(t, "Bearer caller-token", req.Header.Get("Authorization"), "caller headers must remain unchanged")
+		})
+	}
+}
+
+func TestNewClientWithToken_RejectsUnconfiguredHTTPSHost(t *testing.T) {
+	received := make(chan string, 1)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received <- r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+	oldTransport := http.DefaultTransport
+	http.DefaultTransport = server.Client().Transport
+	t.Cleanup(func() { http.DefaultTransport = oldTransport })
+	client := NewClientWithToken("test-token")
+	req, err := client.GitHub().NewRequest(http.MethodGet, server.URL+"/user", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer caller-token")
+	_, err = client.GitHub().Do(context.Background(), req, nil)
+	require.NoError(t, err)
+	assert.Empty(t, <-received)
+	assert.Equal(t, "Bearer caller-token", req.Header.Get("Authorization"))
 }

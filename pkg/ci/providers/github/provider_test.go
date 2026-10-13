@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"testing"
 
@@ -190,10 +189,9 @@ func capturedAuthHeader(t *testing.T, p *Provider) string {
 	http.DefaultTransport = server.Client().Transport
 	t.Cleanup(func() { http.DefaultTransport = originalTransport })
 
-	serverURL, err := url.Parse(server.URL + "/")
-	require.NoError(t, err)
-	p.client.GitHub().BaseURL = serverURL
-	_, _, err = p.client.GitHub().Users.Get(context.Background(), "")
+	t.Setenv("ATMOS_CI_GITHUB_API_URL", server.URL)
+	require.NoError(t, p.client.applyAPIURLFromEnv())
+	_, _, err := p.client.GitHub().Users.Get(context.Background(), "")
 	require.NoError(t, err)
 
 	return capturedAuth

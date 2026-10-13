@@ -85,3 +85,37 @@ func TestProvider_AddPathRejectsNewlines(t *testing.T) {
 		})
 	}
 }
+
+func TestProvider_WriteEnvRejectsInvalidNames(t *testing.T) {
+	for _, name := range []string{"", "A\nINJECTED", "A\rINJECTED", "A\r\nINJECTED", "A=B", "A<<EOF", "A\x00B", "A B", "1A", "A-B"} {
+		t.Run(name, func(t *testing.T) {
+			for _, value := range []string{"value", "multi\nline"} {
+				envFile := filepath.Join(t.TempDir(), "env")
+				t.Setenv("GITHUB_ENV", envFile)
+				require.NoError(t, os.WriteFile(envFile, []byte("EXISTING=value\n"), 0o600))
+				assert.ErrorIs(t, NewProvider().WriteEnv(name, value), errUtils.ErrCIEnvWriteFailed)
+				got, err := os.ReadFile(envFile)
+				require.NoError(t, err)
+				assert.Equal(t, "EXISTING=value\n", string(got), "invalid names must not change the runner file")
+			}
+		})
+	}
+	t.Run("does not create a file", func(t *testing.T) {
+		envFile := filepath.Join(t.TempDir(), "env")
+		t.Setenv("GITHUB_ENV", envFile)
+		require.ErrorIs(t, NewProvider().WriteEnv("A=B", "value"), errUtils.ErrCIEnvWriteFailed)
+		_, err := os.Stat(envFile)
+		require.ErrorIs(t, err, os.ErrNotExist)
+	})
+}
+
+func TestProvider_WriteEnvAcceptsPortableNames(t *testing.T) {
+	envFile := filepath.Join(t.TempDir(), "env")
+	t.Setenv("GITHUB_ENV", envFile)
+	for _, name := range []string{"_", "_lower123", "UPPER_CASE", "mixedCase42"} {
+		require.NoError(t, NewProvider().WriteEnv(name, "value"))
+	}
+	got, err := os.ReadFile(envFile)
+	require.NoError(t, err)
+	assert.Equal(t, "_=value\n_lower123=value\nUPPER_CASE=value\nmixedCase42=value\n", string(got))
+}
