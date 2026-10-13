@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url);
 const action = fs.readFileSync(new URL('./action.yml', import.meta.url), 'utf8');
 const scripts = action.split('        script: |\n').slice(1).map(section =>
   section.split('\n    - name:')[0].split('\n').map(line => line.replace(/^          /, '')).join('\n'));
+assert.equal(scripts.length, 2, "Expected verifier and comment scripts in action.yml");
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 
 function fixture(t, lines, allowlist = []) {

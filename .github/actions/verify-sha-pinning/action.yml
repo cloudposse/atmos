@@ -505,8 +505,8 @@ runs:
           function renderRows(rs) {
             const visible = rs.slice(0, 20).map(r => ({
               ...r,
-              action: r.action.slice(0, 200),
-              file: r.file.slice(0, 200),
+              action: String(r.action ?? '').slice(0, 200),
+              file: String(r.file ?? '').slice(0, 200),
               detail: (r.detail || '').replaceAll('|', '&#124;').replaceAll('\n', ' ').slice(0, 300),
             }));
             const rows = visible.map(r => {

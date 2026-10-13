@@ -1507,10 +1507,13 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 		return nil, fmt.Errorf("%w: merge main config: %w", errUtils.ErrMergeConfiguration, err)
 	}
 
-	// Clear commands before processing imports to collect only imported commands.
-	// Viper keeps raw config values underneath overrides, so use an empty list
-	// instead of nil; nil allows the raw command array to surface again.
-	tempViper.Set(commandsKey, []interface{}{})
+	// Process imports against the defaults so an imported !unset clears them too.
+	// An empty override keeps the main file's raw commands out of this phase when
+	// there are no defaults; main commands are applied after all imports below.
+	if defaultCommands == nil {
+		defaultCommands = []interface{}{}
+	}
+	tempViper.Set(commandsKey, defaultCommands)
 
 	// Process explicit imports.
 	// This will read the import paths from the config and process them.
@@ -1522,7 +1525,7 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 		log.Debug("error process explicit imports", "file", tempViper.ConfigFileUsed(), "error", err)
 	}
 
-	// Get imported commands (without main commands).
+	// Get commands after defaults and explicit imports (without main commands).
 	importedCommands := tempViper.Get(commandsKey)
 
 	// Re-apply this config file's content after processing its imports.
@@ -1532,21 +1535,9 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 		return nil, fmt.Errorf("%w: re-applying main config after processing imports: %w", errUtils.ErrMergeConfiguration, err)
 	}
 
-	// Now merge commands in the correct order with proper override behavior:
-	// 1. Default imports (.atmos.d)
-	// 2. Explicit imports
-	// 3. Main config (overrides imports on duplicates)
-	var finalCommands interface{}
-
-	// Start with defaults
-	if defaultCommands != nil {
-		finalCommands = defaultCommands
-	}
-
-	// Add imported, with imported overriding defaults on duplicates
-	if importedCommands != nil {
-		finalCommands = mergeCommandArrays(finalCommands, importedCommands)
-	}
+	// Defaults and imports have already merged in order. Do not merge defaults
+	// again: a later imported !unset may have deliberately removed them.
+	finalCommands := importedCommands
 
 	// Add main, with main overriding all others on duplicates. Strict: the
 	// directory's own atmos.yaml is authoritative for any command name it
@@ -1557,6 +1548,9 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 		finalCommands = mergeMainCommandArray(finalCommands, mainCommands)
 	}
 
+	if commandsAreUnset(content) {
+		finalCommands = []interface{}{}
+	}
 	tempViper.Set(commandsKey, finalCommands)
 
 	return finalCommands, nil
@@ -2071,7 +2065,9 @@ func mergeConfigFile(
 	// Now handle command merging manually.
 	// Merge commands: when duplicates exist, the file being processed (new) takes precedence.
 	// This ensures local/main config can override imported/remote commands.
-	if existingCommands != nil || newCommands != nil {
+	if commandsAreUnset(content) {
+		v.Set(commandsKey, []interface{}{})
+	} else if existingCommands != nil || newCommands != nil {
 		// Second parameter wins on duplicates, so new commands override existing
 		merged := mergeCommandArrays(existingCommands, newCommands)
 		v.Set(commandsKey, merged)
@@ -2094,6 +2090,9 @@ func preprocessAtmosYamlFuncExceptCommands(content []byte, v *viper.Viper) error
 		mapping := root.Content[0]
 		for i := 0; i < len(mapping.Content); i += 2 {
 			if mapping.Content[i].Value == commandsKey {
+				if mapping.Content[i+1].Tag == "!unset" {
+					v.Set(commandsKey, []interface{}{})
+				}
 				mapping.Content = append(mapping.Content[:i], mapping.Content[i+2:]...)
 				break
 			}
@@ -2102,6 +2101,22 @@ func preprocessAtmosYamlFuncExceptCommands(content []byte, v *viper.Viper) error
 	// Process the parsed tree directly: aliases can refer to anchors under commands,
 	// so serializing the filtered tree would leave dangling aliases on the next parse.
 	return processNode(&root, v, "")
+}
+
+// commandsAreUnset distinguishes explicit removal from an omitted commands block.
+// An empty list cannot represent removal because imports append command lists.
+func commandsAreUnset(content []byte) bool {
+	var root goyaml.Node
+	if err := goyaml.Unmarshal(content, &root); err != nil || len(root.Content) == 0 || root.Content[0].Kind != goyaml.MappingNode {
+		return false
+	}
+	mapping := root.Content[0]
+	for i := 0; i < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == commandsKey {
+			return mapping.Content[i+1].Tag == "!unset"
+		}
+	}
+	return false
 }
 
 func extractCommandsWithYamlFunctionsForFile(content []byte, sourceFile string) (interface{}, error) {
