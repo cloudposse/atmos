@@ -73,30 +73,24 @@ without changing the stored value itself?**
 (e.g. `init_run_reconfigure: true` keeps meaning "true" in the YAML, but what `true` *causes*
 changed from "always add `-reconfigure`" to "add it only when the backend changed.")
 
-→ **This is `KindBehavior`, not `KindValue` — and `KindBehavior` resolution isn't implemented yet**
-(`pkg/edition/journal.go`'s `Kind` field has the enum value reserved, zero entries use it; see
-`docs/prd/editions.md`'s Roadmap). You cannot mechanically gate this today. What you **can** and
-**must** do:
-1. State the reinterpretation explicitly in the PR's PRD (Goals or a dedicated Migration section)
-    — don't let it hide inside a generic "behavior change" bullet. Say precisely what the old value
-    used to cause and what it causes now.
-2. Add a bullet to `docs/prd/editions.md`'s Roadmap → "Behavior gating" seed-entry list, dated to
-    this PR's merge date, with a PR link and one sentence describing the reinterpretation — same
-    format as the existing 9 seed entries. If this is the first such entry to ship *after* editions
-    itself existed (check the entry dates against `docs/prd/editions.md`'s own PRD changelog date),
-    say so explicitly, the way the "First post-editions candidate" paragraph does — it's a
-    different situation from the pre-editions historical sweep and worth flagging as such.
-3. Bump `docs/prd/editions.md`'s own Changelog table with a new dated row noting the addition (no
-    version-number bump needed for a docs-only Roadmap addition; use the next minor, e.g. 1.0 → 1.1).
+→ **This is `KindBehavior`, not `KindValue`.** Follow the behavior-transition contributor
+workflow in `docs/prd/editions.md`:
+1. Add a `KindBehavior` journal entry with a unique transition key, the expected merge date,
+   descriptive `Old` and `New` values, and the PR reference.
+2. Retain both code paths and select them with `edition.BehaviorChanged(atmosConfig.Edition, key)`.
+   Propagate invalid-pin and unknown-key errors. Pins before the date use the old path; pins on
+   or after it and unpinned projects use the new one. No additional YAML toggle is required.
+3. State exactly what the old and new paths do in the feature PRD's migration section and blog.
+4. Test both paths, boundary dates, unpinned behavior, and explicit options. Behavior entries
+   appear in edition inspection but must never become Viper value overrides.
+
+Historical candidates in the PRD remain ungated until their own code paths are wired and tested.
 
 ## What NOT to do
 
-- Don't invent a `KindBehavior` journal entry with a fake or partial `BehaviorChanged` predicate to
-  "make it gated" — the resolution engine doesn't call it, so it would silently do nothing while
-  looking like real protection. Wait for the actual v2 implementation.
-- Don't skip the Roadmap note because "it's just a doc change" — the whole point of the seed-entry
-  list is to make ungated behavior changes discoverable later, not to pretend editions covers
-  something it doesn't.
+- Do not add a behavior journal entry without wiring its caller: recording a transition alone
+  does not preserve the old code path.
+- Do not claim the historical seed entries are gated merely because the framework now exists.
 - Don't default a new automatic-side-effect key to the "smart" value just because the sibling keys
   in the same feature default that way — check step 3's two sub-questions per key, not per
   feature. A single PR can legitimately ship one key defaulting to `auto` and another to `never`.

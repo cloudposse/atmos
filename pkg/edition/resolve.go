@@ -8,9 +8,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// Change describes how one key's effective default differs between two anchors.
+// Change describes how a default or behavior differs between two anchors.
 type Change struct {
-	// Key is the Viper config key whose effective default differs.
+	// Key identifies the config default or behavior transition.
 	Key string `json:"key" yaml:"key"`
 	// Kind is the kind of the journal entries behind this change.
 	Kind Kind `json:"kind" yaml:"kind"`
@@ -47,7 +47,7 @@ func Overrides(a Anchor) map[string]any {
 	return overrides
 }
 
-// Diff reports every key whose effective default differs between two anchors.
+// Diff reports every default or behavior whose effective value differs between two anchors.
 // A nil anchor means "latest" (no pin), so Diff(pin, nil) answers "what would
 // change if I unpinned". The anchors may be given in either order.
 func Diff(from, to *Anchor) []Change {
@@ -55,9 +55,6 @@ func Diff(from, to *Anchor) []Change {
 
 	entriesByKey := make(map[string][]Entry)
 	for _, entry := range Journal() {
-		if entry.Kind != KindValue {
-			continue
-		}
 		entriesByKey[entry.Key] = append(entriesByKey[entry.Key], entry)
 	}
 
@@ -70,7 +67,7 @@ func Diff(from, to *Anchor) []Change {
 		}
 		changes = append(changes, Change{
 			Key:       key,
-			Kind:      KindValue,
+			Kind:      entries[0].Kind,
 			FromValue: fromValue,
 			ToValue:   toValue,
 			Entries:   entriesBetween(entries, from, to),
@@ -105,20 +102,13 @@ func entriesBetween(entries []Entry, from, to *Anchor) []Entry {
 	return filterEntriesInRange(entries, lower, upper)
 }
 
-// Between returns the value-kind journal entries dated after `from` and on or
+// Between returns default and behavior journal entries dated after `from` and on or
 // before `to`, oldest first. A nil bound is unbounded (nil `from` = from the
 // beginning, nil `to` = through the latest change).
 func Between(from, to *Anchor) []Entry {
 	defer perf.Track(nil, "edition.Between")()
 
-	var valueEntries []Entry
-	for _, entry := range Journal() {
-		if entry.Kind != KindValue {
-			continue
-		}
-		valueEntries = append(valueEntries, entry)
-	}
-	return filterEntriesInRange(valueEntries, from, to)
+	return filterEntriesInRange(Journal(), from, to)
 }
 
 // filterEntriesInRange returns the entries dated after `from` and on or before
