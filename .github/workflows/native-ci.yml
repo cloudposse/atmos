@@ -147,6 +147,8 @@ jobs:
     services:
       floci:
         image: floci/floci@sha256:4e451c39c7bb88e3cd4f87e8fc0c25d5b47695a51185d521e2241fa00486e8eb # 1.5.23
+        # Harden Runner can restart Docker after GitHub starts services.
+        options: --restart always
         ports:
           - 4566:4566
 
@@ -237,6 +239,8 @@ jobs:
     services:
       floci:
         image: floci/floci@sha256:4e451c39c7bb88e3cd4f87e8fc0c25d5b47695a51185d521e2241fa00486e8eb # 1.5.23
+        # Harden Runner can restart Docker after GitHub starts services.
+        options: --restart always
         ports:
           - 4566:4566
 

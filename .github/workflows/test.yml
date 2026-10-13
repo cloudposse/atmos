@@ -1399,16 +1399,22 @@ jobs:
       floci:
         # Pin by immutable digest for reproducibility/supply-chain safety (matches our SHA-pinned actions). Comment tracks the human-readable tag.
         image: floci/floci@sha256:4e451c39c7bb88e3cd4f87e8fc0c25d5b47695a51185d521e2241fa00486e8eb # 1.5.23
+        # Harden Runner can restart Docker after GitHub starts services.
+        options: --restart always
         ports:
           - 4566:4566
       floci-gcp:
         # Pin by immutable digest for reproducibility/supply-chain safety. Comment tracks the human-readable tag.
         image: floci/floci-gcp@sha256:102db655af6facdcd1ec621e108558aafc46c817eaada63236d3acf3c5e92aaa # latest
+        # Harden Runner can restart Docker after GitHub starts services.
+        options: --restart always
         ports:
           - 4588:4588
       floci-az:
         # Pin by immutable digest for reproducibility/supply-chain safety. Comment tracks the human-readable tag.
         image: floci/floci-az@sha256:5e403a7d788c24ab2d1dc03d4803ef2d3962ca01522abba65ed86f221ae87ac0 # latest
+        # Harden Runner can restart Docker after GitHub starts services.
+        options: --restart always
         env:
           FLOCI_AZ_TLS_ENABLED: "true"
         ports:
@@ -2217,6 +2223,8 @@ jobs:
     services:
       registry:
         image: registry:2
+        # Harden Runner can restart Docker after GitHub starts services.
+        options: --restart always
         ports:
           - 5000:5000
 
