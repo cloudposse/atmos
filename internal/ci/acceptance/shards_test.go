@@ -203,7 +203,7 @@ func TestCheckShardResults_FetchErrors(t *testing.T) {
 			wantWaits: 0, // A 4xx is not something waiting fixes.
 		},
 		{
-			name:  "transient fetch error is retried on the next poll",
+			name:  "a single 502 is absorbed by a smaller page within the same poll",
 			polls: 5,
 			expect: func(t *testing.T, client *rerun.MockRESTClient) {
 				t.Helper()
@@ -213,7 +213,21 @@ func TestCheckShardResults_FetchErrors(t *testing.T) {
 						Return(jobsPage(t, shard("linux", 1, "success"), shard("linux", 2, "success"), shard("linux", 3, "success")), nil), //nolint:bodyclose // closed by the code under test, not this fixture.
 				)
 			},
-			wantWaits:  1, // One poll spent on the 502.
+			wantWaits: 0, // rerun.FetchJobs retries at a smaller page size before the poll ends.
+		},
+		{
+			name:  "transient fetch error is retried on the next poll",
+			polls: 5,
+			expect: func(t *testing.T, client *rerun.MockRESTClient) {
+				t.Helper()
+				gomock.InOrder(
+					// The first poll fails at every page size rerun.FetchJobs tries.
+					client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, gomock.Any(), nil).Times(3).Return(nil, badGateway),
+					client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, gomock.Any(), nil).
+						Return(jobsPage(t, shard("linux", 1, "success"), shard("linux", 2, "success"), shard("linux", 3, "success")), nil), //nolint:bodyclose // closed by the code under test, not this fixture.
+				)
+			},
+			wantWaits:  1, // One poll spent on the 502s.
 			wantOutput: []string{`poll 1/5: listing "linux" shard jobs failed (`, "HTTP 502"},
 		},
 		{
