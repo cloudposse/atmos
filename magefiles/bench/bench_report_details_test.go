@@ -56,7 +56,7 @@ func TestBenchReportRetainsMeasurementsWithoutBaseline(t *testing.T) {
 			body := string(data)
 			require.Contains(t, body, "Comparison unavailable")
 			require.Contains(t, body, "| 120 | sec/op |")
-			require.Contains(t, body, "### Describe affected")
+			require.Contains(t, body, "<details><summary>Describe affected</summary>")
 			for _, absent := range []string{"All other benchmarks", "Main snapshot (UTC)", "PR change", "Significance", "p < 0.05", "Cross-run"} {
 				require.NotContains(t, body, absent)
 			}
@@ -87,10 +87,45 @@ func TestBenchReportShowsUncomparedMetricsAlongsideComparisons(t *testing.T) {
 	require.Contains(t, body[details:], "Candidate revision:")
 }
 
+func TestBenchReportCollapsesTablesBelowHeadline(t *testing.T) {
+	base, candidate := benchTestSnapshot(100), benchTestSnapshot(120)
+	report := benchReport{
+		Candidate: &candidate.Manifest, CandidateMetrics: benchSummaries(candidate), Threshold: 10,
+		Comparisons: []benchComparison{benchCompareSnapshots(base, candidate, 10)},
+	}
+	body := benchMarkdown(&report)
+	summary := "<details><summary>Describe affected</summary>"
+	start := strings.Index(body, summary)
+	require.Positive(t, start)
+	end := strings.Index(body[start:], "</details>")
+	require.Positive(t, end)
+	require.Contains(t, body[start:start+end], "CLI/DescribeAffected/instances=100-2")
+	require.Contains(t, body[start:start+end], "+20.00%")
+	require.NotContains(t, body, "### Describe affected")
+	headline := strings.Index(body, "Advisory: potential regressions")
+	require.NotEqual(t, -1, headline)
+	require.Less(t, headline, strings.Index(body, "<details>"), "headline must stay outside details blocks")
+}
+
+func TestBenchReportOmitsModulePrefixFromMetricNames(t *testing.T) {
+	const key = "github.com/cloudposse/atmos/tests/benchmarks|CLI/DescribeAffected/instances=100-2|sec/op"
+	require.Equal(t, "tests/benchmarks/CLI/DescribeAffected/instances=100-2 (sec/op)", benchMetricDisplay(key))
+	require.Equal(t, "malformed", benchMetricDisplay("malformed"))
+	base, candidate := benchTestSnapshot(100), benchTestSnapshot(120)
+	for _, s := range []*benchSnapshot{base, candidate} {
+		s.Values[key] = s.Values[benchTestMetric]
+		delete(s.Values, benchTestMetric)
+		s.Manifest.Metrics = []string{key}
+	}
+	body := benchMarkdown(&benchReport{Candidate: &candidate.Manifest, Threshold: 10, Comparisons: []benchComparison{benchCompareSnapshots(base, candidate, 10)}})
+	require.Contains(t, body, "| tests/benchmarks/CLI/DescribeAffected/instances=100-2 (sec/op) |")
+	require.NotContains(t, body, "github.com/cloudposse/atmos/tests")
+}
+
 func TestBenchReportOmitsEmptyTablesAndWarnings(t *testing.T) {
 	candidate := benchTestSnapshot(120)
 	body := benchMarkdown(&benchReport{Candidate: &candidate.Manifest})
-	for _, absent := range []string{"### Describe affected", "All other benchmarks", "| Benchmark", "Unavailable comparisons and statistical warnings"} {
+	for _, absent := range []string{"<details><summary>Describe affected</summary>", "All other benchmarks", "| Benchmark", "Unavailable comparisons and statistical warnings"} {
 		require.NotContains(t, body, absent)
 	}
 }
