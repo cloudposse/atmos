@@ -731,6 +731,8 @@ jobs:
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         shell: pwsh
         run: |
+          # Preserve the host model when investigating Windows runtime heap corruption.
+          Get-CimInstance Win32_Processor | Select-Object Name, Manufacturer, NumberOfCores, NumberOfLogicalProcessors
           Write-Output "PATH=$Env:PATH"
           Write-Output "PATHEXT=$Env:PATHEXT"
           Get-ChildItem "${{ github.workspace }}"
@@ -793,6 +795,7 @@ jobs:
         if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
         shell: bash
         env:
+          GOTRACEBACK: system
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Use the GitHub token for downloading the Packer plugins
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1460,6 +1463,15 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      - name: Test service recovery
+        run: python3 -m unittest discover -s .github/actions/restore-services
+
+      # Harden Runner can restart Docker after Actions starts service containers.
+      - name: Restore job services
+        uses: ./.github/actions/restore-services
+        with:
+          services: ${{ toJSON(job.services) }}
 
       - name: Set up Atmos (install build artifact)
         uses: ./.github/actions/setup-atmos-install
@@ -2252,6 +2264,12 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      # Harden Runner can restart Docker after Actions starts service containers.
+      - name: Restore job services
+        uses: ./.github/actions/restore-services
+        with:
+          services: ${{ toJSON(job.services) }}
 
       - name: Set up Atmos (install build artifact)
         uses: ./.github/actions/setup-atmos-install
