@@ -34,21 +34,17 @@ func (f *fakePublisher) Reconcile(_ context.Context, options *atmosgit.PullReque
 // PullRequestBodyBadge returns a marker so tests can assert the badge leads the default body.
 func (f *fakePublisher) PullRequestBodyBadge() string { return "BADGE" }
 
-// installPRFakes swaps the forge-facing seams for doubles: the publisher registry, forge
-// address detection (the test remote is a local bare repo, not an https forge URL), and
-// default-branch discovery. Git itself (ls-remote, clone, checkout, commit, push) stays real.
+// installPRFakes swaps the forge-facing seams for doubles: publisher and repository lookup (the
+// test remote is a local bare repo, not a forge URL) and default-branch discovery. Git itself (ls-remote, clone, checkout, commit, push) stays real.
 func installPRFakes(t *testing.T) *fakePublisher {
 	t.Helper()
 	publisher := &fakePublisher{}
-	prevPublisher, prevAddress, prevDefault := newPullRequestPublisher, pullRequestAddressFor, defaultBranch
-	newPullRequestPublisher = func(string) (atmosgit.PullRequestPublisher, error) { return publisher, nil }
-	pullRequestAddressFor = func(string) (string, pullRequestAddress, error) {
-		return "github", pullRequestAddress{Owner: "acme", Repository: "deployments"}, nil
+	prevPublisher, prevDefault := pullRequestPublisherFor, defaultBranch
+	pullRequestPublisherFor = func(string) (atmosgit.PullRequestPublisher, atmosgit.PullRequestRepository, error) {
+		return publisher, atmosgit.PullRequestRepository{Owner: "acme", Repository: "deployments"}, nil
 	}
 	defaultBranch = func(context.Context, string, string) (string, error) { return "main", nil }
-	t.Cleanup(func() {
-		newPullRequestPublisher, pullRequestAddressFor, defaultBranch = prevPublisher, prevAddress, prevDefault
-	})
+	t.Cleanup(func() { pullRequestPublisherFor, defaultBranch = prevPublisher, prevDefault })
 	return publisher
 }
 
@@ -202,58 +198,14 @@ func TestDeliverPullRequestSkipsReconcileWhenNothingChanged(t *testing.T) {
 	assert.Empty(t, strings.TrimSpace(gitCmd(t, bare, "branch", "--list", testPRBranch)), "an empty head must not be pushed")
 }
 
-// TestResolvePullRequestAddress verifies forge detection and address parsing for Azure DevOps,
-// github.com, and GitHub Enterprise Server URIs over HTTPS and SSH.
-func TestResolvePullRequestAddress(t *testing.T) {
-	t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com")
-	tests := []struct {
-		name     string
-		uri      string
-		provider string
-		address  pullRequestAddress
-	}{
-		{"azure devops", "https://dev.azure.com/acme/platform/_git/deployments", "azuredevops", pullRequestAddress{Owner: "acme", Namespace: []string{"platform"}, Repository: "deployments"}},
-		{"github.com", "https://github.com/acme/deployments.git", "github", pullRequestAddress{Owner: "acme", Repository: "deployments"}},
-		{"github enterprise server", "https://ghe.example.com/acme/deployments.git", "github", pullRequestAddress{Owner: "acme", Repository: "deployments"}},
-		{"azure devops ssh", "git@ssh.dev.azure.com:v3/acme/platform/deployments", "azuredevops", pullRequestAddress{Owner: "acme", Namespace: []string{"platform"}, Repository: "deployments"}},
-		{"github ssh", "git@github.com:acme/deployments.git", "github", pullRequestAddress{Owner: "acme", Repository: "deployments"}},
-		{"github enterprise server ssh", "git@ghe.example.com:acme/deployments.git", "github", pullRequestAddress{Owner: "acme", Repository: "deployments"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			provider, address, err := resolvePullRequestAddress(tt.uri)
-			require.NoError(t, err)
-			assert.Equal(t, tt.provider, provider)
-			assert.Equal(t, tt.address, address)
-		})
-	}
-}
-
-// TestResolvePullRequestAddressRejectsUnsupportedURIs verifies unsupported or malformed URIs are
-// rejected instead of being treated as GitHub.
-func TestResolvePullRequestAddressRejectsUnsupportedURIs(t *testing.T) {
-	for _, uri := range []string{
-		"/tmp/origin.git",                                 // Local path.
-		"https://gitlab.com/acme/deployments.git",         // Unsupported forge is not guessed as GitHub.
-		"git@gitlab.com:acme/deployments.git",             // Unsupported forge over SSH.
-		"https://dev.azure.com/acme/platform/deployments", // Azure host, but not a _git URL.
-		"git@ssh.dev.azure.com:acme/platform/deployments", // Azure SSH host, but no v3 prefix.
-		"https://github.com/acme/group/deployments.git",   // Not owner/repository.
-	} {
-		t.Run(uri, func(t *testing.T) {
-			_, _, err := resolvePullRequestAddress(uri)
-			require.ErrorIs(t, err, errUtils.ErrGitTargetPullRequestConfig)
-		})
-	}
-}
-
 // TestDeliverPullRequestRejectsUnsupportedForgeBeforeAnyGitOperation verifies the forge is
-// validated before cloning: the workdir is never created.
+// resolved before cloning: with the real registry no publisher recognizes a GitLab URI, and the
+// workdir is never created.
 func TestDeliverPullRequestRejectsUnsupportedForgeBeforeAnyGitOperation(t *testing.T) {
 	workdir := filepath.Join(t.TempDir(), "workdir")
 	err := (&gitProvisioner{}).Deliver(context.Background(),
 		prDeliverInput("https://gitlab.com/acme/deployments.git", workdir, "main", map[string]any{"enabled": true}, manifest("v: 1\n")))
-	require.ErrorIs(t, err, errUtils.ErrGitTargetPullRequestConfig)
+	require.ErrorIs(t, err, errUtils.ErrPullRequestPublisherUnavailable)
 	assert.NoDirExists(t, workdir)
 }
 
@@ -310,7 +262,9 @@ var errPRMetadata = errors.New("add labels failed")
 func TestDeliverPullRequestSurfacesReconcileErrorAfterPush(t *testing.T) {
 	requireGit(t)
 	installPRFakes(t)
-	newPullRequestPublisher = func(string) (atmosgit.PullRequestPublisher, error) { return errPublisher{}, nil }
+	pullRequestPublisherFor = func(string) (atmosgit.PullRequestPublisher, atmosgit.PullRequestRepository, error) {
+		return errPublisher{}, atmosgit.PullRequestRepository{Owner: "acme", Repository: "deployments"}, nil
+	}
 	root := t.TempDir()
 	bare := seedBareRepo(t, root)
 
@@ -336,7 +290,9 @@ func TestDeliverPullRequestFailsBeforeGitOperations(t *testing.T) {
 			name:   "publisher factory error",
 			branch: "main",
 			setup: func() {
-				newPullRequestPublisher = func(string) (atmosgit.PullRequestPublisher, error) { return nil, errFactory }
+				pullRequestPublisherFor = func(string) (atmosgit.PullRequestPublisher, atmosgit.PullRequestRepository, error) {
+					return nil, atmosgit.PullRequestRepository{}, errFactory
+				}
 			},
 			wantErr: errFactory,
 		},

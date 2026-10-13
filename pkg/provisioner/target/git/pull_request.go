@@ -8,9 +8,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
-	"github.com/cloudposse/atmos/pkg/git/providers/azuredevops"
-	"github.com/cloudposse/atmos/pkg/git/providers/github"
-	ghendpoints "github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -23,8 +20,7 @@ const lsRemoteNoMatch = 2
 // doubles (same pattern as newProvider) without a forge API or a github.com remote.
 var (
 	defaultBranch           = atmosgit.DefaultBranch
-	pullRequestAddressFor   = resolvePullRequestAddress
-	newPullRequestPublisher = atmosgit.NewPullRequestPublisher
+	pullRequestPublisherFor = atmosgit.NewPullRequestPublisherForURL
 )
 
 // gitRunner runs the few git commands reconcile doesn't cover (remote branch probe, head checkout).
@@ -46,11 +42,7 @@ type pullRequestBranches struct {
 func deliverPullRequest(ctx context.Context, s *repoSession, cfg *config, in *target.DeliverInput) error {
 	// Resolve the forge first, so misconfiguration fails before any git operation instead of
 	// leaving a pushed branch with no pull request.
-	providerName, address, err := pullRequestAddressFor(s.resolved.URI)
-	if err != nil {
-		return err
-	}
-	publisher, err := newPullRequestPublisher(providerName)
+	publisher, repository, err := pullRequestPublisherFor(s.resolved.URI)
 	if err != nil {
 		return err
 	}
@@ -76,7 +68,7 @@ func deliverPullRequest(ctx context.Context, s *repoSession, cfg *config, in *ta
 	pr := &cfg.PullRequest
 	title, body := pullRequestText(pr, publisher, in, cfg.Path)
 	result, err := publisher.Reconcile(ctx, &atmosgit.PullRequestOptions{
-		Owner: address.Owner, Namespace: address.Namespace, Repository: address.Repository,
+		Owner: repository.Owner, Namespace: repository.Namespace, Repository: repository.Repository,
 		Base: branches.Base, Head: branches.Head, Title: title, Body: body,
 		Labels: pr.Labels, Draft: pr.Draft, Reviewers: pr.Reviewers, Assignees: pr.Assignees,
 	})
@@ -159,37 +151,6 @@ func remoteBranchExists(ctx context.Context, s *repoSession, branch string) (boo
 		return false, nil
 	}
 	return false, atmosgit.WrapOperationError("check remote branch", s.rc.Workdir, result.StderrTail, err, "")
-}
-
-// pullRequestAddress is the owner/namespace/repository triple a publisher addresses.
-type pullRequestAddress struct {
-	Owner      string
-	Namespace  []string
-	Repository string
-}
-
-// resolvePullRequestAddress detects the forge from the repository URI (HTTPS or SSH): an Azure
-// DevOps URL yields its organization/project/repository, and a github.com (or GitHub Enterprise
-// Server, via GITHUB_SERVER_URL) URL yields its owner/repository. Any other URI is rejected
-// rather than guessed at.
-func resolvePullRequestAddress(uri string) (string, pullRequestAddress, error) {
-	if repo, ok := azuredevops.ParseRepositoryURL(uri); ok {
-		return azuredevops.ProviderName, pullRequestAddress{Owner: repo.Organization, Namespace: []string{repo.Project}, Repository: repo.Name}, nil
-	}
-	parts, ok := atmosgit.ParseGenericGitURL(uri)
-	if ok && isGitHubHost(parts.Host) && !strings.Contains(parts.Name, "/") {
-		return github.ProviderName, pullRequestAddress{Owner: parts.Owner, Repository: parts.Name}, nil
-	}
-	return "", pullRequestAddress{}, fmt.Errorf("%w: pull_request supports GitHub (github.com/<owner>/<repository>) and Azure DevOps (dev.azure.com/<organization>/<project>/_git/<repository>) repositories over HTTPS or SSH, got %q",
-		errUtils.ErrGitTargetPullRequestConfig, uri)
-}
-
-// isGitHubHost reports whether host (portless) is github.com or the configured GitHub
-// Enterprise Server host. Ports are ignored, matching atmosgit.GitHubRepository, since
-// scp-style SSH remotes carry none.
-func isGitHubHost(host string) bool {
-	host = strings.ToLower(host)
-	return host == "github.com" || host == strings.ToLower(ghendpoints.RepoEndpoints().Hostname())
 }
 
 // pullRequestText returns the configured title and body, falling back to defaults.

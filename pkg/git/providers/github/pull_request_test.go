@@ -275,3 +275,33 @@ func TestReconcileWrapsGitHubMutationErrors(t *testing.T) {
 		})
 	}
 }
+
+// TestRepositoryFromURL verifies the GitHub provider claims github.com and GitHub Enterprise
+// Server remotes over HTTPS and SSH, and nothing else.
+func TestRepositoryFromURL(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com")
+	tests := []struct {
+		name string
+		uri  string
+		want atmosgit.PullRequestRepository
+		ok   bool
+	}{
+		{"github.com https", "https://github.com/acme/deployments.git", atmosgit.PullRequestRepository{Owner: "acme", Repository: "deployments"}, true},
+		{"github.com ssh", "git@github.com:acme/deployments.git", atmosgit.PullRequestRepository{Owner: "acme", Repository: "deployments"}, true},
+		{"enterprise https", "https://ghe.example.com/acme/deployments.git", atmosgit.PullRequestRepository{Owner: "acme", Repository: "deployments"}, true},
+		{"enterprise ssh", "git@ghe.example.com:acme/deployments.git", atmosgit.PullRequestRepository{Owner: "acme", Repository: "deployments"}, true},
+		{"enterprise host is case-insensitive", "https://GHE.example.com/acme/deployments", atmosgit.PullRequestRepository{Owner: "acme", Repository: "deployments"}, true},
+		{"other forge https", "https://gitlab.com/acme/deployments.git", atmosgit.PullRequestRepository{}, false},
+		{"other forge ssh", "git@gitlab.com:acme/deployments.git", atmosgit.PullRequestRepository{}, false},
+		{"azure devops", "https://dev.azure.com/acme/platform/_git/deployments", atmosgit.PullRequestRepository{}, false},
+		{"nested path is not owner/repository", "https://github.com/acme/group/deployments.git", atmosgit.PullRequestRepository{}, false},
+		{"local path", "/tmp/origin.git", atmosgit.PullRequestRepository{}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := New().RepositoryFromURL(tt.uri)
+			assert.Equal(t, tt.ok, ok)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

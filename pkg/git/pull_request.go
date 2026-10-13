@@ -57,6 +57,24 @@ type PullRequestBodyBadger interface {
 	PullRequestBodyBadge() string
 }
 
+// PullRequestRepository addresses a repository the way a publisher's Reconcile expects it, with
+// the same Owner/Namespace/Repository semantics as PullRequestOptions.
+type PullRequestRepository struct {
+	Owner      string
+	Namespace  []string
+	Repository string
+}
+
+// PullRequestRepositoryResolver is an optional interface a PullRequestPublisher can implement to
+// recognize its own forge's Git remote URLs (HTTPS or SSH) and return the repository address
+// they name. It lets callers pick a publisher from a repository URI without knowing which forges
+// exist: only the provider that speaks to a forge knows its URL conventions (hosts, SSH path
+// prefixes, enterprise-server hostnames).
+type PullRequestRepositoryResolver interface {
+	// RepositoryFromURL reports ok=false for any URL that is not this forge's.
+	RepositoryFromURL(uri string) (PullRequestRepository, bool)
+}
+
 // PullRequestPublisherFactory creates a pull request publisher.
 type PullRequestPublisherFactory func() (PullRequestPublisher, error)
 
@@ -93,4 +111,26 @@ func RegisteredPullRequestPublishers() []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// NewPullRequestPublisherForURL returns the registered publisher whose forge owns the Git remote
+// URL uri, together with the repository address it resolved from it. Publishers are consulted in
+// sorted name order and those that do not implement PullRequestRepositoryResolver are skipped.
+// It returns ErrPullRequestPublisherUnavailable when no registered publisher recognizes uri.
+func NewPullRequestPublisherForURL(uri string) (PullRequestPublisher, PullRequestRepository, error) {
+	for _, name := range RegisteredPullRequestPublishers() {
+		publisher, err := NewPullRequestPublisher(name)
+		if err != nil {
+			return nil, PullRequestRepository{}, err
+		}
+		resolver, ok := publisher.(PullRequestRepositoryResolver)
+		if !ok {
+			continue
+		}
+		if repository, ok := resolver.RepositoryFromURL(uri); ok {
+			return publisher, repository, nil
+		}
+	}
+	return nil, PullRequestRepository{}, fmt.Errorf("%w: no registered forge recognizes repository %q (registered: %v)",
+		errUtils.ErrPullRequestPublisherUnavailable, uri, RegisteredPullRequestPublishers())
 }

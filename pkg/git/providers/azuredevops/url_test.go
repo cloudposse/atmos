@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	atmosgit "github.com/cloudposse/atmos/pkg/git"
 )
 
 // TestParseRepositoryURL verifies the Azure DevOps HTTPS and SSH URL forms parse into their
@@ -39,9 +41,17 @@ func TestParseRepositoryURL(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo, ok := ParseRepositoryURL(tt.uri)
+			repo, ok := parseRepositoryURL(tt.uri)
 			assert.Equal(t, tt.ok, ok)
-			assert.Equal(t, Repository{Organization: tt.org, Project: tt.project, Name: tt.repo}, repo)
+			assert.Equal(t, repository{Organization: tt.org, Project: tt.project, Name: tt.repo}, repo)
+
+			resolved, resolvedOK := New().RepositoryFromURL(tt.uri)
+			assert.Equal(t, tt.ok, resolvedOK)
+			if tt.ok {
+				assert.Equal(t, atmosgit.PullRequestRepository{Owner: tt.org, Namespace: []string{tt.project}, Repository: tt.repo}, resolved)
+			} else {
+				assert.Equal(t, atmosgit.PullRequestRepository{}, resolved)
+			}
 		})
 	}
 }
