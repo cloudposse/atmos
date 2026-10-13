@@ -123,6 +123,8 @@ func TestPolicyHookAttachments(t *testing.T) {
 			require.ErrorIs(t, h.RunAll(event, config, info, nil, nil), errUtils.ErrPolicyDenied)
 			h.sections["metadata"] = map[string]any{"labels": map[string]any{"stage": "dev"}}
 			require.NoError(t, h.RunAll(event, config, info, nil, nil))
+			h.sections["metadata"] = map[string]any{"labels": map[string]any{"stage": 42}}
+			require.ErrorIs(t, h.RunAll(event, config, info, nil, nil), errUtils.ErrPolicyInputInvalid)
 			h.sections = nil
 			require.ErrorIs(t, h.RunAll(event, config, info, nil, nil), errUtils.ErrPolicyEvaluation)
 		})

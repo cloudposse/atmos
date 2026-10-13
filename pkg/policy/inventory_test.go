@@ -81,3 +81,36 @@ func TestBuildAffectedInputValidation(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, Removed, input.Components[0].Action)
 }
+
+func TestBuildAffectedInputRejectsIncompleteIdentities(t *testing.T) {
+	for _, identity := range []ObjectIdentity{
+		{Name: "app", ComponentType: "helm"},
+		{Name: "app", Stack: "prod"},
+		{Stack: "prod", ComponentType: "helm"},
+	} {
+		t.Run(identity.Stack+"/"+identity.ComponentType+"/"+identity.Name, func(t *testing.T) {
+			snapshot := InventorySnapshot{Stacks: map[string]map[string]map[string]json.RawMessage{
+				identity.Stack: {identity.ComponentType: {identity.Name: json.RawMessage(`{}`)}},
+			}}
+			input, err := BuildAffectedInput(inventoryFixture(`{}`), snapshot, nil, nil)
+			require.ErrorIs(t, err, errUtils.ErrPolicyInputInvalid)
+			require.False(t, input.Complete)
+		})
+	}
+	input, err := BuildAffectedInput(inventoryFixture(`{}`), InventorySnapshot{}, nil, nil)
+	require.ErrorIs(t, err, errUtils.ErrPolicyInputUnavailable)
+	require.False(t, input.Complete)
+}
+
+func TestChangedFieldsRejectsInvalidSnapshots(t *testing.T) {
+	for name, values := range map[string][2]string{
+		"before": {`null`, `{}`},
+		"after":  {`{}`, `[]`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fields, err := changedFields(ObjectIdentity{Name: "app"}, json.RawMessage(values[0]), json.RawMessage(values[1]))
+			require.ErrorIs(t, err, errUtils.ErrPolicyInputInvalid)
+			require.Nil(t, fields)
+		})
+	}
+}

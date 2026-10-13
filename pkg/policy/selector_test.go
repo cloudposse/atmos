@@ -66,6 +66,11 @@ func TestSubjectMetadataIsolationAndValidation(t *testing.T) {
 	require.Equal(t, "prod", metadata["labels"].(map[string]any)["stage"])
 	metadata["tags"].([]any)[0] = "changed"
 	require.Equal(t, []string{"pci"}, subject.Metadata.Tags)
+	subject, err = NewSubject(identity, map[string]any{"tags": []string{"[[ .vars.tag ]]"}}, "[[", "]]")
+	require.NoError(t, err)
+	require.Equal(t, "[[", subject.TemplateLeft)
+	_, err = (&Selector{Tags: []string{"pci"}}).Matches(subject)
+	require.ErrorIs(t, err, errUtils.ErrPolicyInputUnavailable)
 	subject, err = NewSubject(identity, nil)
 	require.NoError(t, err)
 	require.Empty(t, subject.Metadata.Tags)
@@ -108,4 +113,21 @@ func TestSelectorDirectoryAndEngine(t *testing.T) {
 	decision, err = engine.Evaluate(context.Background(), request, bundle.Rules)
 	require.NoError(t, err)
 	require.Equal(t, NotApplicable, decision.Status)
+}
+
+func TestSelectorDirectoryRejectsInvalidAttachments(t *testing.T) {
+	for name, attachment := range map[string]string{
+		"affected requires separate snapshots": "      on: atmos.affected\n      match: {labels: {owner: platform}}",
+		"unresolved selector":                  "      on: operation\n      match: {tags: ['!env POLICY_TAG']}",
+		"invalid tag mode":                     "      on: operation\n      match: {tags: [pci], tag_mode: none}",
+	} {
+		t.Run(name, func(t *testing.T) {
+			directory := t.TempDir()
+			document := strings.Replace(testPlanManifest, "      on: terraform.plan", attachment, 1)
+			require.NoError(t, os.WriteFile(filepath.Join(directory, "policy.yaml"), []byte(document), 0o600))
+			bundle, err := LoadDirectory(directory)
+			require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+			require.Nil(t, bundle)
+		})
+	}
 }
