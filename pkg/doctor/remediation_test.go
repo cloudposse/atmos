@@ -3,6 +3,7 @@ package doctor
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -217,14 +218,19 @@ func TestRecoveryModeIsAnOctalString(t *testing.T) {
 
 func TestBackupManifestRecordsOctalMode(t *testing.T) {
 	root := newProject(t)
-	projectFile(t, root, "atmos.yaml", "components:\n  terraform:\n    init_run_reconfigure: false\n")
+	path := projectFile(t, root, "atmos.yaml", "components:\n  terraform:\n    init_run_reconfigure: false\n")
+	// Windows reports POSIX-style modes differently (0666/0444), so the expectation is the
+	// file's own mode rather than the 0640 that projectFile requests.
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	want := info.Mode().Perm()
 
 	r := ecRun(t, &Options{Root: root, Offline: true, Fix: true, Only: []string{categoryDeprecations}})
 
 	raw, err := os.ReadFile(filepath.Join(r.Backup, "manifest.json"))
 	require.NoError(t, err)
-	require.Contains(t, string(raw), `"mode": "0640"`)
+	require.Contains(t, string(raw), fmt.Sprintf(`"mode": "%04o"`, want))
 	var entries []RecoveryEntry
 	require.NoError(t, json.Unmarshal(raw, &entries))
-	require.Equal(t, RecoveryMode(0o640), entries[0].Mode)
+	require.Equal(t, RecoveryMode(want), entries[0].Mode)
 }
