@@ -35,6 +35,10 @@ func VerifyPlanfile(info *schema.ConfigAndStacksInfo, storedPlanFile string, mod
 		return err
 	}
 
+	policy, err := planDiffPolicy(&vc.atmosConfig)
+	if err != nil {
+		return err
+	}
 	plans, err := loadStoredAndFreshPlans(&vc.atmosConfig, &vc.processedInfo, vc.componentPath, storedPlanFile)
 	if err != nil {
 		os.Remove(storedPlanFile)
@@ -42,7 +46,7 @@ func VerifyPlanfile(info *schema.ConfigAndStacksInfo, storedPlanFile string, mod
 	}
 
 	// Generate diff. The stored planfile has served its purpose either way.
-	diff, hasDiff := generatePlanDiff(sortMapKeys(plans.stored), sortMapKeys(plans.fresh))
+	diff, hasDiff := generatePlanDiff(sortMapKeys(plans.stored), sortMapKeys(plans.fresh), policy)
 	os.Remove(storedPlanFile)
 
 	return finalizeVerification(info, plans.freshPlanFile, diff, hasDiff, mode)

@@ -47,6 +47,9 @@ type PlanFileOptions struct {
 // TerraformPlanDiff represents the plan-diff command implementation.
 func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(atmosConfig, "exec.TerraformPlanDiff")()
+	if _, err := planDiffPolicy(atmosConfig); err != nil {
+		return err
+	}
 
 	// Process stacks to resolve component metadata (metadata.component, component_folder_prefix).
 	// This is required to get the correct FinalComponent and ComponentFolderPrefix.
@@ -153,6 +156,10 @@ func validateOriginalPlanFile(origPlanFile, componentPath string) (string, error
 
 // comparePlansAndGenerateDiff compares two plan files and generates a diff.
 func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, origPlanFile, newPlanFile string) error {
+	policy, err := planDiffPolicy(atmosConfig)
+	if err != nil {
+		return err
+	}
 	// Get the JSON representation of the original plan
 	origPlanJSON, err := getTerraformPlanJSON(atmosConfig, info, componentPath, origPlanFile)
 	if err != nil {
@@ -182,7 +189,7 @@ func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *s
 	newPlan = sortMapKeys(newPlan)
 
 	// Generate the diff
-	diff, hasDiff := generatePlanDiff(origPlan, newPlan)
+	diff, hasDiff := generatePlanDiff(origPlan, newPlan, policy)
 
 	// Print the diff
 	if hasDiff {

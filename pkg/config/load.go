@@ -635,6 +635,9 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	if err := schema.ValidateTerraformFlagsKeys(v.GetStringMap("components.terraform.flags")); err != nil {
 		return atmosConfig, fmt.Errorf("atmos.yaml components.terraform.flags: %w", err)
 	}
+	if err := atmosConfig.Components.Terraform.PlanDiff.Validate(); err != nil {
+		return atmosConfig, err
+	}
 
 	extractEnvMapsFromViper(v, &atmosConfig)
 

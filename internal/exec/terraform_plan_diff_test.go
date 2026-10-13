@@ -1433,7 +1433,7 @@ func TestProcessAttributeDifferences(t *testing.T) {
 		assert.Contains(t, result, "url")
 	})
 
-	t.Run("skip_attributes", func(t *testing.T) {
+	t.Run("formatter_does_not_hide_unfiltered_attributes", func(t *testing.T) {
 		var diff strings.Builder
 		origAttrs := map[string]interface{}{
 			"content":              "old content",
@@ -1451,10 +1451,10 @@ func TestProcessAttributeDifferences(t *testing.T) {
 		result := diff.String()
 		// content is a priority attribute, so it should be shown
 		assert.Contains(t, result, "content")
-		// Skip attributes should not be shown
-		assert.NotContains(t, result, "content_md5")
-		assert.NotContains(t, result, "content_sha256")
-		assert.NotContains(t, result, "response_body_base64")
+		// Filtering belongs to the comparator; the formatter displays all remaining attributes.
+		assert.Contains(t, result, "content_md5")
+		assert.Contains(t, result, "content_sha256")
+		assert.Contains(t, result, "response_body_base64")
 	})
 
 	t.Run("added_and_removed_attributes", func(t *testing.T) {

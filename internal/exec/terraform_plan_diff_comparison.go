@@ -51,7 +51,7 @@ func processValue(v interface{}) interface{} {
 }
 
 // generatePlanDiff generates a diff between two terraform plans.
-func generatePlanDiff(origPlan, newPlan map[string]interface{}) (string, bool) {
+func generatePlanDiff(origPlan, newPlan map[string]interface{}, opts ...planDiffOption) (string, bool) {
 	var diff strings.Builder
 	hasDiff := false
 
@@ -62,7 +62,7 @@ func generatePlanDiff(origPlan, newPlan map[string]interface{}) (string, bool) {
 	}
 
 	// Compare resources
-	if resourcesDiff, resourcesHasDiff := compareResourceSections(origPlan, newPlan); resourcesHasDiff {
+	if resourcesDiff, resourcesHasDiff := compareResourceSections(origPlan, newPlan, opts...); resourcesHasDiff {
 		hasDiff = true
 		diff.WriteString(resourcesDiff)
 	}
@@ -113,8 +113,9 @@ func compareVariables(origPlan, newPlan map[string]interface{}) (string, bool) {
 }
 
 // compareResourceSections compares resource sections between two plans and returns the diff.
-func compareResourceSections(origPlan, newPlan map[string]interface{}) (string, bool) {
-	origResources, newResources := getResources(origPlan), getResources(newPlan)
+func compareResourceSections(origPlan, newPlan map[string]interface{}, opts ...planDiffOption) (string, bool) {
+	origResources := normalizePlanDiffResources(getResources(origPlan), opts...)
+	newResources := normalizePlanDiffResources(getResources(newPlan), opts...)
 	if reflect.DeepEqual(origResources, newResources) {
 		return "", false
 	}
@@ -124,7 +125,7 @@ func compareResourceSections(origPlan, newPlan map[string]interface{}) (string, 
 	diff.WriteString("-----------\n")
 	diff.WriteString("\n")
 
-	resourceDiff := compareResources(origResources, newResources)
+	resourceDiff := compareResources(origResources, newResources, opts...)
 	diff.WriteString(resourceDiff)
 	diff.WriteString("\n")
 
@@ -348,14 +349,14 @@ func compareOutputs(origOutputs, newOutputs map[string]interface{}) string {
 }
 
 // compareResources compares resources between two terraform plans.
-func compareResources(origResources, newResources map[string]interface{}) string {
+func compareResources(origResources, newResources map[string]interface{}, opts ...planDiffOption) string {
 	var diff strings.Builder
 
 	// Process resource additions and removals
 	processResourceAdditionsAndRemovals(&diff, origResources, newResources)
 
 	// Process resource changes
-	processChangedResources(&diff, origResources, newResources)
+	processChangedResources(&diff, origResources, newResources, opts...)
 
 	return diff.String()
 }
@@ -378,7 +379,7 @@ func processResourceAdditionsAndRemovals(diff *strings.Builder, origResources, n
 }
 
 // processChangedResources processes resources that exist in both but have changes.
-func processChangedResources(diff *strings.Builder, origResources, newResources map[string]interface{}) {
+func processChangedResources(diff *strings.Builder, origResources, newResources map[string]interface{}, opts ...planDiffOption) {
 	for k, origV := range origResources {
 		newV, exists := newResources[k]
 		if !exists || reflect.DeepEqual(origV, newV) {
@@ -392,34 +393,28 @@ func processChangedResources(diff *strings.Builder, origResources, newResources 
 		newAttrs := getResourceAttributes(newV)
 
 		// Process attribute differences
-		processAttributeDifferences(diff, origAttrs, newAttrs)
+		processAttributeDifferences(diff, origAttrs, newAttrs, opts...)
 	}
 }
 
 // processAttributeDifferences handles comparing and generating diff for resource attributes.
-func processAttributeDifferences(diff *strings.Builder, origAttrs, newAttrs map[string]interface{}) {
+func processAttributeDifferences(diff *strings.Builder, origAttrs, newAttrs map[string]interface{}, opts ...planDiffOption) {
+	options := planDiffOptions{}
+	for _, opt := range opts {
+		opt(&options)
+	}
 	// Important attributes to always show first if they exist
 	priorityAttrs := []string{"id", "url", "content"}
-
-	// Attributes to skip in the diff to keep it clean
-	skipAttrs := map[string]bool{
-		"response_body_base64": true,
-		"content_base64sha256": true,
-		"content_base64sha512": true,
-		"content_md5":          true,
-		"content_sha1":         true,
-		"content_sha256":       true,
-		"content_sha512":       true,
-	}
 
 	// Process priority attributes first
 	processPriorityAttributes(diff, origAttrs, newAttrs, priorityAttrs)
 
-	// Process other attribute changes (not priority, not skipped)
-	processRegularAttributeChanges(diff, origAttrs, newAttrs, priorityAttrs, skipAttrs)
+	// Explicit exclusions have already been applied to the compared resource records.
+	// Older editions additionally retain the historical display-only suppression.
+	processRegularAttributeChanges(diff, origAttrs, newAttrs, priorityAttrs, options.legacyDisplay)
 
 	// Find added attributes (that weren't in the priority list)
-	processAddedAttributes(diff, origAttrs, newAttrs, priorityAttrs, skipAttrs)
+	processAddedAttributes(diff, origAttrs, newAttrs, priorityAttrs, options.legacyDisplay)
 }
 
 // processPriorityAttributes handles high-priority attributes that should be shown first.
@@ -440,10 +435,10 @@ func processPriorityAttributes(diff *strings.Builder, origAttrs, newAttrs map[st
 }
 
 // processRegularAttributeChanges handles changed and removed attributes.
-func processRegularAttributeChanges(diff *strings.Builder, origAttrs, newAttrs map[string]interface{}, priorityAttrs []string, skipAttrs map[string]bool) {
+func processRegularAttributeChanges(diff *strings.Builder, origAttrs, newAttrs map[string]interface{}, priorityAttrs []string, legacyDisplay bool) {
 	for attrK, origAttrV := range origAttrs {
-		// Skip priority attributes (already processed) and attributes in the skip list
-		if slices.Contains(priorityAttrs, attrK) || skipAttrs[attrK] {
+		// Skip priority attributes (already processed).
+		if slices.Contains(priorityAttrs, attrK) || (legacyDisplay && legacyHiddenAttribute(attrK)) {
 			continue
 		}
 
@@ -456,9 +451,9 @@ func processRegularAttributeChanges(diff *strings.Builder, origAttrs, newAttrs m
 }
 
 // processAddedAttributes handles new attributes that didn't exist before.
-func processAddedAttributes(diff *strings.Builder, origAttrs, newAttrs map[string]interface{}, priorityAttrs []string, skipAttrs map[string]bool) {
+func processAddedAttributes(diff *strings.Builder, origAttrs, newAttrs map[string]interface{}, priorityAttrs []string, legacyDisplay bool) {
 	for attrK, newAttrV := range newAttrs {
-		if _, exists := origAttrs[attrK]; !exists && !slices.Contains(priorityAttrs, attrK) && !skipAttrs[attrK] {
+		if _, exists := origAttrs[attrK]; !exists && !slices.Contains(priorityAttrs, attrK) && (!legacyDisplay || !legacyHiddenAttribute(attrK)) {
 			diff.WriteString(fmt.Sprintf("  + %s: %v\n", attrK, formatValue(newAttrV)))
 		}
 	}

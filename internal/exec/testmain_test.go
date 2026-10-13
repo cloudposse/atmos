@@ -71,6 +71,9 @@ func TestMain(m *testing.M) {
 	if os.Getenv("_ATMOS_TEST_SECRET_PLAN") == "1" {
 		os.Exit(runSecretPlanForTest())
 	}
+	if os.Getenv("_ATMOS_TEST_PLAN_DIFF_TERRAFORM") == "1" {
+		os.Exit(runPlanDiffTerraformForTest())
+	}
 	if os.Getenv(testEnvFakeTerraform) == "1" {
 		os.Exit(runFakeTerraformForTest())
 	}
