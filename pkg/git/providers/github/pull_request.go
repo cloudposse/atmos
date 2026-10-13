@@ -52,8 +52,38 @@ func init() {
 
 // New creates a GitHub pull request provider using the configured CI token.
 func New() *Provider {
-	return &Provider{newClient: func() (client, error) { return githubci.NewClient() }}
+	return &Provider{newClient: newRepoEndpointsClient}
 }
+
+// publicAPIURL is the REST API base of public GitHub.com.
+const publicAPIURL = "https://api.github.com"
+
+// newRepoEndpointsClient builds the CI-token client and, when GITHUB_SERVER_URL / GITHUB_API_URL
+// name a GitHub Enterprise Server instance, points it at that instance's API instead of public
+// GitHub.com. This keeps the API host consistent with RepositoryFromURL, which only claims the
+// host those variables name.
+func newRepoEndpointsClient() (client, error) {
+	c, err := githubci.NewClient()
+	if err != nil {
+		return nil, err
+	}
+	endpoints := ghendpoints.RepoEndpoints()
+	if endpoints.APIURL == publicAPIURL {
+		return c, nil
+	}
+	// WithEnterpriseURLs returns a new client rather than reconfiguring c.
+	enterprise, err := c.GitHub().WithEnterpriseURLs(endpoints.APIURL, endpoints.UploadURL)
+	if err != nil {
+		return nil, fmt.Errorf("%w: configuring GitHub Enterprise Server API %q: %w", errUtils.ErrGitHubAuthorization, endpoints.APIURL, err)
+	}
+	return enterpriseClient{api: enterprise}, nil
+}
+
+// enterpriseClient adapts a go-github client pointed at a GitHub Enterprise Server instance.
+type enterpriseClient struct{ api *gh.Client }
+
+// GitHub returns the Enterprise-configured go-github client.
+func (e enterpriseClient) GitHub() *gh.Client { return e.api }
 
 // NewWithClientFactory exists for fake HTTP client tests without exposing the
 // go-github dependency to caller packages.
@@ -152,19 +182,15 @@ func githubError(err error, response *gh.Response) error {
 	return fmt.Errorf("%w: %w", errUtils.ErrPullRequestReconciliation, err)
 }
 
-// RepositoryFromURL recognizes github.com and GitHub Enterprise Server (the host named by
-// GITHUB_SERVER_URL) remotes over HTTPS or SSH and returns their owner/repository. Ports are
-// ignored, matching atmosgit.GitHubRepository, since scp-style SSH remotes carry none.
+// RepositoryFromURL recognizes remotes on the GitHub host this provider's API client talks to
+// over HTTPS or SSH and returns their owner/repository: github.com by default, or the Enterprise
+// Server host named by GITHUB_SERVER_URL. Only that one host is claimed, so a resolved repository
+// is always one the client can reach. Ports are ignored, matching atmosgit.GitHubRepository,
+// since scp-style SSH remotes carry none.
 func (p *Provider) RepositoryFromURL(uri string) (atmosgit.PullRequestRepository, bool) {
 	parts, ok := atmosgit.ParseGenericGitURL(uri)
-	if !ok || strings.Contains(parts.Name, "/") || !isGitHubHost(parts.Host) {
+	if !ok || strings.Contains(parts.Name, "/") || !strings.EqualFold(parts.Host, ghendpoints.RepoEndpoints().Hostname()) {
 		return atmosgit.PullRequestRepository{}, false
 	}
 	return atmosgit.PullRequestRepository{Owner: parts.Owner, Repository: parts.Name}, true
-}
-
-// isGitHubHost reports whether host is github.com or the configured GitHub Enterprise Server host.
-func isGitHubHost(host string) bool {
-	host = strings.ToLower(host)
-	return host == "github.com" || host == strings.ToLower(ghendpoints.RepoEndpoints().Hostname())
 }

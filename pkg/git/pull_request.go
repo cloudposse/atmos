@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/downloader"
 )
 
 // PullRequestOptions is forge-neutral data used to create or reconcile a pull request.
@@ -132,5 +133,5 @@ func NewPullRequestPublisherForURL(uri string) (PullRequestPublisher, PullReques
 		}
 	}
 	return nil, PullRequestRepository{}, fmt.Errorf("%w: no registered forge recognizes repository %q (registered: %v)",
-		errUtils.ErrPullRequestPublisherUnavailable, uri, RegisteredPullRequestPublishers())
+		errUtils.ErrPullRequestPublisherUnavailable, downloader.RedactSource(uri), RegisteredPullRequestPublishers())
 }

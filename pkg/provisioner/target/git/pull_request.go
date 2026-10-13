@@ -23,9 +23,6 @@ var (
 	pullRequestPublisherFor = atmosgit.NewPullRequestPublisherForURL
 )
 
-// gitRunner runs the few git commands reconcile doesn't cover (remote branch probe, head checkout).
-var gitRunner = atmosgit.NewExecRunner()
-
 // pullRequestBranches is the base/head pair for a delivery and whether head is already on the remote.
 type pullRequestBranches struct {
 	Base       string
@@ -66,7 +63,7 @@ func deliverPullRequest(ctx context.Context, s *repoSession, cfg *config, in *ta
 	}
 
 	pr := &cfg.PullRequest
-	title, body := pullRequestText(pr, publisher, in, cfg.Path)
+	title, body := pullRequestText(pr, publisher, in)
 	result, err := publisher.Reconcile(ctx, &atmosgit.PullRequestOptions{
 		Owner: repository.Owner, Namespace: repository.Namespace, Repository: repository.Repository,
 		Base: branches.Base, Head: branches.Head, Title: title, Body: body,
@@ -133,7 +130,7 @@ func checkoutHead(ctx context.Context, s *repoSession, b pullRequestBranches) er
 		return nil
 	}
 	// -B also resets a stale local head left behind by an earlier, already-merged pull request.
-	result, err := gitRunner.Run(ctx, "git", []string{"checkout", "-B", b.Head}, atmosgit.RunOptions{Dir: s.rc.Workdir, Env: s.rc.Env})
+	result, err := atmosgit.NewExecRunner().Run(ctx, "git", []string{"checkout", "-B", b.Head}, atmosgit.RunOptions{Dir: s.rc.Workdir, Env: s.rc.Env})
 	if err != nil {
 		return atmosgit.WrapOperationError("create pull request branch", s.rc.Workdir, result.StderrTail, err, "")
 	}
@@ -143,7 +140,7 @@ func checkoutHead(ctx context.Context, s *repoSession, b pullRequestBranches) er
 
 // remoteBranchExists reports whether branch exists on the repository's remote.
 func remoteBranchExists(ctx context.Context, s *repoSession, branch string) (bool, error) {
-	result, err := gitRunner.Run(ctx, "git", []string{"ls-remote", "--exit-code", "--heads", s.resolved.URI, branch}, atmosgit.RunOptions{Env: s.rc.Env})
+	result, err := atmosgit.NewExecRunner().Run(ctx, "git", []string{"ls-remote", "--exit-code", "--heads", s.resolved.URI, branch}, atmosgit.RunOptions{Env: s.rc.Env})
 	if err == nil {
 		return true, nil
 	}
@@ -154,14 +151,14 @@ func remoteBranchExists(ctx context.Context, s *repoSession, branch string) (boo
 }
 
 // pullRequestText returns the configured title and body, falling back to defaults.
-func pullRequestText(pr *schema.ProvisionTargetPullRequest, publisher atmosgit.PullRequestPublisher, in *target.DeliverInput, path string) (string, string) {
+func pullRequestText(pr *schema.ProvisionTargetPullRequest, publisher atmosgit.PullRequestPublisher, in *target.DeliverInput) (string, string) {
 	title := pr.Title
 	if title == "" {
 		title = fmt.Sprintf("Atmos: deliver %s to %s (%s)", in.Artifact.Metadata.Component, in.TargetName, in.Artifact.Metadata.Stack)
 	}
 	body := pr.Body
 	if body == "" {
-		body = defaultPullRequestBody(publisher, in, path)
+		body = defaultPullRequestBody(publisher)
 	}
 	return title, body
 }
@@ -179,18 +176,13 @@ func defaultPullRequestBranch(targetName string, md *target.ArtifactMetadata) st
 	return strings.Join(parts, "/")
 }
 
-// defaultPullRequestBody summarizes the delivery, prefixed by the publisher's own badge when
-// it supplies one (see atmosgit.PullRequestBodyBadger).
-func defaultPullRequestBody(publisher atmosgit.PullRequestPublisher, in *target.DeliverInput, path string) string {
-	var b strings.Builder
+// defaultPullRequestBody is the publisher's own badge (see atmosgit.PullRequestBodyBadger), when
+// it supplies one, followed by a one-line note. The title already names the component, target,
+// and stack.
+func defaultPullRequestBody(publisher atmosgit.PullRequestPublisher) string {
+	badge := ""
 	if badger, ok := publisher.(atmosgit.PullRequestBodyBadger); ok {
-		b.WriteString(badger.PullRequestBodyBadge())
-		b.WriteString("\n")
+		badge = badger.PullRequestBodyBadge() + "\n"
 	}
-	b.WriteString("Rendered and delivered by Atmos.\n\n")
-	fmt.Fprintf(&b, "- **Stack:** `%s`\n", in.Artifact.Metadata.Stack)
-	fmt.Fprintf(&b, "- **Component:** `%s`\n", in.Artifact.Metadata.Component)
-	fmt.Fprintf(&b, "- **Target:** `%s`\n", in.TargetName)
-	fmt.Fprintf(&b, "- **Path:** `%s`\n", path)
-	return b.String()
+	return badge + "Rendered and delivered by Atmos.\n"
 }

@@ -97,6 +97,19 @@ func TestNewPullRequestPublisherForURL(t *testing.T) {
 	assert.Contains(t, err.Error(), "a-plain", "the error lists the registered forges")
 }
 
+// TestNewPullRequestPublisherForURLRedactsCredentials verifies credentials embedded in an
+// unrecognized repository URL never reach the error message.
+func TestNewPullRequestPublisherForURLRedactsCredentials(t *testing.T) {
+	isolatePublisherRegistry(t)
+
+	_, _, err := NewPullRequestPublisherForURL("https://user:s3cr3t-token@git.example.com/acme/deployments.git?token=abc")
+
+	require.ErrorIs(t, err, errUtils.ErrPullRequestPublisherUnavailable)
+	assert.NotContains(t, err.Error(), "s3cr3t-token")
+	assert.NotContains(t, err.Error(), "token=abc")
+	assert.Contains(t, err.Error(), "git.example.com/acme/deployments.git")
+}
+
 // TestNewPullRequestPublisherForURLFactoryError verifies a publisher that cannot be created is
 // reported rather than silently skipped.
 func TestNewPullRequestPublisherForURLFactoryError(t *testing.T) {

@@ -120,7 +120,6 @@ func TestDeliverPullRequestFromDefaultBranch(t *testing.T) {
 	assert.Equal(t, testPRBranch, got.Head)
 	assert.Equal(t, "Atmos: deliver argocd to deployment-repo (dev)", got.Title)
 	assert.True(t, strings.HasPrefix(got.Body, "BADGE\n"), "the publisher's badge must lead the default body")
-	assert.Contains(t, got.Body, "`clusters/dev/argocd`")
 	assert.Equal(t, []string{"gitops"}, got.Labels)
 	assert.True(t, got.Draft)
 
