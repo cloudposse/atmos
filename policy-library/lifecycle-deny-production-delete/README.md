@@ -1,6 +1,7 @@
 ---
 title: Protect production Helm releases
 description: Deny direct deletion of Helm releases in production stacks.
+command: atmos helm delete <component> -s <stack>
 tags:
   - Lifecycle Hooks
 related_docs:

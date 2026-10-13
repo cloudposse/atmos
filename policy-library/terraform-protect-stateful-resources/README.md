@@ -1,6 +1,7 @@
 ---
 title: Protect stateful resources
 description: Reject deletion or replacement of selected stateful resource types.
+command: atmos terraform plan <component> -s <stack>
 tags:
   - Terraform
 related_docs:

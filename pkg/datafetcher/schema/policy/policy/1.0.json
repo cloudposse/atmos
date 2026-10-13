@@ -32,12 +32,23 @@
             "additionalProperties": false,
             "required": ["on", "rule", "action"],
             "properties": {
-              "on": {"enum": ["terraform.plan", "operation"]},
+              "on": {"enum": ["terraform.plan", "operation", "atmos.affected"]},
               "engine": {"enum": ["cel"], "default": "cel"},
               "rule": {"type": "string", "minLength": 1, "maxLength": 65536},
               "action": {"enum": ["deny", "hooks"]},
               "reason": {"type": "string"},
               "with": {"type": "object"},
+              "match": {
+                "type": "object", "additionalProperties": false,
+                "properties": {
+                  "tags": {"type": "array", "items": {"type": "string"}},
+                  "tag_mode": {"enum": ["any", "all"]},
+                  "labels": {"type": "object", "additionalProperties": {"type": "string"}},
+                  "components": {"type": "array", "items": {"type": "string"}},
+                  "stacks": {"type": "array", "items": {"type": "string"}},
+                  "component_types": {"type": "array", "items": {"type": "string"}}
+                }
+              },
               "required_ci": {
                 "type": "array",
                 "items": {
@@ -66,6 +77,9 @@
               }
             },
             "allOf": [{
+              "if": {"properties": {"on": {"const": "atmos.affected"}}},
+              "then": {"not": {"required": ["match"]}}
+            }, {
               "if": {"properties": {"action": {"const": "hooks"}}},
               "then": {"required": ["hooks"], "properties": {"on": {"const": "operation"}}},
               "else": {"not": {"required": ["hooks"]}}

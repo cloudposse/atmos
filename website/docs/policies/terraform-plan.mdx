@@ -14,7 +14,7 @@ the plan after planning and checks it again before applying the same saved artif
 
 ## Configure
 
-Set `ATMOS_POLICY_DIR` to a directory containing policy documents. In CI, use an absolute path to
+Place policy documents in `policy.d/`, or set `ATMOS_POLICY_DIR` to override it. In CI, use an absolute path to
 policies checked out from your trusted governing revision—not the unreviewed candidate revision.
 The directory is read before Terraform command configuration processing; it is not templated,
 imported, or merged with component configuration.

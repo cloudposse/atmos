@@ -1,6 +1,7 @@
 ---
 title: Require TFLint after plan
 description: Require TFLint to run and succeed after each successful Terraform plan.
+command: atmos terraform plan <component> -s <stack>
 tags:
   - Lifecycle Hooks
 related_docs:

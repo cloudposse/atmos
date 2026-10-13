@@ -9,13 +9,16 @@ command integrations collect specific inputs and enforce their decisions.
 |---|---|---|
 | `terraform.plan` | Native JSON extracted from a private saved Terraform-compatible plan | After successful planning and before applying the evaluated private copy |
 | `operation` | Terraform, Helmfile, Helm, and Kubernetes lifecycle metadata | Denial and governing hook requirements at the current lifecycle event |
+| `atmos.affected` | Unfiltered static inventories from clean Git worktrees, file changes, and structured differences | Denial before affected output filtering or scheduling |
 | GitHub `ci` context | Allowlisted environment variables and supplied event file through Native CI | `required_ci` validates provider, schema, availability, and completeness before a predicate |
 
-Rules load from `ATMOS_POLICY_DIR`. See [Configuration](https://atmos.tools/policies/configuration),
+Rules load from `policy.d/`, overridden by `ATMOS_POLICY_DIR`. See [Configuration](https://atmos.tools/policies/configuration),
 [Inputs](https://atmos.tools/policies/inputs), and [CI Context](https://atmos.tools/policies/ci) for the public contracts.
 
-The Go `AffectedInput` type validates caller-supplied inventories. It is not connected to command
-collection; `describe affected` does not invoke an affected policy gate.
+Plan and lifecycle rules support literal instance selectors over resolved metadata. Affected rules
+inspect separate before/after values. The affected collector uses active discovery settings on both
+revisions, not independent historical discovery; protect those settings. See
+[Affected Changes](https://atmos.tools/policies/affected) for the collection scope and strict failures.
 
 ## CEL operations
 

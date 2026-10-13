@@ -1,6 +1,7 @@
 ---
 title: Disallow resource types
 description: Prevent selected resource types from being created or retained by a change.
+command: atmos terraform plan <component> -s <stack>
 tags:
   - Terraform
 related_docs:

@@ -44,6 +44,7 @@ type Revisions struct {
 // Request contains one explicitly selected input kind. Input must be a JSON object.
 // No input kind implicitly triggers collection of another kind (including affected).
 type Request struct {
+	Subject   *Subject        `json:"subject,omitempty"`
 	Kind      InputKind       `json:"kind"`
 	Input     json.RawMessage `json:"input"`
 	CI        *CISnapshot     `json:"ci,omitempty"`
@@ -53,6 +54,7 @@ type Request struct {
 // Rule is an already resolved definition, not a policy manifest or trust assertion.
 // A true predicate selects its effects; false means not applicable, never denial.
 type Rule struct {
+	Match       *Selector       `json:"match,omitempty"`
 	ID          string          `json:"id"`
 	Description string          `json:"description,omitempty"`
 	On          InputKind       `json:"on"`

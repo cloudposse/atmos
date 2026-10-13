@@ -1,6 +1,7 @@
 ---
 title: Clean up after Kubernetes failure
 description: Require a cleanup command after a failed Kubernetes apply.
+command: atmos kubernetes apply <component> -s <stack>
 tags:
   - Lifecycle Hooks
 related_docs:

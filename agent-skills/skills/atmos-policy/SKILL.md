@@ -14,11 +14,15 @@ or ordinary lifecycle-hook configuration. Use `atmos-hooks` for non-policy hook 
 Check the installed Atmos version/help and the matching source/docs. Do not infer a command exists
 from the PRD: `atmos policy check/test/explain` is proposed, not implemented in this branch.
 
-The current opt-in is a protected, explicit `ATMOS_POLICY_DIR` containing strict `atmos/v1`
+The current opt-in is `policy.d/` in the invocation directory, overridden by `ATMOS_POLICY_DIR`, containing strict `atmos/v1`
 `kind: Policy` documents. Only inline CEL runs. The language interface anticipates restricted
 Starlark; neither Starlark nor Rego is available through this loader. Existing Rego validation
 is separate and remains supported. Do not migrate legacy configuration to proposed `policy:`
 attachments yet.
+
+Use central `match` selectors for instance attachments: literal labels (all), tags (any by default,
+`tag_mode: all` supported), exact component names, stacks, and component types. These use resolved
+metadata from existing inheritance, not inline policy inheritance. Protect the governing directory.
 
 Distinguish input kind, component type, and CI provider:
 
@@ -32,9 +36,15 @@ Distinguish input kind, component type, and CI provider:
   Metadata retains allowlisted environment variable names under `ci.metadata.data`; native event
   fields remain under `ci.event.data`. No tokens or arbitrary environment variables are copied.
   Events are triggering evidence, not current reviews. Missing required data blocks.
-- `atmos.affected`, `git.change`, function/source, and approval input types have core contracts or
-  design examples, not complete CLI collectors/enforcement. Affected is explicit; ordinary
-  lifecycle and saved-plan rules do not depend on `--affected`.
+- `atmos.affected`: deny rules run in shared affected analysis before output filtering/scheduling.
+  Inputs include files, instances, component/stack groups, and structured before/after fields.
+  Collection requires clean worktrees; static inventories use the active, protected discovery
+  configuration on both revisions. This is not independent historical discovery or a transitive
+  execution graph. Missing imports and unsupported inventory types block. Inspect before/after
+  explicitly; affected rules do not accept single-instance `match` or dispatch lifecycle hooks.
+- `git.change`, function/source, and approval input types have core contracts or design examples,
+  not complete CLI collectors/enforcement. Affected is explicit; ordinary lifecycle and saved-plan
+  rules do not depend on `--affected`.
 
 ## Author and test
 

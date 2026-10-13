@@ -6,7 +6,13 @@ Contributor reference for the [Policy Library](https://atmos.tools/policies/libr
 
 Reusable catalog entries live in `policy-library/<name>/`, each with `README.md`, `policy.yaml`,
 and `tests/cases.json`. The website generates the [Policy Library](https://atmos.tools/policies/library) directly
-from these directories. Frontmatter supplies `title`, `description`, `tags`, and `related_docs`.
+from these directories. Frontmatter supplies `title`, `description`, `tags`, `related_docs`, and
+`command` (the component command with explicit target placeholders).
+
+The index is a compact searchable list inside the Reference sidebar. Each policy page displays the
+actual `policy.yaml` first, with copying, followed by configuration, a command, and selectable tested
+fixtures. The website extracts Contract and Configuration sections from the README; manifests and
+fixtures are not duplicated in website source. Existing file URLs remain available as secondary links.
 
 ```shell
 go test ./pkg/policy -run TestPolicyCatalog -v

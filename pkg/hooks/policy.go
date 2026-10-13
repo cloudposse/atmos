@@ -56,6 +56,15 @@ func (h *Hooks) runPolicyHooks(run *hookRunContext) error {
 	if err != nil {
 		return err
 	}
+	if h.sections != nil {
+		request.Subject, err = policy.NewSubject(policy.ObjectIdentity{
+			Name: run.info.ComponentFromArg, Stack: run.info.Stack,
+			ComponentType: strings.Split(string(run.event.Normalize()), ".")[1],
+		}, h.sections["metadata"], run.atmosConfig.Templates.Settings.Delimiters...)
+		if err != nil {
+			return err
+		}
+	}
 	var engine policy.Engine
 	if err := engine.Register(policy.CELEngine, &policy.CEL{}); err != nil {
 		return err

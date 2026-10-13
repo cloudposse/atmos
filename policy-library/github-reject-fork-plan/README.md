@@ -1,6 +1,7 @@
 ---
 title: Reject fork PR plans
 description: Reject saved Terraform plans when the supplied GitHub event identifies a fork pull request.
+command: atmos terraform plan <component> -s <stack>
 tags:
   - GitHub Actions
 related_docs:

@@ -43,14 +43,33 @@ type Bundle struct {
 	Tools map[string]string
 }
 
-// DirectoryFromEnvironment resolves only the caller's explicit governing source.
+// DirectoryFromEnvironment resolves an explicit override or the local policy.d directory.
+// Discovery does not establish trust. A missing default is allowed; an explicit
+// missing directory is returned so loading fails rather than falling back.
 func DirectoryFromEnvironment() (string, error) {
 	defer perf.Track(nil, "policy.DirectoryFromEnvironment")()
 	settings := viper.New()
 	if err := settings.BindEnv("directory", "ATMOS_POLICY_DIR"); err != nil {
 		return "", err
 	}
-	return settings.GetString("directory"), nil
+	if directory := settings.GetString("directory"); directory != "" {
+		return directory, nil
+	}
+	directory, err := filepath.Abs("policy.d")
+	if err != nil {
+		return "", fmt.Errorf("%w: resolve default directory: %w", errUtils.ErrPolicyInvalid, err)
+	}
+	info, err := os.Stat(directory)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("%w: inspect default directory: %w", errUtils.ErrPolicyInvalid, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("%w: default policy.d is not a directory", errUtils.ErrPolicyInvalid)
+	}
+	return directory, nil
 }
 
 // RulesFor returns rules for one input capability without changing their order.
@@ -67,6 +86,7 @@ func (b *Bundle) RulesFor(kind InputKind) []Rule {
 }
 
 type planPolicyItem struct {
+	Match      *Selector         `yaml:"match"`
 	On         InputKind         `yaml:"on"`
 	Engine     string            `yaml:"engine"`
 	Rule       string            `yaml:"rule"`
@@ -233,9 +253,16 @@ func (p *planPolicyItem) resolve(document, name string) (Rule, error) {
 }
 
 func (p *planPolicyItem) validateEffects(name string) error {
-	if strings.TrimSpace(name) == "" || !slices.Contains([]InputKind{TerraformPlan, Operation}, p.On) || !slices.Contains([]string{"deny", "hooks"}, p.Action) {
-		return fmt.Errorf("%w: expected terraform.plan/operation and deny/hooks action", errUtils.ErrPolicyInvalid)
+	if strings.TrimSpace(name) == "" || !slices.Contains([]InputKind{TerraformPlan, Operation, AtmosAffected}, p.On) || !slices.Contains([]string{"deny", "hooks"}, p.Action) {
+		return fmt.Errorf("%w: expected terraform.plan/operation/atmos.affected and deny/hooks action", errUtils.ErrPolicyInvalid)
 	}
+	if p.On == AtmosAffected && p.Match != nil {
+		return fmt.Errorf("%w: affected rules inspect before/after instances in their expression, not match", errUtils.ErrPolicyInvalid)
+	}
+	return p.validateHookEffects()
+}
+
+func (p *planPolicyItem) validateHookEffects() error {
 	if p.Action == "hooks" && (p.On != Operation || len(p.Hooks) == 0) || p.Action == "deny" && len(p.Hooks) != 0 {
 		return fmt.Errorf("%w: hook effects require an operation rule with action: hooks", errUtils.ErrPolicyInvalid)
 	}
@@ -255,6 +282,9 @@ func (p *planPolicyItem) resolveHookReferences(document string) error {
 }
 
 func (p *planPolicyItem) resolveExpression(document, name string) (Rule, error) {
+	if err := p.Match.validate(); err != nil {
+		return Rule{}, err
+	}
 	if p.Engine == "" {
 		p.Engine = CELEngine
 	}
@@ -276,7 +306,7 @@ func (p *planPolicyItem) resolveExpression(document, name string) (Rule, error) 
 		}
 	}
 	return Rule{
-		ID: document + "/" + name, On: p.On, Engine: p.Engine, Expression: p.Rule,
+		ID: document + "/" + name, On: p.On, Engine: p.Engine, Expression: p.Rule, Match: p.Match,
 		Parameters: parameters, RequiredCI: p.RequiredCI, Effects: Effects{Deny: p.Action == "deny", Reason: p.Reason, Hooks: p.Hooks},
 	}, nil
 }

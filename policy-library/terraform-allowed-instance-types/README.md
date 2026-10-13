@@ -1,6 +1,7 @@
 ---
 title: Allow approved instance types
 description: Require planned EC2 instance types to be known and explicitly approved.
+command: atmos terraform plan <component> -s <stack>
 tags:
   - Terraform
 related_docs:

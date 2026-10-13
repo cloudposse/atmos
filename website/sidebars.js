@@ -243,10 +243,11 @@ module.exports = {
             label: 'Policies',
             link: {type: 'doc', id: 'policies/index'},
             items: [
-                {type: 'link', label: 'Library', href: '/policies/library'},
+                {type: 'link', label: 'Library', href: '/policies/library', customProps: {navigationMatchPrefix: true}},
                 'policies/configuration',
                 'policies/inputs',
                 'policies/terraform-plan',
+                'policies/affected',
                 'policies/hooks',
                 'policies/ci',
                 'policies/examples',

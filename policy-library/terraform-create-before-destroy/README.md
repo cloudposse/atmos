@@ -1,6 +1,7 @@
 ---
 title: Require create-before-destroy
 description: Reject Terraform replacements that destroy the old resource first.
+command: atmos terraform plan <component> -s <stack>
 tags:
   - Terraform
 related_docs:

@@ -108,6 +108,9 @@ func executeDescribeAffected(
 	authDisabled bool,
 	errOptions DescribeStacksErrorOptions,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, error) {
+	if err := enforceAffectedPolicies(atmosConfig, localRepo, remoteRepo, localRepoFileSystemPath, remoteRepoFileSystemPath); err != nil {
+		return nil, nil, nil, err
+	}
 	localRepoHead, err := localRepo.Head()
 	if err != nil {
 		return nil, nil, nil, err

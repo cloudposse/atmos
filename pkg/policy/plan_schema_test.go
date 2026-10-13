@@ -21,6 +21,18 @@ func TestPlanManifestSchema(t *testing.T) {
 	var document map[string]any
 	require.NoError(t, yaml.Unmarshal([]byte(testPlanManifest), &document))
 	require.NoError(t, schema.Validate(document))
+	rule := document["spec"].(map[string]any)["policies"].(map[string]any)["no-deletes"].(map[string]any)
+	rule["match"] = map[string]any{"labels": map[string]any{"stage": "prod"}, "tag_mode": "all"}
+	require.NoError(t, schema.Validate(document))
+	rule["match"] = map[string]any{"tag_mode": "invalid"}
+	require.Error(t, schema.Validate(document))
+	delete(rule, "match")
+	rule["on"] = "atmos.affected"
+	require.NoError(t, schema.Validate(document))
+	rule["match"] = map[string]any{}
+	require.Error(t, schema.Validate(document), "affected rules inspect before/after explicitly")
+	delete(rule, "match")
+	rule["on"] = "terraform.plan"
 	document["metadata"].(map[string]any)["description"] = "Protect resources from accidental deletion."
 	require.NoError(t, schema.Validate(document))
 	document["metadata"].(map[string]any)["description"] = map[string]any{"invalid": "object"}

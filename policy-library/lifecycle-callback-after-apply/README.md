@@ -1,6 +1,7 @@
 ---
 title: Notify after Helm apply
 description: Require an HTTP callback after a successful Helm apply.
+command: atmos helm apply <component> -s <stack>
 tags:
   - Lifecycle Hooks
 related_docs:

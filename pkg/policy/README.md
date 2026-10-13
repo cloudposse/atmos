@@ -31,9 +31,9 @@ result-contract, and integration boundaries without treating supplied-data tests
   The caller must actually establish completeness; the engine cannot verify a claim.
 - CEL size and runtime cost bounds, cancellation, and integer-preserving JSON decoding.
 - Strict native Terraform plan validation, `LoadPlanDirectory` compatibility API, and `LoadDirectory`
-  for mixed inline CEL plan/operation bundles with governing hook definitions/tool pins.
+  for mixed inline CEL plan/operation/affected bundles with governing hook definitions/tool pins.
 - `planfile.Guard` binds evaluation to private binary plan artifacts. Terraform commands opt in
-  through `ATMOS_POLICY_DIR`, check after plan, and recheck before applying the evaluated copy.
+  through `policy.d/` or `ATMOS_POLICY_DIR`, check after plan, and recheck before applying the evaluated copy.
   Gate failures are separate from Terraform exit codes. Implicit apply/destroy are rejected.
 
 ## Adapter contract
@@ -62,9 +62,10 @@ unimplemented. Snapshots are collected outside evaluation and supplied to plan/l
 ## Remaining enforcement boundaries
 
 Callers must supply trusted, resolved policy definitions and distinguish governing,
-base, and head revisions. General policy discovery/manifests, inheritance, selectors, legacy
-migration, source trust, general command admission, and repository-level CI gates are not wired.
-The plan gate's explicit directory is not automatically trusted and can be bypassed by a caller
+base, and head revisions. Local discovery and literal instance selectors are implemented; inline
+policy inheritance, remote libraries, legacy migration, source trust, general command admission,
+and repository-level CI gate orchestration are not wired.
+The discovered directory is not automatically trusted and can be bypassed by a caller
 who controls the invocation. Protect the workflow/environment and governing files externally.
 
 Approvals always remain outstanding in this slice; there is no review verifier. The core returns

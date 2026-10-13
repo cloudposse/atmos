@@ -1,15 +1,17 @@
 ---
 title: Policies
 slug: /policies
-description: Configure CEL rules to deny component operations, inspect Terraform plans, and require lifecycle hooks.
+description: Regulate Atmos's execution lifecycle with policies for component operations, lifecycle hooks, and Terraform plans.
 ---
 
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-Use policies to reject Terraform plan changes, block component operations, and require lifecycle
-hooks. Rules use CEL expressions and load from the directory specified by `ATMOS_POLICY_DIR`.
+Use policies to regulate Atmos's execution lifecycle: control component operations and require
+hooks at lifecycle events. For Terraform, use policies to inspect plan changes and reject operations
+that violate your rules. Policies use CEL expressions and load from `policy.d/` by default, with
+`ATMOS_POLICY_DIR` available as an override. Use tag and label selectors to attach rules to instances.
 </Intro>
 
 <Experimental />
@@ -20,9 +22,11 @@ hooks. Rules use CEL expressions and load from the directory specified by `ATMOS
 |---|---|---|---|
 | `terraform.plan` | Terraform / OpenTofu | After a successful saved plan and before saved-plan apply | `deny` |
 | `operation` | Terraform, Helmfile, Helm, Kubernetes | At the component's lifecycle hook events | `deny`, `hooks` |
+| `atmos.affected` | All supported inventory types | During explicit affected analysis, before filtering or scheduling | `deny` |
 
-[GitHub Actions context](/policies/ci) is available to both kinds. Rules run regardless of whether
-`--affected` was passed. Component configuration validation uses the separate
+[GitHub Actions context](/policies/ci) is available to all three kinds. Plan and lifecycle rules run
+regardless of `--affected`; affected rules run only when affected analysis is requested.
+Component configuration validation uses the separate
 [`settings.validation` configuration](/validation/opa).
 
 ## Quick start
@@ -46,10 +50,9 @@ spec:
           r.mode == 'managed' && 'delete' in r.change.actions)
 ```
 
-Enable the directory and run a plan:
+Run a plan from the directory containing `policy.d/`:
 
 ```shell
-export ATMOS_POLICY_DIR="$PWD/policy.d"
 atmos terraform plan vpc -s dev
 ```
 
@@ -73,6 +76,7 @@ Browse the [Policy Library](/policies/library) for individual policies, paramete
 | [Configuration](/policies/configuration) | Directory loading, manifest fields, rule actions, enforcement setup |
 | [Inputs and Expressions](/policies/inputs) | CEL variables, operation fields, missing values, evaluation results |
 | [Terraform Plans](/policies/terraform-plan) | Plan JSON, saved-plan commands, failure handling |
+| [Affected Changes](/policies/affected) | File, instance, component, stack, and structured-field changes |
 | [Hooks](/policies/hooks) | Hook definitions, selection, execution and success requirements |
 | [CI Context](/policies/ci) | GitHub event data, metadata, required inputs, permissions |
 | [Examples](/policies/examples) | Tested policy configurations to copy and adapt |

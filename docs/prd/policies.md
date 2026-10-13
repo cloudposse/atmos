@@ -29,10 +29,13 @@ enrichment, and durable webhook orchestration belong to Atmos Pro.
 
 **Status:** this is a proposed design, not documentation of a fully shipped policy engine.
 `pkg/policy` provides the evaluator scaffold. The first command integration described below is an
-opt-in saved-Terraform-plan gate using CEL and an explicit `ATMOS_POLICY_DIR`. The directory also
+opt-in saved-Terraform-plan gate using CEL and `policy.d/` (overridden by `ATMOS_POLICY_DIR`). The directory also
 supports operation rules selecting existing hooks at Terraform, Helmfile, Helm, and Kubernetes
 lifecycle points. Native CI supplies GitHub Actions environment/event snapshots through `pkg/ci`.
-Broader component admission, manifest discovery/attachment, fresh API facts, and approval verification
+Instance selectors attach plan/lifecycle rules using resolved tags, labels, names, stacks, and types.
+An `atmos.affected` gate compares unfiltered static inventories within the active discovery scope
+before affected results are consumed. Independent historical discovery is not implemented; see below.
+Broader component admission, inline/remote policy attachment inheritance, fresh API facts, and approval verification
 remain proposed. **This is not yet all-component enforcement.** Component integrations have different
 capabilities; none may pretend to supply a Terraform plan merely to share the engine.
 The current-code and incoming-dependency distinctions apply to all examples outside this first slice.
@@ -60,9 +63,10 @@ explicit. Legacy validation behavior remains unchanged during this incremental r
 
 Ship a **tested, browsable policy library** (`policy-library/`) independently of remote library
 resolution. Each entry contains one `policy.yaml`, a technical `README.md`, and colocated input/expected
-decision fixtures in `tests/cases.json`. The website reuses the Agent Skills file-browser gallery at
-`/policies/library`, with search and categories derived from per-entry metadata. Keep the initial UI
-small: no policy installer, featured promotion, or additional control panel. End-to-end demonstrations
+decision fixtures in `tests/cases.json`. The website presents a compact searchable list at
+`/policies/library`, retaining Reference navigation. Individual pages show the complete policy YAML
+first, with copy controls, configuration, usage commands, and selectable tested examples. Reuse source
+scanning, not the repository-browsing interface. No installer or featured promotion. End-to-end demonstrations
 remain separate under `examples/policies/`.
 
 The directory manifest supports optional `metadata.description`: plain-English document purpose,
@@ -559,6 +563,16 @@ unsupported component coverage. It must not repoint head configuration into base
 produces a complete historical inventory. Safe shared machinery may be factored out; an enforcement
 mode must establish completeness before any optional presentation filters.
 
+**Implemented boundary:** the current gate takes unfiltered, static merged inventories from both
+clean worktrees, including abstract/disabled instances, rejects missing imports and unsupported
+types, and evaluates `atmos.affected` before the legacy display/scheduling analysis. It does not
+execute component YAML functions/templates to collect policy input. Both inventories use the
+active discovery configuration. Completeness is therefore relative to that protected scope, not
+an independent reconstruction of each revision's historical discovery. Git file changes remain
+visible to policies, including discovery-file changes. Fully independent discovery, indirect
+attachment-loss analysis, and transitive dependency graph expansion remain PRD work; do not claim
+the current gate detects all evasion through changed discovery configuration.
+
 An intentionally scoped rule may select from a complete inventory. A caller's `--stack` or affected
 filter must not narrow a repository-level required gate. API file-list limits require a complete Git
 comparison or a blocking error, not partial success.
@@ -668,12 +682,14 @@ errors block. Plan JSON contains secrets even when Terraform marks them sensitiv
 bypass console/CI captures, masking transformations, and diagnostic recording; evaluation errors
 must not echo input values. Temporary artifacts are private and removed on all exit paths.
 
-**First implementation:** `ATMOS_POLICY_DIR` selects one explicit directory, captured before stack
+**Current implementation:** `ATMOS_POLICY_DIR` overrides the default `policy.d/` directory, captured before stack
 configuration processing. It loads strict `atmos/v1`, `kind: Policy` documents with named inline
 `spec.policies` entries (`on: terraform.plan`, `engine: cel`, `rule`, `action: deny`, optional `reason`
-and `with`). No templating/imports, library resolution, selectors, tier discovery, or trust inference.
+and `with`). Instance `match` supports literal tags/labels, component names, stacks, and component types.
+No policy templating/imports, remote library resolution, tier discovery, or trust inference.
 Unknown fields, unsupported kinds/engines/actions and empty configured directories fail closed.
-All loaded rules govern every plan and saved-plan apply in the process, independently of `--affected`.
+Matching rules govern plan and saved-plan apply independently of `--affected`; unmatched instances
+are not subject to saved-plan restrictions from those rules.
 These command gates are mandatory once opted in; no warn/off bypass is provided in this slice.
 
 Implicit apply/deploy and direct destroy are rejected when plan rules are configured. Use explicit
@@ -1551,10 +1567,11 @@ required hook: those requirements must work when enabled.
 | Stage | Deliverable / behavior |
 |---|---|
 | Foundation | common decision/effect contract, trusted loading, four evaluator adapters (Starlark depends on the incoming restricted evaluator), legacy validation compatibility |
-| First command slice (implemented in this workspace) | explicit `ATMOS_POLICY_DIR`, strict inline CEL plan rules, saved-plan JSON gate after plan and before saved-plan apply; mandatory once opted in, without general trust/attachment discovery |
+| First command slice (implemented in this workspace) | default `policy.d/`, `ATMOS_POLICY_DIR` override, strict inline CEL plan rules and literal instance selectors, saved-plan JSON gate after plan and before saved-plan apply; mandatory for matching instances, without trust-tier discovery |
 | Local Native CI integration (implemented) | optional snapshot capability on existing registry; GitHub-native supplied metadata/event; no API calls; required missing evidence blocks |
 | Lifecycle hooks (initial slice implemented) | Terraform/Helmfile/Helm/Kubernetes operation rules reuse hook/step engines, governing definitions/tool pins, required execution/success and dry-run; other components and richer result evidence remain work |
-| Further Native CI integration | repository/change/current approval inputs, explicit affected-analysis policy seam, token-only permission profiles, stable required gate and documented refresh limitations |
+| Affected gate (initial slice implemented) | unfiltered static before/after inventories under active discovery, Git files, component-source changes, structured fields; deny before consuming affected output; clean worktrees and strict collection required |
+| Further Native CI integration | independent historical discovery, repository-only changes/current approval inputs, token-only permission profiles, stable required gate and documented refresh limitations |
 | Further hook integration | preflight future obligations, trusted rendering, typed per-invocation results and event duplicate handling |
 | Advisory adoption | existing commands warn by default unless explicitly strict/enforced; optional hook bindings run only when configured, not merely because a warning exists |
 | Later major | consider stricter defaults with migration guidance; local opt-outs remain bounded by trusted floors |

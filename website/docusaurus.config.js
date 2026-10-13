@@ -527,6 +527,8 @@ const config = {
                 sourceDir: '../policy-library',
                 routeBasePath: '/policies/library',
                 title: 'Policy Library',
+                docsSidebar: 'cli',
+                presentation: 'policies',
                 description: 'Browse individual policies for Terraform plans, GitHub Actions context, and component lifecycle hooks.',
                 githubRepo: 'cloudposse/atmos',
                 githubBranch: 'main',

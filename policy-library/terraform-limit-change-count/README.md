@@ -1,6 +1,7 @@
 ---
 title: Limit resource changes
 description: Cap the number of changed managed resources in one Terraform plan.
+command: atmos terraform plan <component> -s <stack>
 tags:
   - Terraform
 related_docs:

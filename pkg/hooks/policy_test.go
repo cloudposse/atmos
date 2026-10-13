@@ -111,6 +111,24 @@ func TestPolicyHookComponentPaths(t *testing.T) {
 	}
 }
 
+func TestPolicyHookAttachments(t *testing.T) {
+	for _, event := range []HookEvent{BeforeTerraformPlan, BeforeHelmApply, BeforeHelmfileApply, BeforeKubernetesApply} {
+		t.Run(string(event), func(t *testing.T) {
+			h := &Hooks{policyBundle: &policy.Bundle{Rules: []policy.Rule{{
+				ID: "platform/deny", On: policy.Operation, Engine: policy.CELEngine, Expression: "true",
+				Match: &policy.Selector{Labels: map[string]string{"stage": "prod"}}, Effects: policy.Effects{Deny: true},
+			}}}, sections: map[string]any{"metadata": map[string]any{"labels": map[string]any{"stage": "prod"}}}}
+			info := &schema.ConfigAndStacksInfo{Stack: "test", ComponentFromArg: "app"}
+			config := &schema.AtmosConfiguration{}
+			require.ErrorIs(t, h.RunAll(event, config, info, nil, nil), errUtils.ErrPolicyDenied)
+			h.sections["metadata"] = map[string]any{"labels": map[string]any{"stage": "dev"}}
+			require.NoError(t, h.RunAll(event, config, info, nil, nil))
+			h.sections = nil
+			require.ErrorIs(t, h.RunAll(event, config, info, nil, nil), errUtils.ErrPolicyEvaluation)
+		})
+	}
+}
+
 func TestPolicyHooksGoverningSourceAndInputs(t *testing.T) {
 	t.Setenv("ATMOS_POLICY_DIR", "")
 	config, info := &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}

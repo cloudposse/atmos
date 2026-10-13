@@ -114,6 +114,9 @@ func (e *Engine) match(ctx context.Context, request *Request, rule *Rule) (bool,
 	if err := validateRule(rule); err != nil {
 		return false, Effects{}, err
 	}
+	if selected, err := rule.Match.Matches(request.Subject); err != nil || !selected {
+		return false, Effects{}, err
+	}
 	for _, requirement := range rule.RequiredCI {
 		if err := requireCI(request.CI, requirement); err != nil {
 			return false, Effects{}, err

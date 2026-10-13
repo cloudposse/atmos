@@ -98,7 +98,7 @@ func celActivation(evaluation Evaluation) (map[string]any, error) {
 		"input":   evaluation.Request.Input,
 		"params":  parameters,
 		"ci":      evaluation.Request.CI,
-		"request": map[string]any{"kind": evaluation.Request.Kind, "revisions": evaluation.Request.Revisions},
+		"request": map[string]any{"kind": evaluation.Request.Kind, "revisions": evaluation.Request.Revisions, "subject": evaluation.Request.Subject},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrPolicyInputInvalid, err)

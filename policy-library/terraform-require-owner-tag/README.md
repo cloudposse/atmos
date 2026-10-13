@@ -1,6 +1,7 @@
 ---
 title: Require an Owner tag
 description: Require a known, nonempty Owner tag on planned EC2 instances.
+command: atmos terraform plan <component> -s <stack>
 tags:
   - Terraform
 related_docs:

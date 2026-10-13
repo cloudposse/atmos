@@ -5,6 +5,7 @@ import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 import matter from 'gray-matter';
 import plugin from './index.js';
+import {policyPage} from './policy-pages.js';
 
 const siteDir = fileURLToPath(new URL('../../', import.meta.url));
 const libraryDir = path.resolve(siteDir, '../policy-library');
@@ -19,34 +20,47 @@ test('the policy gallery discovers individually documented and tested policies',
     searchable: true,
     cardCtaLabel: 'View policy',
     enablePerPageMarkdown: true,
+    presentation: 'policies',
+    docsSidebar: 'cli',
   });
   const content = await browser.loadContent();
   const entries = readdirSync(libraryDir, {withFileTypes: true}).filter(entry => entry.isDirectory());
   assert.ok(entries.length > 0, 'The library must not be empty');
   assert.deepEqual(content.tree.examples.map(entry => entry.name).sort(), entries.map(entry => entry.name).sort());
-  assert.deepEqual(content.tree.tags, ['Terraform', 'GitHub Actions', 'Lifecycle Hooks']);
+  assert.deepEqual(content.tree.tags, ['Terraform', 'GitHub Actions', 'Lifecycle Hooks', 'Affected Changes']);
   assert.equal(content.options.searchable, true);
   assert.equal(content.options.installCommandTemplate, '', 'Do not invent a policy install command');
   assert.equal(content.options.enableCopyMarkdown, false, 'Keep the first-pass gallery controls minimal');
 
   const routes = [];
+  const modules = new Map();
   await browser.contentLoaded({content, actions: {
-    createData: async name => `data/${name}`,
+    createData: async (name, content) => { modules.set(`data/${name}`, JSON.parse(content)); return `data/${name}`; },
     addRoute: route => routes.push(route),
     setGlobalData: () => {},
   }});
   const paths = new Set(routes.map(route => route.path));
   assert.equal(paths.size, routes.length, 'Generated routes must be unique');
   assert.ok(paths.has('/policies/library'));
+  assert.match(routes[0].component, /PolicyLibrary\/IndexPage/);
+  assert.equal(modules.get(routes[0].modules.treeData).examples[0].root, undefined, 'Index must not bundle every manifest and test');
   const configuration = readFileSync(path.join(siteDir, 'docs/policies/configuration.mdx'), 'utf8');
   assert.match(configuration, /^## Enforcement$/m);
 
   for (const entry of content.tree.examples) {
     const base = `/policies/library/${entry.name}`;
+    const route = routes.find(route => route.path === base);
+    assert.match(route.component, /PolicyLibrary\/PolicyPage/);
+    const page = modules.get(route.modules.policyData);
+    assert.equal(page.policy, readFileSync(path.join(libraryDir, entry.name, 'policy.yaml'), 'utf8'));
+    assert.deepEqual(page.cases, JSON.parse(readFileSync(path.join(libraryDir, entry.name, 'tests/cases.json'), 'utf8')));
+    assert.ok(page.configuration && page.contract);
+    assert.match(page.command, /^atmos \S/);
     for (const suffix of ['', '/policy.yaml', '/tests/cases.json']) {
       assert.ok(paths.has(base + suffix), `Missing catalog route: ${base + suffix}`);
     }
     const {data, content: readme} = matter(entry.root.readme.content);
+    assert.equal(page.command, data.command, 'Use the documented command, including repository-wide commands');
     assert.ok(data.title && data.description && data.tags.length, `${entry.name}: catalog metadata required`);
     assert.ok(entry.docs.length >= 2, `${entry.name}: reference links required`);
     for (const section of ['Contract', 'Configuration', 'Policy', 'Use', 'Tests']) {
@@ -69,4 +83,25 @@ test('the policy gallery discovers individually documented and tested policies',
     assert.ok(fixtures.some(fixture => ['deny', 'allow'].includes(fixture.status)), `${entry.name}: matching case required`);
     assert.ok(fixtures.some(fixture => fixture.status === 'not_applicable'), `${entry.name}: nonmatching case required`);
   }
+});
+
+test('documentation navigation uses resolved docs links and fails on a missing sidebar', async () => {
+  const browser = plugin({siteDir}, {id: 'policies', docsSidebar: 'cli'});
+  const content = {tree: {examples: []}, options: {id: 'policies'}};
+  let global;
+  const actions = {setGlobalData: value => {global = value;}};
+  const allContent = {'file-browser': {policies: content}, 'docusaurus-plugin-content-docs': {default: {loadedVersions: [{
+    versionName: 'current',
+    sidebars: {cli: [{type: 'doc', id: 'policies/index'}]},
+    docs: [{id: 'policies/index', title: 'Policies', permalink: '/policies', frontMatter: {}}],
+  }]}}};
+  await browser.allContentLoaded({allContent, actions});
+  assert.equal(global.sidebar.name, 'cli');
+  assert.equal(global.sidebar.items[0].href, '/policies');
+  await assert.rejects(browser.allContentLoaded({allContent: {'file-browser': {policies: content}}, actions}), /sidebar not found/);
+  await plugin({siteDir}, {}).allContentLoaded({allContent: {}, actions: {setGlobalData: () => assert.fail('Standalone galleries must not acquire docs navigation')}});
+});
+
+test('incomplete policy pages fail the build rather than publishing missing code', () => {
+  assert.throws(() => policyPage({name: 'missing', root: {children: []}}), /Incomplete policy/);
 });

@@ -122,8 +122,9 @@ The example reports a decision; it does not execute or intercept Terraform.
     predicate. Missing evidence cannot be hidden behind a condition that evaluates to false.</dd>
 </dl>
 
-Rule lists must already be resolved and trusted. The core does not implement imports, inheritance,
-tag/label attachment selectors, disabled flags, advisory modes, or trust-tier merging.
+Rule lists must already be resolved and trusted. Literal `Rule.Match` selectors use `Request.Subject`
+for plan/lifecycle attachments. Imports, inline policy inheritance, disabled flags, advisory modes,
+and trust-tier merging are not implemented.
 
 ## CEL inputs and limits
 
@@ -275,8 +276,13 @@ evaluation. Setting a flag does not prove actual completeness: the collector mus
 deletions, indirect effects, imports, inheritance, and unsupported analysis. Do not relabel the
 existing filtered `describe affected` output as complete without that work.
 
-This is a supplied-data Go API. Neither `atmos describe affected` nor commands using `--affected`
-collect this contract for the policy engine. Operation and saved-plan policies use their own inputs.
+The shared affected command path now collects this contract and enforces `on: atmos.affected`
+before display filtering and scheduling. It compares unfiltered static configuration in clean
+worktrees using the active discovery settings on both sides; it does not independently reconstruct
+historical discovery. Protect that configuration as part of the governing execution environment.
+Missing imports, unsupported types, and identity collisions block. Operation and saved-plan policies
+use their own inputs and do not implicitly request affected analysis. See the
+[affected reference](../website/docs/policies/affected.mdx).
 
 ## Adding evaluator adapters
 

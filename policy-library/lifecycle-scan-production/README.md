@@ -1,6 +1,7 @@
 ---
 title: Scan production before plan
 description: Require a Checkov scan before planning a production Terraform component.
+command: atmos terraform plan <component> -s <stack>
 tags:
   - Lifecycle Hooks
 related_docs:
