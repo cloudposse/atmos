@@ -22,8 +22,12 @@ const (
 	colorEnvTrue = "true"
 )
 
-// colorEnvVars are the process-level switches that choose a color profile ahead of any parsed flag.
-var colorEnvVars = []string{"NO_COLOR", "ATMOS_NO_COLOR", "ATMOS_FORCE_COLOR", "FORCE_COLOR", "CLICOLOR_FORCE"}
+// colorEnvVars are the process-level inputs to the color decision (pkg/terminal), cleared so each case
+// starts from a plain non-TTY. CI matters: CI runners set CI=true, which enables color by design.
+var colorEnvVars = []string{
+	"NO_COLOR", "ATMOS_NO_COLOR", "ATMOS_FORCE_COLOR", "FORCE_COLOR", "CLICOLOR_FORCE",
+	"CLICOLOR", "COLORTERM", "TERM", "CI",
+}
 
 // startupHarness runs doctor beneath a root that carries the real global persistent flags, the way the
 // executable dispatches it, starting from the writers and masker that exist before any flag is parsed.
@@ -109,6 +113,8 @@ func TestStartupAppliesColorFlags(t *testing.T) {
 		{name: "--force-color emits ANSI on a non-TTY", env: map[string]string{"CLICOLOR_FORCE": "1"}, args: []string{"--force-color"}, wantColor: true},
 		{name: "--no-color beats color forced by the environment", env: map[string]string{"ATMOS_FORCE_COLOR": colorEnvTrue}, args: []string{"--no-color"}, wantColor: false},
 		{name: "environment alone forces color", env: map[string]string{"ATMOS_FORCE_COLOR": colorEnvTrue}, wantColor: true},
+		{name: "a CI environment enables color", env: map[string]string{"CI": colorEnvTrue}, wantColor: true},
+		{name: "--no-color beats a CI environment", env: map[string]string{"CI": colorEnvTrue}, args: []string{"--no-color"}, wantColor: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
