@@ -26,6 +26,8 @@ const (
 	qualityPerformanceStart = "<!-- atmos-quality-performance:start -->"
 	qualityPerformanceEnd   = "<!-- atmos-quality-performance:end -->"
 	qualityBenchmarkError   = "<!-- atmos-benchmark-report-error -->"
+	qualityTimingStart      = "<!-- atmos-quality-timing:start -->"
+	qualityTimingEnd        = "<!-- atmos-quality-timing:end -->"
 )
 
 type qualityGate struct {
@@ -53,8 +55,9 @@ func (q *qualityClient) get(path string, response any) error {
 }
 
 // Report refreshes the PRs associated with the current Actions event. Scheduled
-// and manual runs reconcile every open PR, including fork review resolutions.
+// runs reconcile PRs updated in the last 24 hours; manual runs reconcile all open PRs.
 func (Quality) Report(repo string) error {
+	started := time.Now().UTC()
 	if !githubapi.RepoPattern.MatchString(repo) {
 		return bench.Error("invalid repository")
 	}
@@ -65,7 +68,7 @@ func (Quality) Report(repo string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 	q := qualityClient{ctx: ctx, api: client, repo: repo}
-	prs, err := q.eventPRs()
+	prs, err := q.eventPRs(started)
 	if err != nil {
 		return err
 	}
@@ -79,7 +82,16 @@ func (Quality) Report(repo string) error {
 }
 
 //nolint:revive // Explicit event precedence handles reviews, external checks, and workflow runs.
-func (q *qualityClient) eventPRs() ([]int, error) {
+func (q *qualityClient) eventPRs(now time.Time) ([]int, error) {
+	if os.Getenv("GITHUB_EVENT_NAME") == "schedule" {
+		cutoff := now.UTC().Add(-24 * time.Hour)
+		fmt.Printf("Scheduled quality recovery: cutoff %s\n", cutoff.Format(time.RFC3339Nano))
+		prs, err := q.recentPRNumbers(cutoff)
+		if err == nil {
+			fmt.Printf("Scheduled quality recovery: selected %d PRs\n", len(prs))
+		}
+		return prs, err
+	}
 	var event struct {
 		Number int `json:"number"`
 		Issue  struct {
@@ -122,6 +134,34 @@ func (q *qualityClient) eventPRs() ([]int, error) {
 		path = "commits/" + sha + "/pulls?state=open"
 	}
 	return q.prNumbers(path)
+}
+
+// recentPRNumbers stops at the cutoff rather than scanning inactive PRs.
+func (q *qualityClient) recentPRNumbers(cutoff time.Time) ([]int, error) {
+	var numbers []int
+	for page := 1; page <= githubapi.PageLimit; page++ {
+		var prs []githubapi.PR
+		path := fmt.Sprintf("pulls?state=open&base=main&sort=updated&direction=desc&per_page=100&page=%d", page)
+		if err := q.get(path, &prs); err != nil {
+			return nil, err
+		}
+		for i := range prs {
+			pr := &prs[i]
+			if pr.Updated.IsZero() {
+				return nil, bench.Error("PR #%d: updated_at missing from scheduled recovery selection", pr.Number)
+			}
+			if pr.Updated.Before(cutoff) {
+				return numbers, nil
+			}
+			if pr.State == "open" && pr.Base.Ref == "main" {
+				numbers = append(numbers, pr.Number)
+			}
+		}
+		if len(prs) < githubapi.PageSize {
+			return numbers, nil
+		}
+	}
+	return nil, bench.Error("PR pagination limit exceeded")
 }
 
 func (q *qualityClient) prNumbers(path string) ([]int, error) {
@@ -174,6 +214,14 @@ func (q *qualityClient) reconcile(number int) error {
 		return err
 	}
 	if !qualityEligible(&pr, q.repo) {
+		return nil
+	}
+	complete, err := q.reportingComplete(&pr)
+	if err != nil {
+		return err
+	}
+	if !complete {
+		fmt.Printf("PR #%d: deferring quality report until CI completes\n", number)
 		return nil
 	}
 	var response struct {

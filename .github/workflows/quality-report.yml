@@ -1,59 +1,26 @@
 name: Quality Gate
 
 on:
-  workflow_run:
-    workflows:
-      - Algolia
-      - Benchmarks
-      - Quality Gate Signal
-      - atmos.ci
-      - autofix.ci
-      - Claude Quality Checks
-      - CodeQL
-      - Dependency Review
-      - Feature release
-      - Go Version Change Detection
-      - install.sh smoke
-      - landing-demos
-      - Link Check
-      - Native CI
-      - Planfile Artifacts E2E
-      - Planfile Verify E2E
-      - PR Size Labeler
-      - Pre-commit
-      - Release Documentation Check
-      - Screengrabs
-      - Tests
-      - TruffleHog secret scan
-      - Validate Agent Skills
-      - Validate Codeowners
-      - Validation E2E
-      - Verify Repository Symlinks
-      - Verify SHA Pinning
-      - Version Tracker
-      - vhs
-      - Website Preview Build
-    # Completion is enough: Quality Gate Signal marks a new head pending.
-    types: [completed]
-  check_run:
-    types: [completed]
-  status:
-  issue_comment:
-    types: [created, edited, deleted]
+  workflow_call:
+    inputs:
+      timing-summary:
+        description: Completed CI timing summary from the trusted coordinator.
+        type: string
+        default: ""
+      timing-head-sha:
+        description: PR head commit associated with the timing summary.
+        type: string
+        default: ""
   # Actions has no review-thread resolution trigger. Reconcile these changes
-  # and third-party events not delivered to Actions on a best-effort schedule.
+  # and third-party events not delivered to Actions every 15 minutes, for open
+  # main PRs updated within the last 24 hours (including bot activity).
   schedule:
     - cron: '*/15 * * * *'
   workflow_dispatch:
 
 permissions: {}
 
-# Group per PR so CI bursts coalesce: each run reconciles current GitHub state,
-# so a newer pending run replaces an older one instead of queueing every event.
-# The benchmark reporter shares the group. Fork PRs lack
-# workflow_run.pull_requests and key on the head SHA; schedules use "all". Those
-# groups can overlap one PR, so the reporter re-checks its comment before
-# publishing and re-renders if another writer changed it.
+# Serialize final reports per PR/head; scheduled recovery has its own group.
 concurrency:
   group: >-
     atmos-quality-report-${{
@@ -68,14 +35,6 @@ concurrency:
 
 jobs:
   report:
-    if: >-
-      (github.event_name != 'workflow_run' ||
-        (github.event.workflow_run.name != 'Quality Gate' &&
-         github.event.workflow_run.name != 'Benchmark Report' &&
-         github.event.workflow_run.name != 'CI Timing Summary')) &&
-      (github.event_name != 'check_run' || github.event.check_run.app.slug != 'github-actions') &&
-      (github.event_name != 'issue_comment' ||
-        (github.event.issue.pull_request && github.event.comment.user.login != 'github-actions[bot]'))
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:
@@ -113,6 +72,8 @@ jobs:
       - name: Reconcile current-head quality gates
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          ATMOS_CI_TIMING_SUMMARY: ${{ inputs.timing-summary }}
+          ATMOS_CI_TIMING_HEAD_SHA: ${{ inputs.timing-head-sha }}
         run: go tool mage quality:report "$GITHUB_REPOSITORY"
       - name: Save recovered benchmark comparisons
         if: always()

@@ -363,6 +363,7 @@ function unwrapProperty(property) {
 }
 /** Collects completed PR workflow timings and publishes the sticky comment. */
 async function run() {
+    await setOutput("ready", false);
     await setResult(false, "Action has not completed");
     const token = getInput("github-token");
     const workflowRunId = parseIntegerInput("workflow-run-id", 1);
@@ -440,6 +441,17 @@ async function run() {
     }
     const summary = calculateTimingSummary(selectedRuns, jobsByRun);
     const body = renderComment(marker, headSha, summary);
+    await setOutput("workflow-count", summary.workflowCount);
+    await setOutput("job-count", summary.jobCount);
+    await setOutput("wall-clock-seconds", summary.wallClockSeconds);
+    await setOutput("runner-seconds", summary.runnerSeconds);
+    await setOutput("summary", body);
+    await setOutput("head-sha", headSha);
+    await setOutput("ready", true);
+    if (getInput("publish-comment") === "false") {
+        await setResult(false, "Completed timings handed to the quality reporter");
+        return;
+    }
     const comments = await client.paginate((page) => `${encodedRepo}/issues/${pullRequestNumber}/comments?per_page=100&page=${page}`, (unwrapArray));
     const existingComment = comments.find((comment) => comment.user?.login === commentAuthor && comment.body?.includes(marker));
     let comment;
@@ -455,13 +467,12 @@ async function run() {
     if (summaryFile !== undefined && summaryFile !== "") {
         await (0,promises_namespaceObject.appendFile)(summaryFile, body, "utf8");
     }
-    await setOutput("workflow-count", summary.workflowCount);
-    await setOutput("job-count", summary.jobCount);
-    await setOutput("wall-clock-seconds", summary.wallClockSeconds);
-    await setOutput("runner-seconds", summary.runnerSeconds);
     await setOutput("comment-url", comment.html_url);
     await setResult(true, "Published timing summary");
 }
+
+;// CONCATENATED MODULE: ./src/main.ts
+
 run().catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`::error::${message.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A")}`);

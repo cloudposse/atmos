@@ -138,7 +138,8 @@ function unwrapProperty<T>(property: string): (response: unknown) => T[] {
 }
 
 /** Collects completed PR workflow timings and publishes the sticky comment. */
-async function run(): Promise<void> {
+export async function run(): Promise<void> {
+  await setOutput("ready", false);
   await setResult(false, "Action has not completed");
 
   const token = getInput("github-token");
@@ -243,6 +244,17 @@ async function run(): Promise<void> {
 
   const summary = calculateTimingSummary(selectedRuns, jobsByRun);
   const body = renderComment(marker, headSha, summary);
+  await setOutput("workflow-count", summary.workflowCount);
+  await setOutput("job-count", summary.jobCount);
+  await setOutput("wall-clock-seconds", summary.wallClockSeconds);
+  await setOutput("runner-seconds", summary.runnerSeconds);
+  await setOutput("summary", body);
+  await setOutput("head-sha", headSha);
+  await setOutput("ready", true);
+  if (getInput("publish-comment") === "false") {
+    await setResult(false, "Completed timings handed to the quality reporter");
+    return;
+  }
   const comments = await client.paginate<ApiComment>(
     (page) => `${encodedRepo}/issues/${pullRequestNumber}/comments?per_page=100&page=${page}`,
     unwrapArray<ApiComment>,
@@ -264,16 +276,6 @@ async function run(): Promise<void> {
   if (summaryFile !== undefined && summaryFile !== "") {
     await appendFile(summaryFile, body, "utf8");
   }
-  await setOutput("workflow-count", summary.workflowCount);
-  await setOutput("job-count", summary.jobCount);
-  await setOutput("wall-clock-seconds", summary.wallClockSeconds);
-  await setOutput("runner-seconds", summary.runnerSeconds);
   await setOutput("comment-url", comment.html_url);
   await setResult(true, "Published timing summary");
 }
-
-run().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(`::error::${message.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A")}`);
-  process.exitCode = 1;
-});

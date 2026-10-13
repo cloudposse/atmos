@@ -2,8 +2,8 @@ name: CI Timing Summary
 
 on:
   # GitHub does not have a native "all PR workflows completed" event. Every
-  # relevant completion invokes this coordinator; it writes only when all
-  # latest workflow runs and jobs for the current PR head SHA are complete.
+  # relevant completion invokes this coordinator; it calls the composite quality
+  # reporter only when all latest workflows/jobs for the PR head are complete.
   # Keep this list in sync with workflows that can run for an open PR.
   workflow_run:
     workflows:
@@ -57,14 +57,16 @@ jobs:
       github.event.workflow_run.event == 'pull_request' ||
       github.event.workflow_run.event == 'pull_request_target' ||
       github.event.workflow_run.pull_requests[0].number > 0
+    outputs:
+      ready: ${{ steps.timing.outputs.ready }}
+      timing-summary: ${{ steps.timing.outputs.summary }}
+      timing-head-sha: ${{ steps.timing.outputs.head-sha }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       actions: read
       contents: read
-      issues: write
-      # Required to create and update timing comments on pull requests.
-      pull-requests: write
+      pull-requests: read
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -83,9 +85,26 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           sparse-checkout: .github/actions/stopwatch
 
-      - name: Update sticky CI timing comment
+      - name: Collect completed CI timings
+        id: timing
         uses: ./.github/actions/stopwatch
         with:
           github-token: ${{ github.token }}
           workflow-run-id: ${{ github.event.workflow_run.id }}
           settle-seconds: "30"
+          publish-comment: "false"
+
+  quality-report:
+    needs: summarize
+    if: needs.summarize.outputs.ready == 'true'
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      statuses: read
+      pull-requests: write
+      issues: write
+    uses: ./.github/workflows/quality-report.yml
+    with:
+      timing-summary: ${{ needs.summarize.outputs.timing-summary }}
+      timing-head-sha: ${{ needs.summarize.outputs.timing-head-sha }}
