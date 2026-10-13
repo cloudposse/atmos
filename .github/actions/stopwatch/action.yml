@@ -13,10 +13,6 @@ inputs:
     description: Time to wait for GitHub to finish creating and indexing sibling workflow runs.
     required: false
     default: "30"
-  publish-comment:
-    description: Publish a standalone comment; false returns timings for the composite quality report.
-    required: false
-    default: "true"
   comment-marker:
     description: Hidden marker used to find and update the sticky comment.
     required: false
@@ -27,12 +23,6 @@ inputs:
     default: "github-actions[bot]"
 
 outputs:
-  ready:
-    description: Whether all selected workflows/jobs completed and the PR head is still current.
-  summary:
-    description: Completed timing summary Markdown for the composite quality report.
-  head-sha:
-    description: PR head SHA associated with the completed summary.
   published:
     description: Whether the sticky comment was created or updated.
   reason:

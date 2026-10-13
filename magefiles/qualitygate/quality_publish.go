@@ -140,36 +140,12 @@ func (q *qualityClient) render(pr *githubapi.PR, existing *githubapi.Comment, pe
 	evaluator.benchmarkReportFailed = strings.Contains(performance, qualityBenchmarkError)
 	gates := evaluator.evaluate(pr)
 	body, ready := qualityMarkdown(pr, gates, performance)
-	if timing := qualityTiming(existing, pr.Head.SHA); timing != "" {
-		body += fmt.Sprintf("\n%s\n%s\n%s\n", qualityTimingStart, timing, qualityTimingEnd)
-	}
 	if run != nil {
 		body += fmt.Sprintf("\n<!-- atmos-benchmark-run:%d:%d -->\n", run.ID, run.Attempt)
 	} else if existing != nil && strings.Contains(existing.Body, qualityHeadMarker(pr.Head.SHA)) {
 		body += "\n" + githubapi.CommentRunPattern.FindString(existing.Body) + "\n"
 	}
 	return body, ready
-}
-
-// Only reuse timings for this PR head, including on later scheduled refreshes.
-func qualityTiming(existing *githubapi.Comment, sha string) string {
-	if os.Getenv("ATMOS_CI_TIMING_HEAD_SHA") == sha {
-		if summary := strings.TrimSpace(os.Getenv("ATMOS_CI_TIMING_SUMMARY")); summary != "" {
-			return summary
-		}
-	}
-	if existing == nil || !strings.Contains(existing.Body, qualityHeadMarker(sha)) {
-		return ""
-	}
-	_, tail, ok := strings.Cut(existing.Body, qualityTimingStart)
-	if !ok {
-		return ""
-	}
-	section, _, ok := strings.Cut(tail, qualityTimingEnd)
-	if !ok {
-		return ""
-	}
-	return strings.TrimSpace(section)
 }
 
 // Publish reports false without writing the comment when another writer changed

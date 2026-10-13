@@ -271,20 +271,20 @@ newest first, for ten compatible snapshots. Empty history reports
 rebuilding old commits.
 
 `CI Timing Summary` is the single automatic completion coordinator: it checks
-that the latest PR workflows and their jobs have finished, then calls the reusable
-`Quality Gate` workflow with the completed timing summary and its head SHA.
-The final sticky quality comment includes CI timings and benchmark comparisons;
-the coordinator does not post a separate timing comment. Failed or canceled
-completed runs still produce a report. The standalone `Benchmark Report` workflow
+that the latest PR workflows and their jobs have finished, posts its timing
+comment using the existing TypeScript stopwatch action, then calls the reusable
+`Quality Gate` workflow when stopwatch's existing `published` output is true.
+The Go reporter publishes its own separate quality/benchmark comment. Only the
+workflow scheduling is shared; no timing content is passed into Go. Failed or
+canceled completed runs still produce reports. The standalone `Benchmark Report` workflow
 is manual-only for explicit recovery by run ID.
 
 All reporters execute the default branch's trusted code with scoped API
 permissions. Neither uses `pull_request_target`. Downloaded PR artifacts are
 bounded, validated data files, never code or executables. PR association includes
 forks. The publisher owns only its marked bot comment, rechecks the head before
-writing, rejects older benchmark runs/attempts, and preserves benchmark and timing
-sections only for the current head. Existing standalone timing comments are left
-as historical reports; new timing data goes into the quality comment.
+writing, rejects older benchmark runs/attempts, and preserves benchmark results
+only for the current head. Stopwatch continues to manage its own timing comment.
 
 The read-only `Quality Gate Signal` forwards PR/review activity to the same
 completion coordinator. Quality Gate no longer independently subscribes to

@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Publish one sticky pull-request comment with cross-workflow GitHub Actions timings.",
   "scripts": {
-    "build": "ncc build src/main.ts -o dist && node scripts/normalize-bundle.mjs",
+    "build": "ncc build src/index.ts -o dist && node scripts/normalize-bundle.mjs",
     "test": "tsx --test src/*.test.ts",
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm test && npm run build"

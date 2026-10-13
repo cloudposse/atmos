@@ -59,19 +59,3 @@ func TestQualityCompletedFailuresAreReportable(t *testing.T) {
 		})
 	}
 }
-
-func TestQualityTimingPreservesOnlyCurrentHead(t *testing.T) {
-	t.Setenv("ATMOS_CI_TIMING_HEAD_SHA", "")
-	t.Setenv("ATMOS_CI_TIMING_SUMMARY", "")
-	body := qualityHeadMarker(githubtest.SHA) + qualityTimingStart + "\nold timings\n" + qualityTimingEnd
-	existing := &githubapi.Comment{Body: body}
-	require.Equal(t, "old timings", qualityTiming(existing, githubtest.SHA))
-	require.Empty(t, qualityTiming(existing, githubtest.Base))
-	require.Empty(t, qualityTiming(nil, githubtest.SHA))
-	require.Empty(t, qualityTiming(&githubapi.Comment{Body: qualityHeadMarker(githubtest.SHA)}, githubtest.SHA))
-	require.Empty(t, qualityTiming(&githubapi.Comment{Body: strings.TrimSuffix(body, qualityTimingEnd)}, githubtest.SHA))
-	t.Setenv("ATMOS_CI_TIMING_HEAD_SHA", githubtest.SHA)
-	t.Setenv("ATMOS_CI_TIMING_SUMMARY", "\nnew timings\n")
-	require.Equal(t, "new timings", qualityTiming(existing, githubtest.SHA))
-	require.Empty(t, qualityTiming(existing, githubtest.Base))
-}

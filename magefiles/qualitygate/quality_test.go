@@ -309,8 +309,6 @@ func TestQualityLabelsPreserveUnrelatedLabels(t *testing.T) {
 }
 
 func TestQualityPublishAndStaleProtection(t *testing.T) {
-	t.Setenv("ATMOS_CI_TIMING_HEAD_SHA", githubtest.SHA)
-	t.Setenv("ATMOS_CI_TIMING_SUMMARY", "## CI timing summary\nCompleted in 5 minutes")
 	for _, scenario := range []string{"create", "update", "update marked", "fork", "spoofed comment", "stale head", "newer report", "newer attempt", "draft changed"} {
 		t.Run(scenario, func(t *testing.T) {
 			run := githubtest.Run()
@@ -358,7 +356,6 @@ func TestQualityPublishAndStaleProtection(t *testing.T) {
 			require.Equal(t, 1, strings.Count(commentBody, "<!-- coderabbit do not respond to this -->"))
 			require.Contains(t, commentBody, qualityReady)
 			require.Contains(t, commentBody, "benchmark comparisons")
-			require.Contains(t, commentBody, qualityTimingStart+"\n## CI timing summary\nCompleted in 5 minutes\n"+qualityTimingEnd)
 			summaryBody, err := os.ReadFile(summary)
 			require.NoError(t, err)
 			require.Equal(t, commentBody+"\n", string(summaryBody))

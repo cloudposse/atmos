@@ -26,8 +26,6 @@ const (
 	qualityPerformanceStart = "<!-- atmos-quality-performance:start -->"
 	qualityPerformanceEnd   = "<!-- atmos-quality-performance:end -->"
 	qualityBenchmarkError   = "<!-- atmos-benchmark-report-error -->"
-	qualityTimingStart      = "<!-- atmos-quality-timing:start -->"
-	qualityTimingEnd        = "<!-- atmos-quality-timing:end -->"
 )
 
 type qualityGate struct {
