@@ -154,7 +154,9 @@ more depth. If a name is not listed here, check that page before concluding it d
 - In CI each write honors the same switches as native reporting (`ci.enabled` plus
   `ci.summary.enabled`, `ci.output.enabled` (also env/path), `ci.annotations.enabled`,
   `ci.results.enabled`, `ci.checks.enabled`, `ci.comments.enabled`, `ci.groups.mode`). A
-  gated-off call warns naming the flag and renders locally; it never fails the script. Comments
+  gated-off call renders locally and warns with the disabled flag; local rendering errors can
+  still fail the script. `ci.mask` registers the secret with Atmos masking without a gate warning
+  when `ci.enabled` is disabled. Comments
   and checks are held on elevated events unless `ci.allow_unsafe_fork_execution` is set.
 - Distinct from `atmos.ci(...)`, which runs the `atmos ci` CLI command group as a subprocess.
   Reference: [ci](https://atmos.tools/functions/automation/ci).
