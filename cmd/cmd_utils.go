@@ -1411,9 +1411,13 @@ func executeCustomCommand(
 		// run bare because a successful Unix exec never returns to close a group.
 		var commandResult *stepPkg.StepResult
 		runCommandStep := func(run func(stdout, stderr io.Writer) error) error {
+			var options []stepPkg.CommandResultOption
+			if step.Name == "" && step.Retry != nil && len(step.Retry.Conditions) > 0 {
+				options = append(options, stepPkg.WithUnnamedCommandOutput())
+			}
 			var runErr error
-			commandResult, runErr = stepPkg.ExecuteCommandResult(step.Name, run)
-			return runErr
+			commandResult, runErr = stepPkg.ExecuteCommandResult(step.Name, run, options...)
+			return stepPkg.WithStepOutput(runErr, commandResult)
 		}
 		// Use cmd.Context() so cancellation (e.g. Ctrl-C on the top-level Cobra invocation)
 		// propagates into step execution and container runtime operations;
