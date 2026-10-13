@@ -59,7 +59,10 @@ func killChild(pid int, grouped bool) error {
 
 // childAlive reports whether the child (or, for a group, any member) still exists.
 func childAlive(pid int, grouped bool) bool {
-	return signalChild(pid, grouped, 0) == nil
+	if grouped {
+		return processGroupAlive(pid)
+	}
+	return signalChild(pid, false, 0) == nil
 }
 
 // finishGroupCancellation gives the signalled group time to exit before killing

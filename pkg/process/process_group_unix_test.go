@@ -62,6 +62,7 @@ func TestProcessGoneRecognizesUnreapedChild(t *testing.T) {
 	})
 	pid := waitForPID(t, dir, "child")
 	require.False(t, processGone(pid), "a running child must still be reported alive")
+	require.True(t, childAlive(pid, false), "an ungrouped child must be checked by PID")
 	require.NoError(t, cmd.Process.Kill())
 	// Do not call Wait until cleanup: the exit status must remain unreaped here.
 	require.Eventually(t, func() bool { return processGone(pid) }, goneWait, 25*time.Millisecond,
