@@ -553,7 +553,12 @@ func TestReporter_ForkGate(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, ci.FeatureForkGate, rc.Gate)
 				assert.True(t, rc.Local)
-				assert.Contains(t, h.local.String(), tc.want)
+				want := tc.want
+				if tc.name == "comment" {
+					// No PR number is available without the payload, so comments preview the commit target.
+					want = "commit comment preview"
+				}
+				assert.Contains(t, h.local.String(), want)
 				h.assertNothingWritten(t)
 			})
 		}
