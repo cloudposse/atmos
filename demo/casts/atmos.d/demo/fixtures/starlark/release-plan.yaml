@@ -1,0 +1,56 @@
+commands:
+  - name: casts generate demo fixtures starlark release-plan
+    description: Record a Starlark custom command with parallel component tasks
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: atmos
+        name: setup
+        command: casts setup
+        output: none
+      - type: cast
+        name: release-plan
+        working_directory: "../../.context/cast-fixtures/starlark"
+        title: Starlark custom commands and parallel functions
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/demo/fixtures/starlark/release-plan.cast"
+        steps:
+          - type: simulate
+            text: "# inspect the Starlark step loaded with !include"
+          - type: simulate
+            text: atmos describe config --format=yaml --query .commands[0].steps
+          - type: atmos
+            name: inspect-step
+            working_directory: "../../.context/cast-fixtures/starlark"
+            command: describe config --format=yaml --query .commands[0].steps
+            duration: 450ms
+            interval: 2s
+          - type: simulate
+            text: "# plan three custom components with two parallel function calls"
+          - type: simulate
+            text: atmos release-plan api -s dev
+          - type: atmos
+            name: plan
+            working_directory: "../../.context/cast-fixtures/starlark"
+            command: release-plan api -s dev
+            duration: 450ms
+            interval: 2s
+      - type: script
+        name: validate
+        interpreter: starlark
+        script: |
+          atmos.run(["casts", "validate", "demo", "fixtures", "starlark", "release-plan"])
+  - name: casts validate demo fixtures starlark release-plan
+    description: Validate the recorded Starlark custom command
+    steps:
+      - type: script
+        name: validate
+        interpreter: starlark
+        script: !include scripts/validate-starlark.star

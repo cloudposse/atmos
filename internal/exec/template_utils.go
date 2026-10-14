@@ -20,6 +20,7 @@ import (
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -57,8 +58,34 @@ func ProcessTmpl(
 	tmplValue string,
 	tmplData any,
 	ignoreMissingTemplateValues bool,
-) (string, error) {
+) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmpl")()
+
+	return processTmpl(atmosConfig, tmplName, tmplValue, tmplData, templateProcessOptions{ignoreMissing: ignoreMissingTemplateValues})
+}
+
+type templateProcessOptions struct {
+	ignoreMissing bool
+	prepare       func(*template.Template)
+}
+
+// processTmpl allows a caller to guard parsed expressions before executing them.
+func processTmpl(
+	atmosConfig *schema.AtmosConfiguration,
+	tmplName, tmplValue string,
+	tmplData any,
+	options templateProcessOptions,
+) (rendered string, renderErr error) {
+	protectedSource, restoreSource, protectErr := starlarksource.Protect(tmplValue, tmplName)
+	if protectErr != nil {
+		return "", protectErr
+	}
+	tmplValue = protectedSource
+	defer func() {
+		if renderErr == nil {
+			rendered = restoreSource(rendered)
+		}
+	}()
 
 	d := data.Data{}
 	ctx := context.TODO()
@@ -82,11 +109,14 @@ func ProcessTmpl(
 
 	option := "missingkey=error"
 
-	if ignoreMissingTemplateValues {
+	if options.ignoreMissing {
 		option = "missingkey=default"
 	}
 
 	t.Option(option)
+	if options.prepare != nil {
+		options.prepare(t)
+	}
 
 	var res bytes.Buffer
 	err = t.Execute(&res, tmplData)
@@ -232,8 +262,19 @@ func ProcessTmplWithDatasources(
 	tmplValue string,
 	tmplData any,
 	ignoreMissingTemplateValues bool,
-) (string, error) {
+) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmplWithDatasources")()
+
+	protectedSource, restoreSource, protectErr := starlarksource.Protect(tmplValue, tmplName)
+	if protectErr != nil {
+		return "", protectErr
+	}
+	tmplValue = protectedSource
+	defer func() {
+		if renderErr == nil {
+			rendered = restoreSource(rendered)
+		}
+	}()
 
 	if !atmosConfig.Templates.Settings.Enabled {
 		log.Debug("ProcessTmplWithDatasources: not processing templates since templating is disabled in 'atmos.yaml'", logKeyTemplate, tmplName)

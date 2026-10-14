@@ -116,6 +116,9 @@ func TestValidateSelectorValue(t *testing.T) {
 		{name: "aws_account_id_rejected", v: "!aws.account_id", wantErr: true},
 		{name: "emulator_rejected", v: "!emulator aws endpoint", wantErr: true},
 		{name: "random_rejected", v: "!random uuid", wantErr: true},
+		{name: "starlark_rejected", v: "!starlark ctx.vars[\"tier\"]", wantErr: true},
+		{name: "starlark_multiline_rejected", v: "!starlark\nreturn ctx.vars[\"tier\"]", wantErr: true},
+		{name: "starlark_nested_rejected", v: map[string]any{"tier": "!starlark ctx.vars[\"tier\"]"}, wantErr: true},
 		{name: "leading_space_still_rejected", v: "  !store ssm env", wantErr: true},
 		{name: "atmos_component_call_rejected", v: `{{ (atmos.Component "vpc" .stack).outputs.id }}`, wantErr: true},
 		{name: "atmos_store_call_rejected", v: `{{ atmos.Store "ssm" .stack "vpc" "id" }}`, wantErr: true},
@@ -249,6 +252,7 @@ func TestForbiddenSelectorFunctionsMatchConstants(t *testing.T) {
 		u.AtmosYamlFuncAwsOrganizationID,
 		u.AtmosYamlFuncEmulator,
 		u.AtmosYamlFuncRandom,
+		u.AtmosYamlFuncStarlark,
 	}
 	if len(expected) != len(forbiddenSelectorFunctions) {
 		t.Fatalf("deny-list has %d entries, constants list has %d", len(forbiddenSelectorFunctions), len(expected))

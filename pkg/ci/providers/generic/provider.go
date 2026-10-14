@@ -5,7 +5,9 @@ package generic
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -21,13 +23,13 @@ import (
 const (
 	// ProviderName is the name of the generic CI provider.
 	ProviderName = "generic"
-
-	// defaultFilePermissions is the file permission mode for CI output files.
-	defaultFilePermissions = 0o644
 )
 
 // Ensure Provider implements provider.Provider.
 var _ provider.Provider = (*Provider)(nil)
+
+// Ensure Provider can be bound to an output writer.
+var _ provider.OutputBinder = (*Provider)(nil)
 
 func init() {
 	// Self-register on package import.
@@ -38,9 +40,13 @@ func init() {
 // but no specific CI platform is detected. It writes summaries to stdout
 // and outputs to environment file or stdout.
 type Provider struct {
-	outputFile     string
-	summaryFile    string
-	nextCheckRunID atomic.Int64
+	outputFile  string
+	summaryFile string
+	// writer receives local renderings; nil means the global UI channel (stderr).
+	writer io.Writer
+	// nextCheckRunID and nextCommentID are shared by copies made with BindOutput.
+	nextCheckRunID *atomic.Int64
+	nextCommentID  *atomic.Int64
 }
 
 // NewProvider creates a new generic CI provider.
@@ -50,9 +56,42 @@ func NewProvider() *Provider {
 	defer perf.Track(nil, "generic.NewProvider")()
 
 	return &Provider{
-		outputFile:  os.Getenv("ATMOS_CI_OUTPUT"),
-		summaryFile: os.Getenv("ATMOS_CI_SUMMARY"),
+		outputFile:     os.Getenv("ATMOS_CI_OUTPUT"),
+		summaryFile:    os.Getenv("ATMOS_CI_SUMMARY"),
+		nextCheckRunID: &atomic.Int64{},
+		nextCommentID:  &atomic.Int64{},
 	}
+}
+
+// BindOutput returns a copy of the provider whose local renderings go to w instead of
+// the global UI channel. The copy shares the check-run counter and file settings.
+func (p *Provider) BindOutput(w io.Writer) provider.Provider {
+	defer perf.Track(nil, "generic.Provider.BindOutput")()
+
+	bound := *p
+	bound.writer = w
+	return &bound
+}
+
+// out returns the formatter that renders to the bound writer (the UI channel when unbound).
+func (p *Provider) out() *ui.Output {
+	return ui.New(p.writer)
+}
+
+// render writes markdown content to out. An unbound provider (the registry instance used by
+// the --ci plugin flow) emits the raw text so the output stays stable for pipelines that
+// parse it; a provider bound via BindOutput renders it as terminal markdown.
+func (p *Provider) render(out *ui.Output, markdown string) {
+	renderMarkdown(out, p.writer != nil, markdown)
+}
+
+// renderMarkdown writes content raw, or rendered as terminal markdown when rendered is true.
+func renderMarkdown(out *ui.Output, rendered bool, content string) {
+	if rendered {
+		out.Markdown(content)
+		return
+	}
+	out.Writef("%s\n", content)
 }
 
 // Name returns the provider name.
@@ -88,6 +127,18 @@ func (p *Provider) Context() (*provider.Context, error) {
 		// CI_REPOSITORY_URL, Jenkins GIT_URL); empty when undeterminable.
 		ServerURL: getFirstEnv("ATMOS_CI_SERVER_URL", "CI_SERVER_URL"),
 		CloneURL:  getFirstEnv("ATMOS_CI_REPOSITORY_URL", "CI_REPOSITORY_URL", "GIT_URL"),
+		EventName: getFirstEnv("ATMOS_CI_EVENT"),
+		RunID:     getFirstEnv("ATMOS_CI_RUN_ID", "CI_JOB_ID", "BUILD_ID"),
+		RunURL:    getFirstEnv("ATMOS_CI_RUN_URL", "CI_JOB_URL", "BUILD_URL"),
+	}
+
+	// ATMOS_CI_PR supplies the pull request number when the caller knows it.
+	if n, err := strconv.Atoi(os.Getenv("ATMOS_CI_PR")); err == nil && n > 0 {
+		ctx.PullRequest = &provider.PRInfo{
+			Number:  n,
+			HeadRef: ctx.Branch,
+			BaseRef: os.Getenv("ATMOS_CI_BASE_REF"),
+		}
 	}
 
 	// If we have a repository, try to split into owner/name.
@@ -110,15 +161,6 @@ func (p *Provider) GetStatus(_ context.Context, _ provider.StatusOptions) (*prov
 	return nil, fmt.Errorf("%w: GetStatus is not supported by the generic CI provider", errUtils.ErrCIOperationNotSupported)
 }
 
-// PostComment is not supported by the generic provider.
-// PR/MR comments require a real platform provider (e.g., GitHub, GitLab).
-func (p *Provider) PostComment(_ context.Context, _ *provider.PostCommentOptions) (*provider.Comment, error) {
-	defer perf.Track(nil, "generic.Provider.PostComment")()
-
-	log.Debug("PostComment not supported by generic CI provider")
-	return nil, fmt.Errorf("%w: PostComment is not supported by the generic CI provider", errUtils.ErrCIOperationNotSupported)
-}
-
 // OutputWriter returns an OutputWriter for the generic provider.
 func (p *Provider) OutputWriter() provider.OutputWriter {
 	defer perf.Track(nil, "generic.Provider.OutputWriter")()
@@ -126,6 +168,8 @@ func (p *Provider) OutputWriter() provider.OutputWriter {
 	return &OutputWriter{
 		outputFile:  p.outputFile,
 		summaryFile: p.summaryFile,
+		out:         p.out(),
+		rendered:    p.writer != nil,
 	}
 }
 
@@ -133,6 +177,19 @@ func (p *Provider) OutputWriter() provider.OutputWriter {
 type OutputWriter struct {
 	outputFile  string
 	summaryFile string
+	// out renders when no file is configured; nil means the global UI channel.
+	out *ui.Output
+	// rendered selects markdown rendering over raw text for summaries; set when the
+	// provider was bound with BindOutput.
+	rendered bool
+}
+
+// output returns the renderer, defaulting to the global UI channel.
+func (w *OutputWriter) output() *ui.Output {
+	if w.out == nil {
+		return ui.New(nil)
+	}
+	return w.out
 }
 
 // WriteOutput writes a key-value pair to CI outputs.
@@ -140,48 +197,30 @@ func (w *OutputWriter) WriteOutput(key, value string) error {
 	defer perf.Track(nil, "generic.OutputWriter.WriteOutput")()
 
 	if w.outputFile != "" {
-		// Write to file in KEY=VALUE format (like GitHub Actions).
-		f, err := os.OpenFile(w.outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, defaultFilePermissions)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-
-		// Handle multiline values with heredoc syntax.
-		if strings.Contains(value, "\n") {
-			_, err = fmt.Fprintf(f, "%s<<EOF\n%s\nEOF\n", key, value)
-		} else {
-			_, err = fmt.Fprintf(f, "%s=%s\n", key, value)
-		}
-		return err
+		// Write to file in GitHub Actions format (heredoc for multiline values).
+		return provider.AppendFile(w.outputFile, provider.FormatOutputLine(key, value), errUtils.ErrCIOutputWriteFailed)
 	}
 
-	// No output file configured - log the output.
-	// log.Debug("CI output", "key", key, "value", value)
-	ui.Writef("%s=%s\n", key, value)
+	// No output file configured - render the output locally as a plain key=value line, even
+	// for multiline values. The heredoc form is a file protocol; on stderr the plain form is
+	// what pipelines that parse `--ci` output (and the CLI golden tests) rely on.
+	w.output().Writef("%s=%s\n", key, value)
 	return nil
 }
 
 // WriteSummary writes content to the job summary.
 func (w *OutputWriter) WriteSummary(content string) error {
 	defer perf.Track(nil, "generic.OutputWriter.WriteSummary")()
+
 	content = provider.MaskPublishedContent(content)
 
 	if w.summaryFile != "" {
-		// Write to file.
-		f, err := os.OpenFile(w.summaryFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, defaultFilePermissions)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-
-		_, err = f.WriteString(content)
-		return err
+		return provider.AppendFile(w.summaryFile, content, errUtils.ErrCISummaryWriteFailed)
 	}
 
-	// No summary file configured - write to stderr.
-	// This makes the summary visible in local testing.
-	ui.Writef("%s\n", content)
+	// No summary file configured - show the summary locally (raw unless the provider
+	// was bound with BindOutput). This makes the summary visible in local testing.
+	renderMarkdown(w.output(), w.rendered, content)
 	return nil
 }
 

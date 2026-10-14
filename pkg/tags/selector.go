@@ -46,6 +46,8 @@ var forbiddenSelectorFunctions = map[string]struct{}{
 	"!aws.organization_id":         {},
 	"!emulator":                    {},
 	"!random":                      {},
+	// Starlark context reads can resolve dependencies requiring auth or execution.
+	"!starlark": {},
 }
 
 // forbiddenTemplateIdentifiers are template function identifiers that reach

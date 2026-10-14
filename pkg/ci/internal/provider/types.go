@@ -3,9 +3,12 @@ package provider
 
 import (
 	"context"
+	"io"
 
 	"github.com/cloudposse/atmos/pkg/ci/cache"
 )
+
+//go:generate mockgen -typed -destination=../../mock_provider_test.go -package=ci github.com/cloudposse/atmos/pkg/ci/internal/provider Provider
 
 // BaseResolution contains the resolved base commit for affected detection.
 type BaseResolution struct {
@@ -119,6 +122,29 @@ type LogGroupingSuppressor interface {
 	SuppressLogGrouping() bool
 }
 
+// OutputBinder is implemented by providers that render locally and can be bound to a
+// specific writer (for example a script step's stderr) instead of the global UI channel.
+type OutputBinder interface {
+	// BindOutput returns a provider that writes its local renderings to w.
+	BindOutput(w io.Writer) Provider
+}
+
+// EnvExporter exports values to later steps of the same job (GitHub Actions:
+// $GITHUB_ENV and $GITHUB_PATH).
+type EnvExporter interface {
+	// WriteEnv makes key=value visible to subsequent steps.
+	WriteEnv(key, value string) error
+	// AddPath prepends dir to PATH for subsequent steps.
+	AddPath(dir string) error
+}
+
+// ValueMasker asks the provider to redact a value in its own log output
+// (GitHub Actions: ::add-mask::).
+type ValueMasker interface {
+	// MaskValue registers value for redaction in the provider's logs.
+	MaskValue(value string) error
+}
+
 // CacheProvider is an optional capability for CI providers that expose a remote
 // build cache (for example, the GitHub Actions cache). Providers implement this
 // when their platform offers a documented cache store reachable from within a
@@ -170,6 +196,9 @@ type Context struct {
 
 	// RunNumber is the run number (increments per workflow).
 	RunNumber int
+
+	// RunURL links to this CI run's page (e.g. the GitHub Actions run URL). Empty when the provider cannot determine it.
+	RunURL string
 
 	// Workflow is the name of the workflow.
 	Workflow string
