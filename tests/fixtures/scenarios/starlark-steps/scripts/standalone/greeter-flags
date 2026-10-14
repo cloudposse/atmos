@@ -1,0 +1,4 @@
+#!/usr/bin/env -S atmos --logs-level=Debug
+def main(args, flags):
+    ui.success("Hello with flags, " + args["name"] + "!")
+cli.command(description="Greet", args=[cli.arg("name")], run=main)

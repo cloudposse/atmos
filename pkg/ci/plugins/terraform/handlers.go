@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	ci "github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
@@ -28,7 +29,7 @@ import (
 func (p *Plugin) onBeforePlan(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.onBeforePlan")()
 
-	if isCheckEnabled(ctx.Config) {
+	if ci.ChecksEnabled(ctx.Config) {
 		if err := p.createCheckRun(ctx); err != nil {
 			logCheckRunError("CI check run creation skipped", err)
 		}
@@ -46,13 +47,13 @@ func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 	// Annotations -- warn-only. Inline `::warning` per Terraform warning
 	// diagnostic. Emitted first so it survives the fatal planfile-upload path
 	// below, and any other later failure in this hook.
-	if isAnnotationsEnabled(ctx.Config) {
+	if ci.AnnotationsEnabled(ctx.Config) {
 		p.emitPlanWarningAnnotations(ctx, result)
 	}
 
 	// Summary -- warn-only.
 	var renderedSummary string
-	if isSummaryEnabled(ctx.Config) {
+	if ci.SummaryEnabled(ctx.Config) {
 		var err error
 		renderedSummary, err = p.writeSummary(ctx, result)
 		if err != nil {
@@ -61,7 +62,7 @@ func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 	}
 
 	// Output -- warn-only.
-	if isOutputEnabled(ctx.Config) {
+	if ci.OutputEnabled(ctx.Config) {
 		if err := p.writeOutputs(ctx, result, renderedSummary); err != nil {
 			log.Warn("CI output failed", "error", err)
 		}
@@ -76,7 +77,7 @@ func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 	}
 
 	// Check -- warn-only.
-	if isCheckEnabled(ctx.Config) {
+	if ci.ChecksEnabled(ctx.Config) {
 		if err := p.updateCheckRun(ctx, result); err != nil {
 			logCheckRunError("CI check run update skipped", err)
 		}
@@ -84,7 +85,7 @@ func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 
 	// PR comment -- warn-only. Reuses the summary already rendered above
 	// to honor user template overrides in ci.templates.terraform.plan.
-	if isCommentsEnabled(ctx.Config) {
+	if ci.CommentsEnabled(ctx.Config) {
 		if err := p.postComment(ctx, renderedSummary); err != nil {
 			logCommentError("CI PR comment skipped", err)
 		}
@@ -98,7 +99,7 @@ func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 func (p *Plugin) onBeforeApply(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.onBeforeApply")()
 
-	if isCheckEnabled(ctx.Config) {
+	if ci.ChecksEnabled(ctx.Config) {
 		if err := p.createCheckRun(ctx); err != nil {
 			logCheckRunError("CI check run creation skipped", err)
 		}
@@ -116,13 +117,13 @@ func (p *Plugin) onAfterApply(ctx *plugin.HookContext) error {
 	// Annotations -- warn-only. Inline `::warning` per Terraform warning
 	// diagnostic. Emitted first, ahead of summary/output/check, so it
 	// survives any later failure in this hook.
-	if isAnnotationsEnabled(ctx.Config) {
+	if ci.AnnotationsEnabled(ctx.Config) {
 		p.emitPlanWarningAnnotations(ctx, result)
 	}
 
 	// Summary -- warn-only.
 	var renderedSummary string
-	if isSummaryEnabled(ctx.Config) {
+	if ci.SummaryEnabled(ctx.Config) {
 		var err error
 		renderedSummary, err = p.writeSummary(ctx, result)
 		if err != nil {
@@ -131,14 +132,14 @@ func (p *Plugin) onAfterApply(ctx *plugin.HookContext) error {
 	}
 
 	// Output -- warn-only.
-	if isOutputEnabled(ctx.Config) {
+	if ci.OutputEnabled(ctx.Config) {
 		if err := p.writeOutputs(ctx, result, renderedSummary); err != nil {
 			log.Warn("CI output failed", "error", err)
 		}
 	}
 
 	// Check -- warn-only.
-	if isCheckEnabled(ctx.Config) {
+	if ci.ChecksEnabled(ctx.Config) {
 		if err := p.updateCheckRun(ctx, result); err != nil {
 			logCheckRunError("CI check run update skipped", err)
 		}
@@ -152,7 +153,7 @@ func (p *Plugin) onAfterApply(ctx *plugin.HookContext) error {
 func (p *Plugin) onBeforeTest(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.onBeforeTest")()
 
-	if isCheckEnabled(ctx.Config) {
+	if ci.ChecksEnabled(ctx.Config) {
 		if err := p.createCheckRun(ctx); err != nil {
 			logCheckRunError("CI check run creation skipped", err)
 		}
@@ -171,13 +172,13 @@ func (p *Plugin) onAfterTest(ctx *plugin.HookContext) error {
 	// Annotations -- warn-only. Inline `::error file:line` per failing
 	// assertion. Emitted first, ahead of summary/output/check, so it survives
 	// any later failure in this hook.
-	if isAnnotationsEnabled(ctx.Config) {
+	if ci.AnnotationsEnabled(ctx.Config) {
 		p.emitTestAnnotations(ctx, result)
 	}
 
 	// Summary -- warn-only.
 	var renderedSummary string
-	if isSummaryEnabled(ctx.Config) {
+	if ci.SummaryEnabled(ctx.Config) {
 		var err error
 		renderedSummary, err = p.writeSummary(ctx, result)
 		if err != nil {
@@ -186,7 +187,7 @@ func (p *Plugin) onAfterTest(ctx *plugin.HookContext) error {
 	}
 
 	// Output -- warn-only. Also write a JUnit report (file + `junit_report` path).
-	if isOutputEnabled(ctx.Config) {
+	if ci.OutputEnabled(ctx.Config) {
 		if err := p.writeOutputs(ctx, result, renderedSummary); err != nil {
 			log.Warn("CI output failed", "error", err)
 		}
@@ -194,7 +195,7 @@ func (p *Plugin) onAfterTest(ctx *plugin.HookContext) error {
 	}
 
 	// Check -- warn-only.
-	if isCheckEnabled(ctx.Config) {
+	if ci.ChecksEnabled(ctx.Config) {
 		if err := p.updateCheckRun(ctx, result); err != nil {
 			logCheckRunError("CI check run update skipped", err)
 		}
@@ -211,7 +212,7 @@ func (p *Plugin) onBeforeDeploy(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.onBeforeDeploy")()
 
 	// Create check run if enabled.
-	if isCheckEnabled(ctx.Config) {
+	if ci.ChecksEnabled(ctx.Config) {
 		if err := p.createCheckRun(ctx); err != nil {
 			logCheckRunError("CI check run creation skipped", err)
 		}
@@ -254,13 +255,13 @@ func (p *Plugin) onAfterDeploy(ctx *plugin.HookContext) error {
 	// Annotations -- warn-only. Inline `::warning` per Terraform warning
 	// diagnostic. Emitted first, ahead of summary/output/check, so it
 	// survives any later failure in this hook.
-	if isAnnotationsEnabled(ctx.Config) {
+	if ci.AnnotationsEnabled(ctx.Config) {
 		p.emitPlanWarningAnnotations(ctx, result)
 	}
 
 	// Summary -- warn-only.
 	var renderedSummary string
-	if isSummaryEnabled(ctx.Config) {
+	if ci.SummaryEnabled(ctx.Config) {
 		var err error
 		renderedSummary, err = p.writeSummary(ctx, result)
 		if err != nil {
@@ -269,7 +270,7 @@ func (p *Plugin) onAfterDeploy(ctx *plugin.HookContext) error {
 	}
 
 	// Output -- warn-only.
-	if isOutputEnabled(ctx.Config) {
+	if ci.OutputEnabled(ctx.Config) {
 		if err := p.writeOutputs(ctx, result, renderedSummary); err != nil {
 			log.Warn("CI output failed", "error", err)
 		}
@@ -278,7 +279,7 @@ func (p *Plugin) onAfterDeploy(ctx *plugin.HookContext) error {
 	// Check -- warn-only.
 	// Restore original command so check run name matches the one from onBeforeDeploy.
 	ctx.Command = originalCommand
-	if isCheckEnabled(ctx.Config) {
+	if ci.ChecksEnabled(ctx.Config) {
 		if err := p.updateCheckRun(ctx, result); err != nil {
 			logCheckRunError("CI check run update skipped", err)
 		}
@@ -680,28 +681,24 @@ func (p *Plugin) createCheckRun(ctx *plugin.HookContext) error {
 		return errUtils.Build(errUtils.ErrCICheckRunMissingComponent).WithCause(err).Err()
 	}
 
-	opts := &provider.CreateCheckRunOptions{
-		Name:       name,
-		Status:     provider.CheckRunStateInProgress,
-		Title:      fmt.Sprintf("%s in progress...", ctx.Command),
-		DetailsURL: runURL(ctx),
-	}
-
-	if ctx.CICtx != nil {
-		opts.Owner = ctx.CICtx.RepoOwner
-		opts.Repo = ctx.CICtx.RepoName
-		opts.SHA = ctx.CICtx.SHA
-	}
-
-	checkRun, err := ctx.Provider.CreateCheckRun(context.Background(), opts)
+	rc, err := reporterFor(ctx).Check(context.Background(), ci.CheckRequest{
+		Name:        name,
+		State:       provider.CheckRunStateInProgress,
+		Description: fmt.Sprintf("%s in progress...", ctx.Command),
+		URL:         runURL(ctx),
+	})
 	if err != nil {
 		return errUtils.Build(errUtils.ErrCICheckRunCreateFailed).
 			WithCause(err).
-			WithContext("name", name).
+			WithContext(logKeyName, name).
 			Err()
 	}
+	noteHeld(rc, "the commit status", logKeyName, name)
+	if rc.Gate == ci.FeatureForkGate || rc.Check == nil {
+		return nil
+	}
 
-	log.Debug("Created commit status", "name", name, "id", checkRun.ID)
+	log.Debug("Created commit status", logKeyName, name, "id", rc.Check.ID)
 	return nil
 }
 
@@ -724,28 +721,23 @@ func (p *Plugin) updateCheckRun(ctx *plugin.HookContext, result *plugin.OutputRe
 	// Update component-level status.
 	statusesCfg := getChecksStatuses(ctx.Config)
 	if isStatusEnabled(statusesCfg.Component) {
-		opts := &provider.UpdateCheckRunOptions{
-			Name:       name,
-			Status:     status,
-			Title:      buildStatusDescription(ctx.Command, result),
-			DetailsURL: runURL(ctx),
-		}
-
-		if ctx.CICtx != nil {
-			opts.Owner = ctx.CICtx.RepoOwner
-			opts.Repo = ctx.CICtx.RepoName
-			opts.SHA = ctx.CICtx.SHA
-		}
-
-		_, err := ctx.Provider.UpdateCheckRun(context.Background(), opts)
+		rc, err := reporterFor(ctx).UpdateCheck(context.Background(), ci.CheckRequest{
+			Name:        name,
+			State:       status,
+			Description: buildStatusDescription(ctx.Command, result),
+			URL:         runURL(ctx),
+		})
 		if err != nil {
 			return errUtils.Build(errUtils.ErrCICheckRunUpdateFailed).
 				WithCause(err).
-				WithContext("name", name).
+				WithContext(logKeyName, name).
 				Err()
 		}
 
-		log.Debug("Updated commit status", "name", name, "status", status)
+		noteHeld(rc, "the commit status update", logKeyName, name)
+		if rc.Gate != ci.FeatureForkGate {
+			log.Debug("Updated commit status", logKeyName, name, "status", status)
+		}
 	}
 
 	// Create per-operation statuses (only when counts > 0).
@@ -788,24 +780,19 @@ func (p *Plugin) createPerOperationStatuses(ctx *plugin.HookContext, result *plu
 			log.Warn("CI per-operation status context invalid; skipping", "operation", op.operation, "error", err)
 			continue
 		}
-		opts := &provider.CreateCheckRunOptions{
-			Name:       opName,
-			Status:     provider.CheckRunStateSuccess,
-			Title:      formatResourceCount(op.count),
-			DetailsURL: runURL(ctx),
-		}
-
-		if ctx.CICtx != nil {
-			opts.Owner = ctx.CICtx.RepoOwner
-			opts.Repo = ctx.CICtx.RepoName
-			opts.SHA = ctx.CICtx.SHA
-		}
-
-		_, err = ctx.Provider.CreateCheckRun(context.Background(), opts)
-		if err != nil {
-			log.Warn("CI per-operation status creation skipped", "name", opName, "error", err)
-		} else {
-			log.Debug("Created per-operation status", "name", opName, "count", op.count)
+		rc, err := reporterFor(ctx).Check(context.Background(), ci.CheckRequest{
+			Name:        opName,
+			State:       provider.CheckRunStateSuccess,
+			Description: formatResourceCount(op.count),
+			URL:         runURL(ctx),
+		})
+		switch {
+		case err != nil:
+			log.Warn("CI per-operation status creation skipped", logKeyName, opName, "error", err)
+		case rc.Gate == ci.FeatureForkGate:
+			noteHeld(rc, "the per-operation status", logKeyName, opName)
+		default:
+			log.Debug("Created per-operation status", logKeyName, opName, "count", op.count)
 		}
 	}
 }
@@ -905,40 +892,6 @@ func (p *Plugin) buildPlanfileMetadata(ctx *plugin.HookContext) *planfile.Metada
 
 // isActionEnabled helpers.
 
-// isSummaryEnabled checks if summary action is enabled in config.
-func isSummaryEnabled(cfg *schema.AtmosConfiguration) bool {
-	if cfg == nil {
-		return true
-	}
-	if cfg.CI.Summary.Enabled == nil {
-		return true
-	}
-	return *cfg.CI.Summary.Enabled
-}
-
-// isOutputEnabled checks if output action is enabled in config.
-func isOutputEnabled(cfg *schema.AtmosConfiguration) bool {
-	if cfg == nil {
-		return true
-	}
-	if cfg.CI.Output.Enabled == nil {
-		return true
-	}
-	return *cfg.CI.Output.Enabled
-}
-
-// isAnnotationsEnabled checks if inline CI annotations are enabled. Defaults to
-// true (nil) under ci.enabled, mirroring the scanner-hook behavior.
-func isAnnotationsEnabled(cfg *schema.AtmosConfiguration) bool {
-	if cfg == nil {
-		return true
-	}
-	if cfg.CI.Annotations.Enabled == nil {
-		return true
-	}
-	return *cfg.CI.Annotations.Enabled
-}
-
 // isPlanfileStorageEnabled checks if planfile storage is configured.
 // Returns true only when explicit planfile stores are defined
 // (via default store, priority list, or named stores).
@@ -950,30 +903,6 @@ func isPlanfileStorageEnabled(cfg *schema.AtmosConfiguration) bool {
 	}
 	pf := cfg.Components.Terraform.Planfiles
 	return pf.Default != "" || len(pf.Priority) > 0 || len(pf.Stores) > 0
-}
-
-// isCheckEnabled checks if check action is enabled in config.
-func isCheckEnabled(cfg *schema.AtmosConfiguration) bool {
-	if cfg == nil {
-		return false
-	}
-	if cfg.CI.Checks.Enabled == nil {
-		return false
-	}
-	return *cfg.CI.Checks.Enabled
-}
-
-// isCommentsEnabled returns whether PR comment posting is enabled. Nil means
-// "unset" and defaults to false so that upgrading installations don't start
-// posting comments until the feature is explicitly opted into.
-func isCommentsEnabled(cfg *schema.AtmosConfiguration) bool {
-	if cfg == nil {
-		return false
-	}
-	if cfg.CI.Comments.Enabled == nil {
-		return false
-	}
-	return *cfg.CI.Comments.Enabled
 }
 
 // filterVariables filters a map of variables to only include those in the allowed list.

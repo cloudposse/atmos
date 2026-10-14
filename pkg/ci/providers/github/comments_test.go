@@ -36,7 +36,7 @@ func newTestProvider(t *testing.T, s *ghtest.Server) *Provider {
 	t.Setenv("ATMOS_PRO_GITHUB_TOKEN", "")
 	t.Setenv("GH_TOKEN", "")
 	t.Setenv("GITHUB_API_URL", s.URL())
-	t.Setenv("GITHUB_TOKEN", "x")
+	t.Setenv("GITHUB_TOKEN", "github-token-for-tests")
 
 	client, err := NewClient()
 	require.NoError(t, err)

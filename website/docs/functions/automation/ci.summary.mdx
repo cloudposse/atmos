@@ -16,7 +16,7 @@ import Intro from '@site/src/components/Intro'
 ## Usage
 
 ```python
-ci.summary(markdown)
+ci.summary(markdown = "", template = "", data = None)
 ```
 
 ## Arguments
@@ -24,10 +24,41 @@ ci.summary(markdown)
 <dl>
     <dt>`markdown`</dt>
     <dd>
-        Required. The Markdown to append, as a string. Each call adds to the summary rather than replacing it, so a
-        script can build the summary in several steps.
+        The Markdown to append, as a string. Each call adds to the summary rather than replacing it, so a script can
+        build the summary in several steps. Required unless `template` is given, and it cannot be combined with
+        `template` or `data`, even when it is an empty string.
+    </dd>
+
+    <dt>`template`</dt>
+    <dd>
+        (Optional) The name of a [template file](#templates) to render into the summary, instead of passing
+        `markdown`. It is a file name under [`ci.templates.base_path`](/cli/configuration/ci/templates), or an absolute
+        path. There is no default template, so `data` always needs a `template`.
+    </dd>
+
+    <dt>`data`</dt>
+    <dd>
+        (Optional) A dict that becomes the template context. Keys are read in the template as `.key`. Passing `data`
+        without `template` fails with an argument error that says `template=` is required.
     </dd>
 </dl>
+
+## Templates
+
+A script can keep the layout of a summary in a template file and pass only the values:
+
+- A call with `template=` renders that file, with `data` as the context. A call with only `markdown` appends the text
+  as written.
+- There is no configured default template. The [`ci.summary.template`](/cli/configuration/ci/summary) key belongs to
+  the summaries Atmos writes for commands, and scripts never read it.
+- The name is resolved against [`ci.templates.base_path`](/cli/configuration/ci/templates). A relative `base_path`
+  resolves against the Atmos `base_path`. When no file has exactly that name, the name with a `.md` suffix is tried.
+- Templates use Go template syntax with the same functions as the built-in plan templates. The `data` dict is the
+  template context.
+- A key that the template reads but `data` does not contain fails the render and names the key, so a typo does not
+  write `<no value>` into the summary.
+
+See [script report templates](/cli/configuration/ci/templates#script-report-templates) for the configuration.
 
 ## Returns
 
@@ -59,9 +90,28 @@ for stack, result in {"dev": "ok", "prod": "ok"}.items():
 ci.summary("\n".join(rows))
 ```
 
+### Render a summary from a template
+
+```text title=".atmos/ci/templates/deploy.md"
+## Deploy to {{ .stack }}
+
+{{ .count }} services deployed.
+{{ range .services }}
+- {{ . }}
+{{ end }}
+```
+
+```python
+ci.summary(template = "deploy.md", data = {"stack": "prod", "count": 2, "services": ["api", "web"]})
+```
+
 ## Errors
 
 - A missing or non-string `markdown` fails with an argument error that names `ci.summary`.
+- Passing `markdown` together with `template` or `data` (an empty string counts), a `data` value that is not a dict, or
+  `data` without `template` fails with an argument error.
+- A template that does not exist fails the script with an error that names the resolved path and the value of
+  `ci.templates.base_path`. A template that reads a key missing from `data`, or that fails to render, fails the script.
 - A failure to write the summary fails the script. A gated-off call never fails.
 
 ## Related

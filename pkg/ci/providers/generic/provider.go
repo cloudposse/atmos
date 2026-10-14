@@ -40,31 +40,31 @@ func init() {
 // but no specific CI platform is detected. It writes summaries to stdout
 // and outputs to environment file or stdout.
 type Provider struct {
-	outputFile  string
-	summaryFile string
 	// writer receives local renderings; nil means the global UI channel (stderr).
 	writer io.Writer
 	// nextCheckRunID and nextCommentID are shared by copies made with BindOutput.
 	nextCheckRunID *atomic.Int64
 	nextCommentID  *atomic.Int64
+	// comments remembers rendered comment markers so behavior=update can fail like a platform provider.
+	// It is shared by copies made with BindOutput.
+	comments *commentLedger
 }
 
 // NewProvider creates a new generic CI provider.
-// It checks for ATMOS_CI_OUTPUT and ATMOS_CI_SUMMARY environment variables
-// to determine where to write outputs.
+// ATMOS_CI_OUTPUT and ATMOS_CI_SUMMARY are read when OutputWriter is called, not here,
+// so a change to the environment after construction is honored.
 func NewProvider() *Provider {
 	defer perf.Track(nil, "generic.NewProvider")()
 
 	return &Provider{
-		outputFile:     os.Getenv("ATMOS_CI_OUTPUT"),
-		summaryFile:    os.Getenv("ATMOS_CI_SUMMARY"),
 		nextCheckRunID: &atomic.Int64{},
 		nextCommentID:  &atomic.Int64{},
+		comments:       newCommentLedger(),
 	}
 }
 
 // BindOutput returns a copy of the provider whose local renderings go to w instead of
-// the global UI channel. The copy shares the check-run counter and file settings.
+// the global UI channel. The copy shares the check-run and comment counters and the comment ledger.
 func (p *Provider) BindOutput(w io.Writer) provider.Provider {
 	defer perf.Track(nil, "generic.Provider.BindOutput")()
 
@@ -138,6 +138,7 @@ func (p *Provider) Context() (*provider.Context, error) {
 			Number:  n,
 			HeadRef: ctx.Branch,
 			BaseRef: os.Getenv("ATMOS_CI_BASE_REF"),
+			Fork:    parseForkFlag(os.Getenv("ATMOS_CI_PR_FORK")),
 		}
 	}
 
@@ -166,8 +167,8 @@ func (p *Provider) OutputWriter() provider.OutputWriter {
 	defer perf.Track(nil, "generic.Provider.OutputWriter")()
 
 	return &OutputWriter{
-		outputFile:  p.outputFile,
-		summaryFile: p.summaryFile,
+		outputFile:  os.Getenv("ATMOS_CI_OUTPUT"),
+		summaryFile: os.Getenv("ATMOS_CI_SUMMARY"),
 		out:         p.out(),
 		rendered:    p.writer != nil,
 	}
@@ -192,7 +193,8 @@ func (w *OutputWriter) output() *ui.Output {
 	return w.out
 }
 
-// WriteOutput writes a key-value pair to CI outputs.
+// WriteOutput writes a key-value pair to CI outputs. Without ATMOS_CI_OUTPUT it renders the line
+// to the UI channel, using the heredoc form for multiline values.
 func (w *OutputWriter) WriteOutput(key, value string) error {
 	defer perf.Track(nil, "generic.OutputWriter.WriteOutput")()
 
@@ -201,10 +203,9 @@ func (w *OutputWriter) WriteOutput(key, value string) error {
 		return provider.AppendFile(w.outputFile, provider.FormatOutputLine(key, value), errUtils.ErrCIOutputWriteFailed)
 	}
 
-	// No output file configured - render the output locally as a plain key=value line, even
-	// for multiline values. The heredoc form is a file protocol; on stderr the plain form is
-	// what pipelines that parse `--ci` output (and the CLI golden tests) rely on.
-	w.output().Writef("%s=%s\n", key, value)
+	// No output file configured - render the output locally in the same form the file would hold:
+	// key=value, or the heredoc form for a multiline value, so a multiline value stays unambiguous.
+	w.output().Writef("%s", provider.FormatOutputLine(key, value))
 	return nil
 }
 
@@ -222,6 +223,12 @@ func (w *OutputWriter) WriteSummary(content string) error {
 	// was bound with BindOutput). This makes the summary visible in local testing.
 	renderMarkdown(w.output(), w.rendered, content)
 	return nil
+}
+
+// parseForkFlag parses ATMOS_CI_PR_FORK. An unset or invalid value means the pull request is not from a fork.
+func parseForkFlag(value string) bool {
+	fork, err := strconv.ParseBool(value)
+	return err == nil && fork
 }
 
 // getFirstEnv returns the value of the first environment variable that is set.
@@ -269,4 +276,9 @@ func gitBranchFallback() string {
 		return "" // Detached HEAD.
 	}
 	return ref.Name().Short()
+}
+
+// itoa formats n as a decimal string.
+func itoa(n int) string {
+	return strconv.Itoa(n)
 }

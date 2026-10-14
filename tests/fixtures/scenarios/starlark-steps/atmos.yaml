@@ -332,6 +332,7 @@ commands:
         required: true
       - name: extra
         description: Optional extra value (for example a counter file path)
+        required: false
     steps:
       - name: case
         type: script
@@ -346,6 +347,7 @@ commands:
         required: true
       - name: extra
         description: Optional extra value (for example a URL)
+        required: false
     steps:
       - name: case
         type: script
@@ -398,6 +400,7 @@ commands:
         required: true
       - name: opt
         description: Optional positional with no default
+        required: false
     flags:
       - name: count
         type: int
@@ -523,3 +526,123 @@ commands:
         timeout: '{{ .Flags.t }}'
         script: |
           print("ok")
+
+  # !literal coverage and custom-command inputs (WP3).
+  - name: ft-literal-plain-step
+    description: A plain-string step written with !literal is not rendered
+    steps:
+      - !literal 'echo "kept: {{ not a template }}"'
+
+  - name: ft-literal-env-list
+    description: A command-level env value written with !literal is kept as written
+    env:
+      - key: FT_KEPT
+        value: !literal '{{ kept }}'
+      - key: FT_RENDERED
+        value: '{{ printf "rendered" }}'
+    steps:
+      - echo "kept=$FT_KEPT rendered=$FT_RENDERED"
+
+  - name: ft-literal-parallel-env
+    description: A parallel parent env value written with !literal is kept as written
+    steps:
+      - name: fan
+        type: parallel
+        env:
+          FT_KEPT: !literal '{{ kept }}'
+          FT_RENDERED: '{{ printf "rendered" }}'
+        steps:
+          # A direct shell child runs through COMSPEC on Windows, where $VAR is not expanded;
+          # steps.shell uses the built-in POSIX interpreter on every OS and inherits the parent env.
+          - name: child
+            type: script
+            interpreter: starlark
+            script: |
+              steps.shell(command = 'echo "kept=$FT_KEPT rendered=$FT_RENDERED"')
+
+  - name: ft-literal-timeout-braces
+    description: A !literal timeout is parsed as written, so the braces are an invalid duration
+    steps:
+      - name: braces
+        type: script
+        interpreter: starlark
+        timeout: !literal '{{ 1 }}s'
+        script: |
+          print("must not run")
+
+  - name: ft-timeout-rendered-braces
+    description: The same timeout without !literal renders to 1s
+    steps:
+      - name: braces
+        type: script
+        interpreter: starlark
+        timeout: '{{ 1 }}s'
+        script: |
+          print("rendered timeout ran")
+
+  - name: ft-arg-bare
+    description: An argument with neither required nor default is required
+    arguments:
+      - name: service
+        description: Service name
+    steps:
+      - echo "service={{ .Arguments.service }}"
+
+  - name: ft-arg-optional
+    description: required false makes an argument optional
+    arguments:
+      - name: service
+        description: Service name
+        required: false
+    steps:
+      - echo "service=[{{ .Arguments.service }}]"
+
+  - name: ft-int-flag
+    description: An int flag parses base-10 digits only
+    flags:
+      - name: count
+        type: int
+        default: 1
+    steps:
+      - echo "count={{ .Flags.count }}"
+
+  # Step library, process cleanup, and retry conditions (WP5).
+  - name: ft-retry-conditions
+    description: "Run one retry.conditions case by name (see scripts/ft/retry-conditions.star)"
+    arguments:
+      - name: case
+        description: Case name
+        required: true
+    steps:
+      - name: case
+        type: script
+        interpreter: starlark
+        script: !include scripts/ft/retry-conditions.star
+
+  - name: ft-shell-orphans
+    description: A shell step that times out leaves no process behind (POSIX shell, ps, and pkill)
+    steps:
+      - name: slow
+        type: shell
+        timeout: 1s
+        continue: always
+        command: sh -c 'sleep 300.77 & wait'
+      - name: survivors
+        type: shell
+        command: 'if ps -ef | grep -v grep | grep -q "sleep 300.77"; then echo SURVIVORS-FOUND; else echo NO-SURVIVORS; fi'
+      - name: cleanup
+        type: shell
+        command: pkill -f 'sleep 300.77' || true
+
+  - name: ft-retry-flaky-run
+    description: Runs ft-retry-flaky with a counter file in the working directory and removes it afterwards (POSIX rm)
+    steps:
+      - name: reset
+        type: shell
+        command: rm -f ft-retry-counter.tmp
+      - name: run
+        type: atmos
+        command: ft-retry-flaky --counter ft-retry-counter.tmp
+      - name: cleanup
+        type: shell
+        command: rm -f ft-retry-counter.tmp

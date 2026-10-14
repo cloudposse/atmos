@@ -43,10 +43,12 @@ atmos capacity
 Run `atmos capacity --help` to see the command description and its flag:
 
 ```text
---replicas string  Number of service replicas (default 2)
+--replicas int  Number of service replicas (default 2)
 ```
 
-The step reads the parsed flag directly from `ctx.flags["replicas"]`. Named custom
+The flag is declared with `type: int`, so Atmos rejects a value such as `--replicas=many`
+with a usage error before the script runs, and the step reads the parsed number directly
+from `ctx.flags["replicas"]`. Named custom
 command arguments are available in `ctx.arguments`. Both mappings are read-only;
 values stay data, including strings that happen to contain template syntax.
 

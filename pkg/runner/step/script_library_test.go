@@ -88,7 +88,7 @@ output = [values, steps.join(content = "{{ .env.SERVICE }}").value]
 
 func TestScriptLibraryInvalidCalls(t *testing.T) {
 	for _, tc := range []struct{ source, message string }{
-		{`steps.input(promtp="typo")`, `unknown step field "promtp"`},
+		{`steps.input(promtp="typo")`, `unknown field "promtp" for step type "input"`},
 		{`steps.http()`, "url"},
 		{`steps.run("missing")`, "unknown step type"},
 		{`steps.join("hello")`, "keyword arguments"},
@@ -186,5 +186,5 @@ func TestScriptLibraryNestedCallTimeout(t *testing.T) {
 	_, _, err := runLibrarySource(t, `steps.script(interpreter="starlark", script="while True: pass", timeout="10ms")`)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	_, _, err = runLibrarySource(t, `steps.join(content="hello",timeout="invalid")`)
-	require.ErrorContains(t, err, "positive duration")
+	require.ErrorIs(t, err, errUtils.ErrStepTimeoutInvalid)
 }

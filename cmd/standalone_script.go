@@ -19,6 +19,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/reexec"
 	runnerstep "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/script"
+	"github.com/cloudposse/atmos/pkg/terminal"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // prepareStandaloneScript keeps normal CLI initialization and error reporting,
@@ -38,6 +40,7 @@ func prepareStandaloneScript() (func(), error) {
 		return func() {}, nil
 	}
 	previousArgs := os.Args
+	startDir, _ := os.Getwd()
 	file, err := detectStandaloneFile(globals, rest)
 	if err != nil {
 		os.Args = previousArgs
@@ -50,7 +53,7 @@ func prepareStandaloneScript() (func(), error) {
 	previousRun := RootCmd.RunE
 	// A re-exec (version switch, profile fallback) must receive the whole command line, and must
 	// leave the script's own flags alone when it strips --chdir and --use-version.
-	restoreReexec := reexec.SetOriginalArgs(previousArgs, len(rest))
+	restoreReexec := reexec.SetOriginalArgs(reexecArgs(previousArgs, rest, startDir), len(rest))
 	os.Args = append([]string{previousArgs[0]}, globals...)
 	RootCmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		return runStandaloneScript(cmd, file)
@@ -63,15 +66,38 @@ func prepareStandaloneScript() (func(), error) {
 	}, nil
 }
 
-// detectStandaloneFile applies --chdir (or ATMOS_CHDIR) first, so a relative script path means
-// the same thing here as in a version-switch re-exec that has already dropped --chdir, and then
-// looks for a script at the first non-global argument.
+// detectStandaloneFile looks for a script at the first non-global argument. A relative script
+// path is anchored to the directory the user stood in before --chdir (or ATMOS_CHDIR) moves the
+// process, because that is the directory they typed it against. It then applies the chdir.
 func detectStandaloneFile(globals, rest []string) (*script.File, error) {
+	startDir, _ := os.Getwd()
+	anchored := script.AnchorPath(rest, startDir)
 	os.Args = append([]string{os.Args[0]}, globals...)
 	if err := processEarlyChdirFlag(); err != nil {
 		return nil, err
 	}
-	return script.DetectFile(rest)
+	file, err := script.DetectFile(anchored)
+	if file != nil && !file.Stdin && len(rest) > 0 {
+		// Usage hints keep the spelling the user typed.
+		file.Invoked = rest[0]
+	}
+	return file, err
+}
+
+// reexecArgs returns the command line a re-exec must receive. The re-executed process runs after
+// --chdir was applied and stripped, so when the working directory moved, a relative script path is
+// replaced by the absolute path it meant when the user typed it.
+func reexecArgs(args, rest []string, startDir string) []string {
+	if now, err := os.Getwd(); err == nil && now == startDir {
+		return args
+	}
+	anchored := script.AnchorPath(rest, startDir)
+	if len(rest) == 0 || len(rest) > len(args) || anchored[0] == rest[0] {
+		return args
+	}
+	forwarded := append([]string(nil), args...)
+	forwarded[len(forwarded)-len(rest)] = anchored[0]
+	return forwarded
 }
 
 // rootFlagTakesValue tells the script detector which Atmos global flags consume the next word.
@@ -152,6 +178,7 @@ func runStandaloneScript(cmd *cobra.Command, file *script.File) error {
 		ProcessEnv: processEnv,
 		Stdout:     streams.Data(), Stderr: streams.UI(),
 		ResolveComponent: runnerstep.ScriptComponentResolver(vars),
+		Viewport:         standaloneViewport,
 	})
 	if err != nil {
 		return err
@@ -160,6 +187,13 @@ func runStandaloneScript(cmd *cobra.Command, file *script.File) error {
 		return data.Writeln(result.Value)
 	}
 	return nil
+}
+
+// standaloneViewport shows a subprocess's live output in the step output viewport, the same one
+// `output: viewport` uses in workflow and command steps. Without a terminal it streams instead.
+func standaloneViewport(title string, run func(stdout, stderr io.Writer) error) error {
+	_, _, err := runnerstep.NewOutputModeWriter(runnerstep.OutputModeViewport, title, nil).ExecuteWithIO(run)
+	return err
 }
 
 // standaloneSelectionEnv carries the profile and identity chosen with global flags written before
@@ -201,9 +235,18 @@ func standaloneProjectRoot() string {
 	return dir
 }
 
+// stdinIsTTY reports whether standard input is an interactive terminal. Tests replace it.
+var stdinIsTTY = func() bool { return terminal.New().IsTTY(terminal.Stdin) }
+
+// stdinScriptPrompt tells a person who typed `atmos -` at a terminal why nothing happens yet.
+const stdinScriptPrompt = "Reading script from stdin; press Ctrl-D to end."
+
 // readStandaloneSource consumes stdin only when the standalone command runs.
 func readStandaloneSource(file *script.File, input io.Reader) ([]byte, error) {
 	if file.Stdin {
+		if stdinIsTTY() {
+			ui.Info(stdinScriptPrompt)
+		}
 		return io.ReadAll(input)
 	}
 	// Standalone scripts intentionally accept user-selected file paths, including outside cwd.

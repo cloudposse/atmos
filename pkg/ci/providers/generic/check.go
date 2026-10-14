@@ -22,16 +22,20 @@ func (p *Provider) CreateCheckRun(_ context.Context, opts *provider.CreateCheckR
 	if summary != "" {
 		out.Infof("  Summary: %s", summary)
 	}
+	if opts.DetailsURL != "" {
+		out.Infof("  URL: %s", opts.DetailsURL)
+	}
 
 	id := p.nextCheckRunID.Add(1)
 
 	return &provider.CheckRun{
-		ID:        id,
-		Name:      opts.Name,
-		Status:    opts.Status,
-		Title:     title,
-		Summary:   summary,
-		StartedAt: time.Now(),
+		ID:         id,
+		Name:       opts.Name,
+		Status:     opts.Status,
+		Title:      title,
+		Summary:    summary,
+		DetailsURL: opts.DetailsURL,
+		StartedAt:  time.Now(),
 	}, nil
 }
 
@@ -66,13 +70,23 @@ func (p *Provider) UpdateCheckRun(_ context.Context, opts *provider.UpdateCheckR
 	if summary != "" {
 		uiMethod("  Summary: %s", summary)
 	}
+	if opts.DetailsURL != "" {
+		uiMethod("  URL: %s", opts.DetailsURL)
+	}
+
+	// Keep the handle the caller holds; allocate a new one only when it holds none.
+	id := opts.ID
+	if id == 0 {
+		id = p.nextCheckRunID.Add(1)
+	}
 
 	return &provider.CheckRun{
-		ID:         p.nextCheckRunID.Add(1),
+		ID:         id,
 		Name:       opts.Name,
 		Status:     opts.Status,
 		Conclusion: opts.Conclusion,
 		Title:      title,
 		Summary:    summary,
+		DetailsURL: opts.DetailsURL,
 	}, nil
 }

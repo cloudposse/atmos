@@ -1,0 +1,21 @@
+# Hook recursion guard fixture. Select with ATMOS_STACKS_INCLUDED_PATHS='ft/**/*'.
+vars:
+  stage: depth
+
+components:
+  terraform:
+    mock-depth:
+      metadata:
+        component: mock
+      vars:
+        message: depth
+      hooks:
+        report-depth:
+          kind: step
+          type: script
+          events: [before.terraform.plan]
+          on_failure: fail
+          with:
+            interpreter: starlark
+            script: |
+              print("hook depth: " + exec.run(["sh", "-c", "echo $ATMOS_HOOK_DEPTH"], output = "capture").stdout.strip())
