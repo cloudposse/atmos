@@ -15,8 +15,9 @@ demo also exposed one more bug in verification, fixed in the same pass.
 
 ## Context
 
-Findings were collected in `.context/ft/FINDINGS.md` against the built binary and fixtures under
-`.context/ft/<name>/`. They fall into these groups.
+Findings came from field-testing the built binary against a real infrastructure repository and
+small reproduction projects; the reproductions that close coverage gaps are committed as fixtures
+under `tests/fixtures/scenarios/doctor/`. They fall into these groups.
 
 **Crashes.**
 
