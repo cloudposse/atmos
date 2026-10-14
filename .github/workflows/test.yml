@@ -2245,7 +2245,12 @@ jobs:
       registry:
         image: registry:2
         # Harden Runner can restart Docker after GitHub starts services.
-        options: --restart always
+        options: >-
+          --restart always
+          --health-cmd "wget -q --spider http://127.0.0.1:5000/v2/"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 60
         ports:
           - 5000:5000
 

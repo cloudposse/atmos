@@ -38,12 +38,27 @@ class RestoreServicesTest(unittest.TestCase):
             self.assertEqual(docker.call_args_list[1].args, ("start", "container-id"))
             self.assertEqual(docker.call_count, 4)
 
-    def test_running_service_without_healthcheck_is_ready(self):
+    def test_running_service_without_healthcheck_fails_with_diagnostics(self):
         with patch.object(
             services, "docker", return_value='[{"State":{"Running":true}}]'
-        ) as docker:
-            services.restore({"service": {"id": "container-id"}})
-            docker.assert_called_once()
+        ), patch.object(services, "diagnose") as diagnose:
+            with self.assertRaisesRegex(RuntimeError, "registry.*health check"):
+                services.restore({"registry": {"id": "container-id"}})
+            diagnose.assert_called_once_with("container-id")
+
+    def test_healthcheck_alone_does_not_make_stopped_service_ready(self):
+        with patch.object(services, "docker") as docker, patch.object(
+            services.time, "sleep"
+        ) as sleep:
+            docker.side_effect = [
+                '[{"State":{"Running":false,"Health":{"Status":"healthy"}}}]',
+                "",
+                '[{"State":{"Running":false,"Health":{"Status":"healthy"}}}]',
+                '[{"State":{"Running":true,"Health":{"Status":"healthy"}}}]',
+            ]
+            services.restore({"registry": {"id": "container-id"}})
+            sleep.assert_called_once_with(2)
+            self.assertEqual(docker.call_count, 4)
 
     def test_timeout_reports_container_diagnostics(self):
         with patch.object(

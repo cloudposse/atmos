@@ -481,9 +481,13 @@ than a leaked changeset. Previews that target an existing stack never create thi
 only need the existing `DeleteChangeSet` cleanup.
 `apply`/`deploy` execute the changeset (`ExecuteChangeSet`)
 rather than calling `UpdateStack` directly, giving every apply the same "review before mutate"
-semantics as changesets provide, without requiring users to manage changesets by hand. The explicit
-`changeset create/execute/list/delete` verbs exist for users who want manual control (e.g. a two-phase
-deploy pipeline: create + review in one job, execute in another).
+semantics as changesets provide, without requiring users to manage changesets by hand.
+For `apply`/`deploy`, a `FAILED` changeset with a recognized no-changes `StatusReason` is a successful
+no-op: delete the changeset and do not call `ExecuteChangeSet`. Other `FAILED` reasons remain
+command errors.
+
+The explicit `changeset create/execute/list/delete` verbs exist for users who want manual control
+(e.g. a two-phase deploy pipeline: create + review in one job, execute in another).
 
 Templates using macros/transforms (`Fn::Transform`, `AWS::Serverless` a.k.a. SAM) work through this
 same changeset flow with no special-cased handling: `CreateChangeSet` expands macros while computing
