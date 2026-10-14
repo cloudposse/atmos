@@ -61,6 +61,7 @@ func (r *gateRegistry) evaluate(q *qualityClient, pr *githubapi.PR) []qualityGat
 		gate, err := definition.Check(q, pr)
 		if err != nil {
 			gate.Passed = false
+			gate.Unavailable = true
 			gate.Detail = "Unavailable: " + err.Error()
 			gate.Problem = definition.Name + " could not be evaluated because GitHub evidence was unavailable."
 			gate.NextAction = "Retry the reporter and inspect its API error if retrieval still fails. This is missing evidence, not a confirmed failure in the PR."

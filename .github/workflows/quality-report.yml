@@ -4,7 +4,8 @@ on:
   workflow_call:
   # Actions has no review-thread resolution trigger. Reconcile these changes
   # and third-party events not delivered to Actions every 15 minutes, for open
-  # main PRs updated within the last 24 hours (including bot activity).
+  # main PRs with a head commit from the last 24 hours or no report for their
+  # current head. Bot comments and labels do not select a PR.
   schedule:
     - cron: '*/15 * * * *'
   workflow_dispatch:

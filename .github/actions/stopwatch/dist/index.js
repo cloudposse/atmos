@@ -278,7 +278,34 @@ function renderComment(marker, headSha, summary) {
     return `${lines.join("\n")}\n`;
 }
 
+;// CONCATENATED MODULE: ./src/pull-request.ts
+/** Validates a top-level paginated pull-request array. */
+function unwrapPullRequests(response) {
+    if (!Array.isArray(response)) {
+        throw new Error("GitHub API returned an unexpected paginated response");
+    }
+    return response;
+}
+/**
+ * Finds the open pull request for a workflow run whose head lives on a fork.
+ *
+ * GitHub leaves `workflow_run.pull_requests` empty and `commits/{sha}/pulls`
+ * returns nothing for fork-only commits, so the open pull requests are listed
+ * by `head=<owner>:<branch>` instead. Only a pull request whose head SHA equals
+ * the triggering run's SHA is returned; callers must still re-verify the pull
+ * request before trusting it.
+ */
+async function findPullRequestByHead(lister, encodedRepo, headOwner, headBranch, headSha) {
+    if (!headOwner || !headBranch) {
+        return undefined;
+    }
+    const head = encodeURIComponent(`${headOwner}:${headBranch}`);
+    const candidates = await lister.paginate((page) => `${encodedRepo}/pulls?state=open&head=${head}&per_page=100&page=${page}`, unwrapPullRequests);
+    return candidates.find((pullRequest) => pullRequest.state === "open" && pullRequest.head.sha === headSha)?.number;
+}
+
 ;// CONCATENATED MODULE: ./src/index.ts
+
 
 
 
@@ -330,6 +357,8 @@ function toWorkflowRun(data) {
         updatedAt: data.updated_at,
         htmlUrl: data.html_url ?? data.url,
         pullRequests: data.pull_requests?.map(({ number }) => ({ number })) ?? [],
+        headBranch: data.head_branch ?? null,
+        headRepositoryOwner: data.head_repository?.owner?.login ?? null,
     };
 }
 /** Converts a GitHub workflow-job response to the metrics model. */
@@ -387,6 +416,10 @@ async function run() {
     if (pullRequestNumber === undefined) {
         const associated = await client.paginate((page) => `${encodedRepo}/commits/${encodeURIComponent(headSha)}/pulls?per_page=100&page=${page}`, (unwrapArray));
         pullRequestNumber = associated.find((pullRequest) => pullRequest.state === "open")?.number;
+    }
+    if (pullRequestNumber === undefined) {
+        // Fork pull requests are invisible to both lookups above, so match by head owner and branch.
+        pullRequestNumber = await findPullRequestByHead(client, encodedRepo, triggeringRun.headRepositoryOwner, triggeringRun.headBranch, headSha);
     }
     if (pullRequestNumber === undefined) {
         const reason = `No open pull request is associated with ${headSha}`;
