@@ -2,28 +2,20 @@ package step
 
 import (
 	"context"
-	"fmt"
-	"time"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// automationContext bounds a direct call. Sleep uses timeout as its duration,
-// and HTTP owns its per-request timeout and retry policy inside the handler.
-func (l *AutomationLibrary) automationContext(ctx context.Context, step *schema.WorkflowStep) (context.Context, context.CancelFunc, error) {
+// automationDeadline bounds a direct call with the step's `timeout:`. Sleep uses timeout as its
+// duration, and HTTP owns its per-request timeout and retry policy inside the handler, so neither
+// gets a deadline over the whole call. An overrun is reported through StepDeadline.Wrap as
+// ErrStepTimeout naming the step, its type, and the configured duration.
+func (l *AutomationLibrary) automationDeadline(ctx context.Context, step *schema.WorkflowStep) (*StepDeadline, error) {
 	handler, _ := Get(step.Type)
-	if step.Timeout == "" || handler.GetName() == "sleep" || handler.GetName() == "http" {
-		return ctx, func() {}, nil
+	if handler.GetName() == "sleep" || handler.GetName() == "http" {
+		unbounded := *step
+		unbounded.Timeout = ""
+		return StartStepDeadline(ctx, &unbounded, l.vars)
 	}
-	value, err := l.vars.Resolve(step.Timeout)
-	if err != nil {
-		return nil, nil, err
-	}
-	duration, err := time.ParseDuration(value)
-	if err != nil || duration <= 0 {
-		return nil, nil, fmt.Errorf("%w: timeout must be a positive duration, got %q", errUtils.ErrAutomation, value)
-	}
-	child, cancel := context.WithTimeout(ctx, duration)
-	return child, cancel, nil
+	return StartStepDeadline(ctx, step, l.vars)
 }

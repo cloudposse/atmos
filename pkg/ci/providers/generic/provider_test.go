@@ -3,6 +3,7 @@ package generic
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	atmosio "github.com/cloudposse/atmos/pkg/io"
@@ -51,6 +52,46 @@ func TestProvider(t *testing.T) {
 	t.Run("OutputWriter returns writer", func(t *testing.T) {
 		w := p.OutputWriter()
 		assert.NotNil(t, w)
+	})
+}
+
+// TestOutputWriter_ReadsFilesAtCallTime verifies ATMOS_CI_OUTPUT and ATMOS_CI_SUMMARY set after
+// NewProvider are honored, and that a later change applies to the next OutputWriter.
+func TestOutputWriter_ReadsFilesAtCallTime(t *testing.T) {
+	t.Setenv("ATMOS_CI_OUTPUT", "")
+	t.Setenv("ATMOS_CI_SUMMARY", "")
+	p := NewProvider()
+
+	dir := t.TempDir()
+	firstOut, firstSummary := filepath.Join(dir, "out1"), filepath.Join(dir, "sum1")
+	t.Setenv("ATMOS_CI_OUTPUT", firstOut)
+	t.Setenv("ATMOS_CI_SUMMARY", firstSummary)
+	w := p.OutputWriter()
+	require.NoError(t, w.WriteOutput("k", "v1"))
+	require.NoError(t, w.WriteSummary("first"))
+
+	secondOut := filepath.Join(dir, "out2")
+	t.Setenv("ATMOS_CI_OUTPUT", secondOut)
+	require.NoError(t, p.OutputWriter().WriteOutput("k", "v2"))
+
+	first, err := os.ReadFile(firstOut)
+	require.NoError(t, err)
+	assert.Equal(t, "k=v1\n", string(first))
+	second, err := os.ReadFile(secondOut)
+	require.NoError(t, err)
+	assert.Equal(t, "k=v2\n", string(second))
+	summary, err := os.ReadFile(firstSummary)
+	require.NoError(t, err)
+	assert.Contains(t, string(summary), "first")
+
+	t.Run("bound provider reads at call time too", func(t *testing.T) {
+		bound := p.BindOutput(&strings.Builder{})
+		boundOut := filepath.Join(t.TempDir(), "bound")
+		t.Setenv("ATMOS_CI_OUTPUT", boundOut)
+		require.NoError(t, bound.OutputWriter().WriteOutput("b", "1"))
+		content, err := os.ReadFile(boundOut)
+		require.NoError(t, err)
+		assert.Equal(t, "b=1\n", string(content))
 	})
 }
 

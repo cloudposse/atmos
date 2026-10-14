@@ -31,10 +31,11 @@ import (
 
 // Compile-time sentinels: a rename of these request fields must fail the build here.
 var (
-	_ = ci.CommentRequest{Body: "", Key: "", Behavior: ci.CommentBehaviorUpsert, PR: 0}
-	_ = ci.CheckRequest{Name: "", State: ci.CheckRunStatePending, Description: "", URL: ""}
+	_ = ci.CommentRequest{Body: "", Key: "", Behavior: ci.CommentBehaviorUpsert, PR: 0, Target: ci.CommentTargetAuto}
+	_ = ci.CheckRequest{Name: "", ID: 0, State: ci.CheckRunStatePending, Description: "", URL: ""}
+	_ = ci.Comment{ID: 0, URL: "", Created: false, Target: ci.CommentTargetPR}
 	_ = ci.Annotation{Path: "", StartLine: 0, EndLine: 0, Level: ci.AnnotationError, Title: "", Message: ""}
-	_ = ci.SARIFReport{Body: nil, Category: ""}
+	_ = ci.SARIFReport{Body: nil, Category: "", Path: ""}
 )
 
 var ciFormatterOnce sync.Once
@@ -75,12 +76,15 @@ func runCI(t *testing.T, m *MockReporter, source string) (stdout, stderr string,
 // useGenericOnly isolates the registry so the real reporter renders through the generic provider.
 func useGenericOnly(t *testing.T) {
 	t.Helper()
+	// A CI runner exports CI=true and GITHUB_ACTIONS=true; both would make the reporter treat a
+	// provider as detected and put the I/O layer into CI mode, so these tests blank every switch
+	// that forces CI mode before the formatter and the registry are set up.
+	for _, k := range []string{"CI", "ATMOS_CI", "GITHUB_ACTIONS", "ATMOS_CI_OUTPUT", "ATMOS_CI_SUMMARY", "ATMOS_CI_ENV", "ATMOS_CI_PATH"} {
+		t.Setenv(k, "")
+	}
 	initCIFormatter(t)
 	restore := ci.SwapRegistryForTest()
 	t.Cleanup(restore)
-	t.Setenv("GITHUB_ACTIONS", "")
-	t.Setenv("ATMOS_CI_OUTPUT", "")
-	t.Setenv("ATMOS_CI_SUMMARY", "")
 	ci.Register(generic.NewProvider())
 }
 
@@ -122,11 +126,17 @@ func TestCIBuiltinArgumentErrors(t *testing.T) {
 		{`ci.annotate("error", "m", line=-1)`, "must not be negative"},
 		{`ci.annotate("error", "m", end_line=-2)`, "must not be negative"},
 		{`ci.annotate("error", "m", line="3")`, "ci.annotate"},
+		{`ci.annotate("error", "m", line=3)`, "ci.annotate: line requires file="},
+		{`ci.annotate("error", "m", end_line=4)`, "ci.annotate: end_line requires file="},
+		{`ci.annotate("error", "m", file="a.tf", end_line=4)`, "ci.annotate: end_line requires line="},
+		{`ci.annotate("error", "m", file="a.tf", line=5, end_line=4)`, "ci.annotate: end_line (4) must not be before line (5)"},
 		{`ci.annotate(1, "m")`, "ci.annotate"},
 		{`ci.comment("")`, "body must not be empty"},
 		{`ci.comment(1)`, "ci.comment"},
 		{`ci.comment("b", behavior="merge")`, `behavior must be one of create, update, upsert, got "merge"`},
 		{`ci.comment("b", pr=-1)`, "pr must not be negative"},
+		{`ci.comment("b", target="branch")`, `target must be one of auto, pr, commit, got "branch"`},
+		{`ci.comment("b", target=1)`, "ci.comment"},
 		{`ci.comment("b", pr="1")`, "ci.comment"},
 		{`ci.check("")`, "name must not be empty"},
 		{`ci.check("n", state="done")`, "state must be one of pending, in_progress, success, failure, error, cancelled"},
@@ -183,16 +193,25 @@ func TestCIWritesMapToReporterCalls(t *testing.T) {
 			m.EXPECT().Annotate(ci.Annotation{Path: "a.tf", Level: ci.AnnotationError, Message: "broken"}).Return(ci.Receipt{}, nil)
 		}},
 		{"comment defaults", `ci.comment("hi")`, func(m *MockReporter) {
-			m.EXPECT().Comment(gomock.Any(), ci.CommentRequest{Body: "hi", Behavior: "upsert"}).Return(ci.Receipt{}, nil)
+			m.EXPECT().Comment(gomock.Any(), ci.CommentRequest{Body: "hi", Behavior: "upsert", Target: ci.CommentTargetAuto}).Return(ci.Receipt{}, nil)
 		}},
 		{"comment all fields", `ci.comment("hi", key="k", behavior="create", pr=42)`, func(m *MockReporter) {
-			m.EXPECT().Comment(gomock.Any(), ci.CommentRequest{Body: "hi", Key: "k", Behavior: "create", PR: 42}).Return(ci.Receipt{}, nil)
+			m.EXPECT().Comment(gomock.Any(), ci.CommentRequest{Body: "hi", Key: "k", Behavior: "create", PR: 42, Target: ci.CommentTargetAuto}).Return(ci.Receipt{}, nil)
+		}},
+		{"comment target pr", `ci.comment("hi", target="pr")`, func(m *MockReporter) {
+			m.EXPECT().Comment(gomock.Any(), ci.CommentRequest{Body: "hi", Behavior: "upsert", Target: ci.CommentTargetPR}).Return(ci.Receipt{}, nil)
+		}},
+		{"comment target commit", `ci.comment("hi", key="k", target="commit")`, func(m *MockReporter) {
+			m.EXPECT().Comment(gomock.Any(), ci.CommentRequest{Body: "hi", Key: "k", Behavior: "upsert", Target: ci.CommentTargetCommit}).Return(ci.Receipt{}, nil)
+		}},
+		{"comment target auto", `ci.comment("hi", target="auto")`, func(m *MockReporter) {
+			m.EXPECT().Comment(gomock.Any(), ci.CommentRequest{Body: "hi", Behavior: "upsert", Target: ci.CommentTargetAuto}).Return(ci.Receipt{}, nil)
 		}},
 		{"comment upsert", `ci.comment("hi", key="k", behavior="upsert")`, func(m *MockReporter) {
-			m.EXPECT().Comment(gomock.Any(), ci.CommentRequest{Body: "hi", Key: "k", Behavior: "upsert", PR: 0}).Return(ci.Receipt{}, nil)
+			m.EXPECT().Comment(gomock.Any(), ci.CommentRequest{Body: "hi", Key: "k", Behavior: "upsert", PR: 0, Target: ci.CommentTargetAuto}).Return(ci.Receipt{}, nil)
 		}},
 		{"comment update", `ci.comment("hi", key="k", behavior="update")`, func(m *MockReporter) {
-			m.EXPECT().Comment(gomock.Any(), ci.CommentRequest{Body: "hi", Key: "k", Behavior: "update"}).Return(ci.Receipt{}, nil)
+			m.EXPECT().Comment(gomock.Any(), ci.CommentRequest{Body: "hi", Key: "k", Behavior: "update", Target: ci.CommentTargetAuto}).Return(ci.Receipt{}, nil)
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -279,14 +298,15 @@ func TestCICommentReturnsStruct(t *testing.T) {
 		receipt ci.Receipt
 		want    string
 	}{
-		{"posted", ci.Receipt{Comment: &ci.Comment{ID: 99, URL: "https://x/c/99", Created: true}}, `{"id":99,"url":"https://x/c/99","created":true}`},
-		{"updated", ci.Receipt{Comment: &ci.Comment{ID: 5, URL: "https://x/c/5"}}, `{"id":5,"url":"https://x/c/5","created":false}`},
-		{"local preview without comment", ci.Receipt{Local: true}, `{"id":0,"url":"","created":false}`},
+		{"posted", ci.Receipt{Comment: &ci.Comment{ID: 99, URL: "https://x/c/99", Created: true, Target: ci.CommentTargetPR}}, `{"id":99,"url":"https://x/c/99","created":true,"target":"pr"}`},
+		{"updated", ci.Receipt{Comment: &ci.Comment{ID: 5, URL: "https://x/c/5", Target: ci.CommentTargetPR}}, `{"id":5,"url":"https://x/c/5","created":false,"target":"pr"}`},
+		{"commit comment", ci.Receipt{Comment: &ci.Comment{ID: 8, URL: "https://x/commit/c/8", Created: true, Target: ci.CommentTargetCommit}}, `{"id":8,"url":"https://x/commit/c/8","created":true,"target":"commit"}`},
+		{"local preview without comment", ci.Receipt{Local: true}, `{"id":0,"url":"","created":false,"target":""}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			m := newCIMock(t)
-			m.EXPECT().Comment(gomock.Any(), ci.CommentRequest{Body: "b", Behavior: "upsert"}).Return(tc.receipt, nil)
+			m.EXPECT().Comment(gomock.Any(), ci.CommentRequest{Body: "b", Behavior: "upsert", Target: ci.CommentTargetAuto}).Return(tc.receipt, nil)
 			stdout, _, err := runCI(t, m, `c = ci.comment("b")
 print(json.encode(c))
 print(type(c))`)
@@ -364,7 +384,7 @@ print(type(ci.context))`)
 		require.True(t, found, stdout)
 		assert.JSONEq(t, `{"provider":"github-actions","local":false,"event":"pull_request","sha":"abc","branch":"feat","repo":"o/r",`+
 			`"actor":"erik","run_id":"9","run_url":"https://run","elevated":true,`+
-			`"pr":{"number":12,"head":"feat","base":"main","url":"https://pr"}}`, encoded)
+			`"pr":{"number":12,"head":"feat","base":"main","url":"https://pr","fork":false}}`, encoded)
 		assert.Equal(t, "struct\n", kind)
 	})
 	t.Run("no pull request", func(t *testing.T) {
@@ -457,7 +477,7 @@ func TestCIReporterErrorsKeepTheirSentinel(t *testing.T) {
 	t.Run("pull request unknown carries a hint and traceback", func(t *testing.T) {
 		t.Parallel()
 		m := newCIMock(t)
-		m.EXPECT().Comment(gomock.Any(), ci.CommentRequest{Body: "b", Behavior: "upsert"}).
+		m.EXPECT().Comment(gomock.Any(), ci.CommentRequest{Body: "b", Behavior: "upsert", Target: ci.CommentTargetAuto}).
 			Return(ci.Receipt{}, errUtils.Build(errUtils.ErrCIPullRequestUnknown).Err())
 		_, _, err := runCI(t, m, `def post():
     ci.comment("b")
@@ -562,7 +582,7 @@ print(c.id, c.created, repr(c.url))
 `})
 	require.NoError(t, err)
 	assert.Equal(t, "1 True \"\"\n", stdout)
-	for _, want := range []string{"Hi there", "PR comment preview (upsert)", "comment body", "a=b"} {
+	for _, want := range []string{"Hi there", "comment preview (upsert", "comment body", "a=b"} {
 		assert.Contains(t, stderr, want)
 		assert.NotContains(t, stdout, want)
 	}

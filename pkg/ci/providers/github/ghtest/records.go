@@ -6,8 +6,10 @@ type Comment struct {
 	Owner string
 	// Repo is the repository name.
 	Repo string
-	// Number is the issue or pull request number the comment belongs to.
+	// Number is the issue or pull request number the comment belongs to. Zero for a commit comment.
 	Number int
+	// SHA is the commit the comment belongs to. Empty for an issue or pull request comment.
+	SHA string
 	// ID is the comment ID. Zero on a seeded comment means "assign one".
 	ID int64
 	// Body is the comment markdown.

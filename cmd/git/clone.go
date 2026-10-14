@@ -435,6 +435,7 @@ func guardForkCheckout(ref, uri string, opts *cloneOptions) error {
 	defer perf.Track(nil, "git.guardForkCheckout")()
 
 	if allowUnsafeFork(opts) {
+		ui.Warning("The fork checkout safety gate is disabled; untrusted code may execute with this workflow’s credentials.")
 		return nil
 	}
 
