@@ -38,15 +38,16 @@ This example mirrors [`examples/emulator-aws`](../emulator-aws) (same emulator, 
 
 ## Usage
 
-Start the sandbox, deploy, inspect outputs, then tear everything down (a container runtime —
+Validate the stacks, start the sandbox, deploy, inspect outputs, then tear everything down (a container runtime —
 Docker or Podman — is the only prerequisite):
 
 ```shell
+atmos validate stacks                        # validate configuration before deployment
 atmos emulator up aws -s local                # start the shared local sandbox
 atmos aws cfn deploy demo -s local            # create/update the stack (changeset-driven apply + auto-approve)
 atmos aws cfn output demo -s local            # inspect the stack's Outputs
 
-atmos aws cfn delete demo -s local            # delete the stack
+atmos aws cfn delete demo -s local --auto-approve # delete the stack without prompting
 atmos emulator down aws -s local              # stop and remove the sandbox container
 ```
 
@@ -58,8 +59,8 @@ lifecycle verbs include `plan`/`diff` (preview a changeset without executing it)
 it has not been started; `atmos emulator ps` shows the running subset. The `INSTANCE` column is
 the value an `aws/emulator` identity targets. Add `-s local` to scope either command.
 
-The `atmos test` custom command runs the full deploy/delete lifecycle end to end.
+The `atmos test` custom command validates the stacks and runs the full deploy/delete lifecycle end to end.
 
 ## Learn More
 
-See the [`atmos aws cloudformation`](https://github.com/cloudposse/atmos/pull/3157) docs.
+See the [`atmos aws cloudformation`](https://atmos.tools/cli/commands/aws/cloudformation/) docs.
