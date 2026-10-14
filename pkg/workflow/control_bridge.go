@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/ci"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
@@ -45,6 +46,7 @@ func (controlBridge) RunControl(ctx context.Context, step *schema.WorkflowStep, 
 	childExecutor := &ControlCommandExecutor{
 		ScriptSteps:            stepPkg.NewAutomationLibrary(vars, nil),
 		InstallTools:           stepPkg.ScriptToolInstaller(vars.AtmosConfig),
+		CI:                     ci.NewReporter(vars.AtmosConfig),
 		DryRun:                 step.DryRun,
 		ScriptHook:             vars.ScriptHook,
 		ScriptComponent:        stepPkg.ScriptComponentRef(vars),

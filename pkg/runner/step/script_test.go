@@ -12,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/script"
 )
 
 func requirePython3(t *testing.T) {
@@ -246,3 +247,45 @@ func TestScriptHandlerExecuteDefaultsOutputModeWhenUnset(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.Metadata[exitCodeMetadata])
 }
+
+// ciRecordingEngine is an embedded interpreter that records the Spec each invocation receives.
+type ciRecordingEngine struct {
+	specs []script.Spec
+}
+
+//nolint:gocritic // The signature is fixed by script.Engine.
+func (e *ciRecordingEngine) Execute(_ context.Context, spec script.Spec) (script.Result, error) {
+	e.specs = append(e.specs, spec)
+	return script.Result{}, nil
+}
+
+func TestScriptHandlerInjectsCIReporter(t *testing.T) {
+	initShellTestIO(t)
+	engine := &ciRecordingEngine{}
+	script.Register("recording-step-ci", engine)
+
+	handler, ok := Get("script")
+	require.True(t, ok)
+
+	// A nil AtmosConfig is valid: the reporter then renders locally.
+	for name, vars := range map[string]*Variables{"without config": NewVariables(), "with config": newVariablesWithConfig()} {
+		t.Run(name, func(t *testing.T) {
+			engine.specs = nil
+			_, err := handler.Execute(context.Background(), &schema.WorkflowStep{
+				Name: "ci", Type: schema.TaskTypeScript, Interpreter: "recording-step-ci", Script: "ignored", Output: "none",
+			}, vars)
+			require.NoError(t, err)
+			require.Len(t, engine.specs, 1)
+			assert.NotNil(t, engine.specs[0].CI)
+		})
+	}
+}
+
+func newVariablesWithConfig() *Variables {
+	vars := NewVariables()
+	vars.SetAtmosConfig(&schema.AtmosConfiguration{})
+	return vars
+}
+
+// Compile-time guard: renaming script.Spec.CI fails the build here.
+var _ = script.Spec{CI: nil}

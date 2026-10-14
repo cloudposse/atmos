@@ -16,6 +16,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/ci"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -78,7 +79,10 @@ type ControlCommandExecutor struct {
 	// ResolveComponent backs `components.get` in embedded script children.
 	ResolveComponent script.ComponentResolver
 	InstallTools     script.ToolInstaller
-	ScriptSteps      automation.StepLibrary
+	// CI reports into the active CI provider for embedded script children and renders locally
+	// when none is detected. Hosts construct it with ci.NewReporter; nil means a local-only reporter.
+	CI          ci.Reporter
+	ScriptSteps automation.StepLibrary
 	// ProjectRoot is the absolute Atmos project base path. Embedded script children show paths under
 	// it relative to it in errors and tracebacks.
 	ProjectRoot string
@@ -200,6 +204,7 @@ func (executor *ControlCommandExecutor) executeEmbeddedScript(ctx context.Contex
 		var runErr error
 		embedded, runErr = engine.Execute(ctx, script.Spec{
 			InstallTools: executor.InstallTools,
+			CI:           executor.CI,
 			Steps:        executor.scriptStepLibrary(),
 			Parallel:     true,
 			Name:         step.Name, Source: step.Script, SourcePath: step.ScriptSource, ProjectRoot: executor.ProjectRoot, WorkingDirectory: executor.workingDirectory(step),

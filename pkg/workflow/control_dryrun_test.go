@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/script"
 )
@@ -290,4 +291,28 @@ func TestResolveControlStepRendersScriptAndInterpreter(t *testing.T) {
 func TestResolveControlStepScriptTemplateError(t *testing.T) {
 	_, err := resolveControlStep(&schema.WorkflowStep{Name: "child", Script: "{{ .broken"}, nil, nil)
 	require.Error(t, err)
+}
+
+// Compile-time guard: renaming script.Spec.CI fails the build here rather than silently dropping the reporter.
+var _ = script.Spec{CI: nil}
+
+func TestControlExecutorPassesCIReporterToScriptSpec(t *testing.T) {
+	initControlTestIO(t)
+	engine := registerRecordingEngine(t, "recording-executor-ci")
+	child := &ControlChild{Step: schema.WorkflowStep{Name: "embedded", Type: schema.TaskTypeScript, Interpreter: "recording-executor-ci", Script: "ignored"}}
+
+	reporter := ci.NewReporter(nil)
+	withReporter := &ControlCommandExecutor{CI: reporter}
+	_, err := withReporter.Execute(context.Background(), child, ControlChildOutput{})
+	require.NoError(t, err)
+
+	// Negative path: an executor without a reporter forwards none, so the engine falls back to local-only.
+	withoutReporter := &ControlCommandExecutor{}
+	_, err = withoutReporter.Execute(context.Background(), child, ControlChildOutput{})
+	require.NoError(t, err)
+
+	executed := engine.executed()
+	require.Len(t, executed, 2)
+	assert.Same(t, reporter, executed[0].CI)
+	assert.Nil(t, executed[1].CI)
 }
