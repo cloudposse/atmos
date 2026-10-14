@@ -2,6 +2,7 @@ package cloudformation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -227,12 +228,17 @@ func resolveSpecAndTemplate(ctx context.Context, atmosConfig *schema.AtmosConfig
 // Kubernetes's runWithHooks — since a job summary describing a failed
 // operation is exactly as useful as one describing a successful one.
 func runWithHooks(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation, spec *stackSpec) error {
+	before, after := eventsFor(operation)
+	ciParams := ciHookParams{event: after, flags: ctx.Flags, atmosConfig: atmosConfig, info: info}
+	// Dispatch exactly once, including setup failures, without running user after-hooks on early returns.
+	defer func() { runCIHook(ciParams) }()
 	hookSet, err := getHooks(atmosConfig, info)
 	if err != nil {
+		ciParams.commandErr = err
 		return err
 	}
-	before, after := eventsFor(operation)
 	if err := hookSet.RunAll(before, atmosConfig, info, nil, nil); err != nil {
+		ciParams.commandErr = err
 		return err
 	}
 
@@ -254,22 +260,10 @@ func runWithHooks(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConf
 	// logged, not returned; see runCIHook), so it never masks opErr or the
 	// after-hooks error below.
 	afterErr := hookSet.RunAll(after, atmosConfig, info, nil, nil)
-	// opErr takes precedence (it's the more actionable failure, matching the
-	// return below), but when the operation succeeded and only the after-hook
-	// failed, the CI summary must still reflect that failure rather than
-	// silently reporting success.
-	ciErr := opErr
-	if ciErr == nil {
-		ciErr = afterErr
-	}
-	runCIHook(ciHookParams{
-		event:       after,
-		flags:       ctx.Flags,
-		atmosConfig: atmosConfig,
-		info:        info,
-		summary:     summary,
-		commandErr:  ciErr,
-	})
+	// opErr takes precedence in the command return below, but the CI summary
+	// retains both failures. An after-hook-only failure must not report success.
+	ciParams.summary = summary
+	ciParams.commandErr = errors.Join(opErr, afterErr)
 
 	// The underlying operation's own error takes priority: a failed apply is
 	// the more actionable/severe failure than a problem in a user-defined
