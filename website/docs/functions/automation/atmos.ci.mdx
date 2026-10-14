@@ -13,6 +13,10 @@ import Intro from '@site/src/components/Intro'
     GitHub Actions workflow files, and manage the CI build cache from automation.
 </Intro>
 
+:::note
+This function runs the `atmos ci` command group as a subprocess. To report from inside a script, with job summaries, outputs, annotations, comments, and checks that also render locally, use the [`ci` module](/functions/automation/ci) instead.
+:::
+
 ## Usage
 
 ```python

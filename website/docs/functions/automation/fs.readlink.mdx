@@ -30,8 +30,9 @@ if info.is_symlink:
     print(fs.readlink("current"))
 ```
 
-Relative paths resolve against the script's working directory, including when
-called from a loaded module. Absolute paths are used as given. These functions
+A leading `~` expands to the home directory. Relative paths resolve against the
+script's working directory, including when called from a loaded module. Absolute
+paths are used as given. These functions
 inspect the local filesystem; they do not isolate access to the repository.
 Calls honor cancellation before and after the filesystem operation.
 

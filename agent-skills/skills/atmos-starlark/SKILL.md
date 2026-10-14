@@ -110,14 +110,24 @@ workflows:
   `ui.warning` (`⚠`) write human status to stderr. `log.trace/debug/info/warn/error(message, **fields)`
   writes diagnostics through the Atmos logger with `step` (and, in parallel tasks, `task`)
   fields; it honors `ATMOS_LOGS_LEVEL`, `--logs-level`, and `logs.file`, and masks secrets.
+  `ci.summary`, `ci.comment`, `ci.annotate`, `ci.output`, `ci.env`, `ci.path`, `ci.mask`,
+  `ci.check`, `ci.group`, and `ci.sarif` report into the CI provider running the script and
+  render locally on stderr when none is detected; `ci.context` describes the run. In CI they
+  honor the `ci.*.enabled` switches and warn (naming the flag) instead of failing when one is
+  off. Use `ci.*`, never `exec.run(["gh", ...])` or hand-written `$GITHUB_ENV` appends; see
+  [references/api-reference.md](references/api-reference.md#ci).
 - Top-level `output`: a string is emitted raw, any other value is JSON-encoded, and a value
   that cannot be encoded (such as a function) fails the script. Without `output`, captured
   stdout is the step value.
 - `steps.run(type, **fields)` and the `steps.<type>(...)` library call any registered step
   handler (see [steps.run](https://atmos.tools/functions/automation/steps.run)); they exist,
   and `steps.input` and `steps.choose` prompt. Also available: `fs.read_file`, `fs.glob`,
-  `fs.stat`, `fs.exists`, `fs.readlink`, `errors.build(...)` (a builder ending in `.fail()`),
-  `json.indent`, and `json.encode_indent`. Never invent `components.list`, `commands.run`,
+  `fs.stat`, `fs.exists`, `fs.readlink`, `fs.resolve` (absolute path; every `fs.*` call accepts a leading `~`), `exec.which` (path or `None`), `defer(fn, *args)` (cleanup that runs when the script or task finishes, even after `fail()`; there is no `try`/`finally`),
+  `digest.sha256`/`digest.sha512`/`digest.sha1`/`digest.md5` (hex digest of a string or file contents), `errors.build(...)` (a builder ending in `.fail()`),
+  `json.indent`, `json.encode_indent`, and the `ci` module (`ci.context`, `ci.summary`,
+  `ci.comment`, `ci.annotate`, `ci.output`, `ci.env`, `ci.path`, `ci.mask`, `ci.check`,
+  `ci.group`, `ci.sarif`, `ci.base`; distinct from the `atmos.ci(...)` command wrapper).
+  Never invent `components.list`, `commands.run`,
   a file-write API, or direct secret, store, or Terraform state/output builtins. They do
   not exist. Resolved YAML inputs and component configuration can carry values from those
   services.

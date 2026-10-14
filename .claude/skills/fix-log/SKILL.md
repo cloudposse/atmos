@@ -24,10 +24,11 @@ a single, consistent five-section structure instead of ad hoc headers.
 3. Use a lowercase slug with letters, numbers, and hyphens.
 4. Record what changed, why it changed, validation that actually ran, and follow-ups.
 5. Do not invent validation. If a check was skipped or blocked, say why.
-6. If the fix leaves any follow-up work (anything under **Follow-ups** other than `None.`), it must satisfy
-   `CLAUDE.md`'s **Follow-up Tracking (MANDATORY)** section: open a GitHub issue and link it by number (e.g.
-   `#1234`) in the Follow-ups section. A Follow-ups entry like "a follow-up will..." with no issue number is
-   incomplete — the work will never be tracked.
+6. Follow `CLAUDE.md`'s **Follow-up Tracking (MANDATORY)** rule: **never create GitHub issues for an
+    implementation that has not merged into `main`.** Fix required work in the active PR or stack and
+    keep remaining tasks in its PRD or task list. The Follow-ups section may link to that document;
+    an issue number is not required. Only for already-merged features, track genuinely deferred work
+    in a GitHub issue and link it by number.
 
 ## Required Document Shape
 

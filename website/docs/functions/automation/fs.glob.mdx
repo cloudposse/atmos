@@ -23,7 +23,7 @@ fs.glob(pattern)
 
 Returns a sorted list of matching paths, or an empty list if nothing matches.
 Relative patterns return paths relative to the script's working directory;
-absolute patterns return absolute paths. Returned paths use forward slashes.
+absolute patterns, and patterns that start with `~`, return absolute paths. Returned paths use forward slashes.
 Hidden files are included when they match. Invalid patterns fail; directory
 read errors are ignored, matching Go's filesystem glob behavior.
 
@@ -32,8 +32,9 @@ for path in fs.glob(".claude/agents/*.md"):
     print(path)
 ```
 
-Relative paths resolve against the script's working directory, including when
-called from a loaded module. Absolute paths are used as given. These functions
+A leading `~` expands to the home directory. Relative paths resolve against the
+script's working directory, including when called from a loaded module. Absolute
+paths are used as given. These functions
 inspect the local filesystem; they do not isolate access to the repository.
 Calls honor cancellation before and after the filesystem operation.
 

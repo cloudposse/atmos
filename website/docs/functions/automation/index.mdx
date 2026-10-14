@@ -26,7 +26,7 @@ which Atmos evaluates while it loads stack manifests.
 
 Every function and value on these pages is available without an import. Atmos
 predeclares the names `cli`, `atmos`, `components`, `exec`, `steps`, `fs`, `json`,
-`regex`, `dependencies`, `ui`, `log`, `errors`, `env`, and `ctx`, and the script's top-level
+`regex`, `dependencies`, `ui`, `log`, `ci`, `errors`, `env`, and `ctx`, and the script's top-level
 `output` variable sets its result. The language itself, including statements,
 operators, and the universal built-ins, is described in the
 [language reference](/automation/reference).
@@ -38,11 +38,14 @@ operators, and the universal built-ins, is described in the
 | Command line | [`cli.command`](/functions/automation/cli.command), [`cli.arg`](/functions/automation/cli.arg), [`cli.flag`](/functions/automation/cli.flag) |
 | Atmos commands | [`atmos.run`](/functions/automation/atmos.run), [`atmos.terraform`](/functions/automation/atmos.terraform), [`atmos.helm`](/functions/automation/atmos.helm), [`atmos.toolchain`](/functions/automation/atmos.toolchain), and one wrapper for each [built-in command](#atmos-command-wrappers) |
 | Components | [`components.get`](/functions/automation/components.get), [`component.exec`](/functions/automation/component.exec) |
-| Processes | [`exec.run`](/functions/automation/exec.run), [`dependencies.tools`](/functions/automation/dependencies.tools) |
+| Processes | [`exec.run`](/functions/automation/exec.run), [`exec.which`](/functions/automation/exec.which), [`dependencies.tools`](/functions/automation/dependencies.tools) |
 | Concurrency | [`steps.task`](/functions/automation/steps.task), [`steps.parallel`](/functions/automation/steps.parallel) |
-| Files and data | [`fs.read_file`](/functions/automation/fs.read_file), [`json.encode`](/functions/automation/json.encode), [`json.decode`](/functions/automation/json.decode), [`json.indent`](/functions/automation/json.indent), [`json.encode_indent`](/functions/automation/json.encode_indent) |
+| Cleanup | [`defer`](/functions/automation/defer) |
+| Files and data | [`fs.read_file`](/functions/automation/fs.read_file), [`fs.resolve`](/functions/automation/fs.resolve), [`json.encode`](/functions/automation/json.encode), [`json.decode`](/functions/automation/json.decode), [`json.indent`](/functions/automation/json.indent), [`json.encode_indent`](/functions/automation/json.encode_indent) |
 | Text | [`regex.search`](/functions/automation/regex.search), [`regex.findall`](/functions/automation/regex.findall), [`regex.replace`](/functions/automation/regex.replace) |
+| Digests | [`digest.sha256`](/functions/automation/digest.sha256), [`digest.sha512`](/functions/automation/digest.sha512), [`digest.sha1`](/functions/automation/digest.sha1), [`digest.md5`](/functions/automation/digest.md5) |
 | Messages | [`ui.info`](/functions/automation/ui.info), [`ui.success`](/functions/automation/ui.success), [`ui.warning`](/functions/automation/ui.warning), [`log.trace`](/functions/automation/log.trace), [`log.debug`](/functions/automation/log.debug), [`log.info`](/functions/automation/log.info), [`log.warn`](/functions/automation/log.warn), [`log.error`](/functions/automation/log.error), [`print`](/functions/automation/print) |
+| CI reporting | [`ci`](/functions/automation/ci) (`ci.context`), [`ci.summary`](/functions/automation/ci.summary), [`ci.comment`](/functions/automation/ci.comment), [`ci.annotate`](/functions/automation/ci.annotate), [`ci.output`](/functions/automation/ci.output), [`ci.env`](/functions/automation/ci.env), [`ci.path`](/functions/automation/ci.path), [`ci.mask`](/functions/automation/ci.mask), [`ci.check`](/functions/automation/ci.check), [`ci.group`](/functions/automation/ci.group), [`ci.sarif`](/functions/automation/ci.sarif), [`ci.base`](/functions/automation/ci.base) |
 | Errors | [`errors.build`](/functions/automation/errors.build) |
 | Built-in values | [`ctx`](/functions/automation/ctx), [`env`](/functions/automation/env), [`output`](/functions/automation/output), [`load`](/functions/automation/load) |
 
