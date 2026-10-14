@@ -2,16 +2,15 @@
 title: Data Types
 sidebar_label: Data Types
 sidebar_position: 2
-slug: /automation/reference/data-types
+slug: /scripting/reference/data-types
 description: Values in the Atmos Automation Language, including None, booleans, numbers, strings, bytes, lists, tuples, dictionaries, sets, functions, truthiness, mutability, and freezing.
 ---
 
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Every value in the Atmos Automation Language has a type. This page describes each
-built-in type, how to create values of that type, which operations they support,
-and how mutability and freezing affect what a program can change.
+Starlark values include numbers, strings, lists, dictionaries, and sets.
+This page covers their operations, conversions, and mutability.
 </Intro>
 
 The built-in `type()` function returns the name of a value's type as a string:
@@ -55,7 +54,7 @@ value as a key raises an error such as `unhashable type: list`.
 
 The type `NoneType` has one value, `None`. It represents "no value" and is
 what a function returns when it has no `return` statement. Compare against it
-with `==`; the `is` operator is [reserved](/automation/reference/lexical-elements#reserved-words).
+with `==`; the `is` operator is [reserved](/scripting/reference/lexical-elements#reserved-words).
 
 ```python
 def find(items, wanted):
@@ -127,13 +126,13 @@ print(float("1e3"))        # 1000.0
 print(1e308 * 10)          # +inf
 ```
 
-See [Lexical Elements](/automation/reference/lexical-elements#floating-point-numbers)
+See [Lexical Elements](/scripting/reference/lexical-elements#floating-point-numbers)
 for how floats are printed.
 
 ## Strings
 
 A string is an immutable sequence of text, stored as UTF-8. Create strings
-with [string literals](/automation/reference/lexical-elements#string-literals),
+with [string literals](/scripting/reference/lexical-elements#string-literals),
 with `str(value)`, or with methods such as `format()` and `join()`.
 
 Strings support these operations:
@@ -144,9 +143,9 @@ Strings support these operations:
   lexicographic, so `"Z" < "a"` is `True`.
 - Indexing and slicing, described below.
 - Formatting with `%` and `.format()`. See
-  [Expressions and Operators](/automation/reference/expressions-operators#string-formatting).
+  [Expressions and Operators](/scripting/reference/expressions-operators#string-formatting).
 - Methods such as `split`, `strip`, `replace`, `startswith`, `lower`, and
-  `upper`. See [Methods](/automation/reference/methods).
+  `upper`. See [Methods](/scripting/reference/methods).
 
 Indexing and slicing operate on bytes, and `len()` returns the number of
 bytes. For ASCII text each character is one byte, but a character such as
@@ -196,7 +195,7 @@ print(list(data.elems()))         # [97, 98, 99]
 ## Lists
 
 A list is an ordered, mutable sequence. Write one with square brackets, or
-build one with a [comprehension](/automation/reference/expressions-operators#comprehensions).
+build one with a [comprehension](/scripting/reference/expressions-operators#comprehensions).
 
 ```python
 def demo():
@@ -279,7 +278,7 @@ Dictionary behavior:
   dictionary inside the loop.
 
 Other methods are `pop`, `popitem`, `setdefault`, `update`, and `clear`. See
-[Methods](/automation/reference/methods).
+[Methods](/scripting/reference/methods).
 
 ## Sets
 
@@ -338,8 +337,8 @@ print(handlers["double"](4)) # 8
 ```
 
 Built-in functions such as `len` and methods such as `"".upper` have the type
-`builtin_function_or_method`. See [Statements](/automation/reference/statements#function-definitions)
-for defining functions and [Built-in Functions](/automation/reference/builtin-functions)
+`builtin_function_or_method`. See [Statements](/scripting/reference/statements#function-definitions)
+for defining functions and [Built-in Functions](/scripting/reference/builtin-functions)
 for the functions that ship with the language.
 
 ## Modules and structs
@@ -433,7 +432,7 @@ list` or `cannot insert into frozen hash table`. Values become frozen in
 these situations:
 
 - **After a file finishes loading.** Every top-level value in a file brought in
-  with [`load()`](/automation/reference/statements#load) becomes frozen. The
+  with [`load()`](/scripting/reference/statements#load) becomes frozen. The
   importing file can read these values, but cannot modify them.
 - **When parallel work starts.** Values that tasks started by
   [`steps.parallel`](/functions/automation/steps.parallel) can reach become
@@ -459,7 +458,7 @@ For example, `dict(env)` returns a normal dictionary you can change.
 
 ## Next steps
 
-- [Expressions and Operators](/automation/reference/expressions-operators): operate on these values.
-- [Statements](/automation/reference/statements): assign, loop, and define functions.
-- [Methods](/automation/reference/methods): the methods each type provides.
-- [Built-in Functions](/automation/reference/builtin-functions): `len`, `sorted`, `range`, and more.
+- [Expressions and Operators](/scripting/reference/expressions-operators): operate on these values.
+- [Statements](/scripting/reference/statements): assign, loop, and define functions.
+- [Methods](/scripting/reference/methods): the methods each type provides.
+- [Built-in Functions](/scripting/reference/builtin-functions): `len`, `sorted`, `range`, and more.

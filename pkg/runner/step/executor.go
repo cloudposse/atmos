@@ -128,7 +128,8 @@ func (e *StepExecutor) Execute(ctx context.Context, step *schema.WorkflowStep) (
 	}
 
 	if err != nil {
-		return result, err
+		// Keep the failed attempt's output reachable so `retry.conditions` can match it.
+		return result, WithStepOutput(err, result)
 	}
 
 	// Store result for variable access.

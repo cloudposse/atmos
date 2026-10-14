@@ -91,6 +91,18 @@ def unknown_field():
 def workflow_only():
     dump(steps.shell(command = "echo x", needs = ["a"]))
 
+def shell_foreign_field():
+    dump(steps.shell(command = "echo hi", url = "https://example.test"))
+
+def join_foreign_field():
+    dump(steps.join(options = ["a"], command = "echo hi"))
+
+def shell_timeout():
+    dump(steps.shell(name = "nap", command = "sleep 5.41", timeout = "300ms"))
+
+def atmos_timeout():
+    dump(steps.atmos(name = "nested", command = "version", timeout = "1ms"))
+
 CASES = {
     "shell-capture": shell_capture,
     "shell-stream": shell_stream,
@@ -117,6 +129,10 @@ CASES = {
     "container": container,
     "unknown-field": unknown_field,
     "workflow-only": workflow_only,
+    "shell-foreign-field": shell_foreign_field,
+    "join-foreign-field": join_foreign_field,
+    "shell-timeout": shell_timeout,
+    "atmos-timeout": atmos_timeout,
 }
 
 name = ctx.arguments["case"]

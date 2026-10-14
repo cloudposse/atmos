@@ -85,6 +85,15 @@ func TestMain(m *testing.M) {
 			time.Sleep(time.Duration(ms) * time.Millisecond)
 		}
 		os.Exit(0)
+	case "spawn-grandchild":
+		// Record the pid, start a grandchild that also records its pid, then wait for the group to
+		// be killed. Tests use it to prove a step timeout ends the whole process tree.
+		runStepSpawnGrandchild()
+		os.Exit(0)
+	case "pidfile-sleep":
+		writeStepPIDFile("child")
+		time.Sleep(stepHelperSleep)
+		os.Exit(0)
 	case "printenv":
 		// Print the value of the variable named by _ATMOS_STEP_FAKE_ENV_NAME.
 		_, _ = os.Stdout.WriteString(os.Getenv(os.Getenv(atmosStepFakeEnvNameEnv)))

@@ -150,7 +150,7 @@ func ciFail(name string, err error) error {
 	}
 	message := "ci." + name + ": " + err.Error()
 	hint := script.NewDiagnostic(message).With(func(b *errUtils.ErrorBuilder) {
-		b.WithHint("Pass the pull request number, for example pr=123, or run in a pull request context")
+		b.WithHint("Pass the pull request number, for example pr=123, run in a pull request context, or use target=\"auto\" or target=\"commit\" to comment on the commit instead")
 	}).Err()
 	return failWithAll(kind, []error{hint, err}, "%s", message)
 }
@@ -196,11 +196,16 @@ func oneOf[T ~string](b *starlark.Builtin, field, value string, allowed ...T) (T
 }
 
 func (s *session) ciSummary(t *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var markdown string
-	if err := unpackCI(b, args, kwargs, "markdown", &markdown); err != nil {
+	var markdown, template, data starlark.Value
+	if err := unpackCI(b, args, kwargs, "markdown?", &markdown, "template?", &template, "data?", &data); err != nil {
 		return nil, err
 	}
-	rc, err := s.reporter(t).Summary(markdown)
+	reporter := s.reporter(t)
+	text, err := resolveCIText(b, &ciTextSource{field: "markdown", value: markdown, template: template, data: data, render: reporter.RenderSummary})
+	if err != nil {
+		return nil, err
+	}
+	rc, err := reporter.Summary(text)
 	return s.ciDone(t, "summary", rc, err)
 }
 
@@ -262,8 +267,8 @@ func (s *session) ciAnnotate(t *starlark.Thread, b *starlark.Builtin, args starl
 	if err := requireText(b, "message", message); err != nil {
 		return nil, err
 	}
-	if line < 0 || endLine < 0 {
-		return nil, invalidArg("%s: line and end_line must not be negative", b.Name())
+	if err := checkAnnotationRange(b, file, line, endLine); err != nil {
+		return nil, err
 	}
 	rc, err := s.reporter(t).Annotate(ci.Annotation{
 		Path: file, StartLine: line, EndLine: endLine, Level: parsed, Title: title, Message: message,
@@ -271,11 +276,41 @@ func (s *session) ciAnnotate(t *starlark.Thread, b *starlark.Builtin, args starl
 	return s.ciDone(t, "annotate", rc, err)
 }
 
+// checkAnnotationRange validates the file and line arguments of ci.annotate. Lines are only
+// meaningful with a file, and a range must not end before it starts.
+func checkAnnotationRange(b *starlark.Builtin, file string, line, endLine int) error {
+	if line < 0 || endLine < 0 {
+		return invalidArg("%s: line and end_line must not be negative", b.Name())
+	}
+	if file == "" {
+		if line > 0 {
+			return invalidArg("%s: line requires file=", b.Name())
+		}
+		if endLine > 0 {
+			return invalidArg("%s: end_line requires file=", b.Name())
+		}
+		return nil
+	}
+	if endLine > 0 && line == 0 {
+		return invalidArg("%s: end_line requires line=", b.Name())
+	}
+	if endLine > 0 && endLine < line {
+		return invalidArg("%s: end_line (%d) must not be before line (%d)", b.Name(), endLine, line)
+	}
+	return nil
+}
+
 func (s *session) ciComment(t *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var body, key string
-	behavior := string(ci.CommentBehaviorUpsert)
+	var bodyArg, template, data starlark.Value
+	var key string
+	behavior, target := string(ci.CommentBehaviorUpsert), string(ci.CommentTargetAuto)
 	var pr int
-	if err := unpackCI(b, args, kwargs, "body", &body, "key?", &key, "behavior?", &behavior, "pr?", &pr); err != nil {
+	if err := unpackCI(b, args, kwargs, "body?", &bodyArg, "key?", &key, "behavior?", &behavior, "pr?", &pr, "target?", &target, "template?", &template, "data?", &data); err != nil {
+		return nil, err
+	}
+	reporter := s.reporter(t)
+	body, err := resolveCIText(b, &ciTextSource{field: "body", value: bodyArg, template: template, data: data, render: reporter.RenderComment})
+	if err != nil {
 		return nil, err
 	}
 	if err := requireText(b, "body", body); err != nil {
@@ -285,10 +320,14 @@ func (s *session) ciComment(t *starlark.Thread, b *starlark.Builtin, args starla
 	if err != nil {
 		return nil, err
 	}
+	parsedTarget, err := oneOf(b, "target", target, ci.CommentTargetAuto, ci.CommentTargetPR, ci.CommentTargetCommit)
+	if err != nil {
+		return nil, err
+	}
 	if pr < 0 {
 		return nil, invalidArg("%s: pr must not be negative", b.Name())
 	}
-	rc, err := s.reporter(t).Comment(threadContext(t), ci.CommentRequest{Body: body, Key: key, Behavior: parsed, PR: pr})
+	rc, err := reporter.Comment(threadContext(t), ci.CommentRequest{Body: body, Key: key, Behavior: parsed, PR: pr, Target: parsedTarget})
 	if err != nil {
 		return nil, ciFail("comment", err)
 	}

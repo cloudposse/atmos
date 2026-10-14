@@ -16,8 +16,8 @@ var _ provider.EnvExporter = (*Provider)(nil)
 // WriteEnv exports key=value for later steps. With ATMOS_CI_ENV set it appends to that file
 // in GitHub Actions format; otherwise it renders a shell `export` line.
 //
-// ATMOS_CI_ENV and ATMOS_CI_PATH are read at call time. ATMOS_CI_OUTPUT and ATMOS_CI_SUMMARY
-// are still read once in NewProvider; moving them to call time is a follow-up.
+// ATMOS_CI_ENV and ATMOS_CI_PATH are read at call time, as are ATMOS_CI_OUTPUT and
+// ATMOS_CI_SUMMARY (when OutputWriter is called).
 func (p *Provider) WriteEnv(key, value string) error {
 	defer perf.Track(nil, "generic.Provider.WriteEnv")()
 

@@ -67,13 +67,16 @@ func (h *checkHandle) record(rc ci.Receipt) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.id = rc.Check.ID
+	if rc.Check.ID != 0 {
+		h.id = rc.Check.ID
+	}
 	if rc.Check.DetailsURL != "" {
 		h.url = rc.Check.DetailsURL
 	}
 }
 
-// update moves the check run to a new state.
+// update moves the check run to a new state. It sends the id the create returned, so providers can
+// address the exact check run when several share a name.
 func (h *checkHandle) update(t *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var state, description, url string
 	if err := unpackCI(b, args, kwargs, "state", &state, "description?", &description, "url?", &url); err != nil {
@@ -83,7 +86,10 @@ func (h *checkHandle) update(t *starlark.Thread, b *starlark.Builtin, args starl
 	if err != nil {
 		return nil, err
 	}
-	rc, err := h.s.reporter(t).UpdateCheck(threadContext(t), ci.CheckRequest{Name: h.name, State: parsed, Description: description, URL: url})
+	h.mu.Lock()
+	id := h.id
+	h.mu.Unlock()
+	rc, err := h.s.reporter(t).UpdateCheck(threadContext(t), ci.CheckRequest{Name: h.name, ID: id, State: parsed, Description: description, URL: url})
 	if err != nil {
 		return nil, ciFail("check.update", err)
 	}
