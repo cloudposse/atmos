@@ -65,3 +65,76 @@ func TestScriptStarlarkDryRun(t *testing.T) {
 	}, NewVariables())
 	require.NoError(t, err)
 }
+
+func TestScriptStarlarkReadsParsedCommandInputs(t *testing.T) {
+	initShellTestIO(t)
+	vars := NewVariables()
+	vars.SetFlag("replicas", "fallback-must-not-win")
+	vars.SetTemplateData(map[string]any{
+		"Flags":     map[string]any{"replicas": "3", "enabled": true, "literal": "{{ .Env.NOT_DEFINED }}"},
+		"Arguments": map[string]string{"service": "api", "literal": "{{ fail \"must stay data\" }}"},
+	})
+	result, err := (&ScriptHandler{}).Execute(t.Context(), &schema.WorkflowStep{
+		Name: "inputs", Interpreter: "starlark", Output: "capture",
+		Script: `output = {
+    "replicas": int(ctx.flags["replicas"]),
+    "enabled": ctx.flags["enabled"],
+    "literal_flag": ctx.flags["literal"],
+    "service": ctx.arguments["service"],
+    "literal_argument": ctx.arguments["literal"],
+}`,
+	}, vars)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"replicas":3,"enabled":true,"literal_flag":"{{ .Env.NOT_DEFINED }}","service":"api","literal_argument":"{{ fail \"must stay data\" }}"}`, result.Value)
+}
+
+func TestScriptStarlarkReadsWorkflowFlags(t *testing.T) {
+	initShellTestIO(t)
+	vars := NewVariables()
+	vars.SetFlag("stack", "dev")
+	result, err := (&ScriptHandler{}).Execute(t.Context(), &schema.WorkflowStep{
+		Interpreter: "starlark", Output: "capture",
+		Script: `output = {"stack": ctx.flags["stack"], "arguments": ctx.arguments}`,
+	}, vars)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"stack":"dev","arguments":{}}`, result.Value)
+}
+
+func TestScriptStarlarkInputsSurviveClonedParallelBranches(t *testing.T) {
+	initShellTestIO(t)
+	vars := NewVariables()
+	vars.SetTemplateData(map[string]any{
+		"Flags":     map[string]any{"enabled": true},
+		"Arguments": map[string]string{"service": "api"},
+	})
+	branch := vars.Clone()
+	result, err := (&ScriptHandler{}).Execute(t.Context(), &schema.WorkflowStep{
+		Interpreter: "starlark", Output: "capture",
+		Script: `def inspect():
+    return [ctx.flags["enabled"], ctx.arguments["service"]]
+output = steps.parallel(functions=[inspect, inspect])`,
+	}, branch)
+	require.NoError(t, err)
+	assert.JSONEq(t, `[[true,"api"],[true,"api"]]`, result.Value)
+	// Exposing a snapshot must not give another host caller the backing map.
+	copied := branch.ScriptFlags()
+	copied["enabled"] = false
+	assert.Equal(t, true, vars.ScriptFlags()["enabled"])
+}
+
+func TestScriptStarlarkLowercaseFlagTemplateRoot(t *testing.T) {
+	initShellTestIO(t)
+	vars := NewVariables()
+	vars.SetTemplateData(map[string]any{"flags": map[string]string{"stack": "prod"}})
+	result, err := (&ScriptHandler{}).Execute(t.Context(), &schema.WorkflowStep{
+		Interpreter: "starlark", Output: "capture", Script: `output = ctx.flags["stack"]`,
+	}, vars)
+	require.NoError(t, err)
+	assert.Equal(t, "prod", result.Value)
+}
+
+func TestScriptInputsWithoutVariables(t *testing.T) {
+	var vars *Variables
+	assert.Nil(t, vars.ScriptFlags())
+	assert.Nil(t, vars.ScriptArguments())
+}

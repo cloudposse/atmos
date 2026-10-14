@@ -14,13 +14,11 @@ commands:
         interpreter: starlark
         show:
           labels: false
-        env:
-          REPLICAS: '{{ .Flags.replicas }}'
         script: |
-          replicas = int(env["REPLICAS"])
+          replicas = int(ctx.flags["replicas"])
           if replicas < 1:
               fail("replicas must be positive")
           workers_per_replica = 4
-          print("{} replicas x {} workers = {} workers".format(
+          ui.success("{} replicas x {} workers = {} workers".format(
               replicas, workers_per_replica, replicas * workers_per_replica,
           ))

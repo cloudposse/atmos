@@ -12,6 +12,10 @@ Independent language bindings live under `stdlib/`:
 - `log` validates structured diagnostics, masks values, and writes to the injected
   logger. The host supplies step and task attribution.
 - `regex` implements stateless regular-expression operations.
+- `cli` translates declarative script arguments and flags into native flag
+  definitions. The standalone CLI host parses them using `StandardParser` and
+  `PositionalArgsBuilder`; the binding calls validation and main functions only
+  after parsing succeeds, and skips both for help.
 
 The CLI snapshots its completed command tree through `cmd/internal` and
 `pkg/flags.CommandCatalog`, after custom commands and aliases are registered.

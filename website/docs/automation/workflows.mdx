@@ -1,0 +1,113 @@
+---
+title: Automate with workflows
+sidebar_label: Workflows
+description: Combine Atmos commands, tools, and Atmos Automation Language programs into repeatable runbooks.
+slug: /automation/workflows
+---
+
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+
+<Intro>
+A workflow is a named sequence of tasks your team runs with `atmos workflow`.
+Use workflows when you want to turn a validation, deployment, maintenance, or
+release procedure into a repeatable runbook stored with your project.
+</Intro>
+
+Workflows compose steps that run Atmos commands, external tools, and scripts.
+Add Atmos Automation Language when a step needs decisions, structured data,
+or reusable functions.
+
+## Define and run a workflow
+
+Configure where Atmos finds workflow files:
+
+<File title="atmos.yaml">
+```yaml
+workflows:
+  base_path: workflows
+```
+</File>
+
+Define a workflow with an embedded program:
+
+<File title="workflows/capacity.yaml">
+```yaml
+workflows:
+  capacity:
+    description: Report available worker capacity.
+    steps:
+      - name: report
+        type: script
+        interpreter: starlark
+        script: |
+          replicas = 3
+          workers_per_replica = 4
+          print("Total workers: {}".format(replicas * workers_per_replica))
+```
+</File>
+
+Run the named workflow:
+
+```shell
+atmos workflow capacity -f capacity
+```
+
+The program prints `Total workers: 12`. `capacity` here is a workflow name;
+it does not register an `atmos capacity` subcommand. Use
+[custom commands](/automation/custom-commands) when you want that interface.
+
+## Compose the rest of the process
+
+Add steps before or after the script to run commands, validate results, or report
+progress. Steps run in order by default. Use the available control steps to run
+independent work in parallel or across a matrix.
+
+The [workflow reference](/workflows) covers file discovery and manifest structure.
+The [step reference](/steps) covers step types and execution settings,
+including retries and timeouts.
+
+## Test the workflow
+
+Group script assertions, command checks, and HTTP checks under a `type: test`
+step. Atmos displays their results and shows failing output, so the workflow can
+verify its own results as part of the runbook. A test group can also run in a
+custom command or lifecycle hook.
+
+See [testing automation](/automation/testing) for a complete suite and checks
+written in Atmos Automation Language.
+
+## Share program logic
+
+Move a reusable program into a `.star` file and include it in the script step.
+Use `load()` within that program to share functions with custom commands, hooks,
+or standalone CLI apps. File-backed imports resolve beside the script rather
+than whichever directory invoked the workflow.
+
+See [source files and includes](/steps/type/script#loading-files)
+for inline scripts, included step lists, and path resolution.
+
+## Run parallel functions
+
+Within an Atmos Automation Language program, `steps.task` describes a function
+call and `steps.parallel` runs a collection with a concurrency limit. Task
+results retain input order, and output identifies the task that produced it.
+
+Each task can have its own retry and timeout policy. Retrying runs the entire
+function again; choose operations that are safe to repeat. See the
+[task API](/steps/type/script#parameterized-tasks-retries-and-timeouts)
+for parameterized calls and cancellation behavior.
+
+## Preview and execution environment
+
+Run `atmos workflow capacity -f capacity --dry-run` to validate the script syntax
+without executing its code. Embedded scripts in parallel and matrix children
+also remain unexecuted during a dry run.
+
+An embedded script runs inside Atmos. When a workflow uses containers, set
+`container: false` on its Starlark script steps. External commands started by a
+script still need their tools and credentials available in the execution environment.
+
+Continue with the [language reference](/automation/language), or explore the
+[release-plan walkthrough](/steps/type/script#custom-components)
+for reusable functions and component-aware parallel work.

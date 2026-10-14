@@ -14,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/script"
 )
 
@@ -106,4 +107,48 @@ func TestStandaloneScriptMissingFile(t *testing.T) {
 	require.ErrorIs(t, err, os.ErrNotExist)
 	require.ErrorIs(t, err, errUtils.ErrStarlark)
 	assert.ErrorContains(t, err, "read script")
+}
+
+func TestStandaloneScriptMetricsSummaryOptIn(t *testing.T) {
+	boolPtr := func(b bool) *bool { return &b }
+	for _, tc := range []struct {
+		name     string
+		enabled  *bool
+		expected bool
+	}{
+		{name: "unset is suppressed", enabled: nil, expected: false},
+		{name: "explicit true is preserved", enabled: boolPtr(true), expected: true},
+		{name: "explicit false is preserved", enabled: boolPtr(false), expected: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			config := schema.AtmosConfiguration{}
+			config.Settings.Metrics.Enabled = tc.enabled
+
+			suppressMetricsSummaryByDefault(&config)
+
+			require.NotNil(t, config.Settings.Metrics.Enabled)
+			assert.Equal(t, tc.expected, *config.Settings.Metrics.Enabled)
+		})
+	}
+}
+
+func TestStandaloneScriptAppliesMetricsDefault(t *testing.T) {
+	NewTestKit(t)
+	original := atmosConfig
+	t.Cleanup(func() { atmosConfig = original })
+	atmosConfig.Settings.Metrics.Enabled = nil
+
+	path := filepath.Join(t.TempDir(), "noop.star")
+	require.NoError(t, os.WriteFile(path, []byte(`output = "ok"`), 0o600))
+	command := &cobra.Command{}
+	command.SetContext(context.Background())
+	captureStdoutStderr(t, func() {
+		iolib.Reset()
+		require.NoError(t, iolib.Initialize())
+		data.InitWriter(iolib.GetContext())
+		require.NoError(t, runStandaloneScript(command, &script.File{Path: path}))
+	})
+
+	require.NotNil(t, atmosConfig.Settings.Metrics.Enabled)
+	assert.False(t, *atmosConfig.Settings.Metrics.Enabled)
 }

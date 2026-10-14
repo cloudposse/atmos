@@ -1,0 +1,131 @@
+# Curated, portable regression fixture for the embedded Starlark script interpreter.
+# Scripts are pure Starlark (no subprocess), so every case runs on every OS.
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    command: tofu
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+  app:
+    base_path: "components/app"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{.vars.stage}}"
+
+workflows:
+  base_path: "stacks/workflows"
+
+logs:
+  file: "/dev/stderr"
+  level: Warning
+
+commands:
+  - name: sl
+    description: Starlark regression commands
+    commands:
+      - name: comp
+        description: ctx.component in a component-scoped command
+        arguments:
+          - name: component
+            description: Component name
+            provides: component
+            required: true
+        flags:
+          - name: stack
+            shorthand: s
+            description: Stack name
+            provides: stack
+            required: true
+        component:
+          type: app
+        steps:
+          - name: inspect
+            type: script
+            interpreter: starlark
+            script: |
+              c = ctx.component
+              print("ctx.component: %s" % c)
+              print("name=%s stack=%s type=%s impl=%s" % (c.name, c.stack, c.type, c.implementation))
+              print("vars=" + json.encode(c.vars))
+              print("settings=" + json.encode(c.settings))
+              print("env=" + json.encode(c.env))
+              output = c.vars
+
+      - name: comp-parallel
+        description: ctx.component and components.get in a parallel child of a component-scoped command
+        arguments:
+          - name: component
+            description: Component name
+            provides: component
+            required: true
+        flags:
+          - name: stack
+            shorthand: s
+            description: Stack name
+            provides: stack
+            required: true
+        component:
+          type: app
+        steps:
+          - name: group
+            type: parallel
+            steps:
+              - name: child
+                type: script
+                interpreter: starlark
+                script: |
+                  print("child ctx.component: %s" % ctx.component)
+                  print("child ctx.component.vars: " + json.encode(ctx.component.vars))
+                  print("child components.get vars: " + json.encode(components.get("api", "dev", "app").vars))
+
+  - name: sl-wd
+    description: working_directory in custom commands
+    working_directory: wd
+    steps:
+      - name: group
+        type: parallel
+        steps:
+          - name: child
+            type: script
+            interpreter: starlark
+            working_directory: sub
+            script: |
+              load("lib/mod.star", "where")
+              print("parallel child marker: " + fs.read_file("marker.txt").strip())
+              print("parallel child load: " + where())
+
+  - name: sl-wd-missing
+    description: working_directory that does not exist
+    steps:
+      - name: s
+        type: script
+        interpreter: starlark
+        working_directory: wd/does-not-exist
+        script: |
+          print("must not run")
+
+  - name: sl-inc
+    description: A !include script loads a sibling relative to its own file
+    steps:
+      - name: main
+        type: script
+        interpreter: starlark
+        script: !include scripts/main.star
+
+  - name: sl-inc-parallel
+    description: A parallel child keeps the file its !include script came from
+    steps:
+      - name: group
+        type: parallel
+        steps:
+          - name: child
+            type: script
+            interpreter: starlark
+            script: !include scripts/main.star

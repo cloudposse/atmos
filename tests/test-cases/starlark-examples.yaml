@@ -1,5 +1,72 @@
 # yaml-language-server: $schema=schema.json
 tests:
+  - name: starlark example declared script inputs
+    enabled: true
+    snapshot: false
+    workdir: ../examples/starlark-script
+    command: atmos
+    args: [./capacity.star, api, --replicas, "3"]
+    expect:
+      exit_code: 0
+      stderr:
+        - 'api: 3 replicas x 4 workers = 12 workers'
+
+  - name: starlark example declared script default
+    enabled: true
+    snapshot: false
+    workdir: ../examples/starlark-script
+    command: atmos
+    args: [./capacity.star, api]
+    expect:
+      exit_code: 0
+      stderr:
+        - 'api: 2 replicas x 4 workers = 8 workers'
+
+  - name: starlark example declared script help
+    enabled: true
+    snapshot: false
+    workdir: ../examples/starlark-script
+    command: atmos
+    args: [./capacity.star, --help]
+    expect:
+      exit_code: 0
+      stdout:
+        - 'capacity.star <service>'
+        - '--replicas int'
+
+  - name: starlark example declared script invalid type
+    enabled: true
+    snapshot: false
+    workdir: ../examples/starlark-script
+    command: atmos
+    args: [./capacity.star, api, --replicas, many]
+    expect:
+      exit_code: 1
+      stderr:
+        - 'invalid.*replicas'
+
+  - name: starlark example declared script validation
+    enabled: true
+    snapshot: false
+    workdir: ../examples/starlark-script
+    command: atmos
+    args: [./capacity.star, api, --replicas, "0"]
+    expect:
+      exit_code: 1
+      stderr:
+        - 'replicas must be positive'
+
+  - name: starlark example declared script separator
+    enabled: true
+    snapshot: false
+    workdir: ../examples/starlark-script
+    command: atmos
+    args: [./capacity.star, --, --config]
+    expect:
+      exit_code: 0
+      stderr:
+        - '--config: 2 replicas x 4 workers = 8 workers'
+
   - name: starlark example standalone script
     enabled: true
     snapshot: false
@@ -9,7 +76,7 @@ tests:
     args: [./summarize.star, services.json]
     expect:
       exit_code: 0
-      stdout:
+      stderr:
         - 'api: 2 replicas'
         - 'worker: 3 replicas'
         - 'Total: 2 services, 5 replicas'
@@ -33,7 +100,7 @@ tests:
     args: [capacity, --replicas, "3"]
     expect:
       exit_code: 0
-      stdout:
+      stderr:
         - '3 replicas x 4 workers = 12 workers'
 
   - name: starlark example custom command default
@@ -44,7 +111,7 @@ tests:
     args: [capacity]
     expect:
       exit_code: 0
-      stdout:
+      stderr:
         - '2 replicas x 4 workers = 8 workers'
 
   - name: starlark example custom command rejects zero

@@ -1,0 +1,106 @@
+---
+title: Custom CLI Apps
+sidebar_label: Custom CLI Apps
+description: Build executable tools with Atmos Automation Language, including arguments, typed flags, validation, and generated help.
+id: standalone-cli-apps
+slug: /automation/standalone-cli-apps
+---
+
+import Intro from '@site/src/components/Intro'
+import EmbedFile from '@site/src/components/EmbedFile'
+import CastEmbed from '@site/src/components/CastEmbed'
+
+<Intro>
+A custom CLI app is an executable program built with Atmos Automation Language.
+Use custom CLI apps when you want to give your team a tool with its own arguments,
+flags, validation, and help. Atmos supplies the interpreter and built-in helpers;
+your program supplies the behavior.
+</Intro>
+
+A custom CLI app is an executable such as `./capacity.star`. Its interface
+lives in the script, declared with `cli.command`. It does not need a custom-command
+entry in `atmos.yaml`. To add a subcommand such as `atmos capacity` instead, use
+[custom commands](/automation/custom-commands).
+
+Write the program in Atmos Automation Language: a Python-like language built on
+Starlark and embedded in Atmos. A `.star` file with `#!/usr/bin/env atmos` on its
+first line runs using the Atmos executable on your `PATH`.
+
+## Start with an executable script
+
+A small program can read its positional inputs from `ctx.args`. This tested
+example reads a JSON service manifest and calculates replica totals using the
+built-in `fs` and `json` helpers:
+
+<EmbedFile filePath="examples/starlark-script/summarize.star" language="python" />
+
+Use the example's [service manifest](/examples/starlark-script), then run from
+the directory containing both files:
+
+```shell
+chmod +x summarize.star
+./summarize.star services.json
+```
+
+```text
+▶ api: 2 replicas
+▶ worker: 3 replicas
+✓ Total: 2 services, 5 replicas
+```
+
+`ui.info` reports each service; `ui.success` highlights the total. These styled
+messages use stderr, leaving stdout available for data.
+
+On systems without shebang support, run `atmos ./summarize.star services.json`.
+Input paths passed to `fs.read_file` are relative to your working directory.
+
+<CastEmbed src="/casts/examples/starlark-script/summarize.cast" title="Custom CLI app: ./summarize.star services.json" chrome controls scrubber />
+
+## Declare arguments, flags, and help
+
+When a tool needs a documented interface, declare it with `cli.command`.
+`cli.arg` defines a positional argument; `cli.flag` defines a named option.
+Atmos parses those inputs before calling your program:
+
+<EmbedFile filePath="examples/starlark-script/capacity.star" language="python" />
+
+Save this example as `capacity.star`, make it executable, and run:
+
+```shell
+chmod +x capacity.star
+./capacity.star api --replicas 3
+```
+
+```text
+✓ api: 3 replicas x 4 workers = 12 workers
+```
+
+Omitting `--replicas` uses the declared default of two. `--replicas many` fails
+integer parsing. `--replicas 0` parses as an integer but fails the program's
+positive-count validation.
+
+Run `./capacity.star --help` to see the required service argument, replica flag,
+and default. Help runs neither the validation callback nor `main`.
+
+## Work with parsed inputs
+
+The `run` and optional `validate` callbacks receive `args` and `flags`
+dictionaries. In this example, `args["service"]` is a string and
+`flags["replicas"]` is already an integer. Use these values directly in your
+program; there is no environment-variable mapping to maintain.
+
+Flags can declare defaults, choices, and environment bindings. Use a validation
+callback for rules beyond a flag's type, such as a positive count or a relationship
+between two inputs. Keep the work itself in the `run` callback so help and invalid
+invocations do not start it.
+
+## Continue building
+
+Read the [command declaration reference](/steps/type/script#declaring-a-standalone-command)
+for supported flag types and parsing rules, and the
+[language reference](/automation/language) for helpers,
+module loading, processes, and parallel tasks.
+
+Browse the [complete runnable example](/examples/starlark-script) for both scripts
+and their input data. To expose your automation under the Atmos CLI itself,
+continue with [custom commands](/automation/custom-commands).

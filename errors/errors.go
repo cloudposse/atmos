@@ -19,6 +19,8 @@ var (
 	ErrStarlarkProcessFailed = errors.New("starlark process failed")
 	// ErrStarlarkOutputEncode identifies a top-level Starlark `output` value that cannot be encoded.
 	ErrStarlarkOutputEncode = errors.New("starlark output encoding failed")
+	// ErrStarlarkRecursionLimit identifies a Starlark call stack that exceeded the maximum recursion depth.
+	ErrStarlarkRecursionLimit = errors.New("starlark recursion depth exceeded")
 )
 
 const (

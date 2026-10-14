@@ -11,6 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/script"
+	"github.com/cloudposse/atmos/pkg/script/starlark/internal/convert"
 )
 
 // componentContext installs ctx. A hook's component is a pre-resolved snapshot and is built
@@ -28,9 +29,18 @@ func (s *session) componentContext(thread *starlark.Thread) error {
 	}
 	hook, operation := hookValues(s.spec.Hook)
 	args, file := fileContext(s.spec.File)
+	flags, err := convert.Dictionary(s.spec.Flags)
+	if err != nil {
+		return err
+	}
+	arguments, err := convert.Dictionary(s.spec.Arguments)
+	if err != nil {
+		return err
+	}
 	s.globals["ctx"] = starlarkstruct.FromStringDict(starlark.String("ctx"), starlark.StringDict{
 		"component": selected, "hook": hook, "operation": operation,
 		"args": args, "script": file,
+		"flags": flags, "arguments": arguments,
 	})
 	return nil
 }

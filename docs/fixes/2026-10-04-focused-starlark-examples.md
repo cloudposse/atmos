@@ -18,8 +18,8 @@ style. This was a documentation and discoverability gap, not a runtime defect.
 ## Changes
 
 - `examples/starlark-script` reads a JSON manifest with an executable `.star` file.
-- `examples/starlark-commands` calculates capacity from a named flag, passed through
-  the environment rather than interpolated into script source.
+- `examples/starlark-commands` calculates capacity from a named flag, read directly
+  through `ctx.flags` without an environment mapping or source interpolation.
 - `examples/starlark-hooks` checks resolved ownership before a real Terraform plan.
   Its provider-free module needs no cloud credentials. A second stack clears the
   owner and demonstrates the hook blocking execution.

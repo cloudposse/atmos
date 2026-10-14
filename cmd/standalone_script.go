@@ -12,6 +12,7 @@ import (
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	runnerstep "github.com/cloudposse/atmos/pkg/runner/step"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/script"
 )
 
@@ -38,6 +39,18 @@ func prepareStandaloneScript() (func(), error) {
 	}, nil
 }
 
+// suppressMetricsSummaryByDefault turns the local resource-usage summary off for
+// standalone scripts unless the user explicitly set settings.metrics.enabled.
+// A script is the user's own CLI tool, so Atmos-internal telemetry such as the
+// final "Total for this invocation" line must be opt-in there. An explicit true
+// or false is preserved; every other Atmos command keeps the default of enabled.
+func suppressMetricsSummaryByDefault(config *schema.AtmosConfiguration) {
+	if config.Settings.Metrics.Enabled == nil {
+		disabled := false
+		config.Settings.Metrics.Enabled = &disabled
+	}
+}
+
 func runStandaloneScript(cmd *cobra.Command, file *script.File) error {
 	source, err := os.ReadFile(file.Path) //nolint:gosec // Standalone scripts intentionally accept user-selected file paths, including outside cwd.
 	if err != nil {
@@ -47,6 +60,7 @@ func runStandaloneScript(cmd *cobra.Command, file *script.File) error {
 	if !ok {
 		return fmt.Errorf("%w: embedded interpreter is unavailable", errUtils.ErrStarlark)
 	}
+	suppressMetricsSummaryByDefault(&atmosConfig)
 	processEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
 	vars := runnerstep.NewVariables()
 	vars.SetAtmosConfig(&atmosConfig)
@@ -54,6 +68,7 @@ func runStandaloneScript(cmd *cobra.Command, file *script.File) error {
 	streams := iolib.GetContext()
 	result, err := engine.Execute(cmd.Context(), script.Spec{
 		InstallTools: runnerstep.ScriptToolInstaller(&atmosConfig),
+		ParseCommand: standaloneCommandParser(file, streams.Data()),
 		Name:         file.Path, Source: string(source), File: file,
 		ProcessEnv: processEnv,
 		Stdout:     streams.Data(), Stderr: streams.UI(),

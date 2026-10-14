@@ -82,3 +82,66 @@ steps:
 	require.NoError(t, err, output)
 	assert.Equal(t, 1, result.Metadata["passed"])
 }
+
+func TestControlStarlarkRetainsParsedInputs(t *testing.T) {
+	initControlTestIO(t)
+	for _, kind := range []string{schema.TaskTypeParallel, schema.TaskTypeMatrix} {
+		t.Run(kind, func(t *testing.T) {
+			vars := stepPkg.NewVariables()
+			vars.SetTemplateData(map[string]any{
+				"Flags":     map[string]any{"enabled": true, "literal": "{{ .Env.NOT_DEFINED }}"},
+				"Arguments": map[string]string{"service": "api"},
+			})
+			parent := &schema.WorkflowStep{
+				Name: "group", Type: kind, Output: ControlOutputNone,
+				Steps: []schema.WorkflowStep{{
+					Name: "inspect", Type: schema.TaskTypeScript, Interpreter: "starlark", Script: `
+if ctx.flags["enabled"] != True or ctx.arguments["service"] != "api":
+    fail("parsed inputs were not inherited")
+output = ctx.flags["literal"]`,
+				}},
+			}
+			if kind == schema.TaskTypeMatrix {
+				parent.Matrix = map[string][]string{"region": {"east", "west"}}
+			}
+			handler, ok := stepPkg.Get(kind)
+			require.True(t, ok)
+			_, err := handler.Execute(t.Context(), parent, vars)
+			require.NoError(t, err)
+			expected := 1
+			if kind == schema.TaskTypeMatrix {
+				expected = 2
+			}
+			require.Len(t, vars.Steps, expected)
+			for _, result := range vars.Steps {
+				assert.Equal(t, "{{ .Env.NOT_DEFINED }}", result.Value)
+			}
+		})
+	}
+}
+
+func TestTestRunnerStarlarkRetainsParsedInputs(t *testing.T) {
+	initControlTestIO(t)
+	vars := stepPkg.NewVariables()
+	vars.SetTemplateData(map[string]any{
+		"Flags":     map[string]any{"enabled": true},
+		"Arguments": map[string]string{"service": "api"},
+	})
+	check := schema.WorkflowStep{Name: "inspect", Type: schema.TaskTypeScript, Interpreter: "starlark", Script: `
+if ctx.flags["enabled"] != True or ctx.arguments["service"] != "api":
+    fail("parsed inputs were not inherited")
+output = ctx.arguments["service"]`}
+	parent := &schema.WorkflowStep{Name: "suite", Type: schema.TaskTypeTest, Steps: []schema.WorkflowStep{
+		check,
+		{Name: "parallel", Type: schema.TaskTypeParallel, Steps: []schema.WorkflowStep{check}},
+		{Name: "matrix", Type: schema.TaskTypeMatrix, Matrix: map[string][]string{"region": {"east", "west"}}, Steps: []schema.WorkflowStep{check}},
+	}}
+	handler, ok := stepPkg.Get(schema.TaskTypeTest)
+	require.True(t, ok)
+	result, err := handler.Execute(t.Context(), parent, vars)
+	require.NoError(t, err)
+	assert.Equal(t, 4, result.Metadata["passed"])
+	assert.Equal(t, true, vars.ScriptFlags()["enabled"])
+	assert.Equal(t, "api", vars.ScriptArguments()["service"])
+	assert.NotContains(t, vars.TemplateData(), "matrix")
+}

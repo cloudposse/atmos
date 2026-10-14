@@ -1,0 +1,108 @@
+---
+slug: atmos-interpreter
+title: "Build Custom CLI Apps with the Atmos Interpreter"
+authors: [osterman]
+tags: [feature]
+cast: "/casts/examples/starlark-script/summarize.cast"
+castTitle: "Custom CLI app with styled Atmos output"
+---
+
+Automation tools need more than a script: they need inputs, useful help, clear
+output, and a runtime your team can use locally and in CI. Atmos is now an
+interpreter for [custom CLI apps](/automation/standalone-cli-apps). Build
+executable tools for CI, CD, validation, reporting, and other repeatable work
+using [Atmos Automation Language](/automation/language), a Python-like language
+powered by Starlark.
+
+<!--truncate-->
+
+import CastEmbed from '@site/src/components/CastEmbed'
+import EmbedFile from '@site/src/components/EmbedFile'
+
+## The Problem
+
+A small automation task can grow into a tool that several people and pipelines
+rely on. It needs argument parsing, validation, generated help, and useful
+status messages. Keeping that behavior consistent across scripts takes work,
+especially when every script chooses its own libraries and runtime setup.
+
+## The Fix
+
+Atmos supplies the interpreter and automation helpers. Use custom CLI apps when
+you want to give your team an executable tool with its own arguments, flags,
+validation, and help. Put `#!/usr/bin/env atmos` at the top of a `.star` file,
+make it executable, and run it directly.
+
+Your app can read files and structured data, invoke processes, call Atmos,
+and run independent tasks in parallel. Use it for a release check, a CI report,
+an inventory tool, or another process your team repeats. Apps can start small
+and share reusable functions as they grow.
+
+### Why build on Starlark?
+
+Small CLI apps benefit from a small language: fewer features to learn, familiar
+Python-like syntax, and functions and structured values for reusable logic.
+Starlark gives teams a common automation language across projects, with the
+interpreter and built-in helpers already included in Atmos. Your application's
+implementation language remains your choice.
+
+Read [why Atmos uses Starlark](/automation/language#why-starlark) for how its
+focused design supports reviewable, testable automation.
+
+## How to Use It
+
+### Run your first app
+
+This app reads a JSON service manifest, reports each service with `ui.info`,
+and highlights the total with `ui.success`. Atmos provides the interpreter,
+file access, JSON decoding, and styled output:
+
+<CastEmbed src="/casts/examples/starlark-script/summarize.cast" title="Custom CLI app: ./summarize.star services.json" chrome controls scrubber />
+
+[View the full example](/examples/starlark-script)
+
+Run it with Atmos on your `PATH`:
+
+```shell
+chmod +x summarize.star
+./summarize.star services.json
+```
+
+On systems without shebang support, use `atmos ./summarize.star services.json`.
+
+### Give the app an interface
+
+Declare arguments and flags with [`cli.command`](/steps/type/script#declaring-a-standalone-command),
+then put the work in a main callback. This app accepts a service name and a typed
+replica count, checks the count, and reports the result:
+
+<EmbedFile filePath="examples/starlark-script/capacity.star" language="python" />
+
+Save it as `capacity.star` and run:
+
+```shell
+chmod +x capacity.star
+./capacity.star api --replicas 3
+./capacity.star --help
+```
+
+Atmos parses inputs and validates them before calling `main`. Help shows the
+app's declared interface without running its validation or main callbacks.
+Invalid input fails before the app starts its work.
+
+### Use it locally and in CI
+
+Commit the app with your project and invoke the same file in your terminal and
+pipeline. Keep the CI or CD process's reusable logic in the app, and let the CI
+system control its triggers and approvals. Tools and credentials used by the
+app's subprocesses must be available in that environment.
+
+Use [`ui` for progress and `log` for diagnostics](/automation/language#data-status-and-diagnostics).
+UI messages go to stderr, leaving stdout available for data consumed by another
+process. Test your automation with [script checks and test steps](/automation/testing).
+
+## Get Involved
+
+Build your first tool with the [Custom CLI Apps guide](/automation/standalone-cli-apps).
+For embedding the same language in Atmos custom commands, workflows, and hooks,
+see [Introducing Atmos Automation Language](/changelog/starlark-custom-commands).

@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/script"
+	climodule "github.com/cloudposse/atmos/pkg/script/starlark/stdlib/cli"
 	regexmodule "github.com/cloudposse/atmos/pkg/script/starlark/stdlib/regex"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -236,6 +237,7 @@ func (s *session) thread(ctx context.Context, name string, out *taskOutput) (*st
 	t := &starlark.Thread{Name: name, Load: s.load, Print: func(t *starlark.Thread, msg string) {
 		_, _ = fmt.Fprintln(s.writer(t, stdoutStream), msg)
 	}}
+	limitRecursion(t)
 	t.SetLocal(contextKey, ctx)
 	if out != nil {
 		t.SetLocal(outputKey, out)
@@ -261,6 +263,12 @@ func stringDict(values map[string]string) *starlark.Dict {
 
 func (s *session) predeclared() starlark.StringDict {
 	return starlark.StringDict{
+		"cli": climodule.New(func(t *starlark.Thread, command script.CommandSpec) (script.CommandInput, error) {
+			if s.spec.ParseCommand == nil || t.Local(outputKey) != nil {
+				return script.CommandInput{}, fail(errUtils.ErrStarlarkInvalidArgument, "cli.command is available only in a standalone script's main thread")
+			}
+			return s.spec.ParseCommand(threadContext(t), command)
+		}),
 		"dependencies": module("dependencies", starlark.StringDict{"tools": starlark.NewBuiltin("dependencies.tools", s.installTools)}),
 		"atmos":        s.atmosModule(),
 		"components":   module("components", starlark.StringDict{"get": starlark.NewBuiltin("components.get", s.getComponent)}),

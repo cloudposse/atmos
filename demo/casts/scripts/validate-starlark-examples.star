@@ -15,18 +15,24 @@ def validate(name, filename, needles, expected_error=False):
             fail("{} cast contains {!r}".format(name, bad))
     return text, plain
 
-validate("starlark-script", "summarize", [
+app_text, app_plain = validate("starlark-script", "summarize", [
     "#!/usr/bin/env atmos",
     "./summarize.star services.json",
     "api: 2 replicas",
     "worker: 3 replicas",
     "Total: 2 services, 5 replicas",
 ])
-validate("starlark-commands", "capacity", [
+assert_colored(app_text, "Total: 2 services, 5 replicas")
+command_text, command_plain = validate("starlark-commands", "capacity", [
+    "cat atmos.yaml",
+    "commands:",
+    "ui.success(",
     "interpreter: starlark",
+    'ctx.flags["replicas"]',
     "atmos capacity --replicas 3",
     "3 replicas x 4 workers = 12 workers",
 ])
+assert_colored(command_text, "3 replicas x 4 workers = 12 workers")
 hook_text, hook_plain = validate("starlark-hooks", "owner-check", [
     "atmos terraform plan api -s dev",
     "Owner check passed: api belongs to platform (dev).",

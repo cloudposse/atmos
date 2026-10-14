@@ -234,7 +234,7 @@ func TestScriptHandlerExecuteDefaultsOutputModeWhenUnset(t *testing.T) {
 	require.True(t, ok)
 
 	// No Output field set and no workflow passed, so execute() must fall
-	// back to OutputModeLog via `if mode == "" { mode = OutputModeLog }`.
+	// back to the command-step default (raw output, no labels).
 	step := &schema.WorkflowStep{
 		Name:        "test_default_mode",
 		Type:        schema.TaskTypeScript,
