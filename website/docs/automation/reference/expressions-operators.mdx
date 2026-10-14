@@ -2,17 +2,15 @@
 title: Expressions and Operators
 sidebar_label: Expressions and Operators
 sidebar_position: 3
-slug: /automation/reference/expressions-operators
+slug: /scripting/reference/expressions-operators
 description: Arithmetic, comparison, membership, boolean, and bitwise operators, conditional expressions, string formatting, indexing, slicing, comprehensions, lambda, and operator precedence in the Atmos Automation Language.
 ---
 
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-An expression computes a value. This page covers the operators, conditional
-expressions, string formatting, indexing and slicing, comprehensions, function
-calls, and lambda expressions that the Atmos Automation Language provides, and how
-they group when combined.
+An expression computes a value. Operators combine values; indexing, calls,
+and comprehensions produce new ones. This page covers their syntax and precedence.
 </Intro>
 
 ## Arithmetic
@@ -67,7 +65,7 @@ print(1 << 10, 1024 >> 3)    # 1024 128
 ```
 
 Applied to dictionaries and sets, `|` also merges and unions; see
-[Data Types](/automation/reference/data-types).
+[Data Types](/scripting/reference/data-types).
 
 ## Comparison
 
@@ -109,7 +107,7 @@ print("x" not in ["a", "b"])       # True
 ## Boolean operators
 
 The `and`, `or`, and `not` operators accept any value, using the
-[truthiness rules](/automation/reference/data-types#truthiness). The binary
+[truthiness rules](/scripting/reference/data-types#truthiness). The binary
 operators short-circuit and return one of their operands rather than
 a plain boolean:
 
@@ -239,7 +237,7 @@ print("hello"[1:4])    # ell
 
 Assignment through an index, `items[i] = value` or `d[key] = value`, works on
 lists and dictionaries. Slice assignment is not available; build a new list
-with concatenation instead. See [Statements](/automation/reference/statements#assignment).
+with concatenation instead. See [Statements](/scripting/reference/statements#assignment).
 
 ## Attribute access and calls
 
@@ -265,7 +263,7 @@ print(deploy(*args, **options))             # api in us-east-1 x3
 In a call, write positional arguments first, then keyword arguments, then
 `*` and `**` expansions. A positional argument after `*args` is a syntax error.
 Supplying the same parameter twice, an unknown keyword, or too few or too many
-arguments is an error. See [Statements](/automation/reference/statements#function-definitions)
+arguments is an error. See [Statements](/scripting/reference/statements#function-definitions)
 for how parameters are declared.
 
 ## Comprehensions
@@ -360,7 +358,7 @@ When in doubt, add parentheses.
 
 ## Next steps
 
-- [Data Types](/automation/reference/data-types): the values operators act on.
-- [Statements](/automation/reference/statements): assignment, functions, and control flow.
-- [Built-in Functions](/automation/reference/builtin-functions): `len`, `sorted`, `any`, `all`, and more.
-- [Methods](/automation/reference/methods): string, list, and dictionary methods.
+- [Data Types](/scripting/reference/data-types): the values operators act on.
+- [Statements](/scripting/reference/statements): assignment, functions, and control flow.
+- [Built-in Functions](/scripting/reference/builtin-functions): `len`, `sorted`, `any`, `all`, and more.
+- [Methods](/scripting/reference/methods): string, list, and dictionary methods.

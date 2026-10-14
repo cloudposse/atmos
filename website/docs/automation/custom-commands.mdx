@@ -3,7 +3,7 @@ title: Custom Commands
 sidebar_label: Custom Commands
 description: Extend Atmos with project-specific subcommands whose arguments, flags, defaults, and help are defined in YAML.
 id: custom-commands
-slug: /automation/custom-commands
+slug: /scripting/custom-commands
 ---
 
 import Intro from '@site/src/components/Intro'
@@ -11,34 +11,105 @@ import EmbedFile from '@site/src/components/EmbedFile'
 import CastEmbed from '@site/src/components/CastEmbed'
 
 <Intro>
-Add a subcommand such as `atmos capacity` by defining it in `atmos.yaml`.
-YAML declares its arguments, flags, help, and steps. Atmos loads the command
-when you run it from your project.
+A custom command adds a project-specific subcommand to Atmos. Define its name,
+arguments, flags, and steps in `atmos.yaml`, then run it as `atmos <name>`.
 </Intro>
 
-Give your team a command for a task it repeats: checking a deployment, reporting
-capacity, or preparing a release. Declare the inputs and defaults once in YAML;
-Atmos provides parsing and help, while your script implements the work. The
-command lives with your project and runs the same way locally and in CI.
+Use custom commands for tasks such as validation, deployment, or reporting.
+They can run Atmos commands, shell commands, and scripts, locally or in CI.
+Commands can also have nested subcommands or bind to a component.
 
-Install Atmos and put it on your `PATH`. This example needs no stacks,
-components, or external tools.
+## Command syntax
 
-## Define your subcommand
+Declare commands under the top-level `commands` list:
+
+```yaml title="atmos.yaml"
+commands:
+  - name: greet
+    description: Print a greeting
+    arguments:
+      - name: name
+        required: true
+    flags:
+      - name: greeting
+        type: string
+        default: Hello
+    steps:
+      - type: script
+        interpreter: starlark
+        script: |
+          ui.success("{}, {}!".format(ctx.flags["greeting"], ctx.arguments["name"]))
+```
+
+Run `atmos greet world --greeting Hi` from the project directory.
+`atmos greet --help` lists the argument and flag without running the steps.
+
+| Field | Purpose |
+| --- | --- |
+| `name` | Subcommand name used after `atmos` |
+| `arguments` | Positional inputs, with required values or defaults |
+| `flags` | Named options, with types, defaults, and help |
+| `steps` | Tasks to execute in order |
+| `commands` | Nested subcommands |
+| `component` | Component and stack context for the command |
+
+Use `type: script` with `interpreter: starlark` for a Starlark step. The
+interpreter ships with Atmos. External commands still need their own tools and
+credentials. See the [configuration reference](/cli/configuration/commands)
+for the full schema.
+
+## Use inputs in your program
+
+Script steps read parsed flags from `ctx.flags` and named positional arguments
+from `ctx.arguments`. These mappings are read-only, and values stay data rather
+than being inserted into the program's source.
+
+For a flag declared with `type: int`, Atmos rejects a value such as
+`--replicas=many` with a usage error before the script runs, and `ctx.flags["replicas"]`
+arrives as an integer. Boolean and string flags likewise keep their declared types.
+
+An `int` flag reads base-10 digits only, so `--replicas=010` is 10 and `--replicas=0x10` is
+rejected. The `default` of a flag must match its `type`: an unquoted `2` on a `type: string`
+flag, or `"true"` in quotes on a `type: bool` flag, makes that command unusable. Atmos prints a
+warning that names the flag, keeps every other command working, and reports the same error when
+you run the broken command.
+
+An argument with neither `required:` nor `default:` is required. Write `required: false` to make
+it optional. An optional argument (`required: false`, no `default`) that the caller omits is an
+empty string in `ctx.arguments`, so test it with `if ctx.arguments["region"]:`. See
+[flags](/cli/configuration/commands/flags#integer-flags) and
+[optional arguments](/cli/configuration/commands/arguments#optional-arguments).
+
+## Grow the command
+
+Custom commands can have multiple steps, named arguments, nested subcommands,
+and component context. Define the arguments and flags, then add the steps.
+Move shared logic into `.star` files when
+several commands need the same behavior.
+
+See the [custom command configuration reference](/cli/configuration/commands)
+for the full YAML schema and the
+[language overview](/scripting/language) for language
+helpers and execution controls. The
+[complete runnable example](/examples/starlark-commands) contains the configuration
+used throughout this guide.
+
+## Example: report worker capacity
+
+This example calculates worker capacity from a replica count. It requires Atmos
+on your `PATH`, with no stacks, components, or external tools.
+
+### Define your subcommand
 
 Save this configuration as `atmos.yaml`:
 
 <EmbedFile filePath="examples/starlark-commands/atmos.yaml" />
 
 The YAML defines the command name, description, `--replicas` flag, default, and
-step to run. The embedded Atmos Automation Language program implements the
+step to run. The script implements the
 calculation and checks that the replica count is positive.
 
-The step selects the Atmos Automation Language, a Python-like language based on
-Starlark, with `type: script` and `interpreter: starlark`. The interpreter ships
-with Atmos, so this command needs no separate language runtime.
-
-## Run the command
+### Run the command
 
 Run from the directory containing `atmos.yaml`:
 
@@ -73,43 +144,6 @@ A flag declared as a string shows its default quoted, as in `--replicas string  
 
 <CastEmbed src="/casts/examples/starlark-commands/capacity.cast" title="Custom command: atmos capacity --replicas 3" chrome controls scrubber />
 
-## Use inputs in your program
 
-Script steps read parsed flags from `ctx.flags` and named positional arguments
-from `ctx.arguments`. These mappings are read-only, and values stay data rather
-than being inserted into the program's source.
-
-The example declares `replicas` with `type: int`, so Atmos rejects a value such as
-`--replicas=many` with a usage error before the script runs, and `ctx.flags["replicas"]`
-arrives as an integer that needs no conversion. A boolean flag arrives as a boolean, and a
-`type: string` flag arrives as a string that you convert with `int()` before calculating. The
-step calls `fail("replicas must be positive")` for zero or negative counts, stopping the
-command with that error.
-
-Try `atmos capacity --replicas 0` to see the validation error.
-
-An `int` flag reads base-10 digits only, so `--replicas=010` is 10 and `--replicas=0x10` is
-rejected. The `default` of a flag must match its `type`: an unquoted `2` on a `type: string`
-flag, or `"true"` in quotes on a `type: bool` flag, makes that command unusable. Atmos prints a
-warning that names the flag, keeps every other command working, and reports the same error when
-you run the broken command.
-
-An argument with neither `required:` nor `default:` is required. Write `required: false` to make
-it optional. An optional argument (`required: false`, no `default`) that the caller omits is an
-empty string in `ctx.arguments`, so test it with `if ctx.arguments["region"]:`. See
-[flags](/cli/configuration/commands/flags#integer-flags) and
-[optional arguments](/cli/configuration/commands/arguments#optional-arguments).
-
-## Grow the command
-
-Custom commands can have multiple steps, named arguments, nested subcommands,
-and component context. Start with the interface your team needs, then compose
-the operations behind it. Move shared program logic into `.star` files when
-several commands need the same behavior.
-
-See the [custom command configuration reference](/cli/configuration/commands)
-for the full YAML schema and the
-[language overview](/automation/language) for language
-helpers and execution controls. The
-[complete runnable example](/examples/starlark-commands) contains the configuration
-used throughout this guide.
+Run `atmos capacity --replicas 0` to see the validation error. The script calls
+`fail("replicas must be positive")`, stopping the command.
