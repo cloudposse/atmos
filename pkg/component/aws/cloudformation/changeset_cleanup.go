@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/smithy-go"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
@@ -23,10 +24,7 @@ func discardChangeSet(ctx context.Context, client CloudFormationClient, stackNam
 	}
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), changeSetCleanupTimeout)
 	defer cancel()
-	_, err := client.DeleteChangeSet(cleanupCtx, &cloudformation.DeleteChangeSetInput{
-		StackName: awsString(stackName), ChangeSetName: awsString(result.ChangeSetName),
-	})
-	if err != nil {
+	if err := deleteChangeSetWhenReady(cleanupCtx, client, stackName, result.ChangeSetName); err != nil {
 		return fmt.Errorf("%w: clean up changeset %q: %w", errUtils.ErrAwsCloudFormationChangeSetFailed, result.ChangeSetName, err)
 	}
 	if !result.StackStub {
@@ -37,6 +35,56 @@ func discardChangeSet(ctx context.Context, client CloudFormationClient, stackNam
 		stackName = result.StackID
 	}
 	return removeStubStack(cleanupCtx, client, stackName)
+}
+
+// deleteChangeSetWhenReady waits out creation only after AWS rejects deletion for its status.
+// All attempts share the cleanup deadline; other API errors remain terminal.
+func deleteChangeSetWhenReady(ctx context.Context, client CloudFormationClient, stackName, name string) error {
+	var deleteErr error
+	creating := false
+	for {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(deleteErr, err)
+		}
+		if !creating {
+			_, deleteErr = client.DeleteChangeSet(ctx, &cloudformation.DeleteChangeSetInput{
+				StackName: awsString(stackName), ChangeSetName: awsString(name),
+			})
+			var apiErr smithy.APIError
+			if !errors.As(deleteErr, &apiErr) || apiErr.ErrorCode() != "InvalidChangeSetStatus" {
+				return deleteErr
+			}
+		}
+		state, err := client.DescribeChangeSet(ctx, &cloudformation.DescribeChangeSetInput{
+			StackName: awsString(stackName), ChangeSetName: awsString(name),
+		})
+		if err != nil {
+			return errors.Join(deleteErr, err)
+		}
+		var retry bool
+		creating, retry = changeSetCleanupStatus(state.Status)
+		if !retry {
+			return deleteErr
+		}
+		// Also delay repeated rejections of a ready change set, avoiding a tight API loop.
+		select {
+		case <-ctx.Done():
+			return errors.Join(deleteErr, ctx.Err())
+		case <-time.After(changeSetPollInterval):
+		}
+	}
+}
+
+// changeSetCleanupStatus permits a retry after creation; other states retain AWS's rejection.
+func changeSetCleanupStatus(status cfntypes.ChangeSetStatus) (creating, retry bool) {
+	switch status {
+	case cfntypes.ChangeSetStatusCreatePending, cfntypes.ChangeSetStatusCreateInProgress:
+		return true, true
+	case cfntypes.ChangeSetStatusCreateComplete, cfntypes.ChangeSetStatusFailed:
+		return false, true
+	default:
+		return false, false
+	}
 }
 
 // removeStubStack only deletes an owned stack while it is still empty and unexecuted.
