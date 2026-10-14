@@ -43,7 +43,7 @@ type project struct {
 	config      map[string]any
 	complete    bool
 	configCount int
-	// limits record why repairs are blocked. complete only says whether every input was captured.
+	// limits record why repairs are blocked. complete says whether every input the stack validator reads was captured.
 	limits []limit
 	// profiles are the active profiles: those selected with --profile or ATMOS_PROFILE, or else
 	// the profiles.default value of the base configuration, exactly as the loader chooses them.
@@ -306,8 +306,9 @@ func (e *Engine) readDocument(p *project, o *Options, r *Report, path, kind stri
 	}
 	d.sites = dynamicSites(d.node, p.templateMarkers(d))
 	if len(d.sites) > 0 {
-		// Dynamic values only block the repairs that read them; see blocker.
-		p.complete = false
+		// Dynamic values only block the repairs that read them; see blocker. They limit stack
+		// validation only when the validator reads this document.
+		p.markIncomplete(kind)
 	}
 	p.docs = append(p.docs, d)
 	p.byPath[path] = d

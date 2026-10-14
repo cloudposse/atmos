@@ -292,3 +292,46 @@ func TestStackValidationWithProductionInheritance(t *testing.T) {
 		})
 	}
 }
+
+// Stack validation reads only stack and configuration documents, so dynamic values elsewhere, such
+// as a templated vendor ref or a workflow expression that starts with "!", must not switch it off.
+// A dynamic value inside a stack still does.
+func TestStackValidationIgnoresDynamicValuesItDoesNotRead(t *testing.T) {
+	const stack = "vars:\n  stage: dev\ncomponents:\n  terraform:\n    app:\n      vars:\n        region: us-east-1\n"
+	for _, tc := range []struct {
+		name       string
+		files      map[string]string
+		wantStatus string
+		wantCalls  int
+	}{
+		{
+			name: "templated vendor ref and workflow expression",
+			files: map[string]string{
+				"stacks/dev.yaml":           stack,
+				"vendor.yaml":               "spec:\n  sources:\n    - component: vpc\n      source: \"github.com/example/repo.git?ref={{.Version}}\"\n      version: 1.0.0\n",
+				".github/workflows/ci.yaml": "on: push\njobs:\n  x:\n    if: '!cancelled()'\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ok\n",
+			},
+			wantStatus: statusPassed,
+			wantCalls:  1,
+		},
+		{
+			name:       "templated stack value",
+			files:      map[string]string{"stacks/dev.yaml": stack + "        name: \"{{ .vars.stage }}\"\n"},
+			wantStatus: "incomplete",
+			wantCalls:  0,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := newProject(t)
+			projectFile(t, root, "atmos.yaml", "stacks:\n  base_path: stacks\n  included_paths: [\"**/*\"]\n")
+			for path, content := range tc.files {
+				projectFile(t, root, path, content)
+			}
+			v := &vtStackValidator{}
+			r, err := vtStacksEngine(t, v).Run(context.Background(), Options{Root: root, Offline: true, Only: []string{ruleStacks}})
+			require.NoError(t, err)
+			require.Equal(t, tc.wantStatus, vtCheckByID(t, &r, ruleStacks).Status)
+			require.Equal(t, tc.wantCalls, v.calls)
+		})
+	}
+}

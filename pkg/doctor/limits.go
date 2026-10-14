@@ -46,7 +46,16 @@ func (p *project) limitKind(kind, file string, line int, reason string) {
 		p.limit(limitConfig, file, line, reason)
 		return
 	}
-	p.complete = false
+	p.markIncomplete(kind)
+}
+
+// markIncomplete records that an input of this kind could not be captured. Only the stack and
+// configuration documents the stack validator reads limit it; a templated vendor source or a
+// workflow expression must not switch off stack validation for the whole project.
+func (p *project) markIncomplete(kind string) {
+	if kind == documentStack || kind == documentConfig {
+		p.complete = false
+	}
 }
 
 // describe renders the limit with the input that causes it.

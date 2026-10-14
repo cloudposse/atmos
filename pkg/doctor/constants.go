@@ -6,6 +6,7 @@ const (
 	ruleCommandProvides          = "command-provides"
 	ruleTerraformReconfigure     = "terraform-reconfigure"
 	documentConfig               = "config"
+	documentStack                = "stack"
 	documentVendor               = "vendor"
 	httpsScheme                  = "https://"
 	schemeSeparator              = "://"

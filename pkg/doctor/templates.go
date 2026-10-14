@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -16,24 +17,37 @@ import (
 func (p *project) templateMarkers(d *document) []string {
 	switch d.kind {
 	case "stack":
-		// A stack-level override replaces the atmos.yaml delimiters rather than adding to them, as
-		// the runtime renderer does, so "{{" is literal text in a stack that switches to "<%".
-		var overrides []string
+		// The stack-level settings.templates.settings.delimiters replaces the atmos.yaml delimiters
+		// for the whole manifest, as the runtime renderer does, so "{{" is literal text in a stack
+		// that switches to "<%". A component-level override applies only to that component, so its
+		// marker is added while siblings keep the stack-wide one.
+		stackWide := ""
+		var componentLevel []string
 		walk(d.node, nil, func(n *yaml.Node, path []string) {
 			if !delimiterOverridePath(path) || n.Kind != yaml.SequenceNode {
 				return
 			}
 			var configured []string
-			if err := n.Decode(&configured); err == nil && len(configured) == 2 {
-				override, _ := tags.TemplateDelims(configured)
-				overrides = append(overrides, override)
+			if err := n.Decode(&configured); err != nil || len(configured) != 2 {
+				return
 			}
+			override, _ := tags.TemplateDelims(configured)
+			if len(path) == len(delimiterSettingsPath) {
+				stackWide = override
+				return
+			}
+			componentLevel = append(componentLevel, override)
 		})
-		if len(overrides) > 0 {
-			return overrides
+		if stackWide == "" {
+			stackWide, _ = tags.TemplateDelims(stringList(p.config, "templates", "settings", "delimiters"))
 		}
-		left, _ := tags.TemplateDelims(stringList(p.config, "templates", "settings", "delimiters"))
-		return []string{left}
+		markers := []string{stackWide}
+		for _, marker := range componentLevel {
+			if !slices.Contains(markers, marker) {
+				markers = append(markers, marker)
+			}
+		}
+		return markers
 	case documentConfig, "vendor":
 		return []string{tags.DefaultLeftDelim}
 	default:
@@ -41,9 +55,12 @@ func (p *project) templateMarkers(d *document) []string {
 	}
 }
 
+// delimiterSettingsPath is the key path of a template delimiter override.
+var delimiterSettingsPath = []string{"settings", "templates", "settings", "delimiters"}
+
 // delimiterOverridePath matches stack- and component-level settings.templates.settings.delimiters.
 func delimiterOverridePath(path []string) bool {
-	suffix := []string{"settings", "templates", "settings", "delimiters"}
+	suffix := delimiterSettingsPath
 	if len(path) < len(suffix) {
 		return false
 	}
