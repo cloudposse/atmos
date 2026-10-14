@@ -51,6 +51,10 @@ type Annotator interface {
 type SARIFReport struct {
 	Body     []byte
 	Category string
+
+	// Path is the file the report was read from, when it came from one. It is informational: providers
+	// that render a report locally name it so the user can tell which file was not uploaded.
+	Path string
 }
 
 // SARIFReporter is an optional capability for providers that ingest SARIF into

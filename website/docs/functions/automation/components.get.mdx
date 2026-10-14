@@ -1,0 +1,124 @@
+---
+title: "components.get"
+sidebar_position: 9
+sidebar_label: "components.get"
+sidebar_class_name: command
+description: Resolve a component's configuration for a stack and return a read-only component handle.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `components.get` function resolves a component in a stack and returns a handle with its identity, directory,
+    and fully resolved configuration. The configuration goes through the same inheritance, templating, and YAML-function
+    pipeline as any other Atmos command and is read-only in the script.
+</Intro>
+
+## Usage
+
+```python
+components.get(name, stack, type)
+```
+
+## Arguments
+
+<dl>
+    <dt>`name`</dt>
+    <dd>Required. The component name as it appears in the stack, which can differ from the directory that holds its code.</dd>
+
+    <dt>`stack`</dt>
+    <dd>Required. The stack name.</dd>
+
+    <dt>`type`</dt>
+    <dd>
+        Required. The component type, for example `"terraform"`, `"helmfile"`, `"packer"`, `"ansible"`,
+        `"container"`, or the name of a custom component type.
+    </dd>
+</dl>
+
+All three arguments are required, can be passed by keyword, and must be non-empty. Pass the stack explicitly in
+workflows and hooks. In a custom command that declares a `component:`, [`ctx.component`](/functions/automation/ctx.component)
+already holds that command's component.
+
+## Returns
+
+A component handle with these read-only attributes:
+
+<dl>
+    <dt>`name`, `stack`, `type`</dt>
+    <dd>The identity of the component instance, as strings.</dd>
+
+    <dt>`implementation`</dt>
+    <dd>The component's implementation, such as the name of the directory that holds its code. It can differ from `name` when components inherit shared code.</dd>
+
+    <dt>`path`</dt>
+    <dd>The absolute path of the component's working directory.</dd>
+
+    <dt>`vars`, `settings`, `metadata`</dt>
+    <dd>The matching sections of the resolved configuration, as dictionaries. A section the component does not define is an empty dictionary.</dd>
+
+    <dt>`env`</dt>
+    <dd>The component's `env` section as a dictionary of strings.</dd>
+
+    <dt>`config`</dt>
+    <dd>The complete resolved configuration, including sections such as `backend`, `providers`, `hooks`, and `workspace`.</dd>
+
+    <dt>`exec`</dt>
+    <dd>A function that runs a program in the component's directory. See [`component.exec`](/functions/automation/component.exec).</dd>
+</dl>
+
+Printing a handle shows `component(name = "...", stack = "...", type = "...")` instead of the whole configuration.
+
+The configuration is a snapshot of the stack as Atmos resolved it, so it reflects YAML functions such as `!terraform.output`
+and `!env`. Atmos resolves each distinct `(name, stack, type)` once per run and reuses the result, including across parallel
+tasks. A failed lookup is not cached, so a later call can retry it.
+
+## Errors
+
+- A missing or empty argument fails with an argument error.
+- A component or stack that does not exist fails with the same message the CLI shows, such as
+  `Could not find the component ... in the stack ...`.
+- A script runs the lookup with its own invocation deadline. To bound a lookup with a task timeout, call
+  `components.get` inside the task, with explicit name, stack, and type, instead of reading `ctx.component` there.
+
+## Examples
+
+### Read a component's variables
+
+```python
+station = components.get("station", "dev", "terraform")
+print(station.vars["location"])   # Stockholm
+print(station.metadata["component"])   # weather
+```
+
+### Read settings with a default
+
+```python
+vpc = components.get(name = "vpc", stack = "prod", type = "terraform")
+retention = vpc.settings.get("log_retention_days", 30)
+```
+
+### Compare a component across stacks
+
+```python
+def region_of(stack):
+    return components.get("vpc", stack, "terraform").vars.get("region", "unset")
+
+output = steps.parallel(
+    tasks = [steps.task(name = s, function = region_of, args = [s]) for s in ["dev", "staging", "prod"]],
+)
+```
+
+### Run a command in a component
+
+```python
+peer = components.get("api", "dev", "container")
+peer.exec(["./smoke-test"])
+```
+
+## Related
+
+- [`component.exec`](/functions/automation/component.exec) runs a program in the component's directory.
+- [`ctx.component`](/functions/automation/ctx.component) is the component already in scope for a command or hook.
+- [`atmos.terraform`](/functions/automation/atmos.terraform) runs Terraform for a component.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#custom-components)

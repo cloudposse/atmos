@@ -132,6 +132,7 @@ func runScaffoldTerraformE2E(t *testing.T, tc *scaffoldTerraformE2E) {
 		"--set", "project_name="+tc.Project,
 		"--set", "terraform_command="+terraformCommandForScaffoldE2E(t),
 	)
+	pinFlociToolDependencies(t, filepath.Join(target, "stacks", "_defaults.yaml"), []string{"dependencies", "tools"})
 	runAtmosForScaffoldTest(t, target, env, 2*time.Minute, "validate", "stacks")
 
 	runAtmosForScaffoldTest(t, target, env, 3*time.Minute, "emulator", "up", tc.Emulator, "-s", "dev")

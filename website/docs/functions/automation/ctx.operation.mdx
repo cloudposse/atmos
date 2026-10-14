@@ -1,0 +1,82 @@
+---
+title: "ctx.operation"
+sidebar_position: 38
+sidebar_label: "ctx.operation"
+sidebar_class_name: command
+description: The parent operation a lifecycle hook is attached to, and its outcome.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `ctx.operation` value describes the operation that triggered a lifecycle hook, such as `terraform apply`, and
+    for hooks that run afterward, how it ended. It describes the parent operation, not any process the hook starts.
+</Intro>
+
+## Usage
+
+```python
+ctx.operation.command
+ctx.operation.status
+ctx.operation.exit_code
+```
+
+## Returns
+
+A value with these attributes, or `None` when the script is not running as a hook:
+
+<dl>
+    <dt>`command`</dt>
+    <dd>The canonical operation, such as `terraform apply`.</dd>
+
+    <dt>`status`</dt>
+    <dd>The outcome, `"success"` or `"failure"`, for hooks that run after the operation. Before hooks, and hooks whose outcome is unknown, see `None`.</dd>
+
+    <dt>`exit_code`</dt>
+    <dd>The operation's exit code as an integer for after hooks (`0` on success), otherwise `None`.</dd>
+
+    <dt>`error`</dt>
+    <dd>The error message of a failed operation, or `None` when there is no error or the hook runs before the operation.</dd>
+
+    <dt>`stdout`, `stderr`</dt>
+    <dd>
+        The operation's captured output when available. Ordinary lifecycle hooks do not capture it, so these are
+        usually `None`.
+    </dd>
+</dl>
+
+Terraform state and outputs are not attached to the operation.
+
+## Examples
+
+### Run a check only after a successful apply
+
+```python
+if ctx.operation.status != "success":
+    ui.warning("Skipping smoke test: {} did not succeed".format(ctx.operation.command))
+else:
+    ctx.component.exec(["./smoke-test"])
+```
+
+### Branch between before and after hooks
+
+```python
+if ctx.operation.status == None:
+    ui.info("About to run " + ctx.operation.command)
+else:
+    ui.info("{} finished with status {}".format(ctx.operation.command, ctx.operation.status))
+```
+
+### Report a failure
+
+```python
+if ctx.operation.error != None:
+    fail("{} failed: {}".format(ctx.operation.command, ctx.operation.error))
+```
+
+## Related
+
+- [`ctx.hook`](/functions/automation/ctx.hook) names the hook and its event.
+- [`ctx.component`](/functions/automation/ctx.component) is the hook's component.
+- [`ctx`](/functions/automation/ctx) lists every context attribute.
+- [Lifecycle hooks](/automation/lifecycle-hooks) and [stack hooks](/stacks/hooks)

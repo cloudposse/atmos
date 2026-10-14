@@ -159,6 +159,14 @@ func shouldFetchRemote(path string) bool {
 	return false
 }
 
+// IsRemoteIncludePath reports whether an !include path names a remote source (a URL, or a
+// go-getter shorthand such as "github.com/org/repo/file.yaml") instead of a local file.
+func IsRemoteIncludePath(path string) bool {
+	defer perf.Track(nil, "utils.IsRemoteIncludePath")()
+
+	return shouldFetchRemote(path)
+}
+
 // resolveAbsolutePath checks if a file exists and returns its absolute path.
 func resolveAbsolutePath(path string) string {
 	if !FileExists(path) {

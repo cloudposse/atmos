@@ -1,0 +1,17 @@
+# The docs "Try it" example (website/docs/functions/yaml/starlark.mdx).
+# Copy to .yaml and import from a throwaway stack with vars: {stage: dev, region: us-east-2}.
+# Kept as .example so it is not scanned until those inputs are provided.
+components:
+  terraform:
+    service:
+      metadata:
+        component: mock
+      settings:
+        owner: platform
+      vars:
+        resource_tags: !starlark |
+          return {
+              "Environment": ctx.vars["stage"],
+              "Region": ctx.vars["region"],
+              "Owner": ctx.settings.get("owner", "platform"),
+          }

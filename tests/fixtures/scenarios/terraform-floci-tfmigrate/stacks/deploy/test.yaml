@@ -34,15 +34,15 @@ components:
     service-legacy:
       dependencies:
         tools:
-          opentofu: "^1.10.0"
+          opentofu: "1.12.6"
       vars:
         environment: test
 
     service:
       dependencies:
         tools:
-          opentofu: "^1.10.0"
-          tfmigrate: "^0.4.5"
+          opentofu: "1.12.6"
+          tfmigrate: "0.4.5"
       vars:
         environment: test
       hooks:

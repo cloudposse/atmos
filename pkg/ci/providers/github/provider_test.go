@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"testing"
 
@@ -108,6 +107,34 @@ func TestProvider_Context(t *testing.T) {
 	})
 }
 
+func TestProvider_Context_RunURL(t *testing.T) {
+	tests := []struct {
+		name       string
+		serverURL  string
+		repository string
+		runID      string
+		want       string
+	}{
+		{name: "all parts present", serverURL: "https://github.com", repository: "owner/repo", runID: "12345", want: "https://github.com/owner/repo/actions/runs/12345"},
+		{name: "enterprise server host honored", serverURL: "https://ghe.example.com", repository: "owner/repo", runID: "7", want: "https://ghe.example.com/owner/repo/actions/runs/7"},
+		{name: "missing server URL", serverURL: "", repository: "owner/repo", runID: "12345", want: ""},
+		{name: "missing repository", serverURL: "https://github.com", repository: "", runID: "12345", want: ""},
+		{name: "missing run ID", serverURL: "https://github.com", repository: "owner/repo", runID: "", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GITHUB_SERVER_URL", tt.serverURL)
+			t.Setenv("GITHUB_REPOSITORY", tt.repository)
+			t.Setenv("GITHUB_RUN_ID", tt.runID)
+
+			ctx, err := NewProvider().Context()
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, ctx.RunURL)
+		})
+	}
+}
+
 func TestResolveGitSHA(t *testing.T) {
 	t.Run("prefers git HEAD over GITHUB_SHA", func(t *testing.T) {
 		t.Setenv("GITHUB_SHA", "env-sha-value")
@@ -151,18 +178,21 @@ func capturedAuthHeader(t *testing.T, p *Provider) string {
 	t.Helper()
 
 	var capturedAuth string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"login":"test"}`))
 	}))
 	defer server.Close()
+	originalTransport := http.DefaultTransport
+	http.DefaultTransport = server.Client().Transport
+	t.Cleanup(func() { http.DefaultTransport = originalTransport })
 
-	serverURL, err := url.Parse(server.URL + "/")
+	t.Setenv("ATMOS_CI_GITHUB_API_URL", server.URL)
+	require.NoError(t, p.client.applyAPIURLFromEnv())
+	_, _, err := p.client.GitHub().Users.Get(context.Background(), "")
 	require.NoError(t, err)
-	p.client.GitHub().BaseURL = serverURL
-	_, _, _ = p.client.GitHub().Users.Get(context.Background(), "")
 
 	return capturedAuth
 }

@@ -1,0 +1,114 @@
+---
+title: "regex.search"
+sidebar_position: 20
+sidebar_label: "regex.search"
+sidebar_class_name: command
+description: Test whether a regular expression matches anywhere in a string.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `regex.search` function reports whether a regular expression matches anywhere in a string. Use it to branch on
+    the shape of a value, such as a version number, a stack name, or a line of command output.
+</Intro>
+
+## Usage
+
+```python
+regex.search(pattern, text)
+```
+
+## Arguments
+
+<dl>
+    <dt>`pattern`</dt>
+    <dd>
+        Required. The regular expression, as a string. Atmos uses RE2 syntax: character classes, groups, alternation,
+        repetition, and anchors work, and inline flags such as `(?i)` for case-insensitive matching and `(?m)` for
+        multi-line anchors are supported. Lookahead, lookbehind, and backreferences in the pattern are not available.
+        In a Python-style string, write a backslash as `\\`, as in `"\\d+"`, or use a raw string such as `r"\d+"`.
+    </dd>
+
+    <dt>`text`</dt>
+    <dd>Required. The string to search.</dd>
+</dl>
+
+Both arguments are required and can be passed positionally or by keyword.
+
+## Returns
+
+A boolean: `True` when the pattern matches anywhere in `text`, and `False` otherwise. The result is a boolean, not a match
+object. Use [`regex.findall`](/functions/automation/regex.findall) to retrieve the matched text.
+
+## Examples
+
+### Check a version format
+
+```python
+tag = "v1.2.3"
+output = "release" if regex.search("^v[0-9]+\\.[0-9]+", tag) else "snapshot"
+```
+
+```text
+release
+```
+
+### Match without regard to case
+
+```python
+print(regex.search("(?i)prod", "Env: PROD"))
+```
+
+```text
+True
+```
+
+### Anchor to each line
+
+Without `(?m)`, `^` matches only at the start of the whole string:
+
+```python
+print(regex.search("^dev", "x\ndev"))
+print(regex.search("(?m)^dev", "x\ndev"))
+```
+
+```text
+False
+True
+```
+
+### Filter stacks in a loop
+
+```python
+stacks = ["plat-use1-dev", "plat-use1-prod", "plat-usw2-dev"]
+prod = [s for s in stacks if regex.search("-prod$", s)]
+output = prod
+```
+
+```text
+["plat-use1-prod"]
+```
+
+### Use keyword arguments
+
+```python
+print(regex.search(text = "abc", pattern = "b"))
+```
+
+```text
+True
+```
+
+## Errors
+
+- A pattern that is not valid RE2 fails with `invalid regex: ...` followed by the reason, for example
+  `invalid regex: error parsing regexp: missing closing ): (`. Lookahead such as `(?=a)` and backreferences such as `\1`
+  fail the same way.
+- A missing argument, or an argument that is not a string, fails with an argument error.
+
+## Related
+
+- [`regex.findall`](/functions/automation/regex.findall) returns the matched text.
+- [`regex.replace`](/functions/automation/regex.replace) rewrites matched text.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script)

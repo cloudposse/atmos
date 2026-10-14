@@ -77,6 +77,9 @@ jobs:
 
       # Generate NOTICE file on all PRs to ensure it stays up-to-date
       - name: Generate NOTICE file
+        # Pass public event metadata, never a token, to PR-controlled Go code.
+        env:
+          ATMOS_NOTICE_REPO_DESCRIPTION: ${{ github.event.repository.description }}
         run: go tool mage notice:generate
 
       # Format HCL files in test fixtures and examples
@@ -87,7 +90,19 @@ jobs:
 
       # Regenerate README.md from README.yaml
       - name: Regenerate README
-        run: atmos docs generate readme
+        run: |
+          # Atmos 1.215.0 checks the API quota before fetching raw GitHub files.
+          # Fetch the configured template directly without giving PR templates a token.
+          readme_dir=$(mktemp -d "$RUNNER_TEMP/atmos-readme.XXXXXX")
+          trap 'rm -rf "$readme_dir"' EXIT
+          atmos describe config --format=json > "$readme_dir/config.json"
+          template_url=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["docs"]["generate"]["readme"]["template"])' "$readme_dir/config.json")
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+            --connect-timeout 15 --max-time 60 --retry 2 --retry-max-time 180 \
+            --url "$template_url" --output "$readme_dir/README.md.gotmpl"
+          python3 -c 'import json, sys; config = json.load(open(sys.argv[1])); config["docs"]["generate"]["readme"]["template"] = sys.argv[2]; json.dump(config, sys.stdout)' \
+            "$readme_dir/config.json" "$readme_dir/README.md.gotmpl" > "$readme_dir/override.yaml"
+          atmos docs generate readme --config "$readme_dir/override.yaml"
 
       - name: Commit fixes via Atmos Pro
         env:
