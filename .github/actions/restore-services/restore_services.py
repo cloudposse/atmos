@@ -41,8 +41,12 @@ def restore(job_services):
             deadline = time.monotonic() + 120
             while not (
                 state["Running"]
-                and state.get("Health", {}).get("Status", "healthy") == "healthy"
+                and state.get("Health", {}).get("Status") == "healthy"
             ):
+                if "Health" not in state:
+                    raise RuntimeError(
+                        f"Service {name} requires a Docker health check to verify readiness"
+                    )
                 if time.monotonic() >= deadline:
                     raise RuntimeError(
                         f"Service {name} did not become healthy within 120 seconds"

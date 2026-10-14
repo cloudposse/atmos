@@ -62,7 +62,7 @@ matches this repo's Git Safety Protocol. Preserve the work first, then switch:
   back on this layer. Use this only for your own unpublished WIP commit at the branch tip.
 - Or copy the dirty files out to a temporary worktree, or a patch file written safely: create a
   private temp directory (`dir=$(mktemp -d)`), exclusively create the patch file inside it
-  (`patch=$(mktemp "$dir/XXXXXX.patch")` — avoids following a pre-existing symlink at a predictable
+  (`patch=$(mktemp "$dir/XXXXXX")` — avoids following a pre-existing symlink at a predictable
   shared `/tmp/<tag>.patch` path), and capture with `git diff HEAD > "$patch"` — `HEAD`, not a bare
   `git diff`, so both staged and unstaged tracked changes are captured (a bare `git diff` only
   compares the working tree against the index and silently drops anything already staged); untracked
