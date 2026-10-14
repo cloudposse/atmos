@@ -68,7 +68,7 @@ func ExecuteTerraformGenerateBackends(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateBackends")()
 
-	stacksMap, _, deferredContexts, err := FindStacksMap(atmosConfig, false)
+	stacksMap, rawStackConfigs, deferredContexts, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
 	}
@@ -173,6 +173,7 @@ func ExecuteTerraformGenerateBackends(
 
 				configAndStacksInfo := schema.ConfigAndStacksInfo{
 					ComponentFromArg:          componentName,
+					ComponentType:             cfg.TerraformComponentType,
 					ComponentMetadataSection:  metadataSection,
 					ComponentVarsSection:      varsSection,
 					ComponentSettingsSection:  settingsSection,
@@ -295,6 +296,7 @@ func ExecuteTerraformGenerateBackends(
 				}
 
 				configAndStacksInfo.ComponentSection = componentSectionConverted
+				configAndStacksInfo.StackLocalsSection = stackLocalsForComponent(rawStackConfigs, stackFileName, cfg.TerraformComponentType)
 				yamlSkip, finishValues := prepareConfigurationValues(atmosConfig, &configAndStacksInfo, nil, nil)
 				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, yamlSkip, &configAndStacksInfo)
 				if err != nil {

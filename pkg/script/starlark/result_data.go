@@ -21,6 +21,9 @@ type decodedResult struct {
 	payload string
 	source  string
 	kind    string
+	// hint tells the user how to get data when the payload is not JSON. It depends on what
+	// produced the result, so the producer sets it.
+	hint    string
 	once    sync.Once
 	decoded starlark.Value
 	err     error
@@ -28,11 +31,17 @@ type decodedResult struct {
 
 var _ starlark.HasAttrs = (*decodedResult)(nil)
 
+// Hints for a result whose payload is not JSON, by producer.
+const (
+	processDataHint = "Read result.stdout, or request JSON output from the command."
+	atmosDataHint   = "Read result.stdout, or request JSON output with the command's --format=json flag."
+)
+
 func newProcessResult(output script.ProcessOutput) *decodedResult {
 	attrs := starlarkstruct.FromStringDict(starlark.String("process_result"), starlark.StringDict{
 		"stdout": starlark.String(output.Stdout), "stderr": starlark.String(output.Stderr), "exit_code": starlark.MakeInt(output.ExitCode),
 	})
-	return &decodedResult{attrs: attrs, payload: output.Stdout, source: "stdout", kind: "process_result"}
+	return &decodedResult{attrs: attrs, payload: output.Stdout, source: "stdout", kind: "process_result", hint: processDataHint}
 }
 
 // String preserves the raw result representation without decoding stdout.
@@ -93,12 +102,23 @@ func (r *decodedResult) Attr(name string) (starlark.Value, error) {
 	r.once.Do(func() {
 		r.decoded, r.err = starlark.Call(&starlark.Thread{Name: "result.data"}, starjson.Module.Members["decode"], starlark.Tuple{starlark.String(r.payload)}, nil)
 		if r.err != nil {
-			r.err = failWith(errUtils.ErrStarlark, r.err, "result.data requires valid JSON on %s; request JSON output or read result.%s", r.source, r.source)
+			r.err = r.notJSON(r.err)
 			return
 		}
 		r.decoded.Freeze()
 	})
 	return r.decoded, r.err
+}
+
+// notJSON reports a payload that is not valid JSON, with a hint that matches its producer.
+func (r *decodedResult) notJSON(cause error) error {
+	hint := r.hint
+	if hint == "" {
+		hint = "Read result." + r.source + " instead, or produce JSON."
+	}
+	return failWithAll(errUtils.ErrStarlark, []error{
+		script.NewDiagnostic("result.data requires valid JSON on " + r.source).With(func(b *errUtils.ErrorBuilder) { b.WithHint(hint) }).Err(), cause,
+	}, "result.data requires valid JSON on %s", r.source)
 }
 
 // MarshalJSON preserves serialization of original result fields, even for text

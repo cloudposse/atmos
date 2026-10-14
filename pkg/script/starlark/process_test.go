@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	cockroach "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -112,4 +113,64 @@ func TestProcessFailureWithoutCause(t *testing.T) {
 	_, err := runSource(t, `exec.run(["fail"])`, WithProcessRunner(runner))
 	require.ErrorIs(t, err, errUtils.ErrProcessWaitFailed)
 	assert.Contains(t, err.Error(), "code 7")
+}
+
+func TestTimeoutNamesTheCommandAndTheLimit(t *testing.T) {
+	t.Parallel()
+	runner := NewMockRunner(gomock.NewController(t))
+	runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, _ process.TaskSpec) process.Result {
+		<-ctx.Done()
+		return process.Result{Started: true, Canceled: true, Err: ctx.Err()}
+	})
+	_, err := runSource(t, `exec.run(["sleep", "5"], timeout="10ms")`, WithProcessRunner(runner))
+	require.ErrorIs(t, err, context.DeadlineExceeded, "the deadline stays reachable")
+	require.ErrorIs(t, err, errUtils.ErrStarlarkProcessFailed)
+	assert.ErrorContains(t, err, `exec.run: command "sleep 5" timed out after 10ms`)
+}
+
+func TestCancellationIsNotReportedAsATimeout(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	runner := NewMockRunner(gomock.NewController(t))
+	runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, _ process.TaskSpec) process.Result {
+		cancel()
+		<-ctx.Done()
+		return process.Result{Started: true, Canceled: true, Err: ctx.Err()}
+	})
+	_, err := New(WithProcessRunner(runner)).Execute(ctx, script.Spec{Source: `exec.run(["sleep", "5"], timeout="1h")`})
+	require.ErrorIs(t, err, context.Canceled)
+	assert.NotContains(t, err.Error(), "timed out")
+}
+
+func TestStringArgvGetsAHint(t *testing.T) {
+	t.Parallel()
+	runner := NewMockRunner(gomock.NewController(t))
+	_, err := runSource(t, `exec.run("ls -l")`, WithProcessRunner(runner))
+	require.ErrorIs(t, err, errUtils.ErrStarlarkInvalidArgument)
+	assert.ErrorContains(t, err, "argv must be a list of strings, got a string")
+	assert.Contains(t, cockroach.FlattenHints(err), `exec.run(["ls", "-l"])`)
+}
+
+func TestResultDataHintDependsOnTheProducer(t *testing.T) {
+	t.Parallel()
+	runner := NewMockRunner(gomock.NewController(t))
+	runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, spec process.TaskSpec) process.Result {
+		_, _ = io.WriteString(spec.Streams.Stdout, "plain text")
+		return process.Result{Started: true}
+	})
+	_, err := runSource(t, `exec.run(["tool"], output="capture").data`, WithProcessRunner(runner))
+	require.ErrorIs(t, err, errUtils.ErrStarlark)
+	hints := cockroach.FlattenHints(err)
+	assert.Contains(t, hints, "Read result.stdout, or request JSON output from the command.")
+	assert.NotContains(t, hints, "--format=json", "a generic command has no such flag")
+
+	runner = NewMockRunner(gomock.NewController(t))
+	runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, spec process.TaskSpec) process.Result {
+		_, _ = io.WriteString(spec.Streams.Stdout, "plain text")
+		return process.Result{Started: true}
+	})
+	_, err = runSource(t, `atmos.run(["version"], output="capture").data`, WithProcessRunner(runner), WithAtmosCommands(testAtmosCatalog()),
+		WithAtmosExecutable(func() (string, error) { return "atmos", nil }))
+	require.ErrorIs(t, err, errUtils.ErrStarlark)
+	assert.Contains(t, cockroach.FlattenHints(err), "--format=json")
 }

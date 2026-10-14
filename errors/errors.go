@@ -21,6 +21,8 @@ var (
 	ErrStarlarkOutputEncode = errors.New("starlark output encoding failed")
 	// ErrStarlarkRecursionLimit identifies a Starlark call stack that exceeded the maximum recursion depth.
 	ErrStarlarkRecursionLimit = errors.New("starlark recursion depth exceeded")
+	// ErrStarlarkStackIdentity identifies a stack name derived from a !starlark value, which is not computable.
+	ErrStarlarkStackIdentity = errors.New("stack identity cannot be computed with !starlark")
 	// ErrScriptUsage identifies command-line input that does not satisfy a standalone script's declared interface.
 	ErrScriptUsage = errors.New("usage error")
 )

@@ -9,6 +9,7 @@ import (
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/emulator"
+	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -18,6 +19,20 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version/manager"
 )
+
+// isUnsetTagString reports whether item is a raw string carrying the !unset tag while !unset is not skipped.
+func isUnsetTagString(item any, skip []string) bool {
+	str, ok := item.(string)
+	return ok && strings.HasPrefix(str, u.AtmosYamlFuncUnset) && !skipFunc(skip, u.AtmosYamlFuncUnset)
+}
+
+// isUnsetListItem reports whether a list item is removed by !unset processing.
+func isUnsetListItem(item any, skip []string) bool {
+	if marker, ok := item.(UnsetMarker); ok && marker.IsUnset {
+		return true
+	}
+	return isUnsetTagString(item, skip)
+}
 
 // UnsetMarker is a special type to mark values that should be deleted from the configuration.
 type UnsetMarker struct {
@@ -179,7 +194,7 @@ func processNodesWithContext(
 			newNestedMap := make(map[string]any)
 			for k, val := range v {
 				// Check if the value is a string with !unset tag and it's not skipped.
-				if strVal, ok := val.(string); ok && strings.HasPrefix(strVal, u.AtmosYamlFuncUnset) && !skipFunc(skip, u.AtmosYamlFuncUnset) {
+				if isUnsetTagString(val, skip) {
 					// Skip adding this key to the map - effectively deleting it.
 					continue
 				}
@@ -201,7 +216,7 @@ func processNodesWithContext(
 			newSlice := make([]any, 0, len(v))
 			for _, val := range v {
 				// Check if the value is a string with !unset tag and it's not skipped.
-				if strVal, ok := val.(string); ok && strings.HasPrefix(strVal, u.AtmosYamlFuncUnset) && !skipFunc(skip, u.AtmosYamlFuncUnset) {
+				if isUnsetTagString(val, skip) {
 					// Skip adding this item to the slice - effectively deleting it.
 					continue
 				}
@@ -503,7 +518,7 @@ func processCustomTagsWithContext(
 	resolutionCtx *ResolutionContext,
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (any, error) {
-	if matchesPrefix(input, "!starlark", skip) {
+	if starlarksource.IsEncoded(input) && matchesPrefix(input, starlarksource.Tag, skip) {
 		return newConfigurationResolver(atmosConfig, nil, withConfigurationContext(currentStack, stackInfo), withConfigurationFunctions(skip, resolutionCtx)).resolveString(input)
 	}
 	if err := prepareDeferredYAMLAuth(atmosConfig, input, skip, stackInfo); err != nil {

@@ -90,7 +90,7 @@ steps:
 	assert.Equal(t, schema.TaskTypeShell, result.Steps[0].Type)
 	assert.Equal(t, "structured", result.Steps[1].Name)
 	assert.Equal(t, "echo world", result.Steps[1].Command)
-	assert.Equal(t, time.Minute, result.Steps[1].Timeout)
+	assert.Equal(t, "1m", result.Steps[1].Timeout)
 }
 
 func TestAtmosDecodeHook_CommandEnvMap(t *testing.T) {
@@ -335,7 +335,7 @@ func TestAtmosDecodeHook_GitHookSteps(t *testing.T) {
 	require.Len(t, tasks, 1)
 	assert.Equal(t, "starlark", tasks[0].Interpreter)
 	assert.Equal(t, `print("ok")`, tasks[0].Script)
-	assert.Equal(t, 30*time.Second, tasks[0].Timeout)
+	assert.Equal(t, "30s", tasks[0].Timeout)
 	require.NotNil(t, tasks[0].Retry)
 	require.NotNil(t, tasks[0].Retry.MaxAttempts)
 	assert.Equal(t, 2, *tasks[0].Retry.MaxAttempts)

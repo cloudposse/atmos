@@ -31,7 +31,7 @@ tests:
     expect:
       exit_code: 0
       stdout:
-        - 'capacity.star <service>'
+        - 'capacity <service>'
         - '--replicas int'
 
   - name: starlark example declared script invalid type

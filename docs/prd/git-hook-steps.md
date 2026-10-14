@@ -1,6 +1,6 @@
 # Git hooks with inline automation steps
 
-**Last Updated:** 2026-10-06
+**Last Updated:** 2026-10-07
 
 **Status:** Implemented in the current PR stack; this does not identify a released version.
 
@@ -98,6 +98,25 @@ Use a workflow for those scheduler-owned features. Explicit container operations
 remain available through the container handler. Background wait/cancel handlers
 still require a workflow-owned job context. Script functions can use `steps.parallel`;
 that does not turn the hook into a workflow scheduler.
+
+## Migration and editions
+
+For existing `atmos git hooks run` invocations, omitting
+`settings.metrics.enabled` previously enabled the local resource-usage summary
+when subprocess metrics were available. It now disables that summary for the
+hook invocation. Both command hooks and step hooks use this default. An explicit
+`true` or `false` remains honored; set `settings.metrics.enabled: true` or
+`ATMOS_SETTINGS_METRICS_ENABLED=true` to retain the summary. The environment
+variable now binds to the setting consistently and takes precedence over a file.
+
+Other Atmos commands retain their existing metrics default. Standalone scripts
+also use the quiet default, but that execution mode has not shipped yet. This
+controls local display, not separate Atmos Pro reporting or Native CI summaries.
+
+The stored configuration default remains unset: the hook command changes how
+that value is interpreted. This is an ungated `KindBehavior` candidate, not a
+`KindValue` default change. An edition pin does not restore the old hook behavior;
+explicitly enabling the setting does. See the [editions roadmap](editions.md#roadmap-v2).
 
 ## Filesystem API
 

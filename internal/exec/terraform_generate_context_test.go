@@ -31,6 +31,7 @@ func TestTerraformGenerators_ResolvedContext(t *testing.T) {
 			}{
 				{"pattern", "", "dev"},
 				{"template", "{{ .vars.stage }}-stack", "dev-stack"},
+				{"transformed template", "{{ upper .vars.stage }}-stack", "DEV-stack"},
 			} {
 				t.Run(naming.name, func(t *testing.T) {
 					for _, filter := range []struct {

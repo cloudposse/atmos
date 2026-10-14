@@ -45,11 +45,14 @@ func decodeGitHookSteps(hooks *goyaml.Node, v *viper.Viper, sourceFile string) e
 	return nil
 }
 
-// restoreGitHookStepEnv restores case lost through Viper's map decoding, using
-// the same authored environment key map that custom command execution uses.
+// restoreGitHookStepEnv restores case lost through Viper's map decoding. Env keys use the same
+// authored environment key map that custom command execution uses; vars and outputs keys use the
+// step maps collected by mergeRecursiveStepCaseKeys.
 func restoreGitHookStepEnv(tasks schema.Tasks, caseMaps *casemap.CaseMaps) {
 	for i := range tasks {
 		tasks[i].Env = caseMaps.ApplyCase(envKey, tasks[i].Env)
+		tasks[i].Vars = caseMaps.ApplyCase(stepVarsCaseKey, tasks[i].Vars)
+		tasks[i].Outputs = caseMaps.ApplyCase(stepOutputsCaseKey, tasks[i].Outputs)
 		restoreGitHookChildStepEnv(tasks[i].Steps, caseMaps)
 	}
 }
@@ -57,6 +60,8 @@ func restoreGitHookStepEnv(tasks schema.Tasks, caseMaps *casemap.CaseMaps) {
 func restoreGitHookChildStepEnv(steps []schema.WorkflowStep, caseMaps *casemap.CaseMaps) {
 	for i := range steps {
 		steps[i].Env = caseMaps.ApplyCase(envKey, steps[i].Env)
+		steps[i].Vars = caseMaps.ApplyCase(stepVarsCaseKey, steps[i].Vars)
+		steps[i].Outputs = caseMaps.ApplyCase(stepOutputsCaseKey, steps[i].Outputs)
 		restoreGitHookChildStepEnv(steps[i].Steps, caseMaps)
 	}
 }

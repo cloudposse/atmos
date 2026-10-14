@@ -14,7 +14,7 @@ func TestStarlarkYAMLAfterDeferredMerges(t *testing.T) {
 	config := &schema.AtmosConfiguration{}
 	vars, dctx, err := merge.MergeWithDeferred(config, []map[string]any{
 		{"shared": `!template {"from_base":"catalog"}`},
-		{"shared": map[string]any{"from_override": "prod"}, "copy": `!starlark return ctx.vars["shared"]`},
+		{"shared": map[string]any{"from_override": "prod"}, "copy": starlarkTestSource(`return ctx.vars["shared"]`)},
 	})
 	require.NoError(t, err)
 	info := &schema.ConfigAndStacksInfo{Stack: "prod", ComponentSection: map[string]any{"vars": vars}, DeferredMergeContexts: ComponentDeferredContexts{"vars": dctx}}
@@ -26,21 +26,21 @@ func TestStarlarkYAMLAfterDeferredMerges(t *testing.T) {
 	resolved := info.ComponentSection["vars"].(map[string]any)
 	assert.Equal(t, map[string]any{"from_base": "catalog", "from_override": "prod"}, resolved["shared"])
 	assert.Equal(t, resolved["shared"], resolved["copy"])
-	assert.Equal(t, `!starlark return ctx.vars["shared"]`, vars["copy"], "cached source must stay unchanged")
+	assert.Equal(t, starlarkTestSource(`return ctx.vars["shared"]`), vars["copy"], "cached source must stay unchanged")
 }
 
 func TestStarlarkYAMLFinalPhaseOnlyEvaluatesOriginalSources(t *testing.T) {
 	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"vars": map[string]any{
-		"original": `!starlark return "!starlark return 99"`,
+		"original": starlarkTestSource(`return "!starlark return 99"`),
 		"external": "!template external-data",
-		"nested":   []any{`!starlark return 3`},
+		"nested":   []any{starlarkTestSource(`return 3`)},
 	}}}
 	_, finish := prepareConfigurationValues(&schema.AtmosConfiguration{}, info, nil, nil)
-	info.ComponentSection["vars"].(map[string]any)["external"] = "!starlark return 99"
+	info.ComponentSection["vars"].(map[string]any)["external"] = starlarkTestSource("return 99")
 	require.NoError(t, finish())
 	vars := info.ComponentSection["vars"].(map[string]any)
 	assert.Equal(t, "!starlark return 99", vars["original"])
-	assert.Equal(t, "!starlark return 99", vars["external"])
+	assert.Equal(t, starlarkTestSource("return 99"), vars["external"])
 	assert.Equal(t, []any{int64(3)}, vars["nested"])
 }
 
@@ -48,7 +48,7 @@ func TestStarlarkYAMLFinalPhaseRespectsSelectionAndSkip(t *testing.T) {
 	for _, tc := range []struct{ skip, sections []string }{
 		{[]string{"starlark"}, nil}, {nil, []string{"metadata"}},
 	} {
-		original := map[string]any{"vars": map[string]any{"value": `!starlark return unknown`}}
+		original := map[string]any{"vars": map[string]any{"value": starlarkTestSource(`return unknown`)}}
 		info := &schema.ConfigAndStacksInfo{ComponentSection: original}
 		_, finish := prepareConfigurationValues(&schema.AtmosConfiguration{}, info, tc.skip, tc.sections)
 		require.NoError(t, finish())

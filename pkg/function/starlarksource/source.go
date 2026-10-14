@@ -37,6 +37,15 @@ func Is(value string) bool {
 	return value == Tag || strings.HasPrefix(value, Tag+" ") || strings.HasPrefix(value, Tag+"\n") || strings.HasPrefix(value, Tag+"\t")
 }
 
+// IsEncoded reports whether value was produced by the YAML loader's !starlark tag.
+// Unlike Is, it requires the location header written by Encode, so an ordinary string
+// that merely begins with the tag text (a quoted scalar or included file) remains data.
+func IsEncoded(value string) bool {
+	defer perf.Track(nil, "starlarksource.IsEncoded")()
+
+	return strings.HasPrefix(value, Tag+"\n"+locationPrefix)
+}
+
 // Decode accepts loader-preserved source or a manually supplied tagged string.
 func Decode(value string) Source {
 	defer perf.Track(nil, "starlarksource.Decode")()

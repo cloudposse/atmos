@@ -56,7 +56,7 @@ func newConfigurationResolver(config *schema.AtmosConfiguration, input map[strin
 func containsStarlark(value any) bool {
 	switch value := value.(type) {
 	case string:
-		return starlarksource.Is(value)
+		return starlarksource.IsEncoded(value)
 	case map[string]any:
 		for _, item := range value {
 			if containsStarlark(item) {
@@ -130,7 +130,7 @@ func (r *configurationResolver) resolveMap(path []string, values map[string]any)
 }
 
 func (r *configurationResolver) resolveString(value string) (any, error) {
-	if starlarksource.Is(value) {
+	if starlarksource.IsEncoded(value) {
 		if skipFunc(r.skip, starlarksource.Tag) {
 			return value, nil
 		}

@@ -467,7 +467,7 @@ func ExecuteWorkflow(
 	validationErr := schema.ValidateWorkflowSteps(workflowDefinition.Steps)
 	if validationErr == nil {
 		// The workflow-level `output` is the default mode of every step, so it must name a real mode.
-		validationErr = schema.ValidateOutputMode(fmt.Sprintf("workflow %q", workflow), workflowDefinition.Output)
+		validationErr = schema.ValidateRenderedOutputMode(fmt.Sprintf("workflow %q", workflow), workflowDefinition.Output)
 	}
 	if err := validationErr; err != nil {
 		return errUtils.Build(err).
@@ -743,13 +743,9 @@ func ExecuteWorkflow(
 			commandType != schema.TaskTypeParallel &&
 			commandType != schema.TaskTypeMatrix &&
 			!stepPkg.IsExtendedStepType(commandType) {
-			return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
+			return stepPkg.UnsupportedStepTypeBuilder(fmt.Sprintf("workflow `%s`", workflow), step.Name, commandType).
 				WithTitle(WorkflowErrTitle).
-				WithExplanationf("Workflow `%s` step `%s` uses unsupported type `%s`.", workflow, step.Name, commandType).
 				WithContext("workflow", workflow).
-				WithContext(logKeyStep, step.Name).
-				WithHintf("Step type '%s' is not supported", commandType).
-				WithHint("Each step must specify a valid type: 'atmos', 'shell', 'script', 'exec', or an interactive type like 'input', 'confirm', 'choose'").
 				WithExitCode(1).
 				Err()
 		}
@@ -783,6 +779,32 @@ func ExecuteWorkflow(
 			var runErr error
 			commandResult, runErr = stepPkg.ExecuteCommandResult(step.Name, run)
 			return runErr
+		}
+		// One option set for every extended-step call below so toolchain PATH and the
+		// auth manager are never dropped on any dispatch path.
+		extendedOpts := extendedStepOptions{
+			DryRun:        dryRun,
+			FinalStack:    finalStack,
+			AtmosConfig:   &atmosConfig,
+			ToolchainPATH: tenv.PATH(),
+			AuthManager:   authManager,
+		}
+		// stepVars returns the variables a templated `timeout:` or `output:` renders against, so
+		// shell, atmos, container, and script steps all resolve them the same way.
+		stepVars := func() *stepPkg.Variables {
+			return prepareExtendedStepExecutor(workflowDefinition, stepEnv, extendedOpts)
+		}
+		// Render a templated `output:` once, up front, so every command path (shell, atmos,
+		// container, script) reads the same mode; an unknown rendered mode fails the step instead of
+		// silently running with the default.
+		var outputVars *stepPkg.Variables
+		if strings.Contains(step.Output, "{{") {
+			outputVars = stepVars()
+		}
+		if outputErr := stepPkg.ApplyStepOutputMode(&step, outputVars); outputErr != nil {
+			workflowErr = errors.Join(workflowErr, outputErr)
+			conditionStatus = schema.ConditionPredicateFailure
+			continue
 		}
 		executeStep := func() error {
 			// Background steps (start/wait/wait-all/cancel) are coordinated by the
@@ -851,7 +873,7 @@ func ExecuteWorkflow(
 				switch {
 				case workflowPkg.StepContainerOverride(&step):
 					// One deadline bounds the whole step, retries and backoff included.
-					err = stepPkg.RunWithStepRetry(context.Background(), &step, nil, func(stepCtx context.Context) error {
+					err = stepPkg.RunWithStepRetry(context.Background(), &step, stepVars(), func(stepCtx context.Context) error {
 						return runCommandStep(func(stdout, stderr io.Writer) error {
 							return workflowPkg.RunStepContainerOverride(stepCtx, &workflowPkg.ContainerStepParams{
 								Workflow:      workflow,
@@ -883,7 +905,7 @@ func ExecuteWorkflow(
 							break
 						}
 					}
-					err = stepPkg.RunWithStepRetry(context.Background(), &step, nil, func(stepCtx context.Context) error {
+					err = stepPkg.RunWithStepRetry(context.Background(), &step, stepVars(), func(stepCtx context.Context) error {
 						return runCommandStep(func(stdout, stderr io.Writer) error {
 							return activeContainer.ExecShell(stepCtx, &workflowPkg.ContainerStepParams{
 								Step:          &step,
@@ -898,7 +920,7 @@ func ExecuteWorkflow(
 					})
 				default:
 					// The step's timeout cancels the shell command through the context.
-					err = stepPkg.RunWithStepDeadline(context.Background(), &step, nil, func(shellCtx context.Context) error {
+					err = stepPkg.RunWithStepDeadline(context.Background(), &step, stepVars(), func(shellCtx context.Context) error {
 						return retry.Do(shellCtx, step.Retry, func() error {
 							return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
 								return process.RunShellStep(shellCtx, &process.ShellSessionSpec{
@@ -959,7 +981,7 @@ func ExecuteWorkflow(
 
 				ui.Infof("Executing command: `atmos %s`", command)
 				// The step's timeout cancels the atmos subprocess through the context.
-				err = stepPkg.RunWithStepDeadline(context.Background(), &step, nil, func(atmosCtx context.Context) error {
+				err = stepPkg.RunWithStepDeadline(context.Background(), &step, stepVars(), func(atmosCtx context.Context) error {
 					return retry.Do(atmosCtx, step.Retry, func() error {
 						return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
 							writer := stepPkg.NewCommandOutputWriter(&step, workflowDefinition)
@@ -977,24 +999,11 @@ func ExecuteWorkflow(
 			default:
 				// Check if this is an extended step type (input, confirm, choose, etc.).
 				if !stepPkg.IsExtendedStepType(commandType) {
-					return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
+					return stepPkg.UnsupportedStepTypeBuilder(fmt.Sprintf("workflow `%s`", workflow), step.Name, commandType).
 						WithTitle(WorkflowErrTitle).
-						WithExplanationf("Workflow `%s` step `%s` uses unsupported type `%s`.", workflow, step.Name, commandType).
 						WithContext("workflow", workflow).
-						WithContext(logKeyStep, step.Name).
-						WithHintf("Step type '%s' is not supported", commandType).
-						WithHint("Each step must specify a valid type: 'atmos', 'shell', 'script', 'exec', or an interactive type like 'input', 'confirm', 'choose'").
 						WithExitCode(1).
 						Err()
-				}
-				// One option set for every extended-step call below so toolchain PATH and the
-				// auth manager are never dropped on any dispatch path.
-				extendedOpts := extendedStepOptions{
-					DryRun:        dryRun,
-					FinalStack:    finalStack,
-					AtmosConfig:   &atmosConfig,
-					ToolchainPATH: tenv.PATH(),
-					AuthManager:   authManager,
 				}
 				if commandType == schema.TaskTypeScript {
 					// Container checks and the container command must see the effective
@@ -1008,7 +1017,7 @@ func ExecuteWorkflow(
 					switch {
 					case workflowPkg.StepContainerOverride(&step):
 						// One deadline bounds the whole step, retries and backoff included.
-						err = stepPkg.RunWithStepRetry(context.Background(), &step, nil, func(stepCtx context.Context) error {
+						err = stepPkg.RunWithStepRetry(context.Background(), &step, stepVars(), func(stepCtx context.Context) error {
 							return workflowPkg.RunStepContainerOverride(stepCtx, &workflowPkg.ContainerStepParams{
 								Workflow:     workflow,
 								WorkflowPath: workflowPath,
@@ -1036,7 +1045,7 @@ func ExecuteWorkflow(
 								break
 							}
 						}
-						err = stepPkg.RunWithStepRetry(context.Background(), &step, nil, func(stepCtx context.Context) error {
+						err = stepPkg.RunWithStepRetry(context.Background(), &step, stepVars(), func(stepCtx context.Context) error {
 							return activeContainer.ExecShell(stepCtx, &workflowPkg.ContainerStepParams{
 								Step:        &step,
 								WorkflowDef: workflowDefinition,
@@ -1050,8 +1059,7 @@ func ExecuteWorkflow(
 						// exactly like custom commands (cmd/cmd_utils.go) and the container paths above.
 						// The step's timeout bounds the whole step, retries included; the handler's own
 						// deadline then nests inside it.
-						timeoutVars := prepareExtendedStepExecutor(workflowDefinition, stepEnv, extendedOpts)
-						err = stepPkg.RunWithStepRetry(context.Background(), &steps[stepIdx], timeoutVars, func(stepCtx context.Context) error {
+						err = stepPkg.RunWithStepRetry(context.Background(), &steps[stepIdx], stepVars(), func(stepCtx context.Context) error {
 							return executeExtendedStep(stepCtx, &steps[stepIdx], workflowDefinition, stepEnv, extendedOpts)
 						})
 					}

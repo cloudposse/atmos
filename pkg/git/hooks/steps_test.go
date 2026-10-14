@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,18 +48,20 @@ func TestRunStepValidation(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
 		entry schema.GitHookEntry
+		want  error
 	}{
-		{"empty", schema.GitHookEntry{}},
-		{"both", schema.GitHookEntry{Command: "unused", Steps: schema.Tasks{{Type: "join"}}}},
-		{"unknown", schema.GitHookEntry{Steps: schema.Tasks{{Type: "not-a-step"}}}},
-		{"duplicate", schema.GitHookEntry{Steps: schema.Tasks{{Name: "same", Type: "join"}, {Name: "same", Type: "join"}}}},
-		{"scheduler", schema.GitHookEntry{Steps: schema.Tasks{{Type: "join", Needs: []string{"other"}}}}},
+		{"empty", schema.GitHookEntry{}, errUtils.ErrInvalidConfig},
+		{"both", schema.GitHookEntry{Command: "unused", Steps: schema.Tasks{{Type: "join"}}}, errUtils.ErrInvalidConfig},
+		{"unknown", schema.GitHookEntry{Steps: schema.Tasks{{Type: "not-a-step"}}}, errUtils.ErrUnknownStepType},
+		{"duplicate", schema.GitHookEntry{Steps: schema.Tasks{{Name: "same", Type: "shell", Command: "echo 1"}, {Name: "same", Type: "shell", Command: "echo 2"}}}, errUtils.ErrAutomation},
+		{"scheduler", schema.GitHookEntry{Steps: schema.Tasks{{Type: "join", Needs: []string{"other"}}}}, errUtils.ErrAutomation},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			var stdout bytes.Buffer
 			err := Run(&schema.GitConfig{Hooks: map[string]schema.GitHookEntry{"pre-commit": tc.entry}}, "pre-commit", nil, WithOutputWriters(&stdout, &stdout))
-			require.Error(t, err)
+			require.ErrorIs(t, err, tc.want)
+			assert.Contains(t, err.Error(), `git hook "pre-commit"`)
 			assert.Empty(t, stdout.String())
 		})
 	}
@@ -90,10 +91,11 @@ func TestRunStepPreflightAndTimeout(t *testing.T) {
 		{Type: "script", Interpreter: "starlark", Script: `print("must not run")`},
 		{Type: "unknown"},
 	}}}}
-	require.Error(t, Run(cfg, "pre-commit", nil, WithOutputWriters(&stdout, &stdout)))
+	require.ErrorIs(t, Run(cfg, "pre-commit", nil, WithOutputWriters(&stdout, &stdout)), errUtils.ErrUnknownStepType)
 	assert.Empty(t, stdout.String(), "preflight must validate the whole sequence")
-	cfg.Hooks["pre-commit"] = schema.GitHookEntry{Steps: schema.Tasks{{Name: "bounded", Type: "script", Interpreter: "starlark", Timeout: time.Millisecond, Script: "for i in range(1000000000):\n    pass"}}}
+	cfg.Hooks["pre-commit"] = schema.GitHookEntry{Steps: schema.Tasks{{Name: "bounded", Type: "script", Interpreter: "starlark", Timeout: "1ms", Script: "for i in range(1000000000):\n    pass"}}}
 	err := Run(cfg, "pre-commit", nil, WithOutputWriters(&stdout, &stdout))
+	require.ErrorIs(t, err, errUtils.ErrStepTimeout)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.Contains(t, err.Error(), "bounded")
 }

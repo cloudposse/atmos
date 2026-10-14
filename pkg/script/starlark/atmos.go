@@ -46,6 +46,6 @@ func (s *session) runAtmos(thread *starlark.Thread, argv []string, opts atmosmod
 	}
 	return s.runProcess(thread, &processCall{
 		argv: append([]string{binary}, argv...), dir: dir, env: env,
-		check: opts.Check, stream: stream, allowPlanChanges: allowPlanChanges,
+		check: opts.Check, stream: stream, allowPlanChanges: allowPlanChanges, dataHint: atmosDataHint,
 	})
 }

@@ -129,3 +129,15 @@ commands:
             type: script
             interpreter: starlark
             script: !include scripts/main.star
+
+  - name: ft-retry-renamed
+    description: retry key `delay` was renamed to `initial_delay`
+    steps:
+      - name: s
+        type: script
+        interpreter: starlark
+        retry:
+          max_attempts: 2
+          delay: 1s
+        script: |
+          fail("always")

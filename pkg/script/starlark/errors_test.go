@@ -347,3 +347,22 @@ func TestDisplayErrorKeepsTheOriginalReachable(t *testing.T) {
 	assert.Same(t, unchanged, displayError(root, unchanged), "an error with no project path is returned as is")
 	assert.NoError(t, displayError(root, nil))
 }
+
+func TestDedupeErrorLeadDropsARepeatedBuiltinName(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct{ in, want string }{
+		"fail":           {"Error in fail: fail: boom", "Error in fail: boom"},
+		"dotted builtin": {"Error in cli.command: cli.command: invalid name", "Error in cli.command: invalid name"},
+		"different name": {"Error in exec.run: command failed", "Error in exec.run: command failed"},
+		"no repetition":  {"Error: fail: boom", "Error: fail: boom"},
+		"only the final line": {
+			"Traceback (most recent call last):\n  x.star:1:1: in <toplevel>\nError in fail: fail: boom",
+			"Traceback (most recent call last):\n  x.star:1:1: in <toplevel>\nError in fail: boom",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, dedupeErrorLead(tc.in))
+		})
+	}
+}

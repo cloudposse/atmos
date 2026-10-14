@@ -44,8 +44,18 @@ func StepAcceptsOutputMode(stepType string) bool {
 // StepOutputModes. An empty mode means "use the default". A templated mode is checked after
 // rendering, so a value containing a template expression is accepted here.
 func ValidateOutputMode(owner, mode string) error {
+	if strings.Contains(mode, "{{") {
+		return nil
+	}
+	return ValidateRenderedOutputMode(owner, mode)
+}
+
+// ValidateRenderedOutputMode is ValidateOutputMode for a mode that has already been rendered: it
+// fails with ErrStepInvalidOutputMode for any value that is not one of StepOutputModes, including
+// one that still contains a template expression. An empty mode means "use the default".
+func ValidateRenderedOutputMode(owner, mode string) error {
 	mode = strings.TrimSpace(mode)
-	if mode == "" || strings.Contains(mode, "{{") || slices.Contains(StepOutputModes(), mode) {
+	if mode == "" || slices.Contains(StepOutputModes(), mode) {
 		return nil
 	}
 	return fmt.Errorf("%w: %s sets output %q; valid modes are %s",
