@@ -10,6 +10,11 @@ import (
 	"github.com/cloudposse/atmos/magefiles/internal/githubapi"
 )
 
+// qualityScheduleInterval is the cron period of the scheduled reconcile. The
+// unpublished candidates rotate once per interval so a PR that hangs or fails
+// every run cannot keep the PRs behind it from ever being visited.
+const qualityScheduleInterval = 15 * time.Minute
+
 // qualitySearchLimit bounds the PRs verified after a SHA search. A commit is
 // the head of at most a handful of open PRs, so a small page is enough.
 const qualitySearchLimit = 10
@@ -19,6 +24,7 @@ const qualitySearchLimit = 10
 const (
 	qualityReasonNone        = ""
 	qualityReasonUnpublished = "no report for current head"
+	qualityReasonUnavailable = "report has unavailable evidence"
 	qualityReasonRecent      = "recent head commit"
 	qualityReasonUnknown     = "selection check failed"
 )
@@ -90,8 +96,8 @@ func (q *qualityClient) searchPRNumbers(sha string) ([]int, error) {
 }
 
 // recentPRNumbers selects open main PRs that need a scheduled reconcile: those
-// with no gate report for their current head (any age) and those whose head
-// commit is newer than the cutoff.
+// with no gate report for their current head or a report with unavailable
+// evidence (any age) and those whose head commit is newer than the cutoff.
 //
 // GitHub's updated_at is not an activity signal: the gate's own labels and
 // comments, Mergify, CodeRabbit and Codecov all advance it, which previously
@@ -124,8 +130,23 @@ func (q *qualityClient) recentPRNumbers(cutoff time.Time) ([]int, error) {
 			unpublished = append(unpublished, pr.Number)
 		}
 	}
-	fmt.Printf("Scheduled quality recovery: %d open main PRs, %d without a report for the current head, %d with a recent head commit\n", len(prs), len(unpublished), len(recent))
+	fmt.Printf("Scheduled quality recovery: %d open main PRs, %d needing a report, %d with a recent head commit\n", len(prs), len(unpublished), len(recent))
+	unpublished = rotatePRNumbers(unpublished, int(cutoff.Unix()/int64(qualityScheduleInterval/time.Second)))
 	return append(unpublished, recent...), nil
+}
+
+// rotatePRNumbers starts the list at slot modulo its length, keeping the order
+// otherwise. The run has no cursor: successive schedule slots start at different
+// PRs, so a persistent timeout at the head cannot starve the rest indefinitely.
+func rotatePRNumbers(numbers []int, slot int) []int {
+	if len(numbers) == 0 {
+		return numbers
+	}
+	offset := slot % len(numbers)
+	if offset < 0 {
+		offset += len(numbers)
+	}
+	return append(append(make([]int, 0, len(numbers)), numbers[offset:]...), numbers[:offset]...)
 }
 
 func (q *qualityClient) openMainPRs() ([]githubapi.PR, error) {
@@ -160,6 +181,11 @@ func (q *qualityClient) scheduledReason(pr *githubapi.PR, cutoff time.Time) (str
 	}
 	if existing == nil || !strings.Contains(existing.Body, qualityHeadMarker(pr.Head.SHA)) {
 		return qualityReasonUnpublished, nil
+	}
+	// A report that could not read some evidence is not final: retry it at any
+	// age so it is replaced once the evidence recovers.
+	if strings.Contains(existing.Body, qualityUnavailableProblem) {
+		return qualityReasonUnavailable, nil
 	}
 	if !pr.Updated.IsZero() && pr.Updated.Before(cutoff) {
 		return qualityReasonNone, nil

@@ -20,8 +20,9 @@ import (
 type scheduleCommentState int
 
 const (
-	scheduleCommentCurrent scheduleCommentState = iota // Report for the PR's current head.
-	scheduleCommentOldHead                             // Report for a previous head.
+	scheduleCommentCurrent     scheduleCommentState = iota // Report for the PR's current head.
+	scheduleCommentOldHead                                 // Report for a previous head.
+	scheduleCommentUnavailable                             // Report for the current head with a gate whose evidence was unavailable.
 	scheduleCommentNone
 	scheduleCommentError
 )
@@ -120,6 +121,8 @@ func (s *scheduleServer) commentsFor(number int, response any) error {
 			return errors.New("comments unavailable")
 		case scheduleCommentCurrent:
 			body = qualityMarker + "\n" + qualityHeadMarker(scheduleSHA(number)) + "\n"
+		case scheduleCommentUnavailable:
+			body = qualityMarker + "\n" + qualityHeadMarker(scheduleSHA(number)) + "\nAll CI checks and workflows " + qualityUnavailableProblem + "\n"
 		case scheduleCommentOldHead:
 			body = qualityMarker + "\n" + qualityHeadMarker(githubtest.Base) + "\n"
 		case scheduleCommentNone:
@@ -171,6 +174,15 @@ func TestQualityScheduledSelection(t *testing.T) {
 				{number: 2, labeled: true, updated: old, committed: old, comment: scheduleCommentOldHead},
 			},
 			want:         []int{1, 2},
+			wantComments: []int{1, 2},
+		},
+		{
+			name: "report with unavailable evidence stays eligible at any age without a commit read",
+			prs: []schedulePR{
+				{number: 1, labeled: true, updated: old, committed: old, comment: scheduleCommentUnavailable},
+				{number: 2, labeled: true, updated: old, committed: old, comment: scheduleCommentCurrent},
+			},
+			want:         []int{1},
 			wantComments: []int{1, 2},
 		},
 		{
@@ -258,10 +270,68 @@ func TestQualityScheduledSelectionPaginates(t *testing.T) {
 	q := qualityTestClient(t, server.get)
 	got, err := q.eventPRs(now)
 	require.NoError(t, err)
-	require.Equal(t, want, got)
+	// Unpublished candidates rotate per schedule slot: every PR is present once
+	// and the order is a cyclic shift of the listing order.
+	require.ElementsMatch(t, want, got)
 	require.Equal(t, []int{1, 2}, server.pages)
-	require.Equal(t, githubapi.PageSize+2, len(got))
-	require.Equal(t, githubapi.PageSize+2, got[len(got)-1])
+	require.Len(t, got, githubapi.PageSize+2)
+	for i := range got {
+		require.Equal(t, (got[0]-1+i)%len(got)+1, got[i], "position %d", i)
+	}
+	require.Equal(t, []int{1, 2}, server.pages)
+}
+
+// TestQualityScheduledRotationVisitsEveryPR proves a PR that is always first in
+// GitHub's listing (and, in production, hangs every run) does not keep the rest
+// from leading a run: consecutive 15-minute slots start at different PRs and all
+// of them lead within one full rotation.
+func TestQualityScheduledRotationVisitsEveryPR(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "schedule")
+	const count = 5
+	start := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+	led := map[int]bool{}
+	var previous int
+	for slot := range count {
+		now := start.Add(time.Duration(slot) * qualityScheduleInterval)
+		server := &scheduleServer{}
+		for number := 1; number <= count; number++ {
+			server.prs = append(server.prs, schedulePR{number: number, updated: now, committed: now})
+		}
+		q := qualityTestClient(t, server.get)
+		got, err := q.eventPRs(now)
+		require.NoError(t, err)
+		require.Len(t, got, count)
+		require.ElementsMatch(t, []int{1, 2, 3, 4, 5}, got)
+		if slot > 0 {
+			require.NotEqual(t, previous, got[0], "slot %d led with the same PR as the previous slot", slot)
+		}
+		previous = got[0]
+		led[got[0]] = true
+	}
+	require.Len(t, led, count, "every PR must lead one run within a full rotation")
+}
+
+func TestRotatePRNumbers(t *testing.T) {
+	cases := []struct {
+		name    string
+		numbers []int
+		slot    int
+		want    []int
+	}{
+		{name: "empty", slot: 3},
+		{name: "single", numbers: []int{7}, slot: 5, want: []int{7}},
+		{name: "slot zero keeps order", numbers: []int{1, 2, 3, 4}, slot: 0, want: []int{1, 2, 3, 4}},
+		{name: "slot wraps by length", numbers: []int{1, 2, 3, 4}, slot: 6, want: []int{3, 4, 1, 2}},
+		{name: "negative slot", numbers: []int{1, 2, 3, 4}, slot: -1, want: []int{4, 1, 2, 3}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			input := append([]int(nil), tc.numbers...)
+			got := rotatePRNumbers(input, tc.slot)
+			require.Equal(t, tc.want, got)
+			require.Equal(t, tc.numbers, input, "input must not be mutated")
+		})
+	}
 }
 
 func TestQualityScheduledSelectionErrors(t *testing.T) {

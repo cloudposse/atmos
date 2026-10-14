@@ -55,6 +55,10 @@ func (r *gateRegistry) register(definition gateDefinition) error {
 	return nil
 }
 
+// Published in the report for a gate whose evidence could not be read. Scheduled
+// recovery also matches it to keep such reports eligible until the evidence recovers.
+const qualityUnavailableProblem = "could not be evaluated because GitHub evidence was unavailable."
+
 func (r *gateRegistry) evaluate(q *qualityClient, pr *githubapi.PR) []qualityGate {
 	gates := make([]qualityGate, 0, len(r.definitions))
 	for _, definition := range r.definitions {
@@ -63,7 +67,7 @@ func (r *gateRegistry) evaluate(q *qualityClient, pr *githubapi.PR) []qualityGat
 			gate.Passed = false
 			gate.Unavailable = true
 			gate.Detail = "Unavailable: " + err.Error()
-			gate.Problem = definition.Name + " could not be evaluated because GitHub evidence was unavailable."
+			gate.Problem = definition.Name + " " + qualityUnavailableProblem
 			gate.NextAction = "Retry the reporter and inspect its API error if retrieval still fails. This is missing evidence, not a confirmed failure in the PR."
 		}
 		definition.decorate(pr, &gate)

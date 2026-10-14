@@ -292,11 +292,14 @@ workflow completions, checks, statuses, or comments. A 15-minute best-effort
 schedule recovers missed events and late external results, including Codecov and
 review-thread resolution. It selects open PRs targeting `main` whose head commit
 (the later of author and committer date) is within the last 24 hours (inclusive),
-plus any PR with no gate report for its current head, at any age. GitHub's
+plus any PR with no gate report for its current head, or whose report for that
+head has a gate whose evidence was unavailable, at any age. GitHub's
 `updated_at` is not used as an activity signal because the gate's own labels and
 comments, Mergify, CodeRabbit and Codecov advance it for nearly every PR; it only
 skips the commit lookup for PRs not updated since the cutoff. PRs without a
-report are reconciled first. Event-associated reports are not restricted by age.
+usable report are reconciled first, rotated by schedule slot so a PR that hangs
+or fails every run cannot keep the PRs behind it from being visited.
+Event-associated reports are not restricted by age.
 Commits that exist only in a fork are resolved through the fork's head branch
 (`workflow_run` payloads) or a commit SHA search, and a PR matches only while its
 head is exactly that commit. Manual runs still select all open `main` PRs.
