@@ -34,6 +34,9 @@ type qualityGate struct {
 	Signals                            []qualitySignal
 	Advisory                           bool
 	Passed                             bool
+	// Unavailable marks a gate whose evidence could not be read. It is missing
+	// evidence, not a verdict, so it must not replace a published report.
+	Unavailable bool
 }
 
 // Signals are evidence from GitHub, never instructions for an agent.
@@ -46,6 +49,8 @@ type qualityClient struct {
 	api                   githubapi.API
 	repo                  string
 	benchmarkReportFailed bool
+	// prTimeout overrides qualityPRTimeout for each PR's reconcile.
+	prTimeout time.Duration
 }
 
 func (q *qualityClient) get(path string, response any) error {
@@ -53,7 +58,8 @@ func (q *qualityClient) get(path string, response any) error {
 }
 
 // Report refreshes the PRs associated with the current Actions event. Scheduled
-// runs reconcile PRs updated in the last 24 hours; manual runs reconcile all open PRs.
+// runs reconcile PRs with a recent head commit or no report for their current
+// head; manual runs reconcile all open PRs. One failing PR never blocks the rest.
 func (Quality) Report(repo string) error {
 	started := time.Now().UTC()
 	if !githubapi.RepoPattern.MatchString(repo) {
@@ -63,20 +69,14 @@ func (Quality) Report(repo string) error {
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), qualityRunBudget)
 	defer cancel()
 	q := qualityClient{ctx: ctx, api: client, repo: repo}
 	prs, err := q.eventPRs(started)
 	if err != nil {
 		return err
 	}
-	var failures []error
-	for _, number := range prs {
-		if err = q.reconcile(number); err != nil {
-			failures = append(failures, fmt.Errorf("PR #%d: %w", number, err))
-		}
-	}
-	return errors.Join(failures...)
+	return q.reconcileAll(prs)
 }
 
 //nolint:revive // Explicit event precedence handles reviews, external checks, and workflow runs.
@@ -124,62 +124,25 @@ func (q *qualityClient) eventPRs(now time.Time) ([]int, error) {
 	if event.WorkflowRun.HeadSHA != "" {
 		sha = event.WorkflowRun.HeadSHA
 	}
-	path := "pulls?state=open&base=main"
-	if sha != "" {
-		if !githubapi.SHAPattern.MatchString(sha) {
-			return nil, bench.Error("invalid event SHA")
-		}
-		path = "commits/" + sha + "/pulls?state=open"
+	if sha == "" {
+		return q.prNumbers("pulls?state=open&base=main", "")
 	}
-	return q.prNumbers(path)
-}
-
-// recentPRNumbers stops at the cutoff rather than scanning inactive PRs.
-func (q *qualityClient) recentPRNumbers(cutoff time.Time) ([]int, error) {
-	var numbers []int
-	for page := 1; page <= githubapi.PageLimit; page++ {
-		var prs []githubapi.PR
-		path := fmt.Sprintf("pulls?state=open&base=main&sort=updated&direction=desc&per_page=100&page=%d", page)
-		if err := q.get(path, &prs); err != nil {
-			return nil, err
-		}
-		for i := range prs {
-			pr := &prs[i]
-			if pr.Updated.IsZero() {
-				return nil, bench.Error("PR #%d: updated_at missing from scheduled recovery selection", pr.Number)
-			}
-			if pr.Updated.Before(cutoff) {
-				return numbers, nil
-			}
-			if pr.State == "open" && pr.Base.Ref == "main" {
-				numbers = append(numbers, pr.Number)
-			}
-		}
-		if len(prs) < githubapi.PageSize {
-			return numbers, nil
-		}
+	if !githubapi.SHAPattern.MatchString(sha) {
+		return nil, bench.Error("invalid event SHA")
 	}
-	return nil, bench.Error("PR pagination limit exceeded")
-}
-
-func (q *qualityClient) prNumbers(path string) ([]int, error) {
-	var numbers []int
-	for page := 1; page <= githubapi.PageLimit; page++ {
-		var prs []githubapi.PR
-		if err := q.get(fmt.Sprintf("%s&per_page=100&page=%d", path, page), &prs); err != nil {
-			return nil, err
-		}
-		for i := range prs {
-			pr := &prs[i]
-			if pr.State == "open" && pr.Base.Ref == "main" {
-				numbers = append(numbers, pr.Number)
-			}
-		}
-		if len(prs) < githubapi.PageSize {
-			return numbers, nil
-		}
+	numbers, err := q.prNumbers("commits/"+sha+"/pulls?state=open", "")
+	if err != nil || len(numbers) > 0 {
+		return numbers, err
 	}
-	return nil, bench.Error("PR pagination limit exceeded")
+	// Commits that exist only in a fork are not listed by the commit association
+	// endpoint, so resolve them through the fork's head branch or a SHA search.
+	// Only workflow_run payloads carry the head repository and branch.
+	owner, branch := "", ""
+	if event.WorkflowRun.HeadSHA == sha {
+		owner, _, _ = strings.Cut(event.WorkflowRun.HeadRepository.FullName, "/")
+		branch = event.WorkflowRun.Branch
+	}
+	return q.unlistedPRNumbers(sha, owner, branch)
 }
 
 func (q *qualityClient) evaluate(pr *githubapi.PR) []qualityGate {
