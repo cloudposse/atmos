@@ -79,6 +79,41 @@ func TestServer_CommentsCreateEditAndList(t *testing.T) {
 	assert.Equal(t, "second", current[0].Body)
 }
 
+func TestServer_CommitCommentsCreateEditAndList(t *testing.T) {
+	s := ghtest.NewServer(t, ghtest.WithSeedCommitComments("o", "r", "abc", ghtest.Comment{Body: "seeded"}))
+
+	status, body := do(t, s, http.MethodGet, "/repos/o/r/commits/abc/comments", "")
+	require.Equal(t, http.StatusOK, status)
+	assert.Contains(t, body, "seeded")
+
+	status, body = do(t, s, http.MethodPost, "/repos/o/r/commits/abc/comments", `{"body":"first"}`)
+	require.Equal(t, http.StatusCreated, status)
+	var created struct {
+		ID      int64  `json:"id"`
+		HTMLURL string `json:"html_url"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(body), &created))
+	assert.NotZero(t, created.ID)
+	assert.Contains(t, created.HTMLURL, "commitcomment-")
+
+	status, _ = do(t, s, http.MethodPatch, "/repos/o/r/comments/"+itoa(created.ID), `{"body":"second"}`)
+	require.Equal(t, http.StatusOK, status)
+	status, _ = do(t, s, http.MethodPatch, "/repos/o/r/comments/424242", `{"body":"x"}`)
+	assert.Equal(t, http.StatusNotFound, status)
+
+	writes := s.Comments()
+	require.Len(t, writes, 2, "seeded comments are not writes")
+	assert.Equal(t, "abc", writes[0].SHA)
+	assert.False(t, writes[0].Edited)
+	assert.True(t, writes[1].Edited)
+	assert.Equal(t, "second", writes[1].Body)
+
+	current := s.CommitCommentsFor("o", "r", "abc")
+	require.Len(t, current, 2)
+	assert.Equal(t, "second", current[1].Body)
+	assert.Empty(t, s.CommentsFor("o", "r", 0), "commit comments never appear as issue comments")
+}
+
 func itoa(n int64) string {
 	b, _ := json.Marshal(n)
 	return string(b)

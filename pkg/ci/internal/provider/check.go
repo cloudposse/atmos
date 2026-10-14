@@ -106,6 +106,11 @@ type UpdateCheckRunOptions struct {
 	// Name is the check run name (used as correlation key).
 	Name string
 
+	// ID is the identifier of the check run being updated, as returned by CreateCheckRun.
+	// Providers that address check runs by ID use it; those that correlate by Name ignore it.
+	// Zero means unknown.
+	ID int64
+
 	// Status is the new status.
 	Status CheckRunState
 

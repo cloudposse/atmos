@@ -36,24 +36,25 @@ func TestReporterRenderTemplates(t *testing.T) {
 	data := map[string]any{"N": 3}
 
 	tests := []struct {
-		name       string
-		summary    string
-		comment    string
-		call       string
-		template   string
-		want       string
-		wantErr    error
-		wantDetail string
+		name     string
+		summary  string
+		comment  string
+		call     string
+		template string
+		want     string
+		wantErr  error
 	}{
-		{name: "summary uses configured default", summary: "summary-default.md", call: "summary", want: "default summary 3"},
-		{name: "summary explicit name wins", summary: "summary-default.md", call: "summary", template: "summary-other.md", want: "other summary 3"},
-		{name: "summary explicit name without configured default", call: "summary", template: "summary-other", want: "other summary 3"},
-		{name: "summary with neither", call: "summary", wantErr: errUtils.ErrCITemplateNotFound, wantDetail: "ci.summary.template is not set"},
-		{name: "summary configured default missing on disk", summary: "absent.md", call: "summary", wantErr: errUtils.ErrCITemplateNotFound},
-		{name: "comment uses configured default", comment: "comment-default.md", call: "comment", want: "default comment 3"},
-		{name: "comment explicit name wins", comment: "comment-default.md", call: "comment", template: "comment-other.md", want: "other comment 3"},
-		{name: "comment ignores the summary default", summary: "summary-default.md", call: "comment", wantErr: errUtils.ErrCITemplateNotFound, wantDetail: "ci.comments.template is not set"},
-		{name: "comment with neither", call: "comment", wantErr: errUtils.ErrCITemplateNotFound, wantDetail: "ci.comments.template is not set"},
+		{name: "summary explicit name", call: "summary", template: "summary-other.md", want: "other summary 3"},
+		{name: "summary explicit name without extension", call: "summary", template: "summary-other", want: "other summary 3"},
+		{name: "summary explicit name wins over the native-plugin default", summary: "summary-default.md", call: "summary", template: "summary-other.md", want: "other summary 3"},
+		{name: "summary empty name ignores ci.summary.template", summary: "summary-default.md", call: "summary", wantErr: errUtils.ErrCITemplateNotFound},
+		{name: "summary with neither", call: "summary", wantErr: errUtils.ErrCITemplateNotFound},
+		{name: "summary explicit name missing on disk", call: "summary", template: "absent.md", wantErr: errUtils.ErrCITemplateNotFound},
+		{name: "comment explicit name", call: "comment", template: "comment-other.md", want: "other comment 3"},
+		{name: "comment explicit name wins over the native-plugin default", comment: "comment-default.md", call: "comment", template: "comment-other.md", want: "other comment 3"},
+		{name: "comment empty name ignores ci.comments.template", comment: "comment-default.md", call: "comment", wantErr: errUtils.ErrCITemplateNotFound},
+		{name: "comment ignores the summary default", summary: "summary-default.md", call: "comment", wantErr: errUtils.ErrCITemplateNotFound},
+		{name: "comment with neither", call: "comment", wantErr: errUtils.ErrCITemplateNotFound},
 	}
 
 	for _, tt := range tests {
@@ -71,15 +72,20 @@ func TestReporterRenderTemplates(t *testing.T) {
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
 				assert.Empty(t, got)
-				if tt.wantDetail != "" {
-					assert.Contains(t, errUtils.Format(err, errUtils.DefaultFormatterConfig()), tt.wantDetail)
-				}
 				return
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestReporterRenderTemplates_MissingKeyFails(t *testing.T) {
+	r := templateReporter(t, "", "", map[string]string{"typo.md": "{{ .Stak }}"})
+	_, err := r.RenderSummary("typo.md", map[string]any{"Stack": "dev"})
+	require.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
+	_, err = r.RenderComment("typo.md", map[string]any{"Stack": "dev"})
+	require.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
 }
 
 func TestReporterRenderTemplates_NilConfig(t *testing.T) {

@@ -2360,12 +2360,24 @@ func TestResolveCommentBehavior(t *testing.T) {
 	})
 }
 
-func TestBuildCommentMarker(t *testing.T) {
-	got := buildCommentMarker("plan", "vpc", "plat-ue2-dev")
-	assert.Equal(t, "<!-- atmos:ci:plan:vpc:plat-ue2-dev -->", got,
+func TestBuildCommentKey(t *testing.T) {
+	got := buildCommentKey("plan", "vpc", "plat-ue2-dev")
+	assert.Equal(t, "plan:vpc:plat-ue2-dev", got,
 		"segments must be in (command, component, stack) order to match the marker format")
-	assert.True(t, strings.HasPrefix(got, "<!--"), "marker must be an HTML comment so it renders invisibly")
-	assert.True(t, strings.HasSuffix(got, "-->"))
+}
+
+// TestPostedCommentMarkerIsStable pins the exact marker and body the Reporter produces for a plan
+// comment, because existing comments on open pull requests are found by it.
+func TestPostedCommentMarkerIsStable(t *testing.T) {
+	ctx := commentsHookContext(t)
+	mp := ctx.Provider.(*mockProvider)
+
+	require.NoError(t, (&Plugin{}).onAfterPlan(ctx))
+
+	require.Len(t, mp.commentCalls, 1)
+	call := mp.commentCalls[0]
+	assert.Equal(t, "<!-- atmos:ci:plan:vpc:dev -->", call.Marker)
+	assert.True(t, strings.HasPrefix(call.Body, "<!-- atmos:ci:plan:vpc:dev -->\n"), "the marker leads the body so it renders invisibly")
 }
 
 // commentsHookContext builds a HookContext wired for the comment-posting path:
@@ -2526,7 +2538,8 @@ func TestCreateCheckRun_DetailsURLFromCIContext(t *testing.T) {
 			mp := newMockProvider()
 
 			ctx := &plugin.HookContext{
-				Config:   &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+				// Statuses are written through the Reporter, which checks ci.checks.enabled itself.
+				Config:   &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true, Checks: schema.CIChecksConfig{Enabled: boolPtr(true)}}},
 				Provider: mp,
 				CICtx:    tt.ciCtx,
 				Command:  "plan",
