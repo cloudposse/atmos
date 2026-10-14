@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const action = fs.readFileSync(new URL('./action.yml', import.meta.url), 'utf8');
@@ -27,7 +28,7 @@ function fixture(t, lines, allowlist = []) {
     setOutput: (key, value) => { outputs[key] = value; },
     setFailed: message => failures.push(message),
   };
-  const env = { VERIFY_ACTION_PATH: path.dirname(new URL(import.meta.url).pathname), RUNNER_TEMP: root, WORKFLOW_DIR: workflows, ALLOWLIST_FILE: allowlistFile };
+  const env = { VERIFY_ACTION_PATH: path.dirname(fileURLToPath(import.meta.url)), RUNNER_TEMP: root, WORKFLOW_DIR: workflows, ALLOWLIST_FILE: allowlistFile };
   return { env, outputs, failures, core };
 }
 
@@ -140,5 +141,30 @@ for (const quotaSource of ['getCommit', 'listTags']) {
     assert.equal(state.outputs.allowlisted_count, 0);
     assert.equal(state.outputs.status, 'fail');
     assert.equal(state.failures.length, 1);
+  });
+}
+
+for (const status of [403, 500]) {
+  test(`comment lookup handles HTTP ${status} without losing its retry policy`, async t => {
+    const state = fixture(t, []);
+    const resultsFile = path.join(state.env.RUNNER_TEMP, 'results.json');
+    fs.writeFileSync(resultsFile, '[]');
+    const failure = Object.assign(new Error('lookup failed'), { status });
+    let requests = 0;
+    const github = { rest: { issues: { listComments: async () => {
+      requests++;
+      if (requests === 1) throw failure;
+      return { data: [] };
+    } } } };
+    const run = () => new AsyncFunction('require', 'process', 'github', 'core', 'context', scripts[1])(
+      require, { env: { RESULTS_FILE: resultsFile } }, github, state.core,
+      { issue: { number: 1 }, repo: { owner: 'owner', repo: 'repo' }, runId: 42 });
+    if (status === 403) {
+      await assert.rejects(run, error => error === failure);
+      assert.equal(requests, 1);
+    } else {
+      await run();
+      assert.equal(requests, 2);
+    }
   });
 }
