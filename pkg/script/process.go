@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/automation"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 )
@@ -24,6 +25,7 @@ type ProcessCall struct {
 	Check, Stream    bool
 	AllowPlanChanges bool
 	Stdout, Stderr   io.Writer
+	Policy           automation.ExecutionPolicy
 }
 
 // ProcessOutput contains captured output, independently of whether it was streamed.
@@ -36,11 +38,15 @@ type ProcessOutput struct {
 // Writers are supplied by the host/binding, retaining its masking and task attribution.
 func RunProcess(ctx context.Context, runner process.Runner, call *ProcessCall) (ProcessOutput, error) {
 	defer perf.Track(nil, "script.RunProcess")()
+	return runProcessWithPolicy(ctx, runner, call)
+}
+
+func runProcessOnce(ctx context.Context, runner process.Runner, call *ProcessCall) (ProcessOutput, bool, error) {
 	if err := ctx.Err(); err != nil {
-		return ProcessOutput{}, err
+		return ProcessOutput{}, false, err
 	}
 	if len(call.Argv) == 0 {
-		return ProcessOutput{}, serviceFailure(errUtils.ErrScriptInvalidArgument, nil, "argv must not be empty")
+		return ProcessOutput{}, false, serviceFailure(errUtils.ErrScriptInvalidArgument, nil, "argv must not be empty")
 	}
 	var stdout, stderr bytes.Buffer
 	var out, diagnostic io.Writer = &stdout, &stderr
@@ -58,7 +64,7 @@ func RunProcess(ctx context.Context, runner process.Runner, call *ProcessCall) (
 	})
 	output := ProcessOutput{Stdout: stdout.String(), Stderr: stderr.String(), ExitCode: result.ExitCode}
 	check := call.Check && (!call.AllowPlanChanges || result.ExitCode != 2)
-	return output, checkProcessResult(ctx, call.Argv[0], &result, output.Stderr, check)
+	return output, normalNonzeroExit(&result), checkProcessResult(ctx, call.Argv[0], &result, output.Stderr, check)
 }
 
 // ProcessEnvironment copies inherited values and applies per-call overrides in

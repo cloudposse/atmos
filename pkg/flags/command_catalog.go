@@ -19,6 +19,7 @@ type CommandCatalog struct {
 }
 
 type commandEntry struct {
+	path       []string
 	flags      map[string]string
 	takesValue map[string]bool
 	children   map[string]*commandEntry
@@ -44,7 +45,7 @@ func NewCommandCatalog(root *cobra.Command, lookup CompatibilityLookup) *Command
 }
 
 func snapshotCommand(command *cobra.Command, path []string, lookup CompatibilityLookup) *commandEntry {
-	entry := &commandEntry{flags: make(map[string]string), takesValue: make(map[string]bool), children: make(map[string]*commandEntry)}
+	entry := &commandEntry{path: slices.Clone(path), flags: make(map[string]string), takesValue: make(map[string]bool), children: make(map[string]*commandEntry)}
 	if lookup != nil {
 		for name, flag := range lookup(path) {
 			spelling := name

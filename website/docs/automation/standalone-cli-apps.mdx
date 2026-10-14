@@ -402,6 +402,21 @@ configuration. The bundled `atmos-starlark` agent skill documents the language
 and APIs for coding agents; install it with
 [`atmos ai skill install atmos-starlark`](/cli/commands/ai/skill).
 
+## Call the step library
+
+A standalone program can use the same [step handlers](/functions/automation/steps.run)
+as a YAML workflow. Save this as `select-service.star`:
+
+```python
+service = steps.input(prompt = "Service name?", default = "api").value
+ui.success("Selected " + service)
+```
+
+Run `atmos ./select-service.star` to prompt in a terminal. Without a terminal,
+the input step returns its configured default. Read the result's `.value`,
+`.metadata`, or `.outputs` to pass data to subsequent operations. The step library
+also includes container operations, HTTP requests, archives, and formatted output.
+
 ## Continue building
 
 Read the [command declaration reference](/steps/type/script#declaring-a-standalone-command)

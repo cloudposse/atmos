@@ -28,10 +28,15 @@ atmos.config(
 )
 ```
 
+Get operations default to JSON and captured output. Read `result.data` for the typed
+value or `result.stdout` for raw JSON. Use `flags = {"format": "raw"}` for unquoted
+text and `output = "stream"` to display output live. Other operations retain
+streaming output. See [query defaults](/functions/automation/atmos.run#query-defaults).
+
 ## Subcommands
 
 Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
-`atmos.config("get", "logs.level")` runs `atmos config get logs.level`.
+`atmos.config("get", "logs.level")` runs `atmos config get logs.level --format=json` and captures its output.
 
 | Subcommand | Purpose |
 | --- | --- |
@@ -74,15 +79,15 @@ Options other than the positionals are keyword-only.
 
 ## Returns
 
-A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+A result with `data`, `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
 
 ## Examples
 
 ### Read a setting
 
 ```python
-base = atmos.config("get", "base_path", output = "capture")
-print("base_path is", base.stdout.strip())
+base = atmos.config("get", "base_path")
+print("base_path is", base.data)
 ```
 
 ### Set a typed value

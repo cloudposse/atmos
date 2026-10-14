@@ -22,10 +22,15 @@ atmos.list(
     args = [],
     working_directory = ...,
     env = ...,
-    output = "stream",
+    output = "capture",
     check = True,
 )
 ```
+
+Calls default to JSON and captured output. Read `result.data` directly; `result.stdout`
+retains the raw JSON. Explicit formats and `output = "stream"` override these defaults.
+Subcommands without a `--format` flag retain their native format. See
+[query defaults](/functions/automation/atmos.run#query-defaults).
 
 ## Subcommands
 
@@ -84,16 +89,16 @@ Options other than the positionals are keyword-only.
 
 ## Returns
 
-A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+A result with decoded JSON in `data`, raw text in `stdout` and `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
 
-The function returns the text the command printed. With `format` set to `json`, decode it with `json.decode`.
+The `data` attribute decodes the captured JSON on first access. Use `stdout` for the original text.
 
 ## Examples
 
 ### Loop over every stack
 
 ```python
-stacks = json.decode(atmos.list("stacks", flags = {"format": "json"}, output = "capture").stdout)
+stacks = atmos.list("stacks").data
 for entry in stacks:
     ui.info("Found stack " + entry["Stack"])
 ```
@@ -103,9 +108,7 @@ The JSON output is a list of objects whose keys match the table column headings,
 ### List the components in one stack
 
 ```python
-components = json.decode(
-    atmos.list("components", flags = {"stack": "dev", "format": "json"}, output = "capture").stdout,
-)
+components = atmos.list("components", flags = {"stack": "dev"}).data
 for entry in components:
     print(entry["Component"], entry["Type"])
 ```
@@ -115,7 +118,7 @@ This runs `atmos list components --stack=dev --format=json`.
 ### Count instances
 
 ```python
-instances = json.decode(atmos.list("instances", flags = {"format": "json"}, output = "capture").stdout)
+instances = atmos.list("instances").data
 print("Instances:", len(instances))
 ```
 

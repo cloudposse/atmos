@@ -65,6 +65,7 @@ func (h *AtmosHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 
 // atmosExecOptions holds resolved options for command execution.
 type atmosExecOptions struct {
+	writers OutputWriters
 	command string
 	stack   string
 	workDir string
@@ -99,7 +100,11 @@ func (h *AtmosHandler) prepareExecution(ctx context.Context, step *schema.Workfl
 		return nil, err
 	}
 
+	if vars.OutputWriters.Stdout != nil || vars.OutputWriters.Stderr != nil {
+		envVars = append(vars.EnvSlice(), envVars...)
+	}
 	return &atmosExecOptions{
+		writers: vars.OutputWriters,
 		command: command,
 		stack:   stack,
 		workDir: workDir,
@@ -169,6 +174,7 @@ func (h *AtmosHandler) runAtmosCommand(ctx context.Context, stepName string, opt
 	cmd.Env = append(os.Environ(), opts.envVars...)
 
 	writer := NewOutputModeWriter(output.mode, stepName, output.viewport, output.show)
+	writer.writers = opts.writers
 	stdout, stderr, err := writer.Execute(cmd)
 
 	return h.buildAtmosResult(stdout, stderr, err), err

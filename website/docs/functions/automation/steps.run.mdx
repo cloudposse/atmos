@@ -1,0 +1,257 @@
+---
+title: "Step library"
+sidebar_label: "steps.run — Step library"
+sidebar_position: 12
+sidebar_class_name: command
+description: Call Atmos step handlers from a script and use their values, metadata, and named outputs.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Call Atmos steps directly from the Atmos Automation Language. Collect input,
+build containers, make HTTP requests, package files, and format output with the
+same handlers used by YAML workflows, custom commands, and hooks.
+</Intro>
+
+## Usage
+
+Call a step by its type, using its documented fields as keyword arguments:
+
+```python
+service = steps.input(prompt = "Service name?", default = "api").value
+selection = steps.choose(prompt = "Environment?", options = ["dev", "prod"], default = "dev").value
+ui.info("Selected " + service + " in " + selection)
+```
+
+For a type selected at runtime, use `steps.run(type, **fields)`:
+
+```python
+result = steps.run("join", options = ["api", "worker"], separator = ",")
+print(result.value)  # api,worker
+```
+
+Each call executes immediately. Use [`steps.task`](/functions/automation/steps.task)
+to defer a function call, and [`steps.parallel`](/functions/automation/steps.parallel)
+to run functions concurrently.
+
+## Arguments
+
+<dl>
+  <dt>`type`</dt>
+  <dd>The registered step type, passed as the first positional argument to `steps.run`.
+  A named function such as `steps.http` selects its type for you and accepts only keyword arguments.</dd>
+  <dt>`**fields`</dt>
+  <dd>The fields from the corresponding <a href="/steps/type">step reference</a>,
+  with the same types and defaults as YAML. Use dictionaries for nested blocks.
+  Unknown step fields and invalid values produce errors.</dd>
+  <dt>`with_`, `for_`, `continue_`</dt>
+  <dd>Spellings for fields that conflict with language keywords. For example,
+  pass a container's YAML `with:` block as `with_ = {"image": "..."}`.
+  Dictionary expansion also accepts the original spelling, such as `**{"with": settings}`.</dd>
+</dl>
+
+Hyphens in type names become underscores in function names: `wait-all` is
+`steps.wait_all`. The existing `steps.parallel` function continues to run AAL
+functions. To execute a YAML-style parallel group, use
+`steps.run("parallel", steps = [...])` with child step dictionaries.
+
+## Results
+
+A call returns an immutable result with these attributes:
+
+<dl>
+  <dt>`data`</dt>
+  <dd>The JSON decoded from `value` on first access, with read-only lists and dictionaries.
+  For example, an HTTP step can return a JSON response body. The original `value`
+  remains available. Empty or invalid JSON raises only when you access `data`.</dd>
+  <dt>`value`</dt>
+  <dd>The step's primary result as a string. For example, input text, an HTTP
+  response body, or an archive path. A confirmation returns `"true"`
+  or `"false"`; compare the value explicitly.</dd>
+  <dt>`values`</dt>
+  <dd>A list of strings for handlers that return multiple selections; otherwise an empty list.</dd>
+  <dt>`metadata`</dt>
+  <dd>A dictionary of handler-specific details. For example, HTTP steps return
+  `status_code` and command steps return `stdout`,
+  `stderr`, and `exit_code`. See the individual step reference.</dd>
+  <dt>`outputs`</dt>
+  <dd>A dictionary of named strings evaluated from the step's `outputs` declarations.</dd>
+  <dt>`skipped`, `error`</dt>
+  <dd>The handler's skipped flag and diagnostic string. Execution failures raise
+  an error and stop the script rather than returning a successful result.</dd>
+</dl>
+
+Metadata, selections, and named outputs already have their documented dictionary
+or list types; `data` decodes only the primary `value`. Use `json.decode(result.value)`
+when you need a mutable copy. Serializing a whole result preserves its original
+fields without accessing `data`.
+
+### Pass results between calls
+
+Use ordinary variables to pass results to the next operation. Named steps also
+publish their results to subsequent step templates in the same script thread:
+
+```python
+joined = steps.join(
+    name = "services",
+    options = ["api", "worker"],
+    separator = ",",
+    outputs = {"names": "{{ .value }}"},
+)
+print(joined.outputs["names"])
+
+summary = steps.join(content = "Services: {{ .steps.services.outputs.names }}")
+print(summary.value)
+```
+
+Omitting `name` uses the step type as its name; another call with that name
+replaces its stored result. Assign the script's top-level `output` to publish a
+value to an enclosing workflow or command.
+
+## Execution context
+
+Calls inherit the script's working directory, child-process environment, and
+installed tool paths. A relative `working_directory` resolves against the script's
+working directory. They use the current Atmos configuration and component
+resolvers supplied by the enclosing command, workflow, or hook.
+
+Step state belongs to the script invocation. Calls to `steps.env` update the
+environment used by later **step-library calls**, not the script's immutable
+`env` dictionary or the environment used by `exec.run` and `atmos.*`. Use their
+`env` argument when those calls need an override. Step state does not modify the
+enclosing YAML runner's variables.
+
+Each parallel task inherits a snapshot of its parent's step state. Its changes
+stay in that task, including during nested parallel work. A task retry starts
+with a fresh snapshot. Return values from tasks to share results with the parent.
+
+### Prompts and terminal ownership
+
+Prompts retain the existing step behavior: they use a terminal when available,
+fall back to a configured default without a terminal, or report that a terminal
+is required. Prompts, terminal sessions, casts, line clearing, process replacement,
+and viewport output cannot run in parallel script tasks. Collect input before
+starting parallel work.
+
+Command output uses the script's streams and task prefixes. With script-owned
+streams, command output modes stream through those writers; `output = "none"`
+suppresses display while preserving captured results. The handlers' terminal
+interaction and cast recording retain their own terminal requirements.
+
+### Workflow-only features
+
+A function call does not create a workflow job. Put `needs`, `when`, `continue`,
+`identity`, asynchronous `background`, and freshness policies (`inputs`,
+`artifacts`, `preconditions`) on enclosing YAML steps. Supplying them to a direct
+call is an error. Use language conditionals and function calls for script control
+flow, and [`steps.parallel`](/functions/automation/steps.parallel) for concurrent work.
+
+The `wait`, `wait-all`, and `cancel` handlers require the workflow runner's
+background-job context. Calling them directly from AAL reports that requirement.
+A non-container step's container override also belongs on the enclosing YAML
+step; use `steps.container` for explicit container operations.
+
+The `matrix`, `test`, and YAML-style `parallel` handlers use their existing
+runners and child-type restrictions. The `exec` step replaces the Atmos process
+on Unix; use [`exec.run`](/functions/automation/exec.run) when the script should
+continue after the command finishes.
+
+## Available step functions
+
+The module reflects the registered step library. Each entry links to the fields,
+prerequisites, and result details shared with YAML steps.
+
+<dl>
+  <dt id="steps-alert">`steps.alert`</dt>
+  <dd>Ring the terminal bell and optionally print a message. See the <a href="/steps/type/alert">alert step reference</a>.</dd>
+  <dt id="steps-archive">`steps.archive`</dt>
+  <dd>Create or extract an archive. See the <a href="/steps/type/archive">archive step reference</a>.</dd>
+  <dt id="steps-atmos">`steps.atmos`</dt>
+  <dd>Run an Atmos command through the step handler. See the <a href="/steps/type/atmos">atmos step reference</a>.</dd>
+  <dt id="steps-cancel">`steps.cancel`</dt>
+  <dd>Cancel named background jobs; requires workflow background-job context. See the <a href="/steps/type/cancel">cancel step reference</a>.</dd>
+  <dt id="steps-cast">`steps.cast`</dt>
+  <dd>Record a terminal session or a sequence of steps. See the <a href="/steps/type/cast">cast step reference</a>.</dd>
+  <dt id="steps-choose">`steps.choose`</dt>
+  <dd>Prompt for a choice from a list. See the <a href="/steps/type/choose">choose step reference</a>.</dd>
+  <dt id="steps-clear">`steps.clear`</dt>
+  <dd>Clear the current terminal line. See the <a href="/steps/type/clear">clear step reference</a>.</dd>
+  <dt id="steps-confirm">`steps.confirm`</dt>
+  <dd>Prompt for confirmation and return the string "true" or "false". See the <a href="/steps/type/confirm">confirm step reference</a>.</dd>
+  <dt id="steps-container">`steps.container`</dt>
+  <dd>Build, run, push, or inspect containers using an action and a with_ dictionary. See the <a href="/steps/type/container">container step reference</a>.</dd>
+  <dt id="steps-emulator">`steps.emulator`</dt>
+  <dd>Manage an emulator component. See the <a href="/steps/type/emulator">emulator step reference</a>.</dd>
+  <dt id="steps-env">`steps.env`</dt>
+  <dd>Set variables for subsequent step-library calls in this thread. See the <a href="/steps/type/env">env step reference</a>.</dd>
+  <dt id="steps-exec">`steps.exec`</dt>
+  <dd>Replace the Atmos process with a command. See the <a href="/steps/type/exec">exec step reference</a>.</dd>
+  <dt id="steps-exit">`steps.exit`</dt>
+  <dd>Stop execution with an exit code. See the <a href="/steps/type/exit">exit step reference</a>.</dd>
+  <dt id="steps-file">`steps.file`</dt>
+  <dd>Prompt for a file path. See the <a href="/steps/type/file">file step reference</a>.</dd>
+  <dt id="steps-filter">`steps.filter`</dt>
+  <dd>Select items using a searchable list. See the <a href="/steps/type/filter">filter step reference</a>.</dd>
+  <dt id="steps-format">`steps.format`</dt>
+  <dd>Format structured content. See the <a href="/steps/type/format">format step reference</a>.</dd>
+  <dt id="steps-hint">`steps.hint`</dt>
+  <dd>Display a hint. See the <a href="/steps/type/hint">hint step reference</a>.</dd>
+  <dt id="steps-http">`steps.http`</dt>
+  <dd>Make an HTTP request; steps.webhook is an alias. See the <a href="/steps/type/http">http step reference</a>.</dd>
+  <dt id="steps-input">`steps.input`</dt>
+  <dd>Prompt for a line of text. See the <a href="/steps/type/input">input step reference</a>.</dd>
+  <dt id="steps-join">`steps.join`</dt>
+  <dd>Combine strings and return the result. See the <a href="/steps/type/join">join step reference</a>.</dd>
+  <dt id="steps-junit">`steps.junit`</dt>
+  <dd>Summarize JUnit XML reports. See the <a href="/steps/type/junit">junit step reference</a>.</dd>
+  <dt id="steps-linebreak">`steps.linebreak`</dt>
+  <dd>Print blank lines. See the <a href="/steps/type/linebreak">linebreak step reference</a>.</dd>
+  <dt id="steps-log">`steps.log`</dt>
+  <dd>Emit a structured log message. See the <a href="/steps/type/log">log step reference</a>.</dd>
+  <dt id="steps-markdown">`steps.markdown`</dt>
+  <dd>Render Markdown content. See the <a href="/steps/type/markdown">markdown step reference</a>.</dd>
+  <dt id="steps-matrix">`steps.matrix`</dt>
+  <dd>Run child step dictionaries over a matrix. See the <a href="/steps/type/matrix">matrix step reference</a>.</dd>
+  <dt id="steps-pager">`steps.pager`</dt>
+  <dd>Display content in a pager. See the <a href="/steps/type/pager">pager step reference</a>.</dd>
+  <dt id="steps-require">`steps.require`</dt>
+  <dd>Check preconditions. The alias assert is available through steps.run("assert", **fields). See the <a href="/steps/type/require">require step reference</a>.</dd>
+  <dt id="steps-say">`steps.say`</dt>
+  <dd>Speak a message using an available voice. See the <a href="/steps/type/say">say step reference</a>.</dd>
+  <dt id="steps-script">`steps.script`</dt>
+  <dd>Run a nested script with an explicit interpreter. See the <a href="/steps/type/script">script step reference</a>.</dd>
+  <dt id="steps-shell">`steps.shell`</dt>
+  <dd>Run a shell command. See the <a href="/steps/type/shell">shell step reference</a>.</dd>
+  <dt id="steps-sleep">`steps.sleep`</dt>
+  <dd>Pause for a duration, honoring cancellation. See the <a href="/steps/type/sleep">sleep step reference</a>.</dd>
+  <dt id="steps-spin">`steps.spin`</dt>
+  <dd>Display a spinner while a command runs. See the <a href="/steps/type/spin">spin step reference</a>.</dd>
+  <dt id="steps-stage">`steps.stage`</dt>
+  <dd>Display a stage marker. See the <a href="/steps/type/stage">stage step reference</a>.</dd>
+  <dt id="steps-store">`steps.store`</dt>
+  <dd>Write a value to a configured store. See the <a href="/steps/type/store">store step reference</a>.</dd>
+  <dt id="steps-style">`steps.style`</dt>
+  <dd>Apply terminal styling to content. See the <a href="/steps/type/style">style step reference</a>.</dd>
+  <dt id="steps-table">`steps.table`</dt>
+  <dd>Render tabular data. See the <a href="/steps/type/table">table step reference</a>.</dd>
+  <dt id="steps-test">`steps.test`</dt>
+  <dd>Run a group of check steps. See the <a href="/steps/type/test">test step reference</a>.</dd>
+  <dt id="steps-tflint">`steps.tflint`</dt>
+  <dd>Run TFLint against a Terraform component. See the <a href="/steps/type/tflint">tflint step reference</a>.</dd>
+  <dt id="steps-title">`steps.title`</dt>
+  <dd>Display a title. See the <a href="/steps/type/title">title step reference</a>.</dd>
+  <dt id="steps-toast">`steps.toast`</dt>
+  <dd>Display a notification. See the <a href="/steps/type/toast">toast step reference</a>.</dd>
+  <dt id="steps-wait">`steps.wait`</dt>
+  <dd>Wait for named background jobs; requires workflow background-job context. See the <a href="/steps/type/wait">wait step reference</a>.</dd>
+  <dt id="steps-wait_all">`steps.wait_all`</dt>
+  <dd>Wait for all background jobs; requires workflow background-job context. See the <a href="/steps/type/wait">wait-all step reference</a>.</dd>
+  <dt id="steps-workdir">`steps.workdir`</dt>
+  <dd>Provision a working directory from a source. See the <a href="/steps/type/workdir">workdir step reference</a>.</dd>
+  <dt id="steps-write">`steps.write`</dt>
+  <dd>Prompt for multiline input. See the <a href="/steps/type/write">write step reference</a>.</dd>
+</dl>
+
+For function-based concurrency, see [`steps.task`](/functions/automation/steps.task) and
+[`steps.parallel`](/functions/automation/steps.parallel).

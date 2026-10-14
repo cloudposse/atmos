@@ -44,7 +44,7 @@ func TestModuleBuildsLiteralArguments(t *testing.T) {
 		{`atmos.run(("version",))`, []string{"version"}, false},
 		{`atmos.version()`, []string{"version"}, false},
 		{`atmos.describe("component","api",flags={"f":"json"},args=["--help"])`, []string{"describe", "component", "api", "--format=json", "--help"}, false},
-		{`atmos.describe(args=["component","api"],flags={"q":"vars"})`, []string{"describe", "--query=vars", "component", "api"}, false},
+		{`atmos.describe(args=["component","api"],flags={"q":"vars"})`, []string{"describe", "--query=vars", "component", "api", "--format=json"}, false},
 		{`atmos.vendor("pull",flags={"component":["api","worker"],"dry-run":False,"verbose":True,"count":2})`, []string{"vendor", "pull", "--component=api", "--component=worker", "--count=2", "--dry-run=false", "--verbose"}, false},
 		{`atmos.terraform("plan","api","dev",flags={"detailed-exitcode":True})`, []string{"terraform", "plan", "api", "--stack=dev", "-detailed-exitcode"}, true},
 		{`atmos.terraform("plan","api","dev",args=["-detailed-exitcode=true","-detailed-exitcode=false"])`, []string{"terraform", "plan", "api", "--stack=dev", "-detailed-exitcode=true", "-detailed-exitcode=false"}, false},
@@ -59,7 +59,11 @@ func TestModuleBuildsLiteralArguments(t *testing.T) {
 				calls++
 				assert.Equal(t, tc.argv, argv)
 				assert.Equal(t, tc.detailed, detailed)
-				assert.Equal(t, Options{Dir: "project", Output: "stream", Check: true}, opts)
+				output := "stream"
+				if tc.argv[0] == "describe" {
+					output = "capture"
+				}
+				assert.Equal(t, Options{Dir: "project", Output: output, Check: true}, opts)
 				return starlark.String("host result"), nil
 			})
 			result, err := starlark.EvalOptions(&syntax.FileOptions{}, &starlark.Thread{}, "atmos.star", tc.source, starlark.StringDict{"atmos": module})

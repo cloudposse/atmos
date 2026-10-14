@@ -9,6 +9,7 @@ import (
 	"go.starlark.net/starlark"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/automation"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/scheduler"
@@ -49,7 +50,7 @@ func (s *session) parallel(thread *starlark.Thread, b *starlark.Builtin, args st
 		return nil, err
 	}
 	freezeInputs(tasks)
-	return s.runParallel(threadContext(thread), threadPrefix(thread), tasks, maxConcurrency, failFast)
+	return s.runParallel(threadContext(thread), tasks, parallelRun{prefix: threadPrefix(thread), concurrency: maxConcurrency, failFast: failFast, library: threadSteps(thread)})
 }
 
 func parallelTasks(functions, descriptors starlark.Value) ([]*task, error) {
@@ -88,7 +89,14 @@ func parallelTasks(functions, descriptors starlark.Value) ([]*task, error) {
 	return tasks, nil
 }
 
-func (s *session) runParallel(ctx context.Context, prefix string, tasks []*task, concurrency int, failFast bool) (starlark.Value, error) {
+type parallelRun struct {
+	prefix      string
+	concurrency int
+	failFast    bool
+	library     automation.StepLibrary
+}
+
+func (s *session) runParallel(ctx context.Context, tasks []*task, run parallelRun) (starlark.Value, error) {
 	graph := dependency.NewGraph()
 	for i, t := range tasks {
 		if err := graph.AddNode(&dependency.Node{ID: fmt.Sprintf("%09d", i), Metadata: map[string]any{"task": t}}); err != nil {
@@ -99,15 +107,15 @@ func (s *session) runParallel(ctx context.Context, prefix string, tasks []*task,
 	defer cancel()
 	dispatcher := scheduler.DispatcherFunc(func(ctx context.Context, node *dependency.Node) (scheduler.Result, error) {
 		t := node.Metadata["task"].(*task)
-		value, err := s.runTask(ctx, taskPrefix(prefix, t, len(tasks)), t)
-		if err != nil && failFast {
+		value, err := s.runTask(ctx, taskPrefix(run.prefix, t, len(tasks)), t, run.library)
+		if err != nil && run.failFast {
 			cancel()
 		}
 		return scheduler.Result{Value: value}, err
 	})
 	aggregate := scheduler.New(
 		graph, dispatcher,
-		scheduler.WithMaxConcurrency(concurrency), scheduler.WithFailFast(failFast),
+		scheduler.WithMaxConcurrency(run.concurrency), scheduler.WithFailFast(run.failFast),
 		scheduler.WithNodeCompleteHook(func(node *dependency.Node, result scheduler.Result) {
 			s.event(TaskEvent{Name: node.Metadata["task"].(*task).name, Status: string(result.Status), Err: result.Err})
 		}),
@@ -190,7 +198,7 @@ func combineFailures(errs []error) error {
 	}
 }
 
-func (s *session) runTask(ctx context.Context, prefix string, t *task) (starlark.Value, error) {
+func (s *session) runTask(ctx context.Context, prefix string, t *task, library automation.StepLibrary) (starlark.Value, error) {
 	parent := ctx
 	if t.timeout > 0 {
 		var cancel context.CancelFunc
@@ -212,7 +220,7 @@ func (s *session) runTask(ctx context.Context, prefix string, t *task) (starlark
 		attempt++
 		s.event(TaskEvent{Name: t.name, Status: "attempt", Attempt: attempt})
 		var err error
-		value, err = s.attempt(ctx, prefix, t)
+		value, err = s.attempt(ctx, prefix, t, library)
 		last = err
 		return err
 	}, func(err error) bool {
@@ -226,9 +234,10 @@ func (s *session) runTask(ctx context.Context, prefix string, t *task) (starlark
 }
 
 // attempt runs one invocation of the task function on its own thread and output sink.
-func (s *session) attempt(ctx context.Context, prefix string, t *task) (starlark.Value, error) {
+func (s *session) attempt(ctx context.Context, prefix string, t *task, library automation.StepLibrary) (starlark.Value, error) {
 	out := s.newTaskOutput(prefix)
 	thread, stop := s.thread(ctx, t.name, out)
+	thread.SetLocal(stepLibraryKey, forkSteps(library))
 	defer func() {
 		stop()
 		out.flush()

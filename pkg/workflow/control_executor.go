@@ -15,6 +15,7 @@ import (
 	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/automation"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -77,6 +78,7 @@ type ControlCommandExecutor struct {
 	// ResolveComponent backs `components.get` in embedded script children.
 	ResolveComponent script.ComponentResolver
 	InstallTools     script.ToolInstaller
+	ScriptSteps      automation.StepLibrary
 	// ProjectRoot is the absolute Atmos project base path. Embedded script children show paths under
 	// it relative to it in errors and tracebacks.
 	ProjectRoot string
@@ -198,6 +200,8 @@ func (executor *ControlCommandExecutor) executeEmbeddedScript(ctx context.Contex
 		var runErr error
 		embedded, runErr = engine.Execute(ctx, script.Spec{
 			InstallTools: executor.InstallTools,
+			Steps:        executor.scriptStepLibrary(),
+			Parallel:     true,
 			Name:         step.Name, Source: step.Script, SourcePath: step.ScriptSource, ProjectRoot: executor.ProjectRoot, WorkingDirectory: executor.workingDirectory(step),
 			Env: inputs, ProcessEnv: stepEnv, DryRun: step.DryRun,
 			Flags: executor.ScriptFlags, Arguments: executor.ScriptArguments,
@@ -451,4 +455,17 @@ func controlChildExecutionResult(stdout, stderr *bytes.Buffer, err error) *Contr
 		Stderr:   stderr.String(),
 		Canceled: errors.Is(err, context.Canceled),
 	}
+}
+
+// scriptStepLibrary supplies the shared Go API even for an executor constructed
+// directly by an embedding application rather than a CLI adapter.
+func (executor *ControlCommandExecutor) scriptStepLibrary() automation.StepLibrary {
+	if executor.ScriptSteps != nil {
+		return executor.ScriptSteps
+	}
+	vars := stepPkg.NewVariables()
+	vars.ScriptHook = executor.ScriptHook
+	vars.SetTemplateRoot("Flags", executor.ScriptFlags)
+	vars.SetTemplateRoot("Arguments", executor.ScriptArguments)
+	return stepPkg.NewAutomationLibrary(vars, executor.WorkflowDefinition)
 }

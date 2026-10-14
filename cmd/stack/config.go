@@ -34,7 +34,7 @@ var stackConfigGetCmd = &cobra.Command{
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "stack.config.getRunE")()
-		return runStackGet(args)
+		return runStackGetCommand(cmd, args)
 	},
 }
 
@@ -101,6 +101,7 @@ func stackPathPatternArg(args []string) string {
 }
 
 func init() {
+	stackConfigGetCmd.Flags().StringP("format", "f", "raw", "Output format: raw or json")
 	for _, c := range []*cobra.Command{stackConfigGetCmd, stackConfigSetCmd, stackConfigDeleteCmd, stackConfigFormatCmd} {
 		registerStackEditFlags(c)
 	}

@@ -73,6 +73,7 @@ func newCustomCommandControlExecutor(control *CustomCommandControlContext) *work
 		vars = control.Executor.Variables()
 	}
 	return &workflow.ControlCommandExecutor{
+		ScriptSteps:  stepPkg.NewAutomationLibrary(vars, workflowDefinition),
 		InstallTools: stepPkg.ScriptToolInstaller(&control.AtmosConfig),
 		// Custom commands have no dry-run mode; children always execute.
 		DryRun:                 false,

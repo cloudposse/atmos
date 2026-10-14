@@ -110,6 +110,14 @@ func taskKeywords(value starlark.Value) ([]starlark.Tuple, error) {
 }
 
 func parseRetry(thread *starlark.Thread, value starlark.Value) (*schema.RetryConfig, error) {
+	cfg, err := parseRetryConfig(thread, value)
+	if err == nil && cfg != nil && len(cfg.Conditions) > 0 {
+		return nil, invalidArg("retry conditions apply to subprocess output, not function tasks")
+	}
+	return cfg, err
+}
+
+func parseRetryConfig(thread *starlark.Thread, value starlark.Value) (*schema.RetryConfig, error) {
 	if value == starlark.None {
 		return nil, nil
 	}
@@ -125,9 +133,6 @@ func parseRetry(thread *starlark.Thread, value starlark.Value) (*schema.RetryCon
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&cfg); err != nil {
 		return nil, failWith(errUtils.ErrStarlarkInvalidArgument, err, "invalid retry: %s", err)
-	}
-	if len(cfg.Conditions) > 0 {
-		return nil, invalidArg("retry conditions apply to subprocess output, not function tasks")
 	}
 	switch cfg.BackoffStrategy {
 	case "", schema.BackoffConstant, schema.BackoffLinear, schema.BackoffExponential:

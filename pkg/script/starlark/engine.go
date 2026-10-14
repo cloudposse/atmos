@@ -121,6 +121,7 @@ func (e *Engine) Execute(ctx context.Context, spec script.Spec) (script.Result, 
 	}
 	thread, stop := s.thread(ctx, spec.Name, nil)
 	defer stop()
+	thread.SetLocal(stepLibraryKey, forkSteps(spec.Steps))
 	if err := s.componentContext(thread); err != nil {
 		return script.Result{}, scriptError(ctx, err, s.spec.ProjectRoot)
 	}
@@ -246,12 +247,9 @@ func (s *session) predeclared() starlark.StringDict {
 		"json":         starjson.Module,
 		"fs":           module("fs", starlark.StringDict{"read_file": starlark.NewBuiltin("fs.read_file", s.readFile)}),
 		"regex":        regexmodule.New(),
-		"steps": module("steps", starlark.StringDict{
-			"task":     starlark.NewBuiltin("steps.task", newTask),
-			"parallel": starlark.NewBuiltin("steps.parallel", s.parallel),
-		}),
-		"exec": module("exec", starlark.StringDict{"run": starlark.NewBuiltin("exec.run", s.exec)}),
-		"log":  module("log", s.logMembers()),
+		"steps":        s.stepsModule(),
+		"exec":         module("exec", starlark.StringDict{"run": starlark.NewBuiltin("exec.run", s.exec)}),
+		"log":          module("log", s.logMembers()),
 	}
 }
 

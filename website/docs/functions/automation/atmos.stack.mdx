@@ -27,6 +27,11 @@ atmos.stack(
 )
 ```
 
+Get operations default to JSON and captured output. Read `result.data` for the typed
+value or `result.stdout` for raw JSON. Use `flags = {"format": "raw"}` for unquoted
+text and `output = "stream"` to display output live. Other operations retain
+streaming output. See [query defaults](/functions/automation/atmos.run#query-defaults).
+
 ## Subcommands
 
 Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
@@ -76,7 +81,7 @@ Options other than the positionals are keyword-only.
 
 ## Returns
 
-A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+A result with `data`, `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
 
 ## Examples
 
@@ -84,7 +89,7 @@ A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/
 
 ```python
 location = atmos.stack("get", "vars.location", flags = {"stack": "dev", "component": "station"}, output = "capture")
-print(location.stdout.strip())
+print(location.data)
 ```
 
 The value is written to `stdout`. The command reports which manifest the value comes from on `stderr`.
@@ -117,7 +122,7 @@ ui.success("All stacks validated successfully.")
 ```python
 def location_of(stack):
     out = atmos.stack("get", "vars.location", flags = {"stack": stack, "component": "station"}, output = "capture")
-    return out.stdout.strip()
+    return out.data
 
 for stack in ["dev", "staging", "prod"]:
     ui.info(stack + ": " + location_of(stack))
