@@ -177,7 +177,6 @@ tests:
       ATMOS_VERSION_CHECK_ENABLED: "false"
       ATMOS_TOOLCHAIN_GITHUB_API_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/api/v3"
       COLUMNS: "120"
-      ATMOS_TOOLCHAIN_GITHUB_API_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/api/v3"
     command: "atmos"
     args:
       - "toolchain"

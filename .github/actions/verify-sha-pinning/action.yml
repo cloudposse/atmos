@@ -436,6 +436,7 @@ runs:
         github-token: ${{ inputs.github-token }}
         script: |
           const marker = '<!-- verify-sha-pinning -->';
+          const nonRetryableStatuses = new Set([400, 401, 403, 404, 422]);
           const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
           async function withRetries(operation, label, maxAttempts = 3) {
