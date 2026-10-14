@@ -1,0 +1,38 @@
+---
+title: "fs.exists"
+sidebar_label: "fs.exists"
+sidebar_class_name: command
+description: Check whether a filesystem path resolves.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>Check whether a filesystem path resolves.</Intro>
+
+## Usage
+
+```python
+fs.exists(path)
+```
+
+<dl>
+  <dt>`path`</dt><dd>The file or directory to check. Symlinks are followed.</dd>
+</dl>
+
+Returns `True` for an existing path and `False` for a missing path or dangling
+symlink. Other errors, including permission failures and symlink loops, raise
+an error instead of returning `False`. A successful check does not guarantee
+that a later filesystem operation will succeed: the filesystem can change.
+
+```python
+if not fs.exists("config.json"):
+    errors.build("Missing config.json").with_hint("Create the project configuration.").fail()
+```
+
+Relative paths resolve against the script's working directory, including when
+called from a loaded module. Absolute paths are used as given. These functions
+inspect the local filesystem; they do not isolate access to the repository.
+Calls honor cancellation before and after the filesystem operation.
+
+See [reading files](/functions/automation/fs.read_file) and
+[Git hooks](/cli/configuration/git#local-git-hooks).

@@ -9,12 +9,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/script"
 )
 
-func fileContext(file *script.File) (starlark.Value, starlark.Value) {
+func fileContext(file *script.File, args []string) (starlark.Value, starlark.Value) {
 	values := []starlark.Value{}
 	var location starlark.Value = starlark.None
 	if file != nil {
-		for _, arg := range file.Args {
-			values = append(values, starlark.String(arg))
+		if file.Args != nil {
+			args = file.Args
 		}
 		if !file.Stdin {
 			location = starlarkstruct.FromStringDict(starlark.String("script"), starlark.StringDict{
@@ -22,7 +22,10 @@ func fileContext(file *script.File) (starlark.Value, starlark.Value) {
 			})
 		}
 	}
-	args := starlark.NewList(values)
-	args.Freeze()
-	return args, location
+	for _, arg := range args {
+		values = append(values, starlark.String(arg))
+	}
+	result := starlark.NewList(values)
+	result.Freeze()
+	return result, location
 }

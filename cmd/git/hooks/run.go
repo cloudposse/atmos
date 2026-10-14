@@ -41,7 +41,7 @@ var runCmd = &cobra.Command{
 				Err()
 		}
 
-		return githooks.Run(gitConfig(), hookName, hookArgs)
+		return githooks.Run(gitConfig(), hookName, hookArgs, githooks.WithContext(cmd.Context()), githooks.WithAtmosConfig(atmosConfigPtr))
 	},
 }
 

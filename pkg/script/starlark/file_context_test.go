@@ -32,3 +32,14 @@ output = [args(), ctx.script.path, ctx.script.directory]
 	_, err = New().Execute(context.Background(), script.Spec{File: &script.File{}, Source: `ctx.args.append("mutate")`})
 	require.ErrorContains(t, err, "frozen")
 }
+
+func TestIncludedScriptPreservesHostArguments(t *testing.T) {
+	t.Parallel()
+	result, err := New().Execute(context.Background(), script.Spec{
+		SourcePath: filepath.Join(t.TempDir(), "check.star"),
+		Args:       []string{"commit message", "--flag"},
+		Source:     `output = ctx.args`,
+	})
+	require.NoError(t, err)
+	assert.JSONEq(t, `["commit message","--flag"]`, result.Value)
+}

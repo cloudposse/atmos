@@ -1,26 +1,33 @@
 ---
 slug: starlark-custom-commands
-title: "Introducing Atmos Automation Language"
+title: "Atmos Is Now a Language for Automation"
 authors: [osterman]
 tags: [feature]
 cast: "/casts/examples/starlark-commands/capacity.cast"
 castTitle: "Custom command defined in atmos.yaml"
 ---
 
-Build, ship, and deploy containers the same way locally and in CI. The
-[Atmos Automation Language](/automation/language) is a Python-like DSL based on
-Starlark for writing that process as reusable, testable code. Compose image
-builds, registry pushes, deployments, and checks using your existing Atmos
-stacks, identities, and toolchain.
+Atmos is now a language for automation. Introducing the
+[Atmos Automation Language](/automation/language): a Python-like language based
+on Starlark for writing, composing, and testing your build, test, and deployment
+processes.
 
-Install pinned tool dependencies, assume configured identities, call Atmos
-commands and external tools, and parallelize work with retries and timeouts.
-Combine scripts with native prompt steps, pass structured results between steps,
-and give users Atmos's formatted output and actionable errors.
+Templating made configuration reusable. Custom commands gave teams their own
+CLI. The Atmos Automation Language is the next major step: you can program the
+process itself, with functions, control flow, structured data, and tests, using
+the capabilities already built into Atmos.
 
-Keep the release logic in your project and have developers and CI invoke the
-same command. Atmos supplies structured data, command execution, parallel tasks,
-and test steps, reducing the shell plumbing you maintain as Bash scripts grow.
+Build containers, ship them, and deploy them through the same scripts locally
+and in CI. Install pinned tools, assume configured identities, run commands,
+and parallelize independent work. Use consistent inputs, formatted output, and
+structured errors to make that automation useful to the whole team. It works
+for applications as well as infrastructure.
+
+Write your code in a `.star` file and run it with `atmos ./release.star`, or
+embed it in custom commands, workflow steps, and hooks. The interpreter ships
+in the Atmos binary, together with the automation functions and test runner.
+Your scripts use the tools, credentials, and configuration you provide for each
+environment.
 
 For standalone `.star` apps with their own arguments and help, see the
 [Atmos interpreter announcement](/changelog/atmos-interpreter).
@@ -32,11 +39,10 @@ import EmbedFile from '@site/src/components/EmbedFile'
 
 ## Keep your release process in one place {#the-problem}
 
-Release logic often ends up spread across Bash scripts and CI configuration.
-Changing it means following environment variables, parsing command output, and
-reproducing failures from pipeline logs. With Atmos, you can put that logic in
-functions, pass structured values between them, and test their behavior locally.
-CI invokes the process you already use during development.
+Keep release logic with your project. Put it in functions, pass structured
+values between them, and test their behavior locally. Your CI pipeline invokes
+the same process your team uses during development, with its own triggers,
+credentials, and approvals.
 
 Use custom commands for your team's entry points, workflows to compose the
 process, and lifecycle hooks for checks tied to component operations. They all

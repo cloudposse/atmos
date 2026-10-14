@@ -1,0 +1,48 @@
+---
+title: "fs.stat"
+sidebar_label: "fs.stat"
+sidebar_class_name: command
+description: Inspect file types and byte sizes without reading file contents.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>Inspect file types and byte sizes without reading file contents.</Intro>
+
+## Usage
+
+```python
+fs.stat(path, follow_symlinks = True)
+```
+
+<dl>
+  <dt>`path`</dt><dd>The file or directory to inspect.</dd>
+  <dt>`follow_symlinks`</dt><dd>Follow the target by default. Set to `False` to inspect
+  a symlink itself, including a dangling link.</dd>
+</dl>
+
+Returns an immutable object:
+
+<dl>
+  <dt>`size`</dt><dd>Size in bytes. Use for regular-file size checks; directory sizes are platform-specific.</dd>
+  <dt>`is_file`</dt><dd>Whether the inspected object is a regular file.</dd>
+  <dt>`is_dir`</dt><dd>Whether it is a directory.</dd>
+  <dt>`is_symlink`</dt><dd>Whether it is a symlink. Use `follow_symlinks = False` to detect links.</dd>
+</dl>
+
+A missing path, dangling target with the default options, or inaccessible path
+raises an error.
+
+```python
+info = fs.stat("CLAUDE.md")
+if info.is_file and info.size > 40000:
+    errors.build("CLAUDE.md exceeds 40,000 bytes").fail()
+```
+
+Relative paths resolve against the script's working directory, including when
+called from a loaded module. Absolute paths are used as given. These functions
+inspect the local filesystem; they do not isolate access to the repository.
+Calls honor cancellation before and after the filesystem operation.
+
+See [reading files](/functions/automation/fs.read_file) and
+[Git hooks](/cli/configuration/git#local-git-hooks).

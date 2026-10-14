@@ -15,6 +15,7 @@ import (
 	"go.starlark.net/starlarkstruct"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/automation"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
@@ -27,6 +28,7 @@ import (
 
 // Engine contains immutable host services shared by independent invocations.
 type Engine struct {
+	filesystem automation.FileSystem
 	runner     process.Runner
 	clock      retry.Clock
 	readFile   func(string) ([]byte, error)
@@ -71,7 +73,7 @@ func WithTaskObserver(observe func(TaskEvent)) Option {
 func New(opts ...Option) *Engine {
 	defer perf.Track(nil, "starlark.New")()
 
-	e := &Engine{runner: process.NewDefaultRunner(), readFile: os.ReadFile, executable: os.Executable}
+	e := &Engine{filesystem: automation.LocalFileSystem{}, runner: process.NewDefaultRunner(), readFile: os.ReadFile, executable: os.Executable}
 	for _, opt := range opts {
 		opt(e)
 	}
@@ -245,7 +247,7 @@ func (s *session) predeclared() starlark.StringDict {
 		"ui":           module("ui", s.uiMembers()),
 		"env":          stringDict(s.spec.Env),
 		"json":         starjson.Module,
-		"fs":           module("fs", starlark.StringDict{"read_file": starlark.NewBuiltin("fs.read_file", s.readFile)}),
+		"fs":           s.filesystemModule(),
 		"regex":        regexmodule.New(),
 		"steps":        s.stepsModule(),
 		"exec":         module("exec", starlark.StringDict{"run": starlark.NewBuiltin("exec.run", s.exec)}),

@@ -1,0 +1,132 @@
+---
+slug: git-hook-script-steps
+title: "Write Git hook checks inline with Starlark"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Pre-commit hooks put your team's standards to work on every commit.
+With AI agents generating more code, those automated checks matter even more.
+At Cloud Posse, we use them to enforce formatting, run linters, catch broken
+symlinks, and keep agent instruction files within size limits.
+
+[Atmos already manages Git hooks](/cli/configuration/git#local-git-hooks).
+Now you can write the checks themselves in the
+[Atmos Automation Language](/automation/language), based on Starlark, and keep
+small checks inline beside the hook configuration.
+
+<!--truncate-->
+
+## Two checks from our own repository {#the-problem}
+
+Two checks in the Atmos repository illustrate why this matters. One verifies
+that tracked symlinks resolve. The other limits the size of `CLAUDE.md` and
+agent instruction files, so guidance stays focused and detailed material moves
+to linked documentation.
+
+We implemented both as Bash scripts. The symlink check uses shell parameter
+expansion to unpack Git's file listing and `readlink` to inspect targets. The
+size check pipes `wc` into `tr` to produce a number it can compare. Each script
+also formats its own error messages and instructions.
+
+Writing these checks in Starlark gives them a common interpreter and filesystem
+API across operating systems. It is also part of a broader goal for Atmos:
+connect the tools developers use throughout delivery with readable, testable
+automation that runs locally and in CI.
+
+## Keep the checks with the hook {#the-fix}
+
+Keep each check as a separate named step in `atmos.yaml`. Write the rules with
+loops, lists, filesystem functions, and
+[structured errors](/functions/automation/errors.build). Atmos executes the
+[Starlark script steps](/steps/type/script) directly using its embedded
+interpreter.
+
+The example below still asks Git which symlinks are tracked, but checks their
+targets through `fs.exists`. The size check uses `fs.glob` and `fs.stat` to read
+file metadata directly. Both report failures through the same error builder,
+including a hint about how to fix them.
+
+Atmos provides the interpreter and these filesystem functions in one binary.
+The checks use the same language and filesystem API across machines, independent
+of the installed Bash version. External commands still have their own
+requirements; the symlink check requires Git, for example.
+
+Hooks accept either a `command` or a `steps` list. Existing command hooks continue
+to work, and steps can use other registered types alongside scripts. This brings
+Git hook checks into the same execution model used by your other Atmos
+automation.
+
+## How to Use It
+
+Add two separate checks to `atmos.yaml` in your repository root:
+
+```yaml
+git:
+  hooks:
+    pre-commit:
+      steps:
+        - name: check-symlinks
+          type: script
+          interpreter: starlark
+          script: |
+            entries = exec.run(["git", "ls-files", "-s", "-z"], output = "capture").stdout
+            broken = []
+            for entry in entries.split("\x00"):
+                if not entry:
+                    continue
+                metadata, _, path = entry.partition("\t")
+                if metadata.split(" ")[0] == "120000" and not fs.exists(path):
+                    broken.append(path)
+            if broken:
+                (errors.build("Broken tracked symlinks")
+                    .with_explanation("\n".join(broken))
+                    .with_hint("Restore the targets or remove obsolete symlinks.")
+                    .fail())
+
+        - name: check-agent-file-sizes
+          type: script
+          interpreter: starlark
+          script: |
+            limits = [
+                ("CLAUDE.md", 40000),
+                (".conductor/*/CLAUDE.md", 40000),
+                (".claude/agents/*.md", 25000),
+            ]
+            oversized = []
+            for pattern, limit in limits:
+                for path in fs.glob(pattern):
+                    if not fs.exists(path):
+                        continue
+                    info = fs.stat(path)
+                    if info.is_file and info.size > limit:
+                        oversized.append("{}: {} bytes (limit {})".format(path, info.size, limit))
+            if oversized:
+                (errors.build("Agent instruction files exceed size limits")
+                    .with_explanation("\n".join(oversized))
+                    .with_hint("Move detailed guidance into linked docs; preserve mandatory instructions.")
+                    .fail())
+```
+
+The symlink check asks Git which paths are tracked, then checks their targets
+in the working tree. The size check reads file metadata directly through Atmos.
+These checks inspect working-tree files, including unstaged changes.
+
+Install the hook with [atmos git hooks install](/cli/commands/git/hooks/install):
+
+```shell
+atmos git hooks install
+```
+
+Run the same checks manually or in CI with
+[atmos git hooks run](/cli/commands/git/hooks/run):
+
+```shell
+atmos git hooks run pre-commit
+```
+
+## Get Involved
+
+Try moving a small repository check into an inline script and
+[open an issue](https://github.com/cloudposse/atmos/issues) if another filesystem
+operation would help.

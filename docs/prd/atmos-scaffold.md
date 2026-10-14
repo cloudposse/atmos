@@ -1507,6 +1507,15 @@ engines assume stack/component context scaffold generation doesn't have).
 `terraform`'s flag of the same name. See "Template Structure" above for a
 worked example.
 
+With the embedded interpreter, these hooks can use `type: script` with
+`interpreter: starlark` under `with:`. Atmos executes the script in process through
+the shared step handler. Relative filesystem operations default to the generated
+project directory; pass collected answers with templated `env` values such as
+`NAME: '{{ .Answers.name }}'`. Scripts can call the step library and fail generation
+with a structured error. This does not add stack/component context to scaffold hooks.
+The scaffold hook regression test exercises answers, filesystem access, step calls,
+and script failure propagation. See [the Atmos SDK](atmos-sdk.md).
+
 Future: `command`/`store`/`git` scaffold hook kinds, once/if there's a real
 need to run them outside a stack/component context.
 

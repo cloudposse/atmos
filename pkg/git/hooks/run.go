@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -12,7 +13,7 @@ import (
 
 // Run executes the configured command for the named hook, forwarding the hook
 // arguments and stdin.
-func Run(cfg *schema.GitConfig, hookName string, hookArgs []string) error {
+func Run(cfg *schema.GitConfig, hookName string, hookArgs []string, opts ...RunOption) error {
 	defer perf.Track(nil, "hooks.Run")()
 
 	if cfg == nil || cfg.Hooks == nil {
@@ -22,6 +23,13 @@ func Run(cfg *schema.GitConfig, hookName string, hookArgs []string) error {
 	entry, ok := cfg.Hooks[hookName]
 	if !ok {
 		return NotConfiguredError(hookName, cfg.Hooks)
+	}
+
+	if (strings.TrimSpace(entry.Command) != "") == (len(entry.Steps) > 0) {
+		return errUtils.Build(errUtils.ErrInvalidConfig).WithHint("Configure exactly one of command or a non-empty steps list for a Git hook.").WithContext("hook", hookName).Err()
+	}
+	if len(entry.Steps) > 0 {
+		return runSteps(entry, hookArgs, opts)
 	}
 
 	command := buildHookCommand(entry.Command, hookArgs)

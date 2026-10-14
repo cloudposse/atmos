@@ -73,6 +73,10 @@ func (l *AutomationLibrary) Run(ctx context.Context, call *automation.StepCall) 
 	if err != nil {
 		return nil, err
 	}
+	return l.runStep(ctx, step, call)
+}
+
+func (l *AutomationLibrary) runStep(ctx context.Context, step *schema.WorkflowStep, call *automation.StepCall) (*automation.StepResult, error) {
 	if err := validateAutomationStep(step, call.Parallel || l.vars.automationParallel); err != nil {
 		return nil, err
 	}

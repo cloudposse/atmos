@@ -1,0 +1,39 @@
+---
+title: "fs.readlink"
+sidebar_label: "fs.readlink"
+sidebar_class_name: command
+description: Read the target stored in a symbolic link.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>Read the target stored in a symbolic link.</Intro>
+
+## Usage
+
+```python
+fs.readlink(path)
+```
+
+<dl>
+  <dt>`path`</dt><dd>The symlink to inspect.</dd>
+</dl>
+
+Returns the target string as stored in the link. A relative target remains
+relative to the link's parent directory; it is not resolved against the script's
+working directory. The target need not exist. A missing path, ordinary file,
+or inaccessible symlink raises an error.
+
+```python
+info = fs.stat("current", follow_symlinks = False)
+if info.is_symlink:
+    print(fs.readlink("current"))
+```
+
+Relative paths resolve against the script's working directory, including when
+called from a loaded module. Absolute paths are used as given. These functions
+inspect the local filesystem; they do not isolate access to the repository.
+Calls honor cancellation before and after the filesystem operation.
+
+See [reading files](/functions/automation/fs.read_file) and
+[Git hooks](/cli/configuration/git#local-git-hooks).
