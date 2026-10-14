@@ -10,6 +10,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/refcache"
 )
 
 // clearComponentFuncSyncMap empties componentFuncSyncMap, restoring it after
@@ -148,7 +149,7 @@ func TestComponentFunc_CacheLoggingPreservesResults(t *testing.T) {
 			clearComponentFuncSyncMap(t)
 			ac := setupAwsCloudFormationOutputFixture(t)
 			stubCloudFormationOutputsGetter(t, NewMockCloudFormationOutputsGetter(gomock.NewController(t)))
-			componentFuncSyncMap.Store("test-vpc-", sections)
+			componentFuncSyncMap.Store(refcache.NewKey(&ac, "test", "vpc"), sections)
 			value, err := componentFunc(t.Context(), &ac, nil, "vpc", "test")
 			require.NoError(t, err)
 			require.Equal(t, sections, value)

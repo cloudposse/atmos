@@ -110,7 +110,8 @@ func componentFunc(
 	// share output values. Deferred mode uses its target-bound value cache above.
 	authContext := resolvedTargetAuthContext(atmosConfig, resolvedAuthMgr, nil, authDisabled)
 	cacheKey := refcache.NewKey(atmosConfig, stack, component)
-	cacheKey.Auth = refcache.AuthScope(authContext, resolvedAuthMgr, authDisabled)
+	// Resolved credentials identify the target; per-call manager wrappers must not defeat cache reuse.
+	cacheKey.Auth = refcache.AuthScope(authContext, nil, authDisabled)
 	cacheKey.Inspection = maskOnly
 
 	// Inspection placeholders and resolved execution values use separate cache partitions.
