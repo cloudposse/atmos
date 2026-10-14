@@ -13,6 +13,7 @@ import (
 )
 
 func TestQualityReportEntrypoint(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
 	for _, scenario := range []string{"no PRs", "closed PR", "API failure", "invalid event", "reconcile failure"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Setenv("GITHUB_EVENT_PATH", "")
