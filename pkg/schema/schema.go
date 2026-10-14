@@ -21,10 +21,11 @@ type AtmosSectionMapType = map[string]any
 // DeferredEvaluationContext holds invocation-local evaluated values, independently
 // of the authentication implementation. The resolver identifies the invocation.
 type DeferredEvaluationContext struct {
-	Manager      any
-	Values       sync.Map
-	StoreValues  sync.Map
-	StoreFlights singleflight.Group
+	Manager        any
+	Values         sync.Map
+	StoreValues    sync.Map
+	StoreFlights   singleflight.Group
+	TargetSections sync.Map
 }
 
 // DescribeSettings contains settings for the describe command output.

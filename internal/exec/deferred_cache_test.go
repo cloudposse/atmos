@@ -143,7 +143,7 @@ func TestDeferredComponentCachesPerEffectiveIdentity(t *testing.T) {
 	}
 }
 
-func TestDeferredComponentDoesNotCacheFailuresOrMaskedValues(t *testing.T) {
+func TestDeferredComponentRetriesFailuresAndPartitionsMaskedValues(t *testing.T) {
 	ac, factory, _ := setupDeferredCacheTarget(t)
 	factory.EXPECT().Create(ac, gomock.Any(), "dev").Return(nil, nil).Times(1)
 	executor := NewMockComponentFuncOutputsExecutor(gomock.NewController(t))
@@ -154,13 +154,12 @@ func TestDeferredComponentDoesNotCacheFailuresOrMaskedValues(t *testing.T) {
 		executor.EXPECT().ExecuteWithSections(ac, "target", "dev", gomock.Any(), nil).Return(nil, errUtils.ErrAuthenticationUnavailable).Times(2),
 		executor.EXPECT().ExecuteWithSections(ac, "target", "dev", gomock.Any(), nil).Return(map[string]any{"id": "masked"}, nil),
 		executor.EXPECT().ExecuteWithSections(ac, "target", "dev", gomock.Any(), nil).Return(map[string]any{"id": "resolved"}, nil),
-		executor.EXPECT().ExecuteWithSections(ac, "target", "dev", gomock.Any(), nil).Return(map[string]any{"id": "masked again"}, nil),
 	)
 	for range 2 {
 		_, err := componentFunc(ac, nil, "target", "dev")
 		require.ErrorIs(t, err, errUtils.ErrAuthenticationUnavailable)
 	}
-	for _, expected := range []string{"masked", "resolved", "resolved", "masked again"} {
+	for _, expected := range []string{"masked", "resolved", "resolved", "masked"} {
 		info := &schema.ConfigAndStacksInfo{SecretsMaskOnly: expected != "resolved"}
 		value, err := componentFunc(ac, info, "target", "dev")
 		require.NoError(t, err)
