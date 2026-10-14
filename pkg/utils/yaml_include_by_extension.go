@@ -1,20 +1,24 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	neturl "net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/go-getter"
 	yaml "gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/downloader"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/function/parser"
 	"github.com/cloudposse/atmos/pkg/github"
+	"github.com/cloudposse/atmos/pkg/oci"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -22,6 +26,11 @@ import (
 // TestHTTPClient allows tests to inject a custom HTTP client for remote file fetching.
 // This is used to mock GitHub requests in tests.
 var TestHTTPClient *http.Client
+
+// ociIncludeTimeout bounds an !include oci:// fetch (registry auth, manifest, and layer
+// pull/extract of the whole image). Shorter than vendoring's 10-minute budget since !include
+// targets a single small config file rather than an entire component/template artifact.
+const ociIncludeTimeout = 2 * time.Minute
 
 // ProcessIncludeTag processes the !include tag with extension-based parsing.
 // It parses files based on their extension, not their content.
@@ -217,6 +226,14 @@ func processLocalFile(localFile string, forceRaw bool) (any, error) {
 func processRemoteFile(atmosConfig *schema.AtmosConfiguration, includeFile string, forceRaw bool) (any, error) {
 	defer perf.Track(atmosConfig, "utils.processRemoteFile")()
 
+	// go-getter has no "oci" entry in its Getters map (see
+	// downloader.goGetterClientFactory.NewClient) -- OCI registries aren't a go-getter scheme.
+	// Fetch it via pkg/oci instead, the same primitive component vendoring and scaffold
+	// template sourcing already use to pull OCI artifacts.
+	if strings.HasPrefix(includeFile, "oci://") {
+		return processOCIIncludeFile(atmosConfig, includeFile, forceRaw)
+	}
+
 	// Convert GitHub URLs to raw URLs if needed.
 	downloadURL := includeFile
 	if isGitHubURL(includeFile) {
@@ -241,6 +258,52 @@ func processRemoteFile(atmosConfig *schema.AtmosConfiguration, includeFile strin
 	}
 	// Use extension-based parsing for regular !include
 	return dl.FetchAndParseByExtension(downloadURL)
+}
+
+// processOCIIncludeFile pulls a single file out of an OCI artifact for !include/!include.raw.
+// An OCI registry has no API to fetch one layer-internal path on its own -- the whole image is
+// pulled and its layers extracted (pkg/oci.ProcessImage, the same primitive component vendoring
+// and scaffold template sourcing already use), then the requested file is read back out of the
+// extracted tree.
+//
+// The file to include is named with go-getter's own "//" subdirectory convention (already used
+// for git/S3 sources, see pkg/vendor/uri.go), e.g. "oci://ghcr.io/org/image:tag//path/to/file.yaml".
+// This is required, not just reused for consistency: an OCI tag cannot itself contain a "/" (see
+// go-containerregistry's name.Tag grammar), so there is no way to fold a file path into the
+// reference the way the "oci://...:path/to/file.yaml" form in older docs implied.
+func processOCIIncludeFile(atmosConfig *schema.AtmosConfiguration, includeFile string, forceRaw bool) (any, error) {
+	defer perf.Track(atmosConfig, "utils.processOCIIncludeFile")()
+
+	imageRef, subdir := getter.SourceDirSubdir(includeFile)
+	if subdir == "" {
+		return nil, fmt.Errorf("%w: '%s'", ErrIncludeYamlFunctionOCIMissingPath, includeFile)
+	}
+
+	tempDir, err := os.MkdirTemp("", "atmos-include-oci-*")
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrIncludeYamlFunctionFailedStackManifest, err)
+	}
+	defer func() {
+		_ = os.RemoveAll(tempDir)
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), ociIncludeTimeout)
+	defer cancel()
+
+	if err := oci.ProcessImage(ctx, atmosConfig, strings.TrimPrefix(imageRef, "oci://"), tempDir); err != nil {
+		return nil, err
+	}
+
+	localFile, err := filesystem.SafeJoin(tempDir, subdir)
+	if err != nil {
+		return nil, fmt.Errorf("%w: '%s': %w", ErrIncludeYamlFunctionInvalidFile, includeFile, err)
+	}
+
+	if !FileExists(localFile) {
+		return nil, fmt.Errorf("%w: oci artifact '%s' does not contain '%s'", ErrIncludeYamlFunctionInvalidFile, imageRef, subdir)
+	}
+
+	return processLocalFile(localFile, forceRaw)
 }
 
 // isGitHubURL checks if the URL is a GitHub (or configured GitHub Enterprise Server) URL that

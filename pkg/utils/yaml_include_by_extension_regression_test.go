@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	yaml "gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/oci/ocitest"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -125,6 +127,99 @@ func TestIncludeLocalFileNotFound(t *testing.T) {
 	assert.NotContains(t, err.Error(), "relative path")
 	assert.NotContains(t, err.Error(), "pwd")
 	assert.Contains(t, err.Error(), "could not find local file")
+}
+
+// TestIncludeOCISource tests that !include fetches a single file out of an oci:// artifact,
+// using go-getter's "//" subdir convention to name the in-image path (required because an OCI
+// tag cannot itself contain "/"). Exercises against an in-process fake registry (pkg/oci/ocitest)
+// so the test never depends on real network access.
+func TestIncludeOCISource(t *testing.T) {
+	imageRef := ocitest.NewRegistry(t, "sample:v1", map[string]string{
+		"vars.yaml": "region: us-east-1\nenabled: true\n",
+	})
+
+	catalogContent := fmt.Sprintf(`components:
+  terraform:
+    waf:
+      vars: !include "oci://%s//vars.yaml"
+`, imageRef)
+	tmpDir := t.TempDir()
+	catalogFile := filepath.Join(tmpDir, "catalog.yaml")
+	err := os.WriteFile(catalogFile, []byte(catalogContent), 0o644)
+	assert.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	var node yaml.Node
+	err = yaml.Unmarshal([]byte(catalogContent), &node)
+	assert.NoError(t, err)
+
+	err = processCustomTags(atmosConfig, &node, catalogFile)
+	assert.NoError(t, err)
+
+	var result map[string]any
+	err = node.Decode(&result)
+	assert.NoError(t, err)
+
+	components := result["components"].(map[string]any)
+	terraform := components["terraform"].(map[string]any)
+	waf := terraform["waf"].(map[string]any)
+	vars := waf["vars"].(map[string]any)
+	assert.Equal(t, "us-east-1", vars["region"])
+	assert.Equal(t, true, vars["enabled"])
+}
+
+// TestIncludeOCISourceMissingPath tests that an oci:// source without a "//" path to a file
+// inside the artifact fails with a clear, dedicated error instead of attempting to parse the
+// whole pulled image as a single file.
+func TestIncludeOCISourceMissingPath(t *testing.T) {
+	catalogContent := `components:
+  terraform:
+    waf:
+      vars: !include "oci://ghcr.io/my-org/my-image:v1.0.0"
+`
+	tmpDir := t.TempDir()
+	catalogFile := filepath.Join(tmpDir, "catalog.yaml")
+	err := os.WriteFile(catalogFile, []byte(catalogContent), 0o644)
+	assert.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	var node yaml.Node
+	err = yaml.Unmarshal([]byte(catalogContent), &node)
+	assert.NoError(t, err)
+
+	err = processCustomTags(atmosConfig, &node, catalogFile)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrIncludeYamlFunctionOCIMissingPath)
+}
+
+// TestIncludeOCISourceFileNotFound tests that naming a path which does not exist inside the
+// pulled OCI artifact fails with a clear error naming both the image and the missing path.
+func TestIncludeOCISourceFileNotFound(t *testing.T) {
+	imageRef := ocitest.NewRegistry(t, "sample-missing:v1", map[string]string{
+		"vars.yaml": "region: us-east-1\n",
+	})
+
+	catalogContent := fmt.Sprintf(`components:
+  terraform:
+    waf:
+      vars: !include "oci://%s//does-not-exist.yaml"
+`, imageRef)
+	tmpDir := t.TempDir()
+	catalogFile := filepath.Join(tmpDir, "catalog.yaml")
+	err := os.WriteFile(catalogFile, []byte(catalogContent), 0o644)
+	assert.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	var node yaml.Node
+	err = yaml.Unmarshal([]byte(catalogContent), &node)
+	assert.NoError(t, err)
+
+	err = processCustomTags(atmosConfig, &node, catalogFile)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrIncludeYamlFunctionInvalidFile)
 }
 
 // TestIncludeGoGetterShorthand tests that go-getter shorthand paths like
