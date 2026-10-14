@@ -7,6 +7,26 @@ import (
 	schemaPkg "github.com/cloudposse/atmos/pkg/schema"
 )
 
+// ErrStarlark identifies embedded Starlark execution or configuration failures.
+var ErrStarlark = errors.New("starlark execution failed")
+
+var (
+	// ErrStarlarkInvalidArgument identifies invalid arguments passed to an embedded Starlark builtin.
+	ErrStarlarkInvalidArgument = errors.New("invalid starlark argument")
+	// ErrStarlarkTaskTimeout identifies a Starlark task that exceeded its deadline.
+	ErrStarlarkTaskTimeout = errors.New("starlark task timed out")
+	// ErrStarlarkProcessFailed identifies a subprocess started by Starlark that failed or never started.
+	ErrStarlarkProcessFailed = errors.New("starlark process failed")
+	// ErrStarlarkOutputEncode identifies a top-level Starlark `output` value that cannot be encoded.
+	ErrStarlarkOutputEncode = errors.New("starlark output encoding failed")
+	// ErrStarlarkRecursionLimit identifies a Starlark call stack that exceeded the maximum recursion depth.
+	ErrStarlarkRecursionLimit = errors.New("starlark recursion depth exceeded")
+	// ErrStarlarkStackIdentity identifies a stack name derived from a !starlark value, which is not computable.
+	ErrStarlarkStackIdentity = errors.New("stack identity cannot be computed with !starlark")
+	// ErrScriptUsage identifies command-line input that does not satisfy a standalone script's declared interface.
+	ErrScriptUsage = errors.New("usage error")
+)
+
 const (
 	// ErrWrapFormat is the standard format string for wrapping errors with context.
 	// Use with fmt.Errorf to wrap a sentinel error with an underlying error:
@@ -365,13 +385,14 @@ var (
 	ErrGitArtifactRead             = errors.New("failed to read provision artifact")
 
 	// I/O and output errors.
-	ErrBuildIOConfig  = errors.New("failed to build I/O config")
-	ErrUnknownStream  = errors.New("unknown I/O stream")
-	ErrWriteToStream  = errors.New("failed to write to stream")
-	ErrMaskingContent = errors.New("failed to mask content")
-	ErrHeadLookup     = errors.New("HEAD not found")
-	ErrInvalidFormat  = errors.New("invalid format")
-	ErrOutputFormat   = errors.New("output format error")
+	ErrBuildIOConfig        = errors.New("failed to build I/O config")
+	ErrUnknownStream        = errors.New("unknown I/O stream")
+	ErrWriteToStream        = errors.New("failed to write to stream")
+	ErrMaskingContent       = errors.New("failed to mask content")
+	ErrUnboundedMaskPattern = errors.New("mask patterns that can match carriage returns or newlines must have a finite maximum match length")
+	ErrHeadLookup           = errors.New("HEAD not found")
+	ErrInvalidFormat        = errors.New("invalid format")
+	ErrOutputFormat         = errors.New("output format error")
 
 	// File operation errors.
 	ErrRefusingToDeleteSymlink = ErrRefuseDeleteSymbolicLink
@@ -891,6 +912,12 @@ var (
 	ErrStepFieldRequired             = errors.New("required field missing for step")
 	ErrStepExecutionFailed           = errors.New("step execution failed")
 	ErrStepTTYRequired               = errors.New("interactive terminal required for step")
+	ErrStepTimeout                   = errors.New("step timed out")
+	ErrStepTimeoutInvalid            = errors.New("invalid step timeout")
+	ErrStepInvalidOutputMode         = schemaPkg.ErrStepInvalidOutputMode
+	ErrCustomCommandArgumentMissing  = errors.New("missing required argument for custom command")
+	ErrCustomCommandFlagType         = errors.New("unsupported custom command flag type")
+	ErrCustomCommandFlagDefault      = errors.New("invalid default value for custom command flag")
 	ErrHTTPStepURLRequired           = errors.New("url is required for http step")
 	ErrHTTPStepInvalidMethod         = errors.New("invalid HTTP method for http step")
 	ErrHTTPStepBodyFormConflict      = errors.New("http step cannot set both body and form")
@@ -1477,6 +1504,9 @@ var (
 	ErrCICommentListFailed        = errors.New("failed to list PR comments")
 	ErrCICommentUpdateFailed      = errors.New("failed to update PR comment")
 	ErrCICommentNotFound          = errors.New("PR comment not found")
+	ErrCIEnvWriteFailed           = errors.New("failed to write CI environment file")
+	ErrCIMaskFailed               = errors.New("failed to register CI mask value")
+	ErrCIPullRequestUnknown       = errors.New("CI pull request number is unknown")
 	ErrGitHubTokenNotFound        = errors.New("GitHub token not found")
 
 	// Planfile storage errors.
@@ -1847,6 +1877,9 @@ var (
 	// a negative count, which would otherwise silently behave as unlimited.
 	ErrMockFailWithTimesNegative = errors.New("httpmock: FailWithTimes called with negative times; use FailWith for an unlimited failure")
 )
+
+// Test step (`type: test`) failure sentinel.
+var ErrTestsFailed = errors.New("tests failed")
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
 // This allows the root command to exit with the same code as the subcommand.

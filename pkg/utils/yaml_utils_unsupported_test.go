@@ -248,6 +248,7 @@ func TestAllSupportedYamlTagsList(t *testing.T) {
 	// Note: The registry has more tags than originally supported in yaml_utils.go.
 	// This test verifies all the originally expected tags are present.
 	expectedTags := []string{
+		"!starlark",
 		"!exec",
 		"!secret",
 		"!store",

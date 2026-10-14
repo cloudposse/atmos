@@ -12,6 +12,8 @@ import (
 
 // colorPolicy is shared by derived loggers and their output writers.
 type colorPolicy struct {
+	// mu serializes Charm reads, writes, and configuration as well as color state.
+	// Derived loggers share renderers and writers, so they must share this lock too.
 	mu          sync.Mutex
 	logDisabled bool
 	disabled    bool
@@ -115,7 +117,7 @@ func (l *AtmosLogger) setColorOutput(w io.Writer) {
 	if w != io.Discard {
 		w = &colorWriter{Writer: w, policy: l.color}
 	}
-	l.charm.SetOutput(w)
+	setCharmOutput(l.charm, w)
 	// An explicit profile describes the previous destination, so the new renderer keeps
 	// Charm's automatic detection. Callers that force color reapply it after SetOutput.
 	l.color.profileSet = false

@@ -1,0 +1,78 @@
+---
+title: "ctx.arguments"
+sidebar_position: 35
+sidebar_label: "ctx.arguments"
+sidebar_class_name: command
+description: The parsed named arguments of a custom command.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `ctx.arguments` value is a read-only dictionary of the positional arguments Atmos parsed for a custom command,
+    keyed by each argument's declared name.
+</Intro>
+
+## Usage
+
+```python
+ctx.arguments["name"]
+```
+
+## Returns
+
+A frozen dictionary with sorted keys. In a custom command it has one entry for each argument the command declares, with
+the value the user typed. In a workflow step, a hook, or a standalone script it is an empty dictionary. A standalone
+program receives its arguments as the `args` argument of the entry function it passes to
+[`cli.command`](/functions/automation/cli.command).
+
+Steps inside `parallel` and `matrix` groups inherit the dictionary.
+
+## Examples
+
+### Read a declared argument
+
+```yaml
+commands:
+  - name: greet
+    arguments:
+      - name: name
+        description: Who to greet
+        required: true
+    steps:
+      - name: greet
+        type: script
+        interpreter: starlark
+        script: |
+          print("Hello, {}!".format(ctx.arguments["name"]))
+```
+
+```shell
+atmos greet Ada
+```
+
+```text
+Hello, Ada!
+```
+
+### Combine arguments and flags
+
+```python
+service = ctx.arguments["service"]
+replicas = int(ctx.flags["replicas"])
+print("{}: {} replicas".format(service, replicas))
+```
+
+### Fail early on a missing value
+
+```python
+if not ctx.arguments.get("service"):
+    fail("a service name is required")
+```
+
+## Related
+
+- [`ctx.flags`](/functions/automation/ctx.flags) holds the parsed flags.
+- [`cli.arg`](/functions/automation/cli.arg) declares arguments for a standalone script.
+- [`ctx`](/functions/automation/ctx) lists every context attribute.
+- [Custom commands](/automation/custom-commands)

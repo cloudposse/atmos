@@ -97,7 +97,8 @@ func (h *SpinHandler) prepareExecution(ctx context.Context, step *schema.Workflo
 
 	workDir := ""
 	if step.WorkingDirectory != "" {
-		workDir, err = vars.Resolve(step.WorkingDirectory)
+		// A working_directory written with !literal is used exactly as written.
+		workDir, err = vars.ResolveStepField(step, "working_directory", step.WorkingDirectory)
 		if err != nil {
 			return nil, fmt.Errorf("step '%s': failed to resolve working_directory: %w", step.Name, err)
 		}
@@ -113,7 +114,7 @@ func (h *SpinHandler) prepareExecution(ctx context.Context, step *schema.Workflo
 
 	// Apply step-specific environment variable overrides.
 	if len(step.Env) > 0 {
-		resolvedEnv, err := vars.ResolveEnvMap(step.Env)
+		resolvedEnv, err := vars.ResolveStepEnvMap(step, step.Env)
 		if err != nil {
 			return nil, fmt.Errorf("step '%s': %w", step.Name, err)
 		}

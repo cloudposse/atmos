@@ -6,8 +6,12 @@ Execute 'show component' command
 USAGE
 
 
-    $ atmos show component [flags]
+    $ atmos show component [component] [flags]
 
+
+ARGUMENTS
+
+  component  Name of the component
 
 FLAGS
 

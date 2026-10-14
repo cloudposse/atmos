@@ -1,0 +1,124 @@
+---
+title: "json.encode"
+sidebar_position: 16
+sidebar_label: "json.encode"
+sidebar_class_name: command
+description: Convert a value to a compact JSON string.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `json.encode` function converts a value to a compact JSON string. Use it to pass structured data to another
+    program, to write a file, or to build a JSON document from dictionaries and lists.
+</Intro>
+
+## Usage
+
+```python
+json.encode(x)
+```
+
+## Arguments
+
+<dl>
+    <dt>`x`</dt>
+    <dd>Required. The value to encode. It is a positional argument.</dd>
+</dl>
+
+## Returns
+
+A string containing the JSON text, with no extra whitespace. Dictionary keys are written in sorted order, so the
+same data always produces the same text.
+
+## Encoding rules
+
+| Value | JSON |
+| --- | --- |
+| `None`, `True`, `False` | `null`, `true`, `false` |
+| Integers | A decimal integer, of any size |
+| Floats | Decimal notation that always includes a decimal point, such as `1.0` |
+| Strings | A JSON string, with non-ASCII characters and control characters escaped as needed |
+| Dictionaries | An object. Every key must be a string |
+| Lists and tuples | An array |
+| Values with named fields, such as command results | An object, with fields sorted by name |
+
+## Examples
+
+### Encode a dictionary
+
+```python
+data = {
+    "name": "vpc",
+    "cidr": "10.0.0.0/16",
+    "tags": ["a", "b"],
+    "count": 3,
+    "ratio": 1.0,
+    "enabled": True,
+    "note": None,
+}
+output = json.encode(data)
+```
+
+```text
+{"cidr":"10.0.0.0/16","count":3,"enabled":true,"name":"vpc","note":null,"ratio":1.0,"tags":["a","b"]}
+```
+
+### Encode a tuple and a string
+
+```python
+print(json.encode((1, 2, "three")))
+print(json.encode("quote: \" newline: \n"))
+```
+
+```text
+[1,2,"three"]
+"quote: \" newline: \n"
+```
+
+### Pass JSON to a program
+
+```python
+payload = json.encode({"stack": "dev", "replicas": 3})
+result = exec.run(["echo", payload], output = "capture")
+print(result.stdout.strip())
+```
+
+```text
+{"replicas":3,"stack":"dev"}
+```
+
+### Encode a command result
+
+The result of a process-running function has named fields, so it encodes as an object:
+
+```python
+result = exec.run(["echo", "hi"], output = "capture")
+print(json.encode(result))
+```
+
+```text
+{"exit_code":0,"stderr":"","stdout":"hi\n"}
+```
+
+### Relation to `output`
+
+Assigning a value other than a string to the top-level [`output`](/functions/automation/output) variable encodes it
+the same way, so `output = data` produces the same text as `output = json.encode(data)`.
+
+## Errors
+
+- A dictionary with a key that is not a string fails with `dict has int key, want string`.
+- A float that is infinite or not a number fails with `cannot encode non-finite float`.
+- A value with no JSON form, such as a function, fails with `cannot encode ... as JSON`.
+- A value that contains itself fails with `cycle in JSON structure`.
+- Calling the function without an argument fails with an argument-count error.
+
+Each message begins with `json.encode:`, and errors inside nested data name the key or index where encoding stopped.
+
+## Related
+
+- [`json.decode`](/functions/automation/json.decode) converts JSON text back to values.
+- [`json.indent`](/functions/automation/json.indent) and [`json.encode_indent`](/functions/automation/json.encode_indent) produce readable output.
+- [`output`](/functions/automation/output) encodes non-string results automatically.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#step-output)

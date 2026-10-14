@@ -13,6 +13,7 @@ func TestAllTags(t *testing.T) {
 
 	// Verify all expected tags are present.
 	expectedTags := []string{
+		TagStarlark,
 		TagExec,
 		TagSecret,
 		TagStore,
@@ -62,6 +63,7 @@ func TestAllTags(t *testing.T) {
 func TestIsValidTag(t *testing.T) {
 	// Verify all expected tags are valid.
 	expectedTags := []string{
+		TagStarlark,
 		TagExec,
 		TagSecret,
 		TagStore,

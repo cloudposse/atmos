@@ -2,7 +2,6 @@ package schema
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -104,7 +103,7 @@ func TestValidateExecTasks(t *testing.T) {
 		{
 			name: "exec with timeout",
 			tasks: Tasks{
-				{Type: TaskTypeExec, Command: "top", Timeout: 30 * time.Second},
+				{Type: TaskTypeExec, Command: "top", Timeout: "30s"},
 			},
 			wantErr: ErrExecStepInvalidField,
 		},

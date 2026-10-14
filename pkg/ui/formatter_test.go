@@ -2581,3 +2581,24 @@ func TestFormatter_PlainMarkdownMargins(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatter_Markdown_PreservesTrailingStyledText(t *testing.T) {
+	f := NewFormatter(createTestIOContext(), createMockTerminal(terminal.ColorTrue))
+	for _, tc := range []struct{ name, source, visible string }{
+		{"masked text", "the value is <MASKED>", "the value is"},
+		{"trailing space", "visible text ", "visible text"},
+		{"inline HTML", "keep this <span></span>", "keep this"},
+		{"code span", "the value is `<MASKED>`", "the value is <MASKED>"},
+		{"code block", "```\n<MASKED>\n```", "<MASKED>"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rendered, err := f.Markdown(tc.source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if visible := ansi.Strip(rendered); !strings.Contains(visible, tc.visible) {
+				t.Errorf("Markdown(%q) = %q, want text %q", tc.source, visible, tc.visible)
+			}
+		})
+	}
+}

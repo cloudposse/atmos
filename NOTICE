@@ -1,6 +1,6 @@
 NOTICE
 
-Atmos is the open-source runtime for infrastructure — it builds, authenticates, and ships Terraform, OpenTofu, Packer, Ansible, Kubernetes, Helm, and containers the same way on your laptop, in CI, and with AI agents.
+👽 Terraform Orchestration Tool for DevOps. Keep environment configuration DRY with hierarchical imports of configurations, inheritance, and WAY more. Native support for Terraform and Helmfile.
 Copyright 2021-2026 Cloud Posse, LLC
 
 This product includes software developed by Cloud Posse, LLC and the Atmos community.
@@ -1077,6 +1077,10 @@ BSD LICENSED DEPENDENCIES
   - github.com/yosida95/uritemplate/v3
     License: BSD-3-Clause
     URL: https://github.com/yosida95/uritemplate/blob/v3.0.2/LICENSE
+
+  - go.starlark.net
+    License: BSD-3-Clause
+    URL: https://github.com/google/starlark-go/blob/d7438c5a85ac/LICENSE
 
   - go4.org/intern
     License: BSD-3-Clause

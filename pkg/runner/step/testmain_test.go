@@ -5,8 +5,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
@@ -21,11 +23,21 @@ import (
 // pkg/asciicast's own session test helper.
 const sessionShellHelperEnv = "_ATMOS_STEP_SESSION_SHELL"
 
+// sessionShellDelayEnv simulates a subprocess scheduled after its PTY has
+// already echoed input, exposing waits that mistake input echo for a response.
+const sessionShellDelayEnv = "_ATMOS_STEP_SESSION_DELAY"
+
 // _atmosStepFakeRMGlobEnv names the env var carrying the glob pattern that the
 // "rm-glob-and-fail" _ATMOS_STEP_FAKE mode deletes before exiting non-zero.
 // This lets cast_test.go exercise a child step that deletes a file and fails,
 // without depending on the platform-specific "rm" binary or a shell.
 const atmosStepFakeRMGlobEnv = "_ATMOS_STEP_FAKE_RM_GLOB"
+
+// atmosStepFakeSleepMSEnv carries the sleep duration, in milliseconds, of the "sleep" _ATMOS_STEP_FAKE mode.
+const atmosStepFakeSleepMSEnv = "_ATMOS_STEP_FAKE_SLEEP_MS"
+
+// atmosStepFakeEnvNameEnv names the variable the "printenv" _ATMOS_STEP_FAKE mode prints.
+const atmosStepFakeEnvNameEnv = "_ATMOS_STEP_FAKE_ENV_NAME"
 
 // TestMain lets the test binary impersonate a fake "atmos" executable so that
 // subprocess-executing handlers (e.g. AtmosHandler) can be tested
@@ -56,12 +68,26 @@ func TestMain(m *testing.M) {
 	case "fail":
 		_, _ = os.Stderr.WriteString("fake-atmos-error")
 		os.Exit(3)
+	case "echo-selection":
+		// Report the profile and identity the nested command would run with.
+		_, _ = os.Stdout.WriteString(os.Getenv("ATMOS_PROFILE") + "|" + os.Getenv("ATMOS_IDENTITY"))
+		os.Exit(0)
 	case "rm-glob-and-fail":
 		removeGlobMatches(os.Getenv(atmosStepFakeRMGlobEnv))
 		os.Exit(1)
 	case "spin-output":
 		_, _ = os.Stdout.WriteString("spin-stdout")
 		_, _ = os.Stderr.WriteString("spin-stderr")
+		os.Exit(0)
+	case "sleep":
+		// Sleep for _ATMOS_STEP_FAKE_SLEEP_MS milliseconds so tests can exercise step timeouts.
+		if ms, err := strconv.Atoi(os.Getenv(atmosStepFakeSleepMSEnv)); err == nil {
+			time.Sleep(time.Duration(ms) * time.Millisecond)
+		}
+		os.Exit(0)
+	case "printenv":
+		// Print the value of the variable named by _ATMOS_STEP_FAKE_ENV_NAME.
+		_, _ = os.Stdout.WriteString(os.Getenv(os.Getenv(atmosStepFakeEnvNameEnv)))
 		os.Exit(0)
 	}
 	if os.Getenv(sessionShellHelperEnv) == "1" {
@@ -96,6 +122,9 @@ func removeGlobMatches(pattern string) {
 // stdin/stdout: it recognizes a couple of scripted commands used by
 // runCastSessionMode tests and echoes deterministic output for each.
 func runStepSessionShellHelper() {
+	if os.Getenv(sessionShellDelayEnv) == "1" {
+		time.Sleep(3 * time.Second)
+	}
 	reader := bufio.NewReader(os.Stdin)
 	var line strings.Builder
 	for {

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cloudposse/atmos/pkg/ci"
 	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
@@ -38,6 +39,8 @@ const (
 //	                                   regression guard in terraform_execute_single_invocation_test.go).
 //	_ATMOS_TEST_ARGS_FILE=<path>     — if set, write subprocess arguments and exit
 //	                                   successfully (for command argument assertions).
+//	_ATMOS_TEST_SLEEP_MS=<N>         — if set, sleep N milliseconds and exit 0 (for step
+//	                                   timeout tests).
 //	_ATMOS_TEST_STDOUT=<text>         — if set, write text to stdout.
 //	_ATMOS_TEST_STDERR=<text>         — if set, write text to stderr.
 //	_ATMOS_TEST_EXIT_ONE=1           — if set, exit 1 (writing _ATMOS_TEST_STDOUT/
@@ -96,6 +99,15 @@ func TestMain(m *testing.M) {
 
 	if argsFile := os.Getenv("_ATMOS_TEST_ARGS_FILE"); argsFile != "" {
 		_ = os.WriteFile(argsFile, []byte(strings.Join(os.Args[1:], "\n")), 0o600)
+		os.Exit(0)
+	}
+
+	// _ATMOS_TEST_SLEEP_MS=<N> makes the test binary sleep N milliseconds and exit 0, so tests can
+	// exercise step timeouts with the test binary itself as a long-running command.
+	if sleepMS := os.Getenv("_ATMOS_TEST_SLEEP_MS"); sleepMS != "" {
+		if ms, err := strconv.Atoi(sleepMS); err == nil {
+			time.Sleep(time.Duration(ms) * time.Millisecond)
+		}
 		os.Exit(0)
 	}
 

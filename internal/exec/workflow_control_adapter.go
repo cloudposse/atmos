@@ -25,9 +25,18 @@ type workflowControlContext struct {
 }
 
 func executeWorkflowControlStep(ctx context.Context, control *workflowControlContext, parent *schema.WorkflowStep) error {
+	vars := workflowControlVariables(control)
 	childExecutor := &workflow.ControlCommandExecutor{
+		ScriptSteps:         stepPkg.NewAutomationLibrary(vars, control.workflowDefinition),
+		InstallTools:        stepPkg.ScriptToolInstaller(&control.atmosConfig),
+		DryRun:              control.dryRun,
+		ScriptComponent:     stepPkg.ScriptComponentRef(vars),
+		ScriptFlags:         vars.ScriptFlags(),
+		ScriptArguments:     vars.ScriptArguments(),
+		ResolveComponent:    stepPkg.ScriptComponentResolver(vars),
 		WorkflowDefinition:  control.workflowDefinition,
 		BasePath:            control.atmosConfig.BasePath,
+		ProjectRoot:         stepPkg.ScriptProjectRoot(control.atmosConfig.BasePathAbsolute, control.atmosConfig.BasePath),
 		BaseEnv:             control.baseEnv,
 		CommandLineStack:    control.commandLineStack,
 		CommandLineTags:     control.commandLineTags,
@@ -43,7 +52,7 @@ func executeWorkflowControlStep(ctx context.Context, control *workflowControlCon
 				request.Args,
 				request.Dir,
 				nil,
-				control.dryRun,
+				control.dryRun || request.DryRun,
 				"",
 				WithProcessContext(request.Context),
 				WithEnvironment(request.Env),
@@ -55,8 +64,25 @@ func executeWorkflowControlStep(ctx context.Context, control *workflowControlCon
 	}
 	return workflow.ExecuteControlStep(ctx, parent, childExecutor.Execute, workflow.ControlExecutionOptions{
 		TemplateData: workflowControlTemplateData,
-		StoreResult:  storeWorkflowControlResult,
+		// Children render with the workflow's renderer and pass count, like sequential steps.
+		RenderTemplate: workflowControlRender,
+		StoreResult:    storeWorkflowControlResult,
 	})
+}
+
+// workflowControlVariables returns the workflow's shared step variables with component
+// resolution installed, so embedded script children can use `components.get` even when no
+// earlier extended step configured the executor.
+func workflowControlVariables(control *workflowControlContext) *stepPkg.Variables {
+	if stepExecutorState == nil {
+		stepExecutorState = stepPkg.NewStepExecutor()
+	}
+	vars := stepExecutorState.Variables()
+	if vars.AtmosConfig == nil {
+		vars.SetAtmosConfig(&control.atmosConfig)
+	}
+	vars.SetScriptComponentInfoResolver(ScriptComponentInfoResolver(vars.AtmosConfig, control.authManager))
+	return vars
 }
 
 func workflowControlTemplateData(stepName string, matrix map[string]string) map[string]any {
@@ -77,6 +103,9 @@ func storeWorkflowControlResult(result *scheduler.Result) {
 			WithMetadata("stderr", controlResult.Stderr).
 			WithMetadata("status", string(result.Status)).
 			WithMetadata("canceled", controlResult.Canceled)
+		if controlResult.Value != nil {
+			stepResult.Value = *controlResult.Value
+		}
 		if controlResult.Err != nil {
 			stepResult.WithError(controlResult.Err.Error())
 		}
@@ -85,4 +114,13 @@ func storeWorkflowControlResult(result *scheduler.Result) {
 		stepResult.WithSkipped()
 	}
 	stepExecutorState.Variables().Set(result.NodeID, stepResult)
+}
+
+// workflowControlRender renders a control child's template field with the workflow's own
+// renderer and pass count, the same way a sequential workflow step is rendered.
+func workflowControlRender(name, input string, data map[string]any) (string, error) {
+	if stepExecutorState == nil {
+		stepExecutorState = stepPkg.NewStepExecutor()
+	}
+	return stepExecutorState.Variables().ResolveWithData(name, input, data)
 }
