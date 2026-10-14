@@ -97,7 +97,9 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 		result.ExitCode = -1
 		return result
 	}
-	cmd := exec.CommandContext(ctx, command, spec.Args...)
+	executionCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	cmd := exec.CommandContext(executionCtx, command, spec.Args...)
 	cmd.Args[0] = spec.Command
 	applyWindowsCmdExeQuoting(cmd, spec.Command, spec.Args)
 	cmd.Dir = spec.Dir
@@ -108,6 +110,10 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 	cmd.Stdout = writerOrDiscard(spec.Streams.Stdout)
 	cmd.Stderr = writerOrDiscard(spec.Streams.Stderr)
 
+	// Run the child in its own process group (unless it needs the terminal) so
+	// cancellation and Atmos being signalled terminate its whole process tree.
+	group := newChildGroup(cmd)
+
 	if err := cmd.Start(); err != nil {
 		result.Err = fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessStartFailed, err)
 		result.ExitCode = -1
@@ -115,8 +121,16 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 	}
 	result.Started = true
 	result.StartedAt = time.Now()
+	group.started(cancel)
 
-	err = cmd.Wait()
+	err = group.tolerateWaitDelay(ctx, cmd.Wait())
+	group.finished()
+	recordWaitOutcome(ctx, cmd, &result, err)
+	return result
+}
+
+// recordWaitOutcome fills result from the finished command and its Wait error.
+func recordWaitOutcome(ctx context.Context, cmd *exec.Cmd, result *Result, err error) {
 	// Collect subprocess-tree metrics unconditionally, once, regardless of
 	// success/failure — cmd.ProcessState is populated by Wait() either way,
 	// and callers (e.g. the exec-metadata upload) need usage data even for a
@@ -126,7 +140,7 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 	result.Metrics = metricsprocess.CollectFromProcessState(cmd, time.Since(result.StartedAt))
 	metricsprocess.Accumulate(result.Metrics)
 	if err == nil {
-		return result
+		return
 	}
 
 	result.Err = fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessWaitFailed, err)
@@ -136,7 +150,6 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 		result.Canceled = true
 		result.Err = errors.Join(result.Err, ctxErr)
 	}
-	return result
 }
 
 // resolveCommand searches the invocation environment relative to its working
