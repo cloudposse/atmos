@@ -1,0 +1,64 @@
+---
+title: Atmos Automation Functions
+sidebar_position: 1
+sidebar_label: Automation Functions
+sidebar_class_name: hidden
+id: index
+description: Reference for the functions and built-in values available to Atmos Automation Language scripts.
+---
+
+import DocCardList from '@theme/DocCardList'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Automation functions are the helpers Atmos supplies to scripts written in
+the [Atmos Automation Language](/automation/language). Use them to declare a
+program's command line, run Atmos and external commands, resolve component
+configuration, install tool dependencies, use configured identities, run work
+in parallel, and give users formatted progress and actionable errors.
+</Intro>
+
+Automation functions run when a script executes: in a [standalone program](/automation/standalone-cli-apps),
+a [custom command](/automation/custom-commands), a [workflow](/automation/workflows)
+step, or a [lifecycle hook](/automation/lifecycle-hooks). They are separate from
+[YAML functions](/functions/yaml) and [template functions](/functions/template),
+which Atmos evaluates while it loads stack manifests.
+
+Every function and value on these pages is available without an import. Atmos
+predeclares the names `cli`, `atmos`, `components`, `exec`, `steps`, `fs`, `json`,
+`regex`, `dependencies`, `ui`, `log`, `errors`, `env`, and `ctx`, and the script's top-level
+`output` variable sets its result. The language itself, including statements,
+operators, and the universal built-ins, is described in the
+[language reference](/automation/reference).
+
+## Function categories
+
+| Category | Functions |
+| --- | --- |
+| Command line | [`cli.command`](/functions/automation/cli.command), [`cli.arg`](/functions/automation/cli.arg), [`cli.flag`](/functions/automation/cli.flag) |
+| Atmos commands | [`atmos.run`](/functions/automation/atmos.run), [`atmos.terraform`](/functions/automation/atmos.terraform), [`atmos.helm`](/functions/automation/atmos.helm), [`atmos.toolchain`](/functions/automation/atmos.toolchain), and one wrapper for each [built-in command](#atmos-command-wrappers) |
+| Components | [`components.get`](/functions/automation/components.get), [`component.exec`](/functions/automation/component.exec) |
+| Processes | [`exec.run`](/functions/automation/exec.run), [`dependencies.tools`](/functions/automation/dependencies.tools) |
+| Concurrency | [`steps.task`](/functions/automation/steps.task), [`steps.parallel`](/functions/automation/steps.parallel) |
+| Files and data | [`fs.read_file`](/functions/automation/fs.read_file), [`json.encode`](/functions/automation/json.encode), [`json.decode`](/functions/automation/json.decode), [`json.indent`](/functions/automation/json.indent), [`json.encode_indent`](/functions/automation/json.encode_indent) |
+| Text | [`regex.search`](/functions/automation/regex.search), [`regex.findall`](/functions/automation/regex.findall), [`regex.replace`](/functions/automation/regex.replace) |
+| Messages | [`ui.info`](/functions/automation/ui.info), [`ui.success`](/functions/automation/ui.success), [`ui.warning`](/functions/automation/ui.warning), [`log.trace`](/functions/automation/log.trace), [`log.debug`](/functions/automation/log.debug), [`log.info`](/functions/automation/log.info), [`log.warn`](/functions/automation/log.warn), [`log.error`](/functions/automation/log.error), [`print`](/functions/automation/print) |
+| Errors | [`errors.build`](/functions/automation/errors.build) |
+| Built-in values | [`ctx`](/functions/automation/ctx), [`env`](/functions/automation/env), [`output`](/functions/automation/output), [`load`](/functions/automation/load) |
+
+## Atmos command wrappers {#atmos-command-wrappers}
+
+Use a command wrapper such as `atmos.vendor("pull")` to run the matching Atmos
+command. See [`atmos.run`](/functions/automation/atmos.run#command-wrappers) for
+shared signatures, flag translation, process options, and results.
+
+The built-in commands each have a reference page: [`about`](/functions/automation/atmos.about), [`ai`](/functions/automation/atmos.ai), [`ansible`](/functions/automation/atmos.ansible), [`atlantis`](/functions/automation/atmos.atlantis), [`auth`](/functions/automation/atmos.auth), [`aws`](/functions/automation/atmos.aws), [`azure`](/functions/automation/atmos.azure), [`cast`](/functions/automation/atmos.cast), [`ci`](/functions/automation/atmos.ci), [`completion`](/functions/automation/atmos.completion), [`composition`](/functions/automation/atmos.composition), [`config`](/functions/automation/atmos.config), [`container`](/functions/automation/atmos.container), [`describe`](/functions/automation/atmos.describe), [`devcontainer`](/functions/automation/atmos.devcontainer), [`docs`](/functions/automation/atmos.docs), [`emulator`](/functions/automation/atmos.emulator), [`env`](/functions/automation/atmos.env), [`gcp`](/functions/automation/atmos.gcp), [`git`](/functions/automation/atmos.git), [`helmfile`](/functions/automation/atmos.helmfile), [`help`](/functions/automation/atmos.help), [`init`](/functions/automation/atmos.init), [`kubernetes`](/functions/automation/atmos.kubernetes), [`list`](/functions/automation/atmos.list), [`lsp`](/functions/automation/atmos.lsp), [`mcp`](/functions/automation/atmos.mcp), [`packer`](/functions/automation/atmos.packer), [`pro`](/functions/automation/atmos.pro), [`profile`](/functions/automation/atmos.profile), [`sbom`](/functions/automation/atmos.sbom), [`scaffold`](/functions/automation/atmos.scaffold), [`secret`](/functions/automation/atmos.secret), [`stack`](/functions/automation/atmos.stack), [`store`](/functions/automation/atmos.store), [`support`](/functions/automation/atmos.support), [`theme`](/functions/automation/atmos.theme), [`validate`](/functions/automation/atmos.validate), [`vendor`](/functions/automation/atmos.vendor), [`version`](/functions/automation/atmos.version), [`workflow`](/functions/automation/atmos.workflow).
+
+The module reflects the commands registered in the running Atmos, so it also includes the aliases of those commands
+(`an`, `c`, `emu`, `hf`, `k8s`, `pk`, and `tf`) and every custom command defined in `atmos.yaml`. A custom command named
+`capacity` is callable as `atmos.capacity(...)`. A command name that contains a hyphen cannot be written as an attribute,
+so call it with [`atmos.run`](/functions/automation/atmos.run), for example `atmos.run(["my-command"])`.
+
+## All automation functions
+
+<DocCardList/>

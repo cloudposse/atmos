@@ -1,0 +1,99 @@
+---
+title: "fs.read_file"
+sidebar_position: 15
+sidebar_label: "fs.read_file"
+sidebar_class_name: command
+description: Read a local file as a string.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `fs.read_file` function reads a local file and returns its contents as a string. Use it to load configuration,
+    generated output, or logs that a script needs to inspect.
+</Intro>
+
+## Usage
+
+```python
+fs.read_file(path)
+```
+
+## Arguments
+
+<dl>
+    <dt>`path`</dt>
+    <dd>
+        Required. The file to read, as a string. It can be passed positionally or as `path = ...`. An absolute path is
+        used as given. A relative path, including one with `..` segments, resolves against the script's working
+        directory: the step's `working_directory` for a workflow or custom command step, or the directory Atmos was
+        started from for a standalone script. The same rule applies to calls made from functions in loaded modules.
+    </dd>
+</dl>
+
+## Returns
+
+The file contents as a string.
+
+## Examples
+
+### Read a file and extract a value
+
+```python
+text = fs.read_file("cfg/sub/app.yaml")
+print(text)
+print(regex.findall("region: (.*)", text))
+```
+
+For a file that contains `replicas: 3` and `region: us-east-2`:
+
+```text
+replicas: 3
+region: us-east-2
+
+["region: us-east-2"]
+```
+
+### Parse a JSON file
+
+```python
+cfg = json.decode(fs.read_file("cfg/data.json"), default = {})
+output = cfg
+```
+
+### Read from a step working directory
+
+```yaml
+steps:
+  - name: summarize
+    type: script
+    interpreter: starlark
+    working_directory: reports
+    script: |
+      lines = fs.read_file("summary.txt").splitlines()
+      output = len(lines)
+```
+
+The path `summary.txt` resolves to `reports/summary.txt`.
+
+### Read with an absolute path
+
+```python
+version = fs.read_file(path = "/opt/app/version.txt").strip()
+```
+
+## Errors
+
+- A file that does not exist or cannot be read fails with `cannot read file: ...`, followed by the operating system
+  reason and the full path that was tried.
+- A missing or non-string `path` fails with an argument error.
+- A canceled run stops the call with a cancellation error.
+
+The function only reads. Scripts have no file-writing function.
+
+## Related
+
+- [`json.decode`](/functions/automation/json.decode) and [`regex.findall`](/functions/automation/regex.findall) parse what you read.
+- [`load`](/functions/automation/load) imports Atmos Automation Language code from another file.
+- [`exec.run`](/functions/automation/exec.run) runs programs in the same working directory.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#working-directory-and-environment)

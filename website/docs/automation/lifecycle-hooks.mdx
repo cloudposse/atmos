@@ -1,7 +1,7 @@
 ---
 title: Lifecycle Hooks
 sidebar_label: Lifecycle Hooks
-description: Run checks and follow-up actions automatically around component operations using Atmos Automation Language.
+description: Run checks and follow-up actions automatically around component operations using the Atmos Automation Language.
 id: lifecycle-hooks
 slug: /automation/lifecycle-hooks
 ---
@@ -11,20 +11,20 @@ import EmbedFile from '@site/src/components/EmbedFile'
 import CastEmbed from '@site/src/components/CastEmbed'
 
 <Intro>
-Lifecycle hooks attach automation to component operations.
-Use lifecycle hooks when you want to enforce checks or run follow-up work
-automatically before or after an operation, without asking callers to remember
-an extra command.
+A lifecycle hook runs a check or action automatically before or after an Atmos
+component operation. For example, a hook on `before.terraform.plan` can require
+an owner in the component configuration before allowing the plan to start.
 </Intro>
 
-A lifecycle hook runs when Atmos reaches an event such as
-`before.terraform.plan`. Hooks can run existing tools or scripts. An Atmos
-Automation Language script receives the component's resolved context directly,
-so it can inspect inherited variables without parsing another command's output.
+Hooks make checks part of the operation your team already runs. Callers do not
+need to remember a separate validation command. Your script receives the resolved
+component configuration, so the check can use inherited settings and variables
+directly. After-hooks can report results or start follow-up work.
 
-Use a [custom command](/automation/custom-commands) for an action users invoke
-explicitly. Use a hook when the action should accompany a particular component
-operation.
+This guide uses the [owner-check example](/examples/starlark-hooks). Install
+Atmos and Terraform and put them on your `PATH`. The example includes the Atmos
+configuration and a Terraform module with no providers or resources; it needs
+no cloud credentials.
 
 ## Add a check before planning
 
@@ -34,7 +34,7 @@ This stack defines an `api` component and a hook requiring it to have an owner:
 
 The hook selects `before.terraform.plan` and uses `kind: step` with `type: script`
 to run one script step. Its `with` block configures that step, including
-`interpreter: starlark` for Atmos Automation Language.
+`interpreter: starlark` for the Atmos Automation Language.
 
 `on_failure: fail` makes a failed check stop the operation. The script reads
 `ctx.component.vars`, calls `fail()` if the owner is absent, and otherwise prints
@@ -46,9 +46,7 @@ so messages identify `api`.
 
 ## Run the passing case
 
-Use the [complete hook example](/examples/starlark-hooks), which includes the Atmos
-configuration and a tiny Terraform module. With Atmos and Terraform installed,
-run from that example's directory:
+Run from the example's directory:
 
 ```shell
 atmos terraform plan api -s dev
@@ -60,8 +58,7 @@ The hook prints:
 Owner check passed: api belongs to platform (dev).
 ```
 
-Terraform then reports no changes. This example has no providers or resources
-and needs no cloud credentials or provider installation.
+Terraform then reports no changes.
 
 ## Stop an invalid operation
 

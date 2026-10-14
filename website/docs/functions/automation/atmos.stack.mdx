@@ -1,0 +1,130 @@
+---
+title: "atmos.stack"
+sidebar_position: 8
+sidebar_label: "atmos.stack"
+sidebar_class_name: command
+description: Run an atmos stack command, such as get, set, or validate, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.stack` function runs `atmos stack` through the current Atmos executable. Use it to read and edit
+    component values in stack manifests with dot-notation paths, format manifests, and validate stacks from automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.stack(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
+`atmos.stack("get", "vars.location", flags = {"stack": "dev", "component": "station"})` runs
+`atmos stack get vars.location --stack=dev --component=station`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`get`](/cli/commands/stack/stack-get) | Read a component-relative value from a stack. |
+| [`set`](/cli/commands/stack/stack-set) | Set a component-relative value in the manifest that defines it. |
+| [`delete`](/cli/commands/stack/stack-delete) | Delete a component-relative value from the manifest that defines it. Also available as `del` and `unset`. |
+| [`format`](/cli/commands/stack/stack-format) | Format the manifest files that define a stack component. Also available as `fmt`. |
+| [`validate`](/cli/commands/stack/stack-validate) | Validate stack manifest configurations. |
+| [`schema`](/cli/commands/stack/stack-schema) | Print the atmos-manifest JSON Schema. |
+| [`config`](/cli/commands/stack/config) | Read, edit, and list component config in stack manifests, with its own `get`, `set`, `delete`, `format`, and `list` subcommands. |
+
+See the [`atmos stack` command reference](/cli/commands/stack/usage) for the complete list of subcommands and flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `stack`, in order: the subcommand and its
+        positional arguments, such as a dot-notation path and, for `set`, the new value. Every value must be a string,
+        so pass `"3"` rather than `3` as a value.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"stack"` becomes
+        `--stack`, and registered shorthands such as `"s"` and `"c"` resolve to `--stack` and `--component`.
+        Common keys for this command are `"stack"`, `"component"`, `"file"`, and, for `set`, `"type"`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Read a value from a component
+
+```python
+location = atmos.stack("get", "vars.location", flags = {"stack": "dev", "component": "station"}, output = "capture")
+print(location.stdout.strip())
+```
+
+The value is written to `stdout`. The command reports which manifest the value comes from on `stderr`.
+
+### Change a value in the manifest that defines it
+
+```python
+atmos.stack(
+    "set",
+    "vars.location",
+    "Oslo",
+    flags = {"stack": "dev", "component": "station"},
+)
+```
+
+Atmos finds the manifest file that defines the effective value and edits it in place, keeping comments and YAML
+functions. Pass `flags = {"file": "stacks/deploy/dev.yaml"}` to target one file explicitly.
+
+### Validate stacks as a gate
+
+```python
+result = atmos.stack("validate", output = "capture", check = False)
+if result.exit_code != 0:
+    fail("Stack validation failed:\n" + result.stderr)
+ui.success("All stacks validated successfully.")
+```
+
+### Compare a value across stacks
+
+```python
+def location_of(stack):
+    out = atmos.stack("get", "vars.location", flags = {"stack": stack, "component": "station"}, output = "capture")
+    return out.stdout.strip()
+
+for stack in ["dev", "staging", "prod"]:
+    ui.info(stack + ": " + location_of(stack))
+```
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos stack`](/cli/commands/stack/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

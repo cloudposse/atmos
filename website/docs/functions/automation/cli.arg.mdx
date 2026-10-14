@@ -1,0 +1,82 @@
+---
+title: "cli.arg"
+sidebar_position: 2
+sidebar_label: "cli.arg"
+sidebar_class_name: command
+description: Declare a positional argument for a standalone program.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `cli.arg` function declares one positional argument for a standalone program. Pass the declarations to
+    [`cli.command`](/functions/automation/cli.command), which parses the command line and delivers the values to
+    your entry function.
+</Intro>
+
+## Usage
+
+```python
+cli.arg(name, description = "", required = True)
+```
+
+## Arguments
+
+<dl>
+    <dt>`name`</dt>
+    <dd>
+        Required. The argument name, which is also its key in the `args` dictionary and its placeholder in the
+        usage line. A name starts with a letter and contains only letters, digits, underscores, and hyphens.
+    </dd>
+
+    <dt>`description`</dt>
+    <dd>(Optional) Help text for the argument.</dd>
+
+    <dt>`required`</dt>
+    <dd>
+        (Optional) Defaults to `True`. Pass `False` for an argument the user may omit. An omitted optional
+        argument has the value `None`.
+    </dd>
+</dl>
+
+## Returns
+
+A declaration value for the `args` list of [`cli.command`](/functions/automation/cli.command). The value has no
+other use on its own.
+
+## Examples
+
+```python
+#!/usr/bin/env atmos
+def main(args, flags):
+    region = args["region"] or "us-east-1"
+    print("{} in {}".format(args["service"], region))
+
+cli.command(
+    run = main,
+    args = [
+        cli.arg("service", description = "Service name"),
+        cli.arg("region", description = "Target region", required = False),
+    ],
+)
+```
+
+```shell
+./deploy.star api
+./deploy.star api us-west-2
+```
+
+## Errors
+
+- An invalid name fails with an argument error.
+- Declaring a required argument after an optional one fails when `cli.command` runs, because positional arguments
+  fill from left to right.
+- Two arguments with the same name fail when `cli.command` runs.
+- On the command line, a missing required argument or an extra argument stops the program with a usage error
+  before your functions run.
+
+## Related
+
+- [`cli.command`](/functions/automation/cli.command) parses the declared arguments.
+- [`cli.flag`](/functions/automation/cli.flag) declares named options.
+- [Standalone CLI apps](/automation/standalone-cli-apps)

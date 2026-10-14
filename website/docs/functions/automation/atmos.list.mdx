@@ -1,0 +1,132 @@
+---
+title: "atmos.list"
+sidebar_position: 8
+sidebar_label: "atmos.list"
+sidebar_class_name: command
+description: Run an atmos list command, such as stacks or components, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.list` function runs `atmos list` through the current Atmos executable. Use it to discover stacks,
+    components, instances, workflows, and other project objects, and to feed the results into the rest of a script.
+</Intro>
+
+## Usage
+
+```python
+atmos.list(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand as a string before the keyword arguments. The call `atmos.list("stacks")` runs `atmos list stacks`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`stacks`](/cli/commands/list/stacks) | List all Atmos stacks. |
+| [`components`](/cli/commands/list/components) | List all Atmos components. |
+| [`instances`](/cli/commands/list/list-instances) | List all Atmos instances. |
+| [`affected`](/cli/commands/list/affected) | List affected components and stacks. |
+| [`dependencies`](/cli/commands/list/dependencies) | List Atmos component dependencies. |
+| [`metadata`](/cli/commands/list/list-metadata) | List metadata across stacks. |
+| [`settings`](/cli/commands/list/settings) | List settings across stacks or for a specific component. |
+| [`values`](/cli/commands/list/list-values) | List component values across stacks. |
+| [`vars`](/cli/commands/list/list-vars) | List component vars across stacks. |
+| [`sources`](/cli/commands/list/sources) | List components with source configuration. |
+| [`vendor`](/cli/commands/list/list-vendor) | List all vendor configurations. |
+| [`workflows`](/cli/commands/list/list-workflows) | List all Atmos workflows. |
+| [`editions`](/cli/commands/list/editions) | List the journal of default changes between Atmos editions. |
+| [`themes`](/cli/commands/list/themes) | List available terminal themes. |
+| `profiles` | List available configuration profiles. |
+| `aliases` | List all command aliases, built-in and configured. |
+| `git-repositories` | List configured Git repositories. |
+
+See the [`atmos list` command reference](/cli/commands/list/usage) for the complete list of subcommands and flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `list`, in order: the subcommand and its
+        positional arguments. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"format"` becomes
+        `--format`, and registered shorthands resolve to their long form, so `"s"` becomes `--stack` for
+        subcommands that have it. Common flags include `"format"`, `"columns"`, `"sort"`, `"stack"`, and
+        `"component"`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+The function returns the text the command printed. With `format` set to `json`, decode it with `json.decode`.
+
+## Examples
+
+### Loop over every stack
+
+```python
+stacks = json.decode(atmos.list("stacks", flags = {"format": "json"}, output = "capture").stdout)
+for entry in stacks:
+    ui.info("Found stack " + entry["Stack"])
+```
+
+The JSON output is a list of objects whose keys match the table column headings, such as `Stack`.
+
+### List the components in one stack
+
+```python
+components = json.decode(
+    atmos.list("components", flags = {"stack": "dev", "format": "json"}, output = "capture").stdout,
+)
+for entry in components:
+    print(entry["Component"], entry["Type"])
+```
+
+This runs `atmos list components --stack=dev --format=json`.
+
+### Count instances
+
+```python
+instances = json.decode(atmos.list("instances", flags = {"format": "json"}, output = "capture").stdout)
+print("Instances:", len(instances))
+```
+
+### Read the table as text
+
+```python
+atmos.list("workflows", flags = {"format": "csv"})
+```
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos list`](/cli/commands/list/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

@@ -1,0 +1,105 @@
+---
+title: "dependencies.tools"
+sidebar_position: 12
+sidebar_label: "dependencies.tools"
+sidebar_class_name: command
+description: Install a pinned tool through the Atmos toolchain and add it to the script's PATH.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `dependencies.tools` function pins a tool version for the running script. Atmos installs the tool when it is
+    missing, using the same toolchain as `atmos toolchain install`, and adds it to the `PATH` of every program the
+    script starts afterward.
+</Intro>
+
+## Usage
+
+```python
+dependencies.tools(name, version)
+```
+
+## Arguments
+
+<dl>
+    <dt>`name`</dt>
+    <dd>
+        Required. The tool, in the form the Atmos toolchain accepts: a full `owner/repo` name such as `jqlang/jq`, or a
+        short name when it is unambiguous in the configured registries.
+    </dd>
+
+    <dt>`version`</dt>
+    <dd>Required. The exact version to install, for example `"1.7.1"`.</dd>
+</dl>
+
+Both arguments must be non-empty strings.
+
+## Returns
+
+The return value is `None`. The call is for its effect: after it returns, [`exec.run`](/functions/automation/exec.run),
+[`component.exec`](/functions/automation/component.exec), and the `atmos.*` functions find the tool on `PATH`.
+
+## Behavior
+
+- **Declare tools first.** Call `dependencies.tools` from the main script before starting
+  [`steps.parallel`](/functions/automation/steps.parallel). Every parallel task then inherits the same pinned tools.
+  Declaring a tool inside a task fails with `declare dependencies.tools before starting parallel tasks`.
+- **Repeated pins are cheap.** Calling the function again with the same name and version does nothing. Pinning the same
+  name to a different version fails with `tool "<name>" is already pinned to "<version>" in this script`.
+- **The environment is shared.** The tool directory is added to `PATH` for the script's own processes. It does not change
+  the environment of Atmos itself, and [`atmos.toolchain`](/functions/automation/atmos.toolchain) calls run in separate
+  processes that do not alter the script's `PATH`.
+
+## Errors
+
+- An empty name or version fails with an argument error.
+- An installation failure, such as an unknown tool or an unavailable version, fails with
+  `install dependency <name>@<version>` followed by the toolchain's explanation.
+- Tool installation is available in standalone scripts, custom commands, workflows, and hooks. It requires an Atmos
+  configuration, which Atmos loads when it runs the script.
+
+## Examples
+
+### Pin a tool and use it
+
+```python
+#!/usr/bin/env atmos
+dependencies.tools("jqlang/jq", "1.7.1")
+
+result = exec.run(["jq", "--version"], output = "capture")
+print(result.stdout.strip())   # jq-1.7.1
+```
+
+### Pin several tools before parallel work
+
+```python
+dependencies.tools("jqlang/jq", "1.7.1")
+dependencies.tools("mikefarah/yq", "4.44.3")
+
+def render(path):
+    return exec.run(["yq", ".", path], output = "capture").stdout
+
+output = steps.parallel(
+    tasks = [steps.task(name = p, function = render, args = [p]) for p in ["a.yaml", "b.yaml"]],
+)
+```
+
+### Use the same pin in a workflow step
+
+```yaml
+steps:
+  - name: summarize
+    type: script
+    interpreter: starlark
+    script: |
+      dependencies.tools("jqlang/jq", "1.7.1")
+      output = exec.run(["jq", "-n", "1 + 1"], output = "capture").stdout.strip()
+```
+
+## Related
+
+- [`atmos.toolchain`](/functions/automation/atmos.toolchain) runs `atmos toolchain` commands explicitly.
+- [`exec.run`](/functions/automation/exec.run) runs the installed tool.
+- [Toolchain](/cli/commands/toolchain/usage) describes the registries and version syntax.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#standalone-script-spike)

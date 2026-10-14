@@ -1,0 +1,233 @@
+---
+title: Differences from Python
+sidebar_label: Differences from Python
+sidebar_position: 8
+description: A practical guide for Python programmers to the places where Atmos Automation Language, which is based on Starlark, behaves differently from Python.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos Automation Language looks like Python and reads like Python, but it is a smaller language
+with its own rules. This page lists the differences that most often surprise Python programmers,
+with the closest equivalent for each. Every example here was run on the language that ships with
+Atmos.
+</Intro>
+
+## Quick lookup
+
+| In Python | In Atmos Automation Language |
+| --- | --- |
+| `try` / `except` / `raise` | `fail("message")` stops the script. Nothing catches it. Use `exec.run(..., check=False)` to inspect a failing command. |
+| `import os` | `load("file.star", "name")` for your own code. Atmos names such as `exec`, `fs`, `json`, `regex`, and `env` are already available. |
+| `class` | Use dictionaries and functions. |
+| `x ** 2` | `x * x`, or a loop. There is no `**` operator and no `pow()`. |
+| `f"{name}"` | `"{}".format(name)` or `"%s" % name`. |
+| `a < b < c` | `a < b and b < c`. |
+| `x is None` | `x == None`. |
+| `l.sort()` | `sorted(l)`, which returns a new list. |
+| `l.copy()`, `d.copy()` | `list(l)`, `dict(d)`. |
+| `del l[0]` | `l.pop(0)`, `d.pop("key")`. |
+| `sum(xs)`, `round(x)` | Available as Atmos built-ins; see [`sum`](/automation/reference/builtin-functions#sum) and [`round`](/automation/reference/builtin-functions#round). |
+| `isinstance(x, list)` | `type(x) == "list"`. |
+| `(x for x in xs)` | `[x for x in xs]`. There are no generators. |
+| `for c in "abc"` | `for c in "abc".codepoints()`. |
+| `global x` | Not available. Top-level names are assigned once. |
+
+## Statements
+
+**No `try`, `except`, `finally`, or `raise`.** Errors propagate to the top and stop the script.
+The `fail()` function is the only way to raise one. See
+[Errors and tracebacks](/automation/reference/execution-model#errors-and-tracebacks).
+
+**No `import`.** Use [`load`](/functions/automation/load) to bring names from another `.star` file:
+
+```python
+load("lib/helpers.star", "deploy")
+```
+
+**No `class`, `with`, `yield`, `async`, `del`, `global`, or `nonlocal`.** Each of these
+is a syntax error, as are decorators (`@name`) and the walrus operator (`:=`). There is no
+`assert` statement either; the word is an ordinary identifier. Write a check as
+`if not condition: fail("message")`.
+
+**No chained assignment or star-unpacking.** Both `x = y = 1` and `a, *rest = items` are syntax
+errors. Plain tuple unpacking works: `a, b = 1, 2`, and `(c, d), e = (3, 4), 5`.
+
+**No `else` clause on loops.** A `for` or `while` loop followed by `else` is a syntax error.
+
+**Common statements and expressions work as in Python.** That includes `pass`, `break`, `continue`,
+`elif`, comprehensions, and `lambda`. A `lambda`
+body is a single expression, and a comprehension can contain several `for` and `if` clauses.
+
+**`while` and top-level `for` and `if` statements are available.** Atmos enables them, so a script
+can compute at the top level without wrapping everything in a function.
+
+## Names and scope
+
+**Top-level names are assigned once.** A script cannot rebind a global, including with `x += 1`,
+a loop variable that is reused, or a swap such as `a, b = b, a`. Compute changing values inside a
+function, where local variables can be rebound freely:
+
+```python
+x = 1
+x = 2  # fails: cannot reassign global x
+```
+
+See [Globals are assigned once](/automation/reference/execution-model#globals-are-assigned-once).
+
+**Functions cannot assign to globals.** There is no `global` statement. Assigning inside a function
+creates a local variable, and `count += 1` on a global inside a function fails with
+`local variable count referenced before assignment`. Mutate a dictionary or list instead:
+`state["count"] += 1`.
+
+**Loaded and shared values are frozen.** Collections that come from `load()` are immutable, and
+collections reachable from `steps.parallel` tasks become immutable when the tasks start. See
+[Frozen values](/automation/reference/execution-model#frozen-values).
+
+**Names are checked before the script runs.** A misspelled name is an error even on a line that
+would never execute. A global must still be assigned before it is read, though functions may refer
+to names that are defined later in the file.
+
+**There is no `__name__`.** A standalone program defines a `main` function and passes it to
+[`cli.command`](/functions/automation/cli.command) instead of using
+`if __name__ == "__main__"`.
+
+## Numbers and operators
+
+**Division with `/` always produces a float, and `//` floors.** For example, `7 / 2` is `3.5`, `6 / 3` is `2.0`, `7 // 2` is
+`3`, and `-7 // 2` is `-4`. The `%` operator takes the sign of the divisor, as in Python: `-7 % 3`
+is `2`. Dividing by zero is an error for both `/` and `//`.
+
+**There is no `**` operator.** Use `x * x`, a loop, or a function. The functions `pow` and `divmod` are also unavailable.
+Atmos supplies [`sum`](/automation/reference/builtin-functions#sum) and
+[`round`](/automation/reference/builtin-functions#round) for adding and rounding numbers.
+
+**Bitwise operators work.** `&`, `|`, `^`, `~`, `<<`, and `>>` operate on integers, and integers have
+arbitrary precision: `1 << 70` is `1180591620717411303424`.
+
+**Number literals.** `0x1f`, `0o17`, and `0b101` work. Underscores in numbers, as in `1_000`, do not.
+
+**Booleans are separate from numbers.** The expression `True + 1` is an error, and `True == 1` is
+`False`. As dictionary
+keys, `True` and `1` are different. The comparison `1 == 1.0` is `True`, and the keys `1` and `1.0` collide.
+
+**Comparison chains are not allowed.** Writing `1 < 2 < 3` fails with
+`< does not associate with < (use parens)`. Write `1 < 2 and 2 < 3` instead.
+
+**No `is` and `is not`.** Compare with `==` and `!=`, including for `None`: `x == None`.
+
+**The operators `and`, `or`, and `not` behave as in Python.** `0 or "x"` evaluates to `"x"`. The conditional
+expression `a if cond else b` works too.
+
+## Strings
+
+**Strings are not iterable.** A loop such as `for c in "abc"` fails with `string value is not iterable`. Use
+`"abc".codepoints()` for characters or `"abc".elems()` for bytes.
+
+**Strings hold UTF-8 text and are measured in bytes.** The call `len("héllo")` returns `6`, and indexing and slicing
+count bytes, so `"héllo"[1:3]` is `"é"` and `"é"[0]` is a single byte that is not valid text.
+Methods such as `upper()` and `lower()` handle Unicode correctly. Use `len(list(s.codepoints()))`
+to count characters.
+
+**No f-strings.** Use `"{} is {}".format(a, b)`, `"{name}".format(name=n)`, or `"%s is %d" % (a, b)`.
+The `format` method supports `{}`, `{0}`, `{name}`, and the `!r` conversion, but not format
+specifications such as `{:>5}` or lookups such as `{a.b}`. The `%` operator supports `%s`, `%d`,
+`%i`, `%r`, `%x`, `%X`, `%o`, `%e`, `%f`, `%g`, `%c`, and `%%`, without width or precision.
+
+**Fewer methods.** Strings have 35 methods, listed under
+[String methods](/automation/reference/methods#string-methods). Methods that do not exist include
+`zfill`, `center`, `ljust`, `rjust`, `swapcase`, and `expandtabs`.
+
+**Number parsing does not trim whitespace.** The call `int(" 7 ")` fails, so call `.strip()` first.
+
+## Collections
+
+**Dictionaries keep insertion order.** Iterating, `keys()`, `values()`, and `items()` follow the
+order in which keys were first added, as in modern Python. The methods `items()`, `keys()`, and `values()`
+return lists, not views. Two dictionaries merge with `|`: `{"a": 1} | {"b": 2}`.
+
+**Sets are available through `set()`.** There are no set literals, so `{1, 2}` is a syntax error;
+write `set([1, 2])`. Sets keep insertion order, and `s.pop()` removes the first element. Sets
+support `|`, `&`, `-`, `^`, and the comparisons `<`, `<=`, `>`, `>=`.
+
+**Keys and set members must be hashable.** Strings, numbers, booleans, `None`, and tuples of those
+are hashable. Lists, dictionaries, and sets are not, and using one as a key fails with
+`unhashable type: list`. A missing key in `d[key]` fails with `key "x" not in dict`; use
+`d.get("x")` for `None` or `d.get("x", default)`.
+
+**Mutating a collection while looping over it is an error.** Appending to a list, assigning to one
+of its elements, or assigning to a dictionary key inside a `for` loop over that collection fails,
+even when the key already exists. This fails with messages such as
+`cannot append to list during iteration`. Loop over a copy, such as `for k in list(d)`, or build a
+new collection.
+
+**Fewer methods.** Lists have seven methods (`append`, `clear`, `extend`, `index`, `insert`,
+`pop`, `remove`), so there is no `sort()`, `reverse()`, `count()`, or `copy()`. Dictionaries have no
+`fromkeys()`, and there is no `collections` module. See [Methods](/automation/reference/methods).
+
+**Sorting is stable.** `sorted(items, key=...)` keeps the original order of elements that compare
+equal. It returns a new list. Values of different types cannot be ordered, so `sorted([1, "a"])`
+fails with `string < int not implemented`. The same holds for `min`, `max`, and the `<` operators.
+Strings compare by their UTF-8 bytes.
+
+**Tuples cannot change.** `t[0] = 1` fails with `tuple value does not support item assignment`.
+
+## Functions
+
+**Keyword-only arguments and `*args`/`**kwargs` work.** `def f(a, b=2, *args, c, **kw)` is valid, and
+so is a bare `*` before keyword-only parameters. Call-site unpacking with `f(*list)` and
+`f(**dict)` works.
+
+**Defaults are evaluated once,** when the function is defined, as in Python.
+
+**Built-in functions take positional arguments.** `enumerate(items, start=1)` fails, while
+`enumerate(items, 1)` works. See [Built-in Functions](/automation/reference/builtin-functions).
+
+**The `print` function writes a line to standard output and accepts only `sep`.** There is no `end` or `file`
+argument. Status messages belong in `ui.info()` and diagnostics in `log.debug()`. See
+[Output streams](/automation/reference/execution-model#output-streams).
+
+**Collections print the way the language writes them.** Strings inside collections use double quotes,
+sets print as `set([1, 2])`, floats always show a decimal point (`1.0`), and `None` prints as `None`.
+
+**The `type()` function returns a string.** Test for a type with `type(1) == "int"`. There is no
+`isinstance`, `callable`, `iter`, `next`, `map`, `filter`, `id`, `open`, or `input`. Comprehensions
+cover `map` and `filter`, and `exec.run` and `fs.read_file` cover process and file access.
+
+**Recursion works, within a limit.** Calls nest to a depth of 10,000. See
+[Recursion](/automation/reference/execution-model#recursion).
+
+## Standard library
+
+The Python standard library and Python packages are not part of the runtime, and there is no
+`import`. The built-in modules that Atmos supplies cover what automation needs:
+
+| Python | In Atmos Automation Language |
+| --- | --- |
+| `subprocess` | [`exec.run`](/functions/automation/exec.run) and [`atmos.run`](/functions/automation/atmos.run). |
+| `os.environ` | [`env`](/functions/automation/env), a read-only dictionary of the step's declared inputs. |
+| `open(path).read()` | [`fs.read_file`](/functions/automation/fs.read_file). File writes are not available. |
+| `json` | [`json.encode`](/functions/automation/json.encode), [`json.decode`](/functions/automation/json.decode), [`json.indent`](/functions/automation/json.indent). |
+| `re` | [`regex.search`](/functions/automation/regex.search), [`regex.findall`](/functions/automation/regex.findall), and [`regex.replace`](/functions/automation/regex.replace). These use Go (RE2) syntax with no lookaround or backreferences. |
+| `argparse` | [`cli.command`](/functions/automation/cli.command), [`cli.arg`](/functions/automation/cli.arg), and [`cli.flag`](/functions/automation/cli.flag). |
+| `concurrent.futures`, `threading` | [`steps.parallel`](/functions/automation/steps.parallel) and [`steps.task`](/functions/automation/steps.task). |
+| `logging` | [`log`](/functions/automation/log.info) and [`ui`](/functions/automation/ui.info). |
+
+There is no `math`, `time`, `datetime`, `random`, `pathlib`, `itertools`, `functools`,
+`collections`, or `typing` equivalent.
+
+## Values that come from Atmos
+
+Some values are not dictionaries. [`ctx`](/functions/automation/ctx) is a struct: read its fields
+with dot notation, as in `ctx.flags`, and look them up by name with `getattr(ctx, "flags")`. Indexing
+a struct with `ctx["flags"]` fails. The `flags` and `arguments` fields are read-only
+dictionaries, so `ctx.flags["name"]` works but assigning to it does not.
+
+## Related pages
+
+- [Execution Model](/automation/reference/execution-model) explains single-assignment globals,
+  frozen values, and error reporting in detail.
+- [Built-in Functions](/automation/reference/builtin-functions) and
+  [Methods](/automation/reference/methods) list what is available.
+- [Atmos Automation Language](/automation/language) introduces the language and why Atmos uses it.

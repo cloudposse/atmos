@@ -1,0 +1,87 @@
+---
+title: "ctx.flags"
+sidebar_position: 34
+sidebar_label: "ctx.flags"
+sidebar_class_name: command
+description: The parsed flags of a custom command, or the flags a workflow supplies.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `ctx.flags` value is a read-only dictionary of the flags Atmos parsed for the running command. Read parsed values
+    directly instead of interpolating them into the script source or mapping them to environment variables.
+</Intro>
+
+## Usage
+
+```python
+ctx.flags["name"]
+ctx.flags.get("name", default)
+```
+
+## Returns
+
+A frozen dictionary with sorted keys. Its contents depend on the entry point:
+
+- **Custom command:** one entry per flag the command declares, with the values and types Atmos parsed. A flag declared as
+  `type: string` is a string, so convert it with `int(...)` before doing arithmetic. Boolean flags are booleans. An
+  entry is present for each flag that has a value, including defaults.
+- **Workflow step:** the flags the workflow supplies, as strings. This is currently one entry, `ctx.flags["stack"]`,
+  holding the stack the workflow runs against, or an empty string when there is none.
+- **Standalone script, hook, or any entry point without declared flags:** an empty dictionary. A standalone program
+  receives its flags as the `flags` argument of the entry function it passes to
+  [`cli.command`](/functions/automation/cli.command).
+
+Steps inside `parallel` and `matrix` groups inherit the dictionary.
+
+## Examples
+
+### Read typed flags in a custom command
+
+```yaml
+commands:
+  - name: capacity
+    description: Calculate a service's total worker capacity
+    flags:
+      - name: replicas
+        type: string
+        default: "2"
+    steps:
+      - name: capacity
+        type: script
+        interpreter: starlark
+        script: |
+          replicas = int(ctx.flags["replicas"])
+          if replicas < 1:
+              fail("replicas must be positive")
+          ui.success("{} workers".format(replicas * 4))
+```
+
+```shell
+atmos capacity --replicas=3
+```
+
+```text
+✓ 12 workers
+```
+
+### Provide a default for an optional flag
+
+```python
+stack = ctx.flags.get("stack", "dev")
+```
+
+### Check whether a flag was provided
+
+```python
+if "dry-run" in ctx.flags and ctx.flags["dry-run"]:
+    ui.warning("Dry run: no changes will be made")
+```
+
+## Related
+
+- [`ctx.arguments`](/functions/automation/ctx.arguments) holds the parsed positional arguments.
+- [`cli.flag`](/functions/automation/cli.flag) declares flags for a standalone script.
+- [`ctx`](/functions/automation/ctx) lists every context attribute.
+- [Custom commands](/automation/custom-commands)

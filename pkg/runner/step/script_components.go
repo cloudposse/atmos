@@ -49,7 +49,7 @@ func ScriptComponentRef(vars *Variables) *script.ComponentRef {
 }
 
 // ScriptComponentResolver returns the execution-aware component resolver backing
-// `components.get` for embedded scripts. The resolver reports an ErrStarlark error
+// `components.get` for embedded scripts. The resolver reports an ErrScript error
 // when the variables carry no resolver, so it is always safe to install.
 func ScriptComponentResolver(vars *Variables) script.ComponentResolver {
 	defer perf.Track(nil, "step.ScriptComponentResolver")()
@@ -59,7 +59,7 @@ func ScriptComponentResolver(vars *Variables) script.ComponentResolver {
 	}
 	return func(ctx context.Context, ref script.ComponentRef) (*script.Component, error) {
 		if vars.scriptComponentInfo == nil || vars.AtmosConfig == nil {
-			return nil, fmt.Errorf("%w: component resolution is unavailable in this execution context", errUtils.ErrStarlark)
+			return nil, fmt.Errorf("%w: component resolution is unavailable in this execution context", errUtils.ErrScript)
 		}
 		select {
 		case scriptResolutionGate <- struct{}{}:
@@ -83,7 +83,7 @@ func ScriptComponentResolver(vars *Variables) script.ComponentResolver {
 
 func scriptComponent(config *schema.AtmosConfiguration, ref script.ComponentRef, info *schema.ConfigAndStacksInfo) (*script.Component, error) {
 	if info == nil || info.ComponentSection == nil {
-		return nil, fmt.Errorf("%w: component %q was not resolved", errUtils.ErrStarlark, ref.Name)
+		return nil, fmt.Errorf("%w: component %q was not resolved", errUtils.ErrScript, ref.Name)
 	}
 	implementation := scriptImplementation(info.ComponentSection, ref.Name)
 	path, err := scriptComponentPath(config, ref.Type, implementation, info.ComponentSection)

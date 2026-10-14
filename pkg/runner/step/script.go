@@ -51,7 +51,7 @@ func (h *ScriptHandler) Validate(step *schema.WorkflowStep) error {
 		return err
 	}
 	if _, embedded := script.Get(step.Interpreter); embedded && step.Container.IsEnabled() {
-		return fmt.Errorf("%w: embedded starlark requires container: false", errUtils.ErrStarlark)
+		return fmt.Errorf("%w: embedded %s requires container: false", errUtils.ErrScript, strings.TrimSpace(step.Interpreter))
 	}
 	return h.ValidateRequired(step, "script", step.Script)
 }
@@ -78,7 +78,7 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 	// The raw interpreter may be a template, so Validate cannot tell whether it is embedded.
 	// Check the rendered interpreter here, where the container opt-in is still visible.
 	if _, embedded := script.Get(invocation.interpreter); embedded && step.Container.IsEnabled() {
-		return nil, fmt.Errorf("%w: embedded %s requires container: false", errUtils.ErrStarlark, strings.TrimSpace(invocation.interpreter))
+		return nil, fmt.Errorf("%w: embedded %s requires container: false", errUtils.ErrScript, strings.TrimSpace(invocation.interpreter))
 	}
 	env, err := h.resolveEnv(step, vars)
 	if err != nil {

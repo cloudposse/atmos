@@ -1,0 +1,74 @@
+---
+title: "ctx.script"
+sidebar_position: 39
+sidebar_label: "ctx.script"
+sidebar_class_name: command
+description: The path and directory of the script file that is running.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `ctx.script` value identifies the file the running script was read from, so a script can find files that sit next
+    to it regardless of the directory it runs in.
+</Intro>
+
+## Usage
+
+```python
+ctx.script.path
+ctx.script.directory
+```
+
+## Returns
+
+A value with two attributes, or `None` when the script has no source file:
+
+<dl>
+    <dt>`path`</dt>
+    <dd>The absolute path of the script file.</dd>
+
+    <dt>`directory`</dt>
+    <dd>The absolute path of the directory that contains the script file.</dd>
+</dl>
+
+The value is set for a standalone script file, where symbolic links are resolved to the real file, and for a workflow,
+custom command, or hook step whose `script` comes from a local `!include` or `!include.raw` file. An inline `script: |`
+body or a script read from stdin with `atmos -` has no file, so `ctx.script` is `None`.
+
+## Examples
+
+### Read a file next to the script
+
+```python
+#!/usr/bin/env atmos
+template = fs.read_file(ctx.script.directory + "/template.txt")
+print(template)
+```
+
+The function `fs.read_file` resolves relative paths against the working directory, so building the path from `ctx.script.directory`
+works from any directory the script is started in.
+
+### Show where a script lives
+
+```python
+if ctx.script != None:
+    ui.info("Running " + ctx.script.path)
+else:
+    ui.info("Running an inline script")
+```
+
+### Load a helper module beside the script
+
+The `load()` statement already resolves relative paths against the script file, so most scripts do not need `ctx.script` for that:
+
+```python
+load("lib/helpers.star", "deploy")
+```
+
+## Related
+
+- [`load`](/functions/automation/load) resolves module paths against the script file.
+- [`fs.read_file`](/functions/automation/fs.read_file) reads files relative to the working directory.
+- [`ctx`](/functions/automation/ctx) lists every context attribute.
+- [Script step: loading files](/steps/type/script#loading-files)

@@ -1,0 +1,110 @@
+---
+title: "atmos.config"
+sidebar_position: 8
+sidebar_label: "atmos.config"
+sidebar_class_name: command
+description: Run an atmos config command, such as get, set, or validate, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.config` function runs `atmos config` through the current Atmos executable. Use it to read values from
+    the effective configuration, edit `atmos.yaml` by dot-notation path, and validate or format the file from
+    automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.config(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
+`atmos.config("get", "logs.level")` runs `atmos config get logs.level`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`get`](/cli/commands/config/config-get) | Read a value from the effective Atmos configuration by dot-notation path. |
+| [`set`](/cli/commands/config/config-set) | Set a value in `atmos.yaml` by dot-notation path. |
+| [`delete`](/cli/commands/config/config-delete) | Delete a value from `atmos.yaml` by dot-notation path. Also available as `del` and `unset`. |
+| [`list`](/cli/commands/config/config-list) | List editable `atmos.yaml` setting paths. |
+| [`format`](/cli/commands/config/config-format) | Format the active `atmos.yaml` file. Also available as `fmt`. |
+| [`validate`](/cli/commands/config/config-validate) | Validate `atmos.yaml` against its JSON Schema. |
+| [`schema`](/cli/commands/config/config-schema) | Print the `atmos.yaml` JSON Schema. |
+
+See the [`atmos config` command reference](/cli/commands/config/usage) for the complete list of subcommands and
+flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `config`, in order: the subcommand and its positional arguments, such as the dot-notation path and the new value for `set`. Every value must be a string, so pass `"true"` or `"5"` rather than a boolean or an integer.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). For example, `{"type": "int"}`
+        becomes `--type=int` for `set`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Read a setting
+
+```python
+base = atmos.config("get", "base_path", output = "capture")
+print("base_path is", base.stdout.strip())
+```
+
+### Set a typed value
+
+```python
+atmos.config("set", "logs.level", "debug")
+atmos.config("set", "logs.exclude", '["a", "b"]', flags = {"type": "yaml"})
+```
+
+The second call runs `atmos config set logs.exclude '["a", "b"]' --type=yaml`, which stores the value as a YAML
+list.
+
+### Fail early on an invalid configuration
+
+```python
+validation = atmos.config("validate", output = "capture", check = False)
+if validation.exit_code != 0:
+    fail("atmos.yaml is invalid:\n" + validation.stderr)
+```
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos config`](/cli/commands/config/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

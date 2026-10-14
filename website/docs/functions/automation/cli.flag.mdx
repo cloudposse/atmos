@@ -1,0 +1,133 @@
+---
+title: "cli.flag"
+sidebar_position: 3
+sidebar_label: "cli.flag"
+sidebar_class_name: command
+description: Declare a typed flag for a standalone program.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `cli.flag` function declares one typed flag for a standalone program. Pass the declarations to
+    [`cli.command`](/functions/automation/cli.command), which parses the command line, applies defaults and
+    environment bindings, and delivers typed values to your entry function.
+</Intro>
+
+## Usage
+
+```python
+cli.flag(
+    name,
+    type = "string",
+    default = None,
+    shorthand = "",
+    description = "",
+    required = False,
+    choices = [],
+    env = "",
+)
+```
+
+## Arguments
+
+<dl>
+    <dt>`name`</dt>
+    <dd>
+        Required. The flag name without dashes, which is also its key in the `flags` dictionary. The user passes it
+        as `--name`. A name starts with a letter and contains only letters, digits, underscores, and hyphens. The
+        name `help` is reserved.
+    </dd>
+
+    <dt>`type`</dt>
+    <dd>
+        (Optional) One of `"string"` (the default), `"int"`, `"bool"`, or `"string_list"`. The value arrives in the
+        `flags` dictionary as a string, an integer, a boolean, or a list of strings.
+    </dd>
+
+    <dt>`default`</dt>
+    <dd>
+        (Optional) The value used when the flag is not supplied. It must match the flag type: a string, an integer
+        that fits a native integer, a boolean, or a list or tuple of strings. Without a default, a string flag is
+        `""`, an integer flag is `0`, a boolean flag is `False`, and a list flag is an empty list.
+    </dd>
+
+    <dt>`shorthand`</dt>
+    <dd>(Optional) A single letter, other than `h`, that lets the user pass `-r` instead of `--replicas`.</dd>
+
+    <dt>`description`</dt>
+    <dd>(Optional) Help text for the flag.</dd>
+
+    <dt>`required`</dt>
+    <dd>
+        (Optional) Defaults to `False`. A required flag must be supplied on the command line or through its `env`
+        binding. A required flag cannot declare a default, and boolean flags cannot be required.
+    </dd>
+
+    <dt>`choices`</dt>
+    <dd>
+        (Optional) A list or tuple of allowed strings. Choices apply to `string` and `string_list` flags. A value
+        outside the list stops the program with an error that names the valid values.
+    </dd>
+
+    <dt>`env`</dt>
+    <dd>
+        (Optional) The name of an environment variable that supplies the value when the flag is not on the command
+        line. The first non-empty value wins. Command-line values override the environment, which overrides the
+        default.
+    </dd>
+</dl>
+
+## Returns
+
+A declaration value for the `flags` list of [`cli.command`](/functions/automation/cli.command).
+
+## Command-line forms
+
+- The forms `--replicas=3`, `--replicas 3`, and `-r 3` set an integer or string flag.
+- The form `--verbose` sets a boolean flag to `True`, and `--verbose=false` sets it to `False`.
+- A `string_list` flag accepts comma-separated values, repeated flags, or both: `--tag=a,b --tag=c` produces
+  `["a", "b", "c"]`.
+
+## Examples
+
+```python
+#!/usr/bin/env atmos
+def main(args, flags):
+    print(flags["replicas"], flags["environment"], flags["tag"], flags["verbose"])
+
+cli.command(
+    run = main,
+    flags = [
+        cli.flag("replicas", type = "int", shorthand = "r", default = 2,
+                 description = "Number of replicas"),
+        cli.flag("environment", choices = ["dev", "prod"], default = "dev",
+                 env = "DEPLOY_ENV"),
+        cli.flag("tag", type = "string_list", shorthand = "t"),
+        cli.flag("verbose", type = "bool"),
+    ],
+)
+```
+
+```shell
+./deploy.star --replicas=5 --tag=blue,green --verbose
+```
+
+```text
+5 dev ["blue", "green"] True
+```
+
+## Errors
+
+- An invalid name, an invalid shorthand, an unsupported `type`, or a default of the wrong type fails with an
+  argument error when `cli.flag` is called.
+- Setting `choices` on an `int` or `bool` flag fails.
+- Duplicate flag names or shorthands in one `cli.command` call fail.
+- A missing required flag, an unknown flag, or an invalid value stops the program with a usage error before your
+  functions run.
+
+## Related
+
+- [`cli.command`](/functions/automation/cli.command) parses the declared flags.
+- [`cli.arg`](/functions/automation/cli.arg) declares positional arguments.
+- [Standalone CLI apps](/automation/standalone-cli-apps)

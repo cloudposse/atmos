@@ -11,15 +11,14 @@ cast:
 
 # Add your own Atmos subcommand
 
-Give your team a project-specific command with flags, defaults, and generated help.
-This example adds `atmos capacity` to calculate how many workers a service can run.
-`capacity` is defined by this project's `atmos.yaml`; it is not a built-in Atmos command.
+This example defines `atmos capacity` in `atmos.yaml`. The command calculates
+how many workers a service can run and provides a `--replicas` flag and generated help.
 
-The YAML defines the command's name, flag, default, and help text. An embedded
-Atmos Automation Language script implements the calculation and rejects counts
-below one. Atmos registers the subcommand, parses its inputs, and passes them to
-the script. The language is Python-like, built on Starlark, and runs inside Atmos.
-No stacks, components, or external tools are needed.
+Atmos parses the command's inputs and passes them to a script written in the
+Atmos Automation Language, a Python-like language based on Starlark. The interpreter
+ships with Atmos. The script calculates worker capacity and rejects
+replica counts below one. Install Atmos and put it on your `PATH`; this example
+needs no stacks, components, or external tools.
 
 From this directory:
 

@@ -18,7 +18,7 @@ func ScriptToolInstaller(config *schema.AtmosConfiguration) script.ToolInstaller
 
 	return func(ctx context.Context, tools map[string]string) ([]string, error) {
 		if config == nil {
-			return nil, fmt.Errorf("%w: tool installation requires Atmos configuration", errUtils.ErrStarlark)
+			return nil, fmt.Errorf("%w: tool installation requires Atmos configuration", errUtils.ErrScript)
 		}
 		// The native toolchain and stack resolvers share configuration caches.
 		select {

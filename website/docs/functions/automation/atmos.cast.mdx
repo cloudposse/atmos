@@ -1,0 +1,114 @@
+---
+title: "atmos.cast"
+sidebar_position: 8
+sidebar_label: "atmos.cast"
+sidebar_class_name: command
+description: Run an atmos cast command, such as play or render, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.cast` function runs `atmos cast` through the current Atmos executable. Use it to render asciicast
+    recordings to GIF, MP4, HTML, ASCII, PNG, or JPEG files, and to play them in the terminal.
+</Intro>
+
+## Usage
+
+```python
+atmos.cast(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and the recording path as strings before the keyword arguments. The call
+`atmos.cast("render", "demo.cast", flags = {"output": "demo.html"})` runs
+`atmos cast render demo.cast --output=demo.html`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`play`](/cli/commands/cast/play) | Play an asciicast recording in the terminal. |
+| [`render`](/cli/commands/cast/render) | Render an asciicast recording to GIF, MP4, HTML, ASCII, PNG, or JPEG. |
+
+See the [`atmos cast` command reference](/cli/commands/cast/usage) for the complete list of subcommands and flags.
+
+:::note
+The `render` subcommand is the useful one from a script: it produces a file from a recording. The `play` subcommand
+plays the recording on the terminal in real time, so it suits a person watching and not an unattended run.
+:::
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `cast`, in order: the subcommand and the path of
+        the recording. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"output"` becomes
+        `--output`, and registered shorthands resolve to their long form, so `"o"` resolves to `--output` and `"f"`
+        to `--format` for `render`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) The same process options as [`atmos.run`](/functions/automation/atmos.run#arguments). Relative
+        recording and output paths resolve against the working directory, which is the directory Atmos was started
+        in by default.
+    </dd>
+</dl>
+
+The `output` option of this function controls how the process output is shown. It is unrelated to the `--output` flag
+of `render`, which names the file to write. Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Render a recording to HTML
+
+```python
+atmos.cast("render", "demo.cast", flags = {"output": "demo.html"})
+```
+
+The output format is inferred from the file extension.
+
+### Choose the format explicitly
+
+```python
+atmos.cast("render", "demo.cast", flags = {"output": "demo.out", "format": "html"})
+```
+
+### Render every recording in a list
+
+```python
+def render_all(recordings):
+    for name in recordings:
+        atmos.cast("render", name + ".cast", flags = {"output": name + ".gif"}, output = "capture")
+        ui.success("Rendered " + name + ".gif")
+
+render_all(["install", "deploy"])
+```
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos cast`](/cli/commands/cast/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

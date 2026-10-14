@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -18,7 +19,7 @@ import (
 
 // prepareStandaloneScript keeps normal CLI initialization and error reporting,
 // but isolates script arguments before early config/global-flag preprocessing.
-// This spike deliberately handles only a leading script path, not a new subcommand.
+// It handles a leading script path or an explicit stdin marker, not a subcommand.
 func prepareStandaloneScript() (func(), error) {
 	file, err := script.DetectFile(os.Args[1:])
 	if err != nil {
@@ -52,24 +53,28 @@ func suppressMetricsSummaryByDefault(config *schema.AtmosConfiguration) {
 }
 
 func runStandaloneScript(cmd *cobra.Command, file *script.File) error {
-	source, err := os.ReadFile(file.Path) //nolint:gosec // Standalone scripts intentionally accept user-selected file paths, including outside cwd.
+	streams := iolib.GetContext()
+	source, err := readStandaloneSource(file, streams.Input())
 	if err != nil {
-		return fmt.Errorf("%w: read script: %w", errUtils.ErrStarlark, err)
+		return fmt.Errorf("%w: read script: %w", errUtils.ErrScript, err)
 	}
-	engine, ok := script.Get("starlark")
+	engine, ok := script.Get(file.Interpreter)
 	if !ok {
-		return fmt.Errorf("%w: embedded interpreter is unavailable", errUtils.ErrStarlark)
+		return fmt.Errorf("%w: embedded interpreter %q is unavailable", errUtils.ErrScript, file.Interpreter)
 	}
 	suppressMetricsSummaryByDefault(&atmosConfig)
 	processEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
 	vars := runnerstep.NewVariables()
 	vars.SetAtmosConfig(&atmosConfig)
 	vars.SetScriptComponentInfoResolver(execpkg.ScriptComponentInfoResolver(&atmosConfig, nil))
-	streams := iolib.GetContext()
+	name := file.Path
+	if file.Stdin {
+		name = "<stdin>"
+	}
 	result, err := engine.Execute(cmd.Context(), script.Spec{
 		InstallTools: runnerstep.ScriptToolInstaller(&atmosConfig),
 		ParseCommand: standaloneCommandParser(file, streams.Data()),
-		Name:         file.Path, Source: string(source), File: file,
+		Name:         name, Source: string(source), File: file,
 		ProcessEnv: processEnv,
 		Stdout:     streams.Data(), Stderr: streams.UI(),
 		ResolveComponent: runnerstep.ScriptComponentResolver(vars),
@@ -81,4 +86,13 @@ func runStandaloneScript(cmd *cobra.Command, file *script.File) error {
 		return data.Writeln(result.Value)
 	}
 	return nil
+}
+
+// readStandaloneSource consumes stdin only when the standalone command runs.
+func readStandaloneSource(file *script.File, input io.Reader) ([]byte, error) {
+	if file.Stdin {
+		return io.ReadAll(input)
+	}
+	// Standalone scripts intentionally accept user-selected file paths, including outside cwd.
+	return os.ReadFile(file.Path) //nolint:gosec // The caller explicitly selected this source file.
 }

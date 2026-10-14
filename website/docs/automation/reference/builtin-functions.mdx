@@ -1,0 +1,706 @@
+---
+title: Built-in Functions
+sidebar_label: Built-in Functions
+sidebar_position: 5
+description: Reference for the universal constants and functions of the Atmos Automation Language, plus a map of the names Atmos adds on top of them.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The Atmos Automation Language provides constants and functions that are
+available in every script, loaded module, and function without an import. This page lists each
+one with its signature, return value, failure conditions, and an example. The names that Atmos
+adds for components, commands, files, and output are listed at the end.
+</Intro>
+
+## Conventions
+
+Signatures follow Python notation. A parameter followed by `?` is optional, `*args` collects any
+number of positional arguments, and a bare `=` shows a default value.
+
+Unless a signature shows a keyword parameter, a built-in function accepts positional arguments
+only. For example, `enumerate(items, start=1)` fails with `enumerate: unexpected keyword
+arguments`; write `enumerate(items, 1)` instead. The functions that take keyword arguments are
+`dict`, `fail`, `int`, `max`, `min`, `print`, `round`, `sorted`, and `sum`.
+
+Every failure stops the script and is reported with a traceback. Scripts have no `try` or
+`except`; see [Execution Model](/automation/reference/execution-model#errors-and-tracebacks). The
+messages shown below are the first line of the reported error.
+
+## Constants
+
+<dl>
+  <dt>`None`</dt>
+  <dd>`NoneType`. The absence of a value. It is falsy and compares equal only to itself.</dd>
+
+  <dt>`True`</dt>
+  <dd>`bool`. The true value.</dd>
+
+  <dt>`False`</dt>
+  <dd>`bool`. The false value.</dd>
+</dl>
+
+```python
+print(None, True, False)  # None True False
+print(type(None))         # NoneType
+```
+
+## Summary
+
+The definitions below give each function's signature, behavior, and examples.
+`sum` and `round` are supplied by Atmos; the other functions come from Starlark.
+
+## abs
+
+<dl>
+  <dt>`abs(x)`</dt>
+  <dd>
+
+Returns the absolute value of an `int` or `float`. It fails when `x` is any other type:
+`got string, want int or float`.
+
+  </dd>
+</dl>
+
+```python
+print(abs(-3), abs(-2.5))  # 3 2.5
+```
+
+## all
+
+<dl>
+  <dt>`all(iterable)`</dt>
+  <dd>
+
+Returns `True` when every element of `iterable` is truthy, and `True` for an empty
+iterable.
+
+  </dd>
+</dl>
+
+```python
+print(all([1, 2, 0]), all([]))  # False True
+```
+
+## any
+
+<dl>
+  <dt>`any(iterable)`</dt>
+  <dd>
+
+Returns `True` when at least one element of `iterable` is truthy, and `False` for an
+empty iterable.
+
+  </dd>
+</dl>
+
+```python
+print(any([0, "", 3]), any([]))  # True False
+```
+
+## bool
+
+<dl>
+  <dt>`bool(x=False)`</dt>
+  <dd>
+
+Returns `True` or `False` according to the truth value of `x`. Zero, empty strings,
+empty collections, `None`, and `False` are falsy. Every other value is truthy.
+
+  </dd>
+</dl>
+
+```python
+print(bool(""), bool([0]), bool())  # False True False
+```
+
+## bytes
+
+<dl>
+  <dt>`bytes(x)`</dt>
+  <dd>
+
+Returns a `bytes` value. The argument is a string (encoded as UTF-8), another `bytes`
+value, or an iterable of integers in the range 0 to 255. Any other argument fails with
+`bytes: got int, want string, bytes, or iterable of ints`.
+
+  </dd>
+</dl>
+
+```python
+print(repr(bytes("hi")))         # b"hi"
+print(repr(bytes([104, 105])))   # b"hi"
+print(len(bytes("é")))           # 2
+```
+
+## chr
+
+<dl>
+  <dt>`chr(i)`</dt>
+  <dd>
+
+Returns the one-character string for the Unicode code point `i`. It fails when `i` is
+negative or greater than `0x10FFFF`.
+
+  </dd>
+</dl>
+
+```python
+print(chr(65), chr(0x1F600))  # A 😀
+```
+
+## dict
+
+<dl>
+  <dt>`dict(pairs?, **kwargs)`</dt>
+  <dd>
+
+Returns a new dictionary. The optional first argument is a dictionary or an
+iterable of key-value pairs, and keyword arguments add string keys. Later entries replace earlier
+ones. It fails when an element is not a pair or a key is unhashable.
+
+  </dd>
+</dl>
+
+```python
+print(dict([("a", 1)], b=2))  # {"a": 1, "b": 2}
+print(dict())                 # {}
+```
+
+## dir
+
+<dl>
+  <dt>`dir(x)`</dt>
+  <dd>
+
+Returns a sorted list of the attribute and method names of `x`. Values without attributes
+produce an empty list.
+
+  </dd>
+</dl>
+
+```python
+print(dir({})[:4])  # ["clear", "get", "items", "keys"]
+```
+
+## enumerate
+
+<dl>
+  <dt>`enumerate(iterable, start=0)`</dt>
+  <dd>
+
+Returns a list of `(index, element)` tuples, numbering from `start`.
+Pass `start` as a positional argument.
+
+  </dd>
+</dl>
+
+```python
+print(enumerate(["a", "b"], 1))  # [(1, "a"), (2, "b")]
+```
+
+## fail
+
+<dl>
+  <dt>`fail(*args, sep=" ")`</dt>
+  <dd>
+
+Stops the script with an error. Atmos reports the message prefixed with
+`fail: `, followed by the traceback. Strings are used as written and other values use their
+`repr()` form, joined with `sep`.
+
+  </dd>
+</dl>
+
+```python
+fail("replicas must be positive", 0)
+# fail: replicas must be positive 0
+```
+
+Because there is no `try` statement, `fail` ends the script. Inside a function run by
+[`steps.parallel`](/functions/automation/steps.parallel), the failure belongs to that task and
+enters the task's retry policy, as described for [`steps.task`](/functions/automation/steps.task).
+
+## float
+
+<dl>
+  <dt>`float(x=0.0)`</dt>
+  <dd>
+
+Converts a number, bool, or string to a floating-point number. Strings may use
+decimal or exponent notation, or the words `inf`, `infinity`, or `nan` with an optional sign. The
+string must not contain surrounding whitespace. It fails for an empty string, text that is not a
+number (`invalid float literal: x`), a result too large to represent, and other types.
+
+  </dd>
+</dl>
+
+```python
+print(float("1.5"), float(3), float("inf"), float())  # 1.5 3.0 +inf 0.0
+```
+
+## getattr
+
+<dl>
+  <dt>`getattr(x, name, default?)`</dt>
+  <dd>
+
+Returns the attribute or method `name` of `x`. When the attribute is
+missing it returns `default` if one is given, and fails otherwise:
+`getattr: string has no .zz field or method`.
+
+  </dd>
+</dl>
+
+```python
+print(getattr({}, "nope", "fallback"))  # fallback
+print(getattr("abc", "upper")())        # ABC
+```
+
+## hasattr
+
+<dl>
+  <dt>`hasattr(x, name)`</dt>
+  <dd>
+
+Returns `True` when `x` has an attribute or method called `name`.
+
+  </dd>
+</dl>
+
+```python
+print(hasattr([], "append"), hasattr([], "push"))  # True False
+```
+
+## hash
+
+<dl>
+  <dt>`hash(x)`</dt>
+  <dd>
+
+Returns an integer hash of a string or bytes value. The result is the same on every run
+and every machine: strings hash like Java's `String.hashCode`, and bytes use the 32-bit FNV
+algorithm. Other types fail with `hash: got int, want string or bytes`.
+
+  </dd>
+</dl>
+
+```python
+print(hash("abc"))  # 96354
+```
+
+## int
+
+<dl>
+  <dt>`int(x=0, base?)`</dt>
+  <dd>
+
+Converts a value to an integer.
+
+<dl>
+  <dt>`x`</dt>
+  <dd>
+    A bool (becomes 0 or 1), a float (truncated toward zero), an integer, or a string. A float
+    that is infinite or not a number fails.
+  </dd>
+  <dt>`base`</dt>
+  <dd>
+    Only valid when `x` is a string. A value from 2 to 36, or 0 to pick the base from a `0b`, `0o`,
+    or `0x` prefix. Without `base`, the string is read as decimal. Strings may start with a sign
+    but must not contain whitespace.
+  </dd>
+</dl>
+
+Unparsable text fails with `int: invalid literal with base 10: abc`. Integers have arbitrary
+precision.
+
+  </dd>
+</dl>
+
+```python
+print(int("ff", 16), int("0x1f", 0), int(3.9), int(-3.9), int(True))  # 255 31 3 -3 1
+```
+
+## len
+
+<dl>
+  <dt>`len(x)`</dt>
+  <dd>
+
+Returns the number of elements in a string (in bytes), bytes value, list, tuple,
+dictionary, set, or range. Other types fail with `len: value of type int has no len`.
+
+  </dd>
+</dl>
+
+```python
+print(len("héllo"), len([1, 2]), len({"a": 1}))  # 6 2 1
+```
+
+Strings are measured in UTF-8 bytes, so `len("é")` is 2. Use `len(list(s.codepoints()))` to count
+characters.
+
+## list
+
+<dl>
+  <dt>`list(iterable?)`</dt>
+  <dd>
+
+Returns a new list holding the elements of `iterable`, or an empty list without an
+argument. Iterating a dictionary yields its keys.
+
+  </dd>
+</dl>
+
+```python
+print(list(range(3)), list({"a": 1}), list())  # [0, 1, 2] ["a"] []
+```
+
+## max
+
+<dl>
+  <dt>`max(iterable, key?) or max(a, b, *rest, key?)`</dt>
+  <dd>
+
+Returns the largest element. When `key` is given,
+elements are compared by the value of `key(element)`. The first of several equal maximums wins. An
+empty iterable fails with `max: argument is an empty sequence`; there is no `default` parameter.
+
+  </dd>
+</dl>
+
+```python
+print(max(1, 5, 3))                   # 5
+print(max(["aa", "b"], key=len))      # aa
+```
+
+## min
+
+<dl>
+  <dt>`min(iterable, key?) or min(a, b, *rest, key?)`</dt>
+  <dd>
+
+Returns the smallest element, with the same rules
+as `max`.
+
+  </dd>
+</dl>
+
+```python
+print(min([4, 2, 8]), min(3, 1))  # 2 1
+```
+
+## ord
+
+<dl>
+  <dt>`ord(s)`</dt>
+  <dd>
+
+Returns the Unicode code point of a one-character string, or the byte value of a
+one-byte `bytes` value. Any other length fails:
+`ord: string encodes 2 Unicode code points, want 1`.
+
+  </dd>
+</dl>
+
+```python
+print(ord("A"), ord("é"))  # 65 233
+```
+
+## print
+
+<dl>
+  <dt>`print(*args, sep=" ")`</dt>
+  <dd>
+
+Writes its arguments to standard output followed by a newline. Strings are
+printed as written, `bytes` values as raw bytes, and other values in their `repr()` form. See
+[`print`](/functions/automation/print) for where the text goes in each entry point.
+
+  </dd>
+</dl>
+
+```python
+print("deploying", ["api", "worker"], 3)  # deploying ["api", "worker"] 3
+print("a", "b", sep="-")                  # a-b
+```
+
+## range
+
+<dl>
+  <dt>`range(stop), range(start, stop, step=1)`</dt>
+  <dd>
+
+Returns an immutable sequence of integers from `start`
+up to, but not including, `stop`. The `step` may be negative but not zero (`range: step argument must
+not be zero`). A range supports `len`, indexing, slicing, `in`, and iteration, and it is not a list:
+wrap it in `list()` to see its values.
+
+  </dd>
+</dl>
+
+```python
+print(list(range(1, 10, 3)))  # [1, 4, 7]
+print(list(range(5, 0, -2)))  # [5, 3, 1]
+print(len(range(10)))         # 10
+```
+
+## repr
+
+<dl>
+  <dt>`repr(x)`</dt>
+  <dd>
+
+Returns the text form of `x` that shows strings with quotes and escapes.
+
+  </dd>
+</dl>
+
+```python
+print(repr("a\"b"), repr([1, "x"]), repr(None))  # "a\"b" [1, "x"] None
+```
+
+## reversed
+
+<dl>
+  <dt>`reversed(iterable)`</dt>
+  <dd>
+
+Returns a new list with the elements in reverse order.
+
+  </dd>
+</dl>
+
+```python
+print(reversed([1, 2, 3]))  # [3, 2, 1]
+```
+
+## round
+
+<dl>
+  <dt>`round(number, ndigits=None)`</dt>
+  <dd>
+
+Rounds an integer or float to the
+nearest value at the requested decimal place. On an exact tie, it chooses the
+even result. Negative `ndigits` round to tens, hundreds, and so on.
+
+  </dd>
+</dl>
+
+```python
+print(round(2.5), round(3.5))       # 2 4
+print(round(3.14159, ndigits=2))    # 3.14
+print(round(1250, -2))             # 1200
+```
+
+Omitting `ndigits`, or passing `None`, returns an integer. Otherwise the result
+keeps the input type: `round(2.5, 0)` is `2.0`, and `round(25, -1)` is `20`.
+Integers retain arbitrary precision. Floats use their stored binary value, so
+`round(2.675, 2)` is `2.67`.
+
+`number` must be an `int` or `float`; `ndigits` must be an `int` or `None`.
+Booleans are not numbers in Starlark. Rounding a non-finite float to an integer
+fails. With an integer `ndigits`, non-finite floats are returned unchanged;
+a finite result outside the float range fails.
+
+Atmos supplies this function in every script and loaded module.
+
+## set
+
+<dl>
+  <dt>`set(iterable?)`</dt>
+  <dd>
+
+Returns a new set of the distinct elements of `iterable`. Elements must be
+hashable, so a list element fails with `set: unhashable type: list`. A set remembers insertion
+order.
+
+  </dd>
+</dl>
+
+```python
+print(set([3, 1, 3, 2]))  # set([3, 1, 2])
+```
+
+## sorted
+
+<dl>
+  <dt>`sorted(iterable, key?, reverse=False)`</dt>
+  <dd>
+
+Returns a new list of the elements in ascending order. The
+sort is stable. When `key` is given, elements are ordered by `key(element)`. Elements that cannot
+be compared with each other fail with a message such as `string < int not implemented`. Sorting a
+dictionary sorts its keys.
+
+  </dd>
+</dl>
+
+```python
+print(sorted(["bb", "a", "ccc"], key=len))  # ["a", "bb", "ccc"]
+print(sorted(["b", "a"], reverse=True))     # ["b", "a"]
+```
+
+## str
+
+<dl>
+  <dt>`str(x)`</dt>
+  <dd>
+
+Returns the text form of `x`. A string is returned unchanged, and `bytes` are decoded as
+UTF-8 with invalid sequences replaced by U+FFFD. It takes exactly one argument.
+
+  </dd>
+</dl>
+
+```python
+print(str(1), str([1, "a"]), str(None))  # 1 [1, "a"] None
+```
+
+## sum
+
+<dl>
+  <dt>`sum(iterable, start=0)`</dt>
+  <dd>
+
+Adds integers and floats in iteration order.
+An empty iterable returns `start`. Integer sums retain arbitrary precision;
+including a float produces a float with the usual floating-point precision.
+
+  </dd>
+</dl>
+
+```python
+print(sum([1, 2, 3]))             # 6
+print(sum([1, 2, 3], start=10))   # 16
+print(sum(range(5)))              # 10
+print(sum([]))                    # 0
+```
+
+The input can be any iterable of numbers, including a list, tuple, set, or range.
+Every item and `start` must be an `int` or `float`. Strings, booleans, and nested
+collections produce an error. Use `"".join(parts)` to concatenate strings.
+
+Atmos supplies this function in every script and loaded module. Long sums
+respond to script cancellation and task timeouts.
+
+## tuple
+
+<dl>
+  <dt>`tuple(iterable?)`</dt>
+  <dd>
+
+Returns a new tuple of the elements of `iterable`, or the empty tuple without an
+argument.
+
+  </dd>
+</dl>
+
+```python
+print(tuple([1, 2]), tuple())  # (1, 2) ()
+```
+
+## type
+
+<dl>
+  <dt>`type(x)`</dt>
+  <dd>
+
+Returns the name of the type of `x` as a string.
+
+  </dd>
+</dl>
+
+```python
+print(type(1), type(1.5), type("s"), type(None), type([]))  # int float string NoneType list
+print(type({}), type(()), type(set()), type(range(1)), type(True))  # dict tuple set range bool
+print(type(bytes("a")), type(print))  # bytes builtin_function_or_method
+```
+
+## zip
+
+<dl>
+  <dt>`zip(*iterables)`</dt>
+  <dd>
+
+Returns a list of tuples, where tuple `i` holds the `i`-th element of each
+argument. The result stops at the shortest argument, and `zip()` with no arguments returns an empty
+list.
+
+  </dd>
+</dl>
+
+```python
+print(zip([1, 2, 3], ["a", "b"]))  # [(1, "a"), (2, "b")]
+```
+
+## Names that Atmos adds
+
+Alongside `sum` and `round`, Atmos supplies the following modules and values.
+They are available without an import and are documented in the
+[automation function reference](/functions/automation).
+
+<dl>
+  <dt>`cli`</dt>
+  <dd>Module. [`cli.command`](/functions/automation/cli.command), [`cli.arg`](/functions/automation/cli.arg), and [`cli.flag`](/functions/automation/cli.flag) declare a standalone program's interface.</dd>
+
+  <dt>`atmos`</dt>
+  <dd>Module. Run registered Atmos commands: [`atmos.run`](/functions/automation/atmos.run), [`atmos.terraform`](/functions/automation/atmos.terraform), [`atmos.helm`](/functions/automation/atmos.helm), [`atmos.toolchain`](/functions/automation/atmos.toolchain), and the other command wrappers described under [command wrappers](/functions/automation#atmos-command-wrappers).</dd>
+
+  <dt>`components`</dt>
+  <dd>Module. [`components.get`](/functions/automation/components.get) resolves a component's configuration. The result's [`exec`](/functions/automation/component.exec) method runs a process in the component directory.</dd>
+
+  <dt>`exec`</dt>
+  <dd>Module. [`exec.run`](/functions/automation/exec.run) runs an external program from an argument list.</dd>
+
+  <dt>`steps`</dt>
+  <dd>Module. [`steps.task`](/functions/automation/steps.task) describes a deferred call, and [`steps.parallel`](/functions/automation/steps.parallel) runs calls concurrently.</dd>
+
+  <dt>`fs`</dt>
+  <dd>Module. [`fs.read_file`](/functions/automation/fs.read_file) reads a local file as text.</dd>
+
+  <dt>`json`</dt>
+  <dd>Module. [`json.encode`](/functions/automation/json.encode), [`json.encode_indent`](/functions/automation/json.encode_indent), [`json.decode`](/functions/automation/json.decode), and [`json.indent`](/functions/automation/json.indent).</dd>
+
+  <dt>`regex`</dt>
+  <dd>Module. [`regex.search`](/functions/automation/regex.search), [`regex.findall`](/functions/automation/regex.findall), and [`regex.replace`](/functions/automation/regex.replace).</dd>
+
+  <dt>`dependencies`</dt>
+  <dd>Module. [`dependencies.tools`](/functions/automation/dependencies.tools) installs and selects tools through the Atmos toolchain.</dd>
+
+  <dt>`errors`</dt>
+  <dd>Module. [`errors.build`](/functions/automation/errors.build) creates errors with explanations, hints, examples, context, and exit codes.</dd>
+
+  <dt>`ui`</dt>
+  <dd>Module. [`ui.info`](/functions/automation/ui.info), [`ui.success`](/functions/automation/ui.success), and [`ui.warning`](/functions/automation/ui.warning) write status messages to stderr.</dd>
+
+  <dt>`log`</dt>
+  <dd>Module. [`log.trace`](/functions/automation/log.trace), [`log.debug`](/functions/automation/log.debug), [`log.info`](/functions/automation/log.info), [`log.warn`](/functions/automation/log.warn), and [`log.error`](/functions/automation/log.error) write to the Atmos log.</dd>
+
+  <dt>`ctx`</dt>
+  <dd>Value. [`ctx`](/functions/automation/ctx) describes the invocation: [`ctx.args`](/functions/automation/ctx.args), [`ctx.flags`](/functions/automation/ctx.flags), [`ctx.arguments`](/functions/automation/ctx.arguments), [`ctx.component`](/functions/automation/ctx.component), [`ctx.hook`](/functions/automation/ctx.hook), [`ctx.operation`](/functions/automation/ctx.operation), and [`ctx.script`](/functions/automation/ctx.script).</dd>
+
+  <dt>`env`</dt>
+  <dd>Value. [`env`](/functions/automation/env) is a read-only dictionary of the step's declared environment inputs.</dd>
+
+  <dt>`output`</dt>
+  <dd>Global. Assign [`output`](/functions/automation/output) at the top level to set the script's result.</dd>
+
+  <dt>`load`</dt>
+  <dd>Statement. [`load`](/functions/automation/load) imports names from another `.star` file.</dd>
+</dl>
+
+The `json` module is the standard Starlark JSON module, so it has exactly four members: `encode`,
+`encode_indent`, `decode`, and `indent`. The `ui` module has the three members shown, and `log`
+has the five.
+
+The `load` keyword is a statement. It must appear at the top level of a file, outside any function, and it
+cannot be passed around as a value. The variable `output` is an ordinary global that the script creates by
+assigning it; it is not defined until then, so reading it before an assignment fails with
+`undefined: output`.
+
+For where each name's output goes, see
+[Execution Model](/automation/reference/execution-model#output-streams). For the methods of strings,
+lists, dictionaries, sets, and bytes, see [Methods](/automation/reference/methods).

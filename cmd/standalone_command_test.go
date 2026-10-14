@@ -220,7 +220,7 @@ cli.command(
 	require.NoError(t, os.WriteFile(path, []byte(source), 0o600))
 	command := &cobra.Command{}
 	command.SetContext(t.Context())
-	require.NoError(t, runStandaloneScript(command, &script.File{Path: path, Args: []string{"--help"}}))
+	require.NoError(t, runStandaloneScript(command, &script.File{Path: path, Interpreter: "starlark", Args: []string{"--help"}}))
 }
 
 func TestStandaloneCommandRequiredTypedFlags(t *testing.T) {

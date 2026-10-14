@@ -1,0 +1,137 @@
+---
+title: "atmos.describe"
+sidebar_position: 8
+sidebar_label: "atmos.describe"
+sidebar_class_name: command
+description: Run an atmos describe command, such as component, stacks, or affected, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.describe` function runs `atmos describe` through the current Atmos executable. Use it to read the
+    fully merged configuration of stacks and components, find affected components, and inspect dependents from
+    automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.describe(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
+`atmos.describe("component", "station", flags = {"stack": "dev"})` runs
+`atmos describe component station --stack=dev`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`component`](/cli/commands/describe/component) | Show configuration details for a component in a stack. |
+| [`stacks`](/cli/commands/describe/stacks) | Display configuration for stacks and their components. |
+| [`affected`](/cli/commands/describe/affected) | List components and stacks affected by two Git commits. |
+| [`dependents`](/cli/commands/describe/dependents) | List components that depend on a given component. Also available as `dependants`. |
+| [`locals`](/cli/commands/describe/locals) | Display locals from stack manifests. |
+| [`workflows`](/cli/commands/describe/workflows) | List workflows and their associated files. |
+| [`config`](/cli/commands/describe/config) | Display the final merged CLI configuration. |
+| [`edition`](/cli/commands/describe/edition) | Display the active edition pin and the defaults it rolls back. |
+
+See the [`atmos describe` command reference](/cli/commands/describe/usage) for the complete list of subcommands and
+flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `describe`, in order: the subcommand and its positional arguments, such as the component name for `component` and `dependents`. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). The `stack` key becomes `--stack` for
+        the subcommands that take one, `format` selects the output format, and `query` applies a yq expression to
+        the result. Other common keys include `process-templates`, `process-functions`, and `skip`. The
+        `describe component` subcommand also accepts `provenance`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Read a component as data
+
+```python
+station = atmos.describe(
+    "component", "station",
+    flags = {"stack": "dev", "format": "json", "provenance": False},
+    output = "capture",
+)
+config = json.decode(station.stdout)
+print(config["vars"]["location"])
+```
+
+This runs `atmos describe component station --format=json --provenance=false --stack=dev`. Request JSON so the
+output decodes with `json.decode`; the default format is YAML.
+
+### Pull one value with a query
+
+```python
+location = atmos.describe(
+    "component", "station",
+    flags = {"stack": "dev", "format": "json", "query": ".vars.location", "provenance": False},
+    output = "capture",
+)
+print(json.decode(location.stdout))
+```
+
+### List the stacks that define a component
+
+```python
+stacks = atmos.describe(
+    "stacks",
+    flags = {"components": "station", "sections": "vars", "format": "json"},
+    output = "capture",
+)
+for stack_name in sorted(json.decode(stacks.stdout).keys()):
+    print(stack_name)
+```
+
+### Find affected components
+
+```python
+affected = atmos.describe("affected", flags = {"base": "main", "format": "json"}, output = "capture")
+for item in json.decode(affected.stdout):
+    print(item["component"], "in", item["stack"])
+```
+
+The `base` key becomes `--base=main`, which compares the working tree against the `main` branch.
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos describe`](/cli/commands/describe/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

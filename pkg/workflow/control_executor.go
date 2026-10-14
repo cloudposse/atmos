@@ -131,7 +131,7 @@ func (executor *ControlCommandExecutor) Execute(ctx context.Context, child *Cont
 func (executor *ControlCommandExecutor) rejectEmbeddedContainer(step *schema.WorkflowStep) error {
 	workflowContainer := executor.WorkflowDefinition != nil && executor.WorkflowDefinition.Container.IsEnabled() && !StepContainerDisabled(step)
 	if step.Container.IsEnabled() || workflowContainer {
-		return fmt.Errorf("%w: embedded starlark requires container: false", errUtils.ErrStarlark)
+		return fmt.Errorf("%w: embedded %s requires container: false", errUtils.ErrScript, strings.TrimSpace(step.Interpreter))
 	}
 	return nil
 }

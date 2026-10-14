@@ -11,20 +11,22 @@ import EmbedFile from '@site/src/components/EmbedFile'
 import CastEmbed from '@site/src/components/CastEmbed'
 
 <Intro>
-Custom commands add project-specific subcommands to the Atmos CLI through YAML.
-Use custom commands when you want your team to run a project task through a
-familiar entry point such as `atmos capacity`. Define the interface in
-`atmos.yaml` and compose the steps that implement it.
+Add a subcommand such as `atmos capacity` by defining it in `atmos.yaml`.
+YAML declares its arguments, flags, help, and steps. Atmos loads the command
+when you run it from your project.
 </Intro>
 
-A **custom command** extends the `atmos` CLI. For example, your project can define
-`atmos capacity` to calculate worker capacity, or a command that validates a
-deployment. The command is available when Atmos loads your project's configuration.
+Give your team a command for a task it repeats: checking a deployment, reporting
+capacity, or preparing a release. Declare the inputs and defaults once in YAML;
+Atmos provides parsing and help, while your script implements the work. The
+command lives with your project and runs the same way locally and in CI.
+
+Install Atmos and put it on your `PATH`. This example needs no stacks,
+components, or external tools.
 
 ## Define your subcommand
 
-The following complete `atmos.yaml` adds a command named `capacity`. It is a
-command this project defines, not a built-in Atmos command:
+Save this configuration as `atmos.yaml`:
 
 <EmbedFile filePath="examples/starlark-commands/atmos.yaml" />
 
@@ -32,13 +34,13 @@ The YAML defines the command name, description, `--replicas` flag, default, and
 step to run. The embedded Atmos Automation Language program implements the
 calculation and checks that the replica count is positive.
 
-Atmos Automation Language is Python-like, built on Starlark, and embedded in
-Atmos. Select it with `type: script` and `interpreter: starlark` on the step.
-This example needs no stacks, components, or external tools.
+The step selects the Atmos Automation Language, a Python-like language based on
+Starlark, with `type: script` and `interpreter: starlark`. The interpreter ships
+with Atmos, so this command needs no separate language runtime.
 
 ## Run the command
 
-Save the configuration as `atmos.yaml` and run from its directory:
+Run from the directory containing `atmos.yaml`:
 
 ```shell
 atmos capacity --replicas 3
@@ -78,10 +80,9 @@ than being inserted into the program's source.
 The example declares `replicas` as a string flag, so the script converts
 `ctx.flags["replicas"]` with `int()` before calculating. A boolean flag would
 arrive as a boolean. The step calls `fail("replicas must be positive")` for zero
-or negative counts, giving the caller a failed command with an actionable error.
+or negative counts, stopping the command with that error.
 
-Try `atmos capacity --replicas 0` to see that validation. No environment-variable
-mapping or shell interpolation is required to pass the flag into the program.
+Try `atmos capacity --replicas 0` to see the validation error.
 
 ## Grow the command
 
@@ -92,7 +93,7 @@ several commands need the same behavior.
 
 See the [custom command configuration reference](/cli/configuration/commands)
 for the full YAML schema and the
-[language reference](/automation/language) for language
+[language overview](/automation/language) for language
 helpers and execution controls. The
 [complete runnable example](/examples/starlark-commands) contains the configuration
 used throughout this guide.

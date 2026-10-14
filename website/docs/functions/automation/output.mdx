@@ -1,0 +1,162 @@
+---
+title: "output"
+sidebar_position: 41
+sidebar_label: "output"
+sidebar_class_name: command
+description: Set the result of a script by assigning the top-level output variable.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The top-level `output` variable sets the result of a script. It is a variable you assign rather than a function you
+    call: whatever value the script assigns to `output` becomes the step value in a workflow, custom command, or hook,
+    and the printed result of a standalone script.
+</Intro>
+
+## Usage
+
+```python
+output = value
+```
+
+## Accepted values
+
+<dl>
+    <dt>A string</dt>
+    <dd>Used exactly as written, with no quotes or escaping added.</dd>
+
+    <dt>Any other JSON-encodable value</dt>
+    <dd>
+        Encoded as compact JSON by the same rules as [`json.encode`](/functions/automation/json.encode): integers, floats,
+        booleans, lists, tuples, and dictionaries with string keys. Dictionary keys are written in sorted order.
+    </dd>
+
+    <dt>`None`</dt>
+    <dd>Encoded as the JSON text `null`.</dd>
+</dl>
+
+A value that cannot be encoded, such as a function, a dictionary with a non-string key, or a non-finite float, fails
+the script with an error that names `output` and the reason, plus a hint to assign a string, number, bool, list,
+dict, or `None`.
+
+## Behavior
+
+- Without `output`, the text the script printed with [`print`](/functions/automation/print) is the step value.
+- When `output` is assigned, it replaces the printed text as the step value. Printed lines still reach stdout.
+- A standalone script prints its result to stdout after the script finishes: strings raw, other values as JSON,
+  and `None` as `null`.
+- Module-level names can be assigned once, and `output` is no exception. Assigning it twice, such as in both branches
+  of an `if` and `else`, fails with `cannot reassign global`. Use a conditional expression, or compute the value in a
+  function and assign the result once.
+
+The step-level YAML [`outputs`](/steps/outputs) field also works with script steps.
+It declares named results derived from the script's value, which later steps read
+as `.steps.<name>.outputs.<key>`. For a script returning a dictionary, an output
+template such as `{{ (fromJson .value).image }}` extracts its `image` field. See
+the [prompt and named-output example](/automation/workflows#collect-input-and-pass-results-between-steps).
+
+## Examples
+
+### Return a string
+
+```python
+output = "plain text"
+```
+
+```text
+plain text
+```
+
+### Return structured data
+
+```python
+output = {"b": 1, "a": [1, 2.5, None]}
+```
+
+```text
+{"a":[1,2.5,null],"b":1}
+```
+
+### Return None
+
+```python
+output = None
+```
+
+```text
+null
+```
+
+### Use the value in the next workflow step
+
+```yaml
+workflows:
+  report:
+    steps:
+      - name: calc
+        type: script
+        interpreter: starlark
+        env:
+          REGION: us-east-1
+        script: |
+          print("captured line")
+          output = {"region": env["REGION"], "replicas": 3, "tags": ["a", "b"]}
+      - name: show
+        type: shell
+        command: echo '{{ .steps.calc.value }}'
+```
+
+```text
+captured line
+{"region":"us-east-1","replicas":3,"tags":["a","b"]}
+```
+
+### Choose the value once
+
+```python
+def pick(region):
+    if region == "us-east-1":
+        return "blue"
+    return "green"
+
+output = pick("us-east-1")
+```
+
+### Return the results of parallel tasks
+
+```python
+def api():
+    return {"service": "api"}
+
+def worker():
+    return {"service": "worker"}
+
+output = steps.parallel(functions = [api, worker])
+```
+
+```text
+[{"service":"api"},{"service":"worker"}]
+```
+
+## Errors
+
+An unencodable value fails like this:
+
+```python
+output = {1: 2}
+```
+
+```text
+Error: starlark execution failed: output must be a string or JSON-encodable value: dict has int key, want string
+
+Assign a string, number, bool, list, dict, or None to output in step "...".
+```
+
+Assigning `output` a second time fails with `cannot reassign global output`.
+
+## Related
+
+- [`print`](/functions/automation/print) writes the default step value.
+- [`json.encode`](/functions/automation/json.encode) defines how non-string values are encoded.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#step-output)

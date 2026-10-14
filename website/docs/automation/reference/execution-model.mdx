@@ -1,0 +1,352 @@
+---
+title: Execution Model
+sidebar_label: Execution Model
+sidebar_position: 7
+description: How Atmos Automation Language evaluates a script, including single-assignment globals, frozen values, errors and tracebacks, recursion, cancellation, module loading, output streams, and dry runs.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos Automation Language runs a script from top to bottom in a fixed, repeatable way. This page
+describes the rules that shape how scripts behave: globals that are assigned once, values that
+become immutable, errors that stop the script, how files are loaded, where output goes, and what a
+dry run does.
+</Intro>
+
+## Phases of a run
+
+A script runs in two phases.
+
+1. **Parse and resolve.** Atmos reads the whole file, reports syntax errors, and checks that every
+   name used in the file is defined somewhere in it, is a built-in, or is one of the
+   [names Atmos adds](/automation/reference/builtin-functions#names-that-atmos-adds). A mistake
+   found in this phase, such as a misspelled variable, stops the script before any statement runs,
+   so nothing is printed and no command starts.
+2. **Execute.** Atmos runs the top-level statements in order. A `def` statement creates a function
+   but does not run it. Functions run when they are called, so a function may call another function
+   that is defined further down the file, as long as the call happens after both definitions have
+   run.
+
+Reading a global before the statement that assigns it has run fails with
+`global variable x referenced before assignment`.
+
+## Globals are assigned once
+
+A name assigned at the top level of a file, including the loop variable of a top-level `for`
+statement, can be bound only once. A second binding fails before the script runs further:
+
+```python
+x = 1
+x = 2
+```
+
+```text
+cannot reassign global x declared at scripts/example.star:1:1
+```
+
+The same error occurs for `x += 1` at the top level, for assigning one name in both branches of
+an `if`/`else`, for reusing a loop variable in a second top-level `for`, for swapping two globals
+with `a, b = b, a`. Assigning a name that was imported with `load()` fails the same way, with
+`cannot reassign local` in the message. For the global form of the error, Atmos adds this hint:
+
+```text
+Starlark globals are assigned once. Use a conditional expression (`x = a if cond else b`) or
+compute the value in a function (`def main(): ... return v` then `output = main()`).
+```
+
+Choose a value with a conditional expression, or compute it inside a function, where local
+variables can be reassigned freely:
+
+```python
+region = env.get("REGION", "us-east-1")
+
+# A conditional expression chooses one value.
+color = "blue" if region == "us-east-1" else "green"
+
+# A function can reassign its own locals as often as it needs.
+def replicas(count):
+    total = 0
+    for i in range(count):
+        total += i + 1
+    return total
+
+output = {"color": color, "replicas": replicas(3)}
+```
+
+Mutating a list, dictionary, or set that a global refers to is not a rebinding, so it is allowed:
+
+```python
+state = {"count": 0}
+for name in ["api", "worker"]:
+    state["count"] += 1
+
+output = state  # {"count": 2}
+```
+
+## Frozen values
+
+Some values become immutable, or frozen. Changing a frozen list, dictionary, or set fails with an
+error such as `cannot append to frozen list` or `cannot insert into frozen hash table`. Values are
+frozen at two points.
+
+**After `load()`.** When a file finishes loading, every global it defined is frozen, including
+lists and dictionaries nested inside them. Functions from the loaded file can still be called, but
+they cannot change the file's module-level collections:
+
+```python title="lib.star"
+items = [1, 2]
+```
+
+```python title="main.star"
+load("lib.star", "items")
+items.append(3)  # fails: cannot append to frozen list
+```
+
+Copy a loaded collection when you need a changeable version: `mine = list(items)`.
+
+**When `steps.parallel` dispatches tasks.** Before any task starts, Atmos freezes the task
+functions, their arguments, and everything reachable from them. That includes every global of the
+file that defines each function, whether or not the function uses it. Values that tasks return
+are frozen too:
+
+```python
+cfg = {"retries": 1}
+cfg["retries"] = 2           # allowed: nothing has been dispatched yet
+
+def check():
+    return cfg["retries"]
+
+results = steps.parallel(functions=[check])
+cfg["retries"] = 3           # fails: cannot insert into frozen hash table
+```
+
+Freezing keeps tasks that run side by side from changing shared state. Build changing data inside
+each function from local variables and return it. Mutate shared setup data before dispatching:
+
+```python
+def build():
+    local = []
+    local.append(1)
+    return local
+
+output = steps.parallel(functions=[build, build])  # [[1], [1]]
+```
+
+See [`steps.parallel`](/functions/automation/steps.parallel) and
+[`steps.task`](/functions/automation/steps.task).
+
+## Determinism
+
+The language itself is deterministic. A computation that uses only its inputs gives the same result
+every time, on every machine:
+
+- Dictionaries and sets keep insertion order, and iteration follows it.
+- The `sorted` function is stable, and `hash` returns the same value on every run.
+- Integers have arbitrary precision, and the language has no random numbers or clocks.
+
+What a script does through the names Atmos provides is as deterministic as the outside world:
+
+- The results of [`exec.run`](/functions/automation/exec.run),
+  [`fs.read_file`](/functions/automation/fs.read_file), and
+  [`components.get`](/functions/automation/components.get) depend on processes, files, and
+  configuration.
+- [`env`](/functions/automation/env) depends on the environment the step declares.
+- Tasks in [`steps.parallel`](/functions/automation/steps.parallel) run concurrently, so the order in
+  which their output lines appear, and which task finishes first, can vary between runs. The
+  returned list always follows the order of the input tasks.
+- Retry delays and timeouts depend on elapsed time.
+
+## Errors and tracebacks
+
+Scripts have no `try`, `except`, or `raise`. An error stops the script, and nothing in the script
+can catch it. Use `fail()` to stop with your own message, and use `exec.run(..., check=False)` when
+a nonzero exit code is an expected result that your script should inspect.
+
+Every error is reported as one message plus a traceback that lists the call frames from the
+outermost call to the innermost, each with a file, line, and column:
+
+```python title="scripts/deploy.star"
+def inner(n):
+    fail("bad value: " + str(n))
+
+def outer():
+    inner(3)
+
+outer()
+```
+
+```text
+starlark execution failed: fail: bad value: 3
+
+Traceback (most recent call last):
+  scripts/deploy.star:7:6: in <toplevel>
+  scripts/deploy.star:5:10: in outer
+  scripts/deploy.star:2:9: in inner
+Error in fail: fail: bad value: 3
+```
+
+When Atmos knows the project base path, file paths under it appear relative to it, and paths
+outside the project stay absolute. Syntax and name errors show the position of the problem, for
+example `scripts/deploy.star:3:1: got end of file, want ')'`.
+
+An error inside a task of `steps.parallel` names the task, such as `task "api": fail: ...`, and
+adds the task's own traceback. When several tasks fail, the message lists each failure. A task
+that was retried reports `(after N attempts)`.
+
+## Recursion
+
+Functions can call themselves, directly or through other functions. Atmos stops runaway recursion
+at a depth of 10,000 nested calls and reports a clear error instead of exhausting memory:
+
+```python
+def f():
+    return f()
+
+f()
+```
+
+```text
+recursion depth exceeded (10000 frames)
+```
+
+The error carries the hint that a recursive function needs a base case, and the traceback shortens
+long runs of identical frames to one line, such as `... (10,234 more identical frames)`. The depth
+is checked periodically, so a runaway script can pass the limit by a few hundred frames before it
+stops. Loops are an alternative for work that needs unbounded repetition: `while` statements are
+available.
+
+## Cancellation and timeouts
+
+A script stops when the command or workflow that runs it is canceled. Cancellation reaches
+running code even inside a loop that never calls a function.
+
+[`steps.task`](/functions/automation/steps.task) accepts a `timeout` such as `"30s"` or `"5m"`. The
+timeout bounds the whole task, including every retry attempt and delay. A task that exceeds it
+fails with `task "slow" timed out after 1s`, and the traceback shows where the task was when time
+ran out:
+
+```python
+def slow():
+    n = 0
+    while True:
+        n += 1
+
+steps.parallel(tasks=[steps.task(name="slow", function=slow, timeout="1s")])
+```
+
+With `fail_fast=True`, the first task that exhausts its retries cancels the running tasks and
+skips the queued ones. Without it, every task finishes and the failures are reported together.
+
+## Loading files
+
+The `load()` statement imports names from another `.star` file:
+
+```python
+load("lib/helpers.star", "deploy", short = "summarize")
+```
+
+The first argument is the path of the file. The remaining arguments name what to import: a plain
+string imports a name under its own name, and `alias = "name"` imports it under a different name.
+The rules:
+
+- **Placement.** `load` is a statement for the top level of a file. A `load` inside a function is a
+  syntax error.
+- **Path resolution.** A relative path, including one that begins with `./` or `../`, resolves
+  against the directory of the file that contains the `load`. Inline scripts, which have no file,
+  resolve against the step's working directory. Absolute paths are used as written.
+- **Evaluated once.** Each file is evaluated the first time it is loaded and cached by its cleaned
+  absolute path. Loading the same file again, from any other file or by a different relative
+  spelling such as `./lib.star` and `sub/../lib.star`, reuses the first result. Any `print` in the
+  loaded file runs only once.
+- **Frozen globals.** The globals of a loaded file are frozen when it finishes. See
+  [Frozen values](#frozen-values).
+- **Private names.** A name that begins with an underscore is private to its file, and importing
+  it fails with `load: names with leading underscores are not exported: _name`.
+- **No cycles.** If file `a.star` loads `b.star` and `b.star` loads `a.star`, the load fails with
+  `cyclic load of /path/to/a.star`.
+- **Same environment.** A loaded file sees the same built-ins and Atmos names as the entry script
+  and follows the same single-assignment rule.
+- **Missing names and files.** Importing a name the file does not define fails with
+  `load: name x not found in module lib.star`, with a suggestion when a similar name exists. A
+  file that cannot be read fails with `cannot read module: open ...: no such file or directory`.
+
+Functions from loaded files can be used in `steps.parallel` and `steps.task`. See
+[`load`](/functions/automation/load) for the function reference and
+[Loading files](/steps/type/script#loading-files) for how YAML includes choose the file that a
+script is read from.
+
+## Output streams
+
+A script writes to three separate destinations, and its result is a fourth, separate value.
+
+| Source | Destination | Notes |
+| --- | --- | --- |
+| [`print`](/functions/automation/print) | Standard output | Data for the person or program that runs the script. Pipes and redirects see only this stream. |
+| [`ui.info`](/functions/automation/ui.info), [`ui.success`](/functions/automation/ui.success), [`ui.warning`](/functions/automation/ui.warning) | Standard error | Themed status messages, shown as `▶ message`, `✓ message`, and `⚠ message`. |
+| [`log.trace`](/functions/automation/log.trace), [`log.debug`](/functions/automation/log.debug), [`log.info`](/functions/automation/log.info), [`log.warn`](/functions/automation/log.warn), [`log.error`](/functions/automation/log.error) | The Atmos log | Filtered by the configured log level, and never part of standard output. |
+| [`output`](/functions/automation/output) | The script's result | See below. |
+
+Output appears while the script runs. Inside a `steps.parallel` group with more than one task, every
+line from `print` and `ui.*` carries the task name as a prefix, and each line is written whole, so
+lines from concurrent tasks never mix mid-line:
+
+```python
+def a():
+    print("a1")
+    ui.info("hello")
+    return 1
+
+def b():
+    print("b1")
+    return 2
+
+output = steps.parallel(functions=[a, b])
+```
+
+```text
+[a[0]] a1
+[a[0]] ▶ hello
+[b[1]] b1
+[1,2]
+```
+
+A task that writes a partial line has it completed with a newline when the task ends. Secrets that
+Atmos knows about are masked in everything it displays.
+
+### The `output` variable
+
+When a script assigns the top-level variable `output`, its value becomes the script's result. A
+string is used exactly as written. Any other value is encoded as compact JSON:
+
+| Assigned value | Result |
+| --- | --- |
+| `"plain"` | `plain` |
+| `{"a": [1, 2, {"b": None}], "c": 1.5}` | `{"a":[1,2,{"b":null}],"c":1.5}` |
+| `(1, 2)` or `set([1])` | `[1,2]` or `[1]` |
+| `None` | `null` |
+
+A value that JSON cannot represent fails the script with
+`output must be a string or JSON-encodable value`, followed by the reason. This applies to
+dictionaries with non-string keys, functions, `bytes` values, and non-finite floats such as `nan`.
+Convert such values first, for example `{str(k): v for k, v in table.items()}`.
+
+Reading `output` before assigning it fails with `undefined: output`, because the variable is
+created by the assignment. Like any global, it can be assigned only once. When a script never
+assigns `output`, a script step uses its captured standard output as its value. See
+[Step output](/steps/type/script#step-output).
+
+## Dry runs
+
+In a dry run, such as a workflow dry run, Atmos parses and resolves each script but does not execute it. Syntax
+errors, misspelled names, and misplaced `load` statements are still reported. No statement runs,
+so nothing prints, no command starts, no tool installs, and no file loads, which means that errors
+inside files named by `load()` are not detected. During the check, `ctx` is `None`.
+
+## Related pages
+
+- [Statements](/automation/reference/statements) describes `load`, `for`, `while`, and the rest
+  of the statement syntax.
+- [Differences from Python](/automation/reference/differences-from-python) lists the Python
+  features that scripts do not have.
+- [Script step](/steps/type/script) covers entry points, working directory, and containers.

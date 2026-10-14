@@ -66,14 +66,14 @@ func validateEmbeddedStep(owner string, ambient *schema.WorkflowContainer, step 
 	if name == "" {
 		name = fmt.Sprintf("#%d", index+1)
 	}
-	cause := fmt.Errorf("%w: step %q uses embedded interpreter %q under a container", errUtils.ErrStarlark, name, interpreter)
+	cause := fmt.Errorf("%w: step %q uses embedded interpreter %q under a container", errUtils.ErrScript, name, interpreter)
 	return errUtils.Build(cause).
 		WithTitle(embeddedValidationTitle).
 		WithExplanationf("%s step `%s` uses the embedded `%s` interpreter, which runs inside Atmos and cannot run in a container.", owner, name, interpreter).
 		WithContext("owner", owner).
 		WithContext("step", name).
 		WithContext("interpreter", interpreter).
-		WithHintf("Set `container: false` on step %s — embedded Starlark runs inside Atmos.", name).
+		WithHintf("Set `container: false` on step %s — embedded interpreters run inside Atmos.", name).
 		WithExitCode(1).
 		Err()
 }
@@ -88,7 +88,7 @@ func rejectEmbeddedScriptInContainer(step *schema.WorkflowStep) error {
 	if _, embedded := script.Get(step.Interpreter); !embedded {
 		return nil
 	}
-	return fmt.Errorf("%w: embedded %s requires container: false", errUtils.ErrStarlark, strings.TrimSpace(step.Interpreter))
+	return fmt.Errorf("%w: embedded %s requires container: false", errUtils.ErrScript, strings.TrimSpace(step.Interpreter))
 }
 
 // RenderScriptInterpreter renders a templated interpreter on a script step in place, so the

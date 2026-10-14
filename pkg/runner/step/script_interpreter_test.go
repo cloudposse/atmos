@@ -80,7 +80,7 @@ func TestScriptHandlerRejectsTemplatedEmbeddedInterpreterUnderContainer(t *testi
 	// Validate cannot know a templated name is embedded; execution checks the rendered one.
 	require.NoError(t, handler.Validate(step))
 	_, err := handler.Execute(context.Background(), step, NewVariables())
-	require.ErrorIs(t, err, errUtils.ErrStarlark)
+	require.ErrorIs(t, err, errUtils.ErrScript)
 
 	// Negative path: the same templated interpreter without a container runs on the host.
 	step.Container = nil
@@ -93,5 +93,5 @@ func TestScriptComponentHelpersAreNilSafe(t *testing.T) {
 	assert.Nil(t, ScriptComponentResolver(nil))
 	assert.Nil(t, ScriptComponentRef(NewVariables()), "no component in scope")
 	_, err := ScriptComponentResolver(NewVariables())(context.Background(), script.ComponentRef{Name: "a", Stack: "b", Type: "c"})
-	require.ErrorIs(t, err, errUtils.ErrStarlark)
+	require.ErrorIs(t, err, errUtils.ErrScript)
 }

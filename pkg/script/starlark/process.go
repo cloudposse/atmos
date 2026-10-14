@@ -1,22 +1,14 @@
 package starlark
 
 import (
-	"bytes"
-	"context"
 	"errors"
-	"fmt"
-	"io"
 	"path/filepath"
-	"slices"
-	"sort"
-	"strings"
 
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	envpkg "github.com/cloudposse/atmos/pkg/env"
-	"github.com/cloudposse/atmos/pkg/process"
+	"github.com/cloudposse/atmos/pkg/script"
 )
 
 func (s *session) exec(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -87,80 +79,20 @@ type processCall struct {
 }
 
 func (s *session) runProcess(thread *starlark.Thread, call processCall) (starlark.Value, error) {
-	var stdout, stderr bytes.Buffer
-	var stdoutWriter, stderrWriter io.Writer = &stdout, &stderr
-	if call.stream {
-		stdoutWriter = io.MultiWriter(&stdout, s.writer(thread, stdoutStream))
-		stderrWriter = io.MultiWriter(&stderr, s.writer(thread, stderrStream))
-	}
-	ctx := threadContext(thread)
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	for i := len(s.toolDirs) - 1; i >= 0; i-- {
-		call.env = envpkg.UpdateEnvironmentPath(call.env, s.toolDirs[i])
-	}
-	result := s.engine.runner.Run(ctx, process.TaskSpec{
-		Command: call.argv[0], Args: call.argv[1:], Dir: call.dir, Env: call.env,
-		Streams: process.Streams{
-			Stdout: stdoutWriter,
-			Stderr: stderrWriter,
-		},
+	result, err := script.RunProcess(threadContext(thread), s.engine.runner, &script.ProcessCall{
+		Argv: call.argv, Dir: call.dir, Env: s.tools.Environment(call.env),
+		Check: call.check, Stream: call.stream, AllowPlanChanges: call.allowPlanChanges,
+		Stdout: s.writer(thread, stdoutStream), Stderr: s.writer(thread, stderrStream),
 	})
-	check := call.check && (!call.allowPlanChanges || result.ExitCode != 2)
-	if err := checkProcessResult(ctx, call.argv[0], &result, stderr.String(), check); err != nil {
+	if err != nil {
+		if errors.Is(err, errUtils.ErrScriptProcessFailed) {
+			return nil, failWith(errUtils.ErrStarlarkProcessFailed, err, "%s", err)
+		}
 		return nil, err
 	}
 	return starlarkstruct.FromStringDict(starlark.String("process_result"), starlark.StringDict{
-		"stdout": starlark.String(stdout.String()), "stderr": starlark.String(stderr.String()), "exit_code": starlark.MakeInt(result.ExitCode),
+		"stdout": starlark.String(result.Stdout), "stderr": starlark.String(result.Stderr), "exit_code": starlark.MakeInt(result.ExitCode),
 	}), nil
-}
-
-func checkProcessResult(ctx context.Context, command string, result *process.Result, stderr string, check bool) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if result.Success() || (!check && normalNonzeroExit(result)) {
-		return nil
-	}
-	return processFailure(command, result, stderr)
-}
-
-// processFailure describes a failed subprocess: a start failure never reads as an exit code.
-func processFailure(command string, result *process.Result, stderr string) error {
-	cause := result.Err
-	if cause == nil {
-		cause = errUtils.ErrProcessWaitFailed
-	}
-	if !result.Started && result.ExitCode < 0 {
-		reason := strings.TrimPrefix(cause.Error(), errUtils.ErrProcessStartFailed.Error()+": ")
-		return failWith(errUtils.ErrStarlarkProcessFailed, cause, "failed to start %s: %s", command, reason)
-	}
-	message := fmt.Sprintf("%s exited with code %d", command, result.ExitCode)
-	if result.Signaled && result.Signal != "" {
-		message += fmt.Sprintf(" (signal: %s)", result.Signal)
-	}
-	err := failWith(errUtils.ErrStarlarkProcessFailed, cause, "%s", message)
-	if tail := lastLines(stderr, maxStderrLines); tail != "" {
-		err = withDetail(err, fmt.Sprintf("Last lines of stderr from `%s`:\n%s", command, fenced(tail)))
-	}
-	return err
-}
-
-// lastLines returns at most n trailing non-empty lines of text.
-func lastLines(text string, n int) string {
-	lines := strings.Split(strings.TrimRight(text, "\r\n"), "\n")
-	if len(lines) > n {
-		lines = lines[len(lines)-n:]
-	}
-	return strings.TrimSpace(strings.Join(lines, "\n"))
-}
-
-// normalNonzeroExit excludes failures to launch, cancellation, signals and I/O errors.
-func normalNonzeroExit(result *process.Result) bool {
-	return result.Started && result.ExitCode > 0 && !result.Canceled && !result.Signaled &&
-		!errors.Is(result.Err, context.Canceled) && !errors.Is(result.Err, context.DeadlineExceeded) &&
-		(result.Err == nil || errors.Is(result.Err, errUtils.ErrProcessWaitFailed))
 }
 
 func processArgv(argv starlark.Value) ([]string, error) {
@@ -183,34 +115,16 @@ func processArgv(argv starlark.Value) ([]string, error) {
 }
 
 func processEnv(base []string, extra *starlark.Dict) ([]string, error) {
-	env := slices.Clone(base)
-	if env == nil {
-		env = []string{}
-	}
-	if extra == nil {
-		return env, nil
-	}
 	values := make(map[string]string)
-	for _, item := range extra.Items() {
-		key, keyOK := starlark.AsString(item[0])
-		value, valueOK := starlark.AsString(item[1])
-		if !keyOK || !valueOK {
-			return nil, invalidArg("process env must contain strings")
+	if extra != nil {
+		for _, item := range extra.Items() {
+			key, keyOK := starlark.AsString(item[0])
+			value, valueOK := starlark.AsString(item[1])
+			if !keyOK || !valueOK {
+				return nil, invalidArg("process env must contain strings")
+			}
+			values[key] = value
 		}
-		values[key] = value
 	}
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		// Inherited layers may contain the same key more than once. Remove every
-		// occurrence so the per-call value wins for both lookup and subprocesses.
-		env = slices.DeleteFunc(env, func(entry string) bool {
-			return strings.HasPrefix(entry, key+"=")
-		})
-		env = append(env, key+"="+values[key])
-	}
-	return env, nil
+	return script.ProcessEnvironment(base, values), nil
 }

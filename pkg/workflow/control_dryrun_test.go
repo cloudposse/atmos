@@ -149,7 +149,9 @@ func TestControlExecutorDryRunStillRejectsEmbeddedInContainer(t *testing.T) {
 		Name: "embedded", Type: schema.TaskTypeScript, Interpreter: "recording-dryrun-container", Script: "x",
 	}}, ControlChildOutput{})
 
-	require.ErrorIs(t, err, errUtils.ErrStarlark)
+	require.ErrorIs(t, err, errUtils.ErrScript)
+	assert.ErrorContains(t, err, "recording-dryrun-container")
+	assert.NotErrorIs(t, err, errUtils.ErrStarlark)
 	assert.Empty(t, engine.calls())
 }
 

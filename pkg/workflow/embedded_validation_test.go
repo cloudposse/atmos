@@ -105,7 +105,7 @@ func TestValidateEmbeddedInterpreters(t *testing.T) {
 				return
 			}
 			require.Error(t, err)
-			assert.ErrorIs(t, err, errUtils.ErrStarlark)
+			assert.ErrorIs(t, err, errUtils.ErrScript)
 			assert.Contains(t, err.Error(), tt.wantStep)
 			hints := errors.GetAllHints(err)
 			require.NotEmpty(t, hints)
@@ -124,7 +124,7 @@ func TestValidateEmbeddedInterpreterSteps_UnnamedStepAndOwner(t *testing.T) {
 	err := ValidateEmbeddedInterpreterSteps("custom command `deploy`", nil, steps)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrStarlark)
+	assert.ErrorIs(t, err, errUtils.ErrScript)
 	assert.Contains(t, err.Error(), "#2")
 	assert.Contains(t, errors.GetAllDetails(err)[0], "custom command `deploy`")
 }
@@ -141,9 +141,9 @@ func TestRenderScriptInterpreterExposesEmbeddedInterpreterToContainerChecks(t *t
 	require.NoError(t, RenderScriptInterpreter(&step, render))
 	assert.Equal(t, "starlark", step.Interpreter)
 
-	require.ErrorIs(t, rejectEmbeddedScriptInContainer(&step), errUtils.ErrStarlark)
+	require.ErrorIs(t, rejectEmbeddedScriptInContainer(&step), errUtils.ErrScript)
 	params := &ContainerStepParams{WorkflowDef: &schema.WorkflowDefinition{}, Step: &step}
-	require.ErrorIs(t, RunStepContainerOverride(context.Background(), params), errUtils.ErrStarlark)
+	require.ErrorIs(t, RunStepContainerOverride(context.Background(), params), errUtils.ErrScript)
 }
 
 func TestRenderScriptInterpreterLeavesOtherStepsAlone(t *testing.T) {
