@@ -3,6 +3,7 @@ package cli
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 
 	"go.starlark.net/starlark"
@@ -134,6 +135,12 @@ func (o *flagOptions) stringFlag(env, choices []string) (flags.Flag, error) {
 	if err != nil {
 		return nil, err
 	}
+	// An unset default is empty, which stands for "not given". A declared one must be allowed.
+	if o.value != starlark.None {
+		if err := o.checkChoices([]string{value}, choices); err != nil {
+			return nil, err
+		}
+	}
 	return &flags.StringFlag{
 		Name: o.name, Shorthand: o.shorthand, Description: o.description,
 		Default: value, Required: o.required, EnvVars: env, ValidValues: choices,
@@ -172,11 +179,28 @@ func (o *flagOptions) listFlag(env, choices []string) (flags.Flag, error) {
 		if err != nil {
 			return nil, err
 		}
+		if err := o.checkChoices(value, choices); err != nil {
+			return nil, err
+		}
 	}
 	return &flags.StringSliceFlag{
 		Name: o.name, Shorthand: o.shorthand, Description: o.description,
 		Default: value, Required: o.required, EnvVars: env, ValidValues: choices,
 	}, nil
+}
+
+// checkChoices rejects a declared default that the flag's own choices would refuse. Left alone it
+// would fail every run that did not pass the flag, blaming the user for the script's mistake.
+func (o *flagOptions) checkChoices(defaults, choices []string) error {
+	if len(choices) == 0 {
+		return nil
+	}
+	for _, value := range defaults {
+		if !slices.Contains(choices, value) {
+			return convert.InvalidArgument("cli.flag: default %q for %q is not one of the choices: %s", value, o.name, strings.Join(choices, ", "))
+		}
+	}
+	return nil
 }
 
 func (o *flagOptions) stringDefault() (string, error) {

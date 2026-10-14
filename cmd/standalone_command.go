@@ -142,6 +142,9 @@ func resolveStandaloneCommandFlags(parser *flags.StandardParser, cmd *cobra.Comm
 	if err := parser.ValidateFlagValues(cmd); err != nil {
 		return nil, err
 	}
+	if err := checkExplicitEmptyChoices(cmd, definitions); err != nil {
+		return nil, err
+	}
 	result := make(map[string]any, len(definitions))
 	for _, flag := range definitions {
 		name := flag.GetName()
@@ -153,6 +156,35 @@ func resolveStandaloneCommandFlags(parser *flags.StandardParser, cmd *cobra.Comm
 		result[name] = standaloneFlagValue(flag, values)
 	}
 	return result, parser.Registry().Validate(result)
+}
+
+// checkExplicitEmptyChoices applies a flag's choices to an empty value the user typed on the
+// command line (`--stage=`). The shared flag validation treats an empty string as "not given", so
+// without this check an empty value would slip past the choices. An unset flag stays unchecked.
+func checkExplicitEmptyChoices(cmd *cobra.Command, definitions []flags.Flag) error {
+	defer perf.Track(nil, "cmd.checkExplicitEmptyChoices")()
+
+	for _, definition := range definitions {
+		name := definition.GetName()
+		choices, ok := definition.(interface{ GetValidValues() []string })
+		if !ok || len(choices.GetValidValues()) == 0 || !cmd.Flags().Changed(name) {
+			continue
+		}
+		var empty bool
+		switch definition.(type) {
+		case *flags.StringFlag:
+			value, _ := cmd.Flags().GetString(name)
+			empty = value == ""
+		case *flags.StringSliceFlag:
+			values, _ := cmd.Flags().GetStringSlice(name)
+			empty = slices.Contains(values, "")
+		}
+		if empty {
+			return fmt.Errorf("%w: invalid value %q for flag --%s (valid values: %s)",
+				errUtils.ErrInvalidFlagValue, "", name, strings.Join(choices.GetValidValues(), ", "))
+		}
+	}
+	return nil
 }
 
 func validateStandaloneCommandSpec(spec *script.CommandSpec) error {

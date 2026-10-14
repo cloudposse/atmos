@@ -30,7 +30,7 @@ runs the `atmos ci` command group as a subprocess.
 | [`ci.path`](/functions/automation/ci.path) | Prepend a directory to `PATH` for later steps. |
 | [`ci.mask`](/functions/automation/ci.mask) | Redact a value from everything printed afterwards, including runner logs. |
 | [`ci.annotate`](/functions/automation/ci.annotate) | Attach an error, warning, or notice to a file and line in the pull request diff. |
-| [`ci.comment`](/functions/automation/ci.comment) | Create or update a pull request comment. |
+| [`ci.comment`](/functions/automation/ci.comment) | Create or update a comment on the pull request, or on the commit when there is no pull request. |
 | [`ci.check`](/functions/automation/ci.check) | Report a named status on the commit, and update it as the work progresses. |
 | [`ci.group`](/functions/automation/ci.group) | Wrap a function's output in a collapsible log group. |
 | [`ci.sarif`](/functions/automation/ci.sarif) | Upload a SARIF file to Code Scanning. |
@@ -45,7 +45,11 @@ you read it, so scripts that never read it pay nothing.
     <dd>The detected CI provider as a string, such as `"github-actions"`, or `"generic"` when none is detected.</dd>
 
     <dt>`local`</dt>
-    <dd>A boolean that is `True` when no CI provider is detected and the `generic` provider is rendering locally.</dd>
+    <dd>
+        A boolean that is `True` when no CI provider is detected and the `generic` provider is rendering locally. It is
+        `False` when [CI mode is forced](#local-parity) with `--ci` or `ATMOS_CI=true`, because the `generic` provider
+        then stands in as the detected provider.
+    </dd>
 
     <dt>`event`</dt>
     <dd>The event that triggered the run, such as `"push"` or `"pull_request"`, as a string.</dd>
@@ -78,7 +82,10 @@ you read it, so scripts that never read it pay nothing.
     <dd>
         A struct with `number`, `head`, `base`, `url`, and `fork` for the current pull request, or `None` when the run is
         not for a pull request. `fork` is a boolean that is `True` when the pull request head lives in a fork of the
-        base repository.
+        base repository. Under the elevated `pull_request_target` event, `number` comes from the event payload. Under
+        `workflow_run`, `pr` is `None` when the triggering run was not for a pull request, and the struct is present for
+        a pull request that the payload names. `number` is `0` only when the event payload does not carry the number,
+        so use `ci.comment` with the default `target = "auto"` rather than testing the number.
     </dd>
 </dl>
 
@@ -86,8 +93,10 @@ you read it, so scripts that never read it pay nothing.
 ctx = ci.context
 if ctx.local:
     ui.info("Running locally; CI reports are previews only")
-elif ctx.pr != None:
+elif ctx.pr != None and ctx.pr.number > 0:
     ui.info("Reporting on pull request #" + str(ctx.pr.number))
+else:
+    ui.info("No pull request; comments go to commit " + ctx.sha[:7])
 ```
 
 ## Gating
@@ -108,20 +117,33 @@ Inside CI, every write honors the same switches as the native reporting that Atm
 Comments and checks are opt-in and stay off until you set `enabled: true`. Summaries, outputs, and annotations are on
 by default once `ci.enabled` is true.
 
-A call whose flag is off does not fail. It warns, names the flag, renders locally, and the script continues:
+A call whose flag is off does not fail. It warns, names the switch that is off, renders locally, and the script
+continues:
 
 ```text
 ci.comment: ci.comments.enabled is off; rendered locally
 ```
 
-Locally the flags are irrelevant and there is no warning. See [CI configuration](/cli/configuration/ci) for the full
+When the `ci.enabled` master switch is off, every call names `ci.enabled` instead of its own flag, because turning on a
+per-feature flag changes nothing until the master switch is on:
+
+```text
+ci.summary: ci.enabled is off; rendered locally
+```
+
+`ci.enabled` is never turned on for you inside a CI run. Set it in `atmos.yaml`. Locally the flags are irrelevant and
+there is no warning. See [CI configuration](/cli/configuration/ci) for the full
 list of keys.
 
 ## Fork gate
 
-Under `pull_request_target` and `workflow_run`, comments and checks are held only when the pull request comes from a
-fork (`ci.context.pr.fork`), unless [`ci.allow_unsafe_fork_execution`](/cli/configuration/ci) is set. A held call warns
-and renders locally instead. A pull request from the same repository posts normally, even under these events. Read
+Under `pull_request_target` and `workflow_run`, comments, checks, `ci.env`, `ci.path`, and `ci.sarif` are held only when
+the pull request comes from a fork (`ci.context.pr.fork`), unless
+[`ci.allow_unsafe_fork_execution`](/cli/configuration/ci) (or `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION`) is set. A pull request
+whose head repository was deleted, or whose event payload cannot be read, is treated as a fork. Writing the
+environment or `PATH` files from a fork pull request under an elevated event is a known injection vector, which is why
+those calls are held too. A held call warns and renders locally instead. `ci.summary`, `ci.output`, `ci.annotate`, and
+`ci.mask` only affect the current job and are not held. A pull request from the same repository posts normally, even under these events. Read
 `ci.context.elevated` and `ci.context.pr.fork` to find out whether a script is in that situation, and skip work that only
 makes sense when posting is allowed.
 
@@ -129,7 +151,8 @@ makes sense when posting is allowed.
 
 Summaries, comments, and check descriptions are masked by Atmos before they leave the process. Step outputs,
 environment exports, and SARIF bodies are written exactly as given, because later steps consume them. To keep a value
-out of logs, register it with [`ci.mask`](/functions/automation/ci.mask) before you print or export it.
+out of logs, register it with [`ci.mask`](/functions/automation/ci.mask) before you print or export it. The runner's own
+mask command is emitted only when `ci.enabled` is true.
 
 ## Errors
 
@@ -142,7 +165,8 @@ On GitHub Actions, the job token needs these permissions for the calls that writ
 
 | Call | Permission |
 | --- | --- |
-| `ci.comment` | `pull-requests: write` |
+| `ci.comment` on a pull request | `pull-requests: write` |
+| `ci.comment` on a commit | `contents: write` |
 | `ci.check` | `statuses: write` |
 | `ci.sarif` | `security-events: write` |
 
@@ -152,14 +176,20 @@ Without a detected CI provider, the `generic` provider renders every call on you
 debug a reporting script before it ever runs in CI.
 
 - Summaries render as terminal Markdown on stderr.
-- Outputs print as `name=value` on stderr, environment exports as `export NAME='value'`, and path additions as
-  `export PATH='dir':"$PATH"`.
-- Annotations print as `file:line: level: message`.
-- Comments are previewed and never posted, and the returned `url` is empty.
+- Outputs print as `name=value` on stderr, environment exports as `export NAME=value` (the value is shell-quoted only
+  when it needs quoting), and path additions as `export PATH=dir:"$PATH"`.
+- Annotations print as `path:line: level: message`.
+- Comments are previewed and never posted, the returned `url` is empty, and the returned `id` is a synthetic number
+  that starts at 1.
 
 To capture the values in files instead, set the `ATMOS_CI_OUTPUT`, `ATMOS_CI_SUMMARY`, `ATMOS_CI_ENV`, or `ATMOS_CI_PATH`
-environment variable. The generic provider appends to each file that is set. On a CI platform that Atmos does not recognize, pass the workflow-level `--ci` flag or set `ATMOS_CI=true` to force CI mode. The generic provider then writes to
-those files.
+environment variable. The generic provider appends to each file that is set. The files are read each time a call runs,
+so a step's `env:` block can set them.
+
+On a CI platform that Atmos does not recognize, pass the `--ci` flag or set `ATMOS_CI=true` to force CI mode. Forced CI
+mode makes the `generic` provider the detected provider, so the `ci.*` switches apply as they do on a real platform,
+`ci.context.local` is `False`, and the `ATMOS_CI_*` files are written. Without forced CI mode, `ci.context.local` stays
+`True` on any platform Atmos does not recognize.
 
 ## Example
 
@@ -183,9 +213,11 @@ if result.exit_code != 0:
 ci.output("artifact", "dist/app.tar.gz")
 build.update("success", description = "Built and tested " + ctx.sha[:7])
 
-if ctx.pr != None:
-    ci.comment("Built **" + ctx.sha[:7] + "** and all tests passed.", key = "build-report")
+ci.comment("Built **" + ctx.sha[:7] + "** and all tests passed.", key = "build-report")
 ```
+
+The final comment needs no guard. With the default `target = "auto"`, it goes to the pull request when the run has one
+and to a comment on the commit otherwise, so a `push` run reports too. See [`ci.comment`](/functions/automation/ci.comment).
 
 On a laptop the same script prints the group heading, the status, and the comment preview on stderr.
 
