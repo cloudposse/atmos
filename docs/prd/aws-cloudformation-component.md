@@ -999,7 +999,7 @@ JSON Schema — **four files**, not one:
     — type-specific properties (`template`, `stack_name`, `parameters`, `capabilities`, `tags`,
     `stack_policy`, `role_arn`, `notification_arns`, `disable_rollback`, `termination_protection`)
     plus the shared cross-type sections
-    (`vars`/`env`/`settings`/`hooks`/`generate`/`source`/`provision`/`auth`/`dependencies`/`metadata`),
+    (`vars`/`env`/`secrets`/`settings`/`hooks`/`generate`/`source`/`provision`/`auth`/`dependencies`/`metadata`),
     with `additionalProperties: false`.
 2. `pkg/datafetcher/schema/atmos/manifest/1.0.json` — the parallel manifest schema carries its own
     copies of every per-type definition; a parity test
