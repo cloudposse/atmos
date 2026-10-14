@@ -623,7 +623,7 @@ func applyTagsAndLabelsFlags(cmd *cobra.Command, info *schema.ConfigAndStacksInf
 		info.Tags = tags.ParseTagsFlag(strings.Join(tagsSlice, ","))
 	}
 	if labelsSlice, err := cmd.Flags().GetStringSlice(flagLabels); err == nil {
-		// Error ignored: validateOperationArgs already rejected malformed --labels before RunE.
+		// Error ignored: validateFlagSelection already rejected malformed --labels before RunE.
 		info.Labels, _ = tags.ParseLabelsFlag(labelsSlice)
 	}
 }

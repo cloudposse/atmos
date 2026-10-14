@@ -83,15 +83,21 @@ func TestBackendDryRun_StillRequiresStack(t *testing.T) {
 func captureStderr(t *testing.T, fn func()) string {
 	t.Helper()
 
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
+	// A file avoids blocking when fn writes more than an undrained pipe can hold.
+	capture, err := os.CreateTemp(t.TempDir(), "stderr-*")
 	require.NoError(t, err)
-	os.Stderr = w
-	fn()
-	require.NoError(t, w.Close())
-	os.Stderr = oldStderr
+	oldStderr := os.Stderr
+	os.Stderr = capture
+	defer func() {
+		os.Stderr = oldStderr
+		_ = capture.Close()
+	}()
 
-	out, err := io.ReadAll(r)
+	fn()
+
+	_, err = capture.Seek(0, io.SeekStart)
+	require.NoError(t, err)
+	out, err := io.ReadAll(capture)
 	require.NoError(t, err)
 	return strings.Join(strings.Fields(ansi.Strip(string(out))), " ")
 }
