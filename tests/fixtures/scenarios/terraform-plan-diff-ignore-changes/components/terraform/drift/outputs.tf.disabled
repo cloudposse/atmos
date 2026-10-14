@@ -1,0 +1,3 @@
+output "db_output" {
+  value = terraform_data.db.output
+}
