@@ -48,7 +48,10 @@ type PR struct {
 	Draft        bool      `json:"draft"`
 	Number       int       `json:"number"`
 	State        string    `json:"state"`
-	User         struct {
+	Labels       []struct {
+		Name string `json:"name"`
+	} `json:"labels"`
+	User struct {
 		Login string `json:"login"`
 		Type  string `json:"type"`
 	} `json:"user"`

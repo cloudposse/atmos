@@ -93,7 +93,13 @@ func (q *qualityClient) refresh(number int, performance string, run *githubapi.R
 		if qualityObsolete(existing, run) {
 			return nil
 		}
-		body, ready := q.render(&pr, existing, performance, run)
+		body, ready, unavailable := q.render(&pr, existing, performance, run)
+		if len(unavailable) > 0 && qualityPublishedFor(existing, pr.Head.SHA) {
+			// Missing evidence is not a verdict. Replacing a report for this same head
+			// would flip its label and comment on every transient API failure; keep the
+			// last published state and let the failure surface for a retry.
+			return bench.Error("evidence unavailable for %s; kept the published report for %s", strings.Join(unavailable, ", "), pr.Head.SHA)
+		}
 		valid, err := q.stillCurrent(&pr, run)
 		if err != nil || !valid {
 			return err
@@ -132,20 +138,37 @@ func qualityEligible(pr *githubapi.PR, repo string) bool {
 	return pr.State == "open" && pr.Base.Ref == "main" && pr.Base.Repo.FullName == repo
 }
 
-func (q *qualityClient) render(pr *githubapi.PR, existing *githubapi.Comment, performance string, run *githubapi.Run) (string, bool) {
+func qualityPublishedFor(existing *githubapi.Comment, sha string) bool {
+	return existing != nil && strings.Contains(existing.Body, qualityHeadMarker(sha))
+}
+
+// render returns the report body, the readiness verdict, and the names of gates
+// whose evidence was unavailable (each logged with its cause).
+func (q *qualityClient) render(pr *githubapi.PR, existing *githubapi.Comment, performance string, run *githubapi.Run) (string, bool, []string) {
 	if performance == "" {
 		performance = qualityPreservePerformance(existing, pr.Head.SHA)
 	}
 	evaluator := *q
 	evaluator.benchmarkReportFailed = strings.Contains(performance, qualityBenchmarkError)
 	gates := evaluator.evaluate(pr)
+	var unavailable []string
+	for i := range gates {
+		if gates[i].Unavailable {
+			unavailable = append(unavailable, gates[i].Name)
+			fmt.Printf("PR #%d: %s: %s\n", pr.Number, gates[i].Name, gates[i].Detail)
+		}
+	}
 	body, ready := qualityMarkdown(pr, gates, performance)
 	if run != nil {
 		body += fmt.Sprintf("\n<!-- atmos-benchmark-run:%d:%d -->\n", run.ID, run.Attempt)
-	} else if existing != nil && strings.Contains(existing.Body, qualityHeadMarker(pr.Head.SHA)) {
-		body += "\n" + githubapi.CommentRunPattern.FindString(existing.Body) + "\n"
+	} else if qualityPublishedFor(existing, pr.Head.SHA) {
+		// Carry the run marker only when there is one; appending a bare newline pair
+		// would make a never-benchmarked comment differ from itself and rewrite once.
+		if marker := githubapi.CommentRunPattern.FindString(existing.Body); marker != "" {
+			body += "\n" + marker + "\n"
+		}
 	}
-	return body, ready
+	return body, ready, unavailable
 }
 
 // Publish reports false without writing the comment when another writer changed
