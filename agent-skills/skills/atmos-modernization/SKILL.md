@@ -49,7 +49,9 @@ the umbrella term for replacing legacy patterns with supported, current patterns
 
 Doctor's schema replacement descriptions are guidance, not executable transforms.
 Automatic repairs are limited to recognized custom-command semantic fields, hook
-event spellings, and explicit Terraform reconfigure settings in verifiable inputs.
+event spellings, explicit Terraform reconfigure settings in verifiable inputs, and moving
+archived `cloudposse/terraform-aws-components` sources to their successor repositories
+at the same version once the files are verified identical.
 `init_run_reconfigure: false` maps to `init.reconfigure: never`; `true` maps to `auto`.
 Conflicts remain manual. Other configuration layers (imports, `atmos.d`, active profiles,
 home or system configuration) and dynamic values at or under the edited key leave a config

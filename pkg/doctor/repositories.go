@@ -187,7 +187,7 @@ func repositoryFinding(ref *sourceReference, health RepositoryHealth) Finding {
 		// Skipping the network on request is not a problem with the project, so it never trips --fail-on=warning.
 		severity = validation.SeverityNotice
 	}
-	return Finding{RuleID: ruleSourceRepository, Category: "sources", Severity: severity, File: ref.document.path, Line: ref.node.Line, Column: ref.node.Column, Path: displayNodePath(ref.path), Message: health.Message, Status: status, Reason: health.Status, Remediation: "Review the upstream source and access; doctor does not rewrite source URLs"}
+	return Finding{RuleID: ruleSourceRepository, Category: "sources", Severity: severity, File: ref.document.path, Line: ref.node.Line, Column: ref.node.Column, Path: displayNodePath(ref.path), Message: health.Message, Status: status, Reason: health.Status, Remediation: "Review the upstream source and access; the source-repository check does not rewrite source URLs"}
 }
 
 func checkHasFindings(r *Report, id string) bool {

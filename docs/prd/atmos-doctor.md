@@ -6,7 +6,9 @@ Initial implementation delivered for review. This document defines the acceptanc
 contract; an advisory finding does not imply that its automatic migration is implemented.
 
 The enabled repair domain is deliberately narrow: recognized custom-command semantic
-fields, hook events, and explicit Terraform reconfigure booleans. A repair is blocked by
+fields, hook events, explicit Terraform reconfigure booleans, and archived
+component-monorepo sources whose successor repository is verified identical at the same
+version (`component-monorepo`). A repair is blocked by
 the inputs that can change what it means (relevance-scoped), not by any dynamic value
 anywhere in the project. Dependency and stack naming migrations remain manual. Remote schemas and
 external schema references remain incomplete until their input closure can be captured.

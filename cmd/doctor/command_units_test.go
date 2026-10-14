@@ -41,7 +41,7 @@ func TestRenderSummary(t *testing.T) {
 					{RuleID: "c", Status: "available"},
 				},
 			},
-			want:   []string{"Fixed 1 findings in 1 files. 2 findings remain."},
+			want:   []string{"Fixed 1 finding in 1 file. 2 findings remain."},
 			absent: []string{"Dry run", "Backup:"},
 		},
 		{
@@ -75,7 +75,7 @@ func TestRenderSummary(t *testing.T) {
 			name:   "fix run with nothing to repair keeps the fixed and remaining counts",
 			fix:    true,
 			report: diagnostic.Report{Findings: []diagnostic.Finding{{RuleID: "a", Status: "manual"}}},
-			want:   []string{"Fixed 0 findings in 0 files. 1 findings remain."},
+			want:   []string{"Fixed 0 findings in 0 files. 1 finding remains."},
 		},
 		{
 			name: "explains skipped and incomplete checks only",
@@ -92,6 +92,23 @@ func TestRenderSummary(t *testing.T) {
 			fix:    true,
 			report: diagnostic.Report{DryRun: true},
 			want:   []string{"Dry run: project files and backups were not written."},
+		},
+		{
+			name: "dry run reports verified repairs instead of fixed counts",
+			fix:  true,
+			report: diagnostic.Report{DryRun: true, Findings: []diagnostic.Finding{
+				{RuleID: "a", Status: "available", Fixable: true},
+				{RuleID: "b", Status: "available", Fixable: true},
+				{RuleID: "c", Status: "manual"},
+			}},
+			want:   []string{"2 repairs verified. 3 findings remain."},
+			absent: []string{"Fixed"},
+		},
+		{
+			name:   "dry run uses the singular for one verified repair",
+			fix:    true,
+			report: diagnostic.Report{DryRun: true, Findings: []diagnostic.Finding{{RuleID: "a", Status: "available", Fixable: true}}},
+			want:   []string{"1 repair verified. 1 finding remains."},
 		},
 		{
 			name:   "backup location and recovery instructions are shown",

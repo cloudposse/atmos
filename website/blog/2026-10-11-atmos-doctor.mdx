@@ -19,11 +19,11 @@ Project health checks span configuration schemas, stack validation, formatting, 
 
 ## The Fix
 
-Doctor combines built-in checks in a streaming report. Supported repairs cover custom-command semantic arguments and flags, recognized legacy hook events, and explicit Terraform reconfigure values. Each repair compares runtime field behavior and unrelated YAML values before writing, and comments on a migrated field move with it. A repair is blocked only by inputs that can change what it means, such as an import, an active profile, or a template in the edited value, and the finding names the file and line responsible. Templates elsewhere in the file do not get in the way. Repaired files can have blank lines or folded scalars reformatted, so review the diff before committing.
+Doctor combines built-in checks in a streaming report. Supported repairs cover custom-command semantic arguments and flags, recognized legacy hook events, explicit Terraform reconfigure values, and component sources that still point at the archived `cloudposse/terraform-aws-components` monorepo. Each repair compares runtime field behavior and unrelated YAML values before writing, and comments on a migrated field move with it. A repair is blocked only by inputs that can change what it means, such as an import, an active profile, or a template in the edited value, and the finding names the file and line responsible. Templates elsewhere in the file do not get in the way. Repaired files can have blank lines or folded scalars reformatted, so review the diff before committing.
 
 Legacy dependency and stack naming migrations remain manual. In particular, a missing legacy dependency can produce a warning where a modern required dependency fails.
 
-GitHub source metadata identifies archived repositories and distinguishes inaccessible sources from confirmed removal. Doctor never rewrites source URLs. Access errors, private-repository 404 responses, and unsupported hosts remain inconclusive.
+GitHub source metadata identifies archived repositories and distinguishes inaccessible sources from confirmed removal. The health check itself never rewrites source URLs. The one exception is the `component-monorepo` repair, which moves a source to its successor repository at the same version only after verifying the files are identical. Access errors, private-repository 404 responses, and unsupported hosts remain inconclusive.
 
 ## How to Use It
 

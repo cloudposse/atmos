@@ -16,8 +16,9 @@ import (
 func (p *project) templateMarkers(d *document) []string {
 	switch d.kind {
 	case "stack":
-		left, _ := tags.TemplateDelims(stringList(p.config, "templates", "settings", "delimiters"))
-		markers := []string{left}
+		// A stack-level override replaces the atmos.yaml delimiters rather than adding to them, as
+		// the runtime renderer does, so "{{" is literal text in a stack that switches to "<%".
+		var overrides []string
 		walk(d.node, nil, func(n *yaml.Node, path []string) {
 			if !delimiterOverridePath(path) || n.Kind != yaml.SequenceNode {
 				return
@@ -25,10 +26,14 @@ func (p *project) templateMarkers(d *document) []string {
 			var configured []string
 			if err := n.Decode(&configured); err == nil && len(configured) == 2 {
 				override, _ := tags.TemplateDelims(configured)
-				markers = append(markers, override)
+				overrides = append(overrides, override)
 			}
 		})
-		return markers
+		if len(overrides) > 0 {
+			return overrides
+		}
+		left, _ := tags.TemplateDelims(stringList(p.config, "templates", "settings", "delimiters"))
+		return []string{left}
 	case documentConfig, "vendor":
 		return []string{tags.DefaultLeftDelim}
 	default:

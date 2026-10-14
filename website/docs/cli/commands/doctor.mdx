@@ -289,7 +289,8 @@ and invocation failures.
 
 Without `--fix`, the summary counts what remains and what a repair run could apply, for
 example `3 findings (2 fixable). Run atmos doctor --fix to apply 2.` With `--fix`, it
-reports `Fixed N findings in M files. K findings remain.`
+reports what it applied, for example `Fixed 2 findings in 1 file. 1 finding remains.` A dry
+run reports the repairs it verified, for example `2 repairs verified. 3 findings remain.`
 
 Warnings are advisory by default. `--fail-on=warning` makes them blocking;
 `--fail-on=none` suppresses finding-based failure. Exit codes are `0` when the

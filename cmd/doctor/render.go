@@ -109,12 +109,19 @@ func plural(n int, singular, pluralForm string) string {
 	return pluralForm
 }
 
-// Findings are summarized as applied fixes after a repair run and as available fixes otherwise.
+// Findings are summarized as verified repairs after a dry run, as applied fixes after a repair run,
+// and as available fixes otherwise.
 func summarizeFindings(r *diagnostic.Report, fix bool) {
 	fixed, remaining, fixable := findingCounts(r)
+	files := len(r.ChangedFiles)
 	switch {
-	case fix || r.DryRun || fixed > 0:
-		ui.Writef("Fixed %d findings in %d files. %d findings remain.\n", fixed, len(r.ChangedFiles), remaining)
+	case r.DryRun:
+		// A dry run writes nothing, so it reports the repairs it verified rather than "Fixed 0".
+		ui.Writef("%d %s verified. %d %s.\n", fixable, plural(fixable, "repair", "repairs"),
+			remaining, plural(remaining, "finding remains", "findings remain"))
+	case fix || fixed > 0:
+		ui.Writef("Fixed %d %s in %d %s. %d %s.\n", fixed, plural(fixed, "finding", "findings"),
+			files, plural(files, "file", "files"), remaining, plural(remaining, "finding remains", "findings remain"))
 	case remaining == 0:
 		ui.Writeln("No findings.")
 	case fixable > 0:

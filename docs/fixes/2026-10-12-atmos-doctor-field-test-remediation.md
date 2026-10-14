@@ -204,5 +204,6 @@ Not verified: Windows runs, and snapshots on any machine other than the author's
 - A multi-document workflow file is reported with the internal-sounding message
   `doctor semantic verification failed: multiple YAML documents are not supported`, while the
   `github-actions` check reports the same file as passed.
-- A `--fix --dry-run` summary reads `Fixed 0 findings in 0 files. N findings remain.`, which sounds like a
-  failed fix; it could say how many findings a real run would fix.
+- A `--fix --dry-run` summary read `Fixed 0 findings in 0 files. N findings remain.`, which sounded like a
+  failed fix. Resolved in review: a dry run now reports `N repairs verified.`, and every count uses the
+  singular or plural form.
