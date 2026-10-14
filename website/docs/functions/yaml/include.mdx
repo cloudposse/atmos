@@ -232,10 +232,16 @@ To download remote files, Atmos uses [`go-getter`](https://github.com/hashicorp/
    settings: !include sftp://user@remote-server:/path/to/settings.yaml
    ```
 
-- **oci** (Open Container Initiative)
+- **oci** (Open Container Initiative) - unlike the other remote protocols, OCI registries aren't a
+  [`go-getter`](https://github.com/hashicorp/go-getter) scheme, so `!include` pulls the whole image
+  and extracts the requested file from it, the same way `atmos vendor pull` and `atmos scaffold generate`
+  already fetch OCI artifacts
   ```yaml
-  vars: !include oci://ghcr.io/my-org/my-image:path/to/vars.yaml
+  vars: !include oci://ghcr.io/my-org/my-image:v1.0.0//path/to/vars.yaml
   ```
+  - The path to the file inside the image is given after a `//`, the same subdirectory separator
+    `go-getter` uses for Git and S3 sources. This is required (not optional): an OCI tag cannot itself
+    contain a `/`, so there's no way to fold a file path into the `oci://...:tag` reference directly.
   - The file must be exposed as part of the OCI image and exist as a layer in the image (not hidden inside layers)
   - The registry must support OCI artifact downloads (e.g., AWS ECR, Docker Hub, GHCR, GCR)
 
