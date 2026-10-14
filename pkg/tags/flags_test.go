@@ -42,11 +42,8 @@ func TestParseTagsFlag(t *testing.T) {
 }
 
 // TestParseLabelsFlag exercises ParseLabelsFlag with input shaped the way pflag's
-// StringSlice flag type actually hands it over: comma-splitting within a single
-// --labels occurrence happens in pflag itself, so a raw multi-pair-in-one-occurrence
-// case is represented here as one slice element still containing the embedded comma
-// (matching what pflag would pass through before ParseLabelsFlag ever sees it), while
-// pairs meant to represent separate --labels occurrences are separate slice elements.
+// StringSlice flag type hands it over: comma-separated pairs within one --labels
+// occurrence and pairs from repeated occurrences arrive as separate slice elements.
 func TestParseLabelsFlag(t *testing.T) {
 	t.Run("nil input returns nil", func(t *testing.T) {
 		got, err := ParseLabelsFlag(nil)
