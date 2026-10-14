@@ -63,8 +63,8 @@ cli.command(
     <dt>`validate`</dt>
     <dd>
         (Optional) A function called with the same `args` and `flags` dictionaries before `run`. It accepts
-        the input by returning `None` or `True`, and rejects it by returning `False` or by calling `fail()` with an
-        explanation. Any other return value is an error.
+        the input by returning `None` or `True`, and rejects it by returning `False`, which is a usage error that exits with status 2, or by calling `fail()` with an
+        explanation, which exits with status 1 and shows that reason. Any other return value is an error.
     </dd>
 </dl>
 
@@ -100,8 +100,10 @@ token as an Atmos option once it follows the script name. Atmos global flags, su
 - Command-line values override a flag's `env` binding, which overrides its default.
 - An unknown flag, an invalid value, a missing required flag or argument, a value outside `choices`, or too many
   arguments stops the program with a usage error before `validate` or `run` is called. A usage error shows the
-  problem (for example ``missing required argument `<service>` ``), the usage line, and the hint
+  problem (for example `missing required argument <service>`), the usage line, and the hint
   `Run ./tool --help for usage.`. It has no traceback and exits with status 2.
+- A `validate` callback that returns `False` is also a usage error and exits with status 2. A `validate` callback that
+  calls `fail()` exits with status 1 and shows the reason you gave.
 - Help marks required flags `(required)`, lists choices as `(one of: dev, prod)`, and shows an environment binding as
   `[env: DEPLOY_STAGE]`.
 
@@ -110,8 +112,9 @@ with side effects inside `run`, so that `--help` and rejected input do not trigg
 
 ## Errors
 
-Errors that your own code raises, such as `fail()`, a runtime error, or `validate` returning `False`, are reported as
-script failures with a traceback. Tracebacks show paths relative to the working directory when the script is under it.
+Errors that your own code raises, such as `fail()`, including `fail()` inside `validate`, or a runtime error, are reported
+as script failures with a traceback and exit with status 1. A `validate` callback that returns `False` is a usage error
+and exits with status 2. Tracebacks show paths relative to the working directory when the script is under it.
 
 - A script can call `cli.command` once per run. A second call fails.
 - It is available only in a standalone script's main thread. Calling it from a script step, a custom command, a

@@ -324,7 +324,7 @@ string is used exactly as written. Any other value is encoded as compact JSON:
 | `"plain"` | `plain` |
 | `{"a": [1, 2, {"b": None}], "c": 1.5}` | `{"a":[1,2,{"b":null}],"c":1.5}` |
 | `(1, 2)` or `set([1])` | `[1,2]` or `[1]` |
-| `None` | `null` |
+| `None` | No output is printed. |
 
 A value that JSON cannot represent fails the script with
 `output must be a string or JSON-encodable value`, followed by the reason. This applies to

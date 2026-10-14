@@ -83,7 +83,7 @@ omitted argument that has a `default` takes that default instead.
   <dd>Required. Argument name, referenced as `{{ .Arguments.<name> }}`.</dd>
 
   <dt>`description`</dt>
-  <dd>Help text shown in `atmos help`.</dd>
+  <dd>Help text shown in `atmos help`. The command usage line shows required arguments as `<required>` and optional arguments as `[optional]`.</dd>
 
   <dt>`required`</dt>
   <dd>When `true`, the command fails if the argument is omitted and no `default` is set. When `false` (the default), an omitted argument without a `default` is an empty string. See [Optional Arguments](#optional-arguments).</dd>

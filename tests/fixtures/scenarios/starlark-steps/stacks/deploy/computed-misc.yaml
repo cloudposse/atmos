@@ -1,0 +1,32 @@
+# Number/float/slice/format/ctx-iteration probes for !starlark.
+vars:
+  stage: computed-misc
+components:
+  terraform:
+    c:
+      metadata:
+        component: mock
+      settings:
+        nested:
+          k: v
+          lst: [1, 2, 3]
+      vars:
+        message: f
+        div: !starlark return 4 / 2
+        sumf: !starlark return 0.1 + 0.2
+        big_f: !starlark return 1e21
+        small: !starlark return 1e-7
+        neg0: !starlark return -0.0
+        attr_nested: !starlark return ctx.settings["nested"]["k"]
+        lst_len: !starlark return len(ctx.settings["nested"]["lst"])
+        lst_slice: !starlark return ctx.settings["nested"]["lst"][1:]
+        lst_copy: !starlark return list(ctx.settings["nested"]["lst"]) + [4]
+        dict_merge: !starlark |
+          return {k: v for k, v in ctx.settings["nested"].items() if k == "k"}
+        str_fmt: !starlark return "%s=%d" % ("a", 3)
+        str_fmt2: !starlark return "{}-{}".format("a", "b")
+        bool_str: !starlark return str(True)
+        sorted_keys: !starlark return sorted(ctx.vars.keys())
+        has_self: !starlark return "has_self" in ctx.vars
+        hash_check: !starlark return hash("a") != 0
+        type_of: !starlark return type(ctx.settings["nested"]["lst"])

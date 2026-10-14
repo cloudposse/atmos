@@ -50,7 +50,7 @@ The `command` argument takes a subcommand of [`atmos toolchain`](/cli/commands/t
 
     <dt>`tool`</dt>
     <dd>
-        (Optional) The tool the command applies to, for example `"jqlang/jq@1.7.1"`. It is placed right after the
+        (Optional) The tool the command applies to, spelled `owner/name@version`, for example `"jqlang/jq@1.7.1"`. It is placed right after the
         command.
     </dd>
 
@@ -85,6 +85,12 @@ Use [`dependencies.tools`](/functions/automation/dependencies.tools) when later 
 ```python
 atmos.toolchain("install", "jqlang/jq@1.7.1")
 ```
+
+The `install` operation behaves like the `atmos toolchain install` command. It pins the tool in the project's
+`.tool-versions` file. Commands use that version when it is already installed. With the default
+`toolchain.install: auto`, components install their own executable and workflows install missing pinned tools;
+other commands do not install missing pins. Set `toolchain.install: always` to install all pinned tools on every run.
+To pin a tool for a single script without changing the project, use [`dependencies.tools`](/functions/automation/dependencies.tools).
 
 ### List installed tools
 

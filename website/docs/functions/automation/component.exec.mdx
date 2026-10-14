@@ -19,8 +19,11 @@ The method is available on the handle returned by [`components.get`](/functions/
 [`ctx.component`](/functions/automation/ctx.component):
 
 ```python
-component.exec(argv, working_directory = ..., env = ..., output = "stream", check = True, timeout = "", retry = None)
+ctx.component.exec(argv, working_directory = ..., env = ..., output = "stream", check = True, timeout = "", retry = None)
 ```
+
+A bare `component` name is not defined in a script. Call the method on `ctx.component`, or on a handle you
+assigned from `components.get`, as in `api.exec(...)`.
 
 ## Arguments
 

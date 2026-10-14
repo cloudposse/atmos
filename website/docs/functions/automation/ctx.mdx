@@ -60,6 +60,7 @@ The attributes always exist. What they hold depends on how the script started:
 | [Custom command](/automation/custom-commands) | Empty | Set when the script comes from a local `!include` | Parsed flags | Parsed arguments | The command's component when it declares `component:`, otherwise `None` | `None` |
 | [Workflow step](/automation/workflows) | Empty | Set when the script comes from a local `!include` | Workflow flags, as strings | Empty | `None` | `None` |
 | [Lifecycle hook](/automation/lifecycle-hooks) | Empty | Set when the script comes from a local `!include` | Empty | Empty | The hook's component, or `None` for an aggregate hook | The hook and the parent operation |
+| [Git hook](/cli/configuration/git) | The arguments Git passes to the hook, such as the commit message file path for `commit-msg` | Set when the script comes from a local `!include` | Empty | Empty | `None` | `None` |
 
 Steps inside `parallel` and `matrix` groups inherit the context of the step that contains them. A standalone program that
 declares its interface with [`cli.command`](/functions/automation/cli.command) receives its parsed inputs as the arguments

@@ -45,6 +45,8 @@ atmos stack config get vars.region -s plat-ue2-prod -c vpc
   <dd>The stack name.</dd>
   <dt>`--component` / `-c` (string, required)</dt>
   <dd>The component name.</dd>
+  <dt>`--file` (string)</dt>
+  <dd>Read the value from this manifest file when the YAML path exists. If the path is missing, keep the available value from the merged stack configuration. Provenance is not shown. A file that cannot be read is an error.</dd>
 </dl>
 
 ## Related

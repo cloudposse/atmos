@@ -51,7 +51,7 @@ atmos hello -n world
   <dd>Help text shown in `atmos help`.</dd>
 
   <dt>`type`</dt>
-  <dd>Data type of the flag: `string` (default), `bool`, or `int`. See [Boolean Flags](#boolean-flags) and [Integer Flags](#integer-flags). Any other type fails when Atmos loads the command, with an error that lists the supported types.</dd>
+  <dd>Data type of the flag: `string` (default), `bool`, or `int`. See [Boolean Flags](#boolean-flags) and [Integer Flags](#integer-flags). An unknown type disables only that command: Atmos prints a warning at startup, the rest of your commands keep working, and invoking the disabled command fails with an error that lists the supported types.</dd>
 
   <dt>`required`</dt>
   <dd>When `true`, the command fails if the flag is omitted and no `default` is set.</dd>

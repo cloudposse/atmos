@@ -25,8 +25,9 @@ dependencies.tools(name, version)
 <dl>
     <dt>`name`</dt>
     <dd>
-        Required. The tool, in the form the Atmos toolchain accepts: a full `owner/repo` name such as `jqlang/jq`, or a
-        short name when it is unambiguous in the configured registries.
+        Required. The tool, in the form the Atmos toolchain accepts. Prefer the full `owner/name` form, such as
+        `jqlang/jq`. A short name fails when it matches more than one package: `jq` matches both `jqlang/jq` and
+        `stedolan/jq`.
     </dd>
 
     <dt>`version`</dt>
@@ -56,8 +57,9 @@ The return value is `None`. The call is for its effect: after it returns, [`exec
 - An empty name or version fails with an argument error.
 - An installation failure, such as an unknown tool or an unavailable version, fails with
   `install dependency <name>@<version>` followed by the toolchain's explanation.
-- Tool installation is available in standalone scripts, custom commands, workflows, and hooks. It requires an Atmos
-  configuration, which Atmos loads when it runs the script.
+- Tool installation is available in standalone scripts, custom commands, workflows, and hooks. It does not require an
+  `atmos.yaml` file. Tools install into the Atmos toolchain cache, in
+  `$XDG_CACHE_HOME/atmos/toolchain/bin/<owner>/<name>/<version>/`, and the pin applies only to the running script.
 
 ## Examples
 
