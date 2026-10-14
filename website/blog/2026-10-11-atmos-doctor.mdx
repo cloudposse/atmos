@@ -3,6 +3,8 @@ title: Diagnose and repair configuration with Atmos Doctor
 slug: atmos-doctor
 authors: [osterman]
 tags: [feature, dx]
+cast: "/casts/demo/fixtures/doctor/doctor.cast"
+castTitle: "Diagnose and verify configuration repairs"
 ---
 
 Configuration can pass schema validation while still using deprecated fields or depending on an archived upstream repository. Migrating those fields also takes care: a valid replacement can change which components run or how missing dependencies behave. The new [Atmos Doctor](/cli/commands/doctor) brings those findings together and verifies supported repairs before applying them.
@@ -19,7 +21,7 @@ Project health checks span configuration schemas, stack validation, formatting, 
 
 ## The Fix
 
-Doctor combines built-in checks in a streaming report. Supported repairs cover custom-command semantic arguments and flags, recognized legacy hook events, explicit Terraform reconfigure values, and component sources that still point at the archived `cloudposse/terraform-aws-components` monorepo. Each repair compares runtime field behavior and unrelated YAML values before writing, and comments on a migrated field move with it. A repair is blocked only by inputs that can change what it means, such as an import, an active profile, or a template in the edited value, and the finding names the file and line responsible. Templates elsewhere in the file do not get in the way. Repaired files can have blank lines or folded scalars reformatted, so review the diff before committing.
+Doctor combines built-in checks in a streaming report. Supported repairs cover custom-command semantic arguments and flags, recognized legacy hook events, explicit Terraform reconfigure values, and component sources that point at archived repositories. Each repair compares runtime field behavior and unrelated YAML values before writing, and comments on a migrated field move with it. A repair is blocked only by inputs that can change what it means, such as an import, an active profile, or a template in the edited value, and the finding names the file and line responsible. Templates elsewhere in the file do not get in the way. Repaired files can have blank lines or folded scalars reformatted, so review the diff before committing.
 
 Legacy dependency and stack naming migrations remain manual. In particular, a missing legacy dependency can produce a warning where a modern required dependency fails.
 
