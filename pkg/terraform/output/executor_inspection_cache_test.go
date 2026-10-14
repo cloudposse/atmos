@@ -169,7 +169,8 @@ func TestExecutor_InspectionCacheDisabledAuthNonStatic(t *testing.T) {
 	backend.EXPECT().GenerateProvidersIfNeeded(gomock.Any(), gomock.Any()).Return(nil).Times(3)
 	runner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	gomock.InOrder(
-		runner.EXPECT().Output(gomock.Any()).Return(nil, errUtils.ErrTerraformOutputFailed),
+		// Windows retries a failed Output; the failure must persist across that budget.
+		runner.EXPECT().Output(gomock.Any()).Return(nil, errUtils.ErrTerraformOutputFailed).Times(outputCallsBeforeGivingUp()),
 		runner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{"value": {Value: []byte(`"first"`)}}, nil),
 		runner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{"value": {Value: []byte(`"second"`)}}, nil),
 	)
