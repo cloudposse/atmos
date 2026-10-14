@@ -635,6 +635,11 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	if err := schema.ValidateTerraformFlagsKeys(v.GetStringMap("components.terraform.flags")); err != nil {
 		return atmosConfig, fmt.Errorf("atmos.yaml components.terraform.flags: %w", err)
 	}
+	if err := atmosConfig.Components.Terraform.PlanDiff.Validate(); err != nil {
+		return atmosConfig, errUtils.Build(err).
+			WithHint("Each entry names one top-level attribute on every resource of a type, such as `aws_db_instance.latest_restorable_time`; resource addresses, module paths, and wildcards are not supported.").
+			Err()
+	}
 
 	extractEnvMapsFromViper(v, &atmosConfig)
 

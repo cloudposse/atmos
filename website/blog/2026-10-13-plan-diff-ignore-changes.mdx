@@ -1,0 +1,52 @@
+---
+slug: plan-diff-ignore-changes
+title: "Exclude Expected Attribute Changes from Plan Comparisons"
+authors: [osterman]
+tags: [feature, bugfix]
+---
+
+An RDS instance's latest restorable time can advance between Terraform plans even when its configuration has not changed. That timestamp can make a plan comparison fail and interrupt deployment verification. Atmos now supports [configured attribute exclusions](/cli/commands/terraform/plan-diff#ignoring-attribute-changes) for both comparisons.
+
+<!--truncate-->
+
+## The Problem
+
+Provider-maintained attributes can vary independently of configuration changes. As reported in [#2088](https://github.com/cloudposse/atmos/issues/2088), comparing RDS plans can report differences in `latest_restorable_time` that a project wants to ignore.
+
+## The Fix
+
+The new `components.terraform.plan_diff.ignore_changes` setting applies exclusions consistently to the displayed diff and the comparison result. Both `atmos terraform plan-diff` and deployment plan verification honor the same configuration.
+
+Other attribute changes, resource additions and removals, action changes, and replacement metadata remain detectable. Variables and outputs are compared independently, including outputs that export an excluded attribute.
+
+## How to Use It
+
+Add an exact resource type and top-level attribute to `atmos.yaml`:
+
+```yaml title="atmos.yaml"
+components:
+  terraform:
+    plan_diff:
+      ignore_changes:
+        - aws_db_instance.latest_restorable_time
+```
+
+This entry applies to all instances of `aws_db_instance`, including those inside modules. Wildcards, nested paths, and unqualified attribute names are rejected before Terraform runs.
+
+These exclusions control Atmos comparisons. They do not change Terraform's `lifecycle.ignore_changes`, resource updates, plans, or state.
+
+### Existing projects and editions
+
+No attributes are automatically excluded from comparisons. Content hashes and encoded response
+bodies can represent real changes, so exclude them only when your project expects those changes.
+
+Atmos previously hid seven attributes from displayed diffs while still reporting a comparison
+failure for their differences. The `2026-10-13` [edition](/cli/configuration/edition) displays them:
+`response_body_base64`, `content_base64sha256`, `content_base64sha512`, `content_md5`,
+`content_sha1`, `content_sha256`, and `content_sha512`. Unpinned projects get the new display too.
+A pin before that date preserves the old display-only suppression and still detects the differences.
+Explicit exclusions work identically under every edition.
+
+## Get Involved
+
+See the [plan-diff documentation](/cli/commands/terraform/plan-diff) for command usage, and [report unexpected comparison behavior](https://github.com/cloudposse/atmos/issues) with a sanitized example.
