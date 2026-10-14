@@ -42,11 +42,12 @@ type Run struct {
 }
 
 type PR struct {
-	MergeSHA     string `json:"merge_commit_sha"`
-	ChangedFiles *int   `json:"changed_files"`
-	Draft        bool   `json:"draft"`
-	Number       int    `json:"number"`
-	State        string `json:"state"`
+	Updated      time.Time `json:"updated_at"`
+	MergeSHA     string    `json:"merge_commit_sha"`
+	ChangedFiles *int      `json:"changed_files"`
+	Draft        bool      `json:"draft"`
+	Number       int       `json:"number"`
+	State        string    `json:"state"`
 	User         struct {
 		Login string `json:"login"`
 		Type  string `json:"type"`
