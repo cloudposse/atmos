@@ -39,10 +39,8 @@ func NewResolutionContext() *ResolutionContext {
 }
 
 const (
-	// Initial buffer size for capturing goroutine stack traces.
+	// The goroutine header fits in 64 bytes, including a 20-digit uint64 ID.
 	goroutineStackBufSize = 64
-	// Maximum buffer size to prevent unbounded growth.
-	maxGoroutineStackBufSize = 8192
 	// MaxResolutionDepth caps the nested-call depth tolerated by the YAML-function resolver.
 	// The cycle detector should catch all true cycles; this is a defense-in-depth bound that
 	// aborts with a clean error instead of letting the Go runtime stack overflow if a new
@@ -53,26 +51,15 @@ const (
 // getGoroutineID returns the current goroutine ID.
 // Returns "unknown" if parsing fails to prevent panics.
 func getGoroutineID() string {
-	// Allocate buffer and grow it if needed to avoid truncation.
-	buf := make([]byte, goroutineStackBufSize)
-	for {
-		n := runtime.Stack(buf, false)
-		if n < len(buf) {
-			// Buffer was large enough.
-			buf = buf[:n]
-			break
-		}
-		// Buffer was too small, double it and try again.
-		if len(buf) >= maxGoroutineStackBufSize {
-			// Safety limit reached.
-			return "unknown"
-		}
-		buf = make([]byte, len(buf)*2)
-	}
+	// Only the header is needed. Capturing the entire trace repeatedly is costly
+	// on nested lookups and made deep stacks lose their goroutine identity when
+	// they exceeded the old buffer limit. Truncation after the header is safe.
+	var buf [goroutineStackBufSize]byte
+	n := runtime.Stack(buf[:], false)
 
 	// Format: "goroutine 123 [running]:\n..."
 	// Parse defensively to avoid panics.
-	fields := strings.Fields(string(buf))
+	fields := strings.Fields(string(buf[:n]))
 	if len(fields) < 2 {
 		return "unknown"
 	}
@@ -120,7 +107,8 @@ func (ctx *ResolutionContext) Push(atmosConfig *schema.AtmosConfiguration, node 
 	// that a future re-entry path that bypasses the cycle detector fails with a
 	// clean error instead of crashing the Go runtime stack (see #2457).
 	if len(ctx.CallStack) >= MaxResolutionDepth {
-		return fmt.Errorf("%w: depth=%d, current node: component=%q stack=%q call=%q",
+		return fmt.Errorf(
+			"%w: depth=%d, current node: component=%q stack=%q call=%q",
 			errUtils.ErrYamlFuncMaxResolutionDepth,
 			len(ctx.CallStack),
 			node.Component,
