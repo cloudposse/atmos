@@ -40,6 +40,9 @@ func init() {
 func (h *ScriptHandler) Validate(step *schema.WorkflowStep) error {
 	defer perf.Track(nil, "step.ScriptHandler.Validate")()
 
+	if err := h.ValidateOutput(step); err != nil {
+		return err
+	}
 	if step.Command != "" {
 		return errUtils.Build(schema.ErrScriptStepInvalidField).
 			WithContext("step", step.Name).
@@ -85,6 +88,15 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 		return nil, err
 	}
 
+	// Enforce the step's timeout by running the interpreter under a context deadline. The embedded
+	// engine cancels its thread and subprocesses when the context ends.
+	deadline, err := StartStepDeadline(ctx, step, vars)
+	if err != nil {
+		return nil, err
+	}
+	defer deadline.Stop()
+	ctx = deadline.Context()
+
 	// Script steps share the command-step output defaults: raw mode and no step labels unless
 	// the step or workflow opts in through output or show.labels.
 	writer := NewCommandOutputWriter(step, workflow)
@@ -95,7 +107,7 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 			if step.ScriptEnv != nil {
 				inputs = step.ScriptEnv
 			}
-			resolved, resolveErr := vars.ResolveEnvMap(inputs)
+			resolved, resolveErr := vars.ResolveStepEnvMap(step, inputs)
 			if resolveErr != nil {
 				return resolveErr
 			}
@@ -122,6 +134,7 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 		}, stdout, stderr)
 	})
 	if err != nil {
+		err = deadline.Wrap(err)
 		err = WrapScriptInterpreterError(invocation.interpreter, err)
 		return NewStepResult(stdout).
 			WithError(stderr).
@@ -164,31 +177,19 @@ func WrapScriptInterpreterError(interpreter string, err error) error {
 }
 
 func (h *ScriptHandler) resolveInvocation(step *schema.WorkflowStep, vars *Variables) (scriptInvocation, error) {
-	interpreter, err := vars.Resolve(step.Interpreter)
+	interpreter, err := vars.ResolveStepField(step, "interpreter", step.Interpreter)
 	if err != nil {
-		return scriptInvocation{}, errUtils.Build(errUtils.ErrTemplateEvaluation).
-			WithCause(err).
-			WithContext("step", step.Name).
-			WithContext("field", "interpreter").
-			Err()
+		return scriptInvocation{}, TemplateFieldError(step, "interpreter", err)
 	}
-	script, err := vars.Resolve(step.Script)
+	script, err := vars.ResolveStepField(step, "script", step.Script)
 	if err != nil {
-		return scriptInvocation{}, errUtils.Build(errUtils.ErrTemplateEvaluation).
-			WithCause(err).
-			WithContext("step", step.Name).
-			WithContext("field", "script").
-			Err()
+		return scriptInvocation{}, TemplateFieldError(step, "script", err)
 	}
 	workDir := step.WorkingDirectory
 	if workDir != "" {
-		workDir, err = vars.Resolve(workDir)
+		workDir, err = vars.ResolveStepField(step, "working_directory", workDir)
 		if err != nil {
-			return scriptInvocation{}, errUtils.Build(errUtils.ErrTemplateEvaluation).
-				WithCause(err).
-				WithContext("step", step.Name).
-				WithContext("field", "working_directory").
-				Err()
+			return scriptInvocation{}, TemplateFieldError(step, "working_directory", err)
 		}
 	}
 	return scriptInvocation{interpreter: interpreter, script: script, workDir: workDir}, nil
@@ -202,13 +203,9 @@ func (h *ScriptHandler) resolveEnv(step *schema.WorkflowStep, vars *Variables) (
 	if len(step.Env) == 0 {
 		return env, nil
 	}
-	resolvedEnv, err := vars.ResolveEnvMap(step.Env)
+	resolvedEnv, err := vars.ResolveStepEnvMap(step, step.Env)
 	if err != nil {
-		return nil, errUtils.Build(errUtils.ErrTemplateEvaluation).
-			WithCause(err).
-			WithContext("step", step.Name).
-			WithContext("field", "env").
-			Err()
+		return nil, TemplateFieldError(step, "env", err)
 	}
 	for key, value := range resolvedEnv {
 		env = envpkg.UpdateEnvVar(env, key, value)

@@ -101,6 +101,10 @@ func RenderScriptInterpreter(step *schema.WorkflowStep, render func(string) (str
 	if step == nil || render == nil || step.Type != schema.TaskTypeScript || !strings.Contains(step.Interpreter, "{{") {
 		return nil
 	}
+	// An interpreter written with !literal is already the effective one.
+	if step.IsLiteral("interpreter") {
+		return nil
+	}
 	rendered, err := render(step.Interpreter)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrTemplateEvaluation).

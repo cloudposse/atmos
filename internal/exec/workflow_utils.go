@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -463,7 +464,12 @@ func ExecuteWorkflow(
 	// Validate exec steps before executing anything: an exec step replaces
 	// the Atmos process, so it must be the final step and must not set
 	// supervisor-only fields (tty, interactive, retry, timeout, output).
-	if err := schema.ValidateWorkflowSteps(workflowDefinition.Steps); err != nil {
+	validationErr := schema.ValidateWorkflowSteps(workflowDefinition.Steps)
+	if validationErr == nil {
+		// The workflow-level `output` is the default mode of every step, so it must name a real mode.
+		validationErr = schema.ValidateOutputMode(fmt.Sprintf("workflow %q", workflow), workflowDefinition.Output)
+	}
+	if err := validationErr; err != nil {
 		return errUtils.Build(err).
 			WithTitle(WorkflowErrTitle).
 			WithHint("Check workflow step type, nested steps, needs dependencies, and control-step output/fail configuration").
@@ -685,7 +691,9 @@ func ExecuteWorkflow(
 		// Resolve step-variable templates in workflow/step env values (parity with
 		// custom command steps) so a value like `X: "{{ .steps.select.value }}"`
 		// is populated before it reaches the subprocess.
-		resolvedWorkflowEnv, resolvedStepEnv, err := resolveWorkflowStepEnvs(workflowDefinition.Env, step.Env, baseEnv)
+		// Env values written with !literal are used exactly as written and never rendered.
+		renderStepEnv, literalStepEnv := step.SplitLiteralEnv(step.Env)
+		resolvedWorkflowEnv, resolvedStepEnv, err := resolveWorkflowStepEnvs(workflowDefinition.Env, renderStepEnv, baseEnv)
 		if err != nil {
 			if workflowErr == nil {
 				workflowErr = err
@@ -694,6 +702,12 @@ func ExecuteWorkflow(
 			}
 			conditionStatus = schema.ConditionPredicateFailure
 			continue
+		}
+		if len(literalStepEnv) > 0 {
+			if resolvedStepEnv == nil {
+				resolvedStepEnv = make(map[string]string, len(literalStepEnv))
+			}
+			maps.Copy(resolvedStepEnv, literalStepEnv)
 		}
 
 		// Prepare environment variables: start with baseEnv (system + global + toolchain).
@@ -744,7 +758,8 @@ func ExecuteWorkflow(
 		// {{ .flags.* }}) in inline command-bearing steps (shell/atmos/exec) so a
 		// value captured by an earlier step reaches the command — parity with
 		// custom command steps.
-		if workflowCommandSupportsTemplating(commandType) {
+		// A command written with !literal is used exactly as written.
+		if workflowCommandSupportsTemplating(commandType) && !step.IsLiteral("command") {
 			resolvedCommand, resolveErr := resolveWorkflowStepCommand(command, stepEnv)
 			if resolveErr != nil {
 				// errors.Join ignores a nil left operand, so this both starts and
@@ -835,9 +850,10 @@ func ExecuteWorkflow(
 				commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
 				switch {
 				case workflowPkg.StepContainerOverride(&step):
-					err = retry.Do(context.Background(), step.Retry, func() error {
+					// One deadline bounds the whole step, retries and backoff included.
+					err = stepPkg.RunWithStepRetry(context.Background(), &step, nil, func(stepCtx context.Context) error {
 						return runCommandStep(func(stdout, stderr io.Writer) error {
-							return workflowPkg.RunStepContainerOverride(context.Background(), &workflowPkg.ContainerStepParams{
+							return workflowPkg.RunStepContainerOverride(stepCtx, &workflowPkg.ContainerStepParams{
 								Workflow:      workflow,
 								WorkflowPath:  workflowPath,
 								BasePath:      atmosConfig.BasePath,
@@ -867,9 +883,9 @@ func ExecuteWorkflow(
 							break
 						}
 					}
-					err = retry.Do(context.Background(), step.Retry, func() error {
+					err = stepPkg.RunWithStepRetry(context.Background(), &step, nil, func(stepCtx context.Context) error {
 						return runCommandStep(func(stdout, stderr io.Writer) error {
-							return activeContainer.ExecShell(context.Background(), &workflowPkg.ContainerStepParams{
+							return activeContainer.ExecShell(stepCtx, &workflowPkg.ContainerStepParams{
 								Step:          &step,
 								WorkflowDef:   workflowDefinition,
 								HostWorkDir:   workDir,
@@ -881,24 +897,27 @@ func ExecuteWorkflow(
 						})
 					})
 				default:
-					err = retry.Do(context.Background(), step.Retry, func() error {
-						return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
-							return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
-								Command:     command,
-								Name:        commandName,
-								Dir:         workDir,
-								Env:         stepEnv,
-								TTY:         step.Tty,
-								Interactive: step.Interactive,
-								DryRun:      dryRun,
-							}, func() error {
-								writer := stepPkg.NewCommandOutputWriter(&step, workflowDefinition)
-								_, _, runErr := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
-									return executeShellMasked(&ExecuteShellSpec{
-										Command: command, Name: commandName, Dir: workDir, EnvVars: stepEnv, DryRun: dryRun,
-									}, stdout, stderr, stdoutCapture, stderrCapture)
+					// The step's timeout cancels the shell command through the context.
+					err = stepPkg.RunWithStepDeadline(context.Background(), &step, nil, func(shellCtx context.Context) error {
+						return retry.Do(shellCtx, step.Retry, func() error {
+							return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
+								return process.RunShellStep(shellCtx, &process.ShellSessionSpec{
+									Command:     command,
+									Name:        commandName,
+									Dir:         workDir,
+									Env:         stepEnv,
+									TTY:         step.Tty,
+									Interactive: step.Interactive,
+									DryRun:      dryRun,
+								}, func() error {
+									writer := stepPkg.NewCommandOutputWriter(&step, workflowDefinition)
+									_, _, runErr := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+										return executeShellMasked(&ExecuteShellSpec{
+											Context: shellCtx, Command: command, Name: commandName, Dir: workDir, EnvVars: stepEnv, DryRun: dryRun,
+										}, stdout, stderr, stdoutCapture, stderrCapture)
+									})
+									return runErr
 								})
-								return runErr
 							})
 						})
 					})
@@ -939,17 +958,20 @@ func ExecuteWorkflow(
 				stepPkg.RenderCommand(&step, workflowDefinition, displayCmd)
 
 				ui.Infof("Executing command: `atmos %s`", command)
-				err = retry.Do(context.Background(), step.Retry, func() error {
-					return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
-						writer := stepPkg.NewCommandOutputWriter(&step, workflowDefinition)
-						_, _, runErr := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
-							return ExecuteShellCommand(
-								atmosConfig, "atmos", args, ".", stepEnv, dryRun, "",
-								WithStdoutCapture(stdoutCapture), WithStderrCapture(stderrCapture),
-								WithProcessStreams(process.Streams{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr}),
-							)
+				// The step's timeout cancels the atmos subprocess through the context.
+				err = stepPkg.RunWithStepDeadline(context.Background(), &step, nil, func(atmosCtx context.Context) error {
+					return retry.Do(atmosCtx, step.Retry, func() error {
+						return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
+							writer := stepPkg.NewCommandOutputWriter(&step, workflowDefinition)
+							_, _, runErr := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+								return ExecuteShellCommand(
+									atmosConfig, "atmos", args, ".", stepEnv, dryRun, "",
+									WithProcessContext(atmosCtx), WithStdoutCapture(stdoutCapture), WithStderrCapture(stderrCapture),
+									WithProcessStreams(process.Streams{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr}),
+								)
+							})
+							return runErr
 						})
-						return runErr
 					})
 				})
 			default:
@@ -985,8 +1007,9 @@ func ExecuteWorkflow(
 					stepPkg.RenderCommand(&step, workflowDefinition, process.FormatScriptDisplay(step.Interpreter, step.Script))
 					switch {
 					case workflowPkg.StepContainerOverride(&step):
-						err = retry.Do(context.Background(), step.Retry, func() error {
-							return workflowPkg.RunStepContainerOverride(context.Background(), &workflowPkg.ContainerStepParams{
+						// One deadline bounds the whole step, retries and backoff included.
+						err = stepPkg.RunWithStepRetry(context.Background(), &step, nil, func(stepCtx context.Context) error {
+							return workflowPkg.RunStepContainerOverride(stepCtx, &workflowPkg.ContainerStepParams{
 								Workflow:     workflow,
 								WorkflowPath: workflowPath,
 								BasePath:     atmosConfig.BasePath,
@@ -1013,8 +1036,8 @@ func ExecuteWorkflow(
 								break
 							}
 						}
-						err = retry.Do(context.Background(), step.Retry, func() error {
-							return activeContainer.ExecShell(context.Background(), &workflowPkg.ContainerStepParams{
+						err = stepPkg.RunWithStepRetry(context.Background(), &step, nil, func(stepCtx context.Context) error {
+							return activeContainer.ExecShell(stepCtx, &workflowPkg.ContainerStepParams{
 								Step:        &step,
 								WorkflowDef: workflowDefinition,
 								HostWorkDir: workDir,
@@ -1025,8 +1048,11 @@ func ExecuteWorkflow(
 					default:
 						// The script step handler does not retry itself, so honor `retry:` here
 						// exactly like custom commands (cmd/cmd_utils.go) and the container paths above.
-						err = retry.Do(context.Background(), step.Retry, func() error {
-							return executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedOpts)
+						// The step's timeout bounds the whole step, retries included; the handler's own
+						// deadline then nests inside it.
+						timeoutVars := prepareExtendedStepExecutor(workflowDefinition, stepEnv, extendedOpts)
+						err = stepPkg.RunWithStepRetry(context.Background(), &steps[stepIdx], timeoutVars, func(stepCtx context.Context) error {
+							return executeExtendedStep(stepCtx, &steps[stepIdx], workflowDefinition, stepEnv, extendedOpts)
 						})
 					}
 					break
@@ -1155,25 +1181,7 @@ type extendedStepOptions struct {
 
 // executeExtendedStep runs an extended step type (input, confirm, choose, etc.).
 func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep, workflow *schema.WorkflowDefinition, envVars []string, opts extendedStepOptions) error {
-	// Initialize or reuse step executor.
-	if stepExecutorState == nil {
-		stepExecutorState = stepPkg.NewStepExecutor()
-	}
-
-	// Set workflow context for output mode inheritance.
-	stepExecutorState.SetWorkflow(workflow)
-	configureStepScannerContext(stepExecutorState.Variables(), opts.AtmosConfig, opts.ToolchainPATH, opts.AuthManager)
-
-	// Add environment variables to the executor.
-	for _, env := range envVars {
-		parts := strings.SplitN(env, "=", 2)
-		if len(parts) == 2 {
-			stepExecutorState.SetEnv(parts[0], parts[1])
-		}
-	}
-	// Always set (or clear) the stack flag so a stackless step does not
-	// inherit a stale value from a prior step in the same workflow.
-	stepExecutorState.SetFlag("stack", opts.FinalStack)
+	prepareExtendedStepExecutor(workflow, envVars, opts)
 
 	// Execute the step.
 	stepCopy := *workflowStep
@@ -1193,6 +1201,33 @@ func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep,
 	}
 	_, err := stepExecutorState.Execute(ctx, &stepCopy)
 	return err
+}
+
+// prepareExtendedStepExecutor initializes or reuses the shared step executor and loads the
+// workflow context, scanner context, step environment, and stack flag the step will run with.
+// It is idempotent, so callers that need the executor's variables before executeExtendedStep
+// (to render a templated `timeout:`) can call it first.
+func prepareExtendedStepExecutor(workflow *schema.WorkflowDefinition, envVars []string, opts extendedStepOptions) *stepPkg.Variables {
+	// Initialize or reuse step executor.
+	if stepExecutorState == nil {
+		stepExecutorState = stepPkg.NewStepExecutor()
+	}
+
+	// Set workflow context for output mode inheritance.
+	stepExecutorState.SetWorkflow(workflow)
+	configureStepScannerContext(stepExecutorState.Variables(), opts.AtmosConfig, opts.ToolchainPATH, opts.AuthManager)
+
+	// Add environment variables to the executor.
+	for _, env := range envVars {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			stepExecutorState.SetEnv(parts[0], parts[1])
+		}
+	}
+	// Always set (or clear) the stack flag so a stackless step does not
+	// inherit a stale value from a prior step in the same workflow.
+	stepExecutorState.SetFlag("stack", opts.FinalStack)
+	return stepExecutorState.Variables()
 }
 
 func configureStepScannerContext(vars *stepPkg.Variables, atmosConfig *schema.AtmosConfiguration, toolchainPATH string, authManager auth.AuthManager) {

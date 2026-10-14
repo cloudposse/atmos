@@ -2771,3 +2771,49 @@ func TestExecuteWorkflow_ScriptStepHonorsRetry(t *testing.T) {
 		})
 	}
 }
+
+// A script step's `timeout:` bounds the whole step, retries and backoff included: once it elapses
+// no later attempt runs and the step fails with ErrStepTimeout rather than retry exhaustion.
+func TestExecuteWorkflow_ScriptStepTimeoutBoundsRetries(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	maxAttempts := 3
+	// The backoff is far longer than the timeout, so a retry that ignored the timeout would
+	// still be waiting (and then run a second attempt) long after the timeout elapsed.
+	delay := 15 * time.Second
+	counterFile := filepath.Join(t.TempDir(), "attempts")
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{{
+			Name:        "flaky",
+			Type:        schema.TaskTypeScript,
+			Interpreter: exe,
+			Script:      "ignored",
+			Timeout:     "3s",
+			Retry:       &schema.RetryConfig{MaxAttempts: &maxAttempts, InitialDelay: &delay, BackoffStrategy: schema.BackoffConstant},
+			Env: map[string]string{
+				"_ATMOS_TEST_COUNTER_FILE": counterFile,
+				"_ATMOS_TEST_EXIT_ONE":     "1",
+			},
+		}},
+	}
+
+	start := time.Now()
+	err = ExecuteWorkflow(atmosConfig, "test-script-retry-timeout", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+
+	require.ErrorIs(t, err, errUtils.ErrStepTimeout)
+	assert.Less(t, time.Since(start), delay, "the timeout must end the step before the first backoff completes")
+	// On a slow runner (for example under -race) the first attempt may not even record itself
+	// before the deadline, so zero attempts is fine; a second attempt is not.
+	data, readErr := os.ReadFile(counterFile)
+	if readErr != nil {
+		require.ErrorIs(t, readErr, os.ErrNotExist)
+	}
+	assert.LessOrEqual(t, len(data), 1, "no attempt may start after the step timeout")
+}

@@ -280,6 +280,7 @@ func AtmosConfigYAML() []string {
 		ToYAML(Cwd),
 		ToYAML(Random),
 		ToYAML(Unset),
+		ToYAML(Literal),
 	}
 }
 

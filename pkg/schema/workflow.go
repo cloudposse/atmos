@@ -355,6 +355,12 @@ type WorkflowStep struct {
 	// script's load() calls and tracebacks. The mapstructure key carries it through merged
 	// custom command configuration; it has no YAML or JSON key.
 	ScriptSource string `yaml:"-" json:"-" mapstructure:"script_source"`
+	// LiteralFields lists the fields of this step that were written with the !literal tag: "script",
+	// "command", "interpreter", "working_directory", and "env.NAME" for an individual env value.
+	// The runner uses those fields exactly as written and never renders them as templates. It is
+	// set by the loaders, never by users. The mapstructure key carries it through merged custom
+	// command configuration; it has no YAML or JSON key.
+	LiteralFields []string `yaml:"-" json:"-" mapstructure:"literal_fields"`
 
 	// Continue controls whether a failure of this step is forgiven: subsequent steps still run
 	// and the overall workflow exit status is unaffected (like GitHub Actions'

@@ -89,17 +89,21 @@ func (stepEngine) Run(ctx *ExecContext) (*Output, error) {
 	}
 
 	var result *runnerstep.StepResult
-	run := func() error {
-		r, runErr := executor.Execute(runCtx, ws)
+	run := func(attemptCtx context.Context) error {
+		r, runErr := executor.Execute(attemptCtx, ws)
 		result = r
 		return runErr
 	}
 
 	var runErr error
-	if ws.Retry != nil {
-		runErr = retry.Do(context.Background(), ws.Retry, run)
-	} else {
-		runErr = run()
+	switch {
+	case ws.Retry == nil:
+		runErr = run(runCtx)
+	case runnerstep.StepTimeoutBoundsRetries(ws.Type):
+		// One `timeout:` deadline bounds the whole step, retries and backoff included.
+		runErr = runnerstep.RunWithStepRetry(runCtx, ws, vars, run)
+	default:
+		runErr = retry.Do(runCtx, ws.Retry, func() error { return run(runCtx) })
 	}
 
 	out := stepSummary(stepType, result, runErr)
@@ -178,7 +182,8 @@ func preserveGenericWith(ws *schema.WorkflowStep, payload any) {
 		return
 	}
 	if m, ok := payload.(map[string]any); ok {
-		// script_source and script_source_sha256 are Atmos-recorded provenance, not step parameters.
+		// script_source, script_source_sha256, and literal_fields are Atmos-recorded provenance,
+		// not step parameters.
 		ws.With = withoutScriptSource(m)
 	}
 }
@@ -563,6 +568,11 @@ func resolveTestHookStep(ctx *ExecContext, s *schema.WorkflowStep, vars *runners
 	if err = yaml.Unmarshal(data, &payload); err != nil {
 		return nil, err
 	}
+	// LiteralFields has no YAML key, so put the markers back into the payload for the renderer
+	// to skip the fields written with !literal.
+	if len(copy.LiteralFields) > 0 {
+		payload[schema.LiteralFieldsKey] = copy.LiteralFields
+	}
 	// Generic handler parameters are excluded from WorkflowStep's YAML fields.
 	// Restore them before rendering so expanded matrix and hook variables apply.
 	if copy.With != nil {
@@ -582,7 +592,8 @@ func resolveTestHookStep(ctx *ExecContext, s *schema.WorkflowStep, vars *runners
 	}
 	result.Steps = s.Steps
 	result.DryRun = s.DryRun
-	// ScriptSource has no YAML key, so the round trip above drops it.
+	// ScriptSource and LiteralFields have no YAML key, so the round trip above drops them.
 	result.ScriptSource = s.ScriptSource
+	result.LiteralFields = s.LiteralFields
 	return &result, nil
 }

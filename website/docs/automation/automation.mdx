@@ -111,19 +111,25 @@ parse and validate the inputs before calling `main(args, flags)`.
 
 ```python
 #!/usr/bin/env atmos
+def validate(args, flags):
+    if flags["replicas"] < 1:
+        fail("replicas must be positive")
+
 def main(args, flags):
-    ui.success("{}: {} replicas".format(args["service"], flags["replicas"]))
+    print("{}: {} replicas".format(args["service"], flags["replicas"]))
 
 cli.command(
     description = "Report a service's replica count",
-    args = [cli.arg("service")],
-    flags = [cli.flag("replicas", type="int", default=2)],
+    args = [cli.arg("service", description="Service name")],
+    flags = [cli.flag("replicas", type="int", shorthand="r", default=2)],
+    validate = validate,
     run = main,
 )
 ```
 
-Save this as `replicas.star`. Run `atmos ./replicas.star api --replicas 3`, or
-`atmos ./replicas.star --help` for generated usage. Help does not run `main`. Flags support types, defaults, required values,
+Save this as `replicas.star`. Run `atmos ./replicas.star api -r 3` (or `--replicas 3`),
+or `atmos ./replicas.star --help` for generated usage. Help does not run `main`.
+Flags support types, defaults, required values,
 and choices; an optional `validate` callback handles checks involving multiple
 inputs. Both callbacks receive parsed dictionaries directly.
 

@@ -34,7 +34,7 @@ func TestScriptHandlerExecution(t *testing.T) {
 			Type:        schema.TaskTypeScript,
 			Interpreter: "python3",
 			Script:      "import os\nprint(os.environ['SCRIPT_TEST_VAR'])\n",
-			Output:      "capture",
+			Output:      "none",
 			Env: map[string]string{
 				"SCRIPT_TEST_VAR": "custom_value",
 			},
@@ -52,7 +52,7 @@ func TestScriptHandlerExecution(t *testing.T) {
 			Type:        schema.TaskTypeScript,
 			Interpreter: "python3",
 			Script:      "import sys\nsys.exit(7)\n",
-			Output:      "capture",
+			Output:      "none",
 		}
 
 		result, err := handler.Execute(context.Background(), step, NewVariables())
@@ -86,10 +86,10 @@ for needle in ["describe (masking on)", "encrypted at rest", "OK: reveal without
         raise SystemExit(f"missing {needle!r}")
 `,
 			WorkingDirectory: dir,
-			Output:           "capture",
+			Output:           "none",
 		}
 
-		result, err := scriptHandler.ExecuteWithWorkflow(context.Background(), step, NewVariables(), &schema.WorkflowDefinition{Output: "capture"})
+		result, err := scriptHandler.ExecuteWithWorkflow(context.Background(), step, NewVariables(), &schema.WorkflowDefinition{Output: "none"})
 		require.NoError(t, err)
 		assert.Equal(t, 0, result.Metadata[exitCodeMetadata])
 	})

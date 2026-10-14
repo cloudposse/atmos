@@ -47,4 +47,4 @@ the script. To add a project-specific subcommand such as `atmos capacity`, defin
 it in `atmos.yaml` instead; see the
 [custom command example](https://atmos.tools/examples/starlark-commands).
 
-See the [standalone script reference](https://atmos.tools/steps/type/script#standalone-script-spike).
+See the [standalone script reference](https://atmos.tools/steps/type/script#standalone-scripts).

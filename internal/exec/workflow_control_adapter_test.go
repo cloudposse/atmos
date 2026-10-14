@@ -88,3 +88,19 @@ func TestWorkflowControlStarlarkInputs(t *testing.T) {
 	require.True(t, ok)
 	assert.JSONEq(t, `{"stack":"dev","arguments":{}}`, value)
 }
+
+func TestWorkflowControlRenderUsesTheWorkflowRenderer(t *testing.T) {
+	ResetStepExecutorState()
+	t.Cleanup(ResetStepExecutorState)
+	stepExecutorState = stepPkg.NewStepExecutor()
+	vars := stepExecutorState.Variables()
+	vars.SetTemplateRenderer(func(name, input string, data any) (string, error) {
+		return ProcessTmpl(&schema.AtmosConfiguration{}, name, input, data, false)
+	})
+	vars.SetTemplatePasses(3)
+
+	got, err := workflowControlRender("child", `{{ "x" | upper }}-{{ .matrix.word }}`, map[string]any{"matrix": map[string]string{"word": "y"}})
+
+	require.NoError(t, err)
+	assert.Equal(t, "X-y", got, "a Sprig function must work in a parallel child, as in a sequential step")
+}

@@ -26,6 +26,9 @@ func init() {
 func (h *AtmosHandler) Validate(step *schema.WorkflowStep) error {
 	defer perf.Track(nil, "step.AtmosHandler.Validate")()
 
+	if err := h.ValidateOutput(step); err != nil {
+		return err
+	}
 	return h.ValidateRequired(step, "command", step.Command)
 }
 
@@ -38,6 +41,14 @@ func (h *AtmosHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 		return nil, err
 	}
 
+	// Enforce the step's timeout: the atmos subprocess stops with the context.
+	deadline, err := StartStepDeadline(ctx, step, vars)
+	if err != nil {
+		return nil, err
+	}
+	defer deadline.Stop()
+	ctx = deadline.Context()
+
 	mode := OutputMode(step.Output)
 	if mode == "" {
 		mode = OutputModeLog
@@ -48,7 +59,8 @@ func (h *AtmosHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 		viewport: step.Viewport,
 		show:     GetShowConfig(step, nil),
 	}
-	return h.runAtmosCommand(ctx, step.Name, opts, output)
+	result, runErr := h.runAtmosCommand(ctx, step.Name, opts, output)
+	return result, deadline.Wrap(runErr)
 }
 
 // atmosExecOptions holds resolved options for command execution.
@@ -112,7 +124,7 @@ func (h *AtmosHandler) resolveWorkDir(step *schema.WorkflowStep, vars *Variables
 	if step.WorkingDirectory == "" {
 		return "", nil
 	}
-	workDir, err := vars.Resolve(step.WorkingDirectory)
+	workDir, err := vars.ResolveStepField(step, "working_directory", step.WorkingDirectory)
 	if err != nil {
 		return "", fmt.Errorf("step '%s': failed to resolve working_directory: %w", step.Name, err)
 	}
@@ -124,7 +136,7 @@ func (h *AtmosHandler) resolveEnvVars(step *schema.WorkflowStep, vars *Variables
 	if len(step.Env) == 0 {
 		return nil, nil
 	}
-	resolvedEnv, err := vars.ResolveEnvMap(step.Env)
+	resolvedEnv, err := vars.ResolveStepEnvMap(step, step.Env)
 	if err != nil {
 		return nil, fmt.Errorf("step '%s': %w", step.Name, err)
 	}
@@ -186,6 +198,14 @@ func (h *AtmosHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 		return nil, err
 	}
 
+	// Enforce the step's timeout: the atmos subprocess stops with the context.
+	deadline, err := StartStepDeadline(ctx, step, vars)
+	if err != nil {
+		return nil, err
+	}
+	defer deadline.Stop()
+	ctx = deadline.Context()
+
 	// Get output mode from step or workflow.
 	mode := GetOutputMode(step, workflow)
 	viewport := GetViewportConfig(step, workflow)
@@ -195,7 +215,8 @@ func (h *AtmosHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 		viewport: viewport,
 		show:     GetShowConfig(step, workflow),
 	}
-	return h.runAtmosCommand(ctx, step.Name, opts, output)
+	result, runErr := h.runAtmosCommand(ctx, step.Name, opts, output)
+	return result, deadline.Wrap(runErr)
 }
 
 // containsStackFlag checks if args already contain -s or --stack.

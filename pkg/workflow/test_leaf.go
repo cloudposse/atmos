@@ -97,13 +97,15 @@ func (e *testLeafExecution) prepareCommand() (*schema.WorkflowStep, error) {
 	if child.ScriptEnv == nil {
 		child.ScriptEnv = map[string]string{}
 	}
-	child.Env = maps.Clone(e.vars.Env)
-	for k, v := range e.step.Env {
-		child.Env[k] = v
+	ambient := maps.Clone(e.vars.Env)
+	if ambient == nil {
+		ambient = map[string]string{}
 	}
 	if child.Identity != "" {
-		child.Env["ATMOS_IDENTITY"] = child.Identity
+		ambient["ATMOS_IDENTITY"] = child.Identity
 	}
+	// Only the leaf's declared env is template-rendered; the ambient environment passes through as is.
+	step.ApplyAmbientEnv(&child, ambient, e.step.Env)
 	return &child, nil
 }
 
@@ -118,23 +120,30 @@ func (e *testLeafExecution) execute(ctx context.Context) {
 		return
 	}
 	executor := step.NewStepExecutorWithVars(e.vars)
-	run := func() error {
+	run := func(attemptCtx context.Context) error {
 		outLen, errLen := e.stdout.Len(), e.stderr.Len()
-		result, runErr := executor.Execute(step.WithOutputSuppressed(ctx), child)
+		result, runErr := executor.Execute(step.WithOutputSuppressed(attemptCtx), child)
 		e.result = result
 		e.captureResult(outLen, errLen)
 		return runErr
 	}
 	if child.Type == "http" || child.Type == "webhook" {
-		e.err = run()
+		e.err = run(ctx)
 		return
 	}
 	child.Retry = nil
 	if e.step.Retry == nil {
-		e.err = run()
+		e.err = run(ctx)
 		return
 	}
-	e.err = retry.Do(ctx, e.step.Retry, run)
+	if step.StepTimeoutBoundsRetries(child.Type) {
+		// One `timeout:` deadline bounds the whole step, retries and backoff included.
+		bounded := *child
+		bounded.Retry = e.step.Retry
+		e.err = step.RunWithStepRetry(ctx, &bounded, e.vars, run)
+		return
+	}
+	e.err = retry.Do(ctx, e.step.Retry, func() error { return run(ctx) })
 }
 
 // captureResult copies returned streams only when the handler has not already written them.

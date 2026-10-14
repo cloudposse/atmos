@@ -61,7 +61,7 @@ func TestScriptHandlerWrongCaseInterpreterHint(t *testing.T) {
 	require.True(t, ok)
 
 	_, err := handler.Execute(context.Background(), &schema.WorkflowStep{
-		Name: "case", Type: schema.TaskTypeScript, Interpreter: "Starlark", Script: "print('hi')", Output: "capture",
+		Name: "case", Type: schema.TaskTypeScript, Interpreter: "Starlark", Script: "print('hi')", Output: "none",
 	}, NewVariables())
 
 	require.Error(t, err)

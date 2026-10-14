@@ -41,6 +41,9 @@ func init() {
 func (h *ContainerHandler) Validate(step *schema.WorkflowStep) error {
 	defer perf.Track(nil, "step.ContainerHandler.Validate")()
 
+	if err := h.ValidateOutput(step); err != nil {
+		return err
+	}
 	action := containerStepAction(step)
 	switch action {
 	case containerActionBuild:

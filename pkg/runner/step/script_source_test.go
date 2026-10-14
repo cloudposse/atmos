@@ -25,7 +25,7 @@ func TestScriptStarlarkLoadsRelativeToItsSourceFile(t *testing.T) {
 	t.Run("a script from a file loads siblings of that file", func(t *testing.T) {
 		result, err := (&ScriptHandler{}).Execute(context.Background(), &schema.WorkflowStep{
 			Name: "from-file", Interpreter: "starlark", Script: body, ScriptSource: main,
-			WorkingDirectory: workDir, Output: "capture",
+			WorkingDirectory: workDir, Output: "none",
 		}, NewVariables())
 		require.NoError(t, err)
 		assert.Equal(t, "hello, file", result.Value)
@@ -34,7 +34,7 @@ func TestScriptStarlarkLoadsRelativeToItsSourceFile(t *testing.T) {
 	t.Run("an inline script loads relative to working_directory", func(t *testing.T) {
 		_, err := (&ScriptHandler{}).Execute(context.Background(), &schema.WorkflowStep{
 			Name: "inline", Interpreter: "starlark", Script: body,
-			WorkingDirectory: workDir, Output: "capture",
+			WorkingDirectory: workDir, Output: "none",
 		}, NewVariables())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), filepath.Join(workDir, "lib", "util.star"))

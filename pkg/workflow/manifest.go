@@ -70,9 +70,11 @@ func manifestBasePath(atmosConfig *schema.AtmosConfiguration) string {
 	return atmosConfig.BasePath
 }
 
-// stepSource records where a step's script came from, mirroring the shape of the step tree.
+// stepSource records where a step's script came from and which of its fields were written with
+// the !literal tag, mirroring the shape of the step tree.
 type stepSource struct {
 	script   string
+	literal  []string
 	children []stepSource
 }
 
@@ -97,24 +99,64 @@ func (s *stepSource) UnmarshalYAML(node *yaml.Node) error {
 		return nil
 	}
 	var fields struct {
-		Script yaml.Node   `yaml:"script"`
-		Steps  stepSources `yaml:"steps"`
+		Script           yaml.Node   `yaml:"script"`
+		Command          yaml.Node   `yaml:"command"`
+		Interpreter      yaml.Node   `yaml:"interpreter"`
+		WorkingDirectory yaml.Node   `yaml:"working_directory"`
+		Env              yaml.Node   `yaml:"env"`
+		Steps            stepSources `yaml:"steps"`
 	}
 	if err := node.Decode(&fields); err != nil {
 		return err
 	}
 	s.script, _ = includescope.LocalFile(&fields.Script)
+	s.literal = literalStepFields(&fields.Script, &fields.Command, &fields.Interpreter, &fields.WorkingDirectory, &fields.Env)
 	s.children = fields.Steps
 	return nil
 }
 
-// applyScriptSources copies recorded script sources onto the decoded steps by position.
+// literalStepFields returns the step fields written with the !literal tag, in the order
+// script, command, interpreter, working_directory, then one `env.NAME` entry per tagged env value.
+// It must read the nodes before the tags are cleared by the generic loader.
+func literalStepFields(script, command, interpreter, workingDirectory, env *yaml.Node) []string {
+	var fields []string
+	for _, field := range []struct {
+		name string
+		node *yaml.Node
+	}{
+		{"script", script},
+		{"command", command},
+		{"interpreter", interpreter},
+		{"working_directory", workingDirectory},
+	} {
+		if isLiteralNode(field.node) {
+			fields = append(fields, field.name)
+		}
+	}
+	if env.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(env.Content); i += 2 {
+			if isLiteralNode(env.Content[i+1]) {
+				fields = append(fields, schema.LiteralFieldEnvPrefix+env.Content[i].Value)
+			}
+		}
+	}
+	return fields
+}
+
+func isLiteralNode(node *yaml.Node) bool {
+	return node.Kind == yaml.ScalarNode && node.Tag == utils.AtmosYamlFuncLiteral
+}
+
+// applyScriptSources copies recorded script sources and !literal markers onto the decoded steps
+// by position. A literal_fields key a user wrote by hand never reaches the step, because the
+// field has no YAML key.
 func applyScriptSources(steps []schema.WorkflowStep, sources []stepSource) {
 	for i := range steps {
 		if i >= len(sources) {
 			return
 		}
 		steps[i].ScriptSource = sources[i].script
+		steps[i].LiteralFields = sources[i].literal
 		applyScriptSources(steps[i].Steps, sources[i].children)
 	}
 }

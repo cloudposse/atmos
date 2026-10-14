@@ -207,7 +207,7 @@ func (s *ContainerSession) ExecShell(ctx context.Context, params *ContainerStepP
 		})
 	}
 
-	writer := stepPkg.NewOutputModeWriter(stepPkg.GetOutputMode(step, params.WorkflowDef), step.Name, stepPkg.GetViewportConfig(step, params.WorkflowDef))
+	writer := stepPkg.NewCommandOutputWriter(step, params.WorkflowDef)
 	_, _, err = writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
 		return s.backend.Exec(ctx, cmd, &container.ExecOptions{
 			User:         s.config.User,
@@ -323,7 +323,7 @@ func writeEphemeralResult(params *ContainerStepParams, result *container.Ephemer
 	}
 	writeCapture(params.StdoutCapture, result.Stdout)
 	writeCapture(params.StderrCapture, result.Stderr)
-	writer := stepPkg.NewOutputModeWriter(stepPkg.GetOutputMode(step, params.WorkflowDef), step.Name, stepPkg.GetViewportConfig(step, params.WorkflowDef))
+	writer := stepPkg.NewCommandOutputWriter(step, params.WorkflowDef)
 	_, _, _ = writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
 		if result.Stdout != "" {
 			_, _ = stdout.Write([]byte(result.Stdout))

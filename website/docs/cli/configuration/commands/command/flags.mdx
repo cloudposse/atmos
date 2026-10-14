@@ -51,7 +51,7 @@ atmos hello -n world
   <dd>Help text shown in `atmos help`.</dd>
 
   <dt>`type`</dt>
-  <dd>Data type of the flag: `string` (default) or `bool`. See [Boolean Flags](#boolean-flags).</dd>
+  <dd>Data type of the flag: `string` (default), `bool`, or `int`. See [Boolean Flags](#boolean-flags) and [Integer Flags](#integer-flags). Any other type fails when Atmos loads the command, with an error that lists the supported types.</dd>
 
   <dt>`required`</dt>
   <dd>When `true`, the command fails if the flag is omitted and no `default` is set.</dd>
@@ -177,9 +177,43 @@ commands:
 Boolean values automatically render as `true` or `false` (lowercase strings) when used in templates. You can reference them directly with `{{ .Flags.name }}` — no conversion needed!
 :::
 
+## Integer Flags
+
+Use `type: int` for a whole-number flag. Atmos registers a real integer flag, so `--help` shows
+`--count int` and a value that is not a whole number is rejected when you run the command. The
+value is an integer in `{{ .Flags.<name> }}` and in `ctx.flags` for
+[script steps](/steps/type/script#reading-command-inputs-in-script-steps), so no `int(...)`
+conversion is needed:
+
+```yaml
+commands:
+  - name: scale
+    description: Scale a service
+    flags:
+      - name: count
+        shorthand: c
+        type: int
+        default: 3
+        description: Number of replicas
+    steps:
+      - name: scale
+        type: script
+        interpreter: starlark
+        script: |
+          ui.info("scaling to {} replicas".format(ctx.flags["count"] * 2))
+```
+
+```shell
+atmos scale --count 5
+atmos scale            # count is 3
+```
+
+The `default` must be a whole number such as `3`. A flag with no `default` is `0`. The `values`
+restriction applies to string flags only.
+
 ## Flag Defaults
 
-Both string and boolean flags support default values using the `default` attribute:
+String, boolean, and integer flags support default values using the `default` attribute:
 
 ```yaml
 flags:
@@ -194,6 +228,10 @@ flags:
     type: bool
     description: Skip confirmation prompts
     default: true
+  - name: retries
+    type: int
+    description: Number of retries
+    default: 3
 ```
 
 When a flag has a default value, users can omit it from the command line. The default value will be used unless explicitly overridden.

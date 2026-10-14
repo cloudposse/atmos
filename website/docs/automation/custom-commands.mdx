@@ -84,6 +84,12 @@ or negative counts, stopping the command with that error.
 
 Try `atmos capacity --replicas 0` to see the validation error.
 
+Declare a flag with `type: int` to receive an integer in `ctx.flags` and drop the `int()`
+conversion. An optional argument (`required: false`, no `default`) that the caller omits is an
+empty string in `ctx.arguments`, so test it with `if ctx.arguments["region"]:`. See
+[flags](/cli/configuration/commands/flags#integer-flags) and
+[optional arguments](/cli/configuration/commands/arguments#optional-arguments).
+
 ## Grow the command
 
 Custom commands can have multiple steps, named arguments, nested subcommands,

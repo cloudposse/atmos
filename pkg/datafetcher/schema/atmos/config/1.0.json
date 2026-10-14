@@ -3686,12 +3686,22 @@
         "type": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "",
+                "string",
+                "bool",
+                "int"
+              ]
             },
             {
               "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
             }
-          ]
+          ],
+          "description": "Type is the data type of the flag: \"string\" (the default), \"bool\", or \"int\". An int flag is an\ninteger in templates and script contexts. Any other type fails when the command loads."
         },
         "description": {
           "anyOf": [

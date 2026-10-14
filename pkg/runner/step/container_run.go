@@ -252,7 +252,8 @@ func runtimeHost(rt *schema.ContainerRuntimeConfig) bool {
 func resolveWorkDir(vars *Variables, step *schema.WorkflowStep) (string, error) {
 	workDir := step.WorkingDirectory
 	if workDir != "" {
-		resolved, err := vars.Resolve(workDir)
+		// A working_directory written with !literal is used exactly as written.
+		resolved, err := vars.ResolveStepField(step, "working_directory", workDir)
 		if err != nil {
 			return "", fmt.Errorf("step '%s': failed to resolve working_directory: %w", step.Name, err)
 		}
@@ -279,7 +280,7 @@ func resolveContainerEnv(vars *Variables, step *schema.WorkflowStep) ([]string, 
 	if len(step.Env) == 0 {
 		return nil, nil
 	}
-	resolvedEnv, err := vars.ResolveEnvMap(step.Env)
+	resolvedEnv, err := vars.ResolveStepEnvMap(step, step.Env)
 	if err != nil {
 		return nil, fmt.Errorf("step '%s': %w", step.Name, err)
 	}

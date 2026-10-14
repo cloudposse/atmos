@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -31,6 +32,12 @@ const sessionShellDelayEnv = "_ATMOS_STEP_SESSION_DELAY"
 // This lets cast_test.go exercise a child step that deletes a file and fails,
 // without depending on the platform-specific "rm" binary or a shell.
 const atmosStepFakeRMGlobEnv = "_ATMOS_STEP_FAKE_RM_GLOB"
+
+// atmosStepFakeSleepMSEnv carries the sleep duration, in milliseconds, of the "sleep" _ATMOS_STEP_FAKE mode.
+const atmosStepFakeSleepMSEnv = "_ATMOS_STEP_FAKE_SLEEP_MS"
+
+// atmosStepFakeEnvNameEnv names the variable the "printenv" _ATMOS_STEP_FAKE mode prints.
+const atmosStepFakeEnvNameEnv = "_ATMOS_STEP_FAKE_ENV_NAME"
 
 // TestMain lets the test binary impersonate a fake "atmos" executable so that
 // subprocess-executing handlers (e.g. AtmosHandler) can be tested
@@ -67,6 +74,16 @@ func TestMain(m *testing.M) {
 	case "spin-output":
 		_, _ = os.Stdout.WriteString("spin-stdout")
 		_, _ = os.Stderr.WriteString("spin-stderr")
+		os.Exit(0)
+	case "sleep":
+		// Sleep for _ATMOS_STEP_FAKE_SLEEP_MS milliseconds so tests can exercise step timeouts.
+		if ms, err := strconv.Atoi(os.Getenv(atmosStepFakeSleepMSEnv)); err == nil {
+			time.Sleep(time.Duration(ms) * time.Millisecond)
+		}
+		os.Exit(0)
+	case "printenv":
+		// Print the value of the variable named by _ATMOS_STEP_FAKE_ENV_NAME.
+		_, _ = os.Stdout.WriteString(os.Getenv(os.Getenv(atmosStepFakeEnvNameEnv)))
 		os.Exit(0)
 	}
 	if os.Getenv(sessionShellHelperEnv) == "1" {

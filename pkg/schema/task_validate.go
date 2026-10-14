@@ -109,6 +109,9 @@ const containerStepType = "container"
 
 // ValidateWorkflowSteps validates top-level workflow steps and any control-step children.
 func ValidateWorkflowSteps(steps []WorkflowStep) error {
+	if err := validateStepOutputModes(steps); err != nil {
+		return err
+	}
 	if err := ValidateExecWorkflowSteps(steps); err != nil {
 		return err
 	}

@@ -41,6 +41,43 @@ or rely on the default:
 atmos greet
 ```
 
+Atmos passes each value through exactly as you typed it. A value can contain commas, be an
+empty string, or contain non-ASCII text, and it still maps to its own argument.
+
+## Optional Arguments
+
+An argument that is not `required` and has no `default` can be omitted. Its value is an empty
+string in `{{ .Arguments.<name> }}` and in `ctx.arguments` for [script steps](/steps/type/script#reading-command-inputs-in-script-steps),
+so a step can test for it without the command failing:
+
+```yaml
+commands:
+  - name: dump
+    description: Dump a service's settings
+    arguments:
+      - name: service
+        description: Service name
+        required: true
+      - name: region
+        description: Region to restrict the dump to
+        required: false
+    steps:
+      - |
+        {{ if .Arguments.region }}
+        echo "Dumping {{ .Arguments.service }} in {{ .Arguments.region }}"
+        {{ else }}
+        echo "Dumping {{ .Arguments.service }} in every region"
+        {{ end }}
+```
+
+```shell
+atmos dump api              # region is ""
+atmos dump api us-east-1    # region is "us-east-1"
+```
+
+Optional arguments follow the required ones, because arguments are matched by position. An
+omitted argument that has a `default` takes that default instead.
+
 <dl>
   <dt>`name`</dt>
   <dd>Required. Argument name, referenced as `{{ .Arguments.<name> }}`.</dd>
@@ -49,7 +86,7 @@ atmos greet
   <dd>Help text shown in `atmos help`.</dd>
 
   <dt>`required`</dt>
-  <dd>When `true`, the command fails if the argument is omitted and no `default` is set.</dd>
+  <dd>When `true`, the command fails if the argument is omitted and no `default` is set. When `false` (the default), an omitted argument without a `default` is an empty string. See [Optional Arguments](#optional-arguments).</dd>
 
   <dt>`default`</dt>
   <dd>Value used when the argument is omitted.</dd>
