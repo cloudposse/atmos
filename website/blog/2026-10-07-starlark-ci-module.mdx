@@ -44,15 +44,21 @@ the CI run executes the same code.
 In CI, each call honors the same [`ci` configuration](/cli/configuration/ci)
 switches as the built-in reporting that Atmos already does for Terraform.
 Comments and checks are opt-in. A call whose switch is off does not fail
-silently: it warns, names the flag, and renders locally. Comments and checks are
-also held on `pull_request_target` and `workflow_run`, where privileged
-credentials meet fork code, unless you set `ci.allow_unsafe_fork_execution`.
+silently: it warns, names the switch that is off, and renders locally. When
+`ci.enabled` itself is off, that is the switch the warning names, rather than
+the flag for the individual feature.
 
-The GitHub provider now honors `GITHUB_API_URL`, so the calls work against
-GitHub Enterprise Server, and `ATMOS_CI_GITHUB_API_URL` overrides it. On an
-unknown CI platform run with `--ci`, or on a laptop, a generic provider takes its
-context from `ATMOS_CI_PR`, `ATMOS_CI_EVENT`, `ATMOS_CI_RUN_ID`,
-`ATMOS_CI_RUN_URL`, `ATMOS_CI_ENV`, and `ATMOS_CI_PATH`.
+The GitHub provider honors `GITHUB_API_URL`, so the calls work against GitHub
+Enterprise Server, and `ATMOS_CI_GITHUB_API_URL` overrides it. A malformed URL
+fails the command instead of sending your token to an unintended host.
+
+On a CI platform Atmos does not recognize, pass `--ci` or set `ATMOS_CI=true`.
+That forced CI mode makes the generic provider stand in for a real one: the same
+switches apply, `ci.context.local` is `False`, and files named by
+`ATMOS_CI_OUTPUT`, `ATMOS_CI_SUMMARY`, `ATMOS_CI_ENV`, and `ATMOS_CI_PATH`
+receive the outputs, summary, environment exports, and `PATH` additions. The
+generic provider reads the run's context from variables such as `ATMOS_CI_PR`,
+`ATMOS_CI_EVENT`, `ATMOS_CI_RUN_ID`, and `ATMOS_CI_RUN_URL`.
 
 ## How to Use It {#how-to-use-it}
 
@@ -91,26 +97,44 @@ Run it the same way in CI and on a laptop:
 atmos app test api --stack=dev
 ```
 
-On GitHub Actions, give the job `pull-requests: write` and set
-`ci.comments.enabled: true`. The [`ci` reference](/functions/automation/ci)
+On GitHub Actions, give the job `pull-requests: write` and set `ci.enabled: true`
+and `ci.comments.enabled: true`. The [`ci` reference](/functions/automation/ci)
 covers every call, the gating rules, and the local rendering.
+
+## Comments when there is no pull request {#commit-comments}
+
+The comment above would have nowhere to go on a push to a branch. By default,
+`ci.comment` posts to the pull request when the run has one and otherwise leaves
+a comment on the commit, so the same script reports on both kinds of run. Pass
+`target = "pr"` when a missing pull request should be an error, or
+`target = "commit"` to always comment on the commit. Commit comments need the
+`contents: write` permission.
 
 ## Templates, image comments, and fork pull requests {#templates-and-images}
 
 Reports that several scripts share do not have to be assembled from strings. Pass
 `template="plan.md"` and `data={...}` to `ci.summary` or `ci.comment` and Atmos renders the
 file from `ci.templates.base_path` with the same template engine the built-in plan summaries
-use. Set `ci.summary.template` or `ci.comments.template` once and a call that passes only
-`data` picks the configured file.
+use. The call always names its template: a script has no configured default, so changing
+`ci.summary.template` for your Terraform summaries never changes what a script renders. A
+misspelled key in the data fails the call and names the key, and a template that cannot be
+found reports the path it looked in.
 
 Container builds and pushes already wrote an image summary to the job. They now go through
-the same path, so with `ci.comments.enabled` on, each image also gets one pull request
-comment that later runs update in place, and the Markdown can be replaced with
+the same path. With `ci.comments.enabled` on, each image repository gets a comment on the
+pull request when one is known, or on the commit otherwise. Later builds update the comment
+for that image in the same pull request or commit, regardless of tag. Push runs that post
+commit comments need `contents: write` permission. Customize the Markdown with
 `ci.templates.container.image`.
 
-The hold on comments and checks under `pull_request_target` and `workflow_run` applies only
-when the pull request comes from a fork. A same-repository pull request on those events posts
-normally, and a script can read `ci.context.pr.fork` to decide for itself.
+The hold under `pull_request_target` and `workflow_run` applies only when the pull request
+comes from a fork. For a fork pull request, Atmos holds comments, commit statuses,
+environment and `PATH` exports, and SARIF uploads, whether they come from a script or from
+the native Terraform plan comments. Summaries, outputs, annotations, and masks only touch
+the current job, so they still run. A pull request from the same repository posts normally,
+a deleted fork counts as a fork, and a script can read `ci.context.pr.fork` to decide for
+itself. Setting `ci.allow_unsafe_fork_execution` (or `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION`)
+releases both this hold and the clone gate of `atmos git clone`.
 
 ## Get Involved
 

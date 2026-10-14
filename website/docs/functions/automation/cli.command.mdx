@@ -21,7 +21,7 @@ import EmbedFile from '@site/src/components/EmbedFile'
 ```python
 cli.command(
     run,
-    name = "<script file name>",
+    name = "<script file name without extension>",
     description = "",
     args = [],
     flags = [],
@@ -40,7 +40,8 @@ cli.command(
 
     <dt>`name`</dt>
     <dd>
-        (Optional) The program name shown in usage output. Defaults to the script's file name. A name starts with a
+        (Optional) The program name shown in usage output. Defaults to the script's file name without its extension,
+        so `release.star` is `release`. A name starts with a
         letter and contains only letters, digits, underscores, and hyphens.
     </dd>
 
@@ -70,8 +71,8 @@ cli.command(
 
 ## Returns
 
-The value returned by `run`. When the user passes `--help`, Atmos prints the usage and returns `None` without
-calling `validate` or `run`.
+The value returned by `run`. When the user passes `--help`, Atmos prints the usage and ends the script without
+calling `validate` or `run`; no statement after the `cli.command` call runs, and the exit status is 0.
 
 Assign the result to [`output`](/functions/automation/output) to print it. A result of `None`, which is what `--help`
 and a `run` function that returns nothing produce, means no output, so nothing is printed.
@@ -92,6 +93,10 @@ token as an Atmos option once it follows the script name. Atmos global flags, su
 - A `string_list` flag accepts comma-separated values, repeated flags, or both, so `--tag=a,b --tag=c` yields
   `["a", "b", "c"]`. Values use CSV quoting, and an `env` binding parses the same way: `TAGS=a,b` yields `["a", "b"]`.
   With `choices`, every element is checked.
+- When the same flag appears more than once, the last value wins; only a `string_list` flag collects every
+  occurrence.
+- A declared `default` that is not one of the flag's `choices` is a declaration error. An empty value typed on the
+  command line (`--stage=`) is checked against the `choices`.
 - An `int` flag accepts base-10 digits only, on the command line and in an `env` binding. `010` is ten, and `0x10`
   is rejected.
 - A boolean flag never consumes the next word. `--verbose false` is rejected because `false` would become a
@@ -107,8 +112,9 @@ token as an Atmos option once it follows the script name. Atmos global flags, su
 - Help marks required flags `(required)`, lists choices as `(one of: dev, prod)`, and shows an environment binding as
   `[env: DEPLOY_STAGE]`.
 
-Top-level code in the script still runs before `cli.command`, and any code after it runs once `run` returns. Keep work
-with side effects inside `run`, so that `--help` and rejected input do not trigger it.
+Top-level code in the script still runs before `cli.command`, and any code after it runs once `run` returns. A
+`--help` request ends the script at the `cli.command` call, so the code after it is skipped as well. Keep work with
+side effects inside `run`, so that `--help` and rejected input do not trigger it.
 
 ## Errors
 

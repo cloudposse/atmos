@@ -239,7 +239,7 @@ type Metadata struct {
 
 ## Reporter (script and step facing seam)
 
-`ci.Reporter` (`pkg/ci/reporter.go`) is the single entry point that Starlark scripts and (future) YAML step wrappers use to talk to CI. It hides provider detection, per-feature config gating, and local fallback, so callers never branch on "am I in CI". It is injected into Starlark scripts as `script.Spec.CI`.
+`ci.Reporter` (`pkg/ci/reporter.go`) is the single entry point that Starlark scripts, the native Terraform plan comments and commit statuses, and (future) YAML step wrappers use to talk to CI. It hides provider detection, per-feature config gating, and local fallback, so callers never branch on "am I in CI". It is injected into Starlark scripts as `script.Spec.CI`.
 
 ```go
 // pkg/ci/reporter.go
@@ -267,9 +267,10 @@ type Reporter interface {
 
 type CommentRequest struct {
     Body     string          // Comment markdown.
-    Key      string          // Marker key. Empty means no marker; behavior is forced to create.
+    Key      string          // Marker key. Empty means no marker and the comment is always created; behavior update requires a key.
     Behavior CommentBehavior // create, update, or upsert. Empty means upsert.
     PR       int             // Pull request number. Zero means the current PR from Context.
+    Target   CommentTarget   // auto, pr, or commit. Empty means auto: the PR when known, else a commit comment on Context.SHA.
 }
 
 type CheckRequest struct {
@@ -285,7 +286,7 @@ type CheckRequest struct {
 type Receipt struct {
     Provider string    // Name of the provider that handled the call (the fallback's name when gated or undetected).
     Local    bool      // True when the local fallback (generic) rendered the report.
-    Gate     Feature   // Set when a detected provider was skipped because this switch is off.
+    Gate     Feature   // Set when a detected provider was skipped: the switch that is off (ci.enabled when the master switch is off), or ci.allow_unsafe_fork_execution when the fork gate held the write.
     Comment  *Comment  // Set by Comment.
     Check    *CheckRun // Set by Check and UpdateCheck.
 }
@@ -299,33 +300,39 @@ One private function, `target(feature, enabledFn)`, decides where each write goe
 
 | Condition | Target | `Receipt` |
 |-----------|--------|-----------|
-| No provider detected | Generic provider | `Local=true`, no `Gate` |
-| Provider detected, feature flag off | Generic provider bound to the caller's writer | `Local=true`, `Gate` names the config key |
+| No provider detected and CI mode not forced | Generic provider | `Local=true`, no `Gate` |
+| Provider detected (or the generic stand-in under forced CI mode), feature flag off | Generic provider bound to the caller's writer | `Local=true`, `Gate` names the config key |
 | Provider detected, feature flag on | The detected provider | `Local=false` |
 
-Gate keys per feature:
+Gate keys per feature. When the `ci.enabled` master switch is off every per-feature switch reads off too, so the receipt names `ci.enabled`; the per-feature key is named only when the master switch is on.
 
 | Method | `Gate` config key |
 |--------|-------------------|
+| any gated write, master switch off | `ci.enabled` |
 | `Summary` | `ci.summary.enabled` |
 | `Output`, `Env`, `Path` | `ci.output.enabled` |
 | `Annotate` | `ci.annotations.enabled` |
-| `SARIF` | `ci.results.enabled` |
+| `SARIF` | `ci.results.enabled` (opt-in) |
 | `Check`, `UpdateCheck` | `ci.checks.enabled` |
 | `Comment` | `ci.comments.enabled` |
 | `Group` | `ci.groups.mode` (off disables) |
-| `Comment`/`Check`/`UpdateCheck` for a fork pull request on an elevated event | `ci.allow_unsafe_fork_execution` |
+| `Comment`, `Check`, `UpdateCheck`, `Env`, `Path`, `SARIF` for a fork pull request on an elevated event | `ci.allow_unsafe_fork_execution` |
+
+`Receipt.Gated()` reports whether a detected provider was skipped because a switch is off, so a caller such as the container image summary can skip work that only makes sense when the write reaches CI.
 
 The `Receipt.Provider` field is always the name of the provider that handled the call, which is the generic provider's name when the write was gated or no provider was detected.
 
 Additional rules:
 
 - **Missing capability falls through.** The write needs an optional capability (`EnvExporter`, `Annotator`, `SARIFReporter`, `LogGrouper`). A detected provider that lacks it falls through to the generic provider with a debug log, keeping the gate in the receipt. When nothing can render the write the call is a no-op. The Reporter never returns `ErrCIOperationNotSupported`.
-- **Fork safety.** The fork gate applies only to detected providers and covers both `Comment` and `Check`/`UpdateCheck`. The gate holds a write only when `Context.ElevatedEvent` is true, `Context.PullRequest` is set with `Fork` true, and `ci.allow_unsafe_fork_execution` is off. A same-repository pull request, or an elevated run with no pull request in the context, posts normally. A held write is rendered locally and the receipt carries `Gate=ci.allow_unsafe_fork_execution`.
-- **Comments.** A non-empty `Key` wraps into the marker `<!-- atmos:ci:<key> -->`, which is prepended to the body; an empty `Key` forces create. The PR number comes from the request, then `Context.PullRequest`. A detected provider with no PR number fails with `ErrCIPullRequestUnknown`; local rendering does not require one.
-- **Checks.** `Check` creates with the requested state (empty means pending). `UpdateCheck` maps `success` to conclusion `success`, `failure` and `error` to `failure`, and `cancelled` to `cancelled`, and sets `CompletedAt` for these final states. The details URL defaults to `Context.RunURL`.
-- **Masking.** `Mask` always registers the value with the in-process masker. It emits `::add-mask::` (through `ValueMasker`) only when a provider is detected and `ci.enabled` is on; otherwise the receipt is local.
-- **Base resolution.** `Base()` calls `git.EnsureGitSafeDirectory` only when a provider is detected and `ci.enabled` is on (it mutates the runner's git config), then the provider's `ResolveBase()`.
+- **Fork safety.** The fork gate applies only to detected providers and covers `Comment`, `Check`/`UpdateCheck`, `Env`, `Path`, and `SARIF`: the writes that publish to the repository or change what later steps run. `Summary`, `Output`, `Annotate`, `Group`, and `Mask` affect only the current job and are never held. The gate holds a write only when `Context.ElevatedEvent` is true, `Context.PullRequest` is set with `Fork` true, and `ci.allow_unsafe_fork_execution` is off. A same-repository pull request, or an elevated run with no pull request in the context, posts normally, and a plain `pull_request` event is never elevated. A context that cannot be resolved holds the write. A held write is rendered locally and the receipt carries `Gate=ci.allow_unsafe_fork_execution`. The native Terraform plan comments and commit statuses call the same Reporter methods, so the gate applies to them uniformly.
+- **Comments.** A non-empty `Key` wraps into the marker `<!-- atmos:ci:<key> -->`, which is prepended to the body; an empty `Key` forces create, and `update` without a `Key` is an argument error. `Target` resolves as follows: `auto` posts to the pull request when a number is known (the request, then `Context.PullRequest`) and otherwise to a commit comment on `Context.SHA` through the optional `CommitCommenter` capability; `pr` always posts to a pull request and fails with `ErrCIPullRequestUnknown` (hint: pass the pull request number or run in a pull request context) when none is known; `commit` always posts to the commit. The generic provider keeps an in-process ledger of rendered markers so a local `update` with no earlier comment fails with `ErrCICommentNotFound`, like GitHub.
+- **Checks.** `Check` creates with the requested state (empty means pending). `UpdateCheck` sends the stored `ID` when set. The returned handle's details URL always reflects the URL used: the request URL, else `Context.RunURL`. The GitHub provider writes commit statuses, so `pending` and `in_progress` map to pending, `success` to success, `failure` to failure, and `error` and `cancelled` to error.
+- **Masking.** `Mask` always registers the value with the in-process masker. It emits `::add-mask::` (through `ValueMasker`, written to stderr) only when a provider is detected and `ci.enabled` is on; otherwise the receipt is local.
+- **Base resolution.** `Base()` calls `git.EnsureGitSafeDirectory` only when a provider is detected and `ci.enabled` is on (it mutates the runner's git config; repeated calls do not duplicate the `safe.directory` entry), then the provider's `ResolveBase()`.
+- **Forced CI mode.** `NewReporter` treats the generic provider as the detected one when no provider matches and CI mode is forced (`--ci`, `ATMOS_CI`, or `CI`). The gates then apply, the context reports `Provider=generic` with `local` false, and the `ATMOS_CI_*` files are written.
+- **Groups.** `Group` opens provider markers only for the outermost group in the process tree; a nested call renders a plain heading.
+- **Report templates.** `RenderSummary(name, data)` and `RenderComment(name, data)` require a template name; there is no configured default for scripts.
 - **Output routing.** `WithOutput(w)` returns a Reporter whose local renderings go to `w` (through `OutputBinder`), preserving parallel-task line prefixing and masking.
 
 ## Plugin Interface (IMPLEMENTED)

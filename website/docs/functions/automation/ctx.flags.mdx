@@ -25,8 +25,10 @@ ctx.flags.get("name", default)
 A frozen dictionary with sorted keys. Its contents depend on the entry point:
 
 - **Custom command:** one entry per flag the command declares, with the values and types Atmos parsed. A flag declared as
-  `type: string` is a string, so convert it with `int(...)` before doing arithmetic. Boolean flags are booleans. An
-  entry is present for each flag that has a value, including defaults.
+  `type: int` is an integer (base-10 digits only: `010` is 10, and `0x10` is rejected), so use it in arithmetic
+  directly. A flag declared as `type: string` is a string, so convert it with `int(...)` first. Boolean flags are
+  booleans. An entry is present for each flag that has a value, including defaults. The `default` must match the flag's
+  `type`; a mismatch makes the command unusable and logs a warning that names the flag.
 - **Workflow step:** the flags the workflow supplies, as strings. This is currently one entry, `ctx.flags["stack"]`,
   holding the stack the workflow runs against, or an empty string when there is none.
 - **Standalone script, hook, or any entry point without declared flags:** an empty dictionary. A standalone program
@@ -45,14 +47,14 @@ commands:
     description: Calculate a service's total worker capacity
     flags:
       - name: replicas
-        type: string
-        default: "2"
+        type: int
+        default: 2
     steps:
       - name: capacity
         type: script
         interpreter: starlark
         script: |
-          replicas = int(ctx.flags["replicas"])
+          replicas = ctx.flags["replicas"]
           if replicas < 1:
               fail("replicas must be positive")
           ui.success("{} workers".format(replicas * 4))
