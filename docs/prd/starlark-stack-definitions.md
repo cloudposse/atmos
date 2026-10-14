@@ -572,3 +572,10 @@ support or tests required for this documentation-only change.
 - [ ] **AC-12:** A successfully evaluated empty stack or inventory is distinguishable
   from a load failure and follows existing empty-result behavior. Deleting the last
   component remains visible in the base/head comparison.
+
+## Inline computed configuration
+
+The [Starlark YAML values PRD](starlark-yaml-values.md) defines `!starlark`
+expressions within existing YAML stack manifests. These evaluate typed values
+against the merged component context; native Starlark stack definitions remain
+a separate design.

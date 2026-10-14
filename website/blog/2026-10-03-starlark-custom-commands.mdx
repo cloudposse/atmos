@@ -29,6 +29,11 @@ in the Atmos binary, together with the automation functions and test runner.
 Your scripts use the tools, credentials, and configuration you provide for each
 environment.
 
+Use the same language inside stack manifests with the
+[`!starlark` YAML function](/functions/yaml/starlark). Derive resource tags,
+names, and environment-specific settings from each component's configuration,
+and return typed values directly to YAML.
+
 For standalone `.star` apps with their own arguments and help, see the
 [Atmos interpreter announcement](/changelog/atmos-interpreter).
 
@@ -113,6 +118,35 @@ function and reads three components with at most two tasks running at once.
 It prints their configuration without deploying anything:
 
 <CastEmbed src="/casts/demo/fixtures/starlark/release-plan.cast" title="Starlark custom commands and parallel functions" chrome controls scrubber />
+
+### Derive configuration from the stack that uses it
+
+Define resource tags once and let each environment supply its own stage,
+region, and owner. Add the rule to a shared component definition:
+
+```yaml
+vars:
+  resource_tags: !starlark |
+    return {
+        "Environment": ctx.vars["stage"],
+        "Region": ctx.vars["region"],
+        "Owner": ctx.metadata.get("owner", "platform"),
+    }
+```
+
+Atmos supplies a read-only context after imports, inheritance, and overrides.
+An inherited expression reads the consuming component's values: development
+gets development tags, and production gets production tags. Returned maps,
+lists, booleans, and numbers retain their types.
+
+Use conditions, comprehensions, and helper functions to express configuration
+rules. Atmos resolves computed dependencies when accessed and reports cycles
+with the fields involved. Inspect the result with
+`atmos describe component <component> -s <stack>` before deploying.
+
+The [`!starlark` reference](/functions/yaml/starlark) covers context fields,
+return types, and evaluation scope. Use automation scripts for commands and
+steps, and YAML expressions for computing configuration values.
 
 ## Next steps {#get-involved}
 

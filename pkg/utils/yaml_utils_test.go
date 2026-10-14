@@ -858,6 +858,7 @@ func generateLargeArray(size int) []string {
 func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 	// Validate that atmosYamlTagsMap contains all tags from AtmosYamlTags slice.
 	expectedTags := []string{
+		AtmosYamlFuncStarlark,
 		AtmosYamlFuncExec,
 		AtmosYamlFuncSecret,
 		AtmosYamlFuncStore,

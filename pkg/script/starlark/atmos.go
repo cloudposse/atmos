@@ -44,7 +44,7 @@ func (s *session) runAtmos(thread *starlark.Thread, argv []string, opts atmosmod
 	if err != nil {
 		return nil, err
 	}
-	return s.runProcess(thread, processCall{
+	return s.runProcess(thread, &processCall{
 		argv: append([]string{binary}, argv...), dir: dir, env: env,
 		check: opts.Check, stream: stream, allowPlanChanges: allowPlanChanges,
 	})

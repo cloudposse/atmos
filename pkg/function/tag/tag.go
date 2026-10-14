@@ -11,6 +11,8 @@ import (
 // These are the canonical function names used across all formats.
 // In YAML they appear as !tag, in HCL as tag(), etc.
 const (
+	// Starlark evaluates a configuration function body after merging.
+	Starlark = "starlark"
 	// Exec executes a shell command and returns the output.
 	Exec = "exec"
 
@@ -131,6 +133,7 @@ func All() []string {
 	defer perf.Track(nil, "tag.All")()
 
 	return []string{
+		Starlark,
 		Exec,
 		Secret,
 		Store,
@@ -173,6 +176,7 @@ func All() []string {
 
 // tagsMap provides O(1) lookup for tag names.
 var tagsMap = map[string]bool{
+	Starlark:                true,
 	Exec:                    true,
 	Secret:                  true,
 	Store:                   true,

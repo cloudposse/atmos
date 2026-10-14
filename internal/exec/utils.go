@@ -1066,13 +1066,16 @@ func processStacks(
 	}
 
 	// Process YAML functions in Atmos manifest sections.
+	finishValues := func() error { return nil }
 	if processYamlFunctions {
+		var yamlSkip []string
+		yamlSkip, finishValues = prepareConfigurationValues(atmosConfig, &configAndStacksInfo, skip, nil)
 		var componentSectionConverted schema.AtmosSectionMapType
 		input, unrequestedFields := deferred.SplitEvaluationFields(configAndStacksInfo.ComponentSection, configAndStacksInfo.EvaluationPaths)
 		if onWarning != nil {
-			componentSectionConverted, err = ProcessCustomYamlTagsLenient(atmosConfig, input, configAndStacksInfo.Stack, skip, &configAndStacksInfo, onWarning)
+			componentSectionConverted, err = ProcessCustomYamlTagsLenient(atmosConfig, input, configAndStacksInfo.Stack, yamlSkip, &configAndStacksInfo, onWarning)
 		} else {
-			componentSectionConverted, err = ProcessCustomYamlTags(atmosConfig, input, configAndStacksInfo.Stack, skip, &configAndStacksInfo)
+			componentSectionConverted, err = ProcessCustomYamlTags(atmosConfig, input, configAndStacksInfo.Stack, yamlSkip, &configAndStacksInfo)
 		}
 		if err != nil {
 			return configAndStacksInfo, err
@@ -1095,6 +1098,9 @@ func processStacks(
 		// describe-component and every other non-list caller, none of which opt into the
 		// evaluation-scope filter -- see deferred.IsSectionRequired.
 		if err := resolveDeferredYamlFunctions(atmosConfig, &configAndStacksInfo, &settingsSectionStruct, componentTemplateContext, skip, nil, onWarning); err != nil {
+			return configAndStacksInfo, err
+		}
+		if err := finishValues(); err != nil {
 			return configAndStacksInfo, err
 		}
 	}

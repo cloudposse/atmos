@@ -73,7 +73,7 @@ func (s *session) execScoped(thread *starlark.Thread, b *starlark.Builtin, args 
 	if !filepath.IsAbs(dir) {
 		dir = filepath.Join(scope.dir, dir)
 	}
-	return s.runProcess(thread, processCall{argv: command, dir: dir, env: env, check: opts.check, stream: stream, policy: policy})
+	return s.runProcess(thread, &processCall{argv: command, dir: dir, env: env, check: opts.check, stream: stream, policy: policy})
 }
 
 type processCall struct {
@@ -85,7 +85,7 @@ type processCall struct {
 	policy           automation.ExecutionPolicy
 }
 
-func (s *session) runProcess(thread *starlark.Thread, call processCall) (starlark.Value, error) {
+func (s *session) runProcess(thread *starlark.Thread, call *processCall) (starlark.Value, error) {
 	result, err := script.RunProcess(threadContext(thread), s.engine.runner, &script.ProcessCall{
 		Argv: call.argv, Dir: call.dir, Env: s.tools.Environment(call.env),
 		Check: call.check, Stream: call.stream, AllowPlanChanges: call.allowPlanChanges,

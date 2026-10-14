@@ -54,6 +54,10 @@ const config = {
         [
             '@docusaurus/plugin-client-redirects', {
                 redirects: [
+                    {
+                        from: '/changelog/starlark-yaml-values',
+                        to: '/changelog/starlark-custom-commands'
+                    },
                     // Advanced Quick Start: "Configure Repository" + "Configure CLI"
                     // were merged into a single "Configure the Project" step.
                     {

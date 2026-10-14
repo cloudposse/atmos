@@ -184,3 +184,10 @@ Put these checks in a `test` step to collect results and display failures. See
 - [Custom commands](/automation/custom-commands): add project-specific subcommands to Atmos.
 - [Workflows](/automation/workflows): combine programs and other step types into a runbook.
 - [Lifecycle hooks](/automation/lifecycle-hooks): attach checks and actions to component operations.
+
+## Compute stack configuration
+
+Use [`!starlark`](/functions/yaml/starlark) in stack manifests to compute typed
+values from the merged component context. These blocks use `return` and a
+read-only `ctx` object; see the YAML function reference for the available
+builtins and evaluation order.

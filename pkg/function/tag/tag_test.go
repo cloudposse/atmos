@@ -12,6 +12,7 @@ func TestCatalog(t *testing.T) {
 	require.NotEmpty(t, tags)
 
 	expectedTags := []string{
+		Starlark,
 		Exec,
 		Secret,
 		Store,
