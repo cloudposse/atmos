@@ -18,30 +18,54 @@ import (
 
 func TestQualityReportContinuesAfterPRFailure(t *testing.T) {
 	t.Setenv("GITHUB_EVENT_PATH", "")
-	var inspected []string
-	githubtest.Server(t, func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/repos/cloudposse/atmos/pulls":
-			first := githubtest.PR(githubtest.Run())
-			second := first
-			second.Number = 43
-			githubtest.JSON(t, w, []githubapi.PR{first, second})
-		case "/repos/cloudposse/atmos/pulls/42":
-			inspected = append(inspected, "42")
-			w.WriteHeader(http.StatusInternalServerError)
-		case "/repos/cloudposse/atmos/pulls/43":
-			inspected = append(inspected, "43")
-			pr := githubtest.PR(githubtest.Run())
-			pr.State = "closed"
-			githubtest.JSON(t, w, pr)
-		default:
-			t.Errorf("unexpected request: %s", r.URL.Path)
-			w.WriteHeader(http.StatusInternalServerError)
-		}
-	})
-	err := (Quality{}).Report(githubtest.Repo)
-	require.ErrorContains(t, err, "PR #42")
-	require.Equal(t, []string{"42", "43"}, inspected)
+	cases := []struct {
+		name         string
+		secondFails  bool
+		wantErr      []string
+		wantInspects []string
+	}{
+		// One failing PR is logged and the later PR is still reconciled; the run
+		// fails only when every PR failed.
+		{name: "later PR succeeds", wantInspects: []string{"42", "43"}},
+		{name: "every PR fails", secondFails: true, wantErr: []string{"PR #42", "PR #43"}, wantInspects: []string{"42", "43"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var inspected []string
+			githubtest.Server(t, func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/repos/cloudposse/atmos/pulls":
+					first := githubtest.PR(githubtest.Run())
+					second := first
+					second.Number = 43
+					githubtest.JSON(t, w, []githubapi.PR{first, second})
+				case "/repos/cloudposse/atmos/pulls/42":
+					inspected = append(inspected, "42")
+					w.WriteHeader(http.StatusInternalServerError)
+				case "/repos/cloudposse/atmos/pulls/43":
+					inspected = append(inspected, "43")
+					if tc.secondFails {
+						w.WriteHeader(http.StatusInternalServerError)
+						return
+					}
+					pr := githubtest.PR(githubtest.Run())
+					pr.State = "closed"
+					githubtest.JSON(t, w, pr)
+				default:
+					t.Errorf("unexpected request: %s", r.URL.Path)
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+			})
+			err := (Quality{}).Report(githubtest.Repo)
+			if len(tc.wantErr) == 0 {
+				require.NoError(t, err)
+			}
+			for _, want := range tc.wantErr {
+				require.ErrorContains(t, err, want)
+			}
+			require.Equal(t, tc.wantInspects, inspected)
+		})
+	}
 }
 
 func TestQualityBenchmarkReportErrorStillRefreshes(t *testing.T) {
@@ -123,10 +147,10 @@ func TestQualityReportFailurePersistsUntilRecovery(t *testing.T) {
 	pr.ChangedFiles = &count
 	fake := &githubtest.FakeAPI{T: t, Get: qualityPublishGetter(t, "create", &pr, &run, &reads)}
 	q := qualityClient{ctx: context.Background(), api: &qualityGraphAPI{FakeAPI: fake, t: t, scenario: "valid"}, repo: githubtest.Repo}
-	failed, ready := q.render(&pr, nil, qualityBenchmarkError+"\nComparison unavailable", &run)
+	failed, ready, _ := q.render(&pr, nil, qualityBenchmarkError+"\nComparison unavailable", &run)
 	require.False(t, ready)
 	existing := &githubapi.Comment{Body: failed}
-	retained, ready := q.render(&pr, existing, "", nil)
+	retained, ready, _ := q.render(&pr, existing, "", nil)
 	require.False(t, ready, "ordinary check refresh must preserve the reporting failure")
 	require.Contains(t, retained, qualityBenchmarkError)
 	require.False(t, qualityReported(existing, &pr, &run))
@@ -134,10 +158,10 @@ func TestQualityReportFailurePersistsUntilRecovery(t *testing.T) {
 	older.Attempt--
 	require.True(t, qualityReported(existing, &pr, &older), "failed newer reports still protect against older attempts")
 
-	recovered, ready := q.render(&pr, existing, "**warning**: performance regression", &run)
+	recovered, ready, _ := q.render(&pr, existing, "**warning**: performance regression", &run)
 	require.True(t, ready, "a valid report clears the integrity failure; timing warnings stay advisory")
 	require.NotContains(t, recovered, qualityBenchmarkError)
 	require.True(t, qualityReported(&githubapi.Comment{Body: recovered}, &pr, &run))
-	_, ready = q.render(&pr, nil, "Comparison unavailable: no historical baselines", nil)
+	_, ready, _ = q.render(&pr, nil, "Comparison unavailable: no historical baselines", nil)
 	require.True(t, ready, "missing history must not block readiness")
 }
