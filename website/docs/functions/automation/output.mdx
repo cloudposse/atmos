@@ -33,19 +33,23 @@ output = value
     </dd>
 
     <dt>`None`</dt>
-    <dd>Encoded as the JSON text `null`.</dd>
+    <dd>
+        Means no output, the same as never assigning `output`. A step falls back to the text the script printed, and a
+        standalone script prints nothing. `None` inside a list or dictionary is still encoded as `null`.
+    </dd>
 </dl>
 
 A value that cannot be encoded, such as a function, a dictionary with a non-string key, or a non-finite float, fails
-the script with an error that names `output` and the reason, plus a hint to assign a string, number, bool, list,
-dict, or `None`.
+the script with an error that names `output` and the reason, plus a hint to assign a string, number, bool, list, or dict.
 
 ## Behavior
 
-- Without `output`, the text the script printed with [`print`](/functions/automation/print) is the step value.
+- Without `output`, or with `output = None`, the text the script printed with [`print`](/functions/automation/print)
+  is the step value.
 - When `output` is assigned, it replaces the printed text as the step value. Printed lines still reach stdout.
 - A standalone script prints its result to stdout after the script finishes: strings raw, other values as JSON,
-  and `None` as `null`.
+  and nothing at all for `None`. A command whose `run` function returns nothing, or that was asked for `--help`, therefore
+  prints nothing when you write `output = cli.command(...)`.
 - Module-level names can be assigned once, and `output` is no exception. Assigning it twice, such as in both branches
   of an `if` and `else`, fails with `cannot reassign global`. Use a conditional expression, or compute the value in a
   function and assign the result once.
@@ -84,9 +88,7 @@ output = {"b": 1, "a": [1, 2.5, None]}
 output = None
 ```
 
-```text
-null
-```
+A script that assigns `None` prints nothing. Inside a structure, `None` is still encoded as `null`.
 
 ### Use the value in the next workflow step
 
@@ -150,7 +152,7 @@ output = {1: 2}
 ```text
 Error: starlark execution failed: output must be a string or JSON-encodable value: dict has int key, want string
 
-Assign a string, number, bool, list, dict, or None to output in step "...".
+Assign a string, number, bool, list, or dict to `output` in step "...", or leave it unset (or None) to produce no output.
 ```
 
 Assigning `output` a second time fails with `cannot reassign global output`.

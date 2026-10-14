@@ -109,10 +109,12 @@ func argumentDeclarations(spec *script.CommandSpec, arguments starlark.Value) er
 		if !ok || d.argument == nil {
 			return convert.InvalidArgument("cli.command: args must contain cli.arg declarations")
 		}
-		if names[d.argument.Name] || (optional && d.argument.Required) {
-			return convert.InvalidArgument("cli.command: argument names must be unique and required arguments must precede optional arguments")
+		// Parsed values are keyed case-insensitively, so names differing only by case collide.
+		key := strings.ToLower(d.argument.Name)
+		if names[key] || (optional && d.argument.Required) {
+			return convert.InvalidArgument("cli.command: argument names must be unique (ignoring case) and required arguments must precede optional arguments")
 		}
-		names[d.argument.Name] = true
+		names[key] = true
 		optional = !d.argument.Required
 		spec.Args = append(spec.Args, d.argument)
 	}
@@ -124,19 +126,21 @@ func flagDeclarations(spec *script.CommandSpec, flagValues starlark.Value) error
 	if err != nil {
 		return err
 	}
-	names := map[string]bool{}
+	// Viper keys are case-insensitive, so flags named `Stage` and `stage` would share one value.
+	// `help` is reserved for the generated help flag.
+	names := map[string]bool{"help": true}
 	shorthands := map[string]bool{}
 	for _, item := range values {
 		d, ok := item.(*declaration)
 		if !ok || d.flag == nil {
 			return convert.InvalidArgument("cli.command: flags must contain cli.flag declarations")
 		}
-		// Native flag values use Viper, whose keys are case-insensitive.
-		name, short := strings.ToLower(d.flag.GetName()), d.flag.GetShorthand()
-		if names[name] || (short != "" && shorthands[short]) {
-			return convert.InvalidArgument("cli.command: flag names and shorthands must be unique")
+		name, short := d.flag.GetName(), d.flag.GetShorthand()
+		key := strings.ToLower(name)
+		if names[key] || (short != "" && shorthands[short]) {
+			return convert.InvalidArgument("cli.command: flag names (ignoring case) and shorthands must be unique, got %q", name)
 		}
-		names[name], shorthands[short] = true, true
+		names[key], shorthands[short] = true, true
 		spec.Flags = append(spec.Flags, d.flag)
 	}
 	return nil

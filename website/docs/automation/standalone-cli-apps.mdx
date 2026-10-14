@@ -150,6 +150,156 @@ callback for rules beyond a flag's type, such as a positive count or a relations
 between two inputs. Keep the work itself in the `run` callback so help and invalid
 invocations do not start it.
 
+Environment values parse exactly like command-line values:
+
+- A `string_list` flag splits on commas and honors CSV quoting, so
+  `DEPLOY_ZONES=a,b` is `["a", "b"]` and `DEPLOY_ZONES='"a,b",c'` is `["a,b", "c"]`.
+  Whitespace is not a separator. With `choices`, every element is checked.
+- An `int` flag accepts base-10 digits only, from the command line and from the
+  environment. `010` is ten, and `0x10` is rejected instead of being read as sixteen.
+- Names are case-insensitive. A script that declares both `Stage` and `stage`, or
+  two arguments that differ only by case, fails when `cli.command` runs.
+
+A bool flag never consumes the next word. `--verbose false` would turn the flag on
+and pass `false` as a positional argument, so Atmos rejects it. Write
+`--verbose=false`, or put `--` before an argument you mean literally.
+
+## Help and usage errors
+
+`--help` lists every flag with what you need to call it correctly: required flags
+are marked `(required)`, flags with `choices` show `(one of: dev, prod)`, and a
+flag bound to an environment variable shows `[env: DEPLOY_STAGE]`:
+
+```text
+Usage:
+  release.star <service> [flags]
+
+Flags:
+  -h, --help           Show help for this script
+      --stage string   Stage to deploy (one of: dev, prod) [env: DEPLOY_STAGE] (default "dev")
+      --token string   API token (required) [env: DEPLOY_TOKEN]
+```
+
+Help is compact and shows only your tool's own usage and flags.
+
+Mistakes in the command line are usage errors, not script crashes. An unknown flag,
+a missing or surplus argument, an invalid value, a missing required flag, or a value
+outside `choices` prints the problem, the usage line, and a hint, with no Starlark
+traceback, and exits with status 2:
+
+```text
+Error: usage error
+missing required argument <service>
+Usage: release.star <service> [flags]
+💡 Run ./release.star --help for usage.
+```
+
+Errors your own code raises, such as `fail()`, a runtime error, or a `validate`
+callback returning `False`, keep the Starlark presentation with a traceback.
+Tracebacks show paths relative to the working directory when the script is under
+it, and log fields use the script's file name, such as `step=release.star`.
+
+## Output
+
+Your program prints data by assigning the top-level `output`. A string is written as
+is, and any other value is written as JSON. `None` means no output, so
+`output = cli.command(...)` prints nothing when the callback returns nothing or when
+you ask for `--help`.
+
+## Global flags
+
+Atmos global flags go between `atmos` and the script path, in either the
+`--flag=value` or the `--flag value` form:
+
+```shell
+atmos --chdir=tools ./release.star api
+atmos --logs-level=Debug ./release.star api
+```
+
+Atmos applies these flags itself, and the first word that is not a flag starts the
+script. Everything after the script path belongs to the script, including flags
+that look like Atmos flags, such as a script-owned `--chdir`. A relative script
+path is resolved after `--chdir` is applied, so it is relative to the new working
+directory. Flags that take an optional value, such as `--identity`, use the
+`--flag=value` form. A flag Atmos does not define before the script is an error
+from the normal command line.
+
+With `ATMOS_USE_VERSION` or `version.use`, Atmos re-runs your script with the pinned
+version and forwards the script path and its arguments unchanged.
+
+Paths with a registered extension, such as `.star`, report script errors. An existing directory
+such as `./stacks` is left to normal Atmos command handling.
+
+## File names and editor support
+
+A script runs by path, so the `.star` extension is optional. These all run the script:
+
+```shell
+./tool                # Shebang: #!/usr/bin/env atmos
+atmos ./tool          # A path, with or without .star
+atmos tool.star
+```
+
+A bare `atmos tool` with no slash and no `.star` is an Atmos command name, so it
+never runs a script. Use `./tool`, `atmos ./tool`, or a `.star` name.
+
+The `.star` extension is what lets editors and GitHub recognize a file as Starlark
+without any other hint. An extensionless script needs a file-type hint. Put the
+shebang on line 1 and the hint on line 2, because Vim, Emacs, and GitHub all search
+the first lines of a file:
+
+```python
+#!/usr/bin/env atmos
+# vim: set filetype=bzl: -*- mode: bazel-starlark -*-
+def main(args, flags):
+    ui.success("Hello, " + args["name"] + "!")
+
+cli.command(
+    description = "Greet someone",
+    args = [cli.arg("name")],
+    run = main,
+)
+```
+
+Atmos reads the shebang on line 1 and treats line 2 as a comment, so the hint does
+not change how the script runs.
+
+<dl>
+  <dt>Vim</dt>
+  <dd>
+    Vim has no `starlark` filetype. Its built-in Starlark support is the `bzl`
+    filetype, so use `# vim: set filetype=bzl:`. Vim checks the first and last
+    five lines by default (`modelines=5`) when `modeline` is on.
+  </dd>
+
+  <dt>Emacs</dt>
+  <dd>
+    Emacs has no built-in Starlark mode. With the
+    [bazel-mode](https://github.com/bazelbuild/emacs-bazel-mode) package installed,
+    use `-*- mode: bazel-starlark -*-`. Without it, `-*- mode: python -*-` gives
+    close syntax highlighting. When line 1 is a `#!` line, Emacs reads the mode line
+    from line 2.
+  </dd>
+
+  <dt>VS Code</dt>
+  <dd>
+    VS Code has no built-in Starlark language. Install an extension that provides
+    the `starlark` language, then associate your files in `settings.json`, for
+    example `"files.associations": { "**/bin/tool": "starlark" }`.
+  </dd>
+
+  <dt>GitHub</dt>
+  <dd>
+    GitHub's [Linguist](https://github.com/github-linguist/linguist) reads Vim and
+    Emacs modelines in the first and last five lines, and resolves the value as a
+    language name or alias. The Starlark language answers to `starlark` and `bazel`,
+    so `# vim: set ft=starlark:` or `# -*- mode: starlark -*-` is detected, while
+    `bzl` and `bazel-starlark` are not. Because those two values differ from what
+    Vim and Emacs need, the most reliable option for an extensionless file is a
+    `.gitattributes` entry such as `bin/tool linguist-language=Starlark`.
+  </dd>
+</dl>
+
 ## What your program can do
 
 Use Atmos's built-in functions to turn a small script into a tool that coordinates

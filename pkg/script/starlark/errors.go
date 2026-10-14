@@ -66,6 +66,25 @@ func (f *failure) ErrorDetail() string {
 	return f.detail
 }
 
+// usageFailure carries a host-presented usage error through the interpreter unchanged. The user
+// mistyped the command line; the script did not fail, so scriptError returns the wrapped error
+// as-is, without the Starlark prefix or a traceback.
+type usageFailure struct{ err error }
+
+// Error returns the usage message.
+func (u *usageFailure) Error() string {
+	defer perf.Track(nil, "starlark.usageFailure.Error")()
+
+	return u.err.Error()
+}
+
+// Unwrap exposes the usage error so errors.Is sees ErrScriptUsage.
+func (u *usageFailure) Unwrap() error {
+	defer perf.Track(nil, "starlark.usageFailure.Unwrap")()
+
+	return u.err
+}
+
 // fail creates a classified failure without a cause.
 func fail(kind error, format string, args ...any) error {
 	return &failure{kind: kind, msg: fmt.Sprintf(format, args...)}
@@ -143,6 +162,10 @@ func fenced(text string) string {
 // deadline errors stay reachable through errors.Is. Paths under projectRoot are shown relative
 // to it (display only).
 func scriptError(ctx context.Context, err error, projectRoot string) error {
+	var usage *usageFailure
+	if errors.As(err, &usage) {
+		return usage.err
+	}
 	cause := withContext(ctx, err)
 	recursion := isRecursionError(err)
 	if recursion && !errors.Is(err, errUtils.ErrStarlarkRecursionLimit) {

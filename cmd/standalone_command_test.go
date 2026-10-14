@@ -78,7 +78,7 @@ func TestStandaloneCommandEnvironmentPrecedence(t *testing.T) {
 	t.Setenv("STANDALONE_REPLICAS", "7")
 	t.Setenv("STANDALONE_VERBOSE", "true")
 	t.Setenv("STANDALONE_STAGE", "dev")
-	t.Setenv("STANDALONE_TAGS", "blue green")
+	t.Setenv("STANDALONE_TAGS", "blue,green")
 	spec := script.CommandSpec{Flags: []flags.Flag{
 		&flags.IntFlag{Name: "replicas", Default: 2, EnvVars: []string{"STANDALONE_REPLICAS"}},
 		&flags.BoolFlag{Name: "verbose", EnvVars: []string{"STANDALONE_VERBOSE"}},
@@ -113,10 +113,10 @@ func TestStandaloneCommandValidation(t *testing.T) {
 		{name: "required flag", spec: script.CommandSpec{Flags: []flags.Flag{&flags.StringFlag{Name: "stage", Required: true}}}, want: "stage"},
 		{name: "choices", spec: script.CommandSpec{Flags: []flags.Flag{&flags.StringFlag{Name: "stage", ValidValues: []string{"dev", "prod"}}}}, argv: []string{"--stage=invalid"}, want: "invalid"},
 		{name: "slice choices", spec: script.CommandSpec{Flags: []flags.Flag{&flags.StringSliceFlag{Name: "tags", ValidValues: []string{"blue", "green"}}}}, argv: []string{"--tags=blue,red"}, want: "red"},
-		{name: "required argument", spec: script.CommandSpec{Args: []*flags.PositionalArgSpec{{Name: "service", Required: true}}}, want: "accepts 1 arg(s)"},
-		{name: "surplus argument", spec: script.CommandSpec{Args: []*flags.PositionalArgSpec{{Name: "service"}}}, argv: []string{"api", "worker"}, want: "at most 1 arg(s)"},
-		{name: "no arguments", argv: []string{"extra"}, want: "accepts 0 arg(s)"},
-		{name: "surplus after separator", spec: script.CommandSpec{Args: []*flags.PositionalArgSpec{{Name: "service"}}}, argv: []string{"api", "--", "worker"}, want: "at most 1 arg(s)"},
+		{name: "required argument", spec: script.CommandSpec{Args: []*flags.PositionalArgSpec{{Name: "service", Required: true}}}, want: "missing required argument `<service>`"},
+		{name: "surplus argument", spec: script.CommandSpec{Args: []*flags.PositionalArgSpec{{Name: "service"}}}, argv: []string{"api", "worker"}, want: "at most 1 positional argument"},
+		{name: "no arguments", argv: []string{"extra"}, want: "takes no positional arguments"},
+		{name: "surplus after separator", spec: script.CommandSpec{Args: []*flags.PositionalArgSpec{{Name: "service"}}}, argv: []string{"api", "--", "worker"}, want: "at most 1 positional argument"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -259,7 +259,7 @@ func TestStandaloneCommandRequiredTypedFlags(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, input.Help)
 	t.Setenv("STANDALONE_REQUIRED_COUNT", "0")
-	t.Setenv("STANDALONE_REQUIRED_TAGS", "blue green")
+	t.Setenv("STANDALONE_REQUIRED_TAGS", "blue,green")
 	input, err = parse()
 	require.NoError(t, err)
 	assert.Equal(t, 0, input.Flags["count"])
@@ -314,20 +314,21 @@ func TestStandaloneCommandEnvironmentBindingOrder(t *testing.T) {
 
 func TestStandaloneCommandStringSliceEnvironment(t *testing.T) {
 	tests := []struct {
-		name    string
-		value   string
-		choices []string
-		argv    []string
-		want    []string
-		wantErr string
+		name        string
+		value       string
+		choices     []string
+		argv        []string
+		want        []string
+		wantErr     string
+		wantInvalid bool
 	}{
 		{name: "comma enum", value: "blue,green", choices: []string{"blue", "green"}, want: []string{"blue", "green"}},
-		{name: "whitespace enum", value: "blue green", choices: []string{"blue", "green"}, want: []string{"blue", "green"}},
+		{name: "whitespace is not a separator", value: "blue green", choices: []string{"blue", "green"}, wantErr: "blue green"},
 		{name: "comma list", value: "blue,green", want: []string{"blue", "green"}},
 		{name: "CSV quoted comma", value: `"blue,green",red`, choices: []string{"blue,green", "red"}, want: []string{"blue,green", "red"}},
 		{name: "CSV whitespace", value: `"blue sky", green`, choices: []string{"blue sky", " green"}, want: []string{"blue sky", " green"}},
 		{name: "invalid enum", value: "blue,red", choices: []string{"blue", "green"}, wantErr: "red"},
-		{name: "malformed CSV", value: `"blue,green`, wantErr: "environment value for --tags"},
+		{name: "malformed CSV", value: `"blue,green`, wantInvalid: true},
 		{name: "explicit flags bypass malformed env", value: `"blue,green`, choices: []string{"red", "green"}, argv: []string{"--tags=red", "--tags=green"}, want: []string{"red", "green"}},
 		{name: "explicit flags override valid env", value: "blue,green", argv: []string{"--tags=red"}, want: []string{"red"}},
 	}
@@ -343,9 +344,11 @@ func TestStandaloneCommandStringSliceEnvironment(t *testing.T) {
 				&flags.StringSliceFlag{Name: "tags", Default: []string{defaultValue}, EnvVars: []string{"STANDALONE_CSV_TAGS"}, ValidValues: test.choices},
 			}}
 			input, err := standaloneCommandParser(&script.File{Path: "env.star", Args: test.argv}, &stdout)(t.Context(), spec)
-			if test.wantErr != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), test.wantErr)
+			if test.wantErr != "" || test.wantInvalid {
+				require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+				if test.wantErr != "" {
+					assert.Contains(t, err.Error(), test.wantErr)
+				}
 				return
 			}
 			require.NoError(t, err)

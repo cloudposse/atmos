@@ -23,7 +23,7 @@ ctx.args
 
 A frozen list of strings. In a standalone script, it holds every token after the script file name, exactly as typed,
 including tokens such as `--help` or `--config` that look like Atmos options: everything after the script name belongs to
-the script. In every other entry point, such as a custom command, workflow step, or hook, the list is empty.
+the script. Atmos global flags such as `--chdir=dir` go before the script path and are not part of the list. In every other entry point, such as a custom command, workflow step, or hook, the list is empty.
 
 A script that declares its interface with [`cli.command`](/functions/automation/cli.command) can still read the raw tokens
 here. The parsed values arrive in the arguments of its entry function.

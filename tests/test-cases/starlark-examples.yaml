@@ -41,7 +41,7 @@ tests:
     command: atmos
     args: [./capacity.star, api, --replicas, many]
     expect:
-      exit_code: 1
+      exit_code: 2
       stderr:
         - 'invalid.*replicas'
 

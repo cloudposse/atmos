@@ -79,8 +79,8 @@ not implied.
 Stdout and stderr are separate from the explicit result. `HasOutput=false` means
 no result was produced. When present, strings pass through unchanged, including
 empty strings; other supported language values are JSON-encoded by the engine.
-A null result is therefore distinct from an absent result. Workflow named outputs
-remain the runner's responsibility.
+The Starlark binding treats top-level `None` as no output; null values inside
+containers are JSON-encoded. Workflow named outputs remain the runner's responsibility.
 
 Language bindings own argument conversion, module resolution, language values,
 callbacks, thread rules, and tracebacks. Parallel scheduling and retries reuse
