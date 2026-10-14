@@ -85,8 +85,8 @@ func sanitizeControlName(value string) string {
 	return sanitized
 }
 
-func controlPrefix(outputCfg controlOutputConfig, stepName string, matrix map[string]string, dataFunc ControlTemplateDataFunc) string {
-	prefix, err := resolveControlTemplate(outputCfg.prefix, stepName, matrix, dataFunc)
+func controlPrefix(outputCfg controlOutputConfig, stepName string, matrix map[string]string, templates *controlTemplates) string {
+	prefix, err := templates.resolve(outputCfg.prefix, stepName, matrix)
 	if err != nil || strings.TrimSpace(prefix) == "" {
 		return stepName
 	}

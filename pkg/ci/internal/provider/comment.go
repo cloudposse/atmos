@@ -1,5 +1,12 @@
 package provider
 
+import (
+	"strings"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
+)
+
 // CommentBehavior controls how PostComment reconciles an incoming comment
 // against existing comments on the same PR/MR.
 type CommentBehavior string
@@ -56,4 +63,46 @@ type Comment struct {
 	// Created indicates whether a new comment was created (true) or an
 	// existing one was updated (false).
 	Created bool
+}
+
+// ValidatePostCommentOptions rejects nil or incomplete option structs, and
+// enforces the marker-in-body invariant so repeat runs can reliably reconcile
+// against the same comment. An upsert that writes a body without its marker
+// would leave a comment that future runs cannot match — breaking idempotency
+// and causing duplicate comments on subsequent plans.
+func ValidatePostCommentOptions(opts *PostCommentOptions) error {
+	defer perf.Track(nil, "provider.ValidatePostCommentOptions")()
+
+	if opts == nil || opts.Owner == "" || opts.Repo == "" || opts.PRNumber <= 0 {
+		return errUtils.Build(errUtils.ErrCICommentPostFailed).
+			WithExplanation("Owner, Repo, and PRNumber are required to post a PR comment").
+			Err()
+	}
+	if opts.Marker != "" && !strings.Contains(opts.Body, opts.Marker) {
+		return errUtils.Build(errUtils.ErrCICommentPostFailed).
+			WithExplanation("Marker must appear in Body so future runs can find and update this comment; without it, upserts will create duplicates").
+			WithContext("marker", opts.Marker).
+			Err()
+	}
+	return nil
+}
+
+// NormalizeBehavior resolves the configured behavior. An empty value defaults
+// to upsert; any other value must be one of the declared CommentBehavior
+// constants. Unknown values fail fast so typos in ci.comments.behavior surface
+// immediately rather than silently behaving as upsert.
+func NormalizeBehavior(b CommentBehavior) (CommentBehavior, error) {
+	defer perf.Track(nil, "provider.NormalizeBehavior")()
+
+	switch b {
+	case "":
+		return CommentBehaviorUpsert, nil
+	case CommentBehaviorCreate, CommentBehaviorUpdate, CommentBehaviorUpsert:
+		return b, nil
+	default:
+		return "", errUtils.Build(errUtils.ErrCICommentPostFailed).
+			WithExplanation("ci.comments.behavior must be one of: create, update, upsert").
+			WithContext("behavior", string(b)).
+			Err()
+	}
 }

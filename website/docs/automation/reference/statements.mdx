@@ -1,0 +1,435 @@
+---
+title: Statements
+sidebar_label: Statements
+sidebar_position: 4
+slug: /automation/reference/statements
+description: Assignment, function definitions, return, conditionals, for and while loops, break, continue, pass, load, and top-level rules in the Atmos Automation Language.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+A program is a sequence of statements. This page describes assignment,
+function definitions, conditionals, loops, and `load`, along with the rule that
+makes top-level names assignable once and the scoping rules for functions.
+</Intro>
+
+Simple statements fit on one line and can be separated by semicolons. Compound
+statements (`if`, `for`, `while`, `def`) own an indented block. See
+[Lexical Elements](/automation/reference/lexical-elements#indentation-and-blocks)
+for the indentation rules.
+
+## Expression statements
+
+An expression on its own line is evaluated and its value is discarded. This is
+how a program calls functions for their effect:
+
+```python
+print("starting")
+ui.info("deploying")
+```
+
+## Assignment
+
+An assignment such as `name = expression` binds a name to a value. The target can also be an element
+of a list or dictionary, such as `items[0] = 1` or `settings["region"] = "us-east-1"`.
+
+```python
+def demo():
+    count = 3
+    items = [1, 2, 3]
+    settings = {}
+    items[0] = 10
+    settings["region"] = "us-east-1"
+    return count, items, settings
+
+print(demo())   # (3, [10, 2, 3], {"region": "us-east-1"})
+```
+
+### Tuple unpacking
+
+A tuple or list on the left side unpacks a sequence on the right. The number of
+targets must equal the number of values, and targets can nest:
+
+```python
+def demo():
+    first, second = 1, 2
+    first, second = second, first            # swap
+    (a, b), c = (1, 2), 3
+    [x, y] = [4, 5]
+    return first, second, a, b, c, x, y
+
+print(demo())   # (2, 1, 1, 2, 3, 4, 5)
+```
+
+Unpacking a sequence of the wrong length is an error (`too many values to
+unpack`), and so is unpacking a string. Starred targets such as `a, *rest = items`
+are not available; use slicing instead: `first = items[0]`, `rest = items[1:]`.
+Chained assignment (`a = b = 0`) and type annotations (`x: int = 0`) are also
+syntax errors; use separate statements.
+
+### Augmented assignment
+
+The operators `+=`, `-=`, `*=`, `/=`, `//=`, `%=`, `&=`, `|=`, `^=`, `<<=`, and `>>=` combine
+an operator with assignment. For a list, `+=` extends the list in place, so every
+name that refers to the list sees the change. The form `l = l + [x]` creates a new list
+instead.
+
+```python
+def demo():
+    n = 7
+    n //= 2
+    n += 10
+    names = ["a"]
+    alias = names
+    names += ["b"]
+    copy = names + ["c"]
+    return n, alias, copy
+
+print(demo())   # (13, ["a", "b"], ["a", "b", "c"])
+```
+
+### Top-level names are assigned once
+
+At the top level of a file, each name can be bound only once. A second
+assignment, an augmented assignment, or reusing the same loop variable in two
+top-level loops fails with `cannot reassign global`. Assigning the same name
+in both branches of a top-level `if` and `else` counts as two bindings:
+
+```python
+total = 0
+total = 1    # error: cannot reassign global total
+```
+
+```python
+if len(env) == 0:
+    mode = "empty"
+else:
+    mode = "full"      # error: cannot reassign global mode
+```
+
+Choose the value with a [conditional expression](/automation/reference/expressions-operators#conditional-expressions),
+or compute it in a function and assign the result once:
+
+```python
+mode = "empty" if len(env) == 0 else "full"
+
+def pick_mode():
+    if len(env) == 0:
+        return "empty"
+    return "full"
+
+output = pick_mode()
+```
+
+Changing the contents of a list or dictionary is not rebinding, so this is
+allowed at the top level:
+
+```python
+state = {"count": 0}
+for name in ["api", "worker"]:
+    state["count"] += 1
+output = state["count"]    # 2
+```
+
+Inside a function, local variables can be rebound as often as needed. Put
+loops that need a running total inside a function:
+
+```python
+def total_of(numbers):
+    total = 0
+    for n in numbers:
+        total += n
+    return total
+
+output = total_of([1, 2, 3])   # 6
+```
+
+### Scope
+
+A name assigned inside a function is local to that function. A function can read
+names defined at the top level or in an enclosing function, but assignment never
+reaches outward, and there are no `global` or `nonlocal` declarations. To share
+changing state with an enclosing scope, mutate a list or dictionary:
+
+```python
+def make_counter():
+    state = [0]
+    def next_value():
+        state[0] += 1
+        return state[0]
+    return next_value
+
+counter = make_counter()
+counter()
+print(counter())   # 2
+```
+
+Reading a local variable before it is assigned in the same function is an
+error (`local variable n referenced before assignment`), even when the name also
+exists at the top level. Top-level names must be defined before the code that
+runs them, but a function body can refer to a top-level name that appears later in the
+file, provided the function is called after that name exists.
+
+## Function definitions
+
+A `def` statement, written `def name(parameters):` followed by an indented block, defines a function and binds
+it to a name. The block runs each time the function is called.
+
+```python
+def greet(name):
+    return "Hello, " + name
+
+print(greet("Atmos"))   # Hello, Atmos
+```
+
+### Parameters
+
+A parameter list can contain, in this order:
+
+<dl>
+  <dt>Required parameters</dt>
+  <dd>Plain names such as `name`. The caller must supply a value.</dd>
+  <dt>Optional parameters</dt>
+  <dd>
+    Written as `name=default`. The default expression runs once, when the function is
+    defined. A list or dictionary default is therefore shared across calls, so use
+    `None` as the default and create the collection inside the function.
+  </dd>
+  <dt>Variable positional parameter</dt>
+  <dd>`*args` collects extra positional arguments into a tuple.</dd>
+  <dt>Keyword-only parameters</dt>
+  <dd>
+    Parameters after `*args`, or after a bare `*`, must be passed by keyword.
+    They can be required or optional.
+  </dd>
+  <dt>Variable keyword parameter</dt>
+  <dd>`**kwargs` collects extra keyword arguments into a dictionary. It comes last.</dd>
+</dl>
+
+```python
+def deploy(name, region = "us-east-1", *replicas, strategy, dry_run = False, **labels):
+    return (name, region, replicas, strategy, dry_run, labels)
+
+print(deploy("api", strategy = "rolling"))
+# ("api", "us-east-1", (), "rolling", False, {})
+print(deploy("api", "eu-west-1", 2, 3, strategy = "canary", team = "platform"))
+# ("api", "eu-west-1", (2, 3), "canary", False, {"team": "platform"})
+```
+
+```python
+def connect(host, *, timeout):
+    return host + ":" + str(timeout)
+
+print(connect("db", timeout = 30))   # db:30
+```
+
+The rules the parser and the call enforce:
+
+- A required positional parameter cannot follow an optional one.
+- A parameter name can appear only once, and `*args` and `**kwargs` at most once.
+- Default expressions cannot refer to earlier parameters.
+- A call that omits a required argument, passes too many positional arguments,
+  names an unknown keyword, or gives a parameter two values is an error.
+
+Positional-only parameters and annotations are not available.
+
+### Closures, nesting, and recursion
+
+Functions can be defined inside other functions and inside `if` blocks. A nested
+function keeps access to its enclosing function's variables. Recursion is allowed;
+a function that never reaches its base case stops with a recursion depth error after
+about ten thousand nested calls.
+
+```python
+def factorial(n):
+    return 1 if n <= 1 else n * factorial(n - 1)
+
+print(factorial(25))   # 15511210043330985984000000
+```
+
+## return
+
+The statement `return expression` ends the function and gives the caller a value. A bare
+`return`, or reaching the end of the block, produces `None`. Return several values
+as a tuple and unpack them at the call site. Use `return` only inside a
+function; at the top level it is a syntax error.
+
+```python
+def min_max(numbers):
+    return min(numbers), max(numbers)
+
+low, high = min_max([3, 1, 4])
+print(low, high)   # 1 4
+```
+
+## if, elif, and else
+
+An `if` statement runs the first block whose condition is true, and the optional
+`else` block runs when none is. Conditions follow the
+[truthiness rules](/automation/reference/data-types#truthiness), so
+`if items:` tests for a non-empty list.
+
+```python
+def classify(replicas):
+    if replicas > 10:
+        return "large"
+    elif replicas > 3:
+        return "medium"
+    else:
+        return "small"
+
+print(classify(5))   # medium
+```
+
+Conditional statements are available at the top level of a file as well as in
+functions. There is no `match` statement.
+
+## for
+
+The statement `for variable in iterable:` runs the block once per element. The iterable can be
+a list, tuple, dictionary (which yields keys), set, or range, or the result of a
+method such as `.items()`, `.elems()`, or `.codepoints()`. Strings, bytes, and
+integers are not iterable directly. A tuple of variables unpacks each element.
+
+```python
+def demo():
+    lines = []
+    for name in ["api", "worker"]:
+        lines.append(name.upper())
+    for key, value in {"region": "us-east-1"}.items():
+        lines.append(key + "=" + value)
+    for index, item in enumerate(["a", "b"]):
+        lines.append(str(index) + ":" + item)
+    for ch in "ab".elems():
+        lines.append(ch)
+    return lines
+
+print(demo())
+# ["API", "WORKER", "region=us-east-1", "0:a", "1:b", "a", "b"]
+```
+
+A loop cannot add to or remove from the list, dictionary, or set it is iterating.
+Iterate over a copy (`for x in list(items):`) when the loop changes the collection.
+A `for` statement has no `else` clause. At the top level, the loop variable becomes
+a global name, so two top-level loops cannot reuse the same variable; put the loops
+in a function or use different names.
+
+## while
+
+The statement `while condition:` repeats its block as long as the condition is true. Atmos
+enables `while`, which standard Starlark omits. Make sure the condition eventually
+becomes false, or use `break`.
+
+```python
+def wait_for_even(start):
+    n = start
+    while n % 2 == 1:
+        n += 1
+    return n
+
+print(wait_for_even(7))   # 8
+```
+
+A `while` statement has no `else` clause. Rebinding a variable in a top-level loop
+is subject to the [assign-once rule](#top-level-names-are-assigned-once), so loops
+that count or accumulate belong in a function.
+
+## break, continue, and pass
+
+The `break` statement exits the innermost loop, `continue` skips to its next iteration, and
+`pass` does nothing, which satisfies the grammar where a block is required.
+Using `break` or `continue` outside a loop is a syntax error.
+
+```python
+def sum_even_below(limit):
+    total = 0
+    for n in range(100):
+        if n >= limit:
+            break
+        if n % 2 == 1:
+            continue
+        total += n
+    return total
+
+print(sum_even_below(7))   # 12
+```
+
+```python
+def todo():
+    pass
+```
+
+## load
+
+The statement `load("path", "name")` runs another file once and binds its top-level names into
+the current file. List one or more names, and rename with `alias = "name"`:
+
+```python
+# helpers.star
+SETTINGS = {"region": "us-east-1"}
+
+def double(n):
+    return n * 2
+```
+
+```python
+# main.star
+load("helpers.star", "double", config = "SETTINGS")
+
+print(double(4))        # 8
+print(config["region"]) # us-east-1
+```
+
+Rules for `load`:
+
+- A `load` statement belongs at the top level of a file, not inside a function.
+- A relative path resolves against the directory of the file that contains the
+  `load`. For an inline script, it resolves against the step's working directory.
+- Each file is evaluated once and cached, and a file that loads itself, directly
+  or through another file, is an error.
+- Names that begin with an underscore stay private and cannot be loaded. Asking
+  for a name the file does not define is an error.
+- A loaded name is bound in the importing file and follows the assign-once rule, so
+  `double = 3` after loading `double` is an error.
+- Every value a file defines is frozen after it loads, so the importing file can
+  read a loaded dictionary or list but cannot modify it. See
+  [Mutability and freezing](/automation/reference/data-types#mutability-and-freezing).
+- The predeclared modules, such as `exec`, `json`, and `fs`, are available in
+  loaded files.
+
+See the [`load` reference](/functions/automation/load) for path resolution
+details.
+
+## Raising errors
+
+The language has no `try`, `except`, `raise`, or `assert`. Stop a program with the
+built-in `fail(message)`, which reports the message and a traceback. To handle an
+external command that might fail, pass `check=False` to
+[`exec.run`](/functions/automation/exec.run) and inspect the result:
+
+```python
+def require_positive(n):
+    if n <= 0:
+        fail("expected a positive number, got " + str(n))
+    return n
+
+result = exec.run(["git", "--version"], check = False, output = "capture")
+output = result.exit_code
+```
+
+## Statements the language omits
+
+The following Python statements do not exist, and using their keywords is a
+syntax error: `class`, `import`, `try`, `with`, `raise`, `del`, `global`,
+`nonlocal`, `yield`, `async`, and `await`. Use dictionaries and functions
+instead of classes, `load()` instead of `import`, `d.pop(key)` instead of `del`,
+and `fail()` instead of `raise`. See
+[Differences from Python](/automation/reference/differences-from-python) for the
+complete list.
+
+## Next steps
+
+- [Expressions and Operators](/automation/reference/expressions-operators): build the values these statements use.
+- [Execution Model](/automation/reference/execution-model): how Atmos runs a program, top to bottom.
+- [Built-in Functions](/automation/reference/builtin-functions): `fail`, `range`, `enumerate`, and more.

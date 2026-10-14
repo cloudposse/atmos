@@ -12,7 +12,7 @@ import (
 var writeComponentStepSummary = ci.WriteStepSummary
 
 func writeImageSummary(config *schema.AtmosConfiguration, info *ctr.ImageInfo, opts ctr.ImageSummaryOptions) {
-	if !summaryEnabled(config) || info == nil {
+	if !ci.SummaryEnabled(config) || info == nil {
 		return
 	}
 	md := ctr.RenderImageSummaryMarkdown(info, opts)
@@ -25,7 +25,7 @@ func writeImageSummary(config *schema.AtmosConfiguration, info *ctr.ImageInfo, o
 }
 
 func inspectAndWriteImageSummary(ctx context.Context, runtime ctr.Runtime, config *schema.AtmosConfiguration, image, digest string) {
-	if !summaryEnabled(config) || image == "" {
+	if !ci.SummaryEnabled(config) || image == "" {
 		return
 	}
 	info, err := runtime.ImageInspect(ctx, image)
@@ -34,13 +34,6 @@ func inspectAndWriteImageSummary(ctx context.Context, runtime ctr.Runtime, confi
 		return
 	}
 	writeImageSummary(config, info, ctr.ImageSummaryOptions{Image: image, Digest: digest})
-}
-
-func summaryEnabled(config *schema.AtmosConfiguration) bool {
-	if config == nil || !config.CI.Enabled {
-		return false
-	}
-	return config.CI.Summary.Enabled == nil || *config.CI.Summary.Enabled
 }
 
 func firstNonEmpty(values []string) string {

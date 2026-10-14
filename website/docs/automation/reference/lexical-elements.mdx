@@ -1,0 +1,346 @@
+---
+title: Lexical Elements
+sidebar_label: Lexical Elements
+sidebar_position: 1
+slug: /automation/reference/lexical-elements
+description: Comments, identifiers, keywords, string and number literals, indentation, and line continuation in the Atmos Automation Language.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+This page describes how the Atmos Automation Language reads source text: comments,
+names, keywords, string and number literals, and the indentation rules that
+group statements into blocks. The language is based on Starlark, so the
+syntax looks like Python, with a smaller set of tokens.
+</Intro>
+
+Source files are UTF-8 text. A program is a sequence of statements; see
+[Statements](/automation/reference/statements) for what each statement does.
+
+## Comments
+
+A comment starts with `#` and runs to the end of the line. Comments can follow
+code on the same line or occupy a line of their own.
+
+```python
+# A full-line comment.
+region = "us-east-1"  # A trailing comment.
+```
+
+There are no block comments. A string written on its own line is an ordinary
+expression, so the Atmos Automation Language has no docstrings; use `#` comments
+to document functions.
+
+## Identifiers
+
+An identifier names a variable, function, parameter, or attribute. It starts
+with a letter or underscore and continues with letters, digits, and
+underscores. Identifiers are case-sensitive, so `Region` and `region` are
+different names. Non-ASCII letters are allowed.
+
+```python
+service_name = "api"
+_internal = 1
+Replicas2 = 3
+```
+
+A name that starts with an underscore is private to its file: `load()` refuses
+to import it. See [Statements](/automation/reference/statements#load).
+
+## Keywords
+
+These words have a fixed meaning and cannot be used as identifiers:
+
+<dl>
+  <dt>`and`, `or`, `not`</dt>
+  <dd>Boolean operators</dd>
+
+  <dt>`in`, `not in`</dt>
+  <dd>Membership tests</dd>
+
+  <dt>`if`, `elif`, `else`</dt>
+  <dd>Conditional statements and conditional expressions</dd>
+
+  <dt>`for`, `while`</dt>
+  <dd>Loops and comprehensions</dd>
+
+  <dt>`break`, `continue`, `pass`</dt>
+  <dd>Loop control and the empty statement</dd>
+
+  <dt>`def`, `lambda`, `return`</dt>
+  <dd>Function definitions</dd>
+
+  <dt>`load`</dt>
+  <dd>Import names from another file</dd>
+</dl>
+
+### Reserved words
+
+Python keywords with no equivalent in the language are reserved. Using one
+anywhere in a program is a syntax error, even where Python would accept it
+as a name:
+
+`as`, `async`, `await`, `class`, `del`, `except`, `finally`, `from`, `global`,
+`import`, `is`, `nonlocal`, `raise`, `try`, `with`, `yield`
+
+Each has a direct replacement:
+
+| Python habit | Use instead |
+| --- | --- |
+| `x is None` | `x == None` |
+| `del d[k]` | `d.pop(k)` |
+| `import json` | `json` is predeclared; use `load()` for your own files |
+| `raise ValueError(msg)` | `fail(msg)` |
+| `try` / `except` | Check conditions before acting; pass `check=False` to `exec.run` to inspect a failing command |
+| `global x` | Compute the value in a function and assign it once at the top level |
+
+The names `True`, `False`, and `None` are predeclared rather than keywords,
+and `assert` is an ordinary identifier with no special meaning.
+
+## Operators and delimiters
+
+The following tokens are recognized:
+
+```text
++   -   *   /   //  %   ~   &   |   ^   <<  >>
+==  !=  <   >   <=  >=
+=   +=  -=  *=  /=  //= %=  &=  |=  ^=  <<= >>=
+(   )   [   ]   {   }   ,   :   ;   .
+```
+
+Characters such as `$`, `?`, and `@` are not part of the language and are
+reported as unexpected input. There is no exponentiation operator; see
+[Expressions and Operators](/automation/reference/expressions-operators).
+The `**` token appears only in parameter lists and call arguments, where it
+collects or expands keyword arguments.
+
+## String literals
+
+A string literal is text between matching single quotes, double quotes, or
+triple quotes. Single-quoted and double-quoted strings are equivalent and must
+fit on one line. Triple-quoted strings (`"""` or `'''`) can span lines and can
+contain unescaped quotes.
+
+```python
+a = "say \"hi\""
+b = 'say "hi"'
+c = """first line
+second line with "quotes" and 'quotes'"""
+print(a)  # say "hi"
+print(b)  # say "hi"
+print(c)
+# first line
+# second line with "quotes" and 'quotes'
+```
+
+A line break inside a single-quoted or double-quoted string is a syntax error.
+End a physical line with a backslash to continue the string on the next line
+without including a newline:
+
+```python
+message = "deploying to \
+production"
+print(message)  # deploying to production
+```
+
+### Escape sequences
+
+Inside ordinary strings, a backslash starts an escape sequence:
+
+<dl>
+  <dt>`\\`</dt>
+  <dd>Backslash</dd>
+
+  <dt>`\'` and `\"`</dt>
+  <dd>Single and double quote</dd>
+
+  <dt>`\a` `\b` `\f` `\n` `\r` `\t` `\v`</dt>
+  <dd>Bell, backspace, form feed, newline, carriage return, tab, vertical tab</dd>
+
+  <dt>`\ooo`</dt>
+  <dd>Octal byte value, one to three digits, up to `\177`</dd>
+
+  <dt>`\xhh`</dt>
+  <dd>Hexadecimal byte value from `\x00` to `\x7f`</dd>
+
+  <dt>`\uXXXX`</dt>
+  <dd>Unicode code point with four hex digits</dd>
+
+  <dt>`\UXXXXXXXX`</dt>
+  <dd>Unicode code point with eight hex digits</dd>
+
+  <dt>backslash, then newline</dt>
+  <dd>Line continuation; produces no character</dd>
+</dl>
+
+An unrecognized escape such as `\q` is a syntax error, as are octal and
+hexadecimal escapes above the ASCII range (`\xff`, `\377`) and surrogate code
+points (`\ud800`). Write non-ASCII characters directly or with `\u`:
+
+```python
+print("café")        # café
+print("tab:\there")       # tab:    here
+print(len("\x41\101"))    # 2
+```
+
+### Raw strings
+
+Prefix a string with `r` to turn off escape processing. A backslash stands for
+itself, which suits regular expressions and Windows paths:
+
+```python
+pattern = r"\d+\.\d+"
+print(pattern)        # \d+\.\d+
+print(len(r"\n"))     # 2
+print(len("\n"))      # 1
+```
+
+Raw strings can also use triple quotes. A raw string cannot end in an odd
+number of backslashes, because a backslash followed by the closing quote
+still escapes the quote.
+
+### Strings are text stored as UTF-8
+
+A string holds Unicode text encoded as UTF-8. Its `len()` counts bytes, and
+indexing and slicing work on bytes. Use `.codepoints()` to walk the characters
+of a string. See [Data Types](/automation/reference/data-types#strings).
+
+### No implicit concatenation
+
+Adjacent string literals are not joined automatically. Join them with `+`, or
+wrap the pieces in a call to `"".join([...])`:
+
+```python
+url = "https://" + "example.com" + "/status"
+print(url)  # https://example.com/status
+```
+
+## Bytes literals
+
+Prefix a string with `b` to create a `bytes` value, a sequence of byte
+values. In a bytes literal, `\xhh` can express any byte from `\x00` to `\xff`.
+The `rb` prefix gives a raw bytes literal.
+
+```python
+magic = b"\x89PNG"
+print(len(magic))   # 4
+print(magic[1])     # P (a one-byte bytes value)
+print(type(magic))  # bytes
+```
+
+See [Data Types](/automation/reference/data-types#bytes) for what bytes
+values support.
+
+## Number literals
+
+### Integers
+
+Integer literals can be written in four bases. Prefixes are case-insensitive:
+
+| Form | Example | Value |
+| --- | --- | --- |
+| Decimal | `255` | 255 |
+| Hexadecimal | `0xFF`, `0Xff` | 255 |
+| Octal | `0o377`, `0O377` | 255 |
+| Binary | `0b11111111`, `0B11111111` | 255 |
+
+Integers have arbitrary precision, so `99999999999999999999999999` is a valid
+literal. Leading zeros, as in `0777` or `08`, are a syntax error: use the
+`0o` prefix for octal. Underscore digit separators such as `1_000` are not
+accepted.
+
+### Floating-point numbers
+
+A float literal has a decimal point, an exponent, or both. Digits are optional
+on either side of the point:
+
+```python
+print(1.5)      # 1.5
+print(.5)       # 0.5
+print(5.)       # 5.0
+print(1e3)      # 1000.0
+print(1.5E-2)   # 0.015
+print(0.1 + 0.2)  # 0.30000000000000004
+```
+
+Floats are IEEE 754 double-precision numbers. A literal too large to represent,
+such as `1e400`, is a syntax error. When printed, a float uses the shortest
+digits that read back as the same value, and switches to exponent notation
+for magnitudes of 1,000,000 and above or below 0.0001:
+
+```python
+print(123456.0)     # 123456.0
+print(1234567.0)    # 1.234567e+06
+print(0.0001)       # 0.0001
+print(0.00001)      # 1e-05
+```
+
+There are no complex-number or hexadecimal-float literals.
+
+## Indentation and blocks
+
+Indentation groups statements into blocks. A statement that ends in a colon
+(`if`, `for`, `while`, `def`) is followed by an indented block, and the block
+ends when the indentation returns to the outer level. Use four spaces per
+level.
+
+```python
+def classify(replicas):
+    if replicas > 10:
+        return "large"
+    return "small"
+```
+
+Rules for indentation:
+
+- Every line in a block must use the same indentation, and a dedent must
+  return to a level that an enclosing block already used. Otherwise the
+  parser reports `unindent does not match any outer indentation level`.
+- A tab advances to the next multiple of eight columns. Mixing tabs and spaces
+  within one file is legal but invites confusion, so use spaces.
+- Blank lines and comment-only lines do not affect indentation.
+- A block with a single simple statement can sit on the same line, as in
+  `if ready: print("go")`.
+- Unexpected extra indentation is a syntax error.
+
+## Line continuation and statement separators
+
+A statement normally ends at the end of the line. A statement continues onto
+the next line in two cases.
+
+Inside parentheses, brackets, or braces, line breaks are ignored, and comments
+can appear after each element:
+
+```python
+settings = {
+    "region": "us-east-1",  # Primary region.
+    "tags": ["web", "api"],
+}
+total = (1 +
+         2 +
+         3)
+print(total)  # 6
+```
+
+Outside brackets, end a line with a backslash to continue it:
+
+```python
+total = 1 + \
+    2
+print(total)  # 3
+```
+
+Separate several simple statements on one line with a semicolon. A trailing
+semicolon is allowed:
+
+```python
+a = 1; b = 2
+print(a + b)  # 3
+```
+
+## Next steps
+
+- [Data Types](/automation/reference/data-types): the values these literals produce.
+- [Expressions and Operators](/automation/reference/expressions-operators): combine values into larger expressions.
+- [Statements](/automation/reference/statements): assignments, functions, conditions, and loops.

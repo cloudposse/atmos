@@ -2,11 +2,13 @@ package step
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -502,4 +504,51 @@ func TestAtmosHandler_ExecuteWithWorkflow_Subprocess(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "fake-atmos-output", result.Value)
 	assert.Equal(t, 0, result.Metadata["exit_code"])
+}
+
+// A nested atmos command runs with the profile and identity chosen on the parent's command line,
+// which exist only in the parent's memory until they are forwarded through the environment.
+//
+//nolint:paralleltest // Mutates the process-wide Viper singleton and environment.
+func TestAtmosHandler_ForwardsProfileAndIdentity(t *testing.T) {
+	handler, ok := Get("atmos")
+	require.True(t, ok)
+	atmosHandler := handler.(*AtmosHandler)
+
+	run := func(t *testing.T, env map[string]string) string {
+		t.Helper()
+		env["_ATMOS_STEP_FAKE"] = "echo-selection"
+		step := &schema.WorkflowStep{Name: "show", Command: "describe config", Output: string(OutputModeNone), Env: env}
+		result, err := atmosHandler.Execute(context.Background(), step, NewVariables())
+		require.NoError(t, err)
+		return result.Value
+	}
+
+	t.Setenv("ATMOS_PROFILE", "")
+	require.NoError(t, os.Unsetenv("ATMOS_PROFILE"))
+	t.Setenv("ATMOS_IDENTITY", "")
+	require.NoError(t, os.Unsetenv("ATMOS_IDENTITY"))
+	t.Cleanup(func() {
+		cfg.GlobalViper().Set("profile", nil)
+		cfg.GlobalViper().Set("identity", nil)
+	})
+
+	t.Run("nothing selected forwards nothing", func(t *testing.T) {
+		assert.Equal(t, "|", run(t, map[string]string{}))
+	})
+	t.Run("profiles from the command line", func(t *testing.T) {
+		cfg.GlobalViper().Set("profile", []string{"base", "dev"})
+		defer cfg.GlobalViper().Set("profile", nil)
+		assert.Equal(t, "base,dev|", run(t, map[string]string{}))
+	})
+	t.Run("identity from the command line", func(t *testing.T) {
+		cfg.GlobalViper().Set("identity", "admin")
+		defer cfg.GlobalViper().Set("identity", nil)
+		assert.Equal(t, "|admin", run(t, map[string]string{}))
+	})
+	t.Run("the step's own env wins", func(t *testing.T) {
+		cfg.GlobalViper().Set("profile", []string{"dev"})
+		defer cfg.GlobalViper().Set("profile", nil)
+		assert.Equal(t, "prod|", run(t, map[string]string{"ATMOS_PROFILE": "prod"}))
+	})
 }

@@ -69,6 +69,26 @@ test('Native CI retains historical workflow anchors with links to focused guides
   assert.match(source, /\/integrations\/github-actions\/authentication#permissions/);
 });
 
+
+test('automation guides belong to Reference automation and keep a single language reference', () => {
+  const automationGroup = sidebars.cli.findIndex(item => item.customProps?.navigationGroup === 'Automation');
+  const languageIndex = sidebars.cli.findIndex(item => item.link?.id === 'automation/automation');
+  const nextGroup = sidebars.cli.findIndex((item, index) =>
+    index > automationGroup && item.customProps?.navigationGroup);
+  assert.ok(languageIndex > automationGroup && languageIndex < nextGroup);
+  const language = sidebars.cli[languageIndex];
+  assert.equal(language.label, 'Atmos Automation Language');
+  assert.equal(language.items.filter(item => item.id === 'automation/language').length, 1);
+  const references = language.items.filter(item => item.label === 'Language Reference');
+  assert.equal(references.length, 1);
+  assert.equal(references[0].link.id, 'automation/reference/index');
+  for (const guide of ['standalone-cli-apps', 'custom-commands', 'workflows', 'lifecycle-hooks', 'testing']) {
+    assert.ok(language.items.some(item => item.id === `automation/${guide}`), `Keep the ${guide} guide`);
+  }
+  const functions = sidebars.cli.find(item => item.label === 'Functions');
+  assert.ok(functions.items.some(item => item.link?.id === 'functions/automation/index'));
+});
+
 test('the workflow name placeholder opens its naming guide', () => {
   const workflows = sidebars.cli.find(item => item.label === 'Workflows');
   const name = workflows.items[0].items.find(item => item.label === '<name>');

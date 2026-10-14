@@ -1,0 +1,78 @@
+---
+title: "ctx.hook"
+sidebar_position: 37
+sidebar_label: "ctx.hook"
+sidebar_class_name: command
+description: The name and event of the lifecycle hook that runs the script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `ctx.hook` value tells a script which lifecycle hook triggered it and for which event, so one script can serve
+    several hooks.
+</Intro>
+
+## Usage
+
+```python
+ctx.hook.name
+ctx.hook.event
+```
+
+## Returns
+
+A value with two string attributes, or `None` when the script is not running as a hook:
+
+<dl>
+    <dt>`name`</dt>
+    <dd>The hook's name from the stack manifest.</dd>
+
+    <dt>`event`</dt>
+    <dd>The canonical event, such as `before.terraform.plan` or `after.terraform.apply`.</dd>
+</dl>
+
+The value is set in `kind: step` and `kind: steps` hooks, and in `type: test` hooks that run script steps. It is
+available inside parallel tasks and loaded functions. Outside hooks it is `None`.
+
+## Examples
+
+### Act only on one event
+
+```yaml
+hooks:
+  check:
+    events: [before.terraform.plan, after.terraform.apply]
+    kind: step
+    type: script
+    with:
+      interpreter: starlark
+      script: !include scripts/check.star
+```
+
+```python title="scripts/check.star"
+if ctx.hook.event == "before.terraform.plan":
+    ui.info("Planning " + ctx.component.name)
+else:
+    ui.success("Applied " + ctx.component.name)
+```
+
+### Log which hook ran
+
+```python
+log.debug("hook started", hook = ctx.hook.name, event = ctx.hook.event)
+```
+
+### Support standalone testing
+
+```python
+hook_name = ctx.hook.name if ctx.hook != None else "(not a hook)"
+print(hook_name)
+```
+
+## Related
+
+- [`ctx.operation`](/functions/automation/ctx.operation) describes the operation the hook is attached to.
+- [`ctx.component`](/functions/automation/ctx.component) is the hook's component.
+- [`ctx`](/functions/automation/ctx) lists every context attribute.
+- [Lifecycle hooks](/automation/lifecycle-hooks) and [stack hooks](/stacks/hooks)

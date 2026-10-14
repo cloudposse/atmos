@@ -4,8 +4,4 @@
 
 **Error:** invalid workflow step type
 
-Workflow invalid-step-type step step1 uses unsupported type invalid.
-
-💡 Step type 'invalid' is not supported
-
-💡 Each step must specify a valid type: 'atmos', 'shell', 'script', 'exec', or an interactive type like 'input', 'confirm', 'choose'
+Step step1 of workflow invalid-step-type uses unsupported type invalid. Registered step types: alert, archive, atmos, cancel, cast, choose, clear, confirm, container, emulator, env, exec, exit, file, filter, format, hint, http, input, join, junit, linebreak, log, markdown, matrix, pager, parallel, require, say, script, shell, sleep, spin, stage, store, style, table, test, tflint, title, toast, wait, wait-all, workdir, write.

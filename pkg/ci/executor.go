@@ -95,17 +95,8 @@ func Execute(opts ExecuteOptions) error {
 // detectPlatform detects the CI platform based on environment.
 func detectPlatform(forceCIMode bool) provider.Provider {
 	if forceCIMode {
-		platform := Detect()
-		if platform == nil {
-			log.Debug("CI mode forced but no platform detected, using generic provider")
-			generic, err := Get("generic")
-			if err != nil {
-				log.Warn("Failed to get generic CI provider", "error", err)
-				return nil
-			}
-			return generic
-		}
-		return platform
+		// Forced CI mode falls back to the generic provider when no platform is detected.
+		return ResolveProvider()
 	}
 
 	platform, err := DetectOrError()

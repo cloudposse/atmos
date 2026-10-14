@@ -1,0 +1,127 @@
+---
+title: "atmos.emulator"
+sidebar_position: 8
+sidebar_label: "atmos.emulator"
+sidebar_class_name: command
+description: Run an atmos emulator command, such as up, down, or exec, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.emulator` function runs `atmos emulator` through the current Atmos executable. Use it to start,
+    reset, and stop local cloud-API emulator components and to run commands inside them from automation.
+</Intro>
+
+Also available as `atmos.emu`.
+
+## Usage
+
+```python
+atmos.emulator(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
+`atmos.emulator("up", "aws", flags = {"stack": "local"})` runs `atmos emulator up aws --stack=local`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`up`](/cli/commands/emulator/up) | Start the emulator container. |
+| [`down`](/cli/commands/emulator/down) | Stop and remove the emulator container. |
+| [`reset`](/cli/commands/emulator/reset) | Stop the emulator and wipe its persisted state. |
+| [`exec`](/cli/commands/emulator/exec) | Run a command in the emulator container. |
+| [`logs`](/cli/commands/emulator/logs) | Show the emulator container logs. |
+| [`ps`](/cli/commands/emulator/ps) | List configured running emulators. |
+| [`list`](/cli/commands/emulator/list) | List emulators and their status. Also available as `ls`. |
+
+See the [`atmos emulator` command reference](/cli/commands/emulator/usage) for the complete list of subcommands and
+flags.
+
+:::note
+The `emulator` command is experimental, so each call prints the experimental notice. Starting an emulator needs a
+container runtime, either Docker or Podman, on the machine running the script. The `reset` subcommand asks for
+confirmation unless the `force` flag is set, so pass it when no terminal is available.
+:::
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `emulator`, in order: the subcommand and its positional arguments, such as the emulator component name. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). The `stack` key becomes `--stack`
+        (shorthand `s` ). Other keys include `ephemeral` for `up`, `force` for `reset`, and `runtime` for `list`
+        and `ps`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Start an emulator for a test run
+
+```python
+atmos.emulator("up", "aws", flags = {"stack": "local"})
+```
+
+### Start without persisting state
+
+```python
+atmos.emulator("up", "aws", flags = {"stack": "local", "ephemeral": True})
+```
+
+The `ephemeral` key becomes the bare flag `--ephemeral`, so data is discarded when the emulator goes down.
+
+### Wipe state without a prompt
+
+```python
+atmos.emulator("reset", "aws", flags = {"stack": "local", "force": True})
+```
+
+### Always stop the emulator after a job
+
+```python
+def run_checks():
+    # Replace with your project's integration test command.
+    return exec.run(["go", "test", "./tests/integration/..."], check = False)
+
+atmos.emulator("up", "aws", flags = {"stack": "local"})
+outcome = run_checks()
+atmos.emulator("down", "aws", flags = {"stack": "local"})
+if outcome.exit_code != 0:
+    fail("Integration tests failed.")
+```
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos emulator`](/cli/commands/emulator/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

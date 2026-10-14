@@ -4,6 +4,9 @@ commands:
     env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
+        name: starlark-focused-examples
+        command: atmos casts generate examples starlark
+      - type: shell
         name: emulator-aws-lifecycle
         command: atmos casts generate examples emulator-aws lifecycle
       - type: shell
@@ -184,6 +187,9 @@ commands:
     description: Validate every example-sourced cast
     env: !include cast-defaults.yaml .env.command
     steps:
+      - type: shell
+        name: starlark-focused-examples
+        command: atmos casts validate examples starlark
       - type: script
         name: terminal-modes
         interpreter: python3

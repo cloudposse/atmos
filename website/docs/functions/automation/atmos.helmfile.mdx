@@ -1,0 +1,133 @@
+---
+title: "atmos.helmfile"
+sidebar_position: 8
+sidebar_label: "atmos.helmfile"
+sidebar_class_name: command
+description: Run an atmos helmfile command, such as diff or apply, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.helmfile` function runs `atmos helmfile` through the current Atmos executable. Use it to render, diff,
+    sync, apply, and destroy Helm releases for a Helmfile component from automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.helmfile(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+Also available as `atmos.hf`.
+
+## Subcommands
+
+Pass the subcommand, the component, and any other positional arguments as strings before the keyword arguments. The
+call `atmos.helmfile("diff", "echo-server", flags = {"stack": "dev"})` runs
+`atmos helmfile diff echo-server --stack=dev`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| `diff` | Show differences between the desired and actual state of Helm releases. |
+| `apply` | Apply changes to align the actual state of Helm releases with the desired state. |
+| `sync` | Synchronize the state of Helm releases by reconciling the actual state with the desired state. |
+| `destroy` | Destroy the Helm releases for the specified stack. |
+| [`template`](/cli/commands/helmfile/template) | Render Helm releases defined in a helmfile to Kubernetes manifests. |
+| [`generate varfile`](/cli/commands/helmfile/generate-varfile) | Generate a values file for a Helmfile component. |
+| [`source pull`](/cli/commands/helmfile/source/pull) | Vendor Helmfile component source from the source configuration. |
+| [`source list`](/cli/commands/helmfile/source/list) | List Helmfile components with source configuration. |
+| [`source describe`](/cli/commands/helmfile/source/describe) | Show the source configuration for a Helmfile component. |
+| [`source delete`](/cli/commands/helmfile/source/delete) | Remove the vendored Helmfile source directory. |
+| `version` | Get the Helmfile version. |
+
+See the [`atmos helmfile` command reference](/cli/commands/helmfile/usage) for the complete list of subcommands and
+flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `helmfile`, in order: the subcommand, then the
+        component name. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"stack"` becomes
+        `--stack`, and the registered shorthand `"s"` resolves to the same flag. The `"ci"` key becomes `--ci`,
+        which turns on CI mode for supported Helmfile operations.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>
+        (Optional) A list or tuple of strings appended after the flags. Include the double-dash separator
+        (`"--"`) as the first element to hand the remaining values to the native `helmfile` binary.
+    </dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Diff a component before applying
+
+```python
+diff = atmos.helmfile("diff", "echo-server", flags = {"stack": "tenant1-ue2-dev"}, output = "capture")
+print(diff.stdout)
+```
+
+This runs `atmos helmfile diff echo-server --stack=tenant1-ue2-dev` and keeps the diff output in the result.
+
+### Apply with CI summaries
+
+```python
+atmos.helmfile("apply", "echo-server", flags = {"stack": "tenant1-ue2-dev", "ci": True})
+```
+
+The `ci` flag asks Atmos to write a Helmfile job summary when running in a pipeline.
+
+### Pass native Helmfile options
+
+```python
+atmos.helmfile(
+    "sync",
+    "echo-server",
+    flags = {"stack": "tenant1-ue2-dev"},
+    args = ["--", "--concurrency=2"],
+)
+```
+
+Everything after the double dash goes to the `helmfile` binary instead of Atmos.
+
+### Roll out several stacks
+
+```python
+for stack in ["tenant1-ue2-dev", "tenant1-ue2-staging"]:
+    atmos.helmfile("apply", "echo-server", flags = {"stack": stack})
+```
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos helmfile`](/cli/commands/helmfile/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

@@ -1,0 +1,28 @@
+# Step-field rendering workflows (WP4). Run from the fixture directory:
+#   atmos workflow <name> --file ft-fields
+workflows:
+  ft-templated-timeout-shell-ok:
+    description: A templated timeout (from a previous step value) on a shell step is rendered and enforced.
+    steps:
+      - name: t
+        type: script
+        interpreter: starlark
+        script: |
+          output = "5s"
+      - name: s
+        type: shell
+        timeout: '{{ .steps.t.value }}'
+        command: echo shell-step-ran
+
+  ft-templated-output-bogus:
+    description: A templated output that renders to an unknown mode fails the step.
+    steps:
+      - name: mode
+        type: script
+        interpreter: starlark
+        script: |
+          output = "bogus"
+      - name: s
+        type: shell
+        output: '{{ .steps.mode.value }}'
+        command: echo must-not-run

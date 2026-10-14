@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -432,15 +433,18 @@ func processHookExecutionSlice(atmosConfig *schema.AtmosConfiguration, values []
 
 // processHookExecutionStringMap renders both the keys and values of a
 // string-keyed map. Keys are rendered too because hook fields like `outputs`
-// use templated keys (e.g. `"{{ .vars.stage }}_label"`).
+// use templated keys (e.g. `"{{ .vars.stage }}_label"`). Values of the fields a
+// step payload lists in `literal_fields` (written with !literal) are kept exactly
+// as written.
 func processHookExecutionStringMap(atmosConfig *schema.AtmosConfiguration, values map[string]any, info *schema.ConfigAndStacksInfo) (map[string]any, error) {
+	literal := schema.LiteralFieldsFromValue(values[schema.LiteralFieldsKey])
 	result := make(map[string]any, len(values))
 	for key, item := range values {
 		stringKey, err := processHookExecutionMapKey(atmosConfig, key, info)
 		if err != nil {
 			return nil, err
 		}
-		processedValue, err := processHookExecutionValue(atmosConfig, item, info)
+		processedValue, err := processHookExecutionMapItem(atmosConfig, key, item, literal, info)
 		if err != nil {
 			return nil, err
 		}
@@ -451,19 +455,64 @@ func processHookExecutionStringMap(atmosConfig *schema.AtmosConfiguration, value
 
 // processHookExecutionAnyMap renders an `any`-keyed map (as produced by YAML
 // unmarshalling) and normalizes it to a string-keyed map, stringifying and
-// rendering each key.
+// rendering each key. It honors `literal_fields` like processHookExecutionStringMap.
 func processHookExecutionAnyMap(atmosConfig *schema.AtmosConfiguration, values map[any]any, info *schema.ConfigAndStacksInfo) (map[string]any, error) {
+	literal := schema.LiteralFieldsFromValue(values[schema.LiteralFieldsKey])
 	result := make(map[string]any, len(values))
 	for key, item := range values {
 		stringKey, err := processHookExecutionMapKey(atmosConfig, fmt.Sprint(key), info)
 		if err != nil {
 			return nil, err
 		}
-		processedValue, err := processHookExecutionValue(atmosConfig, item, info)
+		processedValue, err := processHookExecutionMapItem(atmosConfig, fmt.Sprint(key), item, literal, info)
 		if err != nil {
 			return nil, err
 		}
 		result[stringKey] = processedValue
+	}
+	return result, nil
+}
+
+// processHookExecutionMapItem renders one map value, except that a field listed in literal is
+// returned as written, and in an `env` map each value listed as `env.NAME` is returned as written.
+func processHookExecutionMapItem(atmosConfig *schema.AtmosConfiguration, key string, item any, literal []string, info *schema.ConfigAndStacksInfo) (any, error) {
+	if len(literal) == 0 {
+		return processHookExecutionValue(atmosConfig, item, info)
+	}
+	if slices.Contains(literal, key) {
+		return item, nil
+	}
+	if key == schema.StepKeyEnv {
+		return processHookExecutionEnv(atmosConfig, item, literal, info)
+	}
+	return processHookExecutionValue(atmosConfig, item, info)
+}
+
+// processHookExecutionEnv renders the values of a step `env` map, keeping the values listed as
+// `env.NAME` in literal as written. Any other shape of value is rendered normally.
+func processHookExecutionEnv(atmosConfig *schema.AtmosConfiguration, item any, literal []string, info *schema.ConfigAndStacksInfo) (any, error) {
+	entries := map[string]any{}
+	switch env := item.(type) {
+	case map[string]any:
+		entries = env
+	case map[any]any:
+		for name, value := range env {
+			entries[fmt.Sprint(name)] = value
+		}
+	default:
+		return processHookExecutionValue(atmosConfig, item, info)
+	}
+	result := make(map[string]any, len(entries))
+	for name, value := range entries {
+		if schema.IsLiteralEnvName(literal, name) {
+			result[name] = value
+			continue
+		}
+		processed, err := processHookExecutionValue(atmosConfig, value, info)
+		if err != nil {
+			return nil, err
+		}
+		result[name] = processed
 	}
 	return result, nil
 }

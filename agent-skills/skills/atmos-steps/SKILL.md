@@ -15,6 +15,9 @@ hooks (`kind: step`), and cast recordings. When a task involves `steps:`, step
 use this skill together with the surface-specific skill (`atmos-workflows`,
 `atmos-custom-commands`, or `atmos-hooks`).
 
+For `interpreter: starlark`, also load `atmos-starlark` for the embedded API,
+parallel functions, immutable inputs, and module loading.
+
 ## Core Model
 
 A step is a typed action with native fields. Do not treat steps as a place to
@@ -66,7 +69,7 @@ steps:
     output: none
     retry:
       max_attempts: 3
-      delay: 2s
+      initial_delay: 2s
     script: |
       print("ok")
 ```
@@ -89,8 +92,8 @@ Important shared fields:
 
 ## Step Types
 
-Use [atmos.tools/workflows/steps/type](https://atmos.tools/workflows/steps/type) and its
-type-specific subpages (e.g. `atmos.tools/workflows/steps/type/shell`) as the canonical
+Use [atmos.tools/steps/type](https://atmos.tools/steps/type) and its
+type-specific subpages (e.g. `atmos.tools/steps/type/shell`) as the canonical
 reference. Current canonical step types include:
 
 - Command and integration: `atmos`, `shell`, `script`, `exec`, `container`,
@@ -197,46 +200,12 @@ steps:
 Do not put `command` on a `script` step. The schema requires `interpreter` and
 `script`.
 
-## Workdir Steps
+With `interpreter: starlark`, the script runs inside Atmos (no external interpreter) and
+can call Atmos commands directly. Load `atmos-starlark` for the API. Step-specific rules:
 
-Use `type: workdir` for repeatable scratch directories:
-
-```yaml
-steps:
-  - name: stage-fixtures
-    type: workdir
-    path: .context/casts/demo
-    source: demo/casts/fixtures
-    reset: true
-```
-
-This replaces shell sequences that create, delete, and copy directories.
-
-## Hooks
-
-For hooks, the hook envelope controls lifecycle behavior and `with:` is the
-step payload. A scaffold template may use this bridge too, but only with
-`kind: step` or `kind: steps` and its two generation events:
-
-```yaml
-hooks:
-  notify:
-    kind: step
-    type: http
-    events: [after.terraform.apply]
-    on_failure: warn
-    retry:
-      max_attempts: 3
-    with:
-      url: https://example.com/hook
-      method: POST
-```
-
-Use `atmos-hooks` for hook events, outcome conditions, `on_failure`, and
-preflight behavior.
-
-## Verification
-
-When changing step YAML, verify the user-facing command from the directory where
-users actually run Atmos. Prefer `working_directory` fields in YAML and command
-tool `workdir` settings in tests over shell `cd` or `--chdir`.
+- The `script` body (inline or `!include`d) is rendered as a Go template first. A literal
+  `{{` in Starlark source fails; read inputs from `ctx.flags`, `ctx.arguments`, and `env`
+  instead of templating values into source.
+- Script steps default to raw output with no `[step]` or `completed` labels, like shell
+  steps. Set `show: {labels: true}` to restore labels. Valid `output:` modes are `raw`,
+  `log`, `viewport`, and `none`; `capture` is not a mode.
