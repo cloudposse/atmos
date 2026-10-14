@@ -53,7 +53,7 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 func (p *Plugin) onAfterCommand(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "kubernetes.Plugin.onAfterCommand")()
 
-	if !isSummaryEnabled(ctx.Config) {
+	if !ci.SummaryEnabled(ctx.Config) {
 		return nil
 	}
 
@@ -205,14 +205,4 @@ func summaryStatus(result *schema.KubernetesCIResult) string {
 		return "no changes"
 	}
 	return "succeeded"
-}
-
-func isSummaryEnabled(cfg *schema.AtmosConfiguration) bool {
-	if cfg == nil {
-		return true
-	}
-	if cfg.CI.Summary.Enabled == nil {
-		return true
-	}
-	return *cfg.CI.Summary.Enabled
 }

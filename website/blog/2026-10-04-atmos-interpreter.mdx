@@ -9,7 +9,7 @@ castTitle: "Custom CLI app with styled Atmos output"
 
 Give your team one command to build, ship, and deploy containers, whether they
 run it locally or in CI. Write your release tool in the
-[Atmos Automation Language](/automation/language), a Python-like DSL based on
+[Atmos Automation Language](/scripting/language), a Python-like DSL based on
 Starlark, and run it with `atmos ./release.star`. Compose image builds, registry
 pushes, deployments, and checks using your existing Atmos configuration.
 
@@ -34,11 +34,11 @@ As a release script grows, Bash plumbing can take over: parsing arguments and
 JSON, coordinating background processes, and handling errors between commands.
 The Atmos Automation Language gives you structured values, reusable functions,
 and parallel tasks for that work. Test your functions and command behavior with
-[test steps](/automation/testing), then run those checks locally and in CI.
+[test steps](/scripting/testing), then run those checks locally and in CI.
 
 Distribute the tool with your project and use the same entry point in both
 environments. Atmos runs it with the stacks, identities, and pinned tools you
-configure. See the [release example](/automation/standalone-cli-apps#what-your-program-can-do)
+configure. See the [release example](/scripting/standalone-cli-apps#what-your-program-can-do)
 for a tool that builds and pushes an image, then deploys with Terraform.
 
 ## Run a .star file with Atmos {#the-fix}
@@ -49,7 +49,7 @@ run it as `./my-tool.star` on systems with shebang support.
 
 ### Why Starlark? {#why-build-on-starlark}
 
-See [why Atmos uses Starlark](/automation/language#why-starlark) for the language
+See [why Atmos uses Starlark](/scripting/language#why-starlark) for the language
 choices and how they affect your scripts.
 
 ## How to Use It
@@ -101,12 +101,12 @@ pipeline. Keep the CI or CD process's reusable logic in the app, and let the CI
 system control its triggers and approvals. Tools and credentials used by the
 app's subprocesses must be available in that environment.
 
-Use [`ui` for progress and `log` for diagnostics](/automation/language#data-status-and-diagnostics).
+Use [`ui` for progress and `log` for diagnostics](/scripting/language#data-status-and-diagnostics).
 UI messages go to stderr, leaving stdout available for data consumed by another
-process. Test your automation with [script checks and test steps](/automation/testing).
+process. Test your automation with [script checks and test steps](/scripting/testing).
 
 ## Next steps {#get-involved}
 
-Build your first tool with the [Custom CLI Apps guide](/automation/standalone-cli-apps).
+Build your first tool with the [Custom CLI Apps guide](/scripting/standalone-cli-apps).
 To run scripts as Atmos custom commands, workflow steps, or hooks,
 see [Introducing Atmos Automation Language](/changelog/starlark-custom-commands).

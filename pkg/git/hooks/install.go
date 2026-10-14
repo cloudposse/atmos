@@ -71,7 +71,7 @@ func installHook(hooksDir, hookName string, force bool) error {
 	}
 
 	dest := filepath.Join(hooksDir, hookName)
-	shim := ShimContent(hookName)
+	shim := ShimContentFor(hookName, installedAtmosPath())
 
 	// Check if the file already exists.
 	existing, err := os.ReadFile(dest)

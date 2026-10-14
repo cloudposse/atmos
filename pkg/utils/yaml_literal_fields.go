@@ -126,6 +126,10 @@ func isStepMapping(step *yaml.Node, declaredType string) bool {
 	if mappingHasKey(step, schema.StepKeyScript) || mappingHasKey(step, schema.StepKeyCommand) {
 		return true
 	}
+	// A parallel or matrix step has no command of its own, but its env values are literal-aware.
+	if steps := mappingValue(step, schema.StepKeySteps); steps != nil && steps.Kind == yaml.SequenceNode && mappingHasKey(step, typeKey) {
+		return true
+	}
 	stepType := declaredType
 	if stepType == "" {
 		stepType = scalarValue(mappingValue(step, typeKey))
@@ -179,7 +183,8 @@ func isLoaderWritten(key *yaml.Node) bool {
 func literalFieldsOfStep(step *yaml.Node) []string {
 	var fields []string
 	for _, name := range schema.LiteralStepFieldNames() {
-		if isLiteralValue(mappingValue(step, name)) {
+		// An !include.raw file is the text to use as written, so it is never rendered either.
+		if value := mappingValue(step, name); isLiteralValue(value) || isIncludeRawValue(value) {
 			fields = append(fields, name)
 		}
 	}
@@ -197,6 +202,10 @@ func literalFieldsOfStep(step *yaml.Node) []string {
 
 func isLiteralValue(node *yaml.Node) bool {
 	return node != nil && node.Kind == yaml.ScalarNode && node.Tag == AtmosYamlFuncLiteral
+}
+
+func isIncludeRawValue(node *yaml.Node) bool {
+	return node != nil && node.Kind == yaml.ScalarNode && node.Tag == AtmosYamlFuncIncludeRaw
 }
 
 // mappingValue returns the value node stored under key in mapping, or nil.

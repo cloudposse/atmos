@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/spf13/viper"
 	"mvdan.cc/sh/v3/expand"
@@ -38,6 +39,31 @@ type ShellRunnerSpec struct {
 	Env     []string
 	Stdout  io.Writer
 	Stderr  io.Writer
+}
+
+// ShellExecMiddleware wraps the command handler of the shell interpreter. A middleware that does
+// not call next replaces the default handler.
+type ShellExecMiddleware func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc
+
+var (
+	shellExecMu         sync.RWMutex
+	shellExecMiddleware ShellExecMiddleware
+)
+
+// Installs the command handler (SetShellExecMiddleware) every ShellRunnerWithWriters call uses for
+// the external commands a script runs. The pkg/process package installs a handler that starts each command in
+// its own process group, so a timeout or cancellation ends the whole process tree; the dependency
+// has to point this way because pkg/process imports this package. There is one slot: a second
+// registration replaces the first, and nil restores the interpreter's default handler.
+func SetShellExecMiddleware(middleware ShellExecMiddleware) {
+	defer perf.Track(nil, "utils.SetShellExecMiddleware")()
+
+	shellExecMu.Lock()
+	defer shellExecMu.Unlock()
+	if middleware != nil && shellExecMiddleware != nil {
+		log.Debug("Replacing the shell command handler")
+	}
+	shellExecMiddleware = middleware
 }
 
 // MaxShellDepth is the maximum number of nested shell commands that can be executed .
@@ -130,11 +156,18 @@ func ShellRunnerWithWriters(spec *ShellRunnerSpec) error {
 	}
 
 	listEnviron := expand.ListEnviron(environ...)
-	runner, err := interp.New(
+	options := []interp.RunnerOption{
 		interp.Dir(spec.Dir),
 		interp.Env(listEnviron),
 		interp.StdIO(os.Stdin, spec.Stdout, spec.Stderr),
-	)
+	}
+	shellExecMu.RLock()
+	middleware := shellExecMiddleware
+	shellExecMu.RUnlock()
+	if middleware != nil {
+		options = append(options, interp.ExecHandlers(middleware))
+	}
+	runner, err := interp.New(options...)
 	if err != nil {
 		return err
 	}

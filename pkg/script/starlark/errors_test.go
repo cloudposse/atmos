@@ -101,7 +101,7 @@ func TestProcessFailureMessages(t *testing.T) {
 func TestProcessOutputOptionValidation(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ name, source, want string }{
-		{"unknown mode", `exec.run(["tool"], output = "quiet")`, `output must be "stream" or "capture", got "quiet"`},
+		{"unknown mode", `exec.run(["tool"], output = "quiet")`, `output must be "stream", "capture", or "viewport", got "quiet"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
