@@ -7,7 +7,11 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
+
+	"mvdan.cc/sh/v3/expand"
+	"mvdan.cc/sh/v3/interp"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
@@ -87,7 +91,14 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 		return result
 	}
 
-	cmd := exec.CommandContext(ctx, spec.Command, spec.Args...)
+	command, err := resolveCommand(&spec)
+	if err != nil {
+		result.Err = fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessStartFailed, err)
+		result.ExitCode = -1
+		return result
+	}
+	cmd := exec.CommandContext(ctx, command, spec.Args...)
+	cmd.Args[0] = spec.Command
 	applyWindowsCmdExeQuoting(cmd, spec.Command, spec.Args)
 	cmd.Dir = spec.Dir
 	if spec.Env != nil {
@@ -105,7 +116,7 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 	result.Started = true
 	result.StartedAt = time.Now()
 
-	err := cmd.Wait()
+	err = cmd.Wait()
 	// Collect subprocess-tree metrics unconditionally, once, regardless of
 	// success/failure — cmd.ProcessState is populated by Wait() either way,
 	// and callers (e.g. the exec-metadata upload) need usage data even for a
@@ -126,6 +137,19 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 		result.Err = errors.Join(result.Err, ctxErr)
 	}
 	return result
+}
+
+// resolveCommand searches the invocation environment relative to its working
+// directory. Absolute lookup results prevent exec.Cmd from applying Dir twice.
+func resolveCommand(spec *TaskSpec) (string, error) {
+	if spec.Env == nil {
+		return spec.Command, nil
+	}
+	dir, err := filepath.Abs(spec.Dir)
+	if err != nil {
+		return "", err
+	}
+	return interp.LookPathDir(dir, expand.ListEnviron(spec.Env...), spec.Command)
 }
 
 func writerOrDiscard(w io.Writer) io.Writer {

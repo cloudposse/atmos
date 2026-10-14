@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"os"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/muesli/termenv"
@@ -479,4 +481,51 @@ func BenchmarkAtmosLogger_WithContext(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		logger.With("key", "value").Info("benchmark message")
 	}
+}
+
+func TestAtmosLoggerConcurrentConfigurationAndDerivedLogging(t *testing.T) {
+	var output bytes.Buffer
+	logger := New()
+	logger.SetOutput(&output)
+	logger.SetLevel(TraceLevel)
+	logger.SetReportTimestamp(false)
+	derived := logger.WithPrefix("child").With("scope", "derived")
+	const count = 200
+	start := make(chan struct{})
+	var workers sync.WaitGroup
+	workers.Add(2)
+	go func() {
+		defer workers.Done()
+		<-start
+		for range count {
+			logger.SetPrefix("auth")
+			logger.SetLevel(TraceLevel)
+			logger.SetReportCaller(false)
+			logger.SetReportTimestamp(false)
+			logger.SetTimeFormat(time.RFC3339)
+			logger.SetStyles(DefaultStyles())
+			logger.SetColorProfile(termenv.Ascii)
+			logger.SetColorEnabled(false, false)
+			logger.SetOutput(&output)
+			_ = logger.GetPrefix()
+			_ = logger.GetLevel()
+		}
+	}()
+	go func() {
+		defer workers.Done()
+		<-start
+		for i := range count {
+			logger.Warnf("parent-message %d", i)
+			derived.Info("derived-message", "iteration", i)
+			logger.With("iteration", i).WithPrefix("temporary").Info("scoped-message")
+		}
+	}()
+	close(start)
+	workers.Wait()
+
+	assert.Equal(t, count, strings.Count(output.String(), "parent-message"))
+	assert.Equal(t, count, strings.Count(output.String(), "derived-message"))
+	assert.Equal(t, count, strings.Count(output.String(), "scoped-message"))
+	assert.Contains(t, output.String(), "scope=derived")
+	assert.Equal(t, "child", derived.GetPrefix(), "parent mutations must not replace a child's prefix")
 }
