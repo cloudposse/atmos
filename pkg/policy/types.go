@@ -114,8 +114,8 @@ type Evaluation struct {
 	Request    *Request        `json:"request"`
 }
 
-// Evaluator is the language extension point. Future restricted Starlark support
-// can implement this contract without exposing the script automation engine.
+// Evaluator is the language extension point for pure predicates, including CEL
+// and restricted Starlark, without exposing the script automation engine.
 //
 //go:generate go run go.uber.org/mock/mockgen -source=types.go -destination=mock_evaluator_test.go -package=policy
 type Evaluator interface {

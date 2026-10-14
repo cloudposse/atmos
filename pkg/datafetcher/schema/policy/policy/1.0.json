@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Experimental Atmos inline CEL policy document",
+  "title": "Atmos inline policy document",
   "type": "object",
   "additionalProperties": false,
   "required": ["apiVersion", "kind", "metadata", "spec"],
@@ -33,7 +33,7 @@
             "required": ["on", "rule", "action"],
             "properties": {
               "on": {"enum": ["terraform.plan", "operation", "atmos.affected"]},
-              "engine": {"enum": ["cel"], "default": "cel"},
+              "engine": {"enum": ["cel", "starlark"], "default": "cel"},
               "rule": {"type": "string", "minLength": 1, "maxLength": 65536},
               "action": {"enum": ["deny", "hooks"]},
               "reason": {"type": "string"},

@@ -54,7 +54,7 @@ func TestPlanManifestSchema(t *testing.T) {
 	}
 	for name, manifest := range map[string]string{
 		"unknown field":  testPlanManifest + "      enforced: true\n",
-		"unknown engine": testPlanManifest + "      engine: starlark\n",
+		"unknown engine": testPlanManifest + "      engine: unknown\n",
 		"warn":           strings.ReplaceAll(testPlanManifest, "action: deny", "action: warn"),
 		"missing rule":   "apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: test}\nspec: {policies: {}}",
 	} {

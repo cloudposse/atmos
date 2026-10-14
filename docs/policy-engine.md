@@ -7,19 +7,19 @@ contributors building the policy engine and its integrations.
 > [!WARNING]
 > Experimental API and limited command integration
 >
-> The command integrations use the [directory manifest](https://atmos.tools/policies/configuration) with CEL rules.
+> The command integrations use the [directory manifest](https://atmos.tools/policies/configuration) with CEL or Starlark rules.
 > The broader Go API below accepts caller-supplied inputs and effects; its types do not imply a
 > command collector or enforcement path. Existing
 > [`settings.validation`](https://atmos.tools/cli/commands/validate/component) is a separate integration.
 
 ## Scope and boundaries
 
-The implemented core provides an instance-local evaluator registry, bounded CEL evaluation, explicit
+The implemented core provides an instance-local evaluator registry, bounded CEL and Starlark evaluation, explicit
 input-kind dispatch, typed effects, provider-native CI snapshots, and affected inventory contracts.
 The pure core does not calculate a Git diff, fetch API data, verify a review, or execute a hook.
 Requests can be evaluated without an Atmos stack, component, CI environment, or `atmos.yaml`.
 
-`LoadDirectory` loads inline CEL `terraform.plan` denial and `operation` denial/hook rules from
+`LoadDirectory` loads inline CEL/Starlark `terraform.plan` and `atmos.affected` denial rules and `operation` denial/hook rules from
 explicit strict `Policy` documents. `LoadPlanDirectory` retains its plan-only API.
 `planfile.Guard` extracts full JSON through an isolated `process.Runner`, checks
 the native plan envelope, and binds the decision to the private binary consumed by apply.
@@ -295,7 +295,14 @@ Adapters are trusted Go code and must be concurrency-safe, honor cancellation, a
 The registry is not a sandbox for arbitrary Go plugins. Preserve predicate semantics: true selects
 effects, false does not apply, and failure returns an error rather than false.
 
-Only CEL is implemented in this package. Starlark, Rego, and declarative adapters are not registered;
+`NewEngine()` registers CEL and restricted Starlark. The zero-value `Engine` still has no adapters.
+Starlark shares compilation and value conversion with configuration evaluation through the
+host-independent `pkg/script/starlark/value` package, avoiding the runtime → CI → policy import cycle.
+The policy adapter supplies detached snapshots, disables printing, sanitizes errors, enforces a
+100,000-step limit, and accepts only a boolean return. Source is limited to 64 KiB. These bounds
+are not a memory sandbox. See [Starlark policies](https://atmos.tools/policies/starlark).
+
+Rego and declarative adapters are not registered;
 selecting an unknown engine for an applicable rule returns an error. This does not remove the
 separate legacy Rego validation path.
 

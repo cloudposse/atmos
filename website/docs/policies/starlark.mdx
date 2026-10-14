@@ -1,0 +1,102 @@
+---
+title: Starlark Policies
+sidebar_label: Starlark
+description: Write bounded Starlark policy predicates over captured plan, lifecycle, and affected inputs.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use `engine: starlark` for policies that need loops, helper functions, recursion, or custom
+aggregation. A rule is a function body that returns a boolean. It uses the same attachments,
+input collectors, denial rules, and hook executor as CEL policies.
+</Intro>
+
+## Define a rule
+
+Save this manifest as `policy.d/protect-production.yaml`:
+
+```yaml
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: protect-production
+  description: Prevent deletion of production Helm releases.
+spec:
+  policies:
+    prevent-delete:
+      on: operation
+      engine: starlark
+      match:
+        labels: {stage: prod}
+      action: deny
+      reason: Production releases must not be deleted
+      rule: |
+        return ctx.input["event"] == "before.helm.delete"
+```
+
+`True` selects the declared action; `False` makes this rule not applicable. A missing return,
+`None`, a string, or a number is an error—not an implicit boolean conversion. CEL remains the
+default when `engine` is omitted. Both languages can coexist in one document or directory.
+
+## Input bindings
+
+| Binding | Contents |
+|---|---|
+| `ctx.input` | Native data for `terraform.plan`, `operation`, or `atmos.affected` |
+| `ctx.params` | Rule's `with` object; empty by default |
+| `ctx.ci` | Provider-native snapshot, or `None` outside detected CI |
+| `ctx.request` | `kind`, `revisions`, and optional instance `subject` |
+
+Nested objects use dictionary indexing, not attribute access:
+
+```python
+return ctx.request["subject"]["metadata"]["labels"].get("owner") == "platform"
+```
+
+Mappings support `get`, `keys`, `values`, and `items`. Lists and mappings supplied by Atmos are
+read-only. Local lists and dictionaries can be built and changed inside the rule. Integer inputs
+retain their precision. `json.encode` and `json.decode` are available.
+
+For optional fields use `object.get("field")` or `"field" in object`; JSON `null` is `None`.
+Missing required fields must block or select a denial, not silently become an empty result.
+Declare required CI evidence with [`required_ci`](/policies/ci#required-inputs); it is checked
+before the predicate, even if the predicate would return `False`.
+
+## Aggregate plan changes
+
+```python
+total = 0
+for resource in ctx.input.get("resource_changes", []):
+    if resource["mode"] == "managed" and "delete" in resource["change"]["actions"]:
+        total += 1
+return total > ctx.params["maximum"]
+```
+
+The [weighted change budget](/policies/library/terraform-starlark-change-budget) library entry
+includes a complete manifest and tested input snapshots. Its scope is a single plan, not an
+aggregation of separate CI jobs.
+
+## Select lifecycle hooks
+
+Use `on: operation` and `action: hooks` with the existing
+[hook requirements](/policies/hooks#hook-requirements). The predicate only selects obligations:
+
+```python
+return ctx.input["event"] == "after.terraform.plan" and ctx.input["status"] == "success"
+```
+
+The lifecycle executor runs the selected hooks. Starlark predicates cannot call hooks themselves,
+and successful hooks cannot override a separate denial.
+
+## Execution limits
+
+Rules are limited to 64 KiB of source and 100,000 interpreter steps per evaluation. Cancellation,
+limit exhaustion, compilation errors, missing values, and non-boolean results block enforcement.
+These are execution limits, not an operating-system memory sandbox; native builtins can allocate
+memory and do work outside interpreter-step accounting. Protect policy definitions and review changes.
+
+There is no `load`, `print`, shell, filesystem, network, environment, or automation-host access.
+`exec`, `fs`, `steps`, and the automation `ci` module are unavailable. Policy CI data is available
+only through `ctx.ci`; reading it never performs API requests. Error messages omit source and input
+values. Policies cannot evaluate deferred YAML functions or fetch additional component configuration.

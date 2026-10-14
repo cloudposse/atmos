@@ -1,6 +1,6 @@
 # Atmos Policy Library
 
-Reusable, individually documented CEL policies. Browse the catalog at
+Reusable, individually documented CEL and Starlark policies. Browse the catalog at
 [Policy Library](https://atmos.tools/policies/library).
 
 Each directory contains one `policy.yaml`, a technical `README.md`, and
@@ -8,7 +8,7 @@ Each directory contains one `policy.yaml`, a technical `README.md`, and
 the catalog title, description, and category; no separate list of entries is maintained.
 
 Every catalog manifest includes `metadata.description` with its plain-English purpose. This
-literal text is separate from the CEL `rule` and the denial `reason`.
+literal text is separate from the `rule` and the denial `reason`.
 
 ## Use selected policies
 

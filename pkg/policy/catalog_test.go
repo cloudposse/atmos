@@ -26,8 +26,7 @@ type catalogCase struct {
 // A new entry must contain exactly one rule and matching/nonmatching test cases.
 func TestPolicyCatalog(t *testing.T) {
 	root, entries := policyCatalogEntries(t)
-	var engine Engine
-	require.NoError(t, engine.Register(CELEngine, &CEL{}))
+	engine := NewEngine()
 	for _, entry := range entries {
 		t.Run(entry, func(t *testing.T) {
 			directory := filepath.Join(root, entry)
@@ -56,7 +55,7 @@ func TestPolicyCatalog(t *testing.T) {
 					nonmatching = nonmatching || tc.Status == NotApplicable
 				}
 				t.Run(tc.Name, func(t *testing.T) {
-					checkCatalogCase(t, &engine, bundle, &tc)
+					checkCatalogCase(t, engine, bundle, &tc)
 				})
 			}
 			require.True(t, matching, "missing matching case")

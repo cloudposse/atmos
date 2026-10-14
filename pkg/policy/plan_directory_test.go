@@ -92,7 +92,7 @@ func TestPlanDirectoryRejectsUnsupportedDeclarations(t *testing.T) {
 		"unknown field":    testPlanManifest + "      enforced: false\n",
 		"unknown input":    strings.ReplaceAll(testPlanManifest, "terraform.plan", "operation"),
 		"unknown action":   strings.ReplaceAll(testPlanManifest, "action: deny", "action: warn"),
-		"unknown engine":   testPlanManifest + "      engine: starlark\n",
+		"unknown engine":   testPlanManifest + "      engine: unknown\n",
 		"invalid CEL":      strings.ReplaceAll(testPlanManifest, "has(input.resource_changes)", "badfunction()"),
 		"missing name":     strings.ReplaceAll(testPlanManifest, "name: platform", "name: ''"),
 		"blank rule name":  strings.ReplaceAll(testPlanManifest, "no-deletes:", "'':"),

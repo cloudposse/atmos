@@ -65,10 +65,7 @@ func (h *Hooks) runPolicyHooks(run *hookRunContext) error {
 			return err
 		}
 	}
-	var engine policy.Engine
-	if err := engine.Register(policy.CELEngine, &policy.CEL{}); err != nil {
-		return err
-	}
+	engine := policy.NewEngine()
 	decision, err := engine.Evaluate(ctx, request, h.policyBundle.Rules)
 	if err != nil {
 		return fmt.Errorf("%w: operation evaluation failed (input details withheld)", errUtils.ErrPolicyEvaluation)

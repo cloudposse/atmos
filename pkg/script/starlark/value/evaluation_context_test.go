@@ -1,4 +1,4 @@
-package starlark
+package value
 
 import (
 	"context"
@@ -7,8 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/cloudposse/atmos/pkg/script"
 )
 
 func TestEvaluateConfigurationMapping(t *testing.T) {
@@ -30,7 +28,7 @@ func TestEvaluateConfigurationMapping(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.source, func(t *testing.T) {
-			result, err := New().EvaluateValue(context.Background(), script.Evaluation{Source: tc.source, Context: staticValueMap{
+			result, err := evaluateTestValue(context.Background(), testEvaluation{Source: tc.source, Context: StaticMap{
 				"vars": map[string]any{"stage": "prod", "list": []any{1, "two"}}, "metadata": map[string]any{"owner": "platform"},
 			}})
 			require.NoError(t, err)
@@ -49,7 +47,7 @@ func TestEvaluateConfigurationInvalidAccess(t *testing.T) {
 	}
 	for _, source := range cases {
 		t.Run(source, func(t *testing.T) {
-			_, err := New().EvaluateValue(context.Background(), script.Evaluation{Source: source, Context: staticValueMap{"vars": map[string]any{"items": []any{1}}}})
+			_, err := evaluateTestValue(context.Background(), testEvaluation{Source: source, Context: StaticMap{"vars": map[string]any{"items": []any{1}}}})
 			require.Error(t, err)
 		})
 	}
@@ -57,7 +55,7 @@ func TestEvaluateConfigurationInvalidAccess(t *testing.T) {
 
 func TestEvaluateConfigurationResultIsolation(t *testing.T) {
 	original := map[string]any{"nested": map[string]any{"items": []any{"first", "last"}}}
-	value, err := New().EvaluateValue(context.Background(), script.Evaluation{Source: "return ctx.vars", Context: staticValueMap{"vars": original}})
+	value, err := evaluateTestValue(context.Background(), testEvaluation{Source: "return ctx.vars", Context: StaticMap{"vars": original}})
 	require.NoError(t, err)
 	result := value.(map[string]any)
 	outputItems := result["nested"].(map[string]any)["items"].([]any)
@@ -74,17 +72,17 @@ func TestEvaluateConfigurationInputTypes(t *testing.T) {
 		"null": nil, "bool": true, "signed": int64(-9007199254740993),
 		"unsigned": uint64(18446744073709551615), "float": 1.5, "tag": "!env NOT_AN_EXPRESSION",
 	}
-	result, err := New().EvaluateValue(context.Background(), script.Evaluation{Source: "return ctx.vars", Context: staticValueMap{"vars": input}})
+	result, err := evaluateTestValue(context.Background(), testEvaluation{Source: "return ctx.vars", Context: StaticMap{"vars": input}})
 	require.NoError(t, err)
 	assert.Equal(t, input, result)
 	for _, value := range []any{make(chan int), []any{make(chan int)}} {
-		_, err = New().EvaluateValue(context.Background(), script.Evaluation{Source: "return ctx.vars['value']", Context: staticValueMap{"vars": map[string]any{"value": value}}})
+		_, err = evaluateTestValue(context.Background(), testEvaluation{Source: "return ctx.vars['value']", Context: StaticMap{"vars": map[string]any{"value": value}}})
 		require.ErrorContains(t, err, "unsupported configuration input")
 	}
 }
 
 func TestEvaluateConfigurationMappingItems(t *testing.T) {
-	input := staticValueMap{
+	input := StaticMap{
 		"vars": map[string]any{"region": "us-east-2", "stage": "prod", "tags": map[string]any{"team": "plat"}},
 	}
 	cases := []struct {
@@ -99,7 +97,7 @@ func TestEvaluateConfigurationMappingItems(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := New().EvaluateValue(context.Background(), script.Evaluation{Source: tc.source, Context: input})
+			result, err := evaluateTestValue(context.Background(), testEvaluation{Source: tc.source, Context: input})
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, result)
 		})
@@ -120,9 +118,9 @@ func (failingValueMap) Get(key string) (any, bool, error) {
 var errFailingValue = errors.New("value cannot be resolved")
 
 func TestEvaluateConfigurationItemsSurfaceErrors(t *testing.T) {
-	_, err := New().EvaluateValue(context.Background(), script.Evaluation{
+	_, err := evaluateTestValue(context.Background(), testEvaluation{
 		Source:  `return json.encode(ctx.vars)`,
-		Context: staticValueMap{"vars": failingValueMap{}},
+		Context: StaticMap{"vars": failingValueMap{}},
 	})
 	require.ErrorIs(t, err, errFailingValue)
 }

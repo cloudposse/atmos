@@ -97,7 +97,7 @@ type planPolicyItem struct {
 	Hooks      []HookRequirement `yaml:"hooks"`
 }
 
-// LoadPlanDirectory loads the initial, deliberately narrow inline CEL plan manifest.
+// LoadPlanDirectory loads inline CEL or Starlark plan manifests.
 // An explicit directory is required. No discovery, imports, templates or trust claims
 // are made. Unsupported fields/capabilities are errors, not ignored declarations.
 func LoadPlanDirectory(directory string) ([]Rule, error) {
@@ -114,7 +114,7 @@ func LoadPlanDirectory(directory string) ([]Rule, error) {
 	return bundle.Rules, nil
 }
 
-// LoadDirectory loads explicit, protected local CEL policy documents. It performs
+// LoadDirectory loads explicit, protected local policy documents. It performs
 // no imports, template expansion, hook execution or automatic trust discovery.
 func LoadDirectory(directory string) (*Bundle, error) {
 	defer perf.Track(nil, "policy.LoadDirectory")()
@@ -288,13 +288,7 @@ func (p *planPolicyItem) resolveExpression(document, name string) (Rule, error) 
 	if p.Engine == "" {
 		p.Engine = CELEngine
 	}
-	if p.Engine != CELEngine {
-		return Rule{}, fmt.Errorf("%w: plan directory currently supports only CEL", errUtils.ErrPolicyEngineUnknown)
-	}
-	if len(p.Rule) > maxExpressionBytes {
-		return Rule{}, fmt.Errorf("%w: expression exceeds size limit", errUtils.ErrPolicyInvalid)
-	}
-	if _, err := compileCEL(p.Rule); err != nil {
+	if err := validateExpression(p.Engine, p.Rule); err != nil {
 		return Rule{}, err
 	}
 	parameters := json.RawMessage(`{}`)
@@ -309,4 +303,20 @@ func (p *planPolicyItem) resolveExpression(document, name string) (Rule, error) 
 		ID: document + "/" + name, On: p.On, Engine: p.Engine, Expression: p.Rule, Match: p.Match,
 		Parameters: parameters, RequiredCI: p.RequiredCI, Effects: Effects{Deny: p.Action == "deny", Reason: p.Reason, Hooks: p.Hooks},
 	}, nil
+}
+
+func validateExpression(engine, expression string) error {
+	if len(expression) > maxExpressionBytes {
+		return fmt.Errorf("%w: expression exceeds size limit", errUtils.ErrPolicyInvalid)
+	}
+	var err error
+	switch engine {
+	case CELEngine:
+		_, err = compileCEL(expression)
+	case StarlarkEngine:
+		_, err = compileStarlark(expression, nil)
+	default:
+		return fmt.Errorf("%w: supported engines are cel and starlark", errUtils.ErrPolicyEngineUnknown)
+	}
+	return err
 }

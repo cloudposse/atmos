@@ -1,4 +1,4 @@
-package starlark
+package value
 
 import (
 	"fmt"
@@ -9,19 +9,19 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/script"
 )
 
-type staticValueMap map[string]any
+// StaticMap exposes already materialized data through ValueMap. Callers own isolation.
+type StaticMap map[string]any
 
-func (m staticValueMap) Keys() []string {
-	defer perf.Track(nil, "starlark.staticValueMap.Keys")()
+func (m StaticMap) Keys() []string {
+	defer perf.Track(nil, "starlark.StaticMap.Keys")()
 
 	return slices.Sorted(maps.Keys(m))
 }
 
-func (m staticValueMap) Get(key string) (any, bool, error) {
-	defer perf.Track(nil, "starlark.staticValueMap.Get")()
+func (m StaticMap) Get(key string) (any, bool, error) {
+	defer perf.Track(nil, "starlark.StaticMap.Get")()
 
 	value, ok := m[key]
 	return value, ok, nil
@@ -30,9 +30,9 @@ func (m staticValueMap) Get(key string) (any, bool, error) {
 // configurationMap resolves individual keys, including nested maps, on demand.
 // It offers read-only dict operations without exposing the host's mutable maps.
 type configurationMap struct {
-	values     script.ValueMap
+	values     ValueMap
 	attributes bool
-	sink       *itemErrors
+	sink       *ItemErrors
 }
 
 func (m *configurationMap) String() string {

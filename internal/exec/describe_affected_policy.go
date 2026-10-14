@@ -43,10 +43,7 @@ func enforceAffectedPolicies(config *schema.AtmosConfiguration, local, remote *g
 }
 
 func evaluateAffectedPolicies(request *policy.Request, rules []policy.Rule) error {
-	var engine policy.Engine
-	if err := engine.Register(policy.CELEngine, &policy.CEL{}); err != nil {
-		return err
-	}
+	engine := policy.NewEngine()
 	decision, err := engine.Evaluate(context.Background(), request, rules)
 	if err != nil {
 		// Never print inventory values, which may include sensitive configuration.

@@ -41,13 +41,22 @@ for limits and error behavior.
 
 | Layer | Implemented responsibility |
 |---|---|
-| `pkg/policy` | Input validation, CEL evaluation, rule dispatch, decision precedence, and typed obligations |
+| `pkg/policy` | Input validation, CEL/Starlark evaluation, rule dispatch, decision precedence, and typed obligations |
 | `pkg/policy/planfile` | Private artifact extraction, plan validation, and binding evaluation to saved-plan apply |
 | `pkg/ci` | Provider detection and optional snapshot collection |
 | `pkg/hooks` | Governing hook resolution, execution, skip protection, and failure propagation |
 
 The core can represent an outstanding approval requirement, but does not verify approval evidence.
 The directory manifest accepts `deny` and operation `hooks` actions only.
+
+## Starlark operations
+
+Restricted Starlark supports loops, comprehensions, helper functions, recursion, and custom
+aggregation over read-only snapshots. The function body must return a boolean; findings, hook
+payloads, and recipients remain static effects. It shares the existing configuration evaluator's
+compiler and value conversion, without the automation host or lazy configuration reads.
+Source is limited to 64 KiB and execution to 100,000 interpreter steps; this is not a memory sandbox.
+See [Starlark policies](https://atmos.tools/policies/starlark) for bindings and restrictions.
 
 ## Enforcement boundary
 

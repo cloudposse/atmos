@@ -29,7 +29,7 @@ enrichment, and durable webhook orchestration belong to Atmos Pro.
 
 **Status:** this is a proposed design, not documentation of a fully shipped policy engine.
 `pkg/policy` provides the evaluator scaffold. The first command integration described below is an
-opt-in saved-Terraform-plan gate using CEL and `policy.d/` (overridden by `ATMOS_POLICY_DIR`). The directory also
+opt-in saved-Terraform-plan gate using CEL/Starlark and `policy.d/` (overridden by `ATMOS_POLICY_DIR`). The directory also
 supports operation rules selecting existing hooks at Terraform, Helmfile, Helm, and Kubernetes
 lifecycle points. Native CI supplies GitHub Actions environment/event snapshots through `pkg/ci`.
 Instance selectors attach plan/lifecycle rules using resolved tags, labels, names, stacks, and types.
@@ -208,16 +208,18 @@ Do not expose these candidates as supported settings in website documentation.
   Actions metadata/events; operation policies select governing hooks through the existing executor.
 - **Initial scaffold and plan integration (this workspace):** `pkg/policy` supplies typed
   requests/decisions/effects, affected inventory contracts, provider-native CI snapshots and a
-  collector interface, an explicit evaluator registry, and a bounded CEL predicate adapter.
+  collector interface, an explicit evaluator registry, and bounded CEL and Starlark predicate adapters.
   Required inputs fail closed; approvals remain outstanding; pure evaluation returns hook obligations
-  that the lifecycle integration executes. An explicit-directory loader supports inline CEL plan and
+  that the lifecycle integration executes. An explicit-directory loader supports inline CEL/Starlark plan and
   operation rules. There is no general manifest/library resolver, live API-fact collector, trust resolver, approval verifier,
-  or Starlark/Rego adapter in this new package. Existing validation and hook/CI reporting is unchanged.
+  or Rego adapter in this new package. Existing validation and hook/CI reporting is unchanged.
   See [the scaffold contract](../../pkg/policy/README.md) for its narrower current API.
-- **Incoming dependency:** the [Starlark PR stack](https://github.com/cloudposse/atmos/pull/3321)
-  includes restricted value evaluation, script hook steps, CI context, and a reporter seam. Reuse the
-  restricted `pkg/script.ValueEvaluator` for policies; the automation `Engine` is a different host.
-  Availability must be checked against the merged stack before implementation.
+- **Merged dependency:** [restricted Starlark value evaluation](https://github.com/cloudposse/atmos/pull/3286)
+  and the automation runtime are available on main. Policy evaluation now reuses their compiler and
+  read-only value conversion through `pkg/script/starlark/value`, without importing the automation host.
+  `engine: starlark` function bodies return a strict boolean over materialized `ctx.input`, `ctx.params`,
+  `ctx.ci`, and `ctx.request`. Source is bounded to 64 KiB and execution to 100,000 interpreter steps.
+  Printing is disabled and runtime diagnostics omit source/input values. Limits are not a memory sandbox.
 
 ## Goals
 
@@ -904,7 +906,7 @@ Declarative, CEL, Rego, and Starlark are adapters to one policy result, not sepa
   `data.atmos.errors` map to the common result; approval/hook effects use the new typed result adapter,
   not overloaded denial strings.
 - **Declarative** library instances express common conditions, parameters, and effects without code.
-- **Starlark** reuses the incoming restricted `ValueEvaluator`, with frozen ordinary snapshot maps,
+- **Starlark (implemented)** reuses restricted compilation and value conversion, with read-only ordinary snapshot maps,
   bounded execution/cancellation, and no shell, filesystem, network, CI writers, or automation host.
   Do not pass a lazy `ValueMap` that can execute YAML functions while being read. Imports and any
   future helper modules must follow the restricted evaluator's allowlist, not automation defaults.
@@ -1566,8 +1568,8 @@ required hook: those requirements must work when enabled.
 
 | Stage | Deliverable / behavior |
 |---|---|
-| Foundation | common decision/effect contract, trusted loading, four evaluator adapters (Starlark depends on the incoming restricted evaluator), legacy validation compatibility |
-| First command slice (implemented in this workspace) | default `policy.d/`, `ATMOS_POLICY_DIR` override, strict inline CEL plan rules and literal instance selectors, saved-plan JSON gate after plan and before saved-plan apply; mandatory for matching instances, without trust-tier discovery |
+| Foundation | common decision/effect contract, trusted loading, CEL and Starlark implemented; declarative/Rego adapters proposed; legacy validation compatibility |
+| First command slice (implemented in this workspace) | default `policy.d/`, `ATMOS_POLICY_DIR` override, strict inline CEL/Starlark rules and literal instance selectors, saved-plan JSON gate after plan and before saved-plan apply; mandatory for matching instances, without trust-tier discovery |
 | Local Native CI integration (implemented) | optional snapshot capability on existing registry; GitHub-native supplied metadata/event; no API calls; required missing evidence blocks |
 | Lifecycle hooks (initial slice implemented) | Terraform/Helmfile/Helm/Kubernetes operation rules reuse hook/step engines, governing definitions/tool pins, required execution/success and dry-run; other components and richer result evidence remain work |
 | Affected gate (initial slice implemented) | unfiltered static before/after inventories under active discovery, Git files, component-source changes, structured fields; deny before consuming affected output; clean worktrees and strict collection required |
@@ -1704,7 +1706,7 @@ is explicitly documented.
   structured changes and analysis metadata. Do not reuse filtered output as proof of completeness.
 - `pkg/hooks` and `pkg/runner/step`: accept trusted policy bindings and immutable event/decision
   context, preserve engine reuse, enforce mandatory work and record execution results.
-- `pkg/script`: consume the incoming restricted evaluation interface; no new interpreter or
+- `pkg/script/starlark/value`: shared restricted compilation and value conversion; no new interpreter or
   automation-host exposure inside policy evaluation.
 - Command/MCP/function/source/plan entry points: invoke the appropriate input-kind evaluation;
   early admission does not require fully rendered components. Ordinary commands must not implicitly
@@ -1749,7 +1751,7 @@ Apps/durable orchestration in Pro.
 - [Function Execution Security Analysis](../function-execution-security-analysis.md).
 - [Palantir policy-bot](https://github.com/palantir/policy-bot) and its linked result/review/file-predicate
   implementation in the design-precedent section; design reference, not copied code.
-- [Incoming Starlark PR stack](https://github.com/cloudposse/atmos/pull/3321);
+- [Merged restricted Starlark evaluation](https://github.com/cloudposse/atmos/pull/3286);
   [CI module PR](https://github.com/cloudposse/atmos/pull/3307).
 - [GitHub token scope](https://docs.github.com/en/actions/concepts/security/github_token),
   [workflow permissions](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions),

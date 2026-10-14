@@ -13,7 +13,7 @@ result-contract, and integration boundaries without treating supplied-data tests
 ## Implemented
 
 - An instance-local `Engine` with explicit language registration through `Evaluator`.
-  Register `&CEL{}` under `CELEngine` to use CEL. No engines register themselves globally.
+  `NewEngine()` installs CEL and restricted Starlark. No engines register themselves globally.
 - Explicit input-kind dispatch. An `atmos.affected` rule cannot run on an `operation`
   request, and evaluating a rule never computes affected data or loads configuration.
 - Materialized JSON inputs and detached copies per evaluator. No lazy configuration
@@ -29,9 +29,9 @@ result-contract, and integration boundaries without treating supplied-data tests
   fields. Before/after objects stay separate; presence flags distinguish absent fields
   from explicit null. Explicit completeness and all inventory arrays are required.
   The caller must actually establish completeness; the engine cannot verify a claim.
-- CEL size and runtime cost bounds, cancellation, and integer-preserving JSON decoding.
+- CEL cost bounds and Starlark step bounds, source-size limits, cancellation, and integer-preserving JSON decoding.
 - Strict native Terraform plan validation, `LoadPlanDirectory` compatibility API, and `LoadDirectory`
-  for mixed inline CEL plan/operation/affected bundles with governing hook definitions/tool pins.
+  for mixed inline CEL/Starlark plan/operation/affected bundles with governing hook definitions/tool pins.
 - `planfile.Guard` binds evaluation to private binary plan artifacts. Terraform commands opt in
   through `policy.d/` or `ATMOS_POLICY_DIR`, check after plan, and recheck before applying the evaluated copy.
   Gate failures are separate from Terraform exit codes. Implicit apply/destroy are rejected.
@@ -48,10 +48,10 @@ snapshot exposes native values under `ci.metadata.data`, `ci.event.data`, and
 `ci.facts.<provider-fact-name>.data`. Missing fields are evaluation errors unless a
 policy explicitly handles them. This activation is separate from legacy `when: ci`.
 
-Starlark can later implement `Evaluator` using the incoming restricted value evaluator
-over materialized inputs. Do not pass the script automation host or lazy value maps.
-Starlark, Rego, and declarative adapters are not registered or implemented in this
-package; selecting an unregistered language is an error. Existing Rego/JSON-Schema
+Starlark implements `Evaluator` using shared restricted compilation and read-only value conversion
+from `pkg/script/starlark/value`. It exposes `ctx.input`, `ctx.params`, `ctx.ci`, and `ctx.request`;
+requires a boolean return; and performs no logging or host calls. Rego and declarative adapters
+are not implemented in this package; selecting an unregistered language is an error. Existing Rego/JSON-Schema
 `settings.validation` execution remains unchanged.
 
 `pkg/ci.CollectPolicySnapshot` uses the existing provider registry and optional

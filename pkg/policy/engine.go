@@ -19,6 +19,13 @@ type Engine struct {
 	evaluators map[string]Evaluator
 }
 
+// NewEngine returns an isolated registry with the supported pure evaluators.
+func NewEngine() *Engine {
+	defer perf.Track(nil, "policy.NewEngine")()
+
+	return &Engine{evaluators: map[string]Evaluator{CELEngine: &CEL{}, StarlarkEngine: &Starlark{}}}
+}
+
 // Register adds a language adapter without permitting replacement of an existing one.
 func (e *Engine) Register(name string, evaluator Evaluator) error {
 	defer perf.Track(nil, "policy.Engine.Register")()

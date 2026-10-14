@@ -7,11 +7,14 @@ description: CEL variables, operation input fields, missing values, and policy e
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Each rule evaluates a boolean CEL expression against a captured input object. Expressions do not
+Each rule evaluates a boolean CEL expression or Starlark function body against a captured input object. Predicates do not
 execute commands, make network requests, read files, or collect additional inputs.
 </Intro>
 
 ## Expression variables
+
+The table below uses CEL syntax. [Starlark policies](/policies/starlark) receive the same snapshots
+as `ctx.input`, `ctx.params`, `ctx.ci`, and `ctx.request`, with dictionary indexing for nested fields.
 
 | Variable | Type | Contents |
 |---|---|---|
