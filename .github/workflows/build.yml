@@ -91,7 +91,14 @@ jobs:
           # bump-formula-pr edits the formula `.rb`, so homebrew/core must be tapped
           # (see the comment above). Without this the bump fails "No available
           # formula with the name atmos" on every release.
-          brew tap homebrew/core
+          #
+          # `--force` is required: Homebrew 7.x on the runner now refuses a plain
+          # `brew tap homebrew/core` with "Tapping homebrew/core is no longer
+          # typically necessary. Add --force if you are sure you need it for
+          # contributing to Homebrew." (exit 1), which killed the v1.232.0 bump
+          # before bump-formula-pr even ran. We DO need the tap for contributing
+          # (bump-formula-pr edits the formula), so --force is the sanctioned path.
+          brew tap homebrew/core --force
           brew bump-formula-pr --no-browse --no-audit --version="${TAG#v}" atmos
 
   docker:
