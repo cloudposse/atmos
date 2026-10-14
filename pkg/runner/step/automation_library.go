@@ -73,7 +73,8 @@ func (l *AutomationLibrary) Run(ctx context.Context, call *automation.StepCall) 
 	if err != nil {
 		return nil, err
 	}
-	return l.runStep(ctx, step, call)
+	result, err := l.runStep(ctx, step, call)
+	return result, withCaptureHint(step, err)
 }
 
 func (l *AutomationLibrary) runStep(ctx context.Context, step *schema.WorkflowStep, call *automation.StepCall) (*automation.StepResult, error) {
@@ -83,19 +84,24 @@ func (l *AutomationLibrary) runStep(ctx context.Context, step *schema.WorkflowSt
 	if err := l.prepareCall(step, call); err != nil {
 		return nil, err
 	}
-	ctx, cancel, err := l.automationContext(ctx, step)
+	deadline, err := l.automationDeadline(ctx, step)
 	if err != nil {
 		return nil, err
 	}
-	defer cancel()
+	defer deadline.Stop()
+	ctx = deadline.Context()
 	before := maps.Clone(l.vars.Env)
 	result, err := l.execute(ctx, step)
 	l.rememberEnvironment(before)
 
 	if err != nil {
 		// Some handlers return only the process exit code after cancellation (notably
-		// Windows shell commands). Keep the owning context's cause reachable as well.
-		return nil, errors.Join(ctx.Err(), err)
+		// Windows shell commands). Keep the owning context's cause reachable as well, and report
+		// the step's own timeout as ErrStepTimeout instead of a bare "context deadline exceeded".
+		if ctxErr := ctx.Err(); ctxErr != nil && !errors.Is(err, ctxErr) {
+			err = errors.Join(ctxErr, err)
+		}
+		return nil, deadline.Wrap(err)
 	}
 	if result == nil {
 		return &automation.StepResult{}, nil
@@ -113,18 +119,22 @@ func (l *AutomationLibrary) execute(ctx context.Context, step *schema.WorkflowSt
 	retryConfig := step.Retry
 	handler, _ := Get(step.Type)
 	if handler.GetName() == "http" {
+		// The http handler owns its retry policy, including how retry.conditions classify a response.
 		retryConfig = nil
 	}
-	err := retry.WithPredicate(ctx, retryConfig, func() error {
+	// retry.conditions limit which failures are retried, for every step type.
+	shouldRetry, err := RetryPredicate(retryConfig)
+	if err != nil {
+		return nil, err
+	}
+	err = retry.WithPredicate(ctx, retryConfig, func() error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		var runErr error
 		result, runErr = executor.Execute(ctx, step)
 		return runErr
-	}, func(err error) bool {
-		return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, errUtils.ErrWorkflowExit) && !errors.Is(err, errUtils.ErrUserAborted)
-	})
+	}, shouldRetry)
 	return result, err
 }
 
@@ -196,5 +206,5 @@ func (l *AutomationLibrary) Validate(call *automation.StepCall) error {
 	if err != nil {
 		return err
 	}
-	return validateAutomationStep(step, call.Parallel || l.vars.automationParallel)
+	return withCaptureHint(step, validateAutomationStep(step, call.Parallel || l.vars.automationParallel))
 }

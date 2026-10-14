@@ -2,13 +2,16 @@ package step
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/script"
 )
@@ -175,19 +178,46 @@ func (h *AtmosHandler) runAtmosCommand(ctx context.Context, stepName string, opt
 		return nil, fmt.Errorf("failed to determine atmos executable path: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, atmosBin, args...)
-	if opts.workDir != "" {
-		cmd.Dir = opts.workDir
-	}
 	// Global --profile/--identity selections live only in this process; forward them so the
 	// nested atmos command runs with the same ones. Step env comes last and so wins.
-	cmd.Env = append(script.ProcessEnvironment(os.Environ(), script.SelectionEnv(cfg.GetActiveProfiles(nil), cfg.GlobalViper().GetString(cfg.IdentityFlagName))), opts.envVars...)
+	env := append(script.ProcessEnvironment(os.Environ(), script.SelectionEnv(cfg.GetActiveProfiles(nil), cfg.GlobalViper().GetString(cfg.IdentityFlagName))), opts.envVars...)
 
 	writer := NewOutputModeWriter(output.mode, stepName, output.viewport, output.show)
 	writer.writers = opts.writers
-	stdout, stderr, err := writer.Execute(cmd)
+	// The nested command starts through the process runner so a step timeout or cancellation ends
+	// its whole process tree, including the commands it started, and not only the atmos process.
+	stdout, stderr, err := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+		result := process.NewDefaultRunner().Run(ctx, process.TaskSpec{
+			Command:     atmosBin,
+			Args:        args,
+			Dir:         opts.workDir,
+			Env:         env,
+			Streams:     process.Streams{Stdout: stdout, Stderr: stderr},
+			SkipMetrics: true,
+		})
+		return atmosProcessError(ctx, &result)
+	})
 
 	return h.buildAtmosResult(stdout, stderr, err), err
+}
+
+// atmosProcessError returns the error of a finished nested command. A non-zero exit is reported as
+// the underlying *exec.ExitError, so callers read the exit code from it as they always have; a
+// command that never started keeps the runner's full error.
+func atmosProcessError(ctx context.Context, result *process.Result) error {
+	if result.Err == nil {
+		return nil
+	}
+	// A command ended by cancellation or a deadline reports why it was stopped. Its own exit
+	// status ("signal: terminated") would otherwise become the exit code of the whole run.
+	if result.Canceled && ctx.Err() != nil {
+		return ctx.Err()
+	}
+	var exitErr *exec.ExitError
+	if result.Started && !result.Canceled && errors.As(result.Err, &exitErr) {
+		return exitErr
+	}
+	return result.Err
 }
 
 // buildAtmosResult creates a result from command output.

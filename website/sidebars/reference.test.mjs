@@ -3,6 +3,8 @@ import {readFileSync} from 'node:fs';
 import test from 'node:test';
 import sidebars from '../sidebars.js';
 import ci from './ci.js';
+import config from '../docusaurus.config.js';
+import matter from 'gray-matter';
 import {canonicalSidebar} from '../src/components/SidebarNavigator/canonical.mjs';
 import {filterItems, findSection, prepareItems} from '../src/components/SidebarNavigator/navigation.mjs';
 
@@ -77,7 +79,7 @@ test('automation guides belong to Reference automation and keep a single languag
     index > automationGroup && item.customProps?.navigationGroup);
   assert.ok(languageIndex > automationGroup && languageIndex < nextGroup);
   const language = sidebars.cli[languageIndex];
-  assert.equal(language.label, 'Atmos Automation Language');
+  assert.equal(language.label, 'Scripting');
   assert.equal(language.items.filter(item => item.id === 'automation/language').length, 1);
   const references = language.items.filter(item => item.label === 'Language Reference');
   assert.equal(references.length, 1);
@@ -94,4 +96,29 @@ test('the workflow name placeholder opens its naming guide', () => {
   const name = workflows.items[0].items.find(item => item.label === '<name>');
   assert.equal(name.link.id, 'workflows/name');
   assert.ok(name.items.some(item => item.label === 'steps'));
+});
+
+test('Scripting guides use canonical scripting URLs and redirect their previous automation URLs', () => {
+  const scripting = sidebars.cli.find(item => item.label === 'Scripting');
+  const collectDocs = item => [
+    ...(item.type === 'doc' ? [item.id] : []),
+    ...(item.link?.type === 'doc' ? [item.link.id] : []),
+    ...(item.items ?? []).flatMap(collectDocs),
+  ];
+  const redirects = config.plugins.find(plugin =>
+    Array.isArray(plugin) && plugin[0] === '@docusaurus/plugin-client-redirects')[1];
+  for (const id of collectDocs(scripting)) {
+    const source = readFileSync(new URL(`../docs/${id}.mdx`, import.meta.url), 'utf8');
+    const {data} = matter(source);
+    const suffix = id === 'automation/automation' ? '' : id.replace(/^automation/, '').replace(/\/index$/, '');
+    const canonical = `/scripting${suffix}`;
+    assert.equal(data.slug, canonical, `Canonical URL for ${id}`);
+    assert.deepEqual(redirects.createRedirects(canonical), [`/automation${suffix}`]);
+    assert.deepEqual(redirects.createRedirects(`${canonical}/`), [`/automation${suffix}/`]);
+  }
+  for (const route of ['/scripting-other', '/workflows', '/functions/automation', '/automation']) {
+    assert.equal(redirects.createRedirects(route), undefined, `Do not redirect ${route}`);
+  }
+  assert.deepEqual(redirects.createRedirects('/steps/type/script'), ['/workflows/steps/type/script']);
+  assert.deepEqual(redirects.createRedirects('/changelog/starlark-custom-commands'), ['/blog/starlark-custom-commands']);
 });

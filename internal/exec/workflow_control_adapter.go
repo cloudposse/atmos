@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/ci"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -29,6 +30,7 @@ func executeWorkflowControlStep(ctx context.Context, control *workflowControlCon
 	childExecutor := &workflow.ControlCommandExecutor{
 		ScriptSteps:         stepPkg.NewAutomationLibrary(vars, control.workflowDefinition),
 		InstallTools:        stepPkg.ScriptToolInstaller(&control.atmosConfig),
+		CI:                  ci.NewReporter(&control.atmosConfig),
 		DryRun:              control.dryRun,
 		ScriptComponent:     stepPkg.ScriptComponentRef(vars),
 		ScriptFlags:         vars.ScriptFlags(),

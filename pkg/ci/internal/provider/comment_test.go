@@ -69,3 +69,59 @@ func TestValidatePostCommentOptions(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeTarget(t *testing.T) {
+	tests := []struct {
+		name string
+		in   CommentTarget
+		want CommentTarget
+	}{
+		{name: "empty means auto", in: "", want: CommentTargetAuto},
+		{name: "auto", in: CommentTargetAuto, want: CommentTargetAuto},
+		{name: "pr", in: CommentTargetPR, want: CommentTargetPR},
+		{name: "commit", in: CommentTargetCommit, want: CommentTargetCommit},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NormalizeTarget(tt.in)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+
+	for _, bad := range []CommentTarget{"issue", "PR", "Commit"} {
+		t.Run("invalid "+string(bad), func(t *testing.T) {
+			got, err := NormalizeTarget(bad)
+			require.ErrorIs(t, err, errUtils.ErrCICommentTargetInvalid)
+			assert.Empty(t, got)
+		})
+	}
+}
+
+func TestValidatePostCommitCommentOptions(t *testing.T) {
+	const marker = "<!-- atmos:ci:deploy -->"
+
+	tests := []struct {
+		name    string
+		opts    *PostCommitCommentOptions
+		wantErr bool
+	}{
+		{name: "nil opts", opts: nil, wantErr: true},
+		{name: "missing owner", opts: &PostCommitCommentOptions{Repo: "r", SHA: "abc"}, wantErr: true},
+		{name: "missing repo", opts: &PostCommitCommentOptions{Owner: "o", SHA: "abc"}, wantErr: true},
+		{name: "missing sha", opts: &PostCommitCommentOptions{Owner: "o", Repo: "r"}, wantErr: true},
+		{name: "marker missing from body", opts: &PostCommitCommentOptions{Owner: "o", Repo: "r", SHA: "abc", Marker: marker, Body: "no marker"}, wantErr: true},
+		{name: "marker present in body", opts: &PostCommitCommentOptions{Owner: "o", Repo: "r", SHA: "abc", Marker: marker, Body: marker + "\nbody"}},
+		{name: "empty marker skips body check", opts: &PostCommitCommentOptions{Owner: "o", Repo: "r", SHA: "abc", Body: "anything"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidatePostCommitCommentOptions(tt.opts)
+			if tt.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrCICommentPostFailed)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}

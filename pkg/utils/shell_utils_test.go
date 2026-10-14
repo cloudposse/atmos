@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"mvdan.cc/sh/v3/interp"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
@@ -194,4 +196,43 @@ func TestShellRunner_ParseError(t *testing.T) {
 	if errors.As(err, &exitCodeErr) {
 		t.Error("parse errors should not be ExitCodeError")
 	}
+}
+
+func TestSetShellExecMiddleware(t *testing.T) {
+	t.Cleanup(func() { SetShellExecMiddleware(nil) })
+
+	t.Run("nothing installed uses the interpreter's own handler", func(t *testing.T) {
+		SetShellExecMiddleware(nil)
+		var stderr bytes.Buffer
+		err := ShellRunnerWithWriters(&ShellRunnerSpec{Command: "wp5-no-such-command-anywhere", Name: "none", Env: os.Environ(), Stderr: &stderr})
+		var exitErr errUtils.ExitCodeError
+		require.ErrorAs(t, err, &exitErr)
+		assert.Equal(t, 127, exitErr.Code)
+	})
+
+	t.Run("an installed middleware handles external commands", func(t *testing.T) {
+		var seen []string
+		SetShellExecMiddleware(func(_ interp.ExecHandlerFunc) interp.ExecHandlerFunc {
+			return func(_ context.Context, args []string) error {
+				seen = append(seen, args...)
+				return nil
+			}
+		})
+		require.NoError(t, ShellRunnerWithWriters(&ShellRunnerSpec{Command: "wp5-external one two", Name: "installed", Env: os.Environ()}))
+		assert.Equal(t, []string{"wp5-external", "one", "two"}, seen)
+	})
+
+	t.Run("a second registration replaces the first", func(t *testing.T) {
+		first, second := 0, 0
+		counting := func(counter *int) ShellExecMiddleware {
+			return func(_ interp.ExecHandlerFunc) interp.ExecHandlerFunc {
+				return func(context.Context, []string) error { *counter++; return nil }
+			}
+		}
+		SetShellExecMiddleware(counting(&first))
+		SetShellExecMiddleware(counting(&second))
+		require.NoError(t, ShellRunnerWithWriters(&ShellRunnerSpec{Command: "wp5-external", Name: "replaced", Env: os.Environ()}))
+		assert.Zero(t, first)
+		assert.Equal(t, 1, second)
+	})
 }
