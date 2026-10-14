@@ -1,6 +1,9 @@
 """Exercise recovery without requiring a Docker daemon."""
 
+import contextlib
 import importlib.util
+import io
+import json
 import pathlib
 import unittest
 from unittest.mock import patch
@@ -80,6 +83,44 @@ class RestoreServicesTest(unittest.TestCase):
                 docker.call_args_list[-1].args,
                 ("logs", "--tail", "100", "container-id"),
             )
+
+    def test_diagnostics_exclude_credentials_and_health_output(self):
+        inspected = [
+            {
+                "Config": {"Env": ["TOKEN=generated-secret"]},
+                "State": {
+                    "Status": "exited",
+                    "Running": False,
+                    "ExitCode": 1,
+                    "Health": {
+                        "Status": "unhealthy",
+                        "Log": [{"Output": "health-secret"}],
+                    },
+                },
+            }
+        ]
+        output = io.StringIO()
+        with patch.object(
+            services, "docker", side_effect=[json.dumps(inspected), "service logs"]
+        ), contextlib.redirect_stdout(output):
+            services.diagnose("container-id")
+        rendered = output.getvalue()
+        self.assertNotIn("generated-secret", rendered)
+        self.assertNotIn("health-secret", rendered)
+        self.assertEqual(
+            json.loads(rendered.splitlines()[0]),
+            {"Status": "exited", "Running": False, "ExitCode": 1, "Health": "unhealthy"},
+        )
+        self.assertIn("service logs", rendered)
+
+    def test_malformed_inspect_still_collects_logs(self):
+        output = io.StringIO()
+        with patch.object(
+            services, "docker", side_effect=["invalid json", "service logs"]
+        ), contextlib.redirect_stdout(output):
+            services.diagnose("container-id")
+        self.assertIn("Container state diagnostics failed", output.getvalue())
+        self.assertIn("service logs", output.getvalue())
 
     def test_docker_calls_are_bounded(self):
         with patch.object(

@@ -13,11 +13,19 @@ def docker(*args):
 
 def diagnose(container):
     """Keep the original failure even when the Docker daemon is unavailable."""
-    for args in [("inspect", container), ("logs", "--tail", "100", container)]:
-        try:
-            print(docker(*args), flush=True)
-        except (OSError, subprocess.SubprocessError) as error:
-            print(f"Container diagnostics failed: {error}", flush=True)
+    try:
+        state = json.loads(docker("inspect", container))[0]["State"]
+        # Config.Env and health-check output can contain generated credentials.
+        summary = {key: state.get(key) for key in ("Status", "Running", "ExitCode")}
+        summary["Health"] = state.get("Health", {}).get("Status")
+        print(json.dumps(summary), flush=True)
+    except Exception as error:
+        # Diagnostics must never replace the original service startup failure.
+        print(f"Container state diagnostics failed: {error}", flush=True)
+    try:
+        print(docker("logs", "--tail", "100", container), flush=True)
+    except (OSError, subprocess.SubprocessError) as error:
+        print(f"Container log diagnostics failed: {error}", flush=True)
 
 
 def restore(job_services):
