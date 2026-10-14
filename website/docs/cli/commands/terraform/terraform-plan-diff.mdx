@@ -79,7 +79,11 @@ components:
 Each entry must be an exact `resource_type.attribute` name. The rule applies to every instance
 of that resource type, including instances inside modules. Only top-level attributes are supported;
 bare attribute names, wildcards, resource addresses, and nested attribute paths are invalid.
-Malformed entries cause a configuration error before Terraform runs.
+Malformed entries cause a configuration error before Terraform runs. When an entry is well formed
+but matches no attribute on the resources of that type present in the plans, which usually means a
+resource address or a typo was configured, Atmos prints a warning and leaves the comparison unchanged.
+Values that become known only after apply are shown as `(known after apply)` rather than as removed
+or added attributes.
 
 No resource attributes are excluded from comparison by default.
 

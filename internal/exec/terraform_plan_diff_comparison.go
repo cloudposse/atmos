@@ -392,8 +392,12 @@ func processChangedResources(diff *strings.Builder, origResources, newResources 
 		origAttrs := getResourceAttributes(origV)
 		newAttrs := getResourceAttributes(newV)
 
+		// Attributes that are unknown until apply are absent from the attribute maps,
+		// so carry them separately to avoid rendering them as removals or additions.
+		attrOpts := append(slices.Clone(opts), withPlanDiffUnknownAttributes(getUnknownAttributes(origV), getUnknownAttributes(newV)))
+
 		// Process attribute differences
-		processAttributeDifferences(diff, origAttrs, newAttrs, opts...)
+		processAttributeDifferences(diff, origAttrs, newAttrs, attrOpts...)
 	}
 }
 
@@ -407,18 +411,18 @@ func processAttributeDifferences(diff *strings.Builder, origAttrs, newAttrs map[
 	priorityAttrs := []string{"id", "url", "content"}
 
 	// Process priority attributes first
-	processPriorityAttributes(diff, origAttrs, newAttrs, priorityAttrs)
+	processPriorityAttributes(diff, origAttrs, newAttrs, priorityAttrs, options)
 
 	// Explicit exclusions have already been applied to the compared resource records.
 	// Older editions additionally retain the historical display-only suppression.
-	processRegularAttributeChanges(diff, origAttrs, newAttrs, priorityAttrs, options.legacyDisplay)
+	processRegularAttributeChanges(diff, origAttrs, newAttrs, priorityAttrs, options)
 
 	// Find added attributes (that weren't in the priority list)
-	processAddedAttributes(diff, origAttrs, newAttrs, priorityAttrs, options.legacyDisplay)
+	processAddedAttributes(diff, origAttrs, newAttrs, priorityAttrs, options)
 }
 
 // processPriorityAttributes handles high-priority attributes that should be shown first.
-func processPriorityAttributes(diff *strings.Builder, origAttrs, newAttrs map[string]interface{}, priorityAttrs []string) {
+func processPriorityAttributes(diff *strings.Builder, origAttrs, newAttrs map[string]interface{}, priorityAttrs []string, options planDiffOptions) {
 	for _, attrK := range priorityAttrs {
 		origAttrV, origExists := origAttrs[attrK]
 		newAttrV, newExists := newAttrs[attrK]
@@ -427,34 +431,34 @@ func processPriorityAttributes(diff *strings.Builder, origAttrs, newAttrs map[st
 		case origExists && newExists && !reflect.DeepEqual(origAttrV, newAttrV):
 			printAttributeDiff(diff, attrK, origAttrV, newAttrV)
 		case origExists && !newExists:
-			diff.WriteString(fmt.Sprintf("  - %s: %v\n", attrK, formatValue(origAttrV)))
+			diff.WriteString(options.removedAttributeLine(attrK, origAttrV))
 		case !origExists && newExists:
-			diff.WriteString(fmt.Sprintf("  + %s: %v\n", attrK, formatValue(newAttrV)))
+			diff.WriteString(options.addedAttributeLine(attrK, newAttrV))
 		}
 	}
 }
 
 // processRegularAttributeChanges handles changed and removed attributes.
-func processRegularAttributeChanges(diff *strings.Builder, origAttrs, newAttrs map[string]interface{}, priorityAttrs []string, legacyDisplay bool) {
+func processRegularAttributeChanges(diff *strings.Builder, origAttrs, newAttrs map[string]interface{}, priorityAttrs []string, options planDiffOptions) {
 	for attrK, origAttrV := range origAttrs {
 		// Skip priority attributes (already processed).
-		if slices.Contains(priorityAttrs, attrK) || (legacyDisplay && legacyHiddenAttribute(attrK)) {
+		if slices.Contains(priorityAttrs, attrK) || (options.legacyDisplay && legacyHiddenAttribute(attrK)) {
 			continue
 		}
 
 		if newAttrV, exists := newAttrs[attrK]; exists && !reflect.DeepEqual(origAttrV, newAttrV) {
 			printAttributeDiff(diff, attrK, origAttrV, newAttrV)
 		} else if !exists {
-			diff.WriteString(fmt.Sprintf("  - %s: %v\n", attrK, formatValue(origAttrV)))
+			diff.WriteString(options.removedAttributeLine(attrK, origAttrV))
 		}
 	}
 }
 
 // processAddedAttributes handles new attributes that didn't exist before.
-func processAddedAttributes(diff *strings.Builder, origAttrs, newAttrs map[string]interface{}, priorityAttrs []string, legacyDisplay bool) {
+func processAddedAttributes(diff *strings.Builder, origAttrs, newAttrs map[string]interface{}, priorityAttrs []string, options planDiffOptions) {
 	for attrK, newAttrV := range newAttrs {
-		if _, exists := origAttrs[attrK]; !exists && !slices.Contains(priorityAttrs, attrK) && (!legacyDisplay || !legacyHiddenAttribute(attrK)) {
-			diff.WriteString(fmt.Sprintf("  + %s: %v\n", attrK, formatValue(newAttrV)))
+		if _, exists := origAttrs[attrK]; !exists && !slices.Contains(priorityAttrs, attrK) && (!options.legacyDisplay || !legacyHiddenAttribute(attrK)) {
+			diff.WriteString(options.addedAttributeLine(attrK, newAttrV))
 		}
 	}
 }
@@ -504,4 +508,34 @@ func extractChangeAfterField(resMap map[string]interface{}, result map[string]in
 	for k, v := range after {
 		result[k] = v
 	}
+}
+
+// getUnknownAttributes returns the top-level attributes that Terraform reports as unknown until
+// apply (change.after_unknown[attr] == true). Only a boolean true counts; nested unknown
+// structures are not attribute-level unknowns.
+func getUnknownAttributes(resource interface{}) map[string]bool {
+	result := make(map[string]bool)
+
+	resMap, ok := resource.(map[string]interface{})
+	if !ok {
+		return result
+	}
+
+	change, ok := resMap["change"].(map[string]interface{})
+	if !ok {
+		return result
+	}
+
+	unknown, ok := change["after_unknown"].(map[string]interface{})
+	if !ok {
+		return result
+	}
+
+	for k, v := range unknown {
+		if isUnknown, ok := v.(bool); ok && isUnknown {
+			result[k] = true
+		}
+	}
+
+	return result
 }

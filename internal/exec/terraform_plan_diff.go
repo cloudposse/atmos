@@ -188,6 +188,9 @@ func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *s
 	origPlan = sortMapKeys(origPlan)
 	newPlan = sortMapKeys(newPlan)
 
+	// Warn about ignore_changes entries that cannot match anything in these plans.
+	warnUnmatchedPlanDiffIgnoreChanges(atmosConfig.Components.Terraform.PlanDiff.IgnoreChanges, origPlan, newPlan)
+
 	// Generate the diff
 	diff, hasDiff := generatePlanDiff(origPlan, newPlan, policy)
 

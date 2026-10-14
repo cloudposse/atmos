@@ -3,8 +3,10 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -20,6 +22,9 @@ func TestLoadConfigPlanDiff(t *testing.T) {
 			config, err := LoadConfig(&schema.ConfigAndStacksInfo{AtmosConfigFilesFromArg: []string{configPath}})
 			if entry == "aws_db_instance.*" {
 				assert.ErrorIs(t, err, schema.ErrInvalidPlanDiffIgnoreChange)
+				hints := cockroachErrors.GetAllHints(err)
+				require.Len(t, hints, 1)
+				assert.Contains(t, strings.Join(hints, "\n"), "resource addresses")
 				return
 			}
 			require.NoError(t, err)

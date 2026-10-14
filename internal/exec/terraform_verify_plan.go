@@ -45,6 +45,9 @@ func VerifyPlanfile(info *schema.ConfigAndStacksInfo, storedPlanFile string, mod
 		return err
 	}
 
+	// Warn about ignore_changes entries that cannot match anything in these plans.
+	warnUnmatchedPlanDiffIgnoreChanges(vc.atmosConfig.Components.Terraform.PlanDiff.IgnoreChanges, plans.stored, plans.fresh)
+
 	// Generate diff. The stored planfile has served its purpose either way.
 	diff, hasDiff := generatePlanDiff(sortMapKeys(plans.stored), sortMapKeys(plans.fresh), policy)
 	os.Remove(storedPlanFile)
