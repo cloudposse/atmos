@@ -65,6 +65,15 @@ type Entry struct {
 // via viper.SetDefault when a project pins an earlier edition.
 var journal = []Entry{
 	{
+		Date:        "2026-10-13",
+		Key:         "terraform.plan_diff.show_computed_attributes",
+		Kind:        KindBehavior,
+		Old:         "hide seven computed attributes from resource diffs; still compare them",
+		New:         "show all non-excluded resource attributes; still compare them",
+		Description: "Plan comparisons display content hashes and encoded response bodies unless explicitly excluded; earlier editions retain display-only suppression.",
+		Ref:         "https://atmos.tools/changelog/plan-diff-ignore-changes",
+	},
+	{
 		Date: "2026-09-15", Key: "vendor.max_concurrency", Kind: KindValue, Old: 1, New: 4,
 		Description: "Vendor downloads and upstream version checks run with four workers; destination writes remain ordered.",
 		Ref:         "https://github.com/cloudposse/atmos/pull/3169",
