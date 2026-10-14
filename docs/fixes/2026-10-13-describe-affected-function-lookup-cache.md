@@ -193,24 +193,27 @@ those partial results are excluded, preserved under
 `.context/field-store-empty-auth-confirm/`, and marked invalid.
 
 After validation finished and the competing workload settled, a fresh field
-test used **twenty samples per revision**, the same environment and fixture,
-and no concurrent task builds/tests during measurement:
+test compared every relevant release with this PR in one series. It used
+**twenty samples per version**, the same environment and fixture, and no
+concurrent task builds or tests during measurement:
 
-| Revision | Store median | Change versus v1.229.0 | Store reads |
+| Version | Store median | Change versus v1.229.0 | Store reads |
 |---|---:|---:|---:|
-| v1.229.0 (`4ffd8804d350`) | 0.60185 s | baseline | 11 |
-| Previous fix (`90de1b148d2e`) | 0.68143 s | +13.22% | 22 |
-| Final fix (`67ceb3810b7d`) | 0.60998 s | +1.35% | 22 |
+| v1.229.0 | 0.596 s | baseline | 11 |
+| v1.231.0 | 12.17 s | +1,943% | 7,920 |
+| v1.232.0 | 1.699 s | +185% | 660 |
+| This PR | **0.617 s** | **+3.55%** | 22 |
 
-The final fix is **10.49% faster than the previous fix** (`p=5.084e-08`). The
-**1.35% difference from v1.229.0 is not statistically significant** (`p=0.2211`);
-the store runtime advisory is no longer triggered. This does not prove exact
-equivalence. The read-count advisory remains: HEAD and BASE intentionally retain
-independent values, so the fixture performs 22 reads versus the old global
-cache's 11. No advisory threshold or correctness assertion was relaxed.
+This PR is **19.7x faster than v1.231.0** and **2.75x faster than v1.232.0**.
+The remaining 3.55% difference from v1.229.0 is statistically significant
+(`p=4.122e-06`) but below the 10% regression threshold, so the store runtime
+advisory does not trigger. The read-count advisory remains: HEAD and BASE
+intentionally retain independent values, so the fixture performs 22 reads
+versus the old global cache's 11. No advisory threshold or correctness
+assertion was relaxed.
 
 ```console
-ATMOS_BENCH_SAMPLES=20 ATMOS_BENCH_FIELD_FILTER='^BenchmarkCLI$/^DescribeAffected$/^StoreCallerStacks$' go tool mage bench:fieldTest v1.229.0,90de1b148d,67ceb3810b .context/field-store-auth-final
+ATMOS_BENCH_SAMPLES=20 ATMOS_BENCH_FIELD_FILTER='^BenchmarkCLI$/^DescribeAffected$/^StoreCallerStacks$' go tool mage bench:fieldTest v1.229.0,v1.231.0,v1.232.0,1b83bb4713 .context/field-store-versions-4
 ```
 
 Focused store race tests, inspection/cache-isolation race tests after the
