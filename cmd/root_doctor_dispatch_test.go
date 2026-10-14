@@ -54,3 +54,28 @@ func TestDoctorDispatchLeavesOtherCommandsAlone(t *testing.T) {
 		assert.False(t, doctorcmd.IsInvocation(args, flags), "%v", args)
 	}
 }
+
+// TestDoctorDispatchFoldsSpaceSeparatedFlagValues guards the early doctor dispatch, which runs before
+// preprocessArgs: without the same folding, Cobra reads the value in "--no-color false doctor" or
+// "--identity prod doctor" as the command name and doctor never runs.
+func TestDoctorDispatchFoldsSpaceSeparatedFlagValues(t *testing.T) {
+	_ = NewTestKit(t)
+
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{name: "global bool flag value", args: []string{"--no-color", "false", "doctor", "--list-checks"}, want: []string{"--no-color=false", "doctor", "--list-checks"}},
+		{name: "global optional-value flag", args: []string{"--identity", "prod", "doctor"}, want: []string{"--identity=prod", "doctor"}},
+		{name: "doctor's own bool flag value", args: []string{"doctor", "--offline", "true"}, want: []string{"doctor", "--offline=true"}},
+		{name: "equals forms are left alone", args: []string{"--no-color=false", "doctor", "--offline=true"}, want: []string{"--no-color=false", "doctor", "--offline=true"}},
+		{name: "a bare bool flag does not consume the command", args: []string{"--no-color", "doctor"}, want: []string{"--no-color", "doctor"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.True(t, doctorcmd.IsInvocation(tt.args, RootCmd.PersistentFlags()), "the raw arguments must dispatch doctor")
+			assert.Equal(t, tt.want, preprocessNativeFlags(tt.args))
+		})
+	}
+}

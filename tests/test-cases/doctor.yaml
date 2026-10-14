@@ -22,6 +22,22 @@ tests:
         - "^$"
       exit_code: 0
 
+  - name: atmos doctor after a space-separated root flag value
+    enabled: true
+    snapshot: false
+    description: "Root flags given as --flag value before doctor are folded like any other command, so Cobra does not read the value as a command."
+    workdir: "fixtures/scenarios/doctor/eligible"
+    command: "atmos"
+    args:
+      - "--no-color"
+      - "false"
+      - "doctor"
+      - "--list-checks"
+    expect:
+      stdout:
+        - "(?m)^schema \\[validation\\]: "
+      exit_code: 0
+
   - name: atmos doctor --list-checks as JSON
     enabled: true
     snapshot: true

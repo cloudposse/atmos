@@ -1832,6 +1832,11 @@ func Execute() error {
 	// Dispatch before configuration, project init, authentication, or tool installation.
 	// Flag arity comes from the registered root flags, so any root flag may precede the command.
 	if doctorcmd.IsInvocation(os.Args[1:], RootCmd.PersistentFlags()) {
+		// Other commands get this folding in preprocessArgs, which runs after configuration
+		// loading; without it Cobra reads the value of "--no-color false doctor" as a command.
+		if args := preprocessNativeFlags(os.Args[1:]); !slicesEqual(args, os.Args[1:]) {
+			RootCmd.SetArgs(args)
+		}
 		_, err := internal.Execute(RootCmd)
 		return err
 	}
@@ -2038,14 +2043,8 @@ func preprocessArgs() []string {
 		return nil
 	}
 
-	// Step 1: Preprocess NoOptDefVal flags (native Atmos flags like --identity, --pager).
-	// This rewrites --identity value → --identity=value before Cobra parses.
-	processedArgs := preprocessNoOptDefValFlags(osArgs)
-
-	// Step 1b: Fold "--bool-flag true|false" into "--bool-flag=true|false" for boolean flags
-	// that belong to the target command (for example terraform's --dry-run or --affected).
-	// Global boolean flags were already handled above through the global registry.
-	processedArgs = preprocessCommandBoolFlags(processedArgs)
+	// Step 1: Fold space-separated values of native Atmos flags into equals syntax.
+	processedArgs := preprocessNativeFlags(osArgs)
 
 	// Step 2: Preprocess compatibility flags (external tool syntax like -var).
 	// This separates Atmos flags from pass-through flags.
@@ -2136,6 +2135,19 @@ func preprocessCompatibilityFlags(args []string) ([]string, bool) {
 	compat.SetSeparated(separatedArgs)
 
 	return atmosArgs, true
+}
+
+// preprocessNativeFlags folds space-separated values of native Atmos flags into equals syntax,
+// in order:
+//  1. NoOptDefVal and boolean global flags: --identity value → --identity=value and
+//     --no-color false → --no-color=false.
+//  2. Boolean flags of the target command (for example terraform's --dry-run or --affected):
+//     --bool-flag true|false → --bool-flag=true|false. Global boolean flags were already
+//     handled in step 1 through the global registry.
+//
+// Both the normal command path (preprocessArgs) and the early doctor dispatch use it.
+func preprocessNativeFlags(args []string) []string {
+	return preprocessCommandBoolFlags(preprocessNoOptDefValFlags(args))
 }
 
 // preprocessNoOptDefValFlags rewrites space-separated NoOptDefVal flags to equals syntax.
