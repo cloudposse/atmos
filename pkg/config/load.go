@@ -2092,6 +2092,9 @@ func preprocessAtmosYamlFuncExceptCommands(content []byte, v *viper.Viper, sourc
 	if err := goyaml.Unmarshal(content, &root); err != nil {
 		return err
 	}
+	if err := rejectStarlarkTags(&root, sourceFile); err != nil {
+		return err
+	}
 	if len(root.Content) > 0 && root.Content[0].Kind == goyaml.MappingNode {
 		mapping := root.Content[0]
 		for i := 0; i < len(mapping.Content); i += 2 {
@@ -2131,6 +2134,9 @@ func commandsAreUnset(content []byte) bool {
 func extractCommandsWithYamlFunctionsForFile(content []byte, sourceFile string) (interface{}, error) {
 	var root goyaml.Node
 	if err := goyaml.Unmarshal(content, &root); err != nil {
+		return nil, err
+	}
+	if err := rejectStarlarkTags(&root, sourceFile); err != nil {
 		return nil, err
 	}
 	if len(root.Content) == 0 || root.Content[0].Kind != goyaml.MappingNode {

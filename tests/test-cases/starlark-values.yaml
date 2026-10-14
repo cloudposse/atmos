@@ -39,3 +39,111 @@ tests:
       stdout:
         - '"l_unset": \[\s*"a",\s*"c"\s*\]'
         - !not 'atmos-starlark-source'
+
+  # --format on the read commands follows flag > command-specific environment variable > raw.
+  - name: getters config get --format json
+    enabled: true
+    snapshot: false
+    description: atmos config get prints a JSON value with --format json
+    workdir: fixtures/scenarios/starlark-steps/
+    command: atmos
+    args: [config, get, base_path, --format=json]
+    expect:
+      exit_code: 0
+      stdout:
+        - '^"\./"\s*$'
+
+  - name: getters config get ATMOS_CONFIG_GET_FORMAT
+    enabled: true
+    snapshot: false
+    description: ATMOS_CONFIG_GET_FORMAT selects the format when no flag is given
+    workdir: fixtures/scenarios/starlark-steps/
+    env:
+      ATMOS_CONFIG_GET_FORMAT: json
+    command: atmos
+    args: [config, get, base_path]
+    expect:
+      exit_code: 0
+      stdout:
+        - '^"\./"\s*$'
+
+  - name: getters config get ignores the other getters' variables
+    enabled: true
+    snapshot: false
+    description: Negative path, the stack getters' variables do not change config get, which stays raw
+    workdir: fixtures/scenarios/starlark-steps/
+    env:
+      ATMOS_STACK_GET_FORMAT: json
+      ATMOS_STACK_CONFIG_GET_FORMAT: json
+    command: atmos
+    args: [config, get, base_path]
+    expect:
+      exit_code: 0
+      stdout:
+        - '^\./\s*$'
+
+  - name: getters stack get -f json
+    enabled: true
+    snapshot: false
+    description: atmos stack get prints a JSON value with the -f shorthand
+    workdir: fixtures/scenarios/starlark-steps/
+    command: atmos
+    args: [stack, get, vars.message, -s, dev, -c, mock, -f, json]
+    expect:
+      exit_code: 0
+      stdout:
+        - '"hello-from-mock"'
+
+  - name: getters stack get ATMOS_STACK_GET_FORMAT
+    enabled: true
+    snapshot: false
+    description: ATMOS_STACK_GET_FORMAT selects the format when no flag is given
+    workdir: fixtures/scenarios/starlark-steps/
+    env:
+      ATMOS_STACK_GET_FORMAT: json
+    command: atmos
+    args: [stack, get, vars.message, -s, dev, -c, mock]
+    expect:
+      exit_code: 0
+      stdout:
+        - '"hello-from-mock"'
+
+  - name: getters stack config get --format json
+    enabled: true
+    snapshot: false
+    description: atmos stack config get prints a JSON value with --format json
+    workdir: fixtures/scenarios/starlark-steps/
+    command: atmos
+    args: [stack, config, get, vars.message, -s, dev, -c, mock, --format=json]
+    expect:
+      exit_code: 0
+      stdout:
+        - '"hello-from-mock"'
+
+  - name: getters stack config get ATMOS_STACK_CONFIG_GET_FORMAT
+    enabled: true
+    snapshot: false
+    description: ATMOS_STACK_CONFIG_GET_FORMAT selects the format when no flag is given
+    workdir: fixtures/scenarios/starlark-steps/
+    env:
+      ATMOS_STACK_CONFIG_GET_FORMAT: json
+    command: atmos
+    args: [stack, config, get, vars.message, -s, dev, -c, mock]
+    expect:
+      exit_code: 0
+      stdout:
+        - '"hello-from-mock"'
+
+  - name: getters stack config get ignores the stack get variable
+    enabled: true
+    snapshot: false
+    description: Negative path, ATMOS_STACK_GET_FORMAT does not change stack config get, which stays raw
+    workdir: fixtures/scenarios/starlark-steps/
+    env:
+      ATMOS_STACK_GET_FORMAT: json
+    command: atmos
+    args: [stack, config, get, vars.message, -s, dev, -c, mock]
+    expect:
+      exit_code: 0
+      stdout:
+        - '^hello-from-mock\s*$'

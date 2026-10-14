@@ -4,10 +4,12 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -48,16 +50,32 @@ to inspect one file's own declared value instead.`,
 			return err
 		}
 
-		format, err := cmd.Flags().GetString("format")
-		if err != nil {
+		v := viper.GetViper()
+		if err := configGetParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}
-		value, err := atmosyaml.GetFormatted([]byte(effectiveYAML), args[0], format)
+		value, err := atmosyaml.GetFormatted([]byte(effectiveYAML), args[0], v.GetString("config_get.format"))
 		if err != nil {
 			return err
 		}
 		return data.Writeln(value)
 	},
+}
+
+// configGetParser registers --format (flag > ATMOS_CONFIG_GET_FORMAT > "raw"). The Viper prefix keeps
+// the key apart from the other commands' format flags, which would otherwise share one environment
+// binding.
+var configGetParser = flags.NewStandardParser(
+	flags.WithViperPrefix("config_get"),
+	flags.WithStringFlag("format", "f", "raw", "Output format: raw or json"),
+	flags.WithEnvVars("format", "ATMOS_CONFIG_GET_FORMAT"),
+)
+
+func init() {
+	configGetParser.RegisterFlags(configGetCmd)
+	if err := configGetParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 }
 
 var configSetCmd = &cobra.Command{

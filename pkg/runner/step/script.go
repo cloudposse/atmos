@@ -12,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
@@ -133,6 +134,7 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 				ProcessOverrides: step.ScriptProcessOverrides,
 				Hook:             vars.ScriptHook,
 				Args:             vars.ScriptArgs,
+				Viewport:         scriptViewport,
 			})
 			return runErr
 		}
@@ -212,6 +214,10 @@ func (h *ScriptHandler) resolveEnv(step *schema.WorkflowStep, vars *Variables) (
 	if len(env) == 0 {
 		env = os.Environ()
 	}
+	// Global --profile/--identity selections live only in this process; forward them so a nested
+	// atmos command the script starts (atmos.* or exec.run) runs with the same ones, as it does
+	// for a standalone script. The step's own env is applied afterwards and so wins.
+	env = ProcessEnvironmentWithSelection(env)
 	if len(step.Env) == 0 {
 		return env, nil
 	}
@@ -223,6 +229,22 @@ func (h *ScriptHandler) resolveEnv(step *schema.WorkflowStep, vars *Variables) (
 		env = envpkg.UpdateEnvVar(env, key, value)
 	}
 	return env, nil
+}
+
+// scriptViewport shows a subprocess's live output in the step output viewport, the same one
+// `output: viewport` gives a shell step, so exec.run(output="viewport") works in custom command,
+// workflow, and hook script steps and not only in standalone scripts.
+func scriptViewport(title string, run func(stdout, stderr io.Writer) error) error {
+	_, _, err := NewOutputModeWriter(OutputModeViewport, title, nil).ExecuteWithIO(run)
+	return err
+}
+
+// ProcessEnvironmentWithSelection adds the profile and identity chosen with global flags to env, so
+// a child Atmos process selects the same ones.
+func ProcessEnvironmentWithSelection(env []string) []string {
+	defer perf.Track(nil, "step.ProcessEnvironmentWithSelection")()
+
+	return script.ProcessEnvironment(env, script.SelectionEnv(cfg.GetActiveProfiles(nil), cfg.GlobalViper().GetString(cfg.IdentityFlagName)))
 }
 
 // ScriptFlags snapshots parsed flags without rendering user-provided strings.
