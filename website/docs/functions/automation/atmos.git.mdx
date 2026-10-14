@@ -1,0 +1,129 @@
+---
+title: "atmos.git"
+sidebar_position: 8
+sidebar_label: "atmos.git"
+sidebar_class_name: command
+description: Run an atmos git command, such as clone, status, or commit, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.git` function runs `atmos git` through the current Atmos executable. Use it to clone, pull, inspect,
+    commit to, and push managed Git repositories configured under `git.repositories` from automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.git(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
+`atmos.git("clone", "flux-deploy")` runs `atmos git clone flux-deploy`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`clone`](/cli/commands/git/clone) | Clone or reconcile a managed Git repository. |
+| [`init`](/cli/commands/git/init) | Initialize a managed Git repository from scratch. |
+| [`pull`](/cli/commands/git/pull) | Fast-forward pull a managed Git repository. |
+| [`status`](/cli/commands/git/status) | Show the working tree status of a managed Git repository. |
+| [`diff`](/cli/commands/git/diff) | Show changes between the working tree and HEAD. |
+| [`commit`](/cli/commands/git/commit) | Stage managed paths and create a commit. |
+| [`push`](/cli/commands/git/push) | Push commits to a remote Git repository. |
+| [`list`](/cli/commands/git/list) | List configured Git repositories. |
+| [`clean`](/cli/commands/git/clean) | Remove managed Git repository workdirs. |
+| [`hooks`](/cli/commands/git/hooks) | Manage local Git hook shims for the current repository, with `install`, `uninstall`, and `run`. |
+
+See the [`atmos git` command reference](/cli/commands/git/usage) for the complete list of subcommands and flags.
+
+:::note
+The `git` command is experimental, so each call prints the experimental notice. Calls that reach a remote, such as
+`clone`, `pull`, and `push`, use the repository's configured authentication and need network access.
+:::
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `git`, in order: the subcommand and its positional arguments, such as a repository name, URI, or path. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). For example, `message` (shorthand `m`
+        ) and `path` apply to `commit`, `branch` (shorthand `b` ) and `remote` apply to `pull` and `push`,
+        `format` applies to `list`, and `all` applies to `clone`, `pull`, `status`, and `clean`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Check a repository for changes
+
+```python
+status = atmos.git("status", "deployments", output = "capture")
+if status.stdout.strip() != "":
+    print("Uncommitted changes:\n" + status.stdout)
+```
+
+The `status` subcommand prints the porcelain status, so an empty `stdout` means a clean working tree.
+
+### Read the configured repositories
+
+```python
+listing = atmos.git("list", flags = {"format": "json"}, output = "capture")
+for repository in json.decode(listing.stdout):
+    print(repository["Name"], repository["Workdir"])
+```
+
+### Commit and push generated files
+
+```python
+atmos.git("pull", "deployments")
+atmos.git(
+    "commit", "deployments",
+    flags = {"message": "chore: update rendered manifests", "path": ["clusters/dev"]},
+)
+atmos.git("push", "deployments")
+```
+
+The `path` list repeats the flag once per element and stages only those repository-relative paths.
+
+### Pass extra arguments to git clone
+
+```python
+atmos.git("clone", "flux-deploy", args = ["--", "--no-tags"])
+```
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos git`](/cli/commands/git/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

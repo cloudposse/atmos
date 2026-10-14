@@ -3,6 +3,8 @@ name: atmos.ci
 on: pull_request
 env:
   GOFUMPT_VERSION: v0.9.1
+  # Keep dependency downloads on the proxy, including the license tool.
+  GOPROXY: https://proxy.golang.org
 permissions:
   contents: read
   id-token: write
@@ -26,6 +28,10 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # Container shell steps use a different HOME from checkout's temporary
+      # Git configuration. Trust only this checkout for pre-commit and Go VCS.
+      - name: Trust the checked-out repository
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       # Install Go and toolchain dependencies
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
@@ -33,7 +39,7 @@ jobs:
       - run: go mod tidy
       - name: Install Go tools
         run: |
-          go install mvdan.cc/gofumpt@${GOFUMPT_VERSION}
+          go install "mvdan.cc/gofumpt@${GOFUMPT_VERSION}"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Install toolchain dependencies
@@ -71,6 +77,9 @@ jobs:
 
       # Generate NOTICE file on all PRs to ensure it stays up-to-date
       - name: Generate NOTICE file
+        # Pass public event metadata, never a token, to PR-controlled Go code.
+        env:
+          ATMOS_NOTICE_REPO_DESCRIPTION: ${{ github.event.repository.description }}
         run: go tool mage notice:generate
 
       # Format HCL files in test fixtures and examples
@@ -81,7 +90,19 @@ jobs:
 
       # Regenerate README.md from README.yaml
       - name: Regenerate README
-        run: atmos docs generate readme
+        run: |
+          # Atmos 1.215.0 checks the API quota before fetching raw GitHub files.
+          # Fetch the configured template directly without giving PR templates a token.
+          readme_dir=$(mktemp -d "$RUNNER_TEMP/atmos-readme.XXXXXX")
+          trap 'rm -rf "$readme_dir"' EXIT
+          atmos describe config --format=json > "$readme_dir/config.json"
+          template_url=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["docs"]["generate"]["readme"]["template"])' "$readme_dir/config.json")
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+            --connect-timeout 15 --max-time 60 --retry 2 --retry-max-time 180 \
+            --url "$template_url" --output "$readme_dir/README.md.gotmpl"
+          python3 -c 'import json, sys; config = json.load(open(sys.argv[1])); config["docs"]["generate"]["readme"]["template"] = sys.argv[2]; json.dump(config, sys.stdout)' \
+            "$readme_dir/config.json" "$readme_dir/README.md.gotmpl" > "$readme_dir/override.yaml"
+          atmos docs generate readme --config "$readme_dir/override.yaml"
 
       - name: Commit fixes via Atmos Pro
         env:

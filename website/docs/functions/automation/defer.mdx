@@ -1,0 +1,111 @@
+---
+title: "defer"
+sidebar_position: 30
+sidebar_label: "defer"
+sidebar_class_name: command
+description: Register a function to run when the script or task finishes, even after a failure.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `defer` function registers a call to run when the enclosing script or
+    [`steps.parallel`](/functions/automation/steps.parallel) task finishes, whether it returned normally, stopped
+    with `fail()`, or was cancelled. Use it to tear down what a script started, such as an emulator, a temporary
+    stack, or a lock, without a `finally` block the language does not have.
+</Intro>
+
+## Usage
+
+```python
+defer(fn, *args, **kwargs)
+```
+
+## Arguments
+
+<dl>
+    <dt>`fn`</dt>
+    <dd>Required. The function to call later. Any callable works, including a `lambda` or a loaded function.</dd>
+
+    <dt>`*args`, `**kwargs`</dt>
+    <dd>
+        (Optional) Arguments passed to `fn` when it runs. They are captured at the time of the `defer` call, as in
+        Go, so a loop variable keeps the value it had when the call was registered.
+    </dd>
+</dl>
+
+## Returns
+
+The return value is `None`.
+
+## Behavior
+
+- **Last in, first out.** Call `defer` as many times as you like. Deferred calls run in reverse order of
+  registration, so teardown mirrors setup.
+- **Scoped to the script or task.** A call registered at the top level or inside any function runs when the script
+  body finishes. A call registered inside a [`steps.task`](/functions/automation/steps.task) function runs when that
+  task attempt finishes, before the next attempt or task, with the task's output prefix. Each retry attempt unwinds its
+  own deferred calls.
+- **Runs after `fail()`.** The original error is still the script's error. A failure inside a deferred call is
+  reported after it and never masks it. When the body succeeded, a failing deferred call fails the script. The
+  remaining deferred calls still run.
+- **Runs after cancellation.** When Atmos is interrupted, for example with Ctrl-C, the script's own context is
+  cancelled and deferred calls run on a fresh context with a 30 second grace period, so `exec.run` and `atmos.*`
+  calls inside them still work. This is the automation-language form of a shell `trap ... EXIT`; scripts never
+  install signal handlers themselves.
+- **Nested registration.** A deferred call may itself call `defer`; the new call runs after it.
+
+## Examples
+
+### Tear down an emulator and a stack in reverse order
+
+```python
+atmos.emulator("up", "aws", flags = {"stack": "advanced"})
+defer(lambda: atmos.emulator("down", "aws", flags = {"stack": "advanced"}, check = False))
+
+atmos.aws("cfn", "deploy", "artifacts", flags = {"stack": "advanced"})
+defer(lambda: atmos.aws("cfn", "delete", "artifacts", flags = {"stack": "advanced", "auto-approve": True}, check = False))
+
+atmos.aws("cfn", "deploy", "app", flags = {"stack": "advanced"})
+```
+
+If the `app` deploy fails, the `artifacts` stack is deleted first and the emulator stopped second, and the deploy
+error is what Atmos reports.
+
+### Capture arguments at registration time
+
+```python
+def remove(path):
+    exec.run(["rm", "-f", path])
+
+for path in ["a.tmp", "b.tmp"]:
+    defer(remove, path)
+```
+
+Both files are removed; each deferred call keeps its own `path`.
+
+### Clean up per task
+
+```python
+def test(stack):
+    lock = exec.run(["./lock", stack], output = "capture").stdout.strip()
+    defer(exec.run, ["./unlock", lock], check = False)
+    atmos.terraform("plan", "vpc", stack)
+
+steps.parallel(tasks = [steps.task(name = s, function = test, args = [s]) for s in ["dev", "staging"]])
+```
+
+Each task unlocks its own stack when it finishes, even if the plan fails.
+
+## Errors
+
+- A missing argument, or a first argument that is not callable, fails with an argument error.
+- A deferred call that fails reports `deferred <name> failed: <reason>`.
+
+## Related
+
+- [`when: always`](/steps#cleanup-steps) runs a later YAML step after an earlier step failed. Use `defer` for cleanup
+  that belongs inside one script or one task.
+- [`steps.parallel`](/functions/automation/steps.parallel) and [`steps.task`](/functions/automation/steps.task)
+  define the task scope.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script)

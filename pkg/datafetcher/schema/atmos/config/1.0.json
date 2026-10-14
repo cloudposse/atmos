@@ -2503,7 +2503,7 @@
         }
       },
       "type": "object",
-      "description": "CICommentsConfig configures PR/MR comment integration.\nGitHub: PR comments, GitLab: MR notes.\n\nEnabled is *bool so callers can distinguish \"unset\" (nil, default applies)\nfrom explicit false. Default is true when omitted; see `isCommentsEnabled`."
+      "description": "CICommentsConfig configures PR/MR comment integration.\nGitHub: PR comments, GitLab: MR notes.\n\nEnabled is *bool so callers can distinguish \"unset\" (nil, default applies)\nfrom explicit false. Comments are opt-in: nil is treated as false (disabled);\nsee `ci.CommentsEnabled`."
     },
     "CIConfig": {
       "properties": {
@@ -3712,12 +3712,22 @@
         "type": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "",
+                "string",
+                "bool",
+                "int"
+              ]
             },
             {
               "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
             }
-          ]
+          ],
+          "description": "Type is the data type of the flag: \"string\" (the default), \"bool\", or \"int\". An int flag is an\ninteger in templates and script contexts. Any other type fails when the command loads."
         },
         "description": {
           "anyOf": [
@@ -5331,6 +5341,20 @@
               "type": "null"
             }
           ]
+        },
+        "steps": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tasks"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Steps runs registered steps in order, as an alternative to Command."
         }
       },
       "type": "object",
@@ -7940,7 +7964,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Enabled controls the local per-command / final-summary resource-usage display (ui.Info). Defaults to true when unset. Never gates the Atmos Pro exec-metadata upload — only local display."
+          "description": "Enabled controls the local per-command / final-summary resource-usage display (ui.Info). Defaults to true when unset, except in standalone Starlark scripts (interpreter mode), where the summary is shown only when explicitly set to true. Never gates the Atmos Pro exec-metadata upload — only local display."
         }
       },
       "type": "object",
@@ -9715,18 +9739,13 @@
         "timeout": {
           "anyOf": [
             {
-              "type": "string",
-              "description": "Go duration string (e.g. \"500ms\", \"30s\", \"5m\")."
-            },
-            {
-              "type": "integer",
-              "description": "Duration in nanoseconds."
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
-          "description": "Timeout specifies the maximum duration for the task. Zero means no timeout."
+          "description": "Timeout specifies the maximum duration for the task as a Go duration string (for example\n\"30s\"). It may be a template; the step runner renders and parses it when the step starts, so\na templated value does not fail config loading. Empty means no timeout."
         },
         "stack": {
           "anyOf": [

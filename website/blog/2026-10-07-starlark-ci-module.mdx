@@ -1,0 +1,102 @@
+---
+slug: starlark-ci-module
+title: "Report to the pull request from a script, and run it on your laptop"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Moving build, test, and deploy pipelines out of GitHub Actions YAML and into
+Atmos custom commands removes a lot of glue, but one piece of it always came
+back. To tell the pull request what happened, the script had to shell out to
+`gh`, append to `$GITHUB_ENV` by hand, and print workflow commands for
+annotations. None of that works on a laptop, so the reporting half of a pipeline
+could only be debugged by pushing a commit and waiting for a runner.
+
+Scripts written in the [Atmos Automation Language](/automation/language) now have
+a [`ci` module](/functions/automation/ci) that reports to the CI provider with
+one call each, and renders the same calls on your terminal when there is no
+provider.
+
+<!--truncate-->
+
+## Reporting was the part you could not run locally {#the-problem}
+
+Building, testing, and validating policy are easy to run on your own machine. The
+last lines of a pipeline step are the problem: the pull request comment, the job
+summary, the step output, the commit status. They depend on files and tokens that
+only exist inside a runner, so they stay untested until the pipeline runs for real.
+
+## One module, the same script everywhere {#the-fix}
+
+From any script (standalone, custom command, workflow, or hook step) you can post
+a pull request comment, write a job summary, set step outputs, export
+environment variables and `PATH` entries for later steps, mask a value in logs,
+emit inline annotations, create and update a commit status, open a collapsible
+log group, and upload a SARIF report. The run's context is available through
+`ci.context`: provider, event, commit SHA, branch, repository, run URL, and pull
+request.
+
+With no CI provider detected, every call renders locally instead. A comment
+becomes a preview, a summary renders as Markdown on the terminal, and outputs
+print as `name=value`. You develop and debug the reporting on your laptop, and
+the CI run executes the same code.
+
+In CI, each call honors the same [`ci` configuration](/cli/configuration/ci)
+switches as the built-in reporting that Atmos already does for Terraform.
+Comments and checks are opt-in. A call whose switch is off does not fail
+silently: it warns, names the flag, and renders locally. Comments and checks are
+also held on `pull_request_target` and `workflow_run`, where privileged
+credentials meet fork code, unless you set `ci.allow_unsafe_fork_execution`.
+
+The GitHub provider now honors `GITHUB_API_URL`, so the calls work against
+GitHub Enterprise Server, and `ATMOS_CI_GITHUB_API_URL` overrides it. On an
+unknown CI platform run with `--ci`, or on a laptop, a generic provider takes its
+context from `ATMOS_CI_PR`, `ATMOS_CI_EVENT`, `ATMOS_CI_RUN_ID`,
+`ATMOS_CI_RUN_URL`, `ATMOS_CI_ENV`, and `ATMOS_CI_PATH`.
+
+## How to Use It {#how-to-use-it}
+
+This custom command runs tests and OPA policy validation, then reports one result
+to the job summary and to a single pull request comment that later runs update in
+place:
+
+```yaml
+commands:
+  - name: app test
+    arguments: [{ name: component, required: true }]
+    flags: [{ name: stack, shorthand: s, required: true }]
+    steps:
+      - name: test
+        type: script
+        interpreter: starlark
+        script: |
+          component, stack = ctx.arguments["component"], ctx.flags["stack"]
+          tests = ci.group("test", lambda: exec.run(["go", "test", "./..."], check = False, output = "capture"))
+          policy = atmos.validate("component", component, flags = {"stack": stack}, check = False, output = "capture")
+          ok = tests.exit_code == 0 and policy.exit_code == 0
+          body = "## Test: `" + component + "` in `" + stack + "`\n\n" + \
+                 "| Check | Result |\n|---|---|\n" + \
+                 "| Tests | " + ("✅" if tests.exit_code == 0 else "❌") + " |\n" + \
+                 "| OPA policy | " + ("✅" if policy.exit_code == 0 else "❌") + " |\n"
+          ci.summary(body)
+          ci.comment(body, key = "app-test:" + component + ":" + stack)
+          ci.output("tested", "true" if ok else "false")
+          if not ok:
+              fail("tests or policy failed")
+```
+
+Run it the same way in CI and on a laptop:
+
+```shell
+atmos app test api --stack=dev
+```
+
+On GitHub Actions, give the job `pull-requests: write` and set
+`ci.comments.enabled: true`. The [`ci` reference](/functions/automation/ci)
+covers every call, the gating rules, and the local rendering.
+
+## Get Involved
+
+Try moving the reporting lines of one pipeline step into a script, and
+[open an issue](https://github.com/cloudposse/atmos/issues) if a report you need
+is missing.

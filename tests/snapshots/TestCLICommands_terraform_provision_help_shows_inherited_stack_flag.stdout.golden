@@ -6,8 +6,12 @@ This command provisions terraform components
 USAGE
 
 
-    $ atmos terraform provision [flags]
+    $ atmos terraform provision [component] [flags]
 
+
+ARGUMENTS
+
+  component  Name of the component
 
 FLAGS
 

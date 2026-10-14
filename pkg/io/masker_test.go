@@ -144,14 +144,14 @@ func TestMasker_RegisterRegex(t *testing.T) {
 	m := newMasker(cfg)
 
 	// Test nil regex
-	m.RegisterRegex(nil)
+	assert.NoError(t, m.RegisterRegex(nil))
 	if m.Count() != 0 {
 		t.Errorf("expected 0 masks after registering nil regex, got %d", m.Count())
 	}
 
 	// Test valid regex - construct token at runtime to avoid secret detection
 	re := regexp.MustCompile(`ghp_[A-Za-z0-9]{36}`)
-	m.RegisterRegex(re)
+	assert.NoError(t, m.RegisterRegex(re))
 
 	// Generate 36-character suffix at runtime
 	tokenSuffix := strings.Repeat("0", 18) + strings.Repeat("1", 18)

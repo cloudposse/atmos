@@ -117,6 +117,19 @@ strategies in order, finding the **first match** that points to an existing file
    ```
    The path `config/vars.json` in any manifest resolves to `<repo-root>/config/vars.json`.
 
+#### Workflow Manifests and Custom Commands
+
+The same rules apply to `!include` and `!include.raw` in [workflow manifests](/workflows) and in custom
+command definitions in `atmos.yaml` and `atmos.d`: `./` and `../` paths resolve relative to the file that
+contains the tag, bare paths resolve relative to the project `base_path`, and absolute paths are used as written.
+Atmos never looks for these paths in the directory you run it from, so a workflow or command gives the same result
+wherever you invoke Atmos. For a command defined in a config file, `base_path` is the one that file declares
+(or the directory of the config file when it declares none; for files loaded from `atmos.d`, the directory that
+contains `atmos.d`).
+
+A script included this way also becomes the anchor for its own `load()` calls; see
+[Loading files](/steps/type/script#loading-files).
+
 ### Remote Sources
 
 To download remote files, Atmos uses [`go-getter`](https://github.com/hashicorp/go-getter)

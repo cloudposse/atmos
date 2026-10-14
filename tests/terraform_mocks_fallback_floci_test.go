@@ -15,11 +15,16 @@ import (
 // instead of being masked by the mock.
 func TestTerraformComponentMocksFallbackFlociS3(t *testing.T) {
 	endpoint := requireFlociEndpoint(t, "", "")
-	// No terraform/tofu precondition: the emu stack declares opentofu in dependencies.tools, so the
-	// Atmos toolchain installs it (the floci-go CI job does not provide a terraform binary).
+	// The emu stack retains its OpenTofu dependency so Atmos installs and verifies it
+	// when needed, using the repository pin already installed by CI.
 	ensureFlociAtmosRunner(t)
 
 	workdir := copyFlociScenarioFixture(t, filepath.Join("fixtures", "scenarios", "terraform-component-mocks-fallback"))
+	pinFlociToolDependencies(
+		t, filepath.Join(workdir, "stacks", "emu.yaml"),
+		[]string{"components", "terraform", "vpc", "dependencies", "tools"},
+		[]string{"components", "terraform", "app", "dependencies", "tools"},
+	)
 	testID := uniqueFlociTestID(t)
 	bucket := "mocks-fallback-" + testID
 	env := flociHarnessCommandEnv(t, endpoint, workdir, testID, false)

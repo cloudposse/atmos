@@ -45,6 +45,8 @@ atmos config get stacks.included_paths --config ./main.yaml,./overrides.yaml
 ## Flags
 
 <dl>
+  <dt>`--format` / `-f` (string)</dt>
+  <dd>Output format: `raw` (default) or `json`. JSON preserves scalar and collection types, including quoted strings that look like booleans or numbers.</dd>
   <dt>`--config` (string slice, inherited)</dt>
   <dd>Select one or more `atmos.yaml` files instead of the location discovered in the current directory or git root. When multiple files are given, later files override earlier ones and the merged result is what `get` reports.</dd>
 </dl>
