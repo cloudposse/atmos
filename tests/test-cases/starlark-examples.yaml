@@ -1,0 +1,101 @@
+# yaml-language-server: $schema=schema.json
+tests:
+  - name: starlark example standalone script
+    enabled: true
+    snapshot: false
+    description: The executable script reads JSON with the embedded interpreter
+    workdir: ../examples/starlark-script
+    command: atmos
+    args: [./summarize.star, services.json]
+    expect:
+      exit_code: 0
+      stdout:
+        - 'api: 2 replicas'
+        - 'worker: 3 replicas'
+        - 'Total: 2 services, 5 replicas'
+
+  - name: starlark example script requires a manifest
+    enabled: true
+    snapshot: false
+    workdir: ../examples/starlark-script
+    command: atmos
+    args: [./summarize.star]
+    expect:
+      exit_code: 1
+      stderr:
+        - 'usage: ./summarize.star services.json'
+
+  - name: starlark example custom command
+    enabled: true
+    snapshot: false
+    workdir: ../examples/starlark-commands
+    command: atmos
+    args: [capacity, --replicas, "3"]
+    expect:
+      exit_code: 0
+      stdout:
+        - '3 replicas x 4 workers = 12 workers'
+
+  - name: starlark example custom command default
+    enabled: true
+    snapshot: false
+    workdir: ../examples/starlark-commands
+    command: atmos
+    args: [capacity]
+    expect:
+      exit_code: 0
+      stdout:
+        - '2 replicas x 4 workers = 8 workers'
+
+  - name: starlark example custom command rejects zero
+    enabled: true
+    snapshot: false
+    workdir: ../examples/starlark-commands
+    command: atmos
+    args: [capacity, --replicas, "0"]
+    expect:
+      exit_code: 1
+      stderr:
+        - replicas must be positive
+
+  - name: starlark example hook before plan
+    enabled: true
+    snapshot: false
+    description: A real provider-free Terraform plan runs after the owner check
+    workdir: ../examples/starlark-hooks
+    command: atmos
+    args: [terraform, plan, api, -s, dev]
+    env:
+      ATMOS_EXPERIMENTAL: silence
+    expect:
+      exit_code: 0
+      stderr:
+        - 'Owner check passed: api belongs to platform \(dev\)\.'
+      stdout:
+        - 'No changes\.'
+
+  - name: starlark example hook blocks unowned component
+    enabled: true
+    snapshot: false
+    workdir: ../examples/starlark-hooks
+    command: atmos
+    args: [terraform, plan, api, -s, unowned]
+    env:
+      ATMOS_EXPERIMENTAL: silence
+    expect:
+      exit_code: 1
+      stderr:
+        - Set an owner before planning api
+      stdout:
+        - !not 'No changes\.'
+
+  - name: starlark example cast validators
+    enabled: true
+    snapshot: false
+    workdir: ../demo/casts
+    command: atmos
+    args: [casts, validate, examples, starlark]
+    expect:
+      exit_code: 0
+      stderr:
+        - All three Starlark example casts validated

@@ -1,0 +1,129 @@
+commands:
+  - name: casts generate examples starlark
+    description: Record the three focused Starlark examples
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      # These casts demonstrate the actual examples requested by the user.
+      # Copy them so Terraform-generated files never touch the source examples.
+      - type: workdir
+        name: script-fixture
+        source: ../../examples/starlark-script
+        path: ../../.context/cast-fixtures/starlark-script
+        reset: true
+      - type: workdir
+        name: commands-fixture
+        source: ../../examples/starlark-commands
+        path: ../../.context/cast-fixtures/starlark-commands
+        reset: true
+      - type: workdir
+        name: hooks-fixture
+        source: ../../examples/starlark-hooks
+        path: ../../.context/cast-fixtures/starlark-hooks
+        reset: true
+      - type: shell
+        name: prepare-plan
+        working_directory: ../../.context/cast-fixtures/starlark-hooks
+        output: none
+        command: atmos terraform plan api -s dev
+      - type: cast
+        name: script
+        working_directory: ../../.context/cast-fixtures/starlark-script
+        title: One executable file, no extra interpreter
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: ../../website/static/casts/examples/starlark-script/summarize.cast
+        steps:
+          - type: simulate
+            text: "# Atmos is the interpreter; JSON and file access are built in"
+          - type: simulate
+            text: cat summarize.star
+          - type: shell
+            command: cat summarize.star
+            duration: 450ms
+            interval: 2s
+          - type: simulate
+            text: ./summarize.star services.json
+          - type: shell
+            command: ./summarize.star services.json
+            duration: 450ms
+            interval: 2s
+      - type: cast
+        name: commands
+        working_directory: ../../.context/cast-fixtures/starlark-commands
+        title: A custom command with flags and Starlark logic
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: ../../website/static/casts/examples/starlark-commands/capacity.cast
+        steps:
+          - type: simulate
+            text: "# YAML defines the CLI; Starlark does the calculation"
+          - type: simulate
+            text: cat atmos.yaml
+          - type: shell
+            command: cat atmos.yaml
+            duration: 450ms
+            interval: 2s
+          - type: simulate
+            text: atmos capacity --replicas 3
+          - type: shell
+            command: atmos capacity --replicas 3
+            duration: 450ms
+            interval: 2s
+      - type: cast
+        name: hooks
+        working_directory: ../../.context/cast-fixtures/starlark-hooks
+        title: Check ownership before Terraform plans
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: ../../website/static/casts/examples/starlark-hooks/owner-check.cast
+        steps:
+          - type: simulate
+            text: "# A lifecycle hook reads the component's resolved owner"
+          - type: simulate
+            text: atmos terraform plan api -s dev
+          - type: shell
+            command: atmos terraform plan api -s dev
+            duration: 450ms
+            interval: 2s
+          - type: simulate
+            text: "# The unowned stack clears owner; the hook stops the plan"
+          - type: simulate
+            text: atmos terraform plan api -s unowned
+          - type: shell
+            command: |
+              atmos terraform plan api -s unowned
+              test "$?" -eq 1
+            duration: 450ms
+            interval: 2s
+      - type: script
+        name: validate
+        interpreter: starlark
+        script: !include scripts/validate-starlark-examples.star
+  - name: casts validate examples starlark
+    description: Validate all three focused Starlark casts
+    steps:
+      - type: script
+        name: validate
+        interpreter: starlark
+        script: !include scripts/validate-starlark-examples.star

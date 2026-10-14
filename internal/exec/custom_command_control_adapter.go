@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/auth"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/scheduler"
@@ -26,6 +27,11 @@ type CustomCommandControlContext struct {
 	BaseEnv          []string
 	AuthManager      auth.AuthManager
 	Executor         *stepPkg.StepExecutor
+	// WorkingDirectory is the resolved directory of the enclosing control step (the command-level
+	// `working_directory`, optionally overridden by the parent step's own). Children resolve relative
+	// `working_directory` values against it and inherit it when they set none. Empty falls back to the
+	// Atmos base path.
+	WorkingDirectory string
 }
 
 // ExecuteCustomCommandControlStep runs a parallel/matrix step declared in a custom
@@ -35,16 +41,48 @@ type CustomCommandControlContext struct {
 func ExecuteCustomCommandControlStep(ctx context.Context, control *CustomCommandControlContext, parent *schema.WorkflowStep) error {
 	defer perf.Track(&control.AtmosConfig, "exec.ExecuteCustomCommandControlStep")()
 
+	childExecutor := newCustomCommandControlExecutor(control)
+	return workflow.ExecuteControlStep(ctx, parent, childExecutor.Execute, workflow.ControlExecutionOptions{
+		TemplateData: func(stepName string, matrix map[string]string) map[string]any {
+			return control.Executor.Variables().TemplateData()
+		},
+		StoreResult: func(result *scheduler.Result) {
+			storeCustomCommandControlResult(control.Executor, result)
+		},
+	})
+}
+
+// newCustomCommandControlExecutor builds the child executor for a custom command's parallel/matrix
+// step. Relative child `working_directory` values resolve against the command's working directory
+// (not the project root), mirroring how sequential custom-command steps resolve theirs; absolute
+// values still win.
+func newCustomCommandControlExecutor(control *CustomCommandControlContext) *workflow.ControlCommandExecutor {
 	workflowDefinition := &schema.WorkflowDefinition{
 		Env:   control.CommandEnv,
 		Stack: control.CommandLineStack,
 	}
-	childExecutor := &workflow.ControlCommandExecutor{
-		WorkflowDefinition:  workflowDefinition,
-		BasePath:            control.AtmosConfig.BasePath,
-		BaseEnv:             control.BaseEnv,
-		CommandLineStack:    control.CommandLineStack,
-		CommandLineIdentity: control.CommandIdentity,
+	basePath := control.AtmosConfig.BasePath
+	if strings.TrimSpace(control.WorkingDirectory) != "" {
+		basePath = control.WorkingDirectory
+		workflowDefinition.WorkingDirectory = control.WorkingDirectory
+	}
+	var vars *stepPkg.Variables
+	if control.Executor != nil {
+		vars = control.Executor.Variables()
+	}
+	return &workflow.ControlCommandExecutor{
+		InstallTools: stepPkg.ScriptToolInstaller(&control.AtmosConfig),
+		// Custom commands have no dry-run mode; children always execute.
+		DryRun:                 false,
+		ScriptComponent:        stepPkg.ScriptComponentRef(vars),
+		ResolveComponent:       stepPkg.ScriptComponentResolver(vars),
+		ScriptProcessOverrides: commandEnvOverrides(control),
+		WorkflowDefinition:     workflowDefinition,
+		BasePath:               basePath,
+		ProjectRoot:            stepPkg.ScriptProjectRoot(control.AtmosConfig.BasePathAbsolute, control.AtmosConfig.BasePath),
+		BaseEnv:                control.BaseEnv,
+		CommandLineStack:       control.CommandLineStack,
+		CommandLineIdentity:    control.CommandIdentity,
 		PrepareEnv: func(baseEnv []string, identity string, stepName string, workflowEnv map[string]string, stepEnv map[string]string) ([]string, error) {
 			// Custom-command parallel/matrix children have no `type: env` persistent-env
 			// concept (that's a sequential-workflow-only feature) -- pass nil.
@@ -67,14 +105,20 @@ func ExecuteCustomCommandControlStep(ctx context.Context, control *CustomCommand
 			)
 		},
 	}
-	return workflow.ExecuteControlStep(ctx, parent, childExecutor.Execute, workflow.ControlExecutionOptions{
-		TemplateData: func(stepName string, matrix map[string]string) map[string]any {
-			return control.Executor.Variables().TemplateData()
-		},
-		StoreResult: func(result *scheduler.Result) {
-			storeCustomCommandControlResult(control.Executor, result)
-		},
-	})
+}
+
+// commandEnvOverrides names the command-level env keys, with their values from the command's
+// process env, so embedded script children keep command env above component env.
+func commandEnvOverrides(control *CustomCommandControlContext) map[string]string {
+	if len(control.CommandEnv) == 0 {
+		return nil
+	}
+	processEnv := envpkg.SliceToMap(control.BaseEnv)
+	overrides := make(map[string]string, len(control.CommandEnv))
+	for key := range control.CommandEnv {
+		overrides[key] = processEnv[key]
+	}
+	return overrides
 }
 
 // storeCustomCommandControlResult bridges a completed parallel/matrix child's result back
@@ -88,6 +132,9 @@ func storeCustomCommandControlResult(executor *stepPkg.StepExecutor, result *sch
 			WithMetadata("stderr", controlResult.Stderr).
 			WithMetadata("status", string(result.Status)).
 			WithMetadata("canceled", controlResult.Canceled)
+		if controlResult.Value != nil {
+			stepResult.Value = *controlResult.Value
+		}
 		if controlResult.Err != nil {
 			stepResult.WithError(controlResult.Err.Error())
 		}

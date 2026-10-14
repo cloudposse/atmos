@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/scheduler"
@@ -37,12 +38,28 @@ type controlBridge struct{}
 func (controlBridge) RunControl(ctx context.Context, step *schema.WorkflowStep, vars *stepPkg.Variables) (*stepPkg.StepResult, error) {
 	defer perf.Track(nil, "workflow.controlBridge.RunControl")()
 
+	parentEnv, err := vars.ResolveEnvMap(step.Env)
+	if err != nil {
+		return nil, err
+	}
 	childExecutor := &ControlCommandExecutor{
-		BaseEnv:     vars.EnvSlice(),
+		InstallTools:           stepPkg.ScriptToolInstaller(vars.AtmosConfig),
+		DryRun:                 step.DryRun,
+		ScriptHook:             vars.ScriptHook,
+		ScriptComponent:        stepPkg.ScriptComponentRef(vars),
+		ResolveComponent:       stepPkg.ScriptComponentResolver(vars),
+		ScriptProcessOverrides: step.ScriptProcessOverrides,
+		BaseEnv:                envpkg.MergeGlobalEnv(vars.EnvSlice(), parentEnv),
+		PrepareEnv: func(base []string, _, _ string, _, childEnv map[string]string) ([]string, error) {
+			return envpkg.MergeGlobalEnv(base, childEnv), nil
+		},
 		RunCommand:  plainControlRunCommand,
 		ShellRunner: interpreterShellRunner,
 	}
-	err := ExecuteControlStep(ctx, step, childExecutor.Execute, ControlExecutionOptions{
+	if vars.AtmosConfig != nil {
+		childExecutor.ProjectRoot = stepPkg.ScriptProjectRoot(vars.AtmosConfig.BasePathAbsolute, vars.AtmosConfig.BasePath)
+	}
+	err = ExecuteControlStep(ctx, step, childExecutor.Execute, ControlExecutionOptions{
 		TemplateData: func(stepName string, matrix map[string]string) map[string]any {
 			return vars.TemplateData()
 		},
@@ -67,6 +84,9 @@ func storeControlBridgeResult(vars *stepPkg.Variables, result *scheduler.Result)
 			WithMetadata("stderr", controlResult.Stderr).
 			WithMetadata("status", string(result.Status)).
 			WithMetadata("canceled", controlResult.Canceled)
+		if controlResult.Value != nil {
+			stepResult.Value = *controlResult.Value
+		}
 		if controlResult.Err != nil {
 			stepResult.WithError(controlResult.Err.Error())
 		}
@@ -82,6 +102,9 @@ func storeControlBridgeResult(vars *stepPkg.Variables, result *scheduler.Result)
 // the request buffers so the aggregator can render summaries. An `atmos` child
 // resolves to the running binary so it works regardless of PATH.
 func plainControlRunCommand(request *ControlCommandRequest) error {
+	if request.DryRun {
+		return nil
+	}
 	program := request.Program
 	if program == schema.TaskTypeAtmos {
 		if exe, err := os.Executable(); err == nil {

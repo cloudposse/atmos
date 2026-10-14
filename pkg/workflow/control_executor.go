@@ -14,16 +14,23 @@ import (
 
 	"mvdan.cc/sh/v3/shell"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/retry"
+	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/script"
+	_ "github.com/cloudposse/atmos/pkg/script/starlark" // Register the embedded interpreter.
 )
 
 type ControlEnvironmentFunc func(baseEnv []string, identity string, stepName string, workflowEnv map[string]string, stepEnv map[string]string) ([]string, error)
 
 type ControlCommandRequest struct {
+	// DryRun asks the runner to report the command without executing it.
+	DryRun  bool
 	Context context.Context
 	Program string
 	Args    []string
@@ -53,6 +60,29 @@ type ControlShellRequest struct {
 type ControlShellRunner func(ctx context.Context, req *ControlShellRequest) error
 
 type ControlCommandExecutor struct {
+	// DryRun makes the executor execute nothing. Children that run through RunCommand
+	// (atmos, shell without a ShellRunner, external script) are still dispatched with
+	// ControlCommandRequest.DryRun set, so the runner owns the dry-run behavior (the
+	// workflow runner emits its dry-run diagnostics there). Children with no dry-run-aware
+	// runner (a ShellRunner shell child and every embedded script child) are skipped here,
+	// before any runner or embedded engine is reached.
+	DryRun bool
+	// ScriptHook supplies host-owned lifecycle facts to embedded script children.
+	ScriptHook *script.HookContext
+	// ScriptComponent is the component the enclosing execution context is scoped
+	// to. Embedded script children expose it as `ctx.component`.
+	ScriptComponent *script.ComponentRef
+	// ResolveComponent backs `components.get` in embedded script children.
+	ResolveComponent script.ComponentResolver
+	InstallTools     script.ToolInstaller
+	// ProjectRoot is the absolute Atmos project base path. Embedded script children show paths under
+	// it relative to it in errors and tracebacks.
+	ProjectRoot string
+	// ScriptProcessOverrides names the env keys whose values take precedence over
+	// component env for component processes (command-level env). The values are
+	// refreshed from each child's final process env at execution time.
+	ScriptProcessOverrides map[string]string
+
 	WorkflowDefinition  *schema.WorkflowDefinition
 	BasePath            string
 	BaseEnv             []string
@@ -94,6 +124,16 @@ func (executor *ControlCommandExecutor) Execute(ctx context.Context, child *Cont
 	}
 }
 
+// rejectEmbeddedContainer fails a child that would run an embedded interpreter
+// under a container, which cannot host an in-process engine.
+func (executor *ControlCommandExecutor) rejectEmbeddedContainer(step *schema.WorkflowStep) error {
+	workflowContainer := executor.WorkflowDefinition != nil && executor.WorkflowDefinition.Container.IsEnabled() && !StepContainerDisabled(step)
+	if step.Container.IsEnabled() || workflowContainer {
+		return fmt.Errorf("%w: embedded starlark requires container: false", errUtils.ErrStarlark)
+	}
+	return nil
+}
+
 func (executor *ControlCommandExecutor) stepEnv(step *schema.WorkflowStep) ([]string, error) {
 	if executor.PrepareEnv == nil {
 		return executor.BaseEnv, nil
@@ -110,6 +150,9 @@ func (executor *ControlCommandExecutor) stepEnv(step *schema.WorkflowStep) ([]st
 }
 
 func (executor *ControlCommandExecutor) executeScript(ctx context.Context, step *schema.WorkflowStep, stepEnv []string, output ControlChildOutput) (*ControlChildResult, error) {
+	if engine, ok := script.Get(step.Interpreter); ok {
+		return executor.executeEmbeddedScript(ctx, step, stepEnv, output, engine)
+	}
 	argv, stdin := process.ScriptInvocation(step.Interpreter, step.Script)
 	dir := executor.workingDirectory(step)
 	ioSpec := executor.commandStreams(output)
@@ -118,6 +161,7 @@ func (executor *ControlCommandExecutor) executeScript(ctx context.Context, step 
 	}
 	err := retry.Do(ctx, step.Retry, func() error {
 		return executor.runCommand(&ControlCommandRequest{
+			DryRun:  executor.DryRun,
 			Context: ctx,
 			Program: argv[0],
 			Args:    argv[1:],
@@ -129,7 +173,63 @@ func (executor *ControlCommandExecutor) executeScript(ctx context.Context, step 
 		})
 	})
 	ioSpec.flush()
+	err = stepPkg.WrapScriptInterpreterError(step.Interpreter, err)
 	return controlChildExecutionResult(ioSpec.stdout, ioSpec.stderr, err), err
+}
+
+func (executor *ControlCommandExecutor) executeEmbeddedScript(ctx context.Context, step *schema.WorkflowStep, stepEnv []string, output ControlChildOutput, engine script.Engine) (*ControlChildResult, error) {
+	if err := executor.rejectEmbeddedContainer(step); err != nil {
+		return nil, err
+	}
+	if executor.DryRun {
+		// The engine only parses in dry-run mode, so syntax errors still surface without executing anything.
+		_, err := engine.Execute(ctx, script.Spec{Name: step.Name, Source: step.Script, SourcePath: step.ScriptSource, ProjectRoot: executor.ProjectRoot, WorkingDirectory: executor.workingDirectory(step), DryRun: true})
+		return &ControlChildResult{}, err
+	}
+	ioSpec := executor.commandStreams(output)
+	var embedded script.Result
+	inputs := step.Env
+	if step.ScriptEnv != nil {
+		inputs = step.ScriptEnv
+	}
+	err := retry.Do(ctx, step.Retry, func() error {
+		var runErr error
+		embedded, runErr = engine.Execute(ctx, script.Spec{
+			InstallTools: executor.InstallTools,
+			Name:         step.Name, Source: step.Script, SourcePath: step.ScriptSource, ProjectRoot: executor.ProjectRoot, WorkingDirectory: executor.workingDirectory(step),
+			Env: inputs, ProcessEnv: stepEnv, DryRun: step.DryRun,
+			Component: executor.ScriptComponent, ResolveComponent: executor.ResolveComponent,
+			ProcessOverrides: executor.processOverrides(stepEnv),
+			Hook:             executor.ScriptHook,
+			Stdout:           io.MultiWriter(ioSpec.streams.Stdout, ioSpec.stdout),
+			Stderr:           io.MultiWriter(ioSpec.streams.Stderr, ioSpec.stderr),
+		})
+		return runErr
+	})
+	ioSpec.flush()
+	result := controlChildExecutionResult(ioSpec.stdout, ioSpec.stderr, err)
+	if embedded.HasOutput {
+		result.Value = &embedded.Value
+	}
+	return result, err
+}
+
+// processOverrides returns the command-level env overrides for a child, with each
+// value taken from the child's final process env so a child's own env keeps
+// precedence over the command-level value.
+func (executor *ControlCommandExecutor) processOverrides(stepEnv []string) map[string]string {
+	if len(executor.ScriptProcessOverrides) == 0 {
+		return nil
+	}
+	final := envpkg.SliceToMap(stepEnv)
+	overrides := make(map[string]string, len(executor.ScriptProcessOverrides))
+	for key, value := range executor.ScriptProcessOverrides {
+		if resolved, ok := final[key]; ok {
+			value = resolved
+		}
+		overrides[key] = value
+	}
+	return overrides
 }
 
 func (executor *ControlCommandExecutor) executeShell(ctx context.Context, step *schema.WorkflowStep, stepEnv []string, output ControlChildOutput) (*ControlChildResult, error) {
@@ -140,6 +240,9 @@ func (executor *ControlCommandExecutor) executeShell(ctx context.Context, step *
 	// stream (which masks via the data layer) and the capture buffer (kept raw for
 	// downstream template references, matching the RunCommand path).
 	if executor.ShellRunner != nil {
+		if executor.DryRun {
+			return &ControlChildResult{}, nil
+		}
 		outW := io.MultiWriter(ioSpec.streams.Stdout, ioSpec.stdout)
 		errW := io.MultiWriter(ioSpec.streams.Stderr, ioSpec.stderr)
 		dir := executor.workingDirectory(step)
@@ -160,6 +263,7 @@ func (executor *ControlCommandExecutor) executeShell(ctx context.Context, step *
 	dir := executor.workingDirectory(step)
 	err := retry.Do(ctx, step.Retry, func() error {
 		return executor.runCommand(&ControlCommandRequest{
+			DryRun:  executor.DryRun,
 			Context: ctx,
 			Program: program,
 			Args:    args,
@@ -204,6 +308,7 @@ func (executor *ControlCommandExecutor) executeAtmos(ctx context.Context, step *
 	ioSpec := executor.commandStreams(output)
 	err := retry.Do(ctx, step.Retry, func() error {
 		return executor.runCommand(&ControlCommandRequest{
+			DryRun:  executor.DryRun,
 			Context: ctx,
 			Program: "atmos",
 			Args:    args,

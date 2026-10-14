@@ -91,6 +91,12 @@ func (e *testLeafExecution) prepareCommand() (*schema.WorkflowStep, error) {
 	if child.Type == "" {
 		child.Type = schema.TaskTypeShell
 	}
+	if child.ScriptEnv == nil {
+		child.ScriptEnv = maps.Clone(e.step.Env)
+	}
+	if child.ScriptEnv == nil {
+		child.ScriptEnv = map[string]string{}
+	}
 	child.Env = maps.Clone(e.vars.Env)
 	for k, v := range e.step.Env {
 		child.Env[k] = v

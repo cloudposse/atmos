@@ -113,3 +113,48 @@ func TestStoreCustomCommandControlResult_MarksSkippedFallback(t *testing.T) {
 	assert.Empty(t, stored.Value)
 	assert.True(t, stored.Skipped)
 }
+
+// TestCustomCommandControlExecutor_ResolvesChildWorkingDirectory verifies parallel/matrix children
+// of a custom command resolve relative working_directory against the command's working directory
+// (not the project root), inherit it when unset, and let an absolute path win.
+func TestCustomCommandControlExecutor_ResolvesChildWorkingDirectory(t *testing.T) {
+	projectRoot := t.TempDir()
+	cmdDir := filepath.Join(projectRoot, "wd")
+	absDir := t.TempDir()
+
+	tests := []struct {
+		name       string
+		workingDir string
+		childDir   string
+		wantDir    string
+	}{
+		{name: "relative child resolves against command dir", workingDir: cmdDir, childDir: "sub", wantDir: filepath.Join(cmdDir, "sub")},
+		{name: "child without dir inherits command dir", workingDir: cmdDir, childDir: "", wantDir: cmdDir},
+		{name: "absolute child wins", workingDir: cmdDir, childDir: absDir, wantDir: absDir},
+		{name: "no command dir falls back to base path", workingDir: "", childDir: "sub", wantDir: filepath.Join(projectRoot, "sub")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			control := &CustomCommandControlContext{
+				AtmosConfig:      schema.AtmosConfiguration{BasePath: projectRoot},
+				WorkingDirectory: tt.workingDir,
+			}
+			executor := newCustomCommandControlExecutor(control)
+
+			var gotDir string
+			executor.RunCommand = func(request *workflow.ControlCommandRequest) error {
+				gotDir = request.Dir
+				return nil
+			}
+
+			for _, stepType := range []string{schema.TaskTypeShell, schema.TaskTypeScript} {
+				gotDir = ""
+				step := schema.WorkflowStep{Name: "child", Type: stepType, WorkingDirectory: tt.childDir, Command: "echo hi", Interpreter: "python3", Script: "print(1)"}
+				_, err := executor.Execute(context.Background(), &workflow.ControlChild{Step: step}, workflow.ControlChildOutput{Mode: workflow.ControlOutputNone})
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantDir, gotDir, "step type %s", stepType)
+			}
+		})
+	}
+}

@@ -118,25 +118,31 @@ commands:
 
 ### Custom Component Types
 
-Use `component_config` when a custom command should resolve a component and stack before running:
+Use `component.type` and semantic `provides` bindings when a custom command should
+resolve a custom component and stack. `component_config` is legacy Terraform syntax.
 
 ```yaml
 commands:
   - name: render-app
     arguments:
       - name: component
+        provides: component
         required: true
     flags:
       - name: stack
         shorthand: s
+        provides: stack
         required: true
-    component_config:
-      component: "{{ .Arguments.component }}"
-      stack: "{{ .Flags.stack }}"
+    component:
+      type: application
     steps:
       - type: shell
         command: ./scripts/render-app.sh
 ```
+
+An embedded Starlark script step in such a command reads the selected component as
+`ctx.component` (resolved on first access). Workflows have no component in scope, so
+`ctx.component` is `None` there; see `atmos-starlark`.
 
 ## Routing
 
@@ -145,6 +151,7 @@ commands:
 | Complete command schema and examples | [references/command-syntax.md](references/command-syntax.md) |
 | Reusable multi-step orchestration | `atmos-workflows` |
 | Shared step fields and step types | `atmos-steps` |
+| Embedded Starlark and parallel function calls | `atmos-starlark` |
 | Smoke tests, integration tests, and test groups | `atmos-tests` |
 | Tool versions and PATH behavior | `atmos-toolchain` |
 | Auth providers, identities, assume role/root, OIDC | `atmos-auth` |

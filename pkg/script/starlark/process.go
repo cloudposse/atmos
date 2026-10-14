@@ -205,7 +205,12 @@ func processEnv(base []string, extra *starlark.Dict) ([]string, error) {
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		env = envpkg.UpdateEnvVar(env, key, values[key])
+		// Inherited layers may contain the same key more than once. Remove every
+		// occurrence so the per-call value wins for both lookup and subprocesses.
+		env = slices.DeleteFunc(env, func(entry string) bool {
+			return strings.HasPrefix(entry, key+"=")
+		})
+		env = append(env, key+"="+values[key])
 	}
 	return env, nil
 }

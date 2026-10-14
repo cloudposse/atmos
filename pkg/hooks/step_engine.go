@@ -178,7 +178,8 @@ func preserveGenericWith(ws *schema.WorkflowStep, payload any) {
 		return
 	}
 	if m, ok := payload.(map[string]any); ok {
-		ws.With = m
+		// script_source and script_source_sha256 are Atmos-recorded provenance, not step parameters.
+		ws.With = withoutScriptSource(m)
 	}
 }
 
@@ -260,6 +261,8 @@ func stepFromHookWithVariables(ctx *ExecContext, vars *runnerstep.Variables) (*s
 // hook template context plus the current step template environment, then
 // decodes it through WorkflowStep's normal YAML unmarshaler.
 func workflowStepFromHookPayload(ctx *ExecContext, vars *runnerstep.Variables, payload any) (*schema.WorkflowStep, error) {
+	// raw is the payload before template rendering; script provenance is validated against it.
+	raw := payload
 	// Test children are rendered after matrix expansion and prior steps have results.
 	// Rendering the entire tree here would evaluate .matrix/.steps before they exist.
 	nested, deferred := deferredTestPayload(ctx, payload)
@@ -296,6 +299,7 @@ func workflowStepFromHookPayload(ctx *ExecContext, vars *runnerstep.Variables, p
 			Err()
 	}
 	preserveGenericWith(ws, processed)
+	applyScriptSources(ctx.AtmosConfig, ws, raw)
 	return ws, nil
 }
 
@@ -422,6 +426,9 @@ func stepVariables(ctx *ExecContext) *runnerstep.Variables {
 	// applies to an unset working_directory, so it stays compatible with
 	// provisioned workdirs and metadata.component aliasing for free.
 	vars.SetComponentWorkingDirectory(ComponentPath(ctx))
+	vars.ScriptHook = scriptHookContext(ctx)
+	// Lets `components.get` in a hook script look up components other than the hook's own.
+	vars.SetScriptComponentInfoResolver(scriptComponentResolver(ctx))
 	return vars
 }
 
@@ -441,6 +448,11 @@ func setDefaultStepWorkingDirectory(ctx *ExecContext, step *schema.WorkflowStep)
 		return
 	}
 	ApplyDefaultWorkingDirectory(step, ComponentPath(ctx))
+	// Each child is a hook step too. Control groups execute children directly,
+	// bypassing the sequential defaulting above.
+	for i := range step.Steps {
+		setDefaultStepWorkingDirectory(ctx, &step.Steps[i])
+	}
 }
 
 // ApplyDefaultWorkingDirectory applies the shared empty/bare/dot/absolute working-directory
@@ -570,5 +582,7 @@ func resolveTestHookStep(ctx *ExecContext, s *schema.WorkflowStep, vars *runners
 	}
 	result.Steps = s.Steps
 	result.DryRun = s.DryRun
+	// ScriptSource has no YAML key, so the round trip above drops it.
+	result.ScriptSource = s.ScriptSource
 	return &result, nil
 }

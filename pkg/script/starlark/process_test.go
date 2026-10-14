@@ -23,7 +23,7 @@ func TestProcessDirectoryAndEnvironmentIsolation(t *testing.T) {
 	before, err := os.Getwd()
 	require.NoError(t, err)
 	dir := t.TempDir()
-	baseEnv := []string{"BASE=original", "EXTRA=inherited"}
+	baseEnv := []string{"BASE=original", "EXTRA=inherited", "BASE=step"}
 	runner := NewMockRunner(gomock.NewController(t))
 	runner.EXPECT().Run(gomock.Any(), gomock.Any()).Times(2).DoAndReturn(func(_ context.Context, spec process.TaskSpec) process.Result {
 		name := spec.Args[0]
@@ -42,7 +42,7 @@ output = steps.parallel(tasks=[steps.task(name=n, function=run, args=[n]) for n 
 	})
 	require.NoError(t, err)
 	assert.JSONEq(t, `[{"stdout":"a","stderr":"log","code":0},{"stdout":"b","stderr":"log","code":0}]`, result.Value)
-	assert.Equal(t, []string{"BASE=original", "EXTRA=inherited"}, baseEnv)
+	assert.Equal(t, []string{"BASE=original", "EXTRA=inherited", "BASE=step"}, baseEnv)
 	after, err := os.Getwd()
 	require.NoError(t, err)
 	assert.Equal(t, before, after)

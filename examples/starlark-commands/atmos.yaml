@@ -1,0 +1,26 @@
+base_path: .
+
+commands:
+  - name: capacity
+    description: Calculate a service's total worker capacity
+    flags:
+      - name: replicas
+        type: string
+        default: "2"
+        description: Number of service replicas
+    steps:
+      - name: capacity
+        type: script
+        interpreter: starlark
+        show:
+          labels: false
+        env:
+          REPLICAS: '{{ .Flags.replicas }}'
+        script: |
+          replicas = int(env["REPLICAS"])
+          if replicas < 1:
+              fail("replicas must be positive")
+          workers_per_replica = 4
+          print("{} replicas x {} workers = {} workers".format(
+              replicas, workers_per_replica, replicas * workers_per_replica,
+          ))

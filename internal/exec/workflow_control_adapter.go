@@ -25,9 +25,15 @@ type workflowControlContext struct {
 }
 
 func executeWorkflowControlStep(ctx context.Context, control *workflowControlContext, parent *schema.WorkflowStep) error {
+	vars := workflowControlVariables(control)
 	childExecutor := &workflow.ControlCommandExecutor{
+		InstallTools:        stepPkg.ScriptToolInstaller(&control.atmosConfig),
+		DryRun:              control.dryRun,
+		ScriptComponent:     stepPkg.ScriptComponentRef(vars),
+		ResolveComponent:    stepPkg.ScriptComponentResolver(vars),
 		WorkflowDefinition:  control.workflowDefinition,
 		BasePath:            control.atmosConfig.BasePath,
+		ProjectRoot:         stepPkg.ScriptProjectRoot(control.atmosConfig.BasePathAbsolute, control.atmosConfig.BasePath),
 		BaseEnv:             control.baseEnv,
 		CommandLineStack:    control.commandLineStack,
 		CommandLineTags:     control.commandLineTags,
@@ -43,7 +49,7 @@ func executeWorkflowControlStep(ctx context.Context, control *workflowControlCon
 				request.Args,
 				request.Dir,
 				nil,
-				control.dryRun,
+				control.dryRun || request.DryRun,
 				"",
 				WithProcessContext(request.Context),
 				WithEnvironment(request.Env),
@@ -57,6 +63,21 @@ func executeWorkflowControlStep(ctx context.Context, control *workflowControlCon
 		TemplateData: workflowControlTemplateData,
 		StoreResult:  storeWorkflowControlResult,
 	})
+}
+
+// workflowControlVariables returns the workflow's shared step variables with component
+// resolution installed, so embedded script children can use `components.get` even when no
+// earlier extended step configured the executor.
+func workflowControlVariables(control *workflowControlContext) *stepPkg.Variables {
+	if stepExecutorState == nil {
+		stepExecutorState = stepPkg.NewStepExecutor()
+	}
+	vars := stepExecutorState.Variables()
+	if vars.AtmosConfig == nil {
+		vars.SetAtmosConfig(&control.atmosConfig)
+	}
+	vars.SetScriptComponentInfoResolver(ScriptComponentInfoResolver(vars.AtmosConfig, control.authManager))
+	return vars
 }
 
 func workflowControlTemplateData(stepName string, matrix map[string]string) map[string]any {
@@ -77,6 +98,9 @@ func storeWorkflowControlResult(result *scheduler.Result) {
 			WithMetadata("stderr", controlResult.Stderr).
 			WithMetadata("status", string(result.Status)).
 			WithMetadata("canceled", controlResult.Canceled)
+		if controlResult.Value != nil {
+			stepResult.Value = *controlResult.Value
+		}
 		if controlResult.Err != nil {
 			stepResult.WithError(controlResult.Err.Error())
 		}

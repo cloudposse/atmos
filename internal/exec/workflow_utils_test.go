@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -2718,4 +2719,55 @@ func TestExecuteWorkflowUI_TUIStartFailureIsReturned(t *testing.T) {
 	_, _, _, err := ExecuteWorkflowUI(atmosConfig)
 
 	require.Error(t, err)
+}
+
+// TestExecuteWorkflow_ScriptStepHonorsRetry runs a direct workflow `type: script` step whose
+// interpreter (the test binary) always exits 1 and counts invocations via a counter file. The
+// step-level `retry:` must re-run it max_attempts times, and a step without `retry:` runs once.
+func TestExecuteWorkflow_ScriptStepHonorsRetry(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	maxAttempts := 3
+	delay := time.Millisecond
+	tests := []struct {
+		name         string
+		retry        *schema.RetryConfig
+		wantAttempts int
+	}{
+		{name: "retry configured", retry: &schema.RetryConfig{MaxAttempts: &maxAttempts, InitialDelay: &delay}, wantAttempts: 3},
+		{name: "no retry runs once", retry: nil, wantAttempts: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			counterFile := filepath.Join(t.TempDir(), "attempts")
+			workflowDef := &schema.WorkflowDefinition{
+				Steps: []schema.WorkflowStep{{
+					Name:        "flaky",
+					Type:        schema.TaskTypeScript,
+					Interpreter: exe,
+					Script:      "ignored",
+					Retry:       tt.retry,
+					Env: map[string]string{
+						"_ATMOS_TEST_COUNTER_FILE": counterFile,
+						"_ATMOS_TEST_EXIT_ONE":     "1",
+					},
+				}},
+			}
+
+			err := ExecuteWorkflow(atmosConfig, "test-script-retry", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+			require.Error(t, err)
+
+			data, readErr := os.ReadFile(counterFile)
+			require.NoError(t, readErr)
+			assert.Len(t, data, tt.wantAttempts)
+		})
+	}
 }
