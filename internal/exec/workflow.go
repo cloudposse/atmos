@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	workflowPkg "github.com/cloudposse/atmos/pkg/workflow"
 )
 
 // ExecuteWorkflowCmd executes an Atmos workflow.
@@ -141,7 +142,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 
 	workflowPath := ResolveWorkflowFilePath(&atmosConfig, workflowFile)
 
-	workflowConfig, err := LoadWorkflowConfig(workflowPath)
+	workflowConfig, err := LoadWorkflowConfig(&atmosConfig, workflowPath)
 	if err != nil {
 		return err
 	}
@@ -194,7 +195,7 @@ func ResolveWorkflowFilePath(atmosConfig *schema.AtmosConfiguration, file string
 // LoadWorkflowConfig reads and parses a workflow manifest file at the given (already-resolved,
 // see ResolveWorkflowFilePath) path into its WorkflowConfig map (workflow name -> definition,
 // for every workflow defined in that file).
-func LoadWorkflowConfig(workflowPath string) (schema.WorkflowConfig, error) {
+func LoadWorkflowConfig(atmosConfig *schema.AtmosConfiguration, workflowPath string) (schema.WorkflowConfig, error) {
 	defer perf.Track(nil, "exec.LoadWorkflowConfig")()
 
 	if !u.FileExists(workflowPath) {
@@ -209,7 +210,7 @@ func LoadWorkflowConfig(workflowPath string) (schema.WorkflowConfig, error) {
 		return nil, fmt.Errorf("%w: %s: %w", errUtils.ErrReadFile, filepath.ToSlash(displayPath(workflowPath)), err)
 	}
 
-	workflowManifest, err := u.UnmarshalYAML[schema.WorkflowManifest](string(fileContent))
+	workflowManifest, err := workflowPkg.LoadManifest(atmosConfig, workflowPath, fileContent)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %w", errUtils.ErrInvalidWorkflowManifest, filepath.ToSlash(displayPath(workflowPath)), err)
 	}

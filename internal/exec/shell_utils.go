@@ -346,6 +346,17 @@ func ExecuteShellCommand(
 
 	var pacedClosers []io.Closer
 
+	// Streaming maskers hold back a possible secret prefix between writes so a secret split
+	// across two pipe reads is still masked. They are flushed once the process has exited.
+	// Interactive runs keep prompts visible by not holding the unfinished line for regex patterns.
+	maskOpts := ioLayer.MaskOptionsForStdin(streams.Stdin)
+	var streamMaskers []*ioLayer.StreamingMaskWriter
+	newMasked := func(w io.Writer) io.Writer {
+		sw := ioLayer.NewStreamingMaskWriter(w, maskOpts...)
+		streamMaskers = append(streamMaskers, sw)
+		return sw
+	}
+
 	// Set up stdout: masked output to terminal, optionally tee'd to a capture writer.
 	// When stdoutOverride is set, use it instead of os.Stdout (e.g., redirect to stderr
 	// for workspace select so it doesn't pollute data-producing commands like output).
@@ -354,7 +365,7 @@ func ExecuteShellCommand(
 		stdoutTarget = cfg.stdoutOverride
 	}
 	stdoutTarget = maybePaceTerminalWriter(stdoutTarget, atmosConfig.Settings.Terminal.Speed, &pacedClosers)
-	maskedStdout := ioLayer.MaskWriter(stdoutTarget)
+	maskedStdout := newMasked(stdoutTarget)
 	stdoutWriters := []io.Writer{maskedStdout}
 	if diagnostics.OutputEnabled(diagConfig) {
 		stdoutWriters = append(stdoutWriters, diagnostics.NewOutputWriter(diagConfig, diagID, "stdout"))
@@ -377,7 +388,7 @@ func ExecuteShellCommand(
 	var stderr io.Writer
 	if redirectStdError == "/dev/stderr" {
 		stderrTarget := maybePaceTerminalWriter(streams.Stderr, atmosConfig.Settings.Terminal.Speed, &pacedClosers)
-		maskedStderr := ioLayer.MaskWriter(stderrTarget)
+		maskedStderr := newMasked(stderrTarget)
 		stderrWriters := []io.Writer{maskedStderr}
 		if diagnostics.OutputEnabled(diagConfig) {
 			stderrWriters = append(stderrWriters, diagnostics.NewOutputWriter(diagConfig, diagID, "stderr"))
@@ -390,7 +401,7 @@ func ExecuteShellCommand(
 		}
 		stderr = io.MultiWriter(stderrWriters...)
 	} else if redirectStdError == "/dev/stdout" {
-		maskedStderr := ioLayer.MaskWriter(stdout)
+		maskedStderr := newMasked(stdout)
 		extraStderrWriters := []io.Writer{maskedStderr}
 		if cfg.stderrCapture != nil {
 			extraStderrWriters = append(extraStderrWriters, cfg.stderrCapture)
@@ -408,7 +419,7 @@ func ExecuteShellCommand(
 		}
 	} else if redirectStdError == "" {
 		stderrTarget := maybePaceTerminalWriter(streams.Stderr, atmosConfig.Settings.Terminal.Speed, &pacedClosers)
-		maskedStderr := ioLayer.MaskWriter(stderrTarget)
+		maskedStderr := newMasked(stderrTarget)
 		stderrWriters := []io.Writer{maskedStderr}
 		if diagnostics.OutputEnabled(diagConfig) {
 			stderrWriters = append(stderrWriters, diagnostics.NewOutputWriter(diagConfig, diagID, "stderr"))
@@ -434,7 +445,7 @@ func ExecuteShellCommand(
 			}
 		}(f)
 
-		stderr = ioLayer.MaskWriter(f)
+		stderr = newMasked(f)
 	}
 	log.Debug("Executing", "command", command, "args", args)
 
@@ -482,6 +493,7 @@ func ExecuteShellCommand(
 			Stderr: stderr,
 		},
 	})
+	flushStreamMaskers(streamMaskers)
 	emitProcessEndDiagnostics(diagConfig, diagID, diagStartedAt, &result)
 	if cfg.metricsCallback != nil && result.Metrics != nil {
 		cfg.metricsCallback(result.Metrics)
@@ -502,6 +514,16 @@ func ExecuteShellCommand(
 		return errUtils.ExitCodeError{Code: result.ExitCode}
 	}
 	return result.Err
+}
+
+// flushStreamMaskers releases the tail held by each streaming masker. Maskers are flushed in
+// reverse creation order because a later masker (stderr merged into stdout) can feed an earlier one.
+func flushStreamMaskers(maskers []*ioLayer.StreamingMaskWriter) {
+	for i := len(maskers) - 1; i >= 0; i-- {
+		if err := maskers[i].Flush(); err != nil {
+			log.Debug("Failed to flush masked output", "error", err)
+		}
+	}
 }
 
 func maybePaceTerminalWriter(w io.Writer, speed float64, closers *[]io.Closer) io.Writer {
@@ -637,15 +659,32 @@ func ExecuteShell(
 ) error {
 	defer perf.Track(nil, "exec.ExecuteShell")()
 
-	return ExecuteShellWithWriters(&ExecuteShellSpec{
+	return executeShellMasked(&ExecuteShellSpec{
 		Command: command,
 		Name:    name,
 		Dir:     dir,
 		EnvVars: envVars,
 		DryRun:  dryRun,
-		Stdout:  ioLayer.MaskWriter(os.Stdout),
-		Stderr:  os.Stderr,
-	})
+	}, os.Stdout, os.Stderr, nil, nil)
+}
+
+// executeShellMasked runs spec with stdout and stderr masked by split-safe streaming maskers, so a
+// secret split across two pipe reads is still masked. The maskers are flushed once the script has
+// exited. The optional captures receive the output as written by the script; the caller owns them.
+// The Stdout and Stderr fields of spec are overwritten.
+func executeShellMasked(spec *ExecuteShellSpec, stdout, stderr, stdoutCapture, stderrCapture io.Writer) error {
+	masked := ioLayer.NewMaskedStreams(os.Stdin, stdout, stderr)
+	spec.Stdout = withCapture(masked.Stdout, stdoutCapture)
+	spec.Stderr = withCapture(masked.Stderr, stderrCapture)
+	return masked.Finish(ExecuteShellWithWriters(spec))
+}
+
+// withCapture tees w into capture when capture is set.
+func withCapture(w, capture io.Writer) io.Writer {
+	if capture == nil {
+		return w
+	}
+	return io.MultiWriter(w, capture)
 }
 
 // ExecuteShellWithWriters runs a shell script with explicit stdout/stderr writers.

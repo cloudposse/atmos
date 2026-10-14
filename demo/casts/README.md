@@ -57,6 +57,7 @@ atmos casts generate cli commands cast usage
 atmos casts generate cli commands cast play
 atmos casts generate cli commands cast render
 atmos casts generate demo fixtures native-terraform plan
+atmos casts generate demo fixtures starlark release-plan
 atmos casts generate demo fixtures demo-vendoring pull
 atmos casts generate demo fixtures basic list-stacks
 ```

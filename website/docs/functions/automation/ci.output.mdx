@@ -1,0 +1,76 @@
+---
+title: "ci.output"
+sidebar_position: 25.5
+sidebar_label: "ci.output"
+sidebar_class_name: command
+description: Set a step output for later steps and jobs.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `ci.output` function sets a named output that later steps and jobs can read. Locally, it prints the pair on
+    stderr, or appends it to a file when you set one.
+</Intro>
+
+## Usage
+
+```python
+ci.output(name, value)
+```
+
+## Arguments
+
+<dl>
+    <dt>`name`</dt>
+    <dd>Required. The name of the output, as a string.</dd>
+
+    <dt>`value`</dt>
+    <dd>
+        Required. The value, as a string. Multiline values are supported. Convert other types with `str()` or
+        `json.encode()` first.
+    </dd>
+</dl>
+
+## Returns
+
+The return value is `None`.
+
+## Behavior
+
+- On GitHub Actions, the pair is written to the step output file. A multiline value is written in a form that keeps
+  its line breaks intact.
+- Locally, the pair prints as `name=value` on stderr. When `ATMOS_CI_OUTPUT` names a file, the pair is appended to
+  that file instead.
+- Values are written exactly as given, because later steps consume them. To keep a value out of logs, call
+  [`ci.mask`](/functions/automation/ci.mask) first. See [masking](/functions/automation/ci#masking).
+- In CI the call is gated by [`ci.output.enabled`](/cli/configuration/ci/output), which also gates `ci.env` and
+  `ci.path`. When it is off, the call warns, renders locally, and the script continues.
+
+## Examples
+
+### Publish a version
+
+```python
+version = exec.run(["git", "describe", "--tags", "--always"], output = "capture").stdout.strip()
+ci.output("version", version)
+```
+
+A later step reads it as `steps.<id>.outputs.version` in a GitHub Actions workflow.
+
+### Publish structured data
+
+```python
+ci.output("stacks", json.encode(["dev", "staging", "prod"]))
+```
+
+## Errors
+
+- A missing argument or a non-string name or value fails with an argument error that names `ci.output`.
+- A failure to write the output fails the script. A gated-off call never fails.
+
+## Related
+
+- [`ci`](/functions/automation/ci) describes the module and the shared behavior rules.
+- [CI output variables](/cli/configuration/ci/output) configures the native outputs that Atmos writes for commands.
+- [`ci.env`](/functions/automation/ci.env) exports an environment variable instead.

@@ -1078,6 +1078,10 @@ BSD LICENSED DEPENDENCIES
     License: BSD-3-Clause
     URL: https://github.com/yosida95/uritemplate/blob/v3.0.2/LICENSE
 
+  - go.starlark.net
+    License: BSD-3-Clause
+    URL: https://github.com/google/starlark-go/blob/d7438c5a85ac/LICENSE
+
   - go4.org/intern
     License: BSD-3-Clause
     URL: https://github.com/go4org/intern/blob/6c62f75575cb/LICENSE

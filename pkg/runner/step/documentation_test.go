@@ -90,3 +90,17 @@ func readDocumentationFile(t *testing.T, path string) string {
 	}
 	return string(data)
 }
+
+func TestAutomationStepCatalogueCoversRegistry(t *testing.T) {
+	t.Parallel()
+	if len(builtInStepTypes) == 0 {
+		t.Fatal("automation catalogue requires registered handlers")
+	}
+	page := readDocumentationFile(t, filepath.Join("..", "..", "..", "website", "docs", "functions", "automation", "steps.run.mdx"))
+	for _, name := range builtInStepTypes {
+		attr := "steps." + strings.ReplaceAll(name, "-", "_")
+		if !strings.Contains(page, attr) {
+			t.Errorf("missing automation step documentation for %s", attr)
+		}
+	}
+}

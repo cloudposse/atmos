@@ -1,13 +1,8 @@
 # yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 #
-# This fixture is a deliberately isolated sibling of
-# tests/fixtures/scenarios/atmos-include-yaml-function/: atmos's name_template-based stack
-# resolution parses (and evaluates every custom YAML function in) every manifest matched by
-# included_paths whenever ANY stack in a fixture is resolved -- not just the one requested via
-# -s. That fixture's stacks/deploy/nonprod.yaml has a live, unconditional
-# https://raw.githubusercontent.com/... !include, intercepted by the in-process tests' HTTP
-# client. CLI subprocesses cannot use that client, so they use this separate mock-routed
-# fixture to avoid a live fetch while scanning manifests.
+# This sibling fixture exercises GitHub Enterprise blob-to-raw conversion, while the
+# atmos-include-yaml-function fixture exercises a direct HTTP download. Both use the
+# local facade, keeping stack scans independent of GitHub availability and rate limits.
 import:
   - mixins/stage/nonprod-mock
 
@@ -17,9 +12,8 @@ import:
 # The URL's host is the mock's own dynamic address, filled in below via a Go template
 # expression reading the ATMOS_TEST_GITHUB_MOCK_URL environment variable -- the process-wide
 # httpmock GitHub facade TestMain starts and exports (see tests/cli_test.go and the "!include
-# function test" case in tests/test-cases/atmos-include-yaml-function.yaml, which
-# also points GITHUB_SERVER_URL/GITHUB_API_URL at it) -- not a literal "github.com" URL like the
-# sibling live fixture's case uses. pkg/github.ConvertToRawURL (invoked by
+# function test (mock GitHub)" case in tests/test-cases/atmos-include-yaml-function.yaml, which
+# also points GITHUB_SERVER_URL/GITHUB_API_URL at it) -- not a literal "github.com" URL. pkg/github.ConvertToRawURL (invoked by
 # pkg/utils/yaml_include_by_extension.go's processRemoteFile) deliberately always resolves an
 # explicit "github.com" URL against public github.com, even when GITHUB_SERVER_URL points
 # elsewhere -- correct behavior for a real GitHub Enterprise Server user who links a public repo
@@ -31,7 +25,7 @@ import:
 # it via pkg/github.Endpoints.RawURL to the mock's GHES-shape /raw/<owner>/<repo>/<ref>/<path>
 # route, exactly like a real GHES-hosted link would.
 #
-# This requires two things this fixture's file (not the sibling live fixture's) opts into:
+# This requires two things this fixture opts into:
 #   - The .yaml.tmpl extension, so atmos renders the Go template expression below (pkg/function's
 #     Go-template pass over the raw manifest text) before parsing YAML and executing !include --
 #     !include is a PreMerge function; a plain .yaml file only gets this early template pass when

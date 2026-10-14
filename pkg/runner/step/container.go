@@ -3,6 +3,7 @@ package step
 import (
 	"context"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 	"time"
@@ -41,6 +42,9 @@ func init() {
 func (h *ContainerHandler) Validate(step *schema.WorkflowStep) error {
 	defer perf.Track(nil, "step.ContainerHandler.Validate")()
 
+	if err := h.ValidateOutput(step); err != nil {
+		return err
+	}
 	action := containerStepAction(step)
 	switch action {
 	case containerActionBuild:
@@ -66,6 +70,12 @@ func (h *ContainerHandler) Execute(ctx context.Context, step *schema.WorkflowSte
 // ExecuteWithWorkflow runs the container step with workflow output inheritance.
 func (h *ContainerHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.WorkflowStep, vars *Variables, workflow *schema.WorkflowDefinition) (*StepResult, error) {
 	defer perf.Track(nil, "step.ContainerHandler.ExecuteWithWorkflow")()
+
+	// Render a templated `output:` before anything runs, so an unknown mode fails the step.
+	step, err := resolveOutputStep(step, vars)
+	if err != nil {
+		return nil, err
+	}
 
 	switch containerStepAction(step) {
 	case containerActionBuild:
@@ -168,9 +178,18 @@ func firstString(values []string) string {
 	return values[0]
 }
 
-func (h *ContainerHandler) writeOutput(step *schema.WorkflowStep, workflow *schema.WorkflowDefinition, stdout, stderr string) {
+func (h *ContainerHandler) writeOutput(step *schema.WorkflowStep, workflow *schema.WorkflowDefinition, stdout, stderr string, writers ...OutputWriters) {
 	mode := GetOutputMode(step, workflow)
 	if mode == OutputModeNone {
+		return
+	}
+	if len(writers) > 0 && (writers[0].Stdout != nil || writers[0].Stderr != nil) {
+		writer := &OutputModeWriter{mode: mode, writers: writers[0]}
+		_, _, _ = writer.executeScoped(func(out, diagnostic io.Writer) error {
+			_, _ = io.WriteString(out, stdout)
+			_, _ = io.WriteString(diagnostic, stderr)
+			return nil
+		})
 		return
 	}
 	if stdout != "" {

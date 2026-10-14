@@ -24,7 +24,7 @@ func skipIfChmodUnenforced(t *testing.T) {
 	}
 }
 
-func TestLoadToolVersions_ReadOnlyDirectoryFallsBackToUnlockedRead(t *testing.T) {
+func TestLoadToolVersions_ReadOnlyDirectoryUsesExternalLock(t *testing.T) {
 	skipIfChmodUnenforced(t)
 
 	dir := t.TempDir()
@@ -48,18 +48,20 @@ func TestLoadToolVersions_ReadOnlyDirectoryFallsBackToUnlockedRead(t *testing.T)
 	assert.True(t, errors.Is(statErr, fs.ErrNotExist), "no lock file should have been created, got %v", statErr)
 }
 
-func TestSaveToolVersions_ReadOnlyDirectoryStillRequiresLock(t *testing.T) {
+func TestSaveToolVersions_ReadOnlyManifestRejectsWrites(t *testing.T) {
 	skipIfChmodUnenforced(t)
 
 	dir := t.TempDir()
 	manifest := filepath.Join(dir, ".tool-versions")
 	require.NoError(t, os.WriteFile(manifest, []byte("terraform 1.9.8\n"), 0o644))
 
-	require.NoError(t, os.Chmod(dir, 0o555))
-	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+	// Locks live outside the project, so make the manifest itself read-only.
+	// A writable existing file can still be updated inside a read-only directory.
+	require.NoError(t, os.Chmod(manifest, 0o444))
+	t.Cleanup(func() { _ = os.Chmod(manifest, 0o644) })
 
 	err := SaveToolVersions(manifest, &ToolVersions{Tools: map[string][]string{"terraform": {"1.10.0"}}})
-	require.Error(t, err, "writes must keep requiring the lock")
+	require.Error(t, err, "writes must respect manifest permissions")
 
 	data, readErr := os.ReadFile(manifest)
 	require.NoError(t, readErr)
