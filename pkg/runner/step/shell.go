@@ -36,6 +36,9 @@ func init() {
 func (h *ShellHandler) Validate(step *schema.WorkflowStep) error {
 	defer perf.Track(nil, "step.ShellHandler.Validate")()
 
+	if err := h.ValidateOutput(step); err != nil {
+		return err
+	}
 	return h.ValidateRequired(step, "command", step.Command)
 }
 
@@ -51,7 +54,7 @@ func (h *ShellHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 	// Resolve working directory if specified.
 	workDir := step.WorkingDirectory
 	if workDir != "" {
-		workDir, err = vars.Resolve(workDir)
+		workDir, err = vars.ResolveStepField(step, "working_directory", workDir)
 		if err != nil {
 			return nil, fmt.Errorf("step '%s': failed to resolve working_directory: %w", step.Name, err)
 		}
@@ -62,10 +65,25 @@ func (h *ShellHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 		return nil, err
 	}
 
+	// Render a templated `output:` before anything runs, so an unknown mode fails the step.
+	step, err = resolveOutputStep(step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	// Enforce the step's timeout: the interpreter and its child processes stop with the context.
+	deadline, err := StartStepDeadline(ctx, step, vars)
+	if err != nil {
+		return nil, err
+	}
+	defer deadline.Stop()
+	ctx = deadline.Context()
+
 	// Terminal-attached or interactive steps need the session path for
 	// platform-aware shell selection and direct terminal attachment.
 	if step.Tty || step.Interactive {
-		return h.executeShellSessionStep(ctx, step, command, workDir, envVars)
+		result, sessionErr := h.executeShellSessionStep(ctx, step, command, workDir, envVars)
+		return result, deadline.Wrap(sessionErr)
 	}
 
 	// Get output mode - use default log mode if not in workflow context.
@@ -75,8 +93,10 @@ func (h *ShellHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 	}
 
 	writer := NewOutputModeWriter(mode, step.Name, step.Viewport, GetShowConfig(step, nil))
+	writer.writers = vars.OutputWriters
 	stdout, stderr, err := h.runInterpreter(ctx, writer, shellRunSpec{stepName: step.Name, command: command, workDir: workDir, env: envVars})
 	if err != nil {
+		err = deadline.Wrap(err)
 		return NewStepResult(stdout).
 			WithError(stderr).
 			WithMetadata("stdout", stdout).
@@ -105,15 +125,21 @@ type shellRunSpec struct {
 // workflow executor already used, instead of depending on the host `/bin/sh`.
 func (h *ShellHandler) runInterpreter(ctx context.Context, writer *OutputModeWriter, spec shellRunSpec) (string, string, error) {
 	return writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
-		return u.ShellRunnerWithWriters(&u.ShellRunnerSpec{
+		// Streaming maskers hold back a possible secret prefix between reads so a secret split
+		// across two writes is still masked. Flush before the output mode finishes the streams.
+		maskedStdout := iolib.NewStreamingMaskWriter(stdout)
+		maskedStderr := iolib.NewStreamingMaskWriter(stderr)
+		err := u.ShellRunnerWithWriters(&u.ShellRunnerSpec{
 			Context: ctx,
 			Command: spec.command,
 			Name:    spec.stepName,
 			Dir:     spec.workDir,
 			Env:     spec.env,
-			Stdout:  iolib.MaskWriter(stdout),
-			Stderr:  iolib.MaskWriter(stderr),
+			Stdout:  maskedStdout,
+			Stderr:  maskedStderr,
 		})
+		flushDisplay(maskedStdout, maskedStderr)
+		return err
 	})
 }
 
@@ -164,7 +190,7 @@ func (h *ShellHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 	// Resolve working directory if specified.
 	workDir := step.WorkingDirectory
 	if workDir != "" {
-		workDir, err = vars.Resolve(workDir)
+		workDir, err = vars.ResolveStepField(step, "working_directory", workDir)
 		if err != nil {
 			return nil, fmt.Errorf("step '%s': failed to resolve working_directory: %w", step.Name, err)
 		}
@@ -175,10 +201,25 @@ func (h *ShellHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 		return nil, err
 	}
 
+	// Render a templated `output:` before anything runs, so an unknown mode fails the step.
+	step, err = resolveOutputStep(step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	// Enforce the step's timeout: the interpreter and its child processes stop with the context.
+	deadline, err := StartStepDeadline(ctx, step, vars)
+	if err != nil {
+		return nil, err
+	}
+	defer deadline.Stop()
+	ctx = deadline.Context()
+
 	// Terminal-attached or interactive steps need the session path for
 	// platform-aware shell selection and direct terminal attachment.
 	if step.Tty || step.Interactive {
-		return h.executeShellSessionStep(ctx, step, command, workDir, envVars)
+		result, sessionErr := h.executeShellSessionStep(ctx, step, command, workDir, envVars)
+		return result, deadline.Wrap(sessionErr)
 	}
 
 	// Get output mode from step or workflow.
@@ -187,8 +228,10 @@ func (h *ShellHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 	show := GetShowConfig(step, workflow)
 
 	writer := NewOutputModeWriter(mode, step.Name, viewport, show)
+	writer.writers = vars.OutputWriters
 	stdout, stderr, err := h.runInterpreter(ctx, writer, shellRunSpec{stepName: step.Name, command: command, workDir: workDir, env: envVars})
 	if err != nil {
+		err = deadline.Wrap(err)
 		return NewStepResult(stdout).
 			WithError(stderr).
 			WithMetadata("stdout", stdout).
@@ -210,7 +253,7 @@ func (h *ShellHandler) resolveEnv(step *schema.WorkflowStep, vars *Variables) ([
 	if len(step.Env) == 0 {
 		return env, nil
 	}
-	resolvedEnv, err := vars.ResolveEnvMap(step.Env)
+	resolvedEnv, err := vars.ResolveStepEnvMap(step, step.Env)
 	if err != nil {
 		return nil, fmt.Errorf("step '%s': %w", step.Name, err)
 	}

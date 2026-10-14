@@ -1,0 +1,109 @@
+---
+title: "ci.check"
+sidebar_position: 25.5
+sidebar_label: "ci.check"
+sidebar_class_name: command
+description: Report a named status on the commit and update it as the work progresses.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `ci.check` function reports a named status on the current commit and returns a handle that you update as the
+    work moves from pending to a final state. Locally, each state change prints on stderr.
+</Intro>
+
+## Usage
+
+```python
+check = ci.check(name, state = "pending", description = "", url = "")
+check.update(state, description = "", url = "")
+```
+
+## Arguments
+
+<dl>
+    <dt>`name`</dt>
+    <dd>Required. The name of the status, as a string. On GitHub Actions it is the status context shown in the pull request checks list.</dd>
+
+    <dt>`state`</dt>
+    <dd>
+        (Optional) The state, as a string: `"pending"` (the default), `"in_progress"`, `"success"`, `"failure"`,
+        `"error"`, or `"cancelled"`.
+    </dd>
+
+    <dt>`description`</dt>
+    <dd>(Optional) A short line shown next to the status. On GitHub Actions it is truncated to 140 characters.</dd>
+
+    <dt>`url`</dt>
+    <dd>(Optional) A link for the status. It defaults to the URL of the current run.</dd>
+</dl>
+
+The `update` method takes the same `state`, `description`, and `url` arguments. Its `state` is required.
+
+## Returns
+
+A handle with these attributes and one method:
+
+<dl>
+    <dt>`name`</dt>
+    <dd>The name of the status, as a string.</dd>
+
+    <dt>`state`</dt>
+    <dd>The current state, as a string. It changes each time you call `update`.</dd>
+
+    <dt>`id`</dt>
+    <dd>The identifier of the status.</dd>
+
+    <dt>`url`</dt>
+    <dd>The link attached to the status, as a string.</dd>
+
+    <dt>`update(state, description = "", url = "")`</dt>
+    <dd>Sets a new state on the same status and returns `None`.</dd>
+</dl>
+
+## Behavior
+
+- On GitHub Actions, a check is a commit status, not a Checks API check run. It has a name, a state, a short
+  description, and a link, and it has no body. Put details in [`ci.summary`](/functions/automation/ci.summary) or
+  [`ci.comment`](/functions/automation/ci.comment). Posting needs `statuses: write`.
+- Locally, each call prints the name, state, and description on stderr and nothing is posted.
+- Checks are opt-in. In CI the call is gated by [`ci.checks.enabled`](/cli/configuration/ci/checks), which is off by
+  default. When it is off, the call warns, renders locally, and the script continues.
+- Under `pull_request_target` and `workflow_run`, the status is not posted unless `ci.allow_unsafe_fork_execution` is
+  `true`. The call warns and renders locally instead. See the [fork gate](/functions/automation/ci#fork-gate).
+- The description is masked before it leaves the process.
+
+## Examples
+
+### Report progress
+
+```python
+check = ci.check("deploy / prod", state = "in_progress", description = "Applying vpc")
+result = exec.run(["atmos", "terraform", "deploy", "vpc", "--stack=prod"], check = False)
+if result.exit_code != 0:
+    check.update("failure", description = "Deployment failed")
+    fail("deployment failed")
+check.update("success", description = "Applied vpc")
+```
+
+### Report a failure with a link
+
+```python
+check = ci.check("lint")
+result = exec.run(["tflint"], check = False, output = "capture")
+if result.exit_code != 0:
+    check.update("failure", description = "tflint found issues", url = ci.context.run_url)
+else:
+    check.update("success")
+```
+
+## Errors
+
+- An unknown `state` fails with an argument error that names `ci.check`.
+- An API error, a missing token, or a commit that does not exist fails the script. A gated-off call never fails.
+
+## Related
+
+- [`ci`](/functions/automation/ci) describes the module and the shared behavior rules.
+- [CI status checks](/cli/configuration/ci/checks) configures the native statuses that Atmos reports for commands.

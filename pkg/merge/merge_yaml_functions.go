@@ -26,7 +26,9 @@ func isAtmosYAMLFunction(s string) bool {
 	// silently lost data on merge (see docs/prd/deferred-yaml-functions-evaluation-in-merge.md).
 	// Deliberately excluded: !unset/!append (handled by merge-structural mechanisms, see
 	// processAppendTags in merge.go) and !include/!include.raw/!literal (resolved at parse time,
-	// before merge ever sees them).
+	// before merge ever sees them). !starlark remains a scalar during merging:
+	// the winning expression replaces the field and evaluates once against the
+	// final component context, including dependencies on other computed fields.
 	postMergeFunctions := []string{
 		u.AtmosYamlFuncTemplate,
 		u.AtmosYamlFuncTerraformOutput,

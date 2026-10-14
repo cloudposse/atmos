@@ -475,7 +475,7 @@ func TestStepExecutor_ExecuteRealSteps(t *testing.T) {
 	t.Run("executes with workflow context", func(t *testing.T) {
 		executor := NewStepExecutor()
 		executor.SetWorkflow(&schema.WorkflowDefinition{
-			Output: "capture",
+			Output: "none",
 		})
 
 		step := &schema.WorkflowStep{

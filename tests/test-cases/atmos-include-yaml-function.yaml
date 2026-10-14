@@ -1,11 +1,35 @@
 tests:
-  # Use the local GitHub server for CLI coverage; in-process include tests also cover
-  # the literal raw.githubusercontent.com URL, and live_github canaries cover the network.
+  # Cover direct HTTP and GitHub Enterprise includes through the local server.
   - name: "!include function test"
     enabled: true
     tty: false
     clean: true
     description: "Ensure the !include function works with scalars, lists and objects."
+    workdir: "fixtures/scenarios/atmos-include-yaml-function/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "component-1"
+      - "-s"
+      - "nonprod"
+    expect:
+      valid:
+        - "yaml"
+      exit_code: 0
+      stdout:
+        - "string_var: abc"
+        - "boolean_var: true"
+      stderr:
+        - "Telemetry Enabled"
+
+  # Exercise GitHub Enterprise blob-to-raw URL conversion as well as the generic HTTP
+  # download above. The configured GitHub host must match the local facade's URL.
+  - name: "!include function test (mock GitHub)"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Ensure the !include function works against a mocked GitHub Enterprise Server-shape raw fetch."
     workdir: "fixtures/scenarios/atmos-include-yaml-function-mock/"
     command: "atmos"
     env:

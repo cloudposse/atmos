@@ -1,0 +1,134 @@
+---
+title: "atmos.aws"
+sidebar_position: 8
+sidebar_label: "atmos.aws"
+sidebar_class_name: command
+description: Run an atmos aws command, such as eks update-kubeconfig or ecr login, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.aws` function runs `atmos aws` through the current Atmos executable. Use it to configure EKS
+    kubeconfig files, log in to Amazon ECR, and generate compliance and security reports from automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.aws(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand, its nested subcommand, and any positional arguments as strings before the keyword arguments.
+The call `atmos.aws("eks", "update-kubeconfig", flags = {"name": "dev-cluster"})` runs
+`atmos aws eks update-kubeconfig --name=dev-cluster`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`eks update-kubeconfig`](/cli/commands/aws/eks/update-kubeconfig) | Update the kubeconfig for an EKS cluster. |
+| [`eks token`](/cli/commands/aws/eks-token) | Generate an EKS bearer token for kubectl. |
+| [`ecr login`](/cli/commands/aws/ecr-login) | Log in to Amazon ECR registries and write Docker credentials. |
+| [`compliance report`](/cli/commands/aws/compliance/report) | Generate a compliance posture report against a framework such as CIS or PCI DSS. |
+| [`security analyze`](/cli/commands/aws/security/analyze) | Analyze AWS security findings and map them to Atmos components. |
+
+See the [`atmos aws` command reference](/cli/commands/aws/usage) for the complete list of subcommands and flags. The
+groups [`eks`](/cli/commands/aws/eks), [`compliance`](/cli/commands/aws/compliance), and
+[`security`](/cli/commands/aws/security) each have their own page.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `aws`, in order: the subcommand group, the nested
+        subcommand, and any positional arguments. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"region"` becomes
+        `--region`, and registered shorthands resolve to their long form, so `"i"` resolves to `--identity` and
+        `"s"` to `--stack`. Other flags include `--name` and `--kubeconfig` for `eks update-kubeconfig`,
+        `--registry` for `ecr login`, and `--framework` and `--format` for `compliance report`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>
+        (Optional) A list or tuple of strings appended after the flags. The `aws` command accepts a `--` separator
+        before arguments meant for the underlying tool.
+    </dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Configure kubectl for an EKS cluster
+
+```python
+atmos.aws(
+    "eks",
+    "update-kubeconfig",
+    flags = {"name": "dev-cluster", "region": "us-east-2", "identity": "dev-admin"},
+)
+```
+
+This runs `atmos aws eks update-kubeconfig --identity=dev-admin --name=dev-cluster --region=us-east-2`.
+
+### Log in to ECR before a build
+
+```python
+atmos.aws("ecr", "login", flags = {"identity": "dev-admin", "registry": ["123456789012.dkr.ecr.us-east-2.amazonaws.com"]})
+```
+
+### Save a compliance report
+
+```python
+report = atmos.aws(
+    "compliance",
+    "report",
+    flags = {"stack": "plat-ue2-prod", "framework": "cis-aws", "format": "json"},
+    output = "capture",
+)
+data = json.decode(report.stdout)
+print(data)
+```
+
+### Write security findings to a file
+
+```python
+atmos.aws(
+    "security",
+    "analyze",
+    flags = {"stack": "plat-ue2-prod", "severity": "critical,high", "format": "sarif", "file": "findings.sarif"},
+)
+```
+
+The `security` commands require `aws.security.enabled: true` in `atmos.yaml`. Without it the call fails with an
+error that names the setting.
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos aws`](/cli/commands/aws/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
 func TestNewOSHomeDirProvider(t *testing.T) {
@@ -102,4 +104,32 @@ func TestOSHomeDirProvider_Expand(t *testing.T) {
 		// Should be home dir with trailing separator or just home dir.
 		assert.True(t, strings.HasPrefix(expanded, homeDir))
 	})
+}
+
+func TestExpandHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	abs := filepath.Join(home, "abs")
+
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "tilde alone", in: "~", want: home},
+		{name: "tilde slash path", in: "~/x", want: filepath.Join(home, "x")},
+		{name: "tilde user unchanged", in: "~user/x", want: "~user/x"},
+		{name: "absolute unchanged", in: abs, want: abs},
+		{name: "relative unchanged", in: "rel", want: "rel"},
+		{name: "empty unchanged", in: "", want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, ExpandHome(tt.in))
+		})
+	}
 }

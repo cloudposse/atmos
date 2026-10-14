@@ -76,7 +76,7 @@ func TestReconcileMaskingForCommandHonorsShadowingFlag(t *testing.T) {
 				}
 			}
 
-			reconcileMaskingForCommand(leaf)
+			reconcileMaskingForCommand(leaf, nil)
 			assert.Equal(t, tt.want, iolib.MaskingEnabled())
 		})
 	}

@@ -112,15 +112,11 @@ jobs:
           comment-summary-in-pr: always
 
       - name: Generate NOTICE file
-        # Deliberately no GH_TOKEN here: this `pull_request`-triggered job
-        # checks out and executes PR-controlled code (this step runs
-        # tools/noticegen via `go tool mage notice:generate`). Handing a
-        # token to code built from untrusted PR content risks exfiltration.
-        # The description fetch (tools/noticegen/repo.go) is therefore
-        # unauthenticated. On GitHub-hosted runners that rate limit is per IP
-        # and shared with other jobs, so a 403 is routine; noticegen then keeps
-        # the tagline already committed in NOTICE (resolveDescription in
-        # tools/noticegen/generate.go) instead of failing.
+        # Deliberately no GH_TOKEN: this job executes PR-controlled Go code.
+        # Pass public event metadata to avoid an unnecessary GitHub API request.
+        # When metadata cannot be fetched, noticegen retains the committed tagline.
+        env:
+          ATMOS_NOTICE_REPO_DESCRIPTION: ${{ github.event.repository.description }}
         run: go tool mage notice:generate
 
       - name: Check if NOTICE is up to date

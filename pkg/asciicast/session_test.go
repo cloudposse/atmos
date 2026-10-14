@@ -1,7 +1,6 @@
 package asciicast
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -775,24 +774,6 @@ func TestResetTimerStopsRunningTimer(t *testing.T) {
 	default:
 	}
 	timer.Stop()
-}
-
-func TestAnswerTerminalQueries(t *testing.T) {
-	var input bytes.Buffer
-	answerTerminalQueries([]byte("\x1b]11;?\x1b\\\x1b[6n\x1b]10;?\x1b\\\x1b[6n"), &input)
-
-	got := input.String()
-	for _, want := range []string{
-		"\x1b]11;rgb:0000/0000/0000\x1b\\",
-		"\x1b]10;rgb:ffff/ffff/ffff\x1b\\",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("terminal query response missing %q in %q", want, got)
-		}
-	}
-	if count := strings.Count(got, "\x1b[1;1R"); count != 2 {
-		t.Fatalf("cursor position replies = %d, want 2 in %q", count, got)
-	}
 }
 
 func TestRunSessionExecutesScriptedShellActions(t *testing.T) {

@@ -1446,7 +1446,8 @@ type CIChecksStatusesConfig struct {
 // GitHub: PR comments, GitLab: MR notes.
 //
 // Enabled is *bool so callers can distinguish "unset" (nil, default applies)
-// from explicit false. Default is true when omitted; see `isCommentsEnabled`.
+// from explicit false. Comments are opt-in: nil is treated as false (disabled);
+// see `ci.CommentsEnabled`.
 type CICommentsConfig struct {
 	Enabled  *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Behavior string `yaml:"behavior,omitempty" json:"behavior,omitempty" mapstructure:"behavior"` // create, update, upsert
@@ -2191,6 +2192,11 @@ type ConfigAndStacksInfo struct {
 	// InitSkipped records that the implicit terraform init was skipped this
 	// invocation because the init fingerprint was up to date.
 	InitSkipped bool `yaml:"-" json:"-" mapstructure:"-"`
+
+	// StackLocalsSection holds the stack manifest's file-level locals that apply to this
+	// component's type. Component locals live in ComponentSection; the Starlark context
+	// layers them over these. Transient runtime state — not serialized.
+	StackLocalsSection map[string]any `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // GetComponentEnvSection returns the component's env section map.

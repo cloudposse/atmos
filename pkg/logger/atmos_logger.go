@@ -24,81 +24,113 @@ func NewAtmosLogger(charmLogger *charm.Logger) *AtmosLogger {
 
 // Trace logs a trace message.
 func (l *AtmosLogger) Trace(msg interface{}, keyvals ...interface{}) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.Log(TraceLevel, msg, keyvals...)
 }
 
 // Tracef logs a formatted trace message.
 func (l *AtmosLogger) Tracef(format string, args ...interface{}) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.Logf(TraceLevel, format, args...)
 }
 
 // Debug logs a debug message.
 func (l *AtmosLogger) Debug(msg interface{}, keyvals ...interface{}) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.Debug(msg, keyvals...)
 }
 
 // Debugf logs a formatted debug message.
 func (l *AtmosLogger) Debugf(format string, args ...interface{}) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.Debugf(format, args...)
 }
 
 // Info logs an info message.
 func (l *AtmosLogger) Info(msg interface{}, keyvals ...interface{}) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.Info(msg, keyvals...)
 }
 
 // Infof logs a formatted info message.
 func (l *AtmosLogger) Infof(format string, args ...interface{}) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.Infof(format, args...)
 }
 
 // Warn logs a warning message.
 func (l *AtmosLogger) Warn(msg interface{}, keyvals ...interface{}) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.Warn(msg, keyvals...)
 }
 
 // Warnf logs a formatted warning message.
 func (l *AtmosLogger) Warnf(format string, args ...interface{}) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.Warnf(format, args...)
 }
 
 // Error logs an error message.
 func (l *AtmosLogger) Error(msg interface{}, keyvals ...interface{}) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.Error(msg, keyvals...)
 }
 
 // Errorf logs a formatted error message.
 func (l *AtmosLogger) Errorf(format string, args ...interface{}) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.Errorf(format, args...)
 }
 
 // Fatal logs a fatal message and exits the program.
 func (l *AtmosLogger) Fatal(msg interface{}, keyvals ...interface{}) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.Fatal(msg, keyvals...)
 }
 
 // Fatalf logs a formatted fatal message and exits the program.
 func (l *AtmosLogger) Fatalf(format string, args ...interface{}) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.Fatalf(format, args...)
 }
 
 // Log logs a message at the given level.
 func (l *AtmosLogger) Log(level Level, msg interface{}, keyvals ...interface{}) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.Log(level, msg, keyvals...)
 }
 
 // Logf logs a formatted message at the given level.
 func (l *AtmosLogger) Logf(level Level, format string, args ...interface{}) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.Logf(level, format, args...)
 }
 
 // SetLevel sets the log level.
 func (l *AtmosLogger) SetLevel(level Level) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.SetLevel(level)
 }
 
 // GetLevel returns the current log level.
 func (l *AtmosLogger) GetLevel() Level {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	return l.charm.GetLevel()
 }
 
@@ -109,6 +141,8 @@ func (l *AtmosLogger) SetOutput(w io.Writer) {
 
 // SetStyles sets the log styles.
 func (l *AtmosLogger) SetStyles(styles *charm.Styles) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.SetStyles(styles)
 }
 
@@ -123,11 +157,15 @@ func (l *AtmosLogger) SetColorProfile(profile termenv.Profile) {
 
 // WithPrefix returns a new logger with the given prefix.
 func (l *AtmosLogger) WithPrefix(prefix string) *AtmosLogger {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	return &AtmosLogger{charm: l.charm.WithPrefix(prefix), color: l.color}
 }
 
 // With returns a new logger with the given key-value pairs.
 func (l *AtmosLogger) With(keyvals ...interface{}) *AtmosLogger {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	return &AtmosLogger{charm: l.charm.With(keyvals...), color: l.color}
 }
 
@@ -146,40 +184,56 @@ func (l *AtmosLogger) GetLevelString() string {
 
 // Helper marks the logger as a helper.
 func (l *AtmosLogger) Helper() {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.Helper()
 }
 
 // SetReportCaller sets whether to report the caller location.
 func (l *AtmosLogger) SetReportCaller(report bool) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.SetReportCaller(report)
 }
 
 // SetReportTimestamp sets whether to report timestamps.
 func (l *AtmosLogger) SetReportTimestamp(report bool) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.SetReportTimestamp(report)
 }
 
 // SetTimeFormat sets the time format.
 func (l *AtmosLogger) SetTimeFormat(format string) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.SetTimeFormat(format)
 }
 
 // SetPrefix sets the logger prefix.
 func (l *AtmosLogger) SetPrefix(prefix string) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.SetPrefix(prefix)
 }
 
 // GetPrefix returns the logger prefix.
 func (l *AtmosLogger) GetPrefix() string {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	return l.charm.GetPrefix()
 }
 
 // Print logs a message at the info level.
 func (l *AtmosLogger) Print(msg interface{}, keyvals ...interface{}) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.Print(msg, keyvals...)
 }
 
 // Printf logs a formatted message at the info level.
 func (l *AtmosLogger) Printf(format string, args ...interface{}) {
+	l.color.mu.Lock()
+	defer l.color.mu.Unlock()
 	l.charm.Printf(format, args...)
 }

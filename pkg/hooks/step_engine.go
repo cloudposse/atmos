@@ -89,17 +89,21 @@ func (stepEngine) Run(ctx *ExecContext) (*Output, error) {
 	}
 
 	var result *runnerstep.StepResult
-	run := func() error {
-		r, runErr := executor.Execute(runCtx, ws)
+	run := func(attemptCtx context.Context) error {
+		r, runErr := executor.Execute(attemptCtx, ws)
 		result = r
 		return runErr
 	}
 
 	var runErr error
-	if ws.Retry != nil {
-		runErr = retry.Do(context.Background(), ws.Retry, run)
-	} else {
-		runErr = run()
+	switch {
+	case ws.Retry == nil:
+		runErr = run(runCtx)
+	case runnerstep.StepTimeoutBoundsRetries(ws.Type):
+		// One `timeout:` deadline bounds the whole step, retries and backoff included.
+		runErr = runnerstep.RunWithStepRetry(runCtx, ws, vars, run)
+	default:
+		runErr = retry.Do(runCtx, ws.Retry, func() error { return run(runCtx) })
 	}
 
 	out := stepSummary(stepType, result, runErr)
@@ -178,7 +182,9 @@ func preserveGenericWith(ws *schema.WorkflowStep, payload any) {
 		return
 	}
 	if m, ok := payload.(map[string]any); ok {
-		ws.With = m
+		// script_source, script_source_sha256, and literal_fields are Atmos-recorded provenance,
+		// not step parameters.
+		ws.With = withoutScriptSource(m)
 	}
 }
 
@@ -260,6 +266,8 @@ func stepFromHookWithVariables(ctx *ExecContext, vars *runnerstep.Variables) (*s
 // hook template context plus the current step template environment, then
 // decodes it through WorkflowStep's normal YAML unmarshaler.
 func workflowStepFromHookPayload(ctx *ExecContext, vars *runnerstep.Variables, payload any) (*schema.WorkflowStep, error) {
+	// raw is the payload before template rendering; script provenance is validated against it.
+	raw := payload
 	// Test children are rendered after matrix expansion and prior steps have results.
 	// Rendering the entire tree here would evaluate .matrix/.steps before they exist.
 	nested, deferred := deferredTestPayload(ctx, payload)
@@ -296,6 +304,7 @@ func workflowStepFromHookPayload(ctx *ExecContext, vars *runnerstep.Variables, p
 			Err()
 	}
 	preserveGenericWith(ws, processed)
+	applyScriptSources(ctx.AtmosConfig, ws, raw)
 	return ws, nil
 }
 
@@ -422,6 +431,9 @@ func stepVariables(ctx *ExecContext) *runnerstep.Variables {
 	// applies to an unset working_directory, so it stays compatible with
 	// provisioned workdirs and metadata.component aliasing for free.
 	vars.SetComponentWorkingDirectory(ComponentPath(ctx))
+	vars.ScriptHook = scriptHookContext(ctx)
+	// Lets `components.get` in a hook script look up components other than the hook's own.
+	vars.SetScriptComponentInfoResolver(scriptComponentResolver(ctx))
 	return vars
 }
 
@@ -441,6 +453,11 @@ func setDefaultStepWorkingDirectory(ctx *ExecContext, step *schema.WorkflowStep)
 		return
 	}
 	ApplyDefaultWorkingDirectory(step, ComponentPath(ctx))
+	// Each child is a hook step too. Control groups execute children directly,
+	// bypassing the sequential defaulting above.
+	for i := range step.Steps {
+		setDefaultStepWorkingDirectory(ctx, &step.Steps[i])
+	}
 }
 
 // ApplyDefaultWorkingDirectory applies the shared empty/bare/dot/absolute working-directory
@@ -551,6 +568,11 @@ func resolveTestHookStep(ctx *ExecContext, s *schema.WorkflowStep, vars *runners
 	if err = yaml.Unmarshal(data, &payload); err != nil {
 		return nil, err
 	}
+	// LiteralFields has no YAML key, so put the markers back into the payload for the renderer
+	// to skip the fields written with !literal.
+	if len(copy.LiteralFields) > 0 {
+		payload[schema.LiteralFieldsKey] = copy.LiteralFields
+	}
 	// Generic handler parameters are excluded from WorkflowStep's YAML fields.
 	// Restore them before rendering so expanded matrix and hook variables apply.
 	if copy.With != nil {
@@ -570,5 +592,8 @@ func resolveTestHookStep(ctx *ExecContext, s *schema.WorkflowStep, vars *runners
 	}
 	result.Steps = s.Steps
 	result.DryRun = s.DryRun
+	// ScriptSource and LiteralFields have no YAML key, so the round trip above drops them.
+	result.ScriptSource = s.ScriptSource
+	result.LiteralFields = s.LiteralFields
 	return &result, nil
 }
