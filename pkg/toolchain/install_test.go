@@ -1,6 +1,8 @@
 package toolchain
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -347,6 +349,28 @@ func TestRunInstall_WithCanonicalFormat(t *testing.T) {
 	assert.Contains(t, updatedToolVersions.Tools[terraformKey], "1.11.4")
 }
 
+// latestInstallServer serves registry metadata, releases, and an executable without public HTTP calls.
+func latestInstallServer(t *testing.T) string {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/registry.yaml":
+			_, _ = w.Write([]byte("packages:\n  - name: hashicorp/terraform\n"))
+		case "/pkgs/hashicorp/terraform/registry.yaml":
+			_, _ = w.Write([]byte("packages:\n  - name: hashicorp/terraform\n    version_prefix: v\n"))
+		case "/repos/hashicorp/terraform/releases":
+			_, _ = w.Write([]byte(`[{"tag_name":"v2.0.0","draft":true},{"tag_name":"v1.12.0-rc1","prerelease":true},{"tag_name":"v1.11.4"}]`))
+		case "/terraform/1.11.4":
+			_, _ = w.Write([]byte("test executable"))
+		default:
+			t.Errorf("unexpected toolchain request: %s", r.URL)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server.URL
+}
+
 // TestRunInstall_WithLatestKeyword tests RunInstall with the "latest" version keyword.
 func TestRunInstall_WithLatestKeyword(t *testing.T) {
 	for _, binaryName := range []string{"terraform", "terraform.exe"} {
@@ -360,6 +384,7 @@ func testRunInstallWithLatestKeyword(t *testing.T, binaryName string) {
 	t.Helper()
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
+	t.Chdir(tempDir)
 
 	mock := httpmock.NewGitHubMockServer(t)
 	mock.Setenv(t)
@@ -371,6 +396,9 @@ func testRunInstallWithLatestKeyword(t *testing.T, binaryName string) {
 		Owner: "hashicorp", Repo: "terraform", VersionPrefix: "v",
 		Asset: binaryName, Format: "raw", BinaryName: binaryName,
 	})
+	// Latest resolution must ignore newer drafts and prereleases.
+	mock.RegisterRelease("hashicorp", "terraform", httpmock.ReleaseSpec{TagName: "v2.0.0", Draft: true})
+	mock.RegisterRelease("hashicorp", "terraform", httpmock.ReleaseSpec{TagName: "v1.12.0-rc1", Prerelease: true})
 	mock.RegisterRelease("hashicorp", "terraform", httpmock.ReleaseSpec{TagName: "v1.11.4"})
 	// Raw release downloads append .exe on Windows, so serve that exact asset name.
 	assetName := installer.EnsureWindowsExeExtension(binaryName)

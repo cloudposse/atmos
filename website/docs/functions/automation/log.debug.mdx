@@ -1,0 +1,97 @@
+---
+title: "log.debug"
+sidebar_position: 27
+sidebar_label: "log.debug"
+sidebar_class_name: command
+description: Write a debug-level diagnostic message to the Atmos log.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `log.debug` function writes a message to the Atmos log at the debug level. Use it for details that help when troubleshooting a run, such as resolved settings or decisions the script made.
+</Intro>
+
+## Usage
+
+```python
+log.debug(message, **fields)
+```
+
+## Arguments
+
+<dl>
+    <dt>`message`</dt>
+    <dd>
+        Required. Exactly one positional argument: the message, as a string. Passing more than one positional
+        argument, or a value that is not a string, fails with an argument error.
+    </dd>
+
+    <dt>`**fields`</dt>
+    <dd>
+        (Optional) Any number of keyword arguments, written to the log as structured key/value pairs after the
+        message. Field names must be identifiers: letters, digits, and underscores, not starting with a digit.
+        A value that is `None`, a boolean, an integer, a float, or a string keeps its native type. Any other value,
+        such as a list or dictionary, is logged using its `str()` form.
+    </dd>
+</dl>
+
+## Returns
+
+The return value is `None`. The call is a side effect and never becomes the step value.
+
+## Behavior
+
+- The message goes to the Atmos logger, so it honors `--logs-level` (or `ATMOS_LOGS_LEVEL`) and `logs.file`. Below
+  the configured level, the call prints nothing. See [logs configuration](/cli/configuration/logs) for the levels
+  and the log destination.
+- Log output never goes to stdout, so it cannot change what `print` or [`output`](/functions/automation/output)
+  produce.
+- Every message carries a `step` field: the step name for a workflow or custom command step, or the script path for a
+  standalone script.
+- Inside [`steps.parallel`](/functions/automation/steps.parallel) tasks, a `task` field names the running task, for
+  example `task=dev`, or `task=grp/inner` for nested groups. A group with a single task adds no `task` field.
+- If you pass a field named `step` or `task`, your value replaces the automatic one.
+- Secrets that Atmos knows about are masked in the message and in field values.
+
+## Examples
+
+### Record resolved settings
+
+```python
+settings = {"region": "us-east-1", "retries": 3}
+log.debug("resolved settings", region = settings["region"], retries = settings["retries"], dry_run = False)
+log.debug("full settings", settings = settings, owner = None, ratio = 0.5)
+```
+
+```text
+ DEBU  resolved settings step=resolve region=us-east-1 retries=3 dry_run=false
+ DEBU  full settings step=resolve settings="{\"region\": \"us-east-1\", \"retries\": 3}" owner=<nil> ratio=0.5
+```
+
+The dictionary in the second call is not a simple value, so it is logged using its `str()` form. The integer, boolean, and float values keep their native types, and `None` is logged as `<nil>`.
+
+### Fields set by Atmos
+
+```python
+def apply(stack):
+    log.debug("applying", stack = stack)
+
+steps.parallel(tasks = [steps.task(s, apply, args = [s]) for s in ["dev", "prod"]])
+```
+
+Each line carries the `step` field and a `task` field naming the task that wrote it, for example
+`step=apply task=dev stack=dev`.
+
+## Errors
+
+- A call with no message, with more than one positional argument, or with a message that is not a string fails with an
+  argument error that names `log.debug`.
+- A field name that is not an identifier, such as `bad-name`, fails with an argument error that quotes the name.
+
+## Related
+
+- Other levels: [`log.trace`](/functions/automation/log.trace), [`log.info`](/functions/automation/log.info), [`log.warn`](/functions/automation/log.warn), [`log.error`](/functions/automation/log.error).
+- [`ui.info`](/functions/automation/ui.info), [`ui.success`](/functions/automation/ui.success), and [`ui.warning`](/functions/automation/ui.warning) show status to the person running the program.
+- [`print`](/functions/automation/print) writes data to stdout.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#logging)

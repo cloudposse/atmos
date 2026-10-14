@@ -121,7 +121,7 @@ jobs:
       # the checkout.
       - name: Harden Runner
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           # Operating-system background services on the hosted Windows and
@@ -295,7 +295,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -370,7 +370,7 @@ jobs:
       # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           # Operating-system background services on the hosted Windows and
@@ -586,7 +586,7 @@ jobs:
       # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           # Union of core, tool-driven endpoints across the linux/windows/macos
           # acceptance-test legs — bounded by which providers/registries the test
@@ -961,13 +961,10 @@ jobs:
     # (above) gives more total cores across the matrix than one big runner
     # would, without paying for oversized single instances.
     runs-on: ubuntu-latest
-    # Each shard now runs roughly 1/4 of the package list rather than the
-    # unsharded ~27-minute-plus suite, but every shard still pays the same
-    # fixed per-job overhead (checkout, toolchain installs, apt-get, cache
-    # restore) that used to be amortized over one long-running job -- so this
-    # is generous headroom above that fraction, not a straight 75÷4 division
-    # (the acceptance shard matrix above budgets the same way).
-    timeout-minutes: 30
+    # Cache misses can spend most of 30 minutes compiling before these shards
+    # finish testing. Keep the Go test timeouts, but allow compilation, setup,
+    # and the race tests to complete within the job's overall budget.
+    timeout-minutes: 60
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1071,7 +1068,7 @@ jobs:
         check: ["Acceptance Tests (linux)", "Acceptance Tests (macos)", "Acceptance Tests (windows)"]
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -1161,7 +1158,7 @@ jobs:
       contents: read
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           # This job was skipped in the only sampled run (upstream test matrix
           # had a failed shard), so there's no observed egress data to build an
@@ -1255,7 +1252,7 @@ jobs:
       security-events: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -1336,7 +1333,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -1402,16 +1399,22 @@ jobs:
       floci:
         # Pin by immutable digest for reproducibility/supply-chain safety (matches our SHA-pinned actions). Comment tracks the human-readable tag.
         image: floci/floci@sha256:4e451c39c7bb88e3cd4f87e8fc0c25d5b47695a51185d521e2241fa00486e8eb # 1.5.23
+        # Harden Runner can restart Docker after GitHub starts services.
+        options: --restart always
         ports:
           - 4566:4566
       floci-gcp:
         # Pin by immutable digest for reproducibility/supply-chain safety. Comment tracks the human-readable tag.
         image: floci/floci-gcp@sha256:102db655af6facdcd1ec621e108558aafc46c817eaada63236d3acf3c5e92aaa # latest
+        # Harden Runner can restart Docker after GitHub starts services.
+        options: --restart always
         ports:
           - 4588:4588
       floci-az:
         # Pin by immutable digest for reproducibility/supply-chain safety. Comment tracks the human-readable tag.
         image: floci/floci-az@sha256:5e403a7d788c24ab2d1dc03d4803ef2d3962ca01522abba65ed86f221ae87ac0 # latest
+        # Harden Runner can restart Docker after GitHub starts services.
+        options: --restart always
         env:
           FLOCI_AZ_TLS_ENABLED: "true"
         ports:
@@ -1420,7 +1423,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -1538,7 +1541,7 @@ jobs:
     timeout-minutes: 180
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           # Operating-system background services on the hosted macOS image
@@ -1626,8 +1629,17 @@ jobs:
           else
             printf '%s\n' '{"registry-mirrors":["https://mirror.gcr.io"]}' | sudo tee /etc/docker/daemon.json >/dev/null
           fi
-          sudo systemctl restart docker
-          docker info --format '{{json .RegistryConfig.Mirrors}}' | grep -F 'https://mirror.gcr.io'
+          # Registry mirrors support live reload; restarting Docker can fail
+          # after runner hardening and interrupt existing containers.
+          sudo systemctl reload docker
+          for _ in {1..10}; do
+            if docker info --format '{{json .RegistryConfig.Mirrors}}' | grep -F 'https://mirror.gcr.io'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo '::error::Docker did not activate the registry mirror after reload'
+          exit 1
 
       - name: Write a default AWS profile to the AWS config file
         run: |
@@ -1704,7 +1716,7 @@ jobs:
     if: ${{ always() }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           # Pure bash conditional on needs.k3s.result; no external calls at all.
           egress-policy: block
@@ -1748,7 +1760,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           # Operating-system background services on the hosted macOS image
@@ -1869,7 +1881,7 @@ jobs:
       # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           # Operating-system background services on the hosted Windows and
@@ -2038,15 +2050,17 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
+            get.helm.sh:443
             github.com:443
             raw.githubusercontent.com:443
             rekor.sigstore.dev:443
             release-assets.githubusercontent.com:443
+            releases.hashicorp.com:443
             tuf-repo-cdn.sigstore.dev:443
             tuf-repo.github.com:443
             us.i.posthog.com:443
@@ -2061,22 +2075,13 @@ jobs:
         with:
           target: linux
 
-      # Restore the toolchain directory first so the installs below skip
-      # tools already on disk instead of downloading them on every run
-      # (restore-only: the build job's linux leg is this key's writer).
-      - name: Restore the Atmos toolchain cache
-        continue-on-error: true
-        uses: ./actions/cache
+      # The build job already installed and verified the pinned tools. The
+      # shared action skips cached binaries and retries installs on a miss.
+      - name: Set up the CI toolchain
+        uses: ./.github/actions/ci-toolchain
         with:
-          mode: restore-only
-
-      - name: Install OpenTofu and TFLint with Atmos toolchain
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          atmos toolchain install opentofu/opentofu
-          atmos toolchain install terraform-linters/tflint
-          atmos toolchain env --format=github
+          cache: restore-only
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify OpenTofu and TFLint
         run: |
@@ -2096,15 +2101,17 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
+            get.helm.sh:443
             github.com:443
             raw.githubusercontent.com:443
             rekor.sigstore.dev:443
             release-assets.githubusercontent.com:443
+            releases.hashicorp.com:443
             tuf-repo-cdn.sigstore.dev:443
             tuf-repo.github.com:443
             us.i.posthog.com:443
@@ -2119,22 +2126,13 @@ jobs:
         with:
           target: linux
 
-      # Restore the toolchain directory first so the installs below skip
-      # tools already on disk instead of downloading them on every run
-      # (restore-only: the build job's linux leg is this key's writer).
-      - name: Restore the Atmos toolchain cache
-        continue-on-error: true
-        uses: ./actions/cache
+      # The build job already installed and verified the pinned tools. The
+      # shared action skips cached binaries and retries installs on a miss.
+      - name: Set up the CI toolchain
+        uses: ./.github/actions/ci-toolchain
         with:
-          mode: restore-only
-
-      - name: Install OpenTofu and TFLint with Atmos toolchain
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          atmos toolchain install opentofu/opentofu
-          atmos toolchain install terraform-linters/tflint
-          atmos toolchain env --format=github
+          cache: restore-only
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run the TFLint hook example
         working-directory: examples/hooks-tflint
@@ -2174,7 +2172,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -2220,13 +2218,15 @@ jobs:
     services:
       registry:
         image: registry:2
+        # Harden Runner can restart Docker after GitHub starts services.
+        options: --restart always
         ports:
           - 5000:5000
 
     timeout-minutes: 15
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >

@@ -6,8 +6,12 @@ Deploy a component to a stack
 USAGE
 
 
-    $ atmos deploy component [flags]
+    $ atmos deploy component [component] [flags]
 
+
+ARGUMENTS
+
+  component  Name of the component
 
 FLAGS
 

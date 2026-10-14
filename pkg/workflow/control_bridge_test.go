@@ -115,3 +115,27 @@ func TestControlBridge_InteractiveChildRejected(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, schema.ErrWorkflowControlStepInvalid)
 }
+
+// TestControlBridge_InjectsCIReporterIntoScriptChildren proves the bridge hands every embedded
+// script child a CI reporter, even when the invocation carries no Atmos configuration.
+func TestControlBridge_InjectsCIReporterIntoScriptChildren(t *testing.T) {
+	initControlTestIO(t)
+	engine := registerRecordingEngine(t, "recording-bridge-ci")
+
+	handler, ok := stepPkg.Get(schema.TaskTypeParallel)
+	require.True(t, ok)
+
+	step := &schema.WorkflowStep{
+		Name: "fanout",
+		Type: schema.TaskTypeParallel,
+		Steps: []schema.WorkflowStep{
+			{Name: "child", Type: schema.TaskTypeScript, Interpreter: "recording-bridge-ci", Script: "ignored"},
+		},
+	}
+	_, err := handler.Execute(context.Background(), step, stepPkg.NewVariables())
+	require.NoError(t, err)
+
+	executed := engine.executed()
+	require.Len(t, executed, 1)
+	assert.NotNil(t, executed[0].CI, "the bridge must build a reporter for script children")
+}

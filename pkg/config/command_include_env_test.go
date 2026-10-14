@@ -182,3 +182,75 @@ commands:
 	assert.Equal(t, "25ms", step.Defaults.Simulate.Rate)
 	assert.InDelta(t, 0.3, step.Defaults.Simulate.Jitter, 0.0001)
 }
+
+func TestCommandsUnsetClearsInheritedCommands(t *testing.T) {
+	setupTestAdapters()
+	for _, mode := range []string{"fragment", "main"} {
+		t.Run(mode, func(t *testing.T) {
+			root := t.TempDir()
+			inherited := "commands:\n  - name: inherited\n    steps: [echo inherited]\n"
+			require.NoError(t, os.WriteFile(filepath.Join(root, "imported.yaml"), []byte(inherited), 0o600))
+			v := viper.New()
+			v.SetConfigType(yamlType)
+			resetMergedConfigFiles(v)
+			if mode == "fragment" {
+				require.NoError(t, mergeConfigFile(filepath.Join(root, "imported.yaml"), v))
+				require.NoError(t, os.WriteFile(filepath.Join(root, "unset.yaml"), []byte("commands: !unset\n"), 0o600))
+				require.NoError(t, mergeConfigFile(filepath.Join(root, "unset.yaml"), v))
+			} else {
+				content := "base_path: .\nimport: [imported.yaml]\ncommands: !unset\n"
+				require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte(content), 0o600))
+				t.Chdir(root)
+				require.NoError(t, mergeConfig(v, root, CliConfigFileName, true))
+			}
+			var cfg schema.AtmosConfiguration
+			require.NoError(t, v.Unmarshal(&cfg, atmosDecodeHook()))
+			assert.Empty(t, cfg.Commands, "!unset must clear inherited commands")
+		})
+	}
+}
+
+func TestImportedCommandsUnsetClearsDefaults(t *testing.T) {
+	setupTestAdapters()
+	for _, tc := range []struct {
+		name, main string
+		want       []string
+	}{
+		{"direct import", "import: [unset.yaml]\n", nil},
+		{"nested import", "import: [nested.yaml]\n", nil},
+		{"main restores commands", "import: [nested.yaml]\ncommands:\n  - name: restored-main\n", []string{"restored-main"}},
+		{"later import restores commands", "import: [unset.yaml, restore.yaml]\n", []string{"restored-import"}},
+		{"nested unset clears importing file commands", "import: [nested-restore.yaml]\n", nil},
+		{"omitted commands retain defaults", "import: [omitted.yaml]\n", []string{"inherited"}},
+		{"empty command list retains defaults", "import: [empty.yaml]\n", []string{"inherited"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			require.NoError(t, os.MkdirAll(filepath.Join(root, ".atmos.d"), 0o700))
+			require.NoError(t, os.WriteFile(filepath.Join(root, ".atmos.d", "defaults.yaml"), []byte("commands:\n  - name: inherited\n    steps: [echo inherited]\n"), 0o600))
+			for name, content := range map[string]string{
+				"unset.yaml":          "commands: !unset\n",
+				"nested.yaml":         "import: [unset.yaml]\n",
+				"restore.yaml":        "commands:\n  - name: restored-import\n",
+				"nested-restore.yaml": "import: [unset.yaml]\ncommands:\n  - name: restored-parent\n",
+				"omitted.yaml":        "logs: {level: Info}\n",
+				"empty.yaml":          "commands: []\n",
+				"atmos.yaml":          "base_path: .\n" + tc.main,
+			} {
+				require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(content), 0o600))
+			}
+			t.Chdir(root)
+			v := viper.New()
+			v.SetConfigType(yamlType)
+			resetMergedConfigFiles(v)
+			require.NoError(t, mergeConfig(v, root, CliConfigFileName, true))
+			var cfg schema.AtmosConfiguration
+			require.NoError(t, v.Unmarshal(&cfg, atmosDecodeHook()))
+			var names []string
+			for _, command := range cfg.Commands {
+				names = append(names, command.Name)
+			}
+			assert.Equal(t, tc.want, names)
+		})
+	}
+}

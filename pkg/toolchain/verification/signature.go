@@ -277,7 +277,15 @@ func (v *Verifier) verifyGitHubAttestation(ctx context.Context, req *Request, cf
 		args = append(args, "--predicate-type", cfg.PredicateType)
 	}
 	if err := runGitHubAttestationWithRetry(ctx, req, args); err != nil {
-		return handleSignatureVerificationError("github artifact attestations", req, result, err)
+		if !isGitHubAttestationInstallationQuota(err) {
+			return handleSignatureVerificationError("github artifact attestations", req, result, err)
+		}
+		if fallbackErr := verifyPublicGitHubAttestation(ctx, req, args, v.publicAttestationDownloader); fallbackErr != nil {
+			if errors.Is(fallbackErr, errPublicAttestationPredicateUnavailable) {
+				return handleSignatureVerificationError("github artifact attestations", req, result, fallbackErr)
+			}
+			return fmt.Errorf("%w: public attestation fallback: %w", ErrSignatureFailed, fallbackErr)
+		}
 	}
 	result.SignatureMethods = append(result.SignatureMethods, "github_artifact_attestations")
 	return nil
