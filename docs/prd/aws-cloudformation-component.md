@@ -492,6 +492,11 @@ the changeset. `CAPABILITY_AUTO_EXPAND` is not required for this flow and has no
 It is required when directly creating or updating a stack containing macros without first reviewing
 a changeset. IAM resources still require `CAPABILITY_IAM` or `CAPABILITY_NAMED_IAM`, as applicable.
 
+Templates combining macros/transforms with nested stacks are unsupported by this changeset-based
+lifecycle. AWS requires direct `CreateStack` or `UpdateStack` calls with `CAPABILITY_AUTO_EXPAND`
+for that combination; Atmos does not provide a direct-operation fallback. Templates without this
+combination retain the changeset behavior described above.
+
 ### Live Progress Streaming
 
 `apply`/`deploy`/`delete` stream per-resource stack events live while the operation converges
