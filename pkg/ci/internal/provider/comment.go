@@ -25,6 +25,39 @@ const (
 	CommentBehaviorUpsert CommentBehavior = "upsert"
 )
 
+// CommentTarget selects where a comment lands: on the pull request or on the commit.
+type CommentTarget string
+
+const (
+	// CommentTargetAuto posts to the pull request when one is known and to the commit otherwise.
+	// An empty target means auto.
+	CommentTargetAuto CommentTarget = "auto"
+
+	// CommentTargetPR posts to the pull request and fails when none is known.
+	CommentTargetPR CommentTarget = "pr"
+
+	// CommentTargetCommit posts a commit comment on the run's commit SHA.
+	CommentTargetCommit CommentTarget = "commit"
+)
+
+// NormalizeTarget resolves the configured target. An empty value means auto; any other value
+// must be one of the declared CommentTarget constants.
+func NormalizeTarget(t CommentTarget) (CommentTarget, error) {
+	defer perf.Track(nil, "provider.NormalizeTarget")()
+
+	switch t {
+	case "":
+		return CommentTargetAuto, nil
+	case CommentTargetAuto, CommentTargetPR, CommentTargetCommit:
+		return t, nil
+	default:
+		return "", errUtils.Build(errUtils.ErrCICommentTargetInvalid).
+			WithExplanation("The comment target must be one of: auto, pr, commit").
+			WithContext("target", string(t)).
+			Err()
+	}
+}
+
 // PostCommentOptions contains options for posting or upserting a PR/MR comment.
 type PostCommentOptions struct {
 	// Owner is the repository owner (GitHub) or namespace (GitLab).
@@ -63,6 +96,52 @@ type Comment struct {
 	// Created indicates whether a new comment was created (true) or an
 	// existing one was updated (false).
 	Created bool
+
+	// Target is where the comment landed: CommentTargetPR or CommentTargetCommit.
+	// The reporter sets it; providers need not.
+	Target CommentTarget
+}
+
+// PostCommitCommentOptions contains options for posting or upserting a comment on a commit.
+type PostCommitCommentOptions struct {
+	// Owner is the repository owner (GitHub) or namespace (GitLab).
+	Owner string
+
+	// Repo is the repository name.
+	Repo string
+
+	// SHA is the commit the comment is attached to.
+	SHA string
+
+	// Marker is the HTML/Markdown marker used to find an existing comment on repeat runs.
+	// It must appear in Body.
+	Marker string
+
+	// Body is the full comment body (including Marker).
+	Body string
+
+	// Behavior controls create/update/upsert semantics. Empty defaults to
+	// CommentBehaviorUpsert.
+	Behavior CommentBehavior
+}
+
+// ValidatePostCommitCommentOptions rejects nil or incomplete option structs and enforces the
+// marker-in-body invariant, as ValidatePostCommentOptions does for pull request comments.
+func ValidatePostCommitCommentOptions(opts *PostCommitCommentOptions) error {
+	defer perf.Track(nil, "provider.ValidatePostCommitCommentOptions")()
+
+	if opts == nil || opts.Owner == "" || opts.Repo == "" || opts.SHA == "" {
+		return errUtils.Build(errUtils.ErrCICommentPostFailed).
+			WithExplanation("Owner, Repo, and SHA are required to post a commit comment").
+			Err()
+	}
+	if opts.Marker != "" && !strings.Contains(opts.Body, opts.Marker) {
+		return errUtils.Build(errUtils.ErrCICommentPostFailed).
+			WithExplanation("Marker must appear in Body so future runs can find and update this comment; without it, upserts will create duplicates").
+			WithContext("marker", opts.Marker).
+			Err()
+	}
+	return nil
 }
 
 // ValidatePostCommentOptions rejects nil or incomplete option structs, and

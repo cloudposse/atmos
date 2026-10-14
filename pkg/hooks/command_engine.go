@@ -690,6 +690,9 @@ func buildAtmosEnv(ctx *ExecContext, outputFile, outputDir string) map[string]st
 	if ctx.Outcome.Err != nil {
 		env["ATMOS_HOOK_ERROR"] = ctx.Outcome.Err.Error()
 	}
+	if ctx.HookDepth > 0 {
+		env[HookDepthEnvVar] = strconv.Itoa(ctx.HookDepth)
+	}
 	return env
 }
 
