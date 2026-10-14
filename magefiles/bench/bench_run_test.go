@@ -78,7 +78,10 @@ func benchTestOutput() map[string]string {
 		fmt.Fprintf(&out, "pkg: %s\n", benchPackage(suite.Package))
 		names := suite.Names
 		if suite.CLI {
-			names = []string{"BenchmarkCLI/DescribeAffected/Dependents/instances=1000"}
+			names = []string{"BenchmarkCLI/DescribeAffected/Dependents/instances=1000", "BenchmarkCLI/DescribeAffected/StoreCallerStacks/stacks=20/keys=11"}
+			for _, change := range []string{"none", "target", "dependents"} {
+				names = append(names, "BenchmarkCLI/DescribeAffected/FunctionsRepeated/instances=200/change="+change)
+			}
 			for _, size := range []int{100, 1000, 10000} {
 				for _, change := range []string{"none", "catalog", "component"} {
 					names = append(names, fmt.Sprintf("BenchmarkCLI/DescribeAffected/instances=%d/change=%s", size, change))
@@ -90,7 +93,7 @@ func benchTestOutput() map[string]string {
 		for _, name := range names {
 			for range 10 {
 				fmt.Fprintf(&out, "%s-2 1 100 ns/op", name)
-				if strings.Contains(name, "StoreRepeated/") {
+				if strings.Contains(name, "StoreRepeated/") || strings.Contains(name, "StoreCallerStacks/") {
 					out.WriteString(" 11 backend-reads/op")
 				}
 				if !suite.CLI {

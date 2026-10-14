@@ -22,9 +22,11 @@ func deferredTargetAuth(ac *schema.AtmosConfiguration, component, stack string, 
 // deferredTargetAuthAndCache binds values to the target's full configuration, not
 // just its identity name. No cache is returned when authentication fails.
 func deferredTargetAuthAndCache(ac *schema.AtmosConfiguration, component, stack string, parents ...auth.AuthManager) (auth.AuthManager, *deferred.ValueCache, error) {
-	section, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
-		AtmosConfig: ac, Component: component, Stack: stack,
-		ProcessTemplates: false, ProcessYamlFunctions: false,
+	section, err := stackdeferred.TargetSection(ac, component, stack, func() (map[string]any, error) {
+		return ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+			AtmosConfig: ac, Component: component, Stack: stack,
+			ProcessTemplates: false, ProcessYamlFunctions: false,
+		})
 	})
 	if err != nil {
 		return nil, nil, err
@@ -44,7 +46,8 @@ func deferredTargetAuthAndCache(ac *schema.AtmosConfiguration, component, stack 
 	}
 	cache := stackdeferred.CacheFor(ac, info)
 	if info.AuthDisabled {
-		return &authContextWrapper{stackInfo: info}, cache, nil
+		manager := cache.LoadOrStore("auth.disabled", &authContextWrapper{stackInfo: info})
+		return manager.(*authContextWrapper), cache, nil
 	}
 	manager, _ := info.AuthManager.(auth.AuthManager)
 	return manager, cache, nil
