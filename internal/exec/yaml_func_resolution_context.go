@@ -22,7 +22,7 @@ type DependencyNode struct {
 // ResolutionContext tracks the call stack during YAML function resolution to detect circular dependencies.
 type ResolutionContext struct {
 	CallStack []DependencyNode
-	Visited   map[string]bool // Map of "stack-component" to track visited nodes
+	Visited   map[string]bool // Map of quoted stack/component pairs to track visited nodes
 }
 
 // goroutineResolutionContexts maps goroutine IDs to their resolution contexts.
@@ -95,7 +95,7 @@ func ClearResolutionContext() {
 func (ctx *ResolutionContext) Push(atmosConfig *schema.AtmosConfiguration, node DependencyNode) error {
 	defer perf.Track(atmosConfig, "exec.ResolutionContext.Push")()
 
-	key := fmt.Sprintf("%s-%s", node.Stack, node.Component)
+	key := fmt.Sprintf("%q/%q", node.Stack, node.Component)
 
 	// Check if we've already visited this node.
 	if ctx.Visited[key] {
@@ -131,7 +131,7 @@ func (ctx *ResolutionContext) Pop(atmosConfig *schema.AtmosConfiguration) {
 	if len(ctx.CallStack) > 0 {
 		lastIdx := len(ctx.CallStack) - 1
 		node := ctx.CallStack[lastIdx]
-		key := fmt.Sprintf("%s-%s", node.Stack, node.Component)
+		key := fmt.Sprintf("%q/%q", node.Stack, node.Component)
 
 		// Remove from visited set
 		delete(ctx.Visited, key)

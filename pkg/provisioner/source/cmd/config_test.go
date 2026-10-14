@@ -6,18 +6,21 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Config.CLI() must fall back to ComponentType when CLIName is unset — the
-// common case for types whose CLI invocation matches their internal
-// ComponentType exactly (terraform, helmfile, packer).
-func TestConfig_CLI_FallsBackToComponentType(t *testing.T) {
-	c := &Config{ComponentType: "terraform"}
-	assert.Equal(t, "terraform", c.CLI())
-}
-
-// Config.CLI() must return CLIName verbatim when set — used by types whose
-// CLI command path differs from their internal ComponentType (e.g.
-// aws/cloudformation is invoked as "aws cloudformation").
-func TestConfig_CLI_UsesCLINameWhenSet(t *testing.T) {
-	c := &Config{ComponentType: "aws/cloudformation", CLIName: "aws cloudformation"}
-	assert.Equal(t, "aws cloudformation", c.CLI())
+// Config.CLI falls back to ComponentType for matching internal/CLI names,
+// while returning an explicit CLIName verbatim when the command path differs.
+func TestConfig_CLI(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		config Config
+		want   string
+	}{
+		{name: "falls back to component type", config: Config{ComponentType: "terraform"}, want: "terraform"},
+		{name: "uses CLI name when set", config: Config{ComponentType: "aws/cloudformation", CLIName: "aws cloudformation"}, want: "aws cloudformation"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, tc.config.CLI())
+		})
+	}
 }

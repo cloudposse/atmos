@@ -44,44 +44,39 @@ func TestNewAuthContextWrapper_WithContext(t *testing.T) {
 func TestPropagateAuthDisabledManager(t *testing.T) {
 	t.Parallel()
 
-	t.Run("nil authManager and AuthDisabled wraps stackInfo", func(t *testing.T) {
-		t.Parallel()
-		stackInfo := &schema.ConfigAndStacksInfo{AuthDisabled: true}
-
-		got := propagateAuthDisabledManager(nil, stackInfo)
-
-		wrapper, ok := got.(*authContextWrapper)
-		require.True(t, ok, "nil authManager with AuthDisabled must be wrapped")
-		assert.Same(t, stackInfo, wrapper.stackInfo)
-		assert.True(t, wrapper.GetStackInfo().AuthDisabled)
-	})
-
-	t.Run("nil authManager with AuthDisabled false stays nil", func(t *testing.T) {
-		t.Parallel()
-		stackInfo := &schema.ConfigAndStacksInfo{AuthDisabled: false}
-
-		got := propagateAuthDisabledManager(nil, stackInfo)
-
-		assert.Nil(t, got, "with auth enabled, nil must be passed through so the target's own auth resolves")
-	})
-
-	t.Run("non-nil authManager passes through even when AuthDisabled", func(t *testing.T) {
-		t.Parallel()
-		stackInfo := &schema.ConfigAndStacksInfo{AuthDisabled: true}
-		existing := &authContextWrapper{stackInfo: &schema.ConfigAndStacksInfo{}}
-
-		got := propagateAuthDisabledManager(existing, stackInfo)
-
-		assert.Same(t, existing, got, "an already-populated AuthManager must never be overwritten")
-	})
-
-	t.Run("nil stackInfo is a no-op", func(t *testing.T) {
-		t.Parallel()
-
-		got := propagateAuthDisabledManager(nil, nil)
-
-		assert.Nil(t, got)
-	})
+	for _, tc := range []struct {
+		name        string
+		stackInfo   *schema.ConfigAndStacksInfo
+		existing    *authContextWrapper
+		wantWrapper bool
+	}{
+		{name: "nil authManager and AuthDisabled wraps stackInfo", stackInfo: &schema.ConfigAndStacksInfo{AuthDisabled: true}, wantWrapper: true},
+		{name: "nil authManager with AuthDisabled false stays nil", stackInfo: &schema.ConfigAndStacksInfo{}},
+		{name: "non-nil authManager passes through even when AuthDisabled", stackInfo: &schema.ConfigAndStacksInfo{AuthDisabled: true}, existing: &authContextWrapper{stackInfo: &schema.ConfigAndStacksInfo{}}},
+		{name: "nil stackInfo is a no-op"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			// Keep the interface nil when there is no existing manager.
+			var got any
+			if tc.existing != nil {
+				got = propagateAuthDisabledManager(tc.existing, tc.stackInfo)
+			} else {
+				got = propagateAuthDisabledManager(nil, tc.stackInfo)
+			}
+			switch {
+			case tc.wantWrapper:
+				wrapper, ok := got.(*authContextWrapper)
+				require.True(t, ok, "nil authManager with AuthDisabled must be wrapped")
+				assert.Same(t, tc.stackInfo, wrapper.stackInfo)
+				assert.True(t, wrapper.GetStackInfo().AuthDisabled)
+			case tc.existing != nil:
+				assert.Same(t, tc.existing, got, "an already-populated AuthManager must never be overwritten")
+			default:
+				assert.Nil(t, got, "with auth enabled or no stack info, nil must be passed through so the target's own auth resolves")
+			}
+		})
+	}
 }
 
 func TestAuthContextWrapper_GetStackInfo(t *testing.T) {
