@@ -1,4 +1,4 @@
-package exec
+package plandiff
 
 import (
 	"encoding/json"
@@ -60,7 +60,7 @@ func TestPlanDiffAttributeDisplayEditions(t *testing.T) {
 				fresh := planDiffResourcePlan(t, planDiffTestResource("aws_s3_object", attribute, "new", section), section)
 				for _, pin := range []string{"", "2026-10-12", "2026-10-13", "2026-09", "2026-10", "2026"} {
 					config := &schema.AtmosConfiguration{Edition: pin}
-					policy, err := planDiffPolicy(config)
+					policy, err := Policy(config)
 					require.NoError(t, err)
 					diff, hasDiff := generatePlanDiff(orig, fresh, policy)
 					assert.True(t, hasDiff, "hash changes must affect the verdict under edition %q", pin)
@@ -72,7 +72,7 @@ func TestPlanDiffAttributeDisplayEditions(t *testing.T) {
 					}
 
 					config.Components.Terraform.PlanDiff.IgnoreChanges = []string{"aws_s3_object." + attribute}
-					policy, err = planDiffPolicy(config)
+					policy, err = Policy(config)
 					require.NoError(t, err)
 					diff, hasDiff = generatePlanDiff(orig, fresh, policy)
 					assert.False(t, hasDiff, "explicit exclusion must work under edition %q", pin)
@@ -101,7 +101,7 @@ func TestPlanDiffRDSExclusions(t *testing.T) {
 			assert.True(t, hasDiff)
 			assert.Contains(t, diff, "latest_restorable_time: 2026-02-17T22:02:50Z => 2026-02-17T22:07:50Z")
 
-			option := withPlanDiffIgnoreChanges([]string{"aws_db_instance.latest_restorable_time"})
+			option := WithIgnoreChanges([]string{"aws_db_instance.latest_restorable_time"})
 			diff, hasDiff = generatePlanDiff(orig, fresh, option)
 			assert.False(t, hasDiff)
 			assert.Empty(t, diff)
@@ -113,7 +113,7 @@ func TestPlanDiffRDSExclusions(t *testing.T) {
 			assert.Equal(t, string(freshSnapshot), string(freshAfter))
 
 			// An exclusion for another resource type must not suppress this timestamp.
-			_, hasDiff = generatePlanDiff(orig, fresh, withPlanDiffIgnoreChanges([]string{"aws_rds_cluster.latest_restorable_time"}))
+			_, hasDiff = generatePlanDiff(orig, fresh, WithIgnoreChanges([]string{"aws_rds_cluster.latest_restorable_time"}))
 			assert.True(t, hasDiff)
 
 			if section == "resource_changes" {
@@ -159,7 +159,7 @@ func TestPlanDiffExclusionsAttributeMaps(t *testing.T) {
 				fresh := planDiffResourcePlan(t, newResource, "resource_changes")
 				_, hasDiff := generatePlanDiff(orig, fresh)
 				assert.True(t, hasDiff, "control must detect the unfiltered difference")
-				diff, hasDiff := generatePlanDiff(orig, fresh, withPlanDiffIgnoreChanges([]string{"aws_db_instance.latest_restorable_time"}))
+				diff, hasDiff := generatePlanDiff(orig, fresh, WithIgnoreChanges([]string{"aws_db_instance.latest_restorable_time"}))
 				assert.False(t, hasDiff)
 				assert.Empty(t, diff)
 			})
@@ -196,7 +196,7 @@ func TestPlanDiffExclusionsPreserveMeaningfulChanges(t *testing.T) {
 			resource := planDiffTestResource("aws_db_instance", "latest_restorable_time", "new", "resource_changes")
 			tc.mutate(resource)
 			_, hasDiff := generatePlanDiff(orig, planDiffResourcePlan(t, resource, "resource_changes"),
-				withPlanDiffIgnoreChanges([]string{"aws_db_instance.latest_restorable_time"}))
+				WithIgnoreChanges([]string{"aws_db_instance.latest_restorable_time"}))
 			assert.True(t, hasDiff)
 		})
 	}
@@ -204,7 +204,7 @@ func TestPlanDiffExclusionsPreserveMeaningfulChanges(t *testing.T) {
 
 func TestPlanDiffExclusionsPreserveOtherSections(t *testing.T) {
 	t.Parallel()
-	option := withPlanDiffIgnoreChanges([]string{"aws_db_instance.latest_restorable_time"})
+	option := WithIgnoreChanges([]string{"aws_db_instance.latest_restorable_time"})
 	resourcePlan := planDiffResourcePlan(t, planDiffTestResource("aws_db_instance", "latest_restorable_time", "old", "resource_changes"), "resource_changes")
 	for _, plans := range [][2]map[string]interface{}{
 		{{}, resourcePlan},
@@ -225,7 +225,7 @@ func TestPlanDiffConfiguredExclusionsDoNotSuppressHashes(t *testing.T) {
 	resource["values"].(map[string]interface{})["content_md5"] = "new hash"
 	resource["values"].(map[string]interface{})["latest_restorable_time"] = "new"
 	fresh := planDiffResourcePlan(t, resource, "planned_values")
-	diff, hasDiff := generatePlanDiff(orig, fresh, withPlanDiffIgnoreChanges([]string{"aws_db_instance.latest_restorable_time"}))
+	diff, hasDiff := generatePlanDiff(orig, fresh, WithIgnoreChanges([]string{"aws_db_instance.latest_restorable_time"}))
 	assert.True(t, hasDiff)
 	assert.Contains(t, diff, "content_md5: old hash => new hash")
 	assert.NotContains(t, diff, "latest_restorable_time")
@@ -245,7 +245,7 @@ func TestPlanDiffLegacyDisplayAttributePresence(t *testing.T) {
 					delete(fresh["values"].(map[string]interface{}), "content_sha256")
 				}
 				fresh["values"].(map[string]interface{})["filename"] = "changed.txt"
-				policy, err := planDiffPolicy(&schema.AtmosConfiguration{Edition: pin})
+				policy, err := Policy(&schema.AtmosConfiguration{Edition: pin})
 				require.NoError(t, err)
 				diff, hasDiff := generatePlanDiff(planDiffResourcePlan(t, orig, "planned_values"),
 					planDiffResourcePlan(t, fresh, "planned_values"), policy)

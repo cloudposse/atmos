@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/plandiff"
 )
 
 // VerifyPlanfile verifies that a stored planfile matches the current state before applying.
@@ -35,7 +36,7 @@ func VerifyPlanfile(info *schema.ConfigAndStacksInfo, storedPlanFile string, mod
 		return err
 	}
 
-	policy, err := planDiffPolicy(&vc.atmosConfig)
+	policy, err := plandiff.Policy(&vc.atmosConfig)
 	if err != nil {
 		return err
 	}
@@ -46,10 +47,10 @@ func VerifyPlanfile(info *schema.ConfigAndStacksInfo, storedPlanFile string, mod
 	}
 
 	// Warn about ignore_changes entries that cannot match anything in these plans.
-	warnUnmatchedPlanDiffIgnoreChanges(vc.atmosConfig.Components.Terraform.PlanDiff.IgnoreChanges, plans.stored, plans.fresh)
+	plandiff.WarnUnmatchedIgnoreChanges(vc.atmosConfig.Components.Terraform.PlanDiff.IgnoreChanges, plans.stored, plans.fresh)
 
 	// Generate diff. The stored planfile has served its purpose either way.
-	diff, hasDiff := generatePlanDiff(sortMapKeys(plans.stored), sortMapKeys(plans.fresh), policy)
+	diff, hasDiff := plandiff.Compare(plans.stored, plans.fresh, policy)
 	os.Remove(storedPlanFile)
 
 	return finalizeVerification(info, plans.freshPlanFile, diff, hasDiff, mode)

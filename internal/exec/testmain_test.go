@@ -266,3 +266,55 @@ func runLogGroupPipelineForTest() int {
 	}
 	return 0
 }
+
+// runPlanDiffTerraformForTest implements show/plan using JSON plan fixtures, without a provider or network.
+func runPlanDiffTerraformForTest() int {
+	args := os.Args[1:]
+	if len(args) == 0 {
+		return 1
+	}
+	switch args[0] {
+	case "show":
+		contents, err := os.ReadFile(args[len(args)-1])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fmt.Println(string(contents))
+	case "plan":
+		for _, arg := range args[1:] {
+			if path, found := strings.CutPrefix(arg, "-out="); found {
+				if err := os.WriteFile(path, []byte(os.Getenv("_ATMOS_TEST_PLAN_DIFF_FRESH_JSON")), 0o600); err != nil {
+					fmt.Fprintln(os.Stderr, err)
+					return 1
+				}
+				return 0
+			}
+		}
+		return 1
+	case "version":
+		fmt.Println(`{"terraform_version":"1.11.0","platform":"test","provider_selections":{}}`)
+	case "workspace":
+		if len(args) > 1 && args[1] == "show" {
+			fmt.Println("test")
+		}
+	}
+	return 0
+}
+
+// planDiffPolicyPlan builds a decoded Terraform JSON plan holding one unchanged aws_db_instance
+// resource change. A real change adds an attribute that the configured exclusions do not cover.
+func planDiffPolicyPlan(attribute, value string, realChange bool) map[string]interface{} {
+	values := map[string]interface{}{"id": "example", attribute: value}
+	if realChange {
+		values["instance_class"] = "db.t3.small"
+	}
+	return map[string]interface{}{"resource_changes": []interface{}{map[string]interface{}{
+		"address": "module.example.aws_db_instance.default[0]",
+		"mode":    "managed",
+		"type":    "aws_db_instance",
+		"change": map[string]interface{}{
+			"actions": []interface{}{"no-op"}, "before": values, "after": values,
+		},
+	}}}
+}

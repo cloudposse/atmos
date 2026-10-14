@@ -1,4 +1,4 @@
-package exec
+package plandiff
 
 import (
 	"testing"
@@ -87,7 +87,7 @@ func TestUnmatchedPlanDiffIgnoreChanges(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := unmatchedPlanDiffIgnoreChanges(tc.entries, tc.resources)
+			got := unmatchedIgnoreChanges(tc.entries, tc.resources)
 			assert.Equal(t, tc.want, got)
 		})
 	}
@@ -97,8 +97,8 @@ func TestUnmatchedPlanDiffIgnoreChangesSpansBothPlans(t *testing.T) {
 	t.Parallel()
 	orig := map[string]interface{}{"a": planDiffTypedResource("aws_instance", map[string]interface{}{"values": map[string]interface{}{"id": "i-1"}}, nil)}
 	fresh := map[string]interface{}{"a": planDiffTypedResource("aws_instance", map[string]interface{}{"values": map[string]interface{}{"id": "i-1", "ami": "ami-1"}}, nil)}
-	assert.Empty(t, unmatchedPlanDiffIgnoreChanges([]string{"aws_instance.ami"}, orig, fresh))
-	assert.Equal(t, []string{"aws_instance.ami"}, unmatchedPlanDiffIgnoreChanges([]string{"aws_instance.ami"}, orig))
+	assert.Empty(t, unmatchedIgnoreChanges([]string{"aws_instance.ami"}, orig, fresh))
+	assert.Equal(t, []string{"aws_instance.ami"}, unmatchedIgnoreChanges([]string{"aws_instance.ami"}, orig))
 }
 
 func TestWarnUnmatchedPlanDiffIgnoreChangesDoesNotChangeDiff(t *testing.T) {
@@ -107,17 +107,28 @@ func TestWarnUnmatchedPlanDiffIgnoreChangesDoesNotChangeDiff(t *testing.T) {
 	fresh := planDiffResourcePlan(t, planDiffTestResource("terraform_data", "output", "new", "planned_values"), "planned_values")
 	config := &schema.AtmosConfiguration{}
 	config.Components.Terraform.PlanDiff.IgnoreChanges = []string{"terraform_data.db", "terraform_data.output"}
-	policy, err := planDiffPolicy(config)
+	policy, err := Policy(config)
 	require.NoError(t, err)
 
 	wantDiff, wantHasDiff := generatePlanDiff(orig, fresh, policy)
-	require.Equal(t, []string{"terraform_data.db"}, unmatchedPlanDiffIgnoreChanges(
+	require.Equal(t, []string{"terraform_data.db"}, unmatchedIgnoreChanges(
 		config.Components.Terraform.PlanDiff.IgnoreChanges, getResources(orig), getResources(fresh),
 	))
-	warnUnmatchedPlanDiffIgnoreChanges(config.Components.Terraform.PlanDiff.IgnoreChanges, orig, fresh)
+	WarnUnmatchedIgnoreChanges(config.Components.Terraform.PlanDiff.IgnoreChanges, orig, fresh)
 	gotDiff, gotHasDiff := generatePlanDiff(orig, fresh, policy)
 
 	assert.Equal(t, wantHasDiff, gotHasDiff)
 	assert.Equal(t, wantDiff, gotDiff)
 	assert.False(t, gotHasDiff, "terraform_data.output is excluded so the plans are equivalent")
+}
+
+func TestUnmatchedIgnoreChangesFromPlans(t *testing.T) {
+	t.Parallel()
+	orig := planDiffResourcePlan(t, planDiffTestResource("aws_instance", "ami", "old", "planned_values"), "planned_values")
+	fresh := planDiffResourcePlan(t, planDiffTestResource("aws_instance", "ami", "new", "planned_values"), "planned_values")
+
+	got := UnmatchedIgnoreChanges([]string{"aws_instance.ami", "aws_instance.amy", "aws_instance.amy", "aws_s3_bucket.acl"}, orig, fresh)
+
+	assert.Equal(t, []string{"aws_instance.amy"}, got)
+	assert.Empty(t, UnmatchedIgnoreChanges(nil, orig, fresh))
 }

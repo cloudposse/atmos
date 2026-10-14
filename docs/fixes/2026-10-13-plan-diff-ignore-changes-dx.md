@@ -29,22 +29,26 @@ looked absent and was printed as removed.
 
 ## Changes
 
-- `internal/exec/terraform_plan_diff_exclusions.go`: added `unmatchedPlanDiffIgnoreChanges`, which reports
-  entries whose resource type is present in either plan but whose attribute appears in none of the filtered
-  sections. Entries for absent types are not reported, because the configuration is global across
-  components. `warnUnmatchedPlanDiffIgnoreChanges` emits one `ui.Warningf` per entry. Added
-  `(known after apply)` line rendering on `planDiffOptions`.
+- `pkg/terraform/plandiff/unmatched.go`: added `UnmatchedIgnoreChanges`, which reports entries whose
+  resource type is present in either plan but whose attribute appears in none of the filtered sections.
+  Entries for absent types are not reported, because the configuration is global across components.
+  `WarnUnmatchedIgnoreChanges` emits one `ui.Warningf` per entry.
+- `pkg/terraform/plandiff/options.go`: added `(known after apply)` line rendering on the comparison options.
+  The comparison engine, formatter, and exclusions moved out of `internal/exec` into this package, which
+  never runs Terraform; `internal/exec` keeps only the call sites.
 - `internal/exec/terraform_plan_diff.go` and `internal/exec/terraform_verify_plan.go`: both `plan-diff` and
-  deployment plan verification emit the warning before comparing. The verdict is unchanged.
-- `internal/exec/terraform_plan_diff_comparison.go`: the formatter reads top-level `change.after_unknown`
-  and renders `~ attr: old => (known after apply)` or `~ attr: (known after apply) => new`, including for the
-  priority attributes `id`, `url`, and `content`. Legacy-edition hiding still applies. Display only.
+  deployment plan verification call `plandiff.WarnUnmatchedIgnoreChanges` before comparing with
+  `plandiff.Compare`. The verdict is unchanged.
+- `pkg/terraform/plandiff/compare.go` and `pkg/terraform/plandiff/resources.go`: the formatter reads
+  top-level `change.after_unknown` and renders `~ attr: old => (known after apply)` or
+  `~ attr: (known after apply) => new`, including for the priority attributes `id`, `url`, and `content`.
+  Legacy-edition hiding still applies. Display only.
 - `pkg/config/load.go`: the validation error now carries one hint describing the accepted entry shape.
 - `website/docs/cli/commands/terraform/terraform-plan-diff.mdx`: documented the warning and the
   `(known after apply)` display.
-- Tests: `internal/exec/terraform_plan_diff_ignore_warning_test.go`,
-  `internal/exec/terraform_plan_diff_unknown_test.go`, and a hint assertion in
-  `pkg/config/terraform_plan_diff_test.go`.
+- Tests: `pkg/terraform/plandiff/unmatched_test.go`, `pkg/terraform/plandiff/unknown_test.go`,
+  `internal/exec/terraform_plan_diff_test.go` for the end-to-end policy call sites (serial), and a hint
+  assertion in `pkg/config/terraform_plan_diff_test.go`.
 
 ## Validation
 

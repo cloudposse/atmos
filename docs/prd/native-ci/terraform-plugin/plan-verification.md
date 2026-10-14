@@ -11,7 +11,7 @@
 **Behavior**:
 - Download stored planfile to a `stored.*` prefix path
 - Generate a fresh `terraform plan` (without CI side effects — no upload, no checks, no summaries)
-- Compare the two planfiles using plan-diff (`internal/exec/terraform_plan_diff*.go`)
+- Compare the two planfiles using plan-diff (`pkg/terraform/plandiff`, called from `internal/exec/terraform_verify_plan.go`)
 - On drift: **fail** the deploy (mode `fail`) or **warn and proceed** (mode `warn`)
 - Apply the **fresh** planfile if plans match (reconcile, don't replay): the freshly generated plan is
   built with the apply-time state and credentials, so the deploy avoids the brittleness of a saved plan —
@@ -79,13 +79,13 @@ Verification adds one full `terraform plan` execution (~30-60 seconds). This is 
 
 The plan-diff implementation exists and is fully implemented:
 - `internal/exec/terraform_plan_diff.go` — Main entry point
-- `internal/exec/terraform_plan_diff_comparison.go` — Comparison logic
+- `pkg/terraform/plandiff` — Comparison logic (`plandiff.Compare`), exclusions, and formatting
 - `internal/exec/terraform_plan_diff_preparation.go` — Output normalization
 
 The comparison is **JSON-structural** — it runs `terraform show -json` on the stored and fresh
 planfiles, parses each to a map, sorts keys for determinism, and deep-compares variables, managed
-resources (data sources skipped), and outputs (`internal/exec/terraform_verify_plan.go` →
-`generatePlanDiff`). Sensitive values are masked. No resource attributes are excluded from comparison by default.
+resources (data sources skipped), and outputs. The comparison lives in `pkg/terraform/plandiff`
+(`plandiff.Compare`) and `internal/exec/terraform_verify_plan.go` calls it. Sensitive values are masked. No resource attributes are excluded from comparison by default.
 Explicit exclusions are applied before comparison and rendering on copies of resource records.
 
 ### Migration and editions

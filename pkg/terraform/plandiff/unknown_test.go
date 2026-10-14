@@ -1,4 +1,4 @@
-package exec
+package plandiff
 
 import (
 	"testing"
@@ -27,7 +27,7 @@ func unknownTestPlan(t *testing.T, after, afterUnknown map[string]interface{}) m
 
 func TestPlanDiffKnownAfterApply(t *testing.T) {
 	t.Parallel()
-	legacy, err := planDiffPolicy(&schema.AtmosConfiguration{Edition: "2026-10-12"})
+	legacy, err := Policy(&schema.AtmosConfiguration{Edition: "2026-10-12"})
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -36,7 +36,7 @@ func TestPlanDiffKnownAfterApply(t *testing.T) {
 		origUnknown  map[string]interface{}
 		newAfter     map[string]interface{}
 		newUnknown   map[string]interface{}
-		opts         []planDiffOption
+		opts         []Option
 		contains     []string
 		notContains  []string
 		wantHasDiffs bool
@@ -88,7 +88,7 @@ func TestPlanDiffKnownAfterApply(t *testing.T) {
 			origUnknown: map[string]interface{}{"content_sha1": true},
 			newAfter:    map[string]interface{}{"filename": "b.txt", "content_sha1": "bbbb"},
 			newUnknown:  map[string]interface{}{"content_md5": true, "content_sha256": true},
-			opts:        []planDiffOption{legacy},
+			opts:        []Option{legacy},
 			contains:    []string{"~ filename: a.txt => b.txt"},
 			notContains: []string{"content_md5", "content_sha256", "content_sha1", "known after apply"},
 		},
