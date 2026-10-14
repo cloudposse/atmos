@@ -95,6 +95,13 @@ type planPolicyItem struct {
 	With       map[string]any    `yaml:"with"`
 	RequiredCI []CIRequirement   `yaml:"required_ci"`
 	Hooks      []HookRequirement `yaml:"hooks"`
+	Approvals  []approvalItem    `yaml:"approvals"`
+}
+
+type approvalItem struct {
+	ID       string         `yaml:"id"`
+	Provider string         `yaml:"provider"`
+	Spec     map[string]any `yaml:"spec"`
 }
 
 // LoadPlanDirectory loads inline CEL or Starlark plan manifests.
@@ -253,17 +260,20 @@ func (p *planPolicyItem) resolve(document, name string) (Rule, error) {
 }
 
 func (p *planPolicyItem) validateEffects(name string) error {
-	if strings.TrimSpace(name) == "" || !slices.Contains([]InputKind{TerraformPlan, Operation, AtmosAffected}, p.On) || !slices.Contains([]string{"deny", "hooks"}, p.Action) {
-		return fmt.Errorf("%w: expected terraform.plan/operation/atmos.affected and deny/hooks action", errUtils.ErrPolicyInvalid)
+	if strings.TrimSpace(name) == "" || !slices.Contains([]InputKind{TerraformPlan, Operation, AtmosAffected, Function, Command, ComponentCommand}, p.On) || !slices.Contains([]string{"deny", "hooks", "require_approval"}, p.Action) {
+		return fmt.Errorf("%w: unsupported policy input kind or action", errUtils.ErrPolicyInvalid)
 	}
-	if p.On == AtmosAffected && p.Match != nil {
-		return fmt.Errorf("%w: affected rules inspect before/after instances in their expression, not match", errUtils.ErrPolicyInvalid)
+	if slices.Contains([]InputKind{AtmosAffected, Function, Command}, p.On) && p.Match != nil {
+		return fmt.Errorf("%w: this input has no instance selector; use component.command for instance admission", errUtils.ErrPolicyInvalid)
+	}
+	if (p.Action == "require_approval") != (len(p.Approvals) > 0) {
+		return fmt.Errorf("%w: approvals require action: require_approval and at least one requirement", errUtils.ErrPolicyInvalid)
 	}
 	return p.validateHookEffects()
 }
 
 func (p *planPolicyItem) validateHookEffects() error {
-	if p.Action == "hooks" && (p.On != Operation || len(p.Hooks) == 0) || p.Action == "deny" && len(p.Hooks) != 0 {
+	if p.Action == "hooks" && (p.On != Operation || len(p.Hooks) == 0) || p.Action != "hooks" && len(p.Hooks) != 0 {
 		return fmt.Errorf("%w: hook effects require an operation rule with action: hooks", errUtils.ErrPolicyInvalid)
 	}
 	return nil
@@ -299,9 +309,21 @@ func (p *planPolicyItem) resolveExpression(document, name string) (Rule, error) 
 			return Rule{}, fmt.Errorf("%w: parameters must be JSON-compatible", errUtils.ErrPolicyInvalid)
 		}
 	}
+	var approvals []ApprovalRequirement
+	for _, item := range p.Approvals {
+		data, err := json.Marshal(item.Spec)
+		if err != nil {
+			return Rule{}, fmt.Errorf("%w: invalid approval spec", errUtils.ErrPolicyInvalid)
+		}
+		requirement := ApprovalRequirement{ID: item.ID, Provider: item.Provider, Spec: data}
+		if _, err := ParseGitHubApproval(requirement); err != nil {
+			return Rule{}, err
+		}
+		approvals = append(approvals, requirement)
+	}
 	return Rule{
 		ID: document + "/" + name, On: p.On, Engine: p.Engine, Expression: p.Rule, Match: p.Match,
-		Parameters: parameters, RequiredCI: p.RequiredCI, Effects: Effects{Deny: p.Action == "deny", Reason: p.Reason, Hooks: p.Hooks},
+		Parameters: parameters, RequiredCI: p.RequiredCI, Effects: Effects{Deny: p.Action == "deny", Reason: p.Reason, Hooks: p.Hooks, Approvals: approvals},
 	}, nil
 }
 

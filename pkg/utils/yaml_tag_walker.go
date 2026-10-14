@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/admission"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -136,6 +138,9 @@ func dispatchTag(ctx TagContext, n *yaml.Node, policy TagWalkPolicy, file string
 
 	val := strings.TrimSpace(n.Value)
 	if handler, ok := policy.Handlers[tag]; ok {
+		if err := admission.Function(context.Background(), tag); err != nil {
+			return false, err
+		}
 		return handler(ctx, n, val)
 	}
 	if policy.Defer {

@@ -129,6 +129,7 @@ Tokens and arbitrary environment variables are not copied into metadata.
 |---|---|
 | Evaluate supplied event/metadata and produce local output | No additional API permission; collection makes no API calls |
 | Check out repository policies/configuration | `contents: read` |
+| Verify designated reviewers against current PR details and paginated reviews | `pull-requests: read` |
 | Publish existing Native CI commit statuses | `statuses: write` |
 
 Minimal permissions for a job that checks out policies and evaluates them:
@@ -153,5 +154,6 @@ for the surrounding workflow.
 
 Fork and Dependabot runs can have reduced token permissions. Keep policy failures blocking even
 when status publication is unavailable. The supplied event records the triggering event, not
-current review state; it must not be treated as verified approval. These policies evaluate the
+current review state; it must not be treated as verified approval. [Approval requirements](/policies/approvals)
+fetch fresh evidence separately when selected. These policies evaluate the
 current invocation, not outcomes aggregated from other component jobs.

@@ -7,6 +7,9 @@ command integrations collect specific inputs and enforce their decisions.
 
 | Input | Collector | Enforcement |
 |---|---|---|
+| `function` | Canonical YAML function name, without secret arguments | Before config/stack/registry handler execution |
+| `command` | Canonical runnable CLI command path | Before argument validation and pre-run hooks |
+| `component.command` | Shared stack resolution, inherited literal selector metadata, capability list | Before component templates/functions and tool execution |
 | `terraform.plan` | Native JSON extracted from a private saved Terraform-compatible plan | After successful planning and before applying the evaluated private copy |
 | `operation` | Terraform, Helmfile, Helm, and Kubernetes lifecycle metadata | Denial and governing hook requirements at the current lifecycle event |
 | `atmos.affected` | Unfiltered static inventories from clean Git worktrees, file changes, and structured differences | Denial before affected output filtering or scheduling |
@@ -46,8 +49,10 @@ for limits and error behavior.
 | `pkg/ci` | Provider detection and optional snapshot collection |
 | `pkg/hooks` | Governing hook resolution, execution, skip protection, and failure propagation |
 
-The core can represent an outstanding approval requirement, but does not verify approval evidence.
-The directory manifest accepts `deny` and operation `hooks` actions only.
+The pure core returns outstanding approval requirements. Native CI verifies them with fresh,
+paginated GitHub reviews bound to the current PR and checkout. Manifests accept `require_approval`
+with explicit reviewer logins and a minimum count; no organization-team lookup is performed.
+See [approval verification](https://atmos.tools/policies/approvals).
 
 ## Starlark operations
 

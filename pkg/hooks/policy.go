@@ -15,22 +15,18 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/policy"
+	"github.com/cloudposse/atmos/pkg/policy/admission"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func getGovernedHooks(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*Hooks, error) {
 	// Resolve governing data before describing (potentially untrusted) component data.
-	var bundle *policy.Bundle
 	var snapshot *policy.CISnapshot
-	directory, err := policy.DirectoryFromEnvironment()
+	bundle, err := admission.LoadBundle()
 	if err != nil {
 		return nil, err
 	}
-	if directory != "" {
-		bundle, err = policy.LoadDirectory(directory)
-		if err != nil {
-			return nil, err
-		}
+	if bundle != nil {
 		snapshot, err = ci.CollectPolicySnapshot(context.Background())
 		if err != nil {
 			return nil, err
@@ -69,6 +65,10 @@ func (h *Hooks) runPolicyHooks(run *hookRunContext) error {
 	decision, err := engine.Evaluate(ctx, request, h.policyBundle.Rules)
 	if err != nil {
 		return fmt.Errorf("%w: operation evaluation failed (input details withheld)", errUtils.ErrPolicyEvaluation)
+	}
+	decision, err = ci.ResolvePolicyApprovals(ctx, request, decision)
+	if err != nil {
+		return err
 	}
 	if err := enforcePolicyAuthorization(decision); err != nil {
 		return err

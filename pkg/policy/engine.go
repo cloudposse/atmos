@@ -47,7 +47,7 @@ func (e *Engine) Register(name string, evaluator Evaluator) error {
 
 // Evaluate evaluates only rules for the explicit request kind, retaining all outcomes.
 // Missing required data and unknown engines fail closed even for a false predicate.
-// Approvals are always outstanding here; this scaffold does not verify review evidence.
+// Approvals are outstanding here; the CI adapter verifies review evidence separately.
 func (e *Engine) Evaluate(ctx context.Context, request *Request, rules []Rule) (Decision, error) {
 	defer perf.Track(nil, "policy.Engine.Evaluate")()
 

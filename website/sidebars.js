@@ -246,6 +246,8 @@ module.exports = {
                 {type: 'link', label: 'Library', href: '/policies/library', customProps: {navigationMatchPrefix: true}},
                 'policies/configuration',
                 'policies/inputs',
+                'policies/admission',
+                'policies/approvals',
                 'policies/starlark',
                 'policies/terraform-plan',
                 'policies/affected',

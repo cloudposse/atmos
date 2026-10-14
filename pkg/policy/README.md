@@ -56,21 +56,23 @@ are not implemented in this package; selecting an unregistered language is an er
 
 `pkg/ci.CollectPolicySnapshot` uses the existing provider registry and optional
 `PolicySnapshotProvider` capability. GitHub Actions collects allowlisted native environment metadata
-and the supplied event file, without API calls or token permissions. Fresh API facts/approvals remain
-unimplemented. Snapshots are collected outside evaluation and supplied to plan/lifecycle requests.
+and the supplied event file, without API calls or token permissions. `PolicyApprovalProvider` separately
+verifies selected approval obligations with current PR details and paginated reviews, using
+`pull-requests: read`. Snapshots and reviews are collected outside pure evaluation.
 
 ## Remaining enforcement boundaries
 
 Callers must supply trusted, resolved policy definitions and distinguish governing,
 base, and head revisions. Local discovery and literal instance selectors are implemented; inline
-policy inheritance, remote libraries, legacy migration, source trust, general command admission,
+policy inheritance, remote libraries, legacy migration, source trust,
 and repository-level CI gate orchestration are not wired.
 The discovered directory is not automatically trusted and can be bypassed by a caller
 who controls the invocation. Protect the workflow/environment and governing files externally.
 
-Approvals always remain outstanding in this slice; there is no review verifier. The core returns
+The pure engine leaves approvals outstanding; the GitHub adapter verifies fresh reviews before enforcement. The core returns
 hook requirements; `pkg/hooks` resolves governing definitions and executes them at existing Terraform,
-Helmfile, Helm, and Kubernetes lifecycle points. Other component admission remains unwired. An
+Helmfile, Helm, and Kubernetes lifecycle points. `pkg/policy/admission` gates YAML functions, runnable
+CLI commands, and shared component stack resolution. An
 `allow` decision is authorization only, never evidence of approval or hook completion.
 Each finding retains its own requirements, so a caller cannot lose obligations through
 deduplication. See [the sample library](../../examples/policies/README.md) for runnable examples,

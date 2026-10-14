@@ -985,6 +985,10 @@ func processStacks(
 		return configAndStacksInfo, err
 	}
 
+	if err := enforceComponentAdmission(atmosConfig, &configAndStacksInfo); err != nil {
+		return configAndStacksInfo, err
+	}
+
 	// Component mocks are literal fixture data. Keep them out of template and YAML
 	// function processing so a mock cannot resolve the real dependency it is meant
 	// to replace when --use-mocks is enabled.

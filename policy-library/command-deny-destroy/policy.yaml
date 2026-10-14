@@ -1,0 +1,11 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: command-deny-destroy
+  description: Deny the direct destroy command without requiring affected analysis.
+spec:
+  policies:
+    guard:
+      on: command
+      action: deny
+      rule: input.command == 'terraform destroy'

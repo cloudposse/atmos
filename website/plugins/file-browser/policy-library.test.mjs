@@ -27,7 +27,7 @@ test('the policy gallery discovers individually documented and tested policies',
   const entries = readdirSync(libraryDir, {withFileTypes: true}).filter(entry => entry.isDirectory());
   assert.ok(entries.length > 0, 'The library must not be empty');
   assert.deepEqual(content.tree.examples.map(entry => entry.name).sort(), entries.map(entry => entry.name).sort());
-  assert.deepEqual(content.tree.tags, ['Terraform', 'GitHub Actions', 'Lifecycle Hooks', 'Affected Changes']);
+  assert.deepEqual(content.tree.tags, ['Terraform', 'GitHub Actions', 'Lifecycle Hooks', 'Admission', 'Affected Changes']);
   assert.equal(content.options.searchable, true);
   assert.equal(content.options.installCommandTemplate, '', 'Do not invent a policy install command');
   assert.equal(content.options.enableCopyMarkdown, false, 'Keep the first-pass gallery controls minimal');
@@ -80,7 +80,7 @@ test('the policy gallery discovers individually documented and tested policies',
       }
     }
     const fixtures = JSON.parse(readFileSync(path.join(libraryDir, entry.name, 'tests/cases.json'), 'utf8'));
-    assert.ok(fixtures.some(fixture => ['deny', 'allow'].includes(fixture.status)), `${entry.name}: matching case required`);
+    assert.ok(fixtures.some(fixture => ['deny', 'allow', 'awaiting_approval'].includes(fixture.status)), `${entry.name}: matching case required`);
     assert.ok(fixtures.some(fixture => fixture.status === 'not_applicable'), `${entry.name}: nonmatching case required`);
   }
 });

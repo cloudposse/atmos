@@ -12,6 +12,7 @@ import (
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/policy"
+	"github.com/cloudposse/atmos/pkg/policy/admission"
 	"github.com/cloudposse/atmos/pkg/policy/planfile"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -23,11 +24,11 @@ func loadTerraformPlanPolicy(info *schema.ConfigAndStacksInfo) (*planfile.Guard,
 	if info.NeedHelp {
 		return nil, nil
 	}
-	directory, err := policy.DirectoryFromEnvironment()
+	bundle, err := admission.LoadBundle()
 	if err != nil {
 		return nil, err
 	}
-	if directory == "" {
+	if bundle == nil {
 		return nil, nil
 	}
 	if err := validateTerraformPolicyCommand(info); err != nil {
@@ -35,10 +36,6 @@ func loadTerraformPlanPolicy(info *schema.ConfigAndStacksInfo) (*planfile.Guard,
 	}
 	if !governedTerraformCommand(info.SubCommand) {
 		return nil, nil
-	}
-	bundle, err := policy.LoadDirectory(directory)
-	if err != nil {
-		return nil, err
 	}
 	rules := bundle.RulesFor(policy.TerraformPlan)
 	if len(rules) == 0 {
@@ -84,7 +81,7 @@ func bindTerraformPolicy(gate *planfile.Guard, info *schema.ConfigAndStacksInfo,
 
 func newTerraformPolicyGuard(rules []policy.Rule) (*planfile.Guard, error) {
 	engine := policy.NewEngine()
-	gate := &planfile.Guard{Engine: engine, Rules: rules, Show: process.NewDefaultRunner()}
+	gate := &planfile.Guard{Engine: engine, Rules: rules, Show: process.NewDefaultRunner(), ResolveApprovals: ci.ResolvePolicyApprovals}
 	snapshot, err := ci.CollectPolicySnapshot(context.Background())
 	if err != nil {
 		return nil, err

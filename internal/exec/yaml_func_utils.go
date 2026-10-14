@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -10,9 +11,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/emulator"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/admission"
 	"github.com/cloudposse/atmos/pkg/schema"
 	secretdeferred "github.com/cloudposse/atmos/pkg/secrets/deferred"
 	storedeferred "github.com/cloudposse/atmos/pkg/store/deferred"
@@ -520,6 +523,15 @@ func processCustomTagsWithContext(
 ) (any, error) {
 	if starlarksource.IsEncoded(input) && matchesPrefix(input, starlarksource.Tag, skip) {
 		return newConfigurationResolver(atmosConfig, nil, withConfigurationContext(currentStack, stackInfo), withConfigurationFunctions(skip, resolutionCtx)).resolveString(input)
+	}
+	// Gate before deferred authentication or a resolver can perform I/O.
+	for _, tag := range fntag.AllYAML() {
+		if matchesPrefix(input, tag, skip) {
+			if err := admission.Function(context.Background(), tag); err != nil {
+				return nil, err
+			}
+			break
+		}
 	}
 	if err := prepareDeferredYAMLAuth(atmosConfig, input, skip, stackInfo); err != nil {
 		return nil, err

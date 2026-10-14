@@ -51,7 +51,7 @@ func TestPolicyCatalog(t *testing.T) {
 				require.False(t, names[tc.Name], "duplicate case %s", tc.Name)
 				names[tc.Name] = true
 				if tc.Request.Kind == rule.On {
-					matching = matching || tc.Status == Allow || tc.Status == Deny
+					matching = matching || tc.Status == Allow || tc.Status == Deny || tc.Status == AwaitingApproval
 					nonmatching = nonmatching || tc.Status == NotApplicable
 				}
 				t.Run(tc.Name, func(t *testing.T) {

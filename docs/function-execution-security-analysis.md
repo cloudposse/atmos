@@ -11,7 +11,11 @@ This is background analysis, not a product spec. The remediation is designed in 
 [Policies PRD](./prd/policies.md); each finding below maps to a control
 there.
 
-Two structural gaps frame the analysis:
+This analysis predates YAML function admission. `on: function` policies now gate YAML handlers,
+including early `!exec`; see [Execution Admission](https://atmos.tools/policies/admission).
+The Go-template execution and source-trust findings below remain distinct from that control.
+
+Two original structural gaps frame the analysis:
 
 1. **No policy controls over function usage.** There is no mechanism to allow, deny, or gate which
     YAML functions or template functions may run — only a per-invocation `--skip` and coarse

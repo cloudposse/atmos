@@ -1,0 +1,32 @@
+[
+  {
+    "name": "exec denied",
+    "request": {
+      "kind": "function",
+      "input": {
+        "name": "exec"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "env allowed",
+    "request": {
+      "kind": "function",
+      "input": {
+        "name": "env"
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "other input",
+    "request": {
+      "kind": "command",
+      "input": {
+        "command": "describe stacks"
+      }
+    },
+    "status": "not_applicable"
+  }
+]
