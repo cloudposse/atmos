@@ -317,11 +317,12 @@ func benchTables(out *bytes.Buffer, report *benchReport) {
 		if len(comparisons) == 0 && len(measurements) == 0 {
 			continue
 		}
+		// Use the plain <details> tag (no open attribute) because TruncateReport counts the literal string.
+		title := "All other benchmarks"
 		if affected {
-			fmt.Fprint(out, "### Describe affected\n\n")
-		} else {
-			fmt.Fprint(out, "<details><summary>All other benchmarks</summary>\n\n")
+			title = "Describe affected"
 		}
+		fmt.Fprintf(out, "<details><summary>%s</summary>\n\n", title)
 		if len(comparisons) > 0 {
 			fmt.Fprintln(out, "| Benchmark / metric | Main snapshot (UTC) | Main | Current PR | PR change | Significance |\n|---|---|---:|---:|---:|---|")
 			fmt.Fprintln(out, comparisons)
@@ -333,9 +334,7 @@ func benchTables(out *bytes.Buffer, report *benchReport) {
 			fmt.Fprintln(out, "| Benchmark | Current measurement | Unit |\n|---|---:|---|")
 			fmt.Fprintln(out, measurements)
 		}
-		if !affected {
-			fmt.Fprint(out, "</details>\n\n")
-		}
+		fmt.Fprint(out, "</details>\n\n")
 	}
 }
 
@@ -380,7 +379,7 @@ func benchWarningLines(out *bytes.Buffer, report *benchReport) {
 		}
 		for _, metric := range comparison.Metrics {
 			for _, warning := range metric.Warnings {
-				fmt.Fprintf(out, "- %s: %s\n", Escape(metric.Metric), Escape(warning))
+				fmt.Fprintf(out, "- %s: %s\n", Escape(benchMetricDisplay(metric.Metric)), Escape(warning))
 			}
 		}
 	}
@@ -397,7 +396,7 @@ func benchTableRow(out *bytes.Buffer, comparison *benchComparison, metric *bench
 	if metric.Regression {
 		status += "; **warning**"
 	}
-	fmt.Fprintf(out, "| %s | `%s` %s | %.5g | %.5g | %s | %s |\n", Escape(metric.Metric), Escape(comparison.Baseline.SHA[:min(12, len(comparison.Baseline.SHA))]), comparison.Baseline.Started.UTC().Format("Jan 02 15:04"), metric.Base, metric.Candidate, delta, status)
+	fmt.Fprintf(out, "| %s | `%s` %s | %.5g | %.5g | %s | %s |\n", Escape(benchMetricDisplay(metric.Metric)), Escape(comparison.Baseline.SHA[:min(12, len(comparison.Baseline.SHA))]), comparison.Baseline.Started.UTC().Format("Jan 02 15:04"), metric.Base, metric.Candidate, delta, status)
 }
 
 func benchLoadHistory(snapshotsDir string) ([]*benchSnapshot, error) {

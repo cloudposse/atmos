@@ -27,7 +27,7 @@ func tGetenv(t *testing.T, key string) string {
 func TestGitHubMockServer_ReleasesLatest(t *testing.T) {
 	mock := NewGitHubMockServer(t)
 	mock.RegisterRelease("jqlang", "jq", ReleaseSpec{TagName: "jq-1.6", Prerelease: true})
-	mock.RegisterRelease("jqlang", "jq", ReleaseSpec{TagName: "jq-1.7.1"})
+	mock.RegisterRelease("jqlang", "jq", ReleaseSpec{TagName: "jq-1.7.1", PublishedAt: "2026-01-01T00:00:00Z"})
 	mock.RegisterRelease("jqlang", "jq", ReleaseSpec{TagName: "jq-1.7.0"})
 
 	resp, err := http.Get(mock.URL() + "/api/v3/repos/jqlang/jq/releases/latest")
@@ -37,12 +37,14 @@ func TestGitHubMockServer_ReleasesLatest(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var body struct {
-		TagName string `json:"tag_name"`
+		TagName     string `json:"tag_name"`
+		PublishedAt string `json:"published_at"`
 	}
 	require.NoError(t, decodeJSON(resp.Body, &body))
 	// The prerelease is registered first but must be skipped: latest means the first
 	// non-draft, non-prerelease entry.
 	assert.Equal(t, "jq-1.7.1", body.TagName)
+	assert.Equal(t, "2026-01-01T00:00:00Z", body.PublishedAt)
 }
 
 func TestGitHubMockServer_ReleasesLatest_NotFound(t *testing.T) {
@@ -57,8 +59,8 @@ func TestGitHubMockServer_ReleasesLatest_NotFound(t *testing.T) {
 
 func TestGitHubMockServer_ReleasesList_Pagination(t *testing.T) {
 	mock := NewGitHubMockServer(t)
-	mock.RegisterRelease("owner", "repo", ReleaseSpec{TagName: "v3"})
-	mock.RegisterRelease("owner", "repo", ReleaseSpec{TagName: "v2"})
+	mock.RegisterRelease("owner", "repo", ReleaseSpec{TagName: "v3", PublishedAt: "2026-01-03T00:00:00Z"})
+	mock.RegisterRelease("owner", "repo", ReleaseSpec{TagName: "v2", PublishedAt: "2026-01-02T00:00:00Z"})
 	mock.RegisterRelease("owner", "repo", ReleaseSpec{TagName: "v1"})
 
 	resp, err := http.Get(mock.URL() + "/api/v3/repos/owner/repo/releases?per_page=2")
@@ -72,12 +74,15 @@ func TestGitHubMockServer_ReleasesList_Pagination(t *testing.T) {
 	assert.Contains(t, link, "page=2")
 
 	var page1 []struct {
-		TagName string `json:"tag_name"`
+		TagName     string `json:"tag_name"`
+		PublishedAt string `json:"published_at"`
 	}
 	require.NoError(t, decodeJSON(resp.Body, &page1))
 	require.Len(t, page1, 2)
 	assert.Equal(t, "v3", page1[0].TagName)
 	assert.Equal(t, "v2", page1[1].TagName)
+	assert.Equal(t, "2026-01-03T00:00:00Z", page1[0].PublishedAt)
+	assert.Equal(t, "2026-01-02T00:00:00Z", page1[1].PublishedAt)
 
 	resp2, err := http.Get(mock.URL() + "/api/v3/repos/owner/repo/releases?per_page=2&page=2")
 	require.NoError(t, err)

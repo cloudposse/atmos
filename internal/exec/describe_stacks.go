@@ -480,7 +480,7 @@ func executeDescribeStacks(
 	}
 	authDisabled = authDisabled || authdeferred.AuthDisabled(authManager)
 
-	stacksMap, _, deferredContexts, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
+	stacksMap, rawStackConfigs, deferredContexts, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
 	if err != nil {
 		return nil, err
 	}
@@ -506,6 +506,7 @@ func executeDescribeStacks(
 	// Recover per-component deferred-merge contexts from the FindStacksMap cache so Stage 3
 	// (resolveDeferredYamlFunctions) can run below — see processComponentEntry.
 	processor.deferredContexts = deferredContexts
+	processor.rawStackConfigs = rawStackConfigs
 	if errOptions.OnError == OnErrorWarn {
 		processor.withDegradation(errOptions.OnWarning)
 		if errOptions.StrictAuth {

@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -37,7 +38,7 @@ func Configure(cmd *cobra.Command) error {
 	defer perf.Track(nil, "startup.Configure")()
 
 	PrepareFlags(cmd)
-	return InitializeIO(cmd)
+	return InitializeIO(cmd, nil)
 }
 
 // PrepareFlags applies parsed global flags before anything reads them: the early color profile
@@ -60,7 +61,8 @@ func PrepareFlags(cmd *cobra.Command) {
 // InitializeIO rebuilds the I/O context and the global UI and data writers after flag parsing.
 // This ensures flags like --no-color, --redirect-stderr, --mask are respected.
 // Initialize() sets the global iolib.Data and iolib.UI writers with masking enabled.
-func InitializeIO(cmd *cobra.Command) error {
+// The loaded configuration, when there is one, supplies the masking literals and patterns.
+func InitializeIO(cmd *cobra.Command, config *schema.AtmosConfiguration) error {
 	defer perf.Track(nil, "startup.InitializeIO")()
 
 	if err := iolib.Initialize(); err != nil {
@@ -69,7 +71,7 @@ func InitializeIO(cmd *cobra.Command) error {
 	// The global masker may have been created before CLI flags were parsed (e.g. by early
 	// output), so its enabled state reflects the `--mask` default, not the parsed flag.
 	// Reconcile it now that flags are available so `--mask=false` reliably disables masking.
-	ReconcileMasking(cmd)
+	ReconcileMasking(cmd, config)
 	ioCtx := iolib.GetContext()
 	ui.InitFormatter(ioCtx)
 	data.InitWriter(ioCtx)
@@ -78,10 +80,10 @@ func InitializeIO(cmd *cobra.Command) error {
 }
 
 // InitializeIOOrExit is InitializeIO for the root pre-run, where a failure to build the I/O context is fatal.
-func InitializeIOOrExit(cmd *cobra.Command) {
+func InitializeIOOrExit(cmd *cobra.Command, config *schema.AtmosConfiguration) {
 	defer perf.Track(nil, "startup.InitializeIOOrExit")()
 
-	if err := InitializeIO(cmd); err != nil {
+	if err := InitializeIO(cmd, config); err != nil {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }
@@ -162,10 +164,17 @@ func ConfigureEarlyColorProfile(cmd *cobra.Command) {
 // honors a command-local --mask flag when a subcommand shadows the root flag.
 // Several component command groups register their own persistent common flags;
 // Viper remains bound to the root flag, so the changed local value must win.
-func ReconcileMasking(cmd *cobra.Command) {
+// A nil config skips registering configured literals and patterns.
+func ReconcileMasking(cmd *cobra.Command, config *schema.AtmosConfiguration) {
 	defer perf.Track(nil, "startup.ReconcileMasking")()
 
 	iolib.ReconcileMasking()
+	// Config discovery uses an invocation-local Viper instance. The global I/O
+	// context may predate it, so register the resolved literals and patterns here
+	// while retaining the already-reconciled flag/environment masking policy.
+	if config != nil {
+		iolib.ApplyMaskingConfig(&iolib.Config{AtmosConfig: *config, DisableMasking: !iolib.MaskingEnabled()})
+	}
 	if cmd == nil {
 		return
 	}

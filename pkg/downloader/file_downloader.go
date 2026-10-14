@@ -26,7 +26,7 @@ const (
 )
 
 // isGitHubHTTPURL checks if the given URL is a GitHub HTTP URL that uses rate-limited APIs.
-// This includes raw.githubusercontent.com for file downloads, github.com archive/release URLs,
+// This includes github.com archive/release URLs,
 // and the equivalent hosts for a configured GitHub Enterprise Server (GITHUB_SERVER_URL).
 //
 // Src is parsed and compared by hostname/path rather than by substring, so an unrelated URL
@@ -39,9 +39,10 @@ func isGitHubHTTPURL(src string) bool {
 	}
 	hostname := strings.ToLower(parsed.Hostname())
 
-	// Raw GitHub content (used for mixins, imports, templates).
+	// Public raw content uses a separate service, not the REST API core quota.
+	// Waiting on that quota can exhaust the download deadline before making a request.
 	if hostname == "raw.githubusercontent.com" {
-		return true
+		return false
 	}
 
 	// GitHub (or GHES) archive/release downloads (tarballs, zipballs, release assets), and GHES

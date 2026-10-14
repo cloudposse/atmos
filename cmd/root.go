@@ -552,7 +552,7 @@ var RootCmd = &cobra.Command{
 
 		// Initialize I/O context and global formatter after flag parsing.
 		// This ensures flags like --no-color, --redirect-stderr, --mask are respected.
-		startup.InitializeIOOrExit(cmd)
+		startup.InitializeIOOrExit(cmd, &tmpConfig)
 
 		if castErr := castcmd.StartRecordingIfRequested(cmd, &tmpConfig, os.Args[1:]); castErr != nil {
 			errUtils.CheckErrorPrintAndExit(castErr, "Failed to start cast recording", "")
@@ -839,7 +839,7 @@ func setupColorProfileFromEnvWithArgs(args []string) {
 	// Also check --force-color CLI flag by manually parsing args.
 	// This is needed because Cobra hasn't parsed flags yet during init().
 	if !forceColor {
-		for _, arg := range args {
+		for _, arg := range colorScanArgs(args) {
 			if arg == "--force-color" {
 				forceColor = true
 				break
@@ -937,11 +937,7 @@ func calculateMaxFlagWidth(flags *pflag.FlagSet) int {
 
 // buildFlagDescription creates the flag description with default value if applicable.
 func buildFlagDescription(f *pflag.Flag) string {
-	usage := f.Usage
-	if f.DefValue != "" && f.DefValue != "false" && f.DefValue != "0" && f.DefValue != "[]" && f.Name != "" && f.Name != "help" {
-		usage += fmt.Sprintf(" (default `%s`)", f.DefValue)
-	}
-	return usage
+	return f.Usage + flagDefaultText(f)
 }
 
 // renderWrappedLines renders wrapped description lines with proper indentation.
@@ -1814,6 +1810,11 @@ func Execute() error {
 	executionID, restoreInvocation := proexec.BeginInvocation()
 	defer restoreInvocation()
 	defer perf.Track(&atmosConfig, "cmd.Execute")()
+	restoreScript, scriptErr := prepareStandaloneScript()
+	if scriptErr != nil {
+		return scriptErr
+	}
+	defer restoreScript()
 	defer castcmd.FinalizeRecording()
 	resetExperimentalCommandNotices(RootCmd)
 
@@ -1934,6 +1935,10 @@ func Execute() error {
 			return err
 		}
 	}
+
+	// All package init functions, custom commands, and configured aliases have
+	// registered by now. Snapshot only once the host command tree is complete.
+	registerScriptCommands(RootCmd)
 
 	// Boa styling is already applied via RootCmd.SetHelpFunc() which is inherited by all subcommands.
 	// No need to recursively set UsageFunc as that would override Boa's handling.

@@ -1,0 +1,102 @@
+---
+title: "atmos.support"
+sidebar_position: 8
+sidebar_label: "atmos.support"
+sidebar_class_name: command
+description: Run the atmos support command from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.support` function runs `atmos support` through the current Atmos executable. The command displays
+    information about Atmos support options, including community resources and paid support.
+</Intro>
+
+## Usage
+
+```python
+atmos.support(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+The `support` command has no subcommands. The bare call `atmos.support()` runs `atmos support`, which prints the
+community and paid support options. The command takes no flags other than the help flag.
+
+See the [`atmos support` command reference](/cli/commands/support) for details.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `support`, in order. The command does not use
+        positional arguments. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"help"` becomes
+        `--help`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Show the support options
+
+```python
+atmos.support()
+```
+
+### Capture the text
+
+```python
+info = atmos.support(output = "capture")
+print(info.stdout)
+```
+
+### Include the support text in a failure message
+
+```python
+def fail_with_support(reason):
+    support = atmos.support(output = "capture")
+    fail(reason + "\n\n" + support.stdout)
+```
+
+## Notes
+
+:::note
+The output is written for people and describes where to find help, so calling it from a script is useful mostly for
+showing those links at the end of a failed run or an onboarding flow.
+:::
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos support`](/cli/commands/support) documents the command.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

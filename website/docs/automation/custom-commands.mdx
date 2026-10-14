@@ -1,0 +1,105 @@
+---
+title: Custom Commands
+sidebar_label: Custom Commands
+description: Extend Atmos with project-specific subcommands whose arguments, flags, defaults, and help are defined in YAML.
+id: custom-commands
+slug: /automation/custom-commands
+---
+
+import Intro from '@site/src/components/Intro'
+import EmbedFile from '@site/src/components/EmbedFile'
+import CastEmbed from '@site/src/components/CastEmbed'
+
+<Intro>
+Add a subcommand such as `atmos capacity` by defining it in `atmos.yaml`.
+YAML declares its arguments, flags, help, and steps. Atmos loads the command
+when you run it from your project.
+</Intro>
+
+Give your team a command for a task it repeats: checking a deployment, reporting
+capacity, or preparing a release. Declare the inputs and defaults once in YAML;
+Atmos provides parsing and help, while your script implements the work. The
+command lives with your project and runs the same way locally and in CI.
+
+Install Atmos and put it on your `PATH`. This example needs no stacks,
+components, or external tools.
+
+## Define your subcommand
+
+Save this configuration as `atmos.yaml`:
+
+<EmbedFile filePath="examples/starlark-commands/atmos.yaml" />
+
+The YAML defines the command name, description, `--replicas` flag, default, and
+step to run. The embedded Atmos Automation Language program implements the
+calculation and checks that the replica count is positive.
+
+The step selects the Atmos Automation Language, a Python-like language based on
+Starlark, with `type: script` and `interpreter: starlark`. The interpreter ships
+with Atmos, so this command needs no separate language runtime.
+
+## Run the command
+
+Run from the directory containing `atmos.yaml`:
+
+```shell
+atmos capacity --replicas 3
+```
+
+```text
+✓ 3 replicas x 4 workers = 12 workers
+```
+
+Atmos discovers the custom command, parses its flag, and runs the script. Your
+team uses the same command locally and in CI.
+
+Omit the flag to use the default of two replicas:
+
+```shell
+atmos capacity
+```
+
+```text
+✓ 2 replicas x 4 workers = 8 workers
+```
+
+Run `atmos capacity --help` to see the command description and generated flag help:
+
+```text
+--replicas string  Number of service replicas (default 2)
+```
+
+<CastEmbed src="/casts/examples/starlark-commands/capacity.cast" title="Custom command: atmos capacity --replicas 3" chrome controls scrubber />
+
+## Use inputs in your program
+
+Script steps read parsed flags from `ctx.flags` and named positional arguments
+from `ctx.arguments`. These mappings are read-only, and values stay data rather
+than being inserted into the program's source.
+
+The example declares `replicas` as a string flag, so the script converts
+`ctx.flags["replicas"]` with `int()` before calculating. A boolean flag would
+arrive as a boolean. The step calls `fail("replicas must be positive")` for zero
+or negative counts, stopping the command with that error.
+
+Try `atmos capacity --replicas 0` to see the validation error.
+
+Declare a flag with `type: int` to receive an integer in `ctx.flags` and drop the `int()`
+conversion. An optional argument (`required: false`, no `default`) that the caller omits is an
+empty string in `ctx.arguments`, so test it with `if ctx.arguments["region"]:`. See
+[flags](/cli/configuration/commands/flags#integer-flags) and
+[optional arguments](/cli/configuration/commands/arguments#optional-arguments).
+
+## Grow the command
+
+Custom commands can have multiple steps, named arguments, nested subcommands,
+and component context. Start with the interface your team needs, then compose
+the operations behind it. Move shared program logic into `.star` files when
+several commands need the same behavior.
+
+See the [custom command configuration reference](/cli/configuration/commands)
+for the full YAML schema and the
+[language overview](/automation/language) for language
+helpers and execution controls. The
+[complete runnable example](/examples/starlark-commands) contains the configuration
+used throughout this guide.

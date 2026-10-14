@@ -1,0 +1,110 @@
+---
+title: "json.decode"
+sidebar_position: 17
+sidebar_label: "json.decode"
+sidebar_class_name: command
+description: Parse a JSON string into dictionaries, lists, and scalar values.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `json.decode` function parses a JSON string into values a script can work with. Use it to read the output of
+    commands run with `--format=json`, the contents of a JSON file, or a document received from another program.
+</Intro>
+
+## Usage
+
+```python
+json.decode(x, default)
+```
+
+## Arguments
+
+<dl>
+    <dt>`x`</dt>
+    <dd>Required. The JSON text, as a string. It must be passed positionally.</dd>
+
+    <dt>`default`</dt>
+    <dd>
+        (Optional) The value to return when `x` is not valid JSON. Without it, invalid JSON stops the script with an
+        error. Any value is accepted, including `None`, and it can be passed positionally or as `default = ...`.
+    </dd>
+</dl>
+
+## Returns
+
+The value the text denotes:
+
+| JSON | Value |
+| --- | --- |
+| Object | A new dictionary |
+| Array | A new list |
+| String | A string |
+| Number without a decimal point or exponent | An integer |
+| Number with a decimal point or exponent | A float |
+| `true`, `false` | `True`, `False` |
+| `null` | `None` |
+
+The returned dictionaries and lists are ordinary values that the script can modify.
+
+## Examples
+
+### Parse a document
+
+```python
+config = json.decode('{"replicas": 3, "ratio": 0.5, "items": [1, 2.0, "x", null, true]}')
+print(config["replicas"], type(config["replicas"]))
+print(config["ratio"], type(config["ratio"]))
+print(config["items"])
+```
+
+```text
+3 int
+0.5 float
+[1, 2.0, "x", None, True]
+```
+
+### Read structured command output
+
+```python
+result = atmos.run(
+    ["describe", "component", "vpc", "--stack=dev", "--format=json"],
+    output = "capture",
+)
+component = json.decode(result.stdout)
+output = component["vars"]["cidr_block"]
+```
+
+### Fall back to a default
+
+```python
+settings = json.decode(fs.read_file("settings.json"), default = {})
+region = settings.get("region", "us-east-1")
+```
+
+If `settings.json` exists but contains invalid JSON, `settings` is `{}`. A missing file still fails, because
+[`fs.read_file`](/functions/automation/fs.read_file) raises before `json.decode` runs.
+
+### Detect invalid input
+
+```python
+parsed = json.decode("not json", None)
+if parsed == None:
+    ui.warning("The response was not JSON")
+```
+
+Because `None` is also what `null` decodes to, use a different sentinel, such as `{}` or a unique string, when the
+document itself can be `null`.
+
+## Errors
+
+- Invalid JSON without a `default` fails with a message such as `json.decode: at offset 1, unexpected character 'b'`.
+- Passing `x` as a keyword, or a value that is not a string, fails with an argument error.
+
+## Related
+
+- [`json.encode`](/functions/automation/json.encode) converts values to JSON text.
+- [`json.indent`](/functions/automation/json.indent) and [`json.encode_indent`](/functions/automation/json.encode_indent) format JSON for reading.
+- [`fs.read_file`](/functions/automation/fs.read_file) and [`atmos.run`](/functions/automation/atmos.run) supply JSON to decode.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script)

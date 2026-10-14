@@ -1,0 +1,132 @@
+---
+title: "atmos.devcontainer"
+sidebar_position: 8
+sidebar_label: "atmos.devcontainer"
+sidebar_class_name: command
+description: Run an atmos devcontainer command, such as start, exec, or stop, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.devcontainer` function runs `atmos devcontainer` through the current Atmos executable. Use it to
+    start, stop, rebuild, and run commands in development containers from automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.devcontainer(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
+`atmos.devcontainer("start", "default")` runs `atmos devcontainer start default`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`list`](/cli/commands/devcontainer/list) | List available devcontainers. |
+| [`config`](/cli/commands/devcontainer/config) | Show devcontainer configuration. |
+| [`start`](/cli/commands/devcontainer/start) | Start a devcontainer. |
+| [`stop`](/cli/commands/devcontainer/stop) | Stop a running devcontainer. |
+| [`rebuild`](/cli/commands/devcontainer/rebuild) | Rebuild a devcontainer. |
+| [`remove`](/cli/commands/devcontainer/remove) | Remove a devcontainer. |
+| [`exec`](/cli/commands/devcontainer/exec) | Execute a command in a running devcontainer. |
+| [`logs`](/cli/commands/devcontainer/logs) | Show logs from a devcontainer. |
+| [`attach`](/cli/commands/devcontainer/attach) | Attach to a running devcontainer. |
+| [`shell`](/cli/commands/devcontainer/shell) | Launch a shell in a devcontainer. |
+
+See the [`atmos devcontainer` command reference](/cli/commands/devcontainer) for the complete list of subcommands and
+flags.
+
+:::note
+The `devcontainer` command is experimental, so each call prints the experimental notice. The `attach` and `shell`
+subcommands, and `exec` with the `interactive` flag, need a terminal, so use `exec` with a command after the `--`
+separator to run non-interactively.
+:::
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `devcontainer`, in order: the subcommand and its positional arguments, such as the devcontainer name. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). The `instance` key becomes
+        `--instance` and selects a named instance of the devcontainer. Other keys include `identity` for `start`,
+        `rebuild`, and `shell`, `follow` and `tail` for `logs`, and `timeout` and `rm` for `stop`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Start a devcontainer instance
+
+```python
+atmos.devcontainer("start", "geodesic", flags = {"instance": "ci"})
+```
+
+### Run a command inside a running devcontainer
+
+```python
+atmos.devcontainer(
+    "exec", "geodesic",
+    flags = {"instance": "ci"},
+    args = ["--", "terraform", "version"],
+)
+```
+
+Everything after the `--` separator is the command to run. The call runs
+`atmos devcontainer exec geodesic --instance=ci -- terraform version`.
+
+### Run a job and clean up
+
+```python
+def run_in_devcontainer():
+    atmos.devcontainer("start", "geodesic", flags = {"instance": "ci"})
+    return atmos.devcontainer(
+        "exec", "geodesic",
+        flags = {"instance": "ci"},
+        args = ["--", "make", "test"],
+        output = "capture",
+        check = False,
+    )
+
+outcome = run_in_devcontainer()
+atmos.devcontainer("stop", "geodesic", flags = {"instance": "ci", "rm": True})
+if outcome.exit_code != 0:
+    fail("Tests failed in the devcontainer:\n" + outcome.stdout)
+```
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos devcontainer`](/cli/commands/devcontainer) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

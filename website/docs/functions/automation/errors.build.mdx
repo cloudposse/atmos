@@ -1,0 +1,117 @@
+---
+title: "errors.build"
+sidebar_label: "errors.build"
+sidebar_class_name: command
+description: Build actionable errors with Atmos's standard titles, explanations, hints, examples, context, and exit codes.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Give errors in your automation the same presentation as Atmos's own errors.
+`errors.build` creates an error builder; add an explanation, recovery hints,
+examples, or context, then call `.fail()` to stop the script.
+</Intro>
+
+## Usage
+
+```python
+(errors.build("Deployment blocked")
+    .with_title("Release error")
+    .with_explanation("The api component has no owner.")
+    .with_hint("Set vars.owner before deploying.")
+    .with_example("vars:\n  owner: platform")
+    .with_context("component", "api")
+    .with_exit_code(3)
+    .fail())
+```
+
+Atmos displays the error with its explanation, hints, and example. Context appears
+in verbose output. For a standalone script, this example exits with code `3`.
+The traceback identifies the script location that called `.fail()`.
+
+Use the standard [`fail()`](/automation/reference/builtin-functions#fail) when
+a message alone is enough. `log.error()` writes a diagnostic and does not stop
+execution; `.fail()` raises an error.
+
+## Builder methods
+
+<dl>
+  <dt>`errors.build(message)`</dt>
+  <dd>Creates a builder from a non-empty string. Creating a builder does not stop the script or print anything.</dd>
+
+  <dt>`.with_title(title)`</dt>
+  <dd>Sets the error heading. Atmos uses its default heading if omitted.</dd>
+
+  <dt>`.with_explanation(explanation)`</dt>
+  <dd>Adds a string explaining what went wrong. Markdown is supported by Atmos's error formatter.</dd>
+
+  <dt>`.with_hint(hint)`</dt>
+  <dd>Adds an actionable recovery hint. Call it more than once to provide several suggestions.</dd>
+
+  <dt>`.with_example(example)`</dt>
+  <dd>Adds a string to the formatter's example section, such as a command or configuration snippet.</dd>
+
+  <dt>`.with_context(key, value)`</dt>
+  <dd>
+    Adds diagnostic context. The key must be an identifier, such as `component` or
+    `stack`; the value must be a string, number, boolean, or `None`. Values are
+    stored as text. Use non-secret diagnostic values: the error builder marks this
+    context as safe for error reporting.
+  </dd>
+
+  <dt>`.with_cause(cause)`</dt>
+  <dd>
+    Attaches an underlying failure, supplied as a non-empty string or another
+    error builder. Its message and diagnostics are preserved. Settings on the
+    outer builder take precedence over the cause's title, exit code, and context
+    values with the same key.
+  </dd>
+
+  <dt>`.with_exit_code(code)`</dt>
+  <dd>
+    Attaches an integer exit code from `1` through `255`. The standalone CLI uses
+    it when the error reaches the command boundary. A surrounding workflow or test
+    step can determine its own exit status.
+  </dd>
+
+  <dt>`.fail()`</dt>
+  <dd>Stops the script with the enriched error. Takes no arguments and does not return.</dd>
+</dl>
+
+Every `with_*` method returns a new builder and leaves the original unchanged.
+Chain methods or assign the returned builder. Repeated hints, explanations, and
+examples accumulate; later titles, exit codes, and values for the same context
+key replace earlier ones.
+
+Use Starlark's string formatting for dynamic messages, such as
+`.with_hint("Check the {} component".format(name))`.
+To include an example stored in a file, use `.with_example(fs.read_file("example.yaml"))`.
+
+## Share an error template
+
+Builders are immutable and can be shared by loaded modules and parallel tasks:
+
+```python
+missing_owner = errors.build("Component has no owner").with_hint("Set vars.owner.")
+
+def require_owner(component):
+    if not component.vars.get("owner"):
+        missing_owner.with_context("component", component.name).fail()
+```
+
+An error raised in a parallel task keeps its diagnostics alongside that task's
+name and traceback. If several tasks fail, their hints, explanations, and
+examples are collected in input order. The last supplied title, exit code, or
+value for a shared context key wins; use distinct context keys when each task's
+value matters. Retries that eventually succeed do not raise a final error.
+
+## Error reporting
+
+Errors that reach the command boundary use Atmos's normal error reporting path.
+When [Sentry is configured](/cli/configuration/errors), the report includes hints
+as breadcrumbs, safe context, and the exit code. Reporting follows the configured
+masking and redaction behavior. Creating a builder does not send a report.
+
+Starlark source locations remain in the diagnostic traceback; they are not
+mapped to native Sentry source frames. See [script error reporting](/steps/type/script#secrets-stores-and-error-reporting).

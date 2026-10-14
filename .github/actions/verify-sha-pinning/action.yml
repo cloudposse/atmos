@@ -58,6 +58,15 @@ runs:
 
           const workflowDir = process.env.WORKFLOW_DIR;
           const tagShaCache = new Map();
+          let rateLimitError;
+
+          // Keep potentially large diagnostics out of process environment variables.
+          function writeResults(results) {
+            const dir = fs.mkdtempSync(path.join(process.env.RUNNER_TEMP, 'sha-pin-verification-'));
+            const file = path.join(dir, 'results.json');
+            fs.writeFileSync(file, JSON.stringify(results));
+            core.setOutput('results_file', file);
+          }
           const nonRetryableStatuses = new Set([400, 401, 403, 404, 422]);
 
           // A non-empty string, trimmed.
@@ -112,11 +121,17 @@ runs:
           const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
           async function withRetries(operation, label, maxAttempts = 3) {
+            if (rateLimitError) throw rateLimitError;
             let lastErr;
             for (let attempt = 1; attempt <= maxAttempts; attempt++) {
               try {
                 return await operation();
               } catch (err) {
+                // Quota exhaustion applies to every endpoint, including mismatch diagnostics.
+                if (err.status === 403 && err.response?.headers?.['x-ratelimit-remaining'] === '0') {
+                  rateLimitError = err;
+                  throw err;
+                }
                 if (nonRetryableStatuses.has(err.status)) {
                   throw err;
                 }
@@ -142,7 +157,7 @@ runs:
             core.setOutput('unpinned_count', 0);
             core.setOutput('allowlisted_count', 0);
             core.setOutput('status', 'pass');
-            core.setOutput('results_json', '[]');
+            writeResults([]);
             return;
           }
 
@@ -194,7 +209,7 @@ runs:
             core.setOutput('unpinned_count', 0);
             core.setOutput('allowlisted_count', 0);
             core.setOutput('status', 'pass');
-            core.setOutput('results_json', '[]');
+            writeResults([]);
             return;
           }
 
@@ -206,6 +221,9 @@ runs:
             if (tagShaCache.has(cacheKey)) {
               return tagShaCache.get(cacheKey);
             }
+            // An exhausted installation token cannot resolve any further tags.
+            // Cached successes remain usable; unresolved references still fail.
+            if (rateLimitError) throw rateLimitError;
 
             try {
               const ref = await withRetries(
@@ -249,17 +267,8 @@ runs:
                 throw new Error(`Tag "${tag}" not found in ${owner}/${repo}`);
               }
               if (err.status === 403) {
-                // A rate-limit 403 isn't a per-repo access-block condition —
-                // it means this token is out of budget for every remaining
-                // lookup, allowlisted repo or not. Let it fail loudly instead
-                // of being silently absorbed by one repo's allowlist entry.
-                // Detected via the documented x-ratelimit-remaining response
-                // header (a structured API signal), never by inspecting the
-                // error's message text.
-                const rateLimitRemaining = err.response?.headers?.['x-ratelimit-remaining'];
-                if (rateLimitRemaining === '0') {
-                  throw err;
-                }
+                // Quota failures stay hard errors even for allowlisted repositories.
+                if (err === rateLimitError) throw err;
                 throw new AccessBlockedError(
                   `API access blocked (403) resolving tag "${tag}" in ${owner}/${repo}: ${err.message}`,
                   err
@@ -281,6 +290,7 @@ runs:
               );
               details.existsInRepo = true;
             } catch (err) {
+              if (err === rateLimitError) throw err;
               details.existsInRepo = (err.status !== 404 && err.status !== 422);
             }
 
@@ -296,7 +306,8 @@ runs:
                 details.matchingTags = tags
                   .filter(t => t.commit.sha === pinnedSha)
                   .map(t => t.name);
-              } catch {
+              } catch (err) {
+                if (err === rateLimitError) throw err;
                 // Non-fatal — we still have the existence check
               }
             }
@@ -416,7 +427,7 @@ runs:
           core.setOutput('unpinned_count', unpinned);
           core.setOutput('allowlisted_count', allowlisted);
           core.setOutput('status', (failed > 0 || unpinned > 0) ? 'fail' : 'pass');
-          core.setOutput('results_json', JSON.stringify(results));
+          writeResults(results);
 
           if (failed > 0 || unpinned > 0) {
             core.setFailed(
@@ -427,10 +438,10 @@ runs:
           }
 
     - name: Post or update PR comment
-      if: always() && github.event_name == 'pull_request'
+      if: always() && github.event_name == 'pull_request' && steps.verify.outputs.results_file != ''
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
-        RESULTS_JSON: ${{ steps.verify.outputs.results_json }}
+        RESULTS_FILE: ${{ steps.verify.outputs.results_file }}
         VERIFIED_COUNT: ${{ steps.verify.outputs.verified_count }}
         FAILED_COUNT: ${{ steps.verify.outputs.failed_count }}
         UNPINNED_COUNT: ${{ steps.verify.outputs.unpinned_count }}
@@ -467,7 +478,7 @@ runs:
             return;
           }
 
-          const results = JSON.parse(process.env.RESULTS_JSON || '[]');
+          const results = JSON.parse(require('fs').readFileSync(process.env.RESULTS_FILE, 'utf8'));
           const verified = parseInt(process.env.VERIFIED_COUNT || '0', 10);
           const failed = parseInt(process.env.FAILED_COUNT || '0', 10);
           const unpinned = parseInt(process.env.UNPINNED_COUNT || '0', 10);
@@ -490,7 +501,13 @@ runs:
           // Shared row renderer — used by both the failure table and the
           // allowlisted-only warning table below, so the two stay in sync.
           function renderRows(rs) {
-            return rs.map(r => {
+            const visible = rs.slice(0, 20).map(r => ({
+              ...r,
+              action: String(r.action ?? '').slice(0, 200),
+              file: String(r.file ?? '').slice(0, 200),
+              detail: (r.detail || '').replaceAll('|', '&#124;').replaceAll('\n', ' ').slice(0, 300),
+            }));
+            const rows = visible.map(r => {
               const loc = `\`${r.file}:${r.line}\``;
               if (r.status === 'verified') {
                 return `| \`${r.action}\` | ${loc} | ✅ Verified | |`;
@@ -506,6 +523,7 @@ runs:
               }
               return `| \`${r.action}\` | ${loc} | ❌ ${r.status === 'error' ? 'Error' : 'Mismatch'} | ${r.detail || ''} |`;
             }).join('\n');
+            return rows + (rs.length > visible.length ? `\n\nShowing ${visible.length} of ${rs.length} references; see the action run for all results.` : '');
           }
 
           const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
@@ -520,7 +538,7 @@ runs:
 
           | Action | Location | Status | Details |
           |--------|----------|--------|---------|
-          ${renderRows(results)}
+          ${renderRows(results.filter(r => ['error', 'mismatch', 'unpinned'].includes(r.status)))}
 
           See the [action run](${runUrl}) for full details.`;
           } else if (total === 0) {

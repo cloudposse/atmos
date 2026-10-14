@@ -2,16 +2,21 @@
 package server
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	stdio "io"
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -3310,79 +3315,24 @@ func TestSetupMCPServer_NoConfigFile(t *testing.T) {
 	assert.Nil(t, server)
 }
 
-// TestExecuteMCPServer_StdioTransportWithSignal tests executeMCPServer with stdio transport.
-func TestExecuteMCPServer_StdioTransportWithSignal(t *testing.T) {
-	// Skip in short mode since this test involves server startup.
+// TestExecuteMCPServer_StdioTransportWithEOF tests executeMCPServer with stdio transport.
+func TestExecuteMCPServer_StdioTransportWithEOF(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping server startup test in short mode")
 	}
-
 	tmpDir := createTestAtmosDir(t, true, true)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
-
-	// Create command with stdio transport.
-	cmd := &cobra.Command{}
-	cmd.Flags().String("transport", "stdio", "")
-	cmd.Flags().String("host", "localhost", "")
-	cmd.Flags().Int("port", 8080, "")
-
-	// Run in goroutine and cancel after a short time.
-	done := make(chan error, 1)
-	go func() {
-		done <- executeMCPServer(cmd, nil)
-	}()
-
-	// Give server time to start then send signal.
-	time.Sleep(100 * time.Millisecond)
-
-	// Check if the server is running (may not be able to fully test without stdin).
-	select {
-	case err := <-done:
-		// Server may exit due to stdin being closed.
-		if err != nil {
-			t.Logf("Server exited with: %v", err)
-		}
-	case <-time.After(500 * time.Millisecond):
-		// Server is running, test passes.
-		t.Log("Server is running")
-	}
+	runMCPServerStartupSubprocess(t, "stdio")
 }
 
 // TestExecuteMCPServer_HTTPTransportWithQuickShutdown tests executeMCPServer with HTTP transport.
 func TestExecuteMCPServer_HTTPTransportWithQuickShutdown(t *testing.T) {
-	// Skip in short mode since this test involves server startup.
 	if testing.Short() {
 		t.Skip("Skipping server startup test in short mode")
 	}
-
 	tmpDir := createTestAtmosDir(t, true, true)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
-
-	// Create command with HTTP transport on a random port.
-	cmd := &cobra.Command{}
-	cmd.Flags().String("transport", "http", "")
-	cmd.Flags().String("host", "127.0.0.1", "")
-	cmd.Flags().Int("port", 0, "") // Port 0 lets OS pick.
-
-	// Run in goroutine.
-	done := make(chan error, 1)
-	go func() {
-		done <- executeMCPServer(cmd, nil)
-	}()
-
-	// Give server time to start.
-	time.Sleep(200 * time.Millisecond)
-
-	// Server should be running.
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Logf("Server exited with: %v", err)
-		}
-	case <-time.After(500 * time.Millisecond):
-		// Server is running, test passes.
-		t.Log("HTTP server is running")
-	}
+	runMCPServerStartupSubprocess(t, "http")
 }
 
 // TestExecuteMCPServer_ToolsDisabled tests executeMCPServer when tools are disabled.
@@ -3390,39 +3340,12 @@ func TestExecuteMCPServer_HTTPTransportWithQuickShutdown(t *testing.T) {
 // empty tool registry) rather than failing when ai.tools.enabled is false; mcp.enabled: true
 // is the server's own explicit opt-in.
 func TestExecuteMCPServer_ToolsDisabled(t *testing.T) {
-	// Skip in short mode since this test involves server startup.
 	if testing.Short() {
 		t.Skip("Skipping server startup test in short mode")
 	}
-
 	tmpDir := createTestAtmosDir(t, true, false)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
-
-	// Create a command with valid transport.
-	cmd := &cobra.Command{}
-	cmd.Flags().String("transport", "stdio", "")
-	cmd.Flags().String("host", "localhost", "")
-	cmd.Flags().Int("port", 8080, "")
-
-	// Run in goroutine since a successful start blocks waiting for shutdown.
-	done := make(chan error, 1)
-	go func() {
-		done <- executeMCPServer(cmd, nil)
-	}()
-
-	// Give the server time to start past the setup phase.
-	time.Sleep(100 * time.Millisecond)
-
-	select {
-	case err := <-done:
-		// Server may exit due to stdin being closed; it must not be the old setup error.
-		if err != nil {
-			assert.NotContains(t, err.Error(), "failed to initialize AI components")
-		}
-	case <-time.After(500 * time.Millisecond):
-		// Server is running, test passes.
-		t.Log("Server is running")
-	}
+	runMCPServerStartupSubprocess(t, "stdio")
 }
 
 // TestStartHTTPServer_MessageEndpoint tests posting a message to the streamable HTTP endpoint.
@@ -3596,4 +3519,132 @@ func TestServerSDKMethod(t *testing.T) {
 	// Verify SDK() does not panic and returns something.
 	sdk := server.SDK()
 	assert.NotNil(t, sdk)
+}
+
+// TestExecuteMCPServerStartupJoinsWorkers verifies startup smoke tests own their workers.
+func TestExecuteMCPServerStartupJoinsWorkers(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping server startup test in short mode")
+	}
+	for _, tc := range []struct {
+		name string
+		run  func(*testing.T)
+	}{
+		{"http", TestExecuteMCPServer_HTTPTransportWithQuickShutdown},
+		{"stdio", TestExecuteMCPServer_StdioTransportWithEOF},
+		{"tools disabled", TestExecuteMCPServer_ToolsDisabled},
+	} {
+		t.Run(tc.name, tc.run)
+		stack := make([]byte, 2<<20)
+		n := runtime.Stack(stack, true)
+		require.Less(t, n, len(stack), "goroutine dump must not be truncated")
+		assert.NotContains(t, string(stack[:n]), "server.executeMCPServer(", "startup test must join its server before returning")
+	}
+}
+
+// TestMCPServerStartupHelper executes only when selected by the subprocess harness.
+func TestMCPServerStartupHelper(t *testing.T) {
+	if os.Getenv("ATMOS_MCP_STARTUP_HELPER") != "1" {
+		return
+	}
+	port, err := strconv.Atoi(os.Getenv("ATMOS_MCP_STARTUP_PORT"))
+	require.NoError(t, err)
+	cmd := &cobra.Command{}
+	cmd.Flags().String("transport", os.Getenv("ATMOS_MCP_STARTUP_TRANSPORT"), "")
+	cmd.Flags().String("host", "127.0.0.1", "")
+	cmd.Flags().Int("port", port, "")
+	require.NoError(t, executeMCPServer(cmd, nil))
+}
+
+func runMCPServerStartupSubprocess(t *testing.T, transport string) {
+	t.Helper()
+	port := 0
+	if transport == transportHTTP {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		port = listener.Addr().(*net.TCPAddr).Port
+		require.NoError(t, listener.Close())
+	}
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, executable, "-test.run=^TestMCPServerStartupHelper$")
+	cmd.Env = append(os.Environ(), "ATMOS_MCP_STARTUP_HELPER=1", "ATMOS_MCP_STARTUP_TRANSPORT="+transport,
+		"ATMOS_MCP_STARTUP_PORT="+strconv.Itoa(port))
+	cmd.WaitDelay = 3 * time.Second
+	stdin, err := cmd.StdinPipe()
+	require.NoError(t, err)
+	stdout, err := cmd.StdoutPipe()
+	require.NoError(t, err)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	require.NoError(t, cmd.Start())
+	done := make(chan struct{})
+	var waitErr error
+	go func() { waitErr = cmd.Wait(); close(done) }()
+	// Always join before t.Setenv restores the fixture or another test swaps global UI.
+	t.Cleanup(func() {
+		cancel()
+		<-done
+		_ = stdin.Close()
+		if t.Failed() {
+			t.Logf("MCP helper stderr: %s", stderr.String())
+		}
+	})
+	if transport == transportHTTP {
+		waitForMCPHTTPReadiness(t, port)
+		if runtime.GOOS == "windows" {
+			require.NoError(t, cmd.Process.Kill())
+		} else {
+			require.NoError(t, cmd.Process.Signal(os.Interrupt))
+		}
+	} else {
+		requireMCPStdioReadiness(t, stdin, stdout)
+		require.NoError(t, stdin.Close())
+	}
+	<-done
+	require.NoError(t, ctx.Err(), "server must finish before the subprocess deadline")
+	if transport == transportHTTP && runtime.GOOS == "windows" {
+		var exitErr *exec.ExitError
+		require.ErrorAs(t, waitErr, &exitErr)
+	} else {
+		require.NoError(t, waitErr, stderr.String())
+	}
+	require.NotNil(t, cmd.ProcessState, "startup test must reap its child process")
+}
+
+func waitForMCPHTTPReadiness(t *testing.T, port int) {
+	t.Helper()
+	client := &http.Client{Timeout: time.Second}
+	defer client.CloseIdleConnections()
+	require.Eventually(t, func() bool {
+		response, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/health", port))
+		if err != nil {
+			return false
+		}
+		defer response.Body.Close()
+		body, err := stdio.ReadAll(response.Body)
+		return err == nil && response.StatusCode == http.StatusOK && string(body) == `{"status":"healthy"}`
+	}, 20*time.Second, 10*time.Millisecond, "child MCP HTTP server must become healthy")
+}
+
+func requireMCPStdioReadiness(t *testing.T, stdin stdio.Writer, stdout stdio.Reader) {
+	t.Helper()
+	request := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"startup-test","version":"1"}}}` + "\n"
+	_, err := stdio.WriteString(stdin, request)
+	require.NoError(t, err)
+	line, err := bufio.NewReader(stdout).ReadBytes('\n')
+	require.NoError(t, err)
+	var response struct {
+		ID     int `json:"id"`
+		Result struct {
+			ServerInfo struct {
+				Name string `json:"name"`
+			} `json:"serverInfo"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(line, &response))
+	require.Equal(t, 1, response.ID)
+	require.Equal(t, "atmos-mcp-server", response.Result.ServerInfo.Name, "child must complete the real MCP initialization handshake")
 }

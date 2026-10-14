@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	atmostemplate "github.com/cloudposse/atmos/pkg/template"
@@ -134,6 +135,10 @@ func evaluationReferences(value any, delimiters []string) ([][]string, bool) {
 			paths = append(paths, refs...)
 		}
 	case string:
+		// Starlark can select context keys dynamically; preserve the full rendered context.
+		if starlarksource.Is(v) {
+			return nil, false
+		}
 		return templateEvaluationReferences(v, delimiters)
 	}
 	return paths, true

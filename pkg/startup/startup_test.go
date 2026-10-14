@@ -127,7 +127,7 @@ func TestReconcileMaskingHonorsShadowingFlag(t *testing.T) {
 			leaf := &cobra.Command{Use: "leaf"}
 			parent.AddCommand(leaf)
 
-			ReconcileMasking(leaf)
+			ReconcileMasking(leaf, nil)
 
 			assert.Equal(t, tt.want, iolib.MaskingEnabled())
 		})
@@ -138,7 +138,7 @@ func TestReconcileMaskingToleratesNilCommand(t *testing.T) {
 	resetGlobals(t)
 	require.NoError(t, iolib.Initialize())
 
-	assert.NotPanics(t, func() { ReconcileMasking(nil) })
+	assert.NotPanics(t, func() { ReconcileMasking(nil, nil) })
 	assert.True(t, iolib.MaskingEnabled())
 }
 

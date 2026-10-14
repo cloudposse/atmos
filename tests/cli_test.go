@@ -950,30 +950,20 @@ func TestMain(m *testing.M) {
 	githubMock, githubMockClose = httpmock.NewGitHubMockServerStandalone()
 	os.Setenv("ATMOS_TEST_GITHUB_MOCK_URL", githubMock.URL()) //nolint:lintroller // Set before m.Run(); no *testing.T available in TestMain; must persist process-wide for every subtest.
 
-	// Register the one raw-content fixture tests/test-cases/atmos-include-yaml-function.yaml's
-	// !include points at (see the comment on that fixture's settings: line), so the case that
-	// opts into ATMOS_TEST_GITHUB_MOCK_URL gets real, checked-in content back instead of a 404.
-	includeFixturePath := filepath.Join(repoRoot, "tests", "fixtures", "scenarios",
-		"stack-templates-2", "stacks", "deploy", "nonprod.yaml")
-	// This route is required by the opted-in CLI test case, so an unreadable fixture is a setup
-	// error: fail here, where the cause is named, instead of letting the case report a 404.
-	includeFixtureContent, readErr := os.ReadFile(includeFixturePath)
-	if readErr != nil {
-		logger.Error("failed to read atmos-include-yaml-function raw-fetch fixture", "path", includeFixturePath, "error", readErr)
-		githubMockClose()
-		errUtils.Exit(1)
+	// Serve checked-in remote inputs over HTTP so include and docs tests exercise downloads
+	// without depending on GitHub availability or the CI token's remaining rate limit.
+	for _, fixturePath := range []string{
+		"tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml",
+		"README.yaml",
+	} {
+		content, readErr := os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(fixturePath)))
+		if readErr != nil {
+			logger.Error("failed to read raw-fetch fixture", "path", fixturePath, "error", readErr)
+			githubMockClose()
+			errUtils.Exit(1)
+		}
+		githubMock.RegisterRawFile("cloudposse", "atmos", "main", fixturePath, string(content))
 	}
-	githubMock.RegisterRawFile("cloudposse", "atmos", "main",
-		"tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml", string(includeFixtureContent))
-
-	// Serve the docs input-variants test's remote input from this checkout.
-	readmeFixtureContent, readErr := os.ReadFile(filepath.Join(repoRoot, "README.yaml"))
-	if readErr != nil {
-		logger.Error("failed to read docs generation fixture", "error", readErr)
-		githubMockClose()
-		errUtils.Exit(1)
-	}
-	githubMock.RegisterRawFile("cloudposse", "atmos", "main", "README.yaml", string(readmeFixtureContent))
 
 	// Keep toolchain info snapshots independent of upstream releases and API quotas.
 	for _, tool := range []struct{ owner, repo, tag, prefix string }{
