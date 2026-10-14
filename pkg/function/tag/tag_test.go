@@ -12,6 +12,7 @@ func TestCatalog(t *testing.T) {
 	require.NotEmpty(t, tags)
 
 	expectedTags := []string{
+		Starlark,
 		Exec,
 		Secret,
 		Store,
@@ -98,6 +99,7 @@ func TestAtmosConfigYAML(t *testing.T) {
 		"!cwd",
 		"!random",
 		"!unset",
+		"!literal",
 	}
 
 	assert.Equal(t, expected, configTags)

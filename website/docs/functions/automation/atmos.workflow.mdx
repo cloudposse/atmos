@@ -1,0 +1,128 @@
+---
+title: "atmos.workflow"
+sidebar_position: 8
+sidebar_label: "atmos.workflow"
+sidebar_class_name: command
+description: Run an atmos workflow, or list workflows, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.workflow` function runs `atmos workflow` through the current Atmos executable. Use it to run a named
+    workflow from a script, resume it from a step, or list the workflows defined in the project.
+</Intro>
+
+## Usage
+
+```python
+atmos.workflow(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+The first positional is the workflow name. The call `atmos.workflow("deploy", flags = {"file": "deploy"})` runs
+`atmos workflow deploy --file=deploy`.
+
+| Positional | Purpose |
+| --- | --- |
+| `NAME` | Run the workflow with this name. Without `file`, Atmos finds the workflow across all workflow files. |
+| `list` | List all Atmos workflows. This is an alias for `atmos list workflows`. |
+
+See the [`atmos workflow` command reference](/cli/commands/workflow) for the complete list of flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `workflow`, in order: the workflow name, or
+        `"list"`. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"file"` becomes
+        `--file`, and registered shorthands such as `"f"` and `"s"` resolve to `--file` and `--stack`. Common keys
+        for running a workflow are `"file"`, `"stack"`, `"from-step"`, `"dry-run"`, and `"identity"`. The
+        `list` form accepts `"format"`, `"columns"`, `"sort"`, and `"file"`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Run a workflow
+
+```python
+atmos.workflow("deploy", flags = {"file": "deploy", "stack": "dev"})
+```
+
+This runs `atmos workflow deploy --file=deploy --stack=dev`.
+
+### Preview a workflow without changes
+
+```python
+atmos.workflow("deploy", flags = {"file": "deploy", "dry-run": True})
+```
+
+### Resume from a step
+
+```python
+atmos.workflow("deploy", flags = {"file": "deploy", "from-step": "plan"})
+```
+
+### Choose a workflow from the list
+
+The `list` form with `format` set to `json` returns the workflows as data, so a script can decide what to run.
+
+```python
+listing = atmos.workflow("list", flags = {"format": "json"}, output = "capture")
+for workflow in json.decode(listing.stdout):
+    ui.info(workflow["Workflow"] + " in " + workflow["File"] + ": " + workflow["Description"])
+```
+
+### Handle a failed workflow
+
+```python
+result = atmos.workflow("deploy", flags = {"file": "deploy"}, output = "capture", check = False)
+if result.exit_code != 0:
+    ui.warning("The deploy workflow failed.")
+    print(result.stderr)
+```
+
+## Notes
+
+:::note
+Always pass a workflow name. Without one, `atmos workflow` opens an interactive selector that needs a terminal, which
+a script cannot answer. When the same name exists in several workflow files, Atmos asks which one to run, so pass
+`file` to make the call unambiguous.
+:::
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos workflow`](/cli/commands/workflow) documents the command and its flags.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

@@ -1,0 +1,165 @@
+# Regression cases for step-field rendering and validation in custom commands and workflows:
+# templated timeout and output, strict retry keys, and a bad command not breaking the others.
+# The fixture's atmos.yaml deliberately contains the invalid command ft-retry-renamed (retry key
+# `delay`); every case below must still load the configuration.
+tests:
+  - name: starlark step fields templated timeout command
+    enabled: true
+    description: "A templated step timeout (a flag value) renders when the step runs and does not break config loading"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "ft-timeout-templated"
+    expect:
+      stdout:
+        - "ok"
+      exit_code: 0
+
+  - name: starlark step fields invalid command does not break list stacks
+    enabled: true
+    description: "ft-retry-renamed has an unknown retry key; it is skipped with a warning and other commands still work"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "list"
+      - "stacks"
+    expect:
+      stderr:
+        - 'Skipping invalid custom command'
+        - 'ft-retry-renamed'
+        - 'unknown retry field'
+      exit_code: 0
+
+  - name: starlark step fields invalid command reports error when invoked
+    enabled: true
+    description: "Invoking a command whose retry block has an unknown key fails and names the key"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "ft-retry-renamed"
+    expect:
+      stderr:
+        - 'unknown retry field'
+        - 'initial_delay'
+      exit_code: 1
+
+  - name: starlark step fields templated output rejects unknown mode
+    enabled: true
+    description: "A templated output that renders to an unknown mode fails the step with the valid modes, instead of running with the default"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "ft-out"
+      - "--mode=bogus"
+    expect:
+      stderr:
+        - 'valid modes are raw, log, viewport, none'
+      exit_code: 1
+
+  - name: starlark step fields templated output none is silent
+    enabled: true
+    description: "A templated output that renders to none suppresses the step output"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "ft-out"
+      - "--mode=none"
+    expect:
+      stdout:
+        - !not "templated-output-line"
+        - !not "literal-none-line"
+      exit_code: 0
+
+  - name: starlark step fields templated output raw is shown
+    enabled: true
+    description: "A templated output that renders to raw shows the step output"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "ft-out"
+      - "--mode=raw"
+    expect:
+      stdout:
+        - "templated-output-line \\(mode=raw\\)"
+      exit_code: 0
+
+  - name: starlark step fields workflow templated shell timeout renders
+    enabled: true
+    description: "A templated timeout on a workflow shell step renders from an earlier step value"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "ft-templated-timeout-shell-ok"
+      - "--file"
+      - "ft-fields"
+    expect:
+      stdout:
+        - "shell-step-ran"
+      exit_code: 0
+
+  - name: starlark step fields workflow templated shell timeout is enforced
+    enabled: true
+    description: "The rendered timeout (1s) is enforced on the workflow shell step instead of failing to parse the template"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "ft-templated-timeout-shell"
+      - "--file"
+      - "ft"
+    expect:
+      stderr:
+        - "did not finish within its timeout of 1s"
+        - !not "invalid step timeout"
+      exit_code: 1
+
+  - name: starlark step fields workflow templated output rejects unknown mode
+    enabled: true
+    description: "A workflow shell step whose templated output renders to an unknown mode fails and does not run"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "ft-templated-output-bogus"
+      - "--file"
+      - "ft-fields"
+    expect:
+      stdout:
+        - !not "must-not-run"
+      stderr:
+        - "valid modes are raw, log, viewport, none"
+      exit_code: 1
+
+  - name: starlark step fields workflow type starlark typo
+    enabled: true
+    description: "type: starlark names the step, lists the registered types, and hints type: script with interpreter: starlark"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "ft-typo"
+      - "--file"
+      - "ft"
+    expect:
+      stderr:
+        - "Step s of workflow ft-typo uses unsupported type starlark"
+        - "Registered step types:"
+        - "Use type: script with interpreter: starlark"
+      exit_code: 1
+
+  - name: starlark step fields custom command argument help
+    enabled: true
+    description: "Custom command help shows <required> [optional] arguments in the usage line and an ARGUMENTS section"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "ft-atmos"
+      - "--help"
+    expect:
+      stdout:
+        - 'atmos ft-atmos <case> \[extra\] \[flags\]'
+        - "ARGUMENTS"
+        - "Case name \\(required\\)"
+        - "Optional extra value"
+      exit_code: 0

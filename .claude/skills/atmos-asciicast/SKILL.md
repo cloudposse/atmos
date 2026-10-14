@@ -54,12 +54,56 @@ Atmos casts are product demos, regression evidence, and documentation examples a
 - Keep large shell scripts out of recorded casts. If unavoidable, hide them in setup/cleanup and explain the user-facing result with lightweight Atmos commands in the recording.
 - Use path-based custom command names for demo casts, for example `casts generate demo fixtures native-terraform plan`, and publish fixture casts under `/casts/demo/fixtures/...`.
 
+## Validate with embedded Starlark
+
+Prefer `type: script` with `interpreter: starlark` for new cast validators and when
+updating Python-based assertions. Keep parsing and assertions in checked-in `.star`
+files; Python is not needed to read JSON events, strip ANSI, or check cast output.
+This guidance concerns validation, not unrelated fixture setup that needs an external tool.
+
+For repository demos, reuse `demo/casts/cast_checks.star` and follow
+`demo/casts/scripts/validate-starlark.star`. From a validator in `demo/casts/scripts/`:
+
+```starlark
+load("../cast_checks.star", "load_text", "strip_ansi", "assert_no_local_paths")
+
+text = load_text("../../website/static/casts/demo/fixtures/starlark/release-plan.cast")
+plain = strip_ansi(text)
+assert_no_local_paths(text)
+if "release-plan" not in plain:
+    fail("cast is missing the release-plan command")
+ui.success("Cast validated")
+```
+
+`load()` is
+relative to the `.star` source file; `fs.read_file` paths used by `load_text` are
+relative to the step's working directory (`demo/casts` in this example).
+
+Wire validators into the matching `casts validate ...` custom command and call it
+only after successful recording and required cleanup:
+
+```yaml
+steps:
+  - type: script
+    name: validate
+    interpreter: starlark
+    script: !include scripts/validate-starlark.star
+```
+
+Reconstruct text from output events before checking it: a word or secret can span
+multiple events. Assert the feature's expected result, reject secrets and local
+paths, and use raw text for ANSI/color assertions and ANSI-stripped text for content
+assertions. Match expected error output explicitly for demos of failure behavior.
+Execute the validator against the regenerated cast; parsing successfully alone is
+not evidence that the demonstrated feature worked. Keep playback/visual review for
+layout and pacing, which text assertions cannot establish.
+
 ## Authoring Checklist
 
 1. Define the user-facing story before editing YAML: what feature is being proven, what command should the user remember, and what output proves it worked?
 2. Add or update the workflow/custom command that regenerates the cast.
 3. Regenerate the `.cast` into `website/static/casts`.
-4. Review the cast as plain text for secrets, local paths, unstable timestamps, noisy logs, and shell complexity that distracts from Atmos.
+4. Run its Starlark validator, then review the cast as plain text for secrets, local paths, unstable timestamps, noisy logs, and shell complexity that distracts from Atmos.
 5. Embed it with the website `CastPlayer` component when the corresponding docs page can show it usefully, **and in the feature's changelog blog post** (see the `pull-request` skill's Blog post section) — new commands and features should ship their blog post with a working demo, not just prose. Use `CastEmbed` (which wraps `CastPlayer` with Download/Share controls) directly in blog posts, followed by a `[View the full example](/examples/<name>)` link; don't reach for `EmbedExample` there.
 
     ```mdx

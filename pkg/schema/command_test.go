@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"encoding/json"
 	"errors"
 	"reflect"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 type testConfigWithCommandEnv struct {
@@ -152,5 +154,136 @@ func TestCommandFlag_EffectiveProvides(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, tt.flag.EffectiveProvides())
 		})
+	}
+}
+
+func TestCommandCopyLoaderFields(t *testing.T) {
+	src := Command{
+		Steps: Tasks{
+			{Name: "a", ScriptSource: "/p/a.star", LiteralFields: []string{"script"}},
+			{Name: "group", Steps: []WorkflowStep{
+				{Name: "child", ScriptSource: "/p/child.star", LiteralFields: []string{"command", "env.GREETING"}},
+				{Name: "inner", Steps: []WorkflowStep{{Name: "deep", ScriptSource: "/p/deep.star", LiteralFields: []string{"script"}}}},
+			}},
+			{Name: "inline"},
+		},
+		Commands: []Command{{Steps: Tasks{{Name: "sub", ScriptSource: "/p/sub.star", LiteralFields: []string{"command"}}}}},
+	}
+	// A JSON round trip is what cloneCommand does; it drops both fields.
+	encoded, err := json.Marshal(src)
+	require.NoError(t, err)
+	var clone Command
+	require.NoError(t, json.Unmarshal(encoded, &clone))
+	require.Empty(t, clone.Steps[0].ScriptSource)
+	require.Empty(t, clone.Steps[0].LiteralFields)
+
+	clone.CopyLoaderFields(&src)
+
+	assert.Equal(t, "/p/a.star", clone.Steps[0].ScriptSource)
+	assert.Equal(t, []string{"script"}, clone.Steps[0].LiteralFields)
+	assert.Equal(t, "/p/child.star", clone.Steps[1].Steps[0].ScriptSource)
+	assert.Equal(t, []string{"command", "env.GREETING"}, clone.Steps[1].Steps[0].LiteralFields)
+	assert.Equal(t, "/p/deep.star", clone.Steps[1].Steps[1].Steps[0].ScriptSource)
+	assert.Equal(t, []string{"script"}, clone.Steps[1].Steps[1].Steps[0].LiteralFields)
+	assert.Empty(t, clone.Steps[2].ScriptSource)
+	assert.Empty(t, clone.Steps[2].LiteralFields)
+	assert.Equal(t, "/p/sub.star", clone.Commands[0].Steps[0].ScriptSource)
+	assert.Equal(t, []string{"command"}, clone.Commands[0].Steps[0].LiteralFields)
+
+	t.Run("source to clone isolation", func(t *testing.T) {
+		clone.Steps[0].LiteralFields[0] = "mutated"
+		assert.Equal(t, []string{"script"}, src.Steps[0].LiteralFields)
+	})
+
+	t.Run("mismatched shapes copy only what lines up", func(t *testing.T) {
+		short := Command{Steps: Tasks{{Name: "a"}}}
+		short.CopyLoaderFields(&src)
+		assert.Equal(t, "/p/a.star", short.Steps[0].ScriptSource)
+		assert.Equal(t, []string{"script"}, short.Steps[0].LiteralFields)
+	})
+}
+
+func TestScriptSourceSurvivesStepConversion(t *testing.T) {
+	task := Task{Name: "t", Script: "x", ScriptSource: "/p/x.star"}
+	step := task.ToWorkflowStep()
+	assert.Equal(t, "/p/x.star", step.ScriptSource)
+	assert.Equal(t, "/p/x.star", TaskFromWorkflowStep(&step).ScriptSource)
+}
+
+func TestScriptSourceDecodesFromMergedCommandConfig(t *testing.T) {
+	data := map[string]any{"steps": []any{
+		map[string]any{"name": "a", "type": "script", "script": "x", "script_source": "/p/a.star"},
+		map[string]any{"name": "group", "type": "parallel", "steps": []any{
+			map[string]any{"name": "child", "type": "script", "script": "y", "script_source": "/p/child.star"},
+		}},
+	}}
+	var command Command
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result: &command, DecodeHook: TasksDecodeHook(), TagName: "mapstructure",
+	})
+	require.NoError(t, err)
+	require.NoError(t, decoder.Decode(data))
+
+	require.Len(t, command.Steps, 2)
+	assert.Equal(t, "/p/a.star", command.Steps[0].ScriptSource)
+	require.Len(t, command.Steps[1].Steps, 1)
+	assert.Equal(t, "/p/child.star", command.Steps[1].Steps[0].ScriptSource)
+}
+
+func TestScriptSourceHasNoYAMLOrJSONKey(t *testing.T) {
+	step := WorkflowStep{Name: "s", ScriptSource: "/p/a.star"}
+	encoded, err := json.Marshal(step)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), "a.star")
+
+	var fromYAML WorkflowStep
+	require.NoError(t, yaml.Unmarshal([]byte("name: s\nscript_source: /etc/passwd\n"), &fromYAML))
+	assert.Empty(t, fromYAML.ScriptSource)
+}
+
+func TestLiteralFieldsSurviveStepConversion(t *testing.T) {
+	task := Task{Name: "t", Script: "x", LiteralFields: []string{"script", "env.GREETING", "ambient_env.Foo"}}
+	step := task.ToWorkflowStep()
+	assert.Equal(t, []string{"script", "env.GREETING", "ambient_env.Foo"}, step.LiteralFields)
+	assert.Equal(t, []string{"script", "env.GREETING", "ambient_env.Foo"}, TaskFromWorkflowStep(&step).LiteralFields)
+}
+
+func TestIsLiteral(t *testing.T) {
+	step := WorkflowStep{LiteralFields: []string{"script", "env.Greeting", "ambient_env.Foo"}}
+	task := Task{LiteralFields: []string{"command"}}
+
+	tests := []struct {
+		name  string
+		got   bool
+		wants bool
+	}{
+		{"step script", step.IsLiteral("script"), true},
+		{"step command not marked", step.IsLiteral("command"), false},
+		{"step env name is not a field", step.IsLiteral("env"), false},
+		{"env exact case", step.IsLiteralEnv("Greeting"), true},
+		{"env case-insensitive", step.IsLiteralEnv("GREETING"), true},
+		{"env other name", step.IsLiteralEnv("OTHER"), false},
+		{"ambient exact case", step.IsLiteralEnv("Foo"), true},
+		{"ambient other case", step.IsLiteralEnv("FOO"), false},
+		{"task command", task.IsLiteral("command"), true},
+		{"task script not marked", task.IsLiteral("script"), false},
+		{"zero step", (&WorkflowStep{}).IsLiteral("script"), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.wants, tt.got)
+		})
+	}
+}
+
+func TestRuntimeLiteralMarkersAreNotSerialized(t *testing.T) {
+	step := WorkflowStep{Name: "s", LiteralFields: []string{"env.DECLARED", "ambient_env.Ambient"}}
+	encodedJSON, err := json.Marshal(step)
+	require.NoError(t, err)
+	encodedYAML, err := yaml.Marshal(step)
+	require.NoError(t, err)
+	for _, encoded := range [][]byte{encodedJSON, encodedYAML} {
+		assert.NotContains(t, string(encoded), "ambient_env")
+		assert.NotContains(t, string(encoded), "literal_fields")
 	}
 }

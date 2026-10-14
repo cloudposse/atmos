@@ -1,0 +1,311 @@
+---
+title: Atmos Automation
+sidebar_position: 1
+sidebar_label: Automation
+description: Build, ship, and deploy containers the same way locally and in CI with testable automation written in the Atmos Automation Language.
+id: automation
+slug: /automation
+---
+
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+import EmbedFile from '@site/src/components/EmbedFile'
+import Terminal from '@site/src/components/Terminal'
+import CastEmbed from '@site/src/components/CastEmbed'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Build, ship, and deploy containers the same way locally and in CI. The Atmos
+Automation Language gives you a Python-like DSL based on Starlark to write that
+process as reusable, testable code that Atmos executes.
+</Intro>
+
+Build an image, push it to your registry, and deploy your application through
+one release command. Develop and test that process on your machine, then have
+CI invoke the same command. Your automation uses the stacks, identities, and
+toolchain configured in Atmos, with inputs selecting the target environment.
+
+The DSL puts Atmos's capabilities at your disposal: install pinned tool
+dependencies, assume configured cloud identities, run Atmos commands and external
+tools, and parallelize work with retries and timeouts. Build on the configuration
+and integrations your team already maintains.
+
+Bash scripts accumulate quoting rules, command-output parsing, error handling,
+and background-process management as a release process grows. Atmos provides
+structured command results, reusable functions, parallel tasks, and test steps
+so you can spend that effort on the release logic. Test shared functions, check
+command results, and verify deployed services using the same automation tools.
+
+Save your code in a `.star` file and run it with `atmos ./release.star`.
+The [release example](/automation/standalone-cli-apps#what-your-program-can-do)
+builds and pushes a container image, then runs a Terraform deployment. You can
+also expose your automation as an Atmos subcommand, workflow, or lifecycle hook.
+
+Your tools can offer the same developer experience as Atmos: typed flags and
+generated help, formatted status messages, and errors with explanations and
+recovery hints. Workflow and custom-command steps can prompt for inputs and pass
+their outputs to your scripts. Scripts return structured results that later steps
+can consume. See [prompts and step outputs](/automation/workflows#collect-input-and-pass-results-between-steps)
+and [error builders](/functions/automation/errors.build).
+
+## Choose what you want to build
+
+| Start with | Use it for | What Atmos provides |
+| --- | --- | --- |
+| [A custom CLI app](#executable-scripts) | An executable such as `./capacity.star`, with its own interface | A shebang interpreter, command declarations, and built-in helpers |
+| [A workflow](#workflows-and-parallel-tasks) | A repeatable process involving several tasks | Composable steps, parallel execution, retries, and timeouts |
+| [A custom command](#custom-commands) | A project-specific Atmos subcommand, such as `atmos capacity` | Command registration, arguments, flags, defaults, and help |
+| [A lifecycle hook](#lifecycle-hooks) | Checks and actions tied to component operations | Operation events and resolved component context |
+| [A test suite](#testing-your-automation) | Checks for program logic, command results, and deployed services | Test results, failure output, and parallel or matrix execution |
+
+## Custom CLI apps {#executable-scripts}
+
+Give your team a tool with its own arguments, flags, validation, and help. Write
+it in the Atmos Automation Language and declare its interface with `cli.command`.
+Atmos runs the file directly, as `atmos ./capacity.star` or `./capacity.star`,
+without registering a command in `atmos.yaml`.
+
+With Atmos installed and on your `PATH`, save this as `hello.star`. The first
+line selects Atmos as its interpreter; the example needs no stacks or external tools.
+
+<File title="hello.star">
+```python
+#!/usr/bin/env atmos
+name = ctx.args[0] if ctx.args else "world"
+ui.success("Hello, {}!".format(name))
+```
+</File>
+
+<Terminal title="Run the script">
+```shell
+chmod +x hello.star
+./hello.star platform
+```
+</Terminal>
+
+The command displays `Hello, platform!` as a styled success message. You can also run it as
+`atmos hello.star platform`, including on systems without shebang support.
+
+For a practical example, this script reads a JSON service manifest and reports
+replica totals. The built-in `fs` and `json` helpers keep the data structured
+throughout the calculation.
+
+<CastEmbed src="/casts/examples/starlark-script/summarize.cast" title="Custom CLI app: ./summarize.star services.json" chrome controls scrubber />
+
+<ActionCard title="Build a custom CLI app">
+    Learn how to declare your program's arguments, flags, validation, and help.
+    <div>
+      <PrimaryCTA to="/automation/standalone-cli-apps">Read the Guide</PrimaryCTA>
+    </div>
+</ActionCard>
+
+The [runnable script example](/examples/starlark-script) includes the service
+manifest and executable programs.
+
+### Declare script arguments and flags
+
+When a standalone program needs a command-line interface, declare it with
+`cli.command`, `cli.arg`, and `cli.flag`. Atmos uses its native flag handling to
+parse and validate the inputs before calling `main(args, flags)`.
+
+```python
+#!/usr/bin/env atmos
+def validate(args, flags):
+    if flags["replicas"] < 1:
+        fail("replicas must be positive")
+
+def main(args, flags):
+    print("{}: {} replicas".format(args["service"], flags["replicas"]))
+
+cli.command(
+    description = "Report a service's replica count",
+    args = [cli.arg("service", description="Service name")],
+    flags = [cli.flag("replicas", type="int", shorthand="r", default=2)],
+    validate = validate,
+    run = main,
+)
+```
+
+Save this as `replicas.star`. Run `atmos ./replicas.star api -r 3` (or `--replicas 3`),
+or `atmos ./replicas.star --help` for generated usage. Help does not run `main`.
+Flags support types, defaults, required values,
+and choices; an optional `validate` callback handles checks involving multiple
+inputs. Both callbacks receive parsed dictionaries directly.
+
+See the [command declaration reference](/steps/type/script#declaring-a-standalone-command)
+and [complete example](/examples/starlark-script).
+
+## Workflows and parallel tasks
+
+A workflow combines tasks into a named process stored in YAML. Use workflows
+when you want to run a repeatable validation, deployment, maintenance, or release
+procedure through one command your team can reuse. Run it with
+`atmos workflow <name> -f <file>`.
+
+Combine Atmos commands, shell commands, scripts, and control steps for parallel
+work, retries, and timeouts. The [workflow guide](/automation/workflows) explains how to
+define and run a workflow; the [step reference](/steps) describes the
+building blocks.
+
+Add an Atmos Automation Language script step when the process needs program
+logic. Move shared code into `.star` files and include it from YAML; `load()`
+resolves sibling modules relative to the script file.
+
+Inside a program, `steps.task` describes a function call and `steps.parallel`
+runs independent calls with a concurrency limit. Each task can have its own
+timeout and retry policy. Results retain input order, and terminal output identifies
+the task that produced it.
+
+The larger [release-plan example](/steps/type/script#custom-components)
+loads a shared function and reads three components with at most two tasks running
+at once. It demonstrates how a short script can become reusable automation
+without changing languages.
+
+Use retries for operations that are safe to repeat: a retry runs the entire task
+function again. See [task execution](/steps/type/script#embedded-starlark)
+for the available controls and component-resolution deadline behavior.
+
+## Custom commands
+
+Custom commands add project-specific subcommands to Atmos through `atmos.yaml`.
+Use custom commands when you want your team to run a project task through a
+familiar entry point such as `atmos capacity`. YAML defines the arguments,
+flags, defaults, help, and steps to run.
+
+A custom command can run existing tools or call an Atmos Automation Language
+program. YAML defines the command's interface; your program implements its
+behavior. Atmos handles parsing and passes the inputs directly to the program.
+
+Save this configuration as `atmos.yaml`. The `commands:` entry registers the
+`capacity` subcommand, its flag, and the script step that implements it:
+
+<EmbedFile filePath="examples/starlark-commands/atmos.yaml" />
+
+Run the command through Atmos:
+
+<Terminal title="Run the custom command">
+```shell
+atmos capacity --replicas 3
+```
+</Terminal>
+
+It displays `3 replicas x 4 workers = 12 workers` as a success message. The same pattern can become a
+deployment check, an inventory report, or another command for your team.
+
+<CastEmbed src="/casts/examples/starlark-commands/capacity.cast" title="Custom command: atmos capacity --replicas 3" chrome controls scrubber />
+
+<ActionCard title="Add an Atmos subcommand">
+    Learn how to register a subcommand, declare its inputs, and run your program.
+    <div>
+      <PrimaryCTA to="/automation/custom-commands">Read the Guide</PrimaryCTA>
+    </div>
+</ActionCard>
+
+The [runnable capacity example](/examples/starlark-commands) includes the complete
+project. See [custom command configuration](/cli/configuration/commands) for command
+declarations, arguments, flags, and component context.
+
+Select `type: script` and `interpreter: starlark` for the program step.
+Script steps read parsed flags directly as `ctx.flags["replicas"]` and named
+positional arguments as `ctx.arguments["service"]`. Values keep their declared
+types; there is no environment-variable mapping or source interpolation to write.
+
+## Lifecycle hooks
+
+Lifecycle hooks attach automation to component operations. Use lifecycle hooks
+when you want to enforce checks or run follow-up work automatically before or
+after an operation. A before-hook can check inherited configuration and stop an
+operation with an actionable error. An after-hook can inspect the result and
+run follow-up work.
+
+Hooks can run commands or scripts. Atmos Automation Language hooks receive
+`ctx.component`, `ctx.hook`, and `ctx.operation`. You can read a
+component's resolved variables directly, without invoking another command and
+parsing its output.
+
+This example requires an owner before Terraform plans. The `dev` stack passes;
+the `unowned` stack fails the check and never starts a plan. Its tiny Terraform
+module has no providers or resources, so you can try it without cloud credentials.
+
+<CastEmbed src="/casts/examples/starlark-hooks/owner-check.cast" title="Check component ownership before Terraform plans" chrome controls scrubber />
+
+<ActionCard title="Add a lifecycle hook">
+    Learn how to attach a script to an event and use its component context.
+    <div>
+      <PrimaryCTA to="/automation/lifecycle-hooks">Read the Guide</PrimaryCTA>
+    </div>
+</ActionCard>
+
+The [runnable ownership example](/examples/starlark-hooks) shows both outcomes.
+See [hooks](/stacks/hooks) for events, failure policies, and configuration, and
+[lifecycle context](/steps/type/script#lifecycle-hook-context) for the
+fields available to scripts.
+
+## Testing your automation
+
+Test steps group checks and report their results through Atmos. Use test steps
+when you want to verify automation logic, command results, or services and make
+failures visible locally and in CI. An Atmos Automation Language script can check
+structured data, component configuration, or a command's exit code and output. Call `fail()` with a useful message when an expectation
+is not met.
+
+Group checks with the `test` step type to get a test tree and a summary of passed,
+failed, skipped, and canceled checks. Successful output stays hidden by default;
+failing checks show their captured output and error. Combine script checks with
+HTTP checks, shell commands, and other supported step types. Use parallel or
+matrix groups when checks can run independently.
+
+Test groups work in workflows, custom commands, and lifecycle hooks. That lets
+you run the same checks explicitly during development and automatically after
+a component operation.
+
+<ActionCard title="Test your automation">
+    Write script assertions, check command results, and organize checks with the
+    test step type.
+    <div>
+      <PrimaryCTA to="/automation/testing">Read the Testing Guide</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Atmos Automation Language
+
+The Atmos Automation Language is based on Starlark. Its Python-like syntax gives
+you functions, conditions, loops, and structured data for writing automation.
+The interpreter ships with Atmos, along with functions for reading configuration,
+running commands, and executing tasks in parallel.
+
+Write `.star` files for standalone tools and shared code, or select
+`interpreter: starlark` in a YAML script step. Use `load()` to share functions
+between tools, custom commands, workflows, and hooks.
+
+### Why Starlark?
+
+Read [why Atmos uses Starlark](/automation/language#why-starlark) for the language
+choices and how they make automation easier to learn, share, and review.
+
+## Use the same automation locally and in CI
+
+Keep the program in your repository and invoke the same script, custom command,
+or workflow from your terminal and your CI runner. Atmos provides the language
+runtime; commands the script invokes still need their tools and credentials.
+
+Combine your automation with [native CI](/ci) for Terraform plan reporting,
+status checks, and planfile storage. Keep workflow triggers and approvals in the
+CI system while the reusable automation lives alongside your project.
+
+## Built-in helpers and reference
+
+Atmos adds helpers for files, JSON, regular expressions, processes,
+component lookup, command invocation, task execution, and terminal output.
+`print` emits data; `ui` reports status; `log` emits diagnostics at the configured
+log level. Output streams while scripts run. When masking is enabled, registered secrets
+and matches for configured masking patterns are masked in displayed output.
+
+<ActionCard title="Language and API reference">
+    Find syntax, built-in helpers, execution controls, source-path behavior, and
+    the current runtime limitations.
+    <div>
+      <PrimaryCTA to="/automation/language">Read the Language Overview</PrimaryCTA>
+    </div>
+</ActionCard>

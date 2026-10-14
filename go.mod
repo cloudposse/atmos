@@ -489,6 +489,7 @@ require (
 	github.com/minamijoyo/hcledit v0.2.18
 	github.com/mxschmitt/playwright-go v0.6100.0
 	github.com/updatecli/updatecli v0.999.0
+	go.starlark.net v0.0.0-20260930220527-d7438c5a85ac
 	golang.org/x/image v0.45.0
 	golang.org/x/perf v0.0.0-20260409210113-8e83ce0f7b1c
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473

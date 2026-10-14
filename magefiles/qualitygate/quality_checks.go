@@ -29,6 +29,27 @@ func (q *qualityClient) tests(pr *githubapi.PR) (qualityGate, error) {
 	return qualityCIGate(states), nil
 }
 
+// Match the timing coordinator: wait for Actions workflows, including failed
+// completions. Late external results are reflected by scheduled reconciliation.
+func (q *qualityClient) reportingComplete(pr *githubapi.PR) (bool, error) {
+	states := map[string]string{}
+	if err := q.workflowStates(pr.Head.SHA, states); err != nil {
+		return false, err
+	}
+	if len(states) == 0 {
+		return false, nil
+	}
+	for _, state := range states {
+		switch state {
+		case "success", "failure", "cancelled", "skipped", "neutral", "timed_out", "action_required", "startup_failure", "stale":
+			// Terminal results are reportable, regardless of success.
+		default:
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
 func qualityCIGate(states map[string]string) qualityGate {
 	gate := qualityGate{Passed: len(states) > 0, Detail: fmt.Sprintf("%d current PR CI results passed or were skipped/neutral", len(states))}
 	var pending []string
@@ -323,6 +344,10 @@ func (q *qualityClient) coverageStatuses(sha string, states map[string]string) e
 }
 
 func (q *qualityClient) review(pr *githubapi.PR) (qualityGate, error) {
+	// Automated PRs (Renovate, Dependabot, the github-actions token, release apps) do not require CodeRabbit approval.
+	if pr.User.Type == "Bot" {
+		return qualityGate{Passed: true, Detail: fmt.Sprintf("Not required: PR opened by automation (%s)", pr.User.Login)}, nil
+	}
 	gate := qualityGate{Detail: "Pending: CodeRabbit has not approved this commit"}
 	for page := 1; page <= githubapi.PageLimit; page++ {
 		var reviews []struct {

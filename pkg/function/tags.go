@@ -8,6 +8,8 @@ import (
 // Tag constants for Atmos configuration functions.
 // These are compatibility aliases; pkg/function/tag is the central tag catalog.
 const (
+	// TagStarlark evaluates a Starlark configuration function body.
+	TagStarlark = fntag.Starlark
 	// TagExec executes a shell command and returns the output.
 	TagExec = fntag.Exec
 
