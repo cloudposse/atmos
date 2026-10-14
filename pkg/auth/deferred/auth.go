@@ -54,6 +54,9 @@ func ConfigureAuth(ac *schema.AtmosConfiguration, identity string) bool {
 		return false
 	}
 	ac.AuthManager = NewManager(AuthOptions{Disabled: identity == cfg.IdentityFlagDisabledValue, Config: ac})
+	// Describe passes copy the configuration before evaluating references. Bind
+	// their shared value context now so HEAD and dependents keep one invocation.
+	ac.DeferredEvaluation = &schema.DeferredEvaluationContext{Manager: ac.AuthManager}
 	return true
 }
 
