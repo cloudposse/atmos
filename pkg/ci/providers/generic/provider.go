@@ -40,8 +40,6 @@ func init() {
 // but no specific CI platform is detected. It writes summaries to stdout
 // and outputs to environment file or stdout.
 type Provider struct {
-	outputFile  string
-	summaryFile string
 	// writer receives local renderings; nil means the global UI channel (stderr).
 	writer io.Writer
 	// nextCheckRunID and nextCommentID are shared by copies made with BindOutput.
@@ -50,21 +48,19 @@ type Provider struct {
 }
 
 // NewProvider creates a new generic CI provider.
-// It checks for ATMOS_CI_OUTPUT and ATMOS_CI_SUMMARY environment variables
-// to determine where to write outputs.
+// ATMOS_CI_OUTPUT and ATMOS_CI_SUMMARY are read when OutputWriter is called, not here,
+// so a change to the environment after construction is honored.
 func NewProvider() *Provider {
 	defer perf.Track(nil, "generic.NewProvider")()
 
 	return &Provider{
-		outputFile:     os.Getenv("ATMOS_CI_OUTPUT"),
-		summaryFile:    os.Getenv("ATMOS_CI_SUMMARY"),
 		nextCheckRunID: &atomic.Int64{},
 		nextCommentID:  &atomic.Int64{},
 	}
 }
 
 // BindOutput returns a copy of the provider whose local renderings go to w instead of
-// the global UI channel. The copy shares the check-run counter and file settings.
+// the global UI channel. The copy shares the check-run and comment counters.
 func (p *Provider) BindOutput(w io.Writer) provider.Provider {
 	defer perf.Track(nil, "generic.Provider.BindOutput")()
 
@@ -138,6 +134,7 @@ func (p *Provider) Context() (*provider.Context, error) {
 			Number:  n,
 			HeadRef: ctx.Branch,
 			BaseRef: os.Getenv("ATMOS_CI_BASE_REF"),
+			Fork:    parseForkFlag(os.Getenv("ATMOS_CI_PR_FORK")),
 		}
 	}
 
@@ -166,8 +163,8 @@ func (p *Provider) OutputWriter() provider.OutputWriter {
 	defer perf.Track(nil, "generic.Provider.OutputWriter")()
 
 	return &OutputWriter{
-		outputFile:  p.outputFile,
-		summaryFile: p.summaryFile,
+		outputFile:  os.Getenv("ATMOS_CI_OUTPUT"),
+		summaryFile: os.Getenv("ATMOS_CI_SUMMARY"),
 		out:         p.out(),
 		rendered:    p.writer != nil,
 	}
@@ -222,6 +219,12 @@ func (w *OutputWriter) WriteSummary(content string) error {
 	// was bound with BindOutput). This makes the summary visible in local testing.
 	renderMarkdown(w.output(), w.rendered, content)
 	return nil
+}
+
+// parseForkFlag parses ATMOS_CI_PR_FORK. An unset or invalid value means the pull request is not from a fork.
+func parseForkFlag(value string) bool {
+	fork, err := strconv.ParseBool(value)
+	return err == nil && fork
 }
 
 // getFirstEnv returns the value of the first environment variable that is set.

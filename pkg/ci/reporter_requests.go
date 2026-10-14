@@ -59,6 +59,9 @@ type gatedTarget struct {
 
 // gated resolves the provider and context for writes that need repository identity
 // (comments and checks), applying the fork-execution gate to detected providers.
+// Under an elevated event (pull_request_target, workflow_run) the write is held only when the
+// pull request comes from a fork, unless ci.allow_unsafe_fork_execution is set. A same-repository
+// pull request, or a run with no pull request, posts normally.
 // The returned provider is nil when nothing can render the write.
 func (r *reporter) gated(f Feature, enabled func(*schema.AtmosConfiguration) bool) (gatedTarget, error) {
 	p, rc := r.target(f, enabled)
@@ -70,8 +73,8 @@ func (r *reporter) gated(f Feature, enabled func(*schema.AtmosConfiguration) boo
 		return gatedTarget{receipt: rc}, err
 	}
 	allowFork := r.cfg != nil && r.cfg.CI.AllowUnsafeForkExecution
-	if !rc.Local && ciCtx.ElevatedEvent && !allowFork {
-		log.Debug("Skipping CI write on elevated event without ci.allow_unsafe_fork_execution", "feature", f)
+	if !rc.Local && ciCtx.ElevatedEvent && ciCtx.PullRequest != nil && ciCtx.PullRequest.Fork && !allowFork {
+		log.Debug("Skipping CI write for a fork pull request on an elevated event without ci.allow_unsafe_fork_execution", "feature", f)
 		l := r.local()
 		return gatedTarget{provider: l, receipt: r.localReceipt(l, FeatureForkGate), ciCtx: ciCtx}, nil
 	}

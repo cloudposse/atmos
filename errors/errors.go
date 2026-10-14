@@ -1503,6 +1503,7 @@ var (
 	ErrCIEnvWriteFailed           = errors.New("failed to write CI environment file")
 	ErrCIMaskFailed               = errors.New("failed to register CI mask value")
 	ErrCIPullRequestUnknown       = errors.New("CI pull request number is unknown")
+	ErrCITemplateNotFound         = errors.New("CI report template not found")
 	ErrGitHubTokenNotFound        = errors.New("GitHub token not found")
 
 	// Planfile storage errors.

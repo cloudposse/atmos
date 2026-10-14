@@ -5,6 +5,11 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
+
+	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -444,13 +449,21 @@ func TestReporter_GatedByMasterSwitch(t *testing.T) {
 	})
 }
 
-// TestReporter_ForkGate verifies elevated events never post unless ci.allow_unsafe_fork_execution is set.
+// TestReporter_ForkGate verifies that on an elevated event a fork pull request never posts unless
+// ci.allow_unsafe_fork_execution is set, while a same-repository pull request posts normally.
 func TestReporter_ForkGate(t *testing.T) {
 	forkEnv := func() []ghtest.EnvOption {
 		return []ghtest.EnvOption{
 			ghtest.WithRepository("owner/repo"),
 			ghtest.WithEvent("pull_request_target", map[string]any{"action": "synchronize"}),
-			ghtest.WithPullRequest(42, "fork-branch", "main"),
+			ghtest.WithForkPullRequest(42, "fork-branch", "main"),
+		}
+	}
+	sameRepoEnv := func() []ghtest.EnvOption {
+		return []ghtest.EnvOption{
+			ghtest.WithRepository("owner/repo"),
+			ghtest.WithEvent("pull_request_target", map[string]any{"action": "synchronize"}),
+			ghtest.WithPullRequest(42, "feature", "main"),
 		}
 	}
 	calls := []struct {
@@ -495,11 +508,13 @@ func TestReporter_ForkGate(t *testing.T) {
 	}
 
 	for _, tc := range calls {
-		t.Run(tc.name+" is blocked on an elevated event", func(t *testing.T) {
+		t.Run(tc.name+" is blocked for a fork pull request on an elevated event", func(t *testing.T) {
 			h := newHarness(t, fullCIConfig(), nil, forkEnv()...)
 			c, err := h.reporter.Context()
 			require.NoError(t, err)
 			assert.True(t, c.ElevatedEvent)
+			require.NotNil(t, c.PullRequest)
+			assert.True(t, c.PullRequest.Fork)
 
 			rc, err := tc.call(h.reporter)
 
@@ -511,7 +526,39 @@ func TestReporter_ForkGate(t *testing.T) {
 			h.assertNothingWritten(t)
 		})
 
-		t.Run(tc.name+" is sent when unsafe fork execution is allowed", func(t *testing.T) {
+		for _, event := range []string{"pull_request_target", "workflow_run"} {
+			t.Run(tc.name+" blocks unknown origin on "+event, func(t *testing.T) {
+				h := newHarness(t, fullCIConfig(), nil, forkEnv()...)
+				t.Setenv("GITHUB_EVENT_NAME", event)
+				t.Setenv("GITHUB_EVENT_PATH", "")
+				rc, err := tc.call(h.reporter)
+				require.NoError(t, err)
+				assert.Equal(t, ci.FeatureForkGate, rc.Gate)
+				assert.True(t, rc.Local)
+				assert.Contains(t, h.local.String(), tc.want)
+				h.assertNothingWritten(t)
+			})
+		}
+
+		t.Run(tc.name+" is sent for a same-repository pull request on an elevated event", func(t *testing.T) {
+			h := newHarness(t, fullCIConfig(), nil, sameRepoEnv()...)
+			c, err := h.reporter.Context()
+			require.NoError(t, err)
+			assert.True(t, c.ElevatedEvent)
+			require.NotNil(t, c.PullRequest)
+			assert.False(t, c.PullRequest.Fork)
+
+			rc, err := tc.call(h.reporter)
+
+			require.NoError(t, err)
+			assert.Empty(t, rc.Gate)
+			assert.False(t, rc.Local)
+			assert.Equal(t, github.ProviderName, rc.Provider)
+			assert.Empty(t, h.local.String())
+			tc.sent(t, h)
+		})
+
+		t.Run(tc.name+" is sent for a fork pull request when unsafe fork execution is allowed", func(t *testing.T) {
 			cfg := fullCIConfig()
 			cfg.CI.AllowUnsafeForkExecution = true
 			h := newHarness(t, cfg, nil, forkEnv()...)
@@ -597,4 +644,55 @@ func TestReporter_ErrorsKeepSentinels(t *testing.T) {
 		require.Len(t, h.server.CommentsFor("owner", "repo", 9), 1)
 		assert.Empty(t, h.server.CommentsFor("owner", "repo", 42))
 	})
+}
+
+// Elevated events can check out either the base or PR head. Report the commit actually tested.
+func TestReporter_PullRequestTargetCheckUsesCheckoutSHA(t *testing.T) {
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+	author := &object.Signature{Name: "Test", Email: "test@example.com", When: time.Unix(1, 0)}
+	base, err := worktree.Commit("base", &git.CommitOptions{Author: author, AllowEmptyCommits: true})
+	require.NoError(t, err)
+	head, err := worktree.Commit("head", &git.CommitOptions{Author: author, AllowEmptyCommits: true})
+	require.NoError(t, err)
+	require.NotEqual(t, base, head)
+
+	for _, tc := range []struct {
+		name     string
+		checkout plumbing.Hash
+	}{
+		{name: "base checkout", checkout: base},
+		{name: "PR head checkout", checkout: head},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, worktree.Checkout(&git.CheckoutOptions{Hash: tc.checkout}))
+			h := newHarness(
+				t, fullCIConfig(), nil,
+				ghtest.WithRepository("owner/repo"),
+				ghtest.WithPullRequest(42, "feature", "main"),
+				ghtest.WithSHA(base.String()),
+				ghtest.WithEvent("pull_request_target", map[string]any{
+					"pull_request": map[string]any{
+						"number": 42,
+						"head":   map[string]any{"sha": head.String(), "repo": map[string]any{"full_name": "owner/repo"}},
+						"base":   map[string]any{"sha": base.String(), "repo": map[string]any{"full_name": "owner/repo"}},
+					},
+				}),
+			)
+			t.Chdir(dir)
+			ctx, err := h.reporter.Context()
+			require.NoError(t, err)
+			require.NotNil(t, ctx.PullRequest)
+			assert.Equal(t, 42, ctx.PullRequest.Number)
+			assert.Equal(t, tc.checkout.String(), ctx.SHA)
+
+			_, err = h.reporter.Check(context.Background(), ci.CheckRequest{Name: "atmos/test"})
+			require.NoError(t, err)
+			require.Len(t, h.server.Statuses(), 1)
+			assert.Equal(t, tc.checkout.String(), h.server.Statuses()[0].SHA)
+		})
+	}
 }

@@ -674,7 +674,10 @@ func TestReporter_Comment(t *testing.T) {
 
 func TestReporter_ForkGate(t *testing.T) {
 	ctx := context.Background()
-	elevated := &Context{ElevatedEvent: true, RepoOwner: "acme", RepoName: "infra", SHA: "s", PullRequest: &PRInfo{Number: 1}}
+	// elevated is a fork pull request on an elevated event: the only case the gate holds.
+	elevated := &Context{ElevatedEvent: true, RepoOwner: "acme", RepoName: "infra", SHA: "s", PullRequest: &PRInfo{Number: 1, Fork: true}}
+	elevatedSameRepo := &Context{ElevatedEvent: true, RepoOwner: "acme", RepoName: "infra", SHA: "s", PullRequest: &PRInfo{Number: 1}}
+	elevatedNoPR := &Context{ElevatedEvent: true, RepoOwner: "acme", RepoName: "infra", SHA: "s"}
 	cfg := func(allow bool) *schema.AtmosConfiguration {
 		c := ciConfig(func(c *schema.CIConfig) {
 			c.Comments.Enabled = boolPtr(true)
@@ -684,7 +687,43 @@ func TestReporter_ForkGate(t *testing.T) {
 		return c
 	}
 
-	t.Run("comment on elevated event without opt-in goes local", func(t *testing.T) {
+	t.Run("comment for a same-repository pull request on an elevated event posts", func(t *testing.T) {
+		h := newHarness(t, kindPlain, kindPlain)
+		h.ciCtx(elevatedSameRepo)
+		h.detectedPlain.EXPECT().PostComment(ctx, gomock.Any()).Return(&Comment{}, nil)
+
+		rc, err := NewReporter(cfg(false)).Comment(ctx, CommentRequest{Body: "b"})
+
+		require.NoError(t, err)
+		assert.Equal(t, "detected", rc.Provider)
+		assert.False(t, rc.Local)
+		assert.Empty(t, rc.Gate)
+	})
+
+	t.Run("comment on an elevated event without a pull request in context posts", func(t *testing.T) {
+		h := newHarness(t, kindPlain, kindPlain)
+		h.ciCtx(elevatedNoPR)
+		h.detectedPlain.EXPECT().PostComment(ctx, gomock.Any()).Return(&Comment{}, nil)
+
+		rc, err := NewReporter(cfg(false)).Comment(ctx, CommentRequest{Body: "b", PR: 7})
+
+		require.NoError(t, err)
+		assert.Equal(t, "detected", rc.Provider)
+		assert.Empty(t, rc.Gate)
+	})
+
+	t.Run("check for a same-repository pull request on an elevated event posts", func(t *testing.T) {
+		h := newHarness(t, kindPlain, kindPlain)
+		h.ciCtx(elevatedSameRepo)
+		h.detectedPlain.EXPECT().CreateCheckRun(ctx, gomock.Any()).Return(&CheckRun{ID: 4}, nil)
+
+		rc, err := NewReporter(cfg(false)).Check(ctx, CheckRequest{Name: "n"})
+
+		require.NoError(t, err)
+		assert.Equal(t, Receipt{Provider: "detected", Check: &CheckRun{ID: 4}}, rc)
+	})
+
+	t.Run("comment for a fork pull request on elevated event without opt-in goes local", func(t *testing.T) {
 		h := newHarness(t, kindPlain, kindPlain)
 		h.ciCtx(elevated)
 		h.localPlain.EXPECT().PostComment(ctx, gomock.Any()).Return(&Comment{}, nil)
@@ -697,7 +736,7 @@ func TestReporter_ForkGate(t *testing.T) {
 		assert.Equal(t, FeatureForkGate, rc.Gate)
 	})
 
-	t.Run("comment on elevated event with opt-in goes to the detected provider", func(t *testing.T) {
+	t.Run("comment for a fork pull request on elevated event with opt-in goes to the detected provider", func(t *testing.T) {
 		h := newHarness(t, kindPlain, kindPlain)
 		h.ciCtx(elevated)
 		h.detectedPlain.EXPECT().PostComment(ctx, gomock.Any()).Return(&Comment{}, nil)
@@ -721,7 +760,7 @@ func TestReporter_ForkGate(t *testing.T) {
 		assert.Equal(t, "detected", rc.Provider)
 	})
 
-	t.Run("check on elevated event without opt-in goes local", func(t *testing.T) {
+	t.Run("check for a fork pull request on elevated event without opt-in goes local", func(t *testing.T) {
 		h := newHarness(t, kindPlain, kindPlain)
 		h.ciCtx(elevated)
 		h.localPlain.EXPECT().CreateCheckRun(ctx, gomock.Any()).Return(&CheckRun{ID: 5}, nil)

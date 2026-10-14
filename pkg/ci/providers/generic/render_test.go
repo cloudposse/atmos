@@ -221,6 +221,29 @@ func TestContext_PullRequestAndRun(t *testing.T) {
 		assert.Equal(t, "https://ci.example.com/runs/99", ctx.RunURL)
 	})
 
+	forkTests := []struct {
+		value string
+		want  bool
+	}{
+		{"true", true},
+		{"1", true},
+		{"TRUE", true},
+		{"false", false},
+		{"0", false},
+		{"yes", false},
+		{"", false},
+	}
+	for _, tt := range forkTests {
+		t.Run("ATMOS_CI_PR_FORK="+tt.value, func(t *testing.T) {
+			t.Setenv("ATMOS_CI_PR", "42")
+			t.Setenv("ATMOS_CI_PR_FORK", tt.value)
+			ctx, err := NewProvider().Context()
+			require.NoError(t, err)
+			require.NotNil(t, ctx.PullRequest)
+			assert.Equal(t, tt.want, ctx.PullRequest.Fork)
+		})
+	}
+
 	for _, v := range []string{"abc", "0", "-3", ""} {
 		t.Run("invalid PR "+v, func(t *testing.T) {
 			t.Setenv("ATMOS_CI_PR", v)

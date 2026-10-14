@@ -313,13 +313,8 @@ func TestContainerHandlerExecutePushPassesResolvedTagsAndRuntimeEnvToDocker(t *t
 func TestContainerHandlerExecuteBuildWritesCISummaryWhenEnabled(t *testing.T) {
 	installStepFakeDocker(t)
 	h := &ContainerHandler{}
-	var summaries []string
-	prev := writeStepSummaryFn
-	writeStepSummaryFn = func(content string) error {
-		summaries = append(summaries, content)
-		return nil
-	}
-	defer func() { writeStepSummaryFn = prev }()
+	reporter, summaries, comments := useMockReporter(t)
+	expectSummaryAndComment(reporter, summaries, comments, nil)
 	vars := NewVariables()
 	vars.SetAtmosConfig(&schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}})
 
@@ -333,21 +328,19 @@ func TestContainerHandlerExecuteBuildWritesCISummaryWhenEnabled(t *testing.T) {
 	}, vars)
 
 	require.NoError(t, err)
-	require.Len(t, summaries, 1)
-	assert.Contains(t, summaries[0], "## 🐳 app:local")
-	assert.Contains(t, summaries[0], "| Digest | `sha256:built` |")
+	require.Len(t, *summaries, 1)
+	assert.Contains(t, (*summaries)[0], "## 🐳 app:local")
+	assert.Contains(t, (*summaries)[0], "| Digest | `sha256:built` |")
+	require.Len(t, *comments, 1)
+	assert.Equal(t, "container:image:app:local", (*comments)[0].Key)
+	assert.Equal(t, (*summaries)[0], (*comments)[0].Body)
 }
 
 func TestContainerHandlerExecuteBuildSkipsCISummaryWhenDisabled(t *testing.T) {
 	installStepFakeDocker(t)
 	h := &ContainerHandler{}
-	called := false
-	prev := writeStepSummaryFn
-	writeStepSummaryFn = func(string) error {
-		called = true
-		return nil
-	}
-	defer func() { writeStepSummaryFn = prev }()
+	// The mock has no expectations, so any reporter call fails the test.
+	useMockReporter(t)
 	disabled := false
 	vars := NewVariables()
 	vars.SetAtmosConfig(&schema.AtmosConfiguration{
@@ -369,49 +362,21 @@ func TestContainerHandlerExecuteBuildSkipsCISummaryWhenDisabled(t *testing.T) {
 	}, vars)
 
 	require.NoError(t, err)
-	assert.False(t, called)
 }
 
 func TestWriteContainerImageSummarySkipsWhenCIUnavailable(t *testing.T) {
-	prev := writeStepSummaryFn
-	called := false
-	writeStepSummaryFn = func(string) error {
-		called = true
-		return nil
-	}
-	defer func() { writeStepSummaryFn = prev }()
+	// The mock has no expectations, so any reporter call fails the test.
+	useMockReporter(t)
 
-	writeContainerImageSummary(nil, &container.ImageInfo{RepoTags: []string{"app:local"}}, container.ImageSummaryOptions{Image: "app:local"})
-	writeContainerImageSummary(&schema.AtmosConfiguration{}, &container.ImageInfo{RepoTags: []string{"app:local"}}, container.ImageSummaryOptions{Image: "app:local"})
-	writeContainerImageSummary(&schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}, nil, container.ImageSummaryOptions{Image: "app:local"})
-
-	assert.False(t, called)
-}
-
-func TestWriteContainerImageSummaryIgnoresWriteError(t *testing.T) {
-	prev := writeStepSummaryFn
-	writeStepSummaryFn = func(string) error {
-		return assert.AnError
-	}
-	defer func() { writeStepSummaryFn = prev }()
-
-	assert.NotPanics(t, func() {
-		writeContainerImageSummary(
-			&schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
-			&container.ImageInfo{RepoTags: []string{"app:local"}},
-			container.ImageSummaryOptions{Image: "app:local"},
-		)
-	})
+	ctx := context.Background()
+	writeContainerImageSummary(ctx, nil, &container.ImageInfo{RepoTags: []string{"app:local"}}, container.ImageSummaryOptions{Image: "app:local"})
+	writeContainerImageSummary(ctx, &schema.AtmosConfiguration{}, &container.ImageInfo{RepoTags: []string{"app:local"}}, container.ImageSummaryOptions{Image: "app:local"})
+	writeContainerImageSummary(ctx, &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}, nil, container.ImageSummaryOptions{Image: "app:local"})
 }
 
 func TestWritePushedImageSummariesSkipsInvalidAndInspectFailures(t *testing.T) {
-	var summaries []string
-	prev := writeStepSummaryFn
-	writeStepSummaryFn = func(content string) error {
-		summaries = append(summaries, content)
-		return nil
-	}
-	defer func() { writeStepSummaryFn = prev }()
+	reporter, summaries, comments := useMockReporter(t)
+	expectSummaryAndComment(reporter, summaries, comments, nil)
 	runtime := &pushRuntime{
 		imageInfos: map[string]*container.ImageInfo{
 			"registry.example.com/app:ok": {
@@ -431,9 +396,11 @@ func TestWritePushedImageSummariesSkipsInvalidAndInspectFailures(t *testing.T) {
 		{Image: "registry.example.com/app:ok", Digest: "sha256:ok"},
 	})
 
-	require.Len(t, summaries, 1)
-	assert.Contains(t, summaries[0], "## 🐳 registry.example.com/app:ok")
-	assert.Contains(t, summaries[0], "| Digest | `sha256:ok` |")
+	require.Len(t, *summaries, 1)
+	assert.Contains(t, (*summaries)[0], "## 🐳 registry.example.com/app:ok")
+	assert.Contains(t, (*summaries)[0], "| Digest | `sha256:ok` |")
+	require.Len(t, *comments, 1)
+	assert.Equal(t, "container:image:registry.example.com/app:ok", (*comments)[0].Key)
 }
 
 func TestContainerHandlerExecuteInspectWithFakeDocker(t *testing.T) {

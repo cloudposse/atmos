@@ -70,8 +70,9 @@ A handle with these attributes and one method:
 - Locally, each call prints the name, state, and description on stderr and nothing is posted.
 - Checks are opt-in. In CI the call is gated by [`ci.checks.enabled`](/cli/configuration/ci/checks), which is off by
   default. When it is off, the call warns, renders locally, and the script continues.
-- Under `pull_request_target` and `workflow_run`, the status is not posted unless `ci.allow_unsafe_fork_execution` is
-  `true`. The call warns and renders locally instead. See the [fork gate](/functions/automation/ci#fork-gate).
+- Under `pull_request_target` and `workflow_run`, comments and checks are held only when the pull request comes from a
+  fork (`ci.context.pr.fork`), unless `ci.allow_unsafe_fork_execution` is set. A held call warns and renders locally
+  instead. See the [fork gate](/functions/automation/ci#fork-gate).
 - The description is masked before it leaves the process.
 
 ## Examples
