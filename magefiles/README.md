@@ -183,7 +183,7 @@ name the actual blocking results and are quoted as evidence, never instructions.
 | `bench:fetch <repo> <ref> <outputDir>` | Fetch up to 10 compatible, successful main snapshots reachable from the immutable 40-character main SHA. Candidate defaults to the sibling `candidate` directory. |
 | `bench:compare <snapshotsDir> <candidateDir> <outputDir>` | Compare the same candidate independently with each snapshot; write `report.md`, `report.json`, and separate benchstat output for each pair. |
 | `bench:report <repo> <runID>` | Validate a completed PR benchmark run, download data, regenerate comparisons with trusted code, and update the composite comment, summary, and labels. |
-| `quality:report <repo>` | Reconcile quality gates for PRs associated with the Actions event, or all open main PRs on manual/scheduled runs. Recover missing benchmark reports. |
+| `quality:report <repo>` | Reconcile quality gates for PRs associated with the Actions event, or open main PRs updated in the last 24 hours on scheduled runs. Manual runs reconcile all open main PRs. Recover missing benchmark reports. |
 
 Run these from the repository root with `go tool mage`, for example:
 
@@ -270,24 +270,44 @@ newest first, for ten compatible snapshots. Empty history reports
 “comparison unavailable”; history bootstraps naturally after merge without
 rebuilding old commits.
 
-`Benchmark Report` and `Quality Gate` execute the default branch's trusted Mage
-code with scoped API permissions. Neither uses `pull_request_target`. Downloaded
-PR artifacts are bounded, validated data files, never code or executables.
-PR association includes forks. The publisher owns only its marked bot comment,
-rechecks the head immediately before writing, rejects older runs/attempts, and
-preserves current-head benchmark results during ordinary gate refreshes.
+`CI Timing Summary` is the single automatic completion coordinator: it checks
+that the latest PR workflows and their jobs have finished, posts its timing
+comment using the existing TypeScript stopwatch action, then calls the reusable
+`Quality Gate` workflow when stopwatch's existing `published` output is true.
+The Go reporter publishes its own separate quality/benchmark comment. Only the
+workflow scheduling is shared; no timing content is passed into Go. Failed or
+canceled completed runs still produce reports. The standalone `Benchmark Report` workflow
+is manual-only for explicit recovery by run ID.
 
-The read-only `Quality Gate Signal` workflow forwards PR/review activity through
-`workflow_run`. CI completions, external statuses, and review activity trigger
-refreshes. GitHub has no review-thread-resolution Actions event, so a five-minute
-best-effort schedule also reconciles open PRs. Shared publisher concurrency
-serializes writes; scheduled reconciliation recovers reports displaced from
-Actions' pending concurrency slot. Labels and comments are eventually consistent
-with GitHub events and are not a replacement for required checks.
+All reporters execute the default branch's trusted code with scoped API
+permissions. Neither uses `pull_request_target`. Downloaded PR artifacts are
+bounded, validated data files, never code or executables. PR association includes
+forks. The publisher owns only its marked bot comment, rechecks the head before
+writing, rejects older benchmark runs/attempts, and preserves benchmark results
+only for the current head. Stopwatch continues to manage its own timing comment.
+
+The read-only `Quality Gate Signal` forwards PR/review activity to the same
+completion coordinator. Quality Gate no longer independently subscribes to
+workflow completions, checks, statuses, or comments. A 15-minute best-effort
+schedule recovers missed events and late external results, including Codecov and
+review-thread resolution. It selects open PRs targeting `main` updated within the
+last 24 hours (inclusive), using GitHub's `updated_at` including bot activity, and
+stops paging once it reaches older PRs. Manual runs still select all open `main`
+PRs; event-associated reports are not restricted by age. Reconciliation defers
+while Actions workflows are still pending; completion of Actions workflows does
+not imply that external checks have finished or passed.
+
+Unchanged readiness labels and report comments are not rewritten. Each scheduled
+run logs its UTC cutoff and selected PR count. Report concurrency coalesces work
+per PR/head, while scheduled recovery has its own group; publication freshness
+checks protect overlapping writers. Labels and comments are eventually consistent
+with GitHub events and are not a replacement for required checks. The schedule
+bounds activity by recency, not a fixed request budget, and the completion
+coordinator still wakes on relevant workflow completions.
 
 These trusted reporters become active after their workflows and Mage code reach
 the default branch. No compatible main snapshots exist until collection has run
-there. Both benchmark and signal workflows participate in the CI timing
+there. Benchmark and signal workflow completions participate in the CI timing
 coordinator.
 
 ### Historical field tests

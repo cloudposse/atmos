@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/cloudposse/atmos/magefiles/internal/githubapi"
@@ -20,6 +21,7 @@ import (
 )
 
 func TestQualityEventSelection(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
 	cases := []struct {
 		name, event, path string
 		direct            bool
@@ -29,11 +31,13 @@ func TestQualityEventSelection(t *testing.T) {
 		{"status", `{"sha":"` + githubtest.SHA + `"}`, "commits/" + githubtest.SHA + "/pulls?state=open", false},
 		{"check", `{"check_run":{"head_sha":"` + githubtest.SHA + `"}}`, "commits/" + githubtest.SHA + "/pulls?state=open", false},
 		{"workflow", `{"workflow_run":{"head_sha":"` + githubtest.SHA + `"}}`, "commits/" + githubtest.SHA + "/pulls?state=open", false},
-		{"schedule", `{}`, "pulls?state=open&base=main", false},
+		{"manual", `{}`, "pulls?state=open&base=main", false},
 		{"plain issue", `{"issue":{"number":999}}`, "pulls?state=open&base=main", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			eventName := map[string]string{"issue comment": "issue_comment", "pull request": "pull_request", "status": "status", "check": "check_run", "workflow": "workflow_run", "manual": "workflow_dispatch", "plain issue": "issue_comment"}[tc.name]
+			t.Setenv("GITHUB_EVENT_NAME", eventName)
 			eventPath := filepath.Join(t.TempDir(), "event.json")
 			require.NoError(t, os.WriteFile(eventPath, []byte(tc.event), 0o600))
 			t.Setenv("GITHUB_EVENT_PATH", eventPath)
@@ -42,13 +46,14 @@ func TestQualityEventSelection(t *testing.T) {
 				calls++
 				require.Contains(t, path, tc.path)
 				pr := githubtest.PR(githubtest.Run())
+				pr.Updated = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 				closed := pr
 				closed.State = "closed"
 				other := pr
 				other.Base.Ref = "release"
 				return githubtest.Respond([]githubapi.PR{pr, closed, other}, response)
 			})
-			prs, err := q.eventPRs()
+			prs, err := q.eventPRs(time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC))
 			require.NoError(t, err)
 			require.Equal(t, []int{42}, prs)
 			if tc.direct {
@@ -61,18 +66,19 @@ func TestQualityEventSelection(t *testing.T) {
 }
 
 func TestQualityEventErrorsAndPagination(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
 	path := filepath.Join(t.TempDir(), "event.json")
 	t.Setenv("GITHUB_EVENT_PATH", path)
 	q := qualityTestClient(t, func(_ string, _ any) error { return errors.New("API unavailable") })
-	_, err := q.eventPRs()
+	_, err := q.eventPRs(time.Time{})
 	require.Error(t, err)
 	for _, data := range []string{`{`, `{"sha":"invalid"}`} {
 		require.NoError(t, os.WriteFile(path, []byte(data), 0o600))
-		_, err = q.eventPRs()
+		_, err = q.eventPRs(time.Time{})
 		require.Error(t, err)
 	}
 	t.Setenv("GITHUB_EVENT_PATH", "")
-	_, err = q.eventPRs()
+	_, err = q.eventPRs(time.Time{})
 	require.ErrorContains(t, err, "API unavailable")
 	page := 0
 	q = qualityTestClient(t, func(path string, response any) error {
@@ -83,12 +89,12 @@ func TestQualityEventErrorsAndPagination(t *testing.T) {
 		}
 		return githubtest.Respond([]githubapi.PR{githubtest.PR(githubtest.Run())}, response)
 	})
-	prs, err := q.eventPRs()
+	prs, err := q.eventPRs(time.Time{})
 	require.NoError(t, err)
 	require.Equal(t, []int{42}, prs)
 	require.Equal(t, 2, page)
 	q = qualityTestClient(t, func(_ string, response any) error { return githubtest.Respond(make([]githubapi.PR, 100), response) })
-	_, err = q.eventPRs()
+	_, err = q.eventPRs(time.Time{})
 	require.ErrorContains(t, err, "pagination limit")
 }
 
@@ -164,6 +170,9 @@ func TestQualityReconcileErrors(t *testing.T) {
 				if strings.HasSuffix(path, "pulls/42") {
 					return githubtest.Respond(githubtest.PR(githubtest.Run()), response)
 				}
+				if strings.Contains(path, "actions/runs?") {
+					return githubtest.Respond(map[string]any{"workflow_runs": []githubapi.Run{githubtest.Run()}}, response)
+				}
 				return githubtest.Respond(map[string]any{}, response)
 			})
 			require.ErrorContains(t, q.reconcile(42), "API unavailable")
@@ -177,9 +186,15 @@ func TestQualityReconcileErrors(t *testing.T) {
 }
 
 func TestQualityLabelCreationAndFailures(t *testing.T) {
-	for _, fail := range []string{"", "lookup", "create", "delete", "attach"} {
+	for _, fail := range []string{"", "issue", "lookup", "create", "delete", "attach"} {
 		t.Run(fail, func(t *testing.T) {
-			fake := &githubtest.FakeAPI{T: t, Get: func(_ string, _ any) error {
+			fake := &githubtest.FakeAPI{T: t, Get: func(path string, response any) error {
+				if strings.HasSuffix(path, "/issues/42") {
+					if fail == "issue" {
+						return errors.New("issue failed")
+					}
+					return githubtest.Respond(map[string]any{"labels": []map[string]string{{"name": qualityReady}}}, response)
+				}
 				if fail == "lookup" {
 					return errors.New("lookup failed")
 				}
@@ -211,7 +226,7 @@ func TestQualityLabelCreationAndFailures(t *testing.T) {
 				require.ErrorContains(t, err, fail+" failed")
 			} else {
 				require.NoError(t, err)
-				require.Equal(t, []string{"create", "delete", "attach"}, calls)
+				require.Equal(t, []string{"delete", "create", "attach"}, calls)
 			}
 		})
 	}
