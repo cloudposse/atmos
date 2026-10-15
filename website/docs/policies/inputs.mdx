@@ -7,22 +7,27 @@ description: CEL variables, operation input fields, missing values, and policy e
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Each rule evaluates a boolean CEL expression against a captured input object. Expressions do not
+Each rule evaluates a boolean CEL expression or Starlark function body against a captured input object. Predicates do not
 execute commands, make network requests, read files, or collect additional inputs.
 </Intro>
 
 ## Expression variables
+
+The table below uses CEL syntax. [Starlark policies](/policies/starlark) receive the same snapshots
+as `ctx.input`, `ctx.params`, `ctx.ci`, and `ctx.request`, with dictionary indexing for nested fields.
 
 | Variable | Type | Contents |
 |---|---|---|
 | `input` | Object | Data for the rule's `on` kind |
 | `params` | Object | Rule's `with` values; empty object by default |
 | `ci` | Object or `null` | [Provider-native CI snapshot](/policies/ci); `null` when no provider is detected |
-| `request.kind` | String | `terraform.plan` or `operation` for these command integrations |
+| `request.kind` | String | `terraform.plan`, `operation`, or `atmos.affected` |
 | `request.revisions` | Object | `governing`, `base`, `head`; empty strings when not supplied |
+| `request.subject` | Object or `null` | Instance identity and metadata for plan/lifecycle attachments |
 
 `ci` is a snapshot object, not the boolean `ci` variable used by ordinary hook/workflow conditions.
-Command integrations do not populate `request.revisions`; do not treat these fields as verified Git evidence.
+Affected analysis populates comparison `base` and `head` commit IDs. The `governing` revision is not
+inferred from either comparison revision. Plan and lifecycle integrations leave revision fields empty.
 
 ## Operation input
 
@@ -70,6 +75,12 @@ With `on: terraform.plan`, `input` is the native saved-plan JSON object. See
 has(input.resource_changes) && input.resource_changes.exists(r,
   r.mode == 'managed' && 'delete' in r.change.actions)
 ```
+
+## Affected input
+
+Use `on: atmos.affected` to inspect changed files, instances, components, stacks, and structured
+fields before affected results are consumed. See [Affected Changes](/policies/affected) for the
+input contract, examples, collection scope, and enforcement requirements.
 
 ## Missing and unknown values
 

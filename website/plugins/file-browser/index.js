@@ -9,6 +9,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const matter = require('gray-matter');
+const { policyPage } = require('./policy-pages');
 const { getBuildTimestamp } = require('../build-timestamp');
 
 // File names recognized as an item's primary content — the ones treated as
@@ -740,6 +741,9 @@ module.exports = function fileBrowserPlugin(context, options) {
     // Default to '' so existing instances render unchanged unless opted in.
     installCommandLabel = '',
     installCommandTemplate = '',
+    // Reuse a documentation sidebar for galleries embedded in the reference.
+    docsSidebar = '',
+    presentation = 'files',
   } = options;
 
   const mergedExcludePatterns = [...DEFAULT_EXCLUDE_PATTERNS, ...excludePatterns];
@@ -770,6 +774,8 @@ module.exports = function fileBrowserPlugin(context, options) {
       return {
         tree,
         options: {
+          id,
+          docsSidebar,
           routeBasePath,
           title,
           description,
@@ -801,7 +807,10 @@ module.exports = function fileBrowserPlugin(context, options) {
       // Create the main tree data file.
       const treeDataPath = await createData(
         `file-browser-tree-${id}.json`,
-        JSON.stringify(tree, null, 2)
+        JSON.stringify(presentation === 'policies' ? {
+          tags: tree.tags,
+          examples: tree.examples.map(({name, title, description, tags}) => ({name, title, description, tags})),
+        } : tree, null, 2)
       );
 
       // Create options data file.
@@ -813,7 +822,9 @@ module.exports = function fileBrowserPlugin(context, options) {
       // Add index page route.
       addRoute({
         path: routeBasePath,
-        component: '@site/src/components/FileBrowser/IndexPage.tsx',
+        component: presentation === 'policies'
+          ? '@site/src/components/PolicyLibrary/IndexPage.tsx'
+          : '@site/src/components/FileBrowser/IndexPage.tsx',
         modules: {
           treeData: treeDataPath,
           optionsData: optionsDataPath,
@@ -823,11 +834,21 @@ module.exports = function fileBrowserPlugin(context, options) {
 
       // Add routes for each example.
       for (const example of tree.examples) {
+        if (presentation === 'policies') {
+          const policyData = await createData(`policy-${example.name}.json`, JSON.stringify(policyPage(example)));
+          addRoute({
+            path: `${routeBasePath}/${example.name}`,
+            component: '@site/src/components/PolicyLibrary/PolicyPage.tsx',
+            modules: {policyData, optionsData: optionsDataPath},
+            exact: true,
+          });
+        }
         // Collect all directories for this example.
         const directories = collectDirectories(example.root, routeBasePath);
 
         // Add directory routes.
         for (const dir of directories) {
+          if (presentation === 'policies' && dir.urlPath === `${routeBasePath}/${example.name}`) continue;
           // Create directory-specific data.
           const dirDataPath = await createData(
             `file-browser-dir-${hashPath(dir.path)}.json`,
@@ -838,7 +859,9 @@ module.exports = function fileBrowserPlugin(context, options) {
             path: dir.urlPath,
             component: '@site/src/components/FileBrowser/DirectoryPage.tsx',
             modules: {
-              treeData: treeDataPath,
+              treeData: presentation === 'policies'
+                ? await createData(`policy-tree-${example.name}.json`, JSON.stringify({examples: [example]}))
+                : treeDataPath,
               optionsData: optionsDataPath,
               dirData: dirDataPath,
             },
@@ -861,7 +884,9 @@ module.exports = function fileBrowserPlugin(context, options) {
             path: file.urlPath,
             component: '@site/src/components/FileBrowser/FilePage.tsx',
             modules: {
-              treeData: treeDataPath,
+              treeData: presentation === 'policies'
+                ? await createData(`policy-tree-${example.name}.json`, JSON.stringify({examples: [example]}))
+                : treeDataPath,
               optionsData: optionsDataPath,
               fileData: fileDataPath,
             },
@@ -869,6 +894,24 @@ module.exports = function fileBrowserPlugin(context, options) {
           });
         }
       }
+    },
+
+    async allContentLoaded({ allContent, actions }) {
+      if (!docsSidebar) return;
+      const content = allContent['file-browser'][id];
+      const version = allContent['docusaurus-plugin-content-docs']?.default?.loadedVersions
+        .find(version => version.versionName === 'current');
+      if (!version?.sidebars[docsSidebar]) {
+        throw new Error(`[file-browser] Documentation sidebar not found: ${docsSidebar}`);
+      }
+      // Use the docs plugin's conversion so doc IDs, generated categories, and
+      // frontmatter overrides resolve exactly as on documentation pages.
+      const { toSidebarsProp } = require('@docusaurus/plugin-content-docs/lib/props.js');
+      actions.setGlobalData({
+        examples: content.tree.examples,
+        options: content.options,
+        sidebar: { name: docsSidebar, items: toSidebarsProp(version)[docsSidebar] },
+      });
     },
 
     getPathsToWatch() {

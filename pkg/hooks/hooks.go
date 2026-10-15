@@ -115,9 +115,10 @@ func getComponentHooks(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	if !ok {
 		// No hooks defined or wrong type, return empty hooks.
 		return &Hooks{
-			config: atmosConfig,
-			info:   info,
-			items:  nil,
+			config:   atmosConfig,
+			info:     info,
+			items:    nil,
+			sections: sections,
 		}, nil
 	}
 

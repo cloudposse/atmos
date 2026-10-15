@@ -25,7 +25,8 @@ type planPolicyDocument struct {
 	APIVersion string `yaml:"apiVersion"`
 	Kind       string `yaml:"kind"`
 	Metadata   struct {
-		Name string `yaml:"name"`
+		Name        string `yaml:"name"`
+		Description string `yaml:"description"`
 	} `yaml:"metadata"`
 	Spec struct {
 		Policies map[string]planPolicyItem `yaml:"policies"`
@@ -42,14 +43,33 @@ type Bundle struct {
 	Tools map[string]string
 }
 
-// DirectoryFromEnvironment resolves only the caller's explicit governing source.
+// DirectoryFromEnvironment resolves an explicit override or the local policy.d directory.
+// Discovery does not establish trust. A missing default is allowed; an explicit
+// missing directory is returned so loading fails rather than falling back.
 func DirectoryFromEnvironment() (string, error) {
 	defer perf.Track(nil, "policy.DirectoryFromEnvironment")()
 	settings := viper.New()
 	if err := settings.BindEnv("directory", "ATMOS_POLICY_DIR"); err != nil {
 		return "", err
 	}
-	return settings.GetString("directory"), nil
+	if directory := settings.GetString("directory"); directory != "" {
+		return directory, nil
+	}
+	directory, err := filepath.Abs("policy.d")
+	if err != nil {
+		return "", fmt.Errorf("%w: resolve default directory: %w", errUtils.ErrPolicyInvalid, err)
+	}
+	info, err := os.Stat(directory)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("%w: inspect default directory: %w", errUtils.ErrPolicyInvalid, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("%w: default policy.d is not a directory", errUtils.ErrPolicyInvalid)
+	}
+	return directory, nil
 }
 
 // RulesFor returns rules for one input capability without changing their order.
@@ -66,6 +86,7 @@ func (b *Bundle) RulesFor(kind InputKind) []Rule {
 }
 
 type planPolicyItem struct {
+	Match      *Selector         `yaml:"match"`
 	On         InputKind         `yaml:"on"`
 	Engine     string            `yaml:"engine"`
 	Rule       string            `yaml:"rule"`
@@ -76,7 +97,7 @@ type planPolicyItem struct {
 	Hooks      []HookRequirement `yaml:"hooks"`
 }
 
-// LoadPlanDirectory loads the initial, deliberately narrow inline CEL plan manifest.
+// LoadPlanDirectory loads inline CEL or Starlark plan manifests.
 // An explicit directory is required. No discovery, imports, templates or trust claims
 // are made. Unsupported fields/capabilities are errors, not ignored declarations.
 func LoadPlanDirectory(directory string) ([]Rule, error) {
@@ -93,7 +114,7 @@ func LoadPlanDirectory(directory string) ([]Rule, error) {
 	return bundle.Rules, nil
 }
 
-// LoadDirectory loads explicit, protected local CEL policy documents. It performs
+// LoadDirectory loads explicit, protected local policy documents. It performs
 // no imports, template expansion, hook execution or automatic trust discovery.
 func LoadDirectory(directory string) (*Bundle, error) {
 	defer perf.Track(nil, "policy.LoadDirectory")()
@@ -215,6 +236,7 @@ func (d *planPolicyDocument) rules() ([]Rule, error) {
 		if err != nil {
 			return nil, err
 		}
+		rule.Description = d.Metadata.Description
 		rules = append(rules, rule)
 	}
 	return rules, nil
@@ -231,9 +253,16 @@ func (p *planPolicyItem) resolve(document, name string) (Rule, error) {
 }
 
 func (p *planPolicyItem) validateEffects(name string) error {
-	if strings.TrimSpace(name) == "" || !slices.Contains([]InputKind{TerraformPlan, Operation}, p.On) || !slices.Contains([]string{"deny", "hooks"}, p.Action) {
-		return fmt.Errorf("%w: expected terraform.plan/operation and deny/hooks action", errUtils.ErrPolicyInvalid)
+	if strings.TrimSpace(name) == "" || !slices.Contains([]InputKind{TerraformPlan, Operation, AtmosAffected}, p.On) || !slices.Contains([]string{"deny", "hooks"}, p.Action) {
+		return fmt.Errorf("%w: expected terraform.plan/operation/atmos.affected and deny/hooks action", errUtils.ErrPolicyInvalid)
 	}
+	if p.On == AtmosAffected && p.Match != nil {
+		return fmt.Errorf("%w: affected rules inspect before/after instances in their expression, not match", errUtils.ErrPolicyInvalid)
+	}
+	return p.validateHookEffects()
+}
+
+func (p *planPolicyItem) validateHookEffects() error {
 	if p.Action == "hooks" && (p.On != Operation || len(p.Hooks) == 0) || p.Action == "deny" && len(p.Hooks) != 0 {
 		return fmt.Errorf("%w: hook effects require an operation rule with action: hooks", errUtils.ErrPolicyInvalid)
 	}
@@ -253,16 +282,13 @@ func (p *planPolicyItem) resolveHookReferences(document string) error {
 }
 
 func (p *planPolicyItem) resolveExpression(document, name string) (Rule, error) {
+	if err := p.Match.validate(); err != nil {
+		return Rule{}, err
+	}
 	if p.Engine == "" {
 		p.Engine = CELEngine
 	}
-	if p.Engine != CELEngine {
-		return Rule{}, fmt.Errorf("%w: plan directory currently supports only CEL", errUtils.ErrPolicyEngineUnknown)
-	}
-	if len(p.Rule) > maxExpressionBytes {
-		return Rule{}, fmt.Errorf("%w: expression exceeds size limit", errUtils.ErrPolicyInvalid)
-	}
-	if _, err := compileCEL(p.Rule); err != nil {
+	if err := validateExpression(p.Engine, p.Rule); err != nil {
 		return Rule{}, err
 	}
 	parameters := json.RawMessage(`{}`)
@@ -274,7 +300,23 @@ func (p *planPolicyItem) resolveExpression(document, name string) (Rule, error) 
 		}
 	}
 	return Rule{
-		ID: document + "/" + name, On: p.On, Engine: p.Engine, Expression: p.Rule,
+		ID: document + "/" + name, On: p.On, Engine: p.Engine, Expression: p.Rule, Match: p.Match,
 		Parameters: parameters, RequiredCI: p.RequiredCI, Effects: Effects{Deny: p.Action == "deny", Reason: p.Reason, Hooks: p.Hooks},
 	}, nil
+}
+
+func validateExpression(engine, expression string) error {
+	if len(expression) > maxExpressionBytes {
+		return fmt.Errorf("%w: expression exceeds size limit", errUtils.ErrPolicyInvalid)
+	}
+	var err error
+	switch engine {
+	case CELEngine:
+		_, err = compileCEL(expression)
+	case StarlarkEngine:
+		_, err = compileStarlark(expression, nil)
+	default:
+		return fmt.Errorf("%w: supported engines are cel and starlark", errUtils.ErrPolicyEngineUnknown)
+	}
+	return err
 }

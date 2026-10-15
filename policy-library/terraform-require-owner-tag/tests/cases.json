@@ -1,0 +1,283 @@
+[
+  {
+    "name": "owned",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_instance.example",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {
+                "tags": {
+                  "Owner": "platform"
+                }
+              },
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "absent",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_instance.example",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {
+                "tags": {}
+              },
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "empty",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_instance.example",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {
+                "tags": {
+                  "Owner": ""
+                }
+              },
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "null tags",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_instance.example",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {
+                "tags": null
+              },
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "null owner",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_instance.example",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {
+                "tags": {
+                  "Owner": null
+                }
+              },
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "unknown map",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_instance.example",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {
+                "tags": {
+                  "Owner": "platform"
+                }
+              },
+              "after_unknown": {
+                "tags": true
+              }
+            }
+          }
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "unknown owner",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_instance.example",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {
+                "tags": {
+                  "Owner": "platform"
+                }
+              },
+              "after_unknown": {
+                "tags": {
+                  "Owner": true
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "missing tags",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_instance.example",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "deleted",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_instance.example",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "example",
+            "change": {
+              "actions": [
+                "delete"
+              ],
+              "before": null,
+              "after": null,
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "different input kind",
+    "request": {
+      "kind": "operation",
+      "input": {}
+    },
+    "status": "not_applicable"
+  }
+]

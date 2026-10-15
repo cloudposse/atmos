@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"go.starlark.net/starlark"
+
+	starlarkvalue "github.com/cloudposse/atmos/pkg/script/starlark/value"
 )
 
 // ciTextSource describes the text arguments of ci.summary and ci.comment: the literal text, or a
@@ -106,7 +108,7 @@ func ciTemplateData(b *starlark.Builtin, value starlark.Value) (data any, presen
 	if !ok {
 		return nil, false, invalidArg("%s: for parameter data: got %s, want dict", b.Name(), value.Type())
 	}
-	converted, err := configurationResult(dict, make(map[starlark.Value]bool))
+	converted, err := starlarkvalue.Result(dict)
 	if err != nil {
 		return nil, false, invalidArg("%s: data: %v", b.Name(), err)
 	}

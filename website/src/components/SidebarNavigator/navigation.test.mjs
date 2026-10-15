@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   filterItems,
   findSection,
+  matchesPath,
   normalizePath,
   prepareItems,
 } from "./navigation.mjs";
@@ -39,6 +40,17 @@ const tree = [
   ]),
   leaf("CLI", "/cli"),
 ];
+
+test('generated library descendants retain their owning section without matching sibling prefixes', () => {
+  const library = {type: 'link', label: 'Library', href: '/policies/library', customProps: {navigationMatchPrefix: true}};
+  const items = [category('Policies', '/policies', [library])];
+  for (const url of ['/policies/library', '/policies/library/example', '/policies/library/example/tests/cases.json#input']) {
+    assert.equal(findSection(items, url), 0);
+    assert.equal(matchesPath(library, url), true);
+  }
+  assert.equal(findSection(items, '/policies/library-other'), null);
+  assert.equal(matchesPath({...library, customProps: {}}, '/policies/library/example'), false);
+});
 
 test("canonical sections win over cross-links, including direct and anchored arrivals", () => {
   assert.equal(findSection(tree, "/steps"), 1);

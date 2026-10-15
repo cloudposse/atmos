@@ -22,10 +22,11 @@ import (
 //
 //go:generate go run go.uber.org/mock/mockgen -destination=mock_runner_test.go -package=planfile github.com/cloudposse/atmos/pkg/process Runner
 type Guard struct {
-	Engine *policy.Engine
-	Rules  []policy.Rule
-	Show   process.Runner
-	CI     *policy.CISnapshot
+	Subject *policy.Subject
+	Engine  *policy.Engine
+	Rules   []policy.Rule
+	Show    process.Runner
+	CI      *policy.CISnapshot
 }
 
 // Invocation is the prepared Terraform process, not a command to re-enter Atmos.
@@ -110,7 +111,7 @@ func (g *Guard) evaluate(ctx context.Context, invocation *Invocation, path strin
 	if err != nil {
 		return err
 	}
-	decision, evalErr := g.Engine.Evaluate(ctx, &policy.Request{Kind: policy.TerraformPlan, Input: data, CI: g.CI}, g.Rules)
+	decision, evalErr := g.Engine.Evaluate(ctx, &policy.Request{Kind: policy.TerraformPlan, Input: data, CI: g.CI, Subject: g.Subject}, g.Rules)
 	if evalErr != nil {
 		// CEL runtime errors can contain input values. Do not leak them through CLI/CI logs.
 		return fmt.Errorf("%w: plan evaluation failed (input details withheld)", errUtils.ErrPolicyEvaluation)
