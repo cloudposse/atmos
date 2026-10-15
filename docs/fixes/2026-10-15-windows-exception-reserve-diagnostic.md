@@ -32,8 +32,14 @@ proof that every Atmos crash has the same cause.
 ## Validation
 
 Workflow validation with actionlint and `git diff --check` passed locally.
-Windows execution is pending. The diagnostic cannot establish a mitigation
-unless it captures a stock failure and successful modified runs on the same host.
+The first diagnostic run exposed an oversized repetition budget: ten acceptance
+repetitions exceeded the 15-minute timeout on three AMD hosts. Both stress
+binaries passed on those hosts, whose measured context size was 1,663 bytes.
+The corrected harness uses three repetitions per mode and also runs stock
+acceptance tests on the same host. Local probe execution and a Windows cross-build
+with the overlay passed. Corrected Windows execution is pending. The diagnostic
+cannot establish a mitigation unless it captures a stock failure and successful
+modified runs on the same host.
 
 ## Follow-ups
 

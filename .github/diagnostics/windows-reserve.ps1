@@ -130,12 +130,21 @@ for ($round = 0; $round -lt 3; $round++) {
 # Keep the actual stack workflow available to acceptance's matrix verifier.
 Push-Location source
 $env:CGO_ENABLED = '1'
-go test -count=10 -parallel=2 -timeout=15m ./internal/ci/acceptance *> "$output/acceptance-baseline.log"
+$env:GOFLAGS = ''
+go test -count=3 -parallel=2 -timeout=15m ./internal/ci/acceptance *> "$output/acceptance-stock.log"
+$stockExit = $LASTEXITCODE
+@{ exitCode = $stockExit; contextBytes = $length } | ConvertTo-Json | Set-Content "$output/acceptance-stock-result.json"
+if ($stockExit -ne 0 -and -not (Select-String -Path "$output/acceptance-stock.log" -Quiet `
+    -Pattern 'fatal error: found pointer to free object|exception dispatched below goroutine stack bottom')) {
+    throw "Unexpected stock acceptance failure: $stockExit"
+}
+$env:GOFLAGS = "-overlay=$overlay"
+go test -count=3 -parallel=2 -timeout=15m ./internal/ci/acceptance *> "$output/acceptance-baseline.log"
 if ($LASTEXITCODE -ne 0) { throw 'Acceptance baseline failed' }
-go test -race -count=5 -parallel=2 -timeout=15m ./internal/ci/acceptance *> "$output/acceptance-race.log"
+go test -race -count=3 -parallel=2 -timeout=15m ./internal/ci/acceptance *> "$output/acceptance-race.log"
 if ($LASTEXITCODE -ne 0) { throw 'Acceptance race failed' }
 $env:CGO_ENABLED = '0'
-go test -gcflags=all=-d=checkptr=2 -count=5 -parallel=2 -timeout=15m ./internal/ci/acceptance *> "$output/acceptance-checkptr.log"
+go test -gcflags=all=-d=checkptr=2 -count=3 -parallel=2 -timeout=15m ./internal/ci/acceptance *> "$output/acceptance-checkptr.log"
 if ($LASTEXITCODE -ne 0) { throw 'Acceptance checkptr failed' }
 go test -short -timeout=15m -run 'Stack|Exception|Fault|Panic|Signal|Goroutine' runtime *> "$output/runtime.log"
 if ($LASTEXITCODE -ne 0) { throw 'Runtime regression suite failed' }
