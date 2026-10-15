@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { setImmediate } = require('node:timers/promises');
 const { WIDTH, HEIGHT, renderCardJpeg } = require('./render-card');
 
 const OUTPUT_DIR = path.join('img', 'social');
@@ -179,6 +180,9 @@ module.exports = function socialCardsPlugin() {
         if (!written.has(hash)) {
           fs.writeFileSync(path.join(cardsDir, `${hash}.jpg`), renderCardJpeg(card));
           written.add(hash);
+          // Let native renderer finalizers run between cards. An uninterrupted
+          // synchronous loop retains gigabytes of native memory during a build.
+          await setImmediate();
         }
         const imageUrl = `${baseUrl}${OUTPUT_DIR.split(path.sep).join('/')}/${hash}.jpg`;
         fs.writeFileSync(file, rewriteImageMeta(html, imageUrl));

@@ -180,3 +180,20 @@ test("rewriteImageMeta replaces stale dimensions and adds only missing tags", ()
     assert.equal(rewriteImageMeta(out, url), out);
   }
 });
+
+test("postBuild yields between cards so native rendering memory can be released", async (t) => {
+  const outDir = mkdtempSync(path.join(os.tmpdir(), "atmos-social-cards-yield-"));
+  t.after(() => rmSync(outDir, { recursive: true, force: true }));
+  for (const name of ["first", "second"]) {
+    writeFileSync(path.join(outDir, `${name}.html`),
+      `<meta property="og:title" content="${name}"><meta property="og:image" content="old.jpg">`);
+  }
+  let cardsAtYield;
+  const immediate = setImmediate(() => {
+    cardsAtYield = readdirSync(path.join(outDir, "img", "social")).length;
+  });
+  t.after(() => clearImmediate(immediate));
+  await require("./index.js")().postBuild({ outDir, siteConfig: { url: "https://atmos.tools", baseUrl: "/" } });
+  assert.equal(cardsAtYield, 1, "the event loop must run before rendering the second card");
+  assert.equal(readdirSync(path.join(outDir, "img", "social")).length, 2);
+});
