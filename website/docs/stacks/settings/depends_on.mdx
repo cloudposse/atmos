@@ -55,6 +55,25 @@ components:
 ```
 </File>
 
+## List Form
+
+`settings.depends_on` is also accepted as a list, which is the older legacy shape. Each entry takes the same fields as a map entry:
+
+<File title="List form (legacy)">
+```yaml
+components:
+  terraform:
+    app:
+      settings:
+        depends_on:
+          - component: vpc
+          - component: rds
+            stack: tenant1-ue2-prod
+```
+</File>
+
+`atmos doctor --fix` migrates both the map and the list form to `dependencies.components`. It checks that the migration leaves every component's effective dependencies unchanged and rejects the repair when it would change them, for example when an inherited base declares a list and the inheriting component declares its own. See [`atmos doctor`](/cli/commands/doctor).
+
 ## Field Mapping
 
 | Legacy field | Current form |

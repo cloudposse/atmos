@@ -510,18 +510,30 @@ func TestExecuteGraphReportsCancellationAfterSuccessfulDispatch(t *testing.T) {
 }
 
 func TestLegacyDependsOnParsing(t *testing.T) {
-	assert.Nil(t, parseLegacyDependsOn("invalid"))
-	assert.Empty(t, parseLegacyDependsOn([]any{"", map[string]any{"stack": "dev"}, 123}))
+	assert.Nil(t, legacyDependenciesFromSettings(map[string]any{"depends_on": "invalid"}))
+	assert.Empty(t, legacyDependenciesFromSettings(map[string]any{"depends_on": []any{"", map[string]any{"stack": "dev"}, 123}}))
 
-	deps := parseLegacyDependsOn(map[string]any{
+	deps := legacyDependenciesFromSettings(map[string]any{"depends_on": map[string]any{
 		"first": "base",
 		"second": map[string]any{
 			"component": "database",
 			"stack":     "prod",
 		},
-	})
+	}})
 
-	assert.ElementsMatch(t, []schema.ComponentDependency{
+	assert.Equal(t, []schema.ComponentDependency{
+		{Component: "base"},
+		{Component: "database", Stack: "prod"},
+	}, deps, "map entries are ordered by key")
+}
+
+func TestLegacyDependsOnListForm(t *testing.T) {
+	deps := legacyDependenciesFromSettings(map[string]any{"depends_on": []any{
+		"base",
+		map[string]any{"component": "database", "stack": "prod"},
+	}})
+
+	assert.Equal(t, []schema.ComponentDependency{
 		{Component: "base"},
 		{Component: "database", Stack: "prod"},
 	}, deps)
@@ -531,64 +543,25 @@ func TestSortedUniqueStrings(t *testing.T) {
 	assert.Equal(t, []string{"a", "b"}, sortedUniqueStrings([]string{"b", "", "a", "b"}))
 }
 
-func TestParseLegacyDependsOnMapAnyAny(t *testing.T) {
+func TestLegacyDependsOnMapAnyAny(t *testing.T) {
 	// YAML decoders may produce map[any]any (non-string keys) rather than map[string]any.
-	deps := parseLegacyDependsOn(map[any]any{
+	deps := legacyDependenciesFromSettings(map[string]any{"depends_on": map[any]any{
 		1: "base",
 		2: map[any]any{
 			"component": "database",
 			"stack":     "prod",
 		},
-	})
+	}})
 
-	assert.ElementsMatch(t, []schema.ComponentDependency{
+	assert.Equal(t, []schema.ComponentDependency{
 		{Component: "base"},
 		{Component: "database", Stack: "prod"},
 	}, deps)
 }
 
-func TestParseLegacyDependsOnEntry(t *testing.T) {
-	t.Run("map[any]any with component and stack", func(t *testing.T) {
-		dep, ok := parseLegacyDependsOnEntry(map[any]any{
-			"component": "database",
-			"stack":     "prod",
-		})
-		require.True(t, ok)
-		assert.Equal(t, schema.ComponentDependency{Component: "database", Stack: "prod"}, dep)
-	})
-
-	t.Run("map[any]any missing component", func(t *testing.T) {
-		dep, ok := parseLegacyDependsOnEntry(map[any]any{
-			"stack": "prod",
-		})
-		assert.False(t, ok)
-		assert.Equal(t, schema.ComponentDependency{}, dep)
-	})
-
-	t.Run("map[string]any missing component", func(t *testing.T) {
-		dep, ok := parseLegacyDependsOnEntry(map[string]any{
-			"stack": "prod",
-		})
-		assert.False(t, ok)
-		assert.Equal(t, schema.ComponentDependency{}, dep)
-	})
-
-	t.Run("empty string", func(t *testing.T) {
-		dep, ok := parseLegacyDependsOnEntry("")
-		assert.False(t, ok)
-		assert.Equal(t, schema.ComponentDependency{}, dep)
-	})
-
-	t.Run("unsupported type", func(t *testing.T) {
-		dep, ok := parseLegacyDependsOnEntry(123)
-		assert.False(t, ok)
-		assert.Equal(t, schema.ComponentDependency{}, dep)
-	})
-}
-
 func TestLegacyDependenciesFromSettingsStructuredSchema(t *testing.T) {
 	t.Run("structured depends_on with context fields", func(t *testing.T) {
-		// Entries without a 'component' field cause parseLegacyDependsOn to return empty,
+		// Entries without a 'component' field make the shared legacy parser return empty,
 		// forcing the structured schema.Settings.DependsOn decode path. The map[any]Context
 		// decode populates the Namespace/Tenant/Environment/Stage context fields.
 		settingsSection := map[string]any{
@@ -620,7 +593,7 @@ func TestLegacyDependenciesFromSettingsStructuredSchema(t *testing.T) {
 	})
 
 	t.Run("depends_on with decode failure returns nil", func(t *testing.T) {
-		// A scalar depends_on cannot decode into map[any]Context, and parseLegacyDependsOn
+		// A scalar depends_on cannot decode into map[any]Context, and the shared legacy parser
 		// returns nil for a non-collection value, so the result is nil.
 		deps := legacyDependenciesFromSettings(map[string]any{
 			"depends_on": "not-a-collection",

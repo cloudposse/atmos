@@ -24,6 +24,8 @@ type configLayout struct {
 	profiles []source
 	// missingProfiles are active profiles that have no directory.
 	missingProfiles []string
+	// missingConfigs are explicitly selected base configuration paths that do not exist.
+	missingConfigs []missingConfig
 	// configDir is the directory of the highest-precedence base configuration file.
 	configDir string
 	// root is the project root implied by where the configuration was discovered.
@@ -31,6 +33,22 @@ type configLayout struct {
 	// project is true when any project configuration was selected or discovered.
 	project bool
 }
+
+// missingConfig is an explicit configuration selection that points at nothing.
+type missingConfig struct {
+	// path is the selected file or directory, as the user would recognize it.
+	path string
+	// source is the flag or environment variable that selected it.
+	source string
+}
+
+// describe renders the selection for a message.
+func (m missingConfig) describe() string {
+	return fmt.Sprintf("Configured path does not exist: %s (from %s)", m.path, m.source)
+}
+
+// configFlagSource is the Source label of a --config selection, which names a file rather than a directory.
+const configFlagSource = "--config"
 
 // resolveConfigLayout locates configuration candidates exactly as the Atmos loader would, without
 // parsing them. The active profiles and their base path are supplied once the base configuration is known.
@@ -51,7 +69,7 @@ func resolveConfigLayout(o *Options, profiles []string, profilesBasePath, declar
 }
 
 // add classifies one candidate. Ambient configuration never becomes a source because it is not
-// project input; missing explicit selections become sources so the read reports them.
+// project input; missing explicit selections are recorded so they can be reported.
 func (l *configLayout) add(o *Options, c *cfg.ConfigCandidate) {
 	path := canonicalPath(c.Path)
 	switch c.Kind {
@@ -68,11 +86,18 @@ func (l *configLayout) add(o *Options, c *cfg.ConfigCandidate) {
 		}
 		return
 	case cfg.ConfigCandidateBase:
-		l.project = true
-		if c.Exists {
-			l.configDir = filepath.Dir(path)
-			l.root = discoveredRoot(o, c.Source, l.configDir, l.root)
+		if !c.Exists {
+			// A selection that points at nothing is a mistake to report, not an input to read or an
+			// "outside the project" source.
+			selected := path
+			if c.Source != configFlagSource {
+				selected = filepath.Dir(path)
+			}
+			l.missingConfigs = append(l.missingConfigs, missingConfig{path: selected, source: c.Source})
+			return
 		}
+		l.configDir = filepath.Dir(path)
+		l.root = discoveredRoot(o, c.Source, l.configDir, l.root)
 	}
 	l.project = true
 	l.sources = append(l.sources, source{path, documentConfig})
@@ -105,11 +130,7 @@ func canonicalPath(path string) string {
 // values, the runtime override, and the Git-root default agree with `atmos` itself.
 func projectBasePath(o *Options, p *project, configDir string) (string, error) {
 	basePath, source := stringAt(p.config, keyBasePath), ""
-	runtime := o.BasePath
-	if runtime == "" {
-		runtime = cfg.ConfigSelectionFromEnv().BasePath
-	}
-	if runtime != "" {
+	if runtime := runtimeBasePath(o); runtime != "" {
 		basePath, source = runtime, runtimeBasePathSource
 	}
 	base, err := cfg.ResolveBasePath(o.Root, basePath, configDir, source)
@@ -119,27 +140,54 @@ func projectBasePath(o *Options, p *project, configDir string) (string, error) {
 	return canonicalPath(base), nil
 }
 
-// rerootProject moves the project root and rebases affected-file selections that were relative to
-// the previous root.
-func rerootProject(p *project, o *Options, root string) {
+// runtimeBasePath returns the base path selected outside the configuration, by --base-path or
+// ATMOS_BASE_PATH, which takes precedence over base_path in atmos.yaml.
+func runtimeBasePath(o *Options) string {
+	if o.BasePath != "" {
+		return o.BasePath
+	}
+	return cfg.ConfigSelectionFromEnv().BasePath
+}
+
+// rerootProject moves the project root and rebases affected-file selections and the locations of
+// findings already recorded, which were relative to the previous root.
+func rerootProject(p *project, o *Options, r *Report, root string) {
 	if root == "" || root == p.root {
 		return
 	}
 	rebased := make([]string, 0, len(o.Selected))
 	for _, path := range o.Selected {
-		rel, err := filepath.Rel(root, filepath.Join(p.root, filepath.FromSlash(path)))
-		if err != nil {
-			continue // Different volume; the path cannot be inside the new root.
+		if rel, ok := rebase(p.root, root, path); ok {
+			rebased = append(rebased, rel)
 		}
-		rebased = append(rebased, filepath.ToSlash(rel))
 	}
 	o.Selected = rebased
+	for i := range r.Findings {
+		if file := r.Findings[i].File; file != "" && !filepath.IsAbs(file) {
+			if rel, ok := rebase(p.root, root, file); ok {
+				r.Findings[i].File = rel
+			}
+		}
+	}
 	p.root = root
 	o.Root = root
 }
 
-// noProjectError explains how to select a project when none was found.
-func noProjectError(o *Options) error {
+// rebase converts a slash-separated path relative to from into one relative to to.
+func rebase(from, to, path string) (string, bool) {
+	rel, err := filepath.Rel(to, filepath.Join(from, filepath.FromSlash(path)))
+	if err != nil {
+		return "", false // Different volume; the path cannot be inside the new root.
+	}
+	return filepath.ToSlash(rel), true
+}
+
+// noProjectError explains how to select a project when none was found. A selection that points at
+// nothing is named, because that is the actual reason no project was found.
+func noProjectError(o *Options, missing []missingConfig) error {
+	if len(missing) > 0 {
+		return fmt.Errorf("%w: %s", ErrNoConfiguration, missing[0].describe())
+	}
 	return fmt.Errorf("%w in %s: run atmos doctor from the project directory, or select a configuration with --config or ATMOS_CLI_CONFIG_PATH", ErrNoConfiguration, o.Root)
 }
 
@@ -167,6 +215,11 @@ func activeProfiles(o *Options, p *project) []string {
 		return []string{name}
 	}
 	return nil
+}
+
+// missingConfigFinding reports a selected configuration path that does not exist.
+func missingConfigFinding(m missingConfig) *Finding {
+	return &Finding{RuleID: ruleImports, Category: categoryValidation, Severity: validation.SeverityError, Message: m.describe(), Status: statusManual, Remediation: "Create the path or select an existing configuration with --config, --config-path, or ATMOS_CLI_CONFIG_PATH"}
 }
 
 // missingProfileFinding reports an active profile with no directory, which the real CLI rejects.

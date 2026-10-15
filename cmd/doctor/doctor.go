@@ -9,7 +9,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -198,7 +197,7 @@ func interruptedMessage(report *diagnostic.Report) string {
 		}
 		return message + "; no project files were changed"
 	}
-	return fmt.Sprintf("%s; %d %s already changed: %s", message, len(report.ChangedFiles), plural(len(report.ChangedFiles), "file was", "files were"), strings.Join(report.ChangedFiles, ", "))
+	return fmt.Sprintf("%s; %d %s already changed: %s", message, len(report.ChangedFiles), plural(len(report.ChangedFiles), "file was", "files were"), diagnostic.SummarizePaths(report.ChangedFiles))
 }
 
 // finishRun renders a completed engine run and maps it to the exit code.

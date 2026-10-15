@@ -149,14 +149,15 @@ func selectedPaths(p *project, o *Options, paths []string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !within(p.root, abs) || !selected(o, p, &document{path: abs}) {
+		if !within(p.root, abs) {
 			continue
 		}
-		remaining, err := validation.ExcludePaths([]string{relative(p.root, abs)}, o.Exclude)
+		// Every selected-or-not path counts toward the --exclude patterns that match it.
+		excluded, err := p.excludes(o, relative(p.root, abs))
 		if err != nil {
 			return nil, err
 		}
-		if len(remaining) > 0 {
+		if !excluded && selected(o, p, &document{path: abs}) {
 			result = append(result, abs)
 		}
 	}

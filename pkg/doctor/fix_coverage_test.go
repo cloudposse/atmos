@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -261,9 +263,84 @@ func TestEcGitWarningsReportUnreadableStatus(t *testing.T) {
 	e.gitWarnings(context.Background(), &project{root: root}, []candidate{{doc: &document{path: path}}}, r)
 	require.Len(t, r.Findings, 1)
 	require.Equal(t, "recovery", r.Findings[0].RuleID)
-	require.Equal(t, "x.yaml", r.Findings[0].File)
-	require.Equal(t, "Unable to inspect Git status for x.yaml", r.Findings[0].Message)
+	require.Equal(t, validation.SeverityNotice, r.Findings[0].Severity)
+	require.Empty(t, r.Findings[0].File)
+	require.Equal(t, "Git status unavailable for 1 edited file; keep the recovery backup", r.Findings[0].Message)
+	require.Equal(t, "x.yaml", r.Findings[0].Reason)
 	require.Equal(t, statusManual, r.Findings[0].Status)
+}
+
+// gitCandidates creates count untracked project files inside a fresh repository and returns candidates for them.
+func gitCandidates(t *testing.T, count int) (string, []candidate) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is unavailable")
+	}
+	root := newProject(t)
+	output, err := gitCommand(root, "init", "--quiet").CombinedOutput()
+	require.NoError(t, err, string(output))
+	var candidates []candidate
+	for i := range count {
+		path := projectFile(t, root, fmt.Sprintf("stacks/s%02d.yaml", i), "a: 1\n")
+		candidates = append(candidates, candidate{doc: &document{path: path}})
+	}
+	return root, candidates
+}
+
+func TestGitWarningsAggregateManyEditedFilesIntoOneNotice(t *testing.T) {
+	root, candidates := gitCandidates(t, 15)
+	var warnings []Event
+	e := &Engine{Observe: func(event Event) {
+		if event.Status == "warning" {
+			warnings = append(warnings, event)
+		}
+	}}
+	r := &Report{}
+	e.gitWarnings(context.Background(), &project{root: root}, candidates, r)
+
+	require.Len(t, r.Findings, 1, "hundreds of edited files must not produce hundreds of findings")
+	f := r.Findings[0]
+	require.Equal(t, "recovery", f.RuleID)
+	require.Equal(t, validation.SeverityNotice, f.Severity)
+	require.Empty(t, f.File)
+	require.Equal(t, "15 edited files had staged, unstaged, untracked, or ignored content; keep the recovery backup", f.Message)
+	require.True(t, strings.HasPrefix(f.Reason, filepath.ToSlash(filepath.Join("stacks", "s00.yaml"))+", "), f.Reason)
+	require.Contains(t, f.Reason, filepath.ToSlash(filepath.Join("stacks", "s09.yaml")))
+	require.NotContains(t, f.Reason, filepath.ToSlash(filepath.Join("stacks", "s10.yaml")))
+	require.True(t, strings.HasSuffix(f.Reason, ", and 5 more"), f.Reason)
+	require.Len(t, warnings, 1, "one progress warning, not one per file")
+
+	r.Findings[0].Status = statusManual
+	require.Zero(t, r.ExitCode("warning"), "a recovery notice must not trip --fail-on=warning")
+}
+
+func TestGitWarningsDoNotAbbreviateAShortList(t *testing.T) {
+	root, candidates := gitCandidates(t, 2)
+	r := &Report{}
+	(&Engine{}).gitWarnings(context.Background(), &project{root: root}, candidates, r)
+	require.Len(t, r.Findings, 1)
+	require.Equal(t, "2 edited files had staged, unstaged, untracked, or ignored content; keep the recovery backup", r.Findings[0].Message)
+	require.Equal(t, filepath.ToSlash(filepath.Join("stacks", "s00.yaml"))+", "+filepath.ToSlash(filepath.Join("stacks", "s01.yaml")), r.Findings[0].Reason)
+}
+
+func TestGitWarningsStaySilentWhenCancelled(t *testing.T) {
+	root, candidates := gitCandidates(t, 3)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	r := &Report{}
+	(&Engine{}).gitWarnings(ctx, &project{root: root}, candidates, r)
+	require.Empty(t, r.Findings, "a cancelled run must not report every file as uninspectable")
+}
+
+func TestGitWarningsStopWhenCancelledMidway(t *testing.T) {
+	root, candidates := gitCandidates(t, 4)
+	ctx, cancel := context.WithCancel(context.Background())
+	e := &Engine{Observe: func(Event) { cancel() }}
+	r := &Report{}
+	e.gitWarnings(ctx, &project{root: root}, candidates, r)
+	for _, f := range r.Findings {
+		require.NotContains(t, f.Message, "unavailable", "cancellation is not a Git failure")
+	}
 }
 
 // A rejected candidate keeps its verification decision across the post-write recheck, so a

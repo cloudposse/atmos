@@ -100,6 +100,19 @@ func TestRenderSummary(t *testing.T) {
 			absent: []string{"1 finding remains"},
 		},
 		{
+			name: "exclude notices are not counted as remaining findings",
+			fix:  true,
+			report: diagnostic.Report{
+				ChangedFiles: []string{"atmos.yaml"},
+				Findings: []diagnostic.Finding{
+					{RuleID: "a", Status: "fixed"},
+					{RuleID: "exclude", Status: "manual"},
+				},
+			},
+			want:   []string{"Fixed 1 finding in 1 file. 0 findings remain."},
+			absent: []string{"1 finding remains"},
+		},
+		{
 			name: "explains skipped and incomplete checks only",
 			report: diagnostic.Report{Checks: []diagnostic.Check{
 				{ID: "stacks", Status: "skipped", Reason: "No stack manifests"},
@@ -423,4 +436,20 @@ func TestProgressObserverMarksUntotaledWorkAsUnknown(t *testing.T) {
 	assert.Equal(t, -1, got[1].Count)
 	assert.Equal(t, -1, got[2].Count)
 	assert.NotEqual(t, got[1].ID, got[2].ID, "distinct labels must not share an identifier")
+}
+
+// TestInterruptedMessageListsAFewChangedFiles keeps the interruption message short. The complete
+// list is already in changed_files, so the message names the first files and counts the rest.
+func TestInterruptedMessageListsAFewChangedFiles(t *testing.T) {
+	changed := make([]string, 12)
+	for i := range changed {
+		changed[i] = filepath.ToSlash(filepath.Join("stacks", "s"+strings.Repeat("x", i+1)+".yaml"))
+	}
+	message := interruptedMessage(&diagnostic.Report{ChangedFiles: changed, Backup: "backup"})
+
+	assert.Contains(t, message, "12 files were already changed")
+	assert.Contains(t, message, changed[0])
+	assert.Contains(t, message, changed[9])
+	assert.NotContains(t, message, changed[10])
+	assert.Contains(t, message, "and 2 more")
 }

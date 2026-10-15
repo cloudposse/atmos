@@ -1,0 +1,14 @@
+# Inherited-dependencies doctor fixture: the abstract base declares list-form settings.depends_on and
+# the concrete app inherits it while declaring its own map-form settings.depends_on. Migrating the
+# legacy forms to dependencies.components would change which dependencies app ends up with
+# (inheritance replaces the list instead of merging it), so doctor rejects that repair.
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths: ["deploy/**/*"]
+  name_template: "{{ .vars.stage }}"

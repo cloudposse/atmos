@@ -316,8 +316,11 @@ func TestGitWarningsOnlyConcernEditedFiles(t *testing.T) {
 			for _, f := range r.Findings {
 				if f.RuleID == "recovery" {
 					warnings++
+					require.Equal(t, validation.SeverityNotice, f.Severity, "recovery guidance must not trip --fail-on=warning")
+					require.Empty(t, f.File)
 				}
 			}
+			require.Zero(t, r.ExitCode("warning"))
 			if state == "clean" || state == "unrelated" {
 				require.Zero(t, warnings)
 			} else {
@@ -553,6 +556,12 @@ func TestGitUnavailableWarnsWithoutPreventingBackup(t *testing.T) {
 	require.Len(t, report.ChangedFiles, 1)
 	require.NotEmpty(t, report.Backup)
 	require.True(t, checkHasFindings(&report, "recovery"))
+	for _, f := range report.Findings {
+		if f.RuleID == "recovery" {
+			require.Equal(t, validation.SeverityNotice, f.Severity)
+		}
+	}
+	require.Zero(t, report.ExitCode("warning"))
 }
 
 func TestConfiguredStackSchemaRejectsRepair(t *testing.T) {

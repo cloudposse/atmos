@@ -456,6 +456,20 @@ func TestRunAffectedRejectsUnresolvableBase(t *testing.T) {
 		require.NoError(t, json.Unmarshal(stdout.Bytes(), &report))
 		assert.Contains(t, report.OperationalError, "no-such-ref-for-doctor")
 	})
+
+	t.Run("the default base says how to choose one", func(t *testing.T) {
+		// A one-commit repository without a remote has neither origin/HEAD nor a previous commit.
+		t.Setenv("GITHUB_EVENT_PATH", "")
+		t.Setenv("GITHUB_BASE_REF", "")
+		stdout, _ := captureIO(t)
+		err := executeDoctor(t, "--offline", "--format=json", "--affected")
+		requireExitCode(t, err, 2)
+		var report diagnostic.Report
+		require.NoError(t, json.Unmarshal(stdout.Bytes(), &report))
+		assert.Contains(t, report.OperationalError, "origin/HEAD")
+		assert.Contains(t, report.OperationalError, "pass --base=<ref>")
+		assert.NotContains(t, report.OperationalError, "exit status")
+	})
 }
 
 func TestRunAffectedOutsideGitRepositoryFails(t *testing.T) {
@@ -470,5 +484,7 @@ func TestRunAffectedOutsideGitRepositoryFails(t *testing.T) {
 	requireExitCode(t, err, 2)
 	var report diagnostic.Report
 	require.NoError(t, json.Unmarshal(stdout.Bytes(), &report))
-	assert.Contains(t, report.OperationalError, "resolve validation base")
+	assert.Contains(t, report.OperationalError, "not inside a git repository")
+	assert.Contains(t, report.OperationalError, "run inside a repository or drop --affected")
+	assert.NotContains(t, report.OperationalError, "exit status")
 }
