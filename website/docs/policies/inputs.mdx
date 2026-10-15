@@ -21,22 +21,13 @@ as `ctx.input`, `ctx.params`, `ctx.ci`, and `ctx.request`, with dictionary index
 | `input` | Object | Data for the rule's `on` kind |
 | `params` | Object | Rule's `with` values; empty object by default |
 | `ci` | Object or `null` | [Provider-native CI snapshot](/policies/ci); `null` when no provider is detected |
-| `request.kind` | String | `terraform.plan`, `operation`, `atmos.affected`, `function`, `command`, or `component.command` |
+| `request.kind` | String | `terraform.plan`, `operation`, or `atmos.affected` |
 | `request.revisions` | Object | `governing`, `base`, `head`; empty strings when not supplied |
 | `request.subject` | Object or `null` | Instance identity and metadata for plan/lifecycle attachments |
 
 `ci` is a snapshot object, not the boolean `ci` variable used by ordinary hook/workflow conditions.
 Affected analysis populates comparison `base` and `head` commit IDs. The `governing` revision is not
 inferred from either comparison revision. Plan and lifecycle integrations leave revision fields empty.
-
-To discover fields, open **Examples** on a [library policy](/policies/library), choose a scenario,
-and select **Field explorer**. It shows types and copyable CEL/Starlark expressions for each tested input. For the actual
-CI payload in your job, run [`atmos ci context --paths`](/cli/commands/ci/context).
-
-## Admission inputs
-
-See [Execution Admission](/policies/admission) for function names, CLI command paths, and
-component command capabilities. These inputs are available without affected analysis.
 
 ## Operation input
 

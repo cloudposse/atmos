@@ -7,54 +7,9 @@ description: GitHub Actions policy snapshot schema, event payloads, required inp
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-In GitHub Actions, policy rules can inspect the supplied event and allowlisted runner
+In GitHub Actions, plan and operation rules can inspect the supplied event and allowlisted runner
 metadata through `ci`. Declare `required_ci` when a rule needs complete provider data.
 </Intro>
-
-## Inspect your inputs
-
-Use [`atmos ci context`](/cli/commands/ci/context) in the job where the policy runs:
-
-```shell
-# List observed field names and JSON types without values.
-atmos ci context --paths
-
-# Inspect event identity and availability.
-atmos ci context | jq '{event_name: .ci.metadata.data.GITHUB_EVENT_NAME, status: .ci.event.status}'
-```
-
-Without `--paths`, the command prints the collected snapshot under `ci`, including native event
-values. Keep snapshots private: event payloads can contain sensitive user-supplied content.
-Collection requires no API permissions and does not fetch live reviews. Command admission still applies.
-
-Every [library policy](/policies/library) includes an **Inputs and examples** section. Choose an
-example, search its fields, and copy a CEL or Starlark field expression. The **Input JSON** tab
-shows the corresponding request. These are tested examples, not exhaustive provider schemas.
-
-## GitHub event reference
-
-Atmos defines the snapshot envelope; GitHub defines the keys inside `ci.event.data`.
-`ci.metadata.data.GITHUB_EVENT_NAME` identifies the event. The payload is read from
-`GITHUB_EVENT_PATH`, corresponding to the workflow's `github.event` object—not the entire
-`github` context. See GitHub's [variables reference](https://docs.github.com/en/actions/reference/workflows-and-actions/variables)
-and [context reference](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#github-context).
-
-| Event name | Example native fields | Provider reference |
-|---|---|---|
-| `pull_request` | `action`, `pull_request.head`, `pull_request.base` | [Pull request payload](https://docs.github.com/en/webhooks/webhook-events-and-payloads#pull_request) |
-| `pull_request_review` | `action`, `review`, `pull_request` | [Review payload](https://docs.github.com/en/webhooks/webhook-events-and-payloads#pull_request_review) |
-| `push` | `ref`, `before`, `after` | [Push payload](https://docs.github.com/en/webhooks/webhook-events-and-payloads#push) |
-| `workflow_dispatch` | `ref`, `inputs` | [Manual workflow payload](https://docs.github.com/en/webhooks/webhook-events-and-payloads#workflow_dispatch) |
-| `workflow_run` | `action`, `workflow_run` | [Workflow run payload](https://docs.github.com/en/webhooks/webhook-events-and-payloads#workflow_run) |
-
-These are lookup examples, not an event allowlist. The collector preserves the supplied JSON object
-without normalizing provider fields. Consult [events that trigger workflows](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows)
-for Actions-specific availability, activity types, and payload differences. Check the actual snapshot
-and guard optional or null fields; do not assume every webhook example is present in every Actions run.
-
-GitHub event names are separate from Atmos lifecycle events such as `input.event == 'after.terraform.plan'`.
-A triggering `pull_request_review` payload is historical event data, not proof of a current qualifying
-approval. Use [approval requirements](/policies/approvals) for fresh verification.
 
 ## Snapshot schema
 
@@ -174,7 +129,6 @@ Tokens and arbitrary environment variables are not copied into metadata.
 |---|---|
 | Evaluate supplied event/metadata and produce local output | No additional API permission; collection makes no API calls |
 | Check out repository policies/configuration | `contents: read` |
-| Verify designated reviewers against current PR details and paginated reviews | `pull-requests: read` |
 | Publish existing Native CI commit statuses | `statuses: write` |
 
 Minimal permissions for a job that checks out policies and evaluates them:
@@ -199,6 +153,5 @@ for the surrounding workflow.
 
 Fork and Dependabot runs can have reduced token permissions. Keep policy failures blocking even
 when status publication is unavailable. The supplied event records the triggering event, not
-current review state; it must not be treated as verified approval. [Approval requirements](/policies/approvals)
-fetch fresh evidence separately when selected. These policies evaluate the
+current review state; it must not be treated as verified approval. These policies evaluate the
 current invocation, not outcomes aggregated from other component jobs.

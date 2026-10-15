@@ -2,17 +2,6 @@
 title: Require an Owner tag
 description: Require a known, nonempty Owner tag on planned EC2 instances.
 command: atmos terraform plan <component> -s <stack>
-scenarios:
-  owned: EC2 instance has an Owner tag
-  absent: EC2 instance is missing the Owner tag
-  empty: Owner tag is an empty string
-  null tags: EC2 instance has a null tag map
-  null owner: Owner tag is null
-  unknown map: Tags are unknown until apply
-  unknown owner: Owner tag is unknown until apply
-  missing tags: EC2 instance has no tag map
-  deleted: EC2 instance is being deleted
-  different input kind: Request is not a Terraform plan
 tags:
   - Terraform
 related_docs:
@@ -31,7 +20,7 @@ Require a known, nonempty Owner tag on planned EC2 instances.
 | Field | Value |
 |---|---|
 | Input | `terraform.plan` |
-| Engines | `cel`, `starlark` |
+| Engine | `cel` |
 | Action | `deny` |
 | Selects when | A managed EC2 instance has a missing, null, empty, or unknown planned `tags.Owner`. |
 | Required data | Native saved-plan JSON from Terraform/OpenTofu. No CI token required. |
@@ -43,10 +32,6 @@ None. The tag key is `Owner` and is case-sensitive.
 Only EC2 instances are selected. Deleting an instance is permitted.
 
 ## Policy
-
-Choose CEL or Starlark on the [policy page](https://atmos.tools/policies/library/terraform-require-owner-tag).
-The default manifest below uses CEL; the [Starlark variant](https://atmos.tools/policies/library/terraform-require-owner-tag/variants/starlark/policy.yaml)
-uses the same configuration and test cases. Install only one implementation.
 
 [View and copy policy.yaml](https://atmos.tools/policies/library/terraform-require-owner-tag/policy.yaml).
 

@@ -4,9 +4,10 @@ package guard
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -39,6 +40,10 @@ type SourceInput struct {
 }
 
 const unknownProvenance = "unknown"
+
+// A process-local secret makes value fingerprints unsuitable for offline guessing.
+// These keys only correlate attribution in memory; they never authenticate passwords.
+var valueFingerprintKey = []byte(rand.Text())
 
 var state struct {
 	sync.RWMutex
@@ -88,7 +93,7 @@ func evaluate(ctx context.Context, kind string, input any) error {
 func RegisterRemote(path, source string) {
 	defer perf.Track(nil, "guard.RegisterRemote")()
 
-	absolute, err := canonicalOriginPath(path)
+	absolute, _, err := canonicalOriginPath(path)
 	if err != nil {
 		return
 	}
@@ -111,7 +116,7 @@ func FileOrigin(file string) Origin {
 	if isRemote(file) {
 		return Origin{Provenance: "remote", SourceFile: safeSource(file)}
 	}
-	path, err := canonicalOriginPath(file)
+	path, exists, err := canonicalOriginPath(file)
 	if err != nil {
 		return Origin{Provenance: unknownProvenance}
 	}
@@ -125,10 +130,8 @@ func FileOrigin(file string) Origin {
 			origin = candidate
 		}
 	}
-	if best == "" {
-		if _, err := os.Stat(path); err != nil {
-			return Origin{Provenance: unknownProvenance}
-		}
+	if best == "" && !exists {
+		return Origin{Provenance: unknownProvenance}
 	}
 	return origin
 }
@@ -138,7 +141,7 @@ func FileOrigin(file string) Origin {
 func RememberValue(value string, origin Origin) {
 	defer perf.Track(nil, "guard.RememberValue")()
 
-	key := sha256.Sum256([]byte(value))
+	key := valueFingerprint(value)
 	state.Lock()
 	defer state.Unlock()
 	if state.values == nil {
@@ -156,11 +159,20 @@ func ValueOrigin(value string) Origin {
 
 	state.RLock()
 	defer state.RUnlock()
-	origin, ok := state.values[sha256.Sum256([]byte(value))]
+	origin, ok := state.values[valueFingerprint(value)]
 	if !ok {
 		return Origin{Provenance: unknownProvenance}
 	}
 	return origin
+}
+
+// valueFingerprint avoids retaining raw configuration values, which may contain secrets.
+func valueFingerprint(value string) [sha256.Size]byte {
+	mac := hmac.New(sha256.New, valueFingerprintKey)
+	_, _ = mac.Write([]byte(value))
+	var digest [sha256.Size]byte
+	copy(digest[:], mac.Sum(nil))
+	return digest
 }
 
 // Function gates the actual handler invocation.
@@ -220,20 +232,21 @@ func RememberTree(value any, origin Origin) {
 }
 
 // Resolve existing ancestors too, so nonexistent descendants retain cached-directory attribution.
-func canonicalOriginPath(path string) (string, error) {
+// The boolean reports whether the entire path resolved, avoiding a separate filesystem probe.
+func canonicalOriginPath(path string) (string, bool, error) {
 	absolute, err := filepath.Abs(path)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	candidate := absolute
 	suffix := ""
 	for {
 		if resolved, err := filepath.EvalSymlinks(candidate); err == nil {
-			return filepath.Join(resolved, suffix), nil
+			return filepath.Join(resolved, suffix), suffix == "", nil
 		}
 		parent := filepath.Dir(candidate)
 		if parent == candidate {
-			return absolute, nil
+			return absolute, false, nil
 		}
 		suffix = filepath.Join(filepath.Base(candidate), suffix)
 		candidate = parent

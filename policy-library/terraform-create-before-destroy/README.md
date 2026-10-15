@@ -20,7 +20,7 @@ Reject Terraform replacements that destroy the old resource first.
 | Field | Value |
 |---|---|
 | Input | `terraform.plan` |
-| Engines | `cel`, `starlark` |
+| Engine | `cel` |
 | Action | `deny` |
 | Selects when | A managed resource has the ordered actions `['delete', 'create']`. |
 | Required data | Native saved-plan JSON from Terraform/OpenTofu. No CI token required. |
@@ -32,10 +32,6 @@ None.
 Pure deletions are outside this rule. Combine with stateful-resource protection when deletion must also be denied.
 
 ## Policy
-
-Choose CEL or Starlark on the [policy page](https://atmos.tools/policies/library/terraform-create-before-destroy).
-The default manifest below uses CEL; the [Starlark variant](https://atmos.tools/policies/library/terraform-create-before-destroy/variants/starlark/policy.yaml)
-uses the same configuration and test cases. Install only one implementation.
 
 [View and copy policy.yaml](https://atmos.tools/policies/library/terraform-create-before-destroy/policy.yaml).
 

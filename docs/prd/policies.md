@@ -35,17 +35,8 @@ lifecycle points. Native CI supplies GitHub Actions environment/event snapshots 
 Instance selectors attach plan/lifecycle rules using resolved tags, labels, names, stacks, and types.
 An `atmos.affected` gate compares unfiltered static inventories within the active discovery scope
 before affected results are consumed. Independent historical discovery is not implemented; see below.
-CLI command admission and YAML function admission now run through `pkg/policy/admission`;
-`component.command` gates shared stack resolution using inherited literal metadata before
-component templates/functions and tool execution. The CLI pins governing definitions before config loading.
-Native CI verifies `require_approval` using fresh paginated GitHub reviews, named reviewers,
-current PR/checkout revisions, and `pull-requests: read`. Review collection is outside pure evaluation.
-Go-template admission and source destination checks now cover guarded imports/downloads, includes,
-and template file/DNS/HTTP access. Source policies are opt-in; guarded transport limitations are
-documented in the public source-policy reference. Offline `policy check`, `list`, `schema`, and `test`
-and operational `--explain` diagnostics are implemented. `policy check` validates configuration;
-it does not introduce a repository-only enforcement event. Inline/remote policy attachment inheritance,
-general live-fact expression inputs, and trusted-source distribution remain proposed. Component integrations have different
+Broader component admission, inline/remote policy attachment inheritance, fresh API facts, and approval verification
+remain proposed. **This is not yet all-component enforcement.** Component integrations have different
 capabilities; none may pretend to supply a Terraform plan merely to share the engine.
 The current-code and incoming-dependency distinctions apply to all examples outside this first slice.
 
@@ -205,9 +196,9 @@ Do not expose these candidates as supported settings in website documentation.
   and has no notion of plan-time, operation-time, or pre-execution rules.
 - **Initial plan policy integration:** the saved-plan gate evaluates native plan JSON after plan and
   again before saved-plan apply. Operation policies now run at the existing hook-enabled lifecycle
-  points. Command admission covers runnable CLI commands; instance admission uses shared stack resolution.
-- **YAML function admission:** canonical names are checked before execution, including early `!exec`.
-  Go-template function admission and local-vs-remote source trust remain separate proposed controls.
+  points; general pre-configuration admission and trusted-time collection remain proposed.
+- **No function/source security policy or trust boundary.** Functions/imports/templates execute with no
+  allow/deny and no local-vs-remote distinction (see the security analysis).
 - **Initial library.** Parameterized CEL examples and per-policy tests are available locally;
   remote library distribution and share-by-reference resolution remain proposed.
 - **Native CI and hooks integration:** `pkg/ci/registry_provider.go` registers CI
@@ -218,9 +209,9 @@ Do not expose these candidates as supported settings in website documentation.
 - **Initial scaffold and plan integration (this workspace):** `pkg/policy` supplies typed
   requests/decisions/effects, affected inventory contracts, provider-native CI snapshots and a
   collector interface, an explicit evaluator registry, and bounded CEL and Starlark predicate adapters.
-  Required inputs fail closed; approvals remain outstanding until Native CI verification; pure evaluation returns hook obligations
+  Required inputs fail closed; approvals remain outstanding; pure evaluation returns hook obligations
   that the lifecycle integration executes. An explicit-directory loader supports inline CEL/Starlark plan and
-  operation/admission rules and GitHub approval requirements. There is no general manifest/library resolver, general live API-fact collector, trust resolver,
+  operation rules. There is no general manifest/library resolver, live API-fact collector, trust resolver, approval verifier,
   or Rego adapter in this new package. Existing validation and hook/CI reporting is unchanged.
   See [the scaffold contract](../../pkg/policy/README.md) for its narrower current API.
 - **Merged dependency:** [restricted Starlark value evaluation](https://github.com/cloudposse/atmos/pull/3286)
@@ -1537,10 +1528,8 @@ through-line for F-1/F-2/F-4.
 
 ## CLI Usage Examples
 
-The implemented authoring commands are `policy check` (bundle validation), `list`,
-`schema <input-kind>`, and `test <cases.json>`. Enforcement stays at existing command/lifecycle
-boundaries, with `--explain` adding stderr diagnostics. Standalone `policy inputs`,
-`policy explain`, a repository-only enforcement event, and mode overrides below remain future design.
+All policy-group commands below are proposed. Existing `describe affected` and `terraform plan
+--affected` are the producers to which policy evaluation will be attached.
 
 ```shell
 # Inspect, preview, and test; these do not execute policy-triggered hooks.

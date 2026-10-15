@@ -47,3 +47,40 @@ func TestRemoteProvenanceSurvivesCacheAndMerge(t *testing.T) {
 	ResetOrigins()
 	require.Equal(t, "unknown", ValueOrigin("!exec identical").Provenance)
 }
+
+func TestFileOriginRequiresExistingLocalPath(t *testing.T) {
+	ResetOrigins()
+	t.Cleanup(ResetOrigins)
+	root := t.TempDir()
+	file := filepath.Join(root, "stack.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("vars: {}"), 0o600))
+	origin := FileOrigin(file)
+	require.Equal(t, "local", origin.Provenance)
+	alias := filepath.Join(root, "alias.yaml")
+	require.NoError(t, os.Symlink(file, alias))
+	require.Equal(t, origin, FileOrigin(alias), "symlinks preserve the target's attribution")
+	require.Equal(t, "unknown", FileOrigin(filepath.Join(root, "missing", "stack.yaml")).Provenance)
+	require.Equal(t, "unknown", FileOrigin(file+"/child").Provenance)
+	require.NoError(t, os.Remove(file))
+	require.Equal(t, "unknown", FileOrigin(alias).Provenance, "dangling symlinks are not local evidence")
+}
+
+func TestValueFingerprintsPreserveConservativeAttribution(t *testing.T) {
+	ResetOrigins()
+	t.Cleanup(ResetOrigins)
+	local := Origin{Provenance: "local", SourceFile: "stack.yaml"}
+	unknown := Origin{Provenance: "unknown"}
+	remote := Origin{Provenance: "remote", SourceFile: "https://example.com/stack.yaml"}
+	const value = "password: private-configuration-value"
+	RememberValue(value, local)
+	require.Equal(t, local, ValueOrigin(value))
+	RememberValue(value, unknown)
+	RememberValue(value, local)
+	require.Equal(t, unknown, ValueOrigin(value), "local attribution cannot override unknown provenance")
+	RememberValue(value, remote)
+	RememberValue(value, unknown)
+	require.Equal(t, remote, ValueOrigin(value), "remote attribution remains the most restrictive")
+	require.Equal(t, unknown, ValueOrigin(value+"-different"), "different values cannot share attribution")
+	ResetOrigins()
+	require.Equal(t, unknown, ValueOrigin(value), "invocations cannot inherit value attribution")
+}

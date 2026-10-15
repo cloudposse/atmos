@@ -21,7 +21,7 @@ of the entire instance. Inherited label changes are evaluated on merged instance
 | Field | Value |
 |---|---|
 | Input | `atmos.affected` |
-| Engines | `cel`, `starlark` |
+| Engine | `cel` |
 | Action | `deny` |
 | Selects when | An existing `metadata.labels.owner` changes or disappears. |
 | Required data | Complete static change inventory under protected discovery settings. |
@@ -36,10 +36,6 @@ Protect discovery settings and load this policy from a governing revision in CI;
 from the candidate directory cannot enforce its own preservation.
 
 ## Policy
-
-Choose CEL or Starlark on the [policy page](https://atmos.tools/policies/library/affected-protect-owner-label).
-The default manifest below uses CEL; the [Starlark variant](https://atmos.tools/policies/library/affected-protect-owner-label/variants/starlark/policy.yaml)
-uses the same configuration and test cases. Install only one implementation.
 
 [View policy.yaml](https://atmos.tools/policies/library/affected-protect-owner-label/policy.yaml).
 
