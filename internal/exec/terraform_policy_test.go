@@ -123,11 +123,16 @@ func TestTerraformPolicyInvocation(t *testing.T) {
 }
 
 func TestTerraformPolicyDryRunAndNoGate(t *testing.T) {
+	var explanations []policy.Explanation
+	done := policy.BeginExplanation(func(event policy.Explanation) { explanations = append(explanations, event) }, nil)
+	defer done()
+
 	config := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{SubCommand: "plan", DryRun: true}
 	require.NoError(t, executeGovernedTerraformCommand(&config, &info, []string{"plan", "-out=p"}, t.TempDir(), false, nil))
 	// An incomplete Guard would error if dry-run accidentally called extraction/evaluation.
 	require.NoError(t, executeGovernedTerraformCommand(&config, &info, []string{"plan", "-out=p"}, t.TempDir(), false, &planfile.Guard{}))
+	require.Contains(t, explanations, policy.Explanation{Kind: policy.TerraformPlan, Status: "unavailable in dry-run: no saved plan evaluated"})
 	info.SubCommand = "apply"
 	require.Error(t, executeGovernedTerraformCommand(&config, &info, []string{"apply"}, t.TempDir(), false, &planfile.Guard{}))
 }

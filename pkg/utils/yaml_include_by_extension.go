@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	neturl "net/url"
@@ -16,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/function/parser"
 	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -78,11 +80,17 @@ func processIncludeTagInternal(
 	// Process the file
 	if localFile != "" {
 		// Process local file
+		if err := guard.Source(context.Background(), "include", localFile, file); err != nil {
+			return err
+		}
 		res, err = processLocalFile(localFile, forceRaw)
 		if err != nil {
 			return err
 		}
 	} else if shouldFetchRemote(includeFile) {
+		if err := guard.Source(context.Background(), "include", includeFile, file); err != nil {
+			return err
+		}
 		// Process as remote if it's a URL or go-getter detects it as remote
 		res, err = processRemoteFile(atmosConfig, includeFile, forceRaw)
 		if err != nil {
@@ -107,6 +115,14 @@ func processIncludeTagInternal(
 		}
 	}
 
+	origin := guard.FileOrigin(localFile)
+	if localFile == "" {
+		origin = guard.FileOrigin(includeFile)
+	}
+	if parent := guard.FileOrigin(file); parent.Provenance == "remote" {
+		origin = parent
+	}
+	guard.RememberTree(res, origin)
 	// Update the YAML node with the result
 	return updateYamlNode(node, res, val, file)
 }

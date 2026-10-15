@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -14,6 +15,8 @@ import (
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/policy/admission"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -21,7 +24,7 @@ import (
 const (
 	functionKey       = "function"
 	tagValueFormat    = "%s %s"
-	errorFormat       = "%w: %v %v error %v"
+	errorFormat       = "%w: %v %v error %w"
 	failedToProcess   = "failed to process"
 	emptyValueWarning = "execute returned empty value"
 )
@@ -435,6 +438,11 @@ func processRandomTag(strFunc, nodeValue string) (any, error) {
 // during evaluation return an error wrapped with ErrExecuteYamlFunctions, and
 // unknown/unsupported custom tags return ErrUnsupportedYamlTag.
 func processScalarNodeValue(node *yaml.Node) (any, error) {
+	if strings.HasPrefix(node.Tag, "!") && !isStandardYAMLTag(node.Tag) {
+		if err := admission.FunctionValue(context.Background(), node.Tag, node.Tag+" "+node.Value); err != nil {
+			return nil, err
+		}
+	}
 	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
 
 	if isStandardYAMLTag(node.Tag) {
@@ -557,6 +565,7 @@ func decodePlainYamlNode(node *yaml.Node) (any, error) {
 }
 
 func processScalarNodeValueForFile(node *yaml.Node, sourceFile string) (any, error) {
+	guard.RememberValue(node.Tag+" "+node.Value, guard.FileOrigin(sourceFile))
 	if sourceFile == "" || !isIncludeTag(node.Tag) {
 		return processScalarNodeValue(node)
 	}
@@ -569,6 +578,9 @@ func isIncludeTag(tag string) bool {
 }
 
 func processIncludeNodeValueForFile(node *yaml.Node, sourceFile string) (any, error) {
+	if err := admission.FunctionValue(context.Background(), node.Tag, node.Tag+" "+node.Value); err != nil {
+		return nil, err
+	}
 	// Resolve the path against the config file and the project base path, never the working
 	// directory, so the result is the same wherever Atmos runs from.
 	scope := commandIncludeScope(sourceFile)
@@ -618,6 +630,11 @@ func includeBasePathForSourceFile(sourceFile string) string {
 // If the node has no tag or a native YAML tag, the function is a no-op.
 // It returns any error produced by the invoked handler.
 func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
+	if strings.HasPrefix(node.Tag, "!") && !isStandardYAMLTag(node.Tag) {
+		if err := admission.FunctionValue(context.Background(), node.Tag, node.Tag+" "+node.Value); err != nil {
+			return err
+		}
+	}
 	if node.Tag == "" {
 		return nil
 	}

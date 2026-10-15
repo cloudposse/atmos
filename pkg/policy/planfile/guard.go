@@ -1,5 +1,6 @@
 // Package planfile binds policy evaluation to saved Terraform artifacts. It does
-// not collect CI facts, execute hooks, resolve approvals or coordinate other runs.
+// not collect CI facts, execute hooks or coordinate other runs. Its caller can
+// supply approval verification through ResolveApprovals.
 package planfile
 
 import (
@@ -22,11 +23,12 @@ import (
 //
 //go:generate go run go.uber.org/mock/mockgen -destination=mock_runner_test.go -package=planfile github.com/cloudposse/atmos/pkg/process Runner
 type Guard struct {
-	Subject *policy.Subject
-	Engine  *policy.Engine
-	Rules   []policy.Rule
-	Show    process.Runner
-	CI      *policy.CISnapshot
+	ResolveApprovals func(context.Context, *policy.Request, policy.Decision) (policy.Decision, error)
+	Subject          *policy.Subject
+	Engine           *policy.Engine
+	Rules            []policy.Rule
+	Show             process.Runner
+	CI               *policy.CISnapshot
 }
 
 // Invocation is the prepared Terraform process, not a command to re-enter Atmos.
@@ -111,10 +113,17 @@ func (g *Guard) evaluate(ctx context.Context, invocation *Invocation, path strin
 	if err != nil {
 		return err
 	}
-	decision, evalErr := g.Engine.Evaluate(ctx, &policy.Request{Kind: policy.TerraformPlan, Input: data, CI: g.CI, Subject: g.Subject}, g.Rules)
+	request := &policy.Request{Kind: policy.TerraformPlan, Input: data, CI: g.CI, Subject: g.Subject}
+	decision, evalErr := g.Engine.Evaluate(ctx, request, g.Rules)
 	if evalErr != nil {
 		// CEL runtime errors can contain input values. Do not leak them through CLI/CI logs.
 		return fmt.Errorf("%w: plan evaluation failed (input details withheld)", errUtils.ErrPolicyEvaluation)
+	}
+	if g.ResolveApprovals != nil {
+		decision, err = g.ResolveApprovals(ctx, request, decision)
+		if err != nil {
+			return err
+		}
 	}
 	if err := policy.EnforceDecision(decision); err != nil {
 		return fmt.Errorf("%w: rules %s", err, blockingRules(decision))

@@ -23,6 +23,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	stackimports "github.com/cloudposse/atmos/pkg/stack/imports"
 	atmostmpl "github.com/cloudposse/atmos/pkg/template"
@@ -1131,7 +1132,7 @@ func processYAMLConfigFileWithContextInternal(
 	// Set it to `true` to ignore the imported manifest if it does not exist, and don't throw an error.
 	// This is useful when generating Atmos manifests using other tools, but the imported files are not present yet at the generation time.
 	if err != nil {
-		if ignoreMissingFiles || skipIfMissing {
+		if !guard.IsPolicyError(err) && (ignoreMissingFiles || skipIfMissing) {
 			return emptyStackManifestProcessingResult(), nil, nil
 		} else {
 			return nil, nil, err
@@ -1195,14 +1196,14 @@ func processYAMLConfigFileWithContextInternal(
 		}
 
 		var tmplErr error
-		stackManifestTemplatesProcessed, tmplErr = ProcessTmpl(atmosConfig, relativeFilePath, stackManifestTemplateInput, context, ignoreMissingTemplateValues)
+		stackManifestTemplatesProcessed, tmplErr = processTmpl(atmosConfig, relativeFilePath, stackManifestTemplateInput, context, templateProcessOptions{ignoreMissing: ignoreMissingTemplateValues, sourceFile: filePath})
 		if tmplErr != nil {
 			// If template processing failed and the only context is from file extraction
 			// (locals/settings/vars/env, not from an explicit import context), this is likely
 			// due to templates referencing component context (like {{ .atmos_component }}) that
 			// isn't available during import. Fall back to the raw content — these templates will
 			// be processed later in ProcessStacks when the full component context is available.
-			if !originalContextProvided {
+			if !originalContextProvided && !guard.IsPolicyError(tmplErr) {
 				log.Debug("Template processing deferred for file with file-extracted context only",
 					"file", relativeFilePath, "error", tmplErr)
 				stackManifestTemplatesProcessed = stackManifestTemplateInput

@@ -95,6 +95,7 @@ type RunOptions struct {
 func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 	defer perf.Track(nil, "terraform.shared.ParseRunOptions")()
 
+	fromPlan := v.GetString("from-plan")
 	opts := &RunOptions{
 		ProcessTemplates:        v.GetBool("process-templates"),
 		ProcessFunctions:        v.GetBool("process-functions"),
@@ -107,7 +108,7 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 		InitMode:                v.GetString("init-mode"),
 		InitReconfigure:         v.GetString("init-reconfigure"),
 		InitUpgrade:             v.GetString("init-upgrade"),
-		FromPlan:                v.GetString("from-plan") != "",
+		FromPlan:                fromPlan != "" && fromPlan != "false",
 		PlanFile:                v.GetString("planfile"),
 		PlanSkipPlanfile:        v.GetBool("skip-planfile"),
 		DeployRunInit:           v.GetBool("deploy-run-init"),
@@ -132,8 +133,9 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 	}
 	opts.Labels = labels
 	// Cobra consumes --from-plan before the legacy argument parser sees it.
-	// Its no-value sentinel selects the canonical plan; a value selects a path.
-	if fromPlan := v.GetString("from-plan"); fromPlan != "" && fromPlan != "true" && opts.PlanFile == "" {
+	// Its true sentinel selects the canonical plan, false disables selection,
+	// and any other nonempty value selects a path. An explicit planfile wins.
+	if opts.FromPlan && fromPlan != "true" && opts.PlanFile == "" {
 		opts.PlanFile = fromPlan
 	}
 

@@ -182,3 +182,35 @@ spec:
 	require.NoError(t, err)
 	require.Equal(t, "/protected/policies", directory)
 }
+
+func TestPlanDirectoryApprovalDeclarations(t *testing.T) {
+	const approvals = "      approvals:\n        - id: platform\n          provider: github-actions\n          spec: {reviewers: [alice], minimum: 1}\n"
+	manifest := func(action, extra string) string {
+		return "apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: platform}\nspec:\n  policies:\n    review:\n      on: terraform.plan\n      rule: \"true\"\n      action: " + action + "\n" + extra
+	}
+	for name, tc := range map[string]struct {
+		document string
+		wantErr  bool
+	}{
+		"approval requirement":          {document: manifest("require_approval", approvals)},
+		"require_approval without spec": {document: manifest("require_approval", ""), wantErr: true},
+		"approvals on deny":             {document: manifest("deny", approvals), wantErr: true},
+		"empty reviewer spec":           {document: manifest("require_approval", "      approvals:\n        - id: platform\n          provider: github-actions\n          spec: {}\n"), wantErr: true},
+		"team reviewer":                 {document: manifest("require_approval", "      approvals:\n        - id: platform\n          provider: github-actions\n          spec: {reviewers: [org/team], minimum: 1}\n"), wantErr: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			directory := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(directory, "policy.yaml"), []byte(tc.document), 0o600))
+			rules, err := LoadPlanDirectory(directory)
+			if tc.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, rules, 1)
+			require.Len(t, rules[0].Effects.Approvals, 1)
+			require.Equal(t, "platform", rules[0].Effects.Approvals[0].ID)
+			require.Equal(t, "github-actions", rules[0].Effects.Approvals[0].Provider)
+		})
+	}
+}

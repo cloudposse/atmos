@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -13,6 +14,8 @@ import (
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/admission"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -119,6 +122,9 @@ func childTagContext(ctx TagContext, parent *yaml.Node, index int, policy TagWal
 // policy, returning whether the walker must skip recursing into its
 // children afterward (see TagHandler's doc comment for skipChildren).
 func dispatchTag(ctx TagContext, n *yaml.Node, policy TagWalkPolicy, file string) (bool, error) {
+	if n.Kind == yaml.ScalarNode {
+		guard.RememberValue(n.Value, guard.FileOrigin(file))
+	}
 	tag := strings.TrimSpace(n.Tag)
 	if tag == "" || strings.HasPrefix(tag, "!!") {
 		// No tag, or a standard YAML tag (!!str, !!int, ...) -- nothing to
@@ -136,10 +142,14 @@ func dispatchTag(ctx TagContext, n *yaml.Node, policy TagWalkPolicy, file string
 
 	val := strings.TrimSpace(n.Value)
 	if handler, ok := policy.Handlers[tag]; ok {
+		if err := admission.FunctionAt(context.Background(), tag, file); err != nil {
+			return false, err
+		}
 		return handler(ctx, n, val)
 	}
 	if policy.Defer {
 		n.Value = getValueWithTag(n)
+		guard.RememberValue(n.Value, guard.FileOrigin(file))
 		n.Tag = ""
 		return false, nil
 	}

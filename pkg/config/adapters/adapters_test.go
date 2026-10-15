@@ -801,12 +801,13 @@ func TestLocalAdapter_processNestedImports_ResolveFailureSkips(t *testing.T) {
 	v.Set("import", []string{"nested.yaml"})
 
 	adapter := &LocalAdapter{}
-	got := adapter.processNestedImports(v, nestedImportParams{
+	got, err := adapter.processNestedImports(v, nestedImportParams{
 		basePath:     t.TempDir(),
 		tempDir:      t.TempDir(),
 		currentDepth: 1,
 		maxDepth:     10,
 		path:         filepath.Join(t.TempDir(), "does-not-exist.yaml"),
 	})
+	require.NoError(t, err)
 	assert.Nil(t, got)
 }

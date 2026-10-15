@@ -15,6 +15,8 @@ import (
 // The command registry owns both registration and execution of commands.
 func Execute(cmd *cobra.Command) (*cobra.Command, error) {
 	defer perf.Track(nil, "internal.Execute")()
+	restore := installCommandAdmission(cmd)
+	defer restore()
 
 	executedCmd, err := cmd.ExecuteC()
 	if err != nil {

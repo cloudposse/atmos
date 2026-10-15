@@ -31,7 +31,7 @@ func TestNativeCIFlociSurvivesRunnerHardening(t *testing.T) {
 			require.True(t, ok)
 			floci, ok := job.Services["floci"]
 			require.True(t, ok)
-			require.Contains(t, floci.Options, "--restart=always", "runner hardening can restart Docker")
+			require.Regexp(t, `(^|\s)--restart(?:=|\s+)always(\s|$)`, floci.Options, "runner hardening can restart Docker")
 			var names []string
 			for _, step := range job.Steps {
 				names = append(names, step.Name)
