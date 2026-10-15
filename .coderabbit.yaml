@@ -24,9 +24,10 @@ reviews:
       instructions: "Apply when changes introduce new functionality that causes breaking changes requiring the user to update their configuration."
     - label: "no-release"
       instructions: "Apply this label when the PR contains changes only to documentation, website content, or other non-Go code. Changes that do not affect the Go code or the application functionality fall under this category."
-  #path_filters:
-  #  - "!dist/**"
-  #  - "src/**"
+  # Generated CLI recordings are validated by the cast tooling. Keep source, docs,
+  # and golden snapshots in review without spending the file limit on recordings.
+  path_filters:
+    - "!website/static/casts/screengrabs/*.cast"
   #path_instructions:
   #  - path: "**/*.js"
   #    instructions: "Check for consistent coding styles and ES6+ syntax adherence."
@@ -40,17 +41,9 @@ reviews:
     #labels:
     #  - "ready-for-review"
     drafts: false
+    # Review stacked PRs regardless of the intermediate base branch name.
     base_branches:
-      - "main"
-      - "^osterman/starlark-execution-support$"
-      - "^osterman/starlark-runtime$"
-      - "^osterman/starlark-integration-core$"
-      - "^osterman/starlark-interpreter-step$"
-      - "^osterman/starlark-language-reference$"
-      - "^osterman/starlark-literal-script$"
-      - "^osterman/starlark-interpreter-fixes$"
-      - "^osterman/aal-step-library$"
-      - "^osterman/git-hook-script-steps$"
+      - ".*"
   tools:
     ast-grep:
       essential_rules: true
