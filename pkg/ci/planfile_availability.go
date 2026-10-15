@@ -16,14 +16,18 @@ const planfileCredentialLookupTimeout = 2 * time.Second
 // priority entry. Explicit defaults bypass these checks in artifact.SelectStore.
 // This does not probe bucket permissions or retry uploads in another store.
 type planfileEnvironmentChecker struct {
-	options artifact.StoreOptions
+	options       artifact.StoreOptions
+	requireUpload bool
 }
 
 func (c planfileEnvironmentChecker) IsAvailable(ctx context.Context) bool {
 	defer perf.Track(nil, "ci.planfileEnvironmentChecker.IsAvailable")()
 	switch c.options.Type {
 	case "github/artifacts":
-		return os.Getenv("ATMOS_CI_GITHUB_TOKEN") != "" || os.Getenv("GITHUB_TOKEN") != "" || os.Getenv("GH_TOKEN") != ""
+		hasToken := os.Getenv("ATMOS_CI_GITHUB_TOKEN") != "" || os.Getenv("GITHUB_TOKEN") != "" || os.Getenv("GH_TOKEN") != ""
+		// Uploads need the Actions runtime API; completed-run downloads can use REST.
+		return hasToken && (!c.requireUpload ||
+			(os.Getenv("ACTIONS_RUNTIME_TOKEN") != "" && os.Getenv("ACTIONS_RESULTS_URL") != ""))
 	case "aws/s3":
 		// Atmos resolves an explicitly selected identity when the backend is used.
 		// Ambient credentials must not override or exclude that identity.
