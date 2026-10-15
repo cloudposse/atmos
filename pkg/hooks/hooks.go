@@ -26,7 +26,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 var errRenderedHookNotMap = errors.New("rendered hook is not a map")
@@ -964,20 +963,11 @@ func RunCIHooks(opts *RunCIHooksOptions) error {
 	}
 
 	// Skip CI hooks entirely on local runs unless the user explicitly forced CI mode.
-	// This avoids emitting experimental warnings or performing any CI-specific setup
+	// This avoids performing CI-specific setup
 	// when no CI provider is actually available.
 	if !opts.ForceCIMode && !ci.IsCI() {
 		log.Debug("Skipping CI hooks because no CI provider was detected and CI mode was not forced")
 		return nil
-	}
-
-	// CI integration is experimental. Check settings.experimental to decide
-	// whether to proceed, warn, or block — mirroring command-level behavior.
-	// This runs after the ci.enabled check so the warning only appears when CI is active.
-	if opts.AtmosConfig != nil {
-		if err := checkExperimental(opts.AtmosConfig); err != nil {
-			return err
-		}
 	}
 
 	// Execute CI actions based on provider bindings.
@@ -1054,46 +1044,4 @@ func RunPerComponentHooks(opts *RunPerComponentHooksOptions) error {
 	log.Info("Running hooks", "event", opts.Event, logKeyStatus, opts.Outcome.Status,
 		"component", opts.Info.ComponentFromArg, "stack", opts.Info.Stack)
 	return hooksForComponent.RunAll(opts.Event, opts.AtmosConfig, opts.Info, opts.Cmd, opts.Args)
-}
-
-// ciExperimentalFeature is the feature name used in experimental warnings for CI hooks.
-const ciExperimentalFeature = "ci"
-
-// checkExperimental checks settings.experimental and returns an error if CI
-// hooks should not run. Mirrors the command-level experimental gating in cmd/root.go.
-func checkExperimental(atmosConfig *schema.AtmosConfiguration) error {
-	mode := atmosConfig.Settings.Experimental
-	if mode == "" {
-		mode = "warn-daily" // Default matches command-level behavior.
-	}
-
-	switch mode {
-	case "silence":
-		// Proceed without any warning.
-		return nil
-	case "disable":
-		log.Debug("CI hooks disabled by settings.experimental=disable")
-		return errUtils.Build(errUtils.ErrExperimentalDisabled).
-			WithContext("feature", ciExperimentalFeature).
-			WithHint("Enable with settings.experimental: warn").
-			Err()
-	case "warn":
-		ui.Experimental(ciExperimentalFeature)
-		return nil
-	case "warn-daily":
-		if cfg.ClaimExperimentalWarning(ciExperimentalFeature) {
-			ui.Experimental(ciExperimentalFeature)
-		}
-		return nil
-	case "error":
-		ui.Experimental(ciExperimentalFeature)
-		return errUtils.Build(errUtils.ErrExperimentalRequiresIn).
-			WithContext("feature", ciExperimentalFeature).
-			WithHint("Enable with settings.experimental: warn").
-			Err()
-	default:
-		// Unknown mode — treat as warn for forward compatibility.
-		ui.Experimental(ciExperimentalFeature)
-		return nil
-	}
 }

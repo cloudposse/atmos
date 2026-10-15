@@ -73,7 +73,7 @@ func (c *CICommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
 }
 
-// IsExperimental returns true because CI commands are experimental.
+// IsExperimental reports whether CI commands require experimental opt-in.
 func (c *CICommandProvider) IsExperimental() bool {
-	return true
+	return false
 }

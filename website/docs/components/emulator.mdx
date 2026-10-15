@@ -9,7 +9,6 @@ component_type: emulator
 component_implementation: Stack config via components.emulator.*.driver; no component directory
 ---
 import Intro from '@site/src/components/Intro'
-import Experimental from '@site/src/components/Experimental'
 import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
@@ -20,8 +19,6 @@ stack-based configuration used for Terraform, Helmfile, Packer, and Ansible, and
 with the [`atmos emulator`](/cli/commands/emulator/usage) command group — letting the rest of
 your stack run offline, with no cloud account.
 </Intro>
-
-<Experimental />
 
 An emulator is built on the same lifecycle as the [container component](/components/container):
 the container outlives the `atmos` process and is discovered by labels derived from the

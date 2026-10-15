@@ -26,11 +26,11 @@ BUILT-IN COMMANDS
       ai [command] [EXPERIMENTAL]            AI-powered assistant for Atmos operations
       ansible [command]                      Manage ansible-based automation for infrastructure configuration
       atlantis [command]                     Generate and manage Atlantis configurations
-      auth [command] [EXPERIMENTAL]          Authenticate with cloud providers and identity services.
+      auth [command]                         Authenticate with cloud providers and identity services.
       aws [command]                          Run AWS-specific commands for interacting with cloud resources
       azure [command]                        Run Azure-specific commands for interacting with cloud resources
       cast [command]                         Play and render Atmos asciicast recordings
-      ci [command] [EXPERIMENTAL]            CI/CD integration commands
+      ci [command]                           CI/CD integration commands
       completion [command]                   Generate autocompletion scripts for Bash, Zsh, Fish, and PowerShell
       composition [command]                  Inspect compositions that group component instances into systems
       config [command]                       Read and edit your atmos.yaml configuration
@@ -38,7 +38,7 @@ BUILT-IN COMMANDS
       describe [command]                     Show details about Atmos configurations and components
       devcontainer [command] [EXPERIMENTAL]  Manage development containers
       docs [command]                         Open Atmos documentation or display component-specific docs
-      emulator [command] [EXPERIMENTAL]      Manage local emulators for AWS, GCP, Azure, Kubernetes, Vault, and OCI
+      emulator [command]                     Manage local emulators for AWS, GCP, Azure, Kubernetes, Vault, and OCI
                                              registries
       env                                    Output environment variables configured in atmos.yaml
       gcp [command]                          Run GCP-specific commands for interacting with cloud resources
@@ -62,7 +62,7 @@ BUILT-IN COMMANDS
       support                                Show Atmos support options
       terraform [command]                    Execute Terraform commands using Atmos stack configurations
       theme [command]                        Manage terminal themes for Atmos CLI
-      toolchain [command] [EXPERIMENTAL]     Manage tool versions and installations
+      toolchain [command]                    Manage tool versions and installations
       validate [command]                     Validate configurations against OPA policies and JSON schemas
       vendor [command]                       Manage external dependencies for components or stacks
       version [command]                      Display the version of Atmos you are running and check for updates

@@ -1,0 +1,114 @@
+---
+slug: core-features-graduate-to-stable
+title: "Atmos CI, Auth, Toolchain, Emulator, and Source Vendoring Graduate to Stable"
+authors: [atmos]
+tags: [enhancement, dx]
+---
+
+The past year has changed how we build Atmos. Advances in AI have accelerated
+our development and helped us bring many new capabilities to the project. Some
+needed more time and real-world experience before they were ready for broad
+adoption. We introduced the experimental designation to make that maturity visible
+and help you decide which features were ready for everyday use.
+
+Since then, we, our customers, and the community have put many of these features
+to work in production. That use has brought valuable feedback. Interfaces have
+stabilized, functionality has been validated, and feedback has increasingly shifted
+from critical problems toward refinements and nice-to-haves.
+
+We're graduating [Atmos CI](/ci), [Atmos Auth](/cli/commands/auth/usage),
+[Atmos Toolchain](/cli/commands/toolchain/usage), [Atmos Emulator](/cli/commands/emulator/usage),
+and [source vendoring](/cli/commands/terraform/source) to stable. These capabilities
+have demonstrated stable interfaces and real-world use;
+this release formalizes their supported status. Other features will keep the
+experimental designation while we continue assessing them.
+
+<!--truncate-->
+
+## The Problem
+
+These capabilities have become part of everyday infrastructure delivery while
+still carrying experimental warnings. Some roadmap entries already omitted the
+experimental label, while commands and documentation retained it. Teams needed a
+consistent answer about which interfaces they could rely on.
+
+We applied the existing [graduation criteria](/experimental#graduation-criteria)
+and reviewed the preceding 90 days of available history. That is an evidence window,
+not a claim that every feature went 90 days without a bug or a requirement to wait
+another quarter before recognizing established use.
+
+## The Fix
+
+The following capabilities now have stable command and configuration interfaces:
+
+| Capability | What you can rely on |
+|------------|----------------------|
+| [Atmos CI](/ci) | Native plan/apply/deploy reporting, summaries, outputs, and configured planfile storage, with GitHub Actions and generic CI support |
+| [Atmos Auth](/cli/commands/auth/usage) | The identity, credential, and session-management interface used locally and in automation |
+| [Atmos Toolchain](/cli/commands/toolchain/usage) | Declaring, installing, and selecting tool versions, including reproducible installs through lockfiles |
+| [Source vendoring](/cli/commands/terraform/source) | Fetching component sources on demand, refreshing changed versions, and reusing cached sources in isolated workdirs |
+| [Atmos Emulator](/cli/commands/emulator/usage) | Managing local emulator components and their lifecycle for development and testing |
+
+Here's what that use looks like:
+
+- CI and Toolchain run in production at dozens of our own customers,
+  with broader adoption across the community.
+- We've used Auth exclusively for several months. CI, Auth,
+  and Toolchain are frequently used together in production.
+- Nearly all of our demos use Emulator. Repeatedly exercising
+  infrastructure locally has helped identify and fix problems in Atmos itself.
+- We use source vendoring ourselves, and we've seen substantial community adoption.
+  It went through a rough patch; that feedback led to fixes for retrieval failures
+  and workdir interactions.
+
+**Atmos Auth, Toolchain, and CI commands have been executed more than a million
+times in the past 90 days.** Anonymous telemetry recorded 1,030,935 executions
+from July 17 through October 14, 2026, without an extrapolation multiplier.
+This counts explicit command executions; embedded use of these features inside
+other commands is not separately counted.
+
+Auth's adoption extends beyond CI automation: **nearly 120,000 authentication
+commands were run outside CI pipelines** during the same period.
+
+We've seen relatively few reports affecting core functionality across these features.
+We combined that experience with regression checks; neither means bugs cannot occur. Recent fixes remain part of the record. Newer providers and integrations,
+including Azure, have less production history than the established features.
+Emulator's stable status concerns Atmos's lifecycle interface; it does not promise
+that a third-party emulator implements every cloud API.
+
+Source vendoring includes automatic workdir use for remote component sources. The
+[`terraform workdir` commands](/cli/commands/terraform/workdir) also graduate,
+covering listing, inspecting, and cleaning component working directories.
+
+[Atmos Pro](/pro) already has CLI commands and documentation without experimental
+markers. This announcement does not declare a new GA milestone for the hosted service.
+
+## How to Use It
+
+Upgrade to the release containing this announcement. Existing commands and
+configuration continue to work. Use [`atmos config set`](/cli/commands/config/config-set) to disable experimental
+features and enable native CI, then verify the values with
+[`atmos config get`](/cli/commands/config/config-get):
+
+```shell
+atmos config set settings.experimental disable
+atmos config set ci.enabled true
+atmos config get settings.experimental
+atmos config get ci.enabled
+```
+
+These graduated capabilities also work with `atmos config set settings.experimental error`.
+Graduated commands and native CI hooks no longer require experimental opt-in or display experimental warnings.
+Other settings, including edition-pinned defaults, retain their existing behavior.
+
+The remaining [experimental features](/experimental) keep their labels and
+restrictions. Affected-component detection, Devcontainers, backend provisioning,
+and other candidates will graduate when their own evidence supports it. We expect another round of promotions soon, with
+Kubernetes, Helm, and container components next in the review.
+
+## Get Involved
+
+Continue reporting reproducible problems through [GitHub Issues](https://github.com/cloudposse/atmos/issues).
+Include the Atmos version, a minimal configuration, and the expected behavior,
+with credentials and identifying infrastructure details removed. Real-world use
+and regression reports help us assess the next candidates.
