@@ -35,6 +35,7 @@ func Rules() []Rule {
 	defer perf.Track(nil, "doctor.Rules")()
 	return []Rule{
 		{ruleSchema, categoryValidation, "Validate authored configuration and stack schemas"},
+		{ruleYAMLFunctions, categoryValidation, "Validate YAML function names without executing them"},
 		{ruleImports, categoryValidation, "Check local imports and report unresolved inputs"},
 		{ruleStacks, categoryValidation, "Check static stack inheritance and duplicate instances"},
 		{ruleDependencies, categoryValidation, "Validate static Terraform dependency graphs"},

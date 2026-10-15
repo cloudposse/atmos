@@ -5,6 +5,11 @@
     "description": "Validate authored configuration and stack schemas"
   },
   {
+    "id": "yaml-functions",
+    "category": "validation",
+    "description": "Validate YAML function names without executing them"
+  },
+  {
     "id": "imports",
     "category": "validation",
     "description": "Check local imports and report unresolved inputs"

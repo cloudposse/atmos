@@ -30,6 +30,7 @@ func scanDocument(d *document, p *project, o *Options, r *Report, v validator.Va
 		return nil, nil
 	}
 	var edits []edit
+	scanYAMLFunctions(d, o, r)
 	if err := scanSchema(d, o, r, v); err != nil {
 		return nil, err
 	}

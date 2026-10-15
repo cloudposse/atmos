@@ -284,7 +284,7 @@ func (e *Engine) verifyProject(ctx context.Context, o *Options, r *Report, candi
 	options := *o.rediscoveryOptions()
 	options.Fix = false
 	options.DryRun = false
-	options.Only = []string{ruleSchema, ruleImports, ruleStacks, ruleDependencies}
+	options.Only = []string{ruleSchema, ruleYAMLFunctions, ruleImports, ruleStacks, ruleDependencies}
 	baselineEngine := *e
 	baselineEngine.Observe = nil
 	before, err := baselineEngine.Run(ctx, options)

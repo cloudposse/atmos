@@ -22,6 +22,7 @@ const (
 	statusSkipped                = "skipped"
 	statusFailed                 = "failed"
 	ruleSchema                   = "schema"
+	ruleYAMLFunctions            = "yaml-functions"
 	ruleSourceRepository         = "source-repository"
 	ruleHookEvent                = "hook-event"
 	ruleDeprecatedField          = "deprecated-field"

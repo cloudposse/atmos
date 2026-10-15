@@ -101,6 +101,8 @@ exits `2`, because a clean result for a project it never found would be misleadi
 <dl>
 <dt><code>schema</code></dt>
 <dd>Configuration, authored stack, and configured custom schemas.</dd>
+<dt><code>yaml-functions</code></dt>
+<dd>Unknown YAML function names, such as <code>!terraform.staet</code>, with source locations and suggestions for unambiguous spelling corrections. Uses Atmos's canonical function catalog without executing functions. Also checks quoted function strings in known dotted namespaces such as <code>!terraform.*</code>. Native explicit YAML tags, including <code>!!str</code> and verbatim type tags, retain their YAML meaning; explicitly typed strings, URI tags, literal values, and unrelated strings are not interpreted as function names. Argument signatures and runtime results are not validated.</dd>
 <dt><code>imports</code></dt>
 <dd>Local source discovery and unresolved-input diagnostics. Imports resolve the way Atmos resolves them: relative to the importing file, with the <code>.yaml</code>, <code>.yml</code>, and template extensions tried in turn.</dd>
 <dt><code>stacks</code></dt>

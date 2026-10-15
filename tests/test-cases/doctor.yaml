@@ -5,6 +5,28 @@
 # configuration with --config. That keeps the repository's own .atmos.d and the
 # developer's home configuration out of the report, so the snapshots stay stable.
 tests:
+  - name: atmos doctor catches YAML function typos and respects native tags
+    enabled: true
+    snapshot: true
+    description: "Unknown function names produce source diagnostics without treating explicitly typed strings as functions."
+    workdir: "fixtures/scenarios/doctor/yaml-functions"
+    command: "atmos"
+    args:
+      - "doctor"
+      - "--config=atmos.yaml"
+      - "--offline"
+      - "--only=yaml-functions"
+      - "--format=text"
+    expect:
+      stdout:
+        - "^$"
+      stderr:
+        - 'error\[yaml-functions\]: Unknown YAML function !terraform.staet'
+        - 'stacks/dev.yaml:3:9'
+        - 'Did you mean !terraform.state\?'
+        - '1 finding \(none fixable\)'
+      exit_code: 1
+
   - name: atmos doctor --list-checks prints the catalog on stdout
     enabled: true
     snapshot: false

@@ -271,7 +271,7 @@ func (e *Engine) Run(ctx context.Context, o Options) (Report, error) {
 func appendScanCoverage(o *Options, r *Report, checked int) {
 	for _, rule := range Rules() {
 		switch rule.ID {
-		case ruleComponentDependencies, ruleSchema, ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure, ruleModernization, ruleComponentMonorepo, ruleImports:
+		case ruleComponentDependencies, ruleSchema, ruleYAMLFunctions, ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure, ruleModernization, ruleComponentMonorepo, ruleImports:
 			if enabled(o, rule.ID, rule.Category) {
 				status := checkStatus(r, rule.ID)
 				if status == statusPassed && checkHasFindings(r, rule.ID) {

@@ -108,6 +108,11 @@
       "files": 2
     },
     {
+      "id": "yaml-functions",
+      "status": "passed",
+      "files": 2
+    },
+    {
       "id": "imports",
       "status": "passed",
       "files": 2
