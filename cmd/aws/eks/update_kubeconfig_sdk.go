@@ -87,7 +87,10 @@ func executeEKSUpdateKubeconfigDirect(clusterName, region, kubeconfigPath, alias
 		return fmt.Errorf("%w: %w", errUtils.ErrIdentityAuthFailed, err)
 	}
 
-	if whoami.Credentials == nil {
+	// mgr is an AuthManager interface; guard against a nil whoami (a (nil, nil)
+	// return) before dereferencing Credentials, in addition to the by-design
+	// nil-credentials case. Mirrors the AKS direct path.
+	if whoami == nil || whoami.Credentials == nil {
 		return fmt.Errorf("%w: no credentials available", errUtils.ErrIdentityAuthFailed)
 	}
 

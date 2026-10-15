@@ -353,18 +353,25 @@ func DefaultKubeconfigPath() (string, error) {
 	return filepath.Join(kubeDir, "config"), nil
 }
 
-// expandKubeconfigPath expands environment variables and a leading ~ in a
-// kubeconfig path so configs stay portable across users and machines.
+// expandKubeconfigPath expands a kubeconfig path so configs stay portable across
+// users and machines. Expansion happens in three steps:
 //
-// Environment variables are expanded first ($HOME, ${HOME}), then a leading ~
-// or ~/ resolves to the current user's home directory. The order lets a value
-// like "${HOME}/kube/config" expand through the env substitution while a bare
-// "~/kube/config" still resolves via the home-directory lookup. A bare "~" maps
-// to the home directory itself.
+//  1. Environment variables ($VAR, ${VAR}) are substituted. The documented
+//     portable form ${HOME}/$HOME resolves via os.UserHomeDir so it works on
+//     Windows too, where HOME is often unset and the home directory comes from
+//     USERPROFILE. Any OTHER variable that is not set is reported as an error
+//     rather than silently removed - a dropped segment would redirect the write
+//     to an unintended path.
+//  2. A KUBECONFIG-style value may list several files separated by
+//     os.PathListSeparator. kubectl writes changes to the first entry and the
+//     AWS CLI uses the first path as its default destination, so a list is
+//     reduced to its first element. A single path (the --kubeconfig flag or a
+//     configured spec.cluster.kubeconfig.path) contains no separator and is
+//     left unchanged.
+//  3. A leading ~ (or ~/) resolves to the current user's home directory; a bare
+//     ~ maps to the home directory itself.
 //
-// Only $VAR/${VAR} syntax is expanded (os.ExpandEnv); Windows %VAR% is left
-// as-is. os.UserHomeDir is used for the home lookup so the behavior matches the
-// rest of Atmos on every platform.
+// Only $VAR/${VAR} syntax is expanded; Windows %VAR% is left as-is.
 func expandKubeconfigPath(path string) (string, error) {
 	defer perf.Track(nil, "kube.expandKubeconfigPath")()
 
@@ -372,8 +379,17 @@ func expandKubeconfigPath(path string) (string, error) {
 		return "", nil
 	}
 
-	// Substitute environment variables ($VAR and ${VAR}).
-	path = os.ExpandEnv(path)
+	// Substitute environment variables, erroring on unresolved references.
+	expanded, err := expandPathEnvVars(path)
+	if err != nil {
+		return "", err
+	}
+	path = expanded
+
+	// Reduce a KUBECONFIG-style multi-file list to its first entry.
+	if entries := filepath.SplitList(path); len(entries) > 1 {
+		path = entries[0]
+	}
 
 	// Expand a leading ~ to the user's home directory.
 	if path == "~" || strings.HasPrefix(path, "~/") || strings.HasPrefix(path, `~\`) {
@@ -388,6 +404,34 @@ func expandKubeconfigPath(path string) (string, error) {
 	}
 
 	return path, nil
+}
+
+// expandPathEnvVars substitutes $VAR/${VAR} references in a path. HOME resolves
+// via os.UserHomeDir so the documented ${HOME} form works cross-platform (on
+// Windows HOME may be unset while the home directory comes from USERPROFILE).
+// Any other variable that is not set is returned as an error, so an unresolved
+// reference fails loudly instead of silently corrupting the write path.
+func expandPathEnvVars(path string) (string, error) {
+	var missing []string
+
+	expanded := os.Expand(path, func(name string) string {
+		if name == "HOME" {
+			if home, err := os.UserHomeDir(); err == nil {
+				return home
+			}
+		}
+		if value, ok := os.LookupEnv(name); ok {
+			return value
+		}
+		missing = append(missing, name)
+		return ""
+	})
+
+	if len(missing) > 0 {
+		return "", fmt.Errorf("%w: unresolved environment variable(s) %v in kubeconfig path %q", errUtils.ErrKubeconfigPath, missing, path)
+	}
+
+	return expanded, nil
 }
 
 // writeConfig writes a kubeconfig to the file, replacing any existing content.

@@ -3,10 +3,13 @@ package kube
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // TestExpandKubeconfigPath covers the ~ and environment-variable expansion that
@@ -22,9 +25,10 @@ func TestExpandKubeconfigPath(t *testing.T) {
 	t.Setenv("ATMOS_TEST_KUBE_DIR", filepath.Join("custom", "kube"))
 
 	tests := []struct {
-		name  string
-		input string
-		want  string
+		name    string
+		input   string
+		want    string
+		wantErr bool
 	}{
 		{
 			name:  "empty stays empty",
@@ -62,15 +66,29 @@ func TestExpandKubeconfigPath(t *testing.T) {
 			want:  filepath.Join("/opt", "custom", "kube", "config"),
 		},
 		{
-			name:  "unknown env var expands to empty like shell",
-			input: "/opt/kube-${ATMOS_TEST_KUBE_UNSET}config",
-			want:  filepath.Join("/opt", "kube-config"),
+			// Unset variables must fail loudly, not silently drop a path
+			// segment and redirect the write to an unintended location.
+			name:    "unset env var is an error",
+			input:   "/opt/kube-${ATMOS_TEST_KUBE_UNSET}config",
+			wantErr: true,
+		},
+		{
+			// A KUBECONFIG-style multi-file list reduces to its first entry,
+			// matching kubectl's write target and the AWS CLI default.
+			name:  "multi-file list reduces to first entry",
+			input: strings.Join([]string{filepath.Join(home, "primary"), filepath.Join(home, "secondary")}, string(os.PathListSeparator)),
+			want:  filepath.Join(home, "primary"),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := expandKubeconfigPath(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrKubeconfigPath)
+				return
+			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
