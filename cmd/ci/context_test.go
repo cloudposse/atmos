@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cipkg "github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/providers/github"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -37,6 +37,7 @@ func TestCIContextCommand(t *testing.T) {
 		return output.String()
 	}
 	require.JSONEq(t, `{"ci":null}`, run())
+	require.JSONEq(t, `null`, run("-q", ".ci"))
 	require.JSONEq(t, `[{"path":"ci","type":"null"}]`, run("--paths"))
 
 	cipkg.Register(github.NewProvider())
@@ -58,6 +59,28 @@ func TestCIContextCommand(t *testing.T) {
 	require.Equal(t, policy.Available, document.CI.Event.Status)
 	require.Empty(t, document.CI.Facts)
 	require.NotContains(t, result, "never-expose")
+	require.JSONEq(t, `{"event_name":"pull_request","status":"available"}`, run("--query",
+		`{"event_name": .ci.metadata.data.GITHUB_EVENT_NAME, "status": .ci.event.status}`))
+	require.JSONEq(t, `9007199254740993`, run("-q", ".ci.event.data.future_field"))
+	require.JSONEq(t, `"pull_request"`, run("-q", ".ci.metadata.data.GITHUB_EVENT_NAME"))
+	require.JSONEq(t, `null`, run("-q", ".ci.event.data.missing"))
+	require.Equal(t, "\"available\"\ntrue\n", run("-q", ".ci.event.status, .ci.event.complete"))
+	require.Empty(t, run("-q", `select(.ci.event.status == "unavailable")`))
+	require.JSONEq(t, `[{"path":"ci[\"event\"][\"data\"][\"future_field\"]","type":"number"}]`,
+		run("--paths", "--query", `[.[] | select(.type == "number")]`))
+	t.Run("environment and flag precedence", func(t *testing.T) {
+		t.Setenv("ATMOS_QUERY", ".ci.event.status")
+		require.JSONEq(t, `"available"`, run())
+		require.JSONEq(t, `true`, run("-q", ".ci.event.complete"))
+		require.NoError(t, json.Unmarshal([]byte(run("--query=")), &document))
+		require.Equal(t, policy.Available, document.CI.Event.Status)
+	})
+	output.Reset()
+	invalid := newContextCommand()
+	invalid.SetContext(t.Context())
+	require.NoError(t, invalid.Flags().Set("query", "["))
+	require.ErrorIs(t, runCIContext(invalid, nil), errUtils.ErrQueryEvaluation)
+	require.Empty(t, output.String(), "invalid queries must not emit partial output")
 
 	paths := run("--paths")
 	require.Contains(t, paths, `ci[\"event\"][\"data\"][\"pull_request\"][\"head\"][\"repo\"][\"full_name\"]`)
@@ -94,7 +117,6 @@ func TestCIContextCommand(t *testing.T) {
 	cancel()
 	command.SetContext(ctx)
 	require.ErrorIs(t, runCIContext(command, nil), context.Canceled)
-	require.Error(t, runCIContext(&cobra.Command{}, nil))
 }
 
 func TestCIContextPaths(t *testing.T) {
