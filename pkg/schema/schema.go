@@ -21,10 +21,11 @@ type AtmosSectionMapType = map[string]any
 // DeferredEvaluationContext holds invocation-local evaluated values, independently
 // of the authentication implementation. The resolver identifies the invocation.
 type DeferredEvaluationContext struct {
-	Manager      any
-	Values       sync.Map
-	StoreValues  sync.Map
-	StoreFlights singleflight.Group
+	Manager        any
+	Values         sync.Map
+	StoreValues    sync.Map
+	StoreFlights   singleflight.Group
+	TargetSections sync.Map
 }
 
 // DescribeSettings contains settings for the describe command output.
@@ -707,6 +708,8 @@ type Terraform struct {
 	// component's literal `mocks` map.
 	Mocks TerraformMocks `yaml:"mocks,omitempty" json:"mocks,omitempty" mapstructure:"mocks"`
 	Plan  TerraformPlan  `yaml:"plan" json:"plan" mapstructure:"plan"`
+	// PlanDiff configures exclusions shared by plan-diff and deployment plan verification.
+	PlanDiff TerraformPlanDiff `yaml:"plan_diff,omitempty" json:"plan_diff,omitempty" mapstructure:"plan_diff"`
 	// Lint configures the built-in `atmos terraform lint` command.
 	// A configured config path is used when a component does not provide its own
 	// .tflint.hcl file.
@@ -1299,9 +1302,12 @@ type CIConfig struct {
 	Templates   CITemplatesConfig   `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
 	Cache       CICacheConfig       `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`
 	Groups      CIGroupsConfig      `yaml:"groups,omitempty" json:"groups,omitempty" mapstructure:"groups"`
-	// AllowUnsafeForkExecution opts out of the fork-checkout safety gate that
-	// refuses to clone untrusted fork content under pull_request_target and
-	// workflow_run events. Leave false unless a fork-facing workflow has a
+	// AllowUnsafeForkExecution opts out of both fork safety gates for
+	// pull_request_target and workflow_run events: the clone gate that refuses
+	// to check out untrusted fork content, and the posting gate that holds
+	// comments, commit statuses, environment and path exports, and SARIF
+	// uploads for a fork pull request. ATMOS_ALLOW_UNSAFE_FORK_EXECUTION sets
+	// the same switch. Leave false unless a fork-facing workflow has a
 	// documented reason to bypass it. See
 	// docs/prd/native-ci/framework/fork-pr-trust-gate.md.
 	AllowUnsafeForkExecution bool `yaml:"allow_unsafe_fork_execution,omitempty" json:"allow_unsafe_fork_execution,omitempty" mapstructure:"allow_unsafe_fork_execution"`
@@ -1451,7 +1457,6 @@ type CIChecksStatusesConfig struct {
 type CICommentsConfig struct {
 	Enabled  *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Behavior string `yaml:"behavior,omitempty" json:"behavior,omitempty" mapstructure:"behavior"` // create, update, upsert
-	Template string `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
 }
 
 // CITemplatesConfig configures CI summary templates per component type.
@@ -1471,6 +1476,9 @@ type CITemplatesConfig struct {
 	// Helmfile contains template overrides for helmfile commands.
 	// Keys are command names (e.g., "diff", "apply"), values are template file paths.
 	Helmfile map[string]string `yaml:"helmfile,omitempty" json:"helmfile,omitempty" mapstructure:"helmfile"`
+
+	// Container maps a container operation name (`image`) to a template file name under base_path.
+	Container map[string]string `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`
 }
 
 type Helmfile struct {

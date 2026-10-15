@@ -1,6 +1,7 @@
 package deferred
 
 import (
+	"reflect"
 	"sync"
 
 	"github.com/cloudposse/atmos/pkg/degradation"
@@ -23,13 +24,44 @@ func (c *ValueCache) Load(kind string) (any, bool) {
 	return c.values.Load(kind)
 }
 
-// Store retains only successful, fully resolved values, never display placeholders.
+// Store rejects unresolved computed values. Callers must partition inspection
+// placeholders from execution values using separate kinds.
 func (c *ValueCache) Store(kind string, value any) {
 	defer perf.Track(nil, "deferred.ValueCache.Store")()
 
 	if c != nil && !containsComputed(value) {
 		c.values.Store(kind, value)
 	}
+}
+
+// IsCacheable reports whether a successful lookup contains a reusable value.
+// Computed placeholders and nil results must remain retryable.
+//
+//nolint:lintroller // Pure value validation; no I/O or lookup work to measure.
+func IsCacheable(value any) bool {
+	if value == nil {
+		return false
+	}
+	v := reflect.ValueOf(value)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		if v.IsNil() {
+			return false
+		}
+	}
+	return !containsComputed(value)
+}
+
+// LoadOrStore binds a stable value to this target's effective configuration.
+// A nil cache or an unresolved value remains uncached.
+func (c *ValueCache) LoadOrStore(kind string, value any) any {
+	defer perf.Track(nil, "deferred.ValueCache.LoadOrStore")()
+
+	if c == nil || !IsCacheable(value) {
+		return value
+	}
+	actual, _ := c.values.LoadOrStore(kind, value)
+	return actual
 }
 
 func containsComputed(value any) bool {

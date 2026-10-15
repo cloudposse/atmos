@@ -56,6 +56,27 @@ ci:
   </dd>
 </dl>
 
+## Comments without a pull request
+
+The [`ci.comment`](/functions/automation/ci.comment) function in a script takes a `target` of `auto`, `pr`, or
+`commit`. With the default `auto`, a run that has a pull request comments on it, and any other run (a `push`, for
+example) comments on the commit. Commit comments need the `contents: write` permission instead of
+`pull-requests: write`. Both kinds are gated by `ci.comments.enabled`.
+
+## Container image comments
+
+The `atmos container build` and `atmos container push` commands post one image summary comment per
+`registry/repository`, so pushing a new tag updates the existing comment instead of adding another. The comment is
+attempted only when `ci.comments.enabled` is on; with comments off, nothing is previewed in the log. A comment body
+longer than 65,000 characters is truncated with a note, and a failed post is logged as a warning without failing the
+build. See [container components](/stacks/components/container).
+
+## Fork pull requests
+
+Comments are held for a pull request from a fork under the elevated `pull_request_target` and `workflow_run` events.
+Native Terraform plan comments go through the same gate as comments from scripts. See the
+[fork posting gate](/cli/configuration/ci#fork-posting-gate).
+
 ## Environment Variables
 
 | Variable | Description |

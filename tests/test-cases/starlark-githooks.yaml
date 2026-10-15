@@ -106,3 +106,73 @@ tests:
         - 'git hook not configured'
         - 'Hook "nonexistent" is not configured'
         - 'Configured hooks:'
+
+  - name: starlark githooks fail() in a script step fails the hook with exit code 1
+    enabled: true
+    snapshot: false
+    description: A Starlark fail() stops the hook, names the hook, and exits 1
+    workdir: "fixtures/scenarios/starlark-githooks/"
+    command: atmos
+    args: [git, hooks, run, script-fail]
+    expect:
+      exit_code: 1
+      stdout:
+        - 'before-script-fail'
+      stderr:
+        - 'git hook "script-fail"'
+        - 'hook script failed'
+
+  - name: starlark githooks errors.build with_exit_code propagates its exit code
+    enabled: true
+    snapshot: false
+    description: errors.build(...).with_exit_code(5).fail() in a steps hook makes atmos exit 5, which Git reports as the hook failure
+    workdir: "fixtures/scenarios/starlark-githooks/"
+    command: atmos
+    args: [git, hooks, run, script-exit-5]
+    expect:
+      exit_code: 5
+      stdout:
+        - 'before-custom-exit'
+      stderr:
+        - 'git hook "script-exit-5"'
+        - 'custom exit code'
+
+  - name: starlark githooks hook arguments reach shell steps
+    enabled: true
+    snapshot: false
+    description: Arguments after the hook name are positional parameters of a shell step and are joined into ATMOS_GIT_HOOK_ARGS
+    workdir: "fixtures/scenarios/starlark-githooks/"
+    command: atmos
+    args: [git, hooks, run, args-shell, COMMIT_EDITMSG, "second arg"]
+    expect:
+      exit_code: 0
+      stdout:
+        - 'count=2 first=\[COMMIT_EDITMSG\] second=\[second arg\] env=\[COMMIT_EDITMSG second arg\]'
+
+  - name: starlark githooks prompt without a default explains how to run without a terminal
+    enabled: true
+    snapshot: false
+    description: A prompt step with no default under a hook (no terminal) fails and the error names default as the fix
+    workdir: "fixtures/scenarios/starlark-githooks/"
+    command: atmos
+    args: [git, hooks, run, prompt-yaml]
+    expect:
+      exit_code: 1
+      stderr:
+        - 'git hook "prompt-yaml"'
+        - 'interactive terminal required for step'
+        - 'Set default: on the step'
+
+  - name: starlark githooks prompt with a default runs without a terminal
+    enabled: true
+    snapshot: false
+    description: Negative path for the prompt case, the first step of prompt-test has a default and prints its value before the second fails
+    workdir: "fixtures/scenarios/starlark-githooks/"
+    command: atmos
+    args: [git, hooks, run, prompt-test]
+    expect:
+      stdout:
+        - 'input = dflt confirm = true'
+      stderr:
+        - 'interactive terminal required for step'
+      exit_code: 1

@@ -319,6 +319,18 @@ func benchValidateCLIMatrix(values map[string][]float64) error {
 	if _, ok := values[dependents]; !ok {
 		return Error("required CLI workload missing: %s", dependents)
 	}
+	for _, change := range []string{"none", "target", "dependents"} {
+		key := pkg + "|CLI/DescribeAffected/FunctionsRepeated/instances=200/change=" + change + "-2|sec/op"
+		if _, ok := values[key]; !ok {
+			return Error("required function CLI workload missing: %s", key)
+		}
+	}
+	for _, unit := range []string{"sec/op", "backend-reads/op"} {
+		key := pkg + "|CLI/DescribeAffected/StoreCallerStacks/stacks=20/keys=11-2|" + unit
+		if _, ok := values[key]; !ok {
+			return Error("required store caller-stack workload missing: %s", key)
+		}
+	}
 	// The CLI matrix must not silently lose a scale or change scenario.
 	for _, size := range []int{benchSmallInstances, benchMediumInstances, benchLargeInstances} {
 		for _, change := range []string{"none", "catalog", "component"} {
