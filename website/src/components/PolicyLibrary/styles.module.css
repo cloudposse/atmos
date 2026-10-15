@@ -430,8 +430,16 @@
 }
 .reason {
   margin: 12px 0 0;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+.reason > :first-child {
+  margin-top: 0;
+}
+.reason > :last-child {
+  margin-bottom: 0;
+}
+.reason code {
+  font-size: 0.9em;
 }
 .casePicker,
 .fieldPicker {

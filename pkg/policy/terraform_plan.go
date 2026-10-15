@@ -81,13 +81,13 @@ func EnforceDecision(decision Decision) error {
 }
 
 // denialError retains optional author guidance from every blocking rule.
-// Reasons are literal text: they never evaluate templates or interpolate inputs.
+// Reasons are static Markdown: they never evaluate templates or interpolate inputs.
 func denialError(findings []Finding) error {
 	var reasons []string
 	for _, finding := range findings {
 		if finding.Status == Deny {
 			if reason := strings.TrimSpace(finding.Effects.Reason); reason != "" {
-				reasons = append(reasons, finding.RuleID+":\n"+reason)
+				reasons = append(reasons, finding.RuleID+":\n\n"+reason)
 			}
 		}
 	}

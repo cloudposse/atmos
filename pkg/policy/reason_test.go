@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -33,7 +34,9 @@ func TestDenialReasons(t *testing.T) {
 			require.NotContains(t, output, "private-input")
 			encoded, err := json.Marshal(decision)
 			require.NoError(t, err)
-			require.Contains(t, string(encoded), rule.Effects.Reason)
+			var decoded Decision
+			require.NoError(t, json.Unmarshal(encoded, &decoded))
+			require.Equal(t, rule.Effects.Reason, decoded.Findings[0].Effects.Reason)
 
 			request.Input = json.RawMessage(`{"name":"env"}`)
 			decision, err = NewEngine().Evaluate(context.Background(), request, []Rule{rule})
@@ -42,6 +45,29 @@ func TestDenialReasons(t *testing.T) {
 			require.Empty(t, decision.Findings[0].Effects.Reason)
 		})
 	}
+}
+
+func TestDenialReasonMarkdown(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "1")
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("COLORTERM", "truecolor")
+	t.Setenv("ATMOS_FORCE_COLOR", "true")
+	t.Setenv("ATMOS_FORCE_TTY", "true")
+	reason := "**Shell execution is disabled.**\n\nInstead:\n\n- Read values with `!env`.\n- Use a [reviewed workflow](https://atmos.tools/workflows)."
+	err := EnforceDecision(Decision{Status: Deny, Findings: []Finding{{
+		RuleID: "guard", Status: Deny, Effects: Effects{Reason: reason},
+	}}})
+	require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	output := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+	require.Contains(t, output, "\x1b[", "TTY output should retain Markdown styling")
+	plain := ansi.Strip(output)
+	require.Contains(t, plain, "Shell execution is disabled.")
+	require.NotContains(t, plain, "**Shell execution is disabled.**")
+	require.Contains(t, plain, "!env")
+	require.NotContains(t, plain, "`!env`")
+	require.Contains(t, plain, "reviewed workflow")
+	require.Contains(t, plain, "https://atmos.tools/workflows")
 }
 
 func TestDenialReasonIsOptional(t *testing.T) {

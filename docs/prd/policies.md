@@ -698,7 +698,7 @@ must not echo input values. Temporary artifacts are private and removed on all e
 configuration processing. It loads strict `atmos/v1`, `kind: Policy` documents with named inline
 `spec.policies` entries (`on: terraform.plan`, `engine: cel`, `rule`, `action: deny`, optional `reason`
 and `with`). Instance `match` supports literal tags/labels, component names, stacks, and component types.
-An optional static `reason` explains a denial and can suggest an alternative. The CLI displays it
+An optional static Markdown `reason` explains a denial and can suggest an alternative. The CLI displays it
 with the blocking rule ID, and JSON findings retain it in `effects.reason`. Reasons do not expand
 templates or interpolate evaluated input; omitting them preserves the default denial message.
 No policy templating/imports, remote library resolution, tier discovery, or trust inference.

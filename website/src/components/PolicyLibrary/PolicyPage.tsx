@@ -197,7 +197,9 @@ function TestCases({
           </h3>
           <code>{fixture.status}</code>
           {fixture.status === "deny" && reason && (
-            <p className={styles.reason}>{reason}</p>
+            <div className={styles.reason}>
+              <Markdown remarkPlugins={[remarkGfm]} skipHtml>{reason}</Markdown>
+            </div>
           )}
         </div>
         <Tabs key={fixture.name} defaultValue="json">
@@ -325,7 +327,9 @@ export default function PolicyPage({
               {variant.reason && (
                 <div className={styles.decision}>
                   <span className={styles.eyebrow}>Policy reason</span>
-                  <p className={styles.reason}>{variant.reason}</p>
+                  <div className={styles.reason}>
+                    <Markdown remarkPlugins={[remarkGfm]} skipHtml>{variant.reason}</Markdown>
+                  </div>
                 </div>
               )}
               <div id="policy" className={styles.policyCode}>
