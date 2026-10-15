@@ -34,6 +34,7 @@ Valid subcommands are:
   • lsp
   • mcp
   • packer
+  • policy
   • pro
   • profile
   • sbom
