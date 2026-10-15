@@ -27,7 +27,6 @@ func TestJournalInvariants(t *testing.T) {
 			assert.NotEmpty(t, entry.Key)
 			assert.NotEqual(t, "edition", entry.Key, "the edition key itself is permanently exempt from journaling")
 			assert.Contains(t, []Kind{KindValue, KindBehavior}, entry.Kind)
-			assert.Equal(t, KindValue, entry.Kind, "only value entries are supported until behavior gating ships")
 			assert.NotEmpty(t, entry.Description)
 			assert.NotEmpty(t, entry.Ref)
 			assert.False(t, reflect.DeepEqual(entry.Old, entry.New), "an entry must record an actual change")
@@ -38,7 +37,11 @@ func TestJournalInvariants(t *testing.T) {
 	// Chained changes to the same key must be date-ordered with consistent values:
 	// each change starts from the value the previous one ended at.
 	for key, chain := range byKey {
+		if chain[0].Kind == KindBehavior {
+			assert.Len(t, chain, 1, "behavior key %s must identify a single transition; use a new key for a later transition", key)
+		}
 		for i := 1; i < len(chain); i++ {
+			assert.Equal(t, chain[0].Kind, chain[i].Kind, "a key cannot mix default and behavior entries")
 			assert.Less(t, chain[i-1].Date, chain[i].Date,
 				"entries for %s must have distinct, ascending dates", key)
 			assert.Equal(t, chain[i-1].New, chain[i].Old,

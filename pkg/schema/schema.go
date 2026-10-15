@@ -708,6 +708,8 @@ type Terraform struct {
 	// component's literal `mocks` map.
 	Mocks TerraformMocks `yaml:"mocks,omitempty" json:"mocks,omitempty" mapstructure:"mocks"`
 	Plan  TerraformPlan  `yaml:"plan" json:"plan" mapstructure:"plan"`
+	// PlanDiff configures exclusions shared by plan-diff and deployment plan verification.
+	PlanDiff TerraformPlanDiff `yaml:"plan_diff,omitempty" json:"plan_diff,omitempty" mapstructure:"plan_diff"`
 	// Lint configures the built-in `atmos terraform lint` command.
 	// A configured config path is used when a component does not provide its own
 	// .tflint.hcl file.

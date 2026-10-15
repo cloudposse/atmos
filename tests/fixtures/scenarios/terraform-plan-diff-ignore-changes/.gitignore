@@ -1,0 +1,8 @@
+.atmos/
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfstate*
+**/*.planfile
+**/*.tfplan
+**/report.txt
+**/*.tfvars.json

@@ -29,10 +29,10 @@ import (
 type Kind string
 
 const (
-	// KindValue marks a change to a config default value (the only kind used today).
+	// KindValue marks a change to a config default value.
 	KindValue Kind = "value"
-	// KindBehavior is reserved for future entries that gate code paths rather than
-	// config values (Rust-edition-style behavior changes). No entries use it yet.
+	// KindBehavior marks a dated transition between code paths. Each behavior key
+	// identifies one transition; Old and New describe those paths for inspection.
 	KindBehavior Kind = "behavior"
 )
 
@@ -40,14 +40,14 @@ const (
 type Entry struct {
 	// Date is the day the change shipped, in "YYYY-MM-DD" form (typically the PR merge date).
 	Date string `json:"date" yaml:"date"`
-	// Key is the Viper config key whose default changed, e.g. "components.helmfile.use_eks".
+	// Key is a Viper config key for KindValue or a unique transition name for KindBehavior.
 	Key string `json:"key" yaml:"key"`
 	// Kind classifies the entry; only KindValue entries participate in default resolution today.
 	Kind Kind `json:"kind" yaml:"kind"`
-	// Old is the default value before the change (what an earlier-anchored project gets).
+	// Old is the previous default value, or a description of the old behavior.
 	Old any `json:"old" yaml:"old"`
-	// New is the default value after the change; for the latest entry per key this must
-	// match the live default in setDefaultConfiguration (enforced by tests).
+	// New is the current default value, or a description of the new behavior. For
+	// the latest KindValue entry per key it must match setDefaultConfiguration.
 	New any `json:"new" yaml:"new"`
 	// Description explains the change in user-facing terms.
 	Description string `json:"description" yaml:"description"`
@@ -64,6 +64,15 @@ type Entry struct {
 // pager default is the string "true", not a bool), because Old is re-injected
 // via viper.SetDefault when a project pins an earlier edition.
 var journal = []Entry{
+	{
+		Date:        "2026-10-13",
+		Key:         "terraform.plan_diff.show_computed_attributes",
+		Kind:        KindBehavior,
+		Old:         "hide seven computed attributes from resource diffs; still compare them",
+		New:         "show all non-excluded resource attributes; still compare them",
+		Description: "Plan comparisons display content hashes and encoded response bodies unless explicitly excluded; earlier editions retain display-only suppression.",
+		Ref:         "https://atmos.tools/changelog/plan-diff-ignore-changes",
+	},
 	{
 		Date: "2026-09-15", Key: "vendor.max_concurrency", Kind: KindValue, Old: 1, New: 4,
 		Description: "Vendor downloads and upstream version checks run with four workers; destination writes remain ordered.",
