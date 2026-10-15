@@ -398,5 +398,5 @@ Modify `pkg/auth/identities/aws/user.go` to add browser authentication as a thir
 
 - [AWS Blog: Simplified developer access to AWS with 'aws login'](https://aws.amazon.com/blogs/security/simplified-developer-access-to-aws-with-aws-login/)
 - [AWS CLI Login Documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sign-in.html)
-- [AWS Signin Service Authorization Reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_awssignin.html)
+- [AWS Signin Service Authorization Reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_signin.html)
 - [Beyond IAM access keys: Modern authentication approaches for AWS](https://aws.amazon.com/blogs/security/beyond-iam-access-keys-modern-authentication-approaches-for-aws/)
