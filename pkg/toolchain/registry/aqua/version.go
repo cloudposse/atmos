@@ -52,10 +52,7 @@ func (ar *AquaRegistry) versionMetadata(owner, repo string) (prefix string, avai
 }
 
 func normalizeGitHubVersion(tagName, prefix string, metadataAvailable bool) string {
-	if !metadataAvailable {
-		return strings.TrimPrefix(tagName, versionPrefix)
-	}
-	if prefix != "" {
+	if metadataAvailable && prefix != "" {
 		return strings.TrimPrefix(tagName, prefix)
 	}
 	return tagName
@@ -63,7 +60,7 @@ func normalizeGitHubVersion(tagName, prefix string, metadataAvailable bool) stri
 
 // getLatestTag fetches the latest tag from GitHub tags API.
 // The prefix parameter specifies the version prefix to strip (e.g., "v", "jq-").
-// If package metadata is unavailable, falls back to stripping the default "v" prefix.
+// If package metadata is unavailable, the original tag is preserved.
 func (ar *AquaRegistry) getLatestTag(owner, repo, prefix string, metadataAvailable bool) (string, error) {
 	apiURL := fmt.Sprintf("%s/repos/%s/%s/tags?per_page=1", ar.githubBaseURL, owner, repo)
 

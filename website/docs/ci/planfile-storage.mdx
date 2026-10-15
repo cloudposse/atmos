@@ -28,7 +28,7 @@ components:
       # Drift verification on `deploy`: fail (default under CI) | warn | off
       verify: fail
 
-      # Stores are tried in priority order
+      # Select the first available store in priority order
       priority:
         - "github"
         - "s3"
@@ -57,6 +57,15 @@ components:
             path: ".atmos/planfiles"
 ```
 </File>
+
+An explicit `default` store takes precedence over `priority`. Otherwise, the first
+available configured name in `priority` is selected; names absent from `stores` are skipped.
+GitHub artifacts require a token. S3 uses the AWS credential chain or the selected
+Atmos identity. These availability checks do not verify remote bucket permissions.
+An unknown explicit default, an exhausted priority list, or a selected store that
+cannot be initialized produces an error. Atmos does not silently redirect planfiles
+to a different backend after selection. Environment-based detection is used only
+when neither `default` nor `priority` is configured.
 
 ## Storage Backends
 
