@@ -241,7 +241,7 @@ func filterGitDirEnv(env []string) []string {
 // regardless of the COUNT/KEY/VALUE form) prevents a stray command-scope override from doing the
 // same. Neither change affects gitEnv's own callers, which construct their own environment.
 func buildEnv() []string {
-	// Git uses /dev/null on every platform; Windows os.DevNull (NUL) is not a valid config path.
+	// Git accepts /dev/null on every platform; Git for Windows 2.56.0 rejects os.DevNull (NUL).
 	kept := filterGitConfigEnv(gitEnv())
 	return append(kept, "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
 }

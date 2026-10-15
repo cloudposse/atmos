@@ -8,7 +8,9 @@ Use Git's `/dev/null` configuration sentinel on all platforms so Windows accepta
 
 ## Context
 
-The Windows 2022 build failed before test enumeration because Git rejected `GIT_CONFIG_GLOBAL=NUL` with `Invalid argument`. Go's `os.DevNull` returns `NUL` on Windows, but Git documents `/dev/null` for disabling global or system configuration reads.
+The Windows 2022 build using Git 2.56.0.windows.1 failed before test enumeration because Git rejected `GIT_CONFIG_GLOBAL=NUL` with `Invalid argument`. Go's `os.DevNull` returns `NUL` on Windows, but Git documents `/dev/null` for disabling global or system configuration reads.
+
+[Git for Windows issue #6449](https://github.com/git-for-windows/git/issues/6449) confirms this regression; 2.56.0.windows.2 fixes it. Using `/dev/null` also supports runner images that still ship the affected release. The Windows diagnostic pins the affected Git version because hosted runners can receive either image during rollout.
 
 ## Changes
 
