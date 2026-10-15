@@ -35,6 +35,9 @@ const (
 	// RuleRecovery is the rule ID of notices that tell the user how to recover files; they are guidance,
 	// not findings left in the project.
 	ruleRecovery = "recovery"
+	// RuleExclude is the rule ID of notices about --exclude patterns that matched nothing; they ask the
+	// user to check the pattern and are never repaired.
+	ruleExclude = "exclude"
 	// BaseFixCommand is the repair command suggested when the invocation carried no scoping flags.
 	baseFixCommand = "atmos doctor --fix"
 )
@@ -131,8 +134,8 @@ func findingCounts(r *diagnostic.Report) (fixed, remaining, fixable int) {
 		switch {
 		case f.Status == "fixed":
 			fixed++
-		case f.RuleID == ruleRecovery:
-			// Recovery notices describe files already handled; they never remain to be fixed.
+		case f.RuleID == ruleRecovery || f.RuleID == ruleExclude:
+			// Recovery and exclude notices are guidance; they never remain to be fixed.
 		case f.Fixable:
 			remaining++
 			fixable++

@@ -1,0 +1,14 @@
+# Imports doctor fixture: the deploy stack imports a catalog file that defines vpc, and app declares
+# list-form settings.depends_on on it. Local static imports are followed, so doctor can verify the
+# migration to dependencies.components and offer the repair.
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths: ["deploy/**/*"]
+  excluded_paths: ["catalog/**/*"]
+  name_template: "{{ .vars.stage }}"

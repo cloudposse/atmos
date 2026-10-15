@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -56,6 +57,48 @@ func TestCliConfigPathEnvironmentSelectsTheProject(t *testing.T) {
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", project)
 	r := ecRun(t, &Options{Root: elsewhere, Offline: true, Only: []string{ruleSchema, ruleImports}})
 	require.Equal(t, []string{"stacks/dev.yaml"}, ecLoaded(&r))
+}
+
+func TestMissingCliConfigPathIsReportedNotTreatedAsAnOutsideSource(t *testing.T) {
+	missing := filepath.Join(newProject(t), "nonexistent", "dir")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", missing)
+	r, err := testEngine(t).Run(context.Background(), Options{Root: newProject(t), Offline: true})
+	require.ErrorIs(t, err, ErrNoConfiguration)
+	require.Contains(t, r.OperationalError, "Configured path does not exist: "+missing)
+	require.Contains(t, r.OperationalError, "ATMOS_CLI_CONFIG_PATH")
+	require.NotContains(t, r.OperationalError, "outside the project")
+	require.Equal(t, 2, r.ExitCode("none"))
+}
+
+func TestMissingConfigPathBesideARealProjectIsAnErrorFinding(t *testing.T) {
+	root := newProject(t)
+	projectFile(t, root, "atmos.yaml", "base_path: .\n")
+	missing := filepath.Join(newProject(t), "gone")
+	r := ecRun(t, &Options{Root: root, Offline: true, ConfigFiles: []string{"atmos.yaml"}, ConfigDirs: []string{missing}, Only: []string{ruleImports}})
+	var found []Finding
+	for _, f := range ecFindings(&r, ruleImports) {
+		if strings.HasPrefix(f.Message, "Configured path does not exist") {
+			found = append(found, f)
+		}
+	}
+	require.Len(t, found, 1, "%+v", r.Findings)
+	require.Equal(t, "Configured path does not exist: "+missing+" (from --config-path)", found[0].Message)
+	require.Equal(t, validation.SeverityError, found[0].Severity)
+	require.Empty(t, found[0].File, "the finding names the path in its message, not a project-relative file")
+	require.Equal(t, 1, r.ExitCode("error"))
+	for _, f := range r.Findings {
+		require.NotContains(t, f.Reason+f.Message, "outside the project")
+	}
+}
+
+func TestExistingCliConfigPathIsNotReportedMissing(t *testing.T) {
+	project := newProject(t)
+	projectFile(t, project, "atmos.yaml", "base_path: .\n")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", project)
+	r := ecRun(t, &Options{Root: newProject(t), Offline: true, Only: []string{ruleImports}})
+	for _, f := range r.Findings {
+		require.NotContains(t, f.Message, "Configured path does not exist")
+	}
 }
 
 func TestMissingConfigurationPointsAtHowToSelectOne(t *testing.T) {

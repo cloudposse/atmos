@@ -28,6 +28,24 @@ func rejectSymlinked(r *Report, edits []edit) {
 	}
 }
 
+// isReadOnly reports whether the file at path has no write permission bit set for anyone.
+func isReadOnly(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().Perm()&writeBits == 0
+}
+
+// rejectReadOnly leaves the findings of a read-only document for manual review. A read-only file marks
+// content its owner does not want edited, and an atomic rename would silently replace it.
+func rejectReadOnly(r *Report, edits []edit) {
+	for _, change := range edits {
+		f := &r.Findings[change.finding]
+		f.Status = statusVerificationIncomplete
+		f.Fixable = false
+		f.Reason = reasonReadOnlySource
+		f.Remediation = change.manualRemediation()
+	}
+}
+
 func (e *Engine) unchanged(ctx context.Context, p *project, o *Options) error {
 	current, err := e.discover(ctx, o.rediscoveryOptions(), &Report{})
 	if err != nil {

@@ -120,6 +120,13 @@ templates, or incomplete profile/import coverage to justify a fix. Report
 - Every blocked finding names the blocking `file:line` (or layer). Remediation never suggests
   `--fix` for a finding that `--fix` cannot resolve.
 - Imported template files (`*.yaml.tmpl`) are reported as not evaluated and never parsed as YAML.
+- Stack verification loads stacks through the runtime stack loader with an in-memory source overlay,
+  so local static imports (including globs) are followed. Imports with `context`, templated import
+  paths, and remote imports are not evaluated; they limit stack verification and dependency repairs
+  and are reported with their `file:line`. Supporting them requires template evaluation and remains
+  open.
+- A dependency migration is rejected when it changes any concrete component's effective
+  dependency targets; other repairs in the same run proceed.
 - A check with no inputs reports `skipped`, never `passed`. Finite tests do not prove arbitrary future
 configurations; guarantees are limited to tested contracts and verified inputs.
 
@@ -169,6 +176,13 @@ failures, and include verification coverage and backup location.
 - Every schema-annotated deprecation.
 - Custom-command argument `type -> provides` and flag `semantic_type -> provides`
   for recognized semantic values. Ordinary flag `type` is not deprecated.
+- `yaml-functions`: unknown YAML function names, stack-only functions in `atmos.yaml`, and
+  function look-alikes that Atmos keeps as text (warning).
+- `dependencies`: required-dependency graph validation of the effective
+  `dependencies.components`, with every error located at its source entry.
+- `component-dependencies`: legacy component-level `settings.depends_on` (map or list form)
+  to `dependencies.components`; the repair is rejected when it changes any component's
+  effective dependencies.
 - Recognized legacy hook-event spelling.
 - Explicit Terraform `init_run_reconfigure`, using current runtime semantics.
 - Naming transformations require both equivalence gates; dependency transformations follow the explicit modern-semantics policy above.

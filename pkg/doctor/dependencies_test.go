@@ -276,6 +276,116 @@ func TestDependencyMigrationRejectsChangesToTheEffectiveGraph(t *testing.T) {
 	}
 }
 
+// A rejected dependency migration must not take unrelated repairs down with it: the hook event and
+// reconfigure repairs do not touch the dependency graph, so they are applied while the migration is refused.
+func TestRejectedDependencyMigrationStillAllowsUnrelatedRepairs(t *testing.T) {
+	const legacyHooks = "hooks:\n  example:\n    events: [before-terraform-apply]\n    command: echo\n"
+	for _, tc := range []struct {
+		name  string
+		files map[string]string
+		// hookFile is the file that carries the hook repair.
+		hookFile string
+		changed  []string
+	}{
+		{
+			name:     "in the same document",
+			files:    map[string]string{"stacks/deploy/dev.yaml": legacyHooks + mixedInheritanceStack},
+			hookFile: "stacks/deploy/dev.yaml",
+			changed:  []string{"stacks/deploy/dev.yaml"},
+		},
+		{
+			name: "in another document",
+			files: map[string]string{
+				"stacks/deploy/dev.yaml":   mixedInheritanceStack,
+				"stacks/deploy/other.yaml": "vars:\n  stage: other\n" + legacyHooks,
+			},
+			hookFile: "stacks/deploy/other.yaml",
+			changed:  []string{"stacks/deploy/other.yaml"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := newProject(t)
+			projectFile(t, root, "atmos.yaml", "stacks:\n  base_path: stacks\n  included_paths: ['deploy/**/*']\n  name_pattern: '{stage}'\n")
+			paths := map[string]string{}
+			for name, content := range tc.files {
+				paths[name] = projectFile(t, root, name, content)
+			}
+
+			r, err := vtStacksEngine(t, vtProductionValidator{}).Run(context.Background(), Options{Root: root, Offline: true, Fix: true, Only: []string{"deprecations"}})
+
+			require.NoError(t, err)
+			require.Equal(t, tc.changed, r.ChangedFiles, "%+v", r.Findings)
+			hookSource, readErr := os.ReadFile(paths[tc.hookFile])
+			require.NoError(t, readErr)
+			require.Contains(t, string(hookSource), "before.terraform.apply", "the hook repair is applied")
+			require.NotContains(t, string(hookSource), "events: [before-terraform-apply]")
+			if tc.hookFile == "stacks/deploy/dev.yaml" {
+				require.Contains(t, string(hookSource), "depends_on", "the rejected migration leaves the declarations untouched")
+			} else {
+				devSource, devErr := os.ReadFile(paths["stacks/deploy/dev.yaml"])
+				require.NoError(t, devErr)
+				require.Equal(t, mixedInheritanceStack, string(devSource))
+			}
+
+			hooks := vtFindingsByRule(&r, ruleHookEvent)
+			require.NotEmpty(t, hooks)
+			for _, f := range hooks {
+				require.Equal(t, statusFixed, f.Status, "%+v", f)
+			}
+			dependencies := vtFindingsByRule(&r, ruleComponentDependencies)
+			require.NotEmpty(t, dependencies)
+			for _, f := range dependencies {
+				require.Equal(t, statusVerificationFailed, f.Status, "%+v", f)
+				require.False(t, f.Fixable)
+				require.Contains(t, f.Reason, "changes the effective dependencies of app in dev: db → vpc")
+			}
+			require.Equal(t, 1, r.ExitCode("error"), "a requested repair that failed verification exits 1")
+		})
+	}
+}
+
+// With several migrating documents the one that changes the graph is refused and the harmless one is applied.
+func TestRejectedDependencyMigrationIsAttributedToItsDocument(t *testing.T) {
+	root := newProject(t)
+	projectFile(t, root, "atmos.yaml", "stacks:\n  base_path: stacks\n  included_paths: ['deploy/**/*']\n  name_pattern: '{stage}'\n")
+	bad := projectFile(t, root, "stacks/deploy/dev.yaml", mixedInheritanceStack)
+	consistent := strings.Replace(strings.Replace(mixedInheritanceStack, "stage: dev", "stage: prod", 1), "      settings:\n        depends_on:\n          1:\n            component: db\n", "      settings:\n        depends_on:\n          - component: db\n", 1)
+	good := projectFile(t, root, "stacks/deploy/prod.yaml", consistent)
+
+	r, err := vtStacksEngine(t, vtProductionValidator{}).Run(context.Background(), Options{Root: root, Offline: true, Fix: true, Only: []string{"deprecations"}})
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"stacks/deploy/prod.yaml"}, r.ChangedFiles, "%+v", r.Findings)
+	goodAfter, readErr := os.ReadFile(good)
+	require.NoError(t, readErr)
+	require.NotContains(t, string(goodAfter), "depends_on")
+	badAfter, readErr := os.ReadFile(bad)
+	require.NoError(t, readErr)
+	require.Equal(t, mixedInheritanceStack, string(badAfter))
+	statuses := map[string]string{}
+	for _, f := range vtFindingsByRule(&r, ruleComponentDependencies) {
+		statuses[f.File] = f.Status
+	}
+	require.Equal(t, map[string]string{"stacks/deploy/dev.yaml": statusVerificationFailed, "stacks/deploy/prod.yaml": statusFixed}, statuses)
+}
+
+// Negative path: a dependency migration that keeps the graph is not narrowed away by the same mechanism.
+func TestAcceptedDependencyMigrationIsAppliedBesideOtherRepairs(t *testing.T) {
+	root := newProject(t)
+	projectFile(t, root, "atmos.yaml", "stacks:\n  name_pattern: '{stage}'\n")
+	consistent := strings.Replace(mixedInheritanceStack, "      settings:\n        depends_on:\n          1:\n            component: db\n", "      settings:\n        depends_on:\n          - component: db\n", 1)
+	path := projectFile(t, root, "stacks/dev.yaml", "hooks:\n  example:\n    events: [before-terraform-apply]\n    command: echo\n"+consistent)
+
+	r, err := vtStacksEngine(t, vtProductionValidator{}).Run(context.Background(), Options{Root: root, Offline: true, Fix: true, Only: []string{"deprecations"}})
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"stacks/dev.yaml"}, r.ChangedFiles, "%+v", r.Findings)
+	after, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	require.NotContains(t, string(after), "depends_on")
+	require.Contains(t, string(after), "before.terraform.apply")
+}
+
 // Negative path: when every declaration moves together the effective graph is unchanged and the repair proceeds.
 func TestDependencyMigrationAllowsRepairsThatKeepTheGraph(t *testing.T) {
 	root := newProject(t)

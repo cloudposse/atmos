@@ -16,6 +16,7 @@ const (
 	statusVerificationIncomplete = "verification-incomplete"
 	statusManual                 = "manual"
 	reasonSymlinkedSource        = "Not fixed automatically because a symlinked source requires manual review; doctor does not write through symlinks"
+	reasonReadOnlySource         = "Not fixed automatically because a read-only source requires manual review; doctor does not overwrite read-only files"
 	statusFixed                  = "fixed"
 	statusPassed                 = "passed"
 	statusFindings               = "findings"
@@ -43,4 +44,8 @@ const (
 	modeBits                     = 32
 	privateDirectoryMode         = 0o700
 	privateFileMode              = 0o600
+	writeBits                    = 0o222
+	maxListedPaths               = 10
+	ruleRecovery                 = "recovery"
+	ruleExclude                  = "exclude"
 )

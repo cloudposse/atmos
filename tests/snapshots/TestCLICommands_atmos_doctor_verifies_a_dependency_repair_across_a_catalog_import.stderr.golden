@@ -1,0 +1,22 @@
+Atmos Doctor · Dry run
+
+Discover · 1 completed
+Check · 3 completed · 1 with findings
+Stage fixes · 1 completed
+Verify · 2 completed
+
+warning[component-dependencies]: Legacy component dependency declaration
+  --> stacks/deploy/dev.yaml:13:11
+   |
+12 |         depends_on:
+13 |           - component: vpc
+   |           ^
+14 | 
+   |
+   = repair: Automatic fix available
+   = note: Candidate verified; dry run left the source unchanged
+
+Summary
+1 repair verified. 1 finding remains.
+Dry run: project files and backups were not written.
+Run: atmos doctor --fix --config=atmos.yaml --offline --only=deprecations
