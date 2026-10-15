@@ -1245,9 +1245,14 @@ func TestOperationHandlers_Dispatch(t *testing.T) {
 			setup: func(m *MockCloudFormationClient) {
 				m.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
 				m.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.CreateChangeSetOutput{}, nil)
-				m.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
+				lastPoll := m.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
 					Status: cfntypes.ChangeSetStatusCreateComplete,
 				}, nil)
+				gomock.InOrder(
+					lastPoll,
+					m.EXPECT().DeleteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteChangeSetOutput{}, nil),
+					m.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
+				)
 			},
 			check: func(t *testing.T, summary map[string]any) {
 				assert.False(t, summary["no_op"].(bool))
