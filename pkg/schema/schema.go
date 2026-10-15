@@ -611,6 +611,8 @@ type ProvisionSettings struct {
 type ProvisionTarget struct {
 	// Kind selects the target provisioner (e.g. "git", "kubernetes").
 	Kind string `yaml:"kind" json:"kind" mapstructure:"kind"`
+	// Packaging names the aws/s3 target used to package a CloudFormation deployment template.
+	Packaging string `yaml:"packaging,omitempty" json:"packaging,omitempty" mapstructure:"packaging"`
 	// Repository references a top-level git.repositories.<name> (git kind).
 	Repository string `yaml:"repository,omitempty" json:"repository,omitempty" mapstructure:"repository"`
 	// Path is the destination path inside the deployment repository (git kind, supports templates).

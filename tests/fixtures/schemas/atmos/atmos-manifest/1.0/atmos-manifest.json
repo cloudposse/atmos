@@ -2661,7 +2661,7 @@
     },
     "provision": {
       "title": "provision",
-      "description": "Provision section for component provisioning configuration",
+      "description": "Provision section for component provisioning configuration, including workdir and delivery targets",
       "oneOf": [
         {
           "type": "string",
@@ -2669,13 +2669,100 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
           "properties": {
             "workdir": {
               "$ref": "#/definitions/provision_workdir"
+            },
+            "default": {
+              "type": "string",
+              "description": "Name of the provision target used by apply/deploy when --target is not given"
+            },
+            "targets": {
+              "type": "object",
+              "description": "Named delivery destinations for rendered artifacts, keyed by target name",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "description": "Target provisioner kind (e.g. 'git' or 'kubernetes')"
+                  },
+                  "repository": {
+                    "type": "string",
+                    "description": "For kind 'git': name of a top-level git.repositories.<name> to publish to"
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "For kind 'git': destination path inside the deployment repository (supports Go templates)"
+                  },
+                  "split": {
+                    "type": "boolean",
+                    "description": "For kind 'git': true fans out one file per rendered object under 'path' (a directory); false writes 'path' as a single multi-document YAML file. When unset, inferred from whether the last segment of 'path' looks like a manifest filename (matches /\\.(ya?ml|json)$/i): a match defaults to single-file mode, otherwise the directory default is preserved."
+                  },
+                  "auth": {
+                    "type": "object",
+                    "properties": {
+                      "identity": {
+                        "type": "string",
+                        "description": "Atmos Auth identity used for the delivery"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "commit": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "description": "Commit message (supports Go templates)"
+                      },
+                      "signing": {
+                        "type": "string",
+                        "enum": [
+                          "auto",
+                          "always",
+                          "never"
+                        ],
+                        "description": "Commit signing mode"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "pull_request": {
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean",
+                        "description": "Publish via pull request (not yet supported by the cli git provider)"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "bucket": {
+                    "type": "string",
+                    "description": "For kind 'aws/s3': destination S3 bucket for packaged template/asset uploads."
+                  },
+                  "prefix": {
+                    "type": "string",
+                    "description": "For kind 'aws/s3': destination key prefix within bucket."
+                  },
+                  "region": {
+                    "type": "string",
+                    "description": "For kind 'aws/s3': the bucket's region."
+                  },
+                  "packaging": {
+                    "type": "string",
+                    "description": "Name of the declared aws/s3 target used to package a CloudFormation deployment template"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": true
+              }
             }
           },
-          "required": []
+          "additionalProperties": true
         }
       ]
     },

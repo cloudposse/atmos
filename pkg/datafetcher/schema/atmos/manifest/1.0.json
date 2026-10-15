@@ -2180,6 +2180,10 @@
                   "region": {
                     "type": "string",
                     "description": "For kind 'aws/s3': the bucket's region."
+                  },
+                  "packaging": {
+                    "type": "string",
+                    "description": "Name of the declared aws/s3 target used to package a CloudFormation deployment template"
                   }
                 },
                 "required": [

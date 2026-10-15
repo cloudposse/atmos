@@ -155,6 +155,13 @@ func resolvePackagingTarget(provisionSection map[string]any, selected *target.Se
 	}
 
 	s3Targets := findS3Targets(provisionSection)
+	if packagingName, ok := selected.Config["packaging"].(string); ok && packagingName != "" {
+		if cfgBlock, found := s3Targets[packagingName]; found {
+			return s3ConfigFromTarget(packagingName, cfgBlock)
+		}
+		return nil, fmt.Errorf("%w: packaging target %q not found among aws/s3 targets", errUtils.ErrInvalidAwsCloudFormationSettings, packagingName)
+	}
+
 	switch len(s3Targets) {
 	case 0:
 		return nil, errUtils.Build(errUtils.ErrInvalidAwsCloudFormationSettings).
@@ -165,13 +172,6 @@ func resolvePackagingTarget(provisionSection map[string]any, selected *target.Se
 		for name, cfgBlock := range s3Targets {
 			return s3ConfigFromTarget(name, cfgBlock)
 		}
-	}
-
-	if packagingName, ok := selected.Config["packaging"].(string); ok && packagingName != "" {
-		if cfgBlock, found := s3Targets[packagingName]; found {
-			return s3ConfigFromTarget(packagingName, cfgBlock)
-		}
-		return nil, fmt.Errorf("%w: packaging target %q not found among aws/s3 targets", errUtils.ErrInvalidAwsCloudFormationSettings, packagingName)
 	}
 
 	return nil, errUtils.Build(errUtils.ErrInvalidAwsCloudFormationSettings).

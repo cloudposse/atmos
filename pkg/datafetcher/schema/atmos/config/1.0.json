@@ -8875,6 +8875,17 @@
           ],
           "description": "Kind selects the target provisioner (e.g. \"git\", \"kubernetes\")."
         },
+        "packaging": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Packaging names the aws/s3 target used to package a CloudFormation deployment template."
+        },
         "repository": {
           "anyOf": [
             {
