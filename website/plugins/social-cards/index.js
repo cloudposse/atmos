@@ -3,7 +3,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { renderCardJpeg } = require('./render-card');
+const { WIDTH, HEIGHT, renderCardJpeg } = require('./render-card');
 
 const OUTPUT_DIR = path.join('img', 'social');
 // Bump when the card design changes so social crawlers receive a new image URL.
@@ -106,7 +106,7 @@ function cardForPage(html, route, host) {
 }
 
 /**
- * Point og:image / twitter:image (and add dimensions) at the per-page card.
+ * Point og:image / twitter:image at the per-page card and synchronize dimensions.
  *
  * @param {string} html
  * @param {string} imageUrl Absolute URL of the card.
@@ -114,17 +114,24 @@ function cardForPage(html, route, host) {
  */
 function rewriteImageMeta(html, imageUrl) {
   const encodedUrl = imageUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-  let dimensions = ['width', 'height']
-    .filter((dimension) => !metaContent(html, 'property', `og:image:${dimension}`))
-    .map((dimension) => `<meta data-rh="true" property="og:image:${dimension}" content="${dimension === 'width' ? 1200 : 630}">`)
+  const sizes = new Map([['og:image:width', String(WIDTH)], ['og:image:height', String(HEIGHT)]]);
+  const properties = new Set([...html.matchAll(META_TAG)]
+    .map(([tag]) => metaAttributes(tag).get('property')?.value.toLowerCase()));
+  let dimensions = [...sizes]
+    .filter(([property]) => !properties.has(property))
+    .map(([property, size]) => `<meta data-rh="true" property="${property}" content="${size}">`)
     .join('');
   return html.replace(META_TAG, (tag) => {
     const attributes = metaAttributes(tag);
-    const isOgImage = attributes.get('property')?.value.toLowerCase() === 'og:image';
+    const property = attributes.get('property')?.value.toLowerCase();
+    const isOgImage = property === 'og:image';
     const isTwitterImage = attributes.get('name')?.value.toLowerCase() === 'twitter:image';
+    const value = isOgImage || isTwitterImage ? encodedUrl : sizes.get(property);
+    if (value === undefined) return tag;
     const content = attributes.get('content');
-    if ((!isOgImage && !isTwitterImage) || !content) return tag;
-    let updated = `${tag.slice(0, content.start)}"${encodedUrl}"${tag.slice(content.end)}`;
+    let updated = content
+      ? `${tag.slice(0, content.start)}"${value}"${tag.slice(content.end)}`
+      : tag.replace(/\/?>$/, (end) => ` content="${value}"${end}`);
     if (isOgImage) {
       updated += dimensions;
       dimensions = '';

@@ -159,3 +159,24 @@ test("postBuild generates and links cards for reordered metadata and prototype-n
   assert.equal(html.split(`https://atmos.tools/img/social/${cards[0]}`).length - 1, 2);
   assert.ok(!html.includes("old.jpg"));
 });
+
+test("rewriteImageMeta replaces stale dimensions and adds only missing tags", () => {
+  const image = '<meta property="og:image" content="old.jpg">';
+  const cases = [
+    `<meta content='800' property='og:image:width'><meta property="og:image:height" content="800">`,
+    `<meta content="800" property="og:image:width">`,
+    `<meta property="og:image:height" content="800">`,
+    `<meta property="og:image:width" content=""><meta property="og:image:height">`,
+  ];
+  const url = "https://atmos.tools/img/social/new.jpg";
+  for (const dimensions of cases) {
+    const out = rewriteImageMeta(image + dimensions, url);
+    const tags = out.match(/<meta\b[^>]*>/g);
+    for (const [dimension, size] of [["width", 1200], ["height", 630]]) {
+      const matches = tags.filter((tag) => tag.includes(`og:image:${dimension}`));
+      assert.equal(matches.length, 1, `duplicate ${dimension}: ${out}`);
+      assert.ok(matches[0].includes(`content="${size}"`), `incorrect ${dimension}: ${out}`);
+    }
+    assert.equal(rewriteImageMeta(out, url), out);
+  }
+});
