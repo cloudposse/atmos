@@ -16,6 +16,9 @@ jobs:
       - name: Check out diagnostic commit
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
+          # The acceptance verifier reads the real Tests shard matrix.
+          # Run against the unchanged stack source, not this diagnostic workflow.
+          ref: 3755e7a0dd50fc1ae9bfb25647e178a8533cf450
           persist-credentials: false
       - name: Set up failing Go toolchain
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
