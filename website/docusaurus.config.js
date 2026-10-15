@@ -51,6 +51,9 @@ const config = {
         [
             'docusaurus-plugin-image-zoom', {},
         ],
+        // Replaces the default og:image/twitter:image with a per-page card
+        // (title + description) rendered after the build.
+        path.resolve(__dirname, './plugins/social-cards'),
         [
             '@docusaurus/plugin-client-redirects', {
                 redirects: [
@@ -658,6 +661,10 @@ const config = {
     themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
         ({
+            // Default Open Graph / Twitter card image. Generated at build time by
+            // scripts/generate-social-card.mjs (gitignored). The social-cards plugin
+            // swaps it for a per-page card after the build.
+            image: 'img/social-card.png',
             docs: {
                 sidebar: {
                     hideable: true,

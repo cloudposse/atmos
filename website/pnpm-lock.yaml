@@ -206,6 +206,9 @@ importers:
       '@docusaurus/module-type-aliases':
         specifier: ^3.10.1
         version: 3.10.2(postcss@8.5.23)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@expo-google-fonts/geist':
+        specifier: ^0.4.2
+        version: 0.4.2
       '@types/canvas-confetti':
         specifier: ^1.9.0
         version: 1.9.0
@@ -1499,6 +1502,9 @@ packages:
   '@excalidraw/random-username@1.1.0':
     resolution: {integrity: sha512-nULYsQxkWHnbmHvcs+efMkJ4/9TtvNyFeLyHdeGxW0zHs6P+jYVqcRff9A6Vq9w9JXeDRnRh2VKvTtS19GW2qA==}
     engines: {node: '>=10'}
+
+  '@expo-google-fonts/geist@0.4.2':
+    resolution: {integrity: sha512-cTsqJRQrvK5EniTVwH7UDK18RFf9Bc6yxciAuM936aViQ+eR6j3mLEI2rQkJXz5JP9kwtn8tHJviDyZ0ulH6oA==}
 
   '@floating-ui/core@1.7.5':
     resolution: {integrity: sha512-1Ih4WTWyw0+lKyFMcBHGbb5U5FtuHJuujoyyr5zTaWS5EYMeT6Jb2AuDeftsCsEuchO+mM2ij5+q9crhydzLhQ==}
@@ -8993,6 +8999,8 @@ snapshots:
       - supports-color
 
   '@excalidraw/random-username@1.1.0': {}
+
+  '@expo-google-fonts/geist@0.4.2': {}
 
   '@floating-ui/core@1.7.5':
     dependencies:
