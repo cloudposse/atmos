@@ -292,6 +292,10 @@ jobs:
   lint-golangci:
     name: "Lint (golangci)"
     runs-on: ubuntu-latest
+    env:
+      # Match the CGO-disabled release build. Otherwise saml2aws's optional
+      # native HID dependency prevents type checking on hosted Linux runners.
+      CGO_ENABLED: "0"
 
     # golangci-lint-action supports merge_group with fetch-depth: 0 below,
     # using the merge group's base revision to limit findings to new issues.
