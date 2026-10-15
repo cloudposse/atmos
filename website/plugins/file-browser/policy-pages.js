@@ -3,6 +3,17 @@ const {inputFields} = require('./policy-input-fields');
 
 const engines = ['cel', 'starlark'];
 
+function policySummary(example) {
+  const file = example.root.children.find(node => node.name === 'policy.yaml');
+  const document = matter.engines.yaml.parse(file?.content ?? '');
+  const rules = Object.values(document?.spec?.policies ?? {});
+  if (rules.length !== 1 || !rules[0].on || !rules[0].action) {
+    throw new Error(`Policy ${example.name} needs one rule with an input and action`);
+  }
+  const {name, title, description, tags} = example;
+  return {name, title, description, tags, inputKind: rules[0].on, action: rules[0].action};
+}
+
 function policyVariants(example, primary) {
   const directory = example.root.children.find(node => node.name === 'variants');
   const files = [{file: primary, path: 'policy.yaml'}];
@@ -44,19 +55,17 @@ function policyPage(example) {
   }
   const fixtures = JSON.parse(cases.content);
   return {
-    name: example.name,
-    title: example.title,
-    description: example.description,
-    tags: example.tags,
+    ...policySummary(example),
     docs: example.docs,
     variants: policyVariants(example, file),
     configuration: sections.Configuration,
     contract: sections.Contract,
     inputReference: sections.Inputs ?? '',
     command: data.command,
+    caseLabels: data.scenarios ?? {},
     cases: fixtures,
     caseFields: fixtures.map(fixture => inputFields(fixture.request)),
   };
 }
 
-module.exports = {policyPage};
+module.exports = {policyPage, policySummary};

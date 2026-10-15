@@ -40,8 +40,12 @@ CLI command admission and YAML function admission now run through `pkg/policy/ad
 component templates/functions and tool execution. The CLI pins governing definitions before config loading.
 Native CI verifies `require_approval` using fresh paginated GitHub reviews, named reviewers,
 current PR/checkout revisions, and `pull-requests: read`. Review collection is outside pure evaluation.
-Inline/remote policy attachment inheritance, general live-fact expression inputs, Go-template function
-admission, and independent source trust remain proposed. Component integrations have different
+Go-template admission and source destination checks now cover guarded imports/downloads, includes,
+and template file/DNS/HTTP access. Source policies are opt-in; guarded transport limitations are
+documented in the public source-policy reference. Offline `policy check`, `list`, `schema`, and `test`
+and operational `--explain` diagnostics are implemented. `policy check` validates configuration;
+it does not introduce a repository-only enforcement event. Inline/remote policy attachment inheritance,
+general live-fact expression inputs, and trusted-source distribution remain proposed. Component integrations have different
 capabilities; none may pretend to supply a Terraform plan merely to share the engine.
 The current-code and incoming-dependency distinctions apply to all examples outside this first slice.
 
@@ -1533,8 +1537,10 @@ through-line for F-1/F-2/F-4.
 
 ## CLI Usage Examples
 
-All policy-group commands below are proposed. Existing `describe affected` and `terraform plan
---affected` are the producers to which policy evaluation will be attached.
+The implemented authoring commands are `policy check` (bundle validation), `list`,
+`schema <input-kind>`, and `test <cases.json>`. Enforcement stays at existing command/lifecycle
+boundaries, with `--explain` adding stderr diagnostics. Standalone `policy inputs`,
+`policy explain`, a repository-only enforcement event, and mode overrides below remain future design.
 
 ```shell
 # Inspect, preview, and test; these do not execute policy-triggered hooks.

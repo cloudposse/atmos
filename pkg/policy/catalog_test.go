@@ -146,8 +146,8 @@ func testPolicyCatalogCombined(t *testing.T, root string, entries []string, lang
 	bundle, err := LoadDirectory(directory)
 	require.NoError(t, err, "catalog entries must not collide when combined")
 	require.Len(t, bundle.Rules, len(entries))
-	for _, rule := range bundle.Rules {
-		for _, hook := range rule.Effects.Hooks {
+	for i := range bundle.Rules {
+		for _, hook := range bundle.Rules[i].Effects.Hooks {
 			require.Contains(t, bundle.Hooks, hook.Ref)
 		}
 	}

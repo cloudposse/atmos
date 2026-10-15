@@ -247,6 +247,7 @@ module.exports = {
                 'policies/configuration',
                 'policies/inputs',
                 'policies/admission',
+                'policies/sources',
                 'policies/approvals',
                 'policies/starlark',
                 'policies/terraform-plan',

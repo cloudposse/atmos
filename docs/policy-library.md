@@ -11,10 +11,21 @@ The website generates the [Policy Library](https://atmos.tools/policies/library)
 from these directories. Frontmatter supplies `title`, `description`, `tags`, `related_docs`, and
 `command` (the component command with explicit target placeholders).
 
-The index is a compact searchable list inside the Reference sidebar. Each policy page displays the
-actual manifests in CEL/Starlark tabs, with copying, followed by configuration, a command, and selectable tested
-fixtures. Tabs share the `policy-engine` Docusaurus group so the engine preference persists across pages
-and reloads. Install one variant per policy, not both. The website extracts Contract and Configuration sections from the README; manifests and
+The index is a compact searchable list inside the Reference sidebar, with category counts and effects
+derived from the manifests. Policy pages provide Policy, Examples, and Reference views. The default
+Policy view displays the selected manifest and Configure → Save → Run instructions; Examples pairs
+scenarios with their expected decisions, input JSON, and field explorer. The detail navigation uses
+the same policy titles as the catalog; a separate Scenario selector chooses the input case. Reference
+contains the full input/enforcement contract and related documentation. Optional `scenarios`
+frontmatter maps fixture names to reader-friendly labels without changing test identities or URLs.
+
+The CEL/Starlark selector retains the `policy-engine` Docusaurus storage preference across pages and
+reloads. The `engine` URL parameter overrides that preference; choosing an engine updates both.
+Switching policies retains the current view and engine and clears the previous policy's scenario.
+Share a view or named fixture with `?view=examples&engine=starlark&case=absent`. Invalid parameters
+fall back to the default view, saved engine (or CEL), and first case. Existing `#examples` links still
+open Examples. Copy policy and View source always use the selected engine. Install one variant per
+policy, not both. The website extracts Contract and Configuration sections from the README; manifests and
 fixtures are not duplicated in website source. Existing file URLs remain available as secondary links.
 
 ```shell

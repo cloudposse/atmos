@@ -15,6 +15,7 @@ import (
 
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	storedeferred "github.com/cloudposse/atmos/pkg/store/deferred"
 	"github.com/cloudposse/atmos/pkg/templatefuncs"
@@ -29,7 +30,7 @@ func FuncMap(
 ) template.FuncMap {
 	defer perf.Track(atmosConfig, "exec.FuncMap")()
 
-	atmosFuncs := &AtmosFuncs{atmosConfig, configAndStacksInfo, ctx, gomplateData}
+	atmosFuncs := &AtmosFuncs{atmosConfig: atmosConfig, configAndStacksInfo: configAndStacksInfo, ctx: ctx, gomplateData: gomplateData}
 
 	funcs := templatefuncs.FuncMap()
 	funcs["atmos"] = func() any { return atmosFuncs }
@@ -43,20 +44,30 @@ type AtmosFuncs struct {
 	configAndStacksInfo *schema.ConfigAndStacksInfo
 	ctx                 context.Context
 	gomplateData        *data.Data
+	sourceFile          string
 }
 
 // Component returns component configuration for the given component and stack.
 func (f AtmosFuncs) Component(component string, stack string) (any, error) {
+	if err := guard.Function(f.ctx, "atmos.Component", policyTemplateEngine, guard.FileOrigin(f.sourceFile)); err != nil {
+		return nil, err
+	}
 	return componentFunc(f.atmosConfig, f.configAndStacksInfo, component, stack)
 }
 
 // GomplateDatasource returns data for a gomplate datasource alias.
 func (f AtmosFuncs) GomplateDatasource(alias string, args ...string) (any, error) {
-	return gomplateDatasourceFunc(alias, f.gomplateData, args...)
+	if err := guard.Function(f.ctx, "atmos.GomplateDatasource", policyTemplateEngine, guard.FileOrigin(f.sourceFile)); err != nil {
+		return nil, err
+	}
+	return policyDatasource(f.gomplateData, f.sourceFile, alias, false, args...)
 }
 
 // Store reads a value from a named store for the given stack, component, and key.
 func (f AtmosFuncs) Store(store string, stack string, component string, key string) (any, error) {
+	if err := guard.Function(f.ctx, "atmos.Store", policyTemplateEngine, guard.FileOrigin(f.sourceFile)); err != nil {
+		return nil, err
+	}
 	defer perf.Track(nil, "exec.AtmosFuncs.Store")()
 
 	if authdeferred.IsDeferred(f.atmosConfig.AuthManager) {
@@ -82,8 +93,12 @@ func (f AtmosFuncs) Store(store string, stack string, component string, key stri
 // the same evaluation semantics as atmos.Component. A plain (untagged) string is returned
 // unchanged.
 func (f AtmosFuncs) Resolve(input string) (any, error) {
+	if err := guard.Function(f.ctx, "atmos.Resolve", policyTemplateEngine, guard.FileOrigin(f.sourceFile)); err != nil {
+		return nil, err
+	}
 	defer perf.Track(f.atmosConfig, "exec.AtmosFuncs.Resolve")()
 
+	guard.RememberValue(input, guard.FileOrigin(f.sourceFile))
 	var stack string
 	if f.configAndStacksInfo != nil {
 		stack = f.configAndStacksInfo.Stack

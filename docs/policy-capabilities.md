@@ -7,7 +7,8 @@ command integrations collect specific inputs and enforce their decisions.
 
 | Input | Collector | Enforcement |
 |---|---|---|
-| `function` | Canonical YAML function name, without secret arguments | Before config/stack/registry handler execution |
+| `function` | YAML/template function name, engine, and available provenance, without secret arguments | Before config/stack/registry/template handler execution |
+| `source` | Normalized destination, scheme, hostname, canonical path and provenance | Before imports/cache reuse, downloads, includes, and guarded template I/O |
 | `command` | Canonical runnable CLI command path | Before argument validation and pre-run hooks |
 | `component.command` | Shared stack resolution, inherited literal selector metadata, capability list | Before component templates/functions and tool execution |
 | `terraform.plan` | Native JSON extracted from a private saved Terraform-compatible plan | After successful planning and before applying the evaluated private copy |
@@ -72,3 +73,7 @@ existing hook executor; their success cannot override another policy's denial.
 Protect policy sources, workflow configuration, binaries, and credentials. See
 [enforcement configuration](https://atmos.tools/policies/configuration#enforcement) and
 [the engine API](policy-engine.md).
+
+Offline authoring commands: `atmos policy check`, `list`, `schema <input-kind>`, and `test <cases.json>`.
+Operational `--explain` reports reached gates and decisions on stderr without changing enforcement.
+See [source boundaries](https://atmos.tools/policies/sources) for guarded transport limitations.

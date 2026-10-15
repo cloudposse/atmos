@@ -101,7 +101,7 @@ func checkCommandAdmission(root, cmd *cobra.Command) error {
 	if canonical := cmd.Annotations["policy-command"]; canonical != "" {
 		path = canonical
 	}
-	data, err := json.Marshal(map[string]any{"path": strings.Fields(path), "command": path})
+	data, err := json.Marshal(policy.CommandInput{Path: strings.Fields(path), Command: path})
 	if err != nil {
 		return err
 	}

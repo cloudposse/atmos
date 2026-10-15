@@ -22,10 +22,8 @@ func enforceComponentAdmission(config *schema.AtmosConfiguration, info *schema.C
 	if err != nil {
 		return err
 	}
-	data, err := json.Marshal(map[string]any{
-		"command": info.SubCommand, "component_type": info.ComponentType,
-		"component": info.ComponentFromArg, "stack": info.Stack, "dry_run": info.DryRun,
-		"capabilities": componentPolicyCapabilities(info.ComponentType),
+	data, err := json.Marshal(policy.ComponentCommandInput{
+		Command: info.SubCommand, ComponentType: info.ComponentType, Component: info.ComponentFromArg, Stack: info.Stack, DryRun: info.DryRun, Capabilities: componentPolicyCapabilities(info.ComponentType),
 	})
 	if err != nil {
 		return err
@@ -34,7 +32,7 @@ func enforceComponentAdmission(config *schema.AtmosConfiguration, info *schema.C
 }
 
 func componentPolicyCapabilities(componentType string) []string {
-	capabilities := []string{"component.command", "function"}
+	capabilities := []string{"component.command", "function", "source"}
 	switch componentType {
 	case "terraform":
 		return append(capabilities, "operation", "terraform.plan")

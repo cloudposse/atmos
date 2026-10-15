@@ -56,15 +56,16 @@ type Request struct {
 // Rule is an already resolved definition, not a policy manifest or trust assertion.
 // A true predicate selects its effects; false means not applicable, never denial.
 type Rule struct {
-	Match       *Selector       `json:"match,omitempty"`
-	ID          string          `json:"id"`
-	Description string          `json:"description,omitempty"`
-	On          InputKind       `json:"on"`
-	Engine      string          `json:"engine"`
-	Expression  string          `json:"expression"`
-	Parameters  json.RawMessage `json:"parameters,omitempty"`
-	RequiredCI  []CIRequirement `json:"required_ci,omitempty"`
-	Effects     Effects         `json:"effects"`
+	AllowedRoots []string        `json:"allowed_roots,omitempty"`
+	Match        *Selector       `json:"match,omitempty"`
+	ID           string          `json:"id"`
+	Description  string          `json:"description,omitempty"`
+	On           InputKind       `json:"on"`
+	Engine       string          `json:"engine"`
+	Expression   string          `json:"expression"`
+	Parameters   json.RawMessage `json:"parameters,omitempty"`
+	RequiredCI   []CIRequirement `json:"required_ci,omitempty"`
+	Effects      Effects         `json:"effects"`
 }
 
 // Effects are obligations selected by a predicate. They cannot perform side effects.

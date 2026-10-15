@@ -41,8 +41,7 @@ spec:
 
 The check applies to `atmos.yaml` mappings and sequences, stack YAML functions, and registry-based
 lazy evaluation. Skipped functions are not executed. Literal text containing `!exec` is not shell
-execution. This rule does not disable shell hooks, automation scripts, external tools, or Go-template
-functions; those are different execution mechanisms, not aliases for the YAML `!exec` function.
+execution. This rule does not disable shell hooks, automation scripts, or external tools. Go-template calls have their own function names and `engine`, described below.
 
 ## Block a command
 
@@ -102,3 +101,42 @@ and the governing files in CI. Pinning does not establish trust in files selecte
 Denials, evaluation failures, missing required inputs, and outstanding approvals return errors.
 Dry-run does not bypass admission. See [enforcement](/policies/configuration#enforcement) for repository
 protection requirements and [affected policies](/policies/affected) for semantic detachment checks.
+
+## Go-template functions and provenance
+
+`on: function` also covers Go-template calls. `input.engine` is `yaml` or `go-template`;
+`input.name` retains the existing YAML name or identifies the template function/namespace.
+For example:
+
+```yaml
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: rendering
+spec:
+  policies:
+    environment:
+      on: function
+      action: deny
+      rule: >-
+        input.engine == 'go-template' &&
+        input.name in ['env', 'getenv', 'expandenv', 'env.Getenv', 'env.ExpandEnv']
+    remote-exec:
+      on: function
+      action: deny
+      rule: input.engine == 'yaml' && input.name == 'exec' && input.provenance != 'local'
+```
+
+Functions are checked when called, so an unused branch does not trigger admission. Namespace
+constructors such as `net` and `aws` are gates; `file` methods, DNS lookup methods, environment
+methods, and `atmos.Component`, `atmos.Store`, `atmos.Resolve`, and `atmos.GomplateDatasource`
+have additional method gates. `atmos.Resolve` retains the YAML handler check too.
+
+`provenance` is `local`, `remote`, or `unknown`. Remote cache files retain remote attribution.
+Lazy YAML values retain conservative parse-time attribution across merges: identical values with
+multiple origins are treated as remote if any recorded origin is remote. Synthetic or unattributed
+execution contexts remain unknown; use `!= 'local'` when missing attribution must block.
+This is execution provenance, not proof of a trusted author or signed source.
+
+See [source and filesystem policies](/policies/sources) for destination restrictions and include
+confinement, and [policy commands](/cli/commands/policy) for offline checks and `--explain` diagnostics.

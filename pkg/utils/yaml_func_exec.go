@@ -15,7 +15,7 @@ func ProcessTagExec(
 	input string,
 ) (any, error) {
 	defer perf.Track(nil, "utils.ProcessTagExec")()
-	if err := admission.Function(context.Background(), "exec"); err != nil {
+	if err := admission.FunctionValue(context.Background(), "exec", input); err != nil {
 		return nil, err
 	}
 

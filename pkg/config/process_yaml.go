@@ -16,6 +16,7 @@ import (
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/policy/admission"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -438,7 +439,7 @@ func processRandomTag(strFunc, nodeValue string) (any, error) {
 // unknown/unsupported custom tags return ErrUnsupportedYamlTag.
 func processScalarNodeValue(node *yaml.Node) (any, error) {
 	if strings.HasPrefix(node.Tag, "!") && !isStandardYAMLTag(node.Tag) {
-		if err := admission.Function(context.Background(), node.Tag); err != nil {
+		if err := admission.FunctionValue(context.Background(), node.Tag, node.Tag+" "+node.Value); err != nil {
 			return nil, err
 		}
 	}
@@ -564,6 +565,7 @@ func decodePlainYamlNode(node *yaml.Node) (any, error) {
 }
 
 func processScalarNodeValueForFile(node *yaml.Node, sourceFile string) (any, error) {
+	guard.RememberValue(node.Tag+" "+node.Value, guard.FileOrigin(sourceFile))
 	if sourceFile == "" || !isIncludeTag(node.Tag) {
 		return processScalarNodeValue(node)
 	}
@@ -576,7 +578,7 @@ func isIncludeTag(tag string) bool {
 }
 
 func processIncludeNodeValueForFile(node *yaml.Node, sourceFile string) (any, error) {
-	if err := admission.Function(context.Background(), node.Tag); err != nil {
+	if err := admission.FunctionValue(context.Background(), node.Tag, node.Tag+" "+node.Value); err != nil {
 		return nil, err
 	}
 	// Resolve the path against the config file and the project base path, never the working
@@ -629,7 +631,7 @@ func includeBasePathForSourceFile(sourceFile string) string {
 // It returns any error produced by the invoked handler.
 func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	if strings.HasPrefix(node.Tag, "!") && !isStandardYAMLTag(node.Tag) {
-		if err := admission.Function(context.Background(), node.Tag); err != nil {
+		if err := admission.FunctionValue(context.Background(), node.Tag, node.Tag+" "+node.Value); err != nil {
 			return err
 		}
 	}

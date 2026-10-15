@@ -26,5 +26,11 @@ func ResolvePolicyApprovals(ctx context.Context, request *policy.Request, decisi
 	if !ok {
 		return decision, fmt.Errorf("%w: active CI provider cannot verify approvals", errUtils.ErrPolicyInputUnavailable)
 	}
-	return resolver.ResolvePolicyApprovals(ctx, request, decision)
+	resolved, err := resolver.ResolvePolicyApprovals(ctx, request, decision)
+	if err != nil {
+		policy.Explain(request.Kind, "", "approval verification failed")
+	} else {
+		policy.Explain(request.Kind, "", "approval verification: "+string(resolved.Status))
+	}
+	return resolved, err
 }

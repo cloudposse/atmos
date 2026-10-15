@@ -13,7 +13,10 @@ there.
 
 This analysis predates YAML function admission. `on: function` policies now gate YAML handlers,
 including early `!exec`; see [Execution Admission](https://atmos.tools/policies/admission).
-The Go-template execution and source-trust findings below remain distinct from that control.
+Go-template admission and opt-in source/filesystem gates have since been added; see
+[source policies](https://atmos.tools/policies/sources) for coverage and transport limitations.
+The historical findings below remain background analysis; trusted-source distribution and
+secure-by-default rollout remain future work.
 
 Two original structural gaps frame the analysis:
 

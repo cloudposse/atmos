@@ -32,7 +32,8 @@
             "additionalProperties": false,
             "required": ["on", "rule", "action"],
             "properties": {
-              "on": {"enum": ["terraform.plan", "operation", "atmos.affected", "function", "command", "component.command"]},
+              "on": {"enum": ["terraform.plan", "operation", "atmos.affected", "function", "command", "component.command", "source"]},
+              "allowed_roots": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
               "engine": {"enum": ["cel", "starlark"], "default": "cel"},
               "rule": {"type": "string", "minLength": 1, "maxLength": 65536},
               "action": {"enum": ["deny", "hooks", "require_approval"]},
@@ -61,7 +62,6 @@
                 "type": "object", "additionalProperties": false,
                 "properties": {
                   "tags": {"type": "array", "items": {"type": "string"}},
-                  "tag_mode": {"enum": ["any", "all"]},
                   "labels": {"type": "object", "additionalProperties": {"type": "string"}},
                   "components": {"type": "array", "items": {"type": "string"}},
                   "stacks": {"type": "array", "items": {"type": "string"}},
@@ -95,8 +95,8 @@
                 }
               }
             },
-            "allOf": [{
-              "if": {"properties": {"on": {"enum": ["atmos.affected", "function", "command"]}}},
+            "allOf": [{"if": {"required": ["allowed_roots"]}, "then": {"properties": {"on": {"const": "source"}}}},{
+              "if": {"properties": {"on": {"enum": ["atmos.affected", "function", "command", "source"]}}},
               "then": {"not": {"required": ["match"]}}
             }, {
               "if": {"properties": {"action": {"const": "hooks"}}},

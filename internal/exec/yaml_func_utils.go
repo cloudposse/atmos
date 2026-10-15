@@ -527,7 +527,7 @@ func processCustomTagsWithContext(
 	// Gate before deferred authentication or a resolver can perform I/O.
 	for _, tag := range fntag.AllYAML() {
 		if matchesPrefix(input, tag, skip) {
-			if err := admission.Function(context.Background(), tag); err != nil {
+			if err := admission.FunctionValue(context.Background(), tag, input); err != nil {
 				return nil, err
 			}
 			break

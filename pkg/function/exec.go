@@ -9,7 +9,6 @@ import (
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/policy/admission"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -40,7 +39,7 @@ func NewExecFunction() *ExecFunction {
 // Otherwise, the raw string output is returned.
 func (f *ExecFunction) Execute(ctx context.Context, args string, execCtx *ExecutionContext) (any, error) {
 	defer perf.Track(nil, "function.ExecFunction.Execute")()
-	if err := admission.Function(ctx, f.Name()); err != nil {
+	if err := admitFunction(ctx, f.Name(), args, execCtx); err != nil {
 		return nil, err
 	}
 

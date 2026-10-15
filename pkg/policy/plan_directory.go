@@ -22,6 +22,7 @@ import (
 const maxPolicyDocumentBytes = 1024 * 1024
 
 type planPolicyDocument struct {
+	directory  string
 	APIVersion string `yaml:"apiVersion"`
 	Kind       string `yaml:"kind"`
 	Metadata   struct {
@@ -86,16 +87,17 @@ func (b *Bundle) RulesFor(kind InputKind) []Rule {
 }
 
 type planPolicyItem struct {
-	Match      *Selector         `yaml:"match"`
-	On         InputKind         `yaml:"on"`
-	Engine     string            `yaml:"engine"`
-	Rule       string            `yaml:"rule"`
-	Action     string            `yaml:"action"`
-	Reason     string            `yaml:"reason"`
-	With       map[string]any    `yaml:"with"`
-	RequiredCI []CIRequirement   `yaml:"required_ci"`
-	Hooks      []HookRequirement `yaml:"hooks"`
-	Approvals  []approvalItem    `yaml:"approvals"`
+	AllowedRoots []string          `yaml:"allowed_roots"`
+	Match        *Selector         `yaml:"match"`
+	On           InputKind         `yaml:"on"`
+	Engine       string            `yaml:"engine"`
+	Rule         string            `yaml:"rule"`
+	Action       string            `yaml:"action"`
+	Reason       string            `yaml:"reason"`
+	With         map[string]any    `yaml:"with"`
+	RequiredCI   []CIRequirement   `yaml:"required_ci"`
+	Hooks        []HookRequirement `yaml:"hooks"`
+	Approvals    []approvalItem    `yaml:"approvals"`
 }
 
 type approvalItem struct {
@@ -188,6 +190,9 @@ func (b *Bundle) addDocument(document *planPolicyDocument) error {
 		b.Hooks[id] = data
 	}
 	for name, version := range document.Spec.Tools {
+		if strings.TrimSpace(name) == "" || strings.TrimSpace(version) == "" {
+			return fmt.Errorf("%w: tool names and versions must be nonempty", errUtils.ErrPolicyInvalid)
+		}
 		if previous, exists := b.Tools[name]; exists && previous != version {
 			return fmt.Errorf("%w: conflicting tool pin %s", errUtils.ErrPolicyInvalid, name)
 		}
@@ -224,6 +229,7 @@ func readPolicyDocument(path string) (*planPolicyDocument, error) {
 	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("%w: exactly one YAML document per file is required", errUtils.ErrPolicyInvalid)
 	}
+	document.directory = filepath.Dir(path)
 	return &document, nil
 }
 
@@ -243,6 +249,10 @@ func (d *planPolicyDocument) rules() ([]Rule, error) {
 		if err != nil {
 			return nil, err
 		}
+		rule.AllowedRoots, err = resolveRoots(item.AllowedRoots, d.directory)
+		if err != nil {
+			return nil, err
+		}
 		rule.Description = d.Metadata.Description
 		rules = append(rules, rule)
 	}
@@ -250,6 +260,14 @@ func (d *planPolicyDocument) rules() ([]Rule, error) {
 }
 
 func (p *planPolicyItem) resolve(document, name string) (Rule, error) {
+	for _, requirement := range p.RequiredCI {
+		if requirement.Provider == "" || requirement.Schema == "" {
+			return Rule{}, fmt.Errorf("%w: required_ci needs provider and schema", errUtils.ErrPolicyInvalid)
+		}
+		if _, err := requiredDataset(&CISnapshot{}, requirement); err != nil {
+			return Rule{}, err
+		}
+	}
 	if err := p.validateEffects(name); err != nil {
 		return Rule{}, err
 	}
@@ -260,10 +278,13 @@ func (p *planPolicyItem) resolve(document, name string) (Rule, error) {
 }
 
 func (p *planPolicyItem) validateEffects(name string) error {
-	if strings.TrimSpace(name) == "" || !slices.Contains([]InputKind{TerraformPlan, Operation, AtmosAffected, Function, Command, ComponentCommand}, p.On) || !slices.Contains([]string{"deny", "hooks", "require_approval"}, p.Action) {
+	if len(p.AllowedRoots) > 0 && p.On != Source {
+		return fmt.Errorf("%w: allowed_roots requires on: source", errUtils.ErrPolicyInvalid)
+	}
+	if strings.TrimSpace(name) == "" || !slices.Contains([]InputKind{TerraformPlan, Operation, AtmosAffected, Function, Command, ComponentCommand, Source}, p.On) || !slices.Contains([]string{"deny", "hooks", "require_approval"}, p.Action) {
 		return fmt.Errorf("%w: unsupported policy input kind or action", errUtils.ErrPolicyInvalid)
 	}
-	if slices.Contains([]InputKind{AtmosAffected, Function, Command}, p.On) && p.Match != nil {
+	if slices.Contains([]InputKind{AtmosAffected, Function, Command, Source}, p.On) && p.Match != nil {
 		return fmt.Errorf("%w: this input has no instance selector; use component.command for instance admission", errUtils.ErrPolicyInvalid)
 	}
 	if (p.Action == "require_approval") != (len(p.Approvals) > 0) {

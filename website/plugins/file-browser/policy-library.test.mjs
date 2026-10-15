@@ -7,6 +7,7 @@ import matter from 'gray-matter';
 import plugin from './index.js';
 import {policyPage} from './policy-pages.js';
 import {inputFields} from './policy-input-fields.js';
+import {effectLabel, outcomeLabel, policyViewUrl, resolvePolicyView} from '../../src/components/PolicyLibrary/policy-view.mjs';
 
 const siteDir = fileURLToPath(new URL('../../', import.meta.url));
 const libraryDir = path.resolve(siteDir, '../policy-library');
@@ -55,6 +56,14 @@ test('the policy gallery discovers individually documented and tested policies',
     const route = routes.find(route => route.path === base);
     assert.match(route.component, /PolicyLibrary\/PolicyPage/);
     const page = modules.get(route.modules.policyData);
+    assert.equal(route.modules.treeData, routes[0].modules.treeData, 'Policy navigation shares the lightweight catalog');
+    const summary = modules.get(routes[0].modules.treeData).examples.find(item => item.name === entry.name);
+    const manifest = matter.engines.yaml.parse(readFileSync(path.join(libraryDir, entry.name, 'policy.yaml'), 'utf8'));
+    const rule = Object.values(manifest.spec.policies)[0];
+    assert.equal(page.action, rule.action);
+    assert.equal(page.inputKind, rule.on);
+    assert.equal(summary.action, rule.action);
+    assert.equal(summary.inputKind, rule.on);
     assert.deepEqual(page.variants.map(variant => variant.engine), ['cel', 'starlark']);
     for (const variant of page.variants) {
       assert.equal(variant.policy, readFileSync(path.join(libraryDir, entry.name, variant.path), 'utf8'));
@@ -69,6 +78,10 @@ test('the policy gallery discovers individually documented and tested policies',
       assert.ok(paths.has(base + suffix), `Missing catalog route: ${base + suffix}`);
     }
     const {data, content: readme} = matter(entry.root.readme.content);
+    assert.deepEqual(page.caseLabels, data.scenarios ?? {});
+    for (const name of Object.keys(page.caseLabels)) {
+      assert.ok(page.cases.some(fixture => fixture.name === name), `Unknown scenario label: ${entry.name}/${name}`);
+    }
     assert.equal(page.command, data.command, 'Use the documented command, including repository-wide commands');
     assert.ok(data.title && data.description && data.tags.length, `${entry.name}: catalog metadata required`);
     assert.ok(entry.docs.length >= 2, `${entry.name}: reference links required`);
@@ -92,6 +105,44 @@ test('the policy gallery discovers individually documented and tested policies',
     assert.ok(fixtures.some(fixture => ['deny', 'allow', 'awaiting_approval'].includes(fixture.status)), `${entry.name}: matching case required`);
     assert.ok(fixtures.some(fixture => fixture.status === 'not_applicable'), `${entry.name}: nonmatching case required`);
   }
+});
+
+test('policy links round-trip engine, view and named cases without losing unrelated parameters', () => {
+  const cases = [{name: 'missing Owner / unknown?'}, {name: 'owned'}];
+  const url = policyViewUrl('/policies/library/owner', '?source=docs', {
+    view: 'examples', engine: 'starlark', case: cases[0].name,
+  });
+  const parsed = new URL(url, 'https://atmos.tools');
+  assert.equal(parsed.searchParams.get('source'), 'docs');
+  assert.deepEqual(resolvePolicyView(parsed.search, '', cases, 'cel'), {
+    view: 'examples', engine: 'starlark', fixture: cases[0],
+  });
+  const reference = policyViewUrl(parsed.pathname, parsed.search, {view: 'reference'});
+  assert.equal(new URL(reference, parsed).searchParams.get('case'), cases[0].name);
+  const otherPolicy = new URL(policyViewUrl('/policies/library/approval', parsed.search, {case: null}), parsed);
+  assert.equal(otherPolicy.pathname, '/policies/library/approval');
+  assert.equal(otherPolicy.searchParams.has('case'), false);
+  assert.equal(otherPolicy.searchParams.get('view'), 'examples');
+  assert.equal(otherPolicy.searchParams.get('engine'), 'starlark');
+  assert.equal(resolvePolicyView('', '', cases, 'starlark').engine, 'starlark');
+  assert.deepEqual(resolvePolicyView('?view=bad&engine=bad&case=bad', '', cases, 'starlark'), {
+    view: 'policy', engine: 'starlark', fixture: cases[0],
+  });
+  assert.equal(resolvePolicyView('', '#examples', cases).view, 'examples');
+  assert.equal(resolvePolicyView('?view=reference', '#examples', cases).view, 'reference');
+  assert.deepEqual(resolvePolicyView('', '', [], 'unknown'), {view: 'policy', engine: 'cel', fixture: undefined});
+});
+
+test('decision labels distinguish nonmatching, allowed, blocked, approval and hook outcomes', () => {
+  assert.equal(effectLabel('deny'), 'Blocks');
+  assert.equal(effectLabel('require_approval'), 'Requires approval');
+  assert.equal(effectLabel('hooks'), 'Requires hooks');
+  assert.equal(outcomeLabel({status: 'not_applicable'}), 'Rule does not match');
+  assert.equal(outcomeLabel({status: 'allow'}), 'Allowed');
+  assert.equal(outcomeLabel({status: 'allow', hooks: [{}]}), 'Hooks required');
+  assert.equal(outcomeLabel({status: 'deny', hooks: [{}]}), 'Blocked');
+  assert.equal(outcomeLabel({status: 'awaiting_approval', hooks: [{}]}), 'Approval required');
+  assert.equal(outcomeLabel({status: 'future-status'}), 'future-status');
 });
 
 test('field explorer describes observed fields without inventing a provider schema', () => {

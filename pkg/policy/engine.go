@@ -52,6 +52,9 @@ func (e *Engine) Evaluate(ctx context.Context, request *Request, rules []Rule) (
 	defer perf.Track(nil, "policy.Engine.Evaluate")()
 
 	decision := Decision{Status: NotApplicable, Findings: []Finding{}}
+	if request != nil {
+		Explain(request.Kind, "", "gate reached")
+	}
 	if err := validateRequest(ctx, request); err != nil {
 		decision.Status = EvaluationError
 		return decision, err
@@ -99,6 +102,7 @@ func (e *Engine) evaluateRule(ctx context.Context, request *Request, rule *Rule)
 	if err != nil {
 		finding.Status = EvaluationError
 		finding.Error = err.Error()
+		Explain(request.Kind, rule.ID, "evaluation error; required input may be unavailable")
 		return finding, fmt.Errorf("%w: rule %q: %w", errUtils.ErrPolicyEvaluation, rule.ID, err)
 	}
 	if matched {
@@ -111,29 +115,33 @@ func (e *Engine) evaluateRule(ctx context.Context, request *Request, rule *Rule)
 			finding.Status = Deny
 		}
 	}
+	Explain(request.Kind, rule.ID, string(finding.Status))
+	for _, hook := range finding.Effects.Hooks {
+		Explain(request.Kind, rule.ID, fmt.Sprintf("required hook %s at %s (require_success=%t)", hook.Ref, hook.Event, hook.RequireSuccess))
+	}
+	for _, approval := range finding.Effects.Approvals {
+		Explain(request.Kind, rule.ID, fmt.Sprintf("required approval %s from %s", approval.ID, approval.Provider))
+	}
 	return finding, nil
 }
 
 func (e *Engine) match(ctx context.Context, request *Request, rule *Rule) (bool, Effects, error) {
-	if err := ctx.Err(); err != nil {
-		return false, Effects{}, fmt.Errorf("%w: %w", errUtils.ErrPolicyEvaluation, err)
-	}
-	if err := validateRule(rule); err != nil {
+	selected, err := selectRule(ctx, request, rule)
+	if err != nil || !selected {
 		return false, Effects{}, err
-	}
-	if selected, err := rule.Match.Matches(request.Subject); err != nil || !selected {
-		return false, Effects{}, err
-	}
-	for _, requirement := range rule.RequiredCI {
-		if err := requireCI(request.CI, requirement); err != nil {
-			return false, Effects{}, err
-		}
 	}
 	e.mu.RLock()
 	evaluator, exists := e.evaluators[rule.Engine]
 	e.mu.RUnlock()
 	if !exists {
 		return false, Effects{}, fmt.Errorf("%w: %s", errUtils.ErrPolicyEngineUnknown, rule.Engine)
+	}
+	if request.Kind == Source {
+		var err error
+		request, err = sourceRequest(request, rule.AllowedRoots)
+		if err != nil {
+			return false, Effects{}, err
+		}
 	}
 	// JSON cloning rejects unsupported raw payloads and isolates each adapter and result.
 	input, err := cloneJSON(Evaluation{Expression: rule.Expression, Parameters: rule.Parameters, Request: request})
@@ -207,4 +215,25 @@ func dominantStatus(left, right DecisionStatus) DecisionStatus {
 		return right
 	}
 	return left
+}
+
+func selectRule(ctx context.Context, request *Request, rule *Rule) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, fmt.Errorf("%w: %w", errUtils.ErrPolicyEvaluation, err)
+	}
+	if err := validateRule(rule); err != nil {
+		return false, err
+	}
+	if selected, err := rule.Match.Matches(request.Subject); err != nil || !selected {
+		if err == nil {
+			Explain(request.Kind, rule.ID, "excluded by selector")
+		}
+		return false, err
+	}
+	for _, requirement := range rule.RequiredCI {
+		if err := requireCI(request.CI, requirement); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }

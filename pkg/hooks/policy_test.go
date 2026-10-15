@@ -253,3 +253,26 @@ func TestStarlarkPolicyHookExecution(t *testing.T) {
 	require.ErrorIs(t, h.RunAll(AfterHelmApply, config, info, nil, nil), errUtils.ErrPolicyDenied)
 	require.EqualValues(t, 1, calls.Load(), "a CEL denial blocks Starlark-selected hooks")
 }
+
+func TestValidatePolicyBundleOffline(t *testing.T) {
+	for _, tc := range []struct {
+		name, definition string
+		invalid          bool
+	}{
+		{"missing executable is still valid offline", `{"kind":"command","command":"not-installed-policy-test-binary"}`, false},
+		{"missing command", `{"kind":"command"}`, true},
+		{"unknown kind", `{"kind":"unknown"}`, true},
+		{"HTTP without URL", `{"kind":"step","type":"http","with":{}}`, true},
+		{"steps without URL", `{"kind":"steps","with":[{"type":"http"}]}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			bundle := &policy.Bundle{Hooks: map[string]json.RawMessage{"test/hook": json.RawMessage(tc.definition)}}
+			err := ValidatePolicyBundle(bundle)
+			if tc.invalid {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

@@ -24,6 +24,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -65,6 +66,7 @@ func ProcessTmpl(
 }
 
 type templateProcessOptions struct {
+	sourceFile    string
 	ignoreMissing bool
 	prepare       func(*template.Template)
 }
@@ -97,6 +99,14 @@ func processTmpl(
 	}
 	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), getSprigFuncMap(), FuncMap(cfg, &schema.ConfigAndStacksInfo{}, ctx, &d))
 
+	sourceFile := options.sourceFile
+	if sourceFile == "" {
+		sourceFile = tmplName
+	}
+	funcs, err := policyTemplateFuncs(funcs, sourceFile, &d)
+	if err != nil {
+		return "", err
+	}
 	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
 	if err != nil {
 		return "", err
@@ -406,7 +416,11 @@ func ProcessTmplWithDatasources(
 		funcs = lo.Assign(funcs, FuncMap(atmosConfig, configAndStacksInfo, context.TODO(), &d))
 
 		// Process the template
-		t := template.New(tmplName).Funcs(funcs)
+		guardedFuncs, err := policyTemplateFuncs(funcs, tmplName, &d)
+		if err != nil {
+			return "", err
+		}
+		t := template.New(tmplName).Funcs(guardedFuncs)
 
 		leftDelimiter, rightDelimiter, err := resolveTemplateDelimiters(effectiveDelimiters)
 		if err != nil {
@@ -682,6 +696,22 @@ func ProcessTmplWithDatasourcesGomplate(
 		return "", err
 	}
 
+	policyData := &data.Data{Ctx: context.Background(), Sources: map[string]*data.Source{".": {URL: finalTopLevelFileURL}, "config": {URL: finalFileUrl}}}
+	var guardedFuncs template.FuncMap
+	functionPolicies, err := guard.Enabled("function")
+	if err != nil {
+		return "", err
+	}
+	sourcePolicies, err := guard.Enabled("source")
+	if err != nil {
+		return "", err
+	}
+	if functionPolicies || sourcePolicies {
+		guardedFuncs, err = policyTemplateFuncs(gomplate.CreateFuncs(context.Background(), policyData), tmplName, policyData)
+		if err != nil {
+			return "", err
+		}
+	}
 	// Construct Gomplate Options.
 	opts := gomplate.Options{
 		Context: map[string]gomplate.Datasource{
@@ -692,7 +722,7 @@ func ProcessTmplWithDatasourcesGomplate(
 				URL: finalFileUrl,
 			},
 		},
-		Funcs: template.FuncMap{},
+		Funcs: guardedFuncs,
 	}
 
 	// Render the template.

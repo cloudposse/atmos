@@ -9,7 +9,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const matter = require('gray-matter');
-const { policyPage } = require('./policy-pages');
+const { policyPage, policySummary } = require('./policy-pages');
 const { getBuildTimestamp } = require('../build-timestamp');
 
 // File names recognized as an item's primary content — the ones treated as
@@ -809,7 +809,7 @@ module.exports = function fileBrowserPlugin(context, options) {
         `file-browser-tree-${id}.json`,
         JSON.stringify(presentation === 'policies' ? {
           tags: tree.tags,
-          examples: tree.examples.map(({name, title, description, tags}) => ({name, title, description, tags})),
+          examples: tree.examples.map(policySummary),
         } : tree, null, 2)
       );
 
@@ -839,7 +839,7 @@ module.exports = function fileBrowserPlugin(context, options) {
           addRoute({
             path: `${routeBasePath}/${example.name}`,
             component: '@site/src/components/PolicyLibrary/PolicyPage.tsx',
-            modules: {policyData, optionsData: optionsDataPath},
+            modules: {policyData, optionsData: optionsDataPath, treeData: treeDataPath},
             exact: true,
           });
         }

@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"os"
 	"sync"
 
@@ -9,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -358,6 +360,11 @@ func ClearFileContentCache() {
 // Otherwise, it reads the file, stores its content in the map, and returns the content.
 func GetFileContent(filePath string) (string, error) {
 	defer perf.Track(nil, "exec.GetFileContent")()
+	if guard.FileOrigin(filePath).Provenance != "remote" {
+		if err := guard.Source(context.Background(), "import", filePath, ""); err != nil {
+			return "", err
+		}
+	}
 
 	if existingContent, found := getFileContentSyncMap.Load(filePath); found {
 		switch v := existingContent.(type) {
@@ -384,6 +391,11 @@ func GetFileContent(filePath string) (string, error) {
 // Used when provenance tracking is enabled to ensure fresh reads with position tracking.
 func GetFileContentWithoutCache(filePath string) (string, error) {
 	defer perf.Track(nil, "exec.GetFileContentWithoutCache")()
+	if guard.FileOrigin(filePath).Provenance != "remote" {
+		if err := guard.Source(context.Background(), "import", filePath, ""); err != nil {
+			return "", err
+		}
+	}
 
 	content, err := os.ReadFile(filePath)
 	if err != nil {

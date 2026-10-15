@@ -70,6 +70,8 @@ func bindTerraformPolicy(gate *planfile.Guard, info *schema.ConfigAndStacksInfo,
 		}
 		if matches {
 			selected = append(selected, *rule)
+		} else {
+			policy.Explain(policy.TerraformPlan, rule.ID, "excluded by selector")
 		}
 	}
 	if len(selected) == 0 {
@@ -147,6 +149,7 @@ func executeGovernedTerraformCommand( //nolint:revive // argument-limit: mirrors
 		return err
 	}
 	if info.DryRun {
+		policy.Explain(policy.TerraformPlan, "", "unavailable in dry-run: no saved plan evaluated")
 		log.Warn("Dry-run: saved-plan policies were NOT evaluated", "rules", len(gate.Rules))
 		return executeMainTerraformCommand(atmosConfig, info, args, componentPath, uploadStatusFlag, opts...)
 	}

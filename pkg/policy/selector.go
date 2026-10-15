@@ -29,7 +29,7 @@ type SubjectMetadata struct {
 // all match. Multiple tags use the same any/all convention as component selection.
 type Selector struct {
 	Tags           []string          `json:"tags,omitempty" yaml:"tags"`
-	TagMode        tags.TagMode      `json:"tag_mode,omitempty" yaml:"tag_mode"`
+	TagMode        tags.TagMode      `json:"tag_mode,omitempty" yaml:"-"`
 	Labels         map[string]string `json:"labels,omitempty" yaml:"labels"`
 	Components     []string          `json:"components,omitempty" yaml:"components"`
 	Stacks         []string          `json:"stacks,omitempty" yaml:"stacks"`
@@ -66,7 +66,7 @@ func (s *Selector) validate() error {
 		return nil
 	}
 	if s.TagMode != "" && s.TagMode != tags.TagModeAny && s.TagMode != tags.TagModeAll {
-		return fmt.Errorf("%w: match.tag_mode must be any or all", errUtils.ErrPolicyInvalid)
+		return fmt.Errorf("%w: tag matching mode must be any or all", errUtils.ErrPolicyInvalid)
 	}
 	if unresolvedMetadata(SubjectMetadata{Tags: s.Tags, Labels: s.Labels}, "{{") {
 		return fmt.Errorf("%w: attachment selectors must be literal values", errUtils.ErrPolicyInvalid)

@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/policy"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 )
 
 var invocation struct {
@@ -25,6 +26,7 @@ var invocation struct {
 // working directory or environment. The CLI serializes top-level invocations.
 func BeginInvocation() (func(), error) {
 	defer perf.Track(nil, "admission.BeginInvocation")()
+	guard.ResetOrigins()
 	bundle, err := loadDirectory()
 	if err != nil {
 		return nil, err
@@ -77,10 +79,14 @@ func Check(ctx context.Context, request *policy.Request) error {
 	}
 	bundle, err := LoadBundle()
 	if err != nil || bundle == nil {
+		if err == nil {
+			policy.Explain(request.Kind, "", "gate reached; no configured rules")
+		}
 		return err
 	}
 	rules := bundle.RulesFor(request.Kind)
 	if len(rules) == 0 {
+		policy.Explain(request.Kind, "", "gate reached; no configured rules")
 		return nil
 	}
 	request.CI, err = ci.CollectPolicySnapshot(ctx)
@@ -102,16 +108,37 @@ func Check(ctx context.Context, request *policy.Request) error {
 // No subject is fabricated before component metadata is available.
 func Function(ctx context.Context, name string) error {
 	defer perf.Track(nil, "admission.Function")()
+	return guard.Function(ctx, canonicalFunction(name), "yaml", guard.Origin{Provenance: "unknown"})
+}
+
+func init() {
+	guard.SetEnabled(func(kind string) (bool, error) { return HasRules(policy.InputKind(kind)) })
+	guard.SetEvaluator(func(ctx context.Context, kind string, input json.RawMessage) error {
+		return Check(ctx, &policy.Request{Kind: policy.InputKind(kind), Input: input})
+	})
+}
+
+// FunctionAt checks a YAML function with its parser-provided source file.
+func FunctionAt(ctx context.Context, name, file string) error {
+	defer perf.Track(nil, "admission.FunctionAt")()
+
+	return guard.Function(ctx, canonicalFunction(name), "yaml", guard.FileOrigin(file))
+}
+
+// FunctionValue checks lazy YAML functions using conservative parse-time attribution.
+func FunctionValue(ctx context.Context, name, value string) error {
+	defer perf.Track(nil, "admission.FunctionValue")()
+
+	return guard.Function(ctx, canonicalFunction(name), "yaml", guard.ValueOrigin(value))
+}
+
+func canonicalFunction(name string) string {
 	name = strings.TrimPrefix(strings.ToLower(name), "!")
 	switch name {
 	case "repo-root":
-		name = "git.root"
+		return "git.root"
 	case "git.ref":
-		name = "git.sha"
+		return "git.sha"
 	}
-	data, err := json.Marshal(map[string]any{"name": name})
-	if err != nil {
-		return err
-	}
-	return Check(ctx, &policy.Request{Kind: policy.Function, Input: data})
+	return name
 }

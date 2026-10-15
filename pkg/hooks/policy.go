@@ -14,8 +14,10 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/policy/admission"
+	runnerstep "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -84,10 +86,8 @@ func operationPolicyRequest(run *hookRunContext, snapshot *policy.CISnapshot) (*
 	if len(parts) != 3 {
 		return nil, fmt.Errorf("%w: unsupported lifecycle event", errUtils.ErrPolicyInputUnavailable)
 	}
-	input, err := json.Marshal(map[string]any{
-		"event": string(run.event.Normalize()), "component_type": parts[1], "command": parts[2],
-		"component": run.info.ComponentFromArg, "stack": run.info.Stack, "status": string(policyOperationStatus(run)),
-		"exit_code": run.outcome.ExitCode, "dry_run": run.info.DryRun,
+	input, err := json.Marshal(policy.OperationInput{
+		Event: string(run.event.Normalize()), ComponentType: parts[1], Command: parts[2], Component: run.info.ComponentFromArg, Stack: run.info.Stack, Status: string(policyOperationStatus(run)), ExitCode: run.outcome.ExitCode, DryRun: run.info.DryRun,
 	})
 	if err != nil {
 		return nil, err
@@ -207,4 +207,73 @@ func hasPolicySkipControl(value any) bool {
 		}
 	}
 	return false
+}
+
+// ValidatePolicyBundle checks governing hook definitions without installing or running tools.
+func ValidatePolicyBundle(bundle *policy.Bundle) error {
+	defer perf.Track(nil, "hooks.ValidatePolicyBundle")()
+	if bundle == nil {
+		return nil
+	}
+	h := &Hooks{policyBundle: bundle}
+	for ref := range bundle.Hooks {
+		hook, kind, err := h.resolvePolicyHook(ref)
+		if err != nil {
+			return err
+		}
+		if err := validatePolicyHookDefinition(ref, hook, kind); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validatePolicyHookDefinition(ref string, hook *Hook, kind *Kind) error {
+	resolved := kind.ResolveDefaults(hook)
+	if err := verifyOnFailureValue(ref, resolved); err != nil {
+		return err
+	}
+	switch kind.Engine.(type) {
+	case *CommandEngine:
+		if err := validateCtx(&ExecContext{Hook: resolved, Kind: kind}); err != nil {
+			return err
+		}
+	case *stepEngine:
+		if err := verifyStepHookType(ref, resolved.Type); err != nil {
+			return err
+		}
+		step, err := StepFromHook(resolved)
+		if err != nil {
+			return err
+		}
+		handler, _ := runnerstep.Get(resolved.Type)
+		if err := handler.Validate(step); err != nil {
+			return err
+		}
+	case *stepsEngine:
+		return validatePolicySteps(ref, resolved)
+	}
+
+	return nil
+}
+
+func validatePolicySteps(ref string, hook *Hook) error {
+	if err := verifyStepsHookTypes(ref, hook); err != nil {
+		return err
+	}
+	steps, err := StepsFromHook(hook)
+	if err != nil {
+		return err
+	}
+	for i := range steps {
+		step := &steps[i]
+		if step.Type == "" {
+			step.Type = "shell"
+		}
+		handler, _ := runnerstep.Get(step.Type)
+		if err := handler.Validate(step); err != nil {
+			return err
+		}
+	}
+	return nil
 }
