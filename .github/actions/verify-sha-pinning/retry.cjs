@@ -3,8 +3,18 @@ const maxRateLimitWait = 65 * 60 * 1000;
 
 function isRateLimitError(err) {
   const headers = err.response?.headers || {};
+  const message = err.response?.data?.message;
+  const rateLimitMessage = typeof message === 'string' && /(?:secondary rate limit|API rate limit exceeded)/i.test(message);
   return err.status === 429 || (err.status === 403 &&
-    (headers['x-ratelimit-remaining'] === '0' || headers['retry-after'] !== undefined));
+    (headers['x-ratelimit-remaining'] === '0' || headers['retry-after'] !== undefined || rateLimitMessage));
+}
+
+// Only the documented organization IP-policy denial is eligible for the
+// separately reviewed repository allowlist. Unknown 403s must fail closed.
+function isAccessBlockedError(err, owner) {
+  if (err.status !== 403 || isRateLimitError(err)) return false;
+  return err.response?.data?.message ===
+    `Although you appear to have the correct authorization credentials, the \`${owner}\` organization has an IP allow list enabled, and your IP address is not permitted to access this resource.`;
 }
 
 function rateLimitDelay(err, now, attempt) {
@@ -53,4 +63,4 @@ function createRetry({ warning, sleep = ms => new Promise(resolve => setTimeout(
   };
 }
 
-module.exports = { createRetry, isRateLimitError };
+module.exports = { createRetry, isRateLimitError, isAccessBlockedError };

@@ -111,8 +111,8 @@ runs:
           }
 
           // The ONLY error condition allowlist.json is allowed to downgrade:
-          // a clean HTTP 403 from the upstream API (e.g. an org-level IP
-          // allow-list), never a 404, a ref-shape bug, or an exhausted retry.
+          // an explicit organization IP allow-list denial from the upstream API,
+          // never an ambiguous 403, a 404, or an exhausted retry.
           class AccessBlockedError extends Error {
             constructor(message, cause) {
               super(message, { cause });
@@ -121,7 +121,7 @@ runs:
             }
           }
 
-          const { createRetry, isRateLimitError } = require(path.join(process.env.VERIFY_ACTION_PATH, 'retry.cjs'));
+          const { createRetry, isRateLimitError, isAccessBlockedError } = require(path.join(process.env.VERIFY_ACTION_PATH, 'retry.cjs'));
           const withRetries = createRetry({ warning: message => core.warning(message) });
 
           // Find all workflow files
@@ -244,17 +244,7 @@ runs:
               if (err.status === 404) {
                 throw new Error(`Tag "${tag}" not found in ${owner}/${repo}`);
               }
-              if (err.status === 403) {
-                // A rate-limit 403 isn't a per-repo access-block condition —
-                // it means this token is out of budget for every remaining
-                // lookup, allowlisted repo or not. Let it fail loudly instead
-                // of being silently absorbed by one repo's allowlist entry.
-                // Detected via the documented x-ratelimit-remaining response
-                // header (a structured API signal), never by inspecting the
-                // error's message text.
-                if (isRateLimitError(err)) {
-                  throw err;
-                }
+              if (isAccessBlockedError(err, owner)) {
                 throw new AccessBlockedError(
                   `API access blocked (403) resolving tag "${tag}" in ${owner}/${repo}: ${err.message}`,
                   err
@@ -377,10 +367,10 @@ runs:
               const detail = err.message;
 
               // Only a maintainer-reviewed entry in allowlist.json AND the
-              // explicitly verified access-block condition (a 403 from the
+              // explicitly verified IP-policy denial (a 403 from the
               // upstream API) can downgrade a resolution failure to a
-              // warning — never any other error type, and never an inference
-              // from the error's message text. See that file for why.
+              // warning — never any other error type or a generic 403. The API
+              // body must explicitly identify the owner's IP policy.
               const entry = allowlist.get(`${ref.owner}/${ref.repo}`);
               if (entry && err instanceof AccessBlockedError) {
                 const msg = `⚠️  ${label} — tag verification unavailable (${ref.file}:${ref.line}): ${detail}\n` +

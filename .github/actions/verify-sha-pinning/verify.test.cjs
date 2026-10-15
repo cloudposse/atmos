@@ -51,9 +51,11 @@ async function runVerifier(t, responses) {
   return { outputs, failure, calls, delays };
 }
 
-function blocked(headers) {
-  return Object.assign(new Error('API request rejected'), { status: 403, response: { headers } });
+function blocked(headers, message = 'API request rejected') {
+  return Object.assign(new Error(message), { status: 403, response: { headers, data: { message } } });
 }
+
+const ipBlock = 'Although you appear to have the correct authorization credentials, the `owner` organization has an IP allow list enabled, and your IP address is not permitted to access this resource.';
 
 test('actual verifier recovers from quota exhaustion and caches the verified tag', async t => {
   const result = await runVerifier(t, [blocked({ 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '110' }),
@@ -80,11 +82,13 @@ test('actual verifier never allowlists exhausted primary or secondary limits', a
   }
 });
 
-test('actual verifier retains reviewed access-block handling', async t => {
-  const result = await runVerifier(t, [blocked({ 'x-ratelimit-remaining': '42' })]);
-  assert.equal(result.outputs.status, 'pass');
-  assert.equal(result.outputs.allowlisted_count, 2);
-  assert.deepEqual(result.delays, []);
+test('actual verifier retains explicit reviewed IP-policy handling with or without quota headers', async t => {
+  for (const headers of [{}, { 'x-ratelimit-remaining': '42' }]) {
+    const result = await runVerifier(t, [blocked(headers, ipBlock)]);
+    assert.equal(result.outputs.status, 'pass');
+    assert.equal(result.outputs.allowlisted_count, 2);
+    assert.deepEqual(result.delays, []);
+  }
 });
 
 test('actual verifier still rejects a SHA mismatch after quota recovery', async t => {
@@ -95,4 +99,41 @@ test('actual verifier still rejects a SHA mismatch after quota recovery', async 
   assert.equal(result.outputs.allowlisted_count, 0);
   assert.equal(result.calls, 2);
   assert.match(result.failure, /SHA mismatch/);
+});
+
+
+test('actual verifier rejects ambiguous 403s even for an allowlisted repository', async t => {
+  for (const message of ['Forbidden', 'Resource not accessible by integration', ipBlock.replace('`owner`', '`other`')]) {
+    const result = await runVerifier(t, [blocked({}, message)]);
+    assert.equal(result.outputs.status, 'fail');
+    assert.equal(result.outputs.allowlisted_count, 0);
+    assert.equal(result.outputs.failed_count, 2);
+    assert.deepEqual(result.delays, []);
+  }
+});
+
+test('actual verifier fails closed on headerless secondary limits after bounded recovery', async t => {
+  const result = await runVerifier(t, [blocked({}, 'You have exceeded a secondary rate limit. Please wait a few minutes before you try again.')]);
+  assert.equal(result.outputs.status, 'fail');
+  assert.equal(result.outputs.allowlisted_count, 0);
+  assert.equal(result.outputs.failed_count, 2);
+  assert.equal(result.calls, 3);
+  assert.deepEqual(result.delays, [60000, 120000]);
+});
+
+test('actual verifier recovers from a headerless secondary limit and verifies the SHA', async t => {
+  const result = await runVerifier(t, [blocked({}, 'You have exceeded a secondary rate limit.'),
+    { data: { object: { type: 'commit', sha } } }]);
+  assert.equal(result.outputs.status, 'pass');
+  assert.equal(result.outputs.verified_count, 2);
+  assert.equal(result.outputs.allowlisted_count, 0);
+  assert.deepEqual(result.delays, [60000]);
+});
+
+
+test('rate-limit headers override even an explicit IP-policy message', async t => {
+  const result = await runVerifier(t, [blocked({ 'retry-after': '1' }, ipBlock)]);
+  assert.equal(result.outputs.status, 'fail');
+  assert.equal(result.outputs.allowlisted_count, 0);
+  assert.equal(result.calls, 3);
 });
