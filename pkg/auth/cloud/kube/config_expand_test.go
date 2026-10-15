@@ -79,6 +79,20 @@ func TestExpandKubeconfigPath(t *testing.T) {
 			input: strings.Join([]string{filepath.Join(home, "primary"), filepath.Join(home, "secondary")}, string(os.PathListSeparator)),
 			want:  filepath.Join(home, "primary"),
 		},
+		{
+			// A leading separator yields an empty first entry; kubectl skips
+			// empty filenames, so the first usable file must be selected.
+			name:  "leading separator skips empty entry",
+			input: string(os.PathListSeparator) + filepath.Join(home, "primary"),
+			want:  filepath.Join(home, "primary"),
+		},
+		{
+			// A list with only separators has no usable entry and must error
+			// rather than write through an empty path.
+			name:    "list with only separators is an error",
+			input:   string(os.PathListSeparator) + string(os.PathListSeparator),
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {

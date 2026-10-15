@@ -363,10 +363,11 @@ func DefaultKubeconfigPath() (string, error) {
 //     rather than silently removed - a dropped segment would redirect the write
 //     to an unintended path.
 //  2. A KUBECONFIG-style value may list several files separated by
-//     os.PathListSeparator. kubectl writes changes to the first entry and the
-//     AWS CLI uses the first path as its default destination, so a list is
-//     reduced to its first element. A single path (the --kubeconfig flag or a
-//     configured spec.cluster.kubeconfig.path) contains no separator and is
+//     os.PathListSeparator. kubectl writes changes to the first entry (skipping
+//     empty filenames) and the AWS CLI uses the first path as its default
+//     destination, so a list is reduced to its first non-empty element; a list
+//     with no usable entry is an error. A single path (the --kubeconfig flag or
+//     a configured spec.cluster.kubeconfig.path) contains no separator and is
 //     left unchanged.
 //  3. A leading ~ (or ~/) resolves to the current user's home directory; a bare
 //     ~ maps to the home directory itself.
@@ -386,9 +387,20 @@ func expandKubeconfigPath(path string) (string, error) {
 	}
 	path = expanded
 
-	// Reduce a KUBECONFIG-style multi-file list to its first entry.
+	// Reduce a KUBECONFIG-style multi-file list to its first non-empty entry.
+	// kubectl skips empty filenames (e.g. a leading or doubled separator), so a
+	// value like ":/home/dev/.kube/config" still resolves to the usable file.
 	if entries := filepath.SplitList(path); len(entries) > 1 {
-		path = entries[0]
+		path = ""
+		for _, entry := range entries {
+			if entry != "" {
+				path = entry
+				break
+			}
+		}
+		if path == "" {
+			return "", fmt.Errorf("%w: kubeconfig path list contains no usable entry", errUtils.ErrKubeconfigPath)
+		}
 	}
 
 	// Expand a leading ~ to the user's home directory.
