@@ -5,6 +5,7 @@ description: GitHub Actions policy snapshot schema, event payloads, required inp
 ---
 
 import Intro from '@site/src/components/Intro'
+import styles from '@site/src/css/policy-ci.module.css'
 
 <Intro>
 In GitHub Actions, policy rules can inspect the supplied event and allowlisted runner
@@ -20,7 +21,7 @@ Use [`atmos ci context`](/cli/commands/ci/context) in the job where the policy r
 atmos ci context --paths
 
 # Inspect event identity and availability.
-atmos ci context | jq '{event_name: .ci.metadata.data.GITHUB_EVENT_NAME, status: .ci.event.status}'
+atmos ci context --query '{"event_name": .ci.metadata.data.GITHUB_EVENT_NAME, "status": .ci.event.status}'
 ```
 
 Without `--paths`, the command prints the collected snapshot under `ci`, including native event
@@ -154,16 +155,32 @@ to make that execution safe.
 
 Only variables present in the runner environment are included:
 
-```text
-GITHUB_ACTIONS          GITHUB_EVENT_NAME       GITHUB_REPOSITORY
-GITHUB_REPOSITORY_ID    GITHUB_REPOSITORY_OWNER GITHUB_SHA
-GITHUB_REF             GITHUB_REF_NAME         GITHUB_REF_TYPE
-GITHUB_BASE_REF        GITHUB_HEAD_REF         GITHUB_ACTOR
-GITHUB_ACTOR_ID        GITHUB_TRIGGERING_ACTOR GITHUB_RUN_ID
-GITHUB_RUN_NUMBER      GITHUB_RUN_ATTEMPT      GITHUB_WORKFLOW
-GITHUB_JOB             GITHUB_SERVER_URL       GITHUB_API_URL
-RUNNER_OS              RUNNER_ARCH             RUNNER_ENVIRONMENT
-```
+<ul className={styles.metadataList}>
+  <li><code>GITHUB_ACTIONS</code></li>
+  <li><code>GITHUB_EVENT_NAME</code></li>
+  <li><code>GITHUB_REPOSITORY</code></li>
+  <li><code>GITHUB_REPOSITORY_ID</code></li>
+  <li><code>GITHUB_REPOSITORY_OWNER</code></li>
+  <li><code>GITHUB_SHA</code></li>
+  <li><code>GITHUB_REF</code></li>
+  <li><code>GITHUB_REF_NAME</code></li>
+  <li><code>GITHUB_REF_TYPE</code></li>
+  <li><code>GITHUB_BASE_REF</code></li>
+  <li><code>GITHUB_HEAD_REF</code></li>
+  <li><code>GITHUB_ACTOR</code></li>
+  <li><code>GITHUB_ACTOR_ID</code></li>
+  <li><code>GITHUB_TRIGGERING_ACTOR</code></li>
+  <li><code>GITHUB_RUN_ID</code></li>
+  <li><code>GITHUB_RUN_NUMBER</code></li>
+  <li><code>GITHUB_RUN_ATTEMPT</code></li>
+  <li><code>GITHUB_WORKFLOW</code></li>
+  <li><code>GITHUB_JOB</code></li>
+  <li><code>GITHUB_SERVER_URL</code></li>
+  <li><code>GITHUB_API_URL</code></li>
+  <li><code>RUNNER_OS</code></li>
+  <li><code>RUNNER_ARCH</code></li>
+  <li><code>RUNNER_ENVIRONMENT</code></li>
+</ul>
 
 Example: `ci.metadata.data.GITHUB_EVENT_NAME == 'pull_request'`.
 Tokens and arbitrary environment variables are not copied into metadata.

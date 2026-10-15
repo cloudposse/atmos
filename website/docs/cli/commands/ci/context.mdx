@@ -21,12 +21,29 @@ JSON, or list its field paths and types without printing values.
 ```shell
 atmos ci context
 atmos ci context --paths
+atmos ci context --query '.ci.event.status'
 ```
 
 The command uses the same Native CI collector as policy evaluation. GitHub Actions collection
 reads allowlisted environment variables and `GITHUB_EVENT_PATH`; it makes no API calls and needs
 no token. It does not run component operations, execute lifecycle hooks, or verify approvals.
 Normal command-admission policies still apply to `ci context`.
+
+## Flags
+
+<dl>
+  <dt><code>--paths</code></dt>
+  <dd>List observed field paths and JSON types instead of snapshot values.</dd>
+  <dt><code>--query</code>, <code>-q</code></dt>
+  <dd>Filter output with a YQ expression, using the same engine as Atmos describe commands.
+  Defaults to no filtering. Also accepts <code>ATMOS_QUERY</code>; the flag takes precedence.
+  With <code>--paths</code>, the query operates on the field inventory array.</dd>
+</dl>
+
+Query results remain JSON, including quoted strings and <code>null</code>. Multiple results
+are emitted as successive JSON values; wrap the expression in <code>[...]</code> to collect
+them into an array. Object projection keys must be quoted, as shown below. Invalid queries
+return an error without writing partial results.
 
 ## Inspect a snapshot
 
@@ -35,10 +52,10 @@ Normal command-admission policies still apply to `ci context`.
 (umask 077; atmos ci context > ci-context.json)
 
 # Inspect only the event name and collection status.
-atmos ci context | jq '{event_name: .ci.metadata.data.GITHUB_EVENT_NAME, status: .ci.event.status}'
+atmos ci context --query '{"event_name": .ci.metadata.data.GITHUB_EVENT_NAME, "status": .ci.event.status}'
 
 # Inspect the pull-request object supplied to the current job.
-atmos ci context | jq '.ci.event.data.pull_request'
+atmos ci context --query '.ci.event.data.pull_request'
 ```
 
 Output has a single top-level `ci` key. Its value is the [CI snapshot](/policies/ci#snapshot-schema),
@@ -74,7 +91,7 @@ For example, a pull-request event includes an entry like:
 ```
 
 ```shell
-atmos ci context --paths | jq '.[] | select(.path | contains("pull_request"))'
+atmos ci context --paths --query '[.[] | select(.path | contains("pull_request"))]'
 ```
 
 Copy `path` directly into CEL. Prefix it with `ctx.` for Starlark:
