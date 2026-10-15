@@ -316,6 +316,7 @@ func getStackManifestTagPolicy() TagWalkPolicy {
 			Prepare: prepareScriptSource,
 			Handlers: map[string]TagHandler{
 				AtmosYamlFuncStarlark:   handleStarlarkTag,
+				AtmosYamlFuncCILabels:   handleCILabelsTag,
 				AtmosYamlFuncLiteral:    handleLiteralTag,
 				AtmosYamlFuncAppend:     handleAppendTag,
 				AtmosYamlFuncInclude:    handleIncludeTag,

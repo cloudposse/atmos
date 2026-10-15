@@ -78,6 +78,12 @@ type Provider interface {
 	ResolveBase() (*BaseResolution, error)
 }
 
+// LabelReader is an optional capability for reading live labels on a CI review (PR/MR).
+// Context identifies the review; implementations must not discover unrelated branch reviews.
+type LabelReader interface {
+	Labels(ctx context.Context, run *Context) ([]string, error)
+}
+
 // DebugModeDetector is an optional capability for providers that expose a
 // "debug mode" signal set at the runner / step / job level (for example,
 // GitHub Actions' ACTIONS_RUNNER_DEBUG and ACTIONS_STEP_DEBUG). Providers

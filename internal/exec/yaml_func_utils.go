@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/emulator"
+	functionpkg "github.com/cloudposse/atmos/pkg/function"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -479,6 +481,14 @@ func processSimpleTags(
 			return nil, true, err
 		}
 		return res, true, nil
+	}
+	ciArgs, isCI := strings.CutPrefix(input, u.AtmosYamlFuncCILabels)
+	if isCI && (ciArgs == "" || strings.TrimLeftFunc(ciArgs, unicode.IsSpace) != ciArgs) {
+		if skipFunc(skip, u.AtmosYamlFuncCILabels) {
+			return input, true, nil
+		}
+		result, err := functionpkg.NewCILabelsFunction().Execute(context.Background(), ciArgs, nil)
+		return result, true, err
 	}
 	// Check .keys/.values before !labels, which accepts an optional key and default.
 	if exactTagSkipped(input, u.AtmosYamlFuncTags, skip) {

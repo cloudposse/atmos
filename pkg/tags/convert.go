@@ -2,6 +2,7 @@ package tags
 
 import (
 	"sort"
+	"strconv"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -27,7 +28,8 @@ func ToStringSlice(v any) []string {
 }
 
 // ToStringMap coerces a YAML-decoded value (typically map[string]any) into a
-// map[string]string, skipping any non-string values. Returns an empty
+// map[string]string, formatting booleans as "true"/"false" for label selectors
+// and skipping other non-string values. Returns an empty
 // (non-nil) map for nil/invalid input so callers always get a rangeable value.
 func ToStringMap(v any) map[string]string {
 	defer perf.Track(nil, "tags.ToStringMap")()
@@ -39,8 +41,11 @@ func ToStringMap(v any) map[string]string {
 
 	result := make(map[string]string, len(raw))
 	for k, item := range raw {
-		if s, ok := item.(string); ok {
-			result[k] = s
+		switch value := item.(type) {
+		case string:
+			result[k] = value
+		case bool:
+			result[k] = strconv.FormatBool(value)
 		}
 	}
 	return result

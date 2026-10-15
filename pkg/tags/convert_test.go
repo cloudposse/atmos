@@ -39,6 +39,7 @@ func TestToStringMap(t *testing.T) {
 		{"nil returns empty map", nil, map[string]string{}},
 		{"wrong type returns empty map", "not a map", map[string]string{}},
 		{"typed strings", map[string]any{"a": "1"}, map[string]string{"a": "1"}},
+		{"boolean labels", map[string]any{"preview": true, "deploy": false}, map[string]string{"preview": "true", "deploy": "false"}},
 		{"non-string values are skipped", map[string]any{"a": "1", "b": 2}, map[string]string{"a": "1"}},
 	}
 

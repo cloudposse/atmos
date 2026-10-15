@@ -21,6 +21,7 @@ import (
 
 const (
 	// Atmos YAML functions.
+	AtmosYamlFuncCILabels                = "!ci.labels"
 	AtmosYamlFuncStarlark                = "!starlark"
 	AtmosYamlFuncExec                    = "!exec"
 	AtmosYamlFuncSecret                  = "!secret"
@@ -67,6 +68,7 @@ const (
 
 var (
 	AtmosYamlTags = []string{
+		AtmosYamlFuncCILabels,
 		AtmosYamlFuncStarlark,
 		AtmosYamlFuncExec,
 		AtmosYamlFuncSecret,
@@ -109,6 +111,7 @@ var (
 	// This optimization replaces the O(n) SliceContainsString calls that were previously
 	// called 75M+ times, causing significant performance overhead.
 	atmosYamlTagsMap = map[string]bool{
+		AtmosYamlFuncCILabels:                true,
 		AtmosYamlFuncStarlark:                true,
 		AtmosYamlFuncExec:                    true,
 		AtmosYamlFuncSecret:                  true,

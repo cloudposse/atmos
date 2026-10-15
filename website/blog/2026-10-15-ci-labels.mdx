@@ -1,0 +1,50 @@
+---
+slug: ci-labels
+title: "Control Preview Environments with CI Review Labels"
+authors: [osterman]
+tags: [feature]
+---
+
+Enabling preview environments from a pull request label often requires workflow scripts to fetch labels and pass flags into stack configuration. The new [`!ci.labels`](/functions/yaml/ci.labels) YAML function lets you express that decision directly in your stacks.
+
+<!--truncate-->
+
+## The Problem
+
+A label such as `preview` should be enough to enable preview behavior and select the affected components that participate. Keeping that decision in workflow scripts duplicates configuration and separates it from the components it controls.
+
+## The Fix
+
+The `!ci.labels` function reads live labels on the current CI review. GitHub Actions is the first supported provider, including GitHub Enterprise. Atmos fetches every page on first use and caches the resulting snapshot for the entire invocation, so components share one consistent result without repeated API requests. The next invocation fetches fresh labels.
+
+Outside a review context, matching returns `false` and list mode returns `[]`, without credentials or API calls. Authentication and API failures in a review context remain errors.
+
+## How to Use It
+
+Set a boolean [component label](/stacks/components/component-metadata#labels) alongside the preview setting:
+
+```yaml
+components:
+  terraform:
+    preview:
+      metadata:
+        labels:
+          preview: !ci.labels [preview]
+      settings:
+        pro:
+          enabled: !ci.labels [preview]
+```
+
+Then filter the [affected components](/cli/commands/describe/affected):
+
+```shell
+atmos describe affected --labels preview:true
+```
+
+Use `!ci.labels [preview, deploy]` to require both labels, or bare `!ci.labels` to retrieve a sorted list. Matching is exact and case-sensitive; quote names containing spaces, such as `!ci.labels ["needs review"]`.
+
+In GitHub Actions, pass `GITHUB_TOKEN: ${{ github.token }}` to the Atmos step with `pull-requests: read` permission. See the [credentials and snapshot documentation](/functions/yaml/ci.labels#live-lookup-and-credentials) for token precedence, Enterprise configuration, and examples.
+
+## Get Involved
+
+Share feedback and requests for additional CI providers in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

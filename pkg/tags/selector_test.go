@@ -279,6 +279,7 @@ func TestForbiddenSelectorFunctionsCompleteness(t *testing.T) {
 	// reports them as undecidable, deferring the scope decision), but their
 	// presence is not a purity violation.
 	selectorSafe := map[string]struct{}{
+		u.AtmosYamlFuncCILabels:      {},
 		u.AtmosYamlFuncTemplate:      {},
 		u.AtmosYamlFuncEnv:           {},
 		u.AtmosYamlFuncCEL:           {},
