@@ -36,7 +36,7 @@ func gitOpsE2EEnv(workdir string) map[string]string {
 		"GIT_TERMINAL_PROMPT":   "0",
 		// Reproduce a CI runner: no global/system git identity. The provisioner's
 		// commit must succeed via the repo's configured commit.author, not an ambient
-		// developer identity. Git recognizes /dev/null on Windows too; NUL fails there.
+		// developer identity. Git recognizes /dev/null on Windows too; Git 2.56.0 rejects NUL.
 		"GIT_CONFIG_GLOBAL": "/dev/null",
 		"GIT_CONFIG_SYSTEM": "/dev/null",
 	}
