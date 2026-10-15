@@ -1,16 +1,23 @@
-package exec
+package tests
 
 import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	gogit "github.com/go-git/go-git/v5"
+	gitconfig "github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	cp "github.com/otiai10/copy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/providers/github"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -20,12 +27,14 @@ import (
 
 func setupCILabelsStack(t *testing.T, body string) (*schema.AtmosConfiguration, *atomic.Int32) {
 	t.Helper()
-	t.Chdir(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "ci-labels"))
+	fixture, err := filepath.Abs(filepath.Join("fixtures", "scenarios", "ci-labels"))
+	require.NoError(t, err)
+	t.Chdir(createCILabelsRepo(t, fixture))
 	t.Cleanup(ci.SwapRegistryForTest())
 	ci.ResetLabelsCache()
 	t.Cleanup(ci.ResetLabelsCache)
-	ClearFindStacksMapCache()
-	t.Cleanup(ClearFindStacksMapCache)
+	e.ClearFindStacksMapCache()
+	t.Cleanup(e.ClearFindStacksMapCache)
 	calls := &atomic.Int32{}
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
@@ -56,7 +65,7 @@ func TestCILabelsStackInheritanceAndAffected(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			config, calls := setupCILabelsStack(t, tc.body)
-			info, err := ProcessStacks(config, schema.ConfigAndStacksInfo{
+			info, err := e.ProcessStacks(config, schema.ConfigAndStacksInfo{
 				ComponentFromArg: "preview", Stack: "test", ComponentType: cfg.TerraformComponentType,
 			}, true, true, true, nil, nil)
 			require.NoError(t, err)
@@ -72,10 +81,10 @@ func TestCILabelsStackInheritanceAndAffected(t *testing.T) {
 
 			selectors, err := tags.ParseLabelsFlag("preview:true")
 			require.NoError(t, err)
-			current, err := ExecuteDescribeStacksScoped(config, "", nil, nil, nil, false, true, true, false, nil, nil, nil, selectors, DescribeStacksErrorOptions{})
-			require.NoError(t, err)
-			remote := map[string]any{}
-			affected, err := findAffected(&current, &remote, config, nil, false, false, "", AffectedFilter{Labels: selectors}, "")
+			affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRepoPathWithOptions(
+				config, createCILabelsRepo(t, ""), false, false, "", true, true, nil,
+				e.AffectedFilter{Labels: selectors}, nil, false, e.DescribeStacksErrorOptions{},
+			)
 			require.NoError(t, err)
 			if tc.want {
 				require.Len(t, affected, 1)
@@ -97,7 +106,7 @@ func TestCILabelsStackSkip(t *testing.T) {
 		{true, []string{"ci.labels"}},
 		{false, nil},
 	} {
-		info, err := ProcessStacks(config, schema.ConfigAndStacksInfo{
+		info, err := e.ProcessStacks(config, schema.ConfigAndStacksInfo{
 			ComponentFromArg: "preview", Stack: "test", ComponentType: cfg.TerraformComponentType,
 		}, true, true, tc.process, tc.skip, nil)
 		require.NoError(t, err)
@@ -109,8 +118,32 @@ func TestCILabelsStackSkip(t *testing.T) {
 func TestCILabelsDispatchBoundaries(t *testing.T) {
 	t.Parallel()
 	for _, input := range []string{"!ci.labels.other", "!ci.labels-extra", "!ci.labels[preview]"} {
-		result, err := processCustomTagsWithContext(&schema.AtmosConfiguration{}, input, "", nil, nil, nil)
+		result, err := e.ProcessCustomYamlTags(&schema.AtmosConfiguration{}, map[string]any{"value": input}, "", nil, nil)
 		require.NoError(t, err)
-		assert.Equal(t, input, result)
+		assert.Equal(t, input, result["value"])
 	}
+}
+
+// createCILabelsRepo provides a self-contained comparison repository without network access.
+func createCILabelsRepo(t *testing.T, fixture string) string {
+	t.Helper()
+	dir := t.TempDir()
+	if fixture != "" {
+		require.NoError(t, cp.Copy(fixture, dir))
+	} else {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# Empty base\n"), 0o600))
+	}
+	repo, err := gogit.PlainInit(dir, false)
+	require.NoError(t, err)
+	_, err = repo.CreateRemote(&gitconfig.RemoteConfig{Name: "origin", URLs: []string{"https://github.com/owner/repo.git"}})
+	require.NoError(t, err)
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+	_, err = worktree.Add(".")
+	require.NoError(t, err)
+	_, err = worktree.Commit("fixture", &gogit.CommitOptions{Author: &object.Signature{
+		Name: "Test", Email: "test@example.com", When: time.Unix(1_000_000, 0),
+	}})
+	require.NoError(t, err)
+	return dir
 }

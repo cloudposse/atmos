@@ -482,14 +482,6 @@ func processSimpleTags(
 		}
 		return res, true, nil
 	}
-	ciArgs, isCI := strings.CutPrefix(input, u.AtmosYamlFuncCILabels)
-	if isCI && (ciArgs == "" || strings.TrimLeftFunc(ciArgs, unicode.IsSpace) != ciArgs) {
-		if skipFunc(skip, u.AtmosYamlFuncCILabels) {
-			return input, true, nil
-		}
-		result, err := functionpkg.NewCILabelsFunction().Execute(context.Background(), ciArgs, nil)
-		return result, true, err
-	}
 	// Check .keys/.values before !labels, which accepts an optional key and default.
 	if exactTagSkipped(input, u.AtmosYamlFuncTags, skip) {
 		return input, true, nil
@@ -544,8 +536,10 @@ func processCustomTagsWithContext(
 		return result, err
 	}
 
-	// If any other YAML explicit tag (not currently supported by Atmos) is used, return it w/o processing.
-	return input, nil
+	// Delegate registry-backed functions; unrecognized expressions are preserved.
+	return functionpkg.EvaluateDeferredYAML(context.Background(), input, skip, &functionpkg.ExecutionContext{
+		AtmosConfig: atmosConfig, Stack: currentStack, StackInfo: stackInfo,
+	})
 }
 
 func skipFunc(skip []string, f string) bool {

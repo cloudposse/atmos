@@ -1,10 +1,11 @@
-package utils
+package parser
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
@@ -22,9 +23,11 @@ func TestCILabelsYAMLDeferral(t *testing.T) {
 	} {
 		t.Run(tc.input, func(t *testing.T) {
 			t.Parallel()
-			got, err := UnmarshalYAML[map[string]any](tc.input)
+			var doc yaml.Node
+			require.NoError(t, yaml.Unmarshal([]byte(tc.input), &doc))
+			got, err := EncodeCILabels(doc.Content[0].Content[1])
 			require.NoError(t, err)
-			assert.Equal(t, tc.want, got["value"])
+			assert.Equal(t, tc.want, got)
 		})
 	}
 }
@@ -34,7 +37,9 @@ func TestCILabelsYAMLInvalid(t *testing.T) {
 	for _, input := range []string{"[]", "[123]", "[true]", "[null]", "{}", "[!env TOKEN]", "[[preview]]", "preview"} {
 		t.Run(input, func(t *testing.T) {
 			t.Parallel()
-			_, err := UnmarshalYAML[map[string]any]("value: !ci.labels " + input)
+			var doc yaml.Node
+			require.NoError(t, yaml.Unmarshal([]byte("value: !ci.labels "+input), &doc))
+			_, err := EncodeCILabels(doc.Content[0].Content[1])
 			require.ErrorIs(t, err, errUtils.ErrInvalidArguments)
 		})
 	}
