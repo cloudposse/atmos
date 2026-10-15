@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
@@ -83,6 +84,43 @@ func TestPolicyHookFailuresBlock(t *testing.T) {
 	require.NoError(t, h.RunAll(AfterHelmApply, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, nil, nil))
 	delete(h.policyBundle.Hooks, "test/callback")
 	require.ErrorIs(t, h.RunAll(AfterHelmApply, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, nil, nil), errUtils.ErrPolicyRequirements)
+}
+
+func TestPolicyHookEvaluationFailureBlocksWithoutLeakingInput(t *testing.T) {
+	definition := json.RawMessage(`{"kind":"command","command":"true"}`)
+	run := func(h *Hooks) error {
+		return h.RunAll(AfterHelmApply, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, nil, nil)
+	}
+
+	broken := policyTestHooks(AfterHelmApply, definition)
+	broken.policyBundle.Rules[0].Expression = "input.missing.field == 'x'"
+	err := run(broken)
+	require.ErrorIs(t, err, errUtils.ErrPolicyEvaluation)
+	require.ErrorContains(t, err, "input details withheld")
+	require.NotContains(t, err.Error(), "missing.field", "evaluation errors must not echo expression or input details")
+
+	// A rule that evaluates cleanly never reports an evaluation failure.
+	healthy := policyTestHooks(AfterHelmApply, definition)
+	require.NotErrorIs(t, run(healthy), errUtils.ErrPolicyEvaluation)
+}
+
+func TestPolicyHookApprovalRequiresVerifyingProvider(t *testing.T) {
+	restore := ci.SwapRegistryForTest()
+	defer restore()
+	h := policyTestHooks(AfterHelmApply, json.RawMessage(`{"kind":"command","command":"true"}`))
+	spec := json.RawMessage(`{"reviewers":["alice"],"minimum":1}`)
+	h.policyBundle.Rules[0].Effects.Approvals = []policy.ApprovalRequirement{{ID: "platform", Provider: "github-actions", Spec: spec}}
+	run := func() error {
+		return h.RunAll(AfterHelmApply, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, nil, nil)
+	}
+
+	// Without a CI provider that can verify reviews, a pending approval fails closed.
+	err := run()
+	require.ErrorIs(t, err, errUtils.ErrPolicyInputUnavailable)
+
+	// A rule that does not match never needs a provider.
+	h.policyBundle.Rules[0].Expression = "false"
+	require.NotErrorIs(t, run(), errUtils.ErrPolicyInputUnavailable)
 }
 
 func policyTestHooks(event HookEvent, definition json.RawMessage) *Hooks {

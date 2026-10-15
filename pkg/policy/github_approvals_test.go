@@ -104,3 +104,46 @@ func TestGitHubApprovalPreservesOtherObligations(t *testing.T) {
 	require.Equal(t, pending, resolved, "approval cannot override an unrelated denial")
 	require.ErrorIs(t, EnforceDecision(resolved), errUtils.ErrPolicyDenied)
 }
+
+func TestGitHubApprovalLeavesSettledFindingsUntouched(t *testing.T) {
+	t.Parallel()
+	settled := Finding{RuleID: "lint", Status: Allow}
+	awaiting := Finding{RuleID: "review", Status: AwaitingApproval, Effects: Effects{Approvals: []ApprovalRequirement{
+		{ID: "platform", Provider: "github-actions", Spec: []byte(`{"reviewers":["alice"],"minimum":1}`)},
+	}}}
+	pending := Decision{Status: AwaitingApproval, Findings: []Finding{settled, awaiting}}
+
+	approved, err := ResolveGitHubApprovals(pending, "head", "author", []GitHubReview{testGitHubReview(1, "alice", "APPROVED", "head")})
+	require.NoError(t, err)
+	require.Equal(t, Allow, approved.Status)
+	require.Equal(t, settled, approved.Findings[0], "a finding that is not awaiting approval is not rewritten")
+	require.Equal(t, Allow, approved.Findings[1].Status)
+	require.Empty(t, approved.Findings[1].Effects.Approvals)
+
+	// Without the approval, only the awaiting finding keeps the decision pending.
+	unapproved, err := ResolveGitHubApprovals(pending, "head", "author", nil)
+	require.NoError(t, err)
+	require.Equal(t, AwaitingApproval, unapproved.Status)
+	require.Equal(t, settled, unapproved.Findings[0])
+	require.Equal(t, awaiting.Effects.Approvals, unapproved.Findings[1].Effects.Approvals)
+}
+
+func TestGitHubApprovalFailsClosedOnMalformedRequirements(t *testing.T) {
+	t.Parallel()
+	valid := []byte(`{"reviewers":["alice"],"minimum":1}`)
+	for name, requirement := range map[string]ApprovalRequirement{
+		"unsupported provider": {ID: "platform", Provider: "other", Spec: valid},
+		"unknown spec field":   {ID: "platform", Provider: "github-actions", Spec: []byte(`{"reviewers":["alice"],"minimum":1,"team":"x"}`)},
+		"undecodable spec":     {ID: "platform", Provider: "github-actions", Spec: []byte(`{`)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			pending := Decision{Status: AwaitingApproval, Findings: []Finding{{Status: AwaitingApproval, Effects: Effects{Approvals: []ApprovalRequirement{requirement}}}}}
+			reviews := []GitHubReview{testGitHubReview(1, "alice", "APPROVED", "head")}
+			resolved, err := ResolveGitHubApprovals(pending, "head", "author", reviews)
+			require.Error(t, err)
+			require.Equal(t, pending, resolved, "an error must return the unresolved decision, never an approval")
+			require.Error(t, EnforceDecision(resolved))
+		})
+	}
+}

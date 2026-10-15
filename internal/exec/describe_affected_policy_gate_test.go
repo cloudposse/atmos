@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +12,70 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/policy"
 )
+
+const (
+	affectedDenyEffect     = "      action: deny\n      reason: Requires review.\n"
+	affectedApprovalEffect = "      action: require_approval\n      approvals:\n        - id: platform\n          provider: github-actions\n          spec: {reviewers: [alice], minimum: 1}\n"
+)
+
+func affectedGateRules(t *testing.T, expression, effect string) []policy.Rule {
+	t.Helper()
+	directory := t.TempDir()
+	document := "apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: guard}\nspec:\n  policies:\n    guard:\n" +
+		"      on: atmos.affected\n      rule: \"" + expression + "\"\n" + effect
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "guard.yaml"), []byte(document), 0o600))
+	bundle, err := policy.LoadDirectory(directory)
+	require.NoError(t, err)
+	rules := bundle.RulesFor(policy.AtmosAffected)
+	require.Len(t, rules, 1)
+	return rules
+}
+
+// affectedGateRequest builds a well-formed affected input that carries a sensitive value.
+func affectedGateRequest(t *testing.T) *policy.Request {
+	t.Helper()
+	snapshot := func(password string) policy.InventorySnapshot {
+		return policy.InventorySnapshot{Stacks: map[string]map[string]map[string]json.RawMessage{
+			"prod": {"helm": {"app": json.RawMessage(`{"vars":{"password":"` + password + `"}}`)}},
+		}}
+	}
+	input, err := policy.BuildAffectedInput(snapshot("hunter1"), snapshot("hunter2"), nil, nil)
+	require.NoError(t, err)
+	data, err := json.Marshal(input)
+	require.NoError(t, err)
+	require.Contains(t, string(data), "hunter2", "the fixture must carry a sensitive inventory value")
+	return &policy.Request{Kind: policy.AtmosAffected, Input: data}
+}
+
+func TestEvaluateAffectedPoliciesWithholdsInputOnEvaluationFailure(t *testing.T) {
+	request := affectedGateRequest(t)
+
+	err := evaluateAffectedPolicies(request, affectedGateRules(t, "input.missing.field == 'trigger'", affectedDenyEffect))
+	require.ErrorIs(t, err, errUtils.ErrPolicyEvaluation)
+	require.NotContains(t, err.Error(), "hunter2", "inventory values may be sensitive")
+
+	// A rule that evaluates cleanly reports a decision, not an evaluation failure.
+	err = evaluateAffectedPolicies(request, affectedGateRules(t, "true", affectedDenyEffect))
+	require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	require.NotErrorIs(t, err, errUtils.ErrPolicyEvaluation)
+}
+
+func TestEvaluateAffectedPoliciesFailsClosedWithoutApprovalProvider(t *testing.T) {
+	restore := ci.SwapRegistryForTest()
+	defer restore()
+	request := affectedGateRequest(t)
+
+	// No CI provider can verify reviews, so a pending approval is never treated as granted.
+	err := evaluateAffectedPolicies(request, affectedGateRules(t, "true", affectedApprovalEffect))
+	require.ErrorIs(t, err, errUtils.ErrPolicyInputUnavailable)
+	require.NotErrorIs(t, err, errUtils.ErrPolicyDenied)
+
+	// A non-matching approval rule never consults the provider.
+	require.NoError(t, evaluateAffectedPolicies(request, affectedGateRules(t, "false", affectedApprovalEffect)))
+}
 
 func TestAffectedPolicyGateDiscovery(t *testing.T) {
 	t.Setenv("ATMOS_POLICY_DIR", "")
