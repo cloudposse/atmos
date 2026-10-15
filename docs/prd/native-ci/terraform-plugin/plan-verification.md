@@ -11,7 +11,7 @@
 **Behavior**:
 - Download stored planfile to a `stored.*` prefix path
 - Generate a fresh `terraform plan` (without CI side effects — no upload, no checks, no summaries)
-- Compare the two planfiles using plan-diff (`internal/exec/terraform_plan_diff*.go`)
+- Compare the two planfiles using plan-diff (`pkg/terraform/plandiff`, called from `internal/exec/terraform_verify_plan.go`)
 - On drift: **fail** the deploy (mode `fail`) or **warn and proceed** (mode `warn`)
 - Apply the **fresh** planfile if plans match (reconcile, don't replay): the freshly generated plan is
   built with the apply-time state and credentials, so the deploy avoids the brittleness of a saved plan —
@@ -79,13 +79,53 @@ Verification adds one full `terraform plan` execution (~30-60 seconds). This is 
 
 The plan-diff implementation exists and is fully implemented:
 - `internal/exec/terraform_plan_diff.go` — Main entry point
-- `internal/exec/terraform_plan_diff_comparison.go` — Comparison logic
+- `pkg/terraform/plandiff` — Comparison logic (`plandiff.Compare`), exclusions, and formatting
 - `internal/exec/terraform_plan_diff_preparation.go` — Output normalization
 
 The comparison is **JSON-structural** — it runs `terraform show -json` on the stored and fresh
 planfiles, parses each to a map, sorts keys for determinism, and deep-compares variables, managed
-resources (data sources skipped), and outputs (`internal/exec/terraform_verify_plan.go` →
-`generatePlanDiff`). Sensitive values are masked and computed-hash attributes are ignored.
+resources (data sources skipped), and outputs. The comparison lives in `pkg/terraform/plandiff`
+(`plandiff.Compare`) and `internal/exec/terraform_verify_plan.go` calls it. Sensitive values are masked. No resource attributes are excluded from comparison by default.
+Explicit exclusions are applied before comparison and rendering on copies of resource records.
+
+### Migration and editions
+
+Before this change, Atmos suppressed seven attribute names only in formatted resource diffs:
+`response_body_base64`, `content_base64sha256`, `content_base64sha512`, `content_md5`, `content_sha1`,
+`content_sha256`, and `content_sha512`. Differences in those attributes still failed comparisons.
+
+The `terraform.plan_diff.show_computed_attributes` behavior transition on `2026-10-13` removes
+that display-only suppression. Unpinned projects and pins on or after the transition show these
+attributes. Earlier pins retain the old display behavior and the same comparison verdict.
+This transition is a `KindBehavior` journal entry, not a YAML toggle or a change to a config default.
+Explicit exclusions work in both paths and suppress both display and verdict.
+
+### Configurable attribute exclusions
+
+Projects can configure exclusions in `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    plan_diff:
+      ignore_changes:
+        - aws_db_instance.latest_restorable_time
+```
+
+Entries match exact `resource_type.attribute` names for top-level resource attributes, across all
+instances and module addresses of that type. Bare names, globs, resource addresses, and nested paths
+are unsupported; malformed entries fail config loading before Terraform executes. The RDS timestamp
+is not excluded unless explicitly configured. Edition compatibility affects display only.
+
+Both `plan-diff` and deployment verification use the same policy. The comparator copies extracted
+resource records and removes excluded attributes from `values`, `change.before`, `change.after`,
+and corresponding unknown/sensitive attribute maps before testing equality. Rendering consumes those
+same filtered records. Input plans remain unchanged. Resource identity, additions/removals, actions,
+replacement metadata, variables, and outputs retain their comparison behavior. An output exposing an
+excluded attribute is still compared independently.
+
+This config controls Atmos comparisons only; it does not change Terraform's `lifecycle.ignore_changes`,
+the Terraform plan, or the applied resource updates.
 
 **Why not a naive diff?** A plan legitimately contains values that vary between review and apply —
 attributes "known after apply," computed fields, hashes, ordering, timestamps. A byte-for-byte
@@ -93,8 +133,9 @@ comparison of planfiles (or of raw `terraform show` text) flags all of that as d
 plan is rejected; Terraform's own saved-plan apply is stricter still (any state-lineage movement
 invalidates the saved plan). Real-world verification needs **wiggle room**: tolerate benign variation
 while catching substantive drift (a resource added/removed/changed). The semantic, normalized
-comparison above provides exactly that — which is what makes plan-then-deploy practical rather than
-perpetually failing.
+comparison above provides this for explicitly excluded attributes. It does not automatically ignore
+all computed values, timestamps, or unknown values. Real changes alongside excluded attributes still
+fail verification.
 
 ## Integration Point
 

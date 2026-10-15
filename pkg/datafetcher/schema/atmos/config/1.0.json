@@ -11925,6 +11925,20 @@
             }
           ]
         },
+        "plan_diff": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TerraformPlanDiff"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "PlanDiff configures exclusions shared by plan-diff and deployment plan verification."
+        },
         "lint": {
           "anyOf": [
             {
@@ -12593,6 +12607,39 @@
         }
       },
       "type": "object"
+    },
+    "TerraformPlanDiff": {
+      "properties": {
+        "ignore_changes": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "IgnoreChanges excludes exact resource_type.attribute names from Atmos comparisons.\nOnly top-level attributes are supported; globs and nested paths are invalid."
+        }
+      },
+      "type": "object",
+      "description": "TerraformPlanDiff configures Atmos plan comparisons, not Terraform lifecycle behavior."
     },
     "TerraformRCConfig": {
       "properties": {
