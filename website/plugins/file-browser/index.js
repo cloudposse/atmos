@@ -843,6 +843,12 @@ module.exports = function fileBrowserPlugin(context, options) {
             exact: true,
           });
         }
+        // Policy pages scope the tree to a single policy. Write that data once per
+        // policy and share it across every directory and file route.
+        const routeTreeData = presentation === 'policies'
+          ? await createData(`policy-tree-${example.name}.json`, JSON.stringify({examples: [example]}))
+          : treeDataPath;
+
         // Collect all directories for this example.
         const directories = collectDirectories(example.root, routeBasePath);
 
@@ -859,9 +865,7 @@ module.exports = function fileBrowserPlugin(context, options) {
             path: dir.urlPath,
             component: '@site/src/components/FileBrowser/DirectoryPage.tsx',
             modules: {
-              treeData: presentation === 'policies'
-                ? await createData(`policy-tree-${example.name}.json`, JSON.stringify({examples: [example]}))
-                : treeDataPath,
+              treeData: routeTreeData,
               optionsData: optionsDataPath,
               dirData: dirDataPath,
             },
@@ -884,9 +888,7 @@ module.exports = function fileBrowserPlugin(context, options) {
             path: file.urlPath,
             component: '@site/src/components/FileBrowser/FilePage.tsx',
             modules: {
-              treeData: presentation === 'policies'
-                ? await createData(`policy-tree-${example.name}.json`, JSON.stringify({examples: [example]}))
-                : treeDataPath,
+              treeData: routeTreeData,
               optionsData: optionsDataPath,
               fileData: fileDataPath,
             },
