@@ -13,6 +13,9 @@ references:
 
 # Atmos Validation Framework
 
+For the experimental CEL policy engine, saved-plan guardrails, and policy-required hooks, use
+`atmos-policy`. This skill covers the existing validation commands and `settings.validation`.
+
 Use this skill for every Atmos validation command and validation policy configuration: aggregate
 project validation, configuration and stack schemas, JSON Schema, OPA/Rego, EditorConfig,
 GitHub Actions workflows, affected-file selection, and native CI reporting.

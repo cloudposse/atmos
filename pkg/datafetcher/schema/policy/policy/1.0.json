@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Experimental Atmos inline CEL policy document",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": {"const": "atmos/v1"},
+    "kind": {"const": "Policy"},
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {"name": {"type": "string", "pattern": "\\S"}}
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policies"],
+      "properties": {
+        "tools": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},
+        "hooks": {"type": "object", "additionalProperties": {"type": "object"}},
+        "policies": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {"pattern": "\\S"},
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["on", "rule", "action"],
+            "properties": {
+              "on": {"enum": ["terraform.plan", "operation"]},
+              "engine": {"enum": ["cel"], "default": "cel"},
+              "rule": {"type": "string", "minLength": 1, "maxLength": 65536},
+              "action": {"enum": ["deny", "hooks"]},
+              "reason": {"type": "string"},
+              "with": {"type": "object"},
+              "required_ci": {
+                "type": "array",
+                "items": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["provider", "schema", "dataset"],
+                  "properties": {
+                    "provider": {"type": "string", "minLength": 1},
+                    "schema": {"type": "string", "minLength": 1},
+                    "dataset": {"enum": ["metadata", "event", "facts"]},
+                    "fact": {"type": "string", "minLength": 1}
+                  }
+                }
+              },
+              "hooks": {
+                "type": "array", "minItems": 1,
+                "items": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["ref", "event"],
+                  "properties": {
+                    "ref": {"type": "string", "minLength": 1},
+                    "event": {"type": "string", "minLength": 1},
+                    "required": {"type": "boolean"},
+                    "require_success": {"type": "boolean"}
+                  }
+                }
+              }
+            },
+            "allOf": [{
+              "if": {"properties": {"action": {"const": "hooks"}}},
+              "then": {"required": ["hooks"], "properties": {"on": {"const": "operation"}}},
+              "else": {"not": {"required": ["hooks"]}}
+            }]
+          }
+        }
+      }
+    }
+  }
+}

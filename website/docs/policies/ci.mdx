@@ -1,0 +1,157 @@
+---
+title: Policy CI Context
+sidebar_label: CI Context
+description: GitHub Actions policy snapshot schema, event payloads, required inputs, and token permissions.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+In GitHub Actions, plan and operation rules can inspect the supplied event and allowlisted runner
+metadata through `ci`. Declare `required_ci` when a rule needs complete provider data.
+</Intro>
+
+## Snapshot schema
+
+GitHub Actions uses provider `github-actions` and schema `github-actions/v1`.
+
+| Path | Type | Contents |
+|---|---|---|
+| `ci.provider` | String | Provider identifier |
+| `ci.schema` | String | Provider-owned schema version |
+| `ci.metadata` | Dataset | Allowlisted environment variables; values remain strings |
+| `ci.event` | Dataset | Native JSON object read from `GITHUB_EVENT_PATH` |
+| `ci.facts` | Object | Empty for the supplied-event collector; no live API facts |
+
+Each dataset has this shape:
+
+```json
+{
+  "data": {"GITHUB_EVENT_NAME": "pull_request"},
+  "status": "available",
+  "complete": true,
+  "provenance": {
+    "source": "github-actions:environment",
+    "collected_at": "2026-10-12T12:00:00Z",
+    "revision": "<GITHUB_SHA>"
+  }
+}
+```
+
+| Dataset field | Meaning |
+|---|---|
+| `data` | Provider-native object; can be absent when collection fails |
+| `status` | `available`, `unavailable`, or `incomplete` |
+| `complete` | Whether collection completed successfully |
+| `provenance.source` | `github-actions:environment` or `github-actions:GITHUB_EVENT_PATH` |
+| `provenance.collected_at` | UTC collection timestamp, not the event timestamp |
+| `provenance.revision` | `GITHUB_SHA` when supplied |
+| `reason` | Explanation when data cannot be supplied |
+
+Missing or unreadable event files are `unavailable`. Invalid JSON, non-object JSON, read failures,
+or events exceeding 8 MiB are `incomplete`. Missing data is not replaced by an empty event.
+
+Outside a detected CI provider, `ci` is `null`. A provider without snapshot support reports
+unavailable datasets. Requiring GitHub data in either case blocks the command.
+
+## Required inputs
+
+```yaml
+required_ci:
+  - provider: github-actions
+    schema: github-actions/v1
+    dataset: event
+```
+
+<dl>
+  <dt><code>provider</code></dt>
+  <dd>Required string. Exact provider identifier.</dd>
+  <dt><code>schema</code></dt>
+  <dd>Required string. Exact snapshot schema version.</dd>
+  <dt><code>dataset</code></dt>
+  <dd>Required string. Use <code>metadata</code> or <code>event</code> for the GitHub supplied-event collector.
+  The schema also accepts <code>facts</code>, but this collector supplies no facts.</dd>
+  <dt><code>fact</code></dt>
+  <dd>Required only for <code>dataset: facts</code>; invalid for other datasets.</dd>
+</dl>
+
+Requirements are checked before evaluating a matching-kind rule's predicate. The provider and
+schema must match, and each dataset must be `available`, complete, and contain non-null data.
+`rule: false` does not bypass a missing requirement.
+
+## Reject fork PR plans
+
+```yaml title="policy.d/github.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: github-safety
+spec:
+  policies:
+    reject-fork-plan:
+      on: terraform.plan
+      action: deny
+      reason: This privileged plan job does not accept fork pull requests
+      required_ci:
+        - provider: github-actions
+          schema: github-actions/v1
+          dataset: event
+      rule: >-
+        has(ci.event.data.pull_request) &&
+        ci.event.data.pull_request.head.repo.full_name != ci.event.data.pull_request.base.repo.full_name
+```
+
+This rule is a plan gate, not a sandbox. It runs after planning and before saved-plan apply.
+Do not execute untrusted pull-request code with privileged credentials and rely on this check
+to make that execution safe.
+
+## Metadata allowlist
+
+Only variables present in the runner environment are included:
+
+```text
+GITHUB_ACTIONS          GITHUB_EVENT_NAME       GITHUB_REPOSITORY
+GITHUB_REPOSITORY_ID    GITHUB_REPOSITORY_OWNER GITHUB_SHA
+GITHUB_REF             GITHUB_REF_NAME         GITHUB_REF_TYPE
+GITHUB_BASE_REF        GITHUB_HEAD_REF         GITHUB_ACTOR
+GITHUB_ACTOR_ID        GITHUB_TRIGGERING_ACTOR GITHUB_RUN_ID
+GITHUB_RUN_NUMBER      GITHUB_RUN_ATTEMPT      GITHUB_WORKFLOW
+GITHUB_JOB             GITHUB_SERVER_URL       GITHUB_API_URL
+RUNNER_OS              RUNNER_ARCH             RUNNER_ENVIRONMENT
+```
+
+Example: `ci.metadata.data.GITHUB_EVENT_NAME == 'pull_request'`.
+Tokens and arbitrary environment variables are not copied into metadata.
+
+## GitHub permissions
+
+| Capability | Workflow permission |
+|---|---|
+| Evaluate supplied event/metadata and produce local output | No additional API permission; collection makes no API calls |
+| Check out repository policies/configuration | `contents: read` |
+| Publish existing Native CI commit statuses | `statuses: write` |
+
+Minimal permissions for a job that checks out policies and evaluates them:
+
+```yaml
+permissions:
+  contents: read
+```
+
+When the job also publishes Native CI statuses:
+
+```yaml
+permissions:
+  contents: read
+  statuses: write
+```
+
+Use `GITHUB_TOKEN`; a PAT or GitHub App is not required for these capabilities. Configure the
+checkout and policy directory using the [enforcement setup](/policies/configuration#enforcement).
+See [CI authentication and permissions](/integrations/github-actions/authentication#permissions)
+for the surrounding workflow.
+
+Fork and Dependabot runs can have reduced token permissions. Keep policy failures blocking even
+when status publication is unavailable. The supplied event records the triggering event, not
+current review state; it must not be treated as verified approval. These policies evaluate the
+current invocation, not outcomes aggregated from other component jobs.

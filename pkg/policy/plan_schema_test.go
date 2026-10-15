@@ -1,0 +1,43 @@
+package policy
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/santhosh-tekuri/jsonschema/v5"
+	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
+)
+
+func TestPlanManifestSchema(t *testing.T) {
+	data, err := os.ReadFile("../datafetcher/schema/policy/policy/1.0.json")
+	require.NoError(t, err)
+	compiler := jsonschema.NewCompiler()
+	require.NoError(t, compiler.AddResource("policy.json", strings.NewReader(string(data))))
+	schema, err := compiler.Compile("policy.json")
+	require.NoError(t, err)
+	var document map[string]any
+	require.NoError(t, yaml.Unmarshal([]byte(testPlanManifest), &document))
+	require.NoError(t, schema.Validate(document))
+	for _, family := range []string{"terraform", "github", "lifecycle"} {
+		data, err := os.ReadFile(filepath.Join("..", "..", "examples", "policies", family, "policy.yaml"))
+		require.NoError(t, err)
+		var sample map[string]any
+		require.NoError(t, yaml.Unmarshal(data, &sample))
+		require.NoError(t, schema.Validate(sample), family)
+	}
+	for name, manifest := range map[string]string{
+		"unknown field":  testPlanManifest + "      enforced: true\n",
+		"unknown engine": testPlanManifest + "      engine: starlark\n",
+		"warn":           strings.ReplaceAll(testPlanManifest, "action: deny", "action: warn"),
+		"missing rule":   "apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: test}\nspec: {policies: {}}",
+	} {
+		t.Run(name, func(t *testing.T) {
+			var invalid map[string]any
+			require.NoError(t, yaml.Unmarshal([]byte(manifest), &invalid))
+			require.Error(t, schema.Validate(invalid))
+		})
+	}
+}
