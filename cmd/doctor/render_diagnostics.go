@@ -161,7 +161,12 @@ func (p reportRenderer) source(f *diagnostic.Finding, root string, severity lipg
 		}
 		line := strings.ReplaceAll(masked, "\t", "    ")
 		shown, marker := clipSource(highlightYAML(line, p.styles), p.width-gutter-3, column)
-		ui.Writeln(p.styles.Muted.Render(fmt.Sprintf("%*d | ", gutter, start+index)) + shown)
+		// A blank source line ends at the gutter bar, so the excerpt never carries trailing whitespace.
+		number := fmt.Sprintf("%*d | ", gutter, start+index)
+		if strings.TrimSpace(ansi.Strip(shown)) == "" {
+			number, shown = strings.TrimRight(number, reportSpace), ""
+		}
+		ui.Writeln(p.styles.Muted.Render(number) + shown)
 		if column > 0 {
 			ui.Writeln(p.styles.Muted.Render(blank) + strings.Repeat(reportSpace, marker-1) + severity.Render("^"))
 		}
