@@ -98,7 +98,11 @@ spec:
   Each entry specifies <code>id</code>, <code>provider: github-actions</code>, and a provider-owned
   <code>spec</code> with <code>reviewers</code> and <code>minimum</code>.</dd>
   <dt><code>reason</code></dt>
-  <dd>Optional static string. CLI denial errors identify blocking rule IDs, not resource values.</dd>
+  <dd>Optional static string explaining why the rule blocks an operation and, if useful,
+  what to do instead. When a rule denies an operation, the CLI displays its reason with
+  the blocking rule ID. Omit it to keep the default denial message. Reasons are literal
+  author-supplied text: Atmos does not evaluate expressions, expand templates, or insert
+  input values into them. JSON decisions retain the text in <code>findings[].effects.reason</code>.</dd>
   <dt><code>with</code></dt>
   <dd>Optional JSON-compatible object exposed as <code>params</code> in CEL or <code>ctx.params</code>
   in Starlark. Default: an empty object.</dd>

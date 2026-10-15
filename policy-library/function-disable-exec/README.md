@@ -27,6 +27,10 @@ Reject `!exec` before configuration can start a shell.
 
 No parameters. The rule checks the canonical YAML function name, not shell arguments. It covers configuration loading and lazy YAML resolution, not shell hooks or Go-template functions.
 
+The optional `reason` explains the block and suggests using precomputed environment values with
+`!env`. Customize this text for your organization or omit it. It appears in the CLI error when
+the rule denies execution; it is not a template and does not change the rule's behavior.
+
 ## Use
 
 Copy this manifest from a reviewed source checkout into a protected governing directory:

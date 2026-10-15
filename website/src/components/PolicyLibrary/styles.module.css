@@ -428,6 +428,11 @@
 .decision code {
   font-size: 11px;
 }
+.reason {
+  margin: 12px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .casePicker,
 .fieldPicker {
   margin-bottom: 16px;

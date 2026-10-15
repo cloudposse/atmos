@@ -55,7 +55,8 @@ func validatePlanFlags(object map[string]any) error {
 
 // EnforceDecision converts a pure decision into a local gate. This executor has no
 // approval verifier or hook executor: outstanding obligations must not become success.
-// Only static rule identifiers are included in errors, never evaluated values.
+// Denial explanations include only static rule identifiers and author-supplied
+// reasons, never evaluated values.
 func EnforceDecision(decision Decision) error {
 	defer perf.Track(nil, "policy.EnforceDecision")()
 
@@ -63,7 +64,7 @@ func EnforceDecision(decision Decision) error {
 		return errUtils.ErrPolicyEvaluation
 	}
 	if decision.Status == Deny {
-		return errUtils.ErrPolicyDenied
+		return denialError(decision.Findings)
 	}
 	if decision.Status != Allow && decision.Status != NotApplicable {
 		return errUtils.ErrPolicyRequirements
@@ -77,4 +78,23 @@ func EnforceDecision(decision Decision) error {
 		}
 	}
 	return nil
+}
+
+// denialError retains optional author guidance from every blocking rule.
+// Reasons are literal text: they never evaluate templates or interpolate inputs.
+func denialError(findings []Finding) error {
+	var reasons []string
+	for _, finding := range findings {
+		if finding.Status == Deny {
+			if reason := strings.TrimSpace(finding.Effects.Reason); reason != "" {
+				reasons = append(reasons, finding.RuleID+":\n"+reason)
+			}
+		}
+	}
+	if len(reasons) == 0 {
+		return errUtils.ErrPolicyDenied
+	}
+	return errUtils.Build(errUtils.ErrPolicyDenied).
+		WithExplanation(strings.Join(reasons, "\n\n")).
+		Err()
 }

@@ -43,6 +43,7 @@ interface PolicyData {
     path: string;
     policy: string;
     githubUrl: string;
+    reason?: string;
   }[];
   configuration: string;
   contract: string;
@@ -150,11 +151,13 @@ function TestCases({
   policy,
   fixture,
   engine,
+  reason,
   onSelect,
 }: {
   policy: PolicyData;
   fixture?: PolicyCase;
   engine: string;
+  reason?: string;
   onSelect: (name: string) => void;
 }) {
   if (!fixture) return <p>No example cases are available for this policy.</p>;
@@ -193,6 +196,9 @@ function TestCases({
             {outcomeLabel(fixture)}
           </h3>
           <code>{fixture.status}</code>
+          {fixture.status === "deny" && reason && (
+            <p className={styles.reason}>{reason}</p>
+          )}
         </div>
         <Tabs key={fixture.name} defaultValue="json">
           <TabItem value="json" label="Input JSON">
@@ -316,6 +322,12 @@ export default function PolicyPage({
         <div className={styles.policyContent}>
           {view === "policy" && (
             <section aria-label="Policy">
+              {variant.reason && (
+                <div className={styles.decision}>
+                  <span className={styles.eyebrow}>Policy reason</span>
+                  <p className={styles.reason}>{variant.reason}</p>
+                </div>
+              )}
               <div id="policy" className={styles.policyCode}>
                 <CodeBlock language="yaml" title={destination}>
                   {variant.policy.trimEnd()}
@@ -383,6 +395,7 @@ export default function PolicyPage({
                 policy={policy}
                 fixture={fixture}
                 engine={engine}
+                reason={variant.reason}
                 onSelect={(name) => history.push(caseUrl(name))}
               />
             </section>

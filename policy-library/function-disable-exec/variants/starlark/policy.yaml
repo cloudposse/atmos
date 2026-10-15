@@ -9,5 +9,8 @@ spec:
       on: function
       engine: starlark
       action: deny
+      reason: >-
+        !exec is disabled because stack configuration must not run shell commands.
+        Pass precomputed values through environment variables and read them with !env instead.
       rule: |
         return ctx.input["name"] == "exec"

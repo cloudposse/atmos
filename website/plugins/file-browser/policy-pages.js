@@ -33,7 +33,7 @@ function policyVariants(example, primary) {
     if (rules.length !== 1 || !engines.includes(engine) || (expectedEngine && engine !== expectedEngine)) {
       throw new Error(`Invalid policy engine: ${example.name}/${path}`);
     }
-    return {engine, path, policy: file.content, githubUrl: file.githubUrl};
+    return {engine, path, policy: file.content, githubUrl: file.githubUrl, reason: rules[0].reason?.trim() || undefined};
   });
   if (variants.length !== engines.length || new Set(variants.map(variant => variant.engine)).size !== engines.length) {
     throw new Error(`Policy ${example.name} needs exactly one CEL and one Starlark implementation`);

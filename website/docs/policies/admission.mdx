@@ -36,8 +36,14 @@ spec:
     disable:
       on: function
       action: deny
+      reason: >-
+        !exec is disabled because stack configuration must not run shell commands.
+        Pass precomputed values through environment variables and read them with !env instead.
       rule: input.name == 'exec'
 ```
+
+The optional `reason` appears in the CLI error when this rule blocks `!exec`. Use it to explain
+the restriction and suggest an alternative. Omitting it does not change enforcement.
 
 The check applies to `atmos.yaml` mappings and sequences, stack YAML functions, and registry-based
 lazy evaluation. Skipped functions are not executed. Literal text containing `!exec` is not shell

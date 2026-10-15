@@ -70,6 +70,8 @@ test('the policy gallery discovers individually documented and tested policies',
       assert.equal(variant.policy, readFileSync(path.join(libraryDir, entry.name, variant.path), 'utf8'));
       assert.ok(paths.has(`${base}/${variant.path}`), `Missing variant route: ${base}/${variant.path}`);
       assert.ok(variant.githubUrl.endsWith(`/${entry.name}/${variant.path}`));
+      const variantRule = Object.values(matter.engines.yaml.parse(variant.policy).spec.policies)[0];
+      assert.equal(variant.reason, variantRule.reason?.trim() || undefined);
     }
     assert.deepEqual(page.cases, JSON.parse(readFileSync(path.join(libraryDir, entry.name, 'tests/cases.json'), 'utf8')));
     assert.deepEqual(page.caseFields, page.cases.map(fixture => inputFields(fixture.request)));
