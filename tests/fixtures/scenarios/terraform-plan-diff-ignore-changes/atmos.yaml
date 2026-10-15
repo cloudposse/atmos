@@ -1,0 +1,26 @@
+# Field-test scenario for components.terraform.plan_diff.ignore_changes.
+# terraform_data.output stands in for a provider-maintained attribute such as
+# aws_db_instance.latest_restorable_time: it drifts in state without a config change.
+base_path: "./"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_template: "{{ .vars.stage }}"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: true
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+    planfiles:
+      stores:
+        local:
+          type: local/dir
+          options:
+            path: ".atmos/planfiles"
+      priority: [local]
+      verify: fail
