@@ -5,11 +5,15 @@ authors: [osterman]
 tags: [feature, experimental]
 ---
 
+import CastEmbed from '@site/src/components/CastEmbed'
+
 You ask the AI how many stacks you have. After a pause with nothing on screen, it answers that it needs your approval to run a command, and asks whether you would approve it. There is no prompt to say yes to, no sign that anything was happening while you waited, and no way to reply. The answer ends, and so does the conversation.
 
 That is what asking a question from the terminal has felt like when the AI runs through Claude Code. Atmos now keeps the conversation open: it shows you what the AI wants to do, lets you approve it, lets the AI ask you to choose, and lets you follow up without starting over.
 
 <!--truncate-->
+
+<CastEmbed src="/casts/demo/fixtures/ai-ask/interactive-ask.cast" title="atmos ai ask" chrome controls scrubber />
 
 ## The Problem
 

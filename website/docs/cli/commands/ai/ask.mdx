@@ -6,6 +6,7 @@ id: ask
 description: Ask the AI assistant a question directly from the command line
 ---
 import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 import Terminal from '@site/src/components/Terminal'
 import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
@@ -233,6 +234,8 @@ ATMOS_AI_MCP=aws-billing atmos ai ask "Show our billing summary"
 ### Tool Approval
 
 When the AI needs to run a tool, for example `atmos list stacks`, `ask` pauses and shows an approval prompt in your terminal. Claude waits while you decide and then continues in the same run. There are no extra flags, and you do not need to re-run the command.
+
+<CastEmbed src="/casts/demo/fixtures/ai-ask/interactive-ask.cast" title="atmos ai ask" chrome controls scrubber />
 
 <Terminal title="atmos ai ask (claude-code)">
 ```console
