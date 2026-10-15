@@ -12,13 +12,14 @@ The Link Check workflow returned HTTP 404 for the old `list_awssignin.html` URL.
 
 ## Changes
 
-Replace the obsolete path with `list_signin.html`, preserving the reference label and surrounding PRD.
+Replace the obsolete path with `list_signin.html`, preserving the reference label and surrounding PRD. Normalize the two nested fenced examples to four-space list indentation so the touched document satisfies the existing two-space EditorConfig rule.
 
 ## Validation
 
 - The replacement URL returned HTTP 200 without redirecting to another page.
 - The response contains the AWS Signin authorization reference title and `CreateOAuth2Token` action.
 - The fix-document validator and `git diff --check` passed.
+- Affected-file Atmos validation and the full applicable pre-commit hooks passed, including EditorConfig.
 
 ## Follow-ups
 
