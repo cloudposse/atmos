@@ -60,7 +60,3 @@ it has not been started; `atmos emulator ps` shows the running subset. The `INST
 the value an `aws/emulator` identity targets. Add `-s local` to scope either command.
 
 The `atmos test` custom command validates the stacks and runs the full deploy/delete lifecycle end to end.
-
-## Learn More
-
-See the [`atmos aws cloudformation`](https://atmos.tools/cli/commands/aws/cloudformation/) docs.
