@@ -16,6 +16,11 @@ import (
 // ErrPathNotFound indicates the requested directory does not exist at the requested ref.
 var ErrPathNotFound = errors.New("path not found")
 
+// ErrTreeListingIncomplete means the contents API limit prevents proving a path is absent.
+var ErrTreeListingIncomplete = errors.New("repository directory listing may be incomplete")
+
+const contentsDirectoryLimit = 1000
+
 // treeQuery names one directory of one repository at one ref.
 type treeQuery struct {
 	owner   string
@@ -30,7 +35,8 @@ type treeQuery struct {
 // the repository root.
 //
 // The SHA is read from the parent directory listing, which carries the object SHA of every entry,
-// so each lookup costs one request. A missing ref wraps ErrRefNotFound and a missing directory
+// so each lookup costs one request. A limit-sized listing that omits the directory returns
+// ErrTreeListingIncomplete rather than claiming absence. A missing ref wraps ErrRefNotFound and a missing directory
 // wraps ErrPathNotFound; any other failure is returned as the shared client reports it
 // (rate limiting and rejected credentials included).
 //
@@ -74,6 +80,9 @@ func treeSHA(ctx context.Context, client *github.Client, q *treeQuery) (string, 
 			return "", fmt.Errorf("%w: %s/%s has %s at %s, which is not a directory", ErrPathNotFound, q.owner, q.repo, q.dirPath, q.ref)
 		}
 		return entry.GetSHA(), nil
+	}
+	if len(entries) >= contentsDirectoryLimit {
+		return "", fmt.Errorf("%w: %s/%s at %s", ErrTreeListingIncomplete, q.owner, q.repo, q.ref)
 	}
 	return "", fmt.Errorf("%w: %s/%s has no %s at %s", ErrPathNotFound, q.owner, q.repo, q.dirPath, q.ref)
 }

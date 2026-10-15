@@ -330,3 +330,12 @@ func TestResolveConfigCandidates_MatchesLoader(t *testing.T) {
 		})
 	}
 }
+
+func TestMissingProfileWithoutLocations(t *testing.T) {
+	wd := t.TempDir()
+	r := candidateResolver{wd: wd}
+	require.NotPanics(t, func() { r.addProfile("missing", nil) })
+	require.Len(t, r.candidates, 1)
+	require.Equal(t, filepath.Join(wd, ".atmos", "profiles", "missing"), r.candidates[0].Path)
+	require.False(t, r.candidates[0].Exists)
+}

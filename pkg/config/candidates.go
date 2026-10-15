@@ -356,7 +356,10 @@ func (r *candidateResolver) addProfile(name string, locations []ProfileLocation)
 	dir, locType, err := findProfileDirectory(name, locations)
 	if err != nil {
 		// locations is sorted by precedence by findProfileDirectory; report the preferred spot.
-		missing := filepath.Join(locations[0].Path, name)
+		missing := filepath.Join(r.wd, ".atmos", "profiles", name)
+		if len(locations) > 0 {
+			missing = filepath.Join(locations[0].Path, name)
+		}
 		if abs, absErr := absoluteFrom(r.wd, missing); absErr == nil {
 			missing = abs
 		}

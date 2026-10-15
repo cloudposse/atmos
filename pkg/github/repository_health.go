@@ -25,11 +25,12 @@ func InspectRepository(ctx context.Context, gitURI string) RepositoryHealth {
 		return RepositoryHealth{"unsupported", "Repository metadata is unavailable for this host"}
 	}
 	endpoints := RepoEndpoints()
-	token := GetGitHubTokenContext(ctx)
+	token := ""
 	u, _ := url.Parse(gitURI)
 	if IsPublicGitHubHost(u.Host) && !endpoints.IsHost(u.Host) {
 		endpoints = publicGitHubEndpoints
-		token = ""
+	} else {
+		token = gitHubTokenForHost(ctx, endpoints.Host)
 	}
 	client, _ := newGitHubClientForEndpoints(ctx, token, endpoints)
 	return inspectRepository(ctx, client, owner, repo)
