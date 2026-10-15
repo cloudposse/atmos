@@ -28,7 +28,8 @@ const (
 	// MigrationGuideURL documents the migration, including the components that were split.
 	MigrationGuideURL = "https://docs.cloudposse.com/learn/maintenance/tutorials/how-to-update-components-yaml-to-new-organization/"
 
-	legacyLocation = "github.com/" + LegacyOwner + "/" + LegacyRepository
+	host           = "github.com"
+	legacyLocation = host + "/" + LegacyOwner + "/" + LegacyRepository
 	gitSuffix      = ".git"
 	subdirMarker   = "//"
 	templateOpen   = "{{"
@@ -43,6 +44,9 @@ var (
 	ErrSplitComponent = errors.New("component was split into several repositories")
 	// ErrNoSuccessor indicates the module has no successor repository.
 	ErrNoSuccessor = errors.New("component has no successor repository")
+	// ErrSubdirInQuery indicates the subdirectory was written inside the query string, after the ref,
+	// which go-getter does not accept. The subdirectory must come before the "?".
+	ErrSubdirInQuery = errors.New("subdirectory is inside the query string")
 )
 
 // versionTemplate matches the ref placeholder that vendoring fills from the version field.
@@ -71,9 +75,18 @@ type Reference struct {
 	Ref     string
 	RefKind RefKind
 
+	// prefix is the scheme as written, for example "git::https://".
 	prefix string
-	dotGit bool
+	// host is the host as written, for example "GitHub.com".
+	host string
+	// dotGit is the .git suffix as written, or empty.
+	dotGit string
 	query  string
+	// querySubdir is a subdirectory misplaced after the ref (ref=1.0//modules/alb), without the
+	// leading slashes. It is set only when the source has no subdirectory before the query.
+	querySubdir string
+	// queryRef is the ref parameter value as written when it carries a misplaced subdirectory.
+	queryRef string
 }
 
 // Result is a source rewritten to the successor repository.
@@ -87,6 +100,10 @@ type Result struct {
 	// Ref is the literal revision, or the placeholder text when RefKind is RefVersion.
 	Ref     string
 	RefKind RefKind
+	// Subpath is the path below the successor's src directory when the source selected a directory
+	// inside the module, for example "modules/foo" for modules/eks/cluster/modules/foo. Module is
+	// then the mapped parent module, "eks/cluster", which is also what verification compares.
+	Subpath string
 }
 
 // Slug returns the successor as owner/repository.
@@ -101,31 +118,32 @@ func (r Result) Slug() string {
 func Mentions(value string) bool {
 	defer perf.Track(nil, "monorepo.Mentions")()
 
-	return strings.Contains(value, LegacyOwner+"/"+LegacyRepository)
+	return strings.Contains(strings.ToLower(value), LegacyOwner+"/"+LegacyRepository)
 }
 
 // Parse recognizes a go-getter source for the monorepo: github.com/..., https://github.com/...,
 // and git::https://github.com/..., with or without .git, a //modules/<module> subdirectory, and
-// any query. It reports false for every other value.
+// any query. The scheme, host, owner, and repository match without regard to case, as GitHub
+// does. It reports false for every other value.
 func Parse(source string) (Reference, bool) {
 	defer perf.Track(nil, "monorepo.Parse")()
 
 	rest := source
 	prefix := ""
 	for _, scheme := range []string{"git::", "https://"} {
-		if strings.HasPrefix(rest, scheme) {
-			prefix += scheme
-			rest = strings.TrimPrefix(rest, scheme)
+		if len(rest) >= len(scheme) && strings.EqualFold(rest[:len(scheme)], scheme) {
+			prefix += rest[:len(scheme)]
+			rest = rest[len(scheme):]
 		}
 	}
-	if !strings.HasPrefix(rest, legacyLocation) {
+	if len(rest) < len(legacyLocation) || !strings.EqualFold(rest[:len(legacyLocation)], legacyLocation) {
 		return Reference{}, false
 	}
-	rest = strings.TrimPrefix(rest, legacyLocation)
-	ref := Reference{prefix: prefix}
-	if strings.HasPrefix(rest, gitSuffix) {
-		ref.dotGit = true
-		rest = strings.TrimPrefix(rest, gitSuffix)
+	ref := Reference{prefix: prefix, host: rest[:len(host)]}
+	rest = rest[len(legacyLocation):]
+	if len(rest) >= len(gitSuffix) && strings.EqualFold(rest[:len(gitSuffix)], gitSuffix) {
+		ref.dotGit = rest[:len(gitSuffix)]
+		rest = rest[len(gitSuffix):]
 	}
 	rest, ref.query, _ = strings.Cut(rest, "?")
 	switch {
@@ -136,7 +154,55 @@ func Parse(source string) (Reference, bool) {
 		return Reference{}, false
 	}
 	ref.Ref, ref.RefKind = refOf(ref.query)
+	if rest == "" {
+		ref.splitQuerySubdir()
+	}
 	return ref, true
+}
+
+// splitQuerySubdir separates a subdirectory misplaced after the ref value, as in
+// "?ref=1.495.0//modules/alb", from the ref itself.
+func (r *Reference) splitQuerySubdir() {
+	if r.RefKind != RefLiteral {
+		return
+	}
+	value, subdir, found := strings.Cut(r.Ref, subdirMarker)
+	if !found {
+		return
+	}
+	r.queryRef = r.Ref
+	r.Ref = value
+	r.querySubdir = strings.Trim(subdir, "/")
+	if r.Ref == "" {
+		r.RefKind = RefNone
+	}
+}
+
+// QuerySubdirCorrection returns the source with a subdirectory that was written inside the query
+// moved in front of it, where go-getter expects it. It is the successor source when the module has
+// one, otherwise the corrected monorepo source. It reports false when the subdirectory is not in
+// the query.
+func (r *Reference) QuerySubdirCorrection() (string, bool) {
+	defer perf.Track(nil, "monorepo.Reference.QuerySubdirCorrection")()
+
+	if r.querySubdir == "" {
+		return "", false
+	}
+	query := strings.Replace(r.query, "ref="+r.queryRef, "ref="+r.Ref, 1)
+	if r.Ref == "" {
+		query = strings.Replace(r.query, "ref="+r.queryRef, "", 1)
+		query = strings.Trim(strings.ReplaceAll(query, "&&", "&"), "&")
+	}
+	corrected := r.prefix + r.host + "/" + LegacyOwner + "/" + LegacyRepository + r.dotGit + subdirMarker + r.querySubdir
+	if query != "" {
+		corrected += "?" + query
+	}
+	if reference, ok := Parse(corrected); ok {
+		if result, err := reference.Rewrite(); err == nil {
+			return result.Source, true
+		}
+	}
+	return corrected, true
 }
 
 // moduleOf extracts the module path from a subdirectory such as modules/eks/cluster.
@@ -169,33 +235,43 @@ func refOf(query string) (string, RefKind) {
 }
 
 // Rewrite moves the reference to its successor repository. The scheme prefix, the .git suffix, the
-// ref, and every other query parameter are kept as written. It fails with ErrNoModule,
-// ErrTemplatedModule, ErrSplitComponent, or ErrNoSuccessor, wrapped with the module name.
+// ref, the host spelling, and every other query parameter are kept as written. A directory inside a
+// mapped module, such as modules/eks/cluster/modules/foo, moves to the same directory below src. It
+// fails with ErrSubdirInQuery, ErrNoModule, ErrTemplatedModule, ErrSplitComponent, or
+// ErrNoSuccessor, wrapped with the module name.
 func (r *Reference) Rewrite() (Result, error) {
 	defer perf.Track(nil, "monorepo.Reference.Rewrite")()
 
 	switch {
+	case r.querySubdir != "":
+		return Result{}, fmt.Errorf("%w: %s", ErrSubdirInQuery, r.querySubdir)
 	case r.Module == "":
 		return Result{}, ErrNoModule
 	case strings.Contains(r.Module, templateOpen):
 		return Result{}, fmt.Errorf("%w: %s", ErrTemplatedModule, r.Module)
 	}
-	repository, ok := Repository(r.Module)
+	module, subpath := r.Module, ""
+	repository, ok := Repository(module)
+	if !ok {
+		module, subpath, ok = ParentModule(r.Module)
+		if ok {
+			repository, ok = Repository(module)
+		}
+	}
 	if !ok {
 		if len(Successors(r.Module)) > 0 {
 			return Result{}, fmt.Errorf("%w: %s", ErrSplitComponent, r.Module)
 		}
 		return Result{}, fmt.Errorf("%w: %s", ErrNoSuccessor, r.Module)
 	}
-	source := r.prefix + "github.com/" + SuccessorOwner + "/" + repository
-	if r.dotGit {
-		source += gitSuffix
+	source := r.prefix + r.host + "/" + SuccessorOwner + "/" + repository + r.dotGit + subdirMarker + SuccessorPath
+	if subpath != "" {
+		source += "/" + subpath
 	}
-	source += subdirMarker + SuccessorPath
 	if r.query != "" {
 		source += "?" + r.query
 	}
-	return Result{Source: source, Module: r.Module, Repository: repository, Ref: r.Ref, RefKind: r.RefKind}, nil
+	return Result{Source: source, Module: module, Subpath: subpath, Repository: repository, Ref: r.Ref, RefKind: r.RefKind}, nil
 }
 
 // Rewrite parses a source and moves it to its successor repository. It reports false when the

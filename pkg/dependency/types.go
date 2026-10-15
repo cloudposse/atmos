@@ -105,3 +105,9 @@ type SelectionFilter struct {
 	// function keeps every reached dependent.
 	KeepDependent func(*Node) bool
 }
+
+// ComponentRef names a component in a stack.
+type ComponentRef struct {
+	Component string
+	Stack     string
+}

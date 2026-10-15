@@ -1401,3 +1401,51 @@ func TestDescribeDependents_DependenciesComponentsInheritance_WithAppendMerge(t 
 		})
 	}
 }
+
+// The scheduler executes the list form of settings.depends_on, so describe dependents must see it too.
+func TestGetComponentDependencies_ListFormDependsOn(t *testing.T) {
+	t.Run("settings.depends_on list", func(t *testing.T) {
+		componentMap := map[string]any{
+			"settings": map[string]any{
+				"depends_on": []any{
+					"vpc",
+					map[string]any{"component": "rds", "stack": "tenant1-ue1-prod"},
+				},
+			},
+		}
+
+		deps, _, source := getComponentDependencies(componentMap)
+
+		require.Equal(t, dependencySourceSettingsDependsOn, source)
+		require.Len(t, deps, 2)
+		assert.Equal(t, "vpc", deps[0].Component)
+		assert.Equal(t, "rds", deps[1].Component)
+		assert.Equal(t, "tenant1-ue1-prod", deps[1].Stack)
+	})
+
+	t.Run("component-level depends_on list", func(t *testing.T) {
+		componentMap := map[string]any{
+			"depends_on": []any{map[string]any{"component": "vpc"}},
+		}
+
+		deps, _, source := getComponentDependencies(componentMap)
+
+		require.Equal(t, dependencySourceSettingsDependsOn, source)
+		require.Len(t, deps, 1)
+		assert.Equal(t, "vpc", deps[0].Component)
+	})
+
+	t.Run("map form keeps its context fields", func(t *testing.T) {
+		componentMap := map[string]any{
+			"settings": map[string]any{
+				"depends_on": map[any]any{1: map[string]any{"component": "subnet", "environment": "ue2", "stage": "prod"}},
+			},
+		}
+
+		deps, _, _ := getComponentDependencies(componentMap)
+
+		require.Len(t, deps, 1)
+		assert.Equal(t, "ue2", deps[0].Environment)
+		assert.Equal(t, "prod", deps[0].Stage)
+	})
+}

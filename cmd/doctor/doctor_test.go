@@ -27,7 +27,7 @@ func TestDoctorMachineReports(t *testing.T) {
 			ui.InitFormatter(ctx)
 			data.InitWriter(ctx)
 			r := diagnostic.Report{Version: 1, OperationalError: "injected failure", Backup: "/backup", Findings: []diagnostic.Finding{{RuleID: "test", Severity: validation.SeverityWarning, Message: "manual repair", Status: "manual"}}}
-			require.NoError(t, render(&r, format, false))
+			require.NoError(t, render(&r, format, renderOptions{}))
 			var doc map[string]any
 			require.NoError(t, json.Unmarshal(output.Bytes(), &doc))
 			require.Empty(t, human.String())

@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	doctorcmd "github.com/cloudposse/atmos/cmd/doctor"
+	pkgflags "github.com/cloudposse/atmos/pkg/flags"
 )
 
 // TestDoctorDispatchHonorsEveryRootPersistentFlag guards against root flags missing from a hand-maintained
@@ -25,8 +26,14 @@ func TestDoctorDispatchHonorsEveryRootPersistentFlag(t *testing.T) {
 				assert.True(t, doctorcmd.IsInvocation([]string{"--" + f.Name + "=true", "doctor"}, flags))
 			case f.NoOptDefVal != "":
 				assert.True(t, doctorcmd.IsInvocation([]string{"--" + f.Name + "=value", "doctor"}, flags))
-				assert.True(t, doctorcmd.IsInvocation([]string{"--" + f.Name, "value", "doctor"}, flags))
-				assert.False(t, doctorcmd.IsInvocation([]string{"--" + f.Name, "doctor"}, flags))
+				// A flag that opts out of space-separated values never consumes the next token.
+				consumes := true
+				if registered := pkgflags.GlobalFlagsRegistry().Get(f.Name); registered != nil {
+					consumes = registered.GetNoOptDefValConsumesNextArg()
+				}
+				assert.Equal(t, consumes, doctorcmd.IsInvocation([]string{"--" + f.Name, "value", "doctor"}, flags))
+				// An optional-value flag never consumes the command name, so doctor still dispatches.
+				assert.True(t, doctorcmd.IsInvocation([]string{"--" + f.Name, "doctor"}, flags))
 			default:
 				assert.True(t, doctorcmd.IsInvocation([]string{"--" + f.Name + "=value", "doctor"}, flags))
 				assert.True(t, doctorcmd.IsInvocation([]string{"--" + f.Name, "value", "doctor"}, flags))
@@ -76,6 +83,32 @@ func TestDoctorDispatchFoldsSpaceSeparatedFlagValues(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.True(t, doctorcmd.IsInvocation(tt.args, RootCmd.PersistentFlags()), "the raw arguments must dispatch doctor")
 			assert.Equal(t, tt.want, preprocessNativeFlags(tt.args))
+		})
+	}
+}
+
+// TestDoctorDispatchKeepsOptionalValueFlagsBareBeforeCommand guards "--pager doctor": the early dispatch must
+// not fold the command name into the optional-value flag ("--pager=doctor").
+func TestDoctorDispatchKeepsOptionalValueFlagsBareBeforeCommand(t *testing.T) {
+	_ = NewTestKit(t)
+
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{name: "pager", args: []string{"--pager", "doctor", "--offline"}, want: []string{"--pager", "doctor", "--offline"}},
+		{name: "cast", args: []string{"--cast", "doctor"}, want: []string{"--cast", "doctor"}},
+		{name: "identity", args: []string{"--identity", "doctor"}, want: []string{"--identity", "doctor"}},
+		{name: "profile", args: []string{"--profile", "doctor"}, want: []string{"--profile", "doctor"}},
+		{name: "explicit value still folds", args: []string{"--pager", "less", "doctor"}, want: []string{"--pager=less", "doctor"}},
+		{name: "doctor's own bool value still folds", args: []string{"--pager", "doctor", "--offline", "true"}, want: []string{"--pager", "doctor", "--offline=true"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			index, ok := doctorcmd.InvocationIndex(tt.args, RootCmd.PersistentFlags())
+			assert.True(t, ok, "the raw arguments must dispatch doctor")
+			assert.Equal(t, tt.want, preprocessDoctorArgs(tt.args, index))
 		})
 	}
 }
