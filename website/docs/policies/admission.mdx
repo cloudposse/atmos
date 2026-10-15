@@ -15,7 +15,7 @@ restrictions to component instances using literal tags and labels.
 
 | Kind | Gate | Input fields | Instance selectors |
 |---|---|---|---|
-| `function` | Before a YAML function handler executes, including configuration loading | `name`: canonical name without `!` | No; instance metadata may not exist yet |
+| `function` | Before YAML function execution and Go-template calls, including configuration loading | `name`: canonical YAML name without `!` or template function/namespace; `engine`: `yaml` or `go-template` | No; instance metadata may not exist yet |
 | `command` | Before a runnable CLI command's argument validator and pre-run hooks | `command`: command path string; `path`: array of command names, excluding `atmos` | No |
 | `component.command` | During shared stack resolution, before component template/function evaluation and tool execution | `command`, `component_type`, `component`, `stack`, `dry_run`, `capabilities` | Yes; literal inherited metadata |
 

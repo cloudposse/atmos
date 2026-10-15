@@ -9,7 +9,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const matter = require('gray-matter');
-const { policyPage, policySummary } = require('./policy-pages');
+const { policyPage, policySummary, policySidebar } = require('./policy-pages');
 const { getBuildTimestamp } = require('../build-timestamp');
 
 // File names recognized as an item's primary content — the ones treated as
@@ -839,7 +839,7 @@ module.exports = function fileBrowserPlugin(context, options) {
           addRoute({
             path: `${routeBasePath}/${example.name}`,
             component: '@site/src/components/PolicyLibrary/PolicyPage.tsx',
-            modules: {policyData, optionsData: optionsDataPath, treeData: treeDataPath},
+            modules: {policyData, optionsData: optionsDataPath},
             exact: true,
           });
         }
@@ -909,10 +909,16 @@ module.exports = function fileBrowserPlugin(context, options) {
       // Use the docs plugin's conversion so doc IDs, generated categories, and
       // frontmatter overrides resolve exactly as on documentation pages.
       const { toSidebarsProp } = require('@docusaurus/plugin-content-docs/lib/props.js');
+      const sidebarItems = toSidebarsProp(version)[docsSidebar];
       actions.setGlobalData({
         examples: content.tree.examples,
         options: content.options,
-        sidebar: { name: docsSidebar, items: toSidebarsProp(version)[docsSidebar] },
+        sidebar: {
+          name: docsSidebar,
+          items: presentation === 'policies'
+            ? policySidebar(sidebarItems, content.tree.examples, routeBasePath)
+            : sidebarItems,
+        },
       });
     },
 

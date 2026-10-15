@@ -132,8 +132,7 @@
   background: var(--atmos-docs-accent-soft);
   color: var(--accent);
 }
-.mobileCategory,
-.mobilePolicy {
+.mobileCategory {
   display: none;
 }
 .resultsHeader {
@@ -392,50 +391,9 @@
   font-size: 13px;
   line-height: 1.7;
 }
-.policyWorkspace {
-  display: grid;
-  grid-template-columns: 230px minmax(0, 1fr);
-  gap: 24px;
-  margin-top: 24px;
-}
-.policyList {
-  align-self: start;
-  position: sticky;
-  top: calc(var(--ifm-navbar-height, 60px) + 20px);
-  max-height: calc(100vh - var(--ifm-navbar-height, 60px) - 40px);
-  overflow-y: auto;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 6px;
-}
-.policyList a {
-  display: block;
-  padding: 12px;
-  border-radius: 5px;
-  color: var(--atmos-docs-text);
-}
-.policyList a:hover {
-  text-decoration: none;
-  background: var(--atmos-docs-surface-subtle);
-}
-.policyList a[aria-current] {
-  background: var(--atmos-docs-accent-soft);
-  color: var(--accent);
-}
-.policyList h2 {
-  padding: 12px 12px 6px;
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 500;
-}
-.policyList a {
-  font-size: 13px;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
 .policyContent {
   min-width: 0;
+  margin-top: 24px;
 }
 .scenarioPicker {
   display: flex;
@@ -493,21 +451,15 @@
     order: 3;
     width: 100%;
   }
-  .policyWorkspace {
-    grid-template-columns: 180px minmax(0, 1fr);
-    gap: 16px;
-  }
 }
 @media (max-width: 760px) {
   .page {
     padding: 24px 16px 48px;
   }
-  .categories,
-  .policyList {
+  .categories {
     display: none;
   }
-  .mobileCategory,
-  .mobilePolicy {
+  .mobileCategory {
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -515,9 +467,6 @@
   }
   .mobileCategory {
     margin-top: 12px;
-  }
-  .mobilePolicy {
-    margin-bottom: 20px;
   }
   .page input,
   .page select {
@@ -538,9 +487,6 @@
   }
   .views {
     gap: 22px;
-  }
-  .policyWorkspace {
-    grid-template-columns: minmax(0, 1fr);
   }
   .sectionHeading {
     align-items: start;

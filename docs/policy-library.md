@@ -14,8 +14,10 @@ from these directories. Frontmatter supplies `title`, `description`, `tags`, `re
 The index is a compact searchable list inside the Reference sidebar, with category counts and effects
 derived from the manifests. Policy pages provide Policy, Examples, and Reference views. The default
 Policy view displays the selected manifest and Configure → Save → Run instructions; Examples pairs
-scenarios with their expected decisions, input JSON, and field explorer. The detail navigation uses
-the same policy titles as the catalog; a separate Scenario selector chooses the input case. Reference
+scenarios with their expected decisions, input JSON, and field explorer. Inside the library, the
+Reference sidebar lists policy titles and provides a return link to the policy guides. The same
+navigation appears in the mobile drawer; the article has no second policy list. A separate Scenario
+selector chooses the input case. Reference
 contains the full input/enforcement contract and related documentation. Optional `scenarios`
 frontmatter maps fixture names to reader-friendly labels without changing test identities or URLs.
 

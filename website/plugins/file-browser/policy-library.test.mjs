@@ -5,9 +5,10 @@ import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 import matter from 'gray-matter';
 import plugin from './index.js';
-import {policyPage} from './policy-pages.js';
+import {policyPage, policySidebar} from './policy-pages.js';
 import {inputFields} from './policy-input-fields.js';
-import {effectLabel, outcomeLabel, policyViewUrl, resolvePolicyView} from '../../src/components/PolicyLibrary/policy-view.mjs';
+import {effectLabel, outcomeLabel, policySidebarLinks, policyViewUrl, resolvePolicyView} from '../../src/components/PolicyLibrary/policy-view.mjs';
+import {findSection, filterItems} from '../../src/components/SidebarNavigator/navigation.mjs';
 
 const siteDir = fileURLToPath(new URL('../../', import.meta.url));
 const libraryDir = path.resolve(siteDir, '../policy-library');
@@ -56,7 +57,7 @@ test('the policy gallery discovers individually documented and tested policies',
     const route = routes.find(route => route.path === base);
     assert.match(route.component, /PolicyLibrary\/PolicyPage/);
     const page = modules.get(route.modules.policyData);
-    assert.equal(route.modules.treeData, routes[0].modules.treeData, 'Policy navigation shares the lightweight catalog');
+    assert.equal(route.modules.treeData, undefined, 'Policy navigation uses the shared sidebar, not a second catalog in the page');
     const summary = modules.get(routes[0].modules.treeData).examples.find(item => item.name === entry.name);
     const manifest = matter.engines.yaml.parse(readFileSync(path.join(libraryDir, entry.name, 'policy.yaml'), 'utf8'));
     const rule = Object.values(manifest.spec.policies)[0];
@@ -143,6 +144,39 @@ test('decision labels distinguish nonmatching, allowed, blocked, approval and ho
   assert.equal(outcomeLabel({status: 'deny', hooks: [{}]}), 'Blocked');
   assert.equal(outcomeLabel({status: 'awaiting_approval', hooks: [{}]}), 'Approval required');
   assert.equal(outcomeLabel({status: 'future-status'}), 'future-status');
+});
+
+test('library sidebar focuses policy titles, preserves guide navigation, and carries view selections', () => {
+  const original = [
+    {type: 'category', label: 'Commands', href: '/cli', items: []},
+    {type: 'category', label: 'Policies', href: '/policies', customProps: {navigationSidebar: 'cli'}, items: [
+      {type: 'link', label: 'Library', href: '/policies/library'},
+      {type: 'link', label: 'Configuration', href: '/policies/configuration'},
+    ]},
+  ];
+  const before = structuredClone(original);
+  const examples = [{name: 'owner', title: 'Require an Owner tag'}, {name: 'review', title: 'Require approval'}];
+  const sidebar = policySidebar(original, examples, '/policies/library');
+  assert.deepEqual(original, before, 'Ordinary documentation must retain its sidebar');
+  assert.equal(sidebar[0], original[0]);
+  assert.equal(sidebar[1].label, 'Policy Library');
+  assert.equal(sidebar[1].customProps.navigationSidebar, 'cli', 'Mobile and desktop share sidebar identity');
+  assert.equal(sidebar[1].items[0].href, '/policies');
+  assert.deepEqual(sidebar[1].items.slice(1).map(item => item.label), examples.map(item => item.title));
+  for (const path of ['/policies/library', '/policies/library/owner', '/policies/library/owner/policy.yaml']) {
+    assert.equal(findSection(sidebar, path), 1, 'Catalog, policy, and source pages focus the library');
+  }
+  assert.equal(filterItems(sidebar, 'owner')[0].items[0].href, '/policies/library/owner');
+  const selected = policySidebarLinks(sidebar, '?case=absent&source=docs', {engine: 'starlark', view: 'examples'});
+  assert.equal(selected[1].items[0].href, '/policies', 'Guide links must not acquire policy parameters');
+  assert.equal(sidebar[1].items[1].href, '/policies/library/owner', 'URL decoration must not mutate shared data');
+  for (const item of selected[1].items.slice(1)) {
+    const url = new URL(item.href, 'https://atmos.tools');
+    assert.equal(url.searchParams.get('case'), null);
+    assert.equal(url.searchParams.get('engine'), 'starlark');
+    assert.equal(url.searchParams.get('view'), 'examples');
+    assert.equal(url.searchParams.get('source'), 'docs');
+  }
 });
 
 test('field explorer describes observed fields without inventing a provider schema', () => {

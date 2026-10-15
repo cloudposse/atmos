@@ -1,6 +1,7 @@
 /** Observed JSON fields, not an exhaustive schema or inferred optionality. */
 function inputFields(request) {
   const fields = [];
+  /** Record containers and leaf values using deterministic, bracket-indexed expression paths. */
   function visit(value, path) {
     const type = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
     fields.push({path, type});

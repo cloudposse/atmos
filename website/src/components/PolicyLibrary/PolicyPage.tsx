@@ -14,6 +14,7 @@ import {
   effectLabel,
   inputLabel,
   outcomeLabel,
+  policySidebarLinks,
   policyViewUrl,
   resolvePolicyView,
   views,
@@ -53,10 +54,12 @@ interface PolicyData {
   caseFields: InputField[][];
 }
 
+/** Copy the selected manifest and announce clipboard success or the manual-copy fallback. */
 function CopyPolicy({ text }: { text: string }) {
   const [status, setStatus] = useState("");
   const timer = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => () => clearTimeout(timer.current), []);
+  /** Replace any previous notification and clear the result after four seconds. */
   async function copy() {
     clearTimeout(timer.current);
     try {
@@ -79,6 +82,7 @@ function CopyPolicy({ text }: { text: string }) {
   );
 }
 
+/** Inspect observed fixture fields and show an expression for the selected policy engine. */
 function FieldExplorer({
   fields,
   engine,
@@ -141,6 +145,7 @@ function FieldExplorer({
   );
 }
 
+/** Present a selected fixture's expected decision and inputs without implying live execution. */
 function TestCases({
   policy,
   fixture,
@@ -209,15 +214,12 @@ function TestCases({
   );
 }
 
+/** Render policy, fixture, and reference views from shared data and URL-backed selections. */
 export default function PolicyPage({
   policyData: policy,
   optionsData,
-  treeData,
 }: {
   policyData: PolicyData;
-  treeData: {
-    examples: { name: string; title: string; description: string }[];
-  };
   optionsData: FileBrowserOptions;
 }) {
   const location = useLocation();
@@ -242,16 +244,15 @@ export default function PolicyPage({
       ...changes,
     });
   const caseUrl = (name: string) => url({ view: "examples", case: name });
-  const policyUrl = (name: string) =>
-    policyViewUrl(`${optionsData.routeBasePath}/${name}`, location.search, {
-      view,
-      engine,
-      case: null,
-    });
-
   return (
     <Layout
       options={optionsData}
+      sidebarTransform={(items) =>
+        policySidebarLinks(items, isBrowser ? location.search : "", {
+          view,
+          engine,
+        })
+      }
       title={policy.title}
       description={policy.description}
     >
@@ -312,164 +313,135 @@ export default function PolicyPage({
             </Link>
           ))}
         </nav>
-        <div className={styles.policyWorkspace}>
-          <nav className={styles.policyList} aria-label="Browse policies">
-            <h2>Browse policies</h2>
-            {treeData.examples.map((entry) => (
-              <Link
-                key={entry.name}
-                to={policyUrl(entry.name)}
-                aria-current={entry.name === policy.name ? "page" : undefined}
-              >
-                {entry.title}
-              </Link>
-            ))}
-          </nav>
-          <div className={styles.policyContent}>
-            <label className={styles.mobilePolicy}>
-              Browse policies
-              <select
-                value={policy.name}
-                onChange={(event) =>
-                  history.push(policyUrl(event.target.value))
-                }
-              >
-                {treeData.examples.map((entry) => (
-                  <option key={entry.name} value={entry.name}>
-                    {entry.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {view === "policy" && (
-              <section aria-label="Policy">
-                <div id="policy" className={styles.policyCode}>
-                  <CodeBlock language="yaml" title={destination}>
-                    {variant.policy.trimEnd()}
-                  </CodeBlock>
-                </div>
-                <div className={styles.setup}>
-                  <section id="configure">
-                    <h2>
-                      <span>1</span> Configure
-                    </h2>
-                    <div className="markdown">
-                      <Markdown remarkPlugins={[remarkGfm]}>
-                        {policy.configuration}
-                      </Markdown>
-                    </div>
-                  </section>
-                  <section id="save">
-                    <h2>
-                      <span>2</span> Save
-                    </h2>
-                    <p>
-                      Save the {engine === "cel" ? "CEL" : "Starlark"} policy as{" "}
-                      <code>{destination}</code>. Install only one
-                      implementation of each policy.
-                    </p>
-                    <p>
-                      Atmos discovers <code>policy.d/</code> in the invocation
-                      directory. Set <code>ATMOS_POLICY_DIR</code> to use
-                      another directory.
-                    </p>
-                  </section>
-                  <section id="run">
-                    <h2>
-                      <span>3</span> Run
-                    </h2>
-                    {policy.command.includes("<component>") && (
-                      <p>
-                        Replace <code>&lt;component&gt;</code> and{" "}
-                        <code>&lt;stack&gt;</code> with your target.
-                      </p>
-                    )}
-                    <CodeBlock language="shell">{policy.command}</CodeBlock>
-                    <p className={styles.note}>
-                      Review required tools and callback settings before
-                      running. In CI, load policies from a protected, pinned
-                      revision. See{" "}
-                      <Link to="/policies/configuration#enforcement">
-                        enforcement configuration
-                      </Link>
-                      .
-                    </p>
-                  </section>
-                </div>
-                <Link
-                  className={styles.exploreLink}
-                  to={url({ view: "examples" })}
-                >
-                  Explore inputs and expected decisions →
-                </Link>
-              </section>
-            )}
-            {view === "examples" && (
-              <section aria-label="Examples" id="examples">
-                <TestCases
-                  key={policy.name}
-                  policy={policy}
-                  fixture={fixture}
-                  engine={engine}
-                  onSelect={(name) => history.push(caseUrl(name))}
-                />
-              </section>
-            )}
-            {view === "reference" && (
-              <section aria-label="Reference">
-                <h2>Input and enforcement contract</h2>
-                <div className="markdown">
-                  <Markdown remarkPlugins={[remarkGfm]}>
-                    {policy.contract}
-                  </Markdown>
-                </div>
-                <h2>Inputs and expressions</h2>
-                <p>
-                  See the <Link to="/policies/inputs">input contracts</Link> for
-                  each policy kind. Plan and lifecycle policies support{" "}
-                  <Link to="/policies/configuration#instance-attachments">
-                    tag or label selectors
-                  </Link>
-                  ; affected policies inspect before/after instances in their
-                  expressions.
-                </p>
-                {policy.tags.includes("GitHub Actions") && (
-                  <p>
-                    GitHub owns the fields inside <code>ci.event.data</code>.
-                    Use the{" "}
-                    <Link to="/policies/ci#github-event-reference">
-                      event reference
-                    </Link>{" "}
-                    to look up their meaning, and{" "}
-                    <Link to="/cli/commands/ci/context">
-                      <code>atmos ci context</code>
-                    </Link>{" "}
-                    to inspect your runner's actual payload. Triggering events
-                    are not live approval evidence.
-                  </p>
-                )}
-                {policy.inputReference && (
+        <div className={styles.policyContent}>
+          {view === "policy" && (
+            <section aria-label="Policy">
+              <div id="policy" className={styles.policyCode}>
+                <CodeBlock language="yaml" title={destination}>
+                  {variant.policy.trimEnd()}
+                </CodeBlock>
+              </div>
+              <div className={styles.setup}>
+                <section id="configure">
+                  <h2>
+                    <span>1</span> Configure
+                  </h2>
                   <div className="markdown">
                     <Markdown remarkPlugins={[remarkGfm]}>
-                      {policy.inputReference}
+                      {policy.configuration}
                     </Markdown>
                   </div>
-                )}
-                <footer className={styles.references}>
-                  <Link
-                    to={`${optionsData.routeBasePath}/${policy.name}/tests/cases.json`}
-                  >
-                    All test fixtures
-                  </Link>
-                  {policy.docs.map((doc) => (
-                    <Link key={doc.url} to={doc.url}>
-                      {doc.label}
+                </section>
+                <section id="save">
+                  <h2>
+                    <span>2</span> Save
+                  </h2>
+                  <p>
+                    Save the {engine === "cel" ? "CEL" : "Starlark"} policy as{" "}
+                    <code>{destination}</code>. Install only one implementation
+                    of each policy.
+                  </p>
+                  <p>
+                    Atmos discovers <code>policy.d/</code> in the invocation
+                    directory. Set <code>ATMOS_POLICY_DIR</code> to use another
+                    directory.
+                  </p>
+                </section>
+                <section id="run">
+                  <h2>
+                    <span>3</span> Run
+                  </h2>
+                  {policy.command.includes("<component>") && (
+                    <p>
+                      Replace <code>&lt;component&gt;</code> and{" "}
+                      <code>&lt;stack&gt;</code> with your target.
+                    </p>
+                  )}
+                  <CodeBlock language="shell">{policy.command}</CodeBlock>
+                  <p className={styles.note}>
+                    Review required tools and callback settings before running.
+                    In CI, load policies from a protected, pinned revision. See{" "}
+                    <Link to="/policies/configuration#enforcement">
+                      enforcement configuration
                     </Link>
-                  ))}
-                </footer>
-              </section>
-            )}
-          </div>
+                    .
+                  </p>
+                </section>
+              </div>
+              <Link
+                className={styles.exploreLink}
+                to={url({ view: "examples" })}
+              >
+                Explore inputs and expected decisions →
+              </Link>
+            </section>
+          )}
+          {view === "examples" && (
+            <section aria-label="Examples" id="examples">
+              <TestCases
+                key={policy.name}
+                policy={policy}
+                fixture={fixture}
+                engine={engine}
+                onSelect={(name) => history.push(caseUrl(name))}
+              />
+            </section>
+          )}
+          {view === "reference" && (
+            <section aria-label="Reference">
+              <h2>Input and enforcement contract</h2>
+              <div className="markdown">
+                <Markdown remarkPlugins={[remarkGfm]}>
+                  {policy.contract}
+                </Markdown>
+              </div>
+              <h2>Inputs and expressions</h2>
+              <p>
+                See the <Link to="/policies/inputs">input contracts</Link> for
+                each policy kind. Plan, lifecycle, and component command
+                policies support{" "}
+                <Link to="/policies/configuration#instance-attachments">
+                  tag or label selectors
+                </Link>
+                ; affected policies inspect before/after instances in their
+                expressions.
+              </p>
+              {policy.tags.includes("GitHub Actions") && (
+                <p>
+                  GitHub owns the fields inside <code>ci.event.data</code>. Use
+                  the{" "}
+                  <Link to="/policies/ci#github-event-reference">
+                    event reference
+                  </Link>{" "}
+                  to look up their meaning, and{" "}
+                  <Link to="/cli/commands/ci/context">
+                    <code>atmos ci context</code>
+                  </Link>{" "}
+                  to inspect your runner's actual payload. Triggering events are
+                  not live approval evidence.
+                </p>
+              )}
+              {policy.inputReference && (
+                <div className="markdown">
+                  <Markdown remarkPlugins={[remarkGfm]}>
+                    {policy.inputReference}
+                  </Markdown>
+                </div>
+              )}
+              <footer className={styles.references}>
+                <Link
+                  to={`${optionsData.routeBasePath}/${policy.name}/tests/cases.json`}
+                >
+                  All test fixtures
+                </Link>
+                {policy.docs.map((doc) => (
+                  <Link key={doc.url} to={doc.url}>
+                    {doc.label}
+                  </Link>
+                ))}
+              </footer>
+            </section>
+          )}
         </div>
       </article>
     </Layout>

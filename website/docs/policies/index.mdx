@@ -20,7 +20,8 @@ that violate your rules. Policies use CEL expressions or Starlark function bodie
 
 | Input kind | Components | Evaluated when | Actions |
 |---|---|---|---|
-| `function` | Configuration loading and resolution | Before YAML function execution | `deny`, `require_approval` |
+| `function` | Configuration loading and resolution | Before YAML function execution and Go-template calls | `deny`, `require_approval` |
+| `source` | Imports, downloads, includes, and guarded template access | Before accessing each guarded source destination | `deny`, `require_approval` |
 | `command` | All runnable CLI commands | Before argument validation and pre-run hooks | `deny`, `require_approval` |
 | `component.command` | Shared stack resolution | Before component templates/functions and tool execution | `deny`, `require_approval` |
 | `terraform.plan` | Terraform / OpenTofu | After a successful saved plan and before saved-plan apply | `deny`, `require_approval` |
@@ -80,6 +81,7 @@ the selected language is remembered across library pages.
 | [Library](/policies/library) | Searchable catalog with CEL/Starlark implementations and shared tests per policy |
 | [Configuration](/policies/configuration) | Directory loading, manifest fields, rule actions, enforcement setup |
 | [Inputs and Expressions](/policies/inputs) | CEL variables, operation fields, missing values, evaluation results |
+| [Sources and Filesystem](/policies/sources) | Source transports, destinations, and local path confinement |
 | [Starlark](/policies/starlark) | Function bodies, read-only inputs, loops, helpers, and execution limits |
 | [Terraform Plans](/policies/terraform-plan) | Plan JSON, saved-plan commands, failure handling |
 | [Affected Changes](/policies/affected) | File, instance, component, stack, and structured-field changes |

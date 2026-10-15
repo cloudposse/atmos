@@ -71,6 +71,7 @@ func TestPolicyCatalog(t *testing.T) {
 	}
 }
 
+// checkCatalogCase verifies the fixture's status, error, and hook obligations and returns the full decision for comparison.
 func checkCatalogCase(t *testing.T, engine *Engine, bundle *Bundle, tc *catalogCase) Decision {
 	t.Helper()
 	decision, err := engine.Evaluate(context.Background(), &tc.Request, bundle.Rules)
@@ -93,6 +94,7 @@ func checkCatalogCase(t *testing.T, engine *Engine, bundle *Bundle, tc *catalogC
 	return decision
 }
 
+// catalogVariants loads both engines and requires their configuration to differ only in engine and expression.
 func catalogVariants(t *testing.T, directory string, baseline *Bundle) map[string]*Bundle {
 	t.Helper()
 	variants := map[string]*Bundle{baseline.Rules[0].Engine: baseline}
@@ -129,6 +131,7 @@ func TestPolicyCatalogCombined(t *testing.T) {
 	}
 }
 
+// testPolicyCatalogCombined verifies that one engine's catalog can share a directory without rule or hook conflicts.
 func testPolicyCatalogCombined(t *testing.T, root string, entries []string, language string) {
 	t.Helper()
 	directory := t.TempDir()
@@ -153,6 +156,7 @@ func testPolicyCatalogCombined(t *testing.T, root string, entries []string, lang
 	}
 }
 
+// policyCatalogEntries returns the absolute library root and entry directories, failing if the catalog is empty.
 func policyCatalogEntries(t *testing.T) (string, []string) {
 	t.Helper()
 	root, err := filepath.Abs(filepath.Join("..", "..", "policy-library"))

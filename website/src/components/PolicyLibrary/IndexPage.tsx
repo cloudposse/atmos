@@ -13,6 +13,7 @@ interface PolicySummary {
   action: string;
 }
 
+/** Filter policy summaries by all search terms and a category, with counts scoped to the search. */
 export default function PolicyIndex({
   treeData,
   optionsData,

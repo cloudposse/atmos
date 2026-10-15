@@ -206,8 +206,9 @@ Do not expose these candidates as supported settings in website documentation.
 - **Initial plan policy integration:** the saved-plan gate evaluates native plan JSON after plan and
   again before saved-plan apply. Operation policies now run at the existing hook-enabled lifecycle
   points. Command admission covers runnable CLI commands; instance admission uses shared stack resolution.
-- **YAML function admission:** canonical names are checked before execution, including early `!exec`.
-  Go-template function admission and local-vs-remote source trust remain separate proposed controls.
+- **Function admission:** canonical YAML names are checked before execution, including early `!exec`;
+  Go-template calls are checked with `engine: go-template`. Source destination checks and provenance
+  attribution are implemented; trusted-source distribution and trust beyond attribution remain proposed.
 - **Initial library.** Parameterized CEL examples and per-policy tests are available locally;
   remote library distribution and share-by-reference resolution remain proposed.
 - **Native CI and hooks integration:** `pkg/ci/registry_provider.go` registers CI
@@ -452,8 +453,8 @@ is blocked, but cannot use a hook to perform the denied operation under another 
 | validation | component validation | existing OPA/JSON-Schema code; proposed delegation to policy |
 | plan | after change preview, before apply | reuse Terraform JSON generation; policy admission is new |
 | operation | command dispatch and before/after lifecycle | component restrictions exist; general command/custom-command/MCP gating is new |
-| function | YAML dispatch and template FuncMap | proposed checks before evaluation, including `atmos.Resolve` |
-| source | downloader admission | proposed checks before imports/vendor/remote fetches |
+| function | YAML dispatch and template FuncMap | implemented checks before execution, including `atmos.Resolve` |
+| source | import, downloader, include, and guarded template access | implemented destination checks before access |
 | change / affected | Git comparison and describe-affected analysis | reuse analysis functions; complete enforcement inventory and policy adapter are new |
 | event / approval | Native CI snapshot collection and reevaluation | provider registry exists; policy collectors/adapters are new |
 | hook requirements | lifecycle orchestrator → `pkg/hooks` → kind/step executor | executors exist; trusted requirements and execution evidence are new |

@@ -47,6 +47,7 @@ being contacted. Protect the runner's transport configuration, credentials, and 
 | `path_resolved` | Whether the local path was successfully resolved through symlinks |
 | `provenance` | `local`, `remote`, or `unknown` origin of the calling configuration |
 | `source_file` | Available caller attribution, with URI credentials and queries removed |
+| `within_allowed_roots` | Whether the canonical local path is inside the rule's `allowed_roots`; computed only for rules with a nonempty `allowed_roots` list, and `false` for unresolved paths |
 
 ## Confine includes and template file reads
 
