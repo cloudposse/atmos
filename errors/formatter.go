@@ -518,6 +518,12 @@ func renderExplanationCallout(rendered string, maxLineLength int, useColor bool)
 			PaddingLeft(1).
 			PaddingRight(1).
 			Width(width)
+		if i == 0 {
+			style = style.PaddingTop(1)
+		}
+		if i == len(lines)-1 {
+			style = style.PaddingBottom(1)
+		}
 
 		// Glamour emits a full ANSI reset (CSI 0 m) after styled spans. A full
 		// reset clears this outer background too, leaving only the padding tinted

@@ -467,6 +467,14 @@ func TestRenderExplanationCallout_ColorAddsGradientBackground(t *testing.T) {
 	// The first line always starts at the gradient's pure start color.
 	assert.Contains(t, callout, "48;2;51;32;79")
 	assert.Contains(t, callout, "38;2;247;250;252")
+	lines := strings.Split(callout, newline)
+	require.Len(t, lines, 4)
+	for _, padding := range []string{lines[0], lines[len(lines)-1]} {
+		assert.Empty(t, strings.TrimSpace(stripANSI(padding)))
+		assert.Equal(t, lipgloss.Width(lines[1]), lipgloss.Width(padding))
+		assert.Contains(t, padding, "48;2;", "inner padding must retain the callout background")
+	}
+	assert.Equal(t, "first line\nsecond line", renderExplanationCallout("first line\nsecond line", 80, false))
 }
 
 // TestRenderExplanationCallout_ShortCalloutIsSubtleGradient guards against the
@@ -484,10 +492,10 @@ func TestRenderExplanationCallout_ShortCalloutIsSubtleGradient(t *testing.T) {
 
 	callout := renderExplanationCallout("first line\nsecond line", 80, true)
 	lines := strings.Split(callout, newline)
-	require.Len(t, lines, 2)
+	require.Len(t, lines, 4)
 
-	r1, g1, b1 := backgroundRGB(t, lines[0])
-	r2, g2, b2 := backgroundRGB(t, lines[1])
+	r1, g1, b1 := backgroundRGB(t, lines[1])
+	r2, g2, b2 := backgroundRGB(t, lines[2])
 
 	startR, startG, startB := parseHexColor(explanationGradientStart)
 	endR, endG, endB := parseHexColor(explanationGradientEnd)
@@ -517,7 +525,9 @@ func TestRenderExplanationCallout_LongCalloutKeepsFullGradient(t *testing.T) {
 	text := strings.Join([]string{"line one", "line two", "line three", "line four", "line five", "line six"}, newline)
 	callout := renderExplanationCallout(text, 80, true)
 	lines := strings.Split(callout, newline)
-	require.Len(t, lines, 6)
+	require.Len(t, lines, 8)
+	// Padding extends the first and last content colors; inspect content progression.
+	lines = lines[1 : len(lines)-1]
 
 	startR, startG, startB := parseHexColor(explanationGradientStart)
 	endR, endG, endB := parseHexColor(explanationGradientEnd)
