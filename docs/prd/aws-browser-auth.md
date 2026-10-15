@@ -250,21 +250,21 @@ Authorization code: █
 #### IAM Users
 
 1. **IAM Permissions**: IAM principals must have the `SignInLocalDevelopmentAccess` managed policy or equivalent:
-   ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [
-       {
-         "Effect": "Allow",
-         "Action": [
-           "signin:AuthorizeOAuth2Access",
-           "signin:CreateOAuth2Token"
-         ],
-         "Resource": "*"
-       }
-     ]
-   }
-   ```
+    ```json
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Action": [
+            "signin:AuthorizeOAuth2Access",
+            "signin:CreateOAuth2Token"
+          ],
+          "Resource": "*"
+        }
+      ]
+    }
+    ```
 2. **Console Access**: IAM user must have console sign-in enabled
 
 #### Root Users
@@ -313,15 +313,15 @@ Modify `pkg/auth/identities/aws/user.go` to add browser authentication as a thir
 2. Generate PKCE code verifier (random 32-byte string, base64url encoded)
 3. Generate code challenge (SHA-256 hash of verifier, base64url encoded)
 4. Open browser to authorization URL:
-   ```text
-   https://{region}.signin.aws.amazon.com/authorize?
-     client_id=arn:aws:signin:::devtools/same-device
-     &redirect_uri=http://127.0.0.1:{port}/oauth/callback
-     &response_type=code
-     &code_challenge={challenge}
-     &code_challenge_method=S256
-     &scope=openid
-   ```
+    ```text
+    https://{region}.signin.aws.amazon.com/authorize?
+      client_id=arn:aws:signin:::devtools/same-device
+      &redirect_uri=http://127.0.0.1:{port}/oauth/callback
+      &response_type=code
+      &code_challenge={challenge}
+      &code_challenge_method=S256
+      &scope=openid
+    ```
 5. Receive authorization code via callback
 6. Exchange code for tokens via AWS signin service
 7. Return temporary AWS credentials
