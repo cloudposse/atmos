@@ -20,11 +20,14 @@ that violate your rules. Policies use CEL expressions or Starlark function bodie
 
 | Input kind | Components | Evaluated when | Actions |
 |---|---|---|---|
-| `terraform.plan` | Terraform / OpenTofu | After a successful saved plan and before saved-plan apply | `deny` |
-| `operation` | Terraform, Helmfile, Helm, Kubernetes | At the component's lifecycle hook events | `deny`, `hooks` |
-| `atmos.affected` | All supported inventory types | During explicit affected analysis, before filtering or scheduling | `deny` |
+| `function` | Configuration loading and resolution | Before YAML function execution | `deny`, `require_approval` |
+| `command` | All runnable CLI commands | Before argument validation and pre-run hooks | `deny`, `require_approval` |
+| `component.command` | Shared stack resolution | Before component templates/functions and tool execution | `deny`, `require_approval` |
+| `terraform.plan` | Terraform / OpenTofu | After a successful saved plan and before saved-plan apply | `deny`, `require_approval` |
+| `operation` | Terraform, Helmfile, Helm, Kubernetes | At the component's lifecycle hook events | `deny`, `hooks`, `require_approval` |
+| `atmos.affected` | All supported inventory types | During explicit affected analysis, before filtering or scheduling | `deny`, `require_approval` |
 
-[GitHub Actions context](/policies/ci) is available to all three kinds. Plan and lifecycle rules run
+[GitHub Actions context](/policies/ci) is available to all kinds. [Admission](/policies/admission), plan, and lifecycle rules run
 regardless of `--affected`; affected rules run only when affected analysis is requested.
 Component configuration validation uses the separate
 [`settings.validation` configuration](/validation/opa).
@@ -69,10 +72,12 @@ not an unreviewed pull-request checkout.
 ## Reference
 
 Browse the [Policy Library](/policies/library) for individual policies, parameters, and tested input cases.
+Each policy offers CEL and Starlark tabs backed by the same test fixtures. Copy one implementation;
+the selected language is remembered across library pages.
 
 | Page | Contents |
 |---|---|
-| [Library](/policies/library) | Searchable catalog with one definition, reference page, and test suite per policy |
+| [Library](/policies/library) | Searchable catalog with CEL/Starlark implementations and shared tests per policy |
 | [Configuration](/policies/configuration) | Directory loading, manifest fields, rule actions, enforcement setup |
 | [Inputs and Expressions](/policies/inputs) | CEL variables, operation fields, missing values, evaluation results |
 | [Starlark](/policies/starlark) | Function bodies, read-only inputs, loops, helpers, and execution limits |

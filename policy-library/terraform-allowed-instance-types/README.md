@@ -20,7 +20,7 @@ Require planned EC2 instance types to be known and explicitly approved.
 | Field | Value |
 |---|---|
 | Input | `terraform.plan` |
-| Engine | `cel` |
+| Engines | `cel`, `starlark` |
 | Action | `deny` |
 | Selects when | A managed EC2 instance's planned type is missing, unknown, or not in `params.allowed`. |
 | Required data | Native saved-plan JSON from Terraform/OpenTofu. No CI token required. |
@@ -32,6 +32,10 @@ Require planned EC2 instance types to be known and explicitly approved.
 Deleting an instance is permitted. An unknown-value marker blocks even when `after` contains an approved placeholder.
 
 ## Policy
+
+Choose CEL or Starlark on the [policy page](https://atmos.tools/policies/library/terraform-allowed-instance-types).
+The default manifest below uses CEL; the [Starlark variant](https://atmos.tools/policies/library/terraform-allowed-instance-types/variants/starlark/policy.yaml)
+uses the same configuration and test cases. Install only one implementation.
 
 [View and copy policy.yaml](https://atmos.tools/policies/library/terraform-allowed-instance-types/policy.yaml).
 

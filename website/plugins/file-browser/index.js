@@ -9,7 +9,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const matter = require('gray-matter');
-const { policyPage } = require('./policy-pages');
+const { policyPage, policySummary } = require('./policy-pages');
 const { getBuildTimestamp } = require('../build-timestamp');
 
 // File names recognized as an item's primary content — the ones treated as
@@ -809,7 +809,7 @@ module.exports = function fileBrowserPlugin(context, options) {
         `file-browser-tree-${id}.json`,
         JSON.stringify(presentation === 'policies' ? {
           tags: tree.tags,
-          examples: tree.examples.map(({name, title, description, tags}) => ({name, title, description, tags})),
+          examples: tree.examples.map(policySummary),
         } : tree, null, 2)
       );
 
@@ -839,10 +839,16 @@ module.exports = function fileBrowserPlugin(context, options) {
           addRoute({
             path: `${routeBasePath}/${example.name}`,
             component: '@site/src/components/PolicyLibrary/PolicyPage.tsx',
-            modules: {policyData, optionsData: optionsDataPath},
+            modules: {policyData, optionsData: optionsDataPath, treeData: treeDataPath},
             exact: true,
           });
         }
+        // Policy pages scope the tree to a single policy. Write that data once per
+        // policy and share it across every directory and file route.
+        const routeTreeData = presentation === 'policies'
+          ? await createData(`policy-tree-${example.name}.json`, JSON.stringify({examples: [example]}))
+          : treeDataPath;
+
         // Collect all directories for this example.
         const directories = collectDirectories(example.root, routeBasePath);
 
@@ -859,9 +865,7 @@ module.exports = function fileBrowserPlugin(context, options) {
             path: dir.urlPath,
             component: '@site/src/components/FileBrowser/DirectoryPage.tsx',
             modules: {
-              treeData: presentation === 'policies'
-                ? await createData(`policy-tree-${example.name}.json`, JSON.stringify({examples: [example]}))
-                : treeDataPath,
+              treeData: routeTreeData,
               optionsData: optionsDataPath,
               dirData: dirDataPath,
             },
@@ -884,9 +888,7 @@ module.exports = function fileBrowserPlugin(context, options) {
             path: file.urlPath,
             component: '@site/src/components/FileBrowser/FilePage.tsx',
             modules: {
-              treeData: presentation === 'policies'
-                ? await createData(`policy-tree-${example.name}.json`, JSON.stringify({examples: [example]}))
-                : treeDataPath,
+              treeData: routeTreeData,
               optionsData: optionsDataPath,
               fileData: fileDataPath,
             },

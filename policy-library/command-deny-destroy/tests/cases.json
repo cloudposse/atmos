@@ -1,0 +1,30 @@
+[
+  {
+    "name": "destroy denied",
+    "request": {
+      "kind": "command",
+      "input": {
+        "command": "terraform destroy",
+        "path": [
+          "terraform",
+          "destroy"
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "plan permitted",
+    "request": {
+      "kind": "command",
+      "input": {
+        "command": "terraform plan",
+        "path": [
+          "terraform",
+          "plan"
+        ]
+      }
+    },
+    "status": "not_applicable"
+  }
+]

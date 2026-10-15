@@ -1,0 +1,110 @@
+---
+title: GitHub Approval Policies
+sidebar_label: Approvals
+description: Require fresh, designated GitHub reviewers using the workflow GITHUB_TOKEN.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Require designated GitHub reviewers when a policy matches. Native CI verifies current PR reviews
+before allowing the invocation to proceed, using the workflow's read-only API permissions.
+</Intro>
+
+## Require a review
+
+```yaml title="policy.d/production-approval.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: production-approval
+  description: Require a designated reviewer before production deployment.
+spec:
+  policies:
+    deploy:
+      on: component.command
+      match:
+        labels: {stage: prod}
+      rule: input.command in ['apply', 'deploy']
+      action: require_approval
+      approvals:
+        - id: platform
+          provider: github-actions
+          spec:
+            reviewers: [platform-maintainer]
+            minimum: 1
+```
+
+Replace the example login with your explicitly maintained reviewers. Each requirement must have an
+`id`, provider `github-actions`, and a `spec` containing unique user logins and a positive `minimum`
+no larger than the list. Multiple requirements must all be satisfied. Organization/team names are
+not accepted; workflow tokens cannot establish live organization team membership.
+
+Use the same action on `function`, `command`, `component.command`, `terraform.plan`, `operation`, or `atmos.affected` rules.
+For example, an affected predicate can require review when a protected label is removed while
+allowing ordinary label additions. Select only the lifecycle events you intend to govern.
+
+## Verification
+
+1. Evaluate predicates over the supplied input snapshot. Matching approval rules return
+   `awaiting_approval`; pure evaluation never calls GitHub.
+2. The Native CI adapter reads current PR details and every page of reviews. Supported triggering
+   events are `pull_request`, `pull_request_target`, and `pull_request_review`.
+3. Require an open PR whose current head matches the event's head. The actual Git checkout must
+   equal that head or GitHub's current PR merge commit. A supplied affected head must match the checkout.
+4. Count the latest decisive review per designated login, case-insensitively, ordered by submission
+   time (with review ID breaking ties). It must be `APPROVED`
+   for the current head, from someone other than the PR author. `DISMISSED` and `CHANGES_REQUESTED`
+   revoke approval; comment-only and pending reviews do not grant approval.
+5. Re-read the PR after pagination; reject head, base, merge-commit, or open-state changes during
+   collection. Each execution gate collects fresh evidence rather than reusing an old successful job.
+
+Missing token permissions, unsupported providers/events, stale checkouts, malformed data, failed API
+requests, or incomplete pagination block execution. Pagination is bounded at 100 pages of 100 reviews
+and collection at 30 seconds. Ordinary denials take precedence and do not trigger review collection.
+Approval cannot satisfy required hooks or override another policy's denial.
+
+## Workflow permissions
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  GITHUB_TOKEN: ${{ github.token }}
+```
+
+`contents: read` permits checkout. `pull-requests: read` permits fetching PR details and reviews;
+no write permission, PAT, or separate GitHub App is needed. Native CI retains its existing token
+precedence when an explicit alternative token is configured. See
+[GitHub review API permissions](https://docs.github.com/en/rest/pulls/reviews#list-reviews-for-a-pull-request).
+
+Fork and Dependabot tokens may be restricted to read-only, which is sufficient when the repository
+allows the run and grants these read scopes. Do not elevate permissions to execute untrusted code.
+Protect the policy bundle, enforcement workflow, runner, and binary independently of the candidate PR.
+Use a trusted, clean checkout: revision verification binds reviews to Git commits, not to uncommitted
+working-tree changes or generated files.
+The adapter reads from the runner's repository/API configuration, not URLs embedded in PR data.
+
+## Refresh and required checks
+
+An outstanding approval fails the current command; it does not pause a durable service. Re-run the
+gate after review changes. To trigger reevaluation automatically, a trusted workflow can subscribe to:
+
+```yaml
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+```
+
+Run only the required read-only policy check on review events—do not replay plan/apply or their
+lifecycle hooks. Use a repository-level required check independent of component matrices. Ensure
+each event checks the current candidate revision and publishes to the required revision/context.
+
+GitHub provides no atomic review-and-execution transaction. A dismissal after a completed check
+cannot retroactively revoke the already-published success unless the workflow reruns and replaces it.
+Actions scheduling, fork workflow approval, and cancellation can delay that refresh. This integration
+does not aggregate component jobs, install webhooks, or provide durable approval orchestration.
