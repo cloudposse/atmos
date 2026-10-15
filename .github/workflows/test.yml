@@ -102,8 +102,9 @@ jobs:
           # backend also lets the acceptance shards reuse its artifacts.
           - os: "ubuntu-latest"
             target: linux
-          # Go 1.26 can corrupt the heap on Server 2025 AMX runners. Keep
-          # Windows coverage on Server 2022 pending golang/go#81238.
+          # Go 1.26 can corrupt the heap on AMX runners, including Server
+          # 2022. The version-checked exception-reserve action below addresses
+          # golang/go#81238 while retaining the existing runner image.
           - os: "windows-2022"
             target: windows
           - os: "macos-15"
@@ -211,6 +212,13 @@ jobs:
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: ./.github/actions/setup-go-cache
         id: go
+
+      # Hosted Intel AMX CPUs can overrun Go 1.26.9's exception reserve.
+      # Compile every Windows CI artifact with the same guarded workaround,
+      # including binaries later consumed by a different runner CPU model.
+      - name: Reserve Windows exception-stack space
+        if: matrix.target == 'windows' && ! github.event.pull_request.draft
+        uses: ./.github/actions/windows-exception-reserve
 
       - name: Set up Atmos bootstrap
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -500,6 +508,10 @@ jobs:
         uses: ./.github/actions/setup-go-cache
         id: go
 
+      - name: Reserve Windows exception-stack space
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        uses: ./.github/actions/windows-exception-reserve
+
       - name: Get dependencies
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
@@ -745,6 +757,10 @@ jobs:
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: ./.github/actions/setup-go-cache
         id: go
+
+      - name: Reserve Windows exception-stack space
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        uses: ./.github/actions/windows-exception-reserve
 
       - name: Get dependencies
         # Windows runs precompiled acceptance binaries and lets its small source
