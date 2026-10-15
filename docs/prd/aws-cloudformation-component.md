@@ -333,7 +333,10 @@ target, not a settings field**: a **`kind: aws/s3`** target carrying
 its own destination config (`bucket`/`prefix`, optional `region`), exactly as `kind: git` carries
 `repository`/`path`. There is no separate `settings.aws_cloudformation.s3_bucket` — one construct
 declares every delivery destination. This extends the shared `ProvisionTarget` struct with the
-S3-kind fields; no new abstraction is introduced, and Helm/Kubernetes delivery is untouched.
+S3-kind fields and a string `packaging` selector on deploy-style targets. The shared target schema
+and its JSON Schema copies must preserve this selector; CloudFormation resolves its value against
+the declared `kind: aws/s3` target names. No new abstraction is introduced, and Helm/Kubernetes
+delivery is untouched.
 
 How the targets interact:
 
@@ -471,9 +474,9 @@ changeset, or a `plan`/`diff` against a not-yet-created stack leaks a stack agai
 stack-count quota on every preview. `DeleteStack` is itself asynchronous — it only requests deletion
 and returns immediately, leaving the stack in `DELETE_IN_PROGRESS` — so cleanup must poll
 `DescribeStacks` (or use the SDK's `StackDeleteComplete` waiter) until the placeholder is actually
-gone before returning control. Returning early would let a subsequent real `apply` race a still-mid-
-delete placeholder: `ChangeSetType=CREATE` is only valid against a stack that doesn't exist yet, not
-one sitting in `DELETE_IN_PROGRESS`/`REVIEW_IN_PROGRESS`, so that `apply` would fail. Both the
+gone before returning control. Returning early would let a subsequent real `apply` race a
+placeholder still in `DELETE_IN_PROGRESS`. An existing `REVIEW_IN_PROGRESS` placeholder has no
+resources yet; Atmos treats it as a CREATE target rather than an existing stack to update. Both the
 `DeleteStack` call itself and the wait are surfaced as a command error (or a retryable cleanup
 result), as with changeset cleanup — including a `DELETE_FAILED` terminal
 state or a wait timeout — since a leaked `REVIEW_IN_PROGRESS`/`DELETE_FAILED` stack is more disruptive
@@ -487,7 +490,15 @@ no-op: delete the changeset and do not call `ExecuteChangeSet`. Other `FAILED` r
 command errors.
 
 The explicit `changeset create/execute/list/delete` verbs exist for users who want manual control
-(e.g. a two-phase deploy pipeline: create + review in one job, execute in another).
+(e.g. a two-phase deploy pipeline: create + review in one job, execute in another). `changeset delete`
+deletes only the named change set and deliberately preserves the stack, including an unexecuted
+`REVIEW_IN_PROGRESS` placeholder. It does not infer permission to delete the stack from deleting
+its last change set: another pipeline may still own the placeholder or create another change set.
+An abandoned placeholder continues to consume stack quota. To remove it, use
+`atmos aws cloudformation delete <component> -s <stack>` after confirming that no pending change
+sets are needed. That explicit stack-delete operation uses the normal confirmation and waits for
+stack deletion to finish. Preview cleanup remains automatic only for a placeholder created by
+that preview invocation.
 
 Templates using macros/transforms (`Fn::Transform`, `AWS::Serverless` a.k.a. SAM) work through this
 same changeset flow with no special-cased handling: `CreateChangeSet` expands macros while computing
