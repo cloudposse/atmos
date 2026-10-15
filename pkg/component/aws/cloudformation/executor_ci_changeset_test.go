@@ -52,7 +52,7 @@ func TestOperationSummary_ChangesetNameReachesCI(t *testing.T) {
 // successful execution for CI summary tests.
 func expectChangesetCIFlow(t *testing.T, client *MockCloudFormationClient, operation Operation, createdName *string) {
 	t.Helper()
-	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}}}, nil)
 	client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, input *cloudformation.CreateChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.CreateChangeSetOutput, error) {
 		*createdName = stringValue(input.ChangeSetName)
 		return &cloudformation.CreateChangeSetOutput{}, nil
