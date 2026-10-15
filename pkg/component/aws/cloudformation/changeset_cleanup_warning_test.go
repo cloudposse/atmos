@@ -7,6 +7,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -40,7 +41,7 @@ func TestDeployDirect_CleanupWarnings(t *testing.T) {
 			} else {
 				require.ErrorIs(t, err, errUtils.ErrUserAborted)
 			}
-			assert.Contains(t, output, cleanupErr.Error())
+			assert.Contains(t, ansi.Strip(output), cleanupErr.Error())
 		})
 	}
 }

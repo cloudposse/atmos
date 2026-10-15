@@ -79,7 +79,7 @@ func TestComponentFunc_CloudFormationBranch_NotDeployedStackFails(t *testing.T) 
 	mockGetter.EXPECT().GetOutputs(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, notDeployed)
 	stubCloudFormationOutputsGetter(t, mockGetter)
 
-	_, err := componentFunc(&atmosConfig, nil, "vpc", "test")
+	_, err := componentFunc(t.Context(), &atmosConfig, nil, "vpc", "test")
 	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackNotDeployed)
 }
 
@@ -95,7 +95,7 @@ func TestComponentFunc_CloudFormationBranch_MissingKeyStillReturnsOutputs(t *tes
 		Return(map[string]any{"VpcId": "vpc-123"}, nil)
 	stubCloudFormationOutputsGetter(t, mockGetter)
 
-	result, err := componentFunc(&atmosConfig, nil, "vpc", "test")
+	result, err := componentFunc(t.Context(), &atmosConfig, nil, "vpc", "test")
 	require.NoError(t, err)
 	outputs, ok := result.(map[string]any)[cfg.OutputsSectionName].(map[string]any)
 	require.True(t, ok)

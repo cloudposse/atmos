@@ -22,7 +22,7 @@ func TestCaptureStderrRestoresAfterPanic(t *testing.T) {
 		})
 	})
 	assert.Same(t, original, os.Stderr)
-	_, err := captured.Stat()
+	err := captured.Close()
 	assert.ErrorIs(t, err, os.ErrClosed)
 	assert.Equal(t, "captured", captureStderr(t, func() {
 		_, err := os.Stderr.WriteString("captured")
@@ -45,7 +45,7 @@ func TestCaptureStderrLargeOutput(t *testing.T) {
 	})
 	assert.Equal(t, strings.Join(strings.Fields(text), " "), got)
 	assert.Same(t, original, os.Stderr)
-	_, err := captured.Stat()
+	err := captured.Close()
 	assert.ErrorIs(t, err, os.ErrClosed)
 }
 
@@ -62,7 +62,7 @@ func TestCaptureStderrRestoresAfterFailNow(t *testing.T) {
 				t.FailNow()
 			})
 		})
-		_, err := captured.Stat()
+		err := captured.Close()
 		if !passed && os.Stderr == original && errors.Is(err, os.ErrClosed) {
 			_, _ = os.Stdout.WriteString(restored)
 		}
