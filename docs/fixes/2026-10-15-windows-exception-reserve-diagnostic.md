@@ -31,6 +31,10 @@ proof that every Atmos crash has the same cause.
 - Provide a separate action-validation dispatch to run the exact guarded Python
   action and its safeguard tests before compiling and executing the stress probe.
 
+- Add a nested-build diagnostic that compares ordinary CGO-enabled CLI startup
+  with the intended CGO-disabled build environment on the same Windows host.
+- Exercise the precompiled-launcher regression and real CLI integration tests.
+
 ## Validation
 
 Workflow validation with actionlint and `git diff --check` passed locally.
@@ -39,7 +43,9 @@ repetitions exceeded the 15-minute timeout on three AMD hosts. Both stress
 binaries passed on those hosts, whose measured context size was 1,663 bytes.
 The corrected harness uses three repetitions per mode and also runs stock
 acceptance tests on the same host. Local probe execution and a Windows cross-build
-with the overlay passed. Corrected Windows execution is pending. The diagnostic
+with the overlay passed. The corrected eight-host Windows comparison and exact-action validation passed.
+A subsequent stack run exposed a separate CGO CLI startup failure; native
+nested-build validation is pending. The diagnostic
 cannot establish a mitigation unless it captures a stock failure and successful
 modified runs on the same host.
 
