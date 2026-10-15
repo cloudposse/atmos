@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { createRequire } from "node:module";
 import test from "node:test";
 
@@ -110,4 +113,49 @@ test("the alien retains its bright base layer when embedded in a card", () => {
     assert.ok(red > 120 && green > 120 && blue > 120,
       `${brand} lost the alien base layer: RGB ${red}, ${green}, ${blue}`);
   }
+});
+
+test("cardForPage reads metadata independently of attribute order and quoting", () => {
+  const html = `<meta content='Native CI | atmos' data-rh="true" property='og:title'>
+    <meta content="Plans &amp; summaries > logs" property="og:description">`;
+  assert.equal(cardForPage(html, "/ci", "atmos.tools")?.title, "Native CI");
+  assert.equal(cardForPage(html, "/ci", "atmos.tools")?.description, "Plans & summaries > logs");
+  assert.equal(cardForPage('<meta data-property="og:title" content="Wrong">', "/ci", "atmos.tools"), null);
+});
+
+test("unknown section names cannot resolve inherited object properties", () => {
+  const html = '<meta property="og:title" content="Configuration | atmos">';
+  for (const section of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+    assert.equal(cardForPage(html, `/${section}`, "atmos.tools").subtitle, "The runtime for infrastructure");
+  }
+});
+
+test("rewriteImageMeta handles reordered attributes without changing unrelated metadata", () => {
+  const unrelated = `<meta data-property="og:image" content="keep.jpg">`;
+  const html = `<meta content="old.jpg" data-note="content='leave alone' >" property="og:image">
+    <meta content='old.jpg' name='twitter:image'>${unrelated}`;
+  const url = "https://atmos.tools/img/social/new.jpg";
+  const out = rewriteImageMeta(html, url);
+  assert.equal(out.split(url).length - 1, 2);
+  assert.ok(!out.includes("old.jpg"));
+  assert.ok(out.includes(unrelated));
+  assert.ok(out.includes(`data-note="content='leave alone' >"`));
+  assert.equal(out.match(/property="og:image:width"/g).length, 1);
+  assert.equal(rewriteImageMeta(out, url), out);
+});
+
+test("postBuild generates and links cards for reordered metadata and prototype-named routes", async (t) => {
+  const outDir = mkdtempSync(path.join(os.tmpdir(), "atmos-social-cards-"));
+  t.after(() => rmSync(outDir, { recursive: true, force: true }));
+  const dir = path.join(outDir, "constructor");
+  mkdirSync(dir);
+  const page = path.join(dir, "index.html");
+  writeFileSync(page, `<meta content='Configuration | atmos' property='og:title'>
+    <meta content='old.jpg' property='og:image'><meta content='old.jpg' name='twitter:image'>`);
+  await require("./index.js")().postBuild({ outDir, siteConfig: { url: "https://atmos.tools", baseUrl: "/" } });
+  const cards = readdirSync(path.join(outDir, "img", "social"));
+  assert.equal(cards.length, 1);
+  const html = readFileSync(page, "utf8");
+  assert.equal(html.split(`https://atmos.tools/img/social/${cards[0]}`).length - 1, 2);
+  assert.ok(!html.includes("old.jpg"));
 });

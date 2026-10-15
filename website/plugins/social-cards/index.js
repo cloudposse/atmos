@@ -26,6 +26,7 @@ const SECTION_LABELS = {
   learn: 'Learn',
 };
 
+/** Decode the HTML entities emitted in Docusaurus metadata. */
 const decodeEntities = (text) =>
   text
     .replace(/&quot;/g, '"')
@@ -34,9 +35,35 @@ const decodeEntities = (text) =>
     .replace(/&gt;/g, '>')
     .replace(/&amp;/g, '&');
 
+// Match complete tags without treating a quoted greater-than sign as their end.
+const META_TAG = /<meta\b(?:[^"'<>]|"[^"]*"|'[^']*')*>/gi;
+
+/** Read attributes and their value offsets so updates preserve the rest of a tag. */
+function metaAttributes(tag) {
+  const attributes = new Map();
+  const pattern = /([^\s=<>/'"]+)(\s*=\s*)("[^"]*"|'[^']*'|[^\s"'=<>`]+)/g;
+  for (const match of tag.matchAll(pattern)) {
+    const raw = match[3];
+    const quoted = raw.startsWith('"') || raw.startsWith("'");
+    const start = match.index + match[1].length + match[2].length;
+    attributes.set(match[1].toLowerCase(), {
+      value: decodeEntities(quoted ? raw.slice(1, -1) : raw),
+      start,
+      end: start + raw.length,
+    });
+  }
+  return attributes;
+}
+
+/** Find a meta value independently of attribute order, quoting, or HTML case. */
 function metaContent(html, attr, name) {
-  const match = html.match(new RegExp(`<meta[^>]*${attr}="${name}"[^>]*content="([^"]*)"`, 'i'));
-  return match ? decodeEntities(match[1]) : '';
+  for (const [tag] of html.matchAll(META_TAG)) {
+    const attributes = metaAttributes(tag);
+    if (attributes.get(attr)?.value.toLowerCase() === name) {
+      return attributes.get('content')?.value || '';
+    }
+  }
+  return '';
 }
 
 /**
@@ -68,7 +95,7 @@ function cardForPage(html, route, host) {
   if (!rawTitle) return null;
   const title = rawTitle.replace(/\s*\|\s*atmos$/i, '').trim();
   const section = route.split('/').filter(Boolean)[0];
-  const label = SECTION_LABELS[section] || DEFAULT_SUBTITLE;
+  const label = Object.hasOwn(SECTION_LABELS, section) ? SECTION_LABELS[section] : DEFAULT_SUBTITLE;
   return {
     title,
     brand: section === 'ci' ? 'ci' : 'atmos',
@@ -86,22 +113,27 @@ function cardForPage(html, route, host) {
  * @returns {string}
  */
 function rewriteImageMeta(html, imageUrl) {
-  const replaceContent = (source, attr, name) =>
-    source.replace(
-      new RegExp(`(<meta[^>]*${attr}="${name}"[^>]*content=")[^"]*(")`, 'i'),
-      `$1${imageUrl}$2`,
-    );
-  let result = replaceContent(html, 'property', 'og:image');
-  result = replaceContent(result, 'name', 'twitter:image');
-  if (!/property="og:image:width"/.test(result)) {
-    result = result.replace(
-      /(<meta[^>]*property="og:image"[^>]*>)/i,
-      '$1<meta data-rh="true" property="og:image:width" content="1200"><meta data-rh="true" property="og:image:height" content="630">',
-    );
-  }
-  return result;
+  const encodedUrl = imageUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  let dimensions = ['width', 'height']
+    .filter((dimension) => !metaContent(html, 'property', `og:image:${dimension}`))
+    .map((dimension) => `<meta data-rh="true" property="og:image:${dimension}" content="${dimension === 'width' ? 1200 : 630}">`)
+    .join('');
+  return html.replace(META_TAG, (tag) => {
+    const attributes = metaAttributes(tag);
+    const isOgImage = attributes.get('property')?.value.toLowerCase() === 'og:image';
+    const isTwitterImage = attributes.get('name')?.value.toLowerCase() === 'twitter:image';
+    const content = attributes.get('content');
+    if ((!isOgImage && !isTwitterImage) || !content) return tag;
+    let updated = `${tag.slice(0, content.start)}"${encodedUrl}"${tag.slice(content.end)}`;
+    if (isOgImage) {
+      updated += dimensions;
+      dimensions = '';
+    }
+    return updated;
+  });
 }
 
+/** Walk generated HTML pages recursively without loading the entire tree. */
 function* htmlFiles(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
@@ -110,6 +142,7 @@ function* htmlFiles(dir) {
   }
 }
 
+/** Generate per-page JPEG cards and link them from the built social metadata. */
 module.exports = function socialCardsPlugin() {
   return {
     name: 'social-cards',
@@ -128,7 +161,7 @@ module.exports = function socialCardsPlugin() {
           '',
         );
         const card = cardForPage(html, route, host);
-        if (!card || !/property="og:image"/i.test(html)) continue;
+        if (!card || !metaContent(html, 'property', 'og:image')) continue;
 
         // Pages sharing title + subtitle + description + URL share one card.
         const hash = crypto

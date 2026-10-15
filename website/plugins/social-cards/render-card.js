@@ -30,12 +30,14 @@ const logos = Object.fromEntries(
     }).render().asPng().toString('base64'),
   ]),
 );
+/** Escape text for SVG text nodes and attributes. */
 const escapeXml = (text) =>
   text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 // Use the same text shaping engine and fonts for measurement and rendering.
 // Bound the cache because a site build generates thousands of distinct cards.
 const widthCache = new Map();
+/** Measure the rendered horizontal extent of Geist text in pixels. */
 function measureText(text, fontSize = 64, fontWeight = 600) {
   if (!text) return 0;
   const key = `${fontSize}:${fontWeight}:${text}`;
@@ -164,6 +166,7 @@ function cardSvg({ title, subtitle = '', description = '', url = DOMAIN, brand }
 </svg>`;
 }
 
+/** Rasterize a card with the bundled fonts for consistent build output. */
 function rasterize(card) {
   return new Resvg(cardSvg(card), {
     font,
