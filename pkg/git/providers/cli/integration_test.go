@@ -27,7 +27,7 @@ func gitTestEnv(t *testing.T) []string {
 	return append(
 		os.Environ(),
 		"GIT_CONFIG_GLOBAL="+globalCfg,
-		"GIT_CONFIG_SYSTEM="+os.DevNull,
+		"GIT_CONFIG_SYSTEM=/dev/null",
 		"GIT_CONFIG_NOSYSTEM=1",
 		"GIT_TERMINAL_PROMPT=0",
 	)
