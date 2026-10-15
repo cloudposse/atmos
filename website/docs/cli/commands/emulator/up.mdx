@@ -7,15 +7,12 @@ description: Start (or reuse) an emulator's long-running container
 ---
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
-import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 Use this command to start (or reuse) the emulator's long-running container. The container is labeled by its canonical instance address and outlives the `atmos` process, so it stays available for subsequent commands.
 
 By default the emulator **persists its state** across `down`/`up` by bind-mounting a host directory under the XDG cache (`$XDG_CACHE_HOME/atmos/emulator/<instance>`, overridable with `ATMOS_XDG_CACHE_HOME`) onto the emulator's data directory. Pass `--ephemeral` for a throwaway instance, or use [`atmos emulator reset`](/cli/commands/emulator/reset) to wipe persisted state.
 </Intro>
-
-<Experimental />
 
 <CastPlayer title="atmos emulator up --help" src="/casts/screengrabs/atmos-emulator-up--help.cast" static chrome />
 

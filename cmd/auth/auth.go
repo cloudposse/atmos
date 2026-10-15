@@ -98,9 +98,9 @@ func (a *AuthCommandProvider) GetAliases() []internal.CommandAlias {
 }
 
 // IsExperimental returns whether this command is experimental.
-// Auth commands are currently experimental as part of Pro Features.
+// The Auth command and configuration interface is stable.
 func (a *AuthCommandProvider) IsExperimental() bool {
-	return true
+	return false
 }
 
 // GetIdentityFromFlags retrieves the identity flag value, handling the NoOptDefVal quirk.

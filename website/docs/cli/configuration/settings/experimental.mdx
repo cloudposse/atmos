@@ -161,16 +161,31 @@ The environment variable takes precedence over the configuration file setting.
 
 The following features are currently marked as experimental:
 
-| Feature | Command | Description |
-|---------|---------|-------------|
-| AI Assistant | `atmos ai` | AI-powered assistance for infrastructure management |
-| IDE Integration | `atmos lsp` | Language Server Protocol for IDE integration |
-| Devcontainers | `atmos devcontainer` | Development container lifecycle management |
-| Toolchain | `atmos toolchain` | Tool version management and installation |
-| Backend Provisioning | `atmos terraform backend` | Terraform state backend management |
-| Workdir Management | `atmos terraform workdir` | Component working directory management |
-| Affected Components | `atmos list affected` | Identify changes for targeted CI/CD |
+| Feature | Command or setting |
+|---------|--------------------|
+| AI Assistant | `atmos ai` |
+| MCP and language-server integration | `atmos mcp`, `atmos lsp` |
+| Devcontainers | `atmos devcontainer` |
+| Project initialization and scaffolding | `atmos init`, `atmos scaffold` |
+| Native Helm and Kubernetes | `atmos helm`, `atmos kubernetes` |
+| Git operations | `atmos git` |
+| Secrets and store management | `atmos secret`, `atmos store` |
+| Software bill of materials | `atmos sbom` |
+| Backend provisioning | `atmos terraform backend` |
+| Terraform registry cache | `atmos terraform cache` |
+| Terraform migration | `atmos terraform migrate` |
+| Affected components | `atmos list affected` |
+| YAML key delimiter | `settings.yaml.key_delimiter` |
+| Configuration editions | `edition` |
 
+Atmos CI, Auth, Toolchain, Emulator, Source Vendoring, and workdir management are stable and are not blocked by
+`settings.experimental: disable` or `error`. Atmos Pro commands also do not require
+experimental opt-in. CI still requires its normal `ci.enabled` configuration.
+See the [graduation announcement](/changelog/core-features-graduate-to-stable).
+
+Some configuration capabilities carry experimental documentation labels without a
+runtime gate. The [experimental feature inventory](/experimental) includes these
+capabilities as well as commands.
 <Note>
 Experimental features may change significantly or be removed in future releases. We encourage you to try them and provide feedback, but avoid relying on them in production workflows until they are stabilized.
 </Note>
