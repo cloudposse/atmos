@@ -9,12 +9,10 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/validation"
+	"github.com/cloudposse/atmos/pkg/validator"
 )
 
-const (
-	schemaRootField = "(root)"
-	anyOfErrorType  = "number_any_of"
-)
+const schemaRootField = "(root)"
 
 // locateField maps a JSON Schema instance path such as "components.terraform.init" to the
 // source position of the deepest key it can resolve. Keys may themselves contain dots, so each
@@ -77,33 +75,10 @@ func sequenceItem(n *yaml.Node, part string) (key, value *yaml.Node, used int) {
 	return item, item, 1
 }
 
-// meaningfulFailures drops anyOf failures reported at an ancestor of a more specific failure,
-// which only restate that some nested value did not match any alternative.
+// meaningfulFailures drops the anyOf and oneOf failures that only restate a more specific failure at
+// or below the same path, so each bad value is reported once at the value itself.
 func meaningfulFailures(failures []gojsonschema.ResultError) []gojsonschema.ResultError {
-	kept := make([]gojsonschema.ResultError, 0, len(failures))
-	for _, failure := range failures {
-		if failure.Type() == anyOfErrorType && hasDescendantFailure(failures, failure.Field()) {
-			continue
-		}
-		kept = append(kept, failure)
-	}
-	return kept
-}
-
-func hasDescendantFailure(failures []gojsonschema.ResultError, field string) bool {
-	for _, other := range failures {
-		child := other.Field()
-		if field == schemaRootField {
-			if child != schemaRootField {
-				return true
-			}
-			continue
-		}
-		if strings.HasPrefix(child, field+dot) {
-			return true
-		}
-	}
-	return false
+	return validator.FilterCascadeErrors(failures)
 }
 
 var yamlErrorLine = regexp.MustCompile(`line (\d+)`)

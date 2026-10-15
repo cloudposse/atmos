@@ -56,6 +56,15 @@ func (p reportRenderer) line(prefix, text string, style lipgloss.Style) {
 	}
 }
 
+// unwrapped writes one line that is never wrapped, for values such as paths that must stay copyable.
+// It still masks the text and strips terminal control sequences from it.
+//
+//nolint:gocritic // Lip Gloss styles are immutable values, matching its fluent API.
+func (p reportRenderer) unwrapped(prefix, text string, style lipgloss.Style) {
+	text = ansi.Strip(iolib.MaskString(text))
+	ui.Writeln(p.styles.Heading.Render(prefix) + style.Render(text))
+}
+
 func renderHeading(fix, dryRun bool) {
 	mode := "Diagnose"
 	if fix {

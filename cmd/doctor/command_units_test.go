@@ -26,6 +26,7 @@ func TestRenderSummary(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
 		fix    bool
+		opts   renderOptions
 		report diagnostic.Report
 		want   []string
 		absent []string
@@ -72,10 +73,31 @@ func TestRenderSummary(t *testing.T) {
 			absent: []string{"Fixed", "remain"},
 		},
 		{
-			name:   "fix run with nothing to repair keeps the fixed and remaining counts",
+			name:   "fix run with nothing to repair says so and keeps the remaining count",
 			fix:    true,
 			report: diagnostic.Report{Findings: []diagnostic.Finding{{RuleID: "a", Status: "manual"}}},
-			want:   []string{"Fixed 0 findings in 0 files. 1 finding remains."},
+			want:   []string{"Nothing to fix. 1 finding remains."},
+			absent: []string{"Fixed 0", "0 files"},
+		},
+		{
+			name:   "fix run on a clean project has nothing to fix and nothing remaining",
+			fix:    true,
+			report: diagnostic.Report{},
+			want:   []string{"Nothing to fix."},
+			absent: []string{"Fixed", "remain"},
+		},
+		{
+			name: "recovery notices are not counted as remaining findings",
+			fix:  true,
+			report: diagnostic.Report{
+				ChangedFiles: []string{"atmos.yaml"},
+				Findings: []diagnostic.Finding{
+					{RuleID: "a", Status: "fixed"},
+					{RuleID: "recovery", Status: "manual"},
+				},
+			},
+			want:   []string{"Fixed 1 finding in 1 file. 0 findings remain."},
+			absent: []string{"1 finding remains"},
 		},
 		{
 			name: "explains skipped and incomplete checks only",
@@ -111,6 +133,12 @@ func TestRenderSummary(t *testing.T) {
 			want:   []string{"1 repair verified. 1 finding remains."},
 		},
 		{
+			name:   "fix command hint keeps the invocation's scoping flags",
+			report: diagnostic.Report{Findings: []diagnostic.Finding{{RuleID: "a", Status: "available", Fixable: true}}},
+			opts:   renderOptions{FixCommand: "atmos doctor --fix --only=schema"},
+			want:   []string{"Run: atmos doctor --fix --only=schema"},
+		},
+		{
 			name:   "backup location and recovery instructions are shown",
 			report: diagnostic.Report{Backup: filepath.Join("var", "backup-1"), Recovery: "Restore with atmos doctor --recover"},
 			want:   []string{"Backup: " + filepath.Join("var", "backup-1"), "Restore with atmos doctor --recover"},
@@ -123,7 +151,8 @@ func TestRenderSummary(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			stdout, stderr := captureIO(t)
-			require.NoError(t, renderSummary(&tt.report, tt.fix))
+			tt.opts.Fix = tt.fix
+			require.NoError(t, renderSummary(&tt.report, tt.opts))
 			assert.Empty(t, stdout.String())
 			for _, want := range tt.want {
 				assert.Contains(t, plainText(stderr), want)

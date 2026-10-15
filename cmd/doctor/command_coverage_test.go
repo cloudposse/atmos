@@ -104,6 +104,10 @@ func executeDoctorContext(t *testing.T, ctx context.Context, args ...string) err
 	t.Helper()
 	cmd := NewCommand()
 	cmd.SetArgs(args)
+	// Flag errors fire before every flag is parsed, so doctor reads the raw command line for --format.
+	previous := rawArgs
+	rawArgs = func() []string { return args }
+	t.Cleanup(func() { rawArgs = previous })
 	return cmd.ExecuteContext(ctx)
 }
 
@@ -315,11 +319,11 @@ func TestRunDryRunLeavesProjectUntouched(t *testing.T) {
 }
 
 func TestRunCancellationExitsWithSIGINTCode(t *testing.T) {
-	for _, format := range []string{"json", "text"} {
+	for _, format := range []string{"json", "sarif", "text"} {
 		t.Run(format, func(t *testing.T) {
 			isolateAmbientConfig(t)
 			newProjectDir(t, map[string]string{"atmos.yaml": legacyCommandConfig})
-			captureIO(t)
+			stdout, stderr := captureIO(t)
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
 
@@ -329,8 +333,66 @@ func TestRunCancellationExitsWithSIGINTCode(t *testing.T) {
 			require.ErrorAs(t, err, &exitErr)
 			assert.Equal(t, errUtils.ExitCodeSIGINT, exitErr.Code)
 			assert.True(t, exitErr.Silent)
+			if isMachineFormat(format) {
+				// Machine consumers still receive a report that says the run was interrupted.
+				report := decodeReport(t, format, stdout.Bytes())
+				assert.Equal(t, 1, report.Version)
+				assert.Contains(t, report.OperationalError, "Interrupted")
+				return
+			}
+			// Nothing changed on disk, so an interactive Ctrl-C stays quiet.
+			assert.NotContains(t, plainText(stderr), "Operational error")
+			assert.Empty(t, stdout.String())
 		})
 	}
+}
+
+func TestFinishCancelledReportsChangedFilesAndBackup(t *testing.T) {
+	report := diagnostic.Report{
+		Version:      1,
+		ChangedFiles: []string{"atmos.yaml", filepath.Join("stacks", "dev.yaml")},
+		Backup:       filepath.Join("var", "backup-1"),
+		Recovery:     "Restore with the manifest",
+	}
+
+	for _, format := range []string{"text", "json"} {
+		t.Run(format, func(t *testing.T) {
+			stdout, stderr := captureIO(t)
+			input := report
+
+			err := finishCancelled(format, &input, renderOptions{Fix: true})
+
+			var exitErr errUtils.ExitCodeError
+			require.ErrorAs(t, err, &exitErr)
+			assert.Equal(t, errUtils.ExitCodeSIGINT, exitErr.Code)
+			assert.True(t, exitErr.Silent)
+			if format == "json" {
+				got := decodeReport(t, format, stdout.Bytes())
+				assert.Equal(t, report.ChangedFiles, got.ChangedFiles)
+				assert.Equal(t, report.Backup, got.Backup)
+				assert.Contains(t, got.OperationalError, "Interrupted")
+				assert.Contains(t, got.OperationalError, "atmos.yaml")
+				return
+			}
+			output := plainText(stderr)
+			assert.Contains(t, output, "Backup: "+report.Backup)
+			assert.Contains(t, output, "Restore with the manifest")
+			assert.Contains(t, output, "Interrupted")
+			assert.Contains(t, output, "atmos.yaml")
+		})
+	}
+}
+
+func TestFinishCancelledStaysQuietWhenNothingChanged(t *testing.T) {
+	stdout, stderr := captureIO(t)
+	report := diagnostic.Report{Version: 1}
+
+	err := finishCancelled("text", &report, renderOptions{})
+
+	requireExitCode(t, err, errUtils.ExitCodeSIGINT)
+	assert.Empty(t, stdout.String())
+	assert.Empty(t, stderr.String())
+	assert.Empty(t, report.OperationalError, "a silent interruption does not rewrite the report")
 }
 
 // initGitRepository creates a repository in dir with a single commit of its current files.

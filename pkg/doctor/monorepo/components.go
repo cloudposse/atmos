@@ -69,3 +69,25 @@ func Successors(parent string) []string {
 	sort.Strings(repositories)
 	return repositories
 }
+
+// ParentModule finds the longest mapped module that contains a deeper path, such as "eks/cluster"
+// for "eks/cluster/modules/foo", and returns it with the remaining path. It compares whole path
+// segments, so "eks/karpenter" never matches "eks/karpenter-node-pool/x". It reports false when no
+// proper parent is mapped or the path has empty, "." or ".." segments.
+func ParentModule(module string) (parent, subpath string, ok bool) {
+	defer perf.Track(nil, "monorepo.ParentModule")()
+
+	segments := strings.Split(module, "/")
+	for _, segment := range segments {
+		if segment == "" || segment == "." || segment == ".." {
+			return "", "", false
+		}
+	}
+	for n := len(segments) - 1; n > 0; n-- {
+		candidate := strings.Join(segments[:n], "/")
+		if _, mapped := Repository(candidate); mapped {
+			return candidate, strings.Join(segments[n:], "/"), true
+		}
+	}
+	return "", "", false
+}

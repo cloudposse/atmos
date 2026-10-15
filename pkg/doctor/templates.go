@@ -7,6 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/tags"
+	"github.com/cloudposse/atmos/pkg/template"
 )
 
 // templateMarkers returns the left delimiters Atmos renders in a document of this kind.
@@ -100,4 +101,60 @@ func containsTemplate(value string, markers []string) bool {
 		}
 	}
 	return false
+}
+
+// nameTemplatePath is where atmos.yaml configures the template that names stacks.
+var nameTemplatePath = []string{ruleStacks, "name_template"}
+
+// nameTemplateSections are the component sections a stack name template may read. Their values are
+// authored data, and a dynamic value inside one marks its own document as dynamic.
+var nameTemplateSections = []string{"vars", "settings", "env", "metadata"}
+
+// pureNameTemplateFunctions are the functions a stack name template may call and still be evaluated
+// without side effects: text, comparison, and formatting helpers. Environment, file, network, store,
+// and component lookups are deliberately absent.
+var pureNameTemplateFunctions = []string{
+	"and", "or", "not", "eq", "ne", "lt", "le", "gt", "ge", "len", "index", "print", "printf", "println",
+	"lower", "upper", "title", "trim", "trimAll", "trimPrefix", "trimSuffix", "replace", "join",
+	"default", "coalesce", "ternary", "empty", "contains", "hasPrefix", "hasSuffix", "trunc", "substr",
+	"quote", "squote", "cat", "list", "dict",
+}
+
+// pureStackNameTemplate reports whether value is a stacks.name_template that the stack validator can
+// evaluate: it reads only plain stack sections and calls only pure functions. Anything else stays
+// dynamic. The stack validator evaluates the template with the production template engine, so doctor
+// does not render it itself.
+func pureStackNameTemplate(path []string, value string, markers []string) bool {
+	if !slices.Equal(path, nameTemplatePath) || !slices.Equal(markers, []string{tags.DefaultLeftDelim}) || !containsTemplate(value, markers) {
+		return false
+	}
+	return readsOnlyStackSections(value) && callsOnlyPureFunctions(value)
+}
+
+// readsOnlyStackSections reports whether every field the template reads belongs to a plain stack section.
+func readsOnlyStackSections(value string) bool {
+	refs, static := template.StaticFieldRefs(value)
+	if !static {
+		return false
+	}
+	for _, ref := range refs {
+		if len(ref.Path) == 0 || !slices.Contains(nameTemplateSections, ref.Path[0]) {
+			return false
+		}
+	}
+	return true
+}
+
+// callsOnlyPureFunctions reports whether the template calls nothing but allowed functions.
+func callsOnlyPureFunctions(value string) bool {
+	functions, ok := template.StaticFunctionNames(value)
+	if !ok {
+		return false
+	}
+	for _, function := range functions {
+		if !slices.Contains(pureNameTemplateFunctions, function) {
+			return false
+		}
+	}
+	return true
 }

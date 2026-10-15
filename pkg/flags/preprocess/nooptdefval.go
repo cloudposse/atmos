@@ -37,16 +37,39 @@ type FlagInfo interface {
 // when no equals sign is present.
 type NoOptDefValPreprocessor struct {
 	flags []FlagInfo
+	// isCommand reports whether a token is a command name (or alias). When set, a token that names a
+	// command is never folded into the preceding flag, so "--pager terraform plan" keeps "terraform"
+	// as the command. An explicit "--flag=terraform" is unaffected.
+	isCommand func(string) bool
+}
+
+// NoOptDefValOption configures a NoOptDefValPreprocessor.
+type NoOptDefValOption func(*NoOptDefValPreprocessor)
+
+// WithCommandMatcher tells the preprocessor which tokens are command names, so it does not fold
+// a command name into a preceding NoOptDefVal flag. A nil matcher is ignored.
+func WithCommandMatcher(isCommand func(string) bool) NoOptDefValOption {
+	defer perf.Track(nil, "preprocess.WithCommandMatcher")()
+
+	return func(p *NoOptDefValPreprocessor) {
+		if isCommand != nil {
+			p.isCommand = isCommand
+		}
+	}
 }
 
 // NewNoOptDefValPreprocessor creates a new preprocessor with the given flags.
 // The flags slice should contain all flags that may have NoOptDefVal set.
-func NewNoOptDefValPreprocessor(flags []FlagInfo) *NoOptDefValPreprocessor {
+func NewNoOptDefValPreprocessor(flags []FlagInfo, opts ...NoOptDefValOption) *NoOptDefValPreprocessor {
 	defer perf.Track(nil, "preprocess.NewNoOptDefValPreprocessor")()
 
-	return &NoOptDefValPreprocessor{
+	p := &NoOptDefValPreprocessor{
 		flags: flags,
 	}
+	for _, opt := range opts {
+		opt(p)
+	}
+	return p
 }
 
 // Preprocess rewrites space-separated flag syntax to equals syntax
@@ -139,7 +162,11 @@ func (p *NoOptDefValPreprocessor) processFlagArg(arg string, args []string, i in
 func (p *NoOptDefValPreprocessor) hasValueFollowing(args []string, i int) bool {
 	defer perf.Track(nil, "preprocess.NoOptDefValPreprocessor.hasValueFollowing")()
 
-	return i+1 < len(args) && !isFlagArg(args[i+1])
+	if i+1 >= len(args) || isFlagArg(args[i+1]) {
+		return false
+	}
+	// A command name is the next command, not this flag's value.
+	return p.isCommand == nil || !p.isCommand(args[i+1])
 }
 
 // isFlagArg returns true if the arg looks like a flag (starts with - or --).

@@ -15,6 +15,11 @@ const (
 	limitProject limitScope = iota
 	// Configuration limits block repairs of configuration files, whose effective values other layers can change.
 	limitConfig
+	// Stack limits keep the stack validators from running, because an input they read cannot be captured
+	// statically. They do not block repairs of other files.
+	limitStack
+	// Notes record an input for later reporting. They neither block anything nor make the project incomplete.
+	limitNote
 )
 
 // limit records one reason that repairs cannot be verified, with the input that causes it.
@@ -40,13 +45,20 @@ func (p *project) limit(scope limitScope, file string, line int, reason string) 
 
 // limitKind records an unverifiable input found in a document of the given kind. Only
 // configuration documents are layered; an unverifiable stack, workflow, or vendor file cannot change
-// the effective value of a configuration key, so it only limits the checks that read it.
+// the effective value of a configuration key, so it only limits the checks that read it. Stack
+// documents limit stack validation; a templated vendor source or a workflow expression must not.
 func (p *project) limitKind(kind, file string, line int, reason string) {
-	if kind == documentConfig {
+	switch kind {
+	case documentConfig:
 		p.limit(limitConfig, file, line, reason)
-		return
+	case documentStack:
+		p.limit(limitStack, file, line, reason)
 	}
-	p.markIncomplete(kind)
+}
+
+// note records an input without limiting any check.
+func (p *project) note(file string, line int, reason string) {
+	p.limits = append(p.limits, limit{scope: limitNote, file: file, line: line, reason: reason})
 }
 
 // markIncomplete records that an input of this kind could not be captured. Only the stack and
@@ -56,6 +68,54 @@ func (p *project) markIncomplete(kind string) {
 	if kind == documentStack || kind == documentConfig {
 		p.complete = false
 	}
+}
+
+// stackBlocker names the first input that keeps stack validation from running, with its file and line
+// where it has one, so a user can act on it instead of reading a generic statement about static inputs.
+func (e *Engine) stackBlocker(p *project) string {
+	if e.Stacks == nil {
+		return "no stack validator is available"
+	}
+	if reason := p.recordedBlocker(); reason != "" {
+		return reason
+	}
+	if reason := p.dynamicBlocker(); reason != "" {
+		return reason
+	}
+	if reason := p.configLayerBlocker(); reason != "" {
+		return reason
+	}
+	return "an input could not be captured statically"
+}
+
+// recordedBlocker describes the first limit recorded during discovery.
+func (p *project) recordedBlocker() string {
+	for i := range p.limits {
+		if p.limits[i].scope != limitNote {
+			return p.limits[i].describe(p.root)
+		}
+	}
+	return ""
+}
+
+// dynamicBlocker describes the first template or YAML function in a stack or configuration document.
+func (p *project) dynamicBlocker() string {
+	for _, d := range p.docs {
+		if (d.kind == documentStack || d.kind == documentConfig) && len(d.sites) > 0 {
+			return d.sites[0].describe(p.root, d.path)
+		}
+	}
+	return ""
+}
+
+// configLayerBlocker describes the configuration layering that other documents are merged under.
+func (p *project) configLayerBlocker() string {
+	for _, d := range p.docs {
+		if d.kind == documentConfig {
+			return p.layerBlocker(d)
+		}
+	}
+	return ""
 }
 
 // describe renders the limit with the input that causes it.
@@ -163,13 +223,16 @@ func startsWith(path, prefix []string) bool {
 }
 
 // dynamicSites lists the values that only take effect after rendering or execution: custom YAML
-// tags, tag-like strings, and template expressions in any of the document's delimiters.
+// tags, tag-like strings, and template expressions in any of the document's delimiters. A pure
+// stacks.name_template is not one; see pureStackNameTemplate.
 func dynamicSites(node *yaml.Node, markers []string) []dynamicSite {
 	var sites []dynamicSite
 	walk(node, nil, func(n *yaml.Node, path []string) {
 		switch {
 		case strings.HasPrefix(n.Tag, "!") && !strings.HasPrefix(n.Tag, "!!"):
 			sites = append(sites, dynamicSite{path: path, line: n.Line, what: "YAML function " + n.Tag})
+		case pureStackNameTemplate(path, n.Value, markers):
+			// The stack validator evaluates this template itself, with the same functions as the runtime.
 		case containsTemplate(n.Value, markers):
 			sites = append(sites, dynamicSite{path: path, line: n.Line, what: "Template expression"})
 		case strings.HasPrefix(n.Value, "!"):

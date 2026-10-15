@@ -306,7 +306,7 @@ func (e *Engine) verifyProject(ctx context.Context, o *Options, r *Report, candi
 		return err
 	}
 	if migratesDependencies {
-		return recordDependencyVerification(r, &after, o.DryRun)
+		return e.verifyDependencies(ctx, o, r, &after, candidates)
 	}
 	return nil
 }

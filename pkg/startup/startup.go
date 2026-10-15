@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"sync"
 
 	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
@@ -33,12 +34,50 @@ const (
 
 // Configure runs both startup phases back to back for commands that never load configuration.
 // The order is: refine the color profile from parsed flags, synchronize global flags to Viper,
-// initialize the I/O context, reconcile masking, then rebuild the UI and data writers.
+// initialize the I/O context, reconcile masking, rebuild the UI and data writers, then configure the
+// logger from --logs-level, --logs-file, and ATMOS_LOGS_*. An unsupported log level or unusable log
+// file is returned as an error with the usage exit code.
 func Configure(cmd *cobra.Command) error {
 	defer perf.Track(nil, "startup.Configure")()
 
 	PrepareFlags(cmd)
-	return InitializeIO(cmd, nil)
+	if err := InitializeIO(cmd, nil); err != nil {
+		return err
+	}
+	handle, err := ConfigureLogger(cmd)
+	if handle != nil {
+		setLogFile(handle)
+	}
+	return err
+}
+
+var (
+	logFileMu sync.Mutex
+	logFile   *os.File
+)
+
+// setLogFile remembers the log file opened by Configure, closing one left over from an earlier call.
+func setLogFile(handle *os.File) {
+	logFileMu.Lock()
+	defer logFileMu.Unlock()
+	if logFile != nil {
+		_ = logFile.Close()
+	}
+	logFile = handle
+}
+
+// CloseLogFile flushes and closes the log file opened by Configure. It is safe to call when none is open.
+func CloseLogFile() {
+	defer perf.Track(nil, "startup.CloseLogFile")()
+
+	logFileMu.Lock()
+	defer logFileMu.Unlock()
+	if logFile == nil {
+		return
+	}
+	_ = logFile.Sync()
+	_ = logFile.Close()
+	logFile = nil
 }
 
 // PrepareFlags applies parsed global flags before anything reads them: the early color profile

@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -30,7 +31,7 @@ func TestCompilerDiagnosticSourceAndFormats(t *testing.T) {
 		t.Run(format, func(t *testing.T) {
 			stdout, stderr := captureIO(t)
 			ui.SetColorProfile(termenv.Ascii)
-			require.NoError(t, render(&r, format, false))
+			require.NoError(t, render(&r, format, renderOptions{}))
 			output := stderr.String()
 			require.Empty(t, stdout.String())
 			require.NotContains(t, output, "\x1b")
@@ -130,7 +131,7 @@ func TestCompilerMasksBeforeClippingAndWrapping(t *testing.T) {
 func TestDryRunDoesNotClaimUnverifiedRepairs(t *testing.T) {
 	_, stderr := captureIO(t)
 	r := diagnostic.Report{DryRun: true, OperationalError: "verification stopped", Findings: []diagnostic.Finding{{Status: "available", Fixable: true}}}
-	require.NoError(t, renderSummary(&r, true))
+	require.NoError(t, renderSummary(&r, renderOptions{Fix: true}))
 	output := plainText(stderr)
 	assert.Contains(t, output, "0 repairs verified")
 	assert.NotContains(t, output, "atmos doctor --fix")
@@ -161,4 +162,50 @@ func TestCompilerLongLocationAndAbsentLine(t *testing.T) {
 	}
 	assert.Contains(t, output, "config.yaml:99")
 	assert.NotContains(t, output, "^")
+}
+
+func TestUnwrappedLineKeepsLongPathsOnOneLineAndMasks(t *testing.T) {
+	_, stderr := captureIO(t)
+	p := newReportRenderer()
+	p.width = 20
+	path := filepath.Join("home", "user", ".cache", "atmos", "doctor", "backups", "20261015T103000Z")
+
+	p.unwrapped("Backup: ", path, p.styles.Body)
+
+	lines := strings.Split(strings.TrimRight(plainText(stderr), "\n"), "\n")
+	require.Len(t, lines, 1, "the backup path must stay on one line so it can be copied")
+	assert.Equal(t, "Backup: "+path, lines[0])
+}
+
+func TestFixCommandPreservesScopingFlags(t *testing.T) {
+	newCommand := func(t *testing.T, args ...string) *cobra.Command {
+		t.Helper()
+		cmd := NewCommand()
+		// Stand in for the root's persistent flags, which Cobra merges into the command's flag set.
+		cmd.Flags().StringSlice("config", nil, "")
+		cmd.Flags().String("base-path", "", "")
+		cmd.Flags().String("profile", "", "")
+		cmd.Flags().Bool("verbose", false, "")
+		require.NoError(t, cmd.ParseFlags(args))
+		return cmd
+	}
+
+	for _, tt := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"no flags", nil, "atmos doctor --fix"},
+		{"output flags are dropped", []string{"--format=rich", "--dry-run", "--fix"}, "atmos doctor --fix"},
+		{"scoping flags are kept", []string{"--only=schema", "--offline", "--affected", "--base=main"}, "atmos doctor --fix --affected --base=main --offline --only=schema"},
+		{"slice flags repeat per element", []string{"--only=schema,imports", "--config=a.yaml", "--config=b.yaml"}, "atmos doctor --fix --config=a.yaml --config=b.yaml --only=schema --only=imports"},
+		{"array flags repeat per element", []string{"--exclude=vendor/**", "--exclude=dist/**"}, "atmos doctor --fix '--exclude=vendor/**' '--exclude=dist/**'"},
+		{"values with spaces are quoted", []string{"--base-path=my project", "--profile=prod"}, "atmos doctor --fix '--base-path=my project' --profile=prod"},
+		{"explicit false booleans are preserved", []string{"--offline=false", "--verbose"}, "atmos doctor --fix --offline=false --verbose"},
+		{"flags set to their default value are still kept", []string{"--fail-on=error"}, "atmos doctor --fix --fail-on=error"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, fixCommand(newCommand(t, tt.args...)))
+		})
+	}
 }
