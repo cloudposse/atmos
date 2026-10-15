@@ -24,10 +24,9 @@ reviews:
       instructions: "Apply when changes introduce new functionality that causes breaking changes requiring the user to update their configuration."
     - label: "no-release"
       instructions: "Apply this label when the PR contains changes only to documentation, website content, or other non-Go code. Changes that do not affect the Go code or the application functionality fall under this category."
-  # Generated CLI recordings are validated by the cast tooling. Keep source, docs,
-  # and golden snapshots in review without spending the file limit on recordings.
-  path_filters:
-    - "!website/static/casts/screengrabs/*.cast"
+  #path_filters:
+  #  - "!dist/**"
+  #  - "src/**"
   #path_instructions:
   #  - path: "**/*.js"
   #    instructions: "Check for consistent coding styles and ES6+ syntax adherence."
