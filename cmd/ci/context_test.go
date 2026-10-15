@@ -64,6 +64,19 @@ func TestCIContextCommand(t *testing.T) {
 	require.NotContains(t, paths, "contributor/repo")
 	require.NotContains(t, paths, "9007199254740993")
 
+	// An oversized inventory must fail without writing a partial JSON result.
+	largeEvent := `{"items":[` + strings.Repeat("null,", contextMaxFields-1) + `null]}`
+	require.NoError(t, os.WriteFile(eventPath, []byte(largeEvent), 0o600))
+	output.Reset()
+	limited := newContextCommand()
+	limited.SetContext(t.Context())
+	require.NoError(t, limited.Flags().Set("paths", "true"))
+	require.ErrorIs(t, runCIContext(limited, nil), errContextTooManyFields)
+	require.Empty(t, output.String())
+	// The limit applies only to the path inventory, not the native snapshot.
+	require.NoError(t, json.Unmarshal([]byte(run()), &document))
+	require.JSONEq(t, largeEvent, string(document.CI.Event.Data))
+
 	// Inspection preserves failures as evidence; it does not claim a policy passed.
 	require.NoError(t, os.WriteFile(eventPath, []byte(`{`), 0o600))
 	require.NoError(t, json.Unmarshal([]byte(run()), &document))
@@ -122,4 +135,25 @@ func TestCIContextPaths(t *testing.T) {
 	snapshot.Event.Data = json.RawMessage(strings.Repeat(`{"nested":`, 65) + `null` + strings.Repeat(`}`, 65))
 	_, err = ciContextPaths(snapshot)
 	require.ErrorIs(t, err, errContextTooDeep)
+}
+
+func TestCIContextFieldLimit(t *testing.T) {
+	for _, count := range []int{contextMaxFields - 1, contextMaxFields} {
+		fields := []ciContextField{}
+		err := walkCIContext(make([]any, count), "ci", 0, &fields)
+		if count < contextMaxFields {
+			require.NoError(t, err)
+			require.Len(t, fields, contextMaxFields, "the root counts toward the limit")
+		} else {
+			require.ErrorIs(t, err, errContextTooManyFields)
+			require.Len(t, fields, contextMaxFields, "the inventory must never grow beyond its limit")
+		}
+	}
+
+	snapshot := &policy.CISnapshot{Event: policy.Dataset{Data: json.RawMessage(
+		`{"items":[` + strings.Repeat("null,", contextMaxFields-1) + `null]}`,
+	)}}
+	fields, err := ciContextPaths(snapshot)
+	require.ErrorIs(t, err, errContextTooManyFields)
+	require.Nil(t, fields, "an incomplete inventory must not be returned")
 }

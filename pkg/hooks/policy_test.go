@@ -87,21 +87,30 @@ func TestPolicyHookFailuresBlock(t *testing.T) {
 }
 
 func TestPolicyHookEvaluationFailureBlocksWithoutLeakingInput(t *testing.T) {
-	definition := json.RawMessage(`{"kind":"command","command":"true"}`)
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+	definition, err := json.Marshal(map[string]any{"kind": "step", "type": "http", "with": map[string]any{"url": server.URL}})
+	require.NoError(t, err)
 	run := func(h *Hooks) error {
 		return h.RunAll(AfterHelmApply, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, nil, nil)
 	}
 
 	broken := policyTestHooks(AfterHelmApply, definition)
 	broken.policyBundle.Rules[0].Expression = "input.missing.field == 'x'"
-	err := run(broken)
+	err = run(broken)
 	require.ErrorIs(t, err, errUtils.ErrPolicyEvaluation)
 	require.ErrorContains(t, err, "input details withheld")
 	require.NotContains(t, err.Error(), "missing.field", "evaluation errors must not echo expression or input details")
+	require.Zero(t, calls.Load(), "evaluation failure must block hook execution")
 
 	// A rule that evaluates cleanly never reports an evaluation failure.
 	healthy := policyTestHooks(AfterHelmApply, definition)
-	require.NotErrorIs(t, run(healthy), errUtils.ErrPolicyEvaluation)
+	require.NoError(t, run(healthy))
+	require.EqualValues(t, 1, calls.Load(), "a healthy policy must execute its required hook")
 }
 
 func TestPolicyHookApprovalRequiresVerifyingProvider(t *testing.T) {
@@ -120,7 +129,7 @@ func TestPolicyHookApprovalRequiresVerifyingProvider(t *testing.T) {
 
 	// A rule that does not match never needs a provider.
 	h.policyBundle.Rules[0].Expression = "false"
-	require.NotErrorIs(t, run(), errUtils.ErrPolicyInputUnavailable)
+	require.NoError(t, run())
 }
 
 func policyTestHooks(event HookEvent, definition json.RawMessage) *Hooks {

@@ -89,7 +89,9 @@ can have different fields and null values. See the [GitHub event reference](/pol
 Guard optional fields and check array lengths before indexing them.
 
 Paths omit values, but field names themselves can contain private information. The explorer rejects
-nesting deeper than 64 levels rather than silently truncating its inventory.
+nesting deeper than 64 levels or inventories larger than 10,000 entries (including containers).
+Either limit returns an error without emitting a partial inventory. These limits apply to `--paths`;
+the native snapshot remains available without that flag.
 
 ## Related
 

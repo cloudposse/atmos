@@ -14,9 +14,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/policy"
 )
 
-const contextMaxNestingDepth = 64
+const (
+	contextMaxNestingDepth = 64
+	contextMaxFields       = 10_000
+)
 
-var errContextTooDeep = errors.New("CI context exceeds the field explorer's maximum nesting depth of 64")
+var (
+	errContextTooDeep       = errors.New("CI context exceeds the field explorer's maximum nesting depth of 64")
+	errContextTooManyFields = errors.New("CI context exceeds the field explorer's maximum field count of 10000")
+)
 
 func newContextCommand() *cobra.Command {
 	command := &cobra.Command{
@@ -76,15 +82,20 @@ func ciContextPaths(snapshot *policy.CISnapshot) ([]ciContextField, error) {
 		return nil, err
 	}
 	fields := []ciContextField{}
-	err = walkCIContext(value, "ci", 0, &fields)
-	return fields, err
+	if err := walkCIContext(value, "ci", 0, &fields); err != nil {
+		return nil, err
+	}
+	return fields, nil
 }
 
 func walkCIContext(value any, path string, depth int, fields *[]ciContextField) error {
-	// Bound output growth for deeply nested, provider-supplied JSON. Never
+	// Bound output growth for deeply nested or broad provider-supplied JSON. Never
 	// silently truncate and imply that the field inventory is complete.
 	if depth > contextMaxNestingDepth {
 		return errContextTooDeep
+	}
+	if len(*fields) >= contextMaxFields {
+		return errContextTooManyFields
 	}
 	*fields = append(*fields, ciContextField{Path: path, Type: ciContextType(value)})
 	switch node := value.(type) {
