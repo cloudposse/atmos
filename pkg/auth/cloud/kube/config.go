@@ -354,7 +354,7 @@ func DefaultKubeconfigPath() (string, error) {
 }
 
 // expandKubeconfigPath expands a kubeconfig path so configs stay portable across
-// users and machines. Expansion happens in three steps:
+// users and machines. Expansion happens in four steps:
 //
 //  1. Environment variables ($VAR, ${VAR}) are substituted. The documented
 //     portable form ${HOME}/$HOME resolves via os.UserHomeDir so it works on
@@ -371,6 +371,8 @@ func DefaultKubeconfigPath() (string, error) {
 //     left unchanged.
 //  3. A leading ~ (or ~/) resolves to the current user's home directory; a bare
 //     ~ maps to the home directory itself.
+//  4. The result is cleaned to an OS-native path (filepath.Clean), so a config
+//     written with forward slashes yields backslashes on Windows.
 //
 // Only $VAR/${VAR} syntax is expanded; Windows %VAR% is left as-is.
 func expandKubeconfigPath(path string) (string, error) {
@@ -410,12 +412,16 @@ func expandKubeconfigPath(path string) (string, error) {
 			return "", fmt.Errorf("%w: %w", errUtils.ErrKubeconfigPath, err)
 		}
 		if path == "~" {
-			return home, nil
+			path = home
+		} else {
+			path = filepath.Join(home, path[2:])
 		}
-		return filepath.Join(home, path[2:]), nil
 	}
 
-	return path, nil
+	// Normalize to an OS-native, cleaned path so the result is consistent
+	// regardless of how the config or env value was written (e.g. forward
+	// slashes in a committed config become backslashes on Windows).
+	return filepath.Clean(path), nil
 }
 
 // expandPathEnvVars substitutes $VAR/${VAR} references in a path. HOME resolves
