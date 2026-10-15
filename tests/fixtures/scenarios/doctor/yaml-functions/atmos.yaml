@@ -1,3 +1,5 @@
+base_path: ./
+
 stacks:
   base_path: stacks
   included_paths: ['**/*']
