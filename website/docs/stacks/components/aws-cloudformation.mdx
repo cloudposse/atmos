@@ -248,11 +248,15 @@ declare additional named targets under `provision.targets`, selected with
 <dl>
   <dt>`kind: aws/s3`</dt>
   <dd>
-    Uploads the template to S3 and stops — a publish-only target, useful for a
-    review step or a template too large to pass inline. This same target is
-    also used automatically to package (upload) any template that exceeds
-    CloudFormation's 51,200-byte inline size limit, whichever target is
-    selected for the deploy. `bucket` and `region` are both required: `region`
+    Uploads the template to S3 without deploying a stack. Selecting the
+    `packaged` target below with `--target packaged` only uploads the template,
+    for example for a review step.
+
+    During a direct deployment, Atmos uses the S3 target as a packaging
+    destination when the template exceeds CloudFormation's 51,200-byte inline
+    size limit, then deploys the uploaded template. To deploy, omit `--target`
+    when no `provision.default` is set, or select a direct
+    `kind: aws/cloudformation` target. `bucket` and `region` are both required: `region`
     builds the `https://` S3 URL passed as `CreateChangeSet`'s `TemplateURL`
     (AWS rejects a bare `s3://` URI there), so it can't be left to be inferred
     later.
