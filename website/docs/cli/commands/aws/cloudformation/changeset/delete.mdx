@@ -30,6 +30,19 @@ atmos aws cloudformation changeset delete <component> --stack <stack> --changese
 atmos aws cloudformation changeset delete vpc -s plat-ue2-dev --changeset-name vpc-2026-08-25
 ```
 
+Deleting the last unexecuted CREATE changeset also leaves its `REVIEW_IN_PROGRESS`
+stack placeholder intact. The placeholder still consumes stack quota. If you
+are abandoning the stack, first confirm that no pending changesets are needed,
+then explicitly run [`atmos aws cloudformation delete`](/cli/commands/aws/cloudformation/delete):
+
+```shell
+atmos aws cloudformation delete vpc -s plat-ue2-dev
+```
+
+That command asks for confirmation and waits for stack deletion to finish.
+Automatic placeholder cleanup applies only to placeholders created by the
+current `plan` or `diff` preview; deleting a named changeset never deletes its stack.
+
 ## Flags
 
 <dl>
