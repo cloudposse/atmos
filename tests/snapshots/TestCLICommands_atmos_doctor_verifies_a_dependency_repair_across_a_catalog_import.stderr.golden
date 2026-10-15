@@ -11,7 +11,7 @@ warning[component-dependencies]: Legacy component dependency declaration
 12 |         depends_on:
 13 |           - component: vpc
    |           ^
-14 | 
+14 |
    |
    = repair: Automatic fix available
    = note: Candidate verified; dry run left the source unchanged

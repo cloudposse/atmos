@@ -209,3 +209,24 @@ func TestFixCommandPreservesScopingFlags(t *testing.T) {
 		})
 	}
 }
+
+// TestCompilerBlankSourceLineHasNoTrailingSpace keeps excerpt lines free of trailing whitespace. A blank
+// source line in the excerpt renders as its line number and the gutter bar only.
+func TestCompilerBlankSourceLineHasNoTrailingSpace(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "dev.yaml"), []byte("vars:\n  stage: dev\n\n   \ncomponents: {}\n"), 0o600))
+	r := diagnostic.Report{SourceRoot: root, Findings: []diagnostic.Finding{{
+		File: "dev.yaml", Line: 3, Column: 0, RuleID: "schema", Severity: validation.SeverityError,
+		Message: "Problem", Status: "manual",
+	}}}
+	_, stderr := captureIO(t)
+	ui.SetColorProfile(termenv.Ascii)
+	require.NoError(t, render(&r, "text", renderOptions{}))
+
+	output := stderr.String()
+	require.Contains(t, output, "3 |\n")
+	require.Contains(t, output, "4 |\n")
+	for _, line := range strings.Split(output, "\n") {
+		assert.Equal(t, strings.TrimRight(line, " "), line, "line has trailing whitespace: %q", line)
+	}
+}
