@@ -397,8 +397,16 @@ func checkMetadataChanges(metadata *workdir.WorkdirMetadata, sourceSpec *schema.
 		return true, fmt.Sprintf("Source version changed (%s → %s)", oldVer, newVer)
 	}
 
-	if sourceSpec.Uri != metadata.SourceURI {
-		return true, fmt.Sprintf("Source URI changed (%s → %s)", metadata.SourceURI, sourceSpec.Uri)
+	// Source retains the declaration used to stage the workdir. SourceURI is
+	// provenance and may have its query (including a Git ref) redacted. Comparing
+	// against that receipt would re-fetch unchanged pinned sources on every run.
+	declaredSource := metadata.Source
+	if declaredSource == "" {
+		declaredSource = metadata.SourceURI // Compatibility with older metadata.
+	}
+	if sourceSpec.Uri != declaredSource {
+		return true, fmt.Sprintf("Source URI changed (%s → %s)",
+			downloader.RedactSource(declaredSource), downloader.RedactSource(sourceSpec.Uri))
 	}
 
 	return false, ""
