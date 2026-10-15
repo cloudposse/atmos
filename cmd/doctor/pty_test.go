@@ -101,7 +101,8 @@ func TestDoctorPTYStreamingResizeAndCancellation(t *testing.T) {
 	require.NoError(t, <-received)
 	require.Equal(t, 130, exit.ExitCode(), output.String())
 	require.Contains(t, output.String(), "Project inputs")
-	require.Contains(t, output.String(), "Repository check canceled")
+	require.Contains(t, output.String(), "Repository check")
+	require.Contains(t, output.String(), "canceled")
 	require.Contains(t, output.String(), "1 finding (none fixable)")
 	require.NotContains(t, output.String(), "/0 complete")
 }

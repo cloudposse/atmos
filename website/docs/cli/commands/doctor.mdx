@@ -50,7 +50,7 @@ atmos doctor --offline
   <dt>`--dry-run`</dt>
   <dd>Stage and verify repairs without writing files or backups. Requires `--fix`.</dd>
   <dt>`--format`</dt>
-  <dd>Choose `text` (default), `rich`, `json`, or `sarif`.</dd>
+  <dd>Choose `text` (default), `rich`, `json`, or `sarif`. Both human formats show compiler-style diagnostics with source excerpts.</dd>
   <dt>`--fail-on`</dt>
   <dd>Fail on `error` (default), `warning`, or `none`. Operational failures always fail. Notice-level findings never count toward the threshold.</dd>
   <dt>`--only`</dt>
@@ -153,9 +153,18 @@ block a change to `atmos.yaml`. Every blocked finding names the file and line, o
 that blocked it and tells you how to make the change by hand. A finding that no repair can
 resolve never suggests running `--fix`.
 
-Stack naming and dependency migrations are manual. In particular, legacy missing
-dependencies can succeed with a warning, while modern required dependencies fail.
-Changing these fields based only on schema validity would change behavior.
+Doctor automatically moves component-level Terraform `settings.depends_on` lists to
+`dependencies.components` when each entry contains a literal `component` and an
+optional literal `stack`. It preserves comments and unrelated settings. This repair
+intentionally adopts modern required-dependency semantics: missing or disabled targets
+and dependency cycles are reported as errors, even when the migration itself succeeds.
+`--fix --dry-run` reports errors from the proposed configuration without changing files.
+These errors remain visible after repairs even with `--only=deprecations`.
+
+Dependency repairs require complete static inputs so doctor can validate the resulting
+production dependency graph. Legacy context selectors, file/folder entries, other
+legacy shapes, and declarations that already contain `dependencies.components` require
+manual review. Stack naming migrations also remain manual.
 
 ## Source repository health
 
@@ -280,15 +289,23 @@ reported for manual review, and repairs in other files still proceed.
 
 ## Output and exit codes
 
-Human progress uses stderr. Terminals show live spinners and persistent completed
-rows; non-terminal output uses plain status lines. Each open finding is listed once,
-with its location, rule, severity, status, and the reason or remediation. JSON and SARIF
-use stdout and suppress live rendering. JSON includes fix decisions, changed files,
+The default output shows each finding with its severity, rule, file location, and a
+YAML source excerpt with a caret at the reported location. Repair status, suggested
+actions, and explanations appear on separate lines. `--format=rich` uses the same
+presentation. Themes and `--no-color` apply to both formats.
+
+Live progress is replaced by concise phase summaries. The final report includes
+skipped or incomplete checks, recovery instructions when applicable, and a single
+`atmos doctor --fix` suggestion when repairs are available. A dry run reports verified
+repairs separately from applied changes. Missing source files do not hide findings.
+
+Human reports and progress use stderr. Non-terminal output uses the same report
+layout without animation. JSON and SARIF use stdout and suppress human output. JSON includes fix decisions, changed files,
 verification coverage, backup location, `dry_run`, and `operational_error` for operational
 and invocation failures.
 
 Without `--fix`, the summary counts what remains and what a repair run could apply, for
-example `3 findings (2 fixable). Run atmos doctor --fix to apply 2.` With `--fix`, it
+example `3 findings (2 fixable).`, followed by `Run: atmos doctor --fix`. With `--fix`, it
 reports what it applied, for example `Fixed 2 findings in 1 file. 1 finding remains.` A dry
 run reports the repairs it verified, for example `2 repairs verified. 3 findings remain.`
 

@@ -10,7 +10,9 @@ fields, hook events, explicit Terraform reconfigure booleans, and archived
 component-monorepo sources whose successor repository is verified identical at the same
 version (`component-monorepo`). A repair is blocked by
 the inputs that can change what it means (relevance-scoped), not by any dynamic value
-anywhere in the project. Dependency and stack naming migrations remain manual. Remote schemas and
+anywhere in the project. Simple component-level Terraform dependency lists also migrate
+to modern required semantics, as an explicit exception to behavior preservation.
+Stack naming and unsupported dependency shapes remain manual. Remote schemas and
 external schema references remain incomplete until their input closure can be captured.
 GitHub and configured GitHub Enterprise metadata are supported; other source hosts
 report incomplete coverage.
@@ -19,7 +21,7 @@ report incomplete coverage.
 
 Provide a polished project health command combining existing validation,
 deprecation detection, and modernization guidance. `atmos doctor` diagnoses;
-`atmos doctor --fix` applies verified, behavior-preserving migrations. Every run
+`atmos doctor --fix` applies verified migrations with the dependency-semantics exception below. Every run
 explains what was checked, fixed, skipped, or could not be verified.
 
 The initial release covers built-in project checks. Environment diagnostics,
@@ -36,6 +38,17 @@ precedents. Warnings are advisory by default.
 Schema validity is necessary but insufficient. A valid configuration can select
 a different Terraform workspace, change dependency requirements, or override an
 inherited value. Every fixer must pass two independent gates.
+
+**Dependency migration policy:** simple component-level Terraform `settings.depends_on`
+lists containing literal `component` and optional `stack` fields move to
+`dependencies.components`. This intentionally adopts modern required semantics rather
+than preserving legacy tolerance or implicit context matching. Report resulting graph
+errors (including missing/unavailable targets and cycles) without rejecting the migration.
+Dry runs report projected errors and write nothing. Comments, target names, explicit stack
+names, and unrelated YAML must remain unchanged. Reject new schema or unrelated stack
+errors. Mixed old/new declarations, context selectors, file/folder entries, and incomplete
+static source closures remain manual. The equivalence requirements below apply to other
+repairs and future dependency variants that claim to preserve behavior.
 
 ### Gate A: migration contract tests
 
@@ -158,7 +171,7 @@ failures, and include verification coverage and backup location.
   for recognized semantic values. Ordinary flag `type` is not deprecated.
 - Recognized legacy hook-event spelling.
 - Explicit Terraform `init_run_reconfigure`, using current runtime semantics.
-- Naming/dependency transformations only after both verification gates pass.
+- Naming transformations require both equivalence gates; dependency transformations follow the explicit modern-semantics policy above.
 - Advisory legacy CI actions.
 - `component-monorepo`: component sources in the archived `cloudposse/terraform-aws-components`
   monorepo move to their `cloudposse-terraform-components` repository at the same version,
@@ -287,7 +300,8 @@ Production-consumer tests cover semantic command fields, hook event matching, an
 Terraform reconfigure policy. Negative controls change semantic targets, hook events,
 unrelated values, and types; custom schemas that reject a migration prevent writes.
 The dependency contract test confirms the legacy missing-target success versus modern
-required-target error, so no dependency fixer is enabled.
+required-target error. The simple-list fixer deliberately adopts modern required semantics
+and reports those errors; it does not claim legacy behavior equivalence.
 
 Recovery tests cover Git worktrees and unavailable Git, dirty/staged/untracked/ignored
 files, exact backup bytes and permissions, concurrent source changes, partial writes,

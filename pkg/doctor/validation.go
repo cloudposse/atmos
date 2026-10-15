@@ -33,6 +33,7 @@ type projectCheck struct {
 // keeps the overall result operational.
 func (e *Engine) checkProjectValidators(ctx context.Context, p *project, o *Options, r *Report, v validator.Validator) error {
 	checks := []projectCheck{
+		{ruleDependencies, "Dependencies", func() error { return e.checkDependencies(ctx, p, o, r) }},
 		{ruleStacks, "Static stacks", func() error { return e.checkStacks(ctx, p, o, r) }},
 		{ruleGitHubActions, "GitHub Actions", func() error { return e.checkActions(ctx, p, o, r) }},
 		{ruleEditorConfig, "EditorConfig", func() error { return e.checkEditorConfig(p, o, r) }},

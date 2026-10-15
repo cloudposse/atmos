@@ -133,6 +133,11 @@
       "files": 2
     },
     {
+      "id": "component-dependencies",
+      "status": "passed",
+      "files": 2
+    },
+    {
       "id": "modernization",
       "status": "passed",
       "files": 2
@@ -141,6 +146,11 @@
       "id": "component-monorepo",
       "status": "passed",
       "files": 2
+    },
+    {
+      "id": "dependencies",
+      "status": "passed",
+      "files": 1
     },
     {
       "id": "stacks",

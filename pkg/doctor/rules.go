@@ -103,6 +103,10 @@ func oneOfComponentType(value string) bool {
 // Only the exact replacement key conflicts: a sibling such as init.pass_vars does not.
 func migrationConflict(n *yaml.Node, e *edit) string {
 	switch e.kind {
+	case ruleComponentDependencies:
+		if mappingValue(n, "depends_on") != nil || mappingValue(mappingValue(n, "dependencies"), "components") != nil {
+			return "Legacy and modern dependency declarations coexist; decide which dependencies to keep before migrating"
+		}
 	case ruleCommandProvides:
 		if mappingValue(n, "provides") != nil {
 			return "provides is already declared, so " + e.old + " is redundant; keep the value you intend and delete the other by hand"
@@ -185,7 +189,7 @@ func validateDocumentSchema(d *document, r *Report, v validator.Validator) {
 func deprecationFinding(d *document, field validator.DeprecatedField) Finding {
 	f := Finding{RuleID: ruleDeprecatedField, Category: categoryDeprecations, Severity: validation.SeverityWarning, File: d.path, Path: field.Path, Message: field.Path + " is deprecated", Remediation: "Use " + field.Replacement, Status: statusManual, Documentation: "https://atmos.tools/cli/commands/doctor"}
 	if strings.Contains(field.Path, "depends_on") {
-		f.Reason = "Legacy and modern dependency handling differ for missing targets, optional edges, and context matching; automatic migration has not passed the behavioral contract"
+		f.Reason = "Automatic migration supports component-level Terraform lists containing literal component and optional stack names; review legacy context selectors and other dependency shapes manually"
 	}
 	if strings.HasSuffix(field.Path, "name_pattern") {
 		f.Status = statusVerificationIncomplete
@@ -234,6 +238,9 @@ func findCandidate(d *document, n *yaml.Node, path []string) *edit {
 	if candidate == nil {
 		candidate = reconfigureCandidate(d, n, path)
 	}
+	if candidate == nil {
+		candidate = dependencyCandidate(d, n, path)
+	}
 	if isLegacyHook(d, n, path) {
 		candidate = &edit{doc: d, path: path, kind: ruleHookEvent, value: strings.ReplaceAll(n.Value, "-", dot), from: n.Value}
 	}
@@ -262,6 +269,14 @@ func assessCandidate(p *project, r *Report, candidate *edit) bool {
 			f.Status = statusManual
 			f.Reason = conflict
 			f.Remediation = candidate.conflictRemediation()
+		}
+	}
+	if candidate.kind == ruleComponentDependencies {
+		old := nodeAt(n, []string{"settings", "depends_on"})
+		f.Line, f.Column = old.Line, old.Column
+		f.Path = displayNodePath(append(append([]string{}, path...), "settings", "depends_on"))
+		if f.Fixable {
+			f.Reason = "Migrates to modern required dependencies; missing or unavailable targets become errors"
 		}
 	}
 	index := replaceDeprecation(r, d, &f)

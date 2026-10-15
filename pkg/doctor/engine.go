@@ -226,6 +226,7 @@ func (e *Engine) checkDocuments(ctx context.Context, p *project, o *Options, r *
 		if scanErr != nil {
 			return nil, scanErr
 		}
+		planned = e.requireDependencyValidation(p, r, planned)
 		edits = append(edits, planned...)
 		checked++
 		status := statusPassed
@@ -240,6 +241,7 @@ func (e *Engine) checkDocuments(ctx context.Context, p *project, o *Options, r *
 }
 
 func finishReport(r *Report, root string, err error) {
+	r.SourceRoot = root
 	if err != nil {
 		r.OperationalError = err.Error()
 	}
@@ -269,7 +271,7 @@ func (e *Engine) Run(ctx context.Context, o Options) (Report, error) {
 func appendScanCoverage(o *Options, r *Report, checked int) {
 	for _, rule := range Rules() {
 		switch rule.ID {
-		case ruleSchema, ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure, ruleModernization, ruleComponentMonorepo, ruleImports:
+		case ruleComponentDependencies, ruleSchema, ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure, ruleModernization, ruleComponentMonorepo, ruleImports:
 			if enabled(o, rule.ID, rule.Category) {
 				status := checkStatus(r, rule.ID)
 				if status == statusPassed && checkHasFindings(r, rule.ID) {

@@ -245,13 +245,20 @@ func (e *Engine) recheck(ctx context.Context, p *project, o *Options, r *Report)
 	fresh.Observe = nil
 	recheckOptions := *o.rediscoveryOptions()
 	recheckOptions.Fix = false
+	for i := range r.Findings {
+		finding := &r.Findings[i]
+		if finding.RuleID == ruleComponentDependencies && finding.Status == statusFixed && len(recheckOptions.Only) > 0 {
+			recheckOptions.Only = append(append([]string{}, recheckOptions.Only...), ruleDependencies)
+			break
+		}
+	}
 	checked, err := fresh.Run(ctx, recheckOptions)
 	if err != nil {
 		return err
 	}
 	retainDecisions(p, r, &checked)
 	for _, check := range r.Checks {
-		if check.ID == "semantic-verification" {
+		if check.ID == "semantic-verification" || check.ID == "candidate-dependencies" {
 			checked.Checks = append(checked.Checks, check)
 		}
 	}
@@ -273,11 +280,11 @@ func (f sourceOverlay) ReadFile(path string) ([]byte, error) {
 	return f.FileSystem.ReadFile(path)
 }
 
-func (e *Engine) verifyProject(ctx context.Context, o *Options, candidates []candidate) error {
+func (e *Engine) verifyProject(ctx context.Context, o *Options, r *Report, candidates []candidate) error {
 	options := *o.rediscoveryOptions()
 	options.Fix = false
 	options.DryRun = false
-	options.Only = []string{ruleSchema, ruleImports, ruleStacks}
+	options.Only = []string{ruleSchema, ruleImports, ruleStacks, ruleDependencies}
 	baselineEngine := *e
 	baselineEngine.Observe = nil
 	before, err := baselineEngine.Run(ctx, options)
@@ -294,6 +301,18 @@ func (e *Engine) verifyProject(ctx context.Context, o *Options, candidates []can
 	if err != nil {
 		return err
 	}
+	migratesDependencies := hasDependencyMigration(candidates)
+	if err := verifyProjectErrors(&before, &after, migratesDependencies); err != nil {
+		return err
+	}
+	if migratesDependencies {
+		return recordDependencyVerification(r, &after, o.DryRun)
+	}
+	return nil
+}
+
+// verifyProjectErrors permits only the intentional dependency-semantics change.
+func verifyProjectErrors(before, after *Report, migratesDependencies bool) error {
 	errorsBefore := map[string]int{}
 	key := func(f Finding) string { return f.RuleID + "\x00" + f.File + "\x00" + f.Path + "\x00" + f.Message }
 	for i := range before.Findings {
@@ -305,6 +324,9 @@ func (e *Engine) verifyProject(ctx context.Context, o *Options, candidates []can
 	for i := range after.Findings {
 		f := &after.Findings[i]
 		if f.Severity != validation.SeverityError {
+			continue
+		}
+		if migratesDependencies && f.RuleID == ruleDependencies {
 			continue
 		}
 		k := key(*f)
@@ -442,7 +464,7 @@ func retainDecisions(p *project, r, checked *Report) {
 
 func (e *Engine) verifyCandidateProject(ctx context.Context, o *Options, r *Report, candidates []candidate) (bool, error) {
 	e.emit(Event{Phase: "Verify", Label: "Complete candidate project", Total: len(candidates) + 1})
-	if err := e.verifyProject(ctx, o, candidates); err != nil {
+	if err := e.verifyProject(ctx, o, r, candidates); err != nil {
 		if ctx.Err() != nil {
 			return false, ctx.Err()
 		}
@@ -452,8 +474,18 @@ func (e *Engine) verifyCandidateProject(ctx context.Context, o *Options, r *Repo
 		e.emit(Event{Phase: "Verify", Label: "Complete candidate project", Total: len(candidates) + 1, Done: true, Status: statusVerificationFailed})
 		return false, nil
 	}
-	e.emit(Event{Phase: "Verify", Label: "Complete candidate project", Total: len(candidates) + 1, Done: true, Status: statusPassed})
-	r.Checks = append(r.Checks, Check{ID: "semantic-verification", Status: statusPassed, Files: len(candidates), Reason: "Production field consumers, unrelated YAML nodes, and candidate schemas compared through a source overlay"})
+	status := statusPassed
+	for _, check := range r.Checks {
+		if check.ID == "candidate-dependencies" && check.Status == statusFailed {
+			status = statusFindings
+		}
+	}
+	e.emit(Event{Phase: "Verify", Label: "Complete candidate project", Total: len(candidates) + 1, Done: true, Status: status})
+	reason := "Production field consumers, unrelated YAML nodes, and candidate schemas compared through a source overlay"
+	if hasDependencyMigration(candidates) {
+		reason = "Repair transformations, comments, unrelated YAML nodes, and candidate schemas verified through a source overlay; dependency migrations adopt modern required semantics"
+	}
+	r.Checks = append(r.Checks, Check{ID: "semantic-verification", Status: statusPassed, Files: len(candidates), Reason: reason})
 	return true, nil
 }
 

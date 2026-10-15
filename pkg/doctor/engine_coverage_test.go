@@ -531,10 +531,10 @@ func TestEcScanCoverageReportsPerRuleStatus(t *testing.T) {
 
 	t.Run("all scan rules are reported with the checked file count", func(t *testing.T) {
 		got := checks(&Report{}, &Options{})
-		for _, id := range []string{ruleSchema, ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure, ruleModernization, ruleComponentMonorepo, ruleImports} {
+		for _, id := range []string{ruleComponentDependencies, ruleSchema, ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure, ruleModernization, ruleComponentMonorepo, ruleImports} {
 			require.Equal(t, Check{ID: id, Status: statusPassed, Files: 3}, got[id])
 		}
-		require.Len(t, got, 8)
+		require.Len(t, got, 9)
 	})
 
 	t.Run("warnings produce a findings status and errors produce failed", func(t *testing.T) {
@@ -550,8 +550,8 @@ func TestEcScanCoverageReportsPerRuleStatus(t *testing.T) {
 
 	t.Run("selection limits the reported rules", func(t *testing.T) {
 		got := checks(&Report{}, &Options{Only: []string{categoryDeprecations}})
-		require.Len(t, got, 4)
-		for _, id := range []string{ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure} {
+		require.Len(t, got, 5)
+		for _, id := range []string{ruleComponentDependencies, ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure} {
 			require.Contains(t, got, id)
 		}
 	})

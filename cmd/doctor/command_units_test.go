@@ -51,13 +51,13 @@ func TestRenderSummary(t *testing.T) {
 				{RuleID: "b", Status: "available", Fixable: true},
 				{RuleID: "c", Status: "manual"},
 			}},
-			want:   []string{"3 findings (2 fixable). Run atmos doctor --fix to apply 2."},
+			want:   []string{"3 findings (2 fixable).\nRun: atmos doctor --fix"},
 			absent: []string{"Fixed", "remain"},
 		},
 		{
 			name:   "check-only run uses the singular for one finding",
 			report: diagnostic.Report{Findings: []diagnostic.Finding{{RuleID: "a", Status: "available", Fixable: true}}},
-			want:   []string{"1 finding (1 fixable). Run atmos doctor --fix to apply 1."},
+			want:   []string{"1 finding (1 fixable).\nRun: atmos doctor --fix"},
 		},
 		{
 			name:   "check-only run without fixable findings does not suggest --fix",
@@ -97,8 +97,8 @@ func TestRenderSummary(t *testing.T) {
 			name: "dry run reports verified repairs instead of fixed counts",
 			fix:  true,
 			report: diagnostic.Report{DryRun: true, Findings: []diagnostic.Finding{
-				{RuleID: "a", Status: "available", Fixable: true},
-				{RuleID: "b", Status: "available", Fixable: true},
+				{RuleID: "a", Status: "available", Fixable: true, Reason: "Candidate verified; dry run left the source unchanged"},
+				{RuleID: "b", Status: "available", Fixable: true, Reason: "Candidate verified; dry run left the source unchanged"},
 				{RuleID: "c", Status: "manual"},
 			}},
 			want:   []string{"2 repairs verified. 3 findings remain."},
@@ -107,7 +107,7 @@ func TestRenderSummary(t *testing.T) {
 		{
 			name:   "dry run uses the singular for one verified repair",
 			fix:    true,
-			report: diagnostic.Report{DryRun: true, Findings: []diagnostic.Finding{{RuleID: "a", Status: "available", Fixable: true}}},
+			report: diagnostic.Report{DryRun: true, Findings: []diagnostic.Finding{{RuleID: "a", Status: "available", Fixable: true, Reason: "Candidate verified; dry run left the source unchanged"}}},
 			want:   []string{"1 repair verified. 1 finding remains."},
 		},
 		{
@@ -281,11 +281,11 @@ func TestRenderFindingsHidesFixedAndShowsGuidance(t *testing.T) {
 
 	output := plainText(stderr)
 	assert.NotContains(t, output, "applied-rule")
-	assert.Contains(t, output, "stacks.yaml:7 open-rule [error, manual] needs attention")
+	assert.Contains(t, output, "error[open-rule]: needs attention\n  --> stacks.yaml:7")
 	assert.Contains(t, output, "cannot be verified")
 	assert.Contains(t, output, "edit by hand")
 	// Findings without a line report the file alone.
-	assert.Contains(t, output, "atmos.yaml global-rule [warning, available] no line known")
+	assert.Contains(t, output, "warning[global-rule]: no line known\n  --> atmos.yaml")
 	assert.NotContains(t, output, "atmos.yaml:0")
 }
 
@@ -298,7 +298,7 @@ func TestRenderFindingsOmitsLocationWhenFileIsUnknown(t *testing.T) {
 	renderFindings(&report)
 
 	output := plainText(stderr)
-	assert.True(t, strings.HasPrefix(output, "imports [warning, manual] unresolved import"), output)
+	assert.True(t, strings.HasPrefix(output, "warning[imports]: unresolved import"), output)
 	assert.NotContains(t, output, ":0")
 }
 

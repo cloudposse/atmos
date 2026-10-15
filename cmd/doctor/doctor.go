@@ -24,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/signals"
 	"github.com/cloudposse/atmos/pkg/startup"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/batch"
 	"github.com/cloudposse/atmos/pkg/validation"
 )
@@ -154,6 +155,10 @@ func (staticStackValidator) Validate(ctx context.Context, config *schema.AtmosCo
 	return stackexec.ValidateStaticStackMaps(ctx, config, inputs)
 }
 
+func (staticStackValidator) ValidateDependencies(ctx context.Context, config *schema.AtmosConfiguration, inputs map[string]map[string]any) error {
+	return stackexec.ValidateStaticDependencies(ctx, config, inputs)
+}
+
 func commandOptions(cmd *cobra.Command) (diagnostic.Options, error) {
 	selection := config.EarlyConfigAndStacksInfoFromArgs(os.Args[1:])
 	o := diagnostic.Options{ConfigFiles: selection.AtmosConfigFilesFromArg, ConfigDirs: selection.AtmosConfigDirsFromArg, Profiles: selection.ProfilesFromArg, BasePath: selection.AtmosBasePath}
@@ -181,13 +186,15 @@ func commandOptions(cmd *cobra.Command) (diagnostic.Options, error) {
 }
 
 func runStreaming(ctx context.Context, engine *diagnostic.Engine, o *diagnostic.Options) (diagnostic.Report, error) {
+	renderHeading(o.Fix, o.DryRun)
 	var report diagnostic.Report
 	err := batch.Run(0, func(observe batch.Observer) error {
 		engine.Observe = progressObserver(observe)
 		var err error
 		report, err = engine.Run(ctx, *o)
 		return err
-	})
+	}, batch.WithPhaseSummaries())
+	ui.Writeln("")
 	return report, err
 }
 

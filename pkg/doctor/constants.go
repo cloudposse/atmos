@@ -31,6 +31,8 @@ const (
 	ruleGitHubActions            = "github-actions"
 	ruleImports                  = "imports"
 	ruleStacks                   = "stacks"
+	ruleDependencies             = "dependencies"
+	ruleComponentDependencies    = "component-dependencies"
 	keyBasePath                  = "base_path"
 	semanticComponent            = "component"
 	semanticStack                = "stack"

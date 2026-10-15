@@ -7,7 +7,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	diagnostic "github.com/cloudposse/atmos/pkg/doctor"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/validation"
 )
 
 const (
@@ -33,8 +32,6 @@ func render(r *diagnostic.Report, format string, fix bool) error {
 		return data.WriteJSON(r)
 	case formatSARIF:
 		return renderSARIF(r)
-	case formatRich:
-		ui.Writeln(validation.Rich(r.ValidationReport(), validation.RichOptions{}))
 	default:
 		renderFindings(r)
 	}
@@ -57,32 +54,6 @@ func renderSARIF(r *diagnostic.Report) error {
 		}
 	}
 	return data.WriteJSON(document)
-}
-
-// renderFindings prints every open finding exactly once. Progress rows only report per-file
-// outcomes, so this list is the single place that carries the details.
-func renderFindings(r *diagnostic.Report) {
-	for i := range r.Findings {
-		f := &r.Findings[i]
-		if f.Status == "fixed" {
-			continue
-		}
-		location := ""
-		if f.File != "" {
-			location = f.File
-			if f.Line > 0 {
-				location += fmt.Sprintf(":%d", f.Line)
-			}
-			location += " "
-		}
-		ui.Writef("%s%s [%s, %s] %s\n", location, f.RuleID, f.Severity, f.Status, f.Message)
-		if f.Reason != "" {
-			ui.Writef("  %s\n", f.Reason)
-		}
-		if f.Remediation != "" {
-			ui.Writef("  %s\n", f.Remediation)
-		}
-	}
 }
 
 // findingCounts splits findings into those already repaired, those still open, and the open ones a repair run could apply.
@@ -112,41 +83,69 @@ func plural(n int, singular, pluralForm string) string {
 // Findings are summarized as verified repairs after a dry run, as applied fixes after a repair run,
 // and as available fixes otherwise.
 func summarizeFindings(r *diagnostic.Report, fix bool) {
+	p := newReportRenderer()
 	fixed, remaining, fixable := findingCounts(r)
-	files := len(r.ChangedFiles)
+	var summary string
 	switch {
 	case r.DryRun:
-		// A dry run writes nothing, so it reports the repairs it verified rather than "Fixed 0".
-		ui.Writef("%d %s verified. %d %s.\n", fixable, plural(fixable, "repair", "repairs"),
-			remaining, plural(remaining, "finding remains", "findings remain"))
+		verified := 0
+		for i := range r.Findings {
+			f := &r.Findings[i]
+			if f.Fixable && f.Reason == "Candidate verified; dry run left the source unchanged" {
+				verified++
+			}
+		}
+		summary = fmt.Sprintf("%d %s verified. %d %s.", verified, plural(verified, "repair", "repairs"), remaining, plural(remaining, "finding remains", "findings remain"))
 	case fix || fixed > 0:
-		ui.Writef("Fixed %d %s in %d %s. %d %s.\n", fixed, plural(fixed, "finding", "findings"),
-			files, plural(files, "file", "files"), remaining, plural(remaining, "finding remains", "findings remain"))
+		files := len(r.ChangedFiles)
+		summary = fmt.Sprintf("Fixed %d %s in %d %s. %d %s.", fixed, plural(fixed, "finding", "findings"), files, plural(files, "file", "files"), remaining, plural(remaining, "finding remains", "findings remain"))
 	case remaining == 0:
-		ui.Writeln("No findings.")
+		summary = "No findings."
 	case fixable > 0:
-		ui.Writef("%d %s (%d fixable). Run atmos doctor --fix to apply %d.\n", remaining, plural(remaining, "finding", "findings"), fixable, fixable)
+		summary = fmt.Sprintf("%d %s (%d fixable).", remaining, plural(remaining, "finding", "findings"), fixable)
 	default:
-		ui.Writef("%d %s (none fixable).\n", remaining, plural(remaining, "finding", "findings"))
+		summary = fmt.Sprintf("%d %s (none fixable).", remaining, plural(remaining, "finding", "findings"))
+	}
+	p.line("", summary, p.styles.Body.Bold(true))
+	if r.DryRun {
+		p.line("", "Dry run: project files and backups were not written.", p.styles.Body)
+	}
+	if fixable > 0 && r.OperationalError == "" {
+		p.line("Run: ", "atmos doctor --fix", p.styles.Command)
 	}
 }
 
 func renderSummary(r *diagnostic.Report, fix bool) error {
-	summarizeFindings(r, fix)
+	p := newReportRenderer()
+	checksHeading := false
 	for _, check := range r.Checks {
-		if check.Status == "incomplete" || check.Status == "skipped" {
-			ui.Writef("%s: %s. %s\n", check.ID, check.Status, check.Reason)
+		if check.Status != "incomplete" && check.Status != "skipped" {
+			continue
 		}
+		if !checksHeading {
+			p.line("", "Check coverage", p.styles.Label)
+			checksHeading = true
+		}
+		p.line("  ", fmt.Sprintf("%s: %s. %s", check.ID, check.Status, check.Reason), p.styles.Body)
 	}
-	if r.DryRun {
-		ui.Writeln("Dry run: project files and backups were not written.")
+	if checksHeading {
+		ui.Writeln("")
 	}
 	if r.Backup != "" {
-		ui.Writef("Backup: %s\n%s\n", r.Backup, r.Recovery)
+		p.line("", "Recovery", p.styles.Label)
+		p.line("Backup: ", r.Backup, p.styles.Body)
+		if r.Recovery != "" {
+			p.line("", r.Recovery, p.styles.Command)
+		}
+		ui.Writeln("")
 	}
 	if r.OperationalError != "" {
-		ui.Error(r.OperationalError)
+		p.line("", "Operational error", p.styles.Error.Bold(true))
+		p.line("", r.OperationalError, p.styles.Body)
+		ui.Writeln("")
 	}
+	p.line("", "Summary", p.styles.Label)
+	summarizeFindings(r, fix)
 	return nil
 }
 

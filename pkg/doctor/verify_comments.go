@@ -121,6 +121,16 @@ func touchedIDs(edits []edit) (before, after map[string]bool) {
 	for i := range edits {
 		e := &edits[i]
 		switch e.kind {
+		case ruleComponentDependencies:
+			oldPath := child(e.path, "settings", "depends_on")
+			newPath := child(e.path, "dependencies", "components")
+			mark(before, oldPath)
+			mark(after, newPath)
+			// Include every descendant comment, which moves with its list entry.
+			walk(nodeAt(rootNode(e.doc.node), oldPath), nil, func(_ *yaml.Node, path []string) {
+				mark(before, child(oldPath, path...))
+				mark(after, child(newPath, path...))
+			})
 		case ruleTerraformReconfigure:
 			mark(before, child(e.path, e.old))
 			mark(after, child(e.path, "init", "reconfigure"))

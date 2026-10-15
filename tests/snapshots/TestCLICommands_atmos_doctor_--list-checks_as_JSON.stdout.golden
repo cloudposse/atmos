@@ -15,6 +15,11 @@
     "description": "Check static stack inheritance and duplicate instances"
   },
   {
+    "id": "dependencies",
+    "category": "validation",
+    "description": "Validate static Terraform dependency graphs"
+  },
+  {
     "id": "editorconfig",
     "category": "validation",
     "description": "Validate EditorConfig rules"
@@ -43,6 +48,11 @@
     "id": "terraform-reconfigure",
     "category": "deprecations",
     "description": "Migrate explicit Terraform reconfigure policy"
+  },
+  {
+    "id": "component-dependencies",
+    "category": "deprecations",
+    "description": "Migrate simple legacy dependencies to modern required dependencies"
   },
   {
     "id": "modernization",

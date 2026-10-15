@@ -11,8 +11,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// This counterexample is a permanent guard against enabling a syntactic dependency fixer.
-func TestDoctorDependencyContractRejectsMissingTargetMigration(t *testing.T) {
+// This counterexample documents the intentional semantic change the doctor migration must report.
+func TestDoctorDependencyContractMissingTargetChangesFailureBehavior(t *testing.T) {
 	legacy := map[string]any{"settings": map[string]any{"depends_on": []any{map[string]any{"component": "missing"}}}}
 	modern := map[string]any{"dependencies": map[string]any{"components": []any{map[string]any{"component": "missing"}}}}
 	check := func(component map[string]any) error {

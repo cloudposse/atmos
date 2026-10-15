@@ -37,12 +37,14 @@ func Rules() []Rule {
 		{ruleSchema, categoryValidation, "Validate authored configuration and stack schemas"},
 		{ruleImports, categoryValidation, "Check local imports and report unresolved inputs"},
 		{ruleStacks, categoryValidation, "Check static stack inheritance and duplicate instances"},
+		{ruleDependencies, categoryValidation, "Validate static Terraform dependency graphs"},
 		{ruleEditorConfig, categoryValidation, "Validate EditorConfig rules"},
 		{ruleGitHubActions, categoryValidation, "Validate workflows using actionlint"},
 		{ruleDeprecatedField, categoryDeprecations, "Report schema-declared deprecated fields"},
 		{ruleCommandProvides, categoryDeprecations, "Migrate custom-command semantic arguments and flags"},
 		{ruleHookEvent, categoryDeprecations, "Normalize recognized legacy hook events"},
 		{ruleTerraformReconfigure, categoryDeprecations, "Migrate explicit Terraform reconfigure policy"},
+		{ruleComponentDependencies, categoryDeprecations, "Migrate simple legacy dependencies to modern required dependencies"},
 		{ruleModernization, ruleModernization, "Identify legacy Atmos GitHub Actions"},
 		{ruleComponentMonorepo, ruleModernization, "Move archived terraform-aws-components sources to cloudposse-terraform-components at the same version, verified identical"},
 		{ruleSourceRepository, "sources", "Check upstream repositories for archival and availability"},
@@ -76,6 +78,8 @@ type Check struct {
 
 // Report is the complete machine-readable run result.
 type Report struct {
+	// SourceRoot resolves project-relative locations for human source excerpts.
+	SourceRoot       string    `json:"-"`
 	Version          int       `json:"version"`
 	Findings         []Finding `json:"findings"`
 	Checks           []Check   `json:"checks"`
@@ -158,6 +162,11 @@ type Engine struct {
 // StackValidator checks decoded static inputs with the production stack consumers.
 type StackValidator interface {
 	Validate(context.Context, *schema.AtmosConfiguration, map[string]map[string]any) error
+}
+
+// DependencyValidator checks the production dependency graph without evaluating configuration.
+type DependencyValidator interface {
+	ValidateDependencies(context.Context, *schema.AtmosConfiguration, map[string]map[string]any) error
 }
 
 func (r *Report) sort() {

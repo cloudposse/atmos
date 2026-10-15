@@ -360,7 +360,7 @@ func TestCustomSchemaRejectsCandidate(t *testing.T) {
 	require.True(t, found)
 }
 
-func TestDependencyMigrationRemainsManual(t *testing.T) {
+func TestDependencyMigrationNeedsProductionValidator(t *testing.T) {
 	root := newProject(t)
 	projectFile(t, root, "atmos.yaml", "{}\n")
 	content := "components:\n  terraform:\n    app:\n      settings:\n        depends_on:\n          - component: missing\n"

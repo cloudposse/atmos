@@ -41,6 +41,10 @@ func (vtProductionValidator) Validate(ctx context.Context, config *schema.AtmosC
 	return stackexec.ValidateStaticStackMaps(ctx, config, inputs)
 }
 
+func (vtProductionValidator) ValidateDependencies(ctx context.Context, config *schema.AtmosConfiguration, inputs map[string]map[string]any) error {
+	return stackexec.ValidateStaticDependencies(ctx, config, inputs)
+}
+
 func vtStacksEngine(t *testing.T, v StackValidator) *Engine {
 	t.Helper()
 	e := testEngine(t)

@@ -217,7 +217,7 @@ func TestFixRunReportsFixedCountsAndCheckRunReportsFixable(t *testing.T) {
 		want   string
 		absent string
 	}{
-		{"check only", []string{"--offline"}, "1 finding (1 fixable). Run atmos doctor --fix to apply 1.", "Fixed"},
+		{"check only", []string{"--offline"}, "1 finding (1 fixable).\nRun: atmos doctor --fix", "Fixed"},
 		{"dry run", []string{"--offline", "--fix", "--dry-run"}, "repair verified.", "Fixed"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

@@ -30,6 +30,8 @@ func applyEdit(content []byte, e *edit) ([]byte, error) {
 		return atmosyaml.Stage(e.doc.path, content, "("+p+"["+strconv.Quote(e.old)+"] | key) = \"provides\"")
 	case ruleHookEvent, ruleComponentMonorepo:
 		return atmosyaml.Stage(e.doc.path, content, p+" = "+strconv.Quote(e.value))
+	case ruleComponentDependencies:
+		return atmosyaml.Stage(e.doc.path, content, moveKeyExpression(p+".settings.depends_on", p+".dependencies.components", p+".settings.depends_on"))
 	case ruleTerraformReconfigure:
 		return atmosyaml.Stage(e.doc.path, content, moveKeyExpression(p+".init_run_reconfigure", p+".init.reconfigure", strconv.Quote(e.value)))
 	default:

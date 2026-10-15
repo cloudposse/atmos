@@ -9,6 +9,8 @@ import (
 // message names the declaration a finding is about, including the value that makes it legacy.
 func (e *edit) message() string {
 	switch e.kind {
+	case ruleComponentDependencies:
+		return "Legacy component dependency declaration"
 	case ruleHookEvent:
 		return fmt.Sprintf("Legacy hook-event declaration: %q is now %q", e.from, e.value)
 	case ruleCommandProvides:
@@ -26,6 +28,8 @@ func (e *edit) manualRemediation() string {
 		return fmt.Sprintf("Change the event to %q by hand", e.value)
 	case ruleCommandProvides:
 		return fmt.Sprintf("Rename %s to provides by hand", e.old)
+	case ruleComponentDependencies:
+		return "Move settings.depends_on to dependencies.components and resolve any required-dependency errors"
 	case ruleTerraformReconfigure:
 		return fmt.Sprintf("Replace init_run_reconfigure with init.reconfigure: %s under components.terraform by hand", e.value)
 	case ruleComponentMonorepo:
@@ -41,6 +45,9 @@ func (e *edit) conflictRemediation() string {
 
 // fixedReason explains, for a repair that was written, what was verified about it.
 func (e *edit) fixedReason() string {
+	if e.kind == ruleComponentDependencies {
+		return "Migrated to modern required dependencies; comments and unrelated YAML values preserved"
+	}
 	if e.kind == ruleComponentMonorepo {
 		return "Moved to the successor repository at the same version; the files are identical and only the source changed"
 	}
