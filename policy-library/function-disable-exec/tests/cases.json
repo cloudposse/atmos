@@ -1,6 +1,6 @@
 [
   {
-    "name": "exec denied",
+    "name": "!exec denied",
     "request": {
       "kind": "function",
       "input": {
@@ -10,7 +10,7 @@
     "status": "deny"
   },
   {
-    "name": "env allowed",
+    "name": "!env does not match",
     "request": {
       "kind": "function",
       "input": {

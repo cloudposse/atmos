@@ -1,5 +1,5 @@
 ---
-title: Disable YAML shell execution
+title: Deny !exec
 description: Reject !exec before configuration can start a shell.
 command: atmos describe stacks
 tags:
@@ -11,9 +11,9 @@ related_docs:
     url: /policies/admission
 ---
 
-# Disable YAML shell execution
+# Deny !exec
 
-Reject !exec before configuration can start a shell.
+Reject `!exec` before configuration can start a shell.
 
 ## Contract
 
