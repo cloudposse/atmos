@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -87,4 +88,31 @@ func TestTreeSHA(t *testing.T) {
 		assert.NotErrorIs(t, err, ErrPathNotFound)
 		assert.NotErrorIs(t, err, ErrRefNotFound)
 	})
+}
+
+func TestTreeSHADoesNotInferAbsenceFromLimitedListing(t *testing.T) {
+	for _, count := range []int{contentsDirectoryLimit - 1, contentsDirectoryLimit} {
+		t.Run(fmt.Sprint(count), func(t *testing.T) {
+			entries := make([]*github.RepositoryContent, count)
+			for i := range entries {
+				entries[i] = &github.RepositoryContent{Name: github.String(fmt.Sprintf("dir-%d", i)), Type: github.String("dir"), SHA: github.String("present-sha")}
+			}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				require.NoError(t, json.NewEncoder(w).Encode(entries))
+			}))
+			t.Cleanup(server.Close)
+			client := newTestClient(t, server.URL)
+			_, err := treeSHA(context.Background(), client, &treeQuery{owner: "o", repo: "r", ref: "v1", dirPath: "missing"})
+			if count == contentsDirectoryLimit {
+				require.ErrorIs(t, err, ErrTreeListingIncomplete)
+				require.NotErrorIs(t, err, ErrPathNotFound)
+			} else {
+				require.ErrorIs(t, err, ErrPathNotFound)
+			}
+			sha, err := treeSHA(context.Background(), client, &treeQuery{owner: "o", repo: "r", ref: "v1", dirPath: "dir-0"})
+			require.NoError(t, err)
+			require.Equal(t, "present-sha", sha)
+		})
+	}
 }

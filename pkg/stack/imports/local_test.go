@@ -3,6 +3,8 @@ package imports
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -96,4 +98,25 @@ func TestIsTemplatedPathAndTemplateFile(t *testing.T) {
 	assert.True(t, IsTemplateFile("a/b.yaml.tmpl"))
 	assert.True(t, IsTemplateFile("a/b.yml.tmpl"))
 	assert.False(t, IsTemplateFile("a/b.yaml"))
+}
+
+func TestResolveLocalWithLiteralGlobCharactersInBase(t *testing.T) {
+	for _, dirname := range []string{"infra[old]", "infra{old}", "infra*old", "infra?old"} {
+		t.Run(dirname, func(t *testing.T) {
+			if runtime.GOOS == "windows" && strings.ContainsAny(dirname, "*?") {
+				t.Skip("Windows forbids these filename characters")
+			}
+			root := filepath.Join(t.TempDir(), dirname, "stacks")
+			writeFiles(t, root, "catalog/a.yaml", "catalog/nested/b.yaml", "dev.yaml")
+			for _, imp := range []string{"catalog/a", "./catalog/a", "catalog/*.yaml", "./catalog/**/*.yaml", "../stacks/catalog/*.yaml"} {
+				got, err := ResolveLocal(imp, filepath.Join(root, "dev.yaml"), root)
+				require.NoError(t, err, imp)
+				want := []string{filepath.Join(root, "catalog", "a.yaml")}
+				if strings.Contains(imp, "**") {
+					want = append(want, filepath.Join(root, "catalog", "nested", "b.yaml"))
+				}
+				require.ElementsMatch(t, want, got, imp)
+			}
+		})
+	}
 }

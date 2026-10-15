@@ -70,9 +70,7 @@ func ResolveLocal(importPath, importingFile, stacksBasePath string) ([]string, e
 	}
 
 	rel := filepath.FromSlash(importPath)
-	pattern := filepath.Join(baseDir, withImportExtension(baseDir, rel))
-
-	matches, err := expandImportPattern(pattern)
+	matches, err := expandImportPattern(baseDir, withImportExtension(baseDir, rel))
 	if err != nil {
 		return nil, fmt.Errorf("%w: import '%s' in file '%s': %w", errUtils.ErrStackImportNotFound, importPath, importingFile, err)
 	}
@@ -121,15 +119,17 @@ func withImportExtension(baseDir, rel string) string {
 
 // expandImportPattern expands a (possibly glob) pattern into existing paths.
 // Unlike utils.GetGlobMatches it does not memoize results, so callers always see current disk state.
-func expandImportPattern(pattern string) ([]string, error) {
-	if !strings.ContainsAny(pattern, globChars) {
+func expandImportPattern(baseDir, rel string) ([]string, error) {
+	pattern := filepath.Join(baseDir, rel)
+	if !strings.ContainsAny(rel, globChars) {
 		if _, err := os.Stat(pattern); err == nil {
 			return []string{pattern}, nil
 		}
 		return nil, nil
 	}
 
-	slashPattern := filepath.ToSlash(pattern)
+	escapedBase := strings.NewReplacer("\\", "\\\\", "*", "\\*", "?", "\\?", "[", "\\[", "]", "\\]", "{", "\\{", "}", "\\}").Replace(filepath.ToSlash(filepath.Clean(baseDir)))
+	slashPattern := escapedBase + "/" + filepath.ToSlash(rel)
 	base, cleanPattern := doublestar.SplitPattern(slashPattern)
 	matches, err := doublestar.Glob(os.DirFS(base), cleanPattern)
 	if err != nil {

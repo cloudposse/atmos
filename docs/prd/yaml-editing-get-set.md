@@ -262,8 +262,8 @@ edit path (including `Stage`) goes through it.
 2. Align the trees by path: mapping entries by key; sequence items by index,
   but only when the sequence length is unchanged. A sequence whose length
   changed counts as changed.
-3. Mark a rendered node **unchanged** when its kind, tag, value, style, anchor
-  and comments all equal the aligned source node.
+3. Mark a rendered node **unchanged** only when its kind, tag, value, style,
+  anchor, comments, and all aligned descendants match the source node.
 4. Compute each source node's line span: from `Node.Line` to the line before the
   next sibling (or the parent's next sibling), excluding trailing blank lines
   and the next entry's head comment. A block scalar spans its indicator line
@@ -284,7 +284,8 @@ edit path (including `Stage`) goes through it.
 - **3a — Folded scalars (the defect).** Limit restoration to block scalars with
   `FoldedStyle` whose value didn't change: replace the rendered body lines with
   the source body lines, re-indented to the rendered indentation. Ship with the
-  safety net. This alone fixes requirement 2 for `Format`.
+  safety net. This fixes the folded-scalar line breaks in requirement 2 for
+  `Format`; Phase 3b handles its blank-line separators.
 - **3b — Unchanged-text restoration.** Generalize to steps 1–7 (blank lines,
   comment alignment, quoting, indentation of untouched subtrees).
 - **3c — Docs.** Rewrite [Known limitations](#known-limitations) and
