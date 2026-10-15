@@ -20,7 +20,7 @@ Require a Checkov scan before planning a production Terraform component.
 | Field | Value |
 |---|---|
 | Input | `operation` |
-| Engine | `cel` |
+| Engines | `cel`, `starlark` |
 | Action | `hooks` |
 | Selects when | `before.terraform.plan` with a stack name starting with `prod-`. |
 | Required data | Component lifecycle metadata. Tool and HTTP hooks use their normal execution credentials. |
@@ -34,6 +34,10 @@ Install Checkov or add approved pins to `spec.tools`. Adjust the `prod-` prefix 
 The selected hook must execute and succeed: both `required` and `require_success` are `true`. Dry-run previews it without execution.
 
 ## Policy
+
+Choose CEL or Starlark on the [policy page](https://atmos.tools/policies/library/lifecycle-scan-production).
+The default manifest below uses CEL; the [Starlark variant](https://atmos.tools/policies/library/lifecycle-scan-production/variants/starlark/policy.yaml)
+uses the same configuration and test cases. Install only one implementation.
 
 [View and copy policy.yaml](https://atmos.tools/policies/library/lifecycle-scan-production/policy.yaml).
 

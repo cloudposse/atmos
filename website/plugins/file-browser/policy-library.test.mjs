@@ -6,6 +6,7 @@ import test from 'node:test';
 import matter from 'gray-matter';
 import plugin from './index.js';
 import {policyPage} from './policy-pages.js';
+import {inputFields} from './policy-input-fields.js';
 
 const siteDir = fileURLToPath(new URL('../../', import.meta.url));
 const libraryDir = path.resolve(siteDir, '../policy-library');
@@ -14,6 +15,8 @@ test('the policy gallery discovers individually documented and tested policies',
   const browser = plugin({siteDir}, {
     id: 'policies',
     sourceDir: '../policy-library',
+    githubRepo: 'cloudposse/atmos',
+    githubPath: 'policy-library',
     routeBasePath: '/policies/library',
     title: 'Policy Library',
     tagOrder: ['Terraform', 'GitHub Actions', 'Lifecycle Hooks'],
@@ -52,8 +55,14 @@ test('the policy gallery discovers individually documented and tested policies',
     const route = routes.find(route => route.path === base);
     assert.match(route.component, /PolicyLibrary\/PolicyPage/);
     const page = modules.get(route.modules.policyData);
-    assert.equal(page.policy, readFileSync(path.join(libraryDir, entry.name, 'policy.yaml'), 'utf8'));
+    assert.deepEqual(page.variants.map(variant => variant.engine), ['cel', 'starlark']);
+    for (const variant of page.variants) {
+      assert.equal(variant.policy, readFileSync(path.join(libraryDir, entry.name, variant.path), 'utf8'));
+      assert.ok(paths.has(`${base}/${variant.path}`), `Missing variant route: ${base}/${variant.path}`);
+      assert.ok(variant.githubUrl.endsWith(`/${entry.name}/${variant.path}`));
+    }
     assert.deepEqual(page.cases, JSON.parse(readFileSync(path.join(libraryDir, entry.name, 'tests/cases.json'), 'utf8')));
+    assert.deepEqual(page.caseFields, page.cases.map(fixture => inputFields(fixture.request)));
     assert.ok(page.configuration && page.contract);
     assert.match(page.command, /^atmos \S/);
     for (const suffix of ['', '/policy.yaml', '/tests/cases.json']) {
@@ -85,6 +94,31 @@ test('the policy gallery discovers individually documented and tested policies',
   }
 });
 
+test('field explorer describes observed fields without inventing a provider schema', () => {
+  const request = {input: {items: [null, true, 1, 'value', [], {}], 'odd.key"\n': 'private'}, ci: {event: {data: {pull_request: {head: {repo: {full_name: 'contributor/repo'}}}}}}};
+  const fields = inputFields(request);
+  for (const [path, type] of [
+    ['input', 'object'],
+    ['input["items"]', 'array'],
+    ['input["items"][0]', 'null'],
+    ['input["items"][1]', 'boolean'],
+    ['input["items"][2]', 'number'],
+    ['input["items"][3]', 'string'],
+    ['input["items"][4]', 'array'],
+    ['input["items"][5]', 'object'],
+    ['input["odd.key\\"\\n"]', 'string'],
+    ['ci["event"]["data"]["pull_request"]["head"]["repo"]["full_name"]', 'string'],
+  ]) {
+    assert.ok(fields.some(field => field.path === path && field.type === type), path);
+  }
+  assert.ok(!JSON.stringify(fields).includes('contributor/repo'));
+  assert.deepEqual(inputFields({input: {}}), [{path: 'input', type: 'object'}, {path: 'ci', type: 'null'}]);
+  assert.deepEqual(inputFields({input: {z: 1, a: 2}}), inputFields({input: {a: 2, z: 1}}));
+  assert.ok(!fields.some(field => field.path.includes('metadata')), 'Absent fields stay absent');
+  assert.ok(inputFields({kind: 'operation', input: {}, subject: {labels: {stage: 'prod'}}})
+    .some(field => field.path === 'request["subject"]["labels"]["stage"]' && field.type === 'string'));
+});
+
 test('documentation navigation uses resolved docs links and fails on a missing sidebar', async () => {
   const browser = plugin({siteDir}, {id: 'policies', docsSidebar: 'cli'});
   const content = {tree: {examples: []}, options: {id: 'policies'}};
@@ -104,4 +138,36 @@ test('documentation navigation uses resolved docs links and fails on a missing s
 
 test('incomplete policy pages fail the build rather than publishing missing code', () => {
   assert.throws(() => policyPage({name: 'missing', root: {children: []}}), /Incomplete policy/);
+});
+
+function variantExample() {
+  const name = 'function-disable-exec';
+  return {name, root: {
+    readme: {content: readFileSync(path.join(libraryDir, name, 'README.md'), 'utf8')},
+    children: [
+      {name: 'policy.yaml', content: readFileSync(path.join(libraryDir, name, 'policy.yaml'), 'utf8')},
+      {name: 'tests', children: [{name: 'cases.json', content: '[]'}]},
+      {name: 'variants', children: [{name: 'starlark', children: [
+        {name: 'policy.yaml', content: readFileSync(path.join(libraryDir, name, 'variants/starlark/policy.yaml'), 'utf8')},
+      ]}]},
+    ],
+  }};
+}
+
+test('variant tabs reject missing, duplicated, unsupported, or mislabeled implementations', () => {
+  const missing = variantExample();
+  missing.root.children.pop();
+  assert.throws(() => policyPage(missing), /exactly one CEL and one Starlark/);
+
+  const duplicate = variantExample();
+  duplicate.root.children[2].children.push(duplicate.root.children[2].children[0]);
+  assert.throws(() => policyPage(duplicate), /exactly one CEL and one Starlark/);
+
+  const unsupported = variantExample();
+  unsupported.root.children[2].children[0].name = 'opa';
+  assert.throws(() => policyPage(unsupported), /Invalid policy variant/);
+
+  const mislabeled = variantExample();
+  mislabeled.root.children[2].children[0].children[0].content = mislabeled.root.children[0].content;
+  assert.throws(() => policyPage(mislabeled), /Invalid policy engine/);
 });

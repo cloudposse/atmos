@@ -14,7 +14,7 @@
 .filters { display: flex; gap: 1rem; margin-top: 2rem; }
 .filters label, .casePicker { display: flex; flex-direction: column; gap: .4rem; font-size: .875rem; }
 .search { flex: 1; }
-.filters input, .filters select, .casePicker select {
+.filters input, .filters select, .casePicker select, .casePicker input, .fieldPicker select {
   padding: .65rem .75rem;
   border: 1px solid var(--ifm-color-emphasis-300);
   border-radius: 6px;
@@ -43,6 +43,10 @@
 .reset { border: 0; padding: 0; background: none; color: var(--ifm-link-color); text-decoration: underline; cursor: pointer; font: inherit; }
 .page h2 { margin-top: 2rem; }
 .casePicker { max-width: 28rem; margin-bottom: 1rem; }
+.fieldPicker { display: flex; flex-direction: column; gap: .4rem; margin-bottom: 1rem; }
+.fieldPicker select { width: 100%; font-family: var(--ifm-font-family-monospace); font-size: .8rem; }
+.explorer { min-width: 0; }
+.explorer :global(button[aria-label]) { opacity: 1; }
 .contract { border: 1px solid var(--ifm-color-emphasis-300); padding: 1rem; border-radius: 6px; }
 .contract summary { cursor: pointer; font-weight: 500; }
 .contract[open] summary { margin-bottom: 1rem; }

@@ -29,6 +29,10 @@ as `ctx.input`, `ctx.params`, `ctx.ci`, and `ctx.request`, with dictionary index
 Affected analysis populates comparison `base` and `head` commit IDs. The `governing` revision is not
 inferred from either comparison revision. Plan and lifecycle integrations leave revision fields empty.
 
+To discover fields, open **Inputs and examples** on a [library policy](/policies/library). Its field
+explorer shows types and copyable CEL/Starlark expressions for each tested input. For the actual
+CI payload in your job, run [`atmos ci context --paths`](/cli/commands/ci/context).
+
 ## Admission inputs
 
 See [Execution Admission](/policies/admission) for function names, CLI command paths, and

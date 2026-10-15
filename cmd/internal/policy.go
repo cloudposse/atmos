@@ -40,9 +40,15 @@ func installCommandAdmission(root *cobra.Command) func() {
 	var visit func(*cobra.Command)
 	visit = func(command *cobra.Command) {
 		if command.Runnable() {
-			original := command.Args
-			command.Args = admittedCommandArgs(root, original)
-			restores = append(restores, func() { command.Args = original })
+			if command.Args == nil && !command.HasParent() && command.HasSubCommands() {
+				// Find uses a nil root Args validator to reject unknown commands
+				// before execution and usage rendering. Keep that sentinel intact.
+				restores = append(restores, installRootAdmission(command))
+			} else {
+				original := command.Args
+				command.Args = admittedCommandArgs(root, original)
+				restores = append(restores, func() { command.Args = original })
+			}
 		}
 		for _, child := range command.Commands() {
 			visit(child)
@@ -54,6 +60,28 @@ func installCommandAdmission(root *cobra.Command) func() {
 			restore()
 		}
 	}
+}
+
+// installRootAdmission preserves Cobra's implicit root argument validation while
+// gating root execution before its persistent pre-run. Descendants retain their
+// own Args gates, including when they override persistent hooks.
+func installRootAdmission(root *cobra.Command) func() {
+	originalE, original := root.PersistentPreRunE, root.PersistentPreRun
+	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if cmd == root {
+			if err := checkCommandAdmission(root, cmd); err != nil {
+				return err
+			}
+		}
+		if originalE != nil {
+			return originalE(cmd, args)
+		}
+		if original != nil {
+			original(cmd, args)
+		}
+		return nil
+	}
+	return func() { root.PersistentPreRunE = originalE }
 }
 
 func admittedCommandArgs(root *cobra.Command, original cobra.PositionalArgs) cobra.PositionalArgs {

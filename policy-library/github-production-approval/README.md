@@ -20,7 +20,7 @@ Require a designated reviewer before applying or deploying a production instance
 | Field | Value |
 |---|---|
 | Input | `component.command` |
-| Engine | `cel` |
+| Engines | `cel`, `starlark` |
 | Action | `require_approval` |
 
 ## Configuration
@@ -41,6 +41,10 @@ Protect the selected policy revision and enforcement workflow independently of t
 See [enforcement configuration](https://atmos.tools/policies/configuration#enforcement).
 
 ## Policy
+
+Choose CEL or Starlark on the [policy page](https://atmos.tools/policies/library/github-production-approval).
+The default manifest below uses CEL; the [Starlark variant](https://atmos.tools/policies/library/github-production-approval/variants/starlark/policy.yaml)
+uses the same configuration and test cases. Install only one implementation.
 
 [View policy.yaml](https://atmos.tools/policies/library/github-production-approval/policy.yaml).
 

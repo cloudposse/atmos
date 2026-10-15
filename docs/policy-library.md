@@ -5,21 +5,27 @@ Contributor reference for the [Policy Library](https://atmos.tools/policies/libr
 ## Tests
 
 Reusable catalog entries live in `policy-library/<name>/`, each with `README.md`, `policy.yaml`,
-and `tests/cases.json`. The website generates the [Policy Library](https://atmos.tools/policies/library) directly
+and `tests/cases.json`, plus an alternate `variants/<engine>/policy.yaml`. Every entry supplies both
+CEL and Starlark implementations; the existing `policy.yaml` path remains its default implementation.
+The website generates the [Policy Library](https://atmos.tools/policies/library) directly
 from these directories. Frontmatter supplies `title`, `description`, `tags`, `related_docs`, and
 `command` (the component command with explicit target placeholders).
 
 The index is a compact searchable list inside the Reference sidebar. Each policy page displays the
-actual `policy.yaml` first, with copying, followed by configuration, a command, and selectable tested
-fixtures. The website extracts Contract and Configuration sections from the README; manifests and
+actual manifests in CEL/Starlark tabs, with copying, followed by configuration, a command, and selectable tested
+fixtures. Tabs share the `policy-engine` Docusaurus group so the engine preference persists across pages
+and reloads. Install one variant per policy, not both. The website extracts Contract and Configuration sections from the README; manifests and
 fixtures are not duplicated in website source. Existing file URLs remain available as secondary links.
 
 ```shell
 go test ./pkg/policy -run TestPolicyCatalog -v
 ```
 
-The runner loads each actual policy, requires matching and nonmatching fixtures, checks exact
-hook requirements, and verifies that all entries can be combined without identity collisions.
+The runner loads both implementations, requires matching and nonmatching fixtures, checks exact
+hook requirements, and compares full decisions including approval obligations. Only `engine` and `rule`
+may differ between manifests: metadata, selectors, parameters, actions, hooks, and tools must agree.
+It verifies each engine's entries can be combined without identity collisions. The website build rejects
+missing, duplicate, unsupported, and mislabeled variants rather than displaying incomplete tabs.
 Fixtures test evaluation, not hook execution or the trust of collected evidence.
 
 The demonstration configurations live in `examples/policies/`. They are not the reusable policy
