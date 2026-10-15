@@ -5,13 +5,13 @@ permissions:
   contents: read
 jobs:
   windows-diagnostics:
-    name: Windows acceptance diagnostics (${{ matrix.mode }})
-    runs-on: windows-latest
+    name: Windows 2022 acceptance diagnostics (${{ matrix.mode }})
+    runs-on: windows-2022
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        mode: [race, checkptr]
+        mode: [baseline, race, checkptr]
     steps:
       - name: Check out diagnostic commit
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -33,11 +33,16 @@ jobs:
           GOPROXY: https://proxy.golang.org
         run: |
           New-Item -ItemType Directory -Force diagnostics | Out-Null
+          Get-CimInstance Win32_Processor | Select-Object Name, Manufacturer, NumberOfCores, NumberOfLogicalProcessors | Format-List | Out-String | Tee-Object diagnostics/host.txt
+          Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber | Format-List | Out-String | Tee-Object -Append diagnostics/host.txt
           go version | Tee-Object diagnostics/toolchain.txt
           go env | Tee-Object -Append diagnostics/toolchain.txt
           if ($env:DIAGNOSTIC_MODE -eq 'race') {
             $env:CGO_ENABLED = '1'
             go test -race -count=5 -parallel=2 -timeout=20m ./internal/ci/acceptance 2>&1 | Tee-Object diagnostics/test.log
+          } elseif ($env:DIAGNOSTIC_MODE -eq 'baseline') {
+            $env:CGO_ENABLED = '1'
+            go test -count=5 -parallel=2 -timeout=20m ./internal/ci/acceptance 2>&1 | Tee-Object diagnostics/test.log
           } else {
             $env:CGO_ENABLED = '0'
             go test -gcflags=all=-d=checkptr=2 -count=5 -parallel=2 -timeout=20m ./internal/ci/acceptance 2>&1 | Tee-Object diagnostics/test.log
