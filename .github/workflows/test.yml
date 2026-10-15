@@ -19,6 +19,15 @@ jobs:
         with:
           go-version: '1.26.9'
           cache: false
+      - name: Install the Git version from the failing build
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'MinGit-2.56.0-64-bit.zip'
+          $install = Join-Path $env:RUNNER_TEMP 'git-2.56.0'
+          Invoke-WebRequest 'https://github.com/git-for-windows/git/releases/download/v2.56.0.windows.1/MinGit-2.56.0-64-bit.zip' -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne '064b440ff870ed5198527e8f3a92cdf5bd2fd0fedf5e718af95e3fdaddeff718') { throw 'Git archive checksum mismatch' }
+          Expand-Archive $archive -DestinationPath $install
+          (Join-Path $install 'cmd') | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Verify Git null configuration paths
         shell: pwsh
         run: |
