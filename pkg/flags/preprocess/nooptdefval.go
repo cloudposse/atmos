@@ -113,17 +113,21 @@ func (p *NoOptDefValPreprocessor) preprocessArgs(args []string, noOptDefValFlags
 	defer perf.Track(nil, "preprocess.NoOptDefValPreprocessor.preprocessArgs")()
 
 	result := make([]string, 0, len(args))
+	// commandSeen records that a positional argument (the command) has appeared. Command names are
+	// only recognized before it; after it, a following word is a flag value even if it names a command.
+	commandSeen := false
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 
 		// Skip non-flag arguments.
 		if !isFlagArg(arg) {
 			result = append(result, arg)
+			commandSeen = true
 			continue
 		}
 
 		// Process flag argument.
-		processed, skip := p.processFlagArg(arg, args, i, noOptDefValFlags)
+		processed, skip := p.processFlagArg(arg, args, i, noOptDefValFlags, commandSeen)
 		result = append(result, processed)
 		if skip {
 			i++ // Skip the next arg (already consumed).
@@ -134,7 +138,7 @@ func (p *NoOptDefValPreprocessor) preprocessArgs(args []string, noOptDefValFlags
 }
 
 // processFlagArg processes a single flag argument and returns the processed arg and whether to skip next arg.
-func (p *NoOptDefValPreprocessor) processFlagArg(arg string, args []string, i int, noOptDefValFlags map[string]bool) (string, bool) {
+func (p *NoOptDefValPreprocessor) processFlagArg(arg string, args []string, i int, noOptDefValFlags map[string]bool, commandSeen bool) (string, bool) {
 	defer perf.Track(nil, "preprocess.NoOptDefValPreprocessor.processFlagArg")()
 
 	// Keep arg unchanged if it already has equals syntax.
@@ -149,7 +153,7 @@ func (p *NoOptDefValPreprocessor) processFlagArg(arg string, args []string, i in
 	}
 
 	// Check if there's a value following the flag.
-	if !p.hasValueFollowing(args, i) {
+	if !p.hasValueFollowing(args, i, commandSeen) {
 		return arg, false
 	}
 
@@ -159,14 +163,14 @@ func (p *NoOptDefValPreprocessor) processFlagArg(arg string, args []string, i in
 }
 
 // hasValueFollowing checks if there's a value following the flag at position i.
-func (p *NoOptDefValPreprocessor) hasValueFollowing(args []string, i int) bool {
+func (p *NoOptDefValPreprocessor) hasValueFollowing(args []string, i int, commandSeen bool) bool {
 	defer perf.Track(nil, "preprocess.NoOptDefValPreprocessor.hasValueFollowing")()
 
 	if i+1 >= len(args) || isFlagArg(args[i+1]) {
 		return false
 	}
-	// A command name is the next command, not this flag's value.
-	return p.isCommand == nil || !p.isCommand(args[i+1])
+	// Before the command, a command name is the next command, not this flag's value.
+	return commandSeen || p.isCommand == nil || !p.isCommand(args[i+1])
 }
 
 // isFlagArg returns true if the arg looks like a flag (starts with - or --).

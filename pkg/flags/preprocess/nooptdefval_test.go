@@ -321,6 +321,9 @@ func TestNoOptDefValPreprocessor_WithCommandNames(t *testing.T) {
 		{name: "explicit equals value that looks like a command still works", args: []string{"--identity=terraform", "plan"}, want: []string{"--identity=terraform", "plan"}},
 		{name: "non-command value still folds", args: []string{"--pager", "less", "terraform", "plan"}, want: []string{"--pager=less", "terraform", "plan"}},
 		{name: "identity value still folds", args: []string{"--identity", "prod", "terraform", "plan"}, want: []string{"--identity=prod", "terraform", "plan"}},
+		// Once the command appears, a following word is a flag value even when it names another command.
+		{name: "value after the command folds even when it names a command", args: []string{"profile", "list", "--identity", "doctor"}, want: []string{"profile", "list", "--identity=doctor"}},
+		{name: "repeated flags after the command fold", args: []string{"terraform", "plan", "--pager", "tf", "--identity", "doctor"}, want: []string{"terraform", "plan", "--pager=tf", "--identity=doctor"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
