@@ -83,3 +83,50 @@ func TestLoadConfigScalarSkillRefs(t *testing.T) {
 		})
 	}
 }
+
+// TestLoadConfigRejectsVersionInSequences ensures sequence traversal cannot bypass
+// the restriction of version tags to scalar skill-source refs.
+func TestLoadConfigRejectsVersionInSequences(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		path  string
+	}{
+		{value: "[!version {literal: main}]", path: "devcontainer.examples[0]"},
+		{value: "[!version {}]", path: "devcontainer.examples[0]"},
+		{value: "[!version [tool]]", path: "devcontainer.examples[0]"},
+		{value: "[!version []]", path: "devcontainer.examples[0]"},
+		{value: "[[!version {literal: main}]]", path: "devcontainer.examples[0][0]"},
+		{value: "[[!version [tool]]]", path: "devcontainer.examples[0][0]"},
+		{value: "[{nested: [!version {}]}]", path: "devcontainer.examples[0].nested[0]"},
+		{value: "[!version tool]", path: "devcontainer.examples[0]"},
+		{value: "[[!version tool]]", path: "devcontainer.examples[0][0]"},
+		{value: "!append [!version {literal: main}]", path: "devcontainer.examples[0]"},
+		{value: "!append [[!version []]]", path: "devcontainer.examples[0][0]"},
+	} {
+		t.Run(tc.value, func(t *testing.T) {
+			writeEditionTestConfig(t, "devcontainer:\n  examples: "+tc.value+"\n")
+			_, err := LoadConfig(&schema.ConfigAndStacksInfo{})
+			require.ErrorIs(t, err, errUtils.ErrUnsupportedYamlTag)
+			require.ErrorContains(t, err, "!version")
+			require.ErrorContains(t, err, tc.path)
+		})
+	}
+}
+
+// TestSequenceVersionValidationPreservesValues keeps ordinary collections,
+// quoted tag-like strings, and supported scalar tags compatible.
+func TestSequenceVersionValidationPreservesValues(t *testing.T) {
+	t.Setenv("ATMOS_TEST_SEQUENCE_VALUE", "resolved")
+	content := `items:
+  - {literal: main}
+  - ["!version tool", main]
+  - !env ATMOS_TEST_SEQUENCE_VALUE
+`
+	v := viper.New()
+	require.NoError(t, preprocessAtmosYamlFunc([]byte(content), v))
+	require.Equal(t, []any{
+		map[string]any{"literal": "main"},
+		[]any{"!version tool", "main"},
+		"resolved",
+	}, v.Get("items"))
+}

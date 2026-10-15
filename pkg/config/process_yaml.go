@@ -242,6 +242,12 @@ func sequenceNeedsProcessing(node *yaml.Node) bool {
 }
 
 func processSequenceNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
+	// Sequence decoding and !append resolution can bypass processNode, so validate
+	// version tags throughout the subtree before taking either path.
+	if err := rejectSequenceVersionTags(node, currentPath); err != nil {
+		return err
+	}
+
 	// Handle !append tag for list concatenation during merging.
 	if node.Tag == u.AtmosYamlFuncAppend {
 		return handleAppend(node, v, currentPath)
