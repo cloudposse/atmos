@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -105,6 +106,13 @@ type KubeconfigManager struct {
 // NewKubeconfigManager creates a manager with the given path and permissions.
 // If customPath is empty, uses XDG default (~/.config/atmos/kube/config).
 // If modeStr is empty, defaults to "0600".
+//
+// A non-empty customPath is expanded so committable, multi-developer configs and
+// quoted CLI values stay portable: environment variables ($VAR and ${VAR}) are
+// substituted and a leading ~ (or ~/) resolves to the current user's home
+// directory. This covers the integration config path (spec.cluster.kubeconfig.path),
+// the --kubeconfig flag, and the KUBECONFIG/ATMOS_KUBECONFIG env vars alike,
+// since they all flow through here.
 func NewKubeconfigManager(customPath, modeStr string) (*KubeconfigManager, error) {
 	defer perf.Track(nil, "kube.NewKubeconfigManager")()
 
@@ -116,6 +124,12 @@ func NewKubeconfigManager(customPath, modeStr string) (*KubeconfigManager, error
 			return nil, fmt.Errorf("%w: %w", errUtils.ErrKubeconfigPath, err)
 		}
 		path = defaultPath
+	} else {
+		expanded, err := expandKubeconfigPath(path)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrKubeconfigPath, err)
+		}
+		path = expanded
 	}
 
 	// Parse file mode.
@@ -337,6 +351,43 @@ func DefaultKubeconfigPath() (string, error) {
 	}
 
 	return filepath.Join(kubeDir, "config"), nil
+}
+
+// expandKubeconfigPath expands environment variables and a leading ~ in a
+// kubeconfig path so configs stay portable across users and machines.
+//
+// Environment variables are expanded first ($HOME, ${HOME}), then a leading ~
+// or ~/ resolves to the current user's home directory. The order lets a value
+// like "${HOME}/kube/config" expand through the env substitution while a bare
+// "~/kube/config" still resolves via the home-directory lookup. A bare "~" maps
+// to the home directory itself.
+//
+// Only $VAR/${VAR} syntax is expanded (os.ExpandEnv); Windows %VAR% is left
+// as-is. os.UserHomeDir is used for the home lookup so the behavior matches the
+// rest of Atmos on every platform.
+func expandKubeconfigPath(path string) (string, error) {
+	defer perf.Track(nil, "kube.expandKubeconfigPath")()
+
+	if path == "" {
+		return "", nil
+	}
+
+	// Substitute environment variables ($VAR and ${VAR}).
+	path = os.ExpandEnv(path)
+
+	// Expand a leading ~ to the user's home directory.
+	if path == "~" || strings.HasPrefix(path, "~/") || strings.HasPrefix(path, `~\`) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("%w: %w", errUtils.ErrKubeconfigPath, err)
+		}
+		if path == "~" {
+			return home, nil
+		}
+		return filepath.Join(home, path[2:]), nil
+	}
+
+	return path, nil
 }
 
 // writeConfig writes a kubeconfig to the file, replacing any existing content.

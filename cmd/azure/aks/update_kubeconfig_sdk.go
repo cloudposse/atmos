@@ -28,7 +28,9 @@ var (
 )
 
 // executeAKSUpdateKubeconfigViaIntegration runs AKS kubeconfig update using a named integration.
-func executeAKSUpdateKubeconfigViaIntegration(integrationName string) error {
+// kubeconfigPath and alias are optional CLI overrides (empty means "use the integration's
+// configured value") forwarded so --kubeconfig/--alias work on the integration path.
+func executeAKSUpdateKubeconfigViaIntegration(integrationName, kubeconfigPath, alias string) error {
 	defer perf.Track(nil, "aks.executeAKSUpdateKubeconfigViaIntegration")()
 
 	// Load atmos config.
@@ -50,8 +52,11 @@ func executeAKSUpdateKubeconfigViaIntegration(integrationName string) error {
 	}
 
 	// Execute the integration (handles authentication, AKS describe, kubeconfig write).
+	// The CLI overrides are no-ops when empty, so the integration's configured values win.
 	ctx := context.Background()
-	return mgr.ExecuteIntegration(ctx, integrationName)
+	return mgr.ExecuteIntegration(ctx, integrationName,
+		types.WithKubeconfigPath(kubeconfigPath),
+		types.WithAlias(alias))
 }
 
 // aksKubeconfigDirectParams bundles the parameters needed to authenticate,
