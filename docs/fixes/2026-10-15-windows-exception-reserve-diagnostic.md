@@ -28,6 +28,8 @@ proof that every Atmos crash has the same cause.
 - Run the unchanged acceptance suite with baseline, race, and checkptr settings,
   plus focused runtime regressions, using the diagnostic reserve.
 - Preserve the existing runner hardening policy and bounded diagnostic artifacts.
+- Provide a separate action-validation dispatch to run the exact guarded Python
+  action and its safeguard tests before compiling and executing the stress probe.
 
 ## Validation
 
