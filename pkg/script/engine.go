@@ -45,7 +45,15 @@ type Spec struct {
 	CI           ci.Reporter
 	ParseCommand CommandParser
 	Steps        automation.StepLibrary
+	// Viewport shows a subprocess's live output in a bounded terminal viewport for
+	// output="viewport". Nil means the host has none, and the output streams instead.
+	Viewport ViewportRunner
 }
+
+// ViewportRunner runs work while the host shows the output written to the writers it passes in a
+// live viewport (and falls back to plain streaming when the terminal cannot show one). The title
+// names the work. It returns the work's own error.
+type ViewportRunner func(title string, run func(stdout, stderr io.Writer) error) error
 
 // ToolInstaller provisions pinned tools and returns their executable directories.
 type ToolInstaller func(context.Context, map[string]string) ([]string, error)

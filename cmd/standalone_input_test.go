@@ -319,3 +319,41 @@ func TestStandaloneCommandLineErrorsAreNotDoubled(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrScriptUsage)
 	assert.NotContains(t, err.Error(), "invalid value for flag: invalid value")
 }
+
+// An explicitly empty value is still a value the user typed, so choices apply to it. An unset flag
+// stays empty and is not checked.
+func TestStandaloneExplicitEmptyValueIsCheckedAgainstChoices(t *testing.T) {
+	spec := func() *script.CommandSpec {
+		return &script.CommandSpec{Flags: []flags.Flag{
+			&flags.StringFlag{Name: "stage", ValidValues: []string{"dev", "prod"}},
+			&flags.StringSliceFlag{Name: "zones", ValidValues: []string{"a", "b"}},
+		}}
+	}
+	for _, argv := range [][]string{{"--stage="}, {"--stage", ""}, {"--zones=a,"}} {
+		t.Run(strings.Join(argv, " "), func(t *testing.T) {
+			_, _, err := parseStandalone(t, spec(), argv...)
+			require.ErrorIs(t, err, errUtils.ErrScriptUsage)
+			require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+			assert.ErrorContains(t, err, `invalid value ""`)
+			assert.ErrorContains(t, err, "valid values")
+		})
+	}
+	t.Run("unset flags stay empty", func(t *testing.T) {
+		input, _, err := parseStandalone(t, spec())
+		require.NoError(t, err)
+		assert.Equal(t, "", input.Flags["stage"])
+	})
+	t.Run("a flag without choices accepts an empty value", func(t *testing.T) {
+		input, _, err := parseStandalone(t, &script.CommandSpec{Flags: []flags.Flag{&flags.StringFlag{Name: "note"}}}, "--note=")
+		require.NoError(t, err)
+		assert.Equal(t, "", input.Flags["note"])
+	})
+	t.Run("an empty environment value is ignored as before", func(t *testing.T) {
+		t.Setenv("FT_STAGE_EMPTY", "")
+		input, _, err := parseStandalone(t, &script.CommandSpec{Flags: []flags.Flag{
+			&flags.StringFlag{Name: "stage", ValidValues: []string{"dev"}, EnvVars: []string{"FT_STAGE_EMPTY"}},
+		}})
+		require.NoError(t, err)
+		assert.Equal(t, "", input.Flags["stage"])
+	})
+}

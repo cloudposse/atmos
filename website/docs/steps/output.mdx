@@ -29,7 +29,7 @@ A live viewport follows recent stdout and stderr, collapses on success, and reve
 full output on failure. See [live viewport](/workflows/output#live-viewport) for sizing
 and noninteractive behavior.
 
-Supported values are `raw`, `log`, `viewport`, and `none`. See workflow-level [output](/workflows/output) for the value definitions. Any other value, such as `capture`, fails validation before the step runs, and the error lists the valid modes. This applies to `shell`, `script`, `atmos`, and `container` steps and to the workflow-level `output`.
+Supported values are `raw`, `log`, `viewport`, and `none`. See workflow-level [output](/workflows/output) for the value definitions. Any other value, such as `capture` or `stream`, fails validation before the step runs, and the error lists the valid modes. For `capture` and `stream`, the error also points to `exec.run`: in a [script step](/steps/type/script), `exec.run(argv, output="capture")` captures a command's output, and the `exec.run`, `component.exec`, and `atmos.*` functions accept `stream`, `capture`, and `viewport`. This applies to `shell`, `script`, `atmos`, and `container` steps and to the workflow-level `output`.
 
 A templated `output` value is rendered first and validated after rendering. If the rendered text is not one of the supported modes, the step fails with the same error that lists the valid modes.
 

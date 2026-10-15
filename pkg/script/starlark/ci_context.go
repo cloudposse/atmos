@@ -32,7 +32,8 @@ func (s *session) ciContextValue() starlark.Value {
 	return s.ciCtxValue
 }
 
-// contextValue converts the run context. `local` is true when the generic fallback provider
+// contextValue converts the run context. `pr.fork` is true when the pull request head lives in a
+// fork of the base repository, the condition under which elevated events hold comments and checks. `local` is true when the generic fallback provider
 // supplied the context, meaning no CI provider was detected and writes render locally. It does not
 // reflect configuration switches: a detected provider whose switch is off still reports false, and
 // the write itself warns when it is rendered locally.
@@ -44,6 +45,7 @@ func contextValue(c *ci.Context) starlark.Value {
 			"head":   starlark.String(c.PullRequest.HeadRef),
 			"base":   starlark.String(c.PullRequest.BaseRef),
 			"url":    starlark.String(c.PullRequest.URL),
+			"fork":   starlark.Bool(c.PullRequest.Fork),
 		})
 	}
 	return frozenStruct("context", starlark.StringDict{
@@ -81,8 +83,9 @@ func (s *session) ciBase(t *starlark.Thread, b *starlark.Builtin, args starlark.
 	}), nil
 }
 
-// commentValue converts a posted comment. A comment that only rendered locally has no provider
-// identity, so it reads as id 0 with an empty URL.
+// commentValue converts a posted comment. A comment rendered locally by the generic provider
+// carries a synthetic id that starts at 1 and an empty URL. Only a reporter that returned no
+// comment at all (a mock, or a provider that cannot render one) reads as id 0.
 func commentValue(comment *ci.Comment) starlark.Value {
 	if comment == nil {
 		comment = &ci.Comment{}
@@ -91,5 +94,6 @@ func commentValue(comment *ci.Comment) starlark.Value {
 		"id":      starlark.MakeInt64(comment.ID),
 		"url":     starlark.String(comment.URL),
 		"created": starlark.Bool(comment.Created),
+		"target":  starlark.String(comment.Target),
 	})
 }

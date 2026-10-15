@@ -51,10 +51,12 @@ atmos git hooks run commit-msg .git/COMMIT_EDITMSG
 ## Behavior
 
 - Loads the Atmos configuration for the current repository and selects the hook's `command` or `steps`.
-- Runs `steps` in order through the registered step library, from the repository root even when invoked from a subdirectory. The step metrics summary is off by default for hooks. Embedded Starlark runs inside Atmos; a failed step stops the hook. Hook arguments are available as `ctx.args`.
+- Runs `steps` in order through the registered step library, from the repository root even when invoked from a subdirectory. The step metrics summary is off by default for hooks. Embedded Starlark runs inside Atmos; a failed step stops the hook. Hook arguments are available as `ctx.args` in Starlark steps and as `$1`, `"$@"`, and `ATMOS_GIT_HOOK_ARGS` in shell steps.
 - Runs `command` hooks through the shared shell runner with the inherited process environment, including `PATH`. Prepare any tools or identity credentials before invoking the hook.
-- Forwards hook arguments **and stdin** to `command` hooks — hooks such as `pre-push` and `pre-receive` receive their input on stdin, not argv. For `steps` hooks, stdin handling depends on the step type.
-- Propagates the command's exit code, so a failing hook command blocks the Git operation exactly as a hand-written hook would.
+- Forwards hook arguments **and stdin** to `command` hooks — hooks such as `pre-push` and `pre-receive` receive their input on stdin, not argv. For `steps` hooks, Atmos saves the data Git pipes to `pre-push`, `pre-receive`, `post-receive`, `post-rewrite`, `reference-transaction`, and `proc-receive` to a temporary file whose path is in `ATMOS_GIT_HOOK_STDIN`, and the first shell step also receives the data on its standard input. Atmos removes the file when the hook ends.
+- Propagates the command's exit code, so a failing hook command blocks the Git operation exactly as a hand-written hook would. For `steps` hooks the exit code is the failing step's: a Starlark `fail()` exits with 1, and `errors.build("message").with_exit_code(5).fail()` exits with 5.
+- Fails a prompt step that has no `default:` when the hook runs without a terminal, with a hint that setting `default:` lets the step run there.
+- Lets a later configuration source replace an earlier hook definition: switching a hook between `steps:` and `command:` replaces the earlier form.
 - Fails with a clear error listing the configured hooks when `<hook-name>` is not configured under `git.hooks`.
 
 ## Arguments

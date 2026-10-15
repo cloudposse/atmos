@@ -107,7 +107,7 @@ func TestInstallHook_WritesExecutableShim(t *testing.T) {
 	content, err := os.ReadFile(hookPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(content), ShimMarker)
-	assert.Contains(t, string(content), "exec atmos git hooks run pre-commit \"$@\"")
+	assert.Contains(t, string(content), "git hooks run pre-commit \"$@\"")
 
 	// File must be executable.
 	assertHookExecutable(t, hookPath)

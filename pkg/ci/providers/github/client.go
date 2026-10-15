@@ -62,6 +62,22 @@ func NewClient() (*Client, error) {
 	return client, nil
 }
 
+// ValidateAPIURL checks the API base URL from ATMOS_CI_GITHUB_API_URL or GITHUB_API_URL
+// without needing a token, so a misconfigured runner fails before any request is built.
+// It returns nil when neither variable is set.
+func ValidateAPIURL() error {
+	defer perf.Track(nil, "github.ValidateAPIURL")()
+
+	envName, raw := lookupAPIURLEnv()
+	if raw == "" {
+		return nil
+	}
+	if _, err := parseAPIBaseURL(raw); err != nil {
+		return fmt.Errorf("%w: %s=%q: %w", errUtils.ErrInvalidURL, envName, raw, err)
+	}
+	return nil
+}
+
 // applyAPIURLFromEnv points the underlying go-github client at the API base URL
 // from ATMOS_CI_GITHUB_API_URL or GITHUB_API_URL. It is a no-op when neither is set.
 func (c *Client) applyAPIURLFromEnv() error {
