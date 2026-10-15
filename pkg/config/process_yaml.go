@@ -152,6 +152,9 @@ func processNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	if node == nil {
 		return nil
 	}
+	if node.Tag == "!version" && node.Kind != yaml.ScalarNode {
+		return unsupportedAtmosYamlTagError(node.Tag, currentPath)
+	}
 
 	switch node.Kind {
 	case yaml.DocumentNode:
