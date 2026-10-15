@@ -83,7 +83,7 @@ jobs:
   # ensure the code builds...
   build:
     name: Build (${{ matrix.target }})
-    # windows-latest is the slowest target: it compiles this large dependency
+    # Windows is the slowest target: it compiles this large dependency
     # tree far slower than the Linux (self-hosted) and macOS runners. A cold
     # Go cache after dependency changes used to push the job past a tight
     # limit and get the run cancelled mid-save (see #2713's windows build
@@ -102,7 +102,9 @@ jobs:
           # backend also lets the acceptance shards reuse its artifacts.
           - os: "ubuntu-latest"
             target: linux
-          - os: "windows-latest"
+          # Go 1.26 can corrupt the heap on Server 2025 AMX runners. Keep
+          # Windows coverage on Server 2022 pending golang/go#81238.
+          - os: "windows-2022"
             target: windows
           - os: "macos-15"
             target: macos
@@ -343,9 +345,9 @@ jobs:
       matrix:
         flavor:
           - { os: "ubuntu-latest", target: linux }
-          - { os: "windows-latest", target: windows }
+          - { os: "windows-2022", target: windows }
           - { os: "macos-15", target: macos }
-    # windows-latest is the slowest target here too: the actual test finishes
+    # Windows is the slowest target here too: the actual test finishes
     # within its own 15m sub-step timeout, but the post-job Go module/build
     # cache save (tar + zstd) runs after that and is much slower on Windows,
     # so a flat 20m job budget can expire mid-save even though the test
@@ -567,7 +569,7 @@ jobs:
         # Windows here (see this matrix's own history).
         flavor:
           - { os: "ubuntu-latest", target: linux, jobTimeout: 50, stepTimeout: 30, coverageStepTimeout: 40 }
-          - { os: "windows-latest", target: windows, jobTimeout: 50, stepTimeout: 40 }
+          - { os: "windows-2022", target: windows, jobTimeout: 50, stepTimeout: 40 }
           - { os: "macos-15", target: macos, jobTimeout: 40, stepTimeout: 30 }
         # tests/cli_test.go's TestCLICommands splits its ~388 CLI-driven subtests
         # across these shards by bin-packing each test case's workdir
@@ -797,7 +799,7 @@ jobs:
         run: go tool mage acceptance:run coverage linux
 
       - name: Acceptance tests
-        # windows-latest is the slowest target for this suite too (see the
+        # Windows is the slowest target for this suite too (see the
         # Build job's timeout comment above): before sharding, runs of the
         # unsharded step were observed between 37m43s and 60m17s. Per-platform
         # budgets (stepTimeout) live on the matrix above, alongside the measured
@@ -1877,7 +1879,7 @@ jobs:
       matrix:
         flavor:
           - { os: ubuntu-latest, target: linux }
-          - { os: windows-latest, target: windows }
+          - { os: windows-2022, target: windows }
           - { os: "macos-15", target: macos }
         demo-folder:
           - examples/demo-atlantis
