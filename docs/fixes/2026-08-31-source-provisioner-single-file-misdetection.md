@@ -2,10 +2,9 @@
 
 **Date:** 2026-08-31
 
-**Implementation status:** Pending in the documentation-only [PR #3156](https://github.com/cloudposse/atmos/pull/3156).
-The implementation and regression tests are in the follow-up [PR #3157](https://github.com/cloudposse/atmos/pull/3157).
-This report preserves the development findings and validation of that implementation;
-it does not mean the fix is present in the documentation-only revision.
+**Implementation status:** Included in [PR #3157](https://github.com/cloudposse/atmos/pull/3157),
+the implementation follow-up to documentation-only [PR #3156](https://github.com/cloudposse/atmos/pull/3156).
+This report preserves the development findings and validation of that implementation.
 
 ## Summary
 
@@ -29,7 +28,7 @@ against `main`. Re-running the exact same test locally 5/5 times reproduced the 
 deterministically, which ruled out a race and prompted a real root-cause investigation instead
 of continuing to report it as an environment flake.
 
-## Proposed implementation (PR #3157)
+## Implementation (PR #3157)
 
 - `pkg/provisioner/source/vendor.go`: excluded Git, S3, and archive sources from the
   `singleFileInDir` single-file heuristic in `VendorSource`. These getters always unpack to a
