@@ -12,11 +12,8 @@ import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials
 import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
-  Update a CloudFormation StackSet's template, parameters, and capabilities
-  (`UpdateStackSet`) from the component's current configuration, and wait for
-  the update to propagate to every existing stack instance. `stackset update`
-  never changes which accounts/regions have instances — that set is fixed at
-  [`stackset create`](/cli/commands/aws/cloudformation/stackset/create) time.
+Update a StackSet’s template, parameters, and capabilities, then wait for the
+update to reach its existing instances. This command does not add or remove instances.
 </Intro>
 
 <Experimental />
@@ -70,6 +67,10 @@ atmos aws cloudformation stackset update --affected --base origin/main
 </dl>
 
 ## Behavior
+
+Atmos creates instances during [`stackset create`](/cli/commands/aws/cloudformation/stackset/create)
+and has no command to add instances to an existing StackSet. To add instances later,
+use the [AWS CloudFormation console or AWS CLI](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stackinstances-create.html).
 
 The `UpdateStackSet` operation is polled every 3 seconds until it reaches a
 terminal status (`SUCCEEDED`/`FAILED`/`STOPPED`), and the command times out

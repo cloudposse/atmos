@@ -805,7 +805,7 @@ jobs:
           GOTRACEBACK: system
         # Let Go print goroutine stacks on a test timeout before the runner kills
         # the step. Verbose output identifies the last test if a subprocess stalls.
-        run: '"$RUNNER_TEMP/acceptance-checkptr.test.exe" -test.v -test.count=3 -test.timeout=5m'
+        run: '"$(cygpath -u "$RUNNER_TEMP")/acceptance-checkptr.test.exe" -test.v -test.count=3 -test.timeout=5m'
 
       # The Mage target owns package/test allocation, precompiled suites, and
       # native coverage collection so both workflow paths stay identical.
