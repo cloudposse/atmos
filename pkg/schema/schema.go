@@ -1157,6 +1157,13 @@ func (m PlanfileVerifyMode) IsValid() bool {
 type PlanfileStoreSpec struct {
 	Type    string         `yaml:"type" json:"type" mapstructure:"type"`
 	Options map[string]any `yaml:"options,omitempty" json:"options,omitempty" mapstructure:"options"`
+	// Identity optionally names the Atmos auth identity the store uses to
+	// authenticate (resolved via `auth.identities`), independent of the
+	// component's active identity. When empty, the store inherits the
+	// component's identity (the prior behavior). This lets a multi-cloud setup
+	// store planfiles in, say, an AWS S3 bucket while the component itself
+	// authenticates with a non-AWS identity.
+	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 }
 
 type ShellConfig struct {

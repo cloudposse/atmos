@@ -90,6 +90,7 @@ func TestPackageURL_DottedBucketEscapesKeyCharacters(t *testing.T) {
 // environment_test.go's TestBuildAWSConfig_PropagatesRegion for the same
 // property on the sibling AWS SDK client path).
 func TestNewS3Backend_DefaultIdentity(t *testing.T) {
+	isolateAWSDefaultChain(t)
 	atmosConfig := &schema.AtmosConfiguration{}
 	info := &schema.ConfigAndStacksInfo{}
 	s3Target := &targetS3Config{Bucket: "my-bucket", Prefix: "assets/", Region: "us-east-1"}

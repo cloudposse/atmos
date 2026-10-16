@@ -42,7 +42,7 @@ func TestRunCIHook_ApplyPopulatesOutputs(t *testing.T) {
 		},
 	})
 
-	assert.Equal(t, "Password = <MASKED>\nVpcId = vpc-123", captured.Output)
+	assert.Equal(t, "stack_name: dev-vpc\nno_op: false\nPassword = <MASKED>\nVpcId = vpc-123", captured.Output)
 	result, ok := captured.Aggregate.(*schema.CloudFormationCIResult)
 	require.True(t, ok)
 	assert.Equal(t, map[string]string{"VpcId": "vpc-123", "Password": "<MASKED>"}, result.Outputs)
@@ -52,7 +52,7 @@ func TestRunCIHook_ApplyPopulatesOutputs(t *testing.T) {
 }
 
 // Diff must list the changeset's resource changes (Action, type, logical ID, replacement) and count
-// only resource changes. A no-op changeset reports NoOp and no text.
+// only resource changes. A no-op changeset reports NoOp without resource changes.
 func TestRunCIHook_DiffListsResourceChanges(t *testing.T) {
 	changes := []cfntypes.Change{
 		{ResourceChange: &cfntypes.ResourceChange{
@@ -74,10 +74,10 @@ func TestRunCIHook_DiffListsResourceChanges(t *testing.T) {
 		{
 			name:        "changes",
 			summary:     map[string]any{"changes": changes, "no_op": false},
-			wantOutput:  "Modify   AWS::SSM::Parameter          Param (replacement: True)\nAdd      AWS::SNS::Topic              Topic",
+			wantOutput:  "no_op: false\nModify   AWS::SSM::Parameter          Param (replacement: True)\nAdd      AWS::SNS::Topic              Topic",
 			wantChanges: 2,
 		},
-		{name: "no-op", summary: map[string]any{"changes": []cfntypes.Change{}, "no_op": true}, wantNoOp: true},
+		{name: "no-op", summary: map[string]any{"changes": []cfntypes.Change{}, "no_op": true}, wantOutput: "no_op: true", wantNoOp: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
