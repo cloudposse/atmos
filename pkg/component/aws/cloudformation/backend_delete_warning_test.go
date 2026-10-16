@@ -10,6 +10,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -34,12 +35,13 @@ func TestDeleteBackendWithParamsStateWarning(t *testing.T) {
 			})
 			require.NoError(t, err)
 			assert.True(t, deleted.Load(), "must reach actual S3 bucket deletion")
-			assert.Contains(t, output.String(), "permanently remove 1 object(s)")
-			assert.Contains(t, output.String(), "This action cannot be undone")
+			plainOutput := ansi.Strip(output.String())
+			assert.Contains(t, plainOutput, "permanently remove 1 object(s)")
+			assert.Contains(t, plainOutput, "This action cannot be undone")
 			if cloudFormation {
-				assert.NotContains(t, output.String(), "Terraform state file(s)")
+				assert.NotContains(t, plainOutput, "Terraform state file(s)")
 			} else {
-				assert.Contains(t, output.String(), "including 1 Terraform state file(s)")
+				assert.Contains(t, plainOutput, "including 1 Terraform state file(s)")
 			}
 		})
 	}
