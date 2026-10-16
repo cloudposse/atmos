@@ -331,15 +331,14 @@ components:
             region: us-east-1
 ```
 
-    The bucket must exist before `apply`/`deploy` uploads to it — either
-    provision it explicitly with
-    `atmos aws cloudformation backend create` (requires phase 4),
-    or set `provision.backend.enabled: true` (a sibling of `targets`, not
-    nested under a target) to have `apply`/`deploy` create it automatically
-    the first time it's missing. Auto-provisioning only runs the existence
-    check up front — it never reconciles a bucket that already exists, unlike
-    `backend create`/`update` run explicitly, which always re-applies the
-    secure defaults (versioning, encryption, public access blocking, tags).
+    The bucket must exist before `apply`/`deploy` uploads to it. Both
+    `atmos aws cloudformation backend create` and automatic provisioning with
+    `provision.backend.enabled: true` require phase 4. Until phase 4 is available,
+    create the bucket outside Atmos. Set `backend` as a sibling of `targets`,
+    not inside a target. Automatic provisioning checks for a missing bucket;
+    it does not reconcile an existing bucket. Explicit `backend create`/`update`
+    reapplies secure defaults: versioning, encryption, public access blocking,
+    and tags.
 
 ```yaml
 components:

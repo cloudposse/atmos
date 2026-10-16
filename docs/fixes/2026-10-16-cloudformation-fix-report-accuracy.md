@@ -4,7 +4,7 @@
 
 ## Summary
 
-Correct three stale statements in the phase 4 documentation reports.
+Correct three stale statements in the phase 4 documentation reports and clarify when backend provisioning becomes available.
 
 ## Context
 
@@ -12,7 +12,7 @@ CodeRabbit identified an invalid-format claim that incorrectly included apply, a
 
 ## Changes
 
-Limit the invalid-format claim to output. Describe returned cleanup errors and reference the current regression test name. Mark the CloudFormation labels work implemented in #3137 and pending merge.
+Limit the invalid-format claim to output. Describe returned cleanup errors and reference the current regression test name. Mark the CloudFormation labels work implemented in #3137 and pending merge. Mark both automatic and explicit backend provisioning as requiring phase 4; earlier phases require creating the bucket outside Atmos.
 
 ## Validation
 
