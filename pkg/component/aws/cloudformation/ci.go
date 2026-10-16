@@ -1,12 +1,18 @@
 package cloudformation
 
 import (
+	"fmt"
 	"os"
 	"reflect"
+	"sort"
 	"strings"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/hooks"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -51,6 +57,7 @@ func runCIHook(p ciHookParams) {
 		Event:        p.event,
 		AtmosConfig:  p.atmosConfig,
 		Info:         p.info,
+		Output:       ciOutputText(p.summary),
 		ForceCIMode:  cloudformationCIModeEnabled(p.flags),
 		CommandError: p.commandErr,
 		ExitCode:     result.ExitCode,
@@ -84,6 +91,68 @@ func populateCloudFormationCIResultFromSummary(result *schema.CloudFormationCIRe
 	if driftedCount, ok := summary["drifted_resource_count"].(int32); ok {
 		result.DriftedCount = int(driftedCount)
 	}
+}
+
+// ciOutputText builds the text for the CI summary's "CloudFormation output" section from an
+// operation summary: measured statuses, presented stack Outputs, resource changes, and
+// drifted resources. Raw templates and resource property values are not serialized. The text
+// passes through the global masker, so registered secrets are redacted before reaching CI.
+func ciOutputText(summary map[string]any) string {
+	var lines []string
+	for _, key := range []string{"stack_name", "changeset_name", "no_op", "final_status", "drift_status", "drifted_resource_count"} {
+		switch value := summary[key].(type) {
+		case string, bool, int32:
+			lines = append(lines, fmt.Sprintf("%s: %v", key, value))
+		}
+	}
+	if outputs, ok := summary["outputs"].(map[string]any); ok {
+		lines = append(lines, outputLines(outputs)...)
+	}
+	if changes, ok := summary["changes"].([]cfntypes.Change); ok {
+		lines = append(lines, changeLines(changes)...)
+	}
+	if drifts, ok := summary["drifts"].([]cfntypes.StackResourceDrift); ok {
+		lines = append(lines, driftLines(drifts)...)
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	text := strings.Join(lines, "\n")
+	if ioCtx := iolib.GetContext(); ioCtx != nil {
+		text = ioCtx.Masker().Mask(text)
+	}
+	return text
+}
+
+// outputLines renders stack outputs as sorted "Key = Value" lines.
+func outputLines(outputs map[string]any) []string {
+	keys := make([]string, 0, len(outputs))
+	for key := range outputs {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	lines := make([]string, 0, len(keys))
+	for _, key := range keys {
+		lines = append(lines, fmt.Sprintf("%s = %v", key, outputs[key]))
+	}
+	return lines
+}
+
+// changeLines renders a changeset's resource changes (action, type, logical ID, replacement).
+func changeLines(changes []cfntypes.Change) []string {
+	var lines []string
+	for i := range changes {
+		rc := changes[i].ResourceChange
+		if rc == nil {
+			continue
+		}
+		line := fmt.Sprintf("%-8s %-28s %s", rc.Action, aws.ToString(rc.ResourceType), aws.ToString(rc.LogicalResourceId))
+		if rc.Replacement != "" {
+			line += fmt.Sprintf(" (replacement: %s)", rc.Replacement)
+		}
+		lines = append(lines, line)
+	}
+	return lines
 }
 
 // summaryLen returns the length of a summary value that is a slice (e.g.

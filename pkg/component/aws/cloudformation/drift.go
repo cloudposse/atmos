@@ -194,15 +194,24 @@ func runDriftDescribe(ctx context.Context, client CloudFormationClient, stackNam
 		_ = data.Writeln(fmt.Sprintf("%s: no drift results (run drift detect first)", stackName))
 		return summary, nil
 	}
+	for _, line := range driftLines(drifts) {
+		_ = data.Writeln(line)
+	}
+	return summary, nil
+}
+
+// driftLines renders drifted resource identities and statuses for the terminal and CI summary.
+// Raw actual and expected properties are deliberately excluded.
+func driftLines(drifts []cfntypes.StackResourceDrift) []string {
+	var lines []string
 	for i := range drifts {
 		d := &drifts[i]
 		if d.StackResourceDriftStatus == cfntypes.StackResourceDriftStatusInSync {
 			continue
 		}
-		line := fmt.Sprintf("  %-10s %-28s %s", d.StackResourceDriftStatus, stringValue(d.ResourceType), stringValue(d.LogicalResourceId))
-		_ = data.Writeln(line)
+		lines = append(lines, fmt.Sprintf("  %-10s %-28s %s", d.StackResourceDriftStatus, stringValue(d.ResourceType), stringValue(d.LogicalResourceId)))
 	}
-	return summary, nil
+	return lines
 }
 
 // summarizeResourceDrifts derives the aggregate status from the returned

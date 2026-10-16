@@ -2,6 +2,8 @@ package cloudformation
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
@@ -10,7 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/cloudformation"
+	"github.com/cloudposse/atmos/pkg/ci/providers/github"
 	"github.com/cloudposse/atmos/pkg/hooks"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -275,4 +281,68 @@ func TestSummaryLen(t *testing.T) {
 			assert.Equal(t, tt.want, summaryLen(tt.value))
 		})
 	}
+}
+
+// TestRunCIHook_OutputReachesSummary exercises the producer, shared dispatcher, and real
+// CloudFormation templates rather than supplying output directly to the plugin.
+func TestRunCIHook_OutputReachesSummary(t *testing.T) {
+	t.Cleanup(ci.SwapRegistryForTest())
+	ci.Register(github.NewProvider())
+	t.Setenv("GITHUB_ACTIONS", "true")
+	for _, tc := range []struct {
+		command string
+		event   hooks.HookEvent
+		summary map[string]any
+		want    string
+	}{
+		{"diff", hooks.AfterAwsCloudFormationDiff, map[string]any{"changes": []cfntypes.Change{{ResourceChange: &cfntypes.ResourceChange{Action: cfntypes.ChangeActionAdd, LogicalResourceId: awsString("Bucket"), ResourceType: awsString("AWS::S3::Bucket"), Replacement: cfntypes.ReplacementFalse}}}}, "AWS::S3::Bucket"},
+		{"apply", hooks.AfterAwsCloudFormationApply, map[string]any{"no_op": true}, "no_op: true"},
+		{"delete", hooks.AfterAwsCloudFormationDelete, map[string]any{"final_status": "DELETE_COMPLETE"}, "final_status: DELETE_COMPLETE"},
+		{"drift-detect", hooks.AfterAwsCloudFormationDriftDetect, map[string]any{"drift_status": "DRIFTED", "drifted_resource_count": int32(2)}, "drifted_resource_count: 2"},
+		{"drift-describe", hooks.AfterAwsCloudFormationDriftDescribe, map[string]any{"drifts": []cfntypes.StackResourceDrift{{LogicalResourceId: awsString("Bucket"), ResourceType: awsString("AWS::S3::Bucket"), StackResourceDriftStatus: cfntypes.StackResourceDriftStatusModified}}}, "MODIFIED"},
+	} {
+		t.Run(tc.command, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "summary.md")
+			t.Setenv("GITHUB_STEP_SUMMARY", path)
+			tc.summary["stack_name"] = "dev-vpc"
+			runCIHook(ciHookParams{
+				event:       tc.event,
+				atmosConfig: &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}, Settings: schema.AtmosSettings{Experimental: "silence"}},
+				info:        &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "dev", SubCommand: tc.command},
+				summary:     tc.summary,
+			})
+			content, err := os.ReadFile(path)
+			require.NoError(t, err)
+			assert.Contains(t, string(content), "<summary>CloudFormation output</summary>")
+			assert.Contains(t, string(content), tc.want)
+			assert.Contains(t, string(content), "stack_name: dev-vpc")
+		})
+	}
+}
+
+// TestRunCIHook_OutputMasksSecrets excludes raw property values and masks registered
+// secrets before they reach any provider, without modifying the operation summary.
+func TestRunCIHook_OutputMasksSecrets(t *testing.T) {
+	t.Cleanup(iolib.Reset)
+	iolib.RegisterSecret("registered-secret")
+	original := runCIHooks
+	t.Cleanup(func() { runCIHooks = original })
+	var captured *hooks.RunCIHooksOptions
+	runCIHooks = func(opts *hooks.RunCIHooksOptions) error { captured = opts; return nil }
+	summary := map[string]any{
+		"stack_name": "dev-vpc",
+		"template":   "private-template",
+		"outputs":    map[string]any{"Password": "registered-secret", "Public": "visible-output"},
+		"changes":    []cfntypes.Change{{ResourceChange: &cfntypes.ResourceChange{Action: cfntypes.ChangeActionModify, LogicalResourceId: awsString("registered-secret"), BeforeContext: awsString("private-before"), AfterContext: awsString("private-after")}}},
+		"drifts":     []cfntypes.StackResourceDrift{{LogicalResourceId: awsString("Bucket"), ResourceType: awsString("AWS::S3::Bucket"), StackResourceDriftStatus: cfntypes.StackResourceDriftStatusModified, ActualProperties: awsString("private-actual"), ExpectedProperties: awsString("private-expected")}},
+	}
+	runCIHook(ciHookParams{event: hooks.AfterAwsCloudFormationDiff, summary: summary})
+	require.NotNil(t, captured)
+	assert.Contains(t, captured.Output, "<MASKED>")
+	assert.Contains(t, captured.Output, "Bucket")
+	assert.Contains(t, captured.Output, "Public = visible-output")
+	assert.NotContains(t, captured.Output, "registered-secret")
+	assert.NotContains(t, captured.Output, "private-")
+	assert.Equal(t, "private-template", summary["template"])
+	assert.Equal(t, "registered-secret", *summary["changes"].([]cfntypes.Change)[0].ResourceChange.LogicalResourceId)
 }
