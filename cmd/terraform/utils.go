@@ -1055,6 +1055,9 @@ func (n *terraformNodeHooks) Before(ctx context.Context, info *schema.ConfigAndS
 func (n *terraformNodeHooks) BeforeWithWriters(_ context.Context, info *schema.ConfigAndStacksInfo, writers schema.ComponentNodeHookWriters) error {
 	defer perf.Track(nil, "terraform.terraformNodeHooks.Before")()
 
+	// Snapshot the node's own credentials before the hook-only injection, so the
+	// deploy verification below can run with them (see verifyStoredPlanForNode).
+	nodeAuthContext, nodeAuthManager := info.AuthContext, info.AuthManager
 	injectLastAuthContext(info)
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
@@ -1072,6 +1075,29 @@ func (n *terraformNodeHooks) BeforeWithWriters(_ context.Context, info *schema.C
 	if !n.skipPerNodeCI {
 		n.runCIHooksForNodeBefore(&atmosConfig, info)
 	}
+	// Multi-component deploys never reach the RunE verify gate, so enforce the
+	// stored-plan verify and required settings per node here, after the CI hook
+	// downloaded the stored plan. A no-op for subcommands other than deploy.
+	return verifyStoredPlanForNode(n.subCommand, info, nodeAuthContext, nodeAuthManager)
+}
+
+// verifyStoredPlanForNode runs verifyStoredPlanForDeploy for one graph node on a
+// shallow copy of info that carries the node's own credentials. The copy exists
+// because Before injects the last aggregate auth context into info for its
+// hooks, and that context can belong to another node, so the fresh verification
+// plan must not run with it. The original info keeps the injected context,
+// because After receives the same info and reuses it for its hooks. Only the
+// fields a successful verification sets, PlanFile and UseTerraformPlan, are
+// copied back.
+func verifyStoredPlanForNode(subCommand string, info *schema.ConfigAndStacksInfo, authContext *schema.AuthContext, authManager any) error {
+	verifyInfo := *info
+	verifyInfo.AuthContext = authContext
+	verifyInfo.AuthManager = authManager
+	if err := verifyStoredPlanForDeploy(subCommand, &verifyInfo); err != nil {
+		return err
+	}
+	info.PlanFile = verifyInfo.PlanFile
+	info.UseTerraformPlan = verifyInfo.UseTerraformPlan
 	return nil
 }
 
@@ -1783,6 +1809,10 @@ func argsAfterComponent(args []string) []string {
 	return args[1:]
 }
 
+// verifyPlanfile delegates to e.VerifyPlanfile, the stored-vs-fresh plan comparison.
+// Declared as a var so tests can stub the comparison without running terraform.
+var verifyPlanfile = e.VerifyPlanfile
+
 // verifyStoredPlanForDeploy runs planfile drift verification before a deploy
 // apply. It is a no-op for non-deploy commands, when planfile storage is not
 // configured (unless --verify-plan explicitly requested verification, which then
@@ -1831,7 +1861,7 @@ func verifyStoredPlanForDeploy(subCommand string, info *schema.ConfigAndStacksIn
 		return nil
 	}
 
-	return e.VerifyPlanfile(info, storedPlanPath, mode)
+	return verifyPlanfile(info, storedPlanPath, mode)
 }
 
 // handleUnconfiguredPlanfileStorage resolves a verification request that cannot be
