@@ -788,13 +788,24 @@ jobs:
       # A Windows runtime heap-corruption failure in this package is not an
       # assertion failure. Exercise its subprocess paths with pointer checking
       # on one shard, retaining the full ordinary suite below.
-      - name: Check Windows acceptance orchestration
+      # Compile separately so a cold instrumented build does not consume the
+      # test execution budget. Successful combined runs already approach five minutes.
+      - name: Compile Windows acceptance orchestration check
         if: matrix.flavor.target == 'windows' && matrix.shard == 1 && ! github.event.pull_request.draft
         timeout-minutes: 5
         shell: bash
+        run: go test -c -gcflags=all=-d=checkptr=2 -o "$RUNNER_TEMP/acceptance-checkptr.test.exe" ./internal/ci/acceptance
+
+      - name: Check Windows acceptance orchestration
+        if: matrix.flavor.target == 'windows' && matrix.shard == 1 && ! github.event.pull_request.draft
+        timeout-minutes: 6
+        shell: bash
+        working-directory: internal/ci/acceptance
         env:
           GOTRACEBACK: system
-        run: go test -gcflags=all=-d=checkptr=2 -count=3 ./internal/ci/acceptance
+        # Let Go print goroutine stacks on a test timeout before the runner kills
+        # the step. Verbose output identifies the last test if a subprocess stalls.
+        run: '"$(cygpath -u "$RUNNER_TEMP")/acceptance-checkptr.test.exe" -test.v -test.count=3 -test.timeout=5m'
 
       # The Mage target owns package/test allocation, precompiled suites, and
       # native coverage collection so both workflow paths stay identical.
