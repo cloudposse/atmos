@@ -13,8 +13,9 @@ import Experimental from '@site/src/components/Experimental'
   Create a CloudFormation changeset for the component and leave it in place for
   later manual review and execution — the explicit-control complement to
   [`diff`](/cli/commands/aws/cloudformation/diff)/[`plan`](/cli/commands/aws/cloudformation/plan)'s
-  implicit, preview-only changeset (which is also left in place, but framed as
-  a one-off preview rather than a named, reusable artifact).
+  temporary preview changeset. After rendering, `diff`/`plan` deletes its changeset
+  and any preview-created stack placeholder still in `REVIEW_IN_PROGRESS`.
+  Cleanup failures are returned as errors.
 </Intro>
 
 <Experimental />
