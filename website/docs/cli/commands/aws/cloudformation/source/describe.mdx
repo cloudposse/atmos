@@ -85,14 +85,14 @@ components:
 
 <dl>
   <dt>`component`</dt>
-  <dd>**Required.** The name of the Atmos component to describe.</dd>
+  <dd>The name of the Atmos component to describe. Required for unattended use; when omitted, interactive mode offers component selection if candidates are available.</dd>
 </dl>
 
 ## Flags
 
 <dl>
   <dt>`--stack` / `-s`</dt>
-  <dd>**Required.** The Atmos stack name. Can also be set via `ATMOS_STACK` environment variable.</dd>
+  <dd>The Atmos stack name, also settable via `ATMOS_STACK`. Required for unattended use; when unset, interactive mode offers stack selection if candidates are available.</dd>
 </dl>
 
 ## Output Format
