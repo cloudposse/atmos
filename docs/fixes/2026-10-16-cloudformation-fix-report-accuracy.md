@@ -12,7 +12,7 @@ CodeRabbit identified an invalid-format claim that incorrectly included apply, a
 
 ## Changes
 
-Limit the invalid-format claim to output. Describe returned cleanup errors and reference the current regression test name. Mark the CloudFormation labels work implemented in #3137 and pending merge. Mark both automatic and explicit backend provisioning as requiring phase 4; earlier phases require creating the bucket outside Atmos.
+Limit the invalid-format claim to output. Describe returned cleanup errors and reference the current regression test name. Mark the CloudFormation labels work implemented in #3137 and pending merge. Mark both automatic and explicit backend provisioning as requiring phase 4; earlier phases require creating the bucket outside Atmos. Repeat that prerequisite in the migration guide’s artifact-bucket section and FAQ so readers can follow either section independently. Document the existing-bucket confirmation and `--auto-approve` flag on both backend create and update pages.
 
 ## Validation
 
