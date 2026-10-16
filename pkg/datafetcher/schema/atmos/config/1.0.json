@@ -8064,6 +8064,17 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Identity optionally names the Atmos auth identity the store uses to\nauthenticate (resolved via `auth.identities`), independent of the\ncomponent's active identity. When empty, the store inherits the\ncomponent's identity (the prior behavior). This lets a multi-cloud setup\nstore planfiles in, say, an AWS S3 bucket while the component itself\nauthenticates with a non-AWS identity."
         }
       },
       "type": "object",
