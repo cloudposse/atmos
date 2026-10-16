@@ -537,11 +537,14 @@ func TestRunStackSetInstances_Populated(t *testing.T) {
 // rather than a fixed literal sequence.
 func TestListStackSetInstances_Pagination(t *testing.T) {
 	tests := []struct {
-		name      string
-		pageCount int
+		name       string
+		pageCount  int
+		finalToken *string
 	}{
-		{"single page", 1},
-		{"paginates across pages", 3},
+		{"single page", 1, nil},
+		{"paginates across pages", 3, nil},
+		{"single page with empty token", 1, awsString("")},
+		{"paginates until empty token", 3, awsString("")},
 	}
 
 	for _, tt := range tests {
@@ -557,6 +560,7 @@ func TestListStackSetInstances_Pagination(t *testing.T) {
 
 				out := &cloudformation.ListStackInstancesOutput{
 					Summaries: []cfntypes.StackInstanceSummary{{Account: awsString(account)}},
+					NextToken: tt.finalToken,
 				}
 				isLastPage := page == tt.pageCount
 				if !isLastPage {
