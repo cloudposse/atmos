@@ -293,7 +293,7 @@ func TestQualityDraftVerdictComesFromRegistry(t *testing.T) {
 		require.Equal(t, "ready-for-review", gates[0].ID)
 		if draft {
 			require.False(t, gates[0].Passed)
-			require.Contains(t, body, "⏳ [Ready for review]")
+			require.Contains(t, body, "⚠️ [Ready for review]")
 			require.Contains(t, body, "<code>"+qualityNotReady+"</code>")
 			require.Contains(t, body, "Problem: This PR is a draft.")
 			require.Contains(t, body, "Quality Gate not ready")

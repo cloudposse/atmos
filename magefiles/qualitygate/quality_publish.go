@@ -288,10 +288,7 @@ func qualityMarkdown(pr *githubapi.PR, gates []qualityGate, performance string) 
 func qualityGateList(out *strings.Builder, gates []qualityGate) {
 	for i := range gates {
 		gate := &gates[i]
-		icon := "⏳"
-		if gate.Advisory && !gate.Passed {
-			icon = "⚠️"
-		}
+		icon := "⚠️"
 		if gate.Passed {
 			icon = "✅"
 		}
