@@ -34,14 +34,16 @@ type RESTClient interface {
 var nextLinkPattern = regexp.MustCompile(`<([^>]+)>;\s*rel="next"`)
 
 // FetchJobs pages through repos/{repo}/actions/runs/{runID}/attempts/{runAttempt}/jobs
-// (per_page=100), following the Link header until it stops offering a "next"
+// (per_page=30), following the Link header until it stops offering a "next"
 // page - the same request `gh api ... --paginate` makes. It is the only
 // exported function in this package that talks to the network on the read
 // path; classify.go's Classify/Verdict/etc. remain pure.
 func FetchJobs(ctx context.Context, client RESTClient, repo, runID, runAttempt string) ([]Job, error) {
 	defer perf.Track(nil, "rerun.FetchJobs")()
 
-	path := fmt.Sprintf("repos/%s/actions/runs/%s/attempts/%s/jobs?per_page=100", repo, runID, runAttempt)
+	// Large job pages can repeatedly return HTTP 502 even when smaller pages
+	// of the same run succeed. Follow pagination to retain every job.
+	path := fmt.Sprintf("repos/%s/actions/runs/%s/attempts/%s/jobs?per_page=30", repo, runID, runAttempt)
 	var jobs []Job
 	for path != "" {
 		resp, err := client.RequestWithContext(ctx, http.MethodGet, path, nil)
