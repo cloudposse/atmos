@@ -78,6 +78,8 @@ func TestNormalizeParameters_Invalid(t *testing.T) {
 		{"non-string ParameterKey names the index", []any{map[string]any{"ParameterKey": 7}}, []string{"parameters[0]", "ParameterKey"}},
 		{"unknown field names the index and field", []any{map[string]any{"ParameterKey": "A", "Value": "1"}}, []string{"parameters[0]", "Value"}},
 		{"non-boolean UsePreviousValue", []any{map[string]any{"ParameterKey": "A", "UsePreviousValue": "yes"}}, []string{"parameters[0]", "UsePreviousValue"}},
+		{"missing ParameterValue names the field", []any{map[string]any{"ParameterKey": "A"}}, []string{"parameters[0]", `"A"`, "missing ParameterValue"}},
+		{"false UsePreviousValue requires ParameterValue", []any{map[string]any{"ParameterKey": "A", "UsePreviousValue": false}}, []string{"parameters[0]", `"A"`, "missing ParameterValue"}},
 		{"UsePreviousValue with a value", []any{map[string]any{"ParameterKey": "A", "ParameterValue": "1", "UsePreviousValue": true}}, []string{"parameters[0]", "UsePreviousValue", "ParameterValue"}},
 		{"duplicate key names both indexes", []any{
 			map[string]any{"ParameterKey": "A", "ParameterValue": "1"},
