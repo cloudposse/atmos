@@ -459,19 +459,8 @@ func TestStandardFlagParser_PromptForMissingRequiredFlags_ShouldPromptGate(t *te
 	})
 }
 
-// NOTE: The write-back of a resolved prompt selection onto the underlying
-// Cobra flag (see promptForSingleMissingFlag in standard.go, mirroring
-// cmd/terraform/shared.PromptForStack's existing
-// cmd.Flag("stack").Value.Set(...) write-back) is not covered by an automated
-// test. Exercising it requires PromptForValue to actually resolve a
-// selection, which calls huh's Form.Run() — a real TUI read loop with no
-// accessible-mode/non-TTY seam exposed by this package. Attempting to drive
-// that in a headless CI environment risks a hang waiting on stdin rather than
-// a clean failure, so this path is verified by code inspection only; it
-// should be confirmed manually in a real terminal (see also
-// TestNewOperationCommandRegistersExpectedFlags in
-// cmd/aws/cloudformation/cloudformation_test.go, which covers the flag
-// registration/wiring side without invoking the form).
+// Prompt write-back to Cobra and Viper is covered with an accessible-mode
+// form runner in standard_prompt_writeback_test.go.
 
 // TestStandardFlagParser_PromptForMissingPositionalArgs tests Use Case 3.
 func TestStandardFlagParser_PromptForMissingPositionalArgs(t *testing.T) {
