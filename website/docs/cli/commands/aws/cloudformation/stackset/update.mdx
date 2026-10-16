@@ -13,8 +13,10 @@ import Experimental from '@site/src/components/Experimental'
   Update a CloudFormation StackSet's template, parameters, and capabilities
   (`UpdateStackSet`) from the component's current configuration, and wait for
   the update to propagate to every existing stack instance. `stackset update`
-  never changes which accounts/regions have instances — that set is fixed at
-  [`stackset create`](/cli/commands/aws/cloudformation/stackset/create) time.
+  never changes which accounts/regions have instances. Atmos creates instances
+  during [`stackset create`](/cli/commands/aws/cloudformation/stackset/create)
+  and has no command to add instances to an existing StackSet. To add instances
+  later, use the [AWS CloudFormation console or AWS CLI](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stackinstances-create.html).
 </Intro>
 
 <Experimental />

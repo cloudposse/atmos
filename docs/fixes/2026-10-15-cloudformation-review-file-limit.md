@@ -14,7 +14,7 @@ CodeRabbit rejected #3000's full review because its 168 files exceeded the 150-f
 
 - Defer Phase 2 command and output-function documentation in #3000, reducing its diff to 142 files.
 - Retain those documents, including the later Phase 3 edits, in #3001 and incorporate the updated parent ancestry.
-- Preserve #3001's existing tree exactly apart from this fix record. All code and the combined website contents remain unchanged.
+- The relocation commit preserves #3001's existing tree exactly apart from this fix record. Moving the guides changes neither code nor the combined website contents.
 - Preserve the other 15 branch heads and the existing PR sequence.
 
 ## Validation
