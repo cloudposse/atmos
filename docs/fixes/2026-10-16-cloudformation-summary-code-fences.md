@@ -12,6 +12,7 @@ The five built-in summary templates use a fence longer than any backtick run in 
 output or error messages. The original values remain unchanged for custom templates.
 The CloudFormation skill also clarifies that render inputs can require authenticated service
 calls even though rendering does not deploy or validate a template through CloudFormation.
+Its diff entry now documents preview cleanup errors instead of promising that cleanup always succeeds.
 
 ## Validation
 
