@@ -314,7 +314,8 @@ func TestRunStackSetUpdate_Success(t *testing.T) {
 				func(_ context.Context, input *cloudformation.UpdateStackSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.UpdateStackSetOutput, error) {
 					assert.Equal(t, model, input.PermissionModel)
 					return &cloudformation.UpdateStackSetOutput{OperationId: awsString("op-1")}, nil
-				})
+				},
+			)
 			client.EXPECT().DescribeStackSetOperation(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackSetOperationOutput{
 				StackSetOperation: &cfntypes.StackSetOperation{Status: cfntypes.StackSetOperationStatusSucceeded},
 			}, nil)
