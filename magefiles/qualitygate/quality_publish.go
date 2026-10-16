@@ -261,7 +261,7 @@ func qualityPreservePerformance(existing *githubapi.Comment, sha string) string 
 
 func qualityMarkdown(pr *githubapi.PR, gates []qualityGate, performance string) (string, bool) {
 	var out strings.Builder
-	ready := !pr.Draft
+	ready := true
 	for i := range gates {
 		gate := &gates[i]
 		ready = ready && (gate.Passed || gate.Advisory)
@@ -273,9 +273,6 @@ func qualityMarkdown(pr *githubapi.PR, gates []qualityGate, performance string) 
 	fmt.Fprintf(&out, "%s\n<!-- coderabbit do not respond to this -->\n<h2>Quality Gate &nbsp; <a href=\"https://github.com/%s/pull/%d/checks\"><img height=\"28\" align=\"top\" alt=\"Quality Gate %s\" src=\"https://img.shields.io/badge/%s?style=for-the-badge\" /></a></h2>\n\n", qualityMarker, pr.Base.Repo.FullName, pr.Number, status, badge)
 	qualityGateList(&out, gates)
 	fmt.Fprintf(&out, "<sub>Current commit: <code>%s</code> · <code>%s</code></sub>\n%s\n\n", pr.Head.SHA, label, qualityHeadMarker(pr.Head.SHA))
-	if pr.Draft {
-		fmt.Fprint(&out, "Draft PRs are not ready for merge.\n\n")
-	}
 	qualityDetails(&out, gates)
 	out.WriteString(qualityGuidance(pr, gates, performance))
 	if performance == "Performance measurements pending for this commit." {

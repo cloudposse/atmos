@@ -58,7 +58,8 @@ func Run() githubapi.Run {
 
 //nolint:gocritic // Test callers retain their original run while mutating independent PR fixtures.
 func PR(run githubapi.Run) githubapi.PR {
-	p := githubapi.PR{Number: 42, State: "open"}
+	mergeable := true
+	p := githubapi.PR{Number: 42, State: "open", Mergeable: &mergeable, MergeableState: "clean"}
 	p.Head.SHA = run.HeadSHA
 	p.Head.Repo.FullName = run.HeadRepository.FullName
 	p.Base.Ref = "main"
