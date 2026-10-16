@@ -17,6 +17,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ansi"
+	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	ioLayer "github.com/cloudposse/atmos/pkg/io"
@@ -211,6 +212,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		locks:                   newTerraformResourceLocks(),
 		output:                  output,
 		disablePluginCache:      disableTerraformPluginCacheForConcurrentRun(opts.Info),
+		lockDeploySourceDir:     deployVerificationUsesSourceDir(opts.AtmosConfig, opts.Info),
 		queryAppliedAtSelection: terraformClosureRequested(opts.Info, opts.Selection),
 	}
 	startTerraformCIBefore(opts.Info, graph)
@@ -807,6 +809,9 @@ type TerraformDispatcher struct {
 	locks              *terraformResourceLocks
 	output             *terraformOutput
 	disablePluginCache bool
+	// lockDeploySourceDir is set when deploy planfile verification can run in the
+	// source component directory (see deployVerificationUsesSourceDir).
+	lockDeploySourceDir bool
 	// queryAppliedAtSelection suppresses the per-node query skip when closure
 	// expansion is in effect: the query already narrowed the seed in
 	// FilterTerraformGraph, and re-applying it per node would silently drop
@@ -873,6 +878,7 @@ func (d *TerraformDispatcher) Dispatch(ctx context.Context, node *dependency.Nod
 	if beforeErr := d.runBeforeNodeHooks(ctx, &nodeInfo, writers); beforeErr != nil {
 		err = beforeErr
 	} else {
+		carryOverVerifiedPlan(&execution.Info, &nodeInfo)
 		execResult, err = d.executor(execution)
 	}
 	outcome.ExitCode = terraformExitCode(err)
@@ -901,6 +907,17 @@ func (d *TerraformDispatcher) Dispatch(ctx context.Context, node *dependency.Nod
 		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusFailed, Value: outcome}, terraformExecutionError(node, execResult, err)
 	}
 	return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusSucceeded, Value: outcome}, nil
+}
+
+// carryOverVerifiedPlan copies the planfile selected by a before-hook into the
+// executor input. Only PlanFile and UseTerraformPlan move, never the auth context
+// the hooks inject, which can belong to another node.
+func carryOverVerifiedPlan(executionInfo, hookInfo *schema.ConfigAndStacksInfo) {
+	if !hookInfo.UseTerraformPlan {
+		return
+	}
+	executionInfo.PlanFile = hookInfo.PlanFile
+	executionInfo.UseTerraformPlan = true
 }
 
 // runBeforeNodeHooks runs this node's before-event hooks, if wired, aborting
@@ -988,6 +1005,9 @@ func terraformFailureOutputDetail(result TerraformExecutionResult) string {
 }
 
 // lockTerraformResource serializes nodes that share the same physical Terraform workdir.
+// A deploy node with workdir enabled also locks its source directory first when
+// verification can write planfiles there (lockDeploySourceDir). Fixed order and
+// unique workdir keys rule out a deadlock.
 func (d *TerraformDispatcher) lockTerraformResource(node *dependency.Node) func() {
 	key := terraformResourceKey(node)
 	if key == "" {
@@ -995,6 +1015,18 @@ func (d *TerraformDispatcher) lockTerraformResource(node *dependency.Node) func(
 	}
 	if d.locks == nil {
 		return func() {}
+	}
+	if d.lockDeploySourceDir && d.info != nil {
+		if sourceKey := terraformDeploySourceResourceKey(d.info.SubCommand, node); sourceKey != "" {
+			log.Debug("Locking Terraform execution resource", "component", node.Component, "stack", node.Stack, "resource", sourceKey)
+			unlockSource := d.locks.Lock(sourceKey)
+			log.Debug("Locking Terraform execution resource", "component", node.Component, "stack", node.Stack, "resource", key)
+			unlock := d.locks.Lock(key)
+			return func() {
+				unlock()
+				unlockSource()
+			}
+		}
 	}
 	log.Debug("Locking Terraform execution resource", "component", node.Component, "stack", node.Stack, "resource", key)
 	return d.locks.Lock(key)
@@ -1477,6 +1509,38 @@ func terraformResourceKey(node *dependency.Node) string {
 	if provWorkdir.IsWorkdirEnabled(node.Metadata) {
 		return "workdir:" + terraformNodeLabel(node)
 	}
+	return terraformSourceResourceKey(node)
+}
+
+// terraformDeploySourceResourceKey returns the source directory key a deploy node
+// with workdir enabled must also hold, or "" for any other node. Verification
+// runs before the workdir exists, so its planfiles land in the source directory.
+func terraformDeploySourceResourceKey(subCommand string, node *dependency.Node) string {
+	if subCommand != terraformSubCommandDeploy || node == nil || !provWorkdir.IsWorkdirEnabled(node.Metadata) {
+		return ""
+	}
+	return terraformSourceResourceKey(node)
+}
+
+// deployVerificationUsesSourceDir reports whether deploy verification can touch
+// planfiles in a source directory: storage configured and verify mode not off,
+// the same gate as the before.terraform.deploy download hook.
+func deployVerificationUsesSourceDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) bool {
+	if atmosConfig == nil {
+		return true
+	}
+	if !planfile.StorageConfigured(&atmosConfig.Components.Terraform.Planfiles) {
+		return false
+	}
+	var cliOverride schema.PlanfileVerifyMode
+	if info != nil {
+		cliOverride = info.VerifyPlanMode
+	}
+	return planfile.ResolveVerifyMode(atmosConfig, true, cliOverride) != schema.PlanfileVerifyOff
+}
+
+// terraformSourceResourceKey returns the key for nodes sharing a source directory.
+func terraformSourceResourceKey(node *dependency.Node) string {
 	if path := componentInfoPath(node.Metadata); path != "" {
 		return "path:" + filepath.ToSlash(filepath.Clean(filepath.FromSlash(path)))
 	}
