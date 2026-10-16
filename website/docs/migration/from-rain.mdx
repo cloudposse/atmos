@@ -398,11 +398,6 @@ atmos aws cloudformation drift describe vpc -s dev
 
 ### 4. Provisioning the Artifact Bucket
 
-:::note[Requires phase 4]
-Both `backend create` and automatic provisioning with `provision.backend.enabled: true`
-require phase 4. Until phase 4 is available, create the artifact bucket outside Atmos.
-:::
-
 Rain auto-created its artifact bucket silently on first use. Atmos never does this by default —
 provision it explicitly, mirroring `atmos terraform backend create`:
 
@@ -426,6 +421,7 @@ components:
           artifacts:
             kind: aws/s3
             bucket: acme-plat-cfn-artifacts
+            region: us-east-1
 ```
 </File>
 
@@ -601,8 +597,7 @@ don't alias `rain` to `atmos aws cfn` — flag names and output differ.
 <FAQItem question="Does the artifact bucket get created automatically like Rain's did?">
 **Not by default.** Run `atmos aws cloudformation backend create` explicitly, or set
 `provision.backend.enabled: true` to opt into the same automatic provisioning Terraform components
-get. Both options require phase 4; until then, create the artifact bucket outside Atmos.
-Atmos never creates cloud resources as a surprise side effect.
+get. Atmos never creates cloud resources as a surprise side effect.
 </FAQItem>
 
 <FAQItem question="Is aws/cloudformation stable?">

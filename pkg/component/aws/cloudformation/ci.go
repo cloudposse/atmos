@@ -143,12 +143,18 @@ func stringifyOutputs(outputs map[string]any) map[string]string {
 }
 
 // ciOutputText builds the text for the CI summary's "CloudFormation output" section from an
-// operation summary: the stack Outputs after apply, the resource changes for a diff, or the
-// drifted resources for drift describe. It returns "" when the operation produced none of
-// these, which omits the section. The text passes through the global masker, so any registered
-// secret value is redacted before it reaches the job summary.
+// operation summary: measured statuses, presented stack Outputs, resource changes, and
+// drifted resources including formatted property differences. Raw templates and complete
+// resource property documents are not serialized. The text passes through the global masker,
+// so registered secrets are redacted before reaching CI.
 func ciOutputText(summary map[string]any) string {
 	var lines []string
+	for _, key := range []string{"stack_name", "changeset_name", "no_op", "final_status", "drift_status", "drifted_resource_count"} {
+		switch value := summary[key].(type) {
+		case string, bool, int32:
+			lines = append(lines, fmt.Sprintf("%s: %v", key, value))
+		}
+	}
 	if outputs, ok := summary["outputs"].(map[string]any); ok {
 		lines = append(lines, outputLines(outputs)...)
 	}
