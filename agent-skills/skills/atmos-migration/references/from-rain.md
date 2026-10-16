@@ -243,8 +243,14 @@ are valid YAML; quoting this key is optional.
 
 SDK-native execution means there is no subprocess to receive `env:` the way Rain (which shells out
 to the `aws` CLI) does. `NoEcho` template parameters fed with `!secret` in `parameters:` are the
-delivery channel, and are masked in every rendered surface (changeset diffs, `describe`, logs) —
-see [from-native-terraform.md](from-native-terraform.md)'s "Common Gotchas" for the equivalent
+delivery channel. CloudFormation masks `NoEcho` parameter values in stack and stack-event
+descriptions, but **does not mask values in Outputs, template-level Metadata, or a resource's
+Metadata attribute**. Do not put secrets in any of those locations, or in resource properties
+that form a primary identifier: those values can be exposed even when the parameter has
+`NoEcho: true`. See AWS's [NoEcho documentation](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html)
+for these limits.
+
+See [from-native-terraform.md](from-native-terraform.md)'s "Common Gotchas" for the equivalent
 Terraform-side pattern, and the [Secrets skill](../../atmos-secrets/SKILL.md) for `!secret` usage.
 
 ### This component type is experimental

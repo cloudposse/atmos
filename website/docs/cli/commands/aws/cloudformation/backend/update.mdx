@@ -18,7 +18,8 @@ import Experimental from '@site/src/components/Experimental'
   create`](/cli/commands/aws/cloudformation/backend/create) dispatch through
   the identical idempotent code path; `update` exists as the explicit,
   intention-revealing verb for "make sure this bucket's settings are still
-  correct."
+  correct." Both commands prompt before changing an existing bucket; use
+  `--auto-approve` to skip this confirmation in automation.
 </Intro>
 
 <Experimental />
@@ -49,6 +50,9 @@ atmos aws cloudformation backend update vpc -s plat-ue2-dev --target artifacts
 
   <dt>`--target` <em>(optional)</em></dt>
   <dd>The `kind: aws/s3` provision target to use. Required when more than one is declared.</dd>
+
+  <dt>`--auto-approve` <em>(optional)</em></dt>
+  <dd>Skip the confirmation prompt before applying settings to an existing bucket. Use this flag for non-interactive runs.</dd>
 
   <dt>`--identity`, `-i` <em>(optional)</em></dt>
   <dd>Atmos identity to authenticate with.</dd>
