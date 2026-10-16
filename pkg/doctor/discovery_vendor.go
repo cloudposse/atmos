@@ -40,10 +40,7 @@ func resolveVendorImport(d *document, p *project, o *Options, r *Report, item *y
 		path, template := findVendorManifest(absolute(base, value))
 		switch {
 		case template:
-			f := incomplete(d.path, "Template import not evaluated: "+relative(p.root, path))
-			f.Line = item.Line
-			f.Column = item.Column
-			addNotice(o, r, &f)
+			p.templateImport(d, o, r, item, path)
 			return nil
 		case path != "":
 			return []string{path}

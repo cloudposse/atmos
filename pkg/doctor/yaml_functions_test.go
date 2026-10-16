@@ -16,43 +16,56 @@ import (
 
 func TestYAMLFunctionNames(t *testing.T) {
 	tests := []struct {
-		name, source, unknown, help string
+		name, source, message, help string
+		kind                        string
+		severity                    validation.Severity
 		line, column                int
 	}{
-		{"typo", "value: !terraform.staet app dev output\n", "!terraform.staet", "Did you mean !terraform.state?", 1, 8},
-		{"quoted typo", "value: '!terraform.staet app dev output'\n", "!terraform.staet", "Did you mean !terraform.state?", 1, 8},
-		{"unknown", "value: !not_a_function example\n", "!not_a_function", "Use a supported Atmos YAML function name", 1, 8},
-		{"nested", "values:\n  - !terraform.staet app dev output\n", "!terraform.staet", "Did you mean !terraform.state?", 2, 5},
-		{"tagged collection", "value: !not_a_function [a, b]\n", "!not_a_function", "Use a supported Atmos YAML function name", 1, 8},
-		{"valid", "value: !terraform.state app dev output\n", "", "", 0, 0},
-		{"quoted valid", "value: '!terraform.state app dev output'\n", "", "", 0, 0},
-		{"plain data", "value: '!important'\nother: '!cancelled()'\n", "", "", 0, 0},
-		{"literal scalar", "value: !literal '!terraform.staet example'\n", "", "", 0, 0},
-		{"literal collection", "value: !literal {nested: !not_a_function example}\n", "", "", 0, 0},
-		{"quoted literal", "value: '!literal !terraform.staet example'\n", "", "", 0, 0},
-		{"standard tags", "value: !!str example\nnumber: !!int 3\n", "", "", 0, 0},
-		{"explicit string", "value: !!str '!terraform.staet example'\n", "", "", 0, 0},
-		{"verbatim string", "value: !<tag:yaml.org,2002:str> '!terraform.staet example'\n", "", "", 0, 0},
-		{"application URI tag", "value: !<tag:example.com,2026:widget> '!terraform.staet example'\n", "", "", 0, 0},
-		{"native types", "bool: !!bool true\nnull: !!null null\nfloat: !!float 1.2\nbinary: !!binary SGVsbG8=\ndate: !!timestamp 2026-10-14\nmap: !!map {}\nseq: !!seq []\n", "", "", 0, 0},
-		{"function inside native collection", "value: !!seq\n  - !terraform.staet app dev output\n", "!terraform.staet", "Did you mean !terraform.state?", 2, 5},
+		{name: "typo", source: "value: !terraform.staet app dev output\n", message: "Unknown YAML function !terraform.staet", help: "Did you mean !terraform.state?", severity: validation.SeverityError, line: 1, column: 8},
+		{name: "quoted typo is text at runtime", source: "value: '!terraform.staet app dev output'\n", message: "!terraform.staet is kept as text at runtime", help: "Did you mean !terraform.state?", severity: validation.SeverityWarning, line: 1, column: 8},
+		{name: "unknown", source: "value: !not_a_function example\n", message: "Unknown YAML function !not_a_function", help: "Use a supported Atmos YAML function name", severity: validation.SeverityError, line: 1, column: 8},
+		{name: "nested", source: "values:\n  - !terraform.staet app dev output\n", message: "Unknown YAML function !terraform.staet", help: "Did you mean !terraform.state?", severity: validation.SeverityError, line: 2, column: 5},
+		{name: "tagged collection", source: "value: !not_a_function [a, b]\n", message: "Unknown YAML function !not_a_function", help: "Use a supported Atmos YAML function name", severity: validation.SeverityError, line: 1, column: 8},
+		{name: "valid", source: "value: !terraform.state app dev output\n"},
+		{name: "quoted valid", source: "value: '!terraform.state app dev output'\n"},
+		{name: "quoted valid with index boundary", source: "value: '!terraform.state[0]'\n"},
+		{name: "prose that starts like a function", source: "note: '!git.branches are protected'\n", message: "!git.branches is kept as text at runtime", help: "Did you mean !git.branch?", severity: validation.SeverityWarning, line: 1, column: 7},
+		{name: "plain data", source: "value: '!important'\nother: '!cancelled()'\n"},
+		{name: "literal scalar", source: "value: !literal '!terraform.staet example'\n"},
+		{name: "literal collection", source: "value: !literal {nested: !not_a_function example}\n"},
+		{name: "quoted literal", source: "value: '!literal !terraform.staet example'\n"},
+		{name: "standard tags", source: "value: !!str example\nnumber: !!int 3\n"},
+		{name: "explicit string", source: "value: !!str '!terraform.staet example'\n"},
+		{name: "verbatim string", source: "value: !<tag:yaml.org,2002:str> '!terraform.staet example'\n"},
+		{name: "application URI tag", source: "value: !<tag:example.com,2026:widget> '!terraform.staet example'\n"},
+		{name: "native types", source: "bool: !!bool true\nnull: !!null null\nfloat: !!float 1.2\nbinary: !!binary SGVsbG8=\ndate: !!timestamp 2026-10-14\nmap: !!map {}\nseq: !!seq []\n"},
+		{name: "function inside native collection", source: "value: !!seq\n  - !terraform.staet app dev output\n", message: "Unknown YAML function !terraform.staet", help: "Did you mean !terraform.state?", severity: validation.SeverityError, line: 2, column: 5},
+		{name: "config accepts supported function", kind: documentConfig, source: "value: !env HOME\n"},
+		{name: "config rejects stack-only function", kind: documentConfig, source: "value: !terraform.state vpc dev vpc_id\n", message: "!terraform.state is not supported in atmos.yaml; supported: " + strings.Join(fntag.AtmosConfigYAML(), ", "), help: "Use a function atmos.yaml supports, or move this value into a stack manifest", severity: validation.SeverityError, line: 1, column: 8},
+		{name: "config rejects store", kind: documentConfig, source: "value: !store prod/db password\n", message: "!store is not supported in atmos.yaml; supported: " + strings.Join(fntag.AtmosConfigYAML(), ", "), help: "Use a function atmos.yaml supports, or move this value into a stack manifest", severity: validation.SeverityError, line: 1, column: 8},
+		{name: "config keeps unknown names unknown", kind: documentConfig, source: "value: !terraform.staet app dev output\n", message: "Unknown YAML function !terraform.staet", help: "Did you mean !terraform.state?", severity: validation.SeverityError, line: 1, column: 8},
+		{name: "config never evaluates untagged strings", kind: documentConfig, source: "value: '!terraform.staet app dev output'\nnote: '!git.branches are protected'\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var node yaml.Node
 			require.NoError(t, yaml.Unmarshal([]byte(tt.source), &node))
-			d := &document{kind: documentStack, path: "stacks/dev.yaml", node: &node}
+			kind := tt.kind
+			if kind == "" {
+				kind = documentStack
+			}
+			d := &document{kind: kind, path: "stacks/dev.yaml", node: &node}
 			var report Report
 			scanYAMLFunctions(d, &Options{}, &report)
-			if tt.unknown == "" {
+			if tt.message == "" {
 				require.Empty(t, report.Findings)
 				return
 			}
 			require.Len(t, report.Findings, 1)
 			f := report.Findings[0]
 			require.Equal(t, ruleYAMLFunctions, f.RuleID)
-			require.Equal(t, validation.SeverityError, f.Severity)
-			require.Equal(t, "Unknown YAML function "+tt.unknown, f.Message)
+			require.Equal(t, tt.severity, f.Severity)
+			require.Equal(t, tt.message, f.Message)
 			require.Equal(t, tt.help, f.Remediation)
 			require.Equal(t, tt.line, f.Line)
 			require.Equal(t, tt.column, f.Column)
@@ -61,6 +74,17 @@ func TestYAMLFunctionNames(t *testing.T) {
 			require.Equal(t, statusManual, f.Status)
 		})
 	}
+}
+
+// A function-looking string only warns, so it never fails the default error threshold.
+func TestYAMLFunctionProseWarningDoesNotFailRun(t *testing.T) {
+	var node yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte("note: '!git.branches are protected'\n"), &node))
+	var report Report
+	scanYAMLFunctions(&document{kind: documentStack, node: &node}, &Options{}, &report)
+	require.Len(t, report.Findings, 1)
+	require.Equal(t, 0, report.ExitCode("error"))
+	require.Equal(t, 1, report.ExitCode("warning"))
 }
 
 func TestYAMLFunctionsAcceptCanonicalCatalog(t *testing.T) {

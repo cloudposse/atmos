@@ -131,3 +131,20 @@ func TestVendorImportOutsideTheProjectIsNotRead(t *testing.T) {
 
 	assert.Empty(t, ecLoaded(&r))
 }
+
+// A template vendor manifest imported by several manifests is one notice, as for stack imports.
+func TestVendorTemplateImportNoticeIsReportedOncePerTemplate(t *testing.T) {
+	root := newProject(t)
+	projectFile(t, root, "atmos.yaml", "{}\n")
+	projectFile(t, root, "vendor/rendered.yaml.tmpl", "spec: {}\n")
+	projectFile(t, root, "vendor.yaml", vendorManifest("vendor/rendered"))
+	projectFile(t, root, "sub/vendor.yaml", vendorManifest("vendor/rendered"))
+
+	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleImports}})
+
+	notices := templateImportNotices(&r)
+	require.Len(t, notices, 1, "%+v", notices)
+	assert.Equal(t, "sub/vendor.yaml", notices[0].File)
+	assert.Equal(t, "Template import not evaluated: vendor/rendered.yaml.tmpl (imported by 2 files: sub/vendor.yaml, vendor.yaml)", notices[0].Reason)
+	assert.Equal(t, 5, notices[0].Line)
+}

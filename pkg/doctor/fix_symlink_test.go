@@ -203,3 +203,100 @@ func toSlashAll(paths []string) []string {
 	}
 	return out
 }
+
+const readOnlyReason = "read-only source requires manual review; doctor does not overwrite read-only files"
+
+// requireReadOnly makes path read-only for its owner, skipping where the platform ignores permission bits.
+func requireReadOnly(t *testing.T, path string) {
+	t.Helper()
+	require.NoError(t, os.Chmod(path, 0o444))
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	if info.Mode().Perm()&0o222 != 0 {
+		t.Skip("The platform does not report read-only permission bits.")
+	}
+}
+
+func TestFixReadOnlyStackIsReportedNotApplied(t *testing.T) {
+	root := newProject(t)
+	projectFile(t, root, "atmos.yaml", ecLegacyReconfigure)
+	regular := projectFile(t, root, "stacks/dev.yaml", symlinkLegacyHook)
+	readOnly := projectFile(t, root, "stacks/prod.yaml", symlinkLegacyHook)
+	requireReadOnly(t, readOnly)
+
+	r, err := testEngine(t).Run(context.Background(), Options{Root: root, Fix: true, Offline: true, Only: []string{"deprecations"}})
+	require.NoError(t, err)
+	require.Empty(t, r.OperationalError)
+	require.ElementsMatch(t, []string{"atmos.yaml", filepath.ToSlash(filepath.Join("stacks", "dev.yaml"))}, toSlashAll(r.ChangedFiles))
+
+	b, err := os.ReadFile(regular)
+	require.NoError(t, err)
+	require.Contains(t, string(b), "before.terraform.apply")
+
+	f := symlinkFinding(&r, "stacks/prod.yaml")
+	require.NotNil(t, f, "%+v", r.Findings)
+	require.Equal(t, statusVerificationIncomplete, f.Status)
+	require.False(t, f.Fixable)
+	require.Contains(t, f.Reason, readOnlyReason)
+	require.NotEmpty(t, f.Remediation)
+
+	b, err = os.ReadFile(readOnly)
+	require.NoError(t, err)
+	require.Equal(t, symlinkLegacyHook, string(b), "the read-only file must keep its bytes")
+	info, err := os.Stat(readOnly)
+	require.NoError(t, err)
+	require.Zero(t, info.Mode().Perm()&0o222, "the read-only file must keep its mode")
+}
+
+func TestFixDryRunReportsReadOnlyStackAsManual(t *testing.T) {
+	root := newProject(t)
+	projectFile(t, root, "atmos.yaml", "{}\n")
+	readOnly := projectFile(t, root, "stacks/prod.yaml", symlinkLegacyHook)
+	requireReadOnly(t, readOnly)
+
+	r, err := testEngine(t).Run(context.Background(), Options{Root: root, Fix: true, DryRun: true, Offline: true, Only: []string{"deprecations"}})
+	require.NoError(t, err)
+	f := symlinkFinding(&r, "stacks/prod.yaml")
+	require.NotNil(t, f, "%+v", r.Findings)
+	require.Equal(t, statusVerificationIncomplete, f.Status)
+	require.False(t, f.Fixable)
+	require.Contains(t, f.Reason, readOnlyReason)
+}
+
+func TestFixWritableStackIsNotRejectedAsReadOnly(t *testing.T) {
+	root := newProject(t)
+	projectFile(t, root, "atmos.yaml", "{}\n")
+	path := projectFile(t, root, "stacks/dev.yaml", symlinkLegacyHook)
+
+	r, err := testEngine(t).Run(context.Background(), Options{Root: root, Fix: true, Offline: true, Only: []string{"deprecations"}})
+	require.NoError(t, err)
+	require.Equal(t, []string{filepath.ToSlash(filepath.Join("stacks", "dev.yaml"))}, toSlashAll(r.ChangedFiles))
+	f := symlinkFinding(&r, "stacks/dev.yaml")
+	if f != nil {
+		require.NotContains(t, f.Reason, readOnlyReason)
+	}
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(b), "before.terraform.apply")
+}
+
+func TestFixRefusesToWriteAFileMadeReadOnlyAfterStaging(t *testing.T) {
+	root := newProject(t)
+	projectFile(t, root, "atmos.yaml", "{}\n")
+	path := projectFile(t, root, "stacks/dev.yaml", symlinkLegacyHook)
+	e := testEngine(t)
+	e.Observe = func(event Event) {
+		if event.Phase == "Back up" && event.Done {
+			require.NoError(t, os.Chmod(path, 0o444))
+		}
+	}
+	r, err := e.Run(context.Background(), Options{Root: root, Fix: true, Offline: true, Only: []string{"deprecations"}})
+	if info, statErr := os.Stat(path); statErr == nil && info.Mode().Perm()&0o222 != 0 {
+		t.Skip("The platform does not report read-only permission bits.")
+	}
+	require.ErrorIs(t, err, ErrChanged)
+	require.Empty(t, r.ChangedFiles)
+	b, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	require.Equal(t, symlinkLegacyHook, string(b))
+}

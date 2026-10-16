@@ -40,7 +40,7 @@ func TestDoctorPTYChild(t *testing.T) {
 	t.Cleanup(cancel)
 	engine := diagnostic.Engine{Repositories: cancellationRepository{}}
 	report, err := runStreaming(ctx, &engine, &diagnostic.Options{Only: []string{"sources"}})
-	require.NoError(t, render(&report, "text", false))
+	require.NoError(t, render(&report, "text", renderOptions{}))
 	if errors.Is(err, context.Canceled) {
 		os.Exit(130)
 	}

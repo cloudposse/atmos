@@ -127,6 +127,7 @@ var (
 	ErrStacksDirectoryDoesNotExist           = errors.New("directory for Atmos stacks does not exist")
 	ErrMissingAtmosConfig                    = errors.New("atmos configuration not found or invalid")
 	ErrNotInGitRepository                    = errors.New("not inside a git repository")
+	ErrAffectedBaseUnresolved                = errors.New("cannot resolve the base for --affected")
 	ErrCommandNil                            = errors.New("command cannot be nil")
 	ErrProcessStartFailed                    = errors.New("process start failed")
 	ErrProcessWaitFailed                     = errors.New("process wait failed")

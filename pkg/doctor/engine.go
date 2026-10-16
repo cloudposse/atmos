@@ -54,6 +54,7 @@ func (e *Engine) inspect(ctx context.Context, p *project, o *Options, r *Report)
 	if err = e.checkRepositories(ctx, p, o, r); err != nil {
 		return err
 	}
+	noteUnmatchedExcludes(p, o, r)
 	if checkErr != nil {
 		// Each failed check is recorded on the report; repairs never proceed on a partially inspected project.
 		return checkErr

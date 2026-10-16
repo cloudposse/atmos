@@ -137,3 +137,119 @@ tests:
       stderr:
         - "findings \\(6 fixable\\)"
       exit_code: 1
+
+  - name: atmos --cast doctor reaches doctor on a malformed atmos.yaml
+    enabled: true
+    snapshot: false
+    description: "A root flag before doctor must not send a malformed atmos.yaml through normal configuration loading; doctor reports the syntax error as a schema finding."
+    workdir: "fixtures/scenarios/doctor/malformed"
+    command: "atmos"
+    args:
+      - "--cast"
+      - "doctor"
+      - "--config=atmos.yaml"
+      - "--offline"
+      - "--only=schema"
+    expect:
+      stdout:
+        - "^$"
+      stderr:
+        - 'error\[schema\]: yaml: line \d+: did not find expected'
+        - '1 finding \(none fixable\)'
+      exit_code: 1
+
+  - name: atmos --pager doctor reaches doctor on a malformed atmos.yaml
+    enabled: true
+    snapshot: false
+    description: "The optional-value --pager flag does not consume the command name, so doctor still runs and reports the syntax error."
+    workdir: "fixtures/scenarios/doctor/malformed"
+    command: "atmos"
+    args:
+      - "--pager"
+      - "doctor"
+      - "--config=atmos.yaml"
+      - "--offline"
+      - "--only=schema"
+    expect:
+      stdout:
+        - "^$"
+      stderr:
+        - 'error\[schema\]: yaml: line \d+: did not find expected'
+        - '1 finding \(none fixable\)'
+      exit_code: 1
+
+  - name: atmos doctor with a positional argument reports operational_error in JSON
+    enabled: true
+    snapshot: true
+    description: "An unexpected argument exits 2 and still writes the one JSON report shape."
+    workdir: "fixtures/scenarios/doctor/eligible"
+    command: "atmos"
+    args:
+      - "doctor"
+      - "extra"
+      - "--format=json"
+    expect:
+      stdout:
+        - '"operational_error": "invalid doctor options: unexpected argument \\"extra\\""'
+      exit_code: 2
+
+  - name: atmos --chdir to a missing directory reports operational_error in JSON
+    enabled: true
+    snapshot: false
+    description: "A failing --chdir before doctor exits 2 and writes the JSON report instead of a plain error."
+    workdir: "fixtures/scenarios/doctor/eligible"
+    command: "atmos"
+    args:
+      - "--chdir=does-not-exist"
+      - "doctor"
+      - "--format=json"
+    expect:
+      stdout:
+        - '"operational_error": "workdir does not exist: '
+        - 'does-not-exist'
+      exit_code: 2
+
+  - name: atmos doctor rejects a dependency repair that changes inherited dependencies
+    enabled: true
+    snapshot: true
+    description: "Migrating the legacy lists would change the effective dependencies of app, so the repair fails verification and is not offered."
+    workdir: "fixtures/scenarios/doctor/dependencies-inherited"
+    command: "atmos"
+    args:
+      - "doctor"
+      - "--config=atmos.yaml"
+      - "--offline"
+      - "--only=deprecations"
+      - "--fix"
+      - "--dry-run"
+      - "--format=text"
+    expect:
+      stdout:
+        - "^$"
+      stderr:
+        - 'Verification failed'
+        - 'changes the effective\s+dependencies of app in dev: db'
+        - '0 repairs verified'
+      exit_code: 0
+
+  - name: atmos doctor verifies a dependency repair across a catalog import
+    enabled: true
+    snapshot: true
+    description: "Local static imports are followed, so the list-form depends_on migration is verified against the imported catalog."
+    workdir: "fixtures/scenarios/doctor/dependencies-imports"
+    command: "atmos"
+    args:
+      - "doctor"
+      - "--config=atmos.yaml"
+      - "--offline"
+      - "--only=deprecations"
+      - "--fix"
+      - "--dry-run"
+      - "--format=text"
+    expect:
+      stdout:
+        - "^$"
+      stderr:
+        - 'Candidate verified'
+        - '1 repair verified'
+      exit_code: 0

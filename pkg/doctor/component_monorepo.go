@@ -169,6 +169,11 @@ func (run *monorepoRun) add(s *monorepoSite, status, message, reason, remediatio
 func (run *monorepoRun) addUnmovable(s *monorepoSite, reference *monorepo.Reference, err error) {
 	module := "modules/" + reference.Module
 	switch {
+	case errors.Is(err, monorepo.ErrSubdirInQuery):
+		corrected, _ := reference.QuerySubdirCorrection()
+		run.add(s, statusManual, monorepoMessage,
+			"The subdirectory is inside the query string; go-getter requires the //subdirectory before the ?, so this source does not select that directory",
+			"Change the source to "+corrected+" (the subdirectory goes before the query)")
 	case errors.Is(err, monorepo.ErrSplitComponent):
 		run.add(s, statusManual, fmt.Sprintf("Component %s was split into separate repositories", module),
 			"Its subcomponents moved to cloudposse-terraform-components/"+strings.Join(monorepo.Successors(reference.Module), ", "),

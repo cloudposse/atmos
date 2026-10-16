@@ -1,0 +1,14 @@
+# Config-functions doctor fixture: atmos.yaml supports only the configuration function set, so the
+# stack-only !store function under settings is an error. In the stack manifest, a quoted string that
+# only looks like a function ("!git.branches are protected") is kept as text at runtime and warns,
+# while '!terraform.state[0]' is a known function written with an index.
+base_path: "./"
+
+stacks:
+  base_path: "stacks"
+  included_paths: ["**/*"]
+  name_template: "{{ .vars.stage }}"
+
+settings:
+  token: !store mystore dev app key
+  home: !env HOME
