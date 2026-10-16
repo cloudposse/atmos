@@ -108,6 +108,7 @@ func TestRunApplyNoOpReconcilesPolicy(t *testing.T) {
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}}}, nil),
 		client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.CreateChangeSetOutput{}, nil),
 		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{ChangeSetId: awsString("cs-id"), Status: cfntypes.ChangeSetStatusFailed, StatusReason: awsString("The submitted information didn't contain changes.")}, nil),
+		client.EXPECT().DeleteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteChangeSetOutput{}, nil),
 		client.EXPECT().SetStackPolicy(gomock.Any(), gomock.Any()).Return(&cloudformation.SetStackPolicyOutput{}, nil),
 		client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(&cloudformation.UpdateTerminationProtectionOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
