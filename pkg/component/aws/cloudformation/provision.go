@@ -118,7 +118,7 @@ func deployDirect(ctx context.Context, client CloudFormationClient, spec *stackS
 		return nil, err
 	}
 	if result.NoOp {
-		return result, nil
+		return result, discardChangeSet(ctx, client, spec.StackName, result)
 	}
 
 	if _, err := prepareStackPolicy(ctx, client, spec, result); err != nil {
