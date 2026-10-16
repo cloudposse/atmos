@@ -143,7 +143,7 @@ func defaultQualityRegistry() (*gateRegistry, error) {
 		},
 		gateDefinition{
 			ID:           "benchmark-report",
-			Name:         "Benchmark report integrity",
+			Name:         "Benchmark results",
 			Check:        checkBenchmarkReport,
 			EvidencePath: "/checks",
 			Remediation:  "Inspect the benchmark reporter job logs. Repair malformed or incomplete measurements, artifact provenance, or reporting failures and rerun the affected workflow. Reconciliation will retry the report. Missing historical baselines and measured slowdowns alone do not fail this gate.",
