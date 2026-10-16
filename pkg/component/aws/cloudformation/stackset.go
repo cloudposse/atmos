@@ -276,7 +276,7 @@ func listStackSetInstances(ctx context.Context, client CloudFormationClient, sta
 			return nil, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationStackSetFailed, err)
 		}
 		instances = append(instances, out.Summaries...)
-		if out.NextToken == nil {
+		if stringValue(out.NextToken) == "" {
 			return instances, nil
 		}
 		nextToken = out.NextToken
