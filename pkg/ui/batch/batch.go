@@ -30,6 +30,11 @@ const (
 
 // Event describes a job's current state. IDs, unlike labels, must be unique within a run.
 type Event struct {
+	// Diagnostic enables phase progress without changing vendor presentation.
+	Diagnostic bool
+	Elapsed    time.Duration
+	Severity   string
+	started    time.Time
 	// Warning is a permanent diagnostic and does not count as a job.
 	Warning string
 	// Reset starts a new phase, clearing counts and active jobs.
@@ -137,7 +142,11 @@ func (r *Renderer) Update(event *Event) {
 	e := *event
 	if e.Warning != "" {
 		r.Clear()
-		ui.Warning(e.Warning)
+		if e.Severity == "error" {
+			ui.Error(e.Warning)
+		} else {
+			ui.Warning(e.Warning)
+		}
 		r.render()
 		return
 	}
@@ -147,6 +156,10 @@ func (r *Renderer) Update(event *Event) {
 		r.order = nil
 		r.completed, r.total = 0, e.Count
 		return
+	}
+	// An untotaled diagnostic event clears the total only before the phase starts work.
+	if e.Diagnostic && e.Count < 0 && r.completed == 0 && len(r.active) == 0 {
+		r.total = 0
 	}
 	if e.Count > 0 {
 		r.total = e.Count
@@ -166,8 +179,13 @@ func (r *Renderer) Update(event *Event) {
 	r.Clear()
 	if old, ok := r.active[e.ID]; ok {
 		e.Fraction = max(old.Fraction, e.Fraction)
+		e.started = old.started
 	} else {
 		r.order = append(r.order, e.ID)
+		e.started = time.Now()
+		if e.Diagnostic && !r.live {
+			ui.Writef("%s: %s\n", e.Phase, e.Label)
+		}
 	}
 	e.Fraction = min(1, max(0, e.Fraction))
 	r.active[e.ID] = e
@@ -178,6 +196,10 @@ func (e *Event) printResult() {
 	// Append styled suffixes after markdown rendering so ANSI escapes remain intact.
 	suffix := e.versionSuffix()
 	switch {
+	case e.Diagnostic && (e.Outcome == "findings" || e.Outcome == "manual" || e.Outcome == "verification-failed" || e.Outcome == "verification-incomplete"):
+		ui.Warning(e.Label + " (" + e.Outcome + ")")
+	case e.Diagnostic && e.Outcome == "failed":
+		ui.Error(e.Label + " (failed)")
 	case e.Err != nil:
 		ui.Writef("%s%s: %s\n", ui.FormatError(e.Label), suffix, ui.FormatInline(e.Err.Error()))
 	case e.Outcome == "unchanged", e.Outcome == "skipped", e.Outcome == "canceled":
@@ -218,6 +240,13 @@ func (r *Renderer) activeLabel(e *Event) string {
 
 func (e *Event) stageLabel() string {
 	stage := strings.ToLower(e.Phase)
+	if e.Diagnostic {
+		elapsed := e.Elapsed
+		if !e.started.IsZero() {
+			elapsed = time.Since(e.started)
+		}
+		return fmt.Sprintf("%s · %s", e.Phase, elapsed.Round(time.Second))
+	}
 	if stage == "pulling" {
 		stage = "downloading"
 	}
@@ -291,6 +320,9 @@ func (r *Renderer) render() {
 		progress += r.active[id].Fraction
 	}
 	summary := fmt.Sprintf("%s %d/%d complete, %d active, %d queued", r.bar.ViewAs(progress/float64(max(1, r.total))), r.completed, r.total, len(r.active), max(0, r.total-r.completed-len(r.active)))
+	if r.total == 0 {
+		summary = fmt.Sprintf("%d complete, %d active", r.completed, len(r.active))
+	}
 	if r.toolchainStyle {
 		summary = fmt.Sprintf("%s %d/%d complete, %d running", r.bar.ViewAs(float64(r.completed)/float64(max(1, r.total))), r.completed, r.total, len(r.active))
 	}

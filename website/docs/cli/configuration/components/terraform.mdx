@@ -141,6 +141,8 @@ components:
   <dd>
     Deprecated in favor of `init.reconfigure` (see [Configuration Reference](#configuration-reference) below). When `init.reconfigure` is not explicitly set (at any precedence level), Atmos maps this legacy boolean: `false` behaves as `init.reconfigure: never`, and the default `true` behaves as `init.reconfigure: auto` — **not** `always`. This is the one behavior change existing projects relying on the old default will see: Atmos no longer adds `-reconfigure` to every init by default. Set `init.reconfigure: always` explicitly to keep the previous unconditional behavior.
 
+    The legacy environment variable and flag below still override configuration, including an explicit `init.reconfigure` (command-line flag over environment variable over configuration): `false` selects `never` and `true` selects `auto`. When both a legacy and a newer setting are given at the same level, the newer `init.reconfigure` environment variable or `--init-reconfigure` flag wins.
+
     **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE`
     **Command-line flag:** `--init-run-reconfigure`
     **Default:** `true`

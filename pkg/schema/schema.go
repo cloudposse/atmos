@@ -694,7 +694,7 @@ type Terraform struct {
 	ApplyAutoApprove        bool   `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
 	AppendUserAgent         string `yaml:"append_user_agent" json:"append_user_agent" mapstructure:"append_user_agent"`
 	DeployRunInit           bool   `yaml:"deploy_run_init" json:"deploy_run_init" mapstructure:"deploy_run_init"`
-	InitRunReconfigure      bool   `yaml:"init_run_reconfigure" json:"init_run_reconfigure" mapstructure:"init_run_reconfigure"`
+	InitRunReconfigure      bool   `yaml:"init_run_reconfigure" json:"init_run_reconfigure" mapstructure:"init_run_reconfigure" jsonschema_extras:"deprecated=true,x-atmos-replacement=components.terraform.init.reconfigure (false maps to never; true maps to auto)"`
 	AutoGenerateBackendFile bool   `yaml:"auto_generate_backend_file" json:"auto_generate_backend_file" mapstructure:"auto_generate_backend_file"`
 	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
 	// (e.g., .tf, .json, .yaml) during Terraform operations when set to true.
@@ -1063,6 +1063,23 @@ func (t *Terraform) EffectiveInitReconfigure() TerraformInitReconfigure {
 		return TerraformInitReconfigureNever
 	}
 	return TerraformInitReconfigureAuto
+}
+
+// OverrideInitRunReconfigure applies the deprecated boolean `init_run_reconfigure` from a source
+// that outranks configuration -- the ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE environment
+// variable or the --init-run-reconfigure flag (CLI > ENV > config). It records the legacy field and
+// also sets the effective policy (false maps to never, true to auto, the same mapping as
+// EffectiveInitReconfigure) so the override beats an explicit `init.reconfigure` from configuration.
+//
+// Callers must apply the newer init.reconfigure env var / flag AFTER this one at the same
+// precedence level so the newer, explicit setting wins when both are given.
+func (t *Terraform) OverrideInitRunReconfigure(value bool) {
+	t.InitRunReconfigure = value
+	if value {
+		t.Init.Reconfigure = TerraformInitReconfigureAuto
+		return
+	}
+	t.Init.Reconfigure = TerraformInitReconfigureNever
 }
 
 // EffectiveInitUpgrade returns the configured upgrade policy, defaulting to auto when unset.
