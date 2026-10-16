@@ -1,6 +1,6 @@
 ---
-title: Block direct Terraform destroy
-description: Deny the direct destroy command without requiring affected analysis.
+title: Block Terraform destroy
+description: Deny Terraform destroy, including the destroy flag on plan, apply, and deploy.
 command: atmos terraform destroy vpc -s prod
 tags:
   - Admission
@@ -11,21 +11,45 @@ related_docs:
     url: /policies/admission
 ---
 
-# Block direct Terraform destroy
+# Block Terraform destroy
 
-Deny the direct destroy command without requiring affected analysis.
+Deny Terraform destroy, including the destroy flag on plan, apply, and deploy.
 
 ## Contract
 
 | Field | Value |
 |---|---|
-| Input | `command` |
+| Input | `command` (`command`, `destroy`) |
 | Engines | `cel`, `starlark` |
 | Action | `deny` |
 
 ## Configuration
 
-No parameters. This blocks the named command, not deletion through other commands or tools. Pair it with saved-plan deletion policies when resource-level protection is required.
+No parameters. The rule matches the `terraform destroy` command, and every invocation where the
+normalized `destroy` input is `true`. Atmos derives `destroy` from the arguments, so the rule does not
+parse flags itself.
+
+`destroy` is `true` when:
+
+- the command is `terraform destroy` (also through the `tf` alias) or `helmfile destroy`, or
+- a `terraform` command (OpenTofu included) such as `plan`, `apply`, or `deploy` receives the
+  `-destroy` or `--destroy` flag, including when it comes after `--`.
+
+A `true` flag value counts: `-destroy=true`, `--destroy=1`, `-destroy=T`. A `false` value does not:
+`-destroy=false`, `-destroy=0`. An unparseable value counts as `true`, and any `true` occurrence wins over a
+later `false`. Other commands, and other argument values, never set `destroy`.
+
+For example, `atmos terraform apply vpc -s prod -destroy -auto-approve` is denied, while
+`atmos terraform apply vpc -s prod -destroy=false` is allowed.
+
+Limits:
+
+- `atmos terraform apply <planfile>` cannot be recognized as a destroy when the saved plan came from
+  `plan -destroy`. The plan was already created; govern it with `terraform.plan` policies, such as
+  [`terraform-protect-stateful-resources`](https://atmos.tools/policies/library/terraform-protect-stateful-resources).
+- Resource removal through other commands, tools, or direct Terraform use outside Atmos is not covered,
+  for example `helm delete` or deleting resources from configuration. Pair this policy with saved-plan
+  deletion policies when resource-level protection is required.
 
 ## Use
 

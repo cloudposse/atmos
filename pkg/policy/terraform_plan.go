@@ -2,6 +2,7 @@ package policy
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -80,21 +81,51 @@ func EnforceDecision(decision Decision) error {
 	return nil
 }
 
-// denialError retains optional author guidance from every blocking rule.
-// Reasons are static Markdown: they never evaluate templates or interpolate inputs.
+// denialError names every blocking rule and retains optional author guidance.
+// Rule identifiers are static, so they are safe to print even when a rule has no
+// reason; reasons are static Markdown and never evaluate templates or interpolate
+// inputs. Every denial carries ExitCodePolicyDenied so callers can tell a policy
+// decision apart from usage and runtime failures.
 func denialError(findings []Finding) error {
-	var reasons []string
+	var blocks []string
 	for _, finding := range findings {
-		if finding.Status == Deny {
-			if reason := strings.TrimSpace(finding.Effects.Reason); reason != "" {
-				reasons = append(reasons, finding.RuleID+":\n\n"+reason)
-			}
+		if finding.Status != Deny {
+			continue
+		}
+		if reason := strings.TrimSpace(finding.Effects.Reason); reason != "" {
+			blocks = append(blocks, finding.RuleID+":\n\n"+reason)
+			continue
+		}
+		blocks = append(blocks, "Denied by "+finding.RuleID+".")
+	}
+	builder := errUtils.Build(errUtils.ErrPolicyDenied).WithExitCode(errUtils.ExitCodePolicyDenied)
+	if len(blocks) > 0 {
+		builder = builder.WithExplanation(strings.Join(blocks, "\n\n"))
+	}
+	return builder.Err()
+}
+
+// IsAdmissionError reports whether err is a policy admission failure: a denial,
+// an unmet requirement, or a policy that could not be loaded or evaluated.
+// Admission fails closed, so callers must surface these errors unchanged rather
+// than relabeling them as hook or execution failures.
+func IsAdmissionError(err error) bool {
+	defer perf.Track(nil, "policy.IsAdmissionError")()
+
+	if err == nil {
+		return false
+	}
+	for _, sentinel := range []error{
+		errUtils.ErrPolicyDenied,
+		errUtils.ErrPolicyRequirements,
+		errUtils.ErrPolicyEvaluation,
+		errUtils.ErrPolicyInputInvalid,
+		errUtils.ErrPolicyInputUnavailable,
+		errUtils.ErrPolicyInvalid,
+	} {
+		if errors.Is(err, sentinel) {
+			return true
 		}
 	}
-	if len(reasons) == 0 {
-		return errUtils.ErrPolicyDenied
-	}
-	return errUtils.Build(errUtils.ErrPolicyDenied).
-		WithExplanation(strings.Join(reasons, "\n\n")).
-		Err()
+	return false
 }

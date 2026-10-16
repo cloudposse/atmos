@@ -732,6 +732,44 @@ func TestExecuteTerraformNodeHooksBeforeFailureAbortsNodeWithoutExecutor(t *test
 	require.NotContains(t, executed, "vpc@dev", "the executor must never run for a node whose before-hook failed")
 }
 
+// TestExecuteTerraformNodeHooksPolicyDenialKeepsReasonAndExitCode asserts that a
+// policy denial raised by a node's before-hook is not relabeled as a hook
+// failure, keeps the rule id and reason explanation the denial carries, and
+// still exits with the policy-denied exit code.
+func TestExecuteTerraformNodeHooksPolicyDenialKeepsReasonAndExitCode(t *testing.T) {
+	denial := errUtils.Build(errUtils.ErrPolicyDenied).
+		WithExitCode(errUtils.ExitCodePolicyDenied).
+		WithExplanation("prod-no-apply:\n\nProduction components cannot be changed from this workstation.").
+		Err()
+	var executed []string
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			SubCommand: "apply",
+			NodeHooks:  &testNodeHooks{beforeErr: map[string]error{"vpc@dev": denial}},
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			executed = append(executed, execution.Info.Component+"@"+execution.Info.Stack)
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	require.NotErrorIs(t, err, errUtils.ErrPerComponentHookFailed)
+	require.NotErrorIs(t, err, errUtils.ErrTerraformExecFailed)
+	require.Equal(t, errUtils.ExitCodePolicyDenied, errUtils.GetExitCode(err))
+	require.NotContains(t, executed, "vpc@dev")
+
+	formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+	require.Contains(t, formatted, "prod-no-apply")
+	require.Contains(t, formatted, "Production components cannot be changed from this workstation.")
+	require.NotContains(t, formatted, "per-component hook failed")
+}
+
 // TestExecuteTerraformNodeHooksAfterFailurePromotesSuccessToFailure asserts
 // that an after-hook failure (again, only possible for on_failure: fail) is
 // treated as that node's execution failing even though the real Terraform

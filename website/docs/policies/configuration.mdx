@@ -19,11 +19,31 @@ export ATMOS_POLICY_DIR=/trusted/policy.d
 
 <dl>
   <dt><code>ATMOS_POLICY_DIR</code></dt>
-  <dd>Overrides the default <code>policy.d/</code> directory relative to the invocation's working
-  directory (after <code>--chdir</code>). An unset or empty value uses the default. A missing default
-  directory means no directory policies; a missing explicit override is an error. Use an absolute
-  protected path in CI.</dd>
+  <dd>Overrides the default <code>policy.d/</code> directory. An unset or empty value uses the default.
+  A missing default directory means no directory policies; a missing explicit override is an error.
+  Use an absolute protected path in CI.</dd>
 </dl>
+
+### Default discovery
+
+The default `policy.d/` is found next to the configuration that Atmos selects for `atmos.yaml`, so
+running Atmos from a repository subdirectory loads the same project root's policies. Atmos checks
+these directories in order and uses the first one that contains a `policy.d/`:
+
+1. The directories of `--config` files and `--config-path` directories. Without those flags, the
+   `ATMOS_CONFIG` and `ATMOS_CONFIG_PATH` environment variables. A flag takes precedence over the
+   environment variable.
+2. The directory named by `ATMOS_CLI_CONFIG_PATH`. A path to a file resolves to the file's directory.
+3. The working directory (after `--chdir`).
+4. When none of the above selected a location and the working directory has no Atmos configuration
+   (`atmos.yaml`, `.atmos.yaml`, `.atmos/`, `atmos.d/`, `.atmos.d/`), the Git repository root, unless
+   `ATMOS_GIT_ROOT_BASEPATH=false`. Outside a repository, the nearest parent directory containing
+   `atmos.yaml` or `.atmos.yaml`.
+
+A working directory with its own Atmos configuration is its own project root, so a `policy.d/` in a
+parent directory or at the Git root does not apply to it.
+
+`ATMOS_POLICY_DIR` has no flag equivalent and always overrides this discovery.
 
 | Loading rule | Behavior |
 |---|---|
@@ -185,9 +205,17 @@ For a mandatory CI gate:
 4. Protect policy files, workflow definitions, tool binaries, hook dependencies, and their configuration
    with required review. Protect `CODEOWNERS` itself when it supplies ownership rules.
 
-Discovery does not establish trust. A caller who can redirect the policy directory, delete or modify
+Discovery does not establish trust. A caller who can redirect the policy directory (including through
+the config flags and variables above, or the working directory), delete or modify
 its contents, alter instance metadata, modify the workflow, or run the underlying tool directly can
 bypass this gate.
+
+:::info Policies inherit the trust of their runtime
+A policy engine governs the process it runs in. Whoever shapes that process (its environment variables,
+working directory, binaries, and the files it reads) also shapes which policies load and how they apply.
+The same is true of any policy engine. Treat the runtime as part of the policy: point `ATMOS_POLICY_DIR`
+at an absolute, protected path, and enforce mandatory gates from a trusted CI job.
+:::
 
 Source rules can declare `allowed_roots` for canonical filesystem containment. See
 [source policies](/policies/sources). Validate the bundle with `atmos policy check`;

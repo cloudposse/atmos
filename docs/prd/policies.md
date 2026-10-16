@@ -694,7 +694,7 @@ errors block. Plan JSON contains secrets even when Terraform marks them sensitiv
 bypass console/CI captures, masking transformations, and diagnostic recording; evaluation errors
 must not echo input values. Temporary artifacts are private and removed on all exit paths.
 
-**Current implementation:** `ATMOS_POLICY_DIR` overrides the default `policy.d/` directory, captured before stack
+**Current implementation:** `ATMOS_POLICY_DIR` overrides the default `policy.d/` directory (found at the same project root `atmos.yaml` discovery selects: config flags and variables, `ATMOS_CLI_CONFIG_PATH`, the working directory, then the Git root), captured before stack
 configuration processing. It loads strict `atmos/v1`, `kind: Policy` documents with named inline
 `spec.policies` entries (`on: terraform.plan`, `engine: cel`, `rule`, `action: deny`, optional `reason`
 and `with`). Instance `match` supports literal tags/labels, component names, stacks, and component types.

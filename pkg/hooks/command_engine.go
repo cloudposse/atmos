@@ -325,8 +325,7 @@ func captureOutput(ctx *ExecContext, outputFile string) *Output {
 		if hErr != nil {
 			log.Warn(
 				"Hook ResultHandler failed",
-				logKeyKind, ctx.Hook.Kind,
-				"error", hErr,
+				append([]any{logKeyKind, ctx.Hook.Kind}, failureLogFields(hErr)...)...,
 			)
 		}
 		out.Summary = summary
@@ -989,8 +988,7 @@ func applyOnFailure(ctx *ExecContext, runErr error) error {
 	case OnFailureIgnore:
 		log.Debug(
 			"Hook command failed (ignored per on_failure)",
-			logKeyKind, ctx.Hook.Kind,
-			"error", runErr,
+			append([]any{logKeyKind, ctx.Hook.Kind}, failureLogFields(runErr)...)...,
 		)
 		return nil
 	case OnFailureWarn:
@@ -998,8 +996,7 @@ func applyOnFailure(ctx *ExecContext, runErr error) error {
 	default:
 		log.Warn(
 			"Hook command failed (warning per on_failure)",
-			logKeyKind, ctx.Hook.Kind,
-			"error", runErr,
+			append([]any{logKeyKind, ctx.Hook.Kind}, failureLogFields(runErr)...)...,
 		)
 		return nil
 	}

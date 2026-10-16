@@ -22,6 +22,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/provisioning"
 	"github.com/cloudposse/atmos/pkg/config/casemap"
+	"github.com/cloudposse/atmos/pkg/config/projectroot"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/filetype"
@@ -103,7 +104,7 @@ const (
 	commaDelimiter   = ","
 	profileDelimiter = commaDelimiter
 	// AtmosCliConfigPathEnvVar is the environment variable name for CLI config path.
-	AtmosCliConfigPathEnvVar = "ATMOS_CLI_CONFIG_PATH"
+	AtmosCliConfigPathEnvVar = projectroot.CliConfigPathEnvVar
 	// CwdKey is the log key for current working directory.
 	cwdKey = "cwd"
 )
@@ -182,66 +183,20 @@ func ParseProfilesFromEnvString(envValue string) []string {
 
 // ConfigSelection holds the config-selection flags parsed early from os.Args
 // before Cobra is initialized (same pattern as profile early-parsing).
-type ConfigSelection struct {
-	BasePath   string
-	Config     []string
-	ConfigPath []string
-}
+// The parsing lives in projectroot so policy discovery shares it.
+type ConfigSelection = projectroot.ConfigSelection
 
 // ParseConfigSelectionFromOsArgs parses --base-path, --config, and --config-path
 // flags from os.Args. This is used for early extraction before Cobra parses
 // flags, so that InitCliConfig receives the correct config location.
 func ParseConfigSelectionFromOsArgs(args []string) ConfigSelection {
-	var sel ConfigSelection
-
-	if basePath := strings.TrimSpace(osargs.ParseString(args, "base-path")); basePath != "" {
-		sel.BasePath = basePath
-	}
-
-	for _, v := range osargs.ParseStringSlice(args, "config") {
-		if trimmed := strings.TrimSpace(v); trimmed != "" {
-			sel.Config = append(sel.Config, trimmed)
-		}
-	}
-
-	for _, v := range osargs.ParseStringSlice(args, "config-path") {
-		if trimmed := strings.TrimSpace(v); trimmed != "" {
-			sel.ConfigPath = append(sel.ConfigPath, trimmed)
-		}
-	}
-
-	return sel
+	return projectroot.ParseConfigSelectionFromOsArgs(args)
 }
 
 // ConfigSelectionFromEnv reads config-selection values from environment variables
 // as fallbacks when not provided via CLI flags.
 func ConfigSelectionFromEnv() ConfigSelection {
-	var sel ConfigSelection
-
-	//nolint:forbidigo // Must use os.Getenv: config selection is processed before Viper configuration loads.
-	if v := os.Getenv("ATMOS_BASE_PATH"); v != "" {
-		sel.BasePath = strings.TrimSpace(v)
-	}
-
-	//nolint:forbidigo // Must use os.Getenv: config selection is processed before Viper configuration loads.
-	if v := os.Getenv("ATMOS_CONFIG"); v != "" {
-		for _, part := range strings.Split(v, commaDelimiter) {
-			if trimmed := strings.TrimSpace(part); trimmed != "" {
-				sel.Config = append(sel.Config, trimmed)
-			}
-		}
-	}
-
-	//nolint:forbidigo // Must use os.Getenv: config selection is processed before Viper configuration loads.
-	if v := os.Getenv("ATMOS_CONFIG_PATH"); v != "" {
-		for _, part := range strings.Split(v, commaDelimiter) {
-			if trimmed := strings.TrimSpace(part); trimmed != "" {
-				sel.ConfigPath = append(sel.ConfigPath, trimmed)
-			}
-		}
-	}
-
-	return sel
+	return projectroot.ConfigSelectionFromEnv()
 }
 
 // EarlyConfigAndStacksInfoFromArgs builds the initial config-selection values
@@ -259,25 +214,13 @@ func EarlyConfigAndStacksInfoFromArgs(args []string) schema.ConfigAndStacksInfo 
 
 	configSel := ParseConfigSelectionFromOsArgs(args)
 	envSel := ConfigSelectionFromEnv()
-	configSel.applyFallbacks(envSel)
+	configSel.ApplyFallbacks(envSel)
 
 	return schema.ConfigAndStacksInfo{
 		ProfilesFromArg:         profilesFromArg,
 		AtmosBasePath:           configSel.BasePath,
 		AtmosConfigFilesFromArg: configSel.Config,
 		AtmosConfigDirsFromArg:  configSel.ConfigPath,
-	}
-}
-
-func (s *ConfigSelection) applyFallbacks(fallback ConfigSelection) {
-	if s.BasePath == "" {
-		s.BasePath = fallback.BasePath
-	}
-	if len(s.Config) == 0 {
-		s.Config = fallback.Config
-	}
-	if len(s.ConfigPath) == 0 {
-		s.ConfigPath = fallback.ConfigPath
 	}
 }
 
@@ -321,7 +264,7 @@ func getProfilesFromFallbacks() ([]string, string) {
 // today.
 func getConfigSelectionFromFlagsOrEnv() ConfigSelection {
 	sel := ParseConfigSelectionFromOsArgs(os.Args)
-	sel.applyFallbacks(ConfigSelectionFromEnv())
+	sel.ApplyFallbacks(ConfigSelectionFromEnv())
 	return sel
 }
 
@@ -1120,8 +1063,7 @@ func readWorkDirConfigOnly(v *viper.Viper) error {
 // This is a fallback search - it only runs when CWD does NOT have local Atmos config.
 func readGitRootConfig(v *viper.Viper) error {
 	// Check if git root discovery is disabled.
-	//nolint:forbidigo // ATMOS_GIT_ROOT_BASEPATH is bootstrap config, not application configuration.
-	if os.Getenv("ATMOS_GIT_ROOT_BASEPATH") == "false" {
+	if projectroot.GitRootDiscoveryDisabled() {
 		return nil
 	}
 
@@ -1241,28 +1183,7 @@ func readWorkDirConfig(v *viper.Viper) error {
 // it finds an atmos.yaml file or reaches the filesystem root.
 // Returns the directory containing atmos.yaml, or empty string if not found.
 func findAtmosConfigInParentDirs(startDir string) string {
-	dir := startDir
-
-	for {
-		// Move to parent directory.
-		parent := filepath.Dir(dir)
-
-		// Check if we've reached the root.
-		if parent == dir {
-			return ""
-		}
-
-		dir = parent
-		log.Trace("Checking for atmos.yaml in parent directory", "path", dir)
-
-		// Check for atmos.yaml or .atmos.yaml in this directory.
-		for _, configName := range []string{AtmosConfigFileName, DotAtmosConfigFileName} {
-			configPath := filepath.Join(dir, configName)
-			if _, err := os.Stat(configPath); err == nil {
-				return dir
-			}
-		}
-	}
+	return projectroot.FindConfigInParentDirs(startDir)
 }
 
 func readEnvAmosConfigPath(v *viper.Viper) error {

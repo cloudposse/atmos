@@ -3,6 +3,7 @@ package policy
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -71,12 +72,58 @@ func TestDenialReasonMarkdown(t *testing.T) {
 }
 
 func TestDenialReasonIsOptional(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	for _, reason := range []string{"", " \n\t"} {
 		decision := Decision{Status: Deny, Findings: []Finding{{
-			RuleID: "optional", Status: Deny, Effects: Effects{Deny: true, Reason: reason},
+			RuleID: "command-deny-destroy/guard", Status: Deny, Effects: Effects{Deny: true, Reason: reason},
 		}}}
-		require.Equal(t, errUtils.ErrPolicyDenied, EnforceDecision(decision))
+		err := EnforceDecision(decision)
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+		output := strings.Join(strings.Fields(errUtils.Format(err, errUtils.DefaultFormatterConfig())), " ")
+		require.Contains(t, output, "Denied by command-deny-destroy/guard.", "a reason-less denial must still name its rule")
 	}
+}
+
+func TestDenialNamesEveryDenyingRule(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	err := EnforceDecision(Decision{Status: Deny, Findings: []Finding{
+		{RuleID: "first/guard", Status: Deny, Effects: Effects{Deny: true}},
+		{RuleID: "allowed/rule", Status: Allow},
+		{RuleID: "second/guard", Status: Deny, Effects: Effects{Deny: true, Reason: "Use the reviewed workflow."}},
+		{RuleID: "third/guard", Status: Deny, Effects: Effects{Deny: true}},
+	}})
+	require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	output := strings.Join(strings.Fields(errUtils.Format(err, errUtils.DefaultFormatterConfig())), " ")
+	require.Contains(t, output, "Denied by first/guard.")
+	require.Contains(t, output, "second/guard: Use the reviewed workflow.")
+	require.Contains(t, output, "Denied by third/guard.")
+	require.NotContains(t, output, "allowed/rule", "rules that did not deny must not be named")
+}
+
+func TestDenialExitCode(t *testing.T) {
+	t.Run("denial carries the dedicated exit code", func(t *testing.T) {
+		for _, reason := range []string{"", "Because."} {
+			err := EnforceDecision(Decision{Status: Deny, Findings: []Finding{{
+				RuleID: "guard", Status: Deny, Effects: Effects{Deny: true, Reason: reason},
+			}}})
+			require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+			require.Equal(t, errUtils.ExitCodePolicyDenied, errUtils.GetExitCode(err))
+			wrapped := fmt.Errorf("%w: wrapped by a caller", err)
+			require.ErrorIs(t, wrapped, errUtils.ErrPolicyDenied)
+			require.Equal(t, errUtils.ExitCodePolicyDenied, errUtils.GetExitCode(wrapped))
+		}
+	})
+	t.Run("non-denial outcomes keep the default exit code", func(t *testing.T) {
+		for _, decision := range []Decision{
+			{Status: EvaluationError},
+			{Status: AwaitingApproval},
+		} {
+			err := EnforceDecision(decision)
+			require.Error(t, err)
+			require.NotErrorIs(t, err, errUtils.ErrPolicyDenied)
+			require.Equal(t, 1, errUtils.GetExitCode(err))
+		}
+	})
 }
 
 func TestDenialReasonsPreserveAllBlockingRules(t *testing.T) {

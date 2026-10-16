@@ -95,6 +95,10 @@ atmos terraform plan vpc -s prod --dry-run --explain
   and stdout. Reports reached gates, rule outcomes, selector exclusions, approval verification,
   selected hook requirements, and configured input kinds never reached. Input values and function
   arguments are not printed.</dd>
+  <dt><code>ATMOS_EXPLAIN</code></dt>
+  <dd>Environment equivalent of `--explain`. The command-line flag takes precedence. When `--explain`
+  is set, Atmos exports `ATMOS_EXPLAIN=true` to the processes it starts, so nested Atmos commands run by
+  scripts, steps, workflows, and custom commands report their own policy diagnostics too.</dd>
 </dl>
 
 `--explain` is not a preview flag. Combine it with a command's existing `--dry-run` when supported.

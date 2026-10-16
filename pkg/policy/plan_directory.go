@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/config/projectroot"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -44,7 +45,16 @@ type Bundle struct {
 	Tools map[string]string
 }
 
-// DirectoryFromEnvironment resolves an explicit override or the local policy.d directory.
+// defaultDirectoryName is the policy directory discovered at the project root.
+const defaultDirectoryName = "policy.d"
+
+// DirectoryFromEnvironment resolves an explicit override or the default policy.d directory.
+// The default is the policy.d next to the configuration that atmos.yaml discovery
+// selects, using the same precedence: --config/--config-path (then ATMOS_CONFIG and
+// ATMOS_CONFIG_PATH), ATMOS_CLI_CONFIG_PATH, the working directory, then the Git
+// root unless ATMOS_GIT_ROOT_BASEPATH=false (or the nearest ancestor holding
+// atmos.yaml outside a repository). The first of those directories holding a
+// policy.d wins; the working directory is always considered.
 // Discovery does not establish trust. A missing default is allowed; an explicit
 // missing directory is returned so loading fails rather than falling back.
 func DirectoryFromEnvironment() (string, error) {
@@ -56,11 +66,24 @@ func DirectoryFromEnvironment() (string, error) {
 	if directory := settings.GetString("directory"); directory != "" {
 		return directory, nil
 	}
-	directory, err := filepath.Abs("policy.d")
+	cwd, err := os.Getwd()
 	if err != nil {
-		return "", fmt.Errorf("%w: resolve default directory: %w", errUtils.ErrPolicyInvalid, err)
+		return "", fmt.Errorf("%w: resolve working directory: %w", errUtils.ErrPolicyInvalid, err)
 	}
-	info, err := os.Stat(directory)
+	for _, root := range projectroot.SearchDirs(cwd, os.Args) {
+		directory, err := defaultDirectory(filepath.Join(root, defaultDirectoryName))
+		if err != nil || directory != "" {
+			return directory, err
+		}
+	}
+	return "", nil
+}
+
+// defaultDirectory returns candidate when it is an existing directory, and an
+// empty path when it does not exist.
+func defaultDirectory(candidate string) (string, error) {
+	//nolint:gosec // The candidate is a discovered project-root directory; it is only stat-ed here and validated by LoadDirectory.
+	info, err := os.Stat(candidate)
 	if errors.Is(err, os.ErrNotExist) {
 		return "", nil
 	}
@@ -70,7 +93,7 @@ func DirectoryFromEnvironment() (string, error) {
 	if !info.IsDir() {
 		return "", fmt.Errorf("%w: default policy.d is not a directory", errUtils.ErrPolicyInvalid)
 	}
-	return directory, nil
+	return candidate, nil
 }
 
 // RulesFor returns rules for one input capability without changing their order.

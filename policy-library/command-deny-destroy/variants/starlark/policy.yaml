@@ -2,7 +2,7 @@ apiVersion: atmos/v1
 kind: Policy
 metadata:
   name: command-deny-destroy
-  description: Deny the direct destroy command without requiring affected analysis.
+  description: Deny Terraform destroy, including the destroy flag on plan, apply, and deploy.
 spec:
   policies:
     guard:
@@ -10,4 +10,4 @@ spec:
       engine: starlark
       action: deny
       rule: |
-        return ctx.input["command"] == "terraform destroy"
+        return ctx.input["command"] == "terraform destroy" or ctx.input["destroy"]

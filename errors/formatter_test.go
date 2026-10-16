@@ -223,6 +223,40 @@ func TestFormatInCIUsesColorUnlessDisabled(t *testing.T) {
 	assert.NotContains(t, result, "\x1b[", "NO_COLOR must override CI color support")
 }
 
+// TestFormatHintsReadableWithoutColor asserts that bold text wrapped around inline
+// code in a hint stays readable when color is off, and that styled output is not
+// affected by the plain-text path.
+func TestFormatHintsReadableWithoutColor(t *testing.T) {
+	t.Setenv("CI", "")
+	t.Setenv("FORCE_COLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "")
+	t.Setenv("NO_COLOR", "1")
+
+	err := Build(ErrInvalidArguments).
+		WithHint("**`!exec` is disabled** by policy. Run `atmos validate stacks` to review the rules.").
+		Err()
+
+	result := Format(err, DefaultFormatterConfig())
+
+	assert.Contains(t, result, "!exec is disabled by policy.")
+	assert.Contains(t, result, "atmos validate stacks")
+	assert.NotContains(t, result, "!exec**", "bold markers must not dangle around inline code")
+	assert.NotContains(t, result, "disabled**")
+	assert.NotContains(t, result, "\x1b[")
+
+	// The title and error header keep their existing non-TTY rendering.
+	assert.Contains(t, result, "**Error:**")
+
+	t.Setenv("NO_COLOR", "")
+	previousProfile := lipgloss.DefaultRenderer().ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	t.Setenv("CLICOLOR_FORCE", "1")
+
+	colored := Format(err, DefaultFormatterConfig())
+	assert.Contains(t, colored, "\x1b[", "styled output keeps ANSI styling for hints")
+}
+
 func TestWrapText(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -1222,4 +1256,24 @@ func TestFormat_ExplanationWithErrorBuilder(t *testing.T) {
 		assert.Contains(t, result, "Failed to vendor 1 of 3 components: my-vpc")
 		assert.ErrorIs(t, err, sentinel)
 	})
+}
+
+// TestFormat_PlainExplanationKeepsInlineMarkdownReadable guards non-TTY rendering of
+// Markdown that mixes bold and inline code. Glamour's ASCII preset emits bold markers
+// once per text fragment and drops code-span delimiters, which turned this reason
+// into "!exec** is disabled** because ..." in piped output and CI logs.
+func TestFormat_PlainExplanationKeepsInlineMarkdownReadable(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	reason := "**`!exec` is disabled** because stack configuration must not run shell commands.\n\n" +
+		"**Instead:** Pass precomputed values through environment variables and read them with `!env`."
+	err := Build(errors.New("policy denied execution")).WithExplanation(reason).Err()
+
+	result := Format(err, FormatterConfig{MaxLineLength: 200})
+
+	assert.NotContains(t, result, "\x1b[")
+	assert.NotContains(t, result, "!exec**", "bold markers must not be left dangling")
+	assert.NotContains(t, result, "disabled**", "bold markers must not be left dangling")
+	assert.Contains(t, result, "!exec is disabled because stack configuration must not run shell commands.")
+	assert.Contains(t, result, "Instead: Pass precomputed values through environment variables and read them with !env.")
+	assert.Equal(t, 0, strings.Count(result, "**")-strings.Count(result, "**Error:**")*2, "explanation must not contain stray bold markers")
 }

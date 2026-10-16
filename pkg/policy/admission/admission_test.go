@@ -41,7 +41,37 @@ func TestAdmissionInvalidDirectoryFailsClosed(t *testing.T) {
 func TestAdmissionMissingDefault(t *testing.T) {
 	t.Chdir(t.TempDir())
 	t.Setenv("ATMOS_POLICY_DIR", "")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("TEST_GIT_ROOT", "")
 	require.NoError(t, Function(context.Background(), "repo-root"))
 	require.NoError(t, Function(context.Background(), "git.ref"))
 	require.ErrorIs(t, Check(context.Background(), nil), errUtils.ErrPolicyInputInvalid)
+}
+
+// TestAdmissionLoadsGitRootPoliciesFromSubdirectory covers running from a repository
+// subdirectory, where atmos.yaml is found at the Git root and policy.d must be too.
+func TestAdmissionLoadsGitRootPoliciesFromSubdirectory(t *testing.T) {
+	root := t.TempDir()
+	policies := filepath.Join(root, "policy.d")
+	require.NoError(t, os.Mkdir(policies, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(policies, "deny.yaml"), []byte("apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: safety}\nspec:\n  policies:\n    exec:\n      on: function\n      action: deny\n      rule: input.name == 'exec'\n"), 0o600))
+	sub := filepath.Join(root, "components", "terraform", "mock")
+	require.NoError(t, os.MkdirAll(sub, 0o755))
+	t.Setenv("ATMOS_POLICY_DIR", "")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "")
+	t.Setenv("TEST_GIT_ROOT", root)
+	t.Chdir(sub)
+
+	restore, err := BeginInvocation()
+	require.NoError(t, err)
+	defer restore()
+	require.ErrorIs(t, Function(context.Background(), "!exec"), errUtils.ErrPolicyDenied)
+
+	// Negative path: with Git root discovery disabled the same invocation loads nothing.
+	t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "false")
+	restoreDisabled, err := BeginInvocation()
+	require.NoError(t, err)
+	defer restoreDisabled()
+	require.NoError(t, Function(context.Background(), "!exec"))
 }

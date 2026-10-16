@@ -389,20 +389,22 @@ func renderMarkdownSections(sections markdownSections, config FormatterConfig, u
 	}
 
 	if strings.TrimSpace(sections.explanationMarkdown) != "" {
-		renderedExplanation, ok := renderMarkdown(sections.explanationMarkdown, explanationMarkdownLineLength(width, useColor))
+		renderedExplanation, ok := renderSectionMarkdown(sections.explanationMarkdown, explanationMarkdownLineLength(width, useColor), useColor)
 		if !ok {
 			return "", false
-		}
-		if !useColor {
-			renderedExplanation = stripANSI(renderedExplanation)
 		}
 		appendRenderedSection(&out, renderExplanationCallout(renderedExplanation, width, useColor))
 	}
 
 	if strings.TrimSpace(sections.remainderMarkdown) != "" {
-		if !appendRenderedMarkdownSection(&out, sections.remainderMarkdown, width, useColor) {
+		// Hints, examples, and command output carry author-supplied Markdown such as
+		// bold text wrapped around inline code, so they use the same readable
+		// rendering as the explanation when styling is unavailable.
+		renderedRemainder, ok := renderSectionMarkdown(sections.remainderMarkdown, width, useColor)
+		if !ok {
 			return "", false
 		}
+		appendRenderedSection(&out, renderedRemainder)
 	}
 
 	// Leading blank line separates the error block from whatever was printed
@@ -475,6 +477,19 @@ func appendRenderedMarkdownSection(out *strings.Builder, md string, maxLineLengt
 	}
 	appendRenderedSection(out, rendered)
 	return true
+}
+
+// renderSectionMarkdown renders author-supplied Markdown with ANSI styling when color is
+// enabled and as readable plain text otherwise.
+func renderSectionMarkdown(md string, maxLineLength int, useColor bool) (string, bool) {
+	if useColor {
+		return renderMarkdown(md, maxLineLength)
+	}
+	rendered, ok := renderReadableMarkdown(md, maxLineLength)
+	if !ok {
+		return "", false
+	}
+	return stripANSI(rendered), true
 }
 
 func appendRenderedSection(out *strings.Builder, section string) {
@@ -669,6 +684,19 @@ func addStackTraceSection(md *strings.Builder, err error, useColor bool) {
 // 2. Error formatting works before the UI system is initialized (early startup errors)
 // 3. No circular dependencies (pkg/ui imports errors package)
 func renderMarkdown(md string, maxLineLength int) (string, bool) {
+	return renderWith(md, maxLineLength, (*markdown.Renderer).RenderErrorf)
+}
+
+// renderReadableMarkdown renders Markdown as plain text for output without styling.
+// It avoids the ASCII preset used for non-TTY stderr, which leaves bold markers
+// dangling around inline code and drops code-span backticks.
+func renderReadableMarkdown(md string, maxLineLength int) (string, bool) {
+	return renderWith(md, maxLineLength, func(r *markdown.Renderer, content string, _ ...interface{}) (string, error) {
+		return r.RenderReadable(content)
+	})
+}
+
+func renderWith(md string, maxLineLength int, render func(*markdown.Renderer, string, ...interface{}) (string, error)) (string, bool) {
 	// Use provided maxLineLength, or fall back to default if not set.
 	width := maxLineLength
 	if width <= 0 {
@@ -691,7 +719,7 @@ func renderMarkdown(md string, maxLineLength int) (string, bool) {
 		return "", false
 	}
 
-	rendered, renderErr := renderer.RenderErrorf(md)
+	rendered, renderErr := render(renderer, md)
 	if renderErr == nil {
 		return rendered, true
 	}

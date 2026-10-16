@@ -60,8 +60,8 @@ Run a plan from the directory containing `policy.d/`:
 atmos terraform plan vpc -s dev
 ```
 
-A matching rule blocks the command. A plan containing no managed-resource deletions passes this
-rule. To apply a passing saved plan:
+A matching rule blocks the command, names itself in the error, and exits with code `77`. A plan
+containing no managed-resource deletions passes this rule. To apply a passing saved plan:
 
 ```shell
 atmos terraform apply vpc -s dev --from-plan

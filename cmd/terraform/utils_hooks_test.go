@@ -1848,3 +1848,187 @@ func TestHandleInteractiveComponentStackSelection_SkipsMultiComponent(t *testing
 	err := handleInteractiveComponentStackSelection(info, cmd)
 	assert.NoError(t, err)
 }
+
+// writeComponentCommandPolicy writes a component.command deny policy for the
+// given component and points ATMOS_POLICY_DIR at it.
+func writeComponentCommandPolicy(t *testing.T, component string) {
+	t.Helper()
+
+	dir := t.TempDir()
+	t.Setenv("ATMOS_POLICY_DIR", dir)
+	manifest := `apiVersion: atmos/v1
+kind: Policy
+metadata: {name: admission}
+spec:
+  policies:
+    block-apply:
+      on: component.command
+      action: deny
+      rule: input.component == '` + component + `' && input.command in ['apply', 'deploy', 'destroy']
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "guard.yaml"), []byte(manifest), 0o600))
+}
+
+// TestPrepareHookContextSurfacesComponentAdmissionDenial verifies that a
+// component.command denial found while resolving the hook context is returned
+// instead of being swallowed with the other best-effort ProcessStacks failures.
+// Swallowing it let before.* hooks run (and then after.* hooks with
+// status=failure) for a command that policy admission had already rejected.
+func TestPrepareHookContextSurfacesComponentAdmissionDenial(t *testing.T) {
+	t.Chdir("../../tests/fixtures/scenarios/terraform-apply-all-dependencies")
+
+	t.Run("denied command is returned", func(t *testing.T) {
+		writeComponentCommandPolicy(t, "platform-kms")
+		cmd := newHookTestCmd()
+		cmd.Use = "apply"
+		require.NoError(t, cmd.Flags().Set("stack", "reported-order-alias"))
+
+		_, err := prepareHookContext(cmd, []string{"platform-kms"})
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	})
+
+	t.Run("denied command never runs before hooks", func(t *testing.T) {
+		writeComponentCommandPolicy(t, "platform-kms")
+		cmd := newHookTestCmd()
+		cmd.Use = "apply"
+		require.NoError(t, cmd.Flags().Set("stack", "reported-order-alias"))
+
+		err := runHooks(hooks.BeforeTerraformApply, cmd, []string{"platform-kms"})
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	})
+
+	t.Run("other components are not denied", func(t *testing.T) {
+		writeComponentCommandPolicy(t, "some-other-component")
+		cmd := newHookTestCmd()
+		cmd.Use = "apply"
+		require.NoError(t, cmd.Flags().Set("stack", "reported-order-alias"))
+
+		ctx, err := prepareHookContext(cmd, []string{"platform-kms"})
+		require.NoError(t, err)
+		assert.Equal(t, "mock", ctx.info.FinalComponent)
+	})
+
+	t.Run("other commands are not denied", func(t *testing.T) {
+		writeComponentCommandPolicy(t, "platform-kms")
+		cmd := newHookTestCmd() // "plan" is not in the denied command list.
+
+		require.NoError(t, cmd.Flags().Set("stack", "reported-order-alias"))
+		_, err := prepareHookContext(cmd, []string{"platform-kms"})
+		require.NoError(t, err)
+	})
+}
+
+func TestIsPolicyAdmissionError(t *testing.T) {
+	for _, sentinel := range []error{
+		errUtils.ErrPolicyDenied, errUtils.ErrPolicyRequirements, errUtils.ErrPolicyEvaluation,
+		errUtils.ErrPolicyInputInvalid, errUtils.ErrPolicyInputUnavailable, errUtils.ErrPolicyInvalid,
+	} {
+		assert.True(t, hooks.IsPolicyAdmissionError(fmt.Errorf("wrapped: %w", sentinel)), sentinel.Error())
+	}
+	assert.False(t, hooks.IsPolicyAdmissionError(nil))
+	assert.False(t, hooks.IsPolicyAdmissionError(errUtils.ErrMissingStack))
+}
+
+// writeFailingHookProject creates a project whose `app` component has
+// before and after deploy hooks that always fail with on_failure: fail. If either
+// hook ran, the call under test would surface its failure, so a nil or policy
+// error proves the hook never started.
+func writeFailingHookProject(t *testing.T) {
+	t.Helper()
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	tempDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "components", "terraform", "app"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "components", "terraform", "app", "main.tf"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(`base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+schemas: {}
+logs:
+  level: Info
+`), 0o644))
+	hook := func(event, when string) string {
+		return fmt.Sprintf(`        %s:
+          events:
+            - %s
+          when: %s
+          kind: command
+          command: %s
+          args: ["-test.run", "^$"]
+          env:
+            _ATMOS_TEST_EXIT_ONE: "1"
+          on_failure: fail
+`, event, event, when, exe)
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "stacks", "test.yaml"), []byte(`vars:
+  stage: test
+components:
+  terraform:
+    app:
+      hooks:
+`+hook("before-terraform-deploy", "success")+hook("after-terraform-deploy", "always")), 0o644))
+
+	t.Chdir(tempDir)
+	withoutCIDetection(t)
+}
+
+// TestTerraformNodeHooks_ComponentAdmissionDenial verifies the multi-component
+// path: the scheduler runs Before ahead of the executor's own admission check,
+// so Before must reject a denied node without running its before.* hooks, and
+// After must not run after.* hooks for a node that never started.
+func TestTerraformNodeHooks_ComponentAdmissionDenial(t *testing.T) {
+	newNodeHooks := func() *terraformNodeHooks {
+		return &terraformNodeHooks{
+			cmd:         newHookTestCmd(),
+			subCommand:  "deploy",
+			beforeEvent: hooks.BeforeTerraformDeploy,
+			afterEvent:  hooks.AfterTerraformDeploy,
+		}
+	}
+	newInfo := func() *schema.ConfigAndStacksInfo {
+		return &schema.ConfigAndStacksInfo{
+			Stack: "test", Component: "app", ComponentFromArg: "app", ComponentType: "terraform", SubCommand: "deploy",
+		}
+	}
+
+	t.Run("denied node runs no hooks", func(t *testing.T) {
+		writeFailingHookProject(t)
+		writeComponentCommandPolicy(t, "app")
+		nodeHooks, info := newNodeHooks(), newInfo()
+
+		err := nodeHooks.Before(context.Background(), info)
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied, "the failing before-hook must not have run")
+
+		require.NoError(t, nodeHooks.After(context.Background(), info, "", err), "the failing after-hook must not have run")
+	})
+
+	t.Run("admitted node still runs hooks", func(t *testing.T) {
+		writeFailingHookProject(t)
+		writeComponentCommandPolicy(t, "some-other-component")
+		nodeHooks, info := newNodeHooks(), newInfo()
+
+		err := nodeHooks.Before(context.Background(), info)
+		require.Error(t, err)
+		require.NotErrorIs(t, err, errUtils.ErrPolicyDenied)
+		require.Error(t, nodeHooks.After(context.Background(), info, "", err), "after-hooks run for an admitted node")
+	})
+
+	t.Run("without policy rules hooks run", func(t *testing.T) {
+		writeFailingHookProject(t)
+		t.Setenv("ATMOS_POLICY_DIR", "")
+		nodeHooks, info := newNodeHooks(), newInfo()
+
+		err := nodeHooks.Before(context.Background(), info)
+		require.Error(t, err)
+		require.NotErrorIs(t, err, errUtils.ErrPolicyDenied)
+	})
+}
