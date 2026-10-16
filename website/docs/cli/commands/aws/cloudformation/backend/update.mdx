@@ -18,7 +18,8 @@ import Experimental from '@site/src/components/Experimental'
   create`](/cli/commands/aws/cloudformation/backend/create) dispatch through
   the identical idempotent code path; `update` exists as the explicit,
   intention-revealing verb for "make sure this bucket's settings are still
-  correct."
+  correct." Both commands prompt before changing an existing bucket; use
+  `--auto-approve` to skip this confirmation in automation.
 </Intro>
 
 <Experimental />

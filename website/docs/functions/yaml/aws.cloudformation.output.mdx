@@ -88,7 +88,7 @@ components:
 ```
 </File>
 
-## Caching the result of `!aws.cloudformation.output` function
+## Output lookups
 
 Atmos does not cache the result of the `!aws.cloudformation.output` function. Every evaluation of the
 function calls `DescribeStacks` again, so each use in your manifests costs one API call, and the value

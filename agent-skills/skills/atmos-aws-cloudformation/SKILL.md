@@ -102,7 +102,7 @@ chart-style plugin system, unlike native Helm).
 
 | Command | Purpose |
 |---|---|
-| `atmos aws cloudformation render <component> -s <stack>` | Render the local template client-side. No API calls. |
+| `atmos aws cloudformation render <component> -s <stack>` | Render the template without CloudFormation deployment or validation calls. Remote `source:`, secret, or output inputs may still require authentication and service calls. |
 | `atmos aws cloudformation validate <component> -s <stack>` | Server-side `ValidateTemplate` — syntax and capability discovery, not a local linter. |
 | `atmos aws cloudformation diff <component> -s <stack>` | Creates (or reuses) a changeset and previews the changes an apply would make, then deletes the preview changeset (best-effort cleanup) so it never leaks against the account's changeset quota. `plan` is an alias. |
 | `atmos aws cloudformation apply <component> -s <stack>` | Executes the changeset (`ExecuteChangeSet`), creating or updating the stack — never a direct `CreateStack`/`UpdateStack` call. Streams per-resource stack events live and ends with a rendered Outputs summary. |
