@@ -108,6 +108,32 @@ apply even when primary quota remains. Back off and reduce concurrency instead o
 workers or hammering update endpoints. Batch read-only queries, avoid redundant polling, and retain
 successful observations keyed by commit so a restart does not repeat every request.
 
+## Build a contiguous approved bottom block
+
+Read the live native stack order and current-head approval evidence before choosing a review or
+split boundary. The approved bottom prefix ends immediately before the first PR lacking an
+applicable approval or having unresolved findings. For example, approvals at positions 1, 3, and 5
+mean three total approvals but a bottom prefix of only one. Recompute after head, parent, order,
+or review changes; a historical approval count does not identify the first N approved PRs.
+
+Choose the intended bottom block using the user's requested scope. Prioritize its earliest approval
+gaps over higher-layer requests, including eligible retries after an actual rate limit. Keep other
+settled PRs in that block moving while a review is pending; do not duplicate an accepted request or
+bypass cooldowns. Once those gaps have requests pending or are ineligible, other settled work can
+proceed within the user's priorities and remaining quota. Preserve the shared request ledger when
+changing scheduler order.
+
+Keep approved heads stable while repairing gaps. Defer unrelated cleanup and unnecessary propagation;
+when a required fix changes an approved head, record that its approval must be revalidated and
+recompute the prefix. Use incremental reviews under the existing request policy.
+
+Before an authorized split, detachment, or partial merge, verify the exact members and boundary
+against fresh evidence. Scattered approvals do not permit skipping intervening dependencies. Do not
+retarget a dependent PR to trunk merely to make it appear independent. Preserve intended base
+relationships and native membership, and do not treat review authorization as permission to split
+or merge. Report the approved prefix separately from the merge-ready prefix: CI, coverage, conflicts,
+and other repository requirements may still block an approved PR.
+
 ## Coordinate CodeRabbit requests separately
 
 Use one shared request ledger and scheduler across the stack's agents. Determine the current bot
@@ -130,9 +156,9 @@ requests without resending work already submitted.
   hold only affected targets; continue independent requests when their heads/parents are settled.
 - Deduplicate by PR and full head SHA. Persist a unique marker before sending a request. If a write
   times out, look for that marker before retrying; an ambiguous response is not permission to resend.
-- Give remaining eligible PRs their turn rather than repeatedly requesting the same PR. Findings on
-  one PR need not block requests for unrelated settled PRs. Do not re-request just because a review
-  is slow; check the bot's response and current review state first.
+- Within the bottom-block priority above, give eligible PRs their turn rather than repeatedly
+  requesting the same PR. Findings on one PR need not block independent settled work. Do not
+  re-request just because a review is slow; check the bot's response and current review state first.
 - Mark replaced targets as superseded, but retain their quota history and applicable cooldowns.
   Refresh the queue's target SHAs after publication; never keep reviewing the old frozen manifest.
 - Reply to and resolve only findings verified fixed in published commits. Unknown new findings need
@@ -161,7 +187,8 @@ Revalidate affected evidence when a head or parent changes. Do not rewrite the e
 to refresh evidence when the platform supports adequate validation of the intended merge result.
 
 A useful report says how many PRs have current CI and coverage passing, how many have current-head
-approval, which fixes are local versus published, whether conflicts remain, whether all file counts
+approval, the contiguous approved bottom prefix and its first gap, the separately verified merge-ready
+prefix, which fixes are local versus published, whether conflicts remain, whether all file counts
 fit the budget, and what the active workers actually do. Completion requires all requested checks
 finished successfully on the final published state, not just a successful local batch or queued reviews.
 Keep PRs open and preserve the requested checkout unless the user authorized a different final state.

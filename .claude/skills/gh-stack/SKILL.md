@@ -86,6 +86,16 @@ conflicts, required freshness, and the combined merge result first. When an upda
 explain its validation/review cost and batch it with already confirmed fixes. Existing authorization
 still applies; do not add a new approval round for ordinary authorized repairs.
 
+## Build approvals from the bottom
+
+Prioritize a contiguous approved bottom block, not an increasing count of approvals scattered
+through the stack. Verify current-head reviews in native stack order, identify the first gap, and
+spend review quota on closing gaps in the intended bottom block before higher layers. Preserve
+already approved heads where possible; necessary changes require fresh evidence. Report the
+approved bottom prefix separately from total approvals and from the prefix with all merge
+requirements satisfied. Verify the actual boundary before proposing a split or partial merge;
+see [review scheduling and reporting](references/maintenance.md#build-a-contiguous-approved-bottom-block).
+
 ## Keep each PR reviewable
 
 **Stay below the 150-file review boundary.** The repository quality gate currently requires
