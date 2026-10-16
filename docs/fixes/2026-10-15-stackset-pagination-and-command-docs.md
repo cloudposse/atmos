@@ -17,6 +17,8 @@ StackSet instance listing stopped only for a nil token, so an empty final token 
 - Clarify that Atmos cannot add instances to an existing StackSet, while the AWS CloudFormation console and AWS CLI can.
 - Describe `watch --stack` as required for a single component and optional as a bulk-selection filter.
 
+- Align the corrected wording with the later documentation refresh, preserving both changes without rewriting descendant heads.
+
 ## Validation
 
 - The two empty-token regression cases failed before the fix by detecting an unexpected extra API call.
