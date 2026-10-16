@@ -365,7 +365,7 @@ func runDelete(ctx context.Context, client CloudFormationClient, flags map[strin
 	}
 	summary["final_status"] = string(status)
 	if isFailedStackStatus(status) {
-		return summary, deleteFailedError(ctx, client, spec.StackName, status)
+		return summary, deleteFailedError(ctx, client, spec, status)
 	}
 	ui.Success(fmt.Sprintf("Deleted stack %s", spec.StackName))
 	return summary, nil
@@ -374,7 +374,8 @@ func runDelete(ctx context.Context, client CloudFormationClient, flags map[strin
 // deleteFailedError reports a delete that did not complete. For DELETE_FAILED it
 // lists the resources CloudFormation could not delete and hints at
 // --retain-resources, the way to finish deleting the stack while keeping them.
-func deleteFailedError(ctx context.Context, client CloudFormationClient, stackName string, status cfntypes.StackStatus) error {
+func deleteFailedError(ctx context.Context, client CloudFormationClient, spec *stackSpec, status cfntypes.StackStatus) error {
+	stackName := spec.StackName
 	err := fmt.Errorf("%w: stack %s ended in status %s", errUtils.ErrAwsCloudFormationOperationFailed, stackName, status)
 	if !isDeleteFailedStack(status) {
 		return err
@@ -385,7 +386,7 @@ func deleteFailedError(ctx context.Context, client CloudFormationClient, stackNa
 		retain = strings.Join(ids, ",")
 	}
 	return errUtils.Build(err).
-		WithHintf("Delete the stack anyway, keeping the resources that failed to delete, with `atmos aws cloudformation delete <component> -s <stack> --retain-resources=%s`.", retain).
+		WithHintf("Delete the stack anyway, keeping the resources that failed to delete, with `atmos aws cloudformation delete %s --retain-resources=%s`.", spec.commandTarget(), retain).
 		Err()
 }
 

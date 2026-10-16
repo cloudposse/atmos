@@ -307,7 +307,11 @@ func normalizeParameterEntry(entry any) (cfntypes.Parameter, error) {
 		return cfntypes.Parameter{ParameterKey: awsString(name), UsePreviousValue: &usePrevious}, nil
 	}
 
-	value, err := stringifyParameterValue(fields[paramValueField])
+	rawValue, hasValue := fields[paramValueField]
+	if !hasValue {
+		return cfntypes.Parameter{}, fmt.Errorf("%w: parameter %q is missing %s", errUtils.ErrInvalidAwsCloudFormationParameters, name, paramValueField)
+	}
+	value, err := stringifyParameterValue(rawValue)
 	if err != nil {
 		return cfntypes.Parameter{}, fmt.Errorf("parameter %q: %w", name, err)
 	}
