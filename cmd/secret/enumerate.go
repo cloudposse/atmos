@@ -80,8 +80,8 @@ func describeSecretStacks(atmosConfig *schema.AtmosConfiguration, stack string, 
 // guard) treat it as the failure it is.
 type enumerationError struct {
 	failures []error
-	// sopsFailures is the subset of failures whose instance declares a SOPS-backed secret. Only
-	// those can hide a SOPS file collision, so only they make the collision guard fail closed.
+	// sopsFailures is the subset whose instance declares SOPS or has declarations whose
+	// backend cannot be inspected before evaluation. Either can hide a SOPS file collision.
 	sopsFailures []error
 }
 
@@ -105,6 +105,18 @@ func declaresSops(section map[string]any) bool {
 		}
 	}
 	return false
+}
+
+// hasUnresolvedDeclarations identifies a present secrets.vars value that cannot be inspected
+// until evaluation, such as a !template producing a declaration map. It might declare SOPS.
+func hasUnresolvedDeclarations(section map[string]any) bool {
+	secretSection, ok := section["secrets"].(map[string]any)
+	if !ok {
+		return false
+	}
+	declarations, present := secretSection["vars"]
+	_, resolved := declarations.(map[string]any)
+	return present && !resolved
 }
 
 // attributeScopeFailure names the component and stack whose evaluation failed.
@@ -133,12 +145,12 @@ func enumerateFailure(atmosConfig *schema.AtmosConfiguration, facet secretScope,
 
 	var entries []scopeEntry
 	var failures, sopsFailures []error
-	for _, candidate := range collectSecretScopeEntries(raw, "") {
+	for _, candidate := range collectSecretScopeCandidates(raw, "") {
 		stacksMap, describeErr := describeSecretStacks(atmosConfig, candidate.Stack, []string{candidate.Component})
 		if describeErr != nil {
 			failure := attributeScopeFailure(candidate.Stack, candidate.Component, describeErr)
 			failures = append(failures, failure)
-			if declaresSops(candidate.Section) {
+			if declaresSops(candidate.Section) || hasUnresolvedDeclarations(candidate.Section) {
 				sopsFailures = append(sopsFailures, failure)
 			}
 			continue
@@ -153,11 +165,23 @@ func enumerateFailure(atmosConfig *schema.AtmosConfiguration, facet secretScope,
 	return entries, atmosConfig, &enumerationError{failures: failures, sopsFailures: sopsFailures}
 }
 
-// collectSecretScopeEntries traverses the describe-stacks map
-// (stack -> components -> <type> -> component -> section) and keeps the instances that declare
-// secrets, optionally narrowed to a single component. Entries are sorted by stack, component,
-// then component type so a name shared across component types has deterministic ordering.
+// collectSecretScopeEntries returns evaluated instances with actual secret declarations.
+// Unresolved shapes are only candidates for retries, not valid entries for listing or completion.
 func collectSecretScopeEntries(stacksMap map[string]any, componentFilter string) []scopeEntry {
+	var entries []scopeEntry
+	for _, candidate := range collectSecretScopeCandidates(stacksMap, componentFilter) {
+		if len(secrets.ExtractDeclarations(candidate.Section)) > 0 {
+			entries = append(entries, candidate)
+		}
+	}
+	return entries
+}
+
+// collectSecretScopeCandidates traverses the describe-stacks map
+// (stack -> components -> <type> -> component -> section) and keeps instances with declarations
+// or unresolved shapes that may generate them. Entries are sorted by stack, component, then
+// component type so a name shared across component types has deterministic ordering.
+func collectSecretScopeCandidates(stacksMap map[string]any, componentFilter string) []scopeEntry {
 	var entries []scopeEntry
 	for stackName, raw := range stacksMap {
 		stackMap, ok := raw.(map[string]any)
@@ -205,7 +229,7 @@ func secretEntriesInStack(stackName string, stackMap map[string]any, componentFi
 			if !ok {
 				continue
 			}
-			if len(secrets.ExtractDeclarations(section)) == 0 {
+			if len(secrets.ExtractDeclarations(section)) == 0 && !hasUnresolvedDeclarations(section) {
 				continue
 			}
 			entries = append(entries, scopeEntry{Stack: stackName, Component: compName, ComponentType: componentType, Section: section})
@@ -255,7 +279,8 @@ func checkStackSopsCollisions(scope secretScope) error {
 	entries, atmosConfig, err := enumerateScopesFn(secretScope{Stack: scope.Stack})
 	if err != nil {
 		// An instance that could not be evaluated and declares no SOPS secret cannot collide, so
-		// it does not block the check; one that does declare SOPS is an unknown file: fail closed.
+		// it does not block the check; known or potentially generated SOPS has an unknown file:
+		// fail closed.
 		var partial *enumerationError
 		if !errors.As(err, &partial) || len(partial.sopsFailures) > 0 {
 			return err

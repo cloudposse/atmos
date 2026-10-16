@@ -1228,9 +1228,6 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
-            "locals": {
-              "$ref": "#/definitions/locals"
-            },
             "hooks": {
               "$ref": "#/definitions/hooks"
             },
