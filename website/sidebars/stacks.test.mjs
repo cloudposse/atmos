@@ -62,6 +62,7 @@ test("component fields sit below a named instance, never beside component types"
     at("components").items.map((item) => item.label),
     [
       "ansible",
+      "aws/cloudformation",
       "container",
       "emulator",
       "helm",
@@ -206,7 +207,7 @@ test("supported-type cards include each component type without configuration fie
     source.indexOf("## Component Schema"),
   );
   const kinds = [
-    ...cards.matchAll(/href: '\/stacks\/components\/([^']+)'/g),
+    ...cards.matchAll(/href: '\/stacks\/components\/[^']+', label: '([^']+)'/g),
   ].map((match) => match[1]);
   assert.deepEqual(
     kinds,
