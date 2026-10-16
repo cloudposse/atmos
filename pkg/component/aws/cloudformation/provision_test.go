@@ -209,23 +209,49 @@ func TestTemplateContentForDelivery_Packaged(t *testing.T) {
 // deployDirect must skip ExecuteChangeSet and streamStackEvents when the
 // changeset is a no-op — a no-op apply must not attempt to execute anything.
 func TestDeployDirect_NoOp(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	client := NewMockCloudFormationClient(ctrl)
-
-	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
-	client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.CreateChangeSetOutput{}, nil)
-	client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
-		Status:       cfntypes.ChangeSetStatusFailed,
-		StatusReason: awsString("The submitted information didn't contain changes."),
-	}, nil)
-	// No ExecuteChangeSet/DescribeStackEvents expectations: a call to either
-	// fails the test via gomock's unexpected-call panic.
-
-	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
-	result, err := deployDirect(context.Background(), client, spec)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.True(t, result.NoOp)
+	for _, tt := range []struct {
+		name       string
+		cleanupErr error
+	}{
+		{name: "cleanup succeeds"},
+		{name: "cleanup fails", cleanupErr: errUtils.ErrAwsCloudFormationAPICallFailed},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			client := NewMockCloudFormationClient(gomock.NewController(t))
+			var deleted *cloudformation.DeleteChangeSetInput
+			gomock.InOrder(
+				client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+					Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}},
+				}, nil),
+				client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.CreateChangeSetOutput{}, nil),
+				client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
+					Status:       cfntypes.ChangeSetStatusFailed,
+					StatusReason: awsString("The submitted information didn't contain changes."),
+				}, nil),
+				client.EXPECT().DeleteChangeSet(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ context.Context, input *cloudformation.DeleteChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.DeleteChangeSetOutput, error) {
+						deleted = input
+						return &cloudformation.DeleteChangeSetOutput{}, tt.cleanupErr
+					},
+				),
+			)
+			// No ExecuteChangeSet, DescribeStackEvents, or DeleteStack expectations:
+			// a no-op update must not execute a change or delete the existing stack.
+			spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
+			result, err := deployDirect(context.Background(), client, spec)
+			if tt.cleanupErr != nil {
+				require.ErrorIs(t, err, tt.cleanupErr)
+				require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+			} else {
+				require.NoError(t, err)
+			}
+			require.NotNil(t, result)
+			assert.True(t, result.NoOp)
+			require.NotNil(t, deleted)
+			assert.Equal(t, spec.StackName, *deleted.StackName)
+			assert.Equal(t, result.ChangeSetName, *deleted.ChangeSetName)
+		})
+	}
 }
 
 // expectDeployDirectFlow sets up the common gomock expectation chain a

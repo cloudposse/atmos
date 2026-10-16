@@ -86,15 +86,11 @@ components:
 ```
 </File>
 
-## Caching the result of `!aws.cloudformation.output` function
+## Output lookups
 
-Atmos caches (in memory) the results of the `!aws.cloudformation.output` function.
-
-The cache is per Atmos CLI command execution, e.g., each new execution of a command like `atmos terraform plan`
-or `atmos describe component` will create and use a new memory cache, re-invoking `DescribeStacks` on the next run.
-
-If you define the function in stack manifests for the same component in a stack more than once, the first call will
-produce the result and cache it, and all the consecutive calls will just use the cached data.
+Each evaluation of `!aws.cloudformation.output` fetches the deployed stack's Outputs through
+`DescribeStacks`. Results are not cached across evaluations: repeated references to the same
+component and stack can issue repeated API requests within one Atmos CLI command.
 
 ## Considerations
 
