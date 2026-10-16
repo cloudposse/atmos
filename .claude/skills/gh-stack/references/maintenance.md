@@ -111,6 +111,17 @@ limits from responses/configuration, honor cooldowns with a small margin, and pr
 completion history across restarts and head changes. Do not hard-code a session's observed quota as
 an eternal CodeRabbit product limit. Observe GitHub API capacity as well as bot capacity.
 
+Default to incremental requests with `@coderabbitai review` after published fixes. A new head,
+parent merge, missing approval, or stale queue entry with `reviewMode: full` does not justify
+`@coderabbitai full review`. Unattended queues must emit incremental requests only. Use a full
+review only when the user explicitly requests it; do not repeatedly ask for that exception.
+
+When resuming or changing queue policy, revalidate the planned review mode and the scheduler's
+actual command construction, including fallback paths. Changing a plan's default is insufficient
+if the running worker still automatically escalates to full review. Preserve historical request
+modes, quota reservations, deduplication markers, and cooldowns; apply the new policy to future
+requests without resending work already submitted.
+
 - Request reviews on published, validated heads with stable parents. If publication is underway,
   hold only affected targets; continue independent requests when their heads/parents are settled.
 - Deduplicate by PR and full head SHA. Persist a unique marker before sending a request. If a write
@@ -124,8 +135,9 @@ an eternal CodeRabbit product limit. Observe GitHub API capacity as well as bot 
   investigation; closing a thread does not itself produce approval.
 - “Review triggered,” “review finished,” no open threads, and a green bot check are not proof of an
   `APPROVED` review. Verify the actual CodeRabbit review state and commit ID. If an incremental request
-  finished without a formal review, investigate its response; a single full-review upgrade may be
-  appropriate after the cooldown. Do not endlessly repeat the same no-op request.
+  finished without a formal review, inspect its response and review configuration, and record the
+  unresolved approval state. Do not automatically escalate to full review or repeat the same no-op
+  request merely because its cooldown elapsed; continue with other eligible PRs.
 
 Do not add a new approval prompt when review requests or publication are already authorized. Do not
 infer merge authorization from that authorization. Preserve restrictions inherited from an unattended

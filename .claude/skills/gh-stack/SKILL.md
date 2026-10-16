@@ -125,6 +125,8 @@ counts, and native stack membership. Do not create an extra PR contrary to the u
 
 Use the [maintenance reference](references/maintenance.md) to freeze candidate heads, publish safely,
 and coordinate exact-head CI, coverage, and CodeRabbit evidence. Report those states separately.
+Default to incremental CodeRabbit requests (`@coderabbitai review`). Unattended queues must not
+request full reviews or automatically escalate to them; see the reference for handling missing approvals.
 
 Merge only when explicitly authorized. When available and compatible with repository rules,
 `gh stack merge` can merge the selected bottom portion atomically, avoiding a repeated
