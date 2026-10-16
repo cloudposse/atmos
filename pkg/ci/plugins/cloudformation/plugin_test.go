@@ -3,11 +3,15 @@ package cloudformation
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/text"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
@@ -427,6 +431,47 @@ func TestTemplateRendering_ReproductionCommandsAndCleanDrift(t *testing.T) {
 			if strings.HasPrefix(command, "drift-") {
 				assert.Contains(t, writer.summary, "Drift status: **IN_SYNC**")
 				assert.Contains(t, writer.summary, "Drifted resources: **0**")
+			}
+		})
+	}
+}
+
+// TestTemplateRendering_FencedOutputKeepsContentLiteral ensures command output and errors cannot
+// terminate their code blocks, while preserving their complete text for troubleshooting.
+func TestTemplateRendering_FencedOutputKeepsContentLiteral(t *testing.T) {
+	for _, command := range []string{"diff", "apply", "delete", "drift-detect", "drift-describe"} {
+		t.Run(command, func(t *testing.T) {
+			for _, ticks := range [][2]int{{0, 0}, {3, 0}, {0, 3}, {4, 12}, {12, 4}} {
+				t.Run(strconv.Itoa(ticks[0])+"-output-"+strconv.Itoa(ticks[1])+"-error", func(t *testing.T) {
+					payload := "before\n" + strings.Repeat("`", ticks[0]) + "\n# Forged heading\n</details>\n<script>content</script>\nafter"
+					errorPayload := "failure\n" + strings.Repeat("`", ticks[1]) + "\n# Forged error\n</details>\n<script>content</script>\nend"
+					ctx := (&Plugin{}).buildTemplateContext(&plugin.HookContext{
+						Command:      command,
+						Output:       payload,
+						CommandError: errors.New(errorPayload),
+					})
+					rendered, err := templates.NewLoader(nil).LoadAndRender("cloudformation", command, defaultTemplates, ctx)
+					require.NoError(t, err)
+					source := []byte(rendered)
+					document := goldmark.DefaultParser().Parse(text.NewReader(source))
+					var textBlocks []string
+					headings := 0
+					err = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+						if !entering {
+							return ast.WalkContinue, nil
+						}
+						if _, ok := node.(*ast.Heading); ok {
+							headings++
+						}
+						if block, ok := node.(*ast.FencedCodeBlock); ok && string(block.Language(source)) == "text" {
+							textBlocks = append(textBlocks, strings.TrimRight(string(block.Lines().Value(source)), "\n"))
+						}
+						return ast.WalkContinue, nil
+					})
+					require.NoError(t, err)
+					assert.Equal(t, 1, headings, "command text must not create summary headings")
+					assert.Equal(t, []string{payload, errorPayload}, textBlocks)
+				})
 			}
 		})
 	}

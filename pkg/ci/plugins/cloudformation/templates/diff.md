@@ -24,9 +24,9 @@ atmos aws cloudformation diff {{ .Component }} -s {{ .Stack }}
 
 <details><summary>CloudFormation output</summary>
 
-```text
+{{ .CodeFence }}text
 {{ .Output }}
-```
+{{ .CodeFence }}
 
 </details>
 {{- end }}
@@ -35,10 +35,10 @@ atmos aws cloudformation diff {{ .Component }} -s {{ .Stack }}
 
 <details><summary>Error</summary>
 
-```text
+{{ .CodeFence }}text
 {{ range .Result.Errors }}{{ . }}
 {{ end }}
-```
+{{ .CodeFence }}
 
 </details>
 {{- end }}

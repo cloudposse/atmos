@@ -139,6 +139,7 @@ func (p *Plugin) buildTemplateContext(ctx *plugin.HookContext) *TemplateContext 
 		ResourceChanges: result.ResourceChanges,
 		DriftStatus:     result.DriftStatus,
 		DriftedCount:    result.DriftedCount,
+		CodeFence:       summaryCodeFence(base.Output, outputResult.Errors),
 	}
 }
 
@@ -163,6 +164,7 @@ type TemplateContext struct {
 	ResourceChanges int
 	DriftStatus     string
 	DriftedCount    int
+	CodeFence       string
 }
 
 // isSummaryEnabled defaults summaries to enabled unless configuration explicitly disables them.
@@ -174,4 +176,22 @@ func isSummaryEnabled(atmosConfig *schema.AtmosConfiguration) bool {
 		return true
 	}
 	return *atmosConfig.CI.Summary.Enabled
+}
+
+// summaryCodeFence chooses a fence longer than any backtick run in output or errors,
+// preserving their literal content even when it contains Markdown fences.
+func summaryCodeFence(output string, errors []string) string {
+	length := 3
+	for _, value := range append([]string{output}, errors...) {
+		run := 0
+		for _, char := range value {
+			if char != '`' {
+				run = 0
+				continue
+			}
+			run++
+			length = max(length, run+1)
+		}
+	}
+	return strings.Repeat("`", length)
 }
