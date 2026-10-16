@@ -135,9 +135,8 @@ inside an unrelated flag's own composability list, not as a `--labels`-specific 
 
 ## Follow-ups
 
-`cmd/aws/cloudformation` was out of scope for this branch (it doesn't exist here; it lives on the
-unmerged `osterman/cfn-phase4-migration-graduation` branch). The equivalent `--labels` →
-`WithStringSliceFlag` change, plus its `ParseLabelsFlag` call-site update, still needs to be
-applied there before or during that branch's merge — no issue opened yet; flag for the cfn
-branch owner to confirm before merging, per this repo's `project_cfn_stays_experimental`
-convention of re-confirming CFN-affecting changes.
+The CloudFormation implementation is outside this documentation-only PR. The equivalent
+`--labels` → `WithStringSliceFlag` change and `ParseLabelsFlag` call-site update are implemented
+in [#3137](https://github.com/cloudposse/atmos/pull/3137), pending that PR's merge. Confirm the
+companion implementation is included when merging the stack, per this repo's
+`project_cfn_stays_experimental` convention of re-confirming CFN-affecting changes.
