@@ -92,7 +92,8 @@ var operationHelpBySubCommand = map[string]operationHelpEntry{
 		long: "Create (or reuse) a CloudFormation changeset for the component and render the\n" +
 			"predicted changes, without executing it. diff authenticates and calls the\n" +
 			"CloudFormation API -- it previews what apply would actually do to the live\n" +
-			"stack, unlike render, which never leaves the local template.",
+			"stack. render does not create a changeset, but may provision sources or\n" +
+			"resolve secrets and outputs using authenticated remote services.",
 		example: "  atmos aws cloudformation diff vpc --stack plat-ue2-dev\n" +
 			"  atmos aws cloudformation diff --all --stack plat-ue2-dev\n" +
 			"  atmos aws cloudformation diff --affected --base origin/main",

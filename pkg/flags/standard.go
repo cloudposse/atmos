@@ -1225,6 +1225,9 @@ func (p *StandardFlagParser) promptForSingleMissingFlag(flagName string, result 
 		if cobraFlag != nil {
 			if setErr := cobraFlag.Value.Set(selectedValue); setErr == nil {
 				cobraFlag.Changed = true
+				if p.viper != nil {
+					_ = p.viper.BindPFlag(p.getViperKey(flagName), cobraFlag)
+				}
 			}
 		}
 	}
