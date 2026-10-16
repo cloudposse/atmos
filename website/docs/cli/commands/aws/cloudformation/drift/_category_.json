@@ -1,8 +1,0 @@
-{
-  "label": "drift",
-  "className": "command",
-  "link": {
-    "type": "doc",
-    "id": "cli/commands/aws/cloudformation/drift/drift"
-  }
-}

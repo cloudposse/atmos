@@ -1,8 +1,0 @@
-{
-  "label": "changeset",
-  "className": "command",
-  "link": {
-    "type": "doc",
-    "id": "cli/commands/aws/cloudformation/changeset/changeset"
-  }
-}
