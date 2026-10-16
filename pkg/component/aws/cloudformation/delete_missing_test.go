@@ -91,7 +91,7 @@ func TestRunDelete_DeleteFailedHintsRetainResources(t *testing.T) {
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&sdk.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&sdk.DescribeStacksOutput{Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusDeleteFailed}}}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&sdk.DescribeStackEventsOutput{}, nil),
-		client.EXPECT().ListStackResources(gomock.Any(), gomock.Any()).Return(&sdk.ListStackResourcesOutput{
+		client.EXPECT().ListStackResources(gomock.Any(), &sdk.ListStackResourcesInput{StackName: awsString("physical-vpc")}).Return(&sdk.ListStackResourcesOutput{
 			StackResourceSummaries: []cfntypes.StackResourceSummary{
 				{LogicalResourceId: awsString("Queue"), ResourceStatus: cfntypes.ResourceStatusDeleteComplete},
 				{LogicalResourceId: awsString("Bucket"), ResourceStatus: cfntypes.ResourceStatusDeleteFailed},
@@ -99,17 +99,18 @@ func TestRunDelete_DeleteFailedHintsRetainResources(t *testing.T) {
 			},
 		}, nil),
 	)
-	_, err := runDelete(t.Context(), client, nil, &stackSpec{StackName: "vpc"}, map[string]any{})
+	_, err := runDelete(t.Context(), client, nil, &stackSpec{StackName: "physical-vpc", Component: "network/vpc", AtmosStack: "prod-use1"}, map[string]any{})
 	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationOperationFailed)
 	hints := strings.Join(cockroachErrors.GetAllHints(err), "\n")
-	assert.Contains(t, hints, "--retain-resources=Bucket,Table")
+	assert.Contains(t, hints, "atmos aws cloudformation delete network/vpc -s prod-use1 --retain-resources=Bucket,Table")
+	assert.ErrorContains(t, err, "stack physical-vpc ended in status DELETE_FAILED")
 }
 
 // Negative path: a delete that fails in any other status gets no
 // --retain-resources hint, and the resources are never listed.
 func TestDeleteFailedError_OnlyDeleteFailedGetsRetainHint(t *testing.T) {
 	client := NewMockCloudFormationClient(gomock.NewController(t)) // no ListStackResources expectation.
-	err := deleteFailedError(t.Context(), client, "vpc", cfntypes.StackStatusRollbackComplete)
+	err := deleteFailedError(t.Context(), client, &stackSpec{StackName: "vpc"}, cfntypes.StackStatusRollbackComplete)
 	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationOperationFailed)
 	assert.Empty(t, cockroachErrors.GetAllHints(err))
 }
@@ -118,7 +119,7 @@ func TestDeleteFailedError_OnlyDeleteFailedGetsRetainHint(t *testing.T) {
 func TestDeleteFailedError_ListFailureStillHints(t *testing.T) {
 	client := NewMockCloudFormationClient(gomock.NewController(t))
 	client.EXPECT().ListStackResources(gomock.Any(), gomock.Any()).Return(nil, errors.New("throttled"))
-	err := deleteFailedError(t.Context(), client, "vpc", cfntypes.StackStatusDeleteFailed)
+	err := deleteFailedError(t.Context(), client, &stackSpec{StackName: "vpc"}, cfntypes.StackStatusDeleteFailed)
 	hints := strings.Join(cockroachErrors.GetAllHints(err), "\n")
 	assert.Contains(t, hints, "--retain-resources=<LogicalResourceId>")
 }
