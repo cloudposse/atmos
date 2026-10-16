@@ -739,13 +739,8 @@ func TestExecuteTerraformNodeHooksBeforeFailureAbortsNodeWithoutExecutor(t *test
 	require.NotContains(t, executed, "vpc@dev", "the executor must never run for a node whose before-hook failed")
 }
 
-// TestExecuteTerraformNodeHooksBeforeVerifiedPlanReachesExecutor is a
-// regression test for bulk deploys applying an unverified fresh plan: the
-// executor input was built from a copy of the node info taken before the
-// before-hook ran, so the verified plan the hook selected (PlanFile plus
-// UseTerraformPlan) never reached apply. Only that verification result may
-// carry over; other hook-side mutations (an injected AuthContext, or a
-// PlanFile set without UseTerraformPlan) must stay out of the executor input.
+// The verified plan a before-hook selects must reach the executor; an injected
+// AuthContext or a PlanFile without UseTerraformPlan must not.
 func TestExecuteTerraformNodeHooksBeforeVerifiedPlanReachesExecutor(t *testing.T) {
 	tests := []struct {
 		name                 string
@@ -1732,10 +1727,8 @@ func TestExecuteTerraformAllowsParallelPlanForSharedPhysicalComponentPathWhenWor
 	require.Greater(t, maxActive.Load(), int32(1))
 }
 
-// overlapProbe is a Terraform executor for two scheduler nodes that records how
-// many of its calls ran at the same time. Each call waits, up to wait, for the
-// other call to start, so an overlap the scheduler allows is always observed,
-// and a serialized pair costs one wait instead of hanging the test.
+// overlapProbe is an executor for two nodes that records whether its calls
+// overlapped. Each call waits up to wait for the other to start.
 type overlapProbe struct {
 	wait        time.Duration
 	started     atomic.Int32
@@ -1761,15 +1754,8 @@ func (p *overlapProbe) execute(TerraformExecution) (TerraformExecutionResult, er
 	return TerraformExecutionResult{}, nil
 }
 
-// TestExecuteTerraformLocksSourceDirForDeployWorkdirNodes is a regression test
-// for concurrent bulk deploys racing on the stored and fresh planfiles in a
-// shared source component directory: workdir-enabled nodes were locked only by
-// their own workdir, so two deploy nodes resolving to the same source ran their
-// planfile verification at once. Deploy must serialize them when verification
-// can run (planfile storage configured and verification not off). Without
-// storage, or with verification off, deploy keeps running them concurrently,
-// as do plan, apply, and destroy in every setup, and deploy nodes with
-// different sources still overlap.
+// Workdir deploy nodes sharing a source directory serialize only when planfile
+// verification can run there; everything else keeps overlapping.
 func TestExecuteTerraformLocksSourceDirForDeployWorkdirNodes(t *testing.T) {
 	layouts := []struct {
 		name         string
@@ -1947,10 +1933,7 @@ func TestTerraformResourceKeyFallbacks(t *testing.T) {
 	}))
 }
 
-// TestTerraformDeploySourceResourceKey covers the extra source directory key a
-// deploy node with workdir enabled locks before its workdir key. It uses the
-// same fallbacks as the key of a node without workdir, and is empty for every
-// other subcommand and for nodes without workdir, which keep their single key.
+// The extra source key exists only for deploy nodes with workdir enabled.
 func TestTerraformDeploySourceResourceKey(t *testing.T) {
 	componentPath := terraformAdapterPath("shared-service")
 	workdirEnabled := map[string]any{

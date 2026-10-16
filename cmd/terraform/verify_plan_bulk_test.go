@@ -1,14 +1,8 @@
 package terraform
 
-// verify_plan_bulk_test.go covers planfile verification for multi-component
-// deploys (--affected / --all / --components). Those runs never reach the
-// single-component verifyStoredPlanForDeploy call in RunE; each scheduler node
-// runs terraformNodeHooks.BeforeWithWriters instead, so the per-node verify and
-// required gates must be enforced there.
-//
-// Note on test isolation: cmd.NewTestKit(t) cannot be used here due to a
-// circular import between cmd/terraform and the cmd package (see
-// utils_hooks_test.go). These tests do not mutate RootCmd state.
+// Planfile verification for multi-component deploys, enforced per node in
+// terraformNodeHooks.BeforeWithWriters. cmd.NewTestKit is unavailable here
+// (import cycle, see utils_hooks_test.go); these tests do not touch RootCmd.
 
 import (
 	"context"
@@ -214,12 +208,8 @@ func TestBeforeWithWriters_BulkDeployVerifiesStoredPlan(t *testing.T) {
 	}
 }
 
-// TestBeforeWithWriters_BulkDeployVerifiesWithNodeAuth is a regression test for
-// bulk deploy verification running with another node's credentials: Before
-// injects the last aggregate auth context into the node info for its hooks, and
-// the fresh verification plan used that injected context instead of the node's
-// own. The node info must keep the injected context afterwards, because After
-// receives the same info and reuses it for its hooks.
+// Verification must run with the node's own auth, not the aggregate context
+// injected for hooks, which the node info keeps for After.
 func TestBeforeWithWriters_BulkDeployVerifiesWithNodeAuth(t *testing.T) {
 	lastAuthContext := &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "previous-node"}}
 	lastAuthManager := "previous-node-auth-manager"

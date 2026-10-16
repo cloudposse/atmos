@@ -809,9 +809,8 @@ type TerraformDispatcher struct {
 	locks              *terraformResourceLocks
 	output             *terraformOutput
 	disablePluginCache bool
-	// lockDeploySourceDir makes deploy nodes with workdir enabled also lock their
-	// source component directory, because deploy planfile verification can run
-	// there in this invocation (see deployVerificationUsesSourceDir).
+	// lockDeploySourceDir is set when deploy planfile verification can run in the
+	// source component directory (see deployVerificationUsesSourceDir).
 	lockDeploySourceDir bool
 	// queryAppliedAtSelection suppresses the per-node query skip when closure
 	// expansion is in effect: the query already narrowed the seed in
@@ -910,14 +909,9 @@ func (d *TerraformDispatcher) Dispatch(ctx context.Context, node *dependency.Nod
 	return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusSucceeded, Value: outcome}, nil
 }
 
-// carryOverVerifiedPlan copies the planfile a before-hook selected into the
-// executor input, so apply uses the verified fresh plan (deploy's stored-plan
-// verification sets PlanFile together with UseTerraformPlan). Only PlanFile and
-// UseTerraformPlan are copied, never the AuthContext the hooks inject from the
-// last aggregate auth, which can belong to another node. The copy is gated on
-// UseTerraformPlan: a canonical PlanFile set by the CI hook alone stays out,
-// unless UseTerraformPlan was already true on entry (deploy --from-plan). Then
-// the hook info's PlanFile is carried as is, including that canonical path.
+// carryOverVerifiedPlan copies the planfile selected by a before-hook into the
+// executor input. Only PlanFile and UseTerraformPlan move, never the auth context
+// the hooks inject, which can belong to another node.
 func carryOverVerifiedPlan(executionInfo, hookInfo *schema.ConfigAndStacksInfo) {
 	if !hookInfo.UseTerraformPlan {
 		return
@@ -1011,11 +1005,9 @@ func terraformFailureOutputDetail(result TerraformExecutionResult) string {
 }
 
 // lockTerraformResource serializes nodes that share the same physical Terraform workdir.
-// When deploy planfile verification can run (lockDeploySourceDir), a deploy node
-// with workdir enabled also locks its source component directory, before its
-// workdir key, because verification reads and writes the stored and fresh
-// planfiles there (see terraformDeploySourceResourceKey). The fixed order, plus
-// workdir keys unique per node, rules out a deadlock.
+// A deploy node with workdir enabled also locks its source directory first when
+// verification can write planfiles there (lockDeploySourceDir). Fixed order and
+// unique workdir keys rule out a deadlock.
 func (d *TerraformDispatcher) lockTerraformResource(node *dependency.Node) func() {
 	key := terraformResourceKey(node)
 	if key == "" {
@@ -1520,13 +1512,9 @@ func terraformResourceKey(node *dependency.Node) string {
 	return terraformSourceResourceKey(node)
 }
 
-// terraformDeploySourceResourceKey returns the source component directory key a
-// deploy node with workdir enabled must hold in addition to its workdir key, or
-// "" for every other subcommand or node. Deploy planfile verification runs in
-// the before-hook, outside the provisioned workdir: the fresh planfile always
-// resolves to the source component directory, and the downloaded stored
-// planfile does too until the workdir exists. Nodes that share that directory
-// must not verify at the same time.
+// terraformDeploySourceResourceKey returns the source directory key a deploy node
+// with workdir enabled must also hold, or "" for any other node. Verification
+// runs before the workdir exists, so its planfiles land in the source directory.
 func terraformDeploySourceResourceKey(subCommand string, node *dependency.Node) string {
 	if subCommand != terraformSubCommandDeploy || node == nil || !provWorkdir.IsWorkdirEnabled(node.Metadata) {
 		return ""
@@ -1534,14 +1522,9 @@ func terraformDeploySourceResourceKey(subCommand string, node *dependency.Node) 
 	return terraformSourceResourceKey(node)
 }
 
-// deployVerificationUsesSourceDir reports whether deploy planfile verification
-// can read or write the stored and fresh planfiles in a source component
-// directory during this invocation: planfile storage is configured and the
-// verify mode does not resolve to off. It mirrors the before.terraform.deploy
-// download gate and the per-node verify gate, which both resolve the mode with
-// ciEnabled=true and the --verify-plan override. Without storage, or with
-// verification off, neither touches those files, so deploy nodes keep their
-// workdir lock only. A nil config cannot rule verification out, so it locks.
+// deployVerificationUsesSourceDir reports whether deploy verification can touch
+// planfiles in a source directory: storage configured and verify mode not off,
+// the same gate as the before.terraform.deploy download hook.
 func deployVerificationUsesSourceDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) bool {
 	if atmosConfig == nil {
 		return true
@@ -1556,8 +1539,7 @@ func deployVerificationUsesSourceDir(atmosConfig *schema.AtmosConfiguration, inf
 	return planfile.ResolveVerifyMode(atmosConfig, true, cliOverride) != schema.PlanfileVerifyOff
 }
 
-// terraformSourceResourceKey returns the source component directory key, used
-// to serialize nodes that execute in the same component directory.
+// terraformSourceResourceKey returns the key for nodes sharing a source directory.
 func terraformSourceResourceKey(node *dependency.Node) string {
 	if path := componentInfoPath(node.Metadata); path != "" {
 		return "path:" + filepath.ToSlash(filepath.Clean(filepath.FromSlash(path)))
