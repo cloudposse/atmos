@@ -187,6 +187,7 @@ func runStackSetUpdate(ctx context.Context, client CloudFormationClient, spec *s
 		Parameters:            spec.Parameters,
 		Capabilities:          spec.Capabilities,
 		Tags:                  spec.Tags,
+		PermissionModel:       cfntypes.PermissionModels(ssCfg.PermissionModel),
 		AdministrationRoleARN: nilIfEmpty(ssCfg.AdministrationRoleArn),
 		ExecutionRoleName:     nilIfEmpty(ssCfg.ExecutionRoleName),
 	})
