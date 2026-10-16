@@ -104,6 +104,24 @@ commands:
           atmos aws cloudformation delete --help
           atmos aws cloudformation validate --help
           atmos aws cloudformation output --help
+          atmos aws cloudformation changeset --help
+          atmos aws cloudformation changeset create --help
+          atmos aws cloudformation changeset delete --help
+          atmos aws cloudformation changeset execute --help
+          atmos aws cloudformation changeset list --help
+          atmos aws cloudformation drift --help
+          atmos aws cloudformation drift describe --help
+          atmos aws cloudformation drift detect --help
+          atmos aws cloudformation fmt --help
+          atmos aws cloudformation get --help
+          atmos aws cloudformation get policy --help
+          atmos aws cloudformation get template --help
+          atmos aws cloudformation list --help
+          atmos aws cloudformation source --help
+          atmos aws cloudformation source delete --help
+          atmos aws cloudformation source describe --help
+          atmos aws cloudformation source list --help
+          atmos aws cloudformation source pull --help
           atmos completion --help
           atmos describe --help
           atmos describe affected --help
@@ -515,6 +533,24 @@ commands:
           atmos aws cloudformation delete --help
           atmos aws cloudformation validate --help
           atmos aws cloudformation output --help
+          atmos aws cloudformation changeset --help
+          atmos aws cloudformation changeset create --help
+          atmos aws cloudformation changeset delete --help
+          atmos aws cloudformation changeset execute --help
+          atmos aws cloudformation changeset list --help
+          atmos aws cloudformation drift --help
+          atmos aws cloudformation drift describe --help
+          atmos aws cloudformation drift detect --help
+          atmos aws cloudformation fmt --help
+          atmos aws cloudformation get --help
+          atmos aws cloudformation get policy --help
+          atmos aws cloudformation get template --help
+          atmos aws cloudformation list --help
+          atmos aws cloudformation source --help
+          atmos aws cloudformation source delete --help
+          atmos aws cloudformation source describe --help
+          atmos aws cloudformation source list --help
+          atmos aws cloudformation source pull --help
           atmos completion --help
           atmos describe --help
           atmos describe affected --help

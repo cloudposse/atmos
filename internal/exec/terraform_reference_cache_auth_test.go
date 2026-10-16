@@ -141,7 +141,7 @@ func TestComponentFuncCacheSeparatesCallerCredentials(t *testing.T) {
 			).AnyTimes()
 
 			outputID := func(info *schema.ConfigAndStacksInfo) any {
-				sections, err := componentFunc(ac, info, "target", "dev")
+				sections, err := componentFunc(t.Context(), ac, info, "target", "dev")
 				require.NoError(t, err)
 				return sections.(map[string]any)["outputs"].(map[string]any)["id"]
 			}

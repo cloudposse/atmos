@@ -38,8 +38,9 @@ func ListCommand(cfg *Config) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "list [component]",
-		Short: fmt.Sprintf("List %s components with source configuration", cfg.TypeLabel),
+		Annotations: map[string]string{sourceComponentTypeAnnotation: cfg.ComponentType},
+		Use:         "list [component]",
+		Short:       fmt.Sprintf("List %s components with source configuration", cfg.TypeLabel),
 		Long: fmt.Sprintf(`List all %s components that have source configured.
 
 If component is specified, shows source info for that component across stacks.
@@ -60,7 +61,7 @@ This command shows which components can be vendored using the source provisioner
   atmos %s source list
 
   # Output as JSON
-  atmos %s source list --format json`, cfg.ComponentType, cfg.ComponentType, cfg.ComponentType, cfg.ComponentType, cfg.ComponentType),
+  atmos %s source list --format json`, cfg.CLI(), cfg.CLI(), cfg.CLI(), cfg.CLI(), cfg.CLI()),
 		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return executeList(cmd, args, cfg, parser)
@@ -258,7 +259,8 @@ func getSourceListColumnsForContext(hasStack, hasFolderDiff bool) []column.Confi
 	}
 
 	// URI and Version always shown.
-	columns = append(columns,
+	columns = append(
+		columns,
 		column.Config{Name: "URI", Value: "{{ .uri }}"},
 		column.Config{Name: "Version", Value: "{{ .version }}"},
 	)
