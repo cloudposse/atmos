@@ -77,6 +77,10 @@ history; it does **not** guarantee that GitHub will retain approvals. Any new he
 CI and review. Rebase only when the user chooses it or a verified repository requirement needs it;
 `gh stack rebase`/`sync` are not routine status or cleanup commands.
 
+Publish normal updates with ordinary fast-forward pushes. If a push is rejected, fetch and inspect
+the remote changes; do not automatically retry with a force-push flag. An explicit lease is an
+exception for a specifically justified, authorized operation, not the default publication command.
+
 Do not merge new trunk commits through every PR merely because trunk advanced. Check actual
 conflicts, required freshness, and the combined merge result first. When an update is necessary,
 explain its validation/review cost and batch it with already confirmed fixes. Existing authorization

@@ -123,15 +123,15 @@ Get this right the first time:
 
 3. **Never bypass signing with `--no-gpg-sign` or `-c commit.gpgsign=false`** even temporarily. The CLAUDE.md rules forbid this, and the resulting commit cannot be merged.
 
-If you discover unsigned commits already on the branch:
+Repair unsigned commits before publishing. If they are already published, inspect the affected
+branches and reviews, verify the required repair, and confirm that existing authorization covers
+rewriting that history. For stacked PRs, coordinate through the gh-stack skill; do not automatically
+rebase every descendant. If a permitted history rewrite is necessary, use an explicit expected-SHA
+lease to protect against concurrent remote work, never an unconditional force push. A lease does
+not itself authorize the rewrite, and restricted invocations may prohibit it.
 
-```bash
-# For the last N commits (interactive rebase, sign each):
-git rebase --exec 'git commit --amend --no-edit -S' -i HEAD~N
-git push --force-with-lease
-```
-
-Always use `--force-with-lease` (not `--force`) to avoid clobbering work from other sessions on the same branch.
+Normal updates use ordinary fast-forward pushes. A rejected push requires inspecting remote
+changes, not automatically escalating to a force-push flag.
 
 ## Pre-push checklist
 

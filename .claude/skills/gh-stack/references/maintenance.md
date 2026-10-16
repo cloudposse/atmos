@@ -80,19 +80,23 @@ For each publication:
     the recorded expected heads/parents. Verify the signed candidate and its tested tree.
 2. Persist the intended old/new refs and a pending transaction **before** pushing. For a
     history-preserving update, require the recorded remote head to be an ancestor of the candidate.
-3. Protect the expected remote SHA. Where the invocation permits it, an explicit lease can enforce
-    that expectation even for an intended fast-forward: `git push --force-with-lease=refs/heads/<branch>:<expected-old-sha> origin <candidate-sha>:refs/heads/<branch>`.
-    The lease does not authorize rewriting history; the ancestor check remains required in this mode.
-    A restricted invocation such as the unattended `fix-all` loop prohibits leases. Keep that restriction:
-    use an authorized plain fast-forward push with fresh before/after ref checks when that weaker
-    concurrency guarantee is sufficient. A plain push rejects non-fast-forward remote work but is not
-    an atomic comparison with the recorded SHA. If strict expected-SHA protection is required and no
-    permitted mechanism provides it, retain the prepared work and report that specific blocker.
+3. Use an ordinary fast-forward push: `git push origin <candidate-sha>:refs/heads/<branch>`.
+    If rejected, fetch and inspect the remote changes before preparing another candidate. Do not
+    automatically retry with `--force`, `--force-with-lease`, a rebase, or `gh stack sync`.
 4. Read back the live ref and GitHub PR. Verify the published head, actual base, native merge result,
     and file count against the validated candidate. On stale API data, request a fresh read and compare
     with live Git refs; do not accept evidence for another commit or blindly repeat the push.
 5. Record the verified publication and update the durable manifest. Stop advancement if another
     writer changed a ref or the merge result differs from the tested tree; investigate the divergence.
+
+An explicit lease checks an expected remote SHA but also permits history replacement. It does not
+itself rebase descendants; rewriting published parent commits is what can force descendant repairs.
+Reserve leases for a specifically justified, authorized exception, such as required published-signature
+repair or a strict expected-SHA requirement. An ordinary push rejects non-fast-forward updates but
+does not atomically compare the remote with a recorded SHA. If strict comparison is required, establish
+a permitted mechanism rather than silently weakening that requirement. Preserve the ancestor check
+when history must remain intact, and honor invocations such as unattended `fix-all` that prohibit leases.
+If no permitted mechanism satisfies the requirement, retain the prepared work and report the blocker.
 
 On timeout or process interruption, determine whether the remote is still at the old SHA, already
 at the candidate, or at an unexpected third SHA. Resume an already successful publication without
