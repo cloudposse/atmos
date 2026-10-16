@@ -69,6 +69,9 @@ type Renderer struct {
 	completed, total, lines int
 	live                    bool
 	toolchainStyle          bool
+	phaseSummaries          bool
+	phase                   string
+	outcomes                map[string]int
 	size                    func() (int, int, error)
 }
 
@@ -101,9 +104,9 @@ func supportsLiveProgress() bool {
 }
 
 // Run owns rendering while work emits progress. It drains events before returning.
-func Run(total int, work func(Observer) error) error {
+func Run(total int, work func(Observer) error, options ...Option) error {
 	defer perf.Track(nil, "batch.Run")()
-	r := New(total, supportsLiveProgress())
+	r := New(total, supportsLiveProgress(), options...)
 	defer r.Clear()
 	events := make(chan Event, eventBufferSize)
 	finished := make(chan error, 1)
@@ -127,7 +130,9 @@ func Run(total int, work func(Observer) error) error {
 		select {
 		case e, ok := <-events:
 			if !ok {
-				return <-finished
+				err := <-finished
+				r.Finish(err)
+				return err
 			}
 			r.Update(&e)
 		case <-ticker.C:
@@ -151,11 +156,15 @@ func (r *Renderer) Update(event *Event) {
 		return
 	}
 	if e.Reset {
+		r.flushPhase(nil)
 		r.Clear()
 		r.active = make(map[int]Event)
 		r.order = nil
 		r.completed, r.total = 0, e.Count
 		return
+	}
+	if r.phaseSummaries && e.Diagnostic {
+		r.phase = e.Phase
 	}
 	// An untotaled diagnostic event clears the total only before the phase starts work.
 	if e.Diagnostic && e.Count < 0 && r.completed == 0 && len(r.active) == 0 {
@@ -173,7 +182,19 @@ func (r *Renderer) Update(event *Event) {
 		return
 	}
 	if e.Done {
-		r.Complete(e.ID, e.printResult)
+		if r.phaseSummaries && e.Diagnostic {
+			if r.outcomes == nil {
+				r.outcomes = make(map[string]int)
+			}
+			outcome := e.Outcome
+			if e.Err != nil {
+				outcome = "failed"
+			}
+			r.outcomes[outcome]++
+			r.Complete(e.ID, func() {})
+		} else {
+			r.Complete(e.ID, e.printResult)
+		}
 		return
 	}
 	r.Clear()
@@ -183,7 +204,7 @@ func (r *Renderer) Update(event *Event) {
 	} else {
 		r.order = append(r.order, e.ID)
 		e.started = time.Now()
-		if e.Diagnostic && !r.live {
+		if e.Diagnostic && !r.live && !r.phaseSummaries {
 			ui.Writef("%s: %s\n", e.Phase, e.Label)
 		}
 	}

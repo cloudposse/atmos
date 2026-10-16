@@ -15,6 +15,11 @@ commands:
       GOBIN: '{{ env "PWD" }}/../../.context/bin'
     steps:
       - type: workdir
+        name: doctor-fixture
+        source: fixtures/doctor
+        path: "../../.context/cast-fixtures/doctor"
+        reset: true
+      - type: workdir
         name: starlark-fixture
         source: fixtures/starlark
         path: "../../.context/cast-fixtures/starlark"

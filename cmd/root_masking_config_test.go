@@ -9,6 +9,7 @@ import (
 
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/startup"
 )
 
 func TestReconcileMaskingRegistersResolvedConfig(t *testing.T) {
@@ -31,7 +32,7 @@ func TestReconcileMaskingRegistersResolvedConfig(t *testing.T) {
 			config.Settings.Terminal.Mask = schema.MaskSettings{
 				Enabled: true, Replacement: "REDACTED", Literals: []string{"field-secret"}, Patterns: []string{"token-[0-9]+"},
 			}
-			reconcileMaskingForCommand(cmd, &config)
+			startup.ReconcileMasking(cmd, &config)
 			got := iolib.GetContext().Masker().Mask("field-secret token-123")
 			if disabled {
 				require.Equal(t, "field-secret token-123", got)
