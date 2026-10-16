@@ -44,8 +44,8 @@ atmos aws cloudformation watch --affected --base origin/main
 ## Flags
 
 <dl>
-  <dt>`--stack`, `-s` <em>(required)</em></dt>
-  <dd>Atmos stack.</dd>
+  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
 
   <dt>`--all` <em>(optional)</em></dt>
   <dd>Watch all `aws/cloudformation` components in dependency order.</dd>
@@ -64,6 +64,8 @@ atmos aws cloudformation watch --affected --base origin/main
 </dl>
 
 ## Behavior
+
+With bulk selection, `--stack` is an optional filter. Omit it to select components across stacks.
 
 If the stack ends in a failed status, `watch` exits non-zero, the same
 failure signal `apply`/`delete` give when the operation they started fails.

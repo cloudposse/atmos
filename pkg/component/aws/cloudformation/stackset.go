@@ -208,6 +208,7 @@ func runStackSetUpdate(ctx context.Context, client CloudFormationClient, spec *s
 		Parameters:            spec.Parameters,
 		Capabilities:          spec.Capabilities,
 		Tags:                  spec.Tags,
+		PermissionModel:       cfntypes.PermissionModels(ssCfg.PermissionModel),
 		AdministrationRoleARN: nilIfEmpty(ssCfg.AdministrationRoleArn),
 		ExecutionRoleName:     nilIfEmpty(ssCfg.ExecutionRoleName),
 	})
@@ -297,7 +298,7 @@ func listStackSetInstances(ctx context.Context, client CloudFormationClient, sta
 			return nil, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationStackSetFailed, err)
 		}
 		instances = append(instances, out.Summaries...)
-		if out.NextToken == nil {
+		if stringValue(out.NextToken) == "" {
 			return instances, nil
 		}
 		nextToken = out.NextToken

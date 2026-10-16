@@ -159,7 +159,7 @@ what's stated.
 | `rain tree` | `atmos aws cloudformation tree <component> -s <stack>` | Nested-stack/resource dependency graph |
 | `rain rm` | `atmos aws cloudformation delete <component> -s <stack>` | Respects `termination_protection`; never silently disables it (`--disable-termination-protection` is an explicit escape hatch) |
 | `rain bootstrap` | `atmos aws cloudformation backend create <component> -s <stack>` | Provisions the S3 artifact bucket the component's `kind: aws/s3` provision target references — same registered S3 backend provisioner `atmos terraform backend create` uses. Opt into automatic provisioning with `provision.backend.enabled: true` instead of an explicit bootstrap step, if preferred |
-| `rain build` | Not supported — use [`atmos scaffold`](https://atmos.tools) | Skeleton-template generation is dev-time code generation, not a component-type concern (PRD Non-Goal) |
+| `rain build` | Not supported — use [`atmos scaffold`](https://atmos.tools/cli/commands/scaffold/usage) | Skeleton-template generation is dev-time code generation, not a component-type concern (PRD Non-Goal) |
 | `rain forecast` | Not supported — use `plan`/`diff` + `validate` | Changeset review plus server-side `ValidateTemplate` cover the practical "will this deploy work" question (PRD Non-Goal) |
 | `rain cc` (Cloud Control API passthrough) | Not supported | Niche even within Rain; no equivalent planned (PRD Non-Goal) |
 | (no Rain equivalent) | `atmos aws cloudformation output <component> -s <stack> [key]` | Renders deployed stack Outputs — the most-requested Rain gap per this PRD's user research. Also available as `!aws.cloudformation.output` for cross-component consumption |

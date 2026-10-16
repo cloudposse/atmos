@@ -190,15 +190,22 @@ func TestListAllStackResources_Pagination(t *testing.T) {
 
 	tests := map[string][]struct {
 		ids       []string
-		hasMore   bool
+		nextToken *string
 		wantAfter []string
 	}{
 		"single page": {
-			{ids: []string{"R1"}, hasMore: false, wantAfter: []string{"R1"}},
+			{ids: []string{"R1"}, wantAfter: []string{"R1"}},
 		},
 		"paginates across pages": {
-			{ids: []string{"R1"}, hasMore: true, wantAfter: []string{"R1"}},
-			{ids: []string{"R2"}, hasMore: false, wantAfter: []string{"R1", "R2"}},
+			{ids: []string{"R1"}, nextToken: awsString("next"), wantAfter: []string{"R1"}},
+			{ids: []string{"R2"}, wantAfter: []string{"R1", "R2"}},
+		},
+		"single page empty terminal token": {
+			{ids: []string{"R1"}, nextToken: awsString(""), wantAfter: []string{"R1"}},
+		},
+		"multiple pages empty terminal token": {
+			{ids: []string{"R1"}, nextToken: awsString("next"), wantAfter: []string{"R1"}},
+			{ids: []string{"R2"}, nextToken: awsString(""), wantAfter: []string{"R1", "R2"}},
 		},
 	}
 
@@ -208,13 +215,12 @@ func TestListAllStackResources_Pagination(t *testing.T) {
 			client := NewMockCloudFormationClient(ctrl)
 
 			var calls []any
+			var nextToken *string
 			for _, page := range pages {
 				out := &cloudformation.ListStackResourcesOutput{StackResourceSummaries: pageOfIDs(page.ids...)}
-				if page.hasMore {
-					token := "next"
-					out.NextToken = &token
-				}
-				calls = append(calls, client.EXPECT().ListStackResources(gomock.Any(), gomock.Any()).Return(out, nil))
+				out.NextToken = page.nextToken
+				calls = append(calls, client.EXPECT().ListStackResources(gomock.Any(), &cloudformation.ListStackResourcesInput{StackName: awsString("root"), NextToken: nextToken}).Return(out, nil))
+				nextToken = page.nextToken
 			}
 			gomock.InOrder(calls...)
 
