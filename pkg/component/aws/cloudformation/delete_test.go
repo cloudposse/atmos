@@ -3,10 +3,12 @@ package cloudformation
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/smithy-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -96,7 +98,7 @@ func TestDeleteStack_RestoreSkippedWhenDeleteActuallyInProgress(t *testing.T) {
 		client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(&cloudformation.UpdateTerminationProtectionOutput{}, nil),
 		client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(nil, errors.New("timeout")),
 		client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).
-			Return(nil, errors.New("ValidationError: cannot update termination protection while stack is DELETE_IN_PROGRESS")),
+			Return(nil, &smithy.GenericAPIError{Code: "ValidationError", Message: "cannot update termination protection while stack is DELETE_IN_PROGRESS"}),
 	)
 
 	spec := &stackSpec{StackName: "vpc", TerminationProtection: true}
@@ -105,6 +107,40 @@ func TestDeleteStack_RestoreSkippedWhenDeleteActuallyInProgress(t *testing.T) {
 	assert.Contains(t, err.Error(), "timeout")
 	assert.NotContains(t, err.Error(), "DELETE_IN_PROGRESS",
 		"the expected DELETE_IN_PROGRESS restoration rejection must not be surfaced as an additional error")
+}
+
+// Restoration failures must retain their identity even when unrelated error text
+// mentions a delete state; only a typed AWS validation rejection can be ignored.
+func TestRestoreTerminationProtection_DeleteStateErrorClassification(t *testing.T) {
+	cases := []struct {
+		name    string
+		err     error
+		ignored bool
+	}{
+		{name: "success", ignored: true},
+		{name: "delete in progress", err: &smithy.GenericAPIError{Code: "ValidationError", Message: "stack is DELETE_IN_PROGRESS"}, ignored: true},
+		{name: "delete complete", err: &smithy.GenericAPIError{Code: "ValidationError", Message: "stack is DELETE_COMPLETE"}, ignored: true},
+		{name: "wrapped validation", err: fmt.Errorf("update: %w", &smithy.GenericAPIError{Code: "ValidationError", Message: "stack is DELETE_IN_PROGRESS"}), ignored: true},
+		{name: "untyped delete state", err: errors.New("transport failure for DELETE_IN_PROGRESS")},
+		{name: "access denied", err: &smithy.GenericAPIError{Code: "AccessDenied", Message: "cannot access DELETE_COMPLETE"}},
+		{name: "unrelated validation", err: &smithy.GenericAPIError{Code: "ValidationError", Message: "invalid stack name"}},
+		{name: "wrapper only", err: fmt.Errorf("DELETE_IN_PROGRESS: %w", &smithy.GenericAPIError{Code: "ValidationError", Message: "invalid stack name"})},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			client := NewMockCloudFormationClient(gomock.NewController(t))
+			client.EXPECT().UpdateTerminationProtection(gomock.Any(), &cloudformation.UpdateTerminationProtectionInput{
+				StackName: awsString("vpc"), EnableTerminationProtection: awsBool(true),
+			}).Return(nil, tc.err)
+			err := restoreTerminationProtectionAfterFailedDelete(context.Background(), client, "vpc")
+			if tc.ignored {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, tc.err)
+			assert.Contains(t, err.Error(), "restoring termination protection")
+		})
+	}
 }
 
 func TestDeleteStack_NoTerminationProtection(t *testing.T) {

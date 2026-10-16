@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/smithy-go"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -167,7 +168,11 @@ func restoreTerminationProtectionAfterFailedDelete(ctx context.Context, client C
 // UpdateTerminationProtection because the stack has already entered
 // DELETE_IN_PROGRESS or DELETE_COMPLETE status.
 func isDeleteInProgressError(err error) bool {
-	msg := err.Error()
+	var apiErr smithy.APIError
+	if !errors.As(err, &apiErr) || apiErr.ErrorCode() != "ValidationError" {
+		return false
+	}
+	msg := apiErr.ErrorMessage()
 	return strings.Contains(msg, "DELETE_IN_PROGRESS") || strings.Contains(msg, "DELETE_COMPLETE")
 }
 
