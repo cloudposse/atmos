@@ -46,7 +46,7 @@ func Labels(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: resolving review context: %w", errUtils.ErrCILabelsFetchFailed, err)
 	}
-	if run == nil || run.PullRequest == nil {
+	if run == nil || (run.PullRequest == nil && run.MergeQueue == nil) {
 		return []string{}, nil
 	}
 	reader, ok := p.(LabelReader)
@@ -56,7 +56,8 @@ func Labels(ctx context.Context) ([]string, error) {
 	if err := provider.ValidateLabelsContext(run); err != nil {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrCILabelsFetchFailed, err)
 	}
-	key := labelsKey{p.Name(), run.ServerURL, run.RepoOwner, run.RepoName, run.PullRequest.Number}
+	number := provider.LabelsReviewNumber(run)
+	key := labelsKey{p.Name(), run.ServerURL, run.RepoOwner, run.RepoName, number}
 	// Serialize the first read so concurrent component evaluations share one complete snapshot.
 	labelSnapshots.Lock()
 	defer labelSnapshots.Unlock()
@@ -67,7 +68,7 @@ func Labels(ctx context.Context) ([]string, error) {
 	defer cancel()
 	labels, err := reader.Labels(ctx, run)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s %s/%s review %d: %w", errUtils.ErrCILabelsFetchFailed, p.Name(), run.RepoOwner, run.RepoName, run.PullRequest.Number, err)
+		return nil, fmt.Errorf("%w: %s %s/%s review %d: %w", errUtils.ErrCILabelsFetchFailed, p.Name(), run.RepoOwner, run.RepoName, number, err)
 	}
 	snapshot := append([]string{}, labels...)
 	slices.Sort(snapshot)

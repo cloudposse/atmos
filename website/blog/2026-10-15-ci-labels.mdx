@@ -17,6 +17,8 @@ A label such as `preview` should be enough to enable preview behavior and select
 
 The `!ci.labels` function reads live labels on the current CI review. GitHub Actions is the first supported provider, including GitHub Enterprise. Atmos fetches every page on first use and caches the resulting snapshot for the entire invocation, so components share one consistent result without repeated API requests. The next invocation fetches fresh labels.
 
+[Merge-queue runs](/functions/yaml/ci.labels#merge-queues) use the labels of the individual PR being tested. Labels from earlier queued PRs do not affect that run, even when their changes are included in the checkout.
+
 Outside a review context, matching returns `false` and list mode returns `[]`, without credentials or API calls. Authentication and API failures in a review context remain errors.
 
 ## How to Use It

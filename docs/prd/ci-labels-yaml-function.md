@@ -55,6 +55,12 @@ Do not silently substitute event-payload labels, an empty list, or false for a f
 - Initially implement GitHub Actions only. Use the existing CI context for PR identity, including
   supported `pull_request_target` and `workflow_run` contexts. Do not search for a local branch PR
   or infer reviews for push events. An unresolved review number is an error when a review is present.
+- Support GitHub Actions `merge_group` runs by resolving the individual PR number from
+  `merge_group.head_ref`, or `GITHUB_REF` / `GITHUB_REF_NAME` when absent, using the queue ref
+  `refs/heads/gh-readonly-queue/<base-branch>/pr-<number>-<sha>`. Support base branches with slashes.
+  Read only that PR's labels, even when earlier queued PRs contribute code to the checkout.
+  Preserve the synthetic queue commit context separately from ordinary pull-request context.
+  Unrecognized queue refs are errors during label evaluation; context detection makes no API calls.
 - Read all pages using GitHub's Issues labels endpoint for the identified PR. Reuse the existing
   GitHub client, token precedence, API URL overrides, and Enterprise support. Label fetching is
   read-only and does not require CI reporting or Atmos Pro to be enabled.
@@ -97,10 +103,13 @@ This is distinct from Atmos's map-shaped `metadata.labels` and existing `!labels
 - Stack fixtures import and inherit `metadata.labels.preview` and `settings.pro.enabled`, retain
   explicit false overrides, and expose a sorted label list. Affected filtering with
   `--labels preview:true` includes only affected components whose resolved label is true.
+- Merge-queue tests verify event-payload precedence, environment fallbacks, nested base branches,
+  malformed refs, per-PR cache isolation, paginated Enterprise reads, and the inherited preview
+  settings and affected-selector flow. Queue-looking push refs do not discover a review.
 - Skipping the function or disabling function processing issues no label requests.
 - Build, focused tests, repository short tests, and changed-code lint pass.
 
 ## Non-goals
 
 No local review discovery, label mutations, additional CI providers, event-payload fallback,
-any-label matching mode, wildcard matching, new flags, or `!pr.labels` / `!ci.pr.labels` aliases.
+aggregation across queued PRs, any-label matching mode, wildcard matching, new flags, or `!pr.labels` / `!ci.pr.labels` aliases.

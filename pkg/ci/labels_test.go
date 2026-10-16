@@ -83,6 +83,30 @@ func TestLabelsConcurrentSnapshot(t *testing.T) {
 	assert.Equal(t, 1, p.calls)
 }
 
+func TestLabelsMergeQueueSnapshot(t *testing.T) {
+	p, run := setupLabelsProvider(t)
+	run.PullRequest = nil
+	run.MergeQueue = &MergeQueueInfo{PullRequestNumber: 42}
+	got, err := Labels(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"deploy", "preview"}, got)
+	p.labels = []string{"other-pr"}
+	run.MergeQueue.PullRequestNumber = 43
+	got, err = Labels(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"other-pr"}, got)
+	run.MergeQueue.PullRequestNumber = 42
+	got, err = Labels(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"deploy", "preview"}, got)
+	assert.Equal(t, 2, p.calls, "each PR has its own snapshot; labels are never combined")
+	ResetLabelsCache()
+	got, err = Labels(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"other-pr"}, got)
+	assert.Equal(t, 3, p.calls)
+}
+
 func TestLabelsNoReview(t *testing.T) {
 	p, run := setupLabelsProvider(t)
 	run.PullRequest = nil
@@ -115,6 +139,15 @@ func TestLabelsErrors(t *testing.T) {
 		run.PullRequest.Number = 0
 		_, err := Labels(context.Background())
 		require.ErrorIs(t, err, errUtils.ErrCILabelsFetchFailed)
+		assert.Zero(t, p.calls)
+	})
+	t.Run("unknown queue review identity", func(t *testing.T) {
+		p, run := setupLabelsProvider(t)
+		run.PullRequest = nil
+		run.MergeQueue = &MergeQueueInfo{HeadRef: "unrecognized-ref"}
+		_, err := Labels(context.Background())
+		require.ErrorIs(t, err, errUtils.ErrCILabelsFetchFailed)
+		assert.ErrorContains(t, err, "unrecognized-ref")
 		assert.Zero(t, p.calls)
 	})
 	t.Run("unsupported provider", func(t *testing.T) {

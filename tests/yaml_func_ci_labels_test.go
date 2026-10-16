@@ -59,12 +59,19 @@ func TestCILabelsStackInheritanceAndAffected(t *testing.T) {
 	for _, tc := range []struct {
 		name, body string
 		want       bool
+		queue      bool
 	}{
-		{"preview present", `[{"name":"preview"},{"name":"deploy"}]`, true},
-		{"preview absent", `[{"name":"deploy"}]`, false},
+		{"preview present", `[{"name":"preview"},{"name":"deploy"}]`, true, false},
+		{"preview absent", `[{"name":"deploy"}]`, false, false},
+		{"queue preview present", `[{"name":"preview"},{"name":"deploy"}]`, true, true},
+		{"queue preview absent", `[{"name":"deploy"}]`, false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			config, calls := setupCILabelsStack(t, tc.body)
+			if tc.queue {
+				t.Setenv("GITHUB_EVENT_NAME", "merge_group")
+				t.Setenv("GITHUB_REF", "refs/heads/gh-readonly-queue/main/pr-42-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+			}
 			info, err := e.ProcessStacks(config, schema.ConfigAndStacksInfo{
 				ComponentFromArg: "preview", Stack: "test", ComponentType: cfg.TerraformComponentType,
 			}, true, true, true, nil, nil)
@@ -102,10 +109,17 @@ func TestCILabelsStackSkip(t *testing.T) {
 	for _, tc := range []struct {
 		process bool
 		skip    []string
+		queue   bool
 	}{
-		{true, []string{"ci.labels"}},
-		{false, nil},
+		{true, []string{"ci.labels"}, false},
+		{false, nil, false},
+		{true, []string{"ci.labels"}, true},
+		{false, nil, true},
 	} {
+		if tc.queue {
+			t.Setenv("GITHUB_EVENT_NAME", "merge_group")
+			t.Setenv("GITHUB_REF", "refs/heads/gh-readonly-queue/main/pr-42-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+		}
 		info, err := e.ProcessStacks(config, schema.ConfigAndStacksInfo{
 			ComponentFromArg: "preview", Stack: "test", ComponentType: cfg.TerraformComponentType,
 		}, true, true, tc.process, tc.skip, nil)

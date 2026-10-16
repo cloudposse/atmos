@@ -87,6 +87,31 @@ see [GitHub's label API documentation](https://docs.github.com/en/rest/issues/la
 Existing `ATMOS_CI_GITHUB_API_URL` / `GITHUB_API_URL` configuration supports GitHub Enterprise.
 CI reporting and Atmos Pro do not need to be enabled to read labels.
 
+## Merge queues
+
+On GitHub Actions `merge_group` events, `!ci.labels` reads labels from the individual PR
+associated with that queue run. A queue checkout may include changes from earlier PRs, but
+those PRs do not contribute labels. For example, a `preview` label on PR #41 does not enable
+preview behavior for PR #42's queue run.
+
+Enable the merge-queue trigger alongside your pull-request trigger:
+
+```yaml
+on:
+  pull_request:
+  merge_group:
+    types: [checks_requested]
+```
+
+Atmos identifies the PR from GitHub's queue ref, such as
+`refs/heads/gh-readonly-queue/main/pr-42-<sha>`. It uses `merge_group.head_ref` from the event
+payload, falling back to `GITHUB_REF` or `GITHUB_REF_NAME` when the head ref is absent.
+Labels use the same credentials, live lookup, and invocation snapshot as ordinary PR runs.
+An unrecognized queue ref produces an error when labels are evaluated.
+
+See [GitHub's merge-queue documentation](https://docs.github.com/en/enterprise-cloud@latest/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue)
+for how each queued PR is tested with preceding changes.
+
 ## Local runs, errors, and skipping
 
 Outside a review context, including local execution and push events, the function returns `[]`

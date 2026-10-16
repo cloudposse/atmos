@@ -28,7 +28,7 @@ func (p *Provider) Labels(ctx context.Context, run *provider.Context) ([]string,
 	options := &github.ListOptions{PerPage: labelsPerPage}
 	labels := []string{}
 	for {
-		page, response, err := p.client.GitHub().Issues.ListLabelsByIssue(ctx, run.RepoOwner, run.RepoName, run.PullRequest.Number, options)
+		page, response, err := p.client.GitHub().Issues.ListLabelsByIssue(ctx, run.RepoOwner, run.RepoName, provider.LabelsReviewNumber(run), options)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", errUtils.ErrCILabelsFetchFailed, err)
 		}
