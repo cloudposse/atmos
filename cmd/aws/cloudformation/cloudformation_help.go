@@ -81,9 +81,11 @@ var operationHelpBySubCommand = map[string]operationHelpEntry{
 			"  atmos aws cloudformation watch --all --stack plat-ue2-dev",
 	},
 	"render": {
-		long: "Render the component's local template -- resolved from `template:` and, when\n" +
-			"`source:` is set, JIT-provisioned first -- without calling any AWS API.\n" +
-			"render does not authenticate, so it works offline and without AWS credentials.",
+		long: "Render the component's template, JIT-provisioning `source:` first when set,\n" +
+			"without deploying or validating it through the CloudFormation API.\n" +
+			"Local or already-provisioned sources render offline without AWS credentials,\n" +
+			"but source provisioning and configured secret or output lookups can still\n" +
+			"require authentication and network access.",
 		example: "  atmos aws cloudformation render vpc --stack plat-ue2-dev\n" +
 			"  atmos aws cloudformation render --all --stack plat-ue2-dev\n" +
 			"  atmos aws cloudformation render --affected --base origin/main",
@@ -92,7 +94,8 @@ var operationHelpBySubCommand = map[string]operationHelpEntry{
 		long: "Create (or reuse) a CloudFormation changeset for the component and render the\n" +
 			"predicted changes, without executing it. diff authenticates and calls the\n" +
 			"CloudFormation API -- it previews what apply would actually do to the live\n" +
-			"stack, unlike render, which never leaves the local template.",
+			"stack. render does not create a changeset, but may provision sources or\n" +
+			"resolve secrets and outputs using authenticated remote services.",
 		example: "  atmos aws cloudformation diff vpc --stack plat-ue2-dev\n" +
 			"  atmos aws cloudformation diff --all --stack plat-ue2-dev\n" +
 			"  atmos aws cloudformation diff --affected --base origin/main",

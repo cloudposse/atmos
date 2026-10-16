@@ -118,16 +118,16 @@ func BuildSyntheticBackendConfig(s3cfg *targetS3Config, componentConfig map[stri
 		backendMapKey: map[string]any{
 			"bucket": s3cfg.Bucket,
 			"region": resolveBackendRegion(s3cfg, componentConfig, authContext),
+			// state_file_suffix/state_file_label override pkg/provisioner/backend/s3_delete.go's
+			// default ".tfstate"/"Terraform state file(s)" deletion-warning wording, which is
+			// meaningless for a CFN artifact bucket (it holds packaged templates, not Terraform
+			// state). Empty suffix disables the sub-count/mention entirely.
+			"state_file_suffix": "",
+			"state_file_label":  "",
 		},
 		"provision": map[string]any{
 			backendMapKey: map[string]any{"enabled": true},
 		},
-		// state_file_suffix/state_file_label override pkg/provisioner/backend/s3_delete.go's
-		// default ".tfstate"/"Terraform state file(s)" deletion-warning wording, which is
-		// meaningless for a CFN artifact bucket (it holds packaged templates, not Terraform
-		// state). Empty suffix disables the sub-count/mention entirely.
-		"state_file_suffix": "",
-		"state_file_label":  "",
 	}
 }
 

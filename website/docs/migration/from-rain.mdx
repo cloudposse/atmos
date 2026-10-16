@@ -481,6 +481,9 @@ components:
 
 <File title="stacks/deploy/dev.yaml">
 ```yaml
+import:
+  - catalog/vpc-defaults
+
 components:
   "aws/cloudformation":
     vpc:

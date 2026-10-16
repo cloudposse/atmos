@@ -70,14 +70,14 @@ atmos aws cloudformation source pull vpc --stack dev --identity admin
 
 <dl>
   <dt>`component`</dt>
-  <dd>**Required.** The name of the Atmos component to vendor.</dd>
+  <dd>The name of the Atmos component to vendor. Required for unattended use; when omitted, interactive mode offers component selection if candidates are available.</dd>
 </dl>
 
 ## Flags
 
 <dl>
   <dt>`--stack` / `-s`</dt>
-  <dd>**Required.** The Atmos stack name. Can also be set via `ATMOS_STACK` environment variable.</dd>
+  <dd>The Atmos stack name, also settable via `ATMOS_STACK`. Required for unattended use; when unset, interactive mode offers stack selection if candidates are available.</dd>
 
   <dt>`--force` / `-f`</dt>
   <dd>Force re-vendor even if the component directory already exists. Without this flag, the command skips vendoring if the directory exists.</dd>

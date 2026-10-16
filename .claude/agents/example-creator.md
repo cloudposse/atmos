@@ -319,13 +319,16 @@ Add a YAML frontmatter block at the very top of `examples/{name}/README.md`:
 ---
 title: Human-Readable Title
 tags: [Automation]
+related_docs:
+  - label: Feature Docs
+    url: /cli/configuration/feature
 cast:
   file: /casts/examples/{name}/{recording}.cast
   title: atmos {name} demo
 ---
 ```
 
-**Required:** `title`, `tags` (an array — an example can carry more than one, e.g. `[Emulators, Terraform]`). **Optional:** `cast` — only add it if you actually recorded one (see `atmos-asciicast` skill / `atmos --chdir=demo/casts casts generate` conventions); omit the whole block otherwise, don't reference a `.cast` file that doesn't exist under `website/static/casts/examples/{name}/`.
+**Required:** `title`, `tags` (an array — an example can carry more than one, e.g. `[Emulators, Terraform]`). **Optional:** `related_docs` — a list of nonempty `label`/`url` pairs linking to the demonstrated feature docs; `cast` — only add it if you actually recorded one (see `atmos-asciicast` skill / `atmos --chdir=demo/casts casts generate` conventions); omit the whole block otherwise, don't reference a `.cast` file that doesn't exist under `website/static/casts/examples/{name}/`.
 
 **Available tag categories** (in display order on the gallery — see `DEFAULT_TAG_ORDER` in `website/plugins/file-browser/index.js`): `Quickstart`, `Stacks`, `Components`, `Kubernetes`, `Automation`, `Hooks`, `Emulators`, `AI`, `DX`. A tag outside this list still gets its own gallery section (appended alphabetically after the known ones) rather than being dropped — you don't need to register a new category anywhere, just use it in `tags:`.
 
@@ -333,21 +336,11 @@ cast:
 
 **ALWAYS** add this frontmatter block when creating a new example — without it, the example still appears in the gallery (falls back to the directory name as its title) but with **no tags at all**, so it's invisible under every category filter except "All". This is a real, previously-shipped bug (`hooks-tflint`, `hooks-tfmigrate`, `hooks-tfmigrate-advanced` all landed without frontmatter and were silently unfiltered for weeks) — don't repeat it.
 
-There's also a legacy fallback (`TAGS_MAP`/`CAST_MAP`/`DOCS_MAP` in `website/plugins/file-browser/index.js`) used only when an example has **no frontmatter at all**; frontmatter always wins when both exist. Don't add new entries there — it predates the frontmatter convention and only still exists for a handful of pre-frontmatter examples that haven't been migrated.
+Legacy examples can still receive titles, tags, and casts from `TITLES_MAP`, `TAGS_MAP`, and `CAST_MAP` in `website/plugins/file-browser/index.js` when the corresponding README metadata is missing. Prefer README frontmatter for new examples rather than extending these fallback maps.
 
-### DOCS_MAP (still current)
+### Migrating Legacy Related-Docs Links
 
-Related-docs links are still assigned via `DOCS_MAP` (frontmatter has no equivalent field yet):
-
-```javascript
-const DOCS_MAP = {
-  '{name}': [
-    { label: 'Feature Docs', url: '/cli/configuration/feature' },
-  ],
-};
-```
-
-Add an entry here when the example demonstrates a documented feature.
+Older guidance used a central `DOCS_MAP` lookup for related-docs links. The plugin now reads only README `related_docs` frontmatter; there is no `DOCS_MAP` fallback. When migrating a legacy example, put its links in `related_docs` using the `label`/`url` pairs shown above. Examples without that field have an empty related-docs panel.
 
 ## Creation Workflow
 
