@@ -14,8 +14,9 @@ import Experimental from '@site/src/components/Experimental'
   aws/s3` provision target, applying secure defaults: versioning enabled,
   AES-256 encryption, and all four public-access-block settings enabled. If
   the bucket already exists, its settings are brought in line with these
-  defaults rather than left as-is — this operation is idempotent, and can
-  safely be run again.
+  defaults after you confirm the change. The operation is idempotent, but
+  prompts again when the bucket already exists; use `--auto-approve` to
+  skip this confirmation in automation.
 </Intro>
 
 <Experimental />
