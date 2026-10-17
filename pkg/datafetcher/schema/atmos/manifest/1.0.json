@@ -2597,9 +2597,9 @@
             "labels": {
               "type": "object",
               "additionalProperties": {
-                "type": "string"
+                "type": ["string", "boolean"]
               },
-              "description": "User-defined key-value labels for categorizing and filtering components (atmos list components --labels)."
+              "description": "User-defined string or boolean labels for categorizing and filtering components. Boolean values match --labels key:true or key:false."
             }
           },
           "required": []
@@ -2621,9 +2621,9 @@
             "labels": {
               "type": "object",
               "additionalProperties": {
-                "type": "string"
+                "type": ["string", "boolean"]
               },
-              "description": "User-defined key-value labels for categorizing and filtering components (atmos list components --labels)."
+              "description": "User-defined string or boolean labels for categorizing and filtering components. Boolean values match --labels key:true or key:false."
             },
             "tags": {
               "type": "array",

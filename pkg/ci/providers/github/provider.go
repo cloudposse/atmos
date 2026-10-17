@@ -145,6 +145,9 @@ func (p *Provider) Context() (*provider.Context, error) {
 	if ctx.EventName == "pull_request" || ctx.EventName == "pull_request_target" {
 		ctx.PullRequest = pullRequestFromEvent()
 	}
+	if ctx.EventName == eventMergeGroup {
+		ctx.MergeQueue = mergeQueueFromEvent()
+	}
 
 	// A workflow_run triggered by a fork carries no pull_request object, so the fork-execution
 	// gate would never see it. Surface it as a fork pull request instead of failing open. A pull

@@ -13,6 +13,7 @@ func TestAllTags(t *testing.T) {
 
 	// Verify all expected tags are present.
 	expectedTags := []string{
+		TagCILabels,
 		TagStarlark,
 		TagExec,
 		TagSecret,

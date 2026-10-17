@@ -32,6 +32,8 @@ const yamlFunctionMarker = "!"
 // AtmosYamlFunc* constants in pkg/utils/yaml_utils.go (kept as literals so this
 // package stays dependency-light; TestForbiddenSelectorFunctionsMatchConstants
 // cross-checks them).
+// !ci.labels is an explicit exception: its read-only CI lookup is allowed in
+// metadata and shares an invocation snapshot, keeping selector evaluations consistent.
 var forbiddenSelectorFunctions = map[string]struct{}{
 	"!exec":                        {},
 	"!secret":                      {},
@@ -161,6 +163,7 @@ func selectorUnresolved(v any, leftDelim string) bool {
 // which components are in scope without evaluating out-of-scope ones. By
 // design their values are limited to plain strings, simple Go templates over
 // the stack context, and local functions such as !env, !git.*, and !include.
+// !ci.labels is also allowed as an explicit, invocation-cached CI credential/API read.
 // Anything that requires authentication or process execution (for example
 // !terraform.state, !store, !exec, or atmos.Component) is rejected with an
 // error, not silently deferred. The field parameter names the manifest

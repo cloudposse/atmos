@@ -7,6 +7,9 @@ import (
 // Provider represents a CI/CD provider (GitHub Actions, GitLab CI, etc.).
 type Provider = provider.Provider
 
+// LabelReader is an optional CI capability for reading current review labels.
+type LabelReader = provider.LabelReader
+
 // BaseResolution contains the resolved base commit for affected detection.
 type BaseResolution = provider.BaseResolution
 

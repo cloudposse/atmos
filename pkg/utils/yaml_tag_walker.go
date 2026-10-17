@@ -9,6 +9,7 @@ import (
 	yaml "gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/function/parser"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
@@ -316,6 +317,7 @@ func getStackManifestTagPolicy() TagWalkPolicy {
 			Prepare: prepareScriptSource,
 			Handlers: map[string]TagHandler{
 				AtmosYamlFuncStarlark:   handleStarlarkTag,
+				AtmosYamlFuncCILabels:   handleCILabelsTag,
 				AtmosYamlFuncLiteral:    handleLiteralTag,
 				AtmosYamlFuncAppend:     handleAppendTag,
 				AtmosYamlFuncInclude:    handleIncludeTag,
@@ -325,6 +327,19 @@ func getStackManifestTagPolicy() TagWalkPolicy {
 		}
 	})
 	return stackManifestTagPolicyVal
+}
+
+// handleCILabelsTag adapts the function parser to the stack loader's tag handler.
+func handleCILabelsTag(_ TagContext, node *yaml.Node, _ string) (bool, error) {
+	expression, err := parser.EncodeCILabels(node)
+	if err != nil {
+		return false, err
+	}
+	node.Kind = yaml.ScalarNode
+	node.Tag = "!!str"
+	node.Value = expression
+	node.Content = nil
+	return true, nil
 }
 
 // handleStarlarkTag defers a scalar body, preserving its source through merging.
