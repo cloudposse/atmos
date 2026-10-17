@@ -83,6 +83,9 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 
 	deferredContexts := make(ComponentDeferredContexts)
 
+	// Drop the layers below each section set to `!unset` before merging.
+	opts, result = dropUnsetSectionLayers(opts, result)
+
 	// Resolve the effective list_merge_strategy for this component before any merge.
 	// Component-level settings (at any inheritance level) override the global atmos.yaml
 	// setting, so individual components can opt into a different list merge behavior
