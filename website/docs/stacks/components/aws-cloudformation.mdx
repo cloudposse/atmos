@@ -51,11 +51,11 @@ dependencies, and be included in affected runs.
 
   <dt>[`hooks`](/stacks/hooks)</dt>
   <dd>
-    Lifecycle event handlers. Only `diff`/`plan`, `apply`/`deploy`, and
-    `delete` fire `before`/`after` events (`before.aws/cloudformation.diff`,
+    Lifecycle event handlers. `diff`/`plan`, `apply`/`deploy`, `delete`,
+    `drift detect`, and `drift describe` fire `before`/`after` events (`before.aws/cloudformation.diff`,
     `after.aws/cloudformation.apply`, and so on) — every other verb, including
     `render`, `validate`, `output`, `fmt`, `tree`, `logs`, `watch`,
-    `changeset *`, `drift *`, `get *`, `stackset *`, `list`, `backend *`, and
+    `changeset *`, `get *`, `stackset *`, `list`, `backend *`, and
     `source *`, does not fire hook events.
   </dd>
 
@@ -266,12 +266,16 @@ components:
 components:
   "aws/cloudformation":
     dns:
+      stack_name: dns-dev
       source:
         uri: https://raw.githubusercontent.com/acme/cfn-templates/v1.2.0/dns.yaml
 ```
 
   `path:` does not need to be set in the single-file case — Atmos names
-  the vendored file after the source URI's basename and uses it directly.
+  the vendored file after the source URI's basename and inspects the provisioned result.
+  Exactly one regular root file is inferred; ambiguous or nested contents require an explicit
+  `path`. Provisioner metadata files are ignored. Deployed reads and deletion do not fetch the
+  source; dry-run defers inference.
   </dd>
 </dl>
 

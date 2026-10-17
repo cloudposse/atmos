@@ -3,6 +3,7 @@ package cloudformation
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -746,4 +747,70 @@ func TestValidateOperationArgs_AcceptsIncludeDependentsWithAffected(t *testing.T
 
 	err := validateOperationArgs(applyCmd, nil)
 	require.NoError(t, err)
+}
+
+// TestCIFlagReachesOperation verifies that each summary-producing operation forwards the explicit CI
+// flag.
+func TestCIFlagReachesOperation(t *testing.T) {
+	for _, operation := range []string{"diff", "apply", "delete", "drift-detect", "drift-describe"} {
+		t.Run(operation, func(t *testing.T) {
+			cmd := newOperationCommand(operation, operation, "test")
+			require.NoError(t, cmd.ParseFlags([]string{"--ci"}))
+			assert.Equal(t, true, getOperationFlags(cmd)["ci"])
+		})
+	}
+}
+
+// These are the public command spellings emitted by CI summaries. Exercise
+// Cobra and RunE together, including the plan/deploy and cfn aliases.
+func TestCIFlagThroughCommandDispatch(t *testing.T) {
+	original, hadOriginal := component.GetProvider(cfg.CloudFormationComponentType)
+	t.Cleanup(func() {
+		if hadOriginal {
+			require.NoError(t, component.Register(original))
+		}
+	})
+	for _, tc := range []struct{ command, operation string }{
+		{"diff", "diff"},
+		{"plan", "diff"},
+		{"apply", "apply"},
+		{"deploy", "apply"},
+		{"delete", "delete"},
+		{"drift detect", "drift-detect"},
+		{"drift describe", "drift-describe"},
+	} {
+		for _, ciFlag := range []string{"", "--ci", "--ci=false"} {
+			t.Run(tc.command+"/"+ciFlag, func(t *testing.T) {
+				fake := &recordingProvider{}
+				require.NoError(t, component.Register(fake))
+				root := &cobra.Command{Use: "atmos"}
+				awsCmd := &cobra.Command{Use: "aws"}
+				cfnCmd := &cobra.Command{Use: "cloudformation", Aliases: []string{"cfn"}}
+				if strings.HasPrefix(tc.command, "drift ") {
+					cfnCmd.AddCommand(newDriftCmd())
+				} else {
+					cfnCmd.AddCommand(newOperationCommand(tc.command, tc.operation, "test"))
+				}
+				awsCmd.AddCommand(cfnCmd)
+				root.AddCommand(awsCmd)
+				group := "cloudformation"
+				if ciFlag == "--ci=false" {
+					group = "cfn"
+				}
+				args := append([]string{"aws", group}, strings.Fields(tc.command)...)
+				args = append(args, "app", "-s", "dev")
+				if ciFlag != "" {
+					args = append(args, ciFlag)
+				}
+				root.SetArgs(args)
+				require.NoError(t, root.Execute())
+				require.Len(t, fake.executed, 1)
+				got := fake.executed[0]
+				assert.Equal(t, tc.operation, got.SubCommand)
+				assert.Equal(t, "app", got.Component)
+				assert.Equal(t, "dev", got.Stack)
+				assert.Equal(t, ciFlag == "--ci", got.Flags["ci"])
+			})
+		}
+	}
 }

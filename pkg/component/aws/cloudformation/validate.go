@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -28,14 +29,24 @@ import (
 func validateComponentConfig(config map[string]any) error {
 	defer perf.Track(nil, "cloudformation.validateComponentConfig")()
 
-	if config == nil {
-		return nil
-	}
-	if isAbstractComponent(config) {
+	if config == nil || isAbstractComponent(config) {
 		return nil
 	}
 
 	stackName, _ := config[cfg.StackNameSectionName].(string)
+	if err := validateComponentTemplate(config, stackName); err != nil {
+		return err
+	}
+
+	if stackName == "" {
+		return errUtils.ErrMissingAwsCloudFormationStackName
+	}
+
+	return nil
+}
+
+// validateComponentTemplate checks template selection and inline content before stack-name validation.
+func validateComponentTemplate(config map[string]any, stackName string) error {
 	templateRaw := config[cfg.TemplateSectionName]
 	path, _ := config[cfg.TemplatePathSectionName].(string)
 	templatePresent := isTemplatePresent(templateRaw)
@@ -43,7 +54,7 @@ func validateComponentConfig(config map[string]any) error {
 	switch {
 	case templatePresent && path != "":
 		return fmt.Errorf("%w: stack %q", errUtils.ErrAwsCloudFormationTemplateAndPathMutuallyExclusive, stackName)
-	case !templatePresent && path == "":
+	case !templatePresent && !hasFileTemplate(config):
 		return errUtils.ErrMissingAwsCloudFormationTemplate
 	}
 
@@ -51,10 +62,6 @@ func validateComponentConfig(config map[string]any) error {
 		if err := sanityCheckInlineTemplate(templateRaw); err != nil {
 			return inlineTemplateError(stackName, templateRaw, err)
 		}
-	}
-
-	if stackName == "" {
-		return errUtils.ErrMissingAwsCloudFormationStackName
 	}
 
 	return nil
@@ -216,4 +223,11 @@ func looksLikeTemplateFileRef(value string) bool {
 	default:
 		return false
 	}
+}
+
+// hasFileTemplate accepts an explicit path or a source whose filename can be determined after
+// provisioning.
+func hasFileTemplate(config map[string]any) bool {
+	path, _ := config[cfg.TemplatePathSectionName].(string)
+	return path != "" || source.HasSource(config)
 }

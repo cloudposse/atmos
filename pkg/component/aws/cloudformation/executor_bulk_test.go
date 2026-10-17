@@ -194,8 +194,9 @@ func TestDispatchAffected_DefaultRefCheckout(t *testing.T) {
 func TestExecuteBulk_All(t *testing.T) {
 	origDescribe := executeDescribeStacks
 	stacks := map[string]any{"dev": map[string]any{}}
-	executeDescribeStacks = func(_ *schema.AtmosConfiguration, filterByStack string, _, componentTypes, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+	executeDescribeStacks = func(_ *schema.AtmosConfiguration, filterByStack string, _, componentTypes, _ []string, _, _, processYAML, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
 		assert.Equal(t, []string{cfg.CloudFormationComponentType}, componentTypes)
+		assert.False(t, processYAML, "discovery must defer producer outputs until dependency-ordered execution")
 		return stacks, nil
 	}
 	t.Cleanup(func() { executeDescribeStacks = origDescribe })
@@ -229,6 +230,10 @@ func TestExecuteBulk_All(t *testing.T) {
 	assert.Equal(t, string(OperationApply), gotOpts.SubCommand)
 	assert.Nil(t, gotOpts.Selection, "--all (not --affected) must pass a nil selection")
 	assert.Equal(t, ctx.Flags, gotOpts.Flags)
+	assert.False(t, gotOpts.ReverseOrder, "apply must preserve dependency order")
+	require.NoError(t, executeBulk(ctx, atmosConfig, info, OperationDelete))
+	assert.True(t, gotOpts.ReverseOrder, "delete must remove consumers before dependencies")
+
 	require.NotNil(t, gotCtx)
 	assert.ErrorIs(t, gotCtx.Err(), context.Canceled,
 		"executeBulk must forward the caller's cancellation into ExecuteGraph instead of a disconnected context.Background()")

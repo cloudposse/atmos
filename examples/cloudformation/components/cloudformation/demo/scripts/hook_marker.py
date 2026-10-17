@@ -4,9 +4,9 @@ hook_marker.py — appends the firing hook's event name to a marker file.
 
 Used by the `demo` component's `hooks:` block (see
 stacks/catalog/demo.yaml) to live-verify which aws/cloudformation verbs
-actually fire hook events. Atmos wires only `diff`/`apply`/`delete`
+actually fire hook events. Atmos wires `diff`/`apply`/`delete`/`drift detect`/`drift describe`
 (plus their `plan`/`deploy` aliases) to hook events today — every other
-verb (`validate`, `output`, `changeset *`, `drift *`, `get *`, `fmt`,
+verb (`validate`, `output`, `changeset *`, `get *`, `fmt`,
 `tree`, `logs`, `watch`, `stackset *`, `list`, `backend *`, `source *`)
 does not, so running every verb and diffing this marker's contents
 against that claim is a direct, executable check rather than trusting

@@ -74,6 +74,13 @@ If the stack ends in a failed status after executing the changeset (e.g.
 :::note
 `changeset execute` does not fire `before`/`after` hook events — only
 [`apply`](/cli/commands/aws/cloudformation/apply),
-[`diff`](/cli/commands/aws/cloudformation/diff), and
-[`delete`](/cli/commands/aws/cloudformation/delete) do.
+[`diff`](/cli/commands/aws/cloudformation/diff),
+[`delete`](/cli/commands/aws/cloudformation/delete),
+[`drift detect`](/cli/commands/aws/cloudformation/drift/detect), and
+[`drift describe`](/cli/commands/aws/cloudformation/drift/describe) do.
 :::
+
+After a successful named CREATE or UPDATE, Atmos enables configured `termination_protection`,
+matching apply. Failure to enable it fails the command even if the deployment completed.
+Setting the field to false never disables existing protection; deletion requires the explicit
+`--disable-termination-protection` flag.

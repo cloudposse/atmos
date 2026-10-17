@@ -59,8 +59,6 @@ results at all (no detection has ever run), `drift describe` says so and
 suggests running [`drift detect`](/cli/commands/aws/cloudformation/drift/detect) first.
 
 :::note
-`drift describe` does not fire `before`/`after` hook events — only
-[`apply`](/cli/commands/aws/cloudformation/apply),
-[`diff`](/cli/commands/aws/cloudformation/diff), and
-[`delete`](/cli/commands/aws/cloudformation/delete) do.
+`drift describe` fires `before.aws/cloudformation.drift-describe` and
+`after.aws/cloudformation.drift-describe` hooks. The command-name hyphen is part of each event.
 :::

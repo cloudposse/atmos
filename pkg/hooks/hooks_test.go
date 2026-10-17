@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -1672,4 +1673,35 @@ func TestCheckExperimentalWarnDaily(t *testing.T) {
 	assert.ErrorIs(t, checkExperimental(config), errUtils.ErrExperimentalRequiresIn)
 	config.Settings.Experimental = "disable"
 	assert.ErrorIs(t, checkExperimental(config), errUtils.ErrExperimentalDisabled)
+}
+
+// Exercise matching through preflight and the real command engine: a matching
+// event must execute its command, while an unrelated hook must remain untouched.
+func TestRunAllCloudFormationLifecycleEvents(t *testing.T) {
+	tests := []struct {
+		event      HookEvent
+		configured string
+	}{
+		{BeforeAwsCloudFormationDriftDetect, string(BeforeAwsCloudFormationDriftDetect)},
+		{AfterAwsCloudFormationDriftDetect, string(AfterAwsCloudFormationDriftDetect)},
+		{BeforeAwsCloudFormationDriftDescribe, string(BeforeAwsCloudFormationDriftDescribe)},
+		{AfterAwsCloudFormationDriftDescribe, string(AfterAwsCloudFormationDriftDescribe)},
+		{BeforeAwsCloudFormationDiff, "before-aws/cloudformation-plan"},
+		{AfterAwsCloudFormationDiff, "after.aws/cloudformation.plan"},
+		{BeforeAwsCloudFormationApply, "before-aws/cloudformation-deploy"},
+		{AfterAwsCloudFormationApply, "after.aws/cloudformation.deploy"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.configured, func(t *testing.T) {
+			var output bytes.Buffer
+			config := &schema.AtmosConfiguration{}
+			info := &schema.ConfigAndStacksInfo{ComponentType: cfg.CloudFormationComponentType, ComponentFromArg: "app", Stack: "dev"}
+			h := &Hooks{config: config, info: info, stdout: &output, items: map[string]Hook{
+				"marker":    {Kind: "command", Events: []string{tt.configured}, Command: testExePath(t), OnFailure: "fail", Env: map[string]string{"_ATMOS_TEST_ECHO_STDOUT": "1", "_ATMOS_TEST_STDOUT_BODY": "lifecycle marker"}},
+				"unrelated": {Kind: "command", Events: []string{string(AfterTerraformApply)}, Command: "must-not-resolve-an-unrelated-command", OnFailure: "fail"},
+			}}
+			require.NoError(t, h.RunAll(tt.event, config, info, nil, nil))
+			assert.Equal(t, "lifecycle marker", output.String())
+		})
+	}
 }
