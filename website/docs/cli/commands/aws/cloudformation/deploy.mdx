@@ -6,6 +6,8 @@ id: deploy
 description: Apply a CloudFormation stack with --auto-approve.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
@@ -13,14 +15,17 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 import SkipHooksFlag from '@site/docs/cli/commands/aws/cloudformation/_partials/_skip-hooks-flag.mdx'
 
 <Intro>
-  Create or update the CloudFormation stack for a component. `deploy` is an
-  alias for [`apply`](/cli/commands/aws/cloudformation/apply) that defaults
-  `--auto-approve` to `true`, matching the established `terraform deploy` =
-  "apply with auto-approve" convention — useful for CI, where nothing is
-  present to answer an interactive prompt.
+Create or update a CloudFormation stack without an interactive confirmation.
+This is an alias for [`apply`](/cli/commands/aws/cloudformation/apply) with
+`--auto-approve` enabled by default.
 </Intro>
 
 <Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
 
 <CastPlayer title="atmos aws cloudformation deploy --help" src="/casts/screengrabs/atmos-aws-cloudformation-deploy--help.cast" static chrome />
 
@@ -28,6 +33,11 @@ import SkipHooksFlag from '@site/docs/cli/commands/aws/cloudformation/_partials/
 
 ```shell
 atmos aws cloudformation deploy <component> --stack <stack> [options]
+```
+
+## Examples
+
+```shell
 atmos aws cloudformation deploy vpc -s plat-ue2-dev
 
 # Deploy components filtered by tags or labels (composes with --all/--affected)
@@ -35,20 +45,18 @@ atmos aws cloudformation deploy --all --tags production,tier-1
 atmos aws cloudformation deploy --affected --labels cost-center=platform
 ```
 
-## Behavior
+## Arguments
 
-`deploy` runs exactly like [`apply`](/cli/commands/aws/cloudformation/apply#how-apply-runs)
-with the confirmation turned off: it creates the changeset, prints the predicted
-changes on stderr, and executes the changeset without asking. A changeset that
-would change nothing is deleted, `deploy` prints `No changes`, and the follow-up
-steps still run. With `--auto-approve=false` it asks after showing the changes,
-like `apply`.
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
 
 ## Flags
 
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
-  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
 
   <dt>`--target` <em>(optional)</em></dt>
   <dd>Provision target to deliver to. Defaults to `provision.default`, otherwise the implicit direct-deploy target.</dd>
@@ -62,3 +70,12 @@ like `apply`.
 
 <SkipHooksFlag />
 </dl>
+
+## Behavior
+
+`deploy` runs exactly like [`apply`](/cli/commands/aws/cloudformation/apply#how-apply-runs)
+with the confirmation turned off: it creates the changeset, prints the predicted
+changes on stderr, and executes the changeset without asking. A changeset that
+would change nothing is deleted, `deploy` prints `No changes`, and the follow-up
+steps still run. With `--auto-approve=false` it asks after showing the changes,
+like `apply`.

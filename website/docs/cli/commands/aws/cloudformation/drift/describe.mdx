@@ -6,6 +6,8 @@ id: describe
 description: Show the results of the most recent drift detection.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
@@ -21,6 +23,11 @@ import SkipHooksFlag from '@site/docs/cli/commands/aws/cloudformation/_partials/
 
 <Experimental />
 
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
+
 <CastPlayer title="atmos aws cloudformation drift describe --help" src="/casts/screengrabs/atmos-aws-cloudformation-drift-describe--help.cast" static chrome />
 
 ## Usage
@@ -29,15 +36,24 @@ import SkipHooksFlag from '@site/docs/cli/commands/aws/cloudformation/_partials/
 atmos aws cloudformation drift describe <component> --stack <stack> [options]
 ```
 
+## Examples
+
 ```shell
 atmos aws cloudformation drift describe vpc -s plat-ue2-dev
 ```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
 
 ## Flags
 
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
-  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
 
 <SelectionFlags />
 
@@ -52,7 +68,7 @@ Only resources that are not `IN_SYNC` are printed. Each `MODIFIED` resource is f
 property difference, with the property path, the expected value from the template, the actual value in
 the deployed resource, and the difference type:
 
-```
+```text
   MODIFIED   AWS::SSM::Parameter          Param
     /Value: expected v2, actual v1 (NOT_EQUAL)
 ```

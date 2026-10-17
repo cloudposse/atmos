@@ -156,17 +156,21 @@ local reproduction command, and captured masked stdout/stderr in a collapsible s
 
 ## CloudFormation Summaries
 
-When `ci.enabled: true` and summaries are enabled, native CloudFormation commands write compact
-job summaries in CI. The title preserves the invoked verb: `plan` is not reported as `diff`, and
-`deploy` is not reported as `apply`. `diff` and `plan` list resource changes in the pending
-changeset or say "No changes" for a no-op. `apply` and `deploy` list stack Outputs under
-"CloudFormation output" and say "No changes" for a no-op. NoEcho-dependent outputs are masked,
-as they are in `atmos aws cloudformation output`.
+With `ci.enabled: true` and summary output enabled, CloudFormation commands
+publish the following results:
 
-`delete` shows the stack operation result. `drift detect` and `drift describe` show drift status,
-drifted resources, and each modified resource's property differences. The reproduction command
-includes `--fail-on-drift` when used. CloudFormation also emits CI output variables, but does not
-write commit statuses, PR comments, or stored artifacts.
+| Commands | Summary contents |
+|---|---|
+| `diff`, `plan` | Resource changes or a no-changes result. |
+| `apply`, `deploy` | Stack outputs, with NoEcho-dependent values masked, and a no-changes result when applicable. |
+| `delete` | Stack operation result. |
+| `drift detect`, `drift describe` | Drift status, drifted resources, and property differences when available. |
+
+Titles preserve the invoked command, including `plan` and `deploy`. Each summary
+includes a reproduction command, with `--fail-on-drift` when used.
+
+CloudFormation also publishes [CI output variables](/ci#outputs). It does not
+publish commit statuses, PR comments, or stored artifacts.
 
 ## Configuration
 

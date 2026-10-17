@@ -6,6 +6,8 @@ id: apply
 description: Create or update a CloudFormation stack via a changeset.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
@@ -13,16 +15,18 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 import SkipHooksFlag from '@site/docs/cli/commands/aws/cloudformation/_partials/_skip-hooks-flag.mdx'
 
 <Intro>
-  Create or update the CloudFormation stack for a component: create a changeset,
-  show the predicted changes, ask for confirmation, and execute it. After a
-  successful apply, Atmos renders the stack's Outputs — the same view
-  [`output`](/cli/commands/aws/cloudformation/output) renders on demand.
+Create or update a CloudFormation stack. Atmos shows the proposed changes, asks
+for confirmation, and streams deployment events. A successful deployment ends
+with the stack outputs.
 </Intro>
 
-Atmos applies the component's `stack_policy` (if set) after CREATE and no-op
-applies. An UPDATE that changes resources retains the existing stack policy.
 
 <Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
 
 <CastPlayer title="atmos aws cloudformation apply --help" src="/casts/screengrabs/atmos-aws-cloudformation-apply--help.cast" static chrome />
 
@@ -31,6 +35,8 @@ applies. An UPDATE that changes resources retains the existing stack policy.
 ```shell
 atmos aws cloudformation apply <component> --stack <stack> [options]
 ```
+
+## Examples
 
 ```shell
 atmos aws cloudformation apply vpc -s plat-ue2-dev
@@ -49,43 +55,25 @@ atmos aws cloudformation apply --all -s plat-ue2-dev
 atmos aws cloudformation apply --affected --base origin/main
 ```
 
-Apply components filtered by tags or labels (composes with `--all`/`--affected` to narrow the selected set further):
+Apply components selected by tags or labels:
 
 ```shell
 atmos aws cloudformation apply --all --tags production,tier-1
 atmos aws cloudformation apply --affected --labels cost-center=platform
 ```
 
-## How apply runs
+## Arguments
 
-A direct stack deploy runs in this order, so you approve changes you have seen:
-
-1. Atmos creates the changeset.
-2. It prints the predicted changes (one line per added, modified, or replaced resource) on stderr.
-3. If the changeset would change nothing, Atmos deletes it, prints `No changes`, and still runs the follow-up steps (stack policy, termination protection, Outputs). Nothing is executed and no changeset is left behind.
-4. Otherwise it asks for confirmation, unless `--auto-approve` is set.
-5. If you decline, Atmos deletes the changeset and exits with a "user aborted" error; the stack is untouched.
-6. If you confirm, Atmos executes the changeset and streams the stack events until the stack reaches a final status.
-
-Without `--auto-approve` and without a terminal on stdin (for example in CI), `apply` fails before creating anything, with a hint to pass `--auto-approve`. This is a "confirmation required" error, not a user abort.
-
-For a stack that does not exist yet, CloudFormation registers an empty `REVIEW_IN_PROGRESS` stack as soon as the first changeset is created. When Atmos itself created that stack during this run and then abandons the changeset (declined prompt, a failed changeset, or a changeset that cannot be executed), it deletes the empty stack as well, after confirming it is still `REVIEW_IN_PROGRESS`. A stack that already existed is never deleted.
-
-A stack in `ROLLBACK_COMPLETE` cannot be updated: its first create failed and CloudFormation only accepts a delete. `apply` fails before creating a changeset, explains this, and hints at the recovery: run [`atmos aws cloudformation delete`](/cli/commands/aws/cloudformation/delete) for the component, then apply again. Atmos does not delete the stack for you.
-
-### Other provision targets
-
-`apply` asks no stack-change question when no stack changes:
-
-- A `kind: aws/s3` target (selected with `--target` or `provision.default`) only uploads the template. On success Atmos prints the `s3://` location and the `https://` TemplateURL, and records both in the run summary (`package_s3_uri`, `package_url`).
-- An external target such as `kind: git` prints the file it delivered and the target it went to.
-- A `kind: aws/stackset` target is not an apply target. `apply --target <name>` fails with a hint to run `atmos aws cloudformation stackset create <component> -s <stack> --target <name>` (or `stackset update`).
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
 
 ## Flags
 
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
-  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
 
   <dt>`--target` <em>(optional)</em></dt>
   <dd>Provision target to deliver to. Defaults to `provision.default`, otherwise the implicit direct-deploy target.</dd>
@@ -105,3 +93,46 @@ A stack in `ROLLBACK_COMPLETE` cannot be updated: its first create failed and Cl
 that defaults `--auto-approve` to `true`. Both fire the
 `before.aws/cloudformation.apply`/`after.aws/cloudformation.apply` hook events.
 :::
+
+## How apply runs
+
+For direct deployment, Atmos:
+
+1. Creates a changeset and prints the proposed changes on stderr.
+2. Asks for confirmation, unless `--auto-approve` is set.
+3. Installs the configured stack policy before an update.
+4. Executes the changeset and streams stack events until completion.
+5. Applies post-deployment settings and displays stack outputs.
+
+### No Changes
+
+For an empty changeset, Atmos prints `No changes` and deletes the changeset.
+It still applies the stack policy and configured termination protection, then
+shows outputs. A new stack receives its policy after creation succeeds.
+
+### Confirmation and Cleanup
+
+In a non-interactive session, pass `--auto-approve`. Without it, the command
+fails before creating a changeset.
+
+Declining confirmation deletes the changeset and returns a user-aborted error.
+If this invocation created an empty `REVIEW_IN_PROGRESS` stack, Atmos also
+removes it when abandoning the changeset, provided it is still in that state.
+Existing stacks are preserved.
+
+### Failed Stack Creation
+
+A stack in `ROLLBACK_COMPLETE` cannot be updated. Delete that failed stack with
+[`delete`](/cli/commands/aws/cloudformation/delete), then apply again.
+Atmos does not delete it automatically.
+
+### Other provision targets
+
+Publish-only targets do not prompt for a stack change:
+
+- An S3 target uploads the template and reports its S3 URI and HTTPS URL.
+  The run summary records `package_s3_uri` and `package_url`.
+- A Git target reports the delivered file and destination.
+
+Use the [`stackset` commands](/cli/commands/aws/cloudformation/stackset) for
+StackSet targets. See [Delivery Targets](/stacks/components/aws-cloudformation#delivery-targets).

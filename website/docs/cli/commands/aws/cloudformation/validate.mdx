@@ -6,6 +6,8 @@ id: validate
 description: Validate a CloudFormation template server-side with the ValidateTemplate API.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
@@ -19,6 +21,11 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 
 <Experimental />
 
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
+
 <CastPlayer title="atmos aws cloudformation validate --help" src="/casts/screengrabs/atmos-aws-cloudformation-validate--help.cast" static chrome />
 
 ## Usage
@@ -26,6 +33,8 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 ```shell
 atmos aws cloudformation validate <component> --stack <stack> [options]
 ```
+
+## Examples
 
 ```shell
 atmos aws cloudformation validate vpc -s plat-ue2-dev
@@ -38,18 +47,25 @@ atmos aws cloudformation validate --all -s plat-ue2-dev
 atmos aws cloudformation validate --affected --base origin/main
 ```
 
-Validate components filtered by tags or labels (composes with `--all`/`--affected` to narrow the selected set further):
+Validate components selected by tags or labels:
 
 ```shell
 atmos aws cloudformation validate --all --tags production,tier-1
 atmos aws cloudformation validate --affected --labels cost-center=platform
 ```
 
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
+
 ## Flags
 
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
-  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
 
 <SelectionFlags />
 

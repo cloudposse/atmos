@@ -2,6 +2,8 @@
  * FileViewer - Displays file content with syntax highlighting.
  */
 import React from 'react';
+import Link from '@docusaurus/Link';
+import { resolveMarkdownLink } from './markdown-links.mjs';
 import CodeBlock from '@theme/CodeBlock';
 import Mermaid from '@theme/Mermaid';
 import Markdown from 'react-markdown';
@@ -15,9 +17,10 @@ import styles from './styles.module.css';
 
 interface FileViewerProps {
   file: FileNode;
+  routeBasePath: string;
 }
 
-export default function FileViewer({ file }: FileViewerProps): JSX.Element {
+export default function FileViewer({ file, routeBasePath }: FileViewerProps): JSX.Element {
   const showGithubLink = !!file.githubUrl;
 
   // Handle binary files.
@@ -99,6 +102,13 @@ export default function FileViewer({ file }: FileViewerProps): JSX.Element {
           <Markdown
             remarkPlugins={[remarkGfm, remarkAlert]}
             components={{
+              a({ href, children, node: _node, ...props }) {
+                return (
+                  <Link {...props} to={resolveMarkdownLink(href, file.path, routeBasePath, file.githubUrl)}>
+                    {children}
+                  </Link>
+                );
+              },
               // Render code blocks with syntax highlighting.
               code({ className, children, ...props }) {
                 const match = /language-(\w+)/.exec(className || '');

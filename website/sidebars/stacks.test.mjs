@@ -51,7 +51,7 @@ function resolve(item) {
   const id = item.id || item.link?.id;
   return {
     ...item,
-    href: docs.get(id),
+    href: item.link?.href || docs.get(id),
     docId: id,
     items: item.items?.map(resolve),
   };
@@ -78,6 +78,10 @@ test("component fields sit below a named instance, never beside component types"
       ["<name>"],
     );
     assert.ok(at("components", kind.label, "<name>", "metadata"));
+    assert.deepEqual(kind.items[0].link, {
+      type: "doc",
+      id: "stacks/components/name",
+    });
   }
   assert.ok(at("components", "terraform", "<name>", "mocks"));
   assert.equal(at("mocks"), undefined);
