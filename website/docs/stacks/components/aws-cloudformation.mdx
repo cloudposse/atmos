@@ -1,0 +1,917 @@
+---
+title: CloudFormation Components
+sidebar_position: 8
+sidebar_label: aws/cloudformation
+sidebar_class_name: command
+description: Configure native aws/cloudformation components in Atmos stack manifests.
+id: aws-cloudformation
+slug: /stacks/components/aws-cloudformation
+---
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
+import Experimental from "@site/src/components/Experimental";
+
+<Intro>
+Configure CloudFormation templates, parameters, and delivery targets in Atmos
+stack manifests. Components use the same inheritance, authentication, and
+dependencies as other Atmos component types.
+</Intro>
+
+<Experimental />
+
+## Available Configuration Sections
+
+CloudFormation components use the same stack sections as other Atmos
+components, so the stack can inherit values, run hooks, use Auth, declare
+dependencies, and be included in affected runs.
+
+<dl>
+  <dt>[`metadata`](/stacks/components/component-metadata)</dt>
+  <dd>Component behavior, inheritance, and base component selection.</dd>
+
+  <dt>[`vars`](/stacks/vars)</dt>
+  <dd>Variables available to stack template rendering.</dd>
+
+  <dt>[`env`](/stacks/env)</dt>
+  <dd>Environment variables applied before CloudFormation operations run.</dd>
+
+  <dt>[`settings`](/stacks/settings)</dt>
+  <dd>
+    Integration metadata and legacy dependency settings, including
+    `settings.aws_cloudformation.region` (see [Region Resolution](/cli/configuration/components/aws-cloudformation#region-resolution)).
+  </dd>
+
+  <dt>[`hooks`](/stacks/hooks)</dt>
+  <dd>Lifecycle hooks for `diff`/`plan`, `apply`/`deploy`, `delete`,
+  `drift detect`, and `drift describe`. Other CloudFormation commands do not
+  fire hooks. See [CloudFormation lifecycle hooks](#lifecycle-hooks).</dd>
+
+  <dt>`source`</dt>
+  <dd>
+    JIT provisioning of a remote template before operations run — see
+    [Source Provisioning](#source-provisioning) below.
+  </dd>
+
+  <dt>`provision`</dt>
+  <dd>Delivery targets, automatic artifact-bucket provisioning, and source workdirs.
+  See [Delivery Targets](#delivery-targets) and [Workdirs](#workdirs).</dd>
+
+  <dt>`auth`</dt>
+  <dd>Component-level Atmos Auth providers, identities, and integrations.</dd>
+
+  <dt>[`dependencies`](/stacks/dependencies/components)</dt>
+  <dd>Cross-component ordering for `--all` and `--affected` runs.</dd>
+</dl>
+
+## CloudFormation-Specific Sections
+
+<dl>
+  <dt>`template` / `path` <em>(one required)</em></dt>
+  <dd>
+    The CloudFormation template, provided one of two mutually exclusive ways:
+
+    - `template` — an **inline** template body, either a literal string (a
+      `|` block scalar, YAML or JSON) or a structured YAML map. Because it's
+      inline stack config, Atmos renders it with Go templates (when
+      `templates.settings.enabled: true`) and evaluates YAML functions in it
+      before sending it to CloudFormation. See
+      [Inline Templates and Templating](#inline-templates-and-templating).
+    - `path` — a **file reference**: the path to a template file, relative to
+      the component directory under the base path. Atmos uses the file verbatim: it does not
+      render Go templates or YAML functions in it. A file that still contains
+      Rain directives (`!Rain::Env`, `!Rain::Embed`, `${Rain::Constant}`) is
+      rejected before any AWS call, with the Atmos-native replacement named for
+      each directive; see [Migrating from Rain](/migration/rain). To keep the
+      file but use YAML functions inside it, use
+      `template: !include <file> | eval` instead.
+
+    Setting both is an error.
+  </dd>
+
+  <dt>`stack_name`</dt>
+  <dd>The CloudFormation stack name. Supports Go templates, such as `"{{ .vars.stage }}-vpc"`. Set the existing stack name when migrating a deployment.</dd>
+
+  <dt>`parameters`</dt>
+  <dd>Template parameters as a YAML map or a list of
+  `ParameterKey`/`ParameterValue` entries. See [Parameters](#parameters)
+  for value conversion, file imports, and update behavior.</dd>
+
+  <dt>`capabilities`</dt>
+  <dd>
+    Acknowledged IAM capabilities: `CAPABILITY_IAM`, `CAPABILITY_NAMED_IAM`, or
+    `CAPABILITY_AUTO_EXPAND`. Atmos checks each value locally, and an unknown
+    value fails before any AWS call, naming the value and the valid set.
+  </dd>
+
+  <dt>`tags`</dt>
+  <dd>
+    A map of `key: value` tags applied to the CloudFormation stack (not to be
+    confused with Atmos's own component `tags`/`--tags` selection, which is
+    separate). `tags` must be a map of tag names to string values. A list is
+    rejected before any AWS call, whether it is the AWS CLI
+    `[{"Key": ..., "Value": ...}]` form or the string list that `!tags` produces,
+    so a stack is never deployed silently untagged. To reuse an existing AWS CLI
+    tags file, reshape it into a map with `!include`:
+
+    ```yaml
+    tags: !include 'tags.json ".[] as $t ireduce ({}; .[$t.Key] = $t.Value)"'
+    ```
+
+    To carry Atmos `metadata.labels` onto the stack, set `tags: !labels`. The
+    values of `metadata.tags` and `metadata.labels` never flow into stack tags
+    automatically; each stack tag has to be declared here.
+  </dd>
+
+  <dt>`stack_policy`</dt>
+  <dd>
+    Protects specific resources from update during `UpdateStack`. Provide the
+    policy one of two mutually exclusive ways; setting both `file` and `body`
+    is a validation error:
+
+    - `stack_policy.file` — the path to a stack policy JSON document, relative
+      to the component directory under the base path. Atmos uses the file verbatim.
+    - `stack_policy.body` — an inline stack policy, either a JSON string or a
+      YAML map. A map is serialized to JSON; a string is used as written. An
+      inline body needs no component directory, and Atmos renders it with Go
+      templates and YAML functions the same way it renders an inline
+      `template`.
+
+    Atmos installs the policy before it executes an update, so the policy
+    governs that update. For a new stack, it installs the policy after the
+    create succeeds.
+  </dd>
+
+  <dt>`role_arn`</dt>
+  <dd>IAM role ARN that CloudFormation assumes to deploy the stack.</dd>
+
+  <dt>`notification_arns`</dt>
+  <dd>SNS topic ARNs that CloudFormation publishes stack events to.</dd>
+
+  <dt>`disable_rollback`</dt>
+  <dd>Prevents automatic rollback on stack creation failure.</dd>
+
+  <dt>`termination_protection`</dt>
+  <dd>
+    Prevents the stack from being deleted. `atmos aws cloudformation delete`
+    respects this and fails with an actionable hint instead of silently
+    disabling it — pass `--disable-termination-protection` to delete anyway.
+    Setting this to `false` and re-applying does not disable protection: apply
+    only ever turns protection on, never off.
+  </dd>
+
+  <dt>`timeout_in_minutes`</dt>
+  <dd>
+    Accepted for compatibility, but ignored with a warning: the CloudFormation
+    changeset APIs do not support a stack timeout. Atmos stops watching after
+    60 minutes; this does not cancel the AWS operation.
+  </dd>
+</dl>
+
+## Example
+
+<File title="stacks/catalog/vpc.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    vpc:
+      path: template.yaml
+      stack_name: "{{ .vars.stage }}-vpc"
+      parameters:
+        CidrBlock: "10.0.0.0/16"
+        AvailabilityZones:
+          - us-east-1a
+          - us-east-1b
+      capabilities:
+        - CAPABILITY_IAM
+      tags:
+        team: platform
+      stack_policy:
+        file: stack-policy.json
+      termination_protection: true
+      dependencies:
+        components:
+          - vpc-flow-logs
+```
+</File>
+
+Inline templates skip the on-disk file entirely and support two forms — a
+literal string body, or a structured map:
+
+<File title="stacks/catalog/bucket.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    bucket-inline-string:
+      stack_name: "{{ .vars.stage }}-bucket"
+      template: |
+        AWSTemplateFormatVersion: '2010-09-09'
+        Resources:
+          Bucket:
+            Type: AWS::S3::Bucket
+            Properties:
+              BucketName: "{{ .vars.stage }}-bucket"
+
+    bucket-inline-map:
+      stack_name: "{{ .vars.stage }}-bucket-map"
+      template:
+        AWSTemplateFormatVersion: "2010-09-09"
+        Resources:
+          Bucket:
+            Type: AWS::S3::Bucket
+            Properties:
+              BucketName: "{{ .vars.stage }}-bucket-map"
+```
+</File>
+
+## Parameters
+
+Use a map for named parameter values:
+
+```yaml
+parameters:
+  Environment: dev
+  AvailabilityZones: [us-east-1a, us-east-1b]
+```
+
+Atmos converts scalar values to strings and joins list values with commas.
+An invalid parameter shape or a null value is an error. Use `""` for an
+intentional empty string. If an output dependency is unavailable, deploy its
+component first or supply an explicit fallback.
+
+You can also import an AWS CLI parameter array or the `Parameters` section of
+a Rain configuration file:
+
+```yaml
+parameters: !include dev-parameters.json
+# For a Rain configuration file:
+# parameters: !include rain-config.yaml .Parameters
+```
+
+Atmos uses the configured values on each deployment. To retain a deployed value
+on an update, use the list form with `UsePreviousValue: true` and omit
+`ParameterValue` for that entry:
+
+```yaml
+parameters:
+  - ParameterKey: Environment
+    ParameterValue: dev
+  - ParameterKey: DatabasePassword
+    UsePreviousValue: true
+```
+
+## Lifecycle Hooks
+
+These commands fire component hooks:
+
+| Commands | Event suffix |
+|---|---|
+| `diff`, `plan` | `aws/cloudformation.diff` |
+| `apply`, `deploy` | `aws/cloudformation.apply` |
+| `delete` | `aws/cloudformation.delete` |
+| `drift detect` | `aws/cloudformation.drift-detect` |
+| `drift describe` | `aws/cloudformation.drift-describe` |
+| `changeset create` | `aws/cloudformation.changeset-create` |
+| `changeset execute` | `aws/cloudformation.changeset-execute` |
+
+Prefix the suffix with `before.` or `after.`, such as
+`before.aws/cloudformation.apply`. The changeset events are separate from
+`apply`, so a hook listed only for `apply` does not fire around
+`changeset create` or `changeset execute`. Other CloudFormation commands,
+including `changeset list` and `changeset delete`, do not fire hooks. Use `--skip-hooks` to skip all hooks, or `--skip-hooks=name1,name2`
+to skip selected hooks. See [Hooks](/stacks/hooks).
+
+## Component Directory Structure
+
+CloudFormation components are located under
+`components."aws/cloudformation".base_path` from `atmos.yaml` (defaults to
+`components/cloudformation`):
+
+```text
+components/cloudformation/
+└── vpc/
+    ├── template.yaml
+    └── stack-policy.json
+```
+
+## Inline Templates and Templating
+
+An inline `template:` is stack configuration, so Atmos renders it before it
+sends the body to CloudFormation. Two mechanisms apply:
+
+- **Go templates** — values such as `{{ .vars.stage }}` and the rest of the
+  [template context](/templates), when `templates.settings.enabled: true` in
+  `atmos.yaml`.
+- **YAML functions** — `!env`, `!store`, `!aws.cloudformation.output`, and the
+  other [YAML functions](/functions/yaml), evaluated like in any other stack
+  value.
+
+A template file referenced by `path:` is used verbatim. Atmos does not render Go
+templates or YAML functions in it, so a `{{ }}` sequence in a file stays literal.
+Use an inline `template:` whenever a template needs per-stack values. Go
+templates work in both the string and map forms; YAML functions apply to values
+in the map form. CloudFormation's short-form intrinsics (`!Ref`, `!Sub`,
+`!GetAtt`, `!Join`, and the rest) are accepted in the map form and rewritten to
+their long form (`Ref:`, `Fn::Sub:`, `Fn::GetAtt:`) before the template is sent,
+so you can write either spelling:
+
+<File title="stacks/catalog/marker.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    marker:
+      stack_name: "{{ .vars.stage }}-marker"
+      template:
+        AWSTemplateFormatVersion: "2010-09-09"
+        Resources:
+          Marker:
+            Type: AWS::SSM::Parameter
+            Properties:
+              Name: "/atmos/{{ .vars.stage }}/marker"
+              Type: String
+              Value: !env MARKER_VALUE
+        Outputs:
+          ParameterName:
+            Value: !Ref Marker
+      stack_policy:
+        body:
+          Statement:
+            - Effect: Allow
+              Action: "Update:*"
+              Principal: "*"
+              Resource: "*"
+```
+</File>
+
+### Keep the template in a file and still use YAML functions
+
+To keep a template as a file on disk and still use Atmos YAML functions inside
+it, include the file into `template:` with the `| eval` option. The file keeps
+its CloudFormation short-form intrinsics, and every Atmos function in it is
+evaluated as if it were written in the manifest:
+
+<File title="stacks/catalog/app.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    app:
+      stack_name: "{{ .vars.stage }}-app"
+      template: !include ../../components/cloudformation/app/template.yaml | eval
+```
+</File>
+
+<File title="components/cloudformation/app/template.yaml">
+```yaml
+Resources:
+  Function:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "app-${Stage}"
+      Role: !GetAtt Role.Arn
+      Code:
+        ZipFile: !include ./src/handler.py
+      Tags: !include ./tags.yaml
+  Marker:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/app/${Stage}/owner"
+      Type: String
+      Value: !env DEPLOY_OWNER
+```
+</File>
+
+A nested `!include` inside the evaluated template resolves `./` and `../`
+relative to the template file itself (bare paths relative to `base_path`), so
+the template can reference files next to it the way Rain's `!Rain::Embed` did.
+A non-YAML file loads as a string, which is how a script lands in `ZipFile`. Without `| eval`, an included file is data: its CloudFormation
+intrinsics are still preserved, but an Atmos function tag inside it is dropped
+and only its argument remains, per the
+[`!include` contract](/functions/yaml/include#included-content-is-data). The
+`| eval` option is a deliberate opt-in because it lets the included file run any
+YAML function, including `!exec`.
+
+CloudFormation has its own dynamic references that use the same `{{ }}` syntax,
+such as `{{resolve:ssm:/my/param}}`. Escape the opening braces once so that
+Atmos emits them literally and CloudFormation receives the reference:
+
+```yaml
+template: |
+  Resources:
+    Param:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Type: String
+        Value: '{{ "{{" }}resolve:ssm:/my/param}}'
+```
+
+## Asset Packaging Hooks
+
+Use the [`archive` step](/steps/type/archive) in a
+[`kind: steps` hook](/stacks/hooks#kind-steps-run-ordered-steps) to package local
+code, followed by a [`publish` step](/steps/type/publish) to upload it. The example
+requires an existing S3 bucket accessible to the component's credentials.
+
+Add these fields to the CloudFormation component. Its template must declare
+`ArtifactBucket` and `ArtifactKey` parameters and use them for the Lambda
+resource's `Code.S3Bucket` and `Code.S3Key`:
+
+```yaml
+vars:
+  artifact_bucket: acme-lambda-artifacts
+  artifact_key: lambda/releases/v1/handler.zip
+parameters:
+  ArtifactBucket: "{{ .vars.artifact_bucket }}"
+  ArtifactKey: "{{ .vars.artifact_key }}"
+hooks:
+  package-lambda:
+    events: [before.aws/cloudformation.diff, before.aws/cloudformation.apply]
+    kind: steps
+    on_failure: fail
+    with:
+      - type: archive
+        source: src/
+        destination: handler.zip
+        mtime: epoch
+      - type: publish
+        source: handler.zip
+        destination: "{{ .vars.artifact_key }}"
+        target:
+          kind: aws/s3
+          bucket: "{{ .vars.artifact_bucket }}"
+          region: us-east-1
+```
+
+Enable Go templating in `atmos.yaml` for the expressions above. Relative paths
+resolve from the component directory. Use a new artifact key for each release
+so a code change also changes the CloudFormation parameter.
+
+These hooks run for `diff`/`plan` and `apply`/`deploy`, so a real preview also
+builds and uploads the archive. Dry-run skips hooks. To package the artifact
+when you create or execute a named changeset, add the changeset events to the
+same hook so the changeset never references an artifact that was not uploaded:
+
+```yaml
+hooks:
+  package-lambda:
+    events:
+      - before.aws/cloudformation.diff
+      - before.aws/cloudformation.apply
+      - before.aws/cloudformation.changeset-create
+```
+
+List `before.aws/cloudformation.changeset-execute` as well if the changeset
+might be created by a different run and you want the archive rebuilt on execute.
+
+The upload uses the component's resolved AWS identity. An S3 delivery target's
+identity applies to template delivery, so grant the component identity access
+to the artifact bucket as well. Unchanged artifacts are skipped; template asset
+references must still be configured explicitly.
+
+For a runnable build, test, publish, and deploy pipeline, see the
+[advanced CloudFormation example](/examples/cloudformation-advanced). Its
+`after.aws/cloudformation.apply` hook uses the [`http` step](/steps/type/http)
+to verify the deployed Lambda's response in Floci.
+
+## Source Provisioning
+
+Use `source` to download a template or component directory before an operation
+needs its local files. Manage downloads with the
+[`source` commands](/cli/commands/aws/cloudformation/source).
+
+### Source Formats
+
+A source accepts a URI string or a map:
+
+```yaml
+source: github.com/acme/cfn-templates.git//vpc?ref=1.2.0
+```
+
+<File title="stacks/catalog/vpc.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    vpc:
+      stack_name: vpc-dev
+      source:
+        uri: github.com/acme/cfn-templates.git//vpc
+        version: 1.2.0
+      path: template.yaml
+```
+</File>
+
+A directory source downloads the template, stack policy, and other files.
+The component's `path` is relative to that directory.
+
+A single-file source can omit `path`:
+
+<File title="stacks/catalog/dns.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    dns:
+      stack_name: dns-dev
+      source:
+        uri: https://raw.githubusercontent.com/acme/cfn-templates/v1.2.0/dns.yaml
+```
+</File>
+
+Atmos uses the URI's filename for a single-file download. After provisioning,
+it infers `path` only when the result contains one regular file at its root,
+excluding provisioner metadata. Set `path` explicitly for nested or ambiguous
+contents. Dry-run does not download files or infer a path.
+
+### Source Fields
+
+<dl>
+  <dt>`uri` <em>(required in map form)</em></dt>
+  <dd>Source location. Supports Git, HTTP archives or files, S3, and OCI sources.</dd>
+
+  <dt>`version`</dt>
+  <dd>Git tag, branch, or commit. Appended as `?ref=` when the URI has no ref.
+  For HTTP, S3, or OCI sources, put the version in the URI instead.</dd>
+
+  <dt>`included_paths`</dt>
+  <dd>Glob patterns selecting files to copy. Omit to include all files.</dd>
+
+  <dt>`excluded_paths`</dt>
+  <dd>Glob patterns excluding files after inclusion filters are applied.</dd>
+
+  <dt>`ttl`</dt>
+  <dd>Cache duration, such as `"0s"`, `"1h"`, `"7d"`, or `"daily"`.
+  See [Caching and Refresh](#caching-and-refresh).</dd>
+
+  <dt>`retry`</dt>
+  <dd>Download retry settings: `max_attempts`, `initial_delay`, `max_delay`,
+  `backoff_strategy` (`exponential`, `linear`, or `constant`), `multiplier`,
+  `random_jitter`, and `max_elapsed_time`.</dd>
+</dl>
+
+### Private S3 Sources
+
+Use an S3 URI for authenticated downloads:
+
+```yaml
+source:
+  uri: s3://my-cfn-templates/vpc.yaml?region=us-east-2
+```
+
+The `s3::https://s3.us-east-2.amazonaws.com/bucket/key` form also supports S3
+authentication. A plain `https://` URI uses HTTP retrieval.
+
+Downloads use the component's resolved AWS identity, including downloads needed
+by `render` and `fmt`. Credentials are scoped to the download request. Configure
+credentials through [Atmos Auth](/stacks/auth); source URLs reject the
+`aws_profile`, `aws_access_key_id`, `aws_access_key_secret`, and `aws_access_token`
+query parameters.
+
+#### Bucket Region and Access Errors
+
+Set `?region=` when the bucket is outside the identity's default region.
+A region-mismatch error identifies the bucket's region.
+
+For an S3 `403` response, check both object permissions and the object key.
+S3 can return `403` for a missing key when the identity lacks `s3:ListBucket`.
+
+### Caching and Refresh
+
+Set `source.ttl` on the component to refresh remote sources after an interval.
+Use `"0s"` to refresh on each invocation. A component value overrides the project
+default in `components."aws/cloudformation".source.ttl`:
+
+<File title="atmos.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    source:
+      ttl: 1h
+```
+</File>
+
+A fresh cached source needs no download authentication. Without a TTL, shared
+component directories are reused until an explicit refresh. Workdirs also
+refresh when the source URI or version changes.
+
+```shell
+atmos aws cloudformation source pull vpc -s dev --force
+```
+
+Shared directories use the provisioning timestamp recorded by Atmos for TTL
+expiry. For an older download without that record, run `source pull --force`
+once to enable automatic refresh. Local shared directories are not refreshed
+by a remote-source TTL.
+
+Operations that use a local template download the source when needed. Reads of
+a deployed stack and stack deletion do not download it. Named changeset
+execution may still need source files for a configured stack policy.
+
+### Component Directories
+
+Sources are downloaded under the configured CloudFormation `base_path`
+(default: `components/cloudformation`). The directory name comes from
+`metadata.component`, or the instance name when no base component is set.
+Instances using the same base component share that directory.
+
+The component path must be relative and remain inside the components directory.
+The `source pull` and `source delete` commands use this same destination.
+
+Archives containing symbolic or hard links produce empty regular files in
+place of those links. Atmos logs a warning naming the first link.
+
+### Workdirs
+
+Set `provision.workdir.enabled: true` to download a source into a separate
+workdir for each component instance:
+
+```yaml
+source:
+  uri: github.com/acme/cfn-templates.git//vpc?ref=1.2.0
+provision:
+  workdir:
+    enabled: true
+```
+
+CloudFormation workdirs require `source`. Enabling a workdir for a local
+component without a source fails validation. Remove the setting or add a source.
+
+:::note Vendoring manifests
+CloudFormation components use `source` for remote templates. They do not support
+`vendor.yaml` manifests with `atmos vendor pull`.
+:::
+
+## Delivery Targets
+
+A delivery target controls where Atmos sends a template. Select a named target
+with `--target`, or set `provision.default`. Without either, Atmos deploys
+directly to CloudFormation using the implicit `default` target.
+
+<dl>
+  <dt>`kind: aws/cloudformation`</dt>
+  <dd>Deploy a stack. An explicit target accepts `kind`, `auth`, and `packaging`.
+  Set the stack region through
+  [`settings.aws_cloudformation.region`](/cli/configuration/components/aws-cloudformation#region-resolution).</dd>
+
+  <dt>`kind: aws/s3`</dt>
+  <dd>Upload the template without deploying a stack. Also supplies the packaging
+  bucket for templates over the 51,200-byte inline limit.</dd>
+
+  <dt>`kind: git`</dt>
+  <dd>Commit the template to a repository declared in `git.repositories`.
+  A separate pipeline can review and deploy the committed template.</dd>
+
+  <dt>`kind: aws/stackset`</dt>
+  <dd>Configure multi-account and multi-region StackSets. Use the
+  [`stackset` commands](/cli/commands/aws/cloudformation/stackset);
+  this kind cannot be selected with `apply --target`.</dd>
+</dl>
+
+### Direct Deployment
+
+Declare a direct target when you need a target-specific identity or packaging
+bucket:
+
+```yaml
+provision:
+  default: direct
+  targets:
+    direct:
+      kind: aws/cloudformation
+      packaging: artifacts
+    artifacts:
+      kind: aws/s3
+      bucket: my-cfn-artifacts
+      region: us-east-1
+```
+
+The `--target` flag overrides `provision.default` for one invocation. Naming a
+direct target `default` replaces the implicit target.
+
+### S3 Targets
+
+<dl>
+  <dt>`bucket` <em>(required)</em></dt>
+  <dd>Bucket to receive the template.</dd>
+
+  <dt>`region` <em>(required for template uploads)</em></dt>
+  <dd>Bucket region. Atmos uses it to construct the HTTPS template URL passed
+  to CloudFormation.</dd>
+
+  <dt>`prefix`</dt>
+  <dd>Object-key prefix. Leading and trailing slashes are removed.</dd>
+</dl>
+
+```yaml
+provision:
+  targets:
+    artifacts:
+      kind: aws/s3
+      bucket: my-cfn-artifacts
+      region: us-east-1
+      prefix: templates
+```
+
+Uploads use `<prefix>/<stack>/<component>/template-<digest>.yaml` and a
+`.metadata.json` sidecar. Atmos reuses an object when its key and digest match,
+so repeated uploads do not create extra versions of identical templates.
+A publish-only `apply --target artifacts` reports both the S3 URI and HTTPS URL.
+
+Packaging uploads the template body. It does not upload local Lambda archives
+or rewrite nested-template paths. Use [asset-packaging hooks](#asset-packaging-hooks) to build and upload them,
+and reference their S3 locations in the template.
+
+### Automatic Bucket Provisioning
+
+Create the bucket with
+[`backend create`](/cli/commands/aws/cloudformation/backend/create), or enable
+automatic creation:
+
+```yaml
+provision:
+  backend:
+    enabled: true
+  targets:
+    artifacts:
+      kind: aws/s3
+      bucket: my-cfn-artifacts
+      region: us-east-1
+```
+
+Only `apply` and `deploy` create missing buckets automatically. This check does
+not change an existing bucket. Explicit `backend create` and `backend update`
+reapply versioning, encryption, public-access blocking, and tags.
+
+The `validate`, `diff`/`plan`, and `changeset create` commands can upload oversized
+templates, but do not create buckets. Create the bucket before running them.
+
+When the bucket does not exist and `provision.backend.enabled` is not set, every
+command that packages a template (`plan`, `diff`, `validate`, `changeset create`,
+`apply`, and `deploy`) stops before uploading. Each reports that the packaging
+bucket does not exist and suggests running `atmos aws cloudformation backend create`
+or setting `provision.backend.enabled: true`.
+
+### StackSet Targets
+
+```yaml
+provision:
+  targets:
+    multi-account:
+      kind: aws/stackset
+      accounts:
+        - "111111111111"
+        - "222222222222"
+      regions:
+        - us-east-1
+        - us-west-2
+      permission_model: SELF_MANAGED
+      administration_role_arn: arn:aws:iam::111111111111:role/AWSCloudFormationStackSetAdministrationRole
+      execution_role_name: AWSCloudFormationStackSetExecutionRole
+```
+
+<dl>
+  <dt>`accounts`</dt>
+  <dd>Target AWS account IDs. Quote each ID as a 12-digit string.</dd>
+
+  <dt>`regions`</dt>
+  <dd>Target AWS regions for stack instances.</dd>
+
+  <dt>`permission_model`</dt>
+  <dd>`SELF_MANAGED` (default) or `SERVICE_MANAGED`. Atmos supports instance
+  targeting only with `SELF_MANAGED`. A service-managed target with both
+  `accounts` and `regions` fails validation. Manage service-managed instances
+  through AWS CloudFormation.</dd>
+
+  <dt>`administration_role_arn`</dt>
+  <dd>Administration role ARN for self-managed StackSets.</dd>
+
+  <dt>`execution_role_name`</dt>
+  <dd>Role name assumed in each target account for self-managed StackSets.</dd>
+</dl>
+
+The `stackset create` command creates instances when both `accounts` and
+`regions` are configured. The `stackset update` command updates existing
+instances without changing their account or region membership.
+
+Only `stackset create` and `stackset update` resolve a target. The `delete` and
+`instances` subcommands use `stack_name` directly. See
+[StackSet target resolution](/cli/commands/aws/cloudformation/stackset#target-resolution).
+
+### Choosing the Packaging Bucket
+
+Atmos selects the S3 packaging target in this order:
+
+1. Use the selected target when its kind is `aws/s3`.
+2. Use the only S3 target when exactly one is declared.
+3. With multiple S3 targets, use the selected deployment target's `packaging` field.
+
+The implicit direct target cannot specify `packaging`. With multiple buckets,
+declare an explicit direct target:
+
+```yaml
+provision:
+  default: direct
+  targets:
+    direct:
+      kind: aws/cloudformation
+      packaging: artifacts
+    artifacts:
+      kind: aws/s3
+      bucket: my-cfn-artifacts
+      region: us-east-1
+    archive:
+      kind: aws/s3
+      bucket: my-cfn-archive
+      region: us-east-1
+```
+
+Git targets also accept `packaging`. An unresolved or ambiguous packaging target
+is an error.
+
+### Dry Run
+
+Use `--dry-run` to validate static configuration without authentication,
+source downloads, hooks, template evaluation, or AWS calls.
+
+Validation checks known values for:
+
+- Target names, kinds, and authentication settings.
+- Required S3 bucket and region settings.
+- Packaging for a template that exceeds the inline size limit.
+- StackSet permission models, account IDs, and regions.
+
+Checks that require Go templates or YAML functions are deferred. See
+[execution controls](/cli/commands/aws/cloudformation#execution-controls).
+
+### Target Authentication
+
+A target's `auth` block selects the identity for that destination. An explicit
+`--identity` or `ATMOS_IDENTITY` overrides target defaults for direct commands.
+Output references have a separate rule, described below.
+
+```yaml
+provision:
+  targets:
+    artifacts:
+      kind: aws/s3
+      bucket: shared-cfn-artifacts
+      region: us-east-2
+      auth:
+        identity: shared-services
+```
+
+Define `shared-services` in global or component auth, or declare it fully under
+the target's `auth.identities`. You can also select an identity by marking it
+`default: true` in that map.
+
+#### Identity by Operation
+
+| Operation | Identity used |
+|---|---|
+| Source download | Component's resolved identity |
+| S3 upload, automatic bucket creation, `backend` commands | S3 target's identity |
+| Direct stack operations | Selected or default `aws/cloudformation` target's identity |
+| Cross-component output reference | Producer's default direct target's declared identity; see [Output references](#output-references) |
+| `stackset create`, `stackset update` | Selected StackSet target's identity |
+| `stackset delete`, `stackset instances` | Component/CLI identity; pass `--identity` for another account |
+| Git delivery | Target identity, or repository identity when no target/CLI override is set |
+
+Target authentication is isolated from component hooks and secret lookups.
+An authentication failure stops the command; Atmos does not retry with the
+component's credentials.
+
+#### Validation
+
+Atmos validates the selected target's `auth` block and every direct target's
+configuration keys before AWS calls, including during dry-run.
+
+- Use supported `auth` keys. A misspelling such as `identitty` is an error.
+- Select an identity with `auth.identity`, `default: true`, or `--identity`
+  when declaring `auth.identities`.
+- Direct targets accept only `kind`, `auth`, and `packaging`. Set their region
+  on the component, using
+  [region resolution](/cli/configuration/components/aws-cloudformation#region-resolution).
+
+Errors identify the affected target, component, stack, and identity and provide
+a correction hint.
+
+#### Output references
+
+Both `!aws.cloudformation.output` and `atmos.Component(...).outputs` use the
+producer's default direct target identity. That declared identity takes
+precedence over the consumer's `--identity` or `ATMOS_IDENTITY`.
+
+When the producer's target declares no auth, the lookup uses the caller's
+credentials. Authentication failures do not fall back to a same-named stack in
+another account. See the
+[output function reference](/functions/yaml/aws.cloudformation.output).
+
+#### Disabling authentication
+
+Use `--identity=false` or `ATMOS_IDENTITY=false` to disable Atmos authentication.
+The AWS SDK default credential chain then applies. Atmos warns once per target
+when bypassing a declared identity.
+
+## Related
+
+- [CloudFormation command reference](/cli/commands/aws/cloudformation)
+- [CloudFormation project configuration](/cli/configuration/components/aws-cloudformation)
+- [Migrating from Rain](/migration/rain)
+- [Component dependencies](/stacks/dependencies/components)

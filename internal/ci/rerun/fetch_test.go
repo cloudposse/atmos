@@ -34,7 +34,7 @@ func TestFetchJobs(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		client := NewMockRESTClient(ctrl)
 		client.EXPECT().
-			RequestWithContext(gomock.Any(), http.MethodGet, "repos/cloudposse/atmos/actions/runs/1/attempts/1/jobs?per_page=100", nil).
+			RequestWithContext(gomock.Any(), http.MethodGet, "repos/cloudposse/atmos/actions/runs/1/attempts/1/jobs?per_page=30", nil).
 			Return(jsonResponse(200, `{"jobs":[{"name":"Build","status":"completed","conclusion":"failure"}]}`, nil), nil) //nolint:bodyclose // closed by the code under test, not this fixture.
 
 		jobs, err := FetchJobs(context.Background(), client, "cloudposse/atmos", "1", "1")
@@ -47,11 +47,11 @@ func TestFetchJobs(t *testing.T) {
 		t.Parallel()
 		ctrl := gomock.NewController(t)
 		client := NewMockRESTClient(ctrl)
-		nextURL := "https://api.github.com/repos/cloudposse/atmos/actions/runs/1/attempts/1/jobs?per_page=100&page=2"
+		nextURL := "https://api.github.com/repos/cloudposse/atmos/actions/runs/1/attempts/1/jobs?per_page=30&page=2"
 
 		gomock.InOrder(
 			client.EXPECT().
-				RequestWithContext(gomock.Any(), http.MethodGet, "repos/cloudposse/atmos/actions/runs/1/attempts/1/jobs?per_page=100", nil).
+				RequestWithContext(gomock.Any(), http.MethodGet, "repos/cloudposse/atmos/actions/runs/1/attempts/1/jobs?per_page=30", nil).
 				Return(jsonResponse(200, `{"jobs":[{"name":"Build (linux)","status":"completed","conclusion":"success"}]}`, //nolint:bodyclose // closed by the code under test, not this fixture.
 					http.Header{"Link": {`<` + nextURL + `>; rel="next", <https://api.github.com/x?page=2>; rel="last"`}}), nil),
 			client.EXPECT().

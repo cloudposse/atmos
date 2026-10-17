@@ -781,6 +781,8 @@ func componentBasePath(atmosConfig *schema.AtmosConfiguration, componentType str
 		return atmosConfig.KubernetesDirAbsolutePath
 	case cfg.HelmComponentType:
 		return atmosConfig.HelmDirAbsolutePath
+	case cfg.CloudFormationComponentType:
+		return atmosConfig.CloudFormationDirAbsolutePath
 	default:
 		return ""
 	}

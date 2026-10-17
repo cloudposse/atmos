@@ -63,7 +63,7 @@ var (
 	promptForValueFn = promptForSecretValue
 
 	// Interactively confirm a destructive action.
-	confirmActionFn = confirmAction
+	confirmActionFn = confirmActionInteractive
 
 	// Run a command with the resolved environment (used by `secret exec`).
 	runCommandFn = shell.RunCommand

@@ -51,7 +51,7 @@ function resolve(item) {
   const id = item.id || item.link?.id;
   return {
     ...item,
-    href: docs.get(id),
+    href: item.link?.href || docs.get(id),
     docId: id,
     items: item.items?.map(resolve),
   };
@@ -62,6 +62,7 @@ test("component fields sit below a named instance, never beside component types"
     at("components").items.map((item) => item.label),
     [
       "ansible",
+      "aws/cloudformation",
       "container",
       "emulator",
       "helm",
@@ -77,6 +78,10 @@ test("component fields sit below a named instance, never beside component types"
       ["<name>"],
     );
     assert.ok(at("components", kind.label, "<name>", "metadata"));
+    assert.deepEqual(kind.items[0].link, {
+      type: "doc",
+      id: "stacks/components/name",
+    });
   }
   assert.ok(at("components", "terraform", "<name>", "mocks"));
   assert.equal(at("mocks"), undefined);
@@ -142,6 +147,8 @@ test("shared fields retain canonical pages and use references for repeated leave
   );
   for (const id of ids) assert.ok(docs.has(id), `Unknown document ${id}`);
   for (const id of docs.keys()) {
+    // The docs-only CloudFormation preview becomes navigable with its implementation.
+    if (id === "stacks/components/aws-cloudformation" && !at("components", "aws/cloudformation")) continue;
     if (!["stacks/share-data", "stacks/remote-state"].includes(id))
       assert.ok(ids.has(id), `Unreachable reference ${id}`);
   }
@@ -204,7 +211,7 @@ test("supported-type cards include each component type without configuration fie
     source.indexOf("## Component Schema"),
   );
   const kinds = [
-    ...cards.matchAll(/href: '\/stacks\/components\/([^']+)'/g),
+    ...cards.matchAll(/href: '\/stacks\/components\/[^']+', label: '([^']+)'/g),
   ].map((match) => match[1]);
   assert.deepEqual(
     kinds,
