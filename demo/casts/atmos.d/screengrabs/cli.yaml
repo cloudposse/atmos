@@ -122,6 +122,14 @@ commands:
           atmos aws cloudformation source describe --help
           atmos aws cloudformation source list --help
           atmos aws cloudformation source pull --help
+          atmos aws cloudformation logs --help
+          atmos aws cloudformation stackset --help
+          atmos aws cloudformation stackset create --help
+          atmos aws cloudformation stackset delete --help
+          atmos aws cloudformation stackset instances --help
+          atmos aws cloudformation stackset update --help
+          atmos aws cloudformation tree --help
+          atmos aws cloudformation watch --help
           atmos completion --help
           atmos describe --help
           atmos describe affected --help
@@ -551,6 +559,14 @@ commands:
           atmos aws cloudformation source describe --help
           atmos aws cloudformation source list --help
           atmos aws cloudformation source pull --help
+          atmos aws cloudformation logs --help
+          atmos aws cloudformation stackset --help
+          atmos aws cloudformation stackset create --help
+          atmos aws cloudformation stackset delete --help
+          atmos aws cloudformation stackset instances --help
+          atmos aws cloudformation stackset update --help
+          atmos aws cloudformation tree --help
+          atmos aws cloudformation watch --help
           atmos completion --help
           atmos describe --help
           atmos describe affected --help
