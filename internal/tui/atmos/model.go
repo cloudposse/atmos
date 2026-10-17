@@ -94,6 +94,15 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.KeyMsg:
+		if app.columnViews[app.columnPointer].list.SettingFilter() {
+			if key.Matches(message, keys.CtrlC) {
+				app.quit = true
+				return app, tea.Quit
+			}
+			res, cmd := app.columnViews[app.columnPointer].Update(msg)
+			app.columnViews[app.columnPointer] = *res.(*columnView)
+			return app, cmd
+		}
 		switch {
 		case key.Matches(message, keys.CtrlC):
 			app.quit = true
