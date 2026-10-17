@@ -6,6 +6,8 @@ id: diff
 description: Preview the changes an apply would make to a CloudFormation stack.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
@@ -13,14 +15,17 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 import SkipHooksFlag from '@site/docs/cli/commands/aws/cloudformation/_partials/_skip-hooks-flag.mdx'
 
 <Intro>
-  Create a CloudFormation changeset for the component, render the predicted
-  changes, and delete the changeset again without executing it. `diff` authenticates and calls the
-  CloudFormation API — it previews what `apply` would actually do to the live
-  stack, unlike [`render`](/cli/commands/aws/cloudformation/render), which never
-  leaves the local template.
+Preview changes to a deployed CloudFormation stack using a temporary changeset.
+Atmos displays the changes and removes the changeset without executing it.
+This command authenticates and calls AWS.
 </Intro>
 
 <Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
 
 <CastPlayer title="atmos aws cloudformation diff --help" src="/casts/screengrabs/atmos-aws-cloudformation-diff--help.cast" static chrome />
 
@@ -29,6 +34,8 @@ import SkipHooksFlag from '@site/docs/cli/commands/aws/cloudformation/_partials/
 ```shell
 atmos aws cloudformation diff <component> --stack <stack> [options]
 ```
+
+## Examples
 
 ```shell
 atmos aws cloudformation diff vpc -s plat-ue2-dev
@@ -41,37 +48,25 @@ atmos aws cloudformation diff --all -s plat-ue2-dev
 atmos aws cloudformation diff --affected --base origin/main
 ```
 
-Diff components filtered by tags or labels (composes with `--all`/`--affected` to narrow the selected set further):
+Diff components selected by tags or labels:
 
 ```shell
 atmos aws cloudformation diff --all --tags production,tier-1
 atmos aws cloudformation diff --affected --labels cost-center=platform
 ```
 
-## Behavior
+## Arguments
 
-`diff` leaves nothing behind. It deletes the preview changeset after rendering it,
-including when the changeset would change nothing (CloudFormation reports that as
-a `FAILED` changeset, "didn't contain changes").
-
-For a component that has never been deployed, CloudFormation registers an empty
-`REVIEW_IN_PROGRESS` stack as soon as the changeset is created. When `diff`
-created that stack itself, it deletes it again after removing the changeset,
-having first confirmed it is still `REVIEW_IN_PROGRESS`, so a preview never
-leaves a stub that `list` would show as managed. A stack that already existed,
-including an empty `REVIEW_IN_PROGRESS` stub left by an earlier run, is never
-deleted.
-
-A stack in `ROLLBACK_COMPLETE` cannot be updated, so `diff` fails with an
-explanation and a hint to run
-[`atmos aws cloudformation delete`](/cli/commands/aws/cloudformation/delete) for
-the component and apply again.
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
 
 ## Flags
 
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
-  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
 
 <SelectionFlags />
 
@@ -84,3 +79,19 @@ the component and apply again.
 [`atmos aws cloudformation plan`](/cli/commands/aws/cloudformation/plan) is an alias for `diff`.
 Both fire the `before.aws/cloudformation.diff`/`after.aws/cloudformation.diff` hook events.
 :::
+
+## Behavior
+
+Atmos deletes the preview changeset after displaying it, including an empty
+changeset or a failed render.
+
+### New Stacks
+
+Previewing a new stack creates an empty `REVIEW_IN_PROGRESS` stack. Atmos
+removes it after the preview if this invocation created it and it remains in
+that state. Stacks that already existed are preserved.
+
+### Failed Stack Creation
+
+A stack in `ROLLBACK_COMPLETE` cannot be updated. The command fails with a hint
+to [delete the failed stack](/cli/commands/aws/cloudformation/delete) and apply again.

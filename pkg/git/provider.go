@@ -188,3 +188,9 @@ type Provider interface {
 	Commit(ctx context.Context, opts *CommitOptions) (*CommitResult, error)
 	Push(ctx context.Context, opts *PushOptions) error
 }
+
+// UnpushedCommitChecker optionally identifies local commits absent from the
+// configured remote branch, allowing publishing retries without redundant pushes.
+type UnpushedCommitChecker interface {
+	HasUnpushedCommits(context.Context, RepoContext) (bool, error)
+}

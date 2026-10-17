@@ -4220,7 +4220,7 @@
         },
         "destination": {
           "type": "string",
-          "description": "Archive step type: archive file to write when packing, or directory to extract into when extracting."
+          "description": "Archive output/extraction path, or publish destination relative to the target root."
         },
         "subpath": {
           "type": "string",
@@ -4290,6 +4290,68 @@
               "items": {
                 "type": "string"
               }
+            }
+          ]
+        },
+        "target": {
+          "description": "Publish step: named component provision target or inline target definition.",
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "object",
+              "required": [
+                "kind"
+              ],
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "bucket": {
+                  "type": "string"
+                },
+                "prefix": {
+                  "type": "string"
+                },
+                "region": {
+                  "type": "string"
+                },
+                "content_type": {
+                  "type": "string"
+                },
+                "cache_control": {
+                  "type": "string"
+                },
+                "repository": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "auth": {
+                  "$ref": "#/definitions/provision_target_auth"
+                },
+                "commit": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "signing": {
+                      "type": "string",
+                      "enum": [
+                        "auto",
+                        "always",
+                        "never"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
             }
           ]
         }

@@ -74,7 +74,13 @@ test('the repository index includes all native overviews and preserves Terraform
   const items = componentLibraryItems();
   validateSidebars({components: items});
   assert.deepEqual(items.filter(item => item.customProps.componentType?.native).map(item => item.customProps.componentType.id),
-    ['terraform', 'kubernetes', 'helm', 'helmfile', 'packer', 'ansible', 'container', 'aws/cloudformation', 'emulator']);
+    ['terraform', 'aws/cloudformation', 'kubernetes', 'helm', 'helmfile', 'packer', 'ansible', 'container', 'emulator']);
+  assert.equal(items[1].label, 'CloudFormation');
+  assert.equal(items[1].className, undefined);
+  for (const item of items.filter(item => item.customProps.componentType?.native)) {
+    assert.notEqual(item.type, 'link', `${item.label} should open a Component Library overview`);
+    assert.match(item.id || item.link?.id, /^components\//);
+  }
   assert.deepEqual(items[0].items.map(item => item.label),
     ['Stack Configuration', 'Root Modules', 'State Backends', 'Workspaces', 'Provider Generation', 'Planfiles', 'Brownfield']);
   assert.equal(items.some(item => item.label === 'metadata' || item.label === 'provision'), false);

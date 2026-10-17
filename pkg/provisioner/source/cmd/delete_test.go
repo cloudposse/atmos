@@ -106,7 +106,7 @@ func TestDeleteSourceDirectory_DirectoryNotExist(t *testing.T) {
 	}
 
 	// Target directory does not exist. Use force=true to skip interactive prompt.
-	err := deleteSourceDirectory(atmosConfig, "terraform", "nonexistent", componentConfig, true)
+	err := deleteSourceDirectory(atmosConfig, testDeleteRequest("terraform", "nonexistent", componentConfig))
 
 	// Should return nil (no error, just a warning).
 	assert.NoError(t, err)
@@ -122,6 +122,8 @@ func TestDeleteSourceDirectory_Success(t *testing.T) {
 	require.NoError(t, err)
 	err = os.WriteFile(filepath.Join(targetDir, "main.tf"), []byte("# test"), 0o644)
 	require.NoError(t, err)
+	markProvisioned(t, targetDir)
+	stubDescribeStacks(t, nil)
 
 	atmosConfig := &schema.AtmosConfiguration{
 		Components: schema.Components{
@@ -138,7 +140,7 @@ func TestDeleteSourceDirectory_Success(t *testing.T) {
 	}
 
 	// Use force=true to skip interactive prompt.
-	err = deleteSourceDirectory(atmosConfig, "terraform", "vpc", componentConfig, true)
+	err = deleteSourceDirectory(atmosConfig, testDeleteRequest("terraform", "vpc", componentConfig))
 
 	require.NoError(t, err)
 
@@ -147,7 +149,7 @@ func TestDeleteSourceDirectory_Success(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "Directory should be deleted")
 }
 
-// TestInitDeleteContext_NoSource tests that initDeleteContext returns error when no source is configured.
+// TestInitDeleteContext_NoSource tests that loadSourceComponent returns error when no source is configured.
 func TestInitDeleteContext_NoSource(t *testing.T) {
 	// Save originals and restore after test.
 	origInitFunc := initCliConfigFunc
@@ -169,7 +171,7 @@ func TestInitDeleteContext_NoSource(t *testing.T) {
 		}, nil
 	}
 
-	atmosConfig, componentConfig, err := initDeleteContext("terraform", "vpc", "dev", nil)
+	atmosConfig, componentConfig, err := loadSourceComponent("terraform", "vpc", "dev", nil, deleteMissingSourceHint)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrSourceMissing)
@@ -205,7 +207,7 @@ func TestInitDeleteContext_Success(t *testing.T) {
 		}, nil
 	}
 
-	atmosConfig, componentConfig, err := initDeleteContext("terraform", "vpc", "dev", nil)
+	atmosConfig, componentConfig, err := loadSourceComponent("terraform", "vpc", "dev", nil, deleteMissingSourceHint)
 
 	require.NoError(t, err)
 	require.NotNil(t, atmosConfig)
@@ -213,7 +215,7 @@ func TestInitDeleteContext_Success(t *testing.T) {
 	assert.Equal(t, "components/terraform", atmosConfig.Components.Terraform.BasePath)
 }
 
-// Note: initDeleteContext uses cfg.InitCliConfig directly (not the mock function),
+// Note: loadSourceComponent uses cfg.InitCliConfig directly (not the mock function),
 // so testing with real config is done via integration tests.
 // The error paths are covered by the TestInitDeleteContext_NoSource and TestInitDeleteContext_Success tests
 // which mock describeTypedComponentFunc.
@@ -256,6 +258,8 @@ func TestExecuteDelete_NoForceNonTTY(t *testing.T) {
 	targetDir := filepath.Join(tempDir, "vpc")
 	err := os.MkdirAll(targetDir, 0o755)
 	require.NoError(t, err)
+	markProvisioned(t, targetDir)
+	stubDescribeStacks(t, nil)
 
 	// Mock config init.
 	initCliConfigFunc = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
@@ -299,7 +303,7 @@ func TestExecuteDelete_NoForceNonTTY(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrInteractiveNotAvailable)
 }
 
-// TestInitDeleteContext_ConfigInitError tests that initDeleteContext returns error when config init fails.
+// TestInitDeleteContext_ConfigInitError tests that loadSourceComponent returns error when config init fails.
 func TestInitDeleteContext_ConfigInitError(t *testing.T) {
 	// Save originals and restore after test.
 	origInitFunc := initCliConfigFunc
@@ -312,7 +316,7 @@ func TestInitDeleteContext_ConfigInitError(t *testing.T) {
 		return schema.AtmosConfiguration{}, assert.AnError
 	}
 
-	atmosConfig, componentConfig, err := initDeleteContext("terraform", "vpc", "dev", nil)
+	atmosConfig, componentConfig, err := loadSourceComponent("terraform", "vpc", "dev", nil, deleteMissingSourceHint)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrFailedToInitConfig)
@@ -320,7 +324,7 @@ func TestInitDeleteContext_ConfigInitError(t *testing.T) {
 	assert.Nil(t, componentConfig)
 }
 
-// TestInitDeleteContext_DescribeComponentError tests that initDeleteContext returns error when describe component fails.
+// TestInitDeleteContext_DescribeComponentError tests that loadSourceComponent returns error when describe component fails.
 func TestInitDeleteContext_DescribeComponentError(t *testing.T) {
 	// Save originals and restore after test.
 	origInitFunc := initCliConfigFunc
@@ -340,7 +344,7 @@ func TestInitDeleteContext_DescribeComponentError(t *testing.T) {
 		return nil, assert.AnError
 	}
 
-	atmosConfig, componentConfig, err := initDeleteContext("terraform", "vpc", "dev", nil)
+	atmosConfig, componentConfig, err := loadSourceComponent("terraform", "vpc", "dev", nil, deleteMissingSourceHint)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrDescribeComponent)
@@ -351,7 +355,7 @@ func TestInitDeleteContext_DescribeComponentError(t *testing.T) {
 // TestDeleteSourceDirectory_DetermineTargetError tests that deleteSourceDirectory returns error when target cannot be determined.
 func TestDeleteSourceDirectory_DetermineTargetError(t *testing.T) {
 	// Pass nil atmosConfig to trigger an error. Use force=true to skip interactive prompt.
-	err := deleteSourceDirectory(nil, "terraform", "vpc", map[string]any{}, true)
+	err := deleteSourceDirectory(nil, testDeleteRequest("terraform", "vpc", map[string]any{}))
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrSourceProvision)
@@ -374,6 +378,8 @@ func TestExecuteDelete_Success(t *testing.T) {
 	require.NoError(t, err)
 	err = os.WriteFile(filepath.Join(targetDir, "main.tf"), []byte("# test"), 0o644)
 	require.NoError(t, err)
+	markProvisioned(t, targetDir)
+	stubDescribeStacks(t, nil)
 
 	// Mock config init to return config with temp directory as base path.
 	initCliConfigFunc = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
