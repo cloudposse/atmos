@@ -83,7 +83,7 @@ jobs:
   # ensure the code builds...
   build:
     name: Build (${{ matrix.target }})
-    # windows-latest is the slowest target: it compiles this large dependency
+    # Windows is the slowest target: it compiles this large dependency
     # tree far slower than the Linux (self-hosted) and macOS runners. A cold
     # Go cache after dependency changes used to push the job past a tight
     # limit and get the run cancelled mid-save (see #2713's windows build
@@ -102,7 +102,10 @@ jobs:
           # backend also lets the acceptance shards reuse its artifacts.
           - os: "ubuntu-latest"
             target: linux
-          - os: "windows-latest"
+          # Go 1.26 can corrupt the heap on AMX runners, including Server
+          # 2022. The version-checked exception-reserve action below addresses
+          # golang/go#81238 while retaining the existing runner image.
+          - os: "windows-2022"
             target: windows
           - os: "macos-15"
             target: macos
@@ -209,6 +212,13 @@ jobs:
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: ./.github/actions/setup-go-cache
         id: go
+
+      # Hosted Intel AMX CPUs can overrun Go 1.26.9's exception reserve.
+      # Compile every Windows CI artifact with the same guarded workaround,
+      # including binaries later consumed by a different runner CPU model.
+      - name: Reserve Windows exception-stack space
+        if: matrix.target == 'windows' && ! github.event.pull_request.draft
+        uses: ./.github/actions/windows-exception-reserve
 
       - name: Set up Atmos bootstrap
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -343,9 +353,9 @@ jobs:
       matrix:
         flavor:
           - { os: "ubuntu-latest", target: linux }
-          - { os: "windows-latest", target: windows }
+          - { os: "windows-2022", target: windows }
           - { os: "macos-15", target: macos }
-    # windows-latest is the slowest target here too: the actual test finishes
+    # Windows is the slowest target here too: the actual test finishes
     # within its own 15m sub-step timeout, but the post-job Go module/build
     # cache save (tar + zstd) runs after that and is much slower on Windows,
     # so a flat 20m job budget can expire mid-save even though the test
@@ -498,6 +508,10 @@ jobs:
         uses: ./.github/actions/setup-go-cache
         id: go
 
+      - name: Reserve Windows exception-stack space
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        uses: ./.github/actions/windows-exception-reserve
+
       - name: Get dependencies
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
@@ -567,7 +581,7 @@ jobs:
         # Windows here (see this matrix's own history).
         flavor:
           - { os: "ubuntu-latest", target: linux, jobTimeout: 50, stepTimeout: 30, coverageStepTimeout: 40 }
-          - { os: "windows-latest", target: windows, jobTimeout: 50, stepTimeout: 40 }
+          - { os: "windows-2022", target: windows, jobTimeout: 50, stepTimeout: 40 }
           - { os: "macos-15", target: macos, jobTimeout: 40, stepTimeout: 30 }
         # tests/cli_test.go's TestCLICommands splits its ~388 CLI-driven subtests
         # across these shards by bin-packing each test case's workdir
@@ -731,6 +745,8 @@ jobs:
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         shell: pwsh
         run: |
+          # Preserve the host model when investigating Windows runtime heap corruption.
+          Get-CimInstance Win32_Processor | Select-Object Name, Manufacturer, NumberOfCores, NumberOfLogicalProcessors
           Write-Output "PATH=$Env:PATH"
           Write-Output "PATHEXT=$Env:PATHEXT"
           Get-ChildItem "${{ github.workspace }}"
@@ -741,6 +757,10 @@ jobs:
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: ./.github/actions/setup-go-cache
         id: go
+
+      - name: Reserve Windows exception-stack space
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        uses: ./.github/actions/windows-exception-reserve
 
       - name: Get dependencies
         # Windows runs precompiled acceptance binaries and lets its small source
@@ -765,6 +785,17 @@ jobs:
       # dogfoods Atmos's own schema validator (the engine behind `atmos validate schema`).
       # That runs in the unit/acceptance test jobs, so no separate CI step is needed here.
 
+      # A Windows runtime heap-corruption failure in this package is not an
+      # assertion failure. Exercise its subprocess paths with pointer checking
+      # on one shard, retaining the full ordinary suite below.
+      - name: Check Windows acceptance orchestration
+        if: matrix.flavor.target == 'windows' && matrix.shard == 1 && ! github.event.pull_request.draft
+        timeout-minutes: 5
+        shell: bash
+        env:
+          GOTRACEBACK: system
+        run: go test -gcflags=all=-d=checkptr=2 -count=3 ./internal/ci/acceptance
+
       # The Mage target owns package/test allocation, precompiled suites, and
       # native coverage collection so both workflow paths stay identical.
       - name: Acceptance tests with coverage
@@ -784,7 +815,7 @@ jobs:
         run: go tool mage acceptance:run coverage linux
 
       - name: Acceptance tests
-        # windows-latest is the slowest target for this suite too (see the
+        # Windows is the slowest target for this suite too (see the
         # Build job's timeout comment above): before sharding, runs of the
         # unsharded step were observed between 37m43s and 60m17s. Per-platform
         # budgets (stepTimeout) live on the matrix above, alongside the measured
@@ -793,6 +824,7 @@ jobs:
         if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
         shell: bash
         env:
+          GOTRACEBACK: system
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Use the GitHub token for downloading the Packer plugins
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1073,7 +1105,10 @@ jobs:
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
+            dl.google.com:443
             github.com:443
+            go.dev:443
+            raw.githubusercontent.com:443
             release-assets.githubusercontent.com:443
             golang.org:443
             proxy.golang.org:443
@@ -1457,6 +1492,15 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      - name: Test service recovery
+        run: python3 -m unittest discover -s .github/actions/restore-services
+
+      # Harden Runner can restart Docker after Actions starts service containers.
+      - name: Restore job services
+        uses: ./.github/actions/restore-services
+        with:
+          services: ${{ toJSON(job.services) }}
 
       - name: Set up Atmos (install build artifact)
         uses: ./.github/actions/setup-atmos-install
@@ -1851,7 +1895,7 @@ jobs:
       matrix:
         flavor:
           - { os: ubuntu-latest, target: linux }
-          - { os: windows-latest, target: windows }
+          - { os: windows-2022, target: windows }
           - { os: "macos-15", target: macos }
         demo-folder:
           - examples/demo-atlantis
@@ -2219,7 +2263,12 @@ jobs:
       registry:
         image: registry:2
         # Harden Runner can restart Docker after GitHub starts services.
-        options: --restart always
+        options: >-
+          --restart always
+          --health-cmd "wget -q --spider http://127.0.0.1:5000/v2/"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 60
         ports:
           - 5000:5000
 
@@ -2249,6 +2298,12 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      # Harden Runner can restart Docker after Actions starts service containers.
+      - name: Restore job services
+        uses: ./.github/actions/restore-services
+        with:
+          services: ${{ toJSON(job.services) }}
 
       - name: Set up Atmos (install build artifact)
         uses: ./.github/actions/setup-atmos-install

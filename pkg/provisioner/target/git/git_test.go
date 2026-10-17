@@ -522,7 +522,7 @@ func isolatedGitEnv(t *testing.T) {
 	cfg := "[init]\n\tdefaultBranch = main\n[user]\n\tname = Test User\n\temail = test@example.com\n"
 	require.NoError(t, os.WriteFile(globalCfg, []byte(cfg), 0o600))
 	t.Setenv("GIT_CONFIG_GLOBAL", globalCfg)
-	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	t.Setenv("GIT_TERMINAL_PROMPT", "0")
 }
