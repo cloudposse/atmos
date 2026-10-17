@@ -1,6 +1,7 @@
 package cloudformation
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"slices"
@@ -110,8 +111,8 @@ func buildStackSpec(componentSection map[string]any) (*stackSpec, error) {
 
 	spec.Tags = normalizeTags(componentSection[cfg.TagsSectionName])
 
-	if stackPolicy, ok := componentSection[cfg.StackPolicySectionName].(map[string]any); ok {
-		spec.StackPolicyFile, _ = stackPolicy["file"].(string)
+	if err := resolveStackPolicySection(spec, componentSection[cfg.StackPolicySectionName]); err != nil {
+		return nil, err
 	}
 
 	spec.RoleArn, _ = componentSection[cfg.RoleArnSectionName].(string)
@@ -126,6 +127,42 @@ func buildStackSpec(componentSection map[string]any) (*stackSpec, error) {
 	}
 
 	return spec, nil
+}
+
+// resolveStackPolicySection reads `stack_policy.file` or the inline `stack_policy.body` into the spec.
+// An inline body is a JSON string used verbatim, or a map serialized to JSON, mirroring how an
+// inline `template:` accepts a string or a map. The two keys are mutually exclusive.
+func resolveStackPolicySection(spec *stackSpec, raw any) error {
+	stackPolicy, ok := raw.(map[string]any)
+	if !ok {
+		return nil
+	}
+	spec.StackPolicyFile, _ = stackPolicy["file"].(string)
+
+	var body string
+	switch v := stackPolicy["body"].(type) {
+	case nil:
+	case string:
+		body = v
+	case map[string]any:
+		if len(v) > 0 {
+			marshaled, err := json.Marshal(v)
+			if err != nil {
+				return fmt.Errorf("%w: stack_policy.body: %w", errUtils.ErrInvalidAwsCloudFormationSettings, err)
+			}
+			body = string(marshaled)
+		}
+	default:
+		return fmt.Errorf("%w: stack_policy.body must be a JSON string or a map, got %T", errUtils.ErrInvalidAwsCloudFormationSettings, v)
+	}
+
+	if body != "" && spec.StackPolicyFile != "" {
+		return errUtils.Build(errUtils.ErrAwsCloudFormationStackPolicyFileAndBodyMutuallyExclusive).
+			WithHint("Keep 'stack_policy.file' to read the policy from a file, or 'stack_policy.body' to define it inline, but not both.").
+			Err()
+	}
+	spec.StackPolicyBody = body
+	return nil
 }
 
 // normalizeParametersAndCapabilities fills the spec's parameters and capabilities,

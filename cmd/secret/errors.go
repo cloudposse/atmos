@@ -16,3 +16,6 @@ var ErrNoVault = errors.New("no secrets vault is configured")
 
 // ErrAmbiguousVault indicates a vault must be named because several are configured.
 var ErrAmbiguousVault = errors.New("multiple vaults configured; name one")
+
+// ErrSecretScopeEvaluation indicates a component's secret declarations could not be evaluated.
+var ErrSecretScopeEvaluation = errors.New("failed to evaluate the component's secret declarations")
