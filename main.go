@@ -125,6 +125,9 @@ func run() (exitCode int) {
 		formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
 		_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(strings.TrimRight(formatted, "\n") + "\n"))
 
+		// Report the failure to the CI provider, if one is detected.
+		cmd.AnnotateFailure(err)
+
 		// Extract and use the correct exit code.
 		exitCode := errUtils.GetExitCode(err)
 		log.Debug("Exiting with exit code", "code", exitCode)
