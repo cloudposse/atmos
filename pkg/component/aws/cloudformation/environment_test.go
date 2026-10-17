@@ -164,6 +164,7 @@ func TestWarnIgnoredEnvRegion(t *testing.T) {
 // from the component env, and not when settings.aws_cloudformation.region
 // (passed as the region override) already agrees with it.
 func TestBuildAWSConfig_WarnsOnIgnoredEnvRegion(t *testing.T) {
+	isolateAWSDefaultChain(t)
 	info := &schema.ConfigAndStacksInfo{ComponentEnvSection: map[string]any{"AWS_REGION": "us-west-2"}}
 
 	out := normalizeUIOutput(captureStderr(t, func() {

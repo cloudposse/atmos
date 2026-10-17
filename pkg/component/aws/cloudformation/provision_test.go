@@ -257,7 +257,7 @@ func TestDeployDirect_NoOp(t *testing.T) {
 			})
 			require.NoError(t, err)
 			if tt.cleanupErr != nil {
-				assert.Contains(t, output, tt.cleanupErr.Error())
+				assert.Contains(t, normalizeUIOutput(output), tt.cleanupErr.Error())
 			}
 			require.NotNil(t, result)
 			assert.True(t, result.NoOp)
