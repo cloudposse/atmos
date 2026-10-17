@@ -75,6 +75,14 @@ such as `.Type.Raw`, `.Description.Raw`, `.GetValue`, and `.Position.Filename`.
 The module is loaded once per document and is also used to generate the existing
 `terraform_docs` string.
 
+The `terraform` function requires a version of Atmos containing this feature.
+Atmos 1.232.0 and earlier cannot parse templates that call it, even inside
+`{{ with terraform }}` or with Terraform generation disabled. Upgrade the Atmos
+version pinned by your repository before adopting a native template. The guard
+handles a missing module in a supported version; it does not provide backward
+compatibility with an undefined function. Older pins can continue using
+`{{ (ds "config").terraform_docs }}`.
+
 Configure your template and enable Terraform documentation:
 
 ```yaml
@@ -137,6 +145,17 @@ or template errors fail generation.
 | `.ModuleCalls` | Module names, sources, versions, descriptions, and source positions |
 | `.Resources` | Managed resources and data sources; `.GetMode`, `.Spec`, `.URL`, and source positions |
 | `.Header`, `.Footer` | Header and footer text loaded by terraform-docs |
+
+For `terraform_docs`, explicit `show_providers`, `show_inputs`, and `show_outputs`
+settings control visibility, `hide_empty` omits empty sections, and `indent_level`
+sets the Markdown heading level (default `2`). Omitted display settings retain
+the formatter defaults. The built-in `readme` configuration defaults to hiding
+providers and showing inputs and outputs; other generator names inherit the
+formatter's visible sections unless configured otherwise.
+
+Projects with an `edition` pin before `2026-10-17` retain the previous behavior,
+which ignored visibility, empty-section, and heading-level settings. Unpinned
+projects and pins on or after that date honor them. Sorting works in both paths.
 
 The native module retains all parsed sections regardless of the formatter's
 section-display settings. Your template controls grouping, visibility, escaping,

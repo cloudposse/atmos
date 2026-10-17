@@ -208,7 +208,7 @@ func TestApplyTerraformDocs_Disabled(t *testing.T) {
 		},
 	}
 	mergedData := make(map[string]any)
-	_, err := applyTerraformDocs("", &docsGen, mergedData)
+	_, err := applyTerraformDocs(&schema.AtmosConfiguration{}, "", &docsGen, mergedData)
 	if err != nil {
 		t.Errorf("Expected no error when terraform docs disabled, got %v", err)
 	}

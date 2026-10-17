@@ -17,6 +17,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/downloader"
+	"github.com/cloudposse/atmos/pkg/edition"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -80,7 +81,10 @@ func mergeInputs(cfg *schema.AtmosConfiguration, dir string, dg *schema.DocsGene
 // Otherwise, it returns the base directory.
 func getTerraformSource(dir, source string) (string, error) {
 	if source != "" {
-		joinedPath := filepath.Join(dir, source)
+		joinedPath := source
+		if !filepath.IsAbs(source) {
+			joinedPath = filepath.Join(dir, source)
+		}
 		stat, err := os.Stat(joinedPath)
 		if err != nil || !stat.IsDir() {
 			return "", fmt.Errorf("%w: %s", errUtils.ErrSourceDirNotExist, joinedPath)
@@ -127,16 +131,20 @@ type terraformDocsResult struct {
 }
 
 // realTerraformDocsRunner is the production implementation.
-type realTerraformDocsRunner struct{}
+type realTerraformDocsRunner struct{ legacyFormatting bool }
 
 // Run loads a Terraform module and produces its configured documentation format.
 func (r realTerraformDocsRunner) Run(dir string, settings *schema.TerraformDocsReadmeSettings) (terraformDocsResult, error) {
-	return runTerraformDocs(dir, settings)
+	return runTerraformDocsWithConfig(dir, settings, r.legacyFormatting)
 }
 
 // applyTerraformDocs adds formatted documentation to metadata and returns the native module.
-func applyTerraformDocs(dir string, docsGenerate *schema.DocsGenerate, mergedData map[string]any) (*tfdocsTf.Module, error) {
-	return applyTerraformDocsWithRunner(dir, docsGenerate, mergedData, realTerraformDocsRunner{})
+func applyTerraformDocs(cfg *schema.AtmosConfiguration, dir string, docsGenerate *schema.DocsGenerate, mergedData map[string]any) (*tfdocsTf.Module, error) {
+	updated, err := edition.BehaviorChanged(cfg.Edition, "docs.terraform.formatter_settings")
+	if err != nil {
+		return nil, err
+	}
+	return applyTerraformDocsWithRunner(dir, docsGenerate, mergedData, realTerraformDocsRunner{legacyFormatting: !updated})
 }
 
 // applyTerraformDocsWithRunner skips disabled or unavailable sources and propagates generation errors.
@@ -186,7 +194,11 @@ func fetchTemplate(atmosConfig *schema.AtmosConfiguration, docsGenerate *schema.
 // Generate merges YAML inputs, loads Terraform metadata, and renders the configured document.
 func Generate(atmosConfig *schema.AtmosConfiguration, baseDir string, docsGenerate *schema.DocsGenerate) error {
 	defer perf.Track(atmosConfig, "docs.Generate")()
-	return generateDocument(atmosConfig, baseDir, docsGenerate, defaultTemplateRenderer{})
+	absoluteDir, err := filepath.Abs(baseDir)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrPathResolution, err)
+	}
+	return generateDocument(atmosConfig, absoluteDir, docsGenerate, defaultTemplateRenderer{})
 }
 
 // generateDocument merges the docs inputs, optionally runs terraform-docs, renders, and writes the document.
@@ -203,7 +215,7 @@ func generateDocument(
 	}
 
 	// 2) Generate terraform docs if enabled.
-	module, err := applyTerraformDocs(baseDir, docsGenerate, mergedData)
+	module, err := applyTerraformDocs(atmosConfig, baseDir, docsGenerate, mergedData)
 	if err != nil {
 		return err
 	}
@@ -282,44 +294,60 @@ type formatter interface {
 
 // runTerraformDocs loads the module once and returns both native objects and formatted content.
 func runTerraformDocs(dir string, settings *schema.TerraformDocsReadmeSettings) (terraformDocsResult, error) {
+	return runTerraformDocsWithConfig(dir, settings, false)
+}
+
+// runTerraformDocsWithConfig retains legacy formatting for projects pinned before the correction.
+func runTerraformDocsWithConfig(dir string, settings *schema.TerraformDocsReadmeSettings, legacy bool) (terraformDocsResult, error) {
 	config := tfdocsPrint.DefaultConfig()
 	config.ModuleRoot = dir
-
-	config.Sections.Providers = settings.ShowProviders
-	config.Sections.Inputs = settings.ShowInputs
-	config.Sections.Outputs = settings.ShowOutputs
-
 	if settings.SortBy != "" {
 		config.Sort.Enabled = true
 		config.Sort.By = settings.SortBy
 	}
-
 	module, err := tfdocsTf.LoadWithOptions(config)
 	if err != nil {
 		return terraformDocsResult{}, fmt.Errorf("failed to load terraform module: %w", err)
 	}
-
-	var formatter formatter
-
-	// Assign the correct formatter based on settings.Format.
-	switch settings.Format {
-	case "markdown table":
-		formatter = tfdocsFormat.NewMarkdownTable(tfdocsPrint.DefaultConfig())
-	case "markdown":
-		formatter = tfdocsFormat.NewMarkdownDocument(tfdocsPrint.DefaultConfig())
-	case "tfvars hcl":
-		formatter = tfdocsFormat.NewTfvarsHCL(tfdocsPrint.DefaultConfig())
-	case "tfvars json":
-		formatter = tfdocsFormat.NewTfvarsJSON(tfdocsPrint.DefaultConfig())
-	default:
-		formatter = tfdocsFormat.NewMarkdownTable(tfdocsPrint.DefaultConfig())
+	if !legacy {
+		applyFormatterSettings(config, settings)
 	}
-
-	// Generate content and return it.
+	formatter := terraformFormatter(config, settings.Format)
 	if err := formatter.Generate(module); err != nil {
 		return terraformDocsResult{}, err
 	}
 	return terraformDocsResult{module: module, content: formatter.Content()}, nil
+}
+
+// applyFormatterSettings changes presentation without filtering the parsed module.
+func applyFormatterSettings(config *tfdocsPrint.Config, settings *schema.TerraformDocsReadmeSettings) {
+	if settings.ShowProviders != nil {
+		config.Sections.Providers = *settings.ShowProviders
+	}
+	if settings.ShowInputs != nil {
+		config.Sections.Inputs = *settings.ShowInputs
+	}
+	if settings.ShowOutputs != nil {
+		config.Sections.Outputs = *settings.ShowOutputs
+	}
+	config.Settings.HideEmpty = settings.HideEmpty
+	if settings.IndentLevel > 0 {
+		config.Settings.Indent = settings.IndentLevel
+	}
+}
+
+// terraformFormatter selects the existing supported output formats with shared settings.
+func terraformFormatter(config *tfdocsPrint.Config, format string) formatter {
+	switch format {
+	case "markdown":
+		return tfdocsFormat.NewMarkdownDocument(config)
+	case "tfvars hcl":
+		return tfdocsFormat.NewTfvarsHCL(config)
+	case "tfvars json":
+		return tfdocsFormat.NewTfvarsJSON(config)
+	default:
+		return tfdocsFormat.NewMarkdownTable(config)
+	}
 }
 
 // downloadSource calls the go-getter and returns file path.

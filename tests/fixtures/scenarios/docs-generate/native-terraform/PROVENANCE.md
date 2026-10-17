@@ -15,8 +15,23 @@ chosen by the template rather than terraform-docs formatter settings.
 `expected.md` is the reviewed output for the representative module in this directory,
 with the absolute module path replaced by `.` and trailing spaces removed.
 The regression test also renders the original content with terraform-docs and
-compares nonblank lines, ignoring only incidental surrounding whitespace and the
-added README introduction. This independently checks the adaptation's fidelity.
+compares nonblank lines, ignoring incidental surrounding whitespace and the
+added README introduction. The reference renderer applies one explicit correction:
+prefixing every multiline type line with the blockquote marker. The recovered
+source file remains unchanged. This independently checks the adaptation's fidelity.
+
+The adapted fixture additionally omits empty display groups, resolves local and
+HTTPS module links, and uses `latest` for unversioned registry modules. Reduced
+fixtures in `../native-layout/` exercise these cases. A Markdown-to-HTML regression
+test checks that complex types and defaults remain separate code blocks.
+
+Regenerate the reviewed output through the production renderer:
+
+```shell
+ATMOS_UPDATE_DOCS_GOLDEN=true go test ./pkg/docs -run '^TestGenerateDocument_NativeTerraformOriginalDesign$' -count=1
+```
+
+Run this command from the repository root, then review the resulting diff.
 
 To try it, run `atmos docs generate readme` from this directory.
 No Terraform initialization, provider installation, or cloud credentials are needed.

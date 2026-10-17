@@ -1,0 +1,25 @@
+stacks:
+  base_path: stacks
+  included_paths: ["orgs/**/*"]
+docs:
+  generate:
+    context-only:
+      base-dir: context-only
+      input:
+        - name: Context-only README
+          description: All optional inputs belong to the context group.
+      template: ../native-terraform/README.md.gomplate
+      output: ./context.generated.md
+      terraform:
+        enabled: true
+        source: .
+    data-only:
+      base-dir: data-only
+      input:
+        - name: Data-only README
+          description: Data sources without managed resources or input variables.
+      template: ../native-terraform/README.md.gomplate
+      output: ./data.generated.md
+      terraform:
+        enabled: true
+        source: .

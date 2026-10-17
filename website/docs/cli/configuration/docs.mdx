@@ -74,7 +74,7 @@ When `terraform` is configured, Atmos can include Terraform module documentation
 
 <dl>
   <dt>`terraform.source`</dt>
-  <dd>Path to the Terraform module source directory.</dd>
+  <dd>Path to the Terraform module source directory, absolute or relative to `base-dir`.</dd>
 
   <dt>`terraform.enabled`</dt>
   <dd>Whether to generate Terraform documentation. Default: `false`.</dd>
@@ -98,8 +98,18 @@ When `terraform` is configured, Atmos can include Terraform module documentation
   <dd>Hide sections with no content. Default: `false`.</dd>
 
   <dt>`terraform.indent_level`</dt>
-  <dd>Indentation level for nested content. Default: `2`.</dd>
+  <dd>Markdown heading level. Default: `2`.</dd>
 </dl>
+
+Native templates can access the parsed module with the
+[`terraform` function](/cli/commands/docs/generate#custom-terraform-formatting).
+Its objects remain complete even when the formatted `terraform_docs` string hides
+sections. Display defaults above describe the built-in `readme` generator; other
+generator names retain terraform-docs section defaults when these options are omitted.
+
+Visibility, `hide_empty`, and `indent_level` settings are honored for unpinned
+projects and editions on or after `2026-10-17`. Earlier edition pins retain the
+legacy formatter behavior, which ignored these settings.
 
 ## Multiple Documentation Generators
 

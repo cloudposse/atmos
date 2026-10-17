@@ -110,9 +110,9 @@ Settings for the application.<br/>
 >
 >   ```hcl
 >   object({
-    enabled = bool
-    ports   = list(number)
-  })
+>       enabled = bool
+>       ports   = list(number)
+>     })
 >   ```
 >
 >

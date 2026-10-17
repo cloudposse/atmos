@@ -2,8 +2,6 @@ package exec
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -37,16 +35,6 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("%w: %q", errUtils.ErrNoDocsGenerateEntry, args[0])
 	}
 
-	basedir := docsGenerate.BaseDir
-	var targetDir string
-	currDir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	log.Debug("Current directory", "dir", currDir, "basedir", basedir)
-
-	targetDir = filepath.Join(currDir, basedir)
-
 	if len(docsGenerate.Input) == 0 {
 		log.Debug("docs.generate['<doc-type>'].input is empty in atmos.yaml")
 	}
@@ -55,5 +43,5 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Generate a single document in the targetDir using the default renderer.
-	return docs.Generate(&rootConfig, targetDir, &docsGenerate)
+	return docs.Generate(&rootConfig, docsGenerate.BaseDir, &docsGenerate)
 }

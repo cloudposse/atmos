@@ -16,7 +16,7 @@
 >   {{ if lt (len (strings.Split "\n" (conv.ToString .Type))) 2 }}<code>{{ conv.ToString .Type }}</code>{{ else }}
 >
 >   ```hcl
->   {{ .Type.Raw }}
+>   {{ .Type.Raw | strings.ReplaceAll "\n" "\n>   " }}
 >   ```
 >
 >   {{ end }}
@@ -47,6 +47,16 @@
 
 {{- with terraform }}
 {{- $module := . }}
+{{- $required := false }}{{- $optional := false }}{{- $context := false }}
+{{- range .Inputs }}
+{{- if coll.Has $context_variables .Name }}{{- $context = true }}
+{{- else if .Required }}{{- $required = true }}
+{{- else }}{{- $optional = true }}{{- end }}
+{{- end }}
+{{- $resources := false }}{{- $dataSources := false }}
+{{- range .Resources }}
+{{- if eq "resource" .GetMode }}{{- $resources = true }}{{- else }}{{- $dataSources = true }}{{- end }}
+{{- end }}
 {{ .Header }}
 
 
@@ -76,22 +86,23 @@
 Name | Version | Source | Description
 --- | --- | --- | ---
 {{ range $module.ModuleCalls }}
-{{- $baseUrl := "https://registry.terraform.io/modules" -}}
-{{ if strings.Contains "../" .Source -}}
-`{{ .Name }}` | [![{{ .Version | default "latest" }}](https://img.shields.io/badge/{{ printf "%s" (.Version | default "latest") | strings.ReplaceAll " " "_" }}-success.svg?style=for-the-badge)]({{ .Source }}) | {{ printf "[`%s`](%s)" .Source .Source }} | {{ conv.ToString .Description | default "n/a" }}
-{{ else if strings.Contains "//" .Source -}}
-  {{- $moduleParts := strings.SplitN "//" 2 .Source -}}
-  {{- $moduleName := index $moduleParts 0 -}}
-  {{- $submodulePath := index $moduleParts 1 | strings.ReplaceAll "modules/" "" -}}
-  {{- /* https://registry.terraform.io/modules/cloudposse/stack-config/yaml/latest/submodules/remote-state */ -}}
-  `{{ .Name }}` | [![{{ .Version | default "latest" }}](https://img.shields.io/badge/{{ printf "%s" (.Version | default "latest") | strings.ReplaceAll " " "_" }}-success.svg?style=for-the-badge)]({{ printf "%s/%s/%s/submodules/%s" $baseUrl $moduleName .Version $submodulePath }}) | {{ printf "[`%s`](%s/%s/%s/submodules/%s)" .Source $baseUrl $moduleName .Version $submodulePath }} | {{ conv.ToString .Description | default "n/a" }}
-{{ else -}}
-  `{{ .Name }}` | [![{{ .Version | default "latest" }}](https://img.shields.io/badge/{{ printf "%s" (.Version | default "latest") | strings.ReplaceAll " " "_" }}-success.svg?style=for-the-badge)]({{ printf "%s/%s/%s" $baseUrl .Source .Version }}) | {{ printf "[`%s`](%s/%s/%s)" .Source $baseUrl .Source .Version }} | {{ conv.ToString .Description | default "n/a" }}
-{{ end }}
+{{- $target := "" -}}
+{{- if or (strings.HasPrefix "./" .Source) (strings.HasPrefix "../" .Source) -}}
+{{- $target = .Source -}}
+{{- else if or (strings.HasPrefix "https://" .Source) (strings.HasPrefix "http://" .Source) (strings.HasPrefix "git::https://" .Source) (strings.HasPrefix "git::http://" .Source) -}}
+{{- $target = .Source | strings.TrimPrefix "git::" -}}
+{{- else if regexp.Match `^[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+($|//)` .Source -}}
+{{- $parts := strings.SplitN "//" 2 .Source -}}
+{{- $target = printf "https://registry.terraform.io/modules/%s/%s" (index $parts 0) (.Version | default "latest") -}}
+{{- if eq (len $parts) 2 -}}
+{{- $target = printf "%s/submodules/%s" $target (index $parts 1 | strings.TrimPrefix "modules/") -}}
+{{- end -}}
+{{- end -}}
+`{{ .Name }}` | {{ if $target }}[{{ end }}![{{ .Version | default "latest" }}](https://img.shields.io/badge/{{ printf "%s" (.Version | default "latest") | strings.ReplaceAll " " "_" }}-success.svg?style=for-the-badge){{ if $target }}]({{ $target }}){{ end }} | {{ if $target }}{{ printf "[`%s`](%s)" .Source $target }}{{ else }}`{{ .Source }}`{{ end }} | {{ conv.ToString .Description | default "n/a" }}{{ "\n" }}
 {{- end -}}
 {{- end -}}
 
-{{- if ne (len $module.Resources) 0 }}
+{{- if $resources }}
 
 ## Resources
 
@@ -105,7 +116,7 @@ The following resources are used by this module:
 {{- end }}
 {{- end }}
 
-{{ if ne (len $module.Resources) 0 -}}
+{{ if $dataSources -}}
 ## Data Sources
 
 The following data sources are used by this module:
@@ -136,24 +147,24 @@ The following data sources are used by this module:
 </dl>
 {{- end }}
 
+{{ if $required -}}
 ## Required Variables
 
 Required variables are the minimum set of variables that must be set to use this module.
 
+{{ if $context -}}
 > [!IMPORTANT]
 >
 > To customize the names and tags of the resources created by this module, see the [context variables](#context-variables).
 >
+{{- end }}
 
 {{- range $module.Inputs }}
 {{- if and (not (coll.Has $context_variables .Name)) .Required }}
 {{ template "variableDescription" . }}
 {{- end }}
 {{- end }}
-
-{{ $optional := false -}}
-{{ range $module.Inputs }}{{ if not .Required }}{{ $optional = true -}}{{ end -}}{{ end -}}
-
+{{ end }}
 {{ if $optional -}}
 ## Optional Variables
 
@@ -164,6 +175,7 @@ Required variables are the minimum set of variables that must be set to use this
 {{ end -}}
 {{ end }}
 
+{{ if $context -}}
 ## Context Variables
 
 The following variables are defined in the `context.tf` file of this module and part of the [terraform-null-label](https://registry.terraform.io/modules/cloudposse/label/null) pattern. These are identical in all Cloud Posse modules.
@@ -178,4 +190,5 @@ The following variables are defined in the `context.tf` file of this module and 
 {{- end }}
 
 </details>
+{{ end }}
 {{ end }}

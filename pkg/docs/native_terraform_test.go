@@ -35,7 +35,7 @@ func readDocsTestFile(t *testing.T, path string) string {
 }
 
 // Render through the production pipeline, then compare both a reviewed golden
-// and the independently rendered, unmodified template recovered from PR #1074.
+// and the independently rendered template recovered from PR #1074.
 func TestGenerateDocument_NativeTerraformOriginalDesign(t *testing.T) {
 	dir := nativeDocsFixture(t)
 	var config struct {
@@ -53,7 +53,11 @@ func TestGenerateDocument_NativeTerraformOriginalDesign(t *testing.T) {
 	normalizePaths := func(s string) string {
 		return strings.ReplaceAll(strings.ReplaceAll(s, dir, "."), `.\`, "./")
 	}
-	assert.Equal(t, readDocsTestFile(t, filepath.Join(dir, "expected.md")), normalizePaths(trimDocsTrailingSpace(actual)))
+	normalized := normalizePaths(trimDocsTrailingSpace(actual))
+	if os.Getenv("ATMOS_UPDATE_DOCS_GOLDEN") == "true" {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "expected.md"), []byte(normalized), 0o644))
+	}
+	assert.Equal(t, readDocsTestFile(t, filepath.Join(dir, "expected.md")), normalized)
 
 	var original struct {
 		Content string `yaml:"content"`
@@ -67,7 +71,10 @@ func TestGenerateDocument_NativeTerraformOriginalDesign(t *testing.T) {
 	require.NoError(t, err)
 	formatter := tfdocsFormat.NewMarkdownDocument(settings)
 	require.NoError(t, formatter.Generate(module))
-	reference, err := formatter.Render(original.Content)
+	// Correct only the original multiline blockquote bug; preserve the recovered file verbatim.
+	require.Equal(t, 1, strings.Count(original.Content, "{{ .Type.Raw }}"))
+	referenceTemplate := strings.ReplaceAll(original.Content, "{{ .Type.Raw }}", `{{ .Type.Raw | replace "\n" "\n>   " }}`)
+	reference, err := formatter.Render(referenceTemplate)
 	require.NoError(t, err)
 	_, body, ok := strings.Cut(actual, "## Version Requirements")
 	require.True(t, ok)
@@ -109,7 +116,8 @@ providers={{ len .Providers }};outputs={{ len .Outputs }};modules={{ len .Module
 legacy={{ $data.terraform_docs }}`
 	docs := nativeDocsTestConfig(t, tmpl)
 	docs.Input = []any{map[string]any{"name": "metadata", "terraform": "user-owned key"}}
-	// No section display flags: the native object still contains every section.
+	// Explicitly hidden legacy sections must remain available in the native object.
+	require.NoError(t, yaml.Unmarshal([]byte("enabled: true\nshow_providers: false\nshow_inputs: false\nshow_outputs: false\n"), &docs.Terraform))
 	require.NoError(t, Generate(&schema.AtmosConfiguration{}, dir, &docs))
 	actual := readDocsTestFile(t, docs.Output)
 	for _, expected := range []string{
@@ -119,9 +127,12 @@ legacy={{ $data.terraform_docs }}`
 		"position=main.tf:", "position=variables.tf:1;", "position=context.tf:1;",
 		"resource=aws_s3_bucket.assets:resource:https://registry.terraform.io/providers/hashicorp/aws/",
 		"resource=aws_caller_identity.current:data source:", "providers=1;outputs=2;modules=3;requirements=2",
-		"## Requirements", "## Providers", "## Inputs", "## Outputs",
+		"## Requirements",
 	} {
 		assert.Contains(t, actual, expected)
+	}
+	for _, heading := range []string{"## Providers", "## Inputs", "## Outputs"} {
+		assert.NotContains(t, actual, heading)
 	}
 }
 
