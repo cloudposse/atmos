@@ -102,8 +102,10 @@ var operationHelpBySubCommand = map[string]operationHelpEntry{
 	},
 	subCommandApply: {
 		long: "Create or update the CloudFormation stack for a component: create (or reuse)\n" +
-			"a changeset and execute it. After a successful apply, Atmos applies the\n" +
-			"component's stack_policy (if set) and renders the stack's Outputs.",
+			"a changeset and execute it. When the component sets stack_policy, Atmos\n" +
+			"installs it before executing an update (so the policy governs that update),\n" +
+			"and after a create or a no-op apply. After a successful apply, Atmos renders\n" +
+			"the stack's Outputs.",
 		example: "  atmos aws cloudformation apply vpc --stack plat-ue2-dev\n" +
 			"  atmos aws cloudformation apply vpc --stack plat-ue2-dev --auto-approve\n" +
 			"  atmos aws cloudformation apply --all --stack plat-ue2-dev\n" +

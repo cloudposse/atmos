@@ -58,7 +58,7 @@ export default function FilePage({
             <GistDisclaimer text={optionsData.disclaimer} />
           )}
 
-          <FileViewer file={fileData} />
+          <FileViewer file={fileData} routeBasePath={routeBasePath} />
 
           {/* Show related documentation */}
           {example.docs && example.docs.length > 0 && (

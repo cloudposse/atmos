@@ -10,6 +10,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faFolder, faGraduationCap } from '@fortawesome/free-solid-svg-icons';
 import CastPlayer from '@site/src/components/CastPlayer';
 import CopyMarkdownButton from './CopyMarkdownButton';
+import ExampleCatalogPage from './ExampleCatalogPage';
 import type { ExamplesTree, FileBrowserOptions } from './types';
 import styles from './styles.module.css';
 
@@ -39,7 +40,14 @@ interface IndexPageProps {
   optionsData: FileBrowserOptions;
 }
 
-export default function IndexPage({ treeData, optionsData }: IndexPageProps): JSX.Element {
+export default function IndexPage(props: IndexPageProps): JSX.Element {
+  if (props.optionsData.routeBasePath === '/examples') {
+    return <ExampleCatalogPage tree={props.treeData} options={props.optionsData} />;
+  }
+  return <StandardIndexPage {...props} />;
+}
+
+function StandardIndexPage({ treeData, optionsData }: IndexPageProps): JSX.Element {
   const { examples, featured = [], tags } = treeData;
   const { routeBasePath, title, description, searchable, cardIcon, cardCtaLabel, titleAsCode, enableCopyMarkdown } = optionsData;
   const cardIconDefinition = ICON_MAP[cardIcon] || faFolder;

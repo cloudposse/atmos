@@ -6,17 +6,22 @@ id: describe
 description: Show whether the component's template-packaging backend bucket currently exists.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-  Show whether the S3 bucket referenced by the component's resolved `kind:
-  aws/s3` provision target currently exists, along with its resolved
-  bucket/region — a real, non-stub `HeadBucket` check, not a description of
-  the declared configuration alone.
+Check whether the component’s template-packaging bucket exists in S3.
+The result includes the target name, bucket, region, and existence status.
 </Intro>
 
 <Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation#delivery-targets">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
 
 <CastPlayer title="atmos aws cloudformation backend describe --help" src="/casts/screengrabs/atmos-aws-cloudformation-backend-describe--help.cast" static chrome />
 
@@ -25,6 +30,8 @@ import Experimental from '@site/src/components/Experimental'
 ```shell
 atmos aws cloudformation backend describe <component> --stack <stack> [options]
 ```
+
+## Examples
 
 ```shell
 atmos aws cloudformation backend describe vpc -s plat-ue2-dev
@@ -36,6 +43,13 @@ Disambiguate when the component declares more than one `kind: aws/s3` target:
 ```shell
 atmos aws cloudformation backend describe vpc -s plat-ue2-dev --target artifacts
 ```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
 
 ## Flags
 
@@ -55,9 +69,7 @@ atmos aws cloudformation backend describe vpc -s plat-ue2-dev --target artifacts
 
 ## Behavior
 
-`backend describe` calls the same S3 `HeadBucket` existence check the
-provisioner uses internally to decide whether to create or reuse a bucket
-during `backend create`/`backend update`.
+The command checks the bucket in S3 using the selected target’s identity.
 
 The `table` format prints a header row (`TARGET`, `BUCKET`, `REGION`,
 `STATUS`). The `json` and `yaml` formats use snake_case keys, matching the rest

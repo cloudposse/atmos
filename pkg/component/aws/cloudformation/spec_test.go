@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -245,8 +246,75 @@ func TestNormalizeCapabilities_Validation(t *testing.T) {
 	})
 }
 
-func TestNormalizeTags_NonMap(t *testing.T) {
-	assert.Nil(t, normalizeTags("not-a-map"))
+func TestNormalizeTags(t *testing.T) {
+	t.Run("map form is sorted by key and scalars are stringified", func(t *testing.T) {
+		got, err := normalizeTags(map[string]any{"Team": "platform", "Env": "dev", "Count": 3, "On": true})
+		require.NoError(t, err)
+		require.Len(t, got, 4)
+		assert.Equal(t, "Count", *got[0].Key)
+		assert.Equal(t, "3", *got[0].Value)
+		assert.Equal(t, "Env", *got[1].Key)
+		assert.Equal(t, "On", *got[2].Key)
+		assert.Equal(t, "true", *got[2].Value)
+		assert.Equal(t, "Team", *got[3].Key)
+		assert.Equal(t, "platform", *got[3].Value)
+	})
+
+	t.Run("absent or empty yields no tags without error", func(t *testing.T) {
+		got, err := normalizeTags(nil)
+		require.NoError(t, err)
+		assert.Nil(t, got)
+
+		got, err = normalizeTags(map[string]any{})
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	rejected := []struct {
+		name string
+		raw  any
+	}{
+		{"AWS CLI list of Key/Value maps", []any{map[string]any{"Key": "Team", "Value": "platform"}}},
+		{"string list as produced by !tags", []any{"a", "b"}},
+		{"plain string", "not-a-map"},
+		{"number", 42},
+		{"bool", true},
+		{"nested map value", map[string]any{"Team": map[string]any{"name": "platform"}}},
+		{"nested list value", map[string]any{"Team": []any{"platform"}}},
+	}
+	for _, tt := range rejected {
+		t.Run("rejects "+tt.name, func(t *testing.T) {
+			got, err := normalizeTags(tt.raw)
+			require.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+			assert.Nil(t, got)
+			assert.Contains(t, cockroachErrors.GetAllHints(err), tagsShapeHint)
+		})
+	}
+
+	t.Run("explanation names the offending type", func(t *testing.T) {
+		_, err := normalizeTags([]any{"a"})
+		require.Error(t, err)
+		assert.Contains(t, cockroachErrors.FlattenDetails(err), "tags must be a map of tag names to string values, got []interface {}")
+	})
+}
+
+func TestBuildStackSpec_RejectsListTags(t *testing.T) {
+	_, err := buildStackSpec(map[string]any{
+		"stack_name": "vpc",
+		"template":   "Resources: {}\n",
+		"tags":       []any{map[string]any{"Key": "Team", "Value": "platform"}},
+	})
+	require.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+	assert.Contains(t, err.Error(), "tags")
+
+	spec, err := buildStackSpec(map[string]any{
+		"stack_name": "vpc",
+		"template":   "Resources: {}\n",
+		"tags":       map[string]any{"Team": "platform"},
+	})
+	require.NoError(t, err)
+	require.Len(t, spec.Tags, 1)
+	assert.Equal(t, "Team", *spec.Tags[0].Key)
 }
 
 func TestToInt32_ClampsOverflow(t *testing.T) {

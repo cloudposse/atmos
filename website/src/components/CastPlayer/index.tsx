@@ -46,6 +46,8 @@ type Props = {
    * instead of clipping to a 16:9 viewport. Used for docs screengrabs.
    */
   static?: boolean;
+  /** Suspend playback while preserving the loaded cast and current position. */
+  paused?: boolean;
   /** Extra class name(s) merged onto the root element, e.g. to override the `thumbnail` width cap. */
   className?: string;
 };
@@ -71,6 +73,7 @@ export default function CastPlayer({
   enterDelay = 0.5,
   exitDelay = 0.6,
   static: staticFrame = false,
+  paused = false,
   className,
 }: Props) {
   const [columns, setColumns] = useState(80);
@@ -210,7 +213,7 @@ export default function CastPlayer({
   useEffect(() => {
     window.cancelAnimationFrame(animationFrame.current ?? 0);
     window.clearTimeout(loopTimer.current);
-    if (staticFrame || !playing || events.length === 0) return;
+    if (staticFrame || paused || !playing || events.length === 0) return;
 
     if (duration <= 0 || position >= duration) {
       handlePlaybackEnd(
@@ -272,6 +275,7 @@ export default function CastPlayer({
     loop,
     loopDelay,
     staticFrame,
+    paused,
   ]);
 
   const togglePlayback = () => {
