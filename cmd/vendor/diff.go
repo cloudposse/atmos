@@ -166,7 +166,7 @@ func init() {
 		flags.WithEnvVars(vendorTagsFlagName, envVendorTags),
 		flags.WithViperKey(vendorTagsFlagName, vendorTagsViperKey),
 		flags.WithStringFlag("stack", "s", "", "Diff every component belonging to the specified stack"),
-		flags.WithStringSliceFlag(vendorLabelsFlagName, "", nil, vendorLabelsFlagHelp),
+		flags.WithStringArrayFlag(vendorLabelsFlagName, "", nil, vendorLabelsFlagHelp),
 		flags.WithEnvVars(vendorLabelsFlagName, envVendorLabels),
 		flags.WithViperKey(vendorLabelsFlagName, vendorLabelsViperKey),
 	)

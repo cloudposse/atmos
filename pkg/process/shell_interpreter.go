@@ -123,12 +123,15 @@ func RunShellInterpreter(ctx context.Context, spec *ShellInterpreterSpec) error 
 func groupedExecHandler(runner Runner) interp.ExecHandlerFunc {
 	return func(ctx context.Context, args []string) error {
 		handler := interp.HandlerCtx(ctx)
-		if _, err := interp.LookPathDir(handler.Dir, handler.Env, args[0]); err != nil {
+		path, err := interp.LookPathDir(handler.Dir, handler.Env, args[0])
+		if err != nil {
 			fmt.Fprintln(handler.Stderr, err)
 			return interp.ExitStatus(exitStatusNotFound)
 		}
 		result := runner.Run(ctx, TaskSpec{
 			Command: args[0],
+			// Preserve the shell lookup even when PATH is not exported to the child.
+			Path:    path,
 			Args:    args[1:],
 			Dir:     handler.Dir,
 			Env:     exportedEnvironment(handler.Env),
@@ -137,6 +140,9 @@ func groupedExecHandler(runner Runner) interp.ExecHandlerFunc {
 			// the end-of-invocation summary.
 			SkipMetrics: true,
 		})
+		if !result.Started && shellScriptFallback(result.Err) {
+			return runShellScriptFallback(ctx, &handler, path, args, runner)
+		}
 		return execHandlerError(ctx, &handler, &result)
 	}
 }

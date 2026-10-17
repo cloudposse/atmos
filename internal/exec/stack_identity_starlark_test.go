@@ -143,3 +143,30 @@ func TestStackNameTemplatesAllowUnrelatedComputedInputs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, section["vars"].(map[string]any)["stage"], got)
 }
+
+func TestStackNameTemplatesPreserveNumericArguments(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		source string
+		want   string
+	}{
+		{`{{ repeat 2.0 "dev" }}`, "devdev"},
+		{`{{ repeat 2e0 "dev" }}`, "devdev"},
+		{`{{ substr 0 2.0 "dev" }}`, "de"},
+		{`{{ until 3.0 | join "-" }}`, "0-1-2"},
+		{`{{ strings.Repeat 2.0 "dev" }}`, "devdev"},
+		{`{{ repeat 2 "dev" }}`, "devdev"},
+	} {
+		t.Run(tc.source, func(t *testing.T) {
+			t.Parallel()
+			config := &schema.AtmosConfiguration{}
+			// The ordinary template engine establishes the existing literal conversion contract.
+			ordinary, err := ProcessTmpl(config, "component", tc.source, nil, false)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, ordinary)
+			got, err := processStackNameTemplate(config, "deploy/dev", tc.source, nil, false)
+			require.NoError(t, err)
+			assert.Equal(t, ordinary, got)
+		})
+	}
+}

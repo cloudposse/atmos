@@ -674,7 +674,7 @@ func TestAffectedFlagTypes(t *testing.T) {
 	}
 
 	stringSliceFlags := []string{
-		"columns", "skip", "labels",
+		"columns", "skip",
 	}
 
 	for _, flagName := range stringFlags {
@@ -692,6 +692,12 @@ func TestAffectedFlagTypes(t *testing.T) {
 			assert.Equal(t, "bool", flag.Value.Type())
 		})
 	}
+
+	t.Run("labels is stringArray type", func(t *testing.T) {
+		flag := affectedCmd.Flags().Lookup("labels")
+		require.NotNil(t, flag)
+		assert.Equal(t, "stringArray", flag.Value.Type())
+	})
 
 	for _, flagName := range stringSliceFlags {
 		t.Run(flagName+" is stringSlice type", func(t *testing.T) {

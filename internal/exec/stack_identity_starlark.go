@@ -185,6 +185,11 @@ func guardIdentityPipe(pipe *parse.PipeNode) {
 			commands = append(commands, identityGuardCommand(guard))
 		}
 		for j, arg := range command.Args {
+			// Numeric literals cannot contain computed source. Keep them untyped so
+			// template functions can accept ideal constants such as 2.0 as integers.
+			if _, literal := arg.(*parse.NumberNode); literal {
+				continue
+			}
 			if nested, ok := arg.(*parse.PipeNode); ok {
 				guardIdentityPipe(nested)
 			}

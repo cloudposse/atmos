@@ -22,7 +22,7 @@ func TestWorkflowSelectorFlags(t *testing.T) {
 
 	labels := workflowCmd.Flags().Lookup("labels")
 	require.NotNil(t, labels)
-	assert.Equal(t, "stringSlice", labels.Value.Type())
+	assert.Equal(t, "stringArray", labels.Value.Type())
 }
 
 // TestWorkflowLabelsFlag_BoundToEnvVar is a regression test: bindFlagToViper only
@@ -41,6 +41,7 @@ func TestWorkflowLabelsForwarded(t *testing.T) {
 		args []string
 		want string
 	}{
+		{name: "quoted flags", args: []string{`--labels=owner=O"Reilly,team=platform`, "--labels=region=us-east-1"}, want: `owner=O"Reilly,team=platform,region=us-east-1`},
 		{name: "environment", want: "team = platform,owner=platform engineering"},
 		{name: "explicit flags override environment", args: []string{"--labels=team=cli", "--labels=owner=cli engineering"}, want: "team=cli,owner=cli engineering"},
 	} {

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 func TestTerraformFlags(t *testing.T) {
@@ -567,4 +568,18 @@ func TestUseMocksFlagRegistration(t *testing.T) {
 			assert.Equal(t, tt.wantArgs, cmd.Flags().Args())
 		})
 	}
+}
+
+func TestTerraformLabelsPreserveLiteralQuotes(t *testing.T) {
+	t.Setenv("ATMOS_LABELS", "owner=environment")
+	parser := flags.NewStandardParser(WithTerraformFlags())
+	cmd := &cobra.Command{Use: "plan"}
+	parser.RegisterFlags(cmd)
+	require.NoError(t, cmd.ParseFlags([]string{"--labels", `owner=O"Reilly,team=platform`, "--labels", "region=us-east-1"}))
+	v := viper.New()
+	require.NoError(t, v.MergeConfigMap(map[string]any{"labels": "owner=config"}))
+	require.NoError(t, parser.BindFlagsToViper(cmd, v))
+	got, err := tags.ParseLabelsFlag(tags.ReadLabelsFlag(v))
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"owner": `O"Reilly`, "team": "platform", "region": "us-east-1"}, got)
 }

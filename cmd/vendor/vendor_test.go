@@ -1934,11 +1934,11 @@ func TestSplitTags(t *testing.T) {
 
 func TestResetUnchangedFlag_ClearsSlice(t *testing.T) {
 	cmd := &cobra.Command{Use: "update"}
-	cmd.Flags().StringSlice("labels", nil, "")
+	cmd.Flags().StringArray("labels", nil, "")
 	require.NoError(t, cmd.Flags().Set("labels", "team=platform"))
 	require.NoError(t, cmd.Flags().Set("labels", "owner=engineering"))
 	require.NoError(t, resetUnchangedFlag(cmd, "labels"))
-	labels, err := cmd.Flags().GetStringSlice("labels")
+	labels, err := cmd.Flags().GetStringArray("labels")
 	require.NoError(t, err)
 	assert.Empty(t, labels)
 	assert.False(t, cmd.Flags().Changed("labels"))
@@ -1954,7 +1954,7 @@ func (f failingSliceReset) Replace(_ []string) error { return f.err }
 
 func TestResetUnchangedFlag_ReplaceError(t *testing.T) {
 	cmd := &cobra.Command{Use: "update"}
-	cmd.Flags().StringSlice("labels", nil, "")
+	cmd.Flags().StringArray("labels", nil, "")
 	require.NoError(t, cmd.Flags().Set("labels", "team=platform"))
 	flag := cmd.Flags().Lookup("labels")
 	expected := errors.New("cannot replace labels")
