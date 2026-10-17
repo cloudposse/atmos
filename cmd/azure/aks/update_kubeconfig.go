@@ -44,9 +44,14 @@ See https://atmos.tools/cli/commands/azure/aks/update-kubeconfig for more inform
 		flags := cmd.Flags()
 
 		// If --integration is specified, use the auth manager to execute the named integration.
+		// Forward --kubeconfig/--alias (and the KUBECONFIG/ATMOS_KUBECONFIG env vars bound to
+		// --kubeconfig) as per-invocation overrides so the integration path honors them the same
+		// way the direct path does. Read --kubeconfig from Viper so its env bindings take effect.
 		integration, _ := flags.GetString("integration")
 		if integration != "" {
-			return executeAKSUpdateKubeconfigViaIntegration(integration)
+			kubeconfig := v.GetString("aks.kubeconfig")
+			alias, _ := flags.GetString("alias")
+			return executeAKSUpdateKubeconfigViaIntegration(integration, kubeconfig, alias)
 		}
 
 		// If --cluster-name and --resource-group are provided with --identity, use the direct SDK path.

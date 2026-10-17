@@ -149,7 +149,7 @@ func (a *authContextWrapper) EnsureIdentityEnvironment(ctx context.Context, iden
 	panic("authContextWrapper.EnsureIdentityEnvironment should not be called")
 }
 
-func (a *authContextWrapper) ExecuteIntegration(ctx context.Context, integrationName string) error {
+func (a *authContextWrapper) ExecuteIntegration(ctx context.Context, integrationName string, opts ...auth_types.IntegrationOption) error {
 	defer perf.Track(nil, "exec.authContextWrapper.ExecuteIntegration")()
 
 	panic("authContextWrapper.ExecuteIntegration should not be called")
