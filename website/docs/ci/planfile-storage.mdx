@@ -43,6 +43,9 @@ components:
 
         s3:
           type: aws/s3
+          # Optional: authenticate the store with a specific Atmos Auth identity,
+          # independent of the component's identity (see Store Identity below).
+          identity: aws-backend
           options:
             bucket: "my-terraform-planfiles"
             prefix: "atmos/"
@@ -62,6 +65,56 @@ components:
 | **GitHub Artifacts** | `github/artifacts` | GitHub Actions workflows (recommended) |
 | **S3** | `aws/s3` | AWS-native environments, cross-provider workflows |
 | **Local** | `local/dir` | Testing and development |
+
+## Store Identity
+
+By default, a planfile store authenticates with the component's active identity - the same one
+`atmos terraform plan` used for the Terraform run. That works when the component and the store live in
+the same cloud, but it breaks in a multi-cloud setup: a component that authenticates with, say, an
+`azure/subscription` identity cannot produce AWS credentials for an `aws/s3` planfile bucket, so the
+upload fails to resolve an AWS auth context.
+
+Set `identity` on a store to authenticate it with a specific [Atmos Auth identity](/cli/configuration/auth)
+(from `auth.identities`), independent of the component's identity:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    # Non-AWS identity the component authenticates with.
+    azure-plan:
+      kind: azure/subscription
+      default: true
+      # ...
+
+    # AWS-capable identity the planfile store uses.
+    aws-backend:
+      kind: aws/assume-role   # or ambient, aws/permission-set, etc.
+      # ...
+
+components:
+  terraform:
+    planfiles:
+      default: "s3"
+      stores:
+        s3:
+          type: aws/s3
+          identity: aws-backend    # store authenticates with aws-backend
+          options:
+            bucket: "my-terraform-planfiles"
+            region: "us-east-1"
+```
+</File>
+
+The component keeps using its own identity (`azure-plan`) for Terraform operations, while the S3 planfile
+store uses `aws-backend` for storage. When `identity` is omitted, the store inherits the component's
+identity (the prior behavior), so existing single-cloud setups are unchanged.
+
+The `identity` must be able to authenticate the chosen backend: an `aws/s3` store needs an AWS-capable
+identity. It is not limited to `ambient`, though - any AWS-capable identity kind or chain
+(`aws/assume-role`, `aws/permission-set`, …) is resolved through the same Atmos Auth chain as the component,
+not just passed through from the runner environment. This mirrors the
+[`stores.*.identity`](/cli/configuration/stores) field already supported by general Atmos stores.
 
 :::tip
 If `components.terraform.planfiles` is not configured, planfile storage operations are silently
