@@ -38,7 +38,7 @@ The field test used the library `command-deny-destroy` and `function-disable-exe
   flags, then environment, then working directory, then git root or ancestor. `ATMOS_POLICY_DIR` stays
   the explicit override.
 - **Destroy detection:** the `command` and `component.command` inputs have a normalized `destroy`
-  boolean (`pkg/policy/destroy.go`). It is set for `terraform destroy`, `helmfile destroy`, and any
+  boolean (`IsDestroyInvocation` in `pkg/policy/input_schema.go`). It is set for `terraform destroy`, `helmfile destroy`, and any
   Terraform subcommand with a true `-destroy`/`--destroy` flag, also after `--`. False values stay
   false. The library rule is now `input.command == 'terraform destroy' || input.destroy`, in both
   the CEL and the Starlark variants.
