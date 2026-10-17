@@ -3,21 +3,27 @@ title: atmos aws cloudformation render
 sidebar_label: render
 sidebar_class_name: command
 id: render
-description: Render the local CloudFormation template client-side, with no AWS API calls.
+description: Render a CloudFormation template client-side, without deploying or validating it through the CloudFormation API.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
 import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
-  Render the component's local template — resolved from `template:` and, when
-  `source:` is set, JIT-provisioned first — without calling any AWS API. `render`
-  does not authenticate, so it works offline and without AWS credentials.
+Print the component’s CloudFormation template without deploying it. Inline
+templates are evaluated as stack configuration; template files are used as written.
 </Intro>
 
 <Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
 
 <CastPlayer title="atmos aws cloudformation render --help" src="/casts/screengrabs/atmos-aws-cloudformation-render--help.cast" static chrome />
 
@@ -26,6 +32,8 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 ```shell
 atmos aws cloudformation render <component> --stack <stack> [options]
 ```
+
+## Examples
 
 ```shell
 atmos aws cloudformation render vpc -s plat-ue2-dev
@@ -38,26 +46,37 @@ atmos aws cloudformation render --all -s plat-ue2-dev
 atmos aws cloudformation render --affected --base origin/main
 ```
 
-Render components filtered by tags or labels (composes with `--all`/`--affected` to narrow the selected set further):
+Render components selected by tags or labels:
 
 ```shell
 atmos aws cloudformation render --all --tags production,tier-1
 atmos aws cloudformation render --affected --labels cost-center=platform
 ```
 
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
+
 ## Flags
 
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
-  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
 
 <SelectionFlags />
 
 <GitFlags />
 </dl>
 
-:::note
-`render` skips authentication and never calls the CloudFormation API. To preview
-the changes an `apply` would actually make against the deployed stack, use
-[`diff`](/cli/commands/aws/cloudformation/diff) (alias [`plan`](/cli/commands/aws/cloudformation/plan)).
-:::
+## Source and Authentication
+
+Local templates and cached sources can render offline when their configuration
+does not require remote lookups. An uncached source must be downloaded first;
+private S3 downloads use the component's resolved AWS identity.
+
+Secret and output lookups can also require authentication and network access.
+Use `--dry-run` for static validation without downloads or lookups. Use
+[`diff`](/cli/commands/aws/cloudformation/diff) to preview changes against AWS.

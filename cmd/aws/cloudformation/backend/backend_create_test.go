@@ -40,7 +40,7 @@ func TestCreateCmd_Init(t *testing.T) {
 }
 
 func TestExecuteCreateOrUpdate_RequiresStack(t *testing.T) {
-	err := executeCreateOrUpdate(t.Context(), createOrUpdateArgs{Component: "vpc", Stack: "", Identity: "", Target: "", AutoApprove: true})
+	err := executeCreateOrUpdate(t.Context(), &createOrUpdateArgs{Component: "vpc", Stack: "", Identity: "", Target: "", AutoApprove: true})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
 }
@@ -53,7 +53,7 @@ func TestExecuteCreateOrUpdate_ConfigInitError(t *testing.T) {
 	mockCI.EXPECT().InitConfigAndAuth("vpc", "dev", "").Return(nil, nil, errors.New("boom"))
 	SetConfigInitializer(mockCI)
 
-	err := executeCreateOrUpdate(t.Context(), createOrUpdateArgs{Component: "vpc", Stack: "dev", Identity: "", Target: "", AutoApprove: true})
+	err := executeCreateOrUpdate(t.Context(), &createOrUpdateArgs{Component: "vpc", Stack: "dev", Identity: "", Target: "", AutoApprove: true})
 	require.Error(t, err)
 }
 
@@ -68,7 +68,7 @@ func TestExecuteCreateOrUpdate_DescribeComponentError(t *testing.T) {
 	mockCI.EXPECT().DescribeComponent(atmosConfig, info, "vpc", "dev").Return(nil, errors.New("boom"))
 	SetConfigInitializer(mockCI)
 
-	err := executeCreateOrUpdate(t.Context(), createOrUpdateArgs{Component: "vpc", Stack: "dev", Identity: "", Target: "", AutoApprove: true})
+	err := executeCreateOrUpdate(t.Context(), &createOrUpdateArgs{Component: "vpc", Stack: "dev", Identity: "", Target: "", AutoApprove: true})
 	require.Error(t, err)
 }
 
@@ -96,7 +96,7 @@ func TestExecuteCreateOrUpdate_Success(t *testing.T) {
 	SetConfigInitializer(mockCI)
 	SetProvisioner(mockProv)
 
-	err := executeCreateOrUpdate(t.Context(), createOrUpdateArgs{Component: "vpc", Stack: "dev", Identity: "my-identity", Target: "artifacts", AutoApprove: true})
+	err := executeCreateOrUpdate(t.Context(), &createOrUpdateArgs{Component: "vpc", Stack: "dev", Identity: "my-identity", Target: "artifacts", AutoApprove: true})
 	require.NoError(t, err)
 }
 

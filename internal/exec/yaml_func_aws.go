@@ -275,6 +275,10 @@ func processTagAwsCloudFormationOutputWithContext(
 		return nil, fmt.Errorf("failed to describe aws/cloudformation component %s in stack %s: %w", component, stack, err)
 	}
 
+	resolvedAuthContext, err = cloudFormationOutputAuthForSections(atmosConfig, sections, cloudFormationOutputScope(stack, stackInfo, authDisabled), resolvedAuthContext)
+	if err != nil {
+		return nil, err
+	}
 	// This YAML evaluator has no request context; the getter still applies its timeout.
 	outputs, err := cloudFormationOutputsForSections(context.Background(), atmosConfig, component, sections, resolvedAuthContext)
 	if err != nil {

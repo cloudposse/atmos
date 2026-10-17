@@ -1,6 +1,6 @@
 ---
 name: atmos-migration
-description: "Migrate to Atmos from native Terraform, Terraform Workspaces, Terramate, Terragrunt, Make, Just, or Task; migrate tool versions from mise or Aqua CLI; migrate AWS/GCP/Azure CLI configs, Leapp, Granted, saml2aws, or okta-aws-cli to atmos auth; and replace GitHub Actions CI (dflook, tfcmt, cloud OIDC, component updater, TFLint, Checkov, Trivy, KICS, Infracost, tfsec) with Atmos Native CI. Use for incremental adoption that preserves layout, state, task behavior, and CI enforcement."
+description: "Migrate to Atmos from native Terraform, Terraform Workspaces, Terramate, Terragrunt, Make, Just, or Task; migrate Rain or raw CloudFormation stacks to the aws/cloudformation component; migrate tool versions from mise or Aqua CLI; migrate AWS/GCP/Azure CLI configs, Leapp, Granted, saml2aws, or okta-aws-cli to atmos auth; and replace GitHub Actions CI (dflook, tfcmt, cloud OIDC, component updater, TFLint, Checkov, Trivy, KICS, Infracost, tfsec) with Atmos Native CI. Use for incremental adoption that preserves layout, state, task behavior, and CI enforcement."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -56,7 +56,7 @@ For full tutorials for end users, see:
 - [Migrating from Makefiles](https://atmos.tools/migration/makefile)
 - [Migrating from Justfiles](https://atmos.tools/migration/justfile)
 - [Migrating from Taskfile.yml](https://atmos.tools/migration/taskfile)
-- [Migrating from Rain / Raw CloudFormation](https://atmos.tools/migration/from-rain)
+- [Migrating from Rain / Raw CloudFormation](https://atmos.tools/migration/rain)
 
 ## Terraform or OpenTofu
 

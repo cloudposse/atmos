@@ -40,6 +40,8 @@ The `pull` command vendors a Terraform component source by:
 
 If the component is already vendored, it will be skipped unless `--force` is specified.
 
+The destination is the same directory the component uses at run time: `metadata.component` (the base component, not the instance name), unless `working_directory` or `provision.workdir.enabled` places it elsewhere. A `metadata.component` that is an absolute path, or that climbs out of the components directory, is rejected.
+
 ## Examples
 
 ### Basic Usage

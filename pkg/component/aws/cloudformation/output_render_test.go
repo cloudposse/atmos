@@ -283,3 +283,17 @@ func TestDescribeStackOutputs_ErrorMapping(t *testing.T) {
 		require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 	})
 }
+
+func TestJSONOutputDisplayPreservesDataFormats(t *testing.T) {
+	const document = `{"id":9007199254740993,"items":["a","b"]}`
+	outputs := map[string]any{"Config": document}
+	table := captureStdout(t, func() { require.NoError(t, renderOutputsSummary(outputs, nil)) })
+	assert.Contains(t, table, "\"id\": 9007199254740993,")
+	assert.Contains(t, table, "\"items\": [\n")
+	assert.NotContains(t, table, document)
+
+	single := captureStdout(t, func() { require.NoError(t, renderSingleOutput(outputs, "app", "Config", "table", nil)) })
+	assert.Equal(t, document+"\n", single)
+	machine := captureStdout(t, func() { require.NoError(t, renderOutputsSummary(outputs, map[string]any{"format": "json"})) })
+	assert.Contains(t, machine, `"Config": "{\"id\":9007199254740993,\"items\":[\"a\",\"b\"]}"`)
+}

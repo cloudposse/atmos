@@ -6,6 +6,8 @@ id: output
 description: Show a deployed CloudFormation stack's Outputs.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
@@ -19,6 +21,11 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 
 <Experimental />
 
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
+
 <CastPlayer title="atmos aws cloudformation output --help" src="/casts/screengrabs/atmos-aws-cloudformation-output--help.cast" static chrome />
 
 ## Usage
@@ -26,6 +33,8 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 ```shell
 atmos aws cloudformation output <component> [key] --stack <stack> [options]
 ```
+
+## Examples
 
 ```shell
 atmos aws cloudformation output vpc -s plat-ue2-dev
@@ -96,7 +105,7 @@ The table format prints a heading naming the component and stack above each tabl
 
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
-  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
 
   <dt>`--format` <em>(optional, default `table`)</em></dt>
   <dd>Output format: `json`, `yaml`, `hcl`, `env`, `dotenv`, `bash`, `csv`, `tsv`, `table`, or `github`. An unsupported value is an error that names the value and lists the valid formats.</dd>
@@ -132,14 +141,25 @@ JSON output is written without HTML escaping, so masked values read `<MASKED>`.
 
 ## Masking
 
-With masking enabled, `output` and apply summaries require `cloudformation:GetTemplate` in addition
-to `cloudformation:DescribeStacks`. Atmos reads deployed NoEcho metadata without loading a local
-template or provisioning its source. Outputs referencing NoEcho parameters, including intrinsic
-expressions and indirect resource/condition dependencies, are conservatively redacted. Known
-parameter/default literals are masked too. Unreadable or malformed metadata stops presentation
-before raw values are printed. This also protects outputs when local parameters have changed.
+With masking enabled, output presentation requires both
+`cloudformation:GetTemplate` and `cloudformation:DescribeStacks`.
+Atmos reads the deployed template's `NoEcho` metadata, without requiring a
+local template or source download.
 
-`--mask=false` explicitly disables presentation masking. Internal YAML output lookups retain real
-values for component dependencies. Arbitrary transformed secrets without detectable template
-references cannot be recognized; keep secrets out of CloudFormation Outputs. Masking also applies
-when you print a single key.
+### Values Masked
+
+- Outputs that reference `NoEcho` parameters, including intrinsic expressions
+  and indirect resource or condition dependencies.
+- Known parameter and default literals registered for masking.
+- A single selected output key, using the same rules as the full output listing.
+
+Unreadable or malformed template metadata stops presentation before values are
+printed. Changes to local parameters do not bypass deployed-template masking.
+
+### Limits and Overrides
+
+Use `--mask=false` to disable presentation masking. Internal YAML output
+lookups return real values for component dependencies.
+
+Secrets transformed in ways that leave no detectable template reference may
+not be recognized. Keep secrets out of CloudFormation outputs.

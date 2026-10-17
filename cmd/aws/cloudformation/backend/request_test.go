@@ -56,8 +56,8 @@ func TestBackendVerbs_RequireComponent(t *testing.T) {
 	setupTestWithMocks(t) // Strict mocks fail the test on any config initialization.
 	ctx := t.Context()
 
-	require.ErrorIs(t, executeCreateOrUpdate(ctx, createOrUpdateArgs{Verb: verbCreate, Stack: "dev"}), errUtils.ErrComponentRequired)
-	require.ErrorIs(t, executeCreateOrUpdate(ctx, createOrUpdateArgs{Verb: verbUpdate, Stack: "dev", DryRun: true}), errUtils.ErrComponentRequired)
+	require.ErrorIs(t, executeCreateOrUpdate(ctx, &createOrUpdateArgs{Verb: verbCreate, Stack: "dev"}), errUtils.ErrComponentRequired)
+	require.ErrorIs(t, executeCreateOrUpdate(ctx, &createOrUpdateArgs{Verb: verbUpdate, Stack: "dev", DryRun: true}), errUtils.ErrComponentRequired)
 	require.ErrorIs(t, executeDelete(ctx, deleteRequest{Stack: "dev"}), errUtils.ErrComponentRequired)
 	require.ErrorIs(t, executeDescribe(ctx, &describeRequest{Stack: "dev", Format: "table"}), errUtils.ErrComponentRequired)
 	require.ErrorIs(t, executeList(ctx, "", "dev", "", "table"), errUtils.ErrComponentRequired)
