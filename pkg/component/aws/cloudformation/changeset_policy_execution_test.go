@@ -27,7 +27,7 @@ func TestChangesetExecuteLoadsPolicyWithoutTemplate(t *testing.T) {
 	policy := `{"Statement":[]}`
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "policy.json"), []byte(policy), 0o600))
 	stubProvisionAndResolveComponentPath(t, dir, nil)
-	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"stack_name": "vpc", "template": "absent-template.yaml", "stack_policy": map[string]any{"file": "policy.json"}}}
+	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"stack_name": "vpc", "path": "absent-template.yaml", "stack_policy": map[string]any{"file": "policy.json"}}}
 	spec, err := resolveSpecAndTemplate(context.Background(), &schema.AtmosConfiguration{}, info, OperationChangesetExecute)
 	require.NoError(t, err)
 	require.Equal(t, policy, spec.StackPolicyBody)
@@ -53,7 +53,7 @@ func TestChangesetExecutePolicyLoadErrors(t *testing.T) {
 				provisionErr = errors.New("source unavailable")
 			}
 			stubProvisionAndResolveComponentPath(t, t.TempDir(), provisionErr)
-			info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"stack_name": "vpc", "template": "absent-template.yaml", "stack_policy": map[string]any{"file": "missing.json"}}}
+			info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"stack_name": "vpc", "path": "absent-template.yaml", "stack_policy": map[string]any{"file": "missing.json"}}}
 			_, err := resolveSpecAndTemplate(context.Background(), &schema.AtmosConfiguration{}, info, OperationChangesetExecute)
 			require.Error(t, err)
 			if provisioningFails {

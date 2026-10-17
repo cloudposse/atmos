@@ -61,7 +61,7 @@ func TestExecute_DryRunSkipsAuthProvisioningAndHooks(t *testing.T) {
 				},
 				processStacks: func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
 					info.ComponentIsEnabled = true
-					info.ComponentSection = map[string]any{"stack_name": "example", "template": "unprovisioned.yaml"}
+					info.ComponentSection = map[string]any{"stack_name": "example", "path": "unprovisioned.yaml"}
 					return info, nil
 				},
 				setupComponentAuthForCLI: func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
@@ -115,7 +115,7 @@ func TestExecuteSingle_DryRunRenderStillLoadsTemplate(t *testing.T) {
 	installExecutorSeamStubs(t, executorSeamStubs{
 		processStacks: func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
 			info.ComponentIsEnabled = true
-			info.ComponentSection = map[string]any{"stack_name": "example", "template": "template.yaml"}
+			info.ComponentSection = map[string]any{"stack_name": "example", "path": "template.yaml"}
 			return info, nil
 		},
 		provisionAndResolveComponentPath: func(context.Context, provisioner.OutputWriters, *schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string) (string, bool, error) {
@@ -132,7 +132,7 @@ func TestExecuteSingle_DryRunStillValidatesParameters(t *testing.T) {
 	installExecutorSeamStubs(t, executorSeamStubs{
 		processStacks: func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
 			info.ComponentIsEnabled = true
-			info.ComponentSection = map[string]any{"stack_name": "example", "template": "template.yaml", "parameters": map[string]any{"invalid": map[string]any{"nested": "value"}}}
+			info.ComponentSection = map[string]any{"stack_name": "example", "path": "template.yaml", "parameters": map[string]any{"invalid": map[string]any{"nested": "value"}}}
 			return info, nil
 		},
 	})

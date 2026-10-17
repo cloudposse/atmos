@@ -42,7 +42,7 @@ func TestExecuteSingle_ChangesetMetadata(t *testing.T) {
 						processStacks: func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
 							info.ComponentIsEnabled = true
 							info.ComponentIsLocked = locked
-							info.ComponentSection = map[string]any{"stack_name": "vpc", "template": "template.yaml"}
+							info.ComponentSection = map[string]any{"stack_name": "vpc", "path": "template.yaml"}
 							return info, nil
 						},
 						setupComponentAuthForCLI: func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {

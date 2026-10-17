@@ -50,7 +50,7 @@ func verifyStackSetLock(t *testing.T, operation Operation, locked, dryRun, autoA
 			info.ComponentIsLocked = locked
 			info.ComponentSection = map[string]any{
 				"stack_name": "fleet",
-				"template":   "template.yaml",
+				"path":       "template.yaml",
 				"provision":  map[string]any{"targets": map[string]any{"fleet": map[string]any{"kind": "aws/stackset"}}},
 			}
 			return info, nil

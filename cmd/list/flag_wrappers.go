@@ -303,7 +303,7 @@ func WithLabelsFlag(options *[]flags.Option) {
 
 	*options = append(
 		*options,
-		flags.WithStringFlag(flagLabels, "", "", "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
+		flags.WithStringSliceFlag(flagLabels, "", nil, "Filter by labels (comma-separated key=value or key:value pairs within an occurrence, and/or repeated, matches all): --labels=cost-center=platform,compliance=sox or --labels cost-center=platform --labels compliance=sox"),
 		flags.WithEnvVars(flagLabels, "ATMOS_COMPONENT_LABELS"),
 		flags.WithViperKey(flagLabels, labelsViperKey),
 	)

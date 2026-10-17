@@ -155,8 +155,8 @@ system, unlike native Helm.
     Prevents the stack from being deleted. `atmos aws cloudformation delete`
     respects this and fails with an actionable hint instead of silently
     disabling it — pass `--disable-termination-protection` to delete anyway.
-    Setting this to `false` and successfully re-applying the stack disables
-    protection. This removes the stack's deletion safeguard; use it deliberately.
+    Setting this to `false` and re-applying does not disable protection: apply
+    only ever turns protection on, never off.
   </dd>
 
   <dt>`timeout_in_minutes`</dt>

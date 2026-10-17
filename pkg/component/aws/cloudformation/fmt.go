@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // yamlIndent is the indentation width formatTemplate re-emits with, matching
@@ -98,10 +99,22 @@ func formatTemplateAsBlockYAML(body string) (string, error) {
 	return buf.String(), nil
 }
 
+// fmtSkipInlineKey is private execution context, never a user-facing flag.
+const fmtSkipInlineKey = "cloudformation-fmt-skip-inline"
+
 // runFmt formats the component's local template. With --check, reports
 // whether the file is already formatted (via ErrAwsCloudFormationFmtNotClean,
 // for CI) without writing; otherwise formats in place.
 func runFmt(spec *stackSpec, flags map[string]any, summary map[string]any) (map[string]any, error) {
+	if spec.TemplateAbsPath == "" {
+		if skip, _ := flags[fmtSkipInlineKey].(bool); skip {
+			ui.Warning(fmt.Sprintf("%s: skipped (%v)", spec.StackName, errUtils.ErrAwsCloudFormationFmtRequiresPath))
+			summary["skipped"] = true
+			return summary, nil
+		}
+		return summary, errUtils.ErrAwsCloudFormationFmtRequiresPath
+	}
+
 	formatted, err := formatTemplate(spec.TemplateBody)
 	if err != nil {
 		return summary, err

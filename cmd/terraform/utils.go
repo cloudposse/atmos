@@ -209,7 +209,7 @@ func isMultiComponentInvocation(cmd_ *cobra.Command, args []string) bool {
 	if hasComponentArgument(cmd_.Name(), args) {
 		return false
 	}
-	return len(v.GetStringSlice("tags")) > 0 || v.GetString("labels") != ""
+	return len(v.GetStringSlice("tags")) > 0 || len(v.GetStringSlice("labels")) > 0
 }
 
 // hasComponentArgument reports whether the terraform subcommand and its positional args name a
