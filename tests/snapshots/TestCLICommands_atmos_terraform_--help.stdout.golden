@@ -90,7 +90,7 @@ FLAGS
       --init-pass-vars               Pass the generated varfile to terraform init using --var-file flag (OpenTofu
                                      feature)
 
-      --labels strings               Filter by labels (comma-separated key=value or key:value pairs within an
+      --labels stringArray           Filter by labels (comma-separated key=value or key:value pairs within an
                                      occurrence, and/or repeated, matches all): --labels=cost-
                                      center=platform,compliance=sox or --labels cost-center=platform --labels
                                      compliance=sox
