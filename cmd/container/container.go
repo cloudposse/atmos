@@ -120,7 +120,7 @@ func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
 	if tagsSlice, err := cmd.Flags().GetStringSlice("tags"); err == nil {
 		info.Tags = tags.ParseTagsFlag(strings.Join(tagsSlice, ","))
 	}
-	if labelsSlice, err := cmd.Flags().GetStringSlice("labels"); err == nil {
+	if labelsSlice, err := cmd.Flags().GetStringArray("labels"); err == nil {
 		// Error ignored: the wrapped Args validator in buildVerbCmd already
 		// rejected a malformed --labels value before RunE.
 		info.Labels, _ = tags.ParseLabelsFlag(labelsSlice)

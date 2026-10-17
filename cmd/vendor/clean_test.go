@@ -30,7 +30,7 @@ func newVendorCleanTestCmd() *cobra.Command {
 	c.Flags().String("file", "", "")
 	c.Flags().String("tags", "", "")
 	c.Flags().StringP("stack", "s", "", "")
-	c.Flags().StringSlice("labels", nil, "")
+	c.Flags().StringArray("labels", nil, "")
 	c.Flags().Bool("force", false, "")
 	c.Flags().Bool("dry-run", false, "")
 	c.Flags().Bool("prune-lock", false, "")

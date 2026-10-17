@@ -311,7 +311,7 @@ func operationFlagOptions(use, subCommand string) []flags.Option {
 		flags.WithBoolFlag("clone-target-ref", "", false, "Clone the target ref instead of checking it out in the current repository for affected detection."),
 		flags.WithStringSliceFlag(flagTags, "", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
 		flags.WithViperKey(flagTags, "aws.cloudformation.tags"),
-		flags.WithStringSliceFlag(flagLabels, "", nil, "Filter by labels (repeatable and/or comma-separated key=value or key:value pairs, matches all): --labels cost-center=platform --labels compliance=sox"),
+		flags.WithStringArrayFlag(flagLabels, "", nil, "Filter by labels (repeatable and/or comma-separated key=value or key:value pairs, matches all): --labels cost-center=platform --labels compliance=sox"),
 		flags.WithViperKey(flagLabels, "aws.cloudformation.labels"),
 	}
 	options = append(options, operationSpecificFlagOptions(use, subCommand)...)
@@ -465,7 +465,7 @@ func validateFlagSelection(cmd *cobra.Command) error {
 		return fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationInvalidFlagCombination, err)
 	}
 
-	labelsFlag, _ := cmd.Flags().GetStringSlice(flagLabels)
+	labelsFlag, _ := cmd.Flags().GetStringArray(flagLabels)
 	if _, err := tags.ParseLabelsFlag(labelsFlag); err != nil {
 		return err
 	}
@@ -494,7 +494,7 @@ func hasSelectionFlags(cmd *cobra.Command) bool {
 	all, _ := cmd.Flags().GetBool(flagAll)
 	affected, _ := cmd.Flags().GetBool(flagAffected)
 	tagsFlag, _ := cmd.Flags().GetStringSlice(flagTags)
-	labelsFlag, _ := cmd.Flags().GetStringSlice(flagLabels)
+	labelsFlag, _ := cmd.Flags().GetStringArray(flagLabels)
 	return all || affected || len(tagsFlag) > 0 || len(labelsFlag) > 0
 }
 
@@ -628,7 +628,7 @@ func applyTagsAndLabelsFlags(cmd *cobra.Command, info *schema.ConfigAndStacksInf
 	if tagsSlice, err := cmd.Flags().GetStringSlice(flagTags); err == nil {
 		info.Tags = tags.ParseTagsFlag(strings.Join(tagsSlice, ","))
 	}
-	if labelsSlice, err := cmd.Flags().GetStringSlice(flagLabels); err == nil {
+	if labelsSlice, err := cmd.Flags().GetStringArray(flagLabels); err == nil {
 		// Error ignored: validateFlagSelection already rejected malformed --labels before RunE.
 		info.Labels, _ = tags.ParseLabelsFlag(labelsSlice)
 	}

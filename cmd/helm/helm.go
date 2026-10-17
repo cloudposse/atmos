@@ -153,7 +153,7 @@ func operationFlagOptions(name string) []flags.Option {
 		flags.WithStringFlag("ssh-key-password", "", "", "Password for the SSH private key used to clone the target ref for affected detection."),
 		flags.WithBoolFlag("clone-target-ref", "", false, "Clone the target ref instead of checking it out in the current repository for affected detection."),
 		flags.WithStringSliceFlag("tags", "", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
-		flags.WithStringSliceFlag(flagLabels, "", nil, "Filter by labels (comma-separated key=value or key:value pairs within an occurrence, and/or repeated, matches all): --labels=cost-center=platform,compliance=sox or --labels cost-center=platform --labels compliance=sox"),
+		flags.WithStringArrayFlag(flagLabels, "", nil, "Filter by labels (comma-separated key=value or key:value pairs within an occurrence, and/or repeated, matches all): --labels=cost-center=platform,compliance=sox or --labels cost-center=platform --labels compliance=sox"),
 	}
 	if name == helmValuesName {
 		// Values produces one pipeable YAML document, so unlike lifecycle
@@ -244,7 +244,7 @@ func validateOperationArgs(cmd *cobra.Command, args []string) error {
 	}
 
 	tagsFlag, _ := cmd.Flags().GetStringSlice("tags")
-	labelsFlag, _ := cmd.Flags().GetStringSlice(flagLabels)
+	labelsFlag, _ := cmd.Flags().GetStringArray(flagLabels)
 	if _, err := tags.ParseLabelsFlag(labelsFlag); err != nil {
 		return err
 	}
@@ -263,7 +263,7 @@ func hasSelectionFlags(cmd *cobra.Command) bool {
 	all, _ := cmd.Flags().GetBool(flagAll)
 	affected, _ := cmd.Flags().GetBool(flagAffected)
 	tagsFlag, _ := cmd.Flags().GetStringSlice("tags")
-	labelsFlag, _ := cmd.Flags().GetStringSlice(flagLabels)
+	labelsFlag, _ := cmd.Flags().GetStringArray(flagLabels)
 	return all || affected || len(tagsFlag) > 0 || len(labelsFlag) > 0
 }
 
@@ -434,7 +434,7 @@ func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
 	if tagsSlice, err := cmd.Flags().GetStringSlice("tags"); err == nil {
 		info.Tags = tags.ParseTagsFlag(strings.Join(tagsSlice, ","))
 	}
-	if labelsSlice, err := cmd.Flags().GetStringSlice(flagLabels); err == nil {
+	if labelsSlice, err := cmd.Flags().GetStringArray(flagLabels); err == nil {
 		// Error ignored: validateOperationArgs already rejected malformed --labels before RunE.
 		info.Labels, _ = tags.ParseLabelsFlag(labelsSlice)
 	}

@@ -82,7 +82,7 @@ func init() {
 		// vendor pull reads --tags/--labels straight from its Cobra flags (internal/exec), so only the
 		// Viper key is namespaced here; the ATMOS_VENDOR_* variables apply to update, diff, and verify.
 		flags.WithViperKey(vendorTagsFlagName, vendorTagsViperKey),
-		flags.WithStringSliceFlag(vendorLabelsFlagName, "", nil, vendorLabelsFlagHelp),
+		flags.WithStringArrayFlag(vendorLabelsFlagName, "", nil, vendorLabelsFlagHelp),
 		flags.WithViperKey(vendorLabelsFlagName, vendorLabelsViperKey),
 		flags.WithBoolFlag("everything", "", false, "Vendor all components"),
 		flags.WithBoolFlag("refresh-lock", "", false, "Refresh immutable vendor lock entries from declared sources"),
