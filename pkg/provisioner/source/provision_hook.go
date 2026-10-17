@@ -397,8 +397,14 @@ func checkMetadataChanges(metadata *workdir.WorkdirMetadata, sourceSpec *schema.
 		return true, fmt.Sprintf("Source version changed (%s → %s)", oldVer, newVer)
 	}
 
-	if sourceSpec.Uri != metadata.SourceURI {
-		return true, fmt.Sprintf("Source URI changed (%s → %s)", metadata.SourceURI, sourceSpec.Uri)
+	// SourceURI is a redacted provenance label; query strings may select a
+	// different artifact. Compare the original cache source when it is available.
+	previous := metadata.Source
+	if previous == "" {
+		previous = metadata.SourceURI
+	}
+	if sourceSpec.Uri != previous {
+		return true, fmt.Sprintf("Source URI changed (%s → %s)", downloader.RedactSource(previous), downloader.RedactSource(sourceSpec.Uri))
 	}
 
 	return false, ""

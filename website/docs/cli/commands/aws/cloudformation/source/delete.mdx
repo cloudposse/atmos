@@ -1,0 +1,111 @@
+---
+title: atmos aws cloudformation source delete
+sidebar_label: source delete
+sidebar_class_name: command
+id: delete
+description: Remove vendored source directory
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Use this command to delete the vendored source directory for an `aws/cloudformation` component. This removes the component directory that was created by `atmos aws cloudformation source pull`.
+</Intro>
+
+<ActionCard title="Source-Based Version Pinning">
+    Learn how to configure the `source` field for per-environment version control.
+    <div>
+      <PrimaryCTA to="/design-patterns/version-management/source-based-versioning">Design Pattern</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<CastPlayer title="atmos aws cloudformation source delete --help" src="/casts/screengrabs/atmos-aws-cloudformation-source-delete--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation source delete [component] [--stack <stack>] [--force]
+```
+
+## Description
+
+The `delete` command removes the vendored component directory. Without `--force`, it prompts for confirmation and deletes only after you confirm. Use `--force` to skip the confirmation prompt.
+
+The component and stack can be omitted to request interactive selection. Selection requires interactive mode, terminal input, and available candidates; it is disabled in CI. If either value remains unresolved, the command reports a missing-argument or missing-stack error. `--force` skips deletion confirmation only; it does not supply missing component or stack values.
+
+For CI or other unattended use, provide the component, `--stack`, and `--force`. If the directory exists and terminal input is unavailable, running without `--force` returns an interactive-input error and leaves the directory unchanged.
+
+This is useful for:
+- Cleaning up vendored components before re-vendoring
+- Removing components that are no longer needed
+- Resetting to a clean state for troubleshooting
+
+## Examples
+
+### Delete Vendored Component
+
+Remove a vendored component directory without prompting:
+
+```shell
+atmos aws cloudformation source delete vpc --stack dev --force
+```
+
+Output:
+```
+Deleting directory: components/cloudformation/vpc
+✓ Successfully deleted: components/cloudformation/vpc
+```
+
+### Without Force Flag
+
+In an interactive terminal, omit `--force` to review and confirm the deletion:
+
+```shell
+atmos aws cloudformation source delete vpc --stack dev
+```
+
+The command asks whether to delete the source directory. Choose **Yes!** to delete it, or **No.** to cancel and keep the directory. Without terminal input, use `--force` as shown in the previous example.
+
+### Request Interactive Selection
+
+Omitting the component and stack prompts you to select a source-managed CloudFormation component and a stack containing it, then confirm deletion:
+
+```shell
+atmos aws cloudformation source delete
+```
+
+You can also provide the component and omit `--stack` to select only the stack. If `ATMOS_STACK` is set, that stack is used without a selection prompt.
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>The name of the Atmos component to delete. May be omitted for interactive selection when a matching candidate is available; required explicitly for non-interactive use.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>The Atmos stack name. Can also be set via `ATMOS_STACK`. If unset, attempts interactive selection of a stack containing the component. For non-interactive use, supply `--stack` or `ATMOS_STACK`.</dd>
+
+  <dt>`--force` / `-f`</dt>
+  <dd>**Optional.** Skip confirmation and delete the source directory. Use this flag for non-interactive deletion.</dd>
+</dl>
+
+## Safety
+
+The `delete` command has several safety features:
+
+1. **Confirmation by default** - Prompts before deletion unless `--force` is set; declining preserves the directory
+2. **Only deletes source-managed components** - Only works on components with `source` configured
+3. **Non-destructive on missing directories** - Shows a warning if the directory doesn't exist instead of failing
+
+## See Also
+
+- [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) — Design pattern for per-environment version control
+- [`atmos aws cloudformation source`](/cli/commands/aws/cloudformation/source) — Parent command overview
+- [`atmos aws cloudformation source pull`](/cli/commands/aws/cloudformation/source/pull) — Vendor component source
+- [`atmos aws cloudformation source list`](/cli/commands/aws/cloudformation/source/list) — List components with sources

@@ -44,7 +44,7 @@ Some upstream orgs block the GitHub API calls this action needs to resolve a tag
 ]
 ```
 
-**This is the only mechanism that downgrades a resolution failure to a warning, and only for the specific access-block condition (an HTTP 403) the entry documents.** A listed repo's tag lookup can still fail hard: a 404 (deleted/renamed tag), a malformed API response, or an exhausted retry on a transient error is never downgraded, even for a listed repo — only a 403 is. Not every 403 counts, either: a rate-limit 403 (`x-ratelimit-remaining: 0` on the response) means *this token* is out of budget for every remaining lookup, not that this one repo is access-blocked, so it's excluded and stays a hard failure even for a listed repo — detected via that response header, never by inspecting the error's message text. A listed repo still goes through the normal tag-resolution attempt on every run; if the API call ever succeeds, normal drift-checking applies and can still fail on a genuine mismatch. Adding or removing an entry requires a reviewed PR to this file, and every entry must have a non-empty `action`, `description`, and at least one `references` entry — a malformed entry fails the whole check rather than silently suppressing a real failure.
+**This is the only mechanism that downgrades a resolution failure to a warning.** It requires both a reviewed allowlist entry and an HTTP 403 whose API response body explicitly identifies the requested owner's organization IP allow list as blocking access. A missing or unrecognized message fails verification, even if primary quota remains. Primary and secondary rate limits, including secondary-limit responses without retry headers, remain failures after bounded retries. Deleted tags, malformed responses, exhausted transient retries, and SHA mismatches are never downgraded. A listed repository still undergoes normal tag resolution on every run; a successful lookup must match the pinned SHA. Adding or removing an entry requires a reviewed PR, and every entry must include a non-empty `action`, `description`, and at least one `references` entry. Malformed entries fail the check.
 
 ### Trust boundary
 
@@ -106,9 +106,9 @@ Handles sub-actions and reusable workflow calls (`owner/repo/sub@sha # tag`), ta
 
 ## Rate limits and diagnostic size
 
-When GitHub returns HTTP 403 with `x-ratelimit-remaining: 0`, the verifier stops
-new tag lookups for that run. Previously verified tags remain cached; unresolved
-references fail verification. A later run can retry after the quota resets.
+The verifier honors GitHub quota-reset and retry headers within a bounded recovery
+budget. If recovery is exhausted, it stops new tag lookups for that run. Previously
+verified tags remain cached; unresolved references fail verification.
 
 The verification step writes complete results to a temporary JSON file. The
 comment step reads that file instead of passing the payload through an environment
@@ -123,7 +123,18 @@ Run the actual action scripts against mocked GitHub responses without network ac
 node --test .github/actions/verify-sha-pinning/offline.test.mjs
 ```
 
-The existing live API smoke test is also available:
+API lookups honor GitHub's `retry-after` and primary quota reset headers before retrying.
+Each lookup has at most three attempts, and the verifier shares a 65-minute rate-limit
+wait budget across all lookups. Exhausted recovery remains a failure and stops further
+API lookups; rate-limit errors are never downgraded through the access-block allowlist.
+
+The retry regression tests use a simulated clock and require no token:
+
+```bash
+node --test --experimental-test-coverage .github/actions/verify-sha-pinning/*.test.cjs
+```
+
+Run the live tag-resolution and policy tests with a token:
 
 ```bash
 GITHUB_TOKEN=$(gh auth token) node .github/actions/verify-sha-pinning/test.mjs
