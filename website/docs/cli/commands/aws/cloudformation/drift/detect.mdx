@@ -6,6 +6,8 @@ id: detect
 description: Run drift detection against the deployed stack.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
@@ -22,6 +24,11 @@ import SkipHooksFlag from '@site/docs/cli/commands/aws/cloudformation/_partials/
 
 <Experimental />
 
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
+
 <CastPlayer title="atmos aws cloudformation drift detect --help" src="/casts/screengrabs/atmos-aws-cloudformation-drift-detect--help.cast" static chrome />
 
 ## Usage
@@ -29,6 +36,8 @@ import SkipHooksFlag from '@site/docs/cli/commands/aws/cloudformation/_partials/
 ```shell
 atmos aws cloudformation drift detect <component> --stack <stack> [options]
 ```
+
+## Examples
 
 ```shell
 atmos aws cloudformation drift detect vpc -s plat-ue2-dev
@@ -47,11 +56,18 @@ atmos aws cloudformation drift detect --all -s plat-ue2-dev --fail-on-drift
 atmos aws cloudformation drift detect --affected --base origin/main --fail-on-drift
 ```
 
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
+
 ## Flags
 
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
-  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
 
   <dt>`--fail-on-drift` <em>(optional)</em></dt>
   <dd>Exit non-zero if drift is detected. Useful for CI drift-detection jobs.</dd>

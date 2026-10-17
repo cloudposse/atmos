@@ -11,11 +11,8 @@ import DocCardList from '@theme/DocCardList'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-Manage multi-account/multi-region [CloudFormation StackSets](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/what-is-cfnstacksets.html)
-through a `kind: aws/stackset` `provision.targets` entry — a separate delivery
-mechanism from `apply`/`deploy`'s single-account/region changeset flow. A
-StackSet target is used exclusively by these `stackset` verbs; it is never
-selected through `apply --target`.
+Manage CloudFormation StackSets across AWS accounts and regions. Configure
+a `kind: aws/stackset` target for creation and updates.
 </Intro>
 
 <Experimental />

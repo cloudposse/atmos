@@ -60,7 +60,7 @@ each level merges into the final result so you can keep configuration
 | Kubernetes | `before`/`after.kubernetes.render`, `diff`/`plan`, `apply`/`deploy`, `delete`, and `validate`. `plan` normalizes to `diff`; `deploy` normalizes to `apply`. |
 | Native Helm | `before`/`after.helm.template`, `diff`, `apply`/`deploy`, and `delete`. `deploy` normalizes to `apply`. |
 | Helmfile | `before`/`after.helmfile.template`, `diff`, `apply`/`sync`/`deploy`, and `destroy`. `sync` and `deploy` normalize to `apply`. |
-| CloudFormation | `before`/`after.aws/cloudformation.diff`, `apply`, `delete`, `drift-detect`, and `drift-describe`. `plan` normalizes to `diff`; `deploy` normalizes to `apply`. No other CloudFormation verb (`render`, `validate`, `output`, `get`, `changeset`, `fmt`, `tree`, `logs`, `watch`, `list`, `stackset`, `backend`, `source`) fires hooks. Skip them for one run with `--skip-hooks` (all hooks) or `--skip-hooks=name1,name2` (named hooks) on the verbs that fire them, or with the `ATMOS_SKIP_HOOKS` environment variable. |
+| CloudFormation | `before`/`after.aws/cloudformation.diff`, `apply`, `delete`, `drift-detect`, and `drift-describe`. The aliases `plan` and `deploy` use the `diff` and `apply` events. See [CloudFormation lifecycle hooks](/stacks/components/aws-cloudformation#lifecycle-hooks). |
 | Scaffold generation | `before.scaffold.generate` and `after.scaffold.generate`. These are declared in `scaffold.yaml`, not stack manifests, and support only `kind: step` and `kind: steps`. |
 
 Hooks with no `events` list fire on every supported event for backward
