@@ -194,6 +194,9 @@ func createPlanfileStore(opts ExecuteOptions) (planfile.Store, error) {
 		planfilesConfig := opts.AtmosConfig.Components.Terraform.Planfiles
 		if planfilesConfig.Default != "" {
 			if storeSpec, ok := planfilesConfig.Stores[planfilesConfig.Default]; ok {
+				if err := validateStoreIdentity(opts.AtmosConfig, planfilesConfig.Default, storeSpec.Identity); err != nil {
+					return nil, err
+				}
 				artOpts.Type = storeSpec.Type
 				artOpts.Options = storeSpec.Options
 				attachStoreIdentity(&artOpts, opts.Info, storeSpec.Identity)
@@ -247,6 +250,24 @@ func attachIdentity(artOpts *artifact.StoreOptions, info *schema.ConfigAndStacks
 		return
 	}
 	attachIdentityFor(artOpts, info, info.Identity)
+}
+
+// validateStoreIdentity rejects a store-level identity that names no entry in
+// auth.identities. Without this, a typo'd identity would still create the store
+// and only fail during a later upload or download - after the plan work has run.
+// Validating at store creation surfaces the mistake immediately with a message
+// that names the store and the identity. No-op when no store identity is set.
+func validateStoreIdentity(atmosConfig *schema.AtmosConfiguration, storeName, identity string) error {
+	defer perf.Track(atmosConfig, "ci.validateStoreIdentity")()
+
+	if identity == "" || atmosConfig == nil {
+		return nil
+	}
+	if _, ok := atmosConfig.Auth.Identities[identity]; !ok {
+		return fmt.Errorf("%w: planfile store %q references identity %q, which is not defined in auth.identities",
+			errUtils.ErrIdentityNotInConfig, storeName, identity)
+	}
+	return nil
 }
 
 // attachStoreIdentity selects the identity the planfile store should

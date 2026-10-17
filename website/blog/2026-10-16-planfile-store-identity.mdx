@@ -30,9 +30,9 @@ failed to resolve AWS auth context for identity "azure-plan":
 auth context not available for identity
 ```
 
-The reverse hit too: an AWS component with a planfile store in another cloud had the same mismatch. There was
-no way to say "authenticate the component one way, but authenticate the planfile store another way." The two
-were locked together.
+The shape of the problem is general: there was no way to say "authenticate the component one way, but
+authenticate the planfile store another way." The two were locked together. (The same mismatch will apply in
+reverse once non-AWS planfile backends land; today the S3 store is the one that trips on it.)
 
 ## The Fix
 
@@ -55,9 +55,9 @@ components:
 ```
 
 The component keeps using its own identity for the Terraform run, while the store uses `aws-backend` only for
-upload and download. The identity works with any kind, not just ambient credentials: an `aws/assume-role` or
-`aws/permission-set` identity is resolved through the same Atmos Auth chain, not merely passed through from
-the runner environment.
+upload and download. The store identity isn't limited to ambient credentials: for the S3 store, any
+AWS-capable identity - `aws/assume-role`, `aws/permission-set`, and the like - is resolved through the same
+Atmos Auth chain, not merely passed through from the runner environment.
 
 When `identity` is omitted, the store inherits the component's identity exactly as before, so existing
 single-cloud projects need no changes.
@@ -91,7 +91,7 @@ components:
             region: us-east-1
 ```
 
-See the [Store Identity documentation](/ci/planfile-storage#store-identity) for the full configuration
+See the [Store Identity documentation](/ci/planfile-storage) for the full configuration
 reference, and the [per-store identity example](https://github.com/cloudposse/atmos/tree/main/examples/planfile-store-identity)
 for a complete, working project.
 

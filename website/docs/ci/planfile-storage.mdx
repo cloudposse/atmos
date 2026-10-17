@@ -110,9 +110,10 @@ The component keeps using its own identity (`azure-plan`) for Terraform operatio
 store uses `aws-backend` for storage. When `identity` is omitted, the store inherits the component's
 identity (the prior behavior), so existing single-cloud setups are unchanged.
 
-The `identity` field works with any identity kind, not just `ambient` - the store's upload authenticates
-through the same Atmos Auth chain as the component, so an `aws/assume-role` or `aws/permission-set`
-identity is resolved, not just passed through from the runner environment. This mirrors the
+The `identity` must be able to authenticate the chosen backend: an `aws/s3` store needs an AWS-capable
+identity. It is not limited to `ambient`, though - any AWS-capable identity kind or chain
+(`aws/assume-role`, `aws/permission-set`, …) is resolved through the same Atmos Auth chain as the component,
+not just passed through from the runner environment. This mirrors the
 [`stores.*.identity`](/cli/configuration/stores) field already supported by general Atmos stores.
 
 :::tip

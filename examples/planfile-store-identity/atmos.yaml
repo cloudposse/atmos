@@ -57,8 +57,9 @@ auth:
       principal:
         subscription_id: "22222222-2222-2222-2222-222222222222"
 
-    # AWS identity the planfile store authenticates with. Any identity kind
-    # works here (ambient, aws/assume-role, aws/permission-set, ...).
+    # AWS identity the planfile store authenticates with. The aws/s3 store needs
+    # an AWS-capable identity; any AWS kind or chain works here (ambient,
+    # aws/assume-role, aws/permission-set, ...).
     aws-backend:
       kind: aws/assume-role
       via:

@@ -983,16 +983,21 @@ func TestCreatePlanfileStore(t *testing.T) {
 		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
 		t.Setenv("GITHUB_ACTIONS", "")
 
-		// Swap the resolver factory so no live auth manager is needed. A
-		// non-empty store identity defers S3 client init, so no AWS call is
-		// made during construction.
+		// Capture the identity the backend resolves with, so we prove the
+		// store-level identity (not the component's) actually reached the S3
+		// backend. A non-empty store identity defers S3 client init, so no AWS
+		// call is made during construction.
+		resolver := &capturingPlanfileResolver{}
 		original := defaultResolverFactory
 		defaultResolverFactory = func(_ authtypes.AuthManager, _ *schema.ConfigAndStacksInfo) store.AuthContextResolver {
-			return planfileIdentityStubResolver{}
+			return resolver
 		}
 		t.Cleanup(func() { defaultResolverFactory = original })
 
 		cfg := &schema.AtmosConfiguration{}
+		cfg.Auth = schema.AuthConfig{
+			Identities: map[string]schema.Identity{"aws-backend": {}},
+		}
 		cfg.Components.Terraform.Planfiles = schema.PlanfilesConfig{
 			Default: "s3",
 			Stores: map[string]schema.PlanfileStoreSpec{
@@ -1019,19 +1024,61 @@ func TestCreatePlanfileStore(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, st)
 		assert.Equal(t, "aws/s3", st.Name())
+
+		// Trigger the deferred client init so the backend resolves its identity.
+		// The capturing resolver returns an error to short-circuit before any
+		// real S3 call; we only assert which identity the backend passed to it.
+		_, _ = st.Exists(context.Background(), "some/planfile/key")
+		assert.Equal(t, "aws-backend", resolver.gotIdentity,
+			"the S3 backend must resolve with the store-level identity, not the component's")
+	})
+
+	t.Run("unknown store identity is rejected at creation", func(t *testing.T) {
+		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
+		t.Setenv("GITHUB_ACTIONS", "")
+
+		cfg := &schema.AtmosConfiguration{}
+		// auth.identities does NOT define "typo-identity".
+		cfg.Auth = schema.AuthConfig{
+			Identities: map[string]schema.Identity{"aws-backend": {}},
+		}
+		cfg.Components.Terraform.Planfiles = schema.PlanfilesConfig{
+			Default: "s3",
+			Stores: map[string]schema.PlanfileStoreSpec{
+				"s3": {
+					Type:     "aws/s3",
+					Identity: "typo-identity",
+					Options:  map[string]any{"bucket": "b", "region": "us-east-1"},
+				},
+			},
+		}
+
+		st, err := createPlanfileStore(ExecuteOptions{AtmosConfig: cfg})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrIdentityNotInConfig)
+		assert.Nil(t, st)
 	})
 }
 
-// planfileIdentityStubAuthManager / planfileIdentityStubResolver mirror the
-// stubs in executor_identity_test.go so TestCreatePlanfileStore can exercise
-// the identity-aware S3 path without a live auth manager. They are declared
-// here (not reused) to keep this test file self-contained.
+// planfileIdentityStubAuthManager / capturingPlanfileResolver let
+// TestCreatePlanfileStore exercise the identity-aware S3 path without a live
+// auth manager. They are declared here (not reused) to keep this test file
+// self-contained.
 type planfileIdentityStubAuthManager struct {
 	authtypes.AuthManager
 }
 
-type planfileIdentityStubResolver struct {
+// capturingPlanfileResolver records the identity name the backend resolves with
+// (proving the store-level identity reached the backend) and returns an error
+// to short-circuit before any real cloud call.
+type capturingPlanfileResolver struct {
 	store.AuthContextResolver
+	gotIdentity string
+}
+
+func (r *capturingPlanfileResolver) ResolveAWSAuthContext(_ context.Context, identityName string) (*store.AWSAuthConfig, error) {
+	r.gotIdentity = identityName
+	return nil, fmt.Errorf("resolver stub: stop before real S3 call")
 }
 
 func TestBuildHookContext(t *testing.T) {

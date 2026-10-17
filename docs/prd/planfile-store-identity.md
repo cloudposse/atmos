@@ -45,9 +45,10 @@ failed to resolve AWS auth context for identity "azure-plan":
 auth context not available for identity
 ```
 
-The same mismatch occurs in reverse (an AWS component with a planfile store in another cloud). There was no
-way to authenticate the store separately from the component, so the plan-then-deploy workflow could not cross
-a credential boundary.
+The same mismatch would occur in reverse (an AWS component with a planfile store in another cloud) once
+non-AWS planfile backends exist; today only the `aws/s3` identity-aware backend ships, so the reverse case is
+a future scenario rather than a current failure. Either way, there was no way to authenticate the store
+separately from the component, so the plan-then-deploy workflow could not cross a credential boundary.
 
 ### Root Cause
 
@@ -64,8 +65,9 @@ did not exist.
 - Let a planfile store authenticate with an explicit Atmos Auth identity, independent of the component's
   identity.
 - Preserve existing behavior when no store identity is set (inherit the component identity).
-- Support any identity kind, not just `ambient` - an `aws/assume-role` or `aws/permission-set` identity must
-  be resolved through the full Atmos Auth chain, not merely passed through from the runner environment.
+- Support any identity that can authenticate the selected backend, not just `ambient` - for the `aws/s3`
+  backend, any AWS-capable identity kind or chain (`aws/assume-role`, `aws/permission-set`, …) must be
+  resolved through the full Atmos Auth chain, not merely passed through from the runner environment.
 - Stay consistent with the `identity` field already supported by general Atmos stores.
 
 ## Non-Goals
@@ -73,9 +75,6 @@ did not exist.
 - New planfile backends. The feature targets the existing identity-aware `aws/s3` backend. Azure Blob and GCS
   planfile backends do not exist today; the shared resolver is already multi-cloud, so they can adopt the same
   field when implemented, but shipping them is out of scope here.
-- Config-load-time validation that the named identity exists in `auth.identities`. A missing or misnamed
-  identity fails at upload time with a clear authentication error; declarative validation is deferred to
-  future work.
 - Full Go-template support in planfile store config. Not required for this feature.
 
 ---
@@ -116,10 +115,11 @@ store uses `aws-backend` for upload and download.
 ### Implementation
 
 1. Add `Identity string` to the planfile store spec in the configuration schema (with the `identity` YAML/JSON key), and regenerate the embedded atmos.yaml JSON Schema.
-2. In the planfile-store factory, select the effective identity: the store-level identity takes precedence over the component's active identity; when the store identity is empty, fall back to the component identity.
-3. Attach both the identity name **and** the auth resolver for the chosen identity.
+2. In the planfile-store factory, validate that a configured store identity names an entry in `auth.identities`; reject an unknown identity at store creation with an error naming the store and the identity, so a typo fails immediately rather than during a later upload.
+3. Select the effective identity: the store-level identity takes precedence over the component's active identity; when the store identity is empty, fall back to the component identity.
+4. Attach both the identity name **and** the auth resolver for the chosen identity.
 
-The third point is load-bearing. The artifact registry only injects the resolver into an identity-aware
+The last point is load-bearing. The artifact registry only injects the resolver into an identity-aware
 backend when the resolver is set, and such backends fall back to the default credential chain when no resolver
 is present. Setting the identity name alone would therefore silently ignore a non-`ambient` identity - it
 would "work" for ambient credentials but not for `aws/assume-role`, contradicting the goal above. The resolver
@@ -172,6 +172,8 @@ the default-configuration snapshot is unaffected because there are no default pl
 - A store-factory test that builds an `aws/s3` store with a store-level identity and a non-AWS component
   identity, confirming the identity-aware path is taken without a live cloud call (a non-empty identity defers
   client initialization).
+- A validation test confirming a store identity that names no `auth.identities` entry is rejected at store
+  creation (wrapping the identity-not-in-configuration error).
 - An end-to-end example validated in CI: `atmos validate stacks` passes and `atmos describe config` shows the
   store-level identity round-tripping into the loaded planfile store spec.
 
@@ -179,8 +181,6 @@ the default-configuration snapshot is unaffected because there are no default pl
 
 ## Future Work
 
-- Config-load-time validation that a store's `identity` references a defined `auth.identities` entry, with an
-  actionable error.
 - Azure Blob and GCS planfile backends, which can adopt the same `identity` field through the already
   multi-cloud resolver.
 
@@ -190,5 +190,5 @@ the default-configuration snapshot is unaffected because there are no default pl
 
 - Issue: cloudposse/atmos#3400
 - Implementation: cloudposse/atmos#3401
-- Related docs: [Planfile Storage](/ci/planfile-storage#store-identity),
+- Related docs: [Planfile Storage](https://atmos.tools/ci/planfile-storage),
   [Stores Configuration](/cli/configuration/stores), [Authentication](/cli/configuration/auth)
