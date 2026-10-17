@@ -34,6 +34,10 @@ atmos aws cloudformation backend delete <component> --stack <stack> --force
 atmos aws cloudformation backend list <component> --stack <stack>
 ```
 
+Every verb takes the component as a required argument, and `--stack`. There is
+no component-independent form, because the `kind: aws/s3` targets are declared
+per component.
+
 ## Configuration
 
 Declare a `kind: aws/s3` target under the component's `provision.targets`:
@@ -68,6 +72,20 @@ way:
   at once, so it never needs `--target`).
 - **None declared** — `create`/`update`/`delete`/`describe` fail with a hint
   to add one.
+
+## Dry Run
+
+The `create`, `update`, and `delete` verbs honor `--dry-run`. They resolve the component
+and its `kind: aws/s3` target from static configuration, print what they would
+do (bucket and region), and make no AWS calls. A component or stack that does
+not exist is an error, exactly as in a real run.
+
+## Relationship to Automatic Provisioning
+
+With `provision.backend.enabled: true`, only `apply` and `deploy` create the
+bucket when packaging needs it. The `validate`, `diff`, and `changeset create`
+verbs never create it; if the bucket is missing they fail with a hint to run
+`backend create` or `apply`.
 
 ## Subcommands
 

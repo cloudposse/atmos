@@ -44,12 +44,24 @@ type changeSetResult struct {
 	// OnStackFailure was already set on CreateChangeSet (CREATE-only), which
 	// AWS's API forbids combining with ExecuteChangeSet's DisableRollback.
 	ChangeSetType cfntypes.ChangeSetType
-	// StackStub records that this invocation created a previously absent stack.
-	StackStub bool
 	// OnStackFailure preserves the stored policy returned by DescribeChangeSet,
 	// including named changesets whose type is not exposed by that API.
 	OnStackFailure cfntypes.OnStackFailure
+	// StackStub is true when creating this CREATE changeset made CloudFormation
+	// register a brand-new, empty REVIEW_IN_PROGRESS stack: the stack did not
+	// exist at all before this invocation. Only then may Atmos remove the stack
+	// again when it abandons the changeset; a stack that already existed (in any
+	// state) is never ours to delete.
+	StackStub bool
+	// StackStatus is the stack's status once the operation finished: for a no-op,
+	// the status the stack already had; for an executed changeset, the terminal
+	// status observed while streaming its events. Empty when the changeset was
+	// only created (diff, changeset create) or never reached a status.
+	StackStatus cfntypes.StackStatus
 }
+
+// atmosChangeSetPrefix identifies changesets created by Atmos.
+const atmosChangeSetPrefix = "atmos-"
 
 // changeSetNameMaxLength is CloudFormation's hard limit on ChangeSetName length
 // (same limit as stack names): https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/API_CreateChangeSet.html
@@ -60,17 +72,23 @@ const changeSetNameMaxLength = 128
 const decimalBase = 10
 
 // changeSetName generates a unique, stack-scoped changeset name for this operation.
-// The sanitized suffix is truncated so the final "atmos-<suffix>-<timestamp>" name
-// never exceeds CloudFormation's 128-character ChangeSetName limit, even for a
+// The name is "atmos-<suffix>-<timestamp>"; when the stack name already begins
+// with "atmos-" the prefix is not repeated, so the name never reads
+// "atmos-atmos-...". The sanitized suffix is truncated so the final name never
+// exceeds CloudFormation's 128-character ChangeSetName limit, even for a
 // maximum-length stack name.
 func changeSetName(stackName string) string {
 	timestamp := strconv.FormatInt(time.Now().UnixNano(), decimalBase)
 	suffix := sanitizeChangeSetSuffix(stackName)
-	maxSuffixLength := changeSetNameMaxLength - len("atmos--") - len(timestamp)
+	prefix := atmosChangeSetPrefix
+	if strings.HasPrefix(suffix, atmosChangeSetPrefix) {
+		prefix = ""
+	}
+	maxSuffixLength := changeSetNameMaxLength - len(prefix) - len("-") - len(timestamp)
 	if len(suffix) > maxSuffixLength {
 		suffix = suffix[:maxSuffixLength]
 	}
-	return fmt.Sprintf("atmos-%s-%s", suffix, timestamp)
+	return fmt.Sprintf("%s%s-%s", prefix, suffix, timestamp)
 }
 
 // sanitizeChangeSetSuffix keeps changeset names within CloudFormation's
@@ -132,6 +150,15 @@ func stackExists(ctx context.Context, client CloudFormationClient, stackName str
 	return state.exists(), nil
 }
 
+// rollbackCompleteError explains that a stack whose initial create failed cannot
+// be updated, and how to recover. Atmos never deletes the stack on its own.
+func rollbackCompleteError(spec *stackSpec) error {
+	return errUtils.Build(errUtils.ErrAwsCloudFormationStackRollbackComplete).
+		WithExplanationf("Stack %q is in ROLLBACK_COMPLETE: its initial create failed and CloudFormation cannot update a stack in that state.", spec.StackName).
+		WithHintf("Delete the failed stack with `atmos aws cloudformation delete %s`, then run apply again.", spec.commandTarget()).
+		Err()
+}
+
 // stackNotFoundMessage matches the stack-specific messages returned by CloudFormation.
 var stackNotFoundMessage = regexp.MustCompile(`^Stack (?:\[[^\[\]\s]+\]|with id \S+) does not exist(?: or has been deleted)?\.?$`)
 
@@ -174,6 +201,9 @@ func createChangeSet(ctx context.Context, client CloudFormationClient, spec *sta
 	state, err := describeStackState(ctx, client, spec.StackName)
 	if err != nil {
 		return nil, err
+	}
+	if state.Status == cfntypes.StackStatusRollbackComplete {
+		return nil, rollbackCompleteError(spec)
 	}
 
 	changeSetType := cfntypes.ChangeSetTypeCreate
@@ -221,6 +251,9 @@ func createChangeSet(ctx context.Context, client CloudFormationClient, spec *sta
 	}
 	retainChangeSetIdentifiers(result, created)
 	result.StackStub = changeSetType == cfntypes.ChangeSetTypeCreate && !state.Found
+	if result.NoOp {
+		result.StackStatus = state.Status
+	}
 	return result, err
 }
 

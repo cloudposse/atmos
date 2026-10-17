@@ -20,6 +20,32 @@ as top-level `apply`/`delete`. Change-set creation expands macros/transforms (`F
 `UpdateStack` calls without change-set review. Declare applicable `CAPABILITY_IAM`/`CAPABILITY_NAMED_IAM`
 acknowledgments in `capabilities:` independently.
 
+## Apply, diff, and delete behavior
+
+- **apply/deploy order**: create changeset, print predicted changes (stderr), then confirm, then execute. A
+  no-op changeset (CloudFormation's `FAILED` "didn't contain changes") is deleted and reported as `No changes`;
+  the stack-policy, termination-protection, and Outputs follow-ups still run. Changeset names are
+  `atmos-<stack>-<timestamp>` (the `atmos-` prefix is not repeated for stacks already named `atmos-...`).
+- **Never-deployed stacks**: the first CREATE changeset makes CloudFormation register an empty
+  `REVIEW_IN_PROGRESS` stack. `diff`/`plan`, a declined `apply`, a failed changeset, and a changeset that
+  cannot be executed delete that stub (only when this run created it and it is still `REVIEW_IN_PROGRESS`);
+  a pre-existing stack is never deleted. `changeset create` keeps the changeset and its stub on success
+  (execute needs them) but deletes a no-op or failed one (`No changes; changeset not kept`).
+- **ROLLBACK_COMPLETE**: the first create failed and CloudFormation cannot update the stack. `apply`/`diff`/
+  `changeset create` fail with `aws/cloudformation stack is in ROLLBACK_COMPLETE and cannot be updated` and a
+  hint: `atmos aws cloudformation delete <component> -s <stack>`, then apply again. Atmos never deletes it.
+- **Targets**: publish-only `aws/s3` prints `Published template to s3://... (TemplateURL: https://...)` and
+  records `package_s3_uri`/`package_url`; external targets print the delivered file and target; an `aws/stackset`
+  target is rejected (`apply` cannot deliver to it) with a hint to use `stackset create|update --target <name>`.
+- **delete**: prints `Deleted stack <name>` after the stream ends with the stack's `DELETE_COMPLETE`; a missing
+  stack (also with `--retain-resources`) prints `<name> does not exist; nothing to delete` and exits 0; a
+  `DELETE_FAILED` result hints `--retain-resources=<failed logical IDs>`; termination protection and a
+  `--retain-resources` outside `DELETE_FAILED` each have their own error. `stackset delete` of a missing
+  StackSet is the same idempotent no-op; `changeset delete --changeset-name <unknown>` is a not-found error
+  with a hint to `changeset list`.
+- **`output --all --format=json|yaml`** prints one document keyed by stack, then component; `table` prints a
+  `<component> in stack <stack>:` title above each table.
+
 ## Observability: tree, logs, watch
 
 ```shell
@@ -41,7 +67,16 @@ atmos aws cloudformation get policy vpc -s dev
 ```
 
 `get template` answers "what's actually deployed right now" via `GetTemplate` (`--original` fetches
-the user-submitted body instead of the post-transform one); `get policy` fetches the live stack
-policy via `GetStackPolicy`. This is the inverse of `render` (local-only) — useful for drift
+the user-submitted body and prints it byte-for-byte as returned; the default processed body is
+re-serialized as YAML); `get policy` fetches the live stack policy via `GetStackPolicy`. Both map a
+missing stack to a stack-not-found error with a hint. This is the inverse of `render` (local-only) — useful for drift
 investigation and for inspecting a stack before adopting it into Atmos management (stack
 import/adoption itself is not supported).
+
+## Output details
+
+- `output <component> <key>` prints only that Output value, bare and pipeable. With `--format=json` or `yaml`, the value is encoded. A missing key fails and lists the available keys. The key cannot be combined with `--all`, `--affected`, `--tags`, or `--labels`.
+- A stack that is not deployed is an error, for `output`, `!aws.cloudformation.output`, and `atmos.Component(...).outputs`. Not deployed means `REVIEW_IN_PROGRESS`, `ROLLBACK_*`, `CREATE_FAILED`, or `DELETE_*`.
+- A deployed stack with no Outputs prints `Stack <name> has no outputs` for the table format. Structured formats still print an empty document, so stdout stays parseable.
+- An unsupported `--format` error names the value and lists the valid formats. JSON is written without HTML escaping, so `<MASKED>` appears literally.
+- In bulk runs, JSON and YAML print one document keyed by stack, then component. Table output titles each component.

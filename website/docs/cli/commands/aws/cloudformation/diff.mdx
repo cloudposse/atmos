@@ -8,10 +8,13 @@ description: Preview the changes an apply would make to a CloudFormation stack.
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
+import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
+import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
+import SkipHooksFlag from '@site/docs/cli/commands/aws/cloudformation/_partials/_skip-hooks-flag.mdx'
 
 <Intro>
-  Create (or reuse) a CloudFormation changeset for the component and render the
-  predicted changes, without executing it. `diff` authenticates and calls the
+  Create a CloudFormation changeset for the component, render the predicted
+  changes, and delete the changeset again without executing it. `diff` authenticates and calls the
   CloudFormation API — it previews what `apply` would actually do to the live
   stack, unlike [`render`](/cli/commands/aws/cloudformation/render), which never
   leaves the local template.
@@ -45,29 +48,36 @@ atmos aws cloudformation diff --all --tags production,tier-1
 atmos aws cloudformation diff --affected --labels cost-center=platform
 ```
 
+## Behavior
+
+`diff` leaves nothing behind. It deletes the preview changeset after rendering it,
+including when the changeset would change nothing (CloudFormation reports that as
+a `FAILED` changeset, "didn't contain changes").
+
+For a component that has never been deployed, CloudFormation registers an empty
+`REVIEW_IN_PROGRESS` stack as soon as the changeset is created. When `diff`
+created that stack itself, it deletes it again after removing the changeset,
+having first confirmed it is still `REVIEW_IN_PROGRESS`, so a preview never
+leaves a stub that `list` would show as managed. A stack that already existed,
+including an empty `REVIEW_IN_PROGRESS` stub left by an earlier run, is never
+deleted.
+
+A stack in `ROLLBACK_COMPLETE` cannot be updated, so `diff` fails with an
+explanation and a hint to run
+[`atmos aws cloudformation delete`](/cli/commands/aws/cloudformation/delete) for
+the component and apply again.
+
 ## Flags
 
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
   <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
 
-  <dt>`--all` <em>(optional)</em></dt>
-  <dd>Diff all `aws/cloudformation` components in dependency order.</dd>
+<SelectionFlags />
 
-  <dt>`--affected` <em>(optional)</em></dt>
-  <dd>Diff affected `aws/cloudformation` components and their dependencies.</dd>
+<GitFlags />
 
-  <dt>`--include-dependents` <em>(optional)</em></dt>
-  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
-
-  <dt>`--base` <em>(optional)</em></dt>
-  <dd>Git base ref or SHA to compare against for affected detection: `--base origin/main`. Used with `--affected`.</dd>
-
-  <dt>`--tags` <em>(optional)</em></dt>
-  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
-
-  <dt>`--labels` <em>(optional)</em></dt>
-  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+<SkipHooksFlag />
 </dl>
 
 :::note

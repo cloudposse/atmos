@@ -221,11 +221,6 @@ func TestValidateOperationArgs(t *testing.T) {
 			command: configuredOperationCommand(t, "apply", map[string]string{"affected": "true"}),
 		},
 		{
-			name:    "all and affected are mutually exclusive",
-			command: configuredOperationCommand(t, "apply", map[string]string{"all": "true", "affected": "true"}),
-			wantErr: "--all and --affected are mutually exclusive",
-		},
-		{
 			name:    "component cannot be combined with all",
 			command: configuredOperationCommand(t, "apply", map[string]string{"all": "true"}),
 			args:    []string{"app"},
@@ -261,11 +256,6 @@ func TestValidateOperationArgs(t *testing.T) {
 			command: configuredOperationCommand(t, "apply", map[string]string{"labels": "cost-center=platform"}),
 			args:    []string{"app"},
 			wantErr: "component argument cannot be used with --all, --affected, --tags, or --labels",
-		},
-		{
-			name:    "malformed labels flag errors",
-			command: configuredOperationCommand(t, "apply", map[string]string{"labels": "not-valid"}),
-			wantErr: "invalid label",
 		},
 	}
 
@@ -693,8 +683,9 @@ func TestValidateOperationArgs_RejectsFollowWithChart(t *testing.T) {
 	require.NoError(t, logsCmd.Flags().Set("follow", "true"))
 	require.NoError(t, logsCmd.Flags().Set("chart", "true"))
 
-	err := validateOperationArgs(logsCmd, []string{"demo"})
+	err := validateFlagSelection(logsCmd)
 	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationLogsFollowChartExclusive)
+	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationInvalidFlagCombination)
 }
 
 // --labels must be repeatable (like --tags), accumulating across occurrences
@@ -715,16 +706,16 @@ func TestValidateOperationArgs_AcceptsFollowAlone(t *testing.T) {
 	logsCmd := newOperationCommand("logs", "logs", "Show the combined event log")
 	require.NoError(t, logsCmd.Flags().Set("follow", "true"))
 
-	err := validateOperationArgs(logsCmd, []string{"demo"})
-	require.NoError(t, err)
+	require.NoError(t, validateFlagSelection(logsCmd))
+	require.NoError(t, validateOperationArgs(logsCmd, []string{"demo"}))
 }
 
-// validateOperationArgs must be a no-op for the --follow/--chart check on
+// validateFlagSelection must be a no-op for the --follow/--chart check on
 // commands that don't register those flags at all (every verb except logs).
 func TestValidateOperationArgs_FollowChartCheckIsNoOpOnOtherCommands(t *testing.T) {
 	applyCmd := newOperationCommand("apply", subCommandApply, "Create or update the stack")
-	err := validateOperationArgs(applyCmd, []string{"demo"})
-	require.NoError(t, err)
+	require.NoError(t, validateFlagSelection(applyCmd))
+	require.NoError(t, validateOperationArgs(applyCmd, []string{"demo"}))
 }
 
 // validateOperationArgs must reject --include-dependents without --affected —
@@ -735,8 +726,9 @@ func TestValidateOperationArgs_RejectsIncludeDependentsWithoutAffected(t *testin
 	require.NoError(t, applyCmd.Flags().Set("include-dependents", "true"))
 	require.NoError(t, applyCmd.Flags().Set(flagAll, "true"))
 
-	err := validateOperationArgs(applyCmd, nil)
+	err := validateFlagSelection(applyCmd)
 	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationIncludeDependentsRequiresAffected)
+	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationInvalidFlagCombination)
 }
 
 // validateOperationArgs must accept --include-dependents when --affected is set.
@@ -745,8 +737,8 @@ func TestValidateOperationArgs_AcceptsIncludeDependentsWithAffected(t *testing.T
 	require.NoError(t, applyCmd.Flags().Set("include-dependents", "true"))
 	require.NoError(t, applyCmd.Flags().Set(flagAffected, "true"))
 
-	err := validateOperationArgs(applyCmd, nil)
-	require.NoError(t, err)
+	require.NoError(t, validateFlagSelection(applyCmd))
+	require.NoError(t, validateOperationArgs(applyCmd, nil))
 }
 
 // TestCIFlagReachesOperation verifies that each summary-producing operation forwards the explicit CI

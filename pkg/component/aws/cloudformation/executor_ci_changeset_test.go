@@ -29,7 +29,7 @@ func TestOperationSummary_ChangesetNameReachesCI(t *testing.T) {
 			client := NewMockCloudFormationClient(gomock.NewController(t))
 			var createdName string
 			expectChangesetCIFlow(t, client, tt.operation, &createdName)
-			octx := &opContext{Ctx: context.Background(), AtmosConfig: &schema.AtmosConfiguration{}, Info: &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}, Flags: map[string]any{"format": "json"}}
+			octx := &opContext{Ctx: context.Background(), AtmosConfig: &schema.AtmosConfiguration{}, Info: &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}, Flags: map[string]any{"format": "json", "auto-approve": true}}
 			summary, err := operationHandlers[tt.operation](octx, client, &stackSpec{StackName: "vpc", TemplateBody: "Resources: {}"}, map[string]any{"stack_name": "vpc"})
 			require.NoError(t, err)
 			require.NotEmpty(t, createdName)
@@ -70,6 +70,7 @@ func expectChangesetCIFlow(t *testing.T, client *MockCloudFormationClient, opera
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{StackEvents: []cfntypes.StackEvent{{EventId: awsString("new-event"), ResourceStatus: cfntypes.ResourceStatusCreateComplete}}}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}}}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{Outputs: []cfntypes.Output{{OutputKey: awsString("VpcId"), OutputValue: awsString("vpc-123")}}}}}, nil),
 	)
 }

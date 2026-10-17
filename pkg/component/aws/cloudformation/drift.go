@@ -200,8 +200,10 @@ func runDriftDescribe(ctx context.Context, client CloudFormationClient, stackNam
 	return summary, nil
 }
 
-// driftLines renders drifted resource identities and statuses for the terminal and CI summary.
-// Raw actual and expected properties are deliberately excluded.
+// driftLines renders every drifted (not IN_SYNC) resource as one status line, followed by one
+// indented line per property difference (path, expected value, actual value, difference type) so
+// a MODIFIED resource shows what changed rather than only that it did. Shared by `drift describe`
+// and the CI summary so both show the same detail.
 func driftLines(drifts []cfntypes.StackResourceDrift) []string {
 	var lines []string
 	for i := range drifts {
@@ -210,6 +212,11 @@ func driftLines(drifts []cfntypes.StackResourceDrift) []string {
 			continue
 		}
 		lines = append(lines, fmt.Sprintf("  %-10s %-28s %s", d.StackResourceDriftStatus, stringValue(d.ResourceType), stringValue(d.LogicalResourceId)))
+		for j := range d.PropertyDifferences {
+			diff := &d.PropertyDifferences[j]
+			lines = append(lines, fmt.Sprintf("    %s: expected %s, actual %s (%s)",
+				stringValue(diff.PropertyPath), stringValue(diff.ExpectedValue), stringValue(diff.ActualValue), diff.DifferenceType))
+		}
 	}
 	return lines
 }

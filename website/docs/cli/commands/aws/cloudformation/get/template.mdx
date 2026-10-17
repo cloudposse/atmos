@@ -8,6 +8,8 @@ description: Fetch the deployed stack's template.
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
+import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
+import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
   Fetch the deployed stack's template (`GetTemplate`) and write it to stdout.
@@ -36,6 +38,18 @@ Fetch the original, user-submitted template instead of the processed one:
 atmos aws cloudformation get template vpc -s plat-ue2-dev --original
 ```
 
+By default the template is re-serialized as pretty-printed YAML, because CloudFormation often stores
+the processed template as JSON. With `--original`, Atmos prints the body exactly as CloudFormation
+returned it, byte for byte, with comments, quoting, and key order intact, so you can diff it against
+your source file:
+
+```shell
+atmos aws cloudformation get template vpc -s plat-ue2-dev --original > deployed.yaml
+diff template.yaml deployed.yaml
+```
+
+A stack that does not exist is an error that points at `atmos aws cloudformation apply`.
+
 ## Flags
 
 <dl>
@@ -43,22 +57,11 @@ atmos aws cloudformation get template vpc -s plat-ue2-dev --original
   <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
 
   <dt>`--original` <em>(optional)</em></dt>
-  <dd>Fetch the user-submitted template instead of the processed one CloudFormation deployed.</dd>
+  <dd>Fetch the user-submitted template instead of the processed one CloudFormation deployed, and print it exactly as returned, without re-serializing it.</dd>
 
-  <dt>`--all` <em>(optional)</em></dt>
-  <dd>Fetch the template for all `aws/cloudformation` components in dependency order.</dd>
+<SelectionFlags />
 
-  <dt>`--affected` <em>(optional)</em></dt>
-  <dd>Fetch the template for affected `aws/cloudformation` components and their dependencies.</dd>
-
-  <dt>`--include-dependents` <em>(optional)</em></dt>
-  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
-
-  <dt>`--tags` <em>(optional)</em></dt>
-  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
-
-  <dt>`--labels` <em>(optional)</em></dt>
-  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+<GitFlags />
 </dl>
 
 :::note

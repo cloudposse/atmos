@@ -300,7 +300,7 @@ func TestStreamStackEvents_AcceptsTerminalStatusOnFirstPollWithNewEvent(t *testi
 		StackEvents: []cfntypes.StackEvent{
 			{EventId: &newEventID, LogicalResourceId: &logicalID, ResourceStatus: cfntypes.ResourceStatusCreateComplete},
 		},
-	}, nil)
+	}, nil).Times(2) // The poll, then the final read after the terminal status.
 	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
 	}, nil)
@@ -334,6 +334,7 @@ func TestStreamStackEvents_AcceptsTerminalStatusAfterObservedInProgress(t *testi
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}},
 		}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 	)
 
 	status, err := streamStackEvents(context.Background(), client, "vpc", eventBaseline{valid: true}, OperationApply)

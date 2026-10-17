@@ -28,13 +28,15 @@ and `website/docs/stacks/components/aws-cloudformation.mdx` for the stack-config
   itself already handles — Atmos stack config (`parameters:`, `!env`, `!template`, inheritance)
   for anything CloudFormation Parameters can express, or CloudFormation's own native
   `Fn::Transform`/`AWS::Include` intrinsic for template-fragment reuse.
-2. **Reuse templates and include parameter maps.** Point `path:` at the existing `.yaml`/`.json`
+2. **Reuse templates and parameter files.** Point `path:` at the existing `.yaml`/`.json`
   template file unchanged (after resolving any `!Rain::` directives per the table below).
-  Atmos `parameters:` requires a map from parameter names to values. A Rain/CFN parameters JSON
-  file in AWS CLI `ParameterKey`/`ParameterValue` array format must first be converted to that map;
-  include the converted file with `!include`, which loads data without reshaping it. Keep the
-  original parameter file for the existing workflow. Migration is opt-in — see
-  [from-native-terraform.md](from-native-terraform.md) Core Principle 2 for the same stance.
+  Atmos `parameters:` accepts a map from parameter names to values, or a list of AWS CLI
+  `ParameterKey`/`ParameterValue` entries, so an existing parameters JSON file needs no conversion:
+  include it with `!include`, which loads data without reshaping it. A Rain config file
+  (`{Parameters: {...}, Tags: {...}}`) is not a parameter list: select its map with
+  `!include <file> .Parameters`. Keep the original parameter file for the existing workflow.
+  Migration is opt-in — see [from-native-terraform.md](from-native-terraform.md) Core Principle 2
+  for the same stance.
 3. **No 1:1 CLI compatibility.** `atmos aws cloudformation` verbs are Atmos-native — see the verb
   cross-reference table below. Do not tell a user to alias `rain` to `atmos aws cfn`; flag names,
   output shape, and confirmation semantics differ.
@@ -204,8 +206,7 @@ mapped to" rather than guessing.
         capabilities:
           - CAPABILITY_IAM
   ```
-  The included `params/dev-parameters.json` must contain a parameter map. For example, convert
-  this existing AWS CLI parameter array:
+  The included `params/dev-parameters.json` can be the existing AWS CLI parameter array as-is:
 
   ```json
   [
@@ -214,16 +215,18 @@ mapped to" rather than guessing.
   ]
   ```
 
-  into this new `params/dev-parameters.json` file:
+  A malformed entry (missing `ParameterKey`, unknown field, wrong type) fails with the entry's
+  index instead of deploying template defaults. `UsePreviousValue: true` (without a
+  `ParameterValue`) is accepted and keeps the stack's current value; it only works when updating
+  an existing stack. For a Rain config file, select the map instead of including the whole file:
 
-  ```json
-  {
-    "CidrBlock": "10.0.0.0/16",
-    "Environment": "dev"
-  }
+  ```yaml
+  parameters: !include ../params/rain-config.yaml .Parameters
+  tags: !include ../params/rain-config.yaml .Tags
   ```
 
-  Do not include the array directly: Atmos does not convert AWS CLI parameter arrays.
+  Including a whole Rain config file as `parameters:` fails: `Parameters` and `Tags` would be read
+  as two parameters with map values.
 
 5. **Run `atmos aws cloudformation plan vpc -s dev`** and compare the predicted changeset against
   what `rain diff`/`aws cloudformation deploy --no-execute-changeset` produced before.

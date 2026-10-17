@@ -1,7 +1,7 @@
 {{- if .Result.HasErrors }}
-## CloudFormation Apply Failed for `{{ .Component }}` in `{{ .Stack }}`
+## CloudFormation {{ .VerbTitle }} Failed for `{{ .Component }}` in `{{ .Stack }}`
 {{- else }}
-## CloudFormation Apply Summary for `{{ .Component }}` in `{{ .Stack }}`
+## CloudFormation {{ .VerbTitle }} Summary for `{{ .Component }}` in `{{ .Stack }}`
 {{- end }}
 
 {{- if .StackName }}
@@ -14,10 +14,15 @@ Stack: **{{ .StackName }}**
 Changeset: **{{ .ChangeSetName }}**
 {{- end }}
 
+{{- if and .NoOp (not .Result.HasErrors) }}
+
+No changes
+{{- end }}
+
 To reproduce locally:
 
 ```shell
-atmos aws cloudformation apply {{ .Component }} -s {{ .Stack }}
+atmos aws cloudformation {{ .Verb }} {{ .Component }} -s {{ .Stack }}
 ```
 
 {{- if .Output }}

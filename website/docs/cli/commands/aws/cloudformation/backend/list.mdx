@@ -42,6 +42,11 @@ atmos aws cloudformation backend list vpc -s plat-ue2-dev --format json
   <dd>Atmos identity to authenticate with.</dd>
 </dl>
 
+The component argument is required. Running `backend list` with only a stack
+fails with a hint that shows the full form,
+`atmos aws cloudformation backend list <component> -s <stack>`. There is no
+stack-wide form (see Behavior below).
+
 ## Behavior
 
 Unlike [`atmos terraform
@@ -53,3 +58,7 @@ aws/s3` targets per-component under `provision.targets`, not once per stack,
 so there is no component-independent, stack-wide backend inventory to list.
 `backend list` never needs `--target` — it always shows every declared target
 at once.
+
+The `table` format prints a header row (`TARGET`, `BUCKET`, `REGION`,
+`STATUS`). The `json` and `yaml` formats use snake_case keys; see [`backend
+describe`](/cli/commands/aws/cloudformation/backend/describe) for the shape.

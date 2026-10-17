@@ -1,7 +1,7 @@
 {{- if .Result.HasErrors }}
-## CloudFormation Diff Failed for `{{ .Component }}` in `{{ .Stack }}`
+## CloudFormation {{ .VerbTitle }} Failed for `{{ .Component }}` in `{{ .Stack }}`
 {{- else }}
-## CloudFormation Diff Summary for `{{ .Component }}` in `{{ .Stack }}`
+## CloudFormation {{ .VerbTitle }} Summary for `{{ .Component }}` in `{{ .Stack }}`
 {{- end }}
 
 {{- if .StackName }}
@@ -9,7 +9,10 @@
 Stack: **{{ .StackName }}**
 {{- end }}
 
-{{- if gt .ResourceChanges 0 }}
+{{- if and .NoOp (not .Result.HasErrors) }}
+
+No changes
+{{- else if gt .ResourceChanges 0 }}
 
 Resource changes: **{{ .ResourceChanges }}**
 {{- end }}
@@ -17,7 +20,7 @@ Resource changes: **{{ .ResourceChanges }}**
 To reproduce locally:
 
 ```shell
-atmos aws cloudformation diff {{ .Component }} -s {{ .Stack }}
+atmos aws cloudformation {{ .Verb }} {{ .Component }} -s {{ .Stack }}
 ```
 
 {{- if .Output }}

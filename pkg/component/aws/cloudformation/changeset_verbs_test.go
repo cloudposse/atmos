@@ -3,11 +3,13 @@ package cloudformation
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -190,6 +192,8 @@ func TestRunChangesetExecute_Success(t *testing.T) {
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}},
 		}, nil),
+		// Final read for the stack-level event after the terminal status.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 	)
 
 	spec := &stackSpec{StackName: "vpc"}
@@ -312,6 +316,7 @@ func TestRunChangesetExecute_FailedStatus(t *testing.T) {
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateRollbackComplete}},
 		}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 	)
 
 	spec := &stackSpec{StackName: "vpc"}
@@ -375,7 +380,10 @@ func TestRunChangesetList_Error(t *testing.T) {
 func TestRunChangesetDelete_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
-	client.EXPECT().DeleteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteChangeSetOutput{}, nil)
+	gomock.InOrder(
+		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{Status: cfntypes.ChangeSetStatusCreateComplete}, nil),
+		client.EXPECT().DeleteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteChangeSetOutput{}, nil),
+	)
 
 	spec := &stackSpec{StackName: "vpc"}
 	out := captureStdout(t, func() {
@@ -386,13 +394,35 @@ func TestRunChangesetDelete_Success(t *testing.T) {
 	assert.Contains(t, out, `changeset "cs-1" deleted`)
 }
 
+// AWS's DeleteChangeSet succeeds for a name that does not exist, which used to
+// print a false "deleted". The changeset is looked up first, so a nonexistent
+// name is ErrAwsCloudFormationChangeSetNotFound with a hint to list changesets,
+// and DeleteChangeSet is never called.
+func TestRunChangesetDelete_NonexistentIsNotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	// No DeleteChangeSet expectation: calling it fails the test.
+	client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(nil, &cfntypes.ChangeSetNotFoundException{Message: awsString("ChangeSet [nope] does not exist")})
+
+	var err error
+	out := captureStdout(t, func() {
+		_, err = runChangesetDelete(context.Background(), client, &stackSpec{StackName: "vpc"}, "nope", map[string]any{})
+	})
+	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetNotFound)
+	assert.NotContains(t, out, "deleted", "a changeset that was never there must not be reported as deleted")
+	assert.Contains(t, strings.Join(cockroachErrors.GetAllHints(err), "\n"), "changeset list")
+}
+
 // runChangesetDelete must propagate a deleteChangeSet failure.
 func TestRunChangesetDelete_Error(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
-	client.EXPECT().DeleteChangeSet(gomock.Any(), gomock.Any()).Return(nil, errors.New("boom"))
+	gomock.InOrder(
+		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{Status: cfntypes.ChangeSetStatusCreateComplete}, nil),
+		client.EXPECT().DeleteChangeSet(gomock.Any(), gomock.Any()).Return(nil, errors.New("boom")),
+	)
 
 	spec := &stackSpec{StackName: "vpc"}
 	_, err := runChangesetDelete(context.Background(), client, spec, "cs-1", map[string]any{})
-	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
 }

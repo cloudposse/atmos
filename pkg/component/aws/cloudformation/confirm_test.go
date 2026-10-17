@@ -2,6 +2,7 @@ package cloudformation
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"testing"
 
@@ -297,8 +298,53 @@ func TestRequireConfirmation_NonTerminalAbortsWithoutPrompt(t *testing.T) {
 	t.Cleanup(func() { confirmOperation = originalConfirm })
 	for _, operation := range []Operation{OperationApply, OperationDelete, OperationChangesetExecute, OperationChangesetDelete, OperationStackSetCreate, OperationStackSetUpdate, OperationStackSetDelete} {
 		err := requireConfirmation(operation, "vpc", nil)
-		require.ErrorIs(t, err, errUtils.ErrUserAborted)
+		// Nothing was declined: stdin simply cannot answer, so this is the
+		// "confirmation required" error, not a user abort.
+		require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationConfirmationRequired)
+		assert.NotErrorIs(t, err, errUtils.ErrUserAborted)
 		assert.True(t, errUtils.HasHint(err, "--auto-approve"))
 		require.NoError(t, requireConfirmation(operation, "vpc", map[string]any{"auto-approve": true}))
+	}
+}
+
+// In a bulk run the graph wraps each component's error as "component=X stack=Y:
+// <error>", and the formatter then drops the explanation and hint of the wrapped
+// error. The confirmation-required error therefore carries the --auto-approve
+// guidance in its own message, so it survives that wrapping.
+func TestConfirmationRequired_GuidanceSurvivesBulkWrapping(t *testing.T) {
+	original := stdinIsTerminal
+	stdinIsTerminal = func() bool { return false }
+	t.Cleanup(func() { stdinIsTerminal = original })
+
+	err := requireInteractiveOrAutoApprove(OperationApply, map[string]any{})
+	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationConfirmationRequired)
+
+	wrapped := fmt.Errorf("%w: component=%s stack=%s: %w", errUtils.ErrComponentExecutionFailed, "beta", "bk1", err)
+	rendered := errUtils.Format(wrapped, errUtils.DefaultFormatterConfig())
+	assert.Contains(t, rendered, "component=beta stack=bk1")
+	assert.Contains(t, rendered, "--auto-approve")
+	assert.NotContains(t, rendered, "user aborted")
+}
+
+// The fast gate is a no-op when the operation needs no confirmation, when
+// --auto-approve is set, or when stdin is a terminal (the prompt can be shown).
+func TestRequireInteractiveOrAutoApprove_PassesWhenAnswerable(t *testing.T) {
+	tests := []struct {
+		name      string
+		operation Operation
+		flags     map[string]any
+		terminal  bool
+	}{
+		{name: "diff needs no confirmation", operation: OperationDiff, terminal: false},
+		{name: "auto-approve", operation: OperationApply, flags: map[string]any{"auto-approve": true}, terminal: false},
+		{name: "terminal", operation: OperationApply, terminal: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := stdinIsTerminal
+			stdinIsTerminal = func() bool { return tt.terminal }
+			t.Cleanup(func() { stdinIsTerminal = original })
+			require.NoError(t, requireInteractiveOrAutoApprove(tt.operation, tt.flags))
+		})
 	}
 }

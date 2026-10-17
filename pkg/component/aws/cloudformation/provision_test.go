@@ -68,7 +68,7 @@ func TestS3ConfigFromTarget(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "my-bucket", cfg.Bucket)
-	assert.Equal(t, "vpc/", cfg.Prefix)
+	assert.Equal(t, "vpc", cfg.Prefix, "leading and trailing slashes are trimmed from the prefix")
 	assert.Equal(t, "us-east-2", cfg.Region)
 }
 
@@ -211,8 +211,15 @@ func TestTemplateContentForDelivery_Packaged(t *testing.T) {
 	assert.Contains(t, string(content), spec.TemplateURL)
 }
 
+// autoApproveOctx is an opContext that approves the apply up front, so
+// deployDirect does not stop at the confirmation prompt.
+func autoApproveOctx() *opContext {
+	return &opContext{Ctx: context.Background(), Flags: map[string]any{"auto-approve": true}}
+}
+
 // deployDirect must skip ExecuteChangeSet and streamStackEvents when the
-// changeset is a no-op — a no-op apply must not attempt to execute anything.
+// changeset is a no-op — a no-op apply must not attempt to execute anything —
+// and must delete the FAILED "didn't contain changes" changeset it leaves.
 func TestDeployDirect_NoOp(t *testing.T) {
 	for _, tt := range []struct {
 		name       string
@@ -243,12 +250,14 @@ func TestDeployDirect_NoOp(t *testing.T) {
 			// No ExecuteChangeSet, DescribeStackEvents, or DeleteStack expectations:
 			// a no-op update must not execute a change or delete the existing stack.
 			spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
-			result, err := deployDirect(context.Background(), client, spec)
+			var result *changeSetResult
+			var err error
+			output := captureStderr(t, func() {
+				result, err = deployDirect(autoApproveOctx(), client, spec)
+			})
+			require.NoError(t, err)
 			if tt.cleanupErr != nil {
-				require.ErrorIs(t, err, tt.cleanupErr)
-				require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
-			} else {
-				require.NoError(t, err)
+				assert.Contains(t, normalizeUIOutput(output), tt.cleanupErr.Error())
 			}
 			require.NotNil(t, result)
 			assert.True(t, result.NoOp)
@@ -295,6 +304,9 @@ func expectDeployDirectFlow(t *testing.T, client *MockCloudFormationClient, fina
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: finalStatus}},
 		}, nil),
+		// The final read after the terminal status, for the stack-level event
+		// that may have landed between the events and status reads.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 	)
 }
 
@@ -306,7 +318,7 @@ func TestDeployDirect_Success(t *testing.T) {
 	expectDeployDirectFlow(t, client, cfntypes.StackStatusCreateComplete)
 
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
-	result, err := deployDirect(context.Background(), client, spec)
+	result, err := deployDirect(autoApproveOctx(), client, spec)
 	require.NoError(t, err)
 	assert.False(t, result.NoOp)
 }
@@ -319,7 +331,7 @@ func TestDeployDirect_FailedFinalStatus(t *testing.T) {
 	expectDeployDirectFlow(t, client, cfntypes.StackStatusCreateFailed)
 
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
-	_, err := deployDirect(context.Background(), client, spec)
+	_, err := deployDirect(autoApproveOctx(), client, spec)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationOperationFailed)
 }
@@ -335,7 +347,7 @@ func TestDeployDirect_CreateChangeSetError(t *testing.T) {
 	client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(nil, sentinel)
 
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
-	_, err := deployDirect(context.Background(), client, spec)
+	_, err := deployDirect(autoApproveOctx(), client, spec)
 	require.Error(t, err)
 }
 
@@ -355,11 +367,19 @@ func TestDeployDirect_ExecuteChangeSetError(t *testing.T) {
 		// preOperationEventBaseline, captured immediately before ExecuteChangeSet.
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(nil, sentinel),
+		// The changeset can never run, so it is abandoned along with the empty
+		// stack its CREATE registered.
+		client.EXPECT().DeleteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteChangeSetOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusReviewInProgress}},
+		}, nil),
+		client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("vpc")}).Return(&cloudformation.DescribeStacksOutput{}, nil),
 	)
 
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
-	_, err := deployDirect(context.Background(), client, spec)
-	require.Error(t, err)
+	_, err := deployDirect(autoApproveOctx(), client, spec)
+	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
 }
 
 // deployDirect must propagate a streamStackEvents failure.
@@ -381,7 +401,7 @@ func TestDeployDirect_StreamEventsError(t *testing.T) {
 	)
 
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
-	_, err := deployDirect(context.Background(), client, spec)
+	_, err := deployDirect(autoApproveOctx(), client, spec)
 	require.Error(t, err)
 }
 
@@ -396,7 +416,7 @@ func TestDeliverApply_DirectDeployKind(t *testing.T) {
 		Ctx:         context.Background(),
 		AtmosConfig: &schema.AtmosConfiguration{},
 		Info:        &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}},
-		Flags:       map[string]any{},
+		Flags:       map[string]any{"auto-approve": true},
 	}
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
 
@@ -447,6 +467,7 @@ func TestDeliverApply_DirectDeployKind_PackagesLargeTemplate(t *testing.T) {
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
 		}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 	)
 
 	largeTemplate := "AWSTemplateFormatVersion: '2010-09-09'\n" + strings.Repeat("a", templateInlineSizeLimit+1)
@@ -464,7 +485,7 @@ func TestDeliverApply_DirectDeployKind_PackagesLargeTemplate(t *testing.T) {
 				},
 			},
 		},
-		Flags: map[string]any{},
+		Flags: map[string]any{"auto-approve": true},
 	}
 	spec := &stackSpec{StackName: "vpc", TemplateBody: largeTemplate}
 

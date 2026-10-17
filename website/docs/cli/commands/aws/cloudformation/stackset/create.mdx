@@ -8,6 +8,8 @@ description: Create a StackSet, and its initial stack instances if configured.
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
+import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
+import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
   Create a CloudFormation StackSet (`CreateStackSet`) from the resolved
@@ -64,20 +66,9 @@ atmos aws cloudformation stackset create --affected --base origin/main
   <dt>`--auto-approve` <em>(optional)</em></dt>
   <dd>Skip the interactive confirmation prompt. Without it, `stackset create` prompts for confirmation on a TTY before creating the StackSet.</dd>
 
-  <dt>`--all` <em>(optional)</em></dt>
-  <dd>Create StackSets for all `aws/cloudformation` components in dependency order.</dd>
+<SelectionFlags />
 
-  <dt>`--affected` <em>(optional)</em></dt>
-  <dd>Create StackSets for affected `aws/cloudformation` components and their dependencies.</dd>
-
-  <dt>`--include-dependents` <em>(optional)</em></dt>
-  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
-
-  <dt>`--tags` <em>(optional)</em></dt>
-  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
-
-  <dt>`--labels` <em>(optional)</em></dt>
-  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+<GitFlags />
 </dl>
 
 ## Behavior

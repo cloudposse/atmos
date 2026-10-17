@@ -86,8 +86,8 @@ chart-style plugin system, unlike native Helm).
 |---|---|
 | `template` / `path` *(exactly one required)* | `template` is an **inline** body (string or YAML map) that flows through Atmos's `{{ }}` templating before reaching CloudFormation. `path` is a **file reference**, read as raw bytes, no templating. Setting both is an error. |
 | `stack_name` | Explicit stack name. Supports Go templates; no legacy name-pattern interpolation. |
-| `parameters` | `map[string]any`, normalized at the API boundary: scalars stringified, lists comma-joined for `List<Type>`. `UsePreviousValue` isn't expressible — Atmos config is always the source of truth. |
-| `capabilities` | Acknowledged IAM capabilities, e.g. `CAPABILITY_IAM`, `CAPABILITY_AUTO_EXPAND` (macros/SAM). |
+| `parameters` | A map of name to value, or an AWS CLI/Rain list of `{ParameterKey, ParameterValue}` entries (`UsePreviousValue: true` allowed; also `!include` of a JSON array). Scalars stringified, lists comma-joined for `List<Type>`. Other shapes are an error. For a Rain config file use `!include rain.yaml .Parameters`. |
+| `capabilities` | Acknowledged IAM capabilities: `CAPABILITY_IAM`, `CAPABILITY_NAMED_IAM`, `CAPABILITY_AUTO_EXPAND` (macros/SAM). Validated locally; an unknown value fails with the valid set. |
 | `tags` | `map[string]string` tags on the stack — distinct from Atmos's own component `tags`/`--tags`. |
 | `stack_policy.file` | JSON policy path. Set before UPDATE execution (apply/deploy or explicit changeset execute), after successful CREATE. Policy-setting errors stop pending updates; blocked updates never trigger an automatic override. |
 | `role_arn` | The CloudFormation **service role**, not caller credentials — `CreateChangeSet`'s `RoleARN`. |
@@ -108,9 +108,9 @@ chart-style plugin system, unlike native Helm).
 | `atmos aws cloudformation apply <component> -s <stack>` | Executes the changeset (`ExecuteChangeSet`), creating or updating the stack — never a direct `CreateStack`/`UpdateStack` call. Streams per-resource stack events live and ends with a rendered Outputs summary. |
 | `atmos aws cloudformation deploy <component> -s <stack>` | Alias for `apply` with `--auto-approve` defaulted to `true`. |
 | `atmos aws cloudformation delete <component> -s <stack>` | `DeleteStack`, respecting termination protection — see [Delete Safety](#delete-safety--termination-protection). |
-| `atmos aws cloudformation output <component> -s <stack>` | Renders the deployed stack's Outputs (all keys) via `DescribeStacks` — the same view `apply`/`deploy` render at completion. Alias: `outputs`. |
-| `atmos aws cloudformation fmt <component> -s <stack> [--check]` | Canonically formats the local template in place (comment-preserving YAML round-trip, no shell-out). `--check` reports without writing, for CI. |
-| `atmos aws cloudformation list` | Lists CloudFormation stacks in the active identity's account/region via `ListStacks`, including stacks Atmos doesn't manage. |
+| `atmos aws cloudformation output <component> [key] -s <stack>` | Renders the deployed stack's Outputs via `DescribeStacks`, as `apply` does. With `key`, prints only that value (pipeable); a missing key lists the available keys. A stack that is not deployed is an error. Alias: `outputs`. |
+| `atmos aws cloudformation fmt <component> -s <stack> [--check]` | Canonically formats the local template in place (comment-preserving YAML round-trip, no shell-out). `--check` reports without writing and, in bulk runs, checks every template before failing once. See [ci-and-listing](references/ci-and-listing.md#fmt). |
+| `atmos aws cloudformation list [-s <stack>]` | `ListStacks`, marking each stack `managed` (matches a component's `stack_name` in `-s`, or in any stack without it) or `unmanaged`. See [ci-and-listing](references/ci-and-listing.md#list). |
 
 All operation commands accept `--all`, `--affected` (with `--base`/`--ref`/`--sha`/`--repo-path`/
 `--clone-target-ref`/`--ssh-key`/`--ssh-key-password`), `--include-dependents` (requires
@@ -119,15 +119,22 @@ All operation commands accept `--all`, `--affected` (with `--base`/`--ref`/`--sh
 `--tags`/`--labels`-based selection. `atmos aws cfn` is a Cobra alias for `atmos aws cloudformation`
 that works with every verb.
 
-**Confirmation**: `apply` and `delete` prompt for interactive confirmation on a TTY; pass
-`--auto-approve` to skip it. `deploy` defaults `--auto-approve` to `true`.
+**Confirmation**: `delete` prompts for interactive confirmation on a TTY; pass `--auto-approve` to
+skip it. `apply` creates its changeset first, prints the predicted changes, then asks (`--auto-approve`
+skips only the question, not the preview); declining deletes the changeset and the empty
+`REVIEW_IN_PROGRESS` stack Atmos created for a never-deployed component. Without a TTY and without
+`--auto-approve`, `apply` fails before creating anything (`confirmation required`, not `user aborted`).
+Publish-only (`aws/s3`) and external (`git`) targets change no stack and never ask. `deploy` defaults
+`--auto-approve` to `true`. See [apply flow](references/operations.md#apply-diff-and-delete-behavior).
 
 ### Output formats
 
 `output` supports the full standard format set shared with `atmos terraform output`: `json`, `yaml`,
 `hcl`, `env`, `dotenv`, `bash`, `csv`, `tsv`, `table` (default on a TTY), and `github` (GitHub
 Actions `$GITHUB_OUTPUT` syntax via `atmos aws cloudformation output vpc -s dev --format=github`),
-plus `--flatten` and `--uppercase` key options. No positional output key is accepted.
+plus `--flatten` and `--uppercase` key options. An unsupported `--format` lists the valid ones. A
+stack with no Outputs prints `Stack <name> has no outputs`. The `key` argument cannot be combined
+with bulk selection.
 
 With masking enabled, standalone output and apply summaries read the deployed template
 (`cloudformation:GetTemplate`) and redact outputs that reference NoEcho parameters, including
@@ -152,16 +159,15 @@ atmos aws cloudformation drift describe vpc -s dev
 
 `drift detect` runs `DetectStackDrift`/polls `DescribeStackDriftDetectionStatus`; `drift describe`
 renders the results of the most recent detection (`DescribeStackResourceDrifts`). `--fail-on-drift`
-exits non-zero when drift is found, for CI gating — drift is not a hard failure by default. With
-`ci.enabled: true` and summaries enabled, native CI writes drift summaries to `$GITHUB_STEP_SUMMARY`
-in GitHub Actions. When `--ci`/`ATMOS_CI=true` forces CI without a detected platform, the generic
-provider writes to `$ATMOS_CI_SUMMARY` when set, otherwise stderr. Atmos Pro dashboard uploads through
+exits non-zero when drift is found, for CI gating — drift is not a hard failure by default.
+`drift describe` shows each `MODIFIED` resource's property differences (path, expected, actual,
+type). Drift summaries follow [Native CI](#native-ci-summaries). Atmos Pro dashboard uploads through
 `UploadInstanceStatus` remain future work.
 
 ## Delivery Targets (Backend Management)
 
 By default `apply`/`deploy` deploy directly to the account/region resolved for the component (see
-[Region Resolution](#region-resolution)). A component can declare additional named
+[Region Resolution](#region-resolution-and-static-dry-run)). A component can declare additional named
 `provision.targets`, selected with `--target`: `aws/s3` (publish-only upload, also used
 **automatically** to package any template over CloudFormation's 51,200-byte inline limit),
 `git` (GitOps commit instead of deploying), and `aws/stackset` (multi-account/region, see
@@ -245,17 +251,6 @@ for examples and flag behavior.
   Editing `termination_protection: false` and re-applying does **not** unprotect an already-protected
   stack — `apply` only ever turns protection on. Only the explicit delete flag turns it off.
 
-## Region Resolution
-
-CloudFormation API calls need an AWS region, resolved most-specific-wins:
-
-1. `settings.aws_cloudformation.region` on the component
-2. The active identity's region
-3. The AWS SDK's default credential/region chain (`AWS_REGION`, shared config)
-
-There is no per-component account override outside StackSets — the account is always the active
-identity's account.
-
 ## Auth
 
 Component-level `auth:` selects an identity exactly like a Terraform component does — see
@@ -281,21 +276,22 @@ components:
 
 ## Native CI Summaries
 
-When `ci.enabled: true`, `ci.summary.enabled: true` (the default), and Atmos runs in a supported CI
-provider (e.g. GitHub Actions), the native plugin (`pkg/ci/plugins/cloudformation`) writes a compact
-Markdown job summary for `diff`, `apply`,
-`delete`, `drift detect`, and `drift describe` — the same summaries-only tier Kubernetes and Helmfile
-occupy (no `$GITHUB_OUTPUT`, commit statuses, PR comments, or artifacts; that richer tier remains
-Terraform-only). See [atmos-ci](../atmos-ci/SKILL.md) for the native-CI plumbing this rides on.
+With `ci.enabled: true` (and `--ci`/`ATMOS_CI` to force a provider), the native plugin writes a job
+summary titled after the verb you ran, plus `$GITHUB_OUTPUT` variables, for `diff`/`plan`,
+`apply`/`deploy`, `delete`, `drift detect`, and `drift describe`. No commit statuses, PR comments, or
+artifacts (Terraform-only). See [ci-and-listing](references/ci-and-listing.md#native-ci) and
+[atmos-ci](../atmos-ci/SKILL.md).
 
 ## Hooks
 
 Five lifecycle pairs fire hook events: `before`/`after` × `diff` (`plan` normalizes to `diff`),
 `apply` (`deploy` normalizes to `apply`), `delete`, `drift detect`, and `drift describe` — e.g.
 `after.aws/cloudformation.apply`, `before.aws/cloudformation.drift-detect`, and
-`after.aws/cloudformation.drift-describe`. Hyphens inside drift command names are meaningful. Every other verb — `render`, `validate`, `output`, `fmt`, `tree`,
-`logs`, `watch`, `changeset *`, `get *`, `stackset *`, `list`, `backend *`, and `source *` — does
-not fire hook events. See [atmos-hooks](../atmos-hooks/SKILL.md) for the `hooks:` block shape.
+`after.aws/cloudformation.drift-describe`. Hyphens inside drift command names are meaningful. Every
+other verb (`render`, `validate`, `output`, `fmt`, `tree`, `logs`, `watch`, `changeset *`, `get *`,
+`stackset *`, `list`, `backend *`, `source *`) fires none. The hook-firing verbs accept `--skip-hooks`
+(no value skips all; `--skip-hooks=a,b` skips named hooks) and honor `ATMOS_SKIP_HOOKS`, as
+`atmos terraform` does. See [atmos-hooks](../atmos-hooks/SKILL.md) for the `hooks:` block shape.
 
 ## Secrets
 
@@ -332,11 +328,9 @@ Rain-verb-to-`atmos aws cloudformation`-verb cross-reference (`fmt`→`fmt`, `ca
 - Use the Floci `aws/emulator` identity (see `examples/cloudformation/`) to develop and test with
   zero AWS credentials before pointing at a real account.
 
-## Static dry-run
+## Region Resolution and Static Dry-Run
 
-`--dry-run` defers YAML functions, Go templates, source downloads, authentication and hooks,
-including with `render` and bulk/affected selection. It validates known static fields and reports
-execution-dependent checks as deferred. Use a normal `render` to inspect a provisioned template.
-Bulk deletion reverses dependency order so consumers can still resolve producer outputs.
-Named changeset execution enables configured termination protection after successful completion,
-just as apply does; false never disables existing protection.
+The region is the component's `settings.aws_cloudformation.region`, then the active identity's
+region, then the AWS SDK chain; a component `env` `AWS_REGION` does not override it. `--dry-run`
+defers YAML functions, templates, source downloads, authentication, and hooks. Details:
+[region-and-dry-run](references/region-and-dry-run.md).

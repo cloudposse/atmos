@@ -17,5 +17,7 @@ func expectWatchStatusTransition(client *MockCloudFormationClient, inProgress, t
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: terminal}},
 		}, nil),
+		// Final read for the stack-level event after the terminal status.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 	)
 }

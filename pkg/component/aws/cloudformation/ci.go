@@ -33,6 +33,10 @@ type ciHookParams struct {
 	commandErr  error
 }
 
+// invokedVerbFlag is the key under which the CLI records a top-level alias verb
+// (`plan`, `deploy`) that dispatches under a shared operation identifier.
+const invokedVerbFlag = "invoked-verb"
+
 // runCIHook builds the compact CI result for one CloudFormation operation and
 // fires the Native CI plugin dispatch (hooks.RunCIHooks). Errors here are
 // logged, not returned — a CI summary failure must never fail the underlying
@@ -49,8 +53,15 @@ func runCIHook(p ciHookParams) {
 		result.Component = p.info.ComponentFromArg
 		result.Command = p.info.SubCommand
 	}
+	// Prefer the verb the user ran, so a `plan` summary is not titled `diff`.
+	if invoked, ok := p.flags[invokedVerbFlag].(string); ok && invoked != "" {
+		result.Command = invoked
+	}
 	if p.commandErr != nil {
 		result.Error = p.commandErr.Error()
+	}
+	if failOnDrift, ok := p.flags["fail-on-drift"].(bool); ok {
+		result.FailOnDrift = failOnDrift
 	}
 	populateCloudFormationCIResultFromSummary(result, p.summary)
 	if err := runCIHooks(&hooks.RunCIHooksOptions{
@@ -83,7 +94,17 @@ func populateCloudFormationCIResultFromSummary(result *schema.CloudFormationCIRe
 		result.ChangeSetName = changeSetName
 	}
 	if changes, ok := summary["changes"]; ok {
-		result.ResourceChanges = summaryLen(changes)
+		result.ResourceChanges = resourceChangeCount(changes)
+	}
+	if noOp, ok := summary["no_op"].(bool); ok {
+		result.NoOp = noOp
+		result.HasChanges = !noOp
+	}
+	if status, ok := summary["final_status"].(string); ok {
+		result.StackStatus = status
+	}
+	if outputs, ok := summary["outputs"].(map[string]any); ok {
+		result.Outputs = stringifyOutputs(outputs)
 	}
 	if driftStatus, ok := summary["drift_status"].(string); ok {
 		result.DriftStatus = driftStatus
@@ -93,10 +114,39 @@ func populateCloudFormationCIResultFromSummary(result *schema.CloudFormationCIRe
 	}
 }
 
+// resourceChangeCount counts the resource changes in a summary's "changes" value. Typed
+// changeset results count only entries that carry a ResourceChange (non-resource changes are
+// not resource changes); any other slice falls back to its length.
+func resourceChangeCount(changes any) int {
+	typed, ok := changes.([]cfntypes.Change)
+	if !ok {
+		return summaryLen(changes)
+	}
+	count := 0
+	for i := range typed {
+		if typed[i].ResourceChange != nil {
+			count++
+		}
+	}
+	return count
+}
+
+// stringifyOutputs converts the presented (already NoEcho-masked) stack outputs into strings.
+// The values are taken from the same masked map the `output` verb renders, so CI never sees a
+// value the terminal would have redacted.
+func stringifyOutputs(outputs map[string]any) map[string]string {
+	result := make(map[string]string, len(outputs))
+	for key, value := range outputs {
+		result[key] = fmt.Sprint(value)
+	}
+	return result
+}
+
 // ciOutputText builds the text for the CI summary's "CloudFormation output" section from an
 // operation summary: measured statuses, presented stack Outputs, resource changes, and
-// drifted resources. Raw templates and resource property values are not serialized. The text
-// passes through the global masker, so registered secrets are redacted before reaching CI.
+// drifted resources including formatted property differences. Raw templates and complete
+// resource property documents are not serialized. The text passes through the global masker,
+// so registered secrets are redacted before reaching CI.
 func ciOutputText(summary map[string]any) string {
 	var lines []string
 	for _, key := range []string{"stack_name", "changeset_name", "no_op", "final_status", "drift_status", "drifted_resource_count"} {
