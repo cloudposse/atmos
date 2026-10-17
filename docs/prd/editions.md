@@ -168,6 +168,12 @@ layer. `Diff`, `Between`, and `DescribePin` include their descriptive old/new va
 can inspect the changes before advancing a pin. The framework does not retroactively gate the
 historical candidates below: each requires its own retained compatibility path and tests.
 
+The `docs.terraform.formatter_settings` transition (`2026-10-17`,
+[PR #3404](https://github.com/cloudposse/atmos/pull/3404)) makes README generation
+honor configured section visibility, empty-section hiding, and heading levels.
+Earlier pins retain terraform-docs formatter defaults. Sorting and native module
+objects are unaffected by this transition.
+
 ## Historical drift this feature surfaced (and fixed)
 
 Building the journal required 12 months of git archaeology over the default layers, which exposed

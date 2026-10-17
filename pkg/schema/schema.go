@@ -1827,9 +1827,9 @@ type TerraformDocsReadmeSettings struct {
 	Source        string `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
 	Enabled       bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Format        string `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`
-	ShowProviders bool   `yaml:"show_providers,omitempty" json:"show_providers,omitempty" mapstructure:"show_providers"`
-	ShowInputs    bool   `yaml:"show_inputs,omitempty" json:"show_inputs,omitempty" mapstructure:"show_inputs"`
-	ShowOutputs   bool   `yaml:"show_outputs,omitempty" json:"show_outputs,omitempty" mapstructure:"show_outputs"`
+	ShowProviders *bool  `yaml:"show_providers,omitempty" json:"show_providers,omitempty" mapstructure:"show_providers"`
+	ShowInputs    *bool  `yaml:"show_inputs,omitempty" json:"show_inputs,omitempty" mapstructure:"show_inputs"`
+	ShowOutputs   *bool  `yaml:"show_outputs,omitempty" json:"show_outputs,omitempty" mapstructure:"show_outputs"`
 	SortBy        string `yaml:"sort_by,omitempty" json:"sort_by,omitempty" mapstructure:"sort_by"`
 	HideEmpty     bool   `yaml:"hide_empty,omitempty" json:"hide_empty,omitempty" mapstructure:"hide_empty"`
 	IndentLevel   int    `yaml:"indent_level,omitempty" json:"indent_level,omitempty" mapstructure:"indent_level"`
