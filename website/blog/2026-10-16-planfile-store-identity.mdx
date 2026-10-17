@@ -1,0 +1,103 @@
+---
+slug: planfile-store-identity
+title: "Store Planfiles in a Different Cloud Than Your Component"
+authors: [aknysh]
+tags: [feature]
+---
+
+Plan in one stage, apply in another: that is the whole point of saving a Terraform planfile between CI
+steps. But the place that holds the plan and the infrastructure the plan describes do not have to live in
+the same cloud. A component can authenticate to Azure or GCP while its planfiles belong in an S3 bucket the
+platform team already runs. That split is normal in multi-cloud pipelines, and until now it quietly did not
+work: the planfile store borrowed whatever identity the component authenticated with, so an Azure component
+trying to upload to S3 failed to produce AWS credentials at all.
+
+<!--truncate-->
+
+## The Problem
+
+Atmos can store a Terraform planfile after `plan` and verify it before `deploy`, so the plan you reviewed is
+the plan you apply. The store that holds it is configured per project under
+`components.terraform.planfiles.stores`.
+
+The catch was authentication. When a component authenticated with a non-AWS identity, the S3 planfile store
+inherited that same identity and then tried to resolve AWS credentials from it. A `azure/subscription`
+identity authenticates just fine, but it produces no AWS auth context, so the upload failed:
+
+```text
+failed to upload planfile: failed to load AWS configuration:
+failed to resolve AWS auth context for identity "azure-plan":
+auth context not available for identity
+```
+
+The shape of the problem is general: there was no way to say "authenticate the component one way, but
+authenticate the planfile store another way." The two were locked together. (The same mismatch will apply in
+reverse once non-AWS planfile backends land; today the S3 store is the one that trips on it.)
+
+## The Fix
+
+Planfile stores now take an optional `identity` field, naming the [Atmos Auth
+identity](/cli/configuration/auth) the store authenticates with, independent of the component's identity. It
+works like the [`identity` field on general Atmos stores](/cli/configuration/stores) you may already use.
+
+```yaml
+components:
+  terraform:
+    planfiles:
+      default: s3
+      stores:
+        s3:
+          type: aws/s3
+          identity: aws-backend    # store authenticates with this identity
+          options:
+            bucket: my-terraform-planfiles
+            region: us-east-1
+```
+
+The component keeps using its own identity for the Terraform run, while the store uses `aws-backend` only for
+upload and download. The store identity isn't limited to ambient credentials: for the S3 store, any
+AWS-capable identity - `aws/assume-role`, `aws/permission-set`, and the like - is resolved through the same
+Atmos Auth chain, not merely passed through from the runner environment.
+
+When `identity` is omitted, the store inherits the component's identity exactly as before, so existing
+single-cloud projects need no changes.
+
+## How to Use It
+
+Define the two identities in `auth.identities` - one the component uses, one the store uses - and point the
+store at the second:
+
+```yaml
+auth:
+  identities:
+    azure-plan:                    # the component's default identity (non-AWS)
+      kind: azure/subscription
+      default: true
+      # ...
+    aws-backend:                   # AWS identity, used only by the planfile store
+      kind: aws/assume-role
+      # ...
+
+components:
+  terraform:
+    planfiles:
+      default: s3
+      stores:
+        s3:
+          type: aws/s3
+          identity: aws-backend
+          options:
+            bucket: my-terraform-planfiles
+            region: us-east-1
+```
+
+See the [Store Identity documentation](/ci/planfile-storage) for the full configuration
+reference, and the [per-store identity example](https://github.com/cloudposse/atmos/tree/main/examples/planfile-store-identity)
+for a complete, working project.
+
+## Get Involved
+
+This shipped from a real multi-cloud setup where the plan-then-deploy workflow crossed a credential boundary.
+If your pipeline spans clouds in ways this does not yet cover, open an issue or a discussion on
+[GitHub](https://github.com/cloudposse/atmos) - the planfile store and the broader auth system keep growing
+from exactly these cases.
