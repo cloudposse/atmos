@@ -4,20 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -34,10 +32,12 @@ var (
 // opContext bundles the request-scoped values threaded through the operation
 // dispatch, keeping each function's own argument list short.
 type opContext struct {
-	Ctx         context.Context
-	AtmosConfig *schema.AtmosConfiguration
-	Info        *schema.ConfigAndStacksInfo
-	Flags       map[string]any
+	// RequestedIdentity preserves CLI/env precedence before component default selection.
+	RequestedIdentity string
+	Ctx               context.Context
+	AtmosConfig       *schema.AtmosConfiguration
+	Info              *schema.ConfigAndStacksInfo
+	Flags             map[string]any
 }
 
 // Execute runs a single aws/cloudformation component operation.
@@ -67,6 +67,7 @@ func Execute(ctx *component.ExecutionContext, operation Operation) error {
 
 // executeSingle runs the operation for a single component (the non-bulk path).
 func executeSingle(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation) error {
+	atmosConfig = configForComponentExecution(atmosConfig, info)
 	discovered, err := processStacks(atmosConfig, *info, true, !info.DryRun, !info.DryRun, nil, nil)
 	if err != nil {
 		return err
@@ -103,6 +104,20 @@ func executeSingle(ctx *component.ExecutionContext, atmosConfig *schema.AtmosCon
 	}
 
 	return runWithHooks(ctx, atmosConfig, info, operation, spec)
+}
+
+// configForComponentExecution isolates lazy authentication from the shared configuration.
+func configForComponentExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) *schema.AtmosConfiguration {
+	// Stack evaluation can read secrets before the CloudFormation client is
+	// authenticated. Bind each lookup lazily to its component/store identity;
+	// never install credentials on a shared configuration or unused backend.
+	localConfig := *atmosConfig
+	if !info.DryRun && !authdeferred.IsDeferred(localConfig.AuthManager) {
+		localConfig.AuthManager = authdeferred.NewManager(authdeferred.AuthOptions{
+			Config: &localConfig, Disabled: cfg.NormalizeIdentityValue(info.Identity) == cfg.IdentityFlagDisabledValue,
+		})
+	}
+	return &localConfig
 }
 
 // operationsMutatingStack identifies operations that cannot run on locked components.
@@ -197,11 +212,7 @@ func resolveSpecAndTemplate(ctx context.Context, atmosConfig *schema.AtmosConfig
 		return spec, nil
 	}
 
-	componentPath, err := resolveComponentPath(atmosConfig, info)
-	if err != nil {
-		return nil, err
-	}
-	componentPath, _, err = provisionAndResolveComponentPath(ctx, provisioner.OutputWriters{}, atmosConfig, info, cfg.CloudFormationComponentType, componentPath)
+	componentPath, err := prepareComponentFiles(ctx, atmosConfig, info)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +253,7 @@ func runWithHooks(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConf
 		return err
 	}
 
-	octx := &opContext{Ctx: ctx.GoContext(), AtmosConfig: atmosConfig, Info: info, Flags: ctx.Flags}
+	octx := &opContext{Ctx: ctx.GoContext(), AtmosConfig: atmosConfig, Info: info, Flags: ctx.Flags, RequestedIdentity: ctx.ConfigAndStacksInfo.Identity}
 	summary, opErr := runOperation(octx, operation, spec)
 
 	// The outcome status describes the CloudFormation operation, not the
@@ -287,6 +298,10 @@ func eventsFor(operation Operation) (hooks.HookEvent, hooks.HookEvent) {
 		return hooks.BeforeAwsCloudFormationDriftDetect, hooks.AfterAwsCloudFormationDriftDetect
 	case OperationDriftDescribe:
 		return hooks.BeforeAwsCloudFormationDriftDescribe, hooks.AfterAwsCloudFormationDriftDescribe
+	case OperationChangesetCreate:
+		return hooks.BeforeAwsCloudFormationChangesetCreate, hooks.AfterAwsCloudFormationChangesetCreate
+	case OperationChangesetExecute:
+		return hooks.BeforeAwsCloudFormationChangesetExecute, hooks.AfterAwsCloudFormationChangesetExecute
 	default:
 		return hooks.HookEvent(""), hooks.HookEvent("")
 	}
@@ -415,12 +430,10 @@ func runOperation(octx *opContext, operation Operation, spec *stackSpec) (map[st
 		}
 	}
 
-	region := resolveRegion(octx.Info.ComponentSection)
-	awsCfg, err := buildAWSConfig(octx.Ctx, octx.Info, region)
+	client, err := clientForOperation(octx, operation)
 	if err != nil {
 		return summary, err
 	}
-	client := newClient(awsCfg, resolveEndpointURL(octx.Info))
 	return runRemoteOperation(octx, operation, client, spec, summary)
 }
 
@@ -467,35 +480,6 @@ func renderDiffSummary(stackName string, result *changeSetResult) error {
 	return nil
 }
 
-// diffSummaryText builds the text renderDiffSummary writes: a header line with
-// the number of resource changes, then one line per changed resource (or the
-// no-op line when the changeset would change nothing).
-func diffSummaryText(stackName string, result *changeSetResult) string {
-	lines := []string{fmt.Sprintf("%s: no changes (changeset would be a no-op)", stackName)}
-	if !result.NoOp {
-		lines = diffResourceLines(result.Changes)
-		lines = append([]string{fmt.Sprintf("%s: %d resource change(s)", stackName, len(lines))}, lines...)
-	}
-	return strings.Join(lines, "\n")
-}
-
-// diffResourceLines renders resource changes, excluding non-resource changes.
-func diffResourceLines(changes []cfntypes.Change) []string {
-	var lines []string
-	for _, change := range changes {
-		rc := change.ResourceChange
-		if rc == nil {
-			continue
-		}
-		line := fmt.Sprintf("  %-8s %-28s %s", rc.Action, aws.ToString(rc.ResourceType), aws.ToString(rc.LogicalResourceId))
-		if rc.Replacement != "" {
-			line += fmt.Sprintf(" (replacement: %s)", rc.Replacement)
-		}
-		lines = append(lines, line)
-	}
-	return lines
-}
-
 // runApply executes the changeset (creating or updating the stack) and renders
 // the end-of-deploy Outputs summary — the same view the standalone `output` verb
 // renders, per the PRD's direct response to the #1 Rain-user complaint.
@@ -518,10 +502,19 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 	for k, v := range deploySummary {
 		summary[k] = v
 	}
-	// The stack's final status, under the same key delete uses, is recorded even
-	// when the deploy failed (for example ROLLBACK_COMPLETE) so CI can report it.
-	if result != nil && result.StackStatus != "" {
-		summary["final_status"] = string(result.StackStatus)
+	// Preserve the reviewed changeset even when confirmation, execution or event
+	// polling failed. CI reports the planned changes alongside the operation error.
+	if result != nil {
+		summary["changeset_id"] = result.ChangeSetID
+		summary["changeset_name"] = result.ChangeSetName
+		summary["changes"] = result.Changes
+		// A failed computation does not establish whether the stack has changes.
+		if result.Status == cfntypes.ChangeSetStatusCreateComplete || result.NoOp {
+			summary["no_op"] = result.NoOp
+		}
+		if result.StackStatus != "" {
+			summary["final_status"] = string(result.StackStatus)
+		}
 	}
 	if err != nil {
 		return summary, err
@@ -531,11 +524,6 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 		// direct stack deploy happened.
 		return summary, nil
 	}
-	summary["changeset_id"] = result.ChangeSetID
-	summary["changeset_name"] = result.ChangeSetName
-	summary["no_op"] = result.NoOp
-	summary["changes"] = result.Changes
-
 	if err := applyPostDeployPolicy(octx, client, spec, result); err != nil {
 		return summary, err
 	}

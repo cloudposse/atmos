@@ -169,10 +169,10 @@ func TestHook_MatchesDeployApplyAliasesInBothNotations(t *testing.T) {
 	}
 }
 
-// TestHookMatchesCloudFormationDriftEvents preserves the hyphenated operation name when matching all
-// four drift lifecycle events.
+// TestHookMatchesCloudFormationDriftEvents preserves the hyphenated operation name when matching the
+// drift and changeset lifecycle events.
 func TestHookMatchesCloudFormationDriftEvents(t *testing.T) {
-	for _, event := range []HookEvent{BeforeAwsCloudFormationDriftDetect, AfterAwsCloudFormationDriftDetect, BeforeAwsCloudFormationDriftDescribe, AfterAwsCloudFormationDriftDescribe} {
+	for _, event := range []HookEvent{BeforeAwsCloudFormationDriftDetect, AfterAwsCloudFormationDriftDetect, BeforeAwsCloudFormationDriftDescribe, AfterAwsCloudFormationDriftDescribe, BeforeAwsCloudFormationChangesetCreate, AfterAwsCloudFormationChangesetCreate, BeforeAwsCloudFormationChangesetExecute, AfterAwsCloudFormationChangesetExecute} {
 		t.Run(string(event), func(t *testing.T) {
 			assert.True(t, Hook{Events: []string{string(event)}}.MatchesEvent(event))
 			assert.False(t, Hook{Events: []string{string(BeforeAwsCloudFormationApply)}}.MatchesEvent(event))
