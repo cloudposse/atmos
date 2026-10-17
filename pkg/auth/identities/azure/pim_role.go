@@ -300,14 +300,18 @@ func (i *pimRoleIdentity) activate(ctx context.Context, client PIMClient, princi
 	return i.waitForActivation(ctx, client, requestName, status)
 }
 
-// submitActivation resolves the justification and files a fresh self-activation request.
+// submitActivation resolves the justification, caps duration at the policy maximum,
+// and files a fresh self-activation request.
 func (i *pimRoleIdentity) submitActivation(ctx context.Context, client PIMClient, principalID, eligibilityID string) (string, string, error) {
 	justification, err := i.resolveJustification()
 	if err != nil {
 		return "", "", err
 	}
+	isoDuration, err := i.resolveEffectiveDuration(ctx, client)
+	if err != nil {
+		return "", "", err
+	}
 	requestName := i.newRequestName()
-	isoDuration := i.isoDuration()
 	result, err := client.CreateActivationRequest(ctx, &ActivationRequest{
 		RequestName:           requestName,
 		PrincipalID:           principalID,
@@ -318,8 +322,7 @@ func (i *pimRoleIdentity) submitActivation(ctx context.Context, client PIMClient
 	})
 	if err != nil {
 		// ARM enforces the role's PIM activation-policy maximum server-side and rejects a
-		// too-long window. Atmos does not yet pre-flight that cap (tracked as a follow-up),
-		// so surface an actionable hint alongside ARM's own message.
+		// too-long window. If ARM rejects the request, surface an actionable hint alongside ARM's own message.
 		b := errUtils.Build(errUtils.ErrAzurePIMActivationFailed).
 			WithCause(err).
 			WithExplanationf("Could not file the PIM activation request for identity '%s'", i.name).
@@ -414,6 +417,43 @@ func (i *pimRoleIdentity) resolveJustification() (string, error) {
 		WithContext(azureCloud.LogFieldIdentity, i.name).
 		WithExitCode(2).
 		Err()
+}
+
+// resolveEffectiveDuration converts the configured Go-style duration to ISO-8601,
+// clamping to the role's PIM policy maximum if one is configured and the requested
+// duration exceeds it. Returns "" when duration is unset or unparseable.
+func (i *pimRoleIdentity) resolveEffectiveDuration(ctx context.Context, client PIMClient) (string, error) {
+	if i.duration == "" {
+		return "", nil
+	}
+	d, err := time.ParseDuration(i.duration)
+	if err != nil {
+		i.warn(fmt.Sprintf("Invalid duration %q for PIM activation on identity %q; using the role's policy default.", i.duration, i.name))
+		return "", nil
+	}
+	if d <= 0 {
+		return "", nil
+	}
+
+	policyMax, found, err := client.PolicyMaxDuration(ctx, i.roleDefinitionID)
+	if err != nil {
+		log.Debug("Could not read PIM policy maximum; sending configured duration",
+			azureCloud.LogFieldIdentity, i.name, "error", err)
+		return goDurationToISO8601(d), nil
+	}
+	if found && policyMax > 0 && d > policyMax {
+		clampedISO := goDurationToISO8601(policyMax)
+		i.warn(fmt.Sprintf("Configured duration %s for PIM activation on identity %q exceeds the role's policy maximum of %s; capping activation to %s.", i.duration, i.name, policyMax, clampedISO))
+		log.Debug("Clamping PIM activation duration to policy maximum",
+			azureCloud.LogFieldIdentity, i.name,
+			"configured", i.duration,
+			"policy_max", policyMax.String(),
+			"effective", clampedISO,
+		)
+		return clampedISO, nil
+	}
+
+	return goDurationToISO8601(d), nil
 }
 
 // isoDuration converts the configured Go-style duration to the ISO-8601 form ARM expects,
