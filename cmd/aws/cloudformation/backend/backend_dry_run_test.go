@@ -75,7 +75,7 @@ func TestBackendMutations_HonorInheritedDryRun(t *testing.T) {
 
 func TestBackendDryRun_StillRequiresStack(t *testing.T) {
 	setupTestWithMocks(t)
-	require.ErrorIs(t, executeCreateOrUpdate(t.Context(), createOrUpdateArgs{Component: "vpc", DryRun: true}), errUtils.ErrRequiredFlagNotProvided)
+	require.ErrorIs(t, executeCreateOrUpdate(t.Context(), &createOrUpdateArgs{Component: "vpc", DryRun: true}), errUtils.ErrRequiredFlagNotProvided)
 	require.ErrorIs(t, executeDelete(t.Context(), deleteRequest{Component: "vpc", DryRun: true}), errUtils.ErrRequiredFlagNotProvided)
 }
 
@@ -112,14 +112,14 @@ func TestBackendDryRun_DescribesWhatWouldHappen(t *testing.T) {
 		{
 			name: "create",
 			run: func() error {
-				return executeCreateOrUpdate(t.Context(), createOrUpdateArgs{Verb: verbCreate, Component: "vpc", Stack: "dev", DryRun: true})
+				return executeCreateOrUpdate(t.Context(), &createOrUpdateArgs{Verb: verbCreate, Component: "vpc", Stack: "dev", DryRun: true})
 			},
 			want: "Dry run: backend create vpc in dev: would create bucket my-bucket in region us-east-1; no AWS calls made",
 		},
 		{
 			name: "update",
 			run: func() error {
-				return executeCreateOrUpdate(t.Context(), createOrUpdateArgs{Verb: verbUpdate, Component: "vpc", Stack: "dev", DryRun: true})
+				return executeCreateOrUpdate(t.Context(), &createOrUpdateArgs{Verb: verbUpdate, Component: "vpc", Stack: "dev", DryRun: true})
 			},
 			want: "Dry run: backend update vpc in dev: would update (creating it if missing) bucket my-bucket in region us-east-1; no AWS calls made",
 		},
@@ -166,7 +166,7 @@ func TestBackendDryRun_FailsForMissingComponentOrTarget(t *testing.T) {
 
 				var err error
 				if verb == verbCreate {
-					err = executeCreateOrUpdate(t.Context(), createOrUpdateArgs{Verb: verb, Component: "nonexistent-comp", Stack: "no-such-stack", DryRun: true})
+					err = executeCreateOrUpdate(t.Context(), &createOrUpdateArgs{Verb: verb, Component: "nonexistent-comp", Stack: "no-such-stack", DryRun: true})
 				} else {
 					err = executeDelete(t.Context(), deleteRequest{Component: "nonexistent-comp", Stack: "no-such-stack", DryRun: true})
 				}

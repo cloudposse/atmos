@@ -15,13 +15,13 @@ Use this command to delete the vendored source directory for an `aws/cloudformat
 </Intro>
 
 <ActionCard title="Source-Based Version Pinning">
-    Learn how to configure the `source` field for per-environment version control.
+    Configure source locations, version pins, and authentication.
     <div>
-      <PrimaryCTA to="/design-patterns/version-management/source-based-versioning">Design Pattern</PrimaryCTA>
+      <PrimaryCTA to="/stacks/components/aws-cloudformation#source-provisioning">Source Configuration</PrimaryCTA>
     </div>
 </ActionCard>
 
-<CastPlayer title="atmos aws cloudformation source delete --help" src="/casts/screengrabs/atmos-aws-cloudformation-source-delete--help.cast" static chrome />
+<CastPlayer title="atmos aws cloudformation source delete --help=all" src="/casts/screengrabs/atmos-aws-cloudformation-source-delete--help.cast" static chrome />
 
 ## Usage
 
@@ -53,7 +53,7 @@ atmos aws cloudformation source delete vpc --stack dev --force
 ```
 
 Output:
-```
+```text
 Deleting directory: components/cloudformation/vpc
 ✓ Successfully deleted: components/cloudformation/vpc
 ```
@@ -67,6 +67,14 @@ atmos aws cloudformation source delete vpc --stack dev
 ```
 
 The command asks whether to delete the source directory. Choose **Yes!** to delete it, or **No.** to cancel and keep the directory. Without terminal input, use `--force` as shown in the previous example.
+
+### Preview with `--dry-run`
+
+Use `--dry-run` to check the source directory and deletion guards without removing files:
+
+```shell
+atmos aws cloudformation source delete vpc --stack dev --dry-run
+```
 
 ### Request Interactive Selection
 
@@ -93,15 +101,32 @@ You can also provide the component and omit `--stack` to select only the stack. 
 
   <dt>`--force` / `-f`</dt>
   <dd>**Optional.** Skip confirmation and delete the source directory. Use this flag for non-interactive deletion.</dd>
+  <dt>`--dry-run`</dt>
+  <dd>Validate static configuration and show the destination without authentication,
+  downloads, or deletion.</dd>
 </dl>
 
 ## Safety
 
-The `delete` command has several safety features:
+The command checks that the component has a `source` and that its resolved
+directory was provisioned by Atmos. A missing directory produces a warning.
 
 1. **Confirmation by default** - Prompts before deletion unless `--force` is set; declining preserves the directory
 2. **Only deletes source-managed components** - Only works on components with `source` configured
 3. **Non-destructive on missing directories** - Shows a warning if the directory doesn't exist instead of failing
+
+### Directory Selection
+
+Deletion uses the same destination as `source pull`, including the base
+component, `working_directory`, and workdir settings. A directory used by
+another local component in the same stack is protected from deletion.
+
+### Older Downloads
+
+Atmos records source ownership in `.atmos/source.json`, or `.atmos/metadata.json`
+for workdirs. Downloads made before these records were introduced cannot be
+deleted by this command. Run `source pull --force` to refresh the source and
+record ownership, or remove the directory manually.
 
 ## See Also
 

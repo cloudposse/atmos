@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"github.com/aws/smithy-go"
@@ -210,9 +211,47 @@ func createChangeSet(ctx context.Context, client CloudFormationClient, spec *sta
 	if state.exists() {
 		changeSetType = cfntypes.ChangeSetTypeUpdate
 	}
+	if changeSetType == cfntypes.ChangeSetTypeCreate {
+		if err := rejectUsePreviousValueOnCreate(spec.Parameters); err != nil {
+			return nil, err
+		}
+	}
 
 	name := changeSetName(spec.StackName)
+	input := newCreateChangeSetInput(spec, name, changeSetType)
 
+	created, err := client.CreateChangeSet(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf(wrapFmt, errUtils.ErrAwsCloudFormationChangeSetFailed, err)
+	}
+
+	result, err := waitForChangeSet(ctx, client, spec.StackName, name, changeSetType)
+	// Preserve ownership even if the first polling request fails or is cancelled.
+	// Callers decide whether to discard the changeset; apply still needs it.
+	if result == nil {
+		result = &changeSetResult{ChangeSetName: name, ChangeSetType: changeSetType}
+	}
+	retainChangeSetIdentifiers(result, created)
+	result.StackStub = changeSetType == cfntypes.ChangeSetTypeCreate && !state.Found
+	if result.NoOp {
+		result.StackStatus = state.Status
+	}
+
+	return result, err
+}
+
+// retainChangeSetIdentifiers preserves identifiers returned by creation when polling omits them.
+func retainChangeSetIdentifiers(result *changeSetResult, created *cloudformation.CreateChangeSetOutput) {
+	if result.ChangeSetID == "" {
+		result.ChangeSetID = stringValue(created.Id)
+	}
+	if result.StackID == "" {
+		result.StackID = stringValue(created.StackId)
+	}
+}
+
+// newCreateChangeSetInput assembles the CreateChangeSet request for spec.
+func newCreateChangeSetInput(spec *stackSpec, name string, changeSetType cfntypes.ChangeSetType) *cloudformation.CreateChangeSetInput {
 	input := &cloudformation.CreateChangeSetInput{
 		ChangeSetName:    awsString(name),
 		StackName:        awsString(spec.StackName),
@@ -237,34 +276,27 @@ func createChangeSet(ctx context.Context, client CloudFormationClient, spec *sta
 	if spec.DisableRollback && changeSetType == cfntypes.ChangeSetTypeCreate {
 		input.OnStackFailure = cfntypes.OnStackFailureDoNothing
 	}
-
-	created, err := client.CreateChangeSet(ctx, input)
-	if err != nil {
-		return nil, fmt.Errorf(wrapFmt, errUtils.ErrAwsCloudFormationChangeSetFailed, err)
-	}
-
-	result, err := waitForChangeSet(ctx, client, spec.StackName, name, changeSetType)
-	// Preserve ownership even if the first polling request fails or is cancelled.
-	// Callers decide whether to discard the changeset; apply still needs it.
-	if result == nil {
-		result = &changeSetResult{ChangeSetName: name, ChangeSetType: changeSetType}
-	}
-	retainChangeSetIdentifiers(result, created)
-	result.StackStub = changeSetType == cfntypes.ChangeSetTypeCreate && !state.Found
-	if result.NoOp {
-		result.StackStatus = state.Status
-	}
-	return result, err
+	return input
 }
 
-// retainChangeSetIdentifiers preserves identifiers returned by creation when polling omits them.
-func retainChangeSetIdentifiers(result *changeSetResult, created *cloudformation.CreateChangeSetOutput) {
-	if result.ChangeSetID == "" {
-		result.ChangeSetID = stringValue(created.Id)
+// rejectUsePreviousValueOnCreate fails before CreateChangeSet when a parameter
+// asks for UsePreviousValue on a CREATE changeset. CloudFormation rejects that
+// combination with a raw ValidationError, and there is nothing to reuse anyway:
+// the stack does not exist yet.
+func rejectUsePreviousValueOnCreate(params []cfntypes.Parameter) error {
+	var keys []string
+	for _, param := range params {
+		if param.UsePreviousValue != nil && *param.UsePreviousValue {
+			keys = append(keys, aws.ToString(param.ParameterKey))
+		}
 	}
-	if result.StackID == "" {
-		result.StackID = stringValue(created.StackId)
+	if len(keys) == 0 {
+		return nil
 	}
+	return errUtils.Build(errUtils.ErrInvalidAwsCloudFormationParameters).
+		WithExplanationf("UsePreviousValue is set for parameter(s) %s, but the stack does not exist yet, so there is no previous value to reuse.", strings.Join(keys, ", ")).
+		WithHint("Supply a ParameterValue for the first deployment, then switch to UsePreviousValue on later updates.").
+		Err()
 }
 
 // changeSetPollDecision is the outcome of inspecting one DescribeChangeSet poll.

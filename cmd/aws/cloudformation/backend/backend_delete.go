@@ -102,6 +102,7 @@ type deleteRequest struct {
 	DryRun    bool
 }
 
+// executeDelete validates the component scope and preserves a side-effect-free dry-run path.
 func executeDelete(ctx context.Context, req deleteRequest) error {
 	if err := requireComponentAndStack(verbDelete, req.Component, req.Stack); err != nil {
 		return err
@@ -123,12 +124,13 @@ func executeDelete(ctx context.Context, req deleteRequest) error {
 
 	return prov.DeleteBackend(ctx, &DeleteBackendParams{
 		CreateBackendParams: CreateBackendParams{
-			AtmosConfig:     atmosConfig,
-			Component:       req.Component,
-			Stack:           req.Stack,
-			ComponentConfig: componentConfig,
-			AuthContext:     info.AuthContext,
-			Target:          req.Target,
+			AtmosConfig:       atmosConfig,
+			RequestedIdentity: req.Identity,
+			Component:         req.Component,
+			Stack:             req.Stack,
+			ComponentConfig:   componentConfig,
+			AuthContext:       info.AuthContext,
+			Target:            req.Target,
 		},
 		Force: req.Force,
 	})

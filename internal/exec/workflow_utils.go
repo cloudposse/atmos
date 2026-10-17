@@ -712,7 +712,11 @@ func ExecuteWorkflow(
 		// Prepare environment variables: start with baseEnv (system + global + toolchain).
 		// Then merge workflow-level, persistent env-step, and step-level env vars.
 		// If identity is specified, also authenticate and add credentials.
-		stepEnv, err := prepareStepEnvironment(baseEnv, stepIdentity, step.Name, authManager, resolvedWorkflowEnv, persistentEnv, resolvedStepEnv)
+		environmentIdentity := stepIdentity
+		if commandType == "publish" {
+			environmentIdentity = "" // Publishing authenticates only after target and dry-run validation.
+		}
+		stepEnv, err := prepareStepEnvironment(baseEnv, environmentIdentity, step.Name, authManager, resolvedWorkflowEnv, persistentEnv, resolvedStepEnv)
 		if err != nil {
 			if workflowErr == nil {
 				workflowErr = err
@@ -782,6 +786,7 @@ func ExecuteWorkflow(
 		// One option set for every extended-step call below so toolchain PATH and the
 		// auth manager are never dropped on any dispatch path.
 		extendedOpts := extendedStepOptions{
+			Identity:      stepIdentity,
 			DryRun:        dryRun,
 			FinalStack:    finalStack,
 			AtmosConfig:   &atmosConfig,
@@ -1179,6 +1184,7 @@ func ExecuteWorkflow(
 var stepExecutorState *stepPkg.StepExecutor
 
 type extendedStepOptions struct {
+	Identity      string
 	DryRun        bool
 	FinalStack    string
 	AtmosConfig   *schema.AtmosConfiguration
@@ -1192,6 +1198,9 @@ func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep,
 
 	// Execute the step.
 	stepCopy := *workflowStep
+	if stepCopy.Type == "publish" && opts.Identity != "" {
+		stepCopy.Identity = opts.Identity
+	}
 	stepCopy.DryRun = opts.DryRun
 	stepCopy.Stack = opts.FinalStack
 	// Extended step types (archive, file, junit, workdir, container, ...) resolve

@@ -1,11 +1,14 @@
 package cloudformation
 
 import (
+	"context"
 	"os"
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/provisioner/backend"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -26,6 +29,13 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	}
 
+	// Packaging pre-checks the bucket before every upload. Default to "exists" so tests that
+	// are not about the bucket never resolve real AWS credentials or probe the network; tests
+	// that exercise the check call useRealBucketExistenceCheck.
+	s3BucketExistsFunc = func(context.Context, *schema.AtmosConfiguration, map[string]any, *schema.AuthContext) (bool, error) {
+		return true, nil
+	}
+
 	ioCtx, err := iolib.NewContext()
 	if err != nil {
 		panic(err)
@@ -34,4 +44,13 @@ func TestMain(m *testing.M) {
 	ui.InitFormatter(ioCtx)
 
 	os.Exit(m.Run())
+}
+
+// useRealBucketExistenceCheck restores the production bucket existence probe for one test, so
+// the S3 client factory installed by that test is the one that answers.
+func useRealBucketExistenceCheck(t *testing.T) {
+	t.Helper()
+	original := s3BucketExistsFunc
+	s3BucketExistsFunc = backend.S3BackendExists
+	t.Cleanup(func() { s3BucketExistsFunc = original })
 }
