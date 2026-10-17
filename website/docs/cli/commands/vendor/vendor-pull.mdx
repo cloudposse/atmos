@@ -39,6 +39,7 @@ atmos vendor pull -c <component> [options]
 atmos vendor pull --tags <tag1>,<tag2> [options]
 atmos vendor pull --stack <stack> [options]
 atmos vendor pull --labels <key1>=<value1>,<key2>=<value2> [options]
+atmos vendor pull --labels <key1>=<value1>,<key2>=<value2> [options]
 ```
 
 ## Description
@@ -308,6 +309,9 @@ atmos vendor pull --stack dev-us-west-2 --labels tier=1
 # Either "=" or ":" works as the key/value separator
 atmos vendor pull --labels tier:1,cost-center:platform
 
+# Combine multiple selectors in one comma-separated --labels value
+atmos vendor pull --labels tier=1,cost-center=platform
+
 # Narrow a stack/labels selection further by declared vendor.yaml tags
 atmos vendor pull --stack dev-us-west-2 --labels tier=1 --tags networking
 ```
@@ -355,7 +359,7 @@ When executing the `atmos vendor pull` command, Atmos performs the following ste
   <dd>Only vendor the components whose `vendor.yaml` source declares any of the specified tags. An independent filter: composes with `--component` or `--stack`/`--labels` to narrow further, or stands on its own.<br/>`tags` is a comma-separated values (CSV) string.</dd>
 
   <dt>`--labels` <em>(optional)</em></dt>
-  <dd>Only vendor components whose stack `metadata.labels` match ALL of the specified key/value pairs (a component concept, resolved the same way as `--stack`). Comma-separated `key=value` or `key:value` pairs, e.g. `--labels=tier=1,cost-center:platform`. Cannot be combined with `--component`; composes with `--stack` and `--tags`. Considers every component type unless you pass `--type` explicitly, the same as `--stack`.</dd>
+  <dd>Only vendor components whose stack `metadata.labels` match ALL of the specified key/value pairs (a component concept, resolved the same way as `--stack`). `key=value` or `key:value` pairs, comma-separated in one flag value, e.g. `--labels=tier=1,cost-center:platform`. Cannot be combined with `--component`; composes with `--stack` and `--tags`. Considers every component type unless you pass `--type` explicitly, the same as `--stack`.</dd>
 
   <dt>`--type` / `-t` <em>(optional)</em></dt>
   <dd>Component type: `terraform`, `helmfile`, or `packer` (`terraform` is default). Pass this flag explicitly to scope a `--stack`/`--labels` selection to one component type. When you omit it, every component type is considered.</dd>

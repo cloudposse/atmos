@@ -167,7 +167,7 @@ func createWorkflowCmdForTest() *cobra.Command {
 	cmd.PersistentFlags().Bool("dry-run", false, "Dry run")
 	cmd.PersistentFlags().StringP("stack", "s", "", "Stack")
 	cmd.PersistentFlags().StringSlice("tags", nil, "Tags")
-	cmd.PersistentFlags().String("labels", "", "Labels")
+	cmd.PersistentFlags().StringSlice("labels", nil, "Labels")
 	cmd.PersistentFlags().String("from-step", "", "From step")
 	cmd.PersistentFlags().String("identity", "", "Identity")
 

@@ -1,0 +1,13 @@
+name: Reserve Windows exception-stack space for CI
+description: Apply the version-checked Go 1.26.9 CI workaround for golang/go#81238.
+runs:
+  using: composite
+  steps:
+    - name: Verify runtime-overlay safeguards
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: python -m unittest discover -s "$env:GITHUB_ACTION_PATH"
+    - name: Configure the temporary Go runtime overlay
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: python "$env:GITHUB_ACTION_PATH/configure.py"
