@@ -42,7 +42,13 @@ func announceNoChanges(stackName string) {
 // so it must not pollute stdout, which carries the stack Outputs (for example
 // with --format=json).
 func renderApplyPreview(stackName string, result *changeSetResult) {
-	ui.Writeln(diffSummaryText(stackName, result))
+	if result.NoOp {
+		ui.Infof("**%s** ((· no changes (changeset would be a no-op)))", stackName)
+		return
+	}
+	rows := changePreviewRows(result)
+	ui.Infof("((Changes for)) **%s** ((· %s))", stackName, changeCountText(len(rows)))
+	ui.Write(changePreviewTable(rows))
 }
 
 // stackSetTargetError explains that apply/deploy cannot deliver to a
