@@ -47,7 +47,8 @@ func loadTemplateBody(componentPath string, spec *stackSpec) (string, error) {
 }
 
 // loadStackPolicyBody reads the component's stack policy file from disk, if configured.
-// An inline policy is already serialized in the spec; return it without reading a file.
+// An inline stack_policy.body is already in the spec and never touches the component directory,
+// so it is returned unchanged. Returns an empty string when neither is set.
 func loadStackPolicyBody(componentPath string, spec *stackSpec) (string, error) {
 	defer perf.Track(nil, "cloudformation.loadStackPolicyBody")()
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -165,14 +166,16 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	deferredContexts[cfg.EnvSectionName] = envCtx
 
 	// Merge auth using deferred merge to handle YAML functions.
+	// A more specific layer that marks a default identity supersedes less specific defaults, so a
+	// stack-level default and a component-level default never both survive the merge.
 	finalComponentAuth, authCtx, err := m.MergeWithDeferred(
 		mergeConfig,
-		[]map[string]any{
+		auth.ClearSupersededAuthDefaults([]map[string]any{
 			opts.GlobalAuth,
 			result.BaseComponentAuth,
 			result.ComponentAuth,
 			result.ComponentOverridesAuth,
-		},
+		}),
 	)
 	if err != nil {
 		return nil, nil, err
@@ -825,10 +828,10 @@ func processAuthConfig(atmosConfig *schema.AtmosConfiguration, globalAuthConfig 
 	// The globalAuthConfig parameter is pre-converted from atmosConfig.Auth before parallel processing starts.
 	mergedAuthConfig, mergeCtx, err := m.MergeWithDeferred(
 		atmosConfig,
-		[]map[string]any{
+		auth.ClearSupersededAuthDefaults([]map[string]any{
 			globalAuthConfig,
 			authConfig,
-		},
+		}),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: merge auth config: %w", errUtils.ErrInvalidAuthConfig, err)

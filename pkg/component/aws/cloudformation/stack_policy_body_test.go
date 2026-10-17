@@ -2,6 +2,8 @@ package cloudformation
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -75,6 +77,22 @@ func TestMutuallyExclusiveStackPolicyHint(t *testing.T) {
 	assert.Contains(t, strings.Join(cockroachErrors.GetAllHints(err), "\n"), "stack_policy.body")
 }
 
+// TestInlineStackPolicyBodyNeedsNoComponentDirectory verifies the inline policy is used without any
+// component path resolution, for named execution and for operations that load a template.
+func TestInlineStackPolicyBodyNeedsNoComponentDirectory(t *testing.T) {
+	stubProvisionAndResolveComponentPath(t, "", errors.New("component path must not be resolved"))
+	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{
+		"stack_name": "vpc", "path": "absent-template.yaml",
+		"stack_policy": map[string]any{"body": stackPolicyDocument},
+	}}
+	spec, err := resolveSpecAndTemplate(t.Context(), &schema.AtmosConfiguration{}, info, OperationChangesetExecute)
+	require.NoError(t, err)
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal([]byte(spec.StackPolicyBody), &decoded))
+	assert.Equal(t, stackPolicyDocument["Statement"].([]any)[0].(map[string]any)["Effect"], decoded["Statement"].([]any)[0].(map[string]any)["Effect"])
+	assert.Empty(t, spec.TemplateBody, "named execution keeps its reviewed template")
+}
+
 // TestInlineStackPolicyBodySurvivesLoad verifies a template-loading operation keeps the inline policy.
 func TestInlineStackPolicyBodySurvivesLoad(t *testing.T) {
 	spec := &stackSpec{StackPolicyBody: `{"Statement":[]}`}
@@ -119,4 +137,45 @@ func TestDryRunAcceptsInlineStackPolicyBody(t *testing.T) {
 		"stack_policy": map[string]any{"body": stackPolicyDocument},
 	}}
 	require.NoError(t, validateDryRun(&schema.AtmosConfiguration{}, info, nil, OperationApply))
+}
+
+// TestWorkdirRequiresSource verifies provision.workdir.enabled is rejected without a source.
+func TestWorkdirRequiresSource(t *testing.T) {
+	workdir := func(enabled any) map[string]any {
+		return map[string]any{"workdir": map[string]any{"enabled": enabled}}
+	}
+	source := map[string]any{"uri": "https://example.com/template.yaml"}
+	tests := []struct {
+		name      string
+		provision any
+		source    any
+		wantErr   bool
+	}{
+		{name: "enabled without source", provision: workdir(true), wantErr: true},
+		{name: "enabled with source", provision: workdir(true), source: source},
+		{name: "disabled without source", provision: workdir(false)},
+		{name: "workdir without enabled", provision: map[string]any{"workdir": map[string]any{}}},
+		{name: "provision absent"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			section := map[string]any{"stack_name": "vpc", "template": "Resources: {}"}
+			if tt.provision != nil {
+				section["provision"] = tt.provision
+			}
+			if tt.source != nil {
+				section["source"] = tt.source
+			}
+			err := validateComponentConfig(section)
+			if !tt.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+			assert.Contains(t, errUtils.Format(err, errUtils.FormatterConfig{}), "source:")
+
+			info := &schema.ConfigAndStacksInfo{DryRun: true, ComponentSection: section}
+			require.ErrorIs(t, validateDryRun(&schema.AtmosConfiguration{}, info, nil, OperationApply), errUtils.ErrInvalidAwsCloudFormationSettings)
+		})
+	}
 }
