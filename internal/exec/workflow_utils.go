@@ -777,7 +777,7 @@ func ExecuteWorkflow(
 		runCommandStep := func(run func(stdout, stderr io.Writer) error) error {
 			var runErr error
 			commandResult, runErr = stepPkg.ExecuteCommandResult(step.Name, run)
-			return runErr
+			return stepPkg.WithStepOutput(runErr, commandResult)
 		}
 		// One option set for every extended-step call below so toolchain PATH and the
 		// auth manager are never dropped on any dispatch path.
