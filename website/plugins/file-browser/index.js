@@ -92,6 +92,7 @@ const TAGS_MAP = {
   'sops-secrets': ['Stacks'],
   'onepassword-secrets': ['Stacks'],
   'auth-stores': ['Stacks'],
+  'planfile-store-identity': ['Automation'],
   'demo-vendoring': ['Components'],
   'demo-component-versions': ['Components'],
   'source-provisioning': ['Components'],
