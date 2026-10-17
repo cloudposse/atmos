@@ -26,8 +26,11 @@ a branch chain; preserve an ordinary chain's classification unless conversion is
 Stay below the 150-file review boundary against each PR's actual parent; the repository quality
 gate currently permits at most 149 files. Native stacks require linear history between branches;
 batch fixes before a necessary cascading rebase instead of merging parents as a general workaround
-or rebasing after every finding. GitHub can retain approvals for unchanged PR diffs; verify that
-separately from CodeRabbit and CI. Atmos's Quality Gate still requires exact-head CodeRabbit approval.
+or rebasing after every finding. Verify the current direct-parent chain before requesting reviews.
+GitHub can retain approvals for unchanged PR diffs, but do not promise retention; report affected
+approvals at risk before publication. Verify reviews separately from CI. Atmos's Quality Gate still
+requires exact-head CodeRabbit approval; inspect the live review commit ID before requesting another
+review, because GitHub may associate a retained approval with the new head.
 Coordinate history repair and publication through that skill.
 For an explicitly independent PR, target trunk and leave it outside the existing stack.
 

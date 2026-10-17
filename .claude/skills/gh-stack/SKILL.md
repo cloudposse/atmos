@@ -83,6 +83,14 @@ boundary instead of automatically rewriting every branch after each finding. `re
 are mutations, never status commands. Follow the detailed
 [native-stack repair procedure](references/maintenance.md#repair-native-stack-history).
 
+Before requesting reviews, verify that every dependent layer in the intended review block contains
+its current direct parent and has that parent as its sole merge base. Assess the bottom PR's trunk
+freshness separately; an unrelated trunk advance alone does not require rewriting or delaying reviews.
+Do not skip stale intermediate layers by
+merging a lower update directly into a higher PR. Deferred propagation is unfinished integration;
+hold reviews for affected heads until the batch is stable. See the
+[parent-chain checks](references/maintenance.md#validate-the-parent-chain-before-requesting-reviews).
+
 For an ordinary dependent PR chain outside native stacks, signed parent merges may be appropriate
 when repository policy and the user's history preferences permit them. Verify that classification
 first; do not unlink a native stack to avoid its requirements without user authorization.
@@ -91,8 +99,10 @@ GitHub documents retained approvals after a native stack rebase when the PR diff
 even with stale-approval dismissal enabled. Do not assume every rebase loses every approval, or
 that every approval will survive a conflict resolution. Check GitHub review applicability, CodeRabbit
 review evidence, and CI separately; a retained review can refer to an earlier commit. Atmos's Quality
-Gate currently requires exact-head CodeRabbit approval, so retained GitHub approval alone does not
-satisfy it. Verify the gate implementation and use incremental review for a confirmed gap; changed
+Gate currently requires exact-head CodeRabbit approval. Read the live review's commit ID: GitHub may
+associate a retained approval with the new head, satisfying that requirement without another review.
+Unchanged diffs or patch IDs do not guarantee retention. Before publication, report the affected
+approved PRs and contiguous prefix at risk. Verify the gate implementation and use incremental review for a confirmed gap; changed
 SHAs never automatically justify full CodeRabbit reviews. See
 [approval and CI verification](references/maintenance.md#verify-approvals-after-a-native-rebase).
 

@@ -59,6 +59,31 @@ parent other than the PR head, confirm that it contains the expected base, and c
 with the expected cumulative base tree. Checking that the base is somewhere in the whole merge's
 ancestry is insufficient: it might be present only through the PR head.
 
+### Validate the parent chain before requesting reviews
+
+Use fresh remote heads and the registered stack order. For every dependent layer in the intended
+review block, check its current direct parent:
+
+```bash
+git merge-base --is-ancestor <actual-parent-sha> <candidate-head-sha>
+git merge-base --all <actual-parent-sha> <candidate-head-sha>
+```
+
+Require the first command to succeed and the second to return only the actual parent SHA. These
+checks establish the local dependency chain; still verify GitHub's native merge result as above.
+Repeat after integration and publication, and whenever a relevant parent changes. Record the exact
+parent/head pair with review and CI evidence so stale observations cannot qualify a new relationship.
+For the bottom PR, record its validated trunk integration point and the current trunk separately.
+Evaluate conflicts and required freshness before updating it; an unrelated trunk advance alone does
+not require rewriting the stack or suspending otherwise applicable reviews.
+
+Do not merge a grandparent's new changes directly into a higher PR while its direct parent remains
+stale. In the #3250 incident, its head contained the updated #3322 while its direct parent #3100 did
+not. Separately, #3156 lacked its updated direct parent #2998. Selective merges preserved commit IDs
+but left inconsistent dependencies. Delaying propagation to batch fixes is reasonable; classify that
+range as unfinished integration and hold review requests for affected heads. Repair the verified
+boundary using the workflow for the actual stack type, rather than automatically rebasing everything.
+
 ## Repair native stack history
 
 GitHub's native stack model imposes a history requirement in addition to textual mergeability.
@@ -108,6 +133,11 @@ SHAs, screenshots, candidate worktrees, and unresolved repair status in ignored 
 5. Resolve conflicts semantically, preserving earlier fixes and later intentional behavior. Keep
     signing and hooks enabled; verify signatures on rewritten commits. GitHub documents signed commits
     for its native rebase, but that is not evidence that a locally configured tool signed yours.
+    `--rebase-merges` recreates merges but does not guarantee preservation of their manual resolutions.
+    Save independently established intended cumulative trees before replay, then compare every layer
+    against them. A clean replay in this repair dropped fix-log files and test assertions; successful
+    command exit and an unchanged top-level feature are insufficient. Restore omissions in their
+    owning PRs and rerun the relevant tests before freezing candidates.
 6. Compare each old and new PR diff against its respective actual parent, including added/deleted
     paths, and use `git range-diff` as supporting evidence where useful. Also compare cumulative trees
     against the intended integration of trunk and batched fixes. An unchanged final tree alone can hide
@@ -124,6 +154,14 @@ when a native stack rebase leaves the PR diff unchanged, including with stale-re
 This changes the decision: avoiding all rebases to protect reviews can leave a native stack unmergeable.
 Batch required repairs and measure diff changes instead of assuming automatic approval loss.
 
+Retention is a possibility, not a publication guarantee. In the October 17 repair, 13 of 17 PRs kept
+the same stable patch ID, yet current-head CodeRabbit approvals fell from 13 to 2. Patch-ID equality
+does not prove that GitHub considers a review unchanged or will retain it. Before publication, report
+the existing approval total and contiguous prefix, which approved heads are changing, and the possible
+loss of all affected approvals. Explain why the repair is necessary and how its range was minimized.
+Do this even when publication is already authorized; it is a progress update, not a new permission
+requirement. Never promise retention based on local diffs or a successful rebase alone.
+
 Record three independent outcomes:
 
 - **GitHub approval applicability:** inspect the live review decision, dismissals, and required-review
@@ -132,8 +170,11 @@ Record three independent outcomes:
 - **CodeRabbit:** record the bot's actual review state, reviewed commit, and unresolved threads. Check
   repository, invocation, and user requirements before treating a retained review as sufficient.
   Atmos's `qualityClient.review` in `magefiles/qualitygate/quality_checks.go` currently filters out
-  reviews whose commit differs from the PR head; `fix-all` uses that exact-head gate. Report retained
-  GitHub approval and the unmet Quality Gate separately. Do not dismiss the retained review. Request
+  reviews whose commit differs from the PR head; `fix-all` uses that exact-head gate. Read the live
+  review's commit ID rather than inferring it from its submission time: retained approvals on #2997
+  and #2998 were associated with their new heads while keeping their earlier timestamps. Such an
+  approval can satisfy the exact-head criterion without another review. If its commit still differs,
+  report retained GitHub approval and the unmet Quality Gate separately. Do not dismiss the retained review. Request
   incremental review to close a verified gate or content-review gap, respecting the shared ledger;
   a rebase is never automatic permission for full review. Where no exact-head requirement applies,
   avoid requesting another review solely to make an otherwise applicable approval's SHA match.
@@ -204,6 +245,10 @@ On timeout or process interruption, determine whether the remote is still at the
 at the candidate, or at an unexpected third SHA. Resume an already successful publication without
 pushing again. Reconcile partially written local state from the saved transaction. Stop for unexpected
 remote work rather than overwriting it. Keep temporary validation commits out of published refs.
+
+The old/candidate/third-SHA recovery rule applies to an uncertain pending publication. Once read-back
+has verified publication, a later return to the old SHA is an unexpected remote change, potentially
+a deliberate rollback. Stop and reconcile it; do not silently republish the candidate as crash recovery.
 
 For GitHub throttling, honor `Retry-After` and rate-limit reset information; secondary limits can
 apply even when primary quota remains. Back off and reduce concurrency instead of opening more
@@ -289,8 +334,9 @@ integration merely because GitHub still displays green checks.
 
 Count CI, coverage, approvals, unresolved findings, and merge conflicts separately. If the requested
 scope includes CodeRabbit approval, verify an applicable bot approval and no unresolved findings;
-report exact-head versus GitHub-retained approval explicitly after a native rebase. Honor repository,
-invocation, and user requirements for the current commit without treating retention as satisfying them.
+report whether each GitHub-retained approval also references the current head after a native rebase.
+Honor repository, invocation, and user requirements for the current commit: retention satisfies an
+exact-head review requirement only when the live approval actually references that head.
 Revalidate affected evidence when a head or parent changes. Do not rewrite the entire stack merely
 to refresh evidence when the platform supports adequate validation of the intended merge result.
 
