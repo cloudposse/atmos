@@ -209,7 +209,7 @@ func isMultiComponentInvocation(cmd_ *cobra.Command, args []string) bool {
 	if hasComponentArgument(cmd_.Name(), args) {
 		return false
 	}
-	return len(v.GetStringSlice("tags")) > 0 || v.GetString("labels") != ""
+	return len(v.GetStringSlice("tags")) > 0 || len(v.GetStringSlice("labels")) > 0
 }
 
 // hasComponentArgument reports whether the terraform subcommand and its positional args name a
@@ -1055,6 +1055,8 @@ func (n *terraformNodeHooks) Before(ctx context.Context, info *schema.ConfigAndS
 func (n *terraformNodeHooks) BeforeWithWriters(_ context.Context, info *schema.ConfigAndStacksInfo, writers schema.ComponentNodeHookWriters) error {
 	defer perf.Track(nil, "terraform.terraformNodeHooks.Before")()
 
+	// Keep the node's own credentials for the deploy verification below.
+	nodeAuthContext, nodeAuthManager := info.AuthContext, info.AuthManager
 	injectLastAuthContext(info)
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
@@ -1072,6 +1074,21 @@ func (n *terraformNodeHooks) BeforeWithWriters(_ context.Context, info *schema.C
 	if !n.skipPerNodeCI {
 		n.runCIHooksForNodeBefore(&atmosConfig, info)
 	}
+	// Bulk deploys never reach the RunE verify gate, so verify per node here.
+	return verifyStoredPlanForNode(n.subCommand, info, nodeAuthContext, nodeAuthManager)
+}
+
+// verifyStoredPlanForNode verifies one graph node's stored plan on a copy of info
+// that carries the node's own auth, not the aggregate context injected for hooks.
+func verifyStoredPlanForNode(subCommand string, info *schema.ConfigAndStacksInfo, authContext *schema.AuthContext, authManager any) error {
+	verifyInfo := *info
+	verifyInfo.AuthContext = authContext
+	verifyInfo.AuthManager = authManager
+	if err := verifyStoredPlanForDeploy(subCommand, &verifyInfo); err != nil {
+		return err
+	}
+	info.PlanFile = verifyInfo.PlanFile
+	info.UseTerraformPlan = verifyInfo.UseTerraformPlan
 	return nil
 }
 
@@ -1783,6 +1800,9 @@ func argsAfterComponent(args []string) []string {
 	return args[1:]
 }
 
+// verifyPlanfile is a var so tests can stub the plan comparison.
+var verifyPlanfile = e.VerifyPlanfile
+
 // verifyStoredPlanForDeploy runs planfile drift verification before a deploy
 // apply. It is a no-op for non-deploy commands, when planfile storage is not
 // configured (unless --verify-plan explicitly requested verification, which then
@@ -1831,7 +1851,7 @@ func verifyStoredPlanForDeploy(subCommand string, info *schema.ConfigAndStacksIn
 		return nil
 	}
 
-	return e.VerifyPlanfile(info, storedPlanPath, mode)
+	return verifyPlanfile(info, storedPlanPath, mode)
 }
 
 // handleUnconfiguredPlanfileStorage resolves a verification request that cannot be

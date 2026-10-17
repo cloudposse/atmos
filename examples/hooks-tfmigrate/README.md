@@ -1,4 +1,9 @@
 ---
+title: TFMigrate Hook
+tags: [Hooks]
+cast:
+  file: /casts/examples/hooks-tfmigrate/tfmigrate-example.cast
+  title: atmos tfmigrate hook
 related_docs:
   - label: "Terraform state migrations"
     url: /cli/commands/terraform/migrate

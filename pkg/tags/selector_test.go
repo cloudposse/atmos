@@ -250,6 +250,7 @@ func TestForbiddenSelectorFunctionsMatchConstants(t *testing.T) {
 		u.AtmosYamlFuncAwsCallerIdentityUserID,
 		u.AtmosYamlFuncAwsRegion,
 		u.AtmosYamlFuncAwsOrganizationID,
+		u.AtmosYamlFuncAwsCloudFormationOutput,
 		u.AtmosYamlFuncEmulator,
 		u.AtmosYamlFuncRandom,
 		u.AtmosYamlFuncStarlark,

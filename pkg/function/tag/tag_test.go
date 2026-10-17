@@ -45,6 +45,7 @@ func TestCatalog(t *testing.T) {
 		AwsCallerIdentityUserID,
 		AwsRegion,
 		AwsOrganizationID,
+		AwsCloudFormationOutput,
 		Emulator,
 		Version,
 		Tags,

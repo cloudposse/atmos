@@ -1,0 +1,116 @@
+---
+title: atmos aws cloudformation
+sidebar_label: cloudformation
+sidebar_class_name: command
+id: cloudformation
+description: Deploy and manage native aws/cloudformation stacks using the AWS SDK for Go v2.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import DocCardList from '@theme/DocCardList'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Deploy, inspect, and delete native `aws/cloudformation` stacks directly through the AWS SDK for Go v2 — the
+same stack-based workflow you use for Terraform, Helm, and Kubernetes components, with no `aws` CLI or
+`cfn`/`sam`/`Rain` binary dependency. Alias: `atmos aws cfn`.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="Configure CloudFormation Components">
+  Set the default component location in `atmos.yaml`, then describe each stack's
+  template, parameters, capabilities, and delivery behavior with `template`,
+  `stack_name`, `parameters`, `capabilities`, `tags`, `stack_policy`, and more.
+  <div>
+    <PrimaryCTA to="/stacks/components/aws-cloudformation">Stack Configuration</PrimaryCTA>
+  </div>
+</ActionCard>
+
+<CastPlayer title="atmos aws cloudformation --help" src="/casts/screengrabs/atmos-aws-cloudformation--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation render <component> --stack <stack>
+atmos aws cloudformation diff <component> --stack <stack>
+atmos aws cloudformation plan <component> --stack <stack>
+atmos aws cloudformation apply <component> --stack <stack>
+atmos aws cloudformation deploy <component> --stack <stack>
+atmos aws cloudformation delete <component> --stack <stack>
+atmos aws cloudformation validate <component> --stack <stack>
+atmos aws cloudformation output <component> --stack <stack>
+
+atmos aws cloudformation changeset create <component> --stack <stack>
+atmos aws cloudformation changeset execute <component> --stack <stack> --changeset-name <name>
+atmos aws cloudformation changeset list <component> --stack <stack>
+atmos aws cloudformation changeset delete <component> --stack <stack> --changeset-name <name>
+
+atmos aws cloudformation drift detect <component> --stack <stack>
+atmos aws cloudformation drift describe <component> --stack <stack>
+
+atmos aws cloudformation get template <component> --stack <stack>
+atmos aws cloudformation get policy <component> --stack <stack>
+
+atmos aws cloudformation stackset create <component> --stack <stack>
+atmos aws cloudformation stackset update <component> --stack <stack>
+atmos aws cloudformation stackset delete <component> --stack <stack>
+atmos aws cloudformation stackset instances <component> --stack <stack>
+
+atmos aws cloudformation backend create <component> --stack <stack>
+atmos aws cloudformation backend describe <component> --stack <stack>
+atmos aws cloudformation backend update <component> --stack <stack>
+atmos aws cloudformation backend delete <component> --stack <stack> --force
+atmos aws cloudformation backend list <component> --stack <stack>
+
+atmos aws cloudformation fmt <component> --stack <stack>
+atmos aws cloudformation tree <component> --stack <stack>
+atmos aws cloudformation logs <component> --stack <stack>
+atmos aws cloudformation watch <component> --stack <stack>
+atmos aws cloudformation list --stack <stack>
+
+atmos aws cloudformation source pull <component> --stack <stack>
+
+atmos aws cloudformation apply --all --stack <stack>
+atmos aws cloudformation apply --affected --base origin/main
+
+atmos aws cloudformation apply --affected --tags production
+atmos aws cloudformation apply --all --labels cost-center=platform
+```
+
+The `cfn` alias works everywhere `cloudformation` does:
+
+```shell
+atmos aws cfn apply vpc -s plat-ue2-dev
+```
+
+## Subcommands
+
+<DocCardList/>
+
+## Execution controls
+
+<dl>
+  <dt>`--dry-run`</dt>
+  <dd>Validate static configuration without YAML functions, template evaluation, authentication,
+  source downloads, hooks, or cloud operations. This also applies to `render` and bulk/affected
+  selection. Checks requiring dynamic values are deferred.</dd>
+  <dt>`--ci`</dt>
+  <dd>Enable native CI provider selection. With `ci.enabled` and summary output enabled,
+  `diff`, `apply`, `delete`, `drift detect`, and `drift describe` write summaries. In a generic
+  CI environment, set `ATMOS_CI_SUMMARY` to the destination file; GitHub Actions uses
+  `GITHUB_STEP_SUMMARY`. Dry-run does not publish a summary. The flag is accepted by every
+  component verb (not only the ones that write a summary), as are the selection flags
+  (`--all`, `--affected`, `--tags`, `--labels`) and the Git flags that drive `--affected`
+  (`--base`, `--ref`, `--sha`, `--repo-path`, `--clone-target-ref`, `--ssh-key`,
+  `--ssh-key-password`).</dd>
+  <dt>`--skip-hooks`</dt>
+  <dd>Skip lifecycle hooks for one invocation of `diff`/`plan`, `apply`/`deploy`, `delete`,
+  `drift detect`, or `drift describe`: no value skips every hook, `--skip-hooks=a,b` skips the
+  named hooks. Same as the `ATMOS_SKIP_HOOKS` environment variable.</dd>
+</dl>
+
+Bulk deletion runs consumers before dependencies. Apply retains dependency-first execution.
+Preview changesets created by `diff`/`plan` are deleted after rendering, including when rendering fails.

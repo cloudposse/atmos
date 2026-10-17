@@ -28,7 +28,7 @@ func runSecretValidate(cmd *cobra.Command, args []string) error {
 
 	// Guard the advanced SOPS `spec.file` path: a hand-written template that doesn't discriminate by
 	// component would silently collide instance secrets or break stack-secret sharing.
-	if err := checkStackSopsCollisions(scope.Stack); err != nil {
+	if err := checkStackSopsCollisions(scope); err != nil {
 		return err
 	}
 

@@ -109,6 +109,9 @@ const (
 	// AwsOrganizationID returns the AWS Organization ID.
 	AwsOrganizationID = "aws.organization_id"
 
+	// AwsCloudFormationOutput retrieves an aws/cloudformation stack Output value.
+	AwsCloudFormationOutput = "aws.cloudformation.output"
+
 	// Emulator resolves a value from a local emulator.
 	Emulator = "emulator"
 
@@ -169,6 +172,7 @@ func All() []string {
 		AwsCallerIdentityUserID,
 		AwsRegion,
 		AwsOrganizationID,
+		AwsCloudFormationOutput,
 		Emulator,
 		Version,
 		Tags,
@@ -213,6 +217,7 @@ var tagsMap = map[string]bool{
 	AwsCallerIdentityUserID: true,
 	AwsRegion:               true,
 	AwsOrganizationID:       true,
+	AwsCloudFormationOutput: true,
 	Emulator:                true,
 	Version:                 true,
 	Tags:                    true,

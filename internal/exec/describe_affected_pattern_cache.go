@@ -72,6 +72,8 @@ func (c *componentPathPatternCache) getComponentPathPattern(
 		// match changed files against. Return an empty pattern; isComponentFolderChangedIndexed
 		// treats it as "never changed by a file edit".
 		return "", nil
+	case cfg.CloudFormationComponentType:
+		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.CloudFormation.BasePath, component)
 	default:
 		// Unknown component type - return pattern without caching.
 		return "", fmt.Errorf("%w: %s", errUtils.ErrUnsupportedComponentType, componentType)

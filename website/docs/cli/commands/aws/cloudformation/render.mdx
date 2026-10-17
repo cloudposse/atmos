@@ -1,0 +1,63 @@
+---
+title: atmos aws cloudformation render
+sidebar_label: render
+sidebar_class_name: command
+id: render
+description: Render the local CloudFormation template client-side, with no AWS API calls.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
+import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
+
+<Intro>
+  Render the component's local template — resolved from `template:` and, when
+  `source:` is set, JIT-provisioned first — without calling any AWS API. `render`
+  does not authenticate, so it works offline and without AWS credentials.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation render --help" src="/casts/screengrabs/atmos-aws-cloudformation-render--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation render <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation render vpc -s plat-ue2-dev
+```
+
+Render all or affected components in dependency order:
+
+```shell
+atmos aws cloudformation render --all -s plat-ue2-dev
+atmos aws cloudformation render --affected --base origin/main
+```
+
+Render components filtered by tags or labels (composes with `--all`/`--affected` to narrow the selected set further):
+
+```shell
+atmos aws cloudformation render --all --tags production,tier-1
+atmos aws cloudformation render --affected --labels cost-center=platform
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
+  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
+
+<SelectionFlags />
+
+<GitFlags />
+</dl>
+
+:::note
+`render` skips authentication and never calls the CloudFormation API. To preview
+the changes an `apply` would actually make against the deployed stack, use
+[`diff`](/cli/commands/aws/cloudformation/diff) (alias [`plan`](/cli/commands/aws/cloudformation/plan)).
+:::

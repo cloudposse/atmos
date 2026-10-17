@@ -86,7 +86,7 @@ func TestCILabelsStackInheritanceAndAffected(t *testing.T) {
 			}
 			assert.Equal(t, wantLabels, info.ComponentSection["vars"].(map[string]any)["ci_labels"])
 
-			selectors, err := tags.ParseLabelsFlag("preview:true")
+			selectors, err := tags.ParseLabelsFlag([]string{"preview:true"})
 			require.NoError(t, err)
 			affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRepoPathWithOptions(
 				config, createCILabelsRepo(t, ""), false, false, "", true, true, nil,
