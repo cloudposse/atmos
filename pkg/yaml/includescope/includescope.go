@@ -73,6 +73,9 @@ func (s Scope) Resolve(value string) Resolved {
 	if resolved.HasQuery {
 		resolved.Value += " " + queryArgument(parsed.Query)
 	}
+	if parsed.Eval {
+		resolved.Value += " | eval"
+	}
 	return resolved
 }
 

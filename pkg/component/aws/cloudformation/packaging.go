@@ -93,25 +93,29 @@ func packageTemplate(octx *opContext, req *packagingRequest) error {
 		return err
 	}
 
-	args := autoProvisionArgs{
-		AtmosConfig:     octx.AtmosConfig,
-		S3Target:        s3Target,
-		ComponentConfig: octx.Info.ComponentSection,
-		AuthContext:     octx.Info.AuthContext,
-		Component:       octx.Info.ComponentFromArg,
-		Stack:           octx.Info.Stack,
-	}
-	if req.MayProvision {
-		err = autoProvisionBackendIfEnabled(octx.Ctx, args)
-	} else {
-		err = requireBackendExistsIfEnabled(octx.Ctx, args)
-	}
+	info, err := ResolveTargetAuth(octx.AtmosConfig, octx.Info, s3Target.Name, targetConfigByName(octx.Info.ComponentSection, s3Target.Name), octx.RequestedIdentity)
 	if err != nil {
 		return err
 	}
 
-	pkg, err := uploadPackage(octx.Ctx, octx.AtmosConfig, octx.Info, s3Target, req.Spec.TemplateBody)
+	args := autoProvisionArgs{
+		AtmosConfig:     octx.AtmosConfig,
+		S3Target:        s3Target,
+		ComponentConfig: octx.Info.ComponentSection,
+		AuthContext:     info.AuthContext,
+		Component:       octx.Info.ComponentFromArg,
+		Stack:           octx.Info.Stack,
+	}
+	if err = ensurePackagingBucket(octx.Ctx, args, req.MayProvision); err != nil {
+		return err
+	}
+
+	pkg, err := uploadPackage(octx.Ctx, octx.AtmosConfig, info, s3Target, req.Spec.TemplateBody)
 	if err != nil {
+		if isNoSuchBucket(err) {
+			log.Debug("Template upload failed because the packaging bucket does not exist", "error", err, "bucket", s3Target.Bucket)
+			return packagingBucketMissingError(args)
+		}
 		return err
 	}
 	req.Summary["package_url"] = pkg.URL

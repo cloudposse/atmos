@@ -42,6 +42,7 @@ func TestScopeResolve(t *testing.T) {
 		value     string
 		wantLocal string
 		wantQuery bool
+		wantEval  bool
 		unchanged bool
 	}{
 		{name: "bare resolves against the base path", value: "scripts/a.star", wantLocal: absolute},
@@ -51,6 +52,8 @@ func TestScopeResolve(t *testing.T) {
 		{name: "quoted absolute is kept", value: `"` + absolute + `"`, wantLocal: absolute},
 		{name: "missing bare path stays local so the include reports it", value: "scripts/missing.star", wantLocal: filepath.Join(base, "scripts", "missing.star")},
 		{name: "query is preserved", value: "scripts/a.star .x", wantLocal: absolute, wantQuery: true},
+		{name: "evaluation is preserved", value: "scripts/a.star | eval", wantLocal: absolute, wantEval: true},
+		{name: "query and evaluation are preserved", value: "scripts/a.star .x | eval", wantLocal: absolute, wantQuery: true, wantEval: true},
 		{name: "url is untouched", value: "https://example.com/a.star", unchanged: true},
 		{name: "go-getter shorthand is untouched", value: "github.com/org/repo/a.yaml", unchanged: true},
 		{name: "unparsable value is untouched", value: `"unterminated`, unchanged: true},
@@ -68,6 +71,7 @@ func TestScopeResolve(t *testing.T) {
 			parsed, err := parser.ParseInclude(resolved.Value)
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantLocal, parsed.Path)
+			assert.Equal(t, tc.wantEval, parsed.Eval)
 			if tc.wantQuery {
 				assert.Equal(t, ".x", parsed.Query)
 			}
