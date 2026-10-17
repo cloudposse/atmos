@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	cockroachdberrors "github.com/cockroachdb/errors"
@@ -1446,51 +1445,6 @@ func TestRunCIHooks_CIEnabledIsHardKillSwitch(t *testing.T) {
 	}
 }
 
-// TestRunCIHooks_LocalRunSkipsExperimentalGate verifies that local runs do not
-// hit the experimental CI gate unless CI mode is explicitly forced.
-func TestRunCIHooks_LocalRunSkipsExperimentalGate(t *testing.T) {
-	// Disable all registered CI providers for the duration of this test so the
-	// first subtest's ci.IsCI() check returns false regardless of the host
-	// environment (e.g., when this suite runs under GitHub Actions itself).
-	// Without this isolation, the github provider's Detect() would see
-	// GITHUB_ACTIONS=true and cause the non-force branch to fall through to
-	// the experimental gate, failing the test.
-	backup := testSaveAndClearRegistry()
-	defer testRestoreRegistry(backup)
-
-	config := &schema.AtmosConfiguration{
-		CI: schema.CIConfig{Enabled: true},
-		Settings: schema.AtmosSettings{
-			Experimental: "disable",
-		},
-	}
-	info := &schema.ConfigAndStacksInfo{
-		Stack:            "test-stack",
-		ComponentFromArg: "test-component",
-	}
-
-	t.Run("local run without force skips CI hooks before experimental gate", func(t *testing.T) {
-		err := RunCIHooks(&RunCIHooksOptions{
-			Event:       "before.terraform.plan",
-			AtmosConfig: config,
-			Info:        info,
-			ForceCIMode: false,
-		})
-		assert.NoError(t, err)
-	})
-
-	t.Run("forced CI mode still evaluates the experimental gate", func(t *testing.T) {
-		err := RunCIHooks(&RunCIHooksOptions{
-			Event:       "before.terraform.plan",
-			AtmosConfig: config,
-			Info:        info,
-			ForceCIMode: true,
-		})
-		assert.Error(t, err)
-		assert.True(t, errors.Is(err, errUtils.ErrExperimentalDisabled), "expected %v, got %v", errUtils.ErrExperimentalDisabled, err)
-	})
-}
-
 // TestRunCIHooks_ForwardsErrorAndExitCode verifies that RunCIHooksOptions
 // fields (CommandError, ExitCode) flow through to ci.Execute when CI is
 // enabled. We trigger a clean early exit inside ci.Execute by using an
@@ -1547,7 +1501,7 @@ func TestRunCIHooks_ForwardsErrorAndExitCode(t *testing.T) {
 }
 
 // TestRunCIHooks_NilAtmosConfig verifies RunCIHooks does not panic when
-// AtmosConfig is nil — ci.enabled and experimental checks are skipped and
+// AtmosConfig is nil — the ci.enabled check is skipped and
 // the call still completes cleanly (ci.Execute returns nil with no platform
 // detected).
 func TestRunCIHooks_NilAtmosConfig(t *testing.T) {
@@ -1558,118 +1512,4 @@ func TestRunCIHooks_NilAtmosConfig(t *testing.T) {
 		ForceCIMode: false,
 	})
 	assert.NoError(t, err)
-}
-
-// TestRunCIHooks_ExperimentalDisableReturnsError verifies RunCIHooks
-// short-circuits with an experimental-disabled error when CI is enabled
-// in atmos.yaml but settings.experimental is set to "disable".
-func TestRunCIHooks_ExperimentalDisableReturnsError(t *testing.T) {
-	config := &schema.AtmosConfiguration{
-		CI:       schema.CIConfig{Enabled: true},
-		Settings: schema.AtmosSettings{Experimental: "disable"},
-	}
-
-	err := RunCIHooks(&RunCIHooksOptions{
-		Event:        "after.terraform.plan",
-		AtmosConfig:  config,
-		Info:         &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc"},
-		ForceCIMode:  true,
-		CommandError: errUtils.ExitCodeError{Code: 1},
-		ExitCode:     1,
-	})
-	require.Error(t, err)
-	assert.True(t, errors.Is(err, errUtils.ErrExperimentalDisabled),
-		"expected ErrExperimentalDisabled, got %v", err)
-}
-
-// TestCheckExperimental verifies that checkExperimental gates CI hooks
-// based on settings.experimental, mirroring the command-level behavior.
-func TestCheckExperimental(t *testing.T) {
-	tests := []struct {
-		name        string
-		mode        string
-		expectErr   bool
-		expectedErr error
-	}{
-		{
-			name:      "empty defaults to warn-daily (no error)",
-			mode:      "",
-			expectErr: false,
-		},
-		{
-			name:      "silence allows CI hooks",
-			mode:      "silence",
-			expectErr: false,
-		},
-		{
-			name:      "warn allows CI hooks",
-			mode:      "warn",
-			expectErr: false,
-		},
-		{
-			name:        "disable blocks CI hooks",
-			mode:        "disable",
-			expectErr:   true,
-			expectedErr: errUtils.ErrExperimentalDisabled,
-		},
-		{
-			name:        "error blocks CI hooks",
-			mode:        "error",
-			expectErr:   true,
-			expectedErr: errUtils.ErrExperimentalRequiresIn,
-		},
-		{
-			name:      "unknown mode treated as warn",
-			mode:      "unknown-value",
-			expectErr: false,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("ATMOS_XDG_CACHE_HOME", t.TempDir())
-			config := &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					Experimental: tc.mode,
-				},
-			}
-
-			err := checkExperimental(config)
-			if tc.expectErr {
-				assert.Error(t, err)
-				assert.True(t, errors.Is(err, tc.expectedErr), "expected %v, got %v", tc.expectedErr, err)
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
-}
-
-func TestCheckExperimentalWarnDaily(t *testing.T) {
-	t.Setenv("ATMOS_XDG_CACHE_HOME", t.TempDir())
-	output, err := os.CreateTemp(t.TempDir(), "warnings")
-	require.NoError(t, err)
-	originalStderr := os.Stderr
-	os.Stderr = output
-	t.Cleanup(func() {
-		os.Stderr = originalStderr
-		_ = output.Close()
-	})
-
-	// Another feature's warning must not silence CI. The CI command and CI
-	// hooks share the same feature ID and therefore the same daily timestamp.
-	require.True(t, cfg.ClaimExperimentalWarning("toolchain"))
-	config := &schema.AtmosConfiguration{Settings: schema.AtmosSettings{Experimental: "warn-daily"}}
-	require.NoError(t, checkExperimental(config))
-	require.NoError(t, checkExperimental(config))
-	assert.False(t, cfg.ClaimExperimentalWarning(ciExperimentalFeature))
-	warnings, err := os.ReadFile(output.Name())
-	require.NoError(t, err)
-	assert.Equal(t, 1, strings.Count(string(warnings), "experimental feature"))
-
-	// Cached warnings never bypass feature enforcement.
-	config.Settings.Experimental = "error"
-	assert.ErrorIs(t, checkExperimental(config), errUtils.ErrExperimentalRequiresIn)
-	config.Settings.Experimental = "disable"
-	assert.ErrorIs(t, checkExperimental(config), errUtils.ErrExperimentalDisabled)
 }

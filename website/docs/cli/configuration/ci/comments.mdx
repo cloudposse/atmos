@@ -7,15 +7,12 @@ description: Configure GitHub pull-request comments with Terraform plan summarie
 
 import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
-import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 The `ci.comments` section configures automatic GitHub pull-request comments with Terraform plan
 summaries, similar to tools like tfcmt and Atlantis. Comments are opt-in and are posted only when
 `atmos terraform plan` runs in a pull-request context with a rendered summary available.
 </Intro>
-
-<Experimental />
 
 ## Configuration
 

@@ -1212,7 +1212,7 @@ func TestConvertToTermenvProfile(t *testing.T) {
 
 // TestFindExperimentalParent tests finding experimental parent commands.
 // This function uses a two-pass approach:
-// - First pass: Look for registry-based experimental commands (top-level like devcontainer, toolchain)
+// - First pass: Look for registry-based experimental commands (top-level like devcontainer, scaffold)
 // - Second pass: Look for annotation-based experimental subcommands (terraform backend, etc.)
 // This ensures that when running "devcontainer list", it returns "devcontainer" not "list".
 func TestFindExperimentalParent(t *testing.T) {
