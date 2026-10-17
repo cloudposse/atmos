@@ -15,30 +15,19 @@ Use this command to vendor an `aws/cloudformation` component source based on its
 </Intro>
 
 <ActionCard title="Source-Based Version Pinning">
-    Learn how to configure the `source` field for per-environment version control.
+    Configure source locations, version pins, and authentication.
     <div>
-      <PrimaryCTA to="/design-patterns/version-management/source-based-versioning">Design Pattern</PrimaryCTA>
+      <PrimaryCTA to="/stacks/components/aws-cloudformation#source-provisioning">Source Configuration</PrimaryCTA>
     </div>
 </ActionCard>
 
-<CastPlayer title="atmos aws cloudformation source pull --help" src="/casts/screengrabs/atmos-aws-cloudformation-source-pull--help.cast" static chrome />
+<CastPlayer title="atmos aws cloudformation source pull --help=all" src="/casts/screengrabs/atmos-aws-cloudformation-source-pull--help.cast" static chrome />
 
 ## Usage
 
 ```shell
 atmos aws cloudformation source pull <component> --stack <stack> [flags]
 ```
-
-## Description
-
-The `pull` command vendors an `aws/cloudformation` component source by:
-
-1. Reading the `source` configuration from the component's stack manifest
-2. Downloading the source from the specified URI using go-getter
-3. Applying any `included_paths` and `excluded_paths` filters
-4. Copying the filtered content to the component directory
-
-If the component is already vendored, it will be skipped unless `--force` is specified.
 
 ## Examples
 
@@ -66,6 +55,14 @@ Use a specific identity for authentication:
 atmos aws cloudformation source pull vpc --stack dev --identity admin
 ```
 
+### Preview with `--dry-run`
+
+Use `--dry-run` to check the component, source configuration, and destination without downloading:
+
+```shell
+atmos aws cloudformation source pull vpc --stack dev --dry-run
+```
+
 ## Arguments
 
 <dl>
@@ -84,7 +81,19 @@ atmos aws cloudformation source pull vpc --stack dev --identity admin
 
   <dt>`--identity` / `-i`</dt>
   <dd>Identity to use for authentication when downloading from protected sources. Overrides the component's default identity.</dd>
+  <dt>`--dry-run`</dt>
+  <dd>Validate static configuration and show the destination without authentication,
+  downloads, or deletion.</dd>
 </dl>
+
+## Description
+
+The command downloads the configured source, applies path filters, and copies
+the result to the component's resolved directory. Existing downloads are skipped
+unless `--force` is set.
+
+The destination follows the base component, `working_directory`, and workdir
+settings. See [Component Directories](/stacks/components/aws-cloudformation#component-directories).
 
 ## Configuration
 
@@ -107,7 +116,7 @@ components:
 ## Output
 
 On success:
-```
+```text
 Vendoring component 'vpc' from source...
 Downloading from github.com/cloudposse/cloudformation-aws-components//modules/vpc?ref=1.0.0
 ✓ Successfully vendored component to components/cloudformation/vpc

@@ -6,6 +6,8 @@ id: list
 description: List a stack's changesets.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
@@ -18,6 +20,11 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 
 <Experimental />
 
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
+
 <CastPlayer title="atmos aws cloudformation changeset list --help" src="/casts/screengrabs/atmos-aws-cloudformation-changeset-list--help.cast" static chrome />
 
 ## Usage
@@ -26,15 +33,24 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 atmos aws cloudformation changeset list <component> --stack <stack> [options]
 ```
 
+## Examples
+
 ```shell
 atmos aws cloudformation changeset list vpc -s plat-ue2-dev
 ```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
 
 ## Flags
 
 <dl>
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
-  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
 
 <SelectionFlags />
 
@@ -46,11 +62,4 @@ atmos aws cloudformation changeset list vpc -s plat-ue2-dev
 If the stack has no changesets, `changeset list` prints a single line saying
 so instead of an empty table.
 
-:::note
-`changeset list` does not fire `before`/`after` hook events — only
-[`apply`](/cli/commands/aws/cloudformation/apply),
-[`diff`](/cli/commands/aws/cloudformation/diff),
-[`delete`](/cli/commands/aws/cloudformation/delete),
-[`drift detect`](/cli/commands/aws/cloudformation/drift/detect), and
-[`drift describe`](/cli/commands/aws/cloudformation/drift/describe) do.
-:::
+This command does not fire [lifecycle hooks](/stacks/components/aws-cloudformation#lifecycle-hooks).

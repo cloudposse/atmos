@@ -29,6 +29,14 @@ a single, consistent five-section structure instead of ad hoc headers.
     keep remaining tasks in its PRD or task list. The Follow-ups section may link to that document;
     an issue number is not required. Only for already-merged features, track genuinely deferred work
     in a GitHub issue and link it by number.
+7. Triage every candidate follow-up by origin before writing the Follow-ups section:
+    - **Introduced by this PR or its stack** (a regression, gap, inconsistency or stale artifact such as a cast or
+      snapshot that the change itself caused): fix it in the same PR. It is not a follow-up, and it never becomes
+      an issue.
+    - **Pre-existing in an already-merged feature** (reproduces on the base branch or a released version): ask the user, per item, whether to
+      fix it now or open a GitHub issue. Never open an issue without that per-item answer.
+    - **Intended behavior** (the code does what it was designed to do, but it surprised someone): document it
+      where users will look; it is neither a fix nor a follow-up.
 
 ## Required Document Shape
 
