@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/source"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // PullCommand creates a pull command for the given component type.
@@ -21,8 +22,9 @@ func PullCommand(cfg *Config) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "pull [component]",
-		Short: fmt.Sprintf("Vendor %s component source from source configuration", cfg.TypeLabel),
+		Annotations: map[string]string{sourceComponentTypeAnnotation: cfg.ComponentType},
+		Use:         "pull [component]",
+		Short:       fmt.Sprintf("Vendor %s component source from source configuration", cfg.TypeLabel),
 		Long: fmt.Sprintf(`Vendor a %s component source based on source configuration.
 
 This command downloads the component source from the URI specified in the source field
@@ -32,14 +34,14 @@ compatible URI (git, s3, http, oci, etc.).
 If the component is already vendored, it will be skipped unless --force is specified.
 
 If component is not specified, prompts interactively for selection.`, cfg.TypeLabel),
-		Example: fmt.Sprintf(`  # Vendor component source (downloads if missing or outdated)
+		Example: fmt.Sprintf(`  # Vendor component source (skipped if the target directory already exists)
   atmos %s source pull vpc --stack dev
 
-  # Force re-vendor even if up-to-date
+  # Force re-vendor even if already vendored
   atmos %s source pull vpc --stack dev --force
 
   # Interactive: prompts for component and stack
-  atmos %s source pull`, cfg.ComponentType, cfg.ComponentType, cfg.ComponentType),
+  atmos %s source pull`, cfg.CLI(), cfg.CLI(), cfg.CLI()),
 		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return executePull(cmd, args, cfg, parser)
@@ -102,6 +104,11 @@ func executePull(cmd *cobra.Command, args []string, cfg *Config, parser *flags.S
 			Err()
 	}
 
+	if sourceDryRun(cmd) {
+		ui.Info(fmt.Sprintf("Dry run: would pull source for %s in stack %s", component, stack))
+		return nil
+	}
+
 	opts := &CommonOptions{
 		Flags:    flags.ParseGlobalFlags(cmd, v),
 		Stack:    stack,
@@ -110,13 +117,13 @@ func executePull(cmd *cobra.Command, args []string, cfg *Config, parser *flags.S
 	}
 
 	// Initialize config and auth with global flags.
-	atmosConfig, authContext, err := InitConfigAndAuth(component, opts.Stack, opts.Identity, &opts.Flags)
+	atmosConfig, authContext, err := initConfigAndAuth(cfg.ComponentType, component, opts.Stack, opts.Identity, &opts.Flags)
 	if err != nil {
 		return err
 	}
 
 	// Get component configuration.
-	componentConfig, err := DescribeComponent(component, opts.Stack)
+	componentConfig, err := describeSourceComponent(cfg.ComponentType, component, opts.Stack)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrDescribeComponent).
 			WithCause(err).

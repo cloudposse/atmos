@@ -70,7 +70,7 @@ func deliverApply(octx *opContext, client CloudFormationClient, spec *stackSpec)
 	return summary, nil, deliverToExternalTarget(octx, selected, spec, summary)
 }
 
-// packageIfNeeded shares template upload handling across apply, diff, and validate.
+// packageIfNeeded shares template uploads across apply, diff, validate, and changeset creation.
 // Inline templates need no upload unless an S3 publish target was selected.
 // A direct-deploy target needs TemplateURL just as much as an external delivery
 // target: CreateChangeSet rejects TemplateBody over 51,200 bytes. Packaging first
@@ -94,7 +94,7 @@ func packageIfNeeded(octx *opContext, provisionSection map[string]any, selected 
 	return nil
 }
 
-// prepareTemplateForAPI packages oversized templates before preview or validation.
+// prepareTemplateForAPI packages oversized templates before preview, validation, or changeset creation.
 // It only selects a provision target when an upload is needed; an inline template
 // can be inspected without a deployment destination or packaging configuration.
 func prepareTemplateForAPI(octx *opContext, spec *stackSpec, summary map[string]any) error {

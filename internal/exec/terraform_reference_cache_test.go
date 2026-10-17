@@ -75,7 +75,7 @@ func TestComponentCachePartitionsInspection(t *testing.T) {
 					expected := fmt.Sprintf("inspect=%t", maskOnly)
 					executor.EXPECT().ExecuteWithSections(ac, "target", "dev", gomock.Any(), nil).Return(map[string]any{"id": expected}, nil).Times(1)
 					for range 4 {
-						value, err := componentFunc(ac, &schema.ConfigAndStacksInfo{SecretsMaskOnly: maskOnly, AuthDisabled: true}, "target", "dev")
+						value, err := componentFunc(t.Context(), ac, &schema.ConfigAndStacksInfo{SecretsMaskOnly: maskOnly, AuthDisabled: true}, "target", "dev")
 						require.NoError(t, err)
 						require.Equal(t, expected, value.(map[string]any)["outputs"].(map[string]any)["id"])
 					}
@@ -109,7 +109,7 @@ func TestReferenceCacheInspectionDoesNotReadSecrets(t *testing.T) {
 							expected = iolib.MaskReplacement
 						}
 						for range 3 {
-							value, err := loadReferenceForCacheTest(ac, name, maskOnly)
+							value, err := loadReferenceForCacheTest(t, ac, name, maskOnly)
 							require.NoError(t, err)
 							require.Equal(t, expected, value)
 						}
@@ -121,11 +121,12 @@ func TestReferenceCacheInspectionDoesNotReadSecrets(t *testing.T) {
 	}
 }
 
-func loadReferenceForCacheTest(ac *schema.AtmosConfiguration, name string, maskOnly bool) (any, error) {
+func loadReferenceForCacheTest(t *testing.T, ac *schema.AtmosConfiguration, name string, maskOnly bool) (any, error) {
+	t.Helper()
 	if name == "state" {
 		return GetTerraformState(ac, "!terraform.state", "dev", "producer", "credential", false, nil, nil, TerraformLookupOptions{SecretsMaskOnly: maskOnly})
 	}
-	sections, err := componentFunc(ac, &schema.ConfigAndStacksInfo{SecretsMaskOnly: maskOnly}, "producer", "dev")
+	sections, err := componentFunc(t.Context(), ac, &schema.ConfigAndStacksInfo{SecretsMaskOnly: maskOnly}, "producer", "dev")
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +153,7 @@ func TestReferenceCacheSeparatesStaticConfiguration(t *testing.T) {
 					config *schema.AtmosConfiguration
 					value  string
 				}{{first, "HEAD"}, {second, "BASE"}, {first, "HEAD"}, {second, "BASE"}} {
-					value, err := loadReferenceForCacheTest(target.config, name, maskOnly)
+					value, err := loadReferenceForCacheTest(t, target.config, name, maskOnly)
 					require.NoError(t, err)
 					require.Equal(t, target.value, value)
 				}
@@ -209,7 +210,7 @@ func TestComponentInspectionRetriesComputedValues(t *testing.T) {
 				executor.EXPECT().ExecuteWithSections(ac, "target", "dev", gomock.Any(), nil).Return(map[string]any{"id": "ready"}, nil),
 			)
 			for _, expected := range []any{degradation.AtmosComputedValue{}, "ready", "ready"} {
-				value, err := componentFunc(ac, &schema.ConfigAndStacksInfo{SecretsMaskOnly: true, AuthDisabled: true}, "target", "dev")
+				value, err := componentFunc(t.Context(), ac, &schema.ConfigAndStacksInfo{SecretsMaskOnly: true, AuthDisabled: true}, "target", "dev")
 				require.NoError(t, err)
 				require.Equal(t, expected, value.(map[string]any)["outputs"].(map[string]any)["id"])
 			}
@@ -242,7 +243,7 @@ func TestReferenceCacheSeparatesConfigPath(t *testing.T) {
 						require.NoError(t, err)
 						require.Equal(t, configPath, value)
 					} else {
-						value, err := componentFunc(ac, &schema.ConfigAndStacksInfo{SecretsMaskOnly: true, AuthDisabled: true}, "target", "dev")
+						value, err := componentFunc(t.Context(), ac, &schema.ConfigAndStacksInfo{SecretsMaskOnly: true, AuthDisabled: true}, "target", "dev")
 						require.NoError(t, err)
 						require.Equal(t, configPath, value.(map[string]any)["outputs"].(map[string]any)["id"])
 					}

@@ -40,13 +40,19 @@ func expectPreviewRequest(t *testing.T, client *MockCloudFormationClient, operat
 		return
 	}
 	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
-	client.EXPECT().DeleteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteChangeSetOutput{}, nil)
-	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
 	client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, input *cloudformation.CreateChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.CreateChangeSetOutput, error) {
 		assertTemplateInput(t, spec, input.TemplateBody, input.TemplateURL)
 		return &cloudformation.CreateChangeSetOutput{}, nil
 	})
-	client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{Status: cfntypes.ChangeSetStatusCreateComplete}, nil)
+	lastPoll := client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{Status: cfntypes.ChangeSetStatusCreateComplete}, nil)
+	if operation == OperationDiff {
+		// Diff discards its preview and checks its empty CREATE stub; explicit creation keeps both.
+		gomock.InOrder(
+			lastPoll,
+			client.EXPECT().DeleteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteChangeSetOutput{}, nil),
+			client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
+		)
+	}
 }
 
 func assertTemplateInput(t *testing.T, spec *stackSpec, body, url *string) {
@@ -63,6 +69,9 @@ func assertTemplateInput(t *testing.T, spec *stackSpec, body, url *string) {
 }
 
 func runPreview(octx *opContext, client CloudFormationClient, operation Operation, spec *stackSpec) (map[string]any, error) {
+	if operation == OperationChangesetCreate {
+		return operationHandlers[operation](octx, client, spec, map[string]any{})
+	}
 	if operation == OperationValidate {
 		return runValidate(octx, client, spec, map[string]any{})
 	}
@@ -70,7 +79,7 @@ func runPreview(octx *opContext, client CloudFormationClient, operation Operatio
 }
 
 func TestPreviewTemplatePackaging(t *testing.T) {
-	for _, operation := range []Operation{OperationDiff, OperationValidate} {
+	for _, operation := range []Operation{OperationDiff, OperationValidate, OperationChangesetCreate} {
 		for _, mode := range []string{"inline-limit", "large", "already-packaged"} {
 			t.Run(string(operation)+"/"+mode, func(t *testing.T) {
 				ctrl := gomock.NewController(t)
@@ -111,8 +120,8 @@ func TestPreviewTemplatePackaging(t *testing.T) {
 }
 
 func TestPreviewPackagingErrorsPreventAPICalls(t *testing.T) {
-	for _, operation := range []Operation{OperationDiff, OperationValidate} {
-		for _, failure := range []string{"missing-target", "ambiguous-target", "unknown-target", "upload"} {
+	for _, operation := range []Operation{OperationDiff, OperationValidate, OperationChangesetCreate} {
+		for _, failure := range []string{"missing-target", "ambiguous-target", "unknown-target", "unknown-packaging-target", "upload"} {
 			t.Run(string(operation)+"/"+failure, func(t *testing.T) {
 				ctrl := gomock.NewController(t)
 				client := NewMockCloudFormationClient(ctrl)
@@ -127,6 +136,11 @@ func TestPreviewPackagingErrorsPreventAPICalls(t *testing.T) {
 					provision["targets"].(map[string]any)["other"] = map[string]any{"kind": kindAwsS3, "bucket": "other", "region": "us-east-1"}
 				case "unknown-target":
 					octx.Flags[targetKey] = "missing"
+				case "unknown-packaging-target":
+					provision := octx.Info.ComponentSection[cfg.ProvisionSectionName].(map[string]any)
+					targets := provision["targets"].(map[string]any)
+					targets["other"] = map[string]any{"kind": kindAwsS3, "bucket": "other", "region": "us-east-1"}
+					targets["deploy"].(map[string]any)["packaging"] = "missing"
 				case "upload":
 					backend := artifact.NewMockBackend(ctrl)
 					backend.EXPECT().Upload(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(sentinel)
@@ -138,7 +152,7 @@ func TestPreviewPackagingErrorsPreventAPICalls(t *testing.T) {
 				if failure == "upload" {
 					assert.ErrorIs(t, err, sentinel)
 				}
-				if failure == "missing-target" || failure == "ambiguous-target" {
+				if failure == "missing-target" || failure == "ambiguous-target" || failure == "unknown-packaging-target" {
 					assert.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
 				}
 			})
