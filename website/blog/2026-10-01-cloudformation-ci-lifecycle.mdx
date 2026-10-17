@@ -1,0 +1,78 @@
+---
+slug: cloudformation-ci-lifecycle
+title: "CloudFormation CI summaries and safer stack lifecycles"
+authors: [osterman]
+tags: [feature, bugfix]
+---
+
+Reviewing a CloudFormation deployment in CI means finding the pending changes, the deployment result,
+and any drift in a stream of job output. Atmos now presents those results as native job summaries,
+alongside fixes for dependency ordering, sensitive outputs, and template delivery.
+
+<!--truncate-->
+
+## The Problem
+
+A successful deployment command is only part of a dependable workflow. Reviewers need a readable
+changeset, drift counts must distinguish changed resources from clean ones, and teardown must remove
+consumers before the stacks they depend on. Previewing configuration should also be safe before
+credentials or external sources are available.
+
+## The Fix
+
+The [CloudFormation commands](/cli/commands/aws/cloudformation) integrate with
+[native CI job summaries](/ci#job-summaries). Diff summaries show pending changes; apply and delete
+summaries report the stack operation; drift summaries count only modified or deleted resources.
+Each summary includes the command to reproduce the operation. CloudFormation integration currently
+provides summaries only: it does not publish PR comments, commit statuses, CI output variables, or
+stored artifacts.
+
+The same commands also handle these lifecycle cases:
+
+- Bulk deletion removes consumers before dependencies. Apply keeps dependency-first ordering.
+- [Named changeset execution](/cli/commands/aws/cloudformation/changeset/execute) enables configured
+  termination protection after a successful deployment, matching apply.
+- [Dry-run](/cli/commands/aws/cloudformation#execution-controls) validates static configuration
+  without evaluating YAML functions or templates, authenticating, downloading sources, running hooks,
+  or calling cloud services. Checks that need dynamic values are deferred.
+- [Template delivery](/stacks/components/aws-cloudformation#delivery-targets) applies an S3 prefix
+  once, so the uploaded object and its template URL agree. StackSet account IDs must be quoted
+  12-digit strings; malformed targets fail before creating or updating a StackSet.
+- [Source provisioning](/stacks/components/aws-cloudformation#source-provisioning) accepts a
+  source-only component when the provisioned result contains one unambiguous template file.
+- Configured [before/after hooks](/stacks/hooks) now match both drift commands correctly.
+
+The [output command](/cli/commands/aws/cloudformation/output#masking) reads deployed template
+metadata to mask outputs that reference `NoEcho` parameters, even when local parameter values have
+changed or the local template is absent. With masking enabled, output presentation requires
+`cloudformation:GetTemplate` as well as `cloudformation:DescribeStacks`; unreadable metadata stops
+presentation before raw values are printed. Internal component dependencies still receive real
+values. Arbitrary transformed secrets without detectable template references cannot be recognized,
+so keep secrets out of CloudFormation Outputs.
+
+## How to Use It
+
+Enable [CI mode](/cli/configuration/ci) and summary output in `atmos.yaml`:
+
+```yaml
+ci:
+  enabled: true
+  summary:
+    enabled: true
+```
+
+Run the usual commands with `--ci`:
+
+```shell
+atmos aws cloudformation diff vpc -s plat-ue2-dev --ci
+atmos aws cloudformation drift detect vpc -s plat-ue2-dev --ci
+atmos aws cloudformation drift describe vpc -s plat-ue2-dev --ci
+```
+
+GitHub Actions writes summaries to `GITHUB_STEP_SUMMARY`. In a generic CI environment, set
+`ATMOS_CI_SUMMARY` to the destination file. Dry-run does not publish a summary.
+
+## Get Involved
+
+See [PR #3100](https://github.com/cloudposse/atmos/pull/3100) for the changes and share feedback in
+[GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

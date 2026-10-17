@@ -34,14 +34,18 @@ type RESTClient interface {
 var nextLinkPattern = regexp.MustCompile(`<([^>]+)>;\s*rel="next"`)
 
 // FetchJobs pages through repos/{repo}/actions/runs/{runID}/attempts/{runAttempt}/jobs
-// (per_page=100), following the Link header until it stops offering a "next"
+// (per_page=30), following the Link header until it stops offering a "next"
 // page - the same request `gh api ... --paginate` makes. It is the only
 // exported function in this package that talks to the network on the read
 // path; classify.go's Classify/Verdict/etc. remain pure.
+//
+// Keep pages at GitHub's default size: a 98-job rerun repeatedly returned
+// HTTP 502 with 100-job pages, while 30-job pages returned every job.
+// Following every Link header preserves complete shard validation.
 func FetchJobs(ctx context.Context, client RESTClient, repo, runID, runAttempt string) ([]Job, error) {
 	defer perf.Track(nil, "rerun.FetchJobs")()
 
-	path := fmt.Sprintf("repos/%s/actions/runs/%s/attempts/%s/jobs?per_page=100", repo, runID, runAttempt)
+	path := fmt.Sprintf("repos/%s/actions/runs/%s/attempts/%s/jobs?per_page=30", repo, runID, runAttempt)
 	var jobs []Job
 	for path != "" {
 		resp, err := client.RequestWithContext(ctx, http.MethodGet, path, nil)
