@@ -63,19 +63,19 @@ Read [editions](../editions/SKILL.md), `docs/prd/editions.md`, the journal in `p
 and the changed code's actual edition/config consumers. For each meaningful difference:
 
 1. Establish whether intent is documented or unresolved. Do not infer intent from a changed
-   test expectation or a new default alone.
+    test expectation or a new default alone.
 2. Test any existing protection end to end. Compare the **same configuration on both
-   binaries** with a pin before the relevant transition, the boundary date, no pin, and
-   relevant explicit overrides. Use the actual journal date, not an assumed release date.
-   Where pin parsing or precedence changes, also exercise partial dates, invalid pins, and
-   flag > environment > config precedence. Keep invalid-input failures separate from gates.
+    binaries** with a pin before the relevant transition, the boundary date, no pin, and
+    relevant explicit overrides. Use the actual journal date, not an assumed release date.
+    Where pin parsing or precedence changes, also exercise partial dates, invalid pins, and
+    flag > environment > config precedence. Keep invalid-input failures separate from gates.
 3. If protection is missing or ineffective, assess whether introducing a transition can
-   preserve release behavior. Use **KindValue** for default changes; use **KindBehavior**
-   when a stored value keeps its spelling but changes meaning or execution. New keys that
-   replace previously unconditional behavior also need this assessment.
+    preserve release behavior. Use **KindValue** for default changes; use **KindBehavior**
+    when a stored value keeps its spelling but changes meaning or execution. New keys that
+    replace previously unconditional behavior also need this assessment.
 4. Recommend the transition's old/new behavior, affected settings/call sites, retained
-   compatibility path, and tests proving old pins preserve behavior and newer/unpinned
-   configurations select the intended change. Do not implement the recommendation.
+    compatibility path, and tests proving old pins preserve behavior and newer/unpinned
+    configurations select the intended change. Do not implement the recommendation.
 
 A journal entry is not a compatibility path. Trace `BehaviorChanged` to its callers and
 verify execution; historical candidate notes may remain ungated. Explicit configuration
