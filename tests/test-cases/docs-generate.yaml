@@ -1,5 +1,35 @@
 # yaml-language-server: $schema=schema.json
 tests:
+  - name: "atmos docs generate native terraform template"
+    enabled: true
+    snapshot: false
+    description: "Render the recovered component README design using native Terraform objects"
+    workdir: "fixtures/scenarios/docs-generate/native-terraform/"
+    command: "atmos"
+    args:
+      - "docs"
+      - "generate"
+      - "readme"
+    expect:
+      exit_code: 0
+      file_exists:
+        - "README.md"
+      file_contains:
+        "README.md":
+          - "# Native Terraform README"
+          - "## Version Requirements"
+          - "## Providers"
+          - "## Modules"
+          - "## Resources"
+          - "## Data Sources"
+          - "## Outputs"
+          - "## Required Variables"
+          - "## Optional Variables"
+          - "## Context Variables"
+          - "<summary>Click to expand</summary>"
+          - "<dt>Default value</dt>"
+          - "OBSOLETE-f44336"
+
   - name: "atmos docs generate for terraform docs"
     enabled: true
     snapshot: false

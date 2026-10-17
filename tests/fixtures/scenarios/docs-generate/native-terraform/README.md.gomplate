@@ -1,0 +1,181 @@
+{{- $context_variables := coll.Slice "context" "enabled" "namespace" "tenant" "environment" "stage" "name" "delimiter" "attributes" "tags" "additional_tag_map" "label_order" "regex_replace_chars" "id_length_limit" "label_key_case" "label_value_case" "descriptor_formats" "labels_as_tags" -}}
+{{- define "variableDescription" -}}
+### `{{ .Name }}`{{ if lt (len (strings.Split "\n" (conv.ToString .Type))) 2 }} (`{{ conv.ToString .Type }}`){{end}} <i>{{ test.Ternary "required" "optional" .Required }}</i>{{ if strings.Contains "OBSOLETE: " (conv.ToString .Description) }} <img src="https://img.shields.io/badge/OBSOLETE-f44336.svg?style=for-the-badge"/>{{ end }}
+
+{{ $lines := strings.Split "\n" (conv.ToString .Description | strings.ReplaceAll "OBSOLETE: " "") -}}
+{{- range $lines }}
+{{ . }}<br/>
+{{- end }}
+
+>
+> <dl>
+>   <dt>Required</dt>
+>   <dd>{{ test.Ternary "Yes" "No" .Required }}</dd>
+>   <dt>Type</dt>
+>   <dd>
+>   {{ if lt (len (strings.Split "\n" (conv.ToString .Type))) 2 }}<code>{{ conv.ToString .Type }}</code>{{ else }}
+>
+>   ```hcl
+>   {{ .Type.Raw }}
+>   ```
+>
+>   {{ end }}
+>   </dd>
+>
+>   <dt>Default value</dt>
+>   <dd>
+>   {{ if lt (len (strings.Split "\n" .GetValue)) 2 }}<code>{{ .GetValue | default "unset" }}</code>{{ else }}
+>
+>   ```hcl
+    {{- $lines := strings.Split "\n" .GetValue -}}
+    {{- range $lines }}
+>   {{ . }}
+    {{- end }}
+>   ```
+>
+    {{- end }}
+>   </dd>
+> </dl>
+>
+
+{{ end -}}
+
+{{- $data := ds "config" -}}
+# {{ $data.name }}
+
+{{ $data.description }}
+
+{{- with terraform }}
+{{- $module := . }}
+{{ .Header }}
+
+
+{{ if ne (len $module.Requirements) 0 -}}
+## Version Requirements
+
+| Requirement | Version |
+| --- | --- |
+{{- range $module.Requirements }}
+| `{{ .Name }}` | ![{{ conv.ToString .Version | default "latest" }}](https://img.shields.io/badge/{{ printf "%s" (conv.ToString .Version | default "latest") | strings.ReplaceAll " " "_" }}-success.svg?style=for-the-badge) |
+{{- end }}
+{{ end }}
+
+{{ if ne (len $module.Providers) 0 -}}
+## Providers
+
+| Provider | Version |
+| --- | --- |
+{{- range $module.Providers }}
+| [`{{ .Name }}`](https://registry.terraform.io/providers/{{ .Name }}/latest) | ![{{ conv.ToString .Version | default "latest" }}](https://img.shields.io/badge/{{ printf "%s" (conv.ToString .Version | default "latest") | strings.ReplaceAll " " "_" }}-success.svg?style=for-the-badge) |
+{{- end }}
+{{ end }}
+
+{{ if ne (len $module.ModuleCalls) 0 -}}
+## Modules
+
+Name | Version | Source | Description
+--- | --- | --- | ---
+{{ range $module.ModuleCalls }}
+{{- $baseUrl := "https://registry.terraform.io/modules" -}}
+{{ if strings.Contains "../" .Source -}}
+`{{ .Name }}` | [![{{ .Version | default "latest" }}](https://img.shields.io/badge/{{ printf "%s" (.Version | default "latest") | strings.ReplaceAll " " "_" }}-success.svg?style=for-the-badge)]({{ .Source }}) | {{ printf "[`%s`](%s)" .Source .Source }} | {{ conv.ToString .Description | default "n/a" }}
+{{ else if strings.Contains "//" .Source -}}
+  {{- $moduleParts := strings.SplitN "//" 2 .Source -}}
+  {{- $moduleName := index $moduleParts 0 -}}
+  {{- $submodulePath := index $moduleParts 1 | strings.ReplaceAll "modules/" "" -}}
+  {{- /* https://registry.terraform.io/modules/cloudposse/stack-config/yaml/latest/submodules/remote-state */ -}}
+  `{{ .Name }}` | [![{{ .Version | default "latest" }}](https://img.shields.io/badge/{{ printf "%s" (.Version | default "latest") | strings.ReplaceAll " " "_" }}-success.svg?style=for-the-badge)]({{ printf "%s/%s/%s/submodules/%s" $baseUrl $moduleName .Version $submodulePath }}) | {{ printf "[`%s`](%s/%s/%s/submodules/%s)" .Source $baseUrl $moduleName .Version $submodulePath }} | {{ conv.ToString .Description | default "n/a" }}
+{{ else -}}
+  `{{ .Name }}` | [![{{ .Version | default "latest" }}](https://img.shields.io/badge/{{ printf "%s" (.Version | default "latest") | strings.ReplaceAll " " "_" }}-success.svg?style=for-the-badge)]({{ printf "%s/%s/%s" $baseUrl .Source .Version }}) | {{ printf "[`%s`](%s/%s/%s)" .Source $baseUrl .Source .Version }} | {{ conv.ToString .Description | default "n/a" }}
+{{ end }}
+{{- end -}}
+{{- end -}}
+
+{{- if ne (len $module.Resources) 0 }}
+
+## Resources
+
+The following resources are used by this module:
+{{ range $module.Resources }}
+  {{- $isResource := eq "resource" .GetMode }}
+  {{- if $isResource }}
+  {{- $fullspec := test.Ternary (printf "[`%s`](%s)" .Spec .URL) .Spec (ne .URL "") }}
+  - {{ $fullspec }} {{ printf "(%s)" .GetMode -}} ({{ .Position.Filename }}#{{ .Position.Line }})
+  {{- end }}
+{{- end }}
+{{- end }}
+
+{{ if ne (len $module.Resources) 0 -}}
+## Data Sources
+
+The following data sources are used by this module:
+{{ range $module.Resources }}
+  {{- $isDataResource := eq "data source" .GetMode }}
+  {{- if $isDataResource }}
+  {{- $fullspec := test.Ternary (printf "[`%s`](%s)" .Spec .URL) .Spec (ne .URL "") }}
+  - {{ $fullspec }} {{ printf "(%s)" .GetMode -}}
+  {{- end }}
+{{- end }}
+{{- end }}
+
+{{ if ne (len $module.Outputs) 0 -}}
+## Outputs
+
+<dl>
+{{- range $module.Outputs }}
+  <dt><code>{{ .Name }}</code>{{ if strings.Contains "OBSOLETE: " (conv.ToString .Description) }} <img src="https://img.shields.io/badge/OBSOLETE-f44336.svg?style=for-the-badge"/>{{ end }}</dt>
+  <dd>
+
+  {{ $lines := strings.Split "\n" (conv.ToString .Description | strings.ReplaceAll "OBSOLETE: " "" | default "n/a" ) -}}
+  {{- range $lines }}
+  {{ . }}<br/>
+  {{- end }}
+
+  </dd>
+{{- end }}
+</dl>
+{{- end }}
+
+## Required Variables
+
+Required variables are the minimum set of variables that must be set to use this module.
+
+> [!IMPORTANT]
+>
+> To customize the names and tags of the resources created by this module, see the [context variables](#context-variables).
+>
+
+{{- range $module.Inputs }}
+{{- if and (not (coll.Has $context_variables .Name)) .Required }}
+{{ template "variableDescription" . }}
+{{- end }}
+{{- end }}
+
+{{ $optional := false -}}
+{{ range $module.Inputs }}{{ if not .Required }}{{ $optional = true -}}{{ end -}}{{ end -}}
+
+{{ if $optional -}}
+## Optional Variables
+
+{{- range $module.Inputs }}
+{{- if and (not (coll.Has $context_variables .Name)) (not .Required) }}
+{{ template "variableDescription" . }}
+{{- end -}}
+{{ end -}}
+{{ end }}
+
+## Context Variables
+
+The following variables are defined in the `context.tf` file of this module and part of the [terraform-null-label](https://registry.terraform.io/modules/cloudposse/label/null) pattern. These are identical in all Cloud Posse modules.
+
+<details>
+<summary>Click to expand</summary>
+
+{{ range $module.Inputs }}
+{{- if and (coll.Has $context_variables .Name) }}
+{{ template "variableDescription" . }}
+{{- end }}
+{{- end }}
+
+</details>
+{{ end }}

@@ -67,6 +67,92 @@ Extra info: {{ $data.extra_info }}
     ```
 the resultant file will also have a corresponding section rendered. By default `terraform.format` is set to `markdown table`, and can also be `markdown`, `tfvars hcl`, and `tfvars json`.
 
+## Custom Terraform formatting
+
+Use the `terraform` template function to format Terraform documentation yourself.
+It returns the native parsed terraform-docs module, preserving fields and methods
+such as `.Type.Raw`, `.Description.Raw`, `.GetValue`, and `.Position.Filename`.
+The module is loaded once per document and is also used to generate the existing
+`terraform_docs` string.
+
+Configure your template and enable Terraform documentation:
+
+```yaml
+docs:
+  generate:
+    readme:
+      base-dir: .
+      input:
+        - "./README.yaml"
+      template: "./README.md.gomplate"
+      output: "./README.md"
+      terraform:
+        enabled: true
+        source: .
+        sort_by: name
+```
+
+In `README.md.gomplate`:
+
+```gotemplate
+{{- $data := ds "config" -}}
+# {{ $data.name }}
+
+{{ $data.description }}
+
+{{ with terraform }}
+## Required Variables
+{{ range .RequiredInputs }}
+### `{{ .Name }}`
+
+{{ .Description.Raw }}
+
+Type: `{{ .Type.Raw }}`
+{{ end }}
+
+## Optional Variables
+{{ range .OptionalInputs }}
+### `{{ .Name }}`
+
+{{ .Description.Raw }}
+
+Type: `{{ .Type.Raw }}`
+
+Default: `{{ .GetValue }}`
+{{ end }}
+{{ end }}
+```
+
+You can also iterate directly with `{{ range (terraform).Inputs }}` when a module
+is available. Use `{{ with terraform }}` to handle disabled Terraform generation
+or a missing configured source directory: the function returns `nil` in those
+cases. An empty module returns an object with empty collections. Invalid Terraform
+or template errors fail generation.
+
+| Module field | Available data |
+| --- | --- |
+| `.Inputs`, `.RequiredInputs`, `.OptionalInputs` | Names, types, descriptions, defaults, required status, and source positions; `.GetValue` and `.HasDefault` methods |
+| `.Outputs` | Names, descriptions, sensitivity, and source positions; state values are not loaded |
+| `.Providers`, `.Requirements` | Provider and version requirement information |
+| `.ModuleCalls` | Module names, sources, versions, descriptions, and source positions |
+| `.Resources` | Managed resources and data sources; `.GetMode`, `.Spec`, `.URL`, and source positions |
+| `.Header`, `.Footer` | Header and footer text loaded by terraform-docs |
+
+The native module retains all parsed sections regardless of the formatter's
+section-display settings. Your template controls grouping, visibility, escaping,
+and layout. The `sort_by` setting determines the module's input ordering.
+
+The `terraform` function is available only during `atmos docs generate` rendering.
+Its native objects are separate from `ds "config"`, which continues to provide
+merged YAML metadata and the formatted `terraform_docs` string. Existing templates
+can keep using `{{ (ds "config").terraform_docs }}` unchanged. Both `.gomplate`
+and `.gotmpl` filenames work; the configured filename has no required extension.
+
+For a complete example with required, optional, and context-variable sections,
+definition lists, badges, and collapsible details, see the
+[README template fixture](https://github.com/cloudposse/atmos/tree/main/tests/fixtures/scenarios/docs-generate/native-terraform),
+adapted from the original Cloud Posse component README design.
+
 ## Dynamic Keys
 
 If you add a new key under docs.generate—say readme2 or release-notes —you simply pass that key to the CLI:

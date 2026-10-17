@@ -1,5 +1,5 @@
 // exec_test.go
-package exec
+package docs
 
 import (
 	"net/http"
@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	tfdocsTf "github.com/terraform-docs/terraform-docs/terraform"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -206,7 +208,7 @@ func TestApplyTerraformDocs_Disabled(t *testing.T) {
 		},
 	}
 	mergedData := make(map[string]any)
-	err := applyTerraformDocs("", &docsGen, mergedData)
+	_, err := applyTerraformDocs("", &docsGen, mergedData)
 	if err != nil {
 		t.Errorf("Expected no error when terraform docs disabled, got %v", err)
 	}
@@ -220,7 +222,7 @@ func TestApplyTerraformDocs_Disabled(t *testing.T) {
 // a simplified string incorporating test data from `mergedData`.
 type mockRenderer struct{}
 
-func (s mockRenderer) Render(tmplName, tmplValue string, mergedData map[string]interface{}, ignoreMissing bool) (string, error) {
+func (s mockRenderer) Render(tmplName, tmplValue string, mergedData map[string]interface{}, module *tfdocsTf.Module) (string, error) {
 	// For testing, we simply return a string that includes a value from mergedData.
 	if name, ok := mergedData["name"].(string); ok {
 		return "mock rendered for " + name, nil
@@ -279,10 +281,8 @@ func TestGenerateDocument_WithInjectedRenderer(t *testing.T) {
 }
 
 // TestGenerateDocument_DefaultTemplateFallback_RealRenderer exercises the default fallback
-// template through the real defaultTemplateRenderer (gomplate), not mockRenderer. It guards
-// against regressions where the fallback template references bare fields (e.g. ".name")
-// instead of going through the "config" datasource, which ProcessTmplWithDatasourcesGomplate
-// requires (root "." is bound to the outer Env wrapper, not mergedData).
+// template through the real defaultTemplateRenderer (gomplate), including metadata
+// access through the "config" datasource and defaults for missing fields.
 func TestGenerateDocument_DefaultTemplateFallback_RealRenderer(t *testing.T) {
 	targetDir := t.TempDir()
 
