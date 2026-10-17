@@ -716,6 +716,22 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		comp[cfg.GenerateSectionName] = finalComponentGenerate
 	}
 
+	if opts.ComponentType == cfg.CloudFormationComponentType {
+		finalComponentCloudFormation, err := m.Merge(
+			mergeConfig,
+			[]map[string]any{
+				result.BaseComponentCloudFormation,
+				result.ComponentCloudFormation,
+			},
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+		for key, value := range finalComponentCloudFormation {
+			comp[key] = value
+		}
+	}
+
 	// Merge the Helm CLI plugins list (helm and helmfile components).
 	// Component-type defaults, base-component plugins, and concrete component plugins
 	// are merged in increasing precedence; the configured list_merge_strategy

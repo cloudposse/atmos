@@ -382,6 +382,7 @@ func TestRunInstall_WithLatestKeyword(t *testing.T) {
 
 func testRunInstallWithLatestKeyword(t *testing.T, binaryName string) {
 	t.Helper()
+	setupTestIO(t)
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 	t.Chdir(tempDir)

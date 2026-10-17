@@ -1,0 +1,105 @@
+---
+title: atmos aws cloudformation list
+sidebar_label: list
+sidebar_class_name: command
+id: list
+description: List deployed CloudFormation stacks in the account.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  List the account's deployed CloudFormation stacks (`ListStacks`), annotated
+  with whether each one matches an `aws/cloudformation` component's
+  `stack_name` configured in the given Atmos stack, or in any Atmos stack when
+  `--stack` is omitted. Unlike every other verb,
+  `list` is account-wide, not scoped to a single component — there is no
+  `[component]` argument, and it does not support `--all`/`--affected`/`--tags`/`--labels`.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation list --help" src="/casts/screengrabs/atmos-aws-cloudformation-list--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation list [--stack <stack>] [options]
+```
+
+Annotate against the components configured in every Atmos stack:
+
+```shell
+atmos aws cloudformation list
+```
+
+Annotate against a single Atmos stack:
+
+```shell
+atmos aws cloudformation list --stack plat-ue2-dev
+```
+
+Only stacks currently in a `*_COMPLETE` status:
+
+```shell
+atmos aws cloudformation list --stack plat-ue2-dev --status CREATE_COMPLETE,UPDATE_COMPLETE
+```
+
+List stacks in a specific region:
+
+```shell
+atmos aws cloudformation list --stack plat-ue2-dev --region us-west-2
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(optional)</em></dt>
+  <dd>
+    Atmos stack to annotate against. Its configured `aws/cloudformation`
+    components' `stack_name` values determine which deployed stacks are
+    marked `managed` vs. `unmanaged`. Without `--stack`, the `stack_name`
+    values of every Atmos stack's components count, so a stack that Atmos
+    defines is never reported as `unmanaged` just because no stack was named.
+    A stack name that does not exist is an error. Templates are processed (so
+    `stack_name` may reference e.g. `{{ .vars.stage }}`), but YAML functions
+    are not — they aren't needed to resolve `stack_name`, and some require
+    their own authentication, which would slow this command down
+    unnecessarily.
+  </dd>
+
+  <dt>`--identity`, `-i` <em>(optional)</em></dt>
+  <dd>
+    Identity to use for authentication. Without it, `list` uses the single
+    `default: true` identity declared in your auth configuration or stack
+    manifests, the same way the component verbs do. If no identity can be
+    resolved and the AWS SDK finds no credentials either, the error suggests
+    passing `--identity`. `--identity` with no value selects interactively.
+  </dd>
+
+  <dt>`--status` <em>(optional)</em></dt>
+  <dd>
+    Filter by stack status (comma-separated, e.g. `CREATE_COMPLETE,UPDATE_COMPLETE`).
+    Values are matched case-insensitively against the CloudFormation stack
+    statuses, so `create_complete` works. An unknown value is an error that
+    names it and lists every valid status; it is rejected before any AWS call.
+    By default every status except `DELETE_COMPLETE` is listed.
+  </dd>
+
+  <dt>`--region` <em>(optional)</em></dt>
+  <dd>AWS region to list stacks in. Defaults to the active identity's region, then the AWS SDK's standard resolution chain.</dd>
+</dl>
+
+## Output
+
+The table starts with a header row. Each following line shows whether the
+stack is `managed` (its name matches an `aws/cloudformation` component's
+configured `stack_name` in the queried stack, or in any stack when `--stack`
+is omitted) or `unmanaged`, its status, and its name:
+
+```
+MANAGED   STATUS                         STACK NAME
+managed   CREATE_COMPLETE                vpc-plat-ue2-dev
+unmanaged UPDATE_COMPLETE                some-other-stack
+```

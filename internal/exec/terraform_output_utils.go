@@ -220,3 +220,19 @@ func newAuthContextWrapper(authContext *schema.AuthContext) *authContextWrapper 
 		},
 	}
 }
+
+// propagateAuthDisabledManager returns authManager unchanged unless it is nil and
+// stackInfo.AuthDisabled is set, in which case it wraps stackInfo so downstream nested-auth
+// resolution (resolveNestedOutputAuth, used by both !terraform.output and
+// !aws.cloudformation.output) can see AuthDisabled via GetStackInfo() and skip resolving the
+// target component's own default identity. Without this, a nil authManager combined with
+// AuthDisabled would silently let the target component's own auth section override the
+// enclosing component's explicit opt-out.
+func propagateAuthDisabledManager(authManager any, stackInfo *schema.ConfigAndStacksInfo) any {
+	defer perf.Track(nil, "exec.propagateAuthDisabledManager")()
+
+	if authManager == nil && stackInfo != nil && stackInfo.AuthDisabled {
+		return &authContextWrapper{stackInfo: stackInfo}
+	}
+	return authManager
+}

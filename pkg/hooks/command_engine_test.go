@@ -796,3 +796,38 @@ func TestComponentPathFor_Fallbacks(t *testing.T) {
 		})
 	}
 }
+
+// TestComponentBasePath covers every componentBasePath branch, including the
+// aws/cloudformation case (added alongside the native aws/cloudformation
+// component type) and the default "unknown type" fallback.
+func TestComponentBasePath(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		TerraformDirAbsolutePath:      "/atmos/components/terraform",
+		HelmfileDirAbsolutePath:       "/atmos/components/helmfile",
+		PackerDirAbsolutePath:         "/atmos/components/packer",
+		AnsibleDirAbsolutePath:        "/atmos/components/ansible",
+		KubernetesDirAbsolutePath:     "/atmos/components/kubernetes",
+		HelmDirAbsolutePath:           "/atmos/components/helm",
+		CloudFormationDirAbsolutePath: "/atmos/components/cloudformation",
+	}
+
+	tests := []struct {
+		componentType string
+		want          string
+	}{
+		{cfg.TerraformComponentType, "/atmos/components/terraform"},
+		{cfg.HelmfileComponentType, "/atmos/components/helmfile"},
+		{cfg.PackerComponentType, "/atmos/components/packer"},
+		{cfg.AnsibleComponentType, "/atmos/components/ansible"},
+		{cfg.KubernetesComponentType, "/atmos/components/kubernetes"},
+		{cfg.HelmComponentType, "/atmos/components/helm"},
+		{cfg.CloudFormationComponentType, "/atmos/components/cloudformation"},
+		{"unknown-type", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.componentType, func(t *testing.T) {
+			assert.Equal(t, tt.want, componentBasePath(atmosConfig, tt.componentType))
+		})
+	}
+}
