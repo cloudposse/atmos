@@ -17,3 +17,6 @@ components:
       metadata:
         type: real
         tags: ["group-b"]
+    demo-inline:
+      metadata:
+        type: real
