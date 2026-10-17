@@ -26,6 +26,8 @@ func TestAffectedFilesIncludesCommittedWorkingTreeAndUntrackedFiles(t *testing.T
 		case 3:
 			return "working.yaml\x00duplicate.yaml\x00", nil
 		case 4:
+			return "staged.yaml\x00duplicate.yaml\x00", nil
+		case 5:
 			return "untracked.yaml\x00", nil
 		default:
 			return "", errors.New("unexpected git invocation")
@@ -34,9 +36,11 @@ func TestAffectedFilesIncludesCommittedWorkingTreeAndUntrackedFiles(t *testing.T
 
 	paths, err := AffectedFiles("main")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"committed.yaml", "duplicate.yaml", "working.yaml", "untracked.yaml"}, paths)
+	assert.Equal(t, []string{"committed.yaml", "duplicate.yaml", "working.yaml", "staged.yaml", "untracked.yaml"}, paths)
 	assert.Equal(t, []string{"merge-base", "HEAD", "main"}, calls[0])
 	assert.Equal(t, []string{"diff", "--name-only", "-z", "--diff-filter=ACMRD", "base-sha...HEAD"}, calls[1])
+	assert.Equal(t, []string{"diff", "--cached", "--name-only", "-z", "--diff-filter=ACMRD"}, calls[3])
+	assert.Equal(t, []string{"ls-files", "--others", "--exclude-standard", "--full-name", "-z", "--", ":/"}, calls[4])
 }
 
 func TestExcludePaths(t *testing.T) {
