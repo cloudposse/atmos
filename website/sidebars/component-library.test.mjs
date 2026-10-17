@@ -74,7 +74,7 @@ test('the repository index includes all native overviews and preserves Terraform
   const items = componentLibraryItems();
   validateSidebars({components: items});
   assert.deepEqual(items.filter(item => item.customProps.componentType?.native).map(item => item.customProps.componentType.id),
-    ['terraform', 'kubernetes', 'helm', 'helmfile', 'packer', 'ansible', 'container', 'emulator']);
+    ['terraform', 'kubernetes', 'helm', 'helmfile', 'packer', 'ansible', 'container', 'aws/cloudformation', 'emulator']);
   assert.deepEqual(items[0].items.map(item => item.label),
     ['Stack Configuration', 'Root Modules', 'State Backends', 'Workspaces', 'Provider Generation', 'Planfiles', 'Brownfield']);
   assert.equal(items.some(item => item.label === 'metadata' || item.label === 'provision'), false);
