@@ -51,7 +51,7 @@ func expectRunAttempt(t *testing.T, client *rerun.MockRESTClient, attempt int) {
 // expectFetchJobs stubs a single-page jobs response for the given run.
 func expectFetchJobs(t *testing.T, client *rerun.MockRESTClient, run rerun.RunRef, body string) {
 	t.Helper()
-	path := "repos/" + run.Repo + "/actions/runs/" + run.RunID + "/attempts/" + run.RunAttempt + "/jobs?per_page=100"
+	path := "repos/" + run.Repo + "/actions/runs/" + run.RunID + "/attempts/" + run.RunAttempt + "/jobs?per_page=30"
 	client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, path, nil).Return(jobsResponse(body), nil) //nolint:bodyclose // closed by the code under test, not this fixture.
 }
 

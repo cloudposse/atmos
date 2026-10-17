@@ -34,7 +34,7 @@ func TestHandlePromptError_OtherError(t *testing.T) {
 
 // TestStackContainsComponentWithSource_InvalidStackData tests with non-map stack data.
 func TestStackContainsComponentWithSource_InvalidStackData(t *testing.T) {
-	result := stackContainsComponentWithSource("invalid", "vpc")
+	result := stackContainsComponentWithSource("invalid", "terraform", "vpc")
 	assert.False(t, result)
 }
 
@@ -43,7 +43,7 @@ func TestStackContainsComponentWithSource_NoComponents(t *testing.T) {
 	stackData := map[string]any{
 		"vars": map[string]any{"foo": "bar"},
 	}
-	result := stackContainsComponentWithSource(stackData, "vpc")
+	result := stackContainsComponentWithSource(stackData, "terraform", "vpc")
 	assert.False(t, result)
 }
 
@@ -54,7 +54,7 @@ func TestStackContainsComponentWithSource_NoTerraform(t *testing.T) {
 			"helmfile": map[string]any{},
 		},
 	}
-	result := stackContainsComponentWithSource(stackData, "vpc")
+	result := stackContainsComponentWithSource(stackData, "terraform", "vpc")
 	assert.False(t, result)
 }
 
@@ -69,7 +69,7 @@ func TestStackContainsComponentWithSource_ComponentNotFound(t *testing.T) {
 			},
 		},
 	}
-	result := stackContainsComponentWithSource(stackData, "vpc")
+	result := stackContainsComponentWithSource(stackData, "terraform", "vpc")
 	assert.False(t, result)
 }
 
@@ -84,7 +84,7 @@ func TestStackContainsComponentWithSource_ComponentNoSource(t *testing.T) {
 			},
 		},
 	}
-	result := stackContainsComponentWithSource(stackData, "vpc")
+	result := stackContainsComponentWithSource(stackData, "terraform", "vpc")
 	assert.False(t, result)
 }
 
@@ -101,7 +101,7 @@ func TestStackContainsComponentWithSource_ComponentWithSource(t *testing.T) {
 			},
 		},
 	}
-	result := stackContainsComponentWithSource(stackData, "vpc")
+	result := stackContainsComponentWithSource(stackData, "terraform", "vpc")
 	assert.True(t, result)
 }
 
@@ -114,13 +114,13 @@ func TestStackContainsComponentWithSource_InvalidComponentData(t *testing.T) {
 			},
 		},
 	}
-	result := stackContainsComponentWithSource(stackData, "vpc")
+	result := stackContainsComponentWithSource(stackData, "terraform", "vpc")
 	assert.False(t, result)
 }
 
 // TestStackHasAnySource_InvalidStackData tests with non-map stack data.
 func TestStackHasAnySource_InvalidStackData(t *testing.T) {
-	result := stackHasAnySource("invalid")
+	result := stackHasAnySource("invalid", "terraform")
 	assert.False(t, result)
 }
 
@@ -129,7 +129,7 @@ func TestStackHasAnySource_NoComponents(t *testing.T) {
 	stackData := map[string]any{
 		"vars": map[string]any{"foo": "bar"},
 	}
-	result := stackHasAnySource(stackData)
+	result := stackHasAnySource(stackData, "terraform")
 	assert.False(t, result)
 }
 
@@ -140,7 +140,7 @@ func TestStackHasAnySource_NoTerraform(t *testing.T) {
 			"helmfile": map[string]any{},
 		},
 	}
-	result := stackHasAnySource(stackData)
+	result := stackHasAnySource(stackData, "terraform")
 	assert.False(t, result)
 }
 
@@ -158,7 +158,7 @@ func TestStackHasAnySource_NoComponentsWithSource(t *testing.T) {
 			},
 		},
 	}
-	result := stackHasAnySource(stackData)
+	result := stackHasAnySource(stackData, "terraform")
 	assert.False(t, result)
 }
 
@@ -178,7 +178,7 @@ func TestStackHasAnySource_HasComponentWithSource(t *testing.T) {
 			},
 		},
 	}
-	result := stackHasAnySource(stackData)
+	result := stackHasAnySource(stackData, "terraform")
 	assert.True(t, result)
 }
 
@@ -191,14 +191,14 @@ func TestStackHasAnySource_InvalidComponentData(t *testing.T) {
 			},
 		},
 	}
-	result := stackHasAnySource(stackData)
+	result := stackHasAnySource(stackData, "terraform")
 	assert.False(t, result)
 }
 
 // TestCollectComponentsWithSource_InvalidStackData tests with non-map stack data.
 func TestCollectComponentsWithSource_InvalidStackData(t *testing.T) {
 	componentSet := make(map[string]struct{})
-	collectComponentsWithSource("invalid", componentSet)
+	collectComponentsWithSource("invalid", "terraform", componentSet)
 	assert.Empty(t, componentSet)
 }
 
@@ -208,7 +208,7 @@ func TestCollectComponentsWithSource_NoComponents(t *testing.T) {
 	stackData := map[string]any{
 		"vars": map[string]any{"foo": "bar"},
 	}
-	collectComponentsWithSource(stackData, componentSet)
+	collectComponentsWithSource(stackData, "terraform", componentSet)
 	assert.Empty(t, componentSet)
 }
 
@@ -220,7 +220,7 @@ func TestCollectComponentsWithSource_NoTerraform(t *testing.T) {
 			"helmfile": map[string]any{},
 		},
 	}
-	collectComponentsWithSource(stackData, componentSet)
+	collectComponentsWithSource(stackData, "terraform", componentSet)
 	assert.Empty(t, componentSet)
 }
 
@@ -246,7 +246,7 @@ func TestCollectComponentsWithSource_CollectsSourceComponents(t *testing.T) {
 			},
 		},
 	}
-	collectComponentsWithSource(stackData, componentSet)
+	collectComponentsWithSource(stackData, "terraform", componentSet)
 	assert.Len(t, componentSet, 2)
 	assert.Contains(t, componentSet, "vpc")
 	assert.Contains(t, componentSet, "eks")
@@ -268,14 +268,14 @@ func TestCollectComponentsWithSource_SkipsInvalidComponents(t *testing.T) {
 			},
 		},
 	}
-	collectComponentsWithSource(stackData, componentSet)
+	collectComponentsWithSource(stackData, "terraform", componentSet)
 	assert.Len(t, componentSet, 1)
 	assert.Contains(t, componentSet, "vpc")
 }
 
 // TestComponentArgCompletion_NoArgs tests ComponentArgCompletion when no args provided.
 func TestComponentArgCompletion_NoArgs(t *testing.T) {
-	cmd := &cobra.Command{Use: "test"}
+	cmd := &cobra.Command{Use: "test", Annotations: map[string]string{sourceComponentTypeAnnotation: "terraform"}}
 
 	// This will fail to load stacks in test environment, returning empty list.
 	options, directive := ComponentArgCompletion(cmd, []string{}, "")
@@ -287,7 +287,7 @@ func TestComponentArgCompletion_NoArgs(t *testing.T) {
 
 // TestComponentArgCompletion_HasArgs tests ComponentArgCompletion when args already provided.
 func TestComponentArgCompletion_HasArgs(t *testing.T) {
-	cmd := &cobra.Command{Use: "test"}
+	cmd := &cobra.Command{Use: "test", Annotations: map[string]string{sourceComponentTypeAnnotation: "terraform"}}
 
 	// When args already provided, returns empty.
 	options, directive := ComponentArgCompletion(cmd, []string{"vpc"}, "")
@@ -298,7 +298,7 @@ func TestComponentArgCompletion_HasArgs(t *testing.T) {
 
 // TestStackFlagCompletion_WithComponent tests StackFlagCompletion when component is provided.
 func TestStackFlagCompletion_WithComponent(t *testing.T) {
-	cmd := &cobra.Command{Use: "test"}
+	cmd := &cobra.Command{Use: "test", Annotations: map[string]string{sourceComponentTypeAnnotation: "terraform"}}
 
 	// This will fail to load stacks in test environment, returning empty list.
 	options, directive := StackFlagCompletion(cmd, []string{"vpc"}, "")
@@ -310,7 +310,7 @@ func TestStackFlagCompletion_WithComponent(t *testing.T) {
 
 // TestStackFlagCompletion_WithoutComponent tests StackFlagCompletion when no component provided.
 func TestStackFlagCompletion_WithoutComponent(t *testing.T) {
-	cmd := &cobra.Command{Use: "test"}
+	cmd := &cobra.Command{Use: "test", Annotations: map[string]string{sourceComponentTypeAnnotation: "terraform"}}
 
 	// This will fail to load stacks in test environment, returning empty list.
 	options, directive := StackFlagCompletion(cmd, []string{}, "")
@@ -322,7 +322,7 @@ func TestStackFlagCompletion_WithoutComponent(t *testing.T) {
 
 // TestStackFlagCompletion_EmptyComponent tests StackFlagCompletion when component is empty string.
 func TestStackFlagCompletion_EmptyComponent(t *testing.T) {
-	cmd := &cobra.Command{Use: "test"}
+	cmd := &cobra.Command{Use: "test", Annotations: map[string]string{sourceComponentTypeAnnotation: "terraform"}}
 
 	// Empty string component should fall through to listing all stacks.
 	options, directive := StackFlagCompletion(cmd, []string{""}, "")
@@ -384,7 +384,7 @@ func TestListStacksWithSourceForComponent_Success(t *testing.T) {
 		}, nil
 	}
 
-	stacks, err := listStacksWithSourceForComponent("vpc")
+	stacks, err := listStacksWithSourceForComponent("terraform", "vpc")
 	require.NoError(t, err)
 	assert.Len(t, stacks, 2)
 	assert.Contains(t, stacks, "dev")
@@ -405,7 +405,7 @@ func TestListStacksWithSourceForComponent_ConfigError(t *testing.T) {
 		return schema.AtmosConfiguration{}, assert.AnError
 	}
 
-	stacks, err := listStacksWithSourceForComponent("vpc")
+	stacks, err := listStacksWithSourceForComponent("terraform", "vpc")
 	require.Error(t, err)
 	assert.Nil(t, stacks)
 }
@@ -430,7 +430,7 @@ func TestListStacksWithSourceForComponent_DescribeError(t *testing.T) {
 		return nil, assert.AnError
 	}
 
-	stacks, err := listStacksWithSourceForComponent("vpc")
+	stacks, err := listStacksWithSourceForComponent("terraform", "vpc")
 	require.Error(t, err)
 	assert.Nil(t, stacks)
 }
@@ -476,7 +476,7 @@ func TestListStacksWithSource_Success(t *testing.T) {
 		}, nil
 	}
 
-	stacks, err := listStacksWithSource()
+	stacks, err := listStacksWithSource("terraform")
 	require.NoError(t, err)
 	assert.Len(t, stacks, 1)
 	assert.Contains(t, stacks, "dev")
@@ -496,7 +496,7 @@ func TestListStacksWithSource_ConfigError(t *testing.T) {
 		return schema.AtmosConfiguration{}, assert.AnError
 	}
 
-	stacks, err := listStacksWithSource()
+	stacks, err := listStacksWithSource("terraform")
 	require.Error(t, err)
 	assert.Nil(t, stacks)
 }
@@ -521,7 +521,7 @@ func TestListStacksWithSource_DescribeError(t *testing.T) {
 		return nil, assert.AnError
 	}
 
-	stacks, err := listStacksWithSource()
+	stacks, err := listStacksWithSource("terraform")
 	require.Error(t, err)
 	assert.Nil(t, stacks)
 }
@@ -577,7 +577,7 @@ func TestListComponentsWithSource_Success(t *testing.T) {
 		}, nil
 	}
 
-	components, err := listComponentsWithSource()
+	components, err := listComponentsWithSource("terraform")
 	require.NoError(t, err)
 	assert.Len(t, components, 2)
 	assert.Contains(t, components, "vpc")
@@ -598,7 +598,7 @@ func TestListComponentsWithSource_ConfigError(t *testing.T) {
 		return schema.AtmosConfiguration{}, assert.AnError
 	}
 
-	components, err := listComponentsWithSource()
+	components, err := listComponentsWithSource("terraform")
 	require.Error(t, err)
 	assert.Nil(t, components)
 }
@@ -623,7 +623,7 @@ func TestListComponentsWithSource_DescribeError(t *testing.T) {
 		return nil, assert.AnError
 	}
 
-	components, err := listComponentsWithSource()
+	components, err := listComponentsWithSource("terraform")
 	require.Error(t, err)
 	assert.Nil(t, components)
 }

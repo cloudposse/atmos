@@ -27,7 +27,11 @@ const secretTag = "!secret"
 //  3. Otherwise it resolves the backend.
 //     provider, retrieves the value, applies the optional path/default modifiers, registers
 //     the value (recursively) with the I/O masker, and returns it.
-func Resolve(atmosConfig *schema.AtmosConfiguration, input, currentStack string, stackInfo *schema.ConfigAndStacksInfo) (any, error) {
+//
+// A declaration whose `store:`/`sops:` is a YAML-function selector (for example
+// `!aws.cloudformation.output ...`) is resolved lazily here, only for the secret being read, using
+// the evaluator supplied through WithSelectorEvaluator.
+func Resolve(atmosConfig *schema.AtmosConfiguration, input, currentStack string, stackInfo *schema.ConfigAndStacksInfo, extra ...Option) (any, error) {
 	defer perf.Track(atmosConfig, "secrets.Resolve")()
 
 	name, opts, err := parseSecretArgs(input)
@@ -47,14 +51,28 @@ func Resolve(atmosConfig *schema.AtmosConfiguration, input, currentStack string,
 		return nil, fmt.Errorf("%w: %q (declare it under the component's secrets.vars)", ErrSecretNotDeclared, name)
 	}
 
+	if err := decl.ScopeConflict(); err != nil {
+		return nil, err
+	}
+
 	// Mask-without-retrieval fast path for inspection commands. Declaration lookup happens
 	// first so masked inspection still catches misspelled or malformed secret references.
 	if stackInfo != nil && stackInfo.SecretsMaskOnly {
 		return io.GetContext().Masker().Replacement(), nil
 	}
 
-	provider, err := providerFor(atmosConfig, &decl, componentSection)
+	req := providerRequest{
+		atmosConfig: atmosConfig,
+		section:     componentSection,
+		stack:       currentStack,
+		component:   component,
+		evaluator:   applyOptions(extra).evaluator,
+	}
+	provider, err := req.provider(&decl)
 	if err != nil {
+		if errors.Is(err, ErrSelectorUnresolved) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("%w (secret %q)", err, name)
 	}
 
