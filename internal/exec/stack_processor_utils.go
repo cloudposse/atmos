@@ -1166,9 +1166,9 @@ func processYAMLConfigFileWithContextInternal(
 		context, localsErr = extractAndAddLocalsToContext(atmosConfig, stackYamlConfig, filePath, relativeFilePath, context)
 		if localsErr != nil {
 			if mergeContext != nil {
-				return nil, nil, mergeContext.FormatError(localsErr, fmt.Sprintf("stack manifest '%s'", relativeFilePath))
+				return nil, nil, mergeContext.FormatError(localsErr, fmt.Sprintf("stack manifest %q", relativeFilePath))
 			}
-			return nil, nil, fmt.Errorf("stack manifest '%s': %w", relativeFilePath, localsErr)
+			return nil, nil, fmt.Errorf("stack manifest %q: %w", relativeFilePath, localsErr)
 		}
 	}
 
@@ -1212,9 +1212,9 @@ func processYAMLConfigFileWithContextInternal(
 				}
 				wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrInvalidStackManifest, tmplErr)
 				if mergeContext != nil {
-					return nil, nil, mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
+					return nil, nil, mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest %q%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 				}
-				return nil, nil, fmt.Errorf("%w: stack manifest '%s'\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
+				return nil, nil, fmt.Errorf("%w: stack manifest %q\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
 			}
 		}
 	}
@@ -1229,10 +1229,10 @@ func processYAMLConfigFileWithContextInternal(
 			// Wrap the error with the sentinel first to preserve it
 			wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, err)
 			// Then format it with context information
-			e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
+			e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest %q%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 			return nil, nil, e
 		} else {
-			e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
+			e := fmt.Errorf("%w: stack manifest %q\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
 			return nil, nil, e
 		}
 	}
@@ -2953,8 +2953,8 @@ func processBaseComponentConfigInternal(
 			componentPath := filepath.Join(componentBasePath, baseComponent)
 			componentPathExists, err := u.IsDirectory(componentPath)
 			if err != nil || !componentPathExists {
-				return errors.New("The component '" + component + "' inherits from the base component '" +
-					baseComponent + "' (using 'component:' attribute), " + "but `" + baseComponent + "' is not defined in any of the YAML config files for the stack '" + stack + "'")
+				return fmt.Errorf("%w: the component %q inherits from the base component %q (using 'component:' attribute), but %q is not defined in any of the YAML config files for the stack %q",
+					errUtils.ErrInvalidBaseComponentConfig, component, baseComponent, baseComponent, stack)
 			}
 		}
 	}

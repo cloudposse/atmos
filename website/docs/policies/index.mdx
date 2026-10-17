@@ -1,0 +1,74 @@
+---
+title: Policies
+slug: /policies
+description: Configure CEL rules to deny component operations, inspect Terraform plans, and require lifecycle hooks.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use policies to reject Terraform plan changes, block component operations, and require lifecycle
+hooks. Rules use CEL expressions and load from the directory specified by `ATMOS_POLICY_DIR`.
+</Intro>
+
+<Experimental />
+
+## Choose an input
+
+| Input kind | Components | Evaluated when | Actions |
+|---|---|---|---|
+| `terraform.plan` | Terraform / OpenTofu | After a successful saved plan and before saved-plan apply | `deny` |
+| `operation` | Terraform, Helmfile, Helm, Kubernetes | At the component's lifecycle hook events | `deny`, `hooks` |
+
+[GitHub Actions context](/policies/ci) is available to both kinds. Rules run regardless of whether
+`--affected` was passed. Component configuration validation uses the separate
+[`settings.validation` configuration](/validation/opa).
+
+## Quick start
+
+Create a policy file:
+
+```yaml title="policy.d/terraform.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: safety
+spec:
+  policies:
+    prevent-deletion:
+      on: terraform.plan
+      action: deny
+      reason: Resources must not be deleted or replaced
+      rule: >-
+        has(input.resource_changes) && input.resource_changes.exists(r,
+          r.mode == 'managed' && 'delete' in r.change.actions)
+```
+
+Enable the directory and run a plan:
+
+```shell
+export ATMOS_POLICY_DIR="$PWD/policy.d"
+atmos terraform plan vpc -s dev
+```
+
+A matching rule blocks the command. A plan containing no managed-resource deletions passes this
+rule. To apply a passing saved plan:
+
+```shell
+atmos terraform apply vpc -s dev --from-plan
+```
+
+For CI enforcement, load policies from a [protected source](/policies/configuration#enforcement),
+not an unreviewed pull-request checkout.
+
+## Reference
+
+| Page | Contents |
+|---|---|
+| [Configuration](/policies/configuration) | Directory loading, manifest fields, rule actions, enforcement setup |
+| [Inputs and Expressions](/policies/inputs) | CEL variables, operation fields, missing values, evaluation results |
+| [Terraform Plans](/policies/terraform-plan) | Plan JSON, saved-plan commands, failure handling |
+| [Hooks](/policies/hooks) | Hook definitions, selection, execution and success requirements |
+| [CI Context](/policies/ci) | GitHub event data, metadata, required inputs, permissions |
+| [Examples](/policies/examples) | Tested policy configurations to copy and adapt |

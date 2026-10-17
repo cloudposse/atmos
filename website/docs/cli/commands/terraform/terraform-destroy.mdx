@@ -17,6 +17,14 @@ Use this command to destroy Terraform-managed infrastructure for an Atmos compon
 
 <CastPlayer title="atmos terraform destroy --help" src="/casts/screengrabs/atmos-terraform-destroy--help.cast" static chrome />
 
+:::note Saved plan policies
+
+When [`ATMOS_POLICY_DIR` is configured](/policies/terraform-plan), direct destroy is
+rejected. Use `plan -destroy` followed by `apply --from-plan` so policies can inspect the saved
+destruction plan before it is executed.
+
+:::
+
 ## Usage
 
 Execute the `terraform destroy` command like this:

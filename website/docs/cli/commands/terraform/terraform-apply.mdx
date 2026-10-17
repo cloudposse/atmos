@@ -29,6 +29,10 @@ This command applies Terraform changes to your infrastructure. You can:
 - Apply a specific planfile using `--planfile <path>`
 - Auto-approve changes using `-auto-approve`
 
+When [saved plan policies](/policies/terraform-plan) are enabled with `ATMOS_POLICY_DIR`,
+apply requires `--from-plan` or `--planfile`. Atmos reevaluates the selected artifact and applies a
+private copy of those same bytes. Implicit plan-and-apply is rejected while this gate is configured.
+
 For automated deployments, consider using `atmos terraform deploy` which automatically includes `-auto-approve`.
 
 :::note
