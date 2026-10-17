@@ -129,14 +129,17 @@ type terraformDocsResult struct {
 // realTerraformDocsRunner is the production implementation.
 type realTerraformDocsRunner struct{}
 
+// Run loads a Terraform module and produces its configured documentation format.
 func (r realTerraformDocsRunner) Run(dir string, settings *schema.TerraformDocsReadmeSettings) (terraformDocsResult, error) {
 	return runTerraformDocs(dir, settings)
 }
 
+// applyTerraformDocs adds formatted documentation to metadata and returns the native module.
 func applyTerraformDocs(dir string, docsGenerate *schema.DocsGenerate, mergedData map[string]any) (*tfdocsTf.Module, error) {
 	return applyTerraformDocsWithRunner(dir, docsGenerate, mergedData, realTerraformDocsRunner{})
 }
 
+// applyTerraformDocsWithRunner skips disabled or unavailable sources and propagates generation errors.
 func applyTerraformDocsWithRunner(dir string, docsGenerate *schema.DocsGenerate, mergedData map[string]any, runner terraformDocsRunner) (*tfdocsTf.Module, error) {
 	if !docsGenerate.Terraform.Enabled {
 		return nil, nil
@@ -156,6 +159,7 @@ func applyTerraformDocsWithRunner(dir string, docsGenerate *schema.DocsGenerate,
 	return terraformDocs.module, nil
 }
 
+// defaultDocsTemplate combines optional README metadata with formatted Terraform documentation.
 func defaultDocsTemplate() string {
 	// Read metadata through the "config" datasource, as shared README templates do.
 	// Use `index` rather than dot-field access: dot access on a map errors when the key is
@@ -166,6 +170,7 @@ func defaultDocsTemplate() string {
 		"{{ index (ds \"config\") \"terraform_docs\" | default \"\" }}"
 }
 
+// fetchTemplate loads the configured template or returns the built-in default.
 func fetchTemplate(atmosConfig *schema.AtmosConfiguration, docsGenerate *schema.DocsGenerate, dir string) (string, error) {
 	if docsGenerate.Template == "" {
 		return defaultDocsTemplate(), nil
@@ -252,6 +257,7 @@ func fetchAndParseYAML(atmosConfig *schema.AtmosConfiguration, pathOrURL string,
 	return parseYAML(localPath)
 }
 
+// parseYAML reads a YAML metadata file into a map.
 func parseYAML(filePath string) (map[string]interface{}, error) {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
@@ -260,6 +266,7 @@ func parseYAML(filePath string) (map[string]interface{}, error) {
 	return parseYAMLBytes(content)
 }
 
+// parseYAMLBytes decodes YAML metadata for merging into the config datasource.
 func parseYAMLBytes(b []byte) (map[string]interface{}, error) {
 	var data map[string]interface{}
 	if err := yaml.Unmarshal(b, &data); err != nil {
@@ -273,6 +280,7 @@ type formatter interface {
 	Content() string
 }
 
+// runTerraformDocs loads the module once and returns both native objects and formatted content.
 func runTerraformDocs(dir string, settings *schema.TerraformDocsReadmeSettings) (terraformDocsResult, error) {
 	config := tfdocsPrint.DefaultConfig()
 	config.ModuleRoot = dir
@@ -349,7 +357,7 @@ func downloadSource(
 	return downloadedPath, tempDir, nil
 }
 
-// isLikelyRemote does a quick check if a path looks remote.
+// isRemoteSource checks for URL schemes and go-getter source prefixes.
 func isRemoteSource(s string) bool {
 	prefixes := []string{"http://", "https://", "git::", "github.com/", "git@"}
 	for _, p := range prefixes {
@@ -387,6 +395,7 @@ func resolvePath(path string, baseDir string, defaultPath string) (string, error
 	return absPath, nil
 }
 
+// removeTempDir cleans up downloaded inputs, logging cleanup failures.
 func removeTempDir(path string) {
 	if err := os.RemoveAll(path); err != nil {
 		log.Warn(err.Error())

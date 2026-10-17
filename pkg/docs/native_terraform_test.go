@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/template/datasource"
 )
 
+// nativeDocsFixture locates the shared Terraform module and recovered README templates.
 func nativeDocsFixture(t *testing.T) string {
 	t.Helper()
 	dir, err := filepath.Abs("../../tests/fixtures/scenarios/docs-generate/native-terraform")
@@ -25,6 +26,7 @@ func nativeDocsFixture(t *testing.T) string {
 	return dir
 }
 
+// readDocsTestFile reads a fixture or generated document, failing the test on I/O errors.
 func readDocsTestFile(t *testing.T, path string) string {
 	t.Helper()
 	content, err := os.ReadFile(path)
@@ -49,7 +51,7 @@ func TestGenerateDocument_NativeTerraformOriginalDesign(t *testing.T) {
 	actual := readDocsTestFile(t, docs.Output)
 	// Source positions contain the module's absolute path; make it portable.
 	normalizePaths := func(s string) string {
-		return strings.ReplaceAll(s, dir, ".")
+		return strings.ReplaceAll(strings.ReplaceAll(s, dir, "."), `.\`, "./")
 	}
 	assert.Equal(t, readDocsTestFile(t, filepath.Join(dir, "expected.md")), normalizePaths(trimDocsTrailingSpace(actual)))
 
@@ -73,6 +75,7 @@ func TestGenerateDocument_NativeTerraformOriginalDesign(t *testing.T) {
 		nonblankDocsLines(normalizePaths("## Version Requirements"+body)))
 }
 
+// trimDocsTrailingSpace removes incidental trailing whitespace from generated Markdown.
 func trimDocsTrailingSpace(s string) string {
 	lines := strings.Split(s, "\n")
 	for i := range lines {
@@ -122,6 +125,7 @@ legacy={{ $data.terraform_docs }}`
 	}
 }
 
+// nativeDocsTestConfig creates an isolated template and output with Terraform enabled.
 func nativeDocsTestConfig(t *testing.T, tmpl string) schema.DocsGenerate {
 	t.Helper()
 	dir := t.TempDir()

@@ -44,6 +44,7 @@ func toFileScheme(localPath string) string {
 	return "file://" + pathSlashed
 }
 
+// fixWindowsFileScheme moves Windows drive letters from the URL host into the path for Gomplate.
 func fixWindowsFileScheme(rawURL string) (*url.URL, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
