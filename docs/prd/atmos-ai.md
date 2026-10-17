@@ -475,8 +475,8 @@ AI can execute Atmos commands and file operations with granular permission contr
 ai:
   tools:
     enabled: true
-    # require_confirmation: true    # Default: true (secure by default)
-                                     # Set to false to opt-out of prompts
+    mode: require_confirmation        # Default (secure by default)
+                                      # allow: never prompt; yolo: bypass all checks
 
     allowed:
       - atmos_describe_*
@@ -490,8 +490,6 @@ ai:
     blocked:
       - atmos_terraform_apply
       - atmos_terraform_destroy
-
-    yolo_mode: false
 
     audit:
       enabled: true
@@ -567,34 +565,34 @@ Location: `.atmos/ai.settings.local.json` (git-ignored by default)
 
 ```text
 Tool Execution Requested
-         │
-         ▼
+          │
+          ▼
 ┌────────────────────┐
 │ Blocked in config? │──Yes──> ❌ DENY (always)
-└────────┬───────────┘
-         │No
-         ▼
+└─────────┬──────────┘
+          │No
+          ▼
 ┌────────────────────┐
 │ In cache deny list?│──Yes──> ❌ DENY
-└────────┬───────────┘
-         │No
-         ▼
+└─────────┬──────────┘
+          │No
+          ▼
 ┌────────────────────┐
 │ Allowed in config? │──Yes──> ✅ ALLOW
-└────────┬───────────┘
-         │No
-         ▼
+└─────────┬──────────┘
+          │No
+          ▼
 ┌────────────────────┐
 │ In cache allow list│──Yes──> ✅ ALLOW
-└────────┬───────────┘
-         │No
-         ▼
+└─────────┬──────────┘
+          │No
+          ▼
 ┌──────────────────────┐
 │ Show prompt (a/y/n/d)│
-└────────┬─────────────┘
-         │
-         ▼
-   User Decision
+└─────────┬────────────┘
+          │
+          ▼
+    User Decision
 ```
 
 **Priority Order** (highest to lowest):
@@ -604,7 +602,7 @@ Tool Execution Requested
 3. **Allowed Tools** (config) - Pre-approved in configuration
 4. **Cached Allowances** (.atmos/ai.settings.local.json) - User allowed previously
 5. **Restricted Tools** (config) - Requires prompt if not cached
-6. **Default Behavior** - Defaults to prompting (secure by default) unless `require_confirmation: false` is set to opt-out
+6. **Default Behavior** - Defaults to prompting (secure by default) unless `mode: allow` is set to opt-out (the older `require_confirmation: false` and `yolo_mode: true` booleans remain as deprecated aliases for `mode: allow` and `mode: yolo`)
 
 **Key Features:**
 
@@ -697,29 +695,29 @@ Specialized AI skills provide task-specific expertise and focused tool access, i
 #### Built-in Skills
 
 1. **General (Default)**
-   - Purpose: General-purpose assistant
-   - Tools: All tools
-   - Use case: Everyday infrastructure questions
+    - Purpose: General-purpose assistant
+    - Tools: All tools
+    - Use case: Everyday infrastructure questions
 
 2. **Stack Analyzer**
-   - Purpose: Analyze stack configurations and dependencies
-   - Tools: `describe_*`, `list_*`, `read_stack_file`
-   - Use case: Architecture reviews, stack analysis
+    - Purpose: Analyze stack configurations and dependencies
+    - Tools: `describe_*`, `list_*`, `read_stack_file`
+    - Use case: Architecture reviews, stack analysis
 
 3. **Component Refactor**
-   - Purpose: Refactor Terraform/Helmfile components
-   - Tools: `read_*`, `write_*`, `search_files`
-   - Use case: Code improvements, modernization
+    - Purpose: Refactor Terraform/Helmfile components
+    - Tools: `read_*`, `write_*`, `search_files`
+    - Use case: Code improvements, modernization
 
 4. **Security Auditor**
-   - Purpose: Security review of infrastructure
-   - Tools: `describe_*`, `read_*`, `validate_*`
-   - Use case: Security audits, compliance checks
+    - Purpose: Security review of infrastructure
+    - Tools: `describe_*`, `read_*`, `validate_*`
+    - Use case: Security audits, compliance checks
 
 5. **Config Validator**
-   - Purpose: Validate Atmos configurations
-   - Tools: `validate_*`, `read_stack_file`, `validate_file_lsp`
-   - Use case: Configuration troubleshooting
+    - Purpose: Validate Atmos configurations
+    - Tools: `validate_*`, `read_stack_file`, `validate_file_lsp`
+    - Use case: Configuration troubleshooting
 
 #### User Experience
 
@@ -840,15 +838,15 @@ MCP integration enables Atmos tools to be accessed from any MCP-compatible clien
 #### Supported Transports
 
 1. **stdio (Default)** - For desktop clients
-   - Claude Desktop
-   - VSCode/Cursor
-   - Local development
+    - Claude Desktop
+    - VSCode/Cursor
+    - Local development
 
 2. **HTTP + SSE** - For remote/cloud clients (SDK-based)
-   - Cloud Desktop
-   - Remote environments
-   - Containerized deployments
-   - Note: Implementation uses official MCP SDK
+    - Cloud Desktop
+    - Remote environments
+    - Containerized deployments
+    - Note: Implementation uses official MCP SDK
 
 #### Usage
 
@@ -882,20 +880,20 @@ atmos mcp start --transport http --port 3000
 ┌────────────────────────────────────────────┐
 │         MCP Clients                        │
 │  (Claude Desktop, VSCode, etc.)            │
-└────────────────┬───────────────────────────┘
-                 │
+└─────────────────┬──────────────────────────┘
+                  │
         stdio or HTTP/SSE
-                 │
-┌────────────────▼───────────────────────────┐
+                  │
+┌─────────────────▼──────────────────────────┐
 │         Atmos MCP Server                   │
 │         (atmos mcp start)                  │
 ├────────────────────────────────────────────┤
 │ • JSON-RPC 2.0 Protocol Handler            │
 │ • Transport Layer (stdio/HTTP)             │
 │ • Tool/Resource Adapters                   │
-└────────────────┬───────────────────────────┘
-                 │
-        ┌────────┴────────┐
+└─────────────────┬──────────────────────────┘
+                  │
+        ┌─────────┴───────┐
         ▼                 ▼
   ┌──────────┐      ┌──────────┐
   │ MCP Tools│      │ Resources│
@@ -956,14 +954,14 @@ LSP integration provides real-time validation of YAML and Terraform files using 
 #### Supported LSP Servers
 
 1. **yaml-language-server** - YAML/YML validation
-   - JSON Schema support
-   - Real-time syntax checking
-   - Atmos stack file validation
+    - JSON Schema support
+    - Real-time syntax checking
+    - Atmos stack file validation
 
 2. **terraform-ls** - Terraform/HCL validation
-   - Terraform syntax validation
-   - Module validation
-   - Provider schema checking
+    - Terraform syntax validation
+    - Module validation
+    - Provider schema checking
 
 #### Features
 
@@ -1281,18 +1279,18 @@ All core features described in this document are production-ready. See the [Road
 **Three-Tier Permission System:**
 
 1. **Allowed Tools** - Execute without prompting
-   - Read-only operations
-   - Safe analysis commands
-   - Example: `atmos_describe_component`
+    - Read-only operations
+    - Safe analysis commands
+    - Example: `atmos_describe_component`
 
 2. **Restricted Tools** - Require confirmation
-   - File modifications
-   - Potentially risky operations
-   - Example: `file_write`
+    - File modifications
+    - Potentially risky operations
+    - Example: `file_write`
 
 3. **Blocked Tools** - Never execute
-   - Destructive operations
-   - Example: `atmos_terraform_destroy`
+    - Destructive operations
+    - Example: `atmos_terraform_destroy`
 
 **YOLO Mode:**
 - Bypass all confirmations (use with extreme caution)
@@ -1319,18 +1317,18 @@ ai:
 **Privacy-First Options:**
 
 1. **Ollama** - Complete on-premises deployment
-   - All data stays local
-   - No internet required
-   - HIPAA/GDPR compliant
+    - All data stays local
+    - No internet required
+    - HIPAA/GDPR compliant
 
 2. **Enterprise Providers** - Data residency controls
-   - **AWS Bedrock** - Data stays in AWS
-   - **Azure OpenAI** - Data stays in Azure region
+    - **AWS Bedrock** - Data stays in AWS
+    - **Azure OpenAI** - Data stays in Azure region
 
 3. **Context Control** - User controls what AI sees
-   - Explicit permission for file access
-   - `.gitignore` for sensitive files
-   - Configurable context limits
+    - Explicit permission for file access
+    - `.gitignore` for sensitive files
+    - Configurable context limits
 
 ### Compliance & Enterprise
 
@@ -1579,8 +1577,8 @@ ai:
   # Tool execution
   tools:
     enabled: true
-    # require_confirmation: true    # Default: true (secure by default)
-                                     # Set to false to opt-out of prompts
+    mode: require_confirmation        # Default (secure by default)
+                                      # allow: never prompt; yolo: bypass all checks
 
     allowed:
       - atmos_describe_*
@@ -1594,8 +1592,6 @@ ai:
     blocked:
       - atmos_terraform_apply
       - atmos_terraform_destroy
-
-    yolo_mode: false
 
     audit:
       enabled: true

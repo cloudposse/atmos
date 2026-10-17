@@ -279,12 +279,23 @@ current schema.
   [the migration note](https://atmos.tools/changelog/pro-upload-byte-packing#how-to-use-it)
   and [the fix log](../fixes/2026-10-07-pro-upload-byte-packing-and-413-recovery.md).
 
+  **Additional post-editions candidate (2026-10-09):** configuring `mcp.servers`
+  previously made Claude Code auto-approve every tool in `atmos ai ask` and `atmos ai exec`.
+  Both commands now enforce Atmos tool permissions; the same configuration with the default
+  `require_confirmation` policy fails in unattended runs when a tool needs approval.
+  Set `ai.tools.mode: allow` (retaining blocked tools) or pre-approve specific Claude Code
+  tools to migrate. No literal configuration default changes, and edition pins do not restore
+  the former bypass. See [PR #3352](https://github.com/cloudposse/atmos/pull/3352),
+  [the migration example](https://atmos.tools/cli/commands/ai/exec#claude-code-tool-permissions),
+  and [the provider PRD](atmos-ai-local-providers.md).
+
   **Additional post-editions candidate (2026-10-07):** when
   `settings.metrics.enabled` is omitted, `atmos git hooks run` now suppresses its
   local resource-usage summary; previously the omitted value enabled that summary
   when subprocess metrics were available. Explicit `true` and `false` retain their
   meaning. The stored default is unchanged, so this command-specific interpretation
-  ships independently of edition pins while `KindBehavior` resolution is unavailable.
+  ships independently of edition pins because `KindBehavior` resolution was not implemented
+  when this behavior shipped.
   See [PR #3295](https://github.com/cloudposse/atmos/pull/3295) and
   [the migration section](git-hook-steps.md#migration-and-editions).
 
@@ -316,4 +327,5 @@ current schema.
 | 2026-10-07 | 1.5 | Recorded the Pro upload runtime budget fallback as a behavior-gating candidate. |
 | 2026-10-07 | 1.6 | Recorded opt-in local resource-usage summaries for Git hook invocations as a behavior-gating candidate. |
 | 2026-10-09 | 1.7 | Journaled `toolchain.install` (`declared` to `auto`): a brand-new key that governs how `.tool-versions` is used by component runs, which previously had a fixed answer. |
-| 2026-10-13 | 1.8 | Implemented named behavior transitions and inspection alongside value changes; historical candidates remain ungated. |
+| 2026-10-09 | 1.8 | Recorded Claude Code permission enforcement for existing MCP configurations in ask and exec as a behavior-gating candidate. |
+| 2026-10-13 | 1.9 | Implemented named behavior transitions and inspection alongside value changes; historical candidates remain ungated. |

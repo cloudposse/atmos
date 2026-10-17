@@ -89,6 +89,8 @@ var atmosConfigYamlFunctions = []string{
 // reflector annotates the returned instance with field doc comments.
 func typeMapper(t reflect.Type) *jsonschema.Schema {
 	switch t {
+	case reflect.TypeOf(schema.SkillRef{}):
+		return &jsonschema.Schema{Type: typeString, Description: "Git ref or deferred !version dependency."}
 	case reflect.TypeOf(time.Duration(0)):
 		// Durations are authored as Go duration strings; the decode hook also
 		// accepts bare integers (nanoseconds).

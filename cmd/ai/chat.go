@@ -14,7 +14,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/instructions"
 	"github.com/cloudposse/atmos/pkg/ai/session"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
-	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
 	"github.com/cloudposse/atmos/pkg/ai/tui"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -239,26 +238,4 @@ func getSessionStoragePath(atmosConfig *schema.AtmosConfiguration) string {
 	}
 
 	return filepath.Join(sessionPath, "sessions.db")
-}
-
-// getPermissionMode returns the permission mode from configuration.
-func getPermissionMode(atmosConfig *schema.AtmosConfiguration) permission.Mode {
-	if atmosConfig.AI.Tools.YOLOMode {
-		return permission.ModeYOLO
-	}
-
-	// Default behavior: require confirmation (prompt user).
-	// Users can opt-out by setting require_confirmation: false.
-	if atmosConfig.AI.Tools.RequireConfirmation == nil {
-		// Not set - default to prompting for security.
-		return permission.ModePrompt
-	}
-
-	if *atmosConfig.AI.Tools.RequireConfirmation {
-		// Explicitly set to true - prompt.
-		return permission.ModePrompt
-	}
-
-	// Explicitly set to false - opt-out of prompting.
-	return permission.ModeAllow
 }

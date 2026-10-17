@@ -15,6 +15,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 )
@@ -520,6 +521,28 @@ func TestManualSpinnerModel_Update(t *testing.T) {
 
 		_, cmd := model.Update(keyMsg)
 		assert.NotNil(t, cmd) // Should return tea.Quit
+	})
+
+	t.Run("ctrl+c marks the model interrupted and clears the spinner line", func(t *testing.T) {
+		model := newManualSpinnerModel("test")
+
+		updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+
+		m, ok := updatedModel.(manualSpinnerModel)
+		require.True(t, ok)
+		assert.True(t, m.interrupted)
+		assert.True(t, m.done)
+		assert.Equal(t, terminal.EscResetLine, m.View(), "nothing is left on screen after an interrupt")
+	})
+
+	t.Run("a normal stop is not an interrupt", func(t *testing.T) {
+		model := newManualSpinnerModel("test")
+
+		updatedModel, _ := model.Update(manualStopMsg{})
+
+		m, ok := updatedModel.(manualSpinnerModel)
+		require.True(t, ok)
+		assert.False(t, m.interrupted)
 	})
 
 	t.Run("handles manual stop with success message", func(t *testing.T) {

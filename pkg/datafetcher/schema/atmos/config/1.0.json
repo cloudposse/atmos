@@ -786,6 +786,160 @@
     },
     "AISkillConfig": {
       "properties": {
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subpath": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "plugins": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "include": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "exclude": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "clients": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "display_name": {
           "anyOf": [
             {
@@ -904,10 +1058,16 @@
           ],
           "description": "Enabled gates whether atmos ai chat/ask/exec initialize the tool subsystem at all.\nIt does NOT gate the MCP server (`atmos mcp start`) — mcp.enabled is that command's\nown, sufficient opt-in, and tools are always registered for MCP regardless of this flag."
         },
-        "require_confirmation": {
+        "mode": {
           "anyOf": [
             {
-              "type": "boolean"
+              "type": "string",
+              "enum": [
+                "",
+                "require_confirmation",
+                "allow",
+                "yolo"
+              ]
             },
             {
               "type": "null"
@@ -915,7 +1075,24 @@
             {
               "$ref": "#/$defs/yamlFunction"
             }
-          ]
+          ],
+          "description": "Mode selects how tool execution is approved: `require_confirmation` (default) prompts\nfor tools that need approval, `allow` never prompts but still honors `blocked`, and\n`yolo` bypasses every check including `blocked`. When set, it takes precedence over the\ndeprecated `require_confirmation` and `yolo_mode` settings."
+        },
+        "require_confirmation": {
+          "anyOf": [
+            {
+              "type": "boolean",
+              "deprecated": true,
+              "x-atmos-replacement": "ai.tools.mode"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Deprecated: use `mode` instead (`mode: allow` replaces `require_confirmation: false`).\nIgnored when `mode` is set."
         },
         "allowed": {
           "anyOf": [
@@ -1001,7 +1178,9 @@
         "yolo_mode": {
           "anyOf": [
             {
-              "type": "boolean"
+              "type": "boolean",
+              "deprecated": true,
+              "x-atmos-replacement": "ai.tools.mode"
             },
             {
               "type": "null"
@@ -1009,7 +1188,8 @@
             {
               "$ref": "#/$defs/yamlFunction"
             }
-          ]
+          ],
+          "description": "Deprecated: use `mode: yolo` instead. Ignored when `mode` is set."
         }
       },
       "type": "object",

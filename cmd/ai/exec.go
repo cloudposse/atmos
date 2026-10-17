@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"context"
 	_ "embed"
 	"fmt"
 	"io"
@@ -16,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/ai/executor"
 	"github.com/cloudposse/atmos/pkg/ai/formatter"
+	"github.com/cloudposse/atmos/pkg/ai/interactive"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -139,7 +139,15 @@ var execCmd = &cobra.Command{
 		if atmosConfig.AI.TimeoutSeconds > 0 {
 			timeoutSeconds = atmosConfig.AI.TimeoutSeconds
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
+		timeout := time.Duration(timeoutSeconds) * time.Second
+
+		// Providers that run their own tools ask the Atmos permission system first
+		// (ai.tools.mode). exec shows no spinner: its output is meant for automation.
+		interactiveSession, err := interactive.Attach(&atmosConfig, client, "", timeout)
+		if err != nil {
+			return exitWithError(1, "config_error", err)
+		}
+		ctx, cancel := interactiveSession.NewContext(timeout)
 		defer cancel()
 
 		// Load or create a persisted session when --session and ai.sessions.enabled
@@ -191,7 +199,7 @@ var execCmd = &cobra.Command{
 				case "tool_error":
 					return exitWithError(2, result.Error.Type, fmt.Errorf("%w: %s", errUtils.ErrAIToolExecutionFailed, result.Error.Message))
 				default:
-					return exitWithError(1, result.Error.Type, fmt.Errorf("%w: %s", errUtils.ErrAIExecutionFailed, result.Error.Message))
+					return exitWithError(1, result.Error.Type, executor.ResultError(result))
 				}
 			}
 			return exitWithError(1, "unknown_error", errUtils.ErrAIExecutionFailed)
