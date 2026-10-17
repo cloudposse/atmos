@@ -196,7 +196,7 @@ func createPlanfileStore(opts ExecuteOptions) (planfile.Store, error) {
 			if storeSpec, ok := planfilesConfig.Stores[planfilesConfig.Default]; ok {
 				artOpts.Type = storeSpec.Type
 				artOpts.Options = storeSpec.Options
-				attachIdentity(&artOpts, opts.Info)
+				attachStoreIdentity(&artOpts, opts.Info, storeSpec.Identity)
 				backend, err := artifact.NewStore(artOpts)
 				if err != nil {
 					return nil, err
@@ -238,15 +238,50 @@ var defaultResolverFactory = func(authManager authtypes.AuthManager, info *schem
 
 // attachIdentity propagates the active command identity (info.Identity) to
 // the planfile store so identity-aware backends can authenticate the
-// parent-process upload via the same chain as the terraform subprocess.
+// parent-process upload via the same chain as the terraform subprocess. Used
+// for env-detected stores, which carry no store-level identity override.
 func attachIdentity(artOpts *artifact.StoreOptions, info *schema.ConfigAndStacksInfo) {
 	defer perf.Track(nil, "ci.attachIdentity")()
 
-	if info == nil || info.Identity == "" {
+	if info == nil {
+		return
+	}
+	attachIdentityFor(artOpts, info, info.Identity)
+}
+
+// attachStoreIdentity selects the identity the planfile store should
+// authenticate with. A store-level identity (from spec.cluster-less planfile
+// store config, `components.terraform.planfiles.stores.<name>.identity`) takes
+// precedence over the component's active identity, so a store can use a
+// different cloud's identity than the component (e.g. an AWS identity for the
+// S3 planfile bucket while the component runs under a non-AWS identity).
+// When no store-level identity is set, it falls back to the component identity,
+// preserving the prior behavior.
+func attachStoreIdentity(artOpts *artifact.StoreOptions, info *schema.ConfigAndStacksInfo, storeIdentity string) {
+	defer perf.Track(nil, "ci.attachStoreIdentity")()
+
+	identity := storeIdentity
+	if identity == "" && info != nil {
+		identity = info.Identity
+	}
+	attachIdentityFor(artOpts, info, identity)
+}
+
+// attachIdentityFor records the given identity name on artOpts and attaches the
+// auth resolver built from info.AuthManager. No-op when identity is empty.
+//
+// The resolver is required for non-default identities: the artifact registry
+// only injects it into identity-aware backends when it is set, and those
+// backends fall back to the default credential chain when no resolver is
+// present - silently ignoring the named identity. We therefore always attach
+// the resolver whenever an identity is in scope, independent of whether the
+// component itself declared one.
+func attachIdentityFor(artOpts *artifact.StoreOptions, info *schema.ConfigAndStacksInfo, identity string) {
+	if info == nil || identity == "" {
 		return
 	}
 
-	artOpts.Identity = info.Identity
+	artOpts.Identity = identity
 
 	// info.AuthManager is typed as `any` in pkg/schema to avoid a circular
 	// import with pkg/auth. The type assertion recovers type safety. When
@@ -258,7 +293,7 @@ func attachIdentity(artOpts *artifact.StoreOptions, info *schema.ConfigAndStacks
 	authManager, ok := info.AuthManager.(authtypes.AuthManager)
 	if !ok {
 		log.Debug("Planfile store auth manager has unexpected type, falling back to default credential chain",
-			"identity", info.Identity, "type", fmt.Sprintf("%T", info.AuthManager))
+			"identity", identity, "type", fmt.Sprintf("%T", info.AuthManager))
 		return
 	}
 	artOpts.Resolver = defaultResolverFactory(authManager, info)

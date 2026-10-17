@@ -11,9 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	plugin "github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 // boolPtr returns a pointer to a bool value.
@@ -976,6 +978,60 @@ func TestCreatePlanfileStore(t *testing.T) {
 		assert.NotNil(t, store)
 		assert.Equal(t, "local/dir", store.Name())
 	})
+
+	t.Run("configured s3 store with a store-level identity", func(t *testing.T) {
+		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
+		t.Setenv("GITHUB_ACTIONS", "")
+
+		// Swap the resolver factory so no live auth manager is needed. A
+		// non-empty store identity defers S3 client init, so no AWS call is
+		// made during construction.
+		original := defaultResolverFactory
+		defaultResolverFactory = func(_ authtypes.AuthManager, _ *schema.ConfigAndStacksInfo) store.AuthContextResolver {
+			return planfileIdentityStubResolver{}
+		}
+		t.Cleanup(func() { defaultResolverFactory = original })
+
+		cfg := &schema.AtmosConfiguration{}
+		cfg.Components.Terraform.Planfiles = schema.PlanfilesConfig{
+			Default: "s3",
+			Stores: map[string]schema.PlanfileStoreSpec{
+				"s3": {
+					Type:     "aws/s3",
+					Identity: "aws-backend",
+					Options: map[string]any{
+						"bucket": "my-planfiles-bucket",
+						"region": "us-east-1",
+					},
+				},
+			},
+		}
+
+		st, err := createPlanfileStore(ExecuteOptions{
+			AtmosConfig: cfg,
+			// The component authenticates with a different (non-AWS) identity;
+			// the store-level identity must be used for the S3 backend.
+			Info: &schema.ConfigAndStacksInfo{
+				Identity:    "azure-plan",
+				AuthManager: &planfileIdentityStubAuthManager{},
+			},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, st)
+		assert.Equal(t, "aws/s3", st.Name())
+	})
+}
+
+// planfileIdentityStubAuthManager / planfileIdentityStubResolver mirror the
+// stubs in executor_identity_test.go so TestCreatePlanfileStore can exercise
+// the identity-aware S3 path without a live auth manager. They are declared
+// here (not reused) to keep this test file self-contained.
+type planfileIdentityStubAuthManager struct {
+	authtypes.AuthManager
+}
+
+type planfileIdentityStubResolver struct {
+	store.AuthContextResolver
 }
 
 func TestBuildHookContext(t *testing.T) {

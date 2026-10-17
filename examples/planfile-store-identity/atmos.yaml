@@ -1,0 +1,67 @@
+# Demonstrates per-store identity for planfile storage.
+#
+# The component authenticates with a non-AWS identity (azure-plan, the default),
+# while the S3 planfile store authenticates with a separate AWS identity
+# (aws-backend) via the `identity` field. Without it, the S3 upload would inherit
+# the component's non-AWS identity and fail to resolve AWS credentials.
+
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    planfiles:
+      # The default store used to upload/download planfiles in CI.
+      default: s3
+      stores:
+        s3:
+          type: aws/s3
+          # Authenticate the store with this identity, independent of the
+          # component's identity. When omitted, the store inherits the
+          # component's identity (the prior behavior).
+          identity: aws-backend
+          options:
+            bucket: example-terraform-planfiles
+            prefix: atmos/planfiles/
+            region: us-east-1
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+auth:
+  providers:
+    azure-oidc:
+      kind: azure/oidc
+      spec:
+        tenant_id: "00000000-0000-0000-0000-000000000000"
+        client_id: "11111111-1111-1111-1111-111111111111"
+
+    acme-sso:
+      kind: aws/iam-identity-center
+      start_url: https://acme.awsapps.com/start
+      region: us-east-1
+
+  identities:
+    # Non-AWS identity the component authenticates with (its default identity
+    # for Terraform operations).
+    azure-plan:
+      kind: azure/subscription
+      default: true
+      via:
+        provider: azure-oidc
+      principal:
+        subscription_id: "22222222-2222-2222-2222-222222222222"
+
+    # AWS identity the planfile store authenticates with. Any identity kind
+    # works here (ambient, aws/assume-role, aws/permission-set, ...).
+    aws-backend:
+      kind: aws/assume-role
+      via:
+        provider: acme-sso
+      principal:
+        assume_role: arn:aws:iam::111111111111:role/PlanfileBackend
