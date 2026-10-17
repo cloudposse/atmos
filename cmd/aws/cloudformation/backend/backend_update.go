@@ -44,7 +44,7 @@ encryption, and public access blocking to match secure defaults.`,
 		if !autoApproveProvided {
 			autoApprove = v.GetBool(flagAutoApprove)
 		}
-		return executeCreateOrUpdate(ctx, createOrUpdateArgs{
+		return executeCreateOrUpdate(ctx, &createOrUpdateArgs{
 			Verb:        verbUpdate,
 			Component:   result.Component,
 			Stack:       stack,

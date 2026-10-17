@@ -3,6 +3,7 @@ package cloudformation
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -68,6 +69,10 @@ func ResolveS3BackendTarget(provisionSection map[string]any, flagTarget string) 
 		WithHint("Pass --target <name> to select one.").
 		Err()
 }
+
+// S3BackendTarget is the exported name of a resolved `kind: aws/s3` provision
+// target, so callers outside this package can pass targets between helpers.
+type S3BackendTarget = targetS3Config
 
 // FindS3BackendTargets enumerates every `kind: aws/s3` provision target as a
 // resolved targetS3Config, keyed by target name, for `backend list`. Targets
@@ -274,10 +279,27 @@ func resolveBackendRegion(s3cfg *targetS3Config, componentConfig map[string]any,
 //
 // The yaml/json tags give the machine-readable output the snake_case keys the
 // rest of this component type's JSON/YAML output uses.
+//
+// Error is set (and Exists is meaningless) when the target could not be
+// inspected — for example because its identity failed to authenticate — so
+// `backend list` can still render every other target.
 type S3BackendStatus struct {
 	Target *targetS3Config `json:"target" yaml:"target"`
 	Region string          `json:"region" yaml:"region"`
 	Exists bool            `json:"exists" yaml:"exists"`
+	Error  string          `json:"error,omitempty" yaml:"error,omitempty"`
+}
+
+// NewS3BackendStatusError builds the status row for a target that could not be
+// inspected, recording the cause so it can be rendered next to healthy targets.
+func NewS3BackendStatusError(s3cfg *targetS3Config, cause error) *S3BackendStatus {
+	defer perf.Track(nil, "cloudformation.NewS3BackendStatusError")()
+
+	status := &S3BackendStatus{Target: s3cfg, Error: strings.Join(strings.Fields(cause.Error()), " ")}
+	if s3cfg != nil {
+		status.Region = s3cfg.Region
+	}
+	return status
 }
 
 // DescribeS3BackendTarget reports whether an aws/s3 backend target's bucket

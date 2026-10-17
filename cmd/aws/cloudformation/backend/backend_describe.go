@@ -92,6 +92,7 @@ type describeRequest struct {
 	Format    string
 }
 
+// executeDescribe loads the component and forwards the explicit identity to target-scoped backend inspection.
 func executeDescribe(ctx context.Context, req *describeRequest) error {
 	if err := requireComponentAndStack("describe", req.Component, req.Stack); err != nil {
 		return err
@@ -109,12 +110,13 @@ func executeDescribe(ctx context.Context, req *describeRequest) error {
 
 	return prov.DescribeBackend(ctx, &DescribeBackendParams{
 		CreateBackendParams: CreateBackendParams{
-			AtmosConfig:     atmosConfig,
-			Component:       req.Component,
-			Stack:           req.Stack,
-			ComponentConfig: componentConfig,
-			AuthContext:     info.AuthContext,
-			Target:          req.Target,
+			AtmosConfig:       atmosConfig,
+			RequestedIdentity: req.Identity,
+			Component:         req.Component,
+			Stack:             req.Stack,
+			ComponentConfig:   componentConfig,
+			AuthContext:       info.AuthContext,
+			Target:            req.Target,
 		},
 		Format: req.Format,
 	})

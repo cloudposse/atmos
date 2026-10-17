@@ -10,6 +10,8 @@ import (
 	"github.com/pkg/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
+	cfnmanifest "github.com/cloudposse/atmos/pkg/component/aws/cloudformation/manifest"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -291,6 +293,9 @@ func ProcessStackConfig(
 		if !ok {
 			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
 		}
+		if err := cfnmanifest.RejectTypeGenerate(stackName, globalCloudFormationSection); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	if i, ok := config[cfg.ComponentsSectionName]; ok {
@@ -456,7 +461,7 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndTerraformAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, terraformAuth})
+	globalAndTerraformAuth, err := m.Merge(atmosConfig, auth.ClearSupersededAuthDefaults([]map[string]any{globalAuthSection, terraformAuth}))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -592,7 +597,7 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndHelmfileAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, helmfileAuth})
+	globalAndHelmfileAuth, err := m.Merge(atmosConfig, auth.ClearSupersededAuthDefaults([]map[string]any{globalAuthSection, helmfileAuth}))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -662,7 +667,7 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndPackerAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, packerAuth})
+	globalAndPackerAuth, err := m.Merge(atmosConfig, auth.ClearSupersededAuthDefaults([]map[string]any{globalAuthSection, packerAuth}))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -732,7 +737,7 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndAnsibleAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, ansibleAuth})
+	globalAndAnsibleAuth, err := m.Merge(atmosConfig, auth.ClearSupersededAuthDefaults([]map[string]any{globalAuthSection, ansibleAuth}))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -825,7 +830,7 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndKubernetesAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, kubernetesAuth})
+	globalAndKubernetesAuth, err := m.Merge(atmosConfig, auth.ClearSupersededAuthDefaults([]map[string]any{globalAuthSection, kubernetesAuth}))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -961,7 +966,7 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndHelmAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, helmAuth})
+	globalAndHelmAuth, err := m.Merge(atmosConfig, auth.ClearSupersededAuthDefaults([]map[string]any{globalAuthSection, helmAuth}))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1055,7 +1060,7 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndCloudFormationAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, cloudFormationAuth})
+	globalAndCloudFormationAuth, err := m.Merge(atmosConfig, auth.ClearSupersededAuthDefaults([]map[string]any{globalAuthSection, cloudFormationAuth}))
 	if err != nil {
 		return nil, nil, err
 	}
