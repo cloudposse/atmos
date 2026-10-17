@@ -13,13 +13,13 @@ import (
 	"strings"
 	"sync"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	cfnmanifest "github.com/cloudposse/atmos/pkg/component/aws/cloudformation/manifest"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -173,11 +173,18 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 		// Provide a helpful hint if the file might contain Go template directives
 		// that aren't valid YAML. Files with .yaml.tmpl extension are processed
 		// as templates first, which allows non-YAML-valid Go template syntax.
+		// A tag the walker already explained (e.g. a Rain directive with its
+		// migration hint) keeps that guidance; the generic ".yaml.tmpl" advice
+		// is only for parse failures with no better explanation.
+		if hints := cockroachErrors.GetAllHints(err); len(hints) > 0 {
+			wrapped := fmt.Errorf("%w: failed to parse YAML for locals extraction: %w", errUtils.ErrInvalidStackManifest, err)
+			for _, h := range hints {
+				wrapped = cockroachErrors.WithHint(wrapped, h)
+			}
+			return nil, wrapped
+		}
 		hint := ""
-		if cfnHint := cfnmanifest.UnsupportedTagHint(err); cfnHint != "" {
-			// A CloudFormation short-form intrinsic (!Ref, !Sub, ...) is not a templating problem.
-			hint = " (hint: " + cfnHint + ")"
-		} else if !strings.HasSuffix(filePath, u.TemplateExtension) {
+		if !strings.HasSuffix(filePath, u.TemplateExtension) {
 			hint = " (hint: if this file contains Go template directives, rename it to .yaml.tmpl)"
 		}
 		return nil, fmt.Errorf("%w: failed to parse YAML for locals extraction%s: %w", errUtils.ErrInvalidStackManifest, hint, err)
