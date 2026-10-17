@@ -10,8 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 var _ = schema.PlanfilesConfig{Default: "", Priority: nil, Stores: nil}
@@ -105,4 +107,49 @@ func TestPlanfileCredentialAvailability(t *testing.T) {
 		checker := planfileEnvironmentChecker{options: artifact.StoreOptions{Type: "aws/s3", Identity: "deployment"}}
 		assert.True(t, checker.IsAvailable(t.Context()))
 	})
+}
+
+// TestCreatePlanfileStore_PriorityIdentity preserves per-store authentication during priority selection.
+func TestCreatePlanfileStore_PriorityIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name, identity, componentIdentity string
+		wantError                         error
+	}{
+		{name: "store overrides component", identity: "aws-backend", componentIdentity: "azure-plan"},
+		{name: "store without component identity", identity: "aws-backend"},
+		{name: "unknown store identity", identity: "typo", wantError: errUtils.ErrIdentityNotInConfig},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resolver := &capturingPlanfileResolver{}
+			original := defaultResolverFactory
+			defaultResolverFactory = func(_ authtypes.AuthManager, _ *schema.ConfigAndStacksInfo) store.AuthContextResolver {
+				return resolver
+			}
+			t.Cleanup(func() { defaultResolverFactory = original })
+			config := &schema.AtmosConfiguration{}
+			config.Auth.Identities = map[string]schema.Identity{"aws-backend": {}}
+			config.Components.Terraform.Planfiles = schema.PlanfilesConfig{
+				Priority: []string{"s3", "local"},
+				Stores: map[string]schema.PlanfileStoreSpec{
+					"s3":    {Type: "aws/s3", Identity: tc.identity, Options: map[string]any{"bucket": "plans", "region": "us-east-1"}},
+					"local": {Type: "local/dir", Options: map[string]any{"path": t.TempDir()}},
+				},
+			}
+			selected, err := createPlanfileStore(ExecuteOptions{
+				AtmosConfig: config,
+				Info:        &schema.ConfigAndStacksInfo{Identity: tc.componentIdentity, AuthManager: &planfileIdentityStubAuthManager{}},
+			})
+			if tc.wantError != nil {
+				require.ErrorIs(t, err, tc.wantError)
+				assert.Nil(t, selected)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, "aws/s3", selected.Name())
+			// The resolver stops before a network request and records the effective identity.
+			_, err = selected.Exists(t.Context(), "plan")
+			require.Error(t, err)
+			assert.Equal(t, tc.identity, resolver.gotIdentity)
+		})
+	}
 }
