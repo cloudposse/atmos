@@ -40,6 +40,7 @@ func TestPreviewVerbsDoNotProvisionMissingBucket(t *testing.T) {
 			t.Cleanup(backend.ResetS3ClientFactory)
 			s3Client := &createTrackingS3Client{fakeS3Client: fakeS3Client{headBucketErr: &types.NotFound{}}}
 			backend.SetS3ClientFactory(func(aws.Config, ...func(*s3.Options)) backend.S3ClientAPI { return s3Client })
+			useRealBucketExistenceCheck(t)
 
 			ctrl := gomock.NewController(t)
 			// A strict mock with no expectations fails the test on any upload or lookup.
@@ -60,7 +61,8 @@ func TestPreviewVerbsDoNotProvisionMissingBucket(t *testing.T) {
 }
 
 // Negative path: when the bucket already exists the preview verbs package and proceed normally,
-// still without creating anything. Without provision.backend.enabled the bucket is not even probed.
+// still without creating anything. The bucket is probed read-only whether or not
+// provision.backend.enabled is set.
 func TestPreviewVerbsPackageWhenBucketExistsOrBackendNotEnabled(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -68,13 +70,14 @@ func TestPreviewVerbsPackageWhenBucketExistsOrBackendNotEnabled(t *testing.T) {
 		wantHeadCall bool
 	}{
 		{name: "backend enabled and bucket exists", octx: backendEnabledContext, wantHeadCall: true},
-		{name: "backend not enabled", octx: previewContext, wantHeadCall: false},
+		{name: "backend not enabled", octx: previewContext, wantHeadCall: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Cleanup(backend.ResetS3ClientFactory)
 			factoryCalls := 0
 			s3Client := &createTrackingS3Client{}
+			useRealBucketExistenceCheck(t)
 			backend.SetS3ClientFactory(func(aws.Config, ...func(*s3.Options)) backend.S3ClientAPI {
 				factoryCalls++
 				return s3Client
@@ -103,6 +106,7 @@ func TestPackageIfNeededStillProvisionsMissingBucket(t *testing.T) {
 	t.Cleanup(backend.ResetS3ClientFactory)
 	s3Client := &createTrackingS3Client{fakeS3Client: fakeS3Client{headBucketErr: &types.NotFound{}}}
 	backend.SetS3ClientFactory(func(aws.Config, ...func(*s3.Options)) backend.S3ClientAPI { return s3Client })
+	useRealBucketExistenceCheck(t)
 
 	ctrl := gomock.NewController(t)
 	mockBackend := artifact.NewMockBackend(ctrl)

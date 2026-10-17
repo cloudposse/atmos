@@ -184,6 +184,8 @@ func TestSkipHooksFlagRegisteredOnHookFiringVerbs(t *testing.T) {
 		{"delete", "delete"},
 		{"detect", "drift-detect"},
 		{"describe", "drift-describe"},
+		{"create", "changeset-create"},
+		{"execute", "changeset-execute"},
 	}
 	for _, v := range firing {
 		t.Run("fires "+v.use, func(t *testing.T) {
@@ -202,7 +204,8 @@ func TestSkipHooksFlagRegisteredOnHookFiringVerbs(t *testing.T) {
 		{"logs", "logs"},
 		{"tree", "tree"},
 		{"watch", "watch"},
-		{"create", "changeset-create"},
+		{"list", "changeset-list"},
+		{"delete", "changeset-delete"},
 	} {
 		t.Run("silent "+v.use, func(t *testing.T) {
 			cmd := newOperationCommand(v.use, v.subCommand, v.use)

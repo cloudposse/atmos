@@ -106,17 +106,16 @@ func packageTemplate(octx *opContext, req *packagingRequest) error {
 		Component:       octx.Info.ComponentFromArg,
 		Stack:           octx.Info.Stack,
 	}
-	if req.MayProvision {
-		err = autoProvisionBackendIfEnabled(octx.Ctx, args)
-	} else {
-		err = requireBackendExistsIfEnabled(octx.Ctx, args)
-	}
-	if err != nil {
+	if err = ensurePackagingBucket(octx.Ctx, args, req.MayProvision); err != nil {
 		return err
 	}
 
 	pkg, err := uploadPackage(octx.Ctx, octx.AtmosConfig, info, s3Target, req.Spec.TemplateBody)
 	if err != nil {
+		if isNoSuchBucket(err) {
+			log.Debug("Template upload failed because the packaging bucket does not exist", "error", err, "bucket", s3Target.Bucket)
+			return packagingBucketMissingError(args)
+		}
 		return err
 	}
 	req.Summary["package_url"] = pkg.URL
