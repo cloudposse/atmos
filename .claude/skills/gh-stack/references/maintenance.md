@@ -38,7 +38,9 @@ cleanup that will restart reviews.
 Use separate worktrees for independent fixes, then integrate bottom to top. Preserve earlier prepared
 fixes and later intentional behavior. After each necessary parent update:
 
-1. Confirm the old published head is an ancestor of a history-preserving candidate.
+1. Classify the update: for a history-preserving candidate, confirm the old published head is an
+    ancestor; for an authorized native rebase, preserve the old refs and verify the old/new patch
+    mapping and intended cumulative tree using the repair procedure below.
 2. Check the actual parent, merge bases, and complete changed-file count; enforce the effective file budget (currently 149 maximum in this repository).
 3. Test the affected behavior and conflict resolution. Code changes need focused regressions;
     workflows need workflow validation; website changes need relevant navigation/MDX checks and build.
@@ -48,14 +50,99 @@ fixes and later intentional behavior. After each necessary parent update:
 
 `git merge-tree --write-tree <base-sha> <head-sha>` is a useful local simulation. Its success proves
 only that those exact commits merge textually. It does not prove semantic compatibility, CI success,
-or that GitHub is considering the same commits. A GitHub `UNKNOWN` mergeability result is pending,
-not a conflict and not a clean result.
+or that GitHub is considering the same commits and accepts the stack's history. A GitHub `UNKNOWN`
+mergeability result is pending, not a conflict and not a clean result.
 
 When validating GitHub's native merge commit, inspect its parents and tree. Native stacks can use
 the preceding PR's cumulative merge commit as a parent instead of its raw branch tip. Identify the
 parent other than the PR head, confirm that it contains the expected base, and compare its tree
 with the expected cumulative base tree. Checking that the base is somewhere in the whole merge's
 ancestry is insufficient: it might be present only through the PR head.
+
+## Repair native stack history
+
+GitHub's native stack model imposes a history requirement in addition to textual mergeability.
+Read the current [native-stack reference](https://docs.github.com/en/pull-requests/reference/stacked-pull-requests#linear-history)
+and installed CLI help when deciding how to repair it. GitHub directs users to a cascading rebase
+when branch relationships cease to be linear. Allowing merge commits as the final landing method
+does not make parent merges an equivalent repair workflow. Conversely, do not infer that every
+historical merge commit is categorically forbidden: assess the relationships GitHub requires.
+
+### Failure pattern: local merges clean, GitHub reports conflicts
+
+In a 17-PR native stack, PR #3250 remained conflicting on GitHub while local cumulative merges
+were clean. GitHub listed `pkg/component/aws/cloudformation/provision.go` and `provision_test.go`.
+Inspection found competing merge bases involving its direct parent (#3100) and an earlier layer
+(#3322); a diagnostic merge with one selected base reproduced those conflicts. GitHub's conflict
+dialog explicitly directed the user to `gh stack checkout`, `rebase`, and `push`.
+
+This is evidence that local textual mergeability was an insufficient acceptance criterion. It is
+not proof of GitHub's internal merge-base algorithm. The attempted workaround was to add signed
+parent merges to preserve reviewed commits, then compare cumulative trees. That did not establish
+that GitHub would accept the resulting native history. Do not publish further merge-based repairs
+merely because those comparisons pass. Preserve prepared fixes while reassessing the repair.
+
+A separate trunk advance can also create a real content conflict during this investigation. Diagnose
+it against fresh refs; do not fold every new conflict into the same ancestry hypothesis. Keep run
+SHAs, screenshots, candidate worktrees, and unresolved repair status in ignored evidence storage.
+
+### Prepare one bounded repair
+
+1. Snapshot live trunk, every affected head and actual parent, native ordering, review decisions,
+    unresolved threads, file counts, and checks. Preserve local recovery refs and prepared fixes before
+    rewriting. Separate already-published code from local merge experiments and synthetic validation
+    commits; do not replay diagnostic commits into the PRs.
+2. Determine the earliest broken relationship and the affected descendant range. Collect confirmed
+    findings into the same batch. Preserve approved branches outside the required range where possible;
+    do not promise they can all stay unchanged if trunk freshness requires a wider repair. Keep the
+    contiguous approved prefix visible, and hold review requests for heads about to be replaced.
+3. Check the user's existing authorization and restrictions on history replacement. A requirement to
+    fix conflicts does not erase an explicit ban on rebasing or force pushing. If permission is missing,
+    prepare the proposed range, expected diff changes, validation, and publication plan first, then
+    explain the concrete exception needed. Do not ask again when the session already authorizes it.
+4. Use isolated preparation and inspect local stack tracking before commands that alter branches.
+    Read `gh stack checkout --help`, `rebase --help`, and `push --help`. The current CLI offers
+    `--upstack`, `--downstack`, and `--no-trunk` for rebase scope; choose only a scope that repairs the
+    verified dependency boundary. `--no-trunk` cannot satisfy a required trunk update. Do not run an
+    unqualified whole-stack rewrite simply because the conflict dialog shows a generic recipe.
+5. Resolve conflicts semantically, preserving earlier fixes and later intentional behavior. Keep
+    signing and hooks enabled; verify signatures on rewritten commits. GitHub documents signed commits
+    for its native rebase, but that is not evidence that a locally configured tool signed yours.
+6. Compare each old and new PR diff against its respective actual parent, including added/deleted
+    paths, and use `git range-diff` as supporting evidence where useful. Also compare cumulative trees
+    against the intended integration of trunk and batched fixes. An unchanged final tree alone can hide
+    changes moved between PRs. Recheck every affected layer's file budget and run focused regression,
+    workflow, or website validation as applicable. No layer may absorb another layer's changes unnoticed.
+7. Freeze the validated candidate mapping and publish within the allowed cadence using the guarded
+    rewrite path below. Reconcile live refs, native stack state, conflict resolution, and counts after
+    publication. A clean local audit is preparation, not proof that the server conflict is resolved.
+
+### Verify approvals after a native rebase
+
+GitHub [documents approval retention](https://docs.github.com/en/pull-requests/reference/stacked-pull-requests#rebasing)
+when a native stack rebase leaves the PR diff unchanged, including with stale-review dismissal enabled.
+This changes the decision: avoiding all rebases to protect reviews can leave a native stack unmergeable.
+Batch required repairs and measure diff changes instead of assuming automatic approval loss.
+
+Record three independent outcomes:
+
+- **GitHub approval applicability:** inspect the live review decision, dismissals, and required-review
+  state after the rebase. A retained approval may reference an earlier SHA. Keep the old/new diff
+  comparison as evidence, but do not declare a review retained solely because the diffs match.
+- **CodeRabbit:** record the bot's actual review state, reviewed commit, and unresolved threads. Check
+  repository, invocation, and user requirements before treating a retained review as sufficient.
+  Atmos's `qualityClient.review` in `magefiles/qualitygate/quality_checks.go` currently filters out
+  reviews whose commit differs from the PR head; `fix-all` uses that exact-head gate. Report retained
+  GitHub approval and the unmet Quality Gate separately. Do not dismiss the retained review. Request
+  incremental review to close a verified gate or content-review gap, respecting the shared ledger;
+  a rebase is never automatic permission for full review. Where no exact-head requirement applies,
+  avoid requesting another review solely to make an otherwise applicable approval's SHA match.
+- **CI and coverage:** verify applicable checks on the resulting head and integration base. GitHub's
+  review-retention behavior does not promise retained or successful CI, nor exemption from coverage.
+
+The official [merge requirements](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/merging-stacked-pull-requests#merge-requirements)
+also require the lower PRs to satisfy protections. Neither an approved prefix nor an atomic merge
+command bypasses native history, CI, coverage, or unresolved conflicts.
 
 For CI failures, read the failing job logs and reproduce with the failing toolchain/platform when
 relevant. A concurrency reduction or retry is not a diagnosis. Restore declared service containers
@@ -70,11 +157,11 @@ heads about to be replaced; existing reviews may finish and inform the batch. Pr
 publishing the same fix separately for every new comment wastes CI and review quota.
 
 Choose a publication batch size/cadence using the user's instructions, available GitHub capacity, and
-observed throttling. Do not use a whole-stack `submit` or `sync` when it violates that schedule. With
+observed throttling. Do not use a whole-stack `push`, `submit`, or `sync` when it violates that schedule. With
 a one-PR-at-a-time schedule, publish bottom to top and verify each result before advancing. Do not
 invent a universal delay between pushes; review throttles and GitHub publication throttles differ.
 
-For each publication:
+For each ordinary, history-preserving publication:
 
 1. Verify the PR is open, its configured base is unchanged, and the relevant live refs still equal
     the recorded expected heads/parents. Verify the signed candidate and its tested tree.
@@ -91,12 +178,27 @@ For each publication:
 
 An explicit lease checks an expected remote SHA but also permits history replacement. It does not
 itself rebase descendants; rewriting published parent commits is what can force descendant repairs.
-Reserve leases for a specifically justified, authorized exception, such as required published-signature
-repair or a strict expected-SHA requirement. An ordinary push rejects non-fast-forward updates but
-does not atomically compare the remote with a recorded SHA. If strict comparison is required, establish
+Reserve leases for a specifically justified, authorized exception, such as a validated native-stack
+rebase, required published-signature repair, or a strict expected-SHA requirement. An ordinary push
+rejects non-fast-forward updates but does not atomically compare the remote with a recorded SHA.
+If strict comparison is required, establish
 a permitted mechanism rather than silently weakening that requirement. Preserve the ancestor check
 when history must remain intact, and honor invocations such as unattended `fix-all` that prohibit leases.
 If no permitted mechanism satisfies the requirement, retain the prepared work and report the blocker.
+
+For an authorized native-stack rewrite, use the same snapshot, pending-transaction, read-back, and
+recovery safeguards above. Replace the old-head ancestor check with the validated old/new patch and
+tree mapping; the old head normally is not an ancestor after a rebase. Verify each expected remote
+SHA immediately before publication and protect it with an explicit expected-SHA lease. Never use
+unconditional force or silently replace a rejected lease's expected SHA. A lease failure means
+concurrent work must be reconciled, not overwritten.
+
+The installed `gh stack push` uses per-branch leases and can partially succeed; it is not an atomic
+transaction. Check its current implementation/help against the frozen expected refs and permitted
+cadence before using it. If individual publication is required, use an authorized per-branch lease
+instead of pushing the whole stack. Do not run `gh stack sync` after validation if it would rebase
+again and replace the tested candidates. Native rewrite requirements do not override restricted
+invocations such as `fix-all` that prohibit leases; using a wrapper does not evade that restriction.
 
 On timeout or process interruption, determine whether the remote is still at the old SHA, already
 at the candidate, or at an unexpected third SHA. Resume an already successful publication without
@@ -110,10 +212,13 @@ successful observations keyed by commit so a restart does not repeat every reque
 
 ## Build a contiguous approved bottom block
 
-Read the live native stack order and current-head approval evidence before choosing a review or
+Read the live native stack order and applicable approval evidence before choosing a review or
 split boundary. The approved bottom prefix ends immediately before the first PR lacking an
-applicable approval or having unresolved findings. For example, approvals at positions 1, 3, and 5
-mean three total approvals but a bottom prefix of only one. Recompute after head, parent, order,
+applicable approval or having unresolved findings. Verify retained native-rebase approvals as described
+above, and keep exact-head bot approval separate when repository, invocation, or user rules require it.
+Atmos's Quality Gate currently does, so report that contiguous prefix separately from retained approvals.
+For example, approvals at positions 1, 3, and 5 mean three total approvals but a bottom prefix of
+only one. Recompute after head, parent, order,
 or review changes; a historical approval count does not identify the first N approved PRs.
 
 Choose the intended bottom block using the user's requested scope. Prioritize its earliest approval
@@ -164,7 +269,8 @@ requests without resending work already submitted.
 - Reply to and resolve only findings verified fixed in published commits. Unknown new findings need
   investigation; closing a thread does not itself produce approval.
 - “Review triggered,” “review finished,” no open threads, and a green bot check are not proof of an
-  `APPROVED` review. Verify the actual CodeRabbit review state and commit ID. If an incremental request
+  `APPROVED` review. Verify the actual CodeRabbit review state, commit ID, and applicability after any
+  native rebase; use the approval-retention checks above. If an incremental request
   finished without a formal review, inspect its response and review configuration, and record the
   unresolved approval state. Do not automatically escalate to full review or repeat the same no-op
   request merely because its cooldown elapsed; continue with other eligible PRs.
@@ -182,13 +288,15 @@ that never ran. A completed run for an older head or different merge base does n
 integration merely because GitHub still displays green checks.
 
 Count CI, coverage, approvals, unresolved findings, and merge conflicts separately. If the requested
-scope includes CodeRabbit approval, require a current-head approval and no unresolved findings.
+scope includes CodeRabbit approval, verify an applicable bot approval and no unresolved findings;
+report exact-head versus GitHub-retained approval explicitly after a native rebase. Honor repository,
+invocation, and user requirements for the current commit without treating retention as satisfying them.
 Revalidate affected evidence when a head or parent changes. Do not rewrite the entire stack merely
 to refresh evidence when the platform supports adequate validation of the intended merge result.
 
 A useful report says how many PRs have current CI and coverage passing, how many have current-head
-approval, the contiguous approved bottom prefix and its first gap, the separately verified merge-ready
-prefix, which fixes are local versus published, whether conflicts remain, whether all file counts
+or retained approval, the contiguous approved bottom prefix and its first gap, the separately verified
+merge-ready prefix, which fixes are local versus published, whether conflicts remain, whether all file counts
 fit the budget, and what the active workers actually do. Completion requires all requested checks
 finished successfully on the final published state, not just a successful local batch or queued reviews.
 Keep PRs open and preserve the requested checkout unless the user authorized a different final state.

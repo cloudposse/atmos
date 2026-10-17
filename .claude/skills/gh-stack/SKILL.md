@@ -25,9 +25,11 @@ stack is a separate object. Creating PRs with `gh pr create --base <parent>` alo
 that object. Check both the configured base branches and native stack membership. A bottom PR may
 target `main` and still belong to a stack; also look for open PRs based on its head branch.
 
-For existing PRs, use `gh stack link` with the intended bottom-to-top order. Inspect current remote
-membership first, since linking changes the stack. Verify the resulting object and ordering on GitHub,
-not just local branch ancestry. For example, after substituting the actual repository and PR number:
+When native registration is requested or otherwise authorized, use `gh stack link` for existing PRs
+in the intended bottom-to-top order. Inspect current remote membership first, since linking changes
+the stack. Do not convert an ordinary chain into a native stack merely to inspect it. Verify the
+resulting object and ordering on GitHub, not just local branch ancestry. For example, after
+substituting the actual repository and PR number:
 
 ```bash
 gh stack link <bottom-pr> <middle-pr> <top-pr>
@@ -58,38 +60,57 @@ The installed command help is authoritative. Current command roles are:
 | `gh stack link` | Register/update native membership. Branch-name arguments also push branches and create missing PRs; use PR numbers/URLs when only linking existing PRs. |
 | `gh stack submit` | Push branches, create/update PRs and bases, then register/update the native stack. These phases are not one atomic transaction. |
 | `gh stack rebase` | Cascade a local rebase onto updated parents; does not publish the result. |
+| `gh stack push` | Publish active stack branches using explicit per-branch leases. Updates are not atomic; reconcile partial success. Requires authorization for any history replacement and a compatible publication cadence. |
 | `gh stack sync` | Fetch, reconcile, cascade-rebase, and push branches atomically with leases, then synchronize PR/stack state. **Not a read-only probe.** |
 | `gh stack merge` | Atomically merge a contiguous bottom portion, through the chosen PR, or the whole stack. Requires merge authorization. |
 
-After an interrupted submit/sync, inspect which branches, PRs, bases, and native stack entries actually
+After an interrupted push/submit/sync, inspect which branches, PRs, bases, and native stack entries actually
 changed before resuming. Do not assume an error means nothing was published.
 
-## Preserve reviews by choosing when to propagate
+## Choose propagation for the actual stack type
 
-A changed lower PR does **not** automatically require rebasing every descendant. First compare its
-new head with each affected child's actual published head and base. If the child remains mergeable,
-its intended diff is intact and within the file limit, and no required validation or dependency needs
-the new parent in its history yet, defer propagation and batch remaining fixes.
+**Native GitHub stacks require linear history between their branches before merging.** When a
+lower branch or trunk update breaks that relationship, GitHub prescribes a cascading rebase.
+Do not use parent merge commits as a general substitute for this native-stack repair. A clean
+local merge, or a repository that permits merge commits, does not establish native merge eligibility.
+The method used to land the stack (merge, squash, or rebase) is a separate choice.
+See GitHub's [linear-history requirement](https://docs.github.com/en/pull-requests/reference/stacked-pull-requests#linear-history).
 
-For published branches, prefer signed merges of the updated parent into affected children when
-propagation is needed and repository policy allows merge commits. This preserves existing commit
-history; it does **not** guarantee that GitHub will retain approvals. Any new head may require fresh
-CI and review. Rebase only when the user chooses it or a verified repository requirement needs it;
-`gh stack rebase`/`sync` are not routine status or cleanup commands.
+Batch confirmed fixes before a necessary rebase, then validate the affected branches once. Deferring
+propagation while collecting fixes can save CI and review quota; it does not waive the native
+linearity requirement. Inspect the installed `gh stack rebase` scope flags and the actual dependency
+boundary instead of automatically rewriting every branch after each finding. `rebase` and `sync`
+are mutations, never status commands. Follow the detailed
+[native-stack repair procedure](references/maintenance.md#repair-native-stack-history).
+
+For an ordinary dependent PR chain outside native stacks, signed parent merges may be appropriate
+when repository policy and the user's history preferences permit them. Verify that classification
+first; do not unlink a native stack to avoid its requirements without user authorization.
+
+GitHub documents retained approvals after a native stack rebase when the PR diff is unchanged,
+even with stale-approval dismissal enabled. Do not assume every rebase loses every approval, or
+that every approval will survive a conflict resolution. Check GitHub review applicability, CodeRabbit
+review evidence, and CI separately; a retained review can refer to an earlier commit. Atmos's Quality
+Gate currently requires exact-head CodeRabbit approval, so retained GitHub approval alone does not
+satisfy it. Verify the gate implementation and use incremental review for a confirmed gap; changed
+SHAs never automatically justify full CodeRabbit reviews. See
+[approval and CI verification](references/maintenance.md#verify-approvals-after-a-native-rebase).
 
 Publish normal updates with ordinary fast-forward pushes. If a push is rejected, fetch and inspect
 the remote changes; do not automatically retry with a force-push flag. An explicit lease is an
 exception for a specifically justified, authorized operation, not the default publication command.
 
-Do not merge new trunk commits through every PR merely because trunk advanced. Check actual
-conflicts, required freshness, and the combined merge result first. When an update is necessary,
-explain its validation/review cost and batch it with already confirmed fixes. Existing authorization
-still applies; do not add a new approval round for ordinary authorized repairs.
+Do not merge new trunk commits through every PR merely because trunk advanced. Check native
+linearity, conflicts, required freshness, and the combined result first. Explain the affected range
+and validation/review cost before a required rewrite. Honor explicit history restrictions and
+existing authorization; do not add a new permission round when the repair is already authorized.
 
 ## Build approvals from the bottom
 
 Prioritize a contiguous approved bottom block, not an increasing count of approvals scattered
-through the stack. Verify current-head reviews in native stack order, identify the first gap, and
+through the stack. Verify applicable reviews in native stack order, including retained approvals
+after a native rebase, and distinguish those from the repository's exact-head CodeRabbit gate. Identify
+the first gap under the requested approval criterion, and
 spend review quota on closing gaps in the intended bottom block before higher layers. Preserve
 already approved heads where possible; necessary changes require fresh evidence. Report the
 approved bottom prefix separately from total approvals and from the prefix with all merge
@@ -102,7 +123,7 @@ see [review scheduling and reporting](references/maintenance.md#build-a-contiguo
 `changedFiles < 150` (at most **149**); see `qualityFileCount` in
 `magefiles/qualitygate/quality.go`. Apply the stricter of the user's budget, repository gate, and bot
 configuration, and verify those when they change. This is not a GitHub diff limit. Check it when
-planning layers, after moving files or merging parents, and again after publication. Count against the PR's actual parent, not `main` for every layer:
+planning layers, after moving files or rebasing/updating parents, and again after publication. Count against the PR's actual parent, not `main` for every layer:
 
 ```bash
 git merge-base --all <actual-parent-sha> <candidate-head-sha>
@@ -138,12 +159,13 @@ counts, and native stack membership. Do not create an extra PR contrary to the u
 ## Finish the requested scope
 
 Use the [maintenance reference](references/maintenance.md) to freeze candidate heads, publish safely,
-and coordinate exact-head CI, coverage, and CodeRabbit evidence. Report those states separately.
+and coordinate final-head CI/coverage and applicable CodeRabbit approval evidence. Report those states separately.
 Default to incremental CodeRabbit requests (`@coderabbitai review`). Unattended queues must not
 request full reviews or automatically escalate to them; see the reference for handling missing approvals.
 
 Merge only when explicitly authorized. When available and compatible with repository rules,
 `gh stack merge` can merge the selected bottom portion atomically, avoiding a repeated
-merge-one/rebase/review cycle. GitHub still enforces protection rules; atomic merge is not a bypass.
+merge-one/rebase/review cycle. GitHub still enforces protection rules and native stack linearity;
+atomic merge is not a bypass. Approval to repair history is also separate from approval to land PRs.
 Verify the selected PRs, current heads, and merge method before invoking it. Do not treat approval
 to fix CI or request reviews as approval to merge or close PRs.

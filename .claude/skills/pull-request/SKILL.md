@@ -19,11 +19,17 @@ If you violate any of these, CI fails and the PR can't merge. Follow this skill 
 ## Stacked PRs
 
 Before creating or updating dependent PRs, read the [gh-stack skill](../gh-stack/SKILL.md).
-Discover the `gh stack` extension, register the native stack with `gh stack link` or the appropriate
-submission workflow, and verify GitHub's membership and order. Setting `--base` alone creates only
-a branch chain. Stay below the 150-file review boundary against each PR's actual parent; the repository quality
-gate currently permits at most 149 files. Do not automatically rebase descendants: choose propagation and coordinate CI/reviews using
-that skill. For an explicitly independent PR, target trunk and leave it outside the existing stack.
+Discover the `gh stack` extension and inspect native membership before choosing propagation.
+When native registration is requested or otherwise authorized, use `gh stack link` or the appropriate
+submission workflow and verify GitHub's membership and order. Setting `--base` alone creates only
+a branch chain; preserve an ordinary chain's classification unless conversion is authorized.
+Stay below the 150-file review boundary against each PR's actual parent; the repository quality
+gate currently permits at most 149 files. Native stacks require linear history between branches;
+batch fixes before a necessary cascading rebase instead of merging parents as a general workaround
+or rebasing after every finding. GitHub can retain approvals for unchanged PR diffs; verify that
+separately from CodeRabbit and CI. Atmos's Quality Gate still requires exact-head CodeRabbit approval.
+Coordinate history repair and publication through that skill.
+For an explicitly independent PR, target trunk and leave it outside the existing stack.
 
 ## The label decision tree
 
