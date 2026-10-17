@@ -33,23 +33,19 @@ const (
 // set, only PRs whose head is exactly that commit qualify, so a PR whose head
 // moved after the event is never reconciled for the stale commit.
 func (q *qualityClient) prNumbers(path, headSHA string) ([]int, error) {
-	var numbers []int
-	for page := 1; page <= githubapi.PageLimit; page++ {
-		var prs []githubapi.PR
-		if err := q.get(fmt.Sprintf("%s&per_page=100&page=%d", path, page), &prs); err != nil {
-			return nil, err
-		}
-		for i := range prs {
-			pr := &prs[i]
-			if pr.State == "open" && pr.Base.Ref == "main" && (headSHA == "" || pr.Head.SHA == headSHA) {
-				numbers = append(numbers, pr.Number)
-			}
-		}
-		if len(prs) < githubapi.PageSize {
-			return numbers, nil
-		}
+	prs, err := githubapi.ListOpenMainPRs(q.ctx, q.api, "repos/"+q.repo+"/"+path, headSHA)
+	if err != nil {
+		return nil, err
 	}
-	return nil, bench.Error("PR pagination limit exceeded")
+	return prNumbersOf(prs), nil
+}
+
+func prNumbersOf(prs []githubapi.PR) []int {
+	var numbers []int
+	for i := range prs {
+		numbers = append(numbers, prs[i].Number)
+	}
+	return numbers
 }
 
 // unlistedPRNumbers resolves PRs that the commit association endpoint does not
@@ -58,10 +54,9 @@ func (q *qualityClient) prNumbers(path, headSHA string) ([]int, error) {
 // events that do not carry the fork owner and branch. Both verify the head SHA.
 func (q *qualityClient) unlistedPRNumbers(sha, owner, branch string) ([]int, error) {
 	if owner != "" && branch != "" {
-		head := url.QueryEscape(owner + ":" + branch)
-		numbers, err := q.prNumbers("pulls?state=open&base=main&head="+head, sha)
-		if err != nil || len(numbers) > 0 {
-			return numbers, err
+		prs, err := githubapi.OpenPRsForHead(q.ctx, q.api, q.repo, githubapi.HeadRef{Owner: owner, Branch: branch, SHA: sha})
+		if err != nil || len(prs) > 0 {
+			return prNumbersOf(prs), err
 		}
 	}
 	return q.searchPRNumbers(sha)
