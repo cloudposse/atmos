@@ -1,4 +1,5 @@
 ---
+tags: [Automation]
 related_docs:
   - label: Custom commands
     url: /cli/configuration/commands

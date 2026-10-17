@@ -1,0 +1,9 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Deliberately invalid template for field-test bulk-abort/continue verification.
+
+Resources:
+  Marker:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/atmos/demo-broken/${Stage}/marker"
+      Value: !Ref Marker

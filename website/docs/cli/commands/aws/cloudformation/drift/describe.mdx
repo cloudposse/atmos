@@ -1,0 +1,67 @@
+---
+title: atmos aws cloudformation drift describe
+sidebar_label: describe
+sidebar_class_name: command
+id: describe
+description: Show the results of the most recent drift detection.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
+import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
+import SkipHooksFlag from '@site/docs/cli/commands/aws/cloudformation/_partials/_skip-hooks-flag.mdx'
+
+<Intro>
+  Show the per-resource results of the most recently completed drift
+  detection (`DescribeStackResourceDrifts`) without triggering a new one. Run
+  [`drift detect`](/cli/commands/aws/cloudformation/drift/detect) first — this
+  command only reads existing results.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation drift describe --help" src="/casts/screengrabs/atmos-aws-cloudformation-drift-describe--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation drift describe <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation drift describe vpc -s plat-ue2-dev
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
+  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
+
+<SelectionFlags />
+
+<GitFlags />
+
+<SkipHooksFlag />
+</dl>
+
+## Output
+
+Only resources that are not `IN_SYNC` are printed. Each `MODIFIED` resource is followed by one line per
+property difference, with the property path, the expected value from the template, the actual value in
+the deployed resource, and the difference type:
+
+```
+  MODIFIED   AWS::SSM::Parameter          Param
+    /Value: expected v2, actual v1 (NOT_EQUAL)
+```
+
+If the stack has no drift
+results at all (no detection has ever run), `drift describe` says so and
+suggests running [`drift detect`](/cli/commands/aws/cloudformation/drift/detect) first.
+
+:::note
+`drift describe` fires `before.aws/cloudformation.drift-describe` and
+`after.aws/cloudformation.drift-describe` hooks. The command-name hyphen is part of each event.
+:::

@@ -12,6 +12,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import retryModule from './retry.cjs';
 
 const token = process.env.GITHUB_TOKEN;
 if (!token) {
@@ -171,8 +172,7 @@ function validateAllowlistEntry(entry, seen) {
 // means the token is out of budget for every remaining lookup, not that
 // this one repo is access-blocked.
 function shouldDowngrade(err, hasAllowlistEntry) {
-  if (!hasAllowlistEntry || err?.status !== 403) return false;
-  return err?.response?.headers?.['x-ratelimit-remaining'] !== '0';
+  return hasAllowlistEntry && retryModule.isAccessBlockedError(err, 'owner');
 }
 
 // ── Test cases ──────────────────────────────────────────────────
@@ -412,7 +412,7 @@ assert(
 
 // Test 14: exception downgrade — only a 403 (access-blocked) error is eligible
 console.log('\n🧪 Test 14: exception downgrade — only a 403 (access-blocked) error is eligible');
-assert(shouldDowngrade({ status: 403 }, true) === true, '403 + listed repo → downgrade eligible');
+assert(shouldDowngrade({ status: 403 }, true) === false, 'Ambiguous 403 + listed repo → NOT downgrade eligible');
 assert(shouldDowngrade({ status: 404 }, true) === false, '404 (tag not found) + listed repo → NOT downgrade eligible, stays a failure');
 assert(shouldDowngrade(new Error('boom'), true) === false, 'status-less error + listed repo → NOT downgrade eligible');
 assert(shouldDowngrade({ status: 403 }, false) === false, '403 + unlisted repo → NOT downgrade eligible');
@@ -421,12 +421,12 @@ assert(
   'Rate-limited 403 (x-ratelimit-remaining: 0) + listed repo → NOT downgrade eligible, stays a failure'
 );
 assert(
-  shouldDowngrade({ status: 403, response: { headers: { 'x-ratelimit-remaining': '42' } } }, true) === true,
-  'Non-rate-limited 403 (budget remaining) + listed repo → downgrade eligible'
+  shouldDowngrade({ status: 403, response: { headers: { 'x-ratelimit-remaining': '42' } } }, true) === false,
+  'Budget remaining does not establish an access block'
 );
 assert(
-  shouldDowngrade({ status: 403, response: { headers: {} } }, true) === true,
-  '403 with no rate-limit header at all (e.g. an IP allow-list block) + listed repo → downgrade eligible'
+  shouldDowngrade({ status: 403, response: { headers: {} } }, true) === false,
+  '403 without rate-limit headers or an explicit IP-policy denial stays a failure'
 );
 
 // Test 15: regression — a listed repository with a nonexistent tag must not

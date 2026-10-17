@@ -69,7 +69,7 @@ Exits non-zero when any drift is found. This never checks for a newer upstream v
 		component := v.GetString("component")
 		filterTags := splitTags(v.GetString(vendorTagsViperKey))
 		stack := v.GetString("stack")
-		labels, err := pkgtags.ParseLabelsFlag(v.GetString(vendorLabelsViperKey))
+		labels, err := pkgtags.ParseLabelsFlag(pkgtags.ReadLabelsFlagKey(v, vendorLabelsViperKey))
 		if err != nil {
 			return err
 		}
@@ -216,7 +216,7 @@ func init() {
 		flags.WithEnvVars(vendorTagsFlagName, envVendorTags),
 		flags.WithViperKey(vendorTagsFlagName, vendorTagsViperKey),
 		flags.WithStringFlag("stack", "s", "", "Verify only components belonging to the specified stack"),
-		flags.WithStringFlag(vendorLabelsFlagName, "", "", vendorLabelsFlagHelp),
+		flags.WithStringSliceFlag(vendorLabelsFlagName, "", nil, vendorLabelsFlagHelp),
 		flags.WithEnvVars(vendorLabelsFlagName, envVendorLabels),
 		flags.WithViperKey(vendorLabelsFlagName, vendorLabelsViperKey),
 		flags.WithStringFlag("format", "", "table", "Output format: table or json"),

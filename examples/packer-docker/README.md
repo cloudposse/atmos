@@ -1,6 +1,6 @@
 ---
 title: Packer + Docker
-tags: [Automation]
+tags: [Components]
 cast:
   file: /casts/examples/packer-docker/build.cast
   title: atmos Packer Docker build
