@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 
+	cockroach "github.com/cockroachdb/errors"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/automation"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -182,7 +184,7 @@ func NestedAtmosFailure(args []string, exitCode int, cause error) error {
 	if denied {
 		message = deniedMessage(label, exitCode)
 	}
-	err := serviceFailure(errUtils.ErrScriptProcessFailed, cause, "%s", message)
+	err := cockroach.Mark(serviceFailure(errUtils.ErrScriptProcessFailed, cause, "%s", message), errUtils.ErrNestedAtmosFailed)
 	if denied {
 		err = errUtils.WithExitCode(err, errUtils.ExitCodePolicyDenied)
 	}
