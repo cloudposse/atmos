@@ -115,3 +115,14 @@ Migration process:
 - Use `composition` when a container fulfills a named service in a system.
 - Use hooks for pre/post actions such as scans, artifact publication, or store writes.
 - Use registry auth skills such as `atmos-aws-ecr` when pushing to private registries.
+
+## CI Image Summaries and Comments
+
+With `ci.enabled` and `ci.summary.enabled`, `atmos container build` and `atmos container push` write a per-image
+report to the job summary. With `ci.comments.enabled: true` (off by default) the same report is also posted as a
+comment: one comment per `registry/repository` (the tag is stripped, so every push updates it), a commit
+comment when no pull request is known, truncation at 65,000 characters, and a warning instead of a failure when
+the post fails. With comments off, nothing is previewed in the log. Pull request comments need
+`pull-requests: write`; commit comments need `contents: write`. Fork pull requests under
+`pull_request_target`/`workflow_run` are held by the posting gate. Customize the Markdown with
+`ci.templates.container.image`; a configured file that does not exist is an error.

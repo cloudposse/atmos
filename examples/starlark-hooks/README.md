@@ -1,4 +1,5 @@
 ---
+tags: [Automation]
 related_docs:
   - label: Lifecycle hooks
     url: /stacks/hooks

@@ -2,9 +2,11 @@ package tests
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -12,12 +14,47 @@ import (
 	"github.com/cloudposse/atmos/cmd"
 )
 
-// resetViperState resets global Viper state to prevent test pollution.
-// This is needed because tests in this package use cmd.Execute() which
-// binds flags to the global Viper instance. Without this reset, flag
-// values from previous tests can leak and cause unexpected behavior.
-func resetViperState() {
-	viper.Reset()
+// resetSourceCommandState isolates the shared Terraform source command flags
+// and Viper before and after a test. Viper.Reset alone leaves Cobra's parsed
+// persistent --dry-run and --stack values, and source --force values, intact.
+func resetSourceCommandState(t *testing.T) {
+	t.Helper()
+	var commandFlags []*pflag.Flag
+	for _, path := range [][]string{
+		{"terraform"},
+		{"terraform", "source", "describe"},
+		{"terraform", "source", "list"},
+		{"terraform", "source", "pull"},
+		{"terraform", "source", "delete"},
+	} {
+		command, _, err := cmd.RootCmd.Find(path)
+		require.NoError(t, err)
+		for _, name := range []string{"dry-run", "stack", "force"} {
+			if flag := command.Flag(name); flag != nil {
+				commandFlags = append(commandFlags, flag)
+			}
+		}
+	}
+	reset := func() {
+		viper.Reset()
+		cmd.RootCmd.SetArgs(nil)
+		for _, flag := range commandFlags {
+			require.NoError(t, flag.Value.Set(flag.DefValue))
+			flag.Changed = false
+		}
+	}
+	reset()
+	t.Cleanup(reset)
+}
+
+// sourceFixture isolates writable acceptance fixtures from the checked-in tree.
+func sourceFixture(t *testing.T, name string) {
+	t.Helper()
+	fixture, err := filepath.Abs(filepath.Join("fixtures", "scenarios", name))
+	require.NoError(t, err)
+	sandbox := t.TempDir()
+	require.NoError(t, os.CopyFS(sandbox, os.DirFS(fixture)))
+	t.Chdir(sandbox)
 }
 
 // TestSourceProvisionerDescribe_Success tests the `atmos terraform source describe` command.
@@ -82,15 +119,14 @@ func TestSourceProvisionerList(t *testing.T) {
 
 // TestSourceProvisionerDelete_MissingForce tests that delete requires --force flag.
 func TestSourceProvisionerDelete_MissingForce(t *testing.T) {
-	resetViperState() // Prevent flag leakage from previous tests
-	t.Chdir("./fixtures/scenarios/source-provisioner")
+	resetSourceCommandState(t)
+	t.Setenv("ATMOS_DRY_RUN", "false")
+	t.Setenv("ATMOS_INTERACTIVE", "false")
+	sourceFixture(t, "source-provisioner")
 
 	// Create the target directory so delete has something to operate on.
 	targetDir := "components/terraform/vpc-map"
 	require.NoError(t, os.MkdirAll(targetDir, 0o755))
-	t.Cleanup(func() {
-		_ = os.RemoveAll(targetDir)
-	})
 
 	cmd.RootCmd.SetArgs([]string{"terraform", "source", "delete", "vpc-map", "--stack", "dev"})
 

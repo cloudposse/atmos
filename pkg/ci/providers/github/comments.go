@@ -41,6 +41,12 @@ func (p *Provider) postComment(ctx context.Context, opts *provider.PostCommentOp
 	}
 	maskedOpts := *opts
 	maskedOpts.Body = provider.MaskPublishedContent(opts.Body)
+	maskedOpts.Marker = provider.MaskPublishedContent(opts.Marker)
+	limitedBody, err := limitIssueCommentBody(maskedOpts.Body, maskedOpts.Marker)
+	if err != nil {
+		return nil, err
+	}
+	maskedOpts.Body = limitedBody
 	if err := provider.ValidatePostCommentOptions(&maskedOpts); err != nil {
 		return nil, err
 	}
@@ -133,14 +139,32 @@ func (p *Provider) editComment(ctx context.Context, opts *provider.PostCommentOp
 	payload := &github.IssueComment{Body: github.String(opts.Body)}
 
 	updated, _, err := p.client.GitHub().Issues.EditComment(ctx, opts.Owner, opts.Repo, id, payload)
+	comment, err := updatedComment(updated, err, wrapGitHubCommentAPIError, id)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Debug("Updated PR comment", "owner", opts.Owner, "repo", opts.Repo, "pr", opts.PRNumber, "id", comment.ID)
+	return comment, nil
+}
+
+// githubComment is the read accessor surface shared by the issue and commit comments the API returns.
+type githubComment interface {
+	GetID() int64
+	GetHTMLURL() string
+	GetBody() string
+}
+
+// updatedComment turns the outcome of a comment update API call into a provider comment. A failed
+// call is wrapped with the sentinel and the surface-specific API error decoration wrap adds.
+func updatedComment(updated githubComment, err error, wrap func(error) error, id int64) (*provider.Comment, error) {
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrCICommentUpdateFailed).
-			WithCause(wrapGitHubCommentAPIError(err)).
+			WithCause(wrap(err)).
 			WithContext("comment_id", id).
 			Err()
 	}
 
-	log.Debug("Updated PR comment", "owner", opts.Owner, "repo", opts.Repo, "pr", opts.PRNumber, "id", updated.GetID())
 	return &provider.Comment{
 		ID:      updated.GetID(),
 		URL:     updated.GetHTMLURL(),

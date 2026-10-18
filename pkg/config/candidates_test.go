@@ -128,6 +128,31 @@ func TestResolveConfigCandidates_EnvConfigPathMissingIsReported(t *testing.T) {
 	assert.Equal(t, filepath.Join(missing, "atmos.yaml"), got[0].Path)
 }
 
+// The legacy single CLI config directory (ConfigAndStacksInfo.AtmosCliConfigPath) is resolved
+// relative to the working directory and layered after the discovered configuration, so it takes
+// precedence without turning discovery off. A missing directory is reported, not skipped.
+func TestResolveConfigCandidates_CliConfigPathLayersOverDiscovery(t *testing.T) {
+	project := isolateCandidateEnv(t)
+	parentConfig := writeCandidateFile(t, project, "atmos.yaml")
+	cliConfig := writeCandidateFile(t, project, "conf", "atmos.yaml")
+	sub := filepath.Join(project, "sub")
+	require.NoError(t, os.MkdirAll(sub, 0o755))
+	t.Chdir(sub)
+
+	got := projectCandidates(t, WithCliConfigPath(filepath.Join("..", "conf")))
+	require.Len(t, got, 2, "%v", candidatePaths(got))
+	assert.Equal(t, parentConfig, got[0].Path)
+	assert.Equal(t, cliConfig, got[1].Path, "the CLI config path is applied last")
+	assert.Equal(t, "CLI config path", got[1].Source)
+	assert.True(t, got[1].Exists)
+
+	missing := projectCandidates(t, WithCliConfigPath(filepath.Join(project, "nope")))
+	require.Len(t, missing, 2, "%v", candidatePaths(missing))
+	assert.Equal(t, parentConfig, missing[0].Path)
+	assert.Equal(t, filepath.Join(project, "nope", "atmos.yaml"), missing[1].Path)
+	assert.False(t, missing[1].Exists, "a missing CLI config path is reported, not skipped")
+}
+
 func TestResolveConfigCandidates_AtmosDRelativeToConfigDirNotCwd(t *testing.T) {
 	project := isolateCandidateEnv(t)
 	base := writeCandidateFile(t, project, "atmos.yaml")

@@ -39,7 +39,8 @@ type controlBridge struct{}
 func (controlBridge) RunControl(ctx context.Context, step *schema.WorkflowStep, vars *stepPkg.Variables) (*stepPkg.StepResult, error) {
 	defer perf.Track(nil, "workflow.controlBridge.RunControl")()
 
-	parentEnv, err := vars.ResolveEnvMap(step.Env)
+	// Env values written with !literal are kept exactly as written.
+	parentEnv, err := vars.ResolveStepEnvMap(step, step.Env)
 	if err != nil {
 		return nil, err
 	}

@@ -33,42 +33,25 @@ func yqLoggerLevel(atmosConfig *schema.AtmosConfiguration) logging.Level {
 	return atmosyq.SilentLevel
 }
 
+// EvaluateYqExpression applies yq to data and decodes the result as Go values,
+// preserving ambiguous scalar strings and returning nil for an empty-string result.
 func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq string) (any, error) {
 	defer perf.Track(atmosConfig, "utils.EvaluateYqExpression")()
-
-	atmosyq.InitExpressionParser()
-
-	evaluator := yqlib.NewStringEvaluator()
 
 	yamlData, err := ConvertToYAML(data)
 	if err != nil {
 		return nil, fmt.Errorf("EvaluateYqExpression: failed to convert data to YAML: %w", err)
 	}
 
-	pref := yqlib.YamlPreferences{
-		Indent:                      2,
-		ColorsEnabled:               false,
-		LeadingContentPreProcessing: true,
-		PrintDocSeparators:          true,
-		UnwrapScalar:                true,
-		EvaluateTogether:            false,
-	}
-
-	encoder := yqlib.NewYamlEncoder(pref)
-	decoder := yqlib.NewYamlDecoder(pref)
-
-	var result string
-	atmosyq.WithEvaluationLevel(yqLoggerLevel(atmosConfig), func() {
-		result, err = evaluator.Evaluate(yq, yamlData, encoder, decoder)
-	})
+	result, err := evaluateYqToYAML(atmosConfig, yamlData, yq)
 	if err != nil {
-		return nil, fmt.Errorf("EvaluateYqExpression: failed to evaluate YQ expression '%s': %w", yq, err)
+		return nil, fmt.Errorf("EvaluateYqExpression: %w", err)
 	}
 
 	trimmedResult := strings.TrimSpace(result)
 
 	// Handle scalar strings that could be misinterpreted by the YAML parser.
-	// When yq returns a scalar with UnwrapScalar=true, special characters like trailing
+	// When yq returns an unquoted scalar, special characters like trailing
 	// colons can cause the YAML parser to misinterpret the value as a map.
 	// E.g., "arn:aws:secretsmanager:...::password::" would become {"password:": null}.
 	if isScalarString(trimmedResult) {
@@ -104,7 +87,54 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 		return nil, fmt.Errorf("EvaluateYqExpression: failed to convert YAML to Go type: %w", err)
 	}
 
+	// An empty-string scalar result is reported as nil, matching the documented behavior of YQ default
+	// value expressions such as `.key // ""`.
+	if str, ok := res.(string); ok && str == "" {
+		return nil, nil
+	}
+
 	return res, nil
+}
+
+// evaluateYqToYAML runs the yq expression over yamlText and returns the
+// resulting YAML text as yq printed it, without decoding it into Go values.
+// Callers that splice the result straight back into a YAML node tree (the
+// tag-preserving !include path) rely on this: a custom tag in the input, such
+// as a CloudFormation `!Ref`, survives the round trip, which a decode to `any`
+// would silently drop.
+func evaluateYqToYAML(atmosConfig *schema.AtmosConfiguration, yamlText string, yq string) (string, error) {
+	defer perf.Track(atmosConfig, "utils.evaluateYqToYAML")()
+
+	atmosyq.InitExpressionParser()
+
+	evaluator := yqlib.NewStringEvaluator()
+
+	// UnwrapScalar must stay false: with it enabled yq prints scalar results as bare text, which strips
+	// the quotes from strings such as "068007702576". Re-parsing that bare text as YAML then resolves it
+	// to a float64 (6.8007702576e+10), losing the leading zero and the original type. With it disabled
+	// the YAML encoder keeps type-ambiguous strings quoted, so they round-trip as strings, while
+	// integers and floats are printed as plain numbers and keep their types.
+	pref := yqlib.YamlPreferences{
+		Indent:                      2,
+		ColorsEnabled:               false,
+		LeadingContentPreProcessing: true,
+		PrintDocSeparators:          true,
+		UnwrapScalar:                false,
+		EvaluateTogether:            false,
+	}
+
+	encoder := yqlib.NewYamlEncoder(pref)
+	decoder := yqlib.NewYamlDecoder(pref)
+
+	var result string
+	var err error
+	atmosyq.WithEvaluationLevel(yqLoggerLevel(atmosConfig), func() {
+		result, err = evaluator.Evaluate(yq, yamlText, encoder, decoder)
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to evaluate YQ expression '%s': %w", yq, err)
+	}
+	return result, nil
 }
 
 // isScalarString checks if the yq result appears to be a simple scalar string value
@@ -213,12 +243,17 @@ func EvaluateYqExpressionWithType[T any](atmosConfig *schema.AtmosConfiguration,
 		return nil, fmt.Errorf("EvaluateYqExpressionWithType: failed to convert data to YAML: %w", err)
 	}
 
+	// UnwrapScalar must stay false: with it enabled yq prints scalar results as bare text, which strips
+	// the quotes from strings such as "068007702576". Re-parsing that bare text as YAML then resolves it
+	// to a float64 (6.8007702576e+10), losing the leading zero and the original type. With it disabled
+	// the YAML encoder keeps type-ambiguous strings quoted, so they round-trip as strings, while
+	// integers and floats are printed as plain numbers and keep their types.
 	pref := yqlib.YamlPreferences{
 		Indent:                      2,
 		ColorsEnabled:               false,
 		LeadingContentPreProcessing: true,
 		PrintDocSeparators:          true,
-		UnwrapScalar:                true,
+		UnwrapScalar:                false,
 		EvaluateTogether:            false,
 	}
 

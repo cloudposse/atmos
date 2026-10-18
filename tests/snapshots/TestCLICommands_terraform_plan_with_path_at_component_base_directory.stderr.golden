@@ -2,10 +2,10 @@
 
 # Error
 
-**Error:** failed to resolve component from path: path component type does not match command
+**Error:** failed to resolve component from path: must specify a component directory, not the base directory
 
-Path resolves to packer component but command expects terraform component You ran: atmos terraform <command> . The path points to: packer component
+Cannot resolve component: path points to component base directory Path: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform Component base: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform
 
-💡 Run the correct command for this component type
+💡 Navigate into a specific component directory Example: cd terraform/vpc && atmos terraform plan . --stack <stack>
 
 💡 Make sure the path is within your component directories

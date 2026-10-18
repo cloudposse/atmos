@@ -1,8 +1,10 @@
 package step
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 
@@ -14,6 +16,10 @@ import (
 
 // automationCommonFields are the step fields every step type accepts in a direct step call.
 var automationCommonFields = []string{"name", "type", "output", "show", "env", "working_directory", "timeout", "retry", "outputs", "with"}
+
+// automationPolicyFields are the scheduler-policy fields and the container override. Field validation lets them through so
+// validateAutomationStep can reject them with a message that explains where they are supported.
+var automationPolicyFields = []string{"needs", "when", "continue", "identity", "background", "inputs", "artifacts", "preconditions", "container"}
 
 // Rejects fields the step type does not read. The stepType argument is the type of the step the
 // node describes; when it is empty, the node's own `type` key names it. A handler that declares
@@ -32,15 +38,24 @@ func validateAutomationStepFields(node *yaml.Node, stepType string) error {
 	fields, scoped := automationFieldsFor(stepType)
 	for i := 0; i < len(node.Content); i += 2 {
 		key, value := node.Content[i].Value, node.Content[i+1]
-		if !fields[key] {
+		if !fields[key] && (!scoped || !slices.Contains(automationPolicyFields, key)) {
 			return unknownAutomationFieldError(key, stepType, fields, scoped)
 		}
-		if key == "steps" {
-			for _, child := range value.Content {
-				if err := validateAutomationStepFields(child, ""); err != nil {
-					return err
-				}
-			}
+		if err := validateAutomationChildFields(key, value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateAutomationChildFields validates the fields of every nested step.
+func validateAutomationChildFields(key string, node *yaml.Node) error {
+	if key != "steps" {
+		return nil
+	}
+	for _, child := range node.Content {
+		if err := validateAutomationStepFields(child, ""); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -89,6 +104,24 @@ func sortedKeys(set map[string]bool) string {
 	}
 	sort.Strings(keys)
 	return strings.Join(keys, ", ")
+}
+
+// withCaptureHint explains where output capture lives when a direct step call asks a step for an
+// exec.run mode. Step `output` controls how a step shows what it produced (raw, log, viewport,
+// none); capturing a command's output is exec.run(output="capture"), and every step result already
+// carries the output in its value.
+func withCaptureHint(step *schema.WorkflowStep, err error) error {
+	if err == nil || !errors.Is(err, errUtils.ErrStepInvalidOutputMode) {
+		return err
+	}
+	switch strings.ToLower(strings.TrimSpace(step.Output)) {
+	case "capture", "stream":
+		return errUtils.Build(err).
+			WithHintf("Use exec.run(argv, output=\"capture\") to capture a command's output; step output modes are %s.", strings.Join(schema.StepOutputModes(), ", ")).
+			Err()
+	default:
+		return err
+	}
 }
 
 func validateAutomationStep(step *schema.WorkflowStep, parallel bool) error {

@@ -37,9 +37,9 @@ atmos list editions [flags]
 Atmos journals every change to a previously shipped default. The `atmos list editions` command displays that journal, newest first, where each row shows:
 
 - **Date** — the day the default changed
-- **Key** — the configuration key whose default changed
-- **Old** — the default before the change (what an earlier-pinned project gets)
-- **New** — the default after the change
+- **Key** — the configuration key whose default changed, or the identifier of a behavior transition
+- **Old** — the previous default or behavior (what an earlier-pinned project gets)
+- **New** — the new default or behavior
 - **Description** — what the change means in practice
 
 This command is useful for:

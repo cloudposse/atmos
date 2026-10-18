@@ -11,6 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	tuiTerm "github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/component/typedetect"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/deferred"
@@ -220,15 +221,39 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 
 // injectDescribeComponentStoreAuthResolver wires the auth manager into atmosConfig
 // as the store auth-context resolver so identity-aware stores can resolve
-// credentials lazily during describe-component. It is a no-op when either argument
-// is nil.
+// credentials lazily during describe. It is a no-op when either argument is nil.
+// Stores without their own `identity:` inherit the
+// caller's explicit --identity/ATMOS_IDENTITY, exactly as the deploy path does,
+// so the same command line yields the same values in describe and deploy.
 func injectDescribeComponentStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager) {
 	if atmosConfig == nil || authManager == nil {
 		return
 	}
 
-	resolver := authbridge.NewResolver(authManager, authManager.GetStackInfo())
-	atmosConfig.Stores.SetAuthContextResolver(resolver)
+	stackInfo := authManager.GetStackInfo()
+	resolver := authbridge.NewResolver(authManager, stackInfo)
+	atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, describeStoreDefaultIdentity(authManager, stackInfo))
+}
+
+// describeStoreDefaultIdentity returns the identity that stores without their own
+// `identity:` should authenticate as: the caller's explicit selection, or the
+// identity chosen by a bare --identity prompt. It returns "" when no identity was
+// requested (stores then keep the SDK default credential chain) or auth is disabled.
+func describeStoreDefaultIdentity(authManager auth.AuthManager, stackInfo *schema.ConfigAndStacksInfo) string {
+	if stackInfo == nil || stackInfo.RequestedIdentity == nil {
+		return ""
+	}
+	switch requested := cfg.NormalizeIdentityValue(*stackInfo.RequestedIdentity); requested {
+	case "", cfg.IdentityFlagDisabledValue:
+		return ""
+	case cfg.IdentityFlagSelectValue:
+		if chain := authManager.GetChain(); len(chain) > 0 {
+			return chain[len(chain)-1]
+		}
+		return ""
+	default:
+		return requested
+	}
 }
 
 func (d *DescribeComponentExec) viewConfig(atmosConfig *schema.AtmosConfiguration, displayName string, format string, data any) error {
@@ -491,6 +516,20 @@ func tryProcessWithComponentType(params *componentTypeProcessParams) (schema.Con
 	return result, err
 }
 
+// autoDetectComponentTypes lists the component types considered, in order, when the caller
+// does not name one.
+var autoDetectComponentTypes = []string{
+	cfg.TerraformComponentType,
+	cfg.HelmfileComponentType,
+	cfg.PackerComponentType,
+	cfg.AnsibleComponentType,
+	cfg.ContainerComponentType,
+	cfg.EmulatorComponentType,
+	cfg.KubernetesComponentType,
+	cfg.HelmComponentType,
+	cfg.CloudFormationComponentType,
+}
+
 // detectComponentType tries to detect component type (Terraform, Helmfile, Packer, Ansible, Kubernetes, or custom).
 func detectComponentType(
 	atmosConfig *schema.AtmosConfiguration,
@@ -515,20 +554,29 @@ func detectComponentType(
 		return tryProcessWithComponentType(&baseParams)
 	}
 
-	// Auto-detect the component type by trying each in order; the first type whose
-	// section contains the component wins. A non "component not found" error (e.g.
-	// invalid HCL) is reported immediately rather than masked as "component not
-	// found" by trying the remaining types (see issue #1864).
-	componentTypes := []string{
-		cfg.TerraformComponentType,
-		cfg.HelmfileComponentType,
-		cfg.PackerComponentType,
-		cfg.AnsibleComponentType,
-		cfg.ContainerComponentType,
-		cfg.EmulatorComponentType,
-		cfg.KubernetesComponentType,
-		cfg.HelmComponentType,
+	// Auto-detect the component type. Presence is decided first, from the merged stack
+	// manifests alone, so the component is then processed exactly once under the one type
+	// that defines it. This keeps an error raised while evaluating the component (for
+	// example a YAML function referencing a missing producer) from being mistaken for
+	// "component not found in this type" and reported against the wrong component.
+	if baseParams.configAndStacksInfo.ComponentFromArg != "" && baseParams.configAndStacksInfo.Stack != "" {
+		probe := newManifestPresenceProbe(atmosConfig, &baseParams.configAndStacksInfo, params.AuthManager)
+		detected, err := typedetect.Resolve(params.Component, params.Stack, autoDetectComponentTypes, probe)
+		if err != nil {
+			return baseParams.configAndStacksInfo, err
+		}
+		if detected != "" {
+			baseParams.componentType = detected
+			return tryProcessWithComponentType(&baseParams)
+		}
 	}
+
+	// No type defines the component (or detection preconditions are unmet): try each type in
+	// order so the existing "component not found" error is reported unchanged. The first type
+	// whose section contains the component wins. A non "component not found" error (e.g.
+	// invalid HCL) is reported immediately rather than masked as "component not found" by
+	// trying the remaining types (see issue #1864).
+	componentTypes := autoDetectComponentTypes
 
 	var result schema.ConfigAndStacksInfo
 	var err error
@@ -589,6 +637,9 @@ func ExecuteDescribeComponentWithContext(params DescribeComponentContextParams) 
 		// Get the stack info from the auth manager which should contain
 		// the populated AuthContext from the authentication process.
 		managerStackInfo := params.AuthManager.GetStackInfo()
+		if managerStackInfo != nil {
+			configAndStacksInfo.RequestedIdentity = managerStackInfo.RequestedIdentity
+		}
 		if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
 			// Copy the AuthContext from the manager's stack info
 			configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
@@ -658,7 +709,7 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 	// Fields to keep (the sections a stack manifest can define).
 	//
 	// NOTE: this is an intentional allowlist, not an exhaustive one. It still omits
-	// several real stack-definable sections (e.g. retry, generate, auth, secrets,
+	// several real stack-definable sections (e.g. retry, auth, secrets,
 	// command, backend_type, workspace). Whether to surface those, and whether this
 	// filter should be driven by the manifest schema instead of a hand-maintained
 	// list, is a broader design question tracked separately (see #3223).
@@ -680,9 +731,38 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 		"component":    true,
 		"hooks":        true,
 		"flags":        true,
-		"chart":        true, // Native Helm chart reference (#3218).
-		"values":       true, // Native Helm chart values (#3218).
-		"values_files": true, // Native Helm values files (#3218).
+		// Helm-specific sections (built-in types don't get container's pass-through;
+		// without these, `describe component` silently strips them under the default
+		// `describe.component.filter: schema` mode).
+		cfg.ChartSectionName:        true,
+		cfg.ValuesSectionName:       true,
+		cfg.ValuesFilesSectionName:  true,
+		cfg.RepositoriesSectionName: true,
+		// Kubernetes-specific sections.
+		cfg.ProviderSectionName:  true,
+		cfg.PathsSectionName:     true,
+		cfg.ManifestsSectionName: true,
+		cfg.RenderSectionName:    true,
+		// Cross-type sections (generate: terraform/kubernetes/helm; source: terraform/
+		// helmfile/packer/kubernetes/helm; provision: helm/kubernetes) — also previously
+		// missing from this whitelist for every type that defines them, not just CFN's
+		// future sections.
+		cfg.GenerateSectionName:  true,
+		cfg.SourceSectionName:    true,
+		cfg.ProvisionSectionName: true,
+		// aws/cloudformation-specific sections.
+		cfg.TemplateSectionName:              true,
+		cfg.TemplatePathSectionName:          true,
+		cfg.ParametersSectionName:            true,
+		cfg.CapabilitiesSectionName:          true,
+		cfg.TagsSectionName:                  true,
+		cfg.StackPolicySectionName:           true,
+		cfg.RoleArnSectionName:               true,
+		cfg.NotificationArnsSectionName:      true,
+		cfg.DisableRollbackSectionName:       true,
+		cfg.TerminationProtectionSectionName: true,
+		cfg.TimeoutInMinutesSectionName:      true,
+		cfg.StackNameSectionName:             true,
 	}
 
 	filtered := make(map[string]any)

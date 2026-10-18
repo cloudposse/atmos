@@ -222,8 +222,8 @@ func runGit(t *testing.T, dir string, args ...string) {
 	cmd.Dir = dir
 	cmd.Env = mergeCommandEnv(os.Environ(), map[string]string{
 		"GIT_TERMINAL_PROMPT": "0",
-		"GIT_CONFIG_GLOBAL":   os.DevNull,
-		"GIT_CONFIG_SYSTEM":   os.DevNull,
+		"GIT_CONFIG_GLOBAL":   "/dev/null",
+		"GIT_CONFIG_SYSTEM":   "/dev/null",
 	})
 	out, err := cmd.CombinedOutput()
 	require.NoErrorf(t, err, "git %s failed: %s", strings.Join(args, " "), string(out))

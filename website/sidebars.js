@@ -99,7 +99,8 @@ module.exports = {
                                 'migration/justfile',
                                 'migration/taskfile',
                             ]
-                        }
+                        },
+                        'migration/rain'
                     ]
                 },
             ]
@@ -297,7 +298,7 @@ module.exports = {
         referenceGroup('Automation'),
         {
             type: 'category',
-            label: 'Atmos Automation Language',
+            label: 'Scripting',
             className: 'sidebar-title',
             collapsible: true,
             collapsed: true,

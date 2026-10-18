@@ -4,7 +4,6 @@
     "config:recommended"
   ],
   "labels": ["no-release"],
-  "rebaseWhen": "behind-base-branch",
   "minimumReleaseAge": "14 days",
   "customManagers": [
     {

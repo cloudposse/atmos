@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cloudposse/atmos/magefiles/bench"
 	"github.com/cloudposse/atmos/magefiles/internal/githubapi"
 )
 
@@ -55,14 +56,19 @@ func (r *gateRegistry) register(definition gateDefinition) error {
 	return nil
 }
 
+// Published in the report for a gate whose evidence could not be read. Scheduled
+// recovery also matches it to keep such reports eligible until the evidence recovers.
+const qualityUnavailableProblem = "could not be evaluated because GitHub evidence was unavailable."
+
 func (r *gateRegistry) evaluate(q *qualityClient, pr *githubapi.PR) []qualityGate {
 	gates := make([]qualityGate, 0, len(r.definitions))
 	for _, definition := range r.definitions {
 		gate, err := definition.Check(q, pr)
 		if err != nil {
 			gate.Passed = false
+			gate.Unavailable = true
 			gate.Detail = "Unavailable: " + err.Error()
-			gate.Problem = definition.Name + " could not be evaluated because GitHub evidence was unavailable."
+			gate.Problem = definition.Name + " " + qualityUnavailableProblem
 			gate.NextAction = "Retry the reporter and inspect its API error if retrieval still fails. This is missing evidence, not a confirmed failure in the PR."
 		}
 		definition.decorate(pr, &gate)
@@ -79,6 +85,20 @@ func (d *gateDefinition) decorate(pr *githubapi.PR, gate *qualityGate) {
 // Add a gate here: its check, report link and agent guidance travel together.
 func defaultQualityRegistry() (*gateRegistry, error) {
 	return newGateRegistry(
+		gateDefinition{
+			ID:           "ready-for-review",
+			Name:         "Ready for review",
+			Check:        checkReadyForReview,
+			EvidencePath: "",
+			Remediation:  "Mark the PR ready for review when the work is complete. A draft PR is never ready to merge.",
+		},
+		gateDefinition{
+			ID:           "merge-conflicts",
+			Name:         "No merge conflicts",
+			Check:        checkMergeConflicts,
+			EvidencePath: "/conflicts",
+			Remediation:  "Rebase the PR branch onto main or merge main into it, resolve the conflicts, and push. GitHub recomputes mergeability after the push.",
+		},
 		gateDefinition{
 			ID:           "ci",
 			Name:         "All CI checks and workflows",
@@ -123,12 +143,34 @@ func defaultQualityRegistry() (*gateRegistry, error) {
 		},
 		gateDefinition{
 			ID:           "benchmark-report",
-			Name:         "Benchmark report integrity",
+			Name:         "Benchmark results",
 			Check:        checkBenchmarkReport,
 			EvidencePath: "/checks",
 			Remediation:  "Inspect the benchmark reporter job logs. Repair malformed or incomplete measurements, artifact provenance, or reporting failures and rerun the affected workflow. Reconciliation will retry the report. Missing historical baselines and measured slowdowns alone do not fail this gate.",
 		},
 	)
+}
+
+func checkReadyForReview(_ *qualityClient, pr *githubapi.PR) (qualityGate, error) {
+	if pr.Draft {
+		return qualityGate{Detail: "Draft", Problem: "This PR is a draft.", NextAction: "Mark the PR ready for review when the work is complete."}, nil
+	}
+	return qualityGate{Passed: true, Detail: "Marked ready for review"}, nil
+}
+
+// checkMergeConflicts treats only an explicit mergeable=false or a dirty state
+// as a conflict. Other states such as blocked, behind, or unstable describe
+// branch protection or CI and are covered by their own gates.
+func checkMergeConflicts(_ *qualityClient, pr *githubapi.PR) (qualityGate, error) {
+	if pr.Mergeable == nil && pr.MergeableState != "dirty" {
+		// GitHub computes mergeability lazily after a push or base move. Report
+		// missing evidence so the previous report is kept and the check retried.
+		return qualityGate{}, bench.Error("GitHub has not computed mergeability yet")
+	}
+	if pr.MergeableState == "dirty" || (pr.Mergeable != nil && !*pr.Mergeable) {
+		return qualityGate{Detail: "Merge conflicts with main", Problem: "This PR has merge conflicts with main.", NextAction: "Rebase the PR branch onto main or merge main into it, resolve the conflicts, and push."}, nil
+	}
+	return qualityGate{Passed: true, Detail: "No merge conflicts with main"}, nil
 }
 
 func checkBenchmarkReport(q *qualityClient, _ *githubapi.PR) (qualityGate, error) {

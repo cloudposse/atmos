@@ -144,15 +144,7 @@ func TestPluginBuildTemplateContextFallbacksAndErrors(t *testing.T) {
 	assert.Equal(t, "diff text", ctx.Diff)
 }
 
-func TestSummaryEnabledAndPrimitiveConversions(t *testing.T) {
-	assert.True(t, isSummaryEnabled(nil))
-	assert.True(t, isSummaryEnabled(&schema.AtmosConfiguration{}))
-
-	disabled := false
-	assert.False(t, isSummaryEnabled(&schema.AtmosConfiguration{
-		CI: schema.CIConfig{Summary: schema.CISummaryConfig{Enabled: &disabled}},
-	}))
-
+func TestPrimitiveConversions(t *testing.T) {
 	assert.Equal(t, "", stringValue(nil))
 	assert.Equal(t, "value", stringValue("value"))
 	assert.Equal(t, "123", stringValue(123))
@@ -208,7 +200,7 @@ func TestPluginOnAfterOperation(t *testing.T) {
 	writer := &fakeWriter{}
 
 	err := p.onAfterOperation(&plugin.HookContext{
-		Config:         &schema.AtmosConfiguration{CI: schema.CIConfig{Summary: schema.CISummaryConfig{Enabled: &disabled}}},
+		Config:         &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true, Summary: schema.CISummaryConfig{Enabled: &disabled}}},
 		Provider:       fakeProvider{writer: writer},
 		TemplateLoader: templates.NewLoader(nil),
 		Command:        "apply",
@@ -217,6 +209,7 @@ func TestPluginOnAfterOperation(t *testing.T) {
 	assert.Empty(t, writer.summary)
 
 	err = p.onAfterOperation(&plugin.HookContext{
+		Config:         &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		Provider:       fakeProvider{},
 		TemplateLoader: templates.NewLoader(nil),
 		Command:        "apply",
@@ -225,6 +218,7 @@ func TestPluginOnAfterOperation(t *testing.T) {
 
 	writer = &fakeWriter{}
 	err = p.onAfterOperation(&plugin.HookContext{
+		Config:         &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		Provider:       fakeProvider{writer: writer},
 		TemplateLoader: templates.NewLoader(nil),
 		Command:        "render",
@@ -236,6 +230,7 @@ func TestPluginOnAfterOperation(t *testing.T) {
 
 	sentinel := errors.New("write failed")
 	err = p.onAfterOperation(&plugin.HookContext{
+		Config:         &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		Provider:       fakeProvider{writer: &fakeWriter{err: sentinel}},
 		TemplateLoader: templates.NewLoader(nil),
 		Command:        "apply",

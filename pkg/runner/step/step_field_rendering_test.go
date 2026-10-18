@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
@@ -79,15 +80,38 @@ func TestSleepRejectsFieldsOfOtherStepTypes(t *testing.T) {
 
 	require.NoError(t, library.Validate(&automation.StepCall{Type: "sleep", Configuration: map[string]any{"timeout": "100ms", "name": "pause"}}))
 
-	// Handlers that do not declare their fields keep the union of all step fields.
-	require.NoError(t, library.Validate(&automation.StepCall{Type: "join", Configuration: map[string]any{"content": "x", "duration": "1s"}}))
+	// Every built-in step declares its fields, so join rejects the field that belongs to sleep.
+	err = library.Validate(&automation.StepCall{Type: "join", Configuration: map[string]any{"content": "x", "duration": "1s"}})
+	require.ErrorIs(t, err, errUtils.ErrAutomation)
+	assert.Contains(t, err.Error(), `unknown field "duration" for step type "join"`)
+}
+
+// A handler registered without KnownFields keeps the union of all step fields.
+func TestHandlerWithoutKnownFieldsKeepsTheUnionOfStepFields(t *testing.T) {
+	handler := NewMockStepHandler(gomock.NewController(t))
+	const handlerName = "undeclared-fields-test"
+	handler.EXPECT().GetName().Return(handlerName).AnyTimes()
+	handler.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
+	handler.EXPECT().RequiresTTY().Return(false).AnyTimes()
+	Register(handler)
+	t.Cleanup(func() {
+		registry.mu.Lock()
+		defer registry.mu.Unlock()
+		delete(registry.handlers, handlerName)
+	})
+
+	library := NewAutomationLibrary(nil, nil)
+	require.NoError(t, library.Validate(&automation.StepCall{Type: handlerName, Configuration: map[string]any{"content": "x", "duration": "1s"}}))
+	err := library.Validate(&automation.StepCall{Type: handlerName, Configuration: map[string]any{"not_a_field": "x"}})
+	require.ErrorIs(t, err, errUtils.ErrAutomation)
+	assert.Contains(t, err.Error(), `unknown step field "not_a_field"`)
 }
 
 func TestAutomationValidationReportsMisspelledRequiredField(t *testing.T) {
 	library := NewAutomationLibrary(nil, nil)
 	err := library.Validate(&automation.StepCall{Type: "script", Configuration: map[string]any{"scritp": "print(1)", "interpreter": "starlark"}})
 	require.ErrorIs(t, err, errUtils.ErrAutomation)
-	assert.Contains(t, err.Error(), `unknown step field "scritp"`)
+	assert.Contains(t, err.Error(), `unknown field "scritp" for step type "script"`)
 }
 
 func TestSchedulerPolicyErrorNamesTheOffendingFields(t *testing.T) {

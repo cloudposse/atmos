@@ -5,7 +5,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -362,6 +364,48 @@ func TestStore_BuildAuthConfigOpts(t *testing.T) {
 			assert.Equal(t, tt.want.SharedConfigProfile, lo.SharedConfigProfile)
 			assert.Equal(t, tt.want.SharedCredentialsFiles, lo.SharedCredentialsFiles)
 			assert.Equal(t, tt.want.SharedConfigFiles, lo.SharedConfigFiles)
+		})
+	}
+}
+
+// TestStore_BuildClientOptFns verifies that a non-empty identity EndpointURL
+// override (e.g. a Floci-emulated S3 endpoint) is threaded into the S3
+// client's BaseEndpoint, mirroring cloudformation.newClient's own endpoint
+// override handling. Without this, the S3 client always talks to real AWS
+// even when the active identity is scoped to an emulator.
+func TestStore_BuildClientOptFns(t *testing.T) {
+	tests := []struct {
+		name         string
+		authContext  *artifact.AWSAuthConfig
+		wantEndpoint *string
+	}{
+		{
+			name:         "nil auth context produces no opts",
+			authContext:  nil,
+			wantEndpoint: nil,
+		},
+		{
+			name:         "empty endpoint URL produces no opts",
+			authContext:  &artifact.AWSAuthConfig{},
+			wantEndpoint: nil,
+		},
+		{
+			name:         "endpoint URL override is applied",
+			authContext:  &artifact.AWSAuthConfig{EndpointURL: "http://localhost:4566"},
+			wantEndpoint: aws.String("http://localhost:4566"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildClientOptFns(tt.authContext)
+
+			var opts s3.Options
+			for _, opt := range got {
+				opt(&opts)
+			}
+
+			assert.Equal(t, tt.wantEndpoint, opts.BaseEndpoint)
 		})
 	}
 }

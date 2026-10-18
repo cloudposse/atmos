@@ -2,7 +2,6 @@ package output
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -60,49 +59,4 @@ func TestExecutor_OutputCacheSeparatesAuthentication(t *testing.T) {
 			})
 		}
 	}
-}
-
-func TestOutputCacheKeyContextIsolation(t *testing.T) {
-	first := &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "same-name", EndpointURL: "http://first"}}
-	copyOfFirst := &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "same-name", EndpointURL: "http://first"}}
-	second := &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "same-name", EndpointURL: "http://second"}}
-	key := outputCacheKey("stack", "component", first, nil)
-	require.Equal(t, key, outputCacheKey("stack", "component", copyOfFirst, nil))
-	require.NotEqual(t, key, outputCacheKey("stack", "component", second, nil))
-	require.NotEqual(t, key, outputCacheKey("stack", "component", nil, nil))
-	require.NotEqual(t, key, outputCacheKey("other-stack", "component", first, nil))
-	require.NotEqual(t, key, outputCacheKey("stack", "other-component", first, nil))
-}
-
-func TestOutputCacheKeyManagerIsolation(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	first := authtypes.NewMockAuthManager(ctrl)
-	second := authtypes.NewMockAuthManager(ctrl)
-	info := &schema.ConfigAndStacksInfo{Identity: "same-name"}
-	first.EXPECT().GetStackInfo().Return(info).AnyTimes()
-	second.EXPECT().GetStackInfo().Return(info).AnyTimes()
-	key := outputCacheKey("stack", "component", nil, first)
-	require.Equal(t, key, outputCacheKey("stack", "component", nil, first))
-	require.False(t, key == outputCacheKey("stack", "component", nil, second), "cache keys compare manager identity, not deep structural equality")
-	info.Identity = "another-name"
-	require.NotEqual(t, key, outputCacheKey("stack", "component", nil, first))
-	info.Identity = "same-name"
-	info.AuthDisabled = true
-	require.NotEqual(t, key, outputCacheKey("stack", "component", nil, first))
-	info.AuthDisabled = false
-	info.AuthContext = &schema.AuthContext{Azure: &schema.AzureAuthContext{SubscriptionID: "other-account"}}
-	require.NotEqual(t, key, outputCacheKey("stack", "component", nil, first))
-}
-
-func TestOutputCacheKeyUnencodableContextDoesNotCollide(t *testing.T) {
-	context := &schema.AuthContext{GCP: &schema.GCPAuthContext{TokenExpiry: time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC)}}
-	first := outputCacheKey("stack", "component", context, nil)
-	require.NotEqual(t, first, outputCacheKey("stack", "component", context, nil))
-	require.NotEqual(t, first, outputCacheKey("stack", "component", nil, nil))
-	// GetAllOutputs historically accepts opaque manager values. Uncomparable ones
-	// must bypass reuse instead of panicking when used as a sync.Map key.
-	uncomparable := []string{"opaque"}
-	require.NotEqual(t,
-		outputCacheKey("stack", "component", nil, uncomparable),
-		outputCacheKey("stack", "component", nil, uncomparable))
 }

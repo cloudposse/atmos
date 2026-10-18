@@ -85,34 +85,44 @@ func plural(n int, singular, pluralForm string) string {
 func summarizeFindings(r *diagnostic.Report, fix bool) {
 	p := newReportRenderer()
 	fixed, remaining, fixable := findingCounts(r)
-	var summary string
-	switch {
-	case r.DryRun:
-		verified := 0
-		for i := range r.Findings {
-			f := &r.Findings[i]
-			if f.Fixable && f.Reason == "Candidate verified; dry run left the source unchanged" {
-				verified++
-			}
-		}
-		summary = fmt.Sprintf("%d %s verified. %d %s.", verified, plural(verified, "repair", "repairs"), remaining, plural(remaining, "finding remains", "findings remain"))
-	case fix || fixed > 0:
-		files := len(r.ChangedFiles)
-		summary = fmt.Sprintf("Fixed %d %s in %d %s. %d %s.", fixed, plural(fixed, "finding", "findings"), files, plural(files, "file", "files"), remaining, plural(remaining, "finding remains", "findings remain"))
-	case remaining == 0:
-		summary = "No findings."
-	case fixable > 0:
-		summary = fmt.Sprintf("%d %s (%d fixable).", remaining, plural(remaining, "finding", "findings"), fixable)
-	default:
-		summary = fmt.Sprintf("%d %s (none fixable).", remaining, plural(remaining, "finding", "findings"))
-	}
-	p.line("", summary, p.styles.Body.Bold(true))
+	p.line("", findingsSummary(r, fix, [3]int{fixed, remaining, fixable}), p.styles.Body.Bold(true))
 	if r.DryRun {
 		p.line("", "Dry run: project files and backups were not written.", p.styles.Body)
 	}
 	if fixable > 0 && r.OperationalError == "" {
 		p.line("Run: ", "atmos doctor --fix", p.styles.Command)
 	}
+}
+
+// findingsSummary returns the summary sentence for the fixed, remaining, and fixable counts.
+func findingsSummary(r *diagnostic.Report, fix bool, counts [3]int) string {
+	fixed, remaining, fixable := counts[0], counts[1], counts[2]
+	switch {
+	case r.DryRun:
+		verified := verifiedRepairs(r)
+		return fmt.Sprintf("%d %s verified. %d %s.", verified, plural(verified, "repair", "repairs"), remaining, plural(remaining, "finding remains", "findings remain"))
+	case fix || fixed > 0:
+		files := len(r.ChangedFiles)
+		return fmt.Sprintf("Fixed %d %s in %d %s. %d %s.", fixed, plural(fixed, "finding", "findings"), files, plural(files, "file", "files"), remaining, plural(remaining, "finding remains", "findings remain"))
+	case remaining == 0:
+		return "No findings."
+	case fixable > 0:
+		return fmt.Sprintf("%d %s (%d fixable).", remaining, plural(remaining, "finding", "findings"), fixable)
+	default:
+		return fmt.Sprintf("%d %s (none fixable).", remaining, plural(remaining, "finding", "findings"))
+	}
+}
+
+// verifiedRepairs counts the repairs a dry run verified without writing.
+func verifiedRepairs(r *diagnostic.Report) int {
+	verified := 0
+	for i := range r.Findings {
+		f := &r.Findings[i]
+		if f.Fixable && f.Reason == "Candidate verified; dry run left the source unchanged" {
+			verified++
+		}
+	}
+	return verified
 }
 
 func renderSummary(r *diagnostic.Report, fix bool) error {

@@ -1,8 +1,6 @@
 
 👽 test linux/amd64
 
-[EXPERIMENTAL]
-
 Authenticate to cloud providers using an identity defined in atmos.yaml.
 
 USAGE

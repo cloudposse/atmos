@@ -17,6 +17,7 @@ import (
 const (
 	stdinMarker     = "-"
 	atmosExecutable = "atmos"
+	envSplitFlag    = "-S"
 )
 
 // File describes an explicitly invoked standalone program.
@@ -52,7 +53,7 @@ func DetectFile(args []string) (*File, error) {
 
 func detectScriptPath(args []string) (*File, error) {
 	name := args[0]
-	interpreter, registered := InterpreterForFile(name)
+	interpreter, registered := interpreterForPath(name)
 	if !registered && !strings.ContainsAny(name, `/\`) {
 		return nil, nil
 	}
@@ -77,6 +78,21 @@ func detectScriptPath(args []string) (*File, error) {
 	return &File{Path: path, Invoked: name, Interpreter: interpreter, Args: append([]string{}, args[1:]...)}, nil
 }
 
+// AnchorPath returns args with a relative script path (the first argument) made absolute against
+// dir, so a later change of the working directory cannot change which file it names. Stdin
+// selections, flags, absolute paths, and arguments that are not script paths come back unchanged.
+// The input is never modified.
+func AnchorPath(args []string, dir string) []string {
+	defer perf.Track(nil, "script.AnchorPath")()
+
+	if dir == "" || len(args) == 0 || isStdinSelection(args[0]) || filepath.IsAbs(args[0]) || !MayBeFile(args[:1]) {
+		return args
+	}
+	anchored := append([]string(nil), args...)
+	anchored[0] = filepath.Join(dir, args[0])
+	return anchored
+}
+
 // MayBeFile reports whether the first argument selects stdin, a registered extension,
 // or an explicit script path. It looks only at the spelling, so callers can decide cheaply
 // whether a file-system check is worthwhile.
@@ -93,8 +109,22 @@ func MayBeFile(args []string) bool {
 		return false
 	}
 	name := args[0]
-	_, registered := InterpreterForFile(name)
+	_, registered := interpreterForPath(name)
 	return registered || strings.ContainsAny(name, `/\`)
+}
+
+// interpreterForPath resolves the registered interpreter for a script path. The registry keeps
+// extensions exact, but file systems on macOS and Windows do not, so a name such as TOOL.STAR is
+// found by its lower-case extension as well.
+func interpreterForPath(path string) (string, bool) {
+	if interpreter, ok := InterpreterForFile(path); ok {
+		return interpreter, true
+	}
+	extension := filepath.Ext(path)
+	if extension == "" {
+		return "", false
+	}
+	return InterpreterForFile(strings.TrimSuffix(path, extension) + strings.ToLower(extension))
 }
 
 // SplitGlobalFlags separates the leading Atmos global flags from the rest of the arguments, so a
@@ -188,14 +218,31 @@ func hasAtmosShebang(path string) (bool, error) {
 	if !strings.HasPrefix(line, "#!") {
 		return false, nil
 	}
-	parts := strings.Fields(strings.TrimPrefix(line, "#!"))
-	if len(parts) == 1 {
-		return filepath.Base(parts[0]) == atmosExecutable, nil
+	return shebangRunsAtmos(strings.Fields(strings.TrimPrefix(line, "#!"))), nil
+}
+
+// shebangRunsAtmos reports whether the words after "#!" start Atmos: the Atmos executable itself
+// (`#!/usr/bin/atmos`, optionally followed by global flags) or `env`, with an optional -S and
+// NAME=value assignments, in front of it (`#!/usr/bin/env -S atmos --logs-level=Debug`). The
+// words after atmos are global flags. When the kernel runs the file they arrive before the script
+// path, where the leading-flag parser applies them, so they are not interpreted here.
+func shebangRunsAtmos(parts []string) bool {
+	if len(parts) == 0 {
+		return false
 	}
-	if len(parts) == 2 {
-		return filepath.Base(parts[0]) == "env" && parts[1] == atmosExecutable, nil
+	if filepath.Base(parts[0]) == atmosExecutable {
+		return true
 	}
-	return len(parts) == 3 && filepath.Base(parts[0]) == "env" && parts[1] == "-S" && parts[2] == atmosExecutable, nil
+	if filepath.Base(parts[0]) != "env" {
+		return false
+	}
+	for _, word := range parts[1:] {
+		if word == envSplitFlag || (strings.Contains(word, "=") && !strings.HasPrefix(word, flagPrefix)) {
+			continue
+		}
+		return word == atmosExecutable
+	}
+	return false
 }
 
 // detectStdin parses only the host prefix. After -, flags belong to the script.

@@ -116,3 +116,54 @@ func TestTreeSHADoesNotInferAbsenceFromLimitedListing(t *testing.T) {
 		})
 	}
 }
+
+// publicTreeServer serves a directory listing and records whether a request carried credentials.
+func publicTreeServer(t *testing.T) (url string, hits *int, authorized *bool) {
+	t.Helper()
+	hits, authorized = new(int), new(bool)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		*hits++
+		if r.Header.Get("Authorization") != "" {
+			*authorized = true
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]*github.RepositoryContent{{Name: github.String("src"), Type: github.String("dir"), SHA: github.String("bbb222")}})
+	}))
+	t.Cleanup(server.Close)
+	return server.URL, hits, authorized
+}
+
+// TestTreeSHAUsesTheConfiguredGitHubAPI covers the public entry point against public github.com.
+func TestTreeSHAUsesTheConfiguredGitHubAPI(t *testing.T) {
+	url, hits, _ := publicTreeServer(t)
+	t.Setenv("GITHUB_SERVER_URL", "https://github.com")
+	t.Setenv("GITHUB_API_URL", url)
+
+	sha, err := TreeSHA(context.Background(), "o", "new", "1.0.0", "src")
+
+	require.NoError(t, err)
+	assert.Equal(t, "bbb222", sha)
+	assert.Equal(t, 1, *hits)
+}
+
+// TestTreeSHAQueriesPublicGitHubWithoutTheEnterpriseToken covers a GitHub Enterprise Server
+// configuration. The compared repositories are public, so the lookup goes to public github.com
+// and never carries the token scoped to the enterprise server.
+func TestTreeSHAQueriesPublicGitHubWithoutTheEnterpriseToken(t *testing.T) {
+	publicURL, publicHits, authorized := publicTreeServer(t)
+	enterpriseURL, enterpriseHits, _ := publicTreeServer(t)
+	original := publicGitHubEndpoints
+	publicGitHubEndpoints = newEndpoints(defaultGitHubServerURL, publicURL)
+	t.Cleanup(func() { publicGitHubEndpoints = original })
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+	t.Setenv("GITHUB_API_URL", enterpriseURL)
+	t.Setenv("GITHUB_TOKEN", "enterprise-token")
+
+	sha, err := TreeSHA(context.Background(), "o", "new", "1.0.0", "src")
+
+	require.NoError(t, err)
+	assert.Equal(t, "bbb222", sha)
+	assert.Equal(t, 1, *publicHits, "the lookup targets public github.com")
+	assert.Zero(t, *enterpriseHits, "the enterprise server is never queried")
+	assert.False(t, *authorized, "the enterprise token is never sent to public github.com")
+}

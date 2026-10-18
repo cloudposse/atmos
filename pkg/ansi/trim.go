@@ -214,14 +214,59 @@ func TrimRightSpaces(s string) string {
 
 	result, i := copyContentAndANSI(s, len(trimmed))
 
-	// Capture any trailing ANSI codes that immediately follow the last character.
-	for i < len(s) && isStart(s, i) {
-		start := i
-		i = skip(s, i)
-		result.WriteString(s[start:i])
+	// Preserve resets after padding, but discard styles that apply only to removed spaces.
+	for i < len(s) {
+		if isStart(s, i) {
+			start := i
+			i = skip(s, i)
+			result.WriteString(trailingResets(s[start:i]))
+		} else {
+			i++
+		}
 	}
 
 	return result.String()
+}
+
+// trailingResets retains SGR closing parameters without opening styles on removed padding.
+// Non-SGR terminal controls are preserved unchanged.
+func trailingResets(sequence string) string {
+	if !strings.HasPrefix(sequence, "\x1b[") || !strings.HasSuffix(sequence, "m") {
+		return sequence
+	}
+
+	params := strings.Split(sequence[2:len(sequence)-1], ";")
+	resets := make([]string, 0, len(params))
+	for i := 0; i < len(params); i++ {
+		switch params[i] {
+		case "", "0", "10", "4:0", "22", "23", "24", "25", "27", "28", "29", "39", "49", "50", "54", "55", "59", "65", "75":
+			resets = append(resets, params[i])
+		case "38", "48", "58":
+			// Extended colors contain numbers that can otherwise look like resets.
+			// Colon-delimited colors remain a single parameter and are ignored above.
+			i = skipExtendedColor(params, i)
+		}
+	}
+	if len(resets) == 0 {
+		return ""
+	}
+	return "\x1b[" + strings.Join(resets, ";") + "m"
+}
+
+// skipExtendedColor advances to the last color parameter, or past the list if its
+// layout is unknown, so payload numbers cannot be mistaken for SGR resets.
+func skipExtendedColor(params []string, i int) int {
+	if i+1 >= len(params) {
+		return len(params)
+	}
+	switch params[i+1] {
+	case "2":
+		return i + 4 // Color mode plus three RGB channels.
+	case "5":
+		return i + 2 // Color mode plus palette index.
+	default:
+		return len(params)
+	}
 }
 
 // TrimLeftSpaces removes only leading spaces from an ANSI-coded string while

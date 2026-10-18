@@ -25,6 +25,17 @@ const (
 	defaultEventName  = "push"
 	eventPullRequest  = "pull_request"
 
+	// Events GitHub runs against the base branch, with GITHUB_REF=refs/heads/<base>.
+	eventPullRequestTarget = "pull_request_target"
+	eventWorkflowRun       = "workflow_run"
+
+	// Head repositories of pull requests created by WithForkPullRequest belong to forkOwner.
+	forkOwner = "forker"
+
+	// Payload key names.
+	keyFullName = "full_name"
+	keyFork     = "fork"
+
 	// FilePerm is the mode of files SetEnv creates.
 	filePerm = 0o600
 )
@@ -47,6 +58,7 @@ type pullRequestFixture struct {
 	number  int
 	headRef string
 	baseRef string
+	fork    bool
 }
 
 type envConfig struct {
@@ -127,12 +139,25 @@ func WithToken(token string) EnvOption {
 // WithPullRequest makes the run a pull request: it writes a pull_request event
 // payload, sets GITHUB_REF=refs/pull/N/merge, GITHUB_REF_NAME=N/merge,
 // GITHUB_HEAD_REF and GITHUB_BASE_REF, and defaults the event name to
-// "pull_request" unless WithEvent chose another (such as pull_request_target).
+// "pull_request" unless WithEvent chose another. For pull_request_target and
+// workflow_run, which GitHub runs against the base branch, GITHUB_REF is
+// refs/heads/<base> and only the payload names the pull request (workflow_run
+// writes a workflow_run payload instead of a pull_request one).
 func WithPullRequest(number int, headRef, baseRef string) EnvOption {
 	defer perf.Track(nil, "ghtest.WithPullRequest")()
 
 	return func(c *envConfig) {
 		c.pr = &pullRequestFixture{number: number, headRef: headRef, baseRef: baseRef}
+	}
+}
+
+// WithForkPullRequest is WithPullRequest for a pull request whose head lives in a fork:
+// the payload marks head.repo as a fork and gives it a full_name different from the base repository.
+func WithForkPullRequest(number int, headRef, baseRef string) EnvOption {
+	defer perf.Track(nil, "ghtest.WithForkPullRequest")()
+
+	return func(c *envConfig) {
+		c.pr = &pullRequestFixture{number: number, headRef: headRef, baseRef: baseRef, fork: true}
 	}
 }
 
@@ -176,9 +201,7 @@ func SetEnv(t testing.TB, s *Server, opts ...EnvOption) Env {
 
 	cfg.refName = strings.TrimPrefix(strings.TrimPrefix(cfg.ref, "refs/heads/"), "refs/tags/")
 	if cfg.pr != nil {
-		cfg.ref = fmt.Sprintf("refs/pull/%d/merge", cfg.pr.number)
-		cfg.refName = fmt.Sprintf("%d/merge", cfg.pr.number)
-		cfg.headRef, cfg.baseRef = cfg.pr.headRef, cfg.pr.baseRef
+		applyPullRequestRefs(cfg)
 	}
 
 	env := newEnvFiles(t)
@@ -190,6 +213,26 @@ func SetEnv(t testing.TB, s *Server, opts ...EnvOption) Env {
 	}
 
 	return env
+}
+
+// applyPullRequestRefs derives the ref variables of a pull request run. Plain pull_request runs
+// check out refs/pull/<n>/merge. The pull_request_target and workflow_run events run against the
+// base branch, so GITHUB_REF is refs/heads/<base> and only the event payload names the pull
+// request, exactly as on a real runner. The workflow_run event sets neither GITHUB_HEAD_REF nor
+// GITHUB_BASE_REF.
+func applyPullRequestRefs(cfg *envConfig) {
+	switch cfg.eventName {
+	case eventPullRequestTarget, eventWorkflowRun:
+		cfg.ref = "refs/heads/" + cfg.pr.baseRef
+		cfg.refName = cfg.pr.baseRef
+		if cfg.eventName == eventPullRequestTarget {
+			cfg.headRef, cfg.baseRef = cfg.pr.headRef, cfg.pr.baseRef
+		}
+	default:
+		cfg.ref = fmt.Sprintf("refs/pull/%d/merge", cfg.pr.number)
+		cfg.refName = fmt.Sprintf("%d/merge", cfg.pr.number)
+		cfg.headRef, cfg.baseRef = cfg.pr.headRef, cfg.pr.baseRef
+	}
 }
 
 // envVars builds the full set of variables SetEnv exports.
@@ -222,6 +265,9 @@ func envVars(s *Server, cfg *envConfig, env *Env) map[string]string {
 		"ATMOS_CI_GITHUB_TOKEN":   "",
 		"ATMOS_PRO_GITHUB_TOKEN":  "",
 		"GH_TOKEN":                "",
+		// A CI job that runs the tests inside an Atmos log group exports this sentinel to child
+		// processes; blank it so every test group is the outermost one.
+		"ATMOS_CI_LOG_GROUP_ACTIVE": "",
 	}
 }
 
@@ -252,14 +298,18 @@ func writeEventPayload(t testing.TB, path string, cfg *envConfig) {
 	t.Helper()
 
 	payload := map[string]any{}
-	if cfg.pr != nil {
+	switch {
+	case cfg.pr != nil && cfg.eventName == eventWorkflowRun:
+		payload["action"] = "completed"
+		payload[eventWorkflowRun] = workflowRunFixture(cfg)
+	case cfg.pr != nil:
 		payload["action"] = "opened"
 		payload["number"] = cfg.pr.number
 		payload["pull_request"] = map[string]any{
 			"number":   cfg.pr.number,
 			"html_url": fmt.Sprintf("%s/%s/pull/%s", cfg.serverURL, cfg.repository, strconv.Itoa(cfg.pr.number)),
-			"head":     map[string]any{"ref": cfg.pr.headRef, "sha": cfg.sha},
-			"base":     map[string]any{"ref": cfg.pr.baseRef, "sha": defaultBaseSHA},
+			"head":     map[string]any{"ref": cfg.pr.headRef, "sha": cfg.sha, "repo": headRepoFixture(cfg)},
+			"base":     map[string]any{"ref": cfg.pr.baseRef, "sha": defaultBaseSHA, "repo": map[string]any{keyFullName: cfg.repository, keyFork: false}},
 		}
 	}
 	for k, v := range cfg.payload {
@@ -276,6 +326,16 @@ func writeEventPayload(t testing.TB, path string, cfg *envConfig) {
 	if err := os.WriteFile(path, data, filePerm); err != nil {
 		t.Fatalf("ghtest: writing event payload: %v", err)
 	}
+}
+
+// headRepoFixture is the pull request head repository: the base repository for a same-repo pull
+// request, or a fork owned by another account for WithForkPullRequest.
+func headRepoFixture(cfg *envConfig) map[string]any {
+	if cfg.pr.fork {
+		_, name, _ := strings.Cut(cfg.repository, "/")
+		return map[string]any{keyFullName: forkOwner + "/" + name, keyFork: true}
+	}
+	return map[string]any{keyFullName: cfg.repository, keyFork: false}
 }
 
 // ReadFile returns the contents of path, failing the test on error.
@@ -306,4 +366,24 @@ func RegisterProvider(t testing.TB, p ci.Provider) {
 
 	t.Cleanup(ci.SwapRegistryForTest())
 	ci.Register(p)
+}
+
+// workflowRunFixture is the workflow_run payload object for the pull request fixture. As on GitHub,
+// pull_requests lists the pull request only when the triggering run came from the same repository;
+// it is empty for a fork.
+func workflowRunFixture(cfg *envConfig) map[string]any {
+	pullRequests := []any{}
+	if !cfg.pr.fork {
+		pullRequests = append(pullRequests, map[string]any{
+			"number": cfg.pr.number,
+			"base":   map[string]any{"ref": cfg.pr.baseRef},
+		})
+	}
+	return map[string]any{
+		"id":              1,
+		"head_branch":     cfg.pr.headRef,
+		"head_sha":        cfg.sha,
+		"head_repository": headRepoFixture(cfg),
+		"pull_requests":   pullRequests,
+	}
 }

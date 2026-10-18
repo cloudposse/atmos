@@ -21,6 +21,9 @@ const (
 	checkArg            = "check?"
 )
 
+// componentAliases maps the short spellings of component commands to the command they stand for.
+var componentAliases = map[string]string{"tf": "terraform"}
+
 // Options are invocation policies supplied to the host process runner.
 type Options struct {
 	Dir    string
@@ -50,9 +53,14 @@ func New(directory string, catalog *flags.CommandCatalog, run Run) starlark.Valu
 func (s *binding) module() starlark.Value {
 	members := starlark.StringDict{
 		"run":       starlark.NewBuiltin("atmos.run", s.atmosRun),
-		"terraform": starlark.NewBuiltin("atmos.terraform", s.atmosComponentCommand),
-		"helm":      starlark.NewBuiltin("atmos.helm", s.atmosComponentCommand),
+		"terraform": starlark.NewBuiltin("atmos.terraform", s.componentCommand("terraform")),
+		"helm":      starlark.NewBuiltin("atmos.helm", s.componentCommand("helm")),
 		"toolchain": starlark.NewBuiltin("atmos.toolchain", s.atmosToolchain),
+	}
+	// An alias shares its command's binding, so atmos.tf takes the same component and stack
+	// parameters (and tolerates -detailed-exitcode) as atmos.terraform.
+	for alias, canonical := range componentAliases {
+		members[alias] = starlark.NewBuiltin("atmos."+alias, s.componentCommand(canonical))
 	}
 	for _, name := range s.catalog.Names() {
 		if _, reserved := members[name]; reserved {
@@ -110,7 +118,15 @@ func (s *binding) atmosRun(thread *starlark.Thread, b *starlark.Builtin, args st
 	return s.run(thread, command, opts, false)
 }
 
-func (s *binding) atmosComponentCommand(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+// componentCommand returns the binding for a component command (terraform, helm). The provider is
+// the canonical command name, so an alias such as tf still builds a terraform argv.
+func (s *binding) componentCommand(provider string) func(*starlark.Thread, *starlark.Builtin, starlark.Tuple, []starlark.Tuple) (starlark.Value, error) {
+	return func(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		return s.atmosComponentCommand(thread, b, args, kwargs, provider)
+	}
+}
+
+func (s *binding) atmosComponentCommand(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple, provider string) (starlark.Value, error) {
 	var command, component, stack string
 	var flags *starlark.Dict
 	var extra starlark.Value = starlark.Tuple{}
@@ -125,7 +141,6 @@ func (s *binding) atmosComponentCommand(thread *starlark.Thread, b *starlark.Bui
 			return nil, convert.InvalidArgument("command, component, and stack must be nonempty values, not flags")
 		}
 	}
-	provider := strings.TrimPrefix(b.Name(), "atmos.")
 	flagArgs, err := s.atmosFlags([]string{provider, command}, flags)
 	if err != nil {
 		return nil, err

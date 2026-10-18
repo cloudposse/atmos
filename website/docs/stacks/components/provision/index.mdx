@@ -8,14 +8,15 @@ slug: /stacks/components/provision
 id: component-provision
 ---
 import Intro from '@site/src/components/Intro'
-import Experimental from '@site/src/components/Experimental'
 import DocCardList from '@theme/DocCardList'
 
 <Intro>
 The `provision` section controls automatic, just-in-time creation of supporting infrastructure (Terraform state backends) and execution environments (isolated workdirs) before component commands run. Use it to remove manual bootstrap steps and to enable safe concurrent execution.
 </Intro>
 
-<Experimental />
+[Just-in-time source vendoring](/cli/commands/terraform/source), including its automatic
+workdir support, and standalone workdir management are stable. Backend provisioning
+and workdir provisioning for local-only components remain experimental; see the [graduation announcement](/changelog/core-features-graduate-to-stable).
 
 ## Two Independent Capabilities
 

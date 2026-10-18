@@ -1,8 +1,6 @@
 
 👽 test linux/amd64
 
-[EXPERIMENTAL]
-
 Outputs environment variables for the assumed identity, suitable for use by external tools such as Terraform or Helm.
 
 USAGE

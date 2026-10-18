@@ -78,9 +78,15 @@ func TestTemplateFieldError(t *testing.T) {
 				assert.NotContains(t, err.Error(), "(/proj")
 			}
 			hints := strings.Join(cerrors.GetAllHints(err), "\n")
-			if tt.wantHint {
+			switch {
+			case tt.wantHint && tt.field == "script" && tt.step.ScriptSource != "":
+				// !literal cannot be written inside an included file; the hint names what can.
+				assert.Contains(t, hints, "load()")
+				assert.Contains(t, hints, "!include.raw")
+				assert.NotContains(t, hints, "!literal")
+			case tt.wantHint:
 				assert.Contains(t, hints, "!literal")
-			} else {
+			default:
 				assert.NotContains(t, hints, "!literal")
 			}
 		})
@@ -111,7 +117,9 @@ func TestScriptHandlerTemplateErrorNamesStepFieldAndSource(t *testing.T) {
 
 	require.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
 	assert.Contains(t, err.Error(), `step "inc" field script (/proj/scripts/braces.star)`)
-	assert.Contains(t, strings.Join(cerrors.GetAllHints(err), "\n"), "!literal")
+	hints := strings.Join(cerrors.GetAllHints(err), "\n")
+	assert.Contains(t, hints, "!include.raw")
+	assert.NotContains(t, hints, "!literal")
 }
 
 func TestScriptHandlerLiteralScriptWithBracesRunsWithoutRendering(t *testing.T) {

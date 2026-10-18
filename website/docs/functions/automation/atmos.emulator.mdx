@@ -48,7 +48,7 @@ See the [`atmos emulator` command reference](/cli/commands/emulator/usage) for t
 flags.
 
 :::note
-The `emulator` command is experimental, so each call prints the experimental notice. Starting an emulator needs a
+Starting an emulator needs a
 container runtime, either Docker or Podman, on the machine running the script. The `reset` subcommand asks for
 confirmation unless the `force` flag is set, so pass it when no terminal is available.
 :::
@@ -124,4 +124,4 @@ if outcome.exit_code != 0:
 
 - [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
 - [`atmos emulator`](/cli/commands/emulator/usage) documents every subcommand and flag.
-- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)
+- [Atmos Automation Language](/scripting/language) and the [script step](/steps/type/script#calling-atmos-commands)
