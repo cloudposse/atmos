@@ -609,7 +609,7 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 		atmosConfig.Components.CloudFormation.BasePath = "components/cloudformation"
 	}
 	cloudFormationBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Components.CloudFormation.BasePath)
-	cloudFormationDirAbsPath, err := absPathOrError(cloudFormationBasePath, "aws/cloudformation base path")
+	cloudFormationDirAbsPath, err := absPathOrError("", cloudFormationBasePath, "aws/cloudformation base path")
 	if err != nil {
 		return err
 	}
