@@ -94,6 +94,36 @@ func TestCastPlaybackStepsEndToEnd(t *testing.T) {
 	require.GreaterOrEqual(t, events[len(events)-1].Time, endpoint)
 }
 
+func TestCastPlaybackFinalPromptCursor(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		grouped bool
+		cursor  bool
+	}{
+		{name: "direct cursor", cursor: true},
+		{name: "playback cursor", grouped: true, cursor: true},
+		{name: "playback without cursor", grouped: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, iolib.Initialize())
+			path := filepath.Join(t.TempDir(), "cursor.cast")
+			child := schema.WorkflowStep{Type: "simulate", Text: "frame", Cursor: tc.cursor, Rate: "0", Duration: "0", Interval: "0"}
+			if tc.grouped {
+				child = schema.WorkflowStep{Type: "playback", Duration: "1s", Steps: []schema.WorkflowStep{child}}
+			}
+			cast := &schema.WorkflowStep{Type: "cast", CastOutput: &schema.CastOutput{Cast: path}, Steps: []schema.WorkflowStep{child}}
+			_, err := (&CastHandler{}).Execute(context.Background(), cast, NewVariables())
+			require.NoError(t, err)
+			_, events, err := asciicast.ReadEvents(path)
+			require.NoError(t, err)
+			require.NotEmpty(t, events)
+			finalPrompt := events[len(events)-1].Data
+			require.Contains(t, ansi.Strip(finalPrompt), "> ")
+			require.Equal(t, tc.cursor, strings.HasSuffix(finalPrompt, castCursorShow), "final prompt must preserve cursor visibility")
+		})
+	}
+}
+
 func TestCastPlaybackFailurePreservesPreviousRecording(t *testing.T) {
 	require.NoError(t, iolib.Initialize())
 	shell, err := os.Executable()
