@@ -1,52 +1,36 @@
----
-title: Developing the Policy Engine
-sidebar_label: Policy Engine
-sidebar_position: 4
-description: Contributor guide to the experimental policy evaluator, provider-native snapshots, affected inputs, and future language adapters.
-id: policy-engine
----
+# Developing the Policy Engine
 
-import Intro from '@site/src/components/Intro'
-
-<Intro>
 The experimental `pkg/policy` package evaluates rules against collected data and returns decisions,
 approval requirements, and hook requirements. This guide describes the implemented Go API for
 contributors building the policy engine and its integrations.
-</Intro>
 
-:::warning Experimental API and limited command integration
-
-Terraform commands now have an opt-in [saved-plan gate](/policies/terraform-plan) using
-`ATMOS_POLICY_DIR` and a narrow inline CEL manifest loader. There is no `atmos policy` command,
-general library/trust resolver, or first-class component `policy:` integration. The API may change.
-Existing [`settings.validation` behavior](/cli/commands/validate/component) is unchanged; do not migrate
-working validation configuration to the proposed policy syntax yet.
-
-:::
+> [!WARNING]
+> Experimental API and limited command integration
+>
+> The command integrations use the [directory manifest](https://atmos.tools/policies/configuration) with CEL or Starlark rules.
+> The broader Go API below accepts caller-supplied inputs and effects; its types do not imply a
+> command collector or enforcement path. Existing
+> [`settings.validation`](https://atmos.tools/cli/commands/validate/component) is a separate integration.
 
 ## Scope and boundaries
 
-The implemented core provides an instance-local evaluator registry, bounded CEL evaluation, explicit
+The implemented core provides an instance-local evaluator registry, bounded CEL and Starlark evaluation, explicit
 input-kind dispatch, typed effects, provider-native CI snapshots, and affected inventory contracts.
 The pure core does not calculate a Git diff, fetch API data, verify a review, or execute a hook.
 Requests can be evaluated without an Atmos stack, component, CI environment, or `atmos.yaml`.
 
-`LoadDirectory` loads inline CEL `terraform.plan` denial and `operation` denial/hook rules from
+`LoadDirectory` loads inline CEL/Starlark `terraform.plan` and `atmos.affected` denial rules and `operation` denial/hook rules from
 explicit strict `Policy` documents. `LoadPlanDirectory` retains its plan-only API.
 `planfile.Guard` extracts full JSON through an isolated `process.Runner`, checks
 the native plan envelope, and binds the decision to the private binary consumed by apply.
 `internal/exec/terraform_policy.go` supplies prepared executable/environment details and keeps gate
 errors outside CI exit-code remapping. It deliberately does not call the CI summary parser or recurse
-through Atmos's `show` command, which would execute configuration again. New evaluators can register
-through the existing engine interface; Starlark support does not require changing the artifact gate.
+through Atmos's `show` command, which would execute configuration again.
 
-An integration must supply trusted rules and materialized data. The future orchestration layer is
-responsible for collecting facts, selecting the governing policy revision, enforcing decisions,
-executing permitted work, and publishing a final result. Calling this package alone does not establish
+Callers supply trusted rules and materialized data. Calling this package alone does not establish
 a security boundary or a repository merge gate.
 
-See [Policy Capabilities and Integration Gaps](/contribute/policy-capabilities) for the distinction
-between expressible predicates, missing inputs, missing effects, and missing enforcement.
+See [Policy Capabilities](policy-capabilities.md) for implemented command integrations.
 
 ## Evaluate a rule in Go
 
@@ -59,41 +43,41 @@ This complete program uses the current API. Run it from a checkout containing `p
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
+    "context"
+    "encoding/json"
+    "fmt"
 
-	"github.com/cloudposse/atmos/pkg/policy"
+    "github.com/cloudposse/atmos/pkg/policy"
 )
 
 func main() {
-	engine := &policy.Engine{}
-	if err := engine.Register(policy.CELEngine, &policy.CEL{}); err != nil {
-		panic(err)
-	}
+    engine := &policy.Engine{}
+    if err := engine.Register(policy.CELEngine, &policy.CEL{}); err != nil {
+        panic(err)
+    }
 
-	request := &policy.Request{
-		Kind:  policy.Operation,
-		Input: json.RawMessage(`{"command":"apply","stage":"prod"}`),
-	}
-	rules := []policy.Rule{{
-		ID:         "production-freeze",
-		On:         policy.Operation,
-		Engine:     policy.CELEngine,
-		Expression: "input.command == 'apply' && input.stage == params.stage",
-		Parameters: json.RawMessage(`{"stage":"prod"}`),
-		Effects: policy.Effects{
-			Deny:   true,
-			Reason: "Production changes are frozen",
-		},
-	}}
+    request := &policy.Request{
+        Kind:  policy.Operation,
+        Input: json.RawMessage(`{"command":"apply","stage":"prod"}`),
+    }
+    rules := []policy.Rule{{
+        ID:         "production-freeze",
+        On:         policy.Operation,
+        Engine:     policy.CELEngine,
+        Expression: "input.command == 'apply' && input.stage == params.stage",
+        Parameters: json.RawMessage(`{"stage":"prod"}`),
+        Effects: policy.Effects{
+            Deny:   true,
+            Reason: "Production changes are frozen",
+        },
+    }}
 
-	decision, err := engine.Evaluate(context.Background(), request, rules)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(decision.Status)
-	fmt.Println(decision.Findings[0].Effects.Reason)
+    decision, err := engine.Evaluate(context.Background(), request, rules)
+    if err != nil {
+        panic(err)
+    }
+    fmt.Println(decision.Status)
+    fmt.Println(decision.Findings[0].Effects.Reason)
 }
 ```
 
@@ -111,32 +95,36 @@ The example reports a decision; it does not execute or intercept Terraform.
 ### Request and rule contracts
 
 <dl>
-  <dt><code>Request.Kind</code> and <code>Rule.On</code></dt>
-  <dd>Must match exactly for a rule to run. Input kinds identify what is evaluated, not the component
-  type or CI provider. For example, <code>plan</code> and <code>terraform.plan</code> are distinct;
-  the core does not implicitly normalize or fan out inputs.</dd>
-  <dt><code>Request.Input</code></dt>
-  <dd>A materialized JSON object, including an empty object when appropriate. Null, arrays, and
-  malformed JSON are invalid. The affected input kind has additional completeness checks.</dd>
-  <dt><code>Request.CI</code></dt>
-  <dd>An optional provider-native snapshot, available to any input kind, including early function
-  and source checks. Supplying it must not require executing configuration.</dd>
-  <dt><code>Request.Revisions</code></dt>
-  <dd>Separate governing, base, and head revision identifiers. The governing revision selects trusted
-  policy; the base and head delimit the change comparison. The core does not resolve or authenticate
-  these identifiers.</dd>
-  <dt><code>Rule.ID</code></dt>
-  <dd>A nonempty identifier, unique within the rule list. Every rule must also declare its input kind.</dd>
-  <dt><code>Rule.Expression</code> and <code>Rule.Parameters</code></dt>
-  <dd>A predicate and optional JSON-object parameters. Omitted parameters become an empty object in
-  CEL. A matching predicate selects effects; it is not itself synonymous with denial.</dd>
-  <dt><code>Rule.RequiredCI</code></dt>
-  <dd>Explicit provider, schema, and dataset requirements checked before an applicable rule's
-  predicate. Missing evidence cannot be hidden behind a condition that evaluates to false.</dd>
+    <dt><code>Request.Kind</code> and <code>Rule.On</code></dt>
+    <dd>Must match exactly for a rule to run. Input kinds identify what is evaluated, not the component
+    type or CI provider. For example, <code>plan</code> and <code>terraform.plan</code> are distinct;
+    the core does not implicitly normalize or fan out inputs.</dd>
+    <dt><code>Request.Input</code></dt>
+    <dd>A materialized JSON object, including an empty object when appropriate. Null, arrays, and
+    malformed JSON are invalid. The affected input kind has additional completeness checks.</dd>
+    <dt><code>Request.CI</code></dt>
+    <dd>An optional provider-native snapshot, available to any input kind, including early function
+    and source checks. Supplying it must not require executing configuration.</dd>
+    <dt><code>Request.Revisions</code></dt>
+    <dd>Separate governing, base, and head revision identifiers. The governing revision selects trusted
+    policy; the base and head delimit the change comparison. The core does not resolve or authenticate
+    these identifiers.</dd>
+    <dt><code>Rule.ID</code></dt>
+    <dd>A nonempty identifier, unique within the rule list. Every rule must also declare its input kind.</dd>
+    <dt><code>Rule.Description</code></dt>
+    <dd>Plain-English document purpose copied from <code>metadata.description</code> by the directory
+    loader. It is preserved for callers but does not affect evaluation or replace <code>Effects.Reason</code>.</dd>
+    <dt><code>Rule.Expression</code> and <code>Rule.Parameters</code></dt>
+    <dd>A predicate and optional JSON-object parameters. Omitted parameters become an empty object in
+    CEL. A matching predicate selects effects; it is not itself synonymous with denial.</dd>
+    <dt><code>Rule.RequiredCI</code></dt>
+    <dd>Explicit provider, schema, and dataset requirements checked before an applicable rule's
+    predicate. Missing evidence cannot be hidden behind a condition that evaluates to false.</dd>
 </dl>
 
-Rule lists must already be resolved and trusted. The core does not implement imports, inheritance,
-tag/label attachment selectors, disabled flags, advisory modes, or trust-tier merging.
+Rule lists must already be resolved and trusted. Literal `Rule.Match` selectors use `Request.Subject`
+for plan/lifecycle attachments. Imports, inline policy inheritance, disabled flags, advisory modes,
+and trust-tier merging are not implemented.
 
 ## CEL inputs and limits
 
@@ -149,8 +137,7 @@ CEL exposes four variables:
 | `ci` | The CI snapshot, or null when none was supplied |
 | `request` | `kind` and `revisions.governing`, `revisions.base`, `revisions.head` |
 
-Use `input.command` or `input.changes`, not the proposed PRD aliases `operation.command` or
-`affected.changes`. Those aliases are not installed. This activation is separate from the existing
+Use `input.command` or `input.changes` for corresponding supplied fields. This activation is separate from the existing
 workflow/hook `when:` activation, where `ci` remains a boolean.
 
 Predicates must return a boolean. Syntax errors, missing fields accessed without a guard, and
@@ -197,11 +184,8 @@ validates their basic shape but does not interpret users, count reviews, establi
 or check review freshness. A matched approval requirement always remains `awaiting_approval` unless
 a denial or error takes precedence—even if review data is present in the snapshot.
 
-Future GitHub integration must work within `GITHUB_TOKEN` permissions and document the scopes required
-for each collected fact or action. Named reviewers or trusted maintained reviewer lists are the
-planned open-source model, not live organization-team lookup. No token or API permission is needed
-to evaluate a snapshot or collect the local GitHub Actions metadata/event through Native CI.
-Fresh API facts, review verification, and Atmos Pro integrations remain unimplemented.
+The directory loader has no approval action. The supplied-event collector does not fetch live
+reviews or verify approvals. See [CI Context](https://atmos.tools/policies/ci) for its data and permission contract.
 
 ### Hooks
 
@@ -215,10 +199,10 @@ can return a hook reference for TFLint. That decision alone does **not** mean TF
 
 The `pkg/hooks` lifecycle integration now resolves governing `spec.hooks` through existing kind/step
 execution, preserves mandatory requirements against workspace skips and weaker failure modes, and
-keeps authorization separate. See [Policies](/policies) for supported inputs and
-[Hooks](/policies/hooks) for static-definition restrictions. Tests are listed in
-[Developing Policy Examples](/contribute/policy-library). Review reevaluation
-must not replay plan/apply hooks. A failed callback after apply cannot undo the completed apply,
+keeps authorization separate. See [Policies](https://atmos.tools/policies) for supported inputs and
+[Hooks](https://atmos.tools/policies/hooks) for static-definition restrictions. Tests are listed in
+[Developing the Policy Library](policy-library.md). Saved-plan reevaluation before apply
+does not replay after-plan hooks. A failed callback after apply cannot undo the completed apply,
 and arbitrary HTTP callbacks cannot promise exactly-once delivery.
 
 ## Provider-native CI snapshots
@@ -243,7 +227,7 @@ are supplied claims, not cryptographic proof or verified freshness.
 
 `pkg/ci.CollectPolicySnapshot` dispatches through the existing provider registry's optional
 `PolicySnapshotProvider` capability. GitHub Actions implements `github-actions/v1` with native
-environment/event data; GitLab and Azure DevOps remain extension targets. The engine never fetches
+environment/event data. The engine never fetches
 missing facts. Existing Native CI context and reporting interfaces are unchanged.
 
 ## Policies over affected changes
@@ -259,7 +243,7 @@ missing facts. Existing Native CI context and reporting interfaces are unchanged
 Object changes retain separate `before` and `after` snapshots, reasons for being affected, and
 ambiguity. Field actions distinguish `add`, `modify`, and `remove`. An absent field differs from an
 explicit JSON null value. Collectors must represent ambiguous moves conservatively and must not
-merge before/after metadata to evaluate future attachment selectors.
+merge before/after metadata into one snapshot.
 
 For example, this predicate selects modifications or removals of a protected label, while allowing
 ordinary additions to remain outside this rule:
@@ -292,14 +276,13 @@ evaluation. Setting a flag does not prove actual completeness: the collector mus
 deletions, indirect effects, imports, inheritance, and unsupported analysis. Do not relabel the
 existing filtered `describe affected` output as complete without that work.
 
-:::note Planned command integration
-
-`atmos describe affected` and supported commands using `--affected` will explicitly supply this
-input after analysis, before filtering or scheduling work. An ordinary `atmos helm deploy` without
-affected analysis will not trigger an affected-set policy. These integration points are **not wired
-yet**; declaring a rule does not make any command compute an inventory.
-
-:::
+The shared affected command path now collects this contract and enforces `on: atmos.affected`
+before display filtering and scheduling. It compares unfiltered static configuration in clean
+worktrees using the active discovery settings on both sides; it does not independently reconstruct
+historical discovery. Protect that configuration as part of the governing execution environment.
+Missing imports, unsupported types, and identity collisions block. Operation and saved-plan policies
+use their own inputs and do not implicitly request affected analysis. See the
+[affected reference](../website/docs/policies/affected.mdx).
 
 ## Adding evaluator adapters
 
@@ -312,15 +295,18 @@ Adapters are trusted Go code and must be concurrency-safe, honor cancellation, a
 The registry is not a sandbox for arbitrary Go plugins. Preserve predicate semantics: true selects
 effects, false does not apply, and failure returns an error rather than false.
 
-Only CEL is implemented in this package. Starlark, Rego, and declarative adapters are not registered;
+`NewEngine()` registers CEL and restricted Starlark. The zero-value `Engine` still has no adapters.
+Starlark shares compilation and value conversion with configuration evaluation through the
+host-independent `pkg/script/starlark/value` package, avoiding the runtime → CI → policy import cycle.
+The policy adapter supplies detached snapshots, disables printing, sanitizes errors, enforces a
+100,000-step limit, and accepts only a boolean return. Source is limited to 64 KiB. These bounds
+are not a memory sandbox. See [Starlark policies](https://atmos.tools/policies/starlark).
+
+Rego and declarative adapters are not registered;
 selecting an unknown engine for an applicable rule returns an error. This does not remove the
 separate legacy Rego validation path.
 
-Future Starlark support should wrap the incoming restricted value evaluator with materialized inputs,
-execution limits, and cancellation. Do not expose the script automation host or lazy configuration
-maps that can execute YAML functions while being read.
-
-## Verification and integration checklist
+## Verification
 
 Run the core and existing condition compatibility tests from the repository root:
 
@@ -332,14 +318,6 @@ Tests use collected data and synthetic provider snapshots, not live credentials.
 and non-applicable rules, error/deny precedence, independent requirements, missing required facts,
 snapshot isolation, cancellation, and complete versus incomplete affected inventories.
 
-Before an integration claims enforcement, it must additionally establish:
-
-1. Trusted governing policy and hook definitions independent of candidate changes.
-2. Complete collected evidence, supported provider capabilities, and documented token permissions.
-3. Fresh approval verification bound to the correct repository, head, and governing revision.
-4. A required repository-level gate that still runs when no component jobs are scheduled.
-5. Mandatory hook execution and success tracking without replaying lifecycle work on review events.
-6. Protected enforcement workflows, governing configuration, and ownership rules, with explicit
-   limitations around stale statuses, refresh triggers, and workspace-controlled code.
-
-These are integration responsibilities, not guarantees provided by the scaffold.
+The [catalog test runner](policy-library.md) verifies distributed definitions and fixtures.
+Command enforcement additionally depends on the
+[protected execution configuration](https://atmos.tools/policies/configuration#enforcement).

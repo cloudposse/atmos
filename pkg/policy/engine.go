@@ -19,6 +19,13 @@ type Engine struct {
 	evaluators map[string]Evaluator
 }
 
+// NewEngine returns an isolated registry with the supported pure evaluators.
+func NewEngine() *Engine {
+	defer perf.Track(nil, "policy.NewEngine")()
+
+	return &Engine{evaluators: map[string]Evaluator{CELEngine: &CEL{}, StarlarkEngine: &Starlark{}}}
+}
+
 // Register adds a language adapter without permitting replacement of an existing one.
 func (e *Engine) Register(name string, evaluator Evaluator) error {
 	defer perf.Track(nil, "policy.Engine.Register")()
@@ -112,6 +119,9 @@ func (e *Engine) match(ctx context.Context, request *Request, rule *Rule) (bool,
 		return false, Effects{}, fmt.Errorf("%w: %w", errUtils.ErrPolicyEvaluation, err)
 	}
 	if err := validateRule(rule); err != nil {
+		return false, Effects{}, err
+	}
+	if selected, err := rule.Match.Matches(request.Subject); err != nil || !selected {
 		return false, Effects{}, err
 	}
 	for _, requirement := range rule.RequiredCI {

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Experimental Atmos inline CEL policy document",
+  "title": "Atmos inline policy document",
   "type": "object",
   "additionalProperties": false,
   "required": ["apiVersion", "kind", "metadata", "spec"],
@@ -11,7 +11,10 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["name"],
-      "properties": {"name": {"type": "string", "pattern": "\\S"}}
+      "properties": {
+        "name": {"type": "string", "pattern": "\\S"},
+        "description": {"type": "string", "description": "Plain-English policy purpose; not an expression or denial reason."}
+      }
     },
     "spec": {
       "type": "object",
@@ -29,12 +32,23 @@
             "additionalProperties": false,
             "required": ["on", "rule", "action"],
             "properties": {
-              "on": {"enum": ["terraform.plan", "operation"]},
-              "engine": {"enum": ["cel"], "default": "cel"},
+              "on": {"enum": ["terraform.plan", "operation", "atmos.affected"]},
+              "engine": {"enum": ["cel", "starlark"], "default": "cel"},
               "rule": {"type": "string", "minLength": 1, "maxLength": 65536},
               "action": {"enum": ["deny", "hooks"]},
               "reason": {"type": "string"},
               "with": {"type": "object"},
+              "match": {
+                "type": "object", "additionalProperties": false,
+                "properties": {
+                  "tags": {"type": "array", "items": {"type": "string"}},
+                  "tag_mode": {"enum": ["any", "all"]},
+                  "labels": {"type": "object", "additionalProperties": {"type": "string"}},
+                  "components": {"type": "array", "items": {"type": "string"}},
+                  "stacks": {"type": "array", "items": {"type": "string"}},
+                  "component_types": {"type": "array", "items": {"type": "string"}}
+                }
+              },
               "required_ci": {
                 "type": "array",
                 "items": {
@@ -63,6 +77,9 @@
               }
             },
             "allOf": [{
+              "if": {"properties": {"on": {"const": "atmos.affected"}}},
+              "then": {"not": {"required": ["match"]}}
+            }, {
               "if": {"properties": {"action": {"const": "hooks"}}},
               "then": {"required": ["hooks"], "properties": {"on": {"const": "operation"}}},
               "else": {"not": {"required": ["hooks"]}}

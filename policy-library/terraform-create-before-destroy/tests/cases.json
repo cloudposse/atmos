@@ -1,0 +1,93 @@
+[
+  {
+    "name": "create first",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_instance.example",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create",
+                "delete"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "destroy first",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_instance.example",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "example",
+            "change": {
+              "actions": [
+                "delete",
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "pure deletion",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_instance.example",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "example",
+            "change": {
+              "actions": [
+                "delete"
+              ],
+              "before": null,
+              "after": null,
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "different input kind",
+    "request": {
+      "kind": "operation",
+      "input": {}
+    },
+    "status": "not_applicable"
+  }
+]

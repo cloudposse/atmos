@@ -29,10 +29,13 @@ enrichment, and durable webhook orchestration belong to Atmos Pro.
 
 **Status:** this is a proposed design, not documentation of a fully shipped policy engine.
 `pkg/policy` provides the evaluator scaffold. The first command integration described below is an
-opt-in saved-Terraform-plan gate using CEL and an explicit `ATMOS_POLICY_DIR`. The directory also
+opt-in saved-Terraform-plan gate using CEL/Starlark and `policy.d/` (overridden by `ATMOS_POLICY_DIR`). The directory also
 supports operation rules selecting existing hooks at Terraform, Helmfile, Helm, and Kubernetes
 lifecycle points. Native CI supplies GitHub Actions environment/event snapshots through `pkg/ci`.
-Broader component admission, manifest discovery/attachment, fresh API facts, and approval verification
+Instance selectors attach plan/lifecycle rules using resolved tags, labels, names, stacks, and types.
+An `atmos.affected` gate compares unfiltered static inventories within the active discovery scope
+before affected results are consumed. Independent historical discovery is not implemented; see below.
+Broader component admission, inline/remote policy attachment inheritance, fresh API facts, and approval verification
 remain proposed. **This is not yet all-component enforcement.** Component integrations have different
 capabilities; none may pretend to supply a Terraform plan merely to share the engine.
 The current-code and incoming-dependency distinctions apply to all examples outside this first slice.
@@ -43,7 +46,7 @@ The security analysis that motivated the effort is documented separately in
 
 ## Concepts
 
-### Component capability contract and sample library
+### Component capability contract and policy library
 
 The product target includes **all component types**, with shared command/configuration capabilities
 and optional provider-native artifact capabilities. Component adapters must advertise their input
@@ -54,22 +57,32 @@ evaluation error; an unrelated input kind is not applicable. Lifecycle policies 
 
 Current: Terraform-compatible saved plans plus the existing Terraform/Helmfile/Helm/Kubernetes
 lifecycle entry points. Proposed: Packer, Ansible, container, emulator and custom-component admission,
-rendered Kubernetes/release artifacts, scanner/cost reports, and repository-only command integration.
+externally validated preview artifacts, scanner/cost reports, and repository-only command integration.
 Ansible check mode is not a complete saved plan; unavailable or skipped predictions must remain
 explicit. Legacy validation behavior remains unchanged during this incremental rollout.
 
-Ship a **tested sample library** (`examples/policies/`) before remote library distribution. The first
-12 examples cover resource deletion/replacement/count/type/tag restrictions, fork-event selection,
+Ship a **tested, browsable policy library** (`policy-library/`) independently of remote library
+resolution. Each entry contains one `policy.yaml`, a technical `README.md`, and colocated input/expected
+decision fixtures in `tests/cases.json`. The website presents a compact searchable list at
+`/policies/library`, retaining Reference navigation. Individual pages show the complete policy YAML
+first, with copy controls, configuration, usage commands, and selectable tested examples. Reuse source
+scanning, not the repository-browsing interface. No installer or featured promotion. End-to-end demonstrations
+remain separate under `examples/policies/`.
+
+The directory manifest supports optional `metadata.description`: plain-English document purpose,
+preserved on resolved rules independently of the CEL predicate and denial `reason`. Every catalog
+entry supplies a description. Descriptions are literal text, never evaluated or templated.
+
+The first 12 catalog entries cover resource deletion/replacement/count/type/tag restrictions, fork-event selection,
 mandatory TFLint, production scanning, post-apply HTTP callbacks, failure cleanup, and Helm operation
 denial. Every distributed rule has allowing/non-applicable and blocking/selecting cases against the
 actual YAML. Add boundary, null/unknown, and missing-input cases as appropriate; a sample without tests
 fails the suite. Hook selection tests are supplemented by executor tests (dry-run, skip bypass,
 failure propagation, event mismatch, and no replay during unrelated lifecycle events).
 
-The [library capability and research catalog](../../website/docs/contribute/policy-library.mdx)
-records proposed native Kubernetes, Ansible, Packer, container, CI, change, cost and scanner examples,
-their missing collectors/executors, and acceptance cases for each. Proposals must not be shipped as
-apparently executable examples or advertised as enforced merely because CEL can express them.
+Website documentation and catalog entries describe implemented behavior only. Unimplemented
+integrations, research candidates, and rollout proposals belong exclusively in this PRD. A policy
+must not appear as executable merely because CEL can express its condition.
 
 The current hook slice resolves only governing `spec.hooks`, optionally pins `spec.tools`, preserves
 existing kind/step execution and retries, and distinguishes required execution from required success.
@@ -77,7 +90,49 @@ It rejects nested skip/background controls and does not render hook templates/YA
 Broader trusted rendering, typed hook results, pre-operation validation of future obligations, and
 durable duplicate handling remain design work. Post-apply failure cannot undo completed changes.
 
-The `atmos-policy` consumer skill must track these implementation boundaries and sample tests.
+The `atmos-policy` consumer skill must track these implementation boundaries and catalog tests.
+
+### Policy responsibility boundary
+
+Atmos owns decisions about its execution and change workflow: whether an operation may proceed,
+which saved plan is acceptable, what review evidence is required, and which checks/hooks must run.
+It does not replace platform-native admission or runtime security enforcement.
+
+Do not build a parallel Kubernetes security catalog for privileged Pods, seccomp/non-root settings,
+image trust, resource quotas, or persistent-volume protection. Those controls belong in the platform
+policy layer and must apply to clients other than Atmos. An Atmos policy can require an external
+validator to run and succeed; that tool or the cluster retains ownership of its resource-security
+rules. Optional preflight checks do not establish authoritative cluster enforcement.
+
+The library can include checks on artifacts Atmos actually consumes (such as Terraform saved plans),
+but their documentation must identify the invocation boundary rather than claim continuous
+infrastructure compliance. Ansible recap and image-provenance processing are tool/report integrations,
+not grounds for growing a second resource-security engine in the CLI.
+
+### Deferred integration research (PRD only)
+
+The following are design candidates, not runnable catalog entries. Add an entry only after its
+collector/executor and enforcement tests exist. These govern one invocation or complete repository
+analysis before fanout; cross-run aggregation and durable coordination remain Pro responsibilities.
+
+| Proposed example | Required input / integration | Minimum acceptance cases |
+|---|---|---|
+| Protect labels while permitting additions | Structured before/after metadata and reviewer verifier | New ordinary label allows; protected remove/modify awaits review; absent versus null differs |
+| Detect indirect policy detachment | Complete attachment inventories and governing revision | Selector/import/discovery/parameter change requires review; policy deletion caught; ambiguous move blocks |
+| Protect workflow permission changes | Structured Actions workflow diff | Unchanged/read-only allows; write grant/unsafe event change requires review; renamed workflow still detected |
+| Require immutable Action references | Parsed workflow steps and reusable workflows | Commit SHA allows; mutable reference denies; local actions handled separately |
+| Require fresh designated reviewer approval | Current paginated PR review facts | Current head/non-author allows; dismissed/stale/self review blocks; partial/API-denied results error |
+| Request a reviewer or update one PR comment | Approval resolver and typed GitHub action hook | Pending selects action; satisfied selects none; insufficient permission errors; duplicate event updates same comment |
+| Limit changed/affected instances before fanout | Complete files/components/instances inventory | Boundary count allows; excess blocks; deletes included; incomplete analysis errors |
+| Enforce a current-component cost budget | Cost artifact bound to evaluated plan | Below cap allows; above denies; missing estimate/currency mismatch/zero baseline handled |
+| Require scanner completion and cap findings | Scanner report bound to current input | Clean completed scan allows; severe findings deny; empty/missing/stale/failed scan is not clean |
+| Approved deployment window | Trusted captured timestamp/timezone | In-window allows; boundary/DST tested; missing time errors; evaluator does not read clock |
+
+Additional language work may include pure aggregation, recursive traversal, CIDR containment, and
+explicit sanitized-value helpers. Richer results need typed dynamic findings and hook payloads;
+another boolean evaluator alone does not provide them. Named-reviewer verification requires fresh,
+complete evidence, while live organization-team enrichment remains outside the token-only model.
+Do not expose these candidates as supported settings in website documentation.
 
 ### Terminology
 
@@ -153,16 +208,18 @@ The `atmos-policy` consumer skill must track these implementation boundaries and
   Actions metadata/events; operation policies select governing hooks through the existing executor.
 - **Initial scaffold and plan integration (this workspace):** `pkg/policy` supplies typed
   requests/decisions/effects, affected inventory contracts, provider-native CI snapshots and a
-  collector interface, an explicit evaluator registry, and a bounded CEL predicate adapter.
+  collector interface, an explicit evaluator registry, and bounded CEL and Starlark predicate adapters.
   Required inputs fail closed; approvals remain outstanding; pure evaluation returns hook obligations
-  that the lifecycle integration executes. An explicit-directory loader supports inline CEL plan and
+  that the lifecycle integration executes. An explicit-directory loader supports inline CEL/Starlark plan and
   operation rules. There is no general manifest/library resolver, live API-fact collector, trust resolver, approval verifier,
-  or Starlark/Rego adapter in this new package. Existing validation and hook/CI reporting is unchanged.
+  or Rego adapter in this new package. Existing validation and hook/CI reporting is unchanged.
   See [the scaffold contract](../../pkg/policy/README.md) for its narrower current API.
-- **Incoming dependency:** the [Starlark PR stack](https://github.com/cloudposse/atmos/pull/3321)
-  includes restricted value evaluation, script hook steps, CI context, and a reporter seam. Reuse the
-  restricted `pkg/script.ValueEvaluator` for policies; the automation `Engine` is a different host.
-  Availability must be checked against the merged stack before implementation.
+- **Merged dependency:** [restricted Starlark value evaluation](https://github.com/cloudposse/atmos/pull/3286)
+  and the automation runtime are available on main. Policy evaluation now reuses their compiler and
+  read-only value conversion through `pkg/script/starlark/value`, without importing the automation host.
+  `engine: starlark` function bodies return a strict boolean over materialized `ctx.input`, `ctx.params`,
+  `ctx.ci`, and `ctx.request`. Source is bounded to 64 KiB and execution to 100,000 interpreter steps.
+  Printing is disabled and runtime diagnostics omit source/input values. Limits are not a memory sandbox.
 
 ## Goals
 
@@ -508,6 +565,16 @@ unsupported component coverage. It must not repoint head configuration into base
 produces a complete historical inventory. Safe shared machinery may be factored out; an enforcement
 mode must establish completeness before any optional presentation filters.
 
+**Implemented boundary:** the current gate takes unfiltered, static merged inventories from both
+clean worktrees, including abstract/disabled instances, rejects missing imports and unsupported
+types, and evaluates `atmos.affected` before the legacy display/scheduling analysis. It does not
+execute component YAML functions/templates to collect policy input. Both inventories use the
+active discovery configuration. Completeness is therefore relative to that protected scope, not
+an independent reconstruction of each revision's historical discovery. Git file changes remain
+visible to policies, including discovery-file changes. Fully independent discovery, indirect
+attachment-loss analysis, and transitive dependency graph expansion remain PRD work; do not claim
+the current gate detects all evasion through changed discovery configuration.
+
 An intentionally scoped rule may select from a complete inventory. A caller's `--stack` or affected
 filter must not narrow a repository-level required gate. API file-list limits require a complete Git
 comparison or a blocking error, not partial success.
@@ -617,12 +684,14 @@ errors block. Plan JSON contains secrets even when Terraform marks them sensitiv
 bypass console/CI captures, masking transformations, and diagnostic recording; evaluation errors
 must not echo input values. Temporary artifacts are private and removed on all exit paths.
 
-**First implementation:** `ATMOS_POLICY_DIR` selects one explicit directory, captured before stack
+**Current implementation:** `ATMOS_POLICY_DIR` overrides the default `policy.d/` directory, captured before stack
 configuration processing. It loads strict `atmos/v1`, `kind: Policy` documents with named inline
 `spec.policies` entries (`on: terraform.plan`, `engine: cel`, `rule`, `action: deny`, optional `reason`
-and `with`). No templating/imports, library resolution, selectors, tier discovery, or trust inference.
+and `with`). Instance `match` supports literal tags/labels, component names, stacks, and component types.
+No policy templating/imports, remote library resolution, tier discovery, or trust inference.
 Unknown fields, unsupported kinds/engines/actions and empty configured directories fail closed.
-All loaded rules govern every plan and saved-plan apply in the process, independently of `--affected`.
+Matching rules govern plan and saved-plan apply independently of `--affected`; unmatched instances
+are not subject to saved-plan restrictions from those rules.
 These command gates are mandatory once opted in; no warn/off bypass is provided in this slice.
 
 Implicit apply/deploy and direct destroy are rejected when plan rules are configured. Use explicit
@@ -837,7 +906,7 @@ Declarative, CEL, Rego, and Starlark are adapters to one policy result, not sepa
   `data.atmos.errors` map to the common result; approval/hook effects use the new typed result adapter,
   not overloaded denial strings.
 - **Declarative** library instances express common conditions, parameters, and effects without code.
-- **Starlark** reuses the incoming restricted `ValueEvaluator`, with frozen ordinary snapshot maps,
+- **Starlark (implemented)** reuses restricted compilation and value conversion, with read-only ordinary snapshot maps,
   bounded execution/cancellation, and no shell, filesystem, network, CI writers, or automation host.
   Do not pass a lazy `ValueMap` that can execute YAML functions while being read. Imports and any
   future helper modules must follow the restricted evaluator's allowlist, not automation defaults.
@@ -1499,11 +1568,12 @@ required hook: those requirements must work when enabled.
 
 | Stage | Deliverable / behavior |
 |---|---|
-| Foundation | common decision/effect contract, trusted loading, four evaluator adapters (Starlark depends on the incoming restricted evaluator), legacy validation compatibility |
-| First command slice (implemented in this workspace) | explicit `ATMOS_POLICY_DIR`, strict inline CEL plan rules, saved-plan JSON gate after plan and before saved-plan apply; mandatory once opted in, without general trust/attachment discovery |
+| Foundation | common decision/effect contract, trusted loading, CEL and Starlark implemented; declarative/Rego adapters proposed; legacy validation compatibility |
+| First command slice (implemented in this workspace) | default `policy.d/`, `ATMOS_POLICY_DIR` override, strict inline CEL/Starlark rules and literal instance selectors, saved-plan JSON gate after plan and before saved-plan apply; mandatory for matching instances, without trust-tier discovery |
 | Local Native CI integration (implemented) | optional snapshot capability on existing registry; GitHub-native supplied metadata/event; no API calls; required missing evidence blocks |
 | Lifecycle hooks (initial slice implemented) | Terraform/Helmfile/Helm/Kubernetes operation rules reuse hook/step engines, governing definitions/tool pins, required execution/success and dry-run; other components and richer result evidence remain work |
-| Further Native CI integration | repository/change/current approval inputs, explicit affected-analysis policy seam, token-only permission profiles, stable required gate and documented refresh limitations |
+| Affected gate (initial slice implemented) | unfiltered static before/after inventories under active discovery, Git files, component-source changes, structured fields; deny before consuming affected output; clean worktrees and strict collection required |
+| Further Native CI integration | independent historical discovery, repository-only changes/current approval inputs, token-only permission profiles, stable required gate and documented refresh limitations |
 | Further hook integration | preflight future obligations, trusted rendering, typed per-invocation results and event duplicate handling |
 | Advisory adoption | existing commands warn by default unless explicitly strict/enforced; optional hook bindings run only when configured, not merely because a warning exists |
 | Later major | consider stricter defaults with migration guidance; local opt-outs remain bounded by trusted floors |
@@ -1636,7 +1706,7 @@ is explicitly documented.
   structured changes and analysis metadata. Do not reuse filtered output as proof of completeness.
 - `pkg/hooks` and `pkg/runner/step`: accept trusted policy bindings and immutable event/decision
   context, preserve engine reuse, enforce mandatory work and record execution results.
-- `pkg/script`: consume the incoming restricted evaluation interface; no new interpreter or
+- `pkg/script/starlark/value`: shared restricted compilation and value conversion; no new interpreter or
   automation-host exposure inside policy evaluation.
 - Command/MCP/function/source/plan entry points: invoke the appropriate input-kind evaluation;
   early admission does not require fully rendered components. Ordinary commands must not implicitly
@@ -1681,7 +1751,7 @@ Apps/durable orchestration in Pro.
 - [Function Execution Security Analysis](../function-execution-security-analysis.md).
 - [Palantir policy-bot](https://github.com/palantir/policy-bot) and its linked result/review/file-predicate
   implementation in the design-precedent section; design reference, not copied code.
-- [Incoming Starlark PR stack](https://github.com/cloudposse/atmos/pull/3321);
+- [Merged restricted Starlark evaluation](https://github.com/cloudposse/atmos/pull/3286);
   [CI module PR](https://github.com/cloudposse/atmos/pull/3307).
 - [GitHub token scope](https://docs.github.com/en/actions/concepts/security/github_token),
   [workflow permissions](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions),

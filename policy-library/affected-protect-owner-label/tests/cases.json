@@ -1,0 +1,297 @@
+[
+  {
+    "name": "owner changed",
+    "request": {
+      "kind": "atmos.affected",
+      "input": {
+        "complete": true,
+        "reasons": [],
+        "files": [],
+        "components": [],
+        "stacks": [],
+        "changes": [],
+        "instances": [
+          {
+            "identity": {
+              "name": "app",
+              "component_type": "helm",
+              "stack": "prod"
+            },
+            "action": "modify",
+            "before": {
+              "metadata": {
+                "labels": {
+                  "owner": "platform"
+                }
+              }
+            },
+            "after": {
+              "metadata": {
+                "labels": {
+                  "owner": "application"
+                }
+              }
+            },
+            "reasons": [
+              "configuration"
+            ],
+            "ambiguous": false
+          }
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "owner removed",
+    "request": {
+      "kind": "atmos.affected",
+      "input": {
+        "complete": true,
+        "reasons": [],
+        "files": [],
+        "components": [],
+        "stacks": [],
+        "changes": [],
+        "instances": [
+          {
+            "identity": {
+              "name": "app",
+              "component_type": "helm",
+              "stack": "prod"
+            },
+            "action": "modify",
+            "before": {
+              "metadata": {
+                "labels": {
+                  "owner": "platform"
+                }
+              }
+            },
+            "after": {
+              "metadata": {
+                "labels": {}
+              }
+            },
+            "reasons": [
+              "configuration"
+            ],
+            "ambiguous": false
+          }
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "instance removed",
+    "request": {
+      "kind": "atmos.affected",
+      "input": {
+        "complete": true,
+        "reasons": [],
+        "files": [],
+        "components": [],
+        "stacks": [],
+        "changes": [],
+        "instances": [
+          {
+            "identity": {
+              "name": "app",
+              "component_type": "helm",
+              "stack": "prod"
+            },
+            "action": "remove",
+            "before": {
+              "metadata": {
+                "labels": {
+                  "owner": "platform"
+                }
+              }
+            },
+            "reasons": [
+              "configuration"
+            ],
+            "ambiguous": false
+          }
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "null metadata",
+    "request": {
+      "kind": "atmos.affected",
+      "input": {
+        "complete": true,
+        "reasons": [],
+        "files": [],
+        "components": [],
+        "stacks": [],
+        "changes": [],
+        "instances": [
+          {
+            "identity": {
+              "name": "app",
+              "component_type": "helm",
+              "stack": "prod"
+            },
+            "action": "modify",
+            "before": {
+              "metadata": {
+                "labels": {
+                  "owner": "platform"
+                }
+              }
+            },
+            "after": {
+              "metadata": null
+            },
+            "reasons": [
+              "configuration"
+            ],
+            "ambiguous": false
+          }
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "new owner",
+    "request": {
+      "kind": "atmos.affected",
+      "input": {
+        "complete": true,
+        "reasons": [],
+        "files": [],
+        "components": [],
+        "stacks": [],
+        "changes": [],
+        "instances": [
+          {
+            "identity": {
+              "name": "app",
+              "component_type": "helm",
+              "stack": "prod"
+            },
+            "action": "modify",
+            "before": {},
+            "after": {
+              "metadata": {
+                "labels": {
+                  "owner": "platform"
+                }
+              }
+            },
+            "reasons": [
+              "configuration"
+            ],
+            "ambiguous": false
+          }
+        ]
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "unchanged owner",
+    "request": {
+      "kind": "atmos.affected",
+      "input": {
+        "complete": true,
+        "reasons": [],
+        "files": [],
+        "components": [],
+        "stacks": [],
+        "changes": [],
+        "instances": [
+          {
+            "identity": {
+              "name": "app",
+              "component_type": "helm",
+              "stack": "prod"
+            },
+            "action": "modify",
+            "before": {
+              "metadata": {
+                "labels": {
+                  "owner": "platform"
+                }
+              }
+            },
+            "after": {
+              "metadata": {
+                "labels": {
+                  "owner": "platform",
+                  "stage": "prod"
+                }
+              }
+            },
+            "reasons": [
+              "configuration"
+            ],
+            "ambiguous": false
+          }
+        ]
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "new instance",
+    "request": {
+      "kind": "atmos.affected",
+      "input": {
+        "complete": true,
+        "reasons": [],
+        "files": [],
+        "components": [],
+        "stacks": [],
+        "changes": [],
+        "instances": [
+          {
+            "identity": {
+              "name": "app",
+              "component_type": "helm",
+              "stack": "prod"
+            },
+            "action": "add",
+            "after": {
+              "metadata": {
+                "labels": {
+                  "owner": "platform"
+                }
+              }
+            },
+            "reasons": [
+              "configuration"
+            ],
+            "ambiguous": false
+          }
+        ]
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "incomplete inventory",
+    "request": {
+      "kind": "atmos.affected",
+      "input": {
+        "complete": false,
+        "reasons": [
+          "missing import"
+        ],
+        "files": [],
+        "components": [],
+        "stacks": [],
+        "instances": [],
+        "changes": []
+      }
+    },
+    "status": "error",
+    "error": "input_unavailable"
+  }
+]

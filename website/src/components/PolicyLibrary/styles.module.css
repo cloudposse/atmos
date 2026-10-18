@@ -1,0 +1,59 @@
+.page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1rem 0 3rem;
+  min-width: 0;
+}
+
+.lead, .description, .note, .count {
+  color: var(--ifm-color-emphasis-700);
+}
+
+.lead { margin-bottom: 1.5rem; }
+.back { display: inline-block; margin-bottom: 1.5rem; }
+.filters { display: flex; gap: 1rem; margin-top: 2rem; }
+.filters label, .casePicker { display: flex; flex-direction: column; gap: .4rem; font-size: .875rem; }
+.search { flex: 1; }
+.filters input, .filters select, .casePicker select {
+  padding: .65rem .75rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 6px;
+  background: var(--ifm-background-color);
+  color: var(--ifm-font-color-base);
+  font: inherit;
+  min-width: 0;
+}
+.count { font-size: .85rem; margin: 1rem 0 .5rem; }
+.list { list-style: none; padding: 0; border-top: 1px solid var(--ifm-color-emphasis-200); }
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem .75rem;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+  color: var(--ifm-font-color-base);
+}
+.row:hover { text-decoration: none; background: var(--ifm-color-emphasis-100); }
+.row:focus-visible { outline: 2px solid var(--ifm-color-primary); outline-offset: -2px; }
+.rowTitle { display: block; font-weight: 600; }
+.description { display: block; font-size: .9rem; font-weight: 400; margin-top: .25rem; }
+.badge { font-size: .75rem; border: 1px solid var(--ifm-color-emphasis-300); border-radius: 4px; padding: .15rem .45rem; white-space: nowrap; }
+.arrow { color: var(--ifm-color-emphasis-600); }
+.reset { border: 0; padding: 0; background: none; color: var(--ifm-link-color); text-decoration: underline; cursor: pointer; font: inherit; }
+.page h2 { margin-top: 2rem; }
+.casePicker { max-width: 28rem; margin-bottom: 1rem; }
+.contract { border: 1px solid var(--ifm-color-emphasis-300); padding: 1rem; border-radius: 6px; }
+.contract summary { cursor: pointer; font-weight: 500; }
+.contract[open] summary { margin-bottom: 1rem; }
+.note { font-size: .875rem; }
+.references { display: flex; flex-wrap: wrap; gap: .75rem 1.5rem; border-top: 1px solid var(--ifm-color-emphasis-200); margin-top: 2rem; padding-top: 1rem; font-size: .875rem; }
+/* Keep the standard CodeBlock copy control visible without a hover. */
+.policyCode :global(button[aria-label]) { opacity: 1; }
+
+@media (max-width: 600px) {
+  .filters { flex-direction: column; }
+  .row { grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; }
+  .badge { grid-column: 1; justify-self: start; }
+  .arrow { grid-column: 2; grid-row: 1 / span 2; }
+}

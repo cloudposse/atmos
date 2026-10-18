@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/policy"
@@ -47,18 +48,43 @@ func loadTerraformPlanPolicy(info *schema.ConfigAndStacksInfo) (*planfile.Guard,
 	if err != nil {
 		return nil, err
 	}
-	if err := validateTerraformPolicyOperation(info, gate); err != nil {
-		return nil, err
-	}
 	return gate, nil
 }
 
-func newTerraformPolicyGuard(rules []policy.Rule) (*planfile.Guard, error) {
-	var engine policy.Engine
-	if err := engine.Register(policy.CELEngine, &policy.CEL{}); err != nil {
+// bindTerraformPolicy attaches loaded definitions after inherited instance metadata
+// is resolved, before starting component tools. Out-of-scope instances retain their
+// normal command behavior; a missing required subject fails closed.
+func bindTerraformPolicy(gate *planfile.Guard, info *schema.ConfigAndStacksInfo, delimiters ...string) (*planfile.Guard, error) {
+	if gate == nil {
+		return nil, nil
+	}
+	subject, err := policy.NewSubject(policy.ObjectIdentity{
+		Name: info.ComponentFromArg, Stack: info.Stack, ComponentType: "terraform",
+	}, info.ComponentSection[cfg.MetadataSectionName], delimiters...)
+	if err != nil {
 		return nil, err
 	}
-	gate := &planfile.Guard{Engine: &engine, Rules: rules, Show: process.NewDefaultRunner()}
+	var selected []policy.Rule
+	for i := range gate.Rules {
+		rule := &gate.Rules[i]
+		matches, err := rule.Match.Matches(subject)
+		if err != nil {
+			return nil, err
+		}
+		if matches {
+			selected = append(selected, *rule)
+		}
+	}
+	if len(selected) == 0 {
+		return nil, nil
+	}
+	gate.Rules, gate.Subject = selected, subject
+	return gate, validateTerraformPolicyOperation(info, gate)
+}
+
+func newTerraformPolicyGuard(rules []policy.Rule) (*planfile.Guard, error) {
+	engine := policy.NewEngine()
+	gate := &planfile.Guard{Engine: engine, Rules: rules, Show: process.NewDefaultRunner()}
 	snapshot, err := ci.CollectPolicySnapshot(context.Background())
 	if err != nil {
 		return nil, err
