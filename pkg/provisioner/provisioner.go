@@ -49,6 +49,11 @@ type ProvisionParams struct {
 	Stack             string
 	DescribeComponent ExecuteDescribeComponentFunc
 	AuthContext       *schema.AuthContext
+	// Context, when set, is used as the parent for the internal provisioning
+	// timeout so a caller's own cancellation/deadline (e.g. a Cobra command's
+	// cmd.Context()) can stop an in-progress operation. Nil preserves the
+	// prior behavior of deriving the timeout from context.Background().
+	Context context.Context
 }
 
 // Provision provisions infrastructure resources using a params struct.
@@ -91,7 +96,11 @@ func ProvisionWithParams(params *ProvisionParams) error {
 	// Warnings must be displayed AFTER the spinner to avoid concurrent output corruption.
 	var result *backend.ProvisionResult
 	err = spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		parentCtx := params.Context
+		if parentCtx == nil {
+			parentCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
 		defer cancel()
 
 		// Pass AuthContext from params directly to backend provisioner.
@@ -147,6 +156,11 @@ type DeleteBackendParams struct {
 	Force             bool
 	DescribeComponent ExecuteDescribeComponentFunc
 	AuthContext       *schema.AuthContext
+	// Context, when set, is used as the parent for the internal deletion
+	// timeout so a caller's own cancellation/deadline (e.g. a Cobra command's
+	// cmd.Context()) can stop an in-progress operation. Nil preserves the
+	// prior behavior of deriving the timeout from context.Background().
+	Context context.Context
 }
 
 // validateDeleteParams validates DeleteBackendParams and returns an error if invalid.
@@ -216,7 +230,11 @@ func DeleteBackendWithParams(params *DeleteBackendParams) error {
 	completedMsg := fmt.Sprintf("Deleted %s backend `%s` for `%s` in stack `%s`", strings.ToUpper(backendType), backendName, params.Component, params.Stack)
 
 	return spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		parentCtx := params.Context
+		if parentCtx == nil {
+			parentCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
 		defer cancel()
 
 		return deleteFunc(ctx, params.AtmosConfig, backendConfig, params.AuthContext, params.Force)

@@ -10,6 +10,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faFolder, faGraduationCap } from '@fortawesome/free-solid-svg-icons';
 import CastPlayer from '@site/src/components/CastPlayer';
 import CopyMarkdownButton from './CopyMarkdownButton';
+import ExampleCatalogPage from './ExampleCatalogPage';
 import type { ExamplesTree, FileBrowserOptions } from './types';
 import styles from './styles.module.css';
 
@@ -39,7 +40,14 @@ interface IndexPageProps {
   optionsData: FileBrowserOptions;
 }
 
-export default function IndexPage({ treeData, optionsData }: IndexPageProps): JSX.Element {
+export default function IndexPage(props: IndexPageProps): JSX.Element {
+  if (props.optionsData.routeBasePath === '/examples') {
+    return <ExampleCatalogPage tree={props.treeData} options={props.optionsData} />;
+  }
+  return <StandardIndexPage {...props} />;
+}
+
+function StandardIndexPage({ treeData, optionsData }: IndexPageProps): JSX.Element {
   const { examples, featured = [], tags } = treeData;
   const { routeBasePath, title, description, searchable, cardIcon, cardCtaLabel, titleAsCode, enableCopyMarkdown } = optionsData;
   const cardIconDefinition = ICON_MAP[cardIcon] || faFolder;
@@ -64,10 +72,17 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
   // When searching, sections are built from the search results so empty
   // sections drop out instead of showing a heading with nothing under it.
   const sections = [
-    ...tags.map((tag) => ({
-      tag,
-      examples: filteredExamples.filter((ex) => (ex.tags[0] ?? 'More') === tag),
-    })),
+    ...tags.map((tag) => {
+      const primary = filteredExamples.filter((ex) => (ex.tags[0] ?? 'More') === tag);
+      // A tag can be assigned to an example without being that example's
+      // primary (first) tag — e.g. `[Emulators, Terraform]`. If nothing has
+      // this tag as primary, fall back to any example carrying it at all, so
+      // the section isn't silently dropped just because it's never anyone's
+      // first tag.
+      // Search results belong only to their primary section so each result appears once.
+      const examples = primary.length > 0 || query ? primary : filteredExamples.filter((ex) => ex.tags.includes(tag));
+      return { tag, examples };
+    }),
     { tag: 'More', examples: filteredExamples.filter((ex) => ex.tags.length === 0) },
   ].filter((section) => section.examples.length > 0);
 

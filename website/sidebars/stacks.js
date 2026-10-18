@@ -134,6 +134,15 @@ const instanceFields = {
     "settings",
     "vars",
   ],
+  "aws/cloudformation": [
+    "auth",
+    "dependencies",
+    "env",
+    "hooks",
+    "metadata",
+    "settings",
+    "vars",
+  ],
   container: ["command", "env", "metadata", "settings", "vars"],
   emulator: ["env", "metadata", "settings", "vars"],
   helm: [
@@ -214,6 +223,14 @@ const defaultFields = {
     "settings",
     "vars",
   ],
+  "aws/cloudformation": [
+    "auth",
+    "dependencies",
+    "env",
+    "hooks",
+    "settings",
+    "vars",
+  ],
   helm: [
     "auth",
     "command",
@@ -274,7 +291,19 @@ const defaultFields = {
 };
 /** Preserve component overview IDs, including Terraform's nested index page. */
 const overview = (kind) =>
-  `stacks/components/${kind}${kind === "terraform" ? "/index" : ""}`;
+  kind === "aws/cloudformation"
+    ? "stacks/components/aws-cloudformation"
+    : `stacks/components/${kind}${kind === "terraform" ? "/index" : ""}`;
+
+/** Link the placeholder to its definition while keeping its field tree expandable. */
+function componentNameFields(kind, keys) {
+  return category(
+    "<name>",
+    keys.map((key) => field(key, kind, "component")),
+    "stacks/components/name",
+    "Component instance",
+  );
+}
 
 // Register global field pages first as their canonical navigation entries.
 const items = [
@@ -303,14 +332,7 @@ items.push(
       .map(([kind, keys]) =>
         category(
           kind,
-          [
-            category(
-              "<name>",
-              keys.map((key) => field(key, kind, "component")),
-              "stacks/components/name",
-              "Component instance",
-            ),
-          ],
+          [componentNameFields(kind, keys)],
           overview(kind),
         ),
       ),

@@ -51,6 +51,7 @@ func TestDirectStepCallRejectsFieldsOfOtherStepTypes(t *testing.T) {
 		wantField string
 		wantValid string
 	}{
+		{name: "command on publish", stepType: "publish", fields: map[string]any{"source": "dist/", "target": "artifacts", "command": "x"}, wantField: `"command"`, wantValid: "destination"},
 		{name: "url on shell", stepType: "shell", fields: map[string]any{"command": "echo hi", "url": "x"}, wantField: `"url"`, wantValid: "command"},
 		{name: "command on join", stepType: "join", fields: map[string]any{"options": []string{"a"}, "command": "x"}, wantField: `"command"`, wantValid: "separator"},
 		{name: "prompt on shell", stepType: "shell", fields: map[string]any{"command": "echo hi", "prompt": "x"}, wantField: `"prompt"`, wantValid: "command"},
@@ -81,6 +82,7 @@ func TestDirectStepCallAcceptsDeclaredFields(t *testing.T) {
 		{"shell", map[string]any{"command": "echo hi", "env": map[string]string{"A": "b"}, "timeout": "5s", "working_directory": ".", "retry": map[string]any{"max_attempts": 2}, "output": "none"}},
 		{"join", map[string]any{"options": []string{"a"}, "separator": ",", "outputs": map[string]string{"x": "{{ .value }}"}}},
 		{"http", map[string]any{"url": "http://127.0.0.1:1", "method": "GET", "headers": map[string]string{"A": "b"}}},
+		{"publish", map[string]any{"source": "dist/", "target": map[string]any{"kind": "aws/s3", "bucket": "artifacts", "region": "us-east-1"}, "destination": "release/", "stack": "dev", "env": map[string]string{"A": "b"}}},
 		{"sleep", map[string]any{"timeout": "1ms"}},
 		{"atmos", map[string]any{"command": "version", "stack": "dev"}},
 		{"container", map[string]any{"action": "run", "with": map[string]any{"image": "alpine:3.20", "command": "echo hi"}}},
@@ -112,9 +114,9 @@ func TestDocumentedStepFieldsAreAccepted(t *testing.T) {
 	stepFields := automationStepFields()
 	// A direct call deliberately rejects these: they need the enclosing workflow, command, or hook.
 	enclosing := map[string]bool{"container": true, "background": true, "needs": true}
-	// These pages list the parameters nested under `with` or `fail` as definitions too, and several
+	// These pages list parameters nested under `with`, `fail`, or `target` as definitions too, and several
 	// of those share a name with a step field (`command`, `shell`, `source`, `mode`, `key`).
-	nested := map[string]bool{"container": true, "parallel": true, "matrix": true, "store": true}
+	nested := map[string]bool{"container": true, "parallel": true, "matrix": true, "store": true, "publish": true}
 	// The wait page documents wait-all and wait together; the other pages map one to one.
 	pages := map[string]string{"wait-all": "wait"}
 	checked := 0

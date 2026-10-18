@@ -27,6 +27,7 @@ func TestJITSource_OCIScheme(t *testing.T) {
 		t.Skip("skipping on Windows: in-process CLI invocation can stall while reading from the loopback OCI test registry")
 	}
 
+	resetSourceCommandState(t)
 	root := t.TempDir()
 	t.Chdir(root)
 

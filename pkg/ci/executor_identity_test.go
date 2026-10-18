@@ -137,3 +137,92 @@ func TestAttachIdentity_AuthManagerWrongTypeFallsBack(t *testing.T) {
 	assert.Equal(t, "deploy", artOpts.Identity)
 	assert.Nil(t, artOpts.Resolver)
 }
+
+// TestAttachStoreIdentity_StoreOverridesComponent is the issue #3400 regression
+// guard: a store-level identity must take precedence over the component's
+// active identity, AND the resolver must be attached so a non-ambient identity
+// is actually resolved rather than silently falling back to the default chain.
+func TestAttachStoreIdentity_StoreOverridesComponent(t *testing.T) {
+	called := 0
+	swapResolverFactory(t, func(_ authtypes.AuthManager, _ *schema.ConfigAndStacksInfo) store.AuthContextResolver {
+		called++
+		return stubResolver{}
+	})
+
+	info := &schema.ConfigAndStacksInfo{
+		Identity:    "azure-plan", // the component's (non-AWS) identity
+		AuthManager: &stubAuthManager{},
+	}
+	artOpts := artifact.StoreOptions{}
+	attachStoreIdentity(&artOpts, info, "aws-backend")
+
+	assert.Equal(t, "aws-backend", artOpts.Identity, "store-level identity must win over the component identity")
+	assert.NotNil(t, artOpts.Resolver, "resolver must be attached so the store identity can be resolved")
+	assert.Equal(t, 1, called)
+}
+
+// TestAttachStoreIdentity_FallsBackToComponentIdentity verifies the prior
+// behavior is preserved when no store-level identity is configured.
+func TestAttachStoreIdentity_FallsBackToComponentIdentity(t *testing.T) {
+	swapResolverFactory(t, func(_ authtypes.AuthManager, _ *schema.ConfigAndStacksInfo) store.AuthContextResolver {
+		return stubResolver{}
+	})
+
+	info := &schema.ConfigAndStacksInfo{
+		Identity:    "ci-deployer",
+		AuthManager: &stubAuthManager{},
+	}
+	artOpts := artifact.StoreOptions{}
+	attachStoreIdentity(&artOpts, info, "")
+
+	assert.Equal(t, "ci-deployer", artOpts.Identity)
+	assert.NotNil(t, artOpts.Resolver)
+}
+
+// TestAttachStoreIdentity_StoreIdentityWithoutComponentIdentity covers the gap
+// the naive fix would miss: when the component declares no identity but the
+// store does, the store identity and its resolver must still be attached. The
+// old early-return on an empty component identity would have dropped a
+// store-only identity to the default credential chain.
+func TestAttachStoreIdentity_StoreIdentityWithoutComponentIdentity(t *testing.T) {
+	called := 0
+	swapResolverFactory(t, func(_ authtypes.AuthManager, _ *schema.ConfigAndStacksInfo) store.AuthContextResolver {
+		called++
+		return stubResolver{}
+	})
+
+	info := &schema.ConfigAndStacksInfo{AuthManager: &stubAuthManager{}} // no component Identity
+	artOpts := artifact.StoreOptions{}
+	attachStoreIdentity(&artOpts, info, "aws-backend")
+
+	assert.Equal(t, "aws-backend", artOpts.Identity)
+	assert.NotNil(t, artOpts.Resolver)
+	assert.Equal(t, 1, called)
+}
+
+// TestAttachStoreIdentity_NoIdentityAnywhere verifies nothing is attached when
+// neither the store nor the component names an identity.
+func TestAttachStoreIdentity_NoIdentityAnywhere(t *testing.T) {
+	swapResolverFactory(t, func(_ authtypes.AuthManager, _ *schema.ConfigAndStacksInfo) store.AuthContextResolver {
+		t.Fatal("factory must not be called when no identity is in scope")
+		return nil
+	})
+
+	info := &schema.ConfigAndStacksInfo{}
+	artOpts := artifact.StoreOptions{}
+	attachStoreIdentity(&artOpts, info, "")
+
+	assert.Empty(t, artOpts.Identity)
+	assert.Nil(t, artOpts.Resolver)
+}
+
+// TestAttachStoreIdentity_NilInfoIsSafe verifies attachStoreIdentity does not
+// panic when info is nil (no auth manager, so nothing to attach).
+func TestAttachStoreIdentity_NilInfoIsSafe(t *testing.T) {
+	artOpts := artifact.StoreOptions{}
+	require.NotPanics(t, func() {
+		attachStoreIdentity(&artOpts, nil, "aws-backend")
+	})
+	assert.Empty(t, artOpts.Identity)
+	assert.Nil(t, artOpts.Resolver)
+}
