@@ -105,6 +105,20 @@ func TestEditorConfigFiles_WalksOutsideGit(t *testing.T) {
 		"node_modules is only a default exclude when nested below the root; directories matching an exclude are pruned")
 }
 
+// A root inside a directory that the enclosing repository ignores gets an empty, successful
+// listing from Git. That listing cannot be trusted, so the files are found by walking instead.
+func TestEditorConfigFiles_WalksARootIgnoredByTheEnclosingRepository(t *testing.T) {
+	repository := newAffectedRepo(t)
+	writeRepoFile(t, repository, ".gitignore", ".workdir/\n")
+	writeRepoFile(t, repository, ".workdir/project/atmos.yaml", "x\n")
+	writeRepoFile(t, repository, ".workdir/project/stacks/dev.yaml", "x\n")
+	root := filepath.Join(repository, ".workdir", "project")
+
+	paths, err := EditorConfigFiles(root, newEditorConfigConfig(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"atmos.yaml", "stacks/dev.yaml"}, editorConfigRelative(t, root, paths))
+}
+
 func TestEditorConfigFiles_RelativeRootYieldsRelativePaths(t *testing.T) {
 	root := newAffectedRepo(t)
 	t.Chdir(root)

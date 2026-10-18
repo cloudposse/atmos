@@ -317,8 +317,8 @@ All backups finish before the first write. Each replacement is atomic, but a
 multi-file run is not a transaction. Failures or cancellation stop further writes;
 the report identifies files already changed and retains their backups. If you interrupt a run
 (Ctrl-C), doctor prints the files it already changed and the backup location, and exits `130`.
-With `--format=json` or `--format=sarif` the report has `operational_error` set to
-`interrupted`. Doctor reads
+With `--format=json` or `--format=sarif` the report has an `operational_error` message that
+starts with `Interrupted` and summarizes the changed files; `changed_files` lists all of them. Doctor reads
 symlinked sources but never writes through them. Findings in a symlinked file are
 reported for manual review, and repairs in other files still proceed.
 

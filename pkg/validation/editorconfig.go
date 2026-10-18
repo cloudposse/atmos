@@ -190,7 +190,8 @@ func editorConfigCandidates(root string, cfg *ecconfig.Config) ([]string, error)
 	return walkedFiles(root, cfg)
 }
 
-// gitListedFiles asks Git for tracked and untracked-but-not-ignored files under root.
+// gitListedFiles asks Git for tracked and untracked-but-not-ignored files under root. An empty
+// listing is reported as unusable so the caller walks root instead.
 func gitListedFiles(root string) ([]string, bool) {
 	command := exec.Command("git", "-C", root, "ls-files", "--cached", "--others", "--exclude-standard", nullSeparatedFlag)
 	var stdout bytes.Buffer
@@ -203,6 +204,11 @@ func gitListedFiles(root string) ([]string, bool) {
 		if entry != "" {
 			listed = append(listed, filepath.ToSlash(entry))
 		}
+	}
+	if len(listed) == 0 {
+		// Git also succeeds with no output when root sits inside a directory that the
+		// enclosing repository ignores; walking finds the files that listing hides.
+		return nil, false
 	}
 	return listed, true
 }
