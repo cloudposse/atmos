@@ -1483,7 +1483,7 @@ func (m *mockAuthManager) EnsureIdentityEnvironment(_ context.Context, _ string)
 	return nil, nil
 }
 
-func (m *mockAuthManager) ExecuteIntegration(_ context.Context, _ string) error {
+func (m *mockAuthManager) ExecuteIntegration(_ context.Context, _ string, _ ...types.IntegrationOption) error {
 	return nil
 }
 
