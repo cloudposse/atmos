@@ -15,6 +15,7 @@ commands:
       git init -q
       git config user.email demo@atmos.tools
       git config user.name demo
+      git config color.diff always
       git config commit.gpgsign false
       git add -A
       git commit -qm baseline
