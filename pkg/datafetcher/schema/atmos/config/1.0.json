@@ -12371,7 +12371,9 @@
         "init_run_reconfigure": {
           "anyOf": [
             {
-              "type": "boolean"
+              "type": "boolean",
+              "deprecated": true,
+              "x-atmos-replacement": "components.terraform.init.reconfigure (false maps to never; true maps to auto)"
             },
             {
               "type": "null"
