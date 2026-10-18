@@ -2,3 +2,8 @@ import:
   - catalog/app
 vars:
   stage: dev
+components:
+  terraform:
+    app:
+      vars:
+        replicas: 2

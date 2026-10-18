@@ -2,7 +2,7 @@
 import json
 import sys
 from pathlib import Path
-from cast_checks import (assert_body_color, assert_progress_color, assert_no_error_output, assert_no_experimental,
+from cast_checks import (assert_body_color, assert_no_error_output, assert_no_experimental,
                          assert_no_local_paths, load_text, sanitize_paths, strip_ansi)
 
 
@@ -22,7 +22,10 @@ def check(action, name):
     if action != 'validate':
         raise SystemExit(f'Unknown action: {action}')
     lines = path.read_text().splitlines()
-    if json.loads(lines[0]).get('version') != 3:
+    header = json.loads(lines[0])
+    if name == 'hero' and header.get('term', {}).get('cols', 0) != 64:
+        raise SystemExit('hero: use 64 columns to keep homepage text readable')
+    if header.get('version') != 3:
         raise SystemExit(f'{name}: expected asciicast v3')
     events = [json.loads(line) for line in lines[1:]]
     if not events or not any(e[1] in ('o', 'e') and e[2].strip() for e in events):
@@ -33,8 +36,6 @@ def check(action, name):
     assert_no_error_output(text)
     assert_no_experimental(text)
     assert_no_local_paths(text)
-    if name == 'hero':
-        assert_progress_color(text)
     if name == 'local-ci' and '--ui' in plain:
         raise SystemExit('local-ci: interactive UI does not belong in CI')
     for needle in expectations[name]:

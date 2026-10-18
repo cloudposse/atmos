@@ -1,11 +1,19 @@
 {
   "hero": [
-    "atmos terraform apply app -s dev --ui",
-    "dev/app",
-    "terraform_data.api",
-    "terraform_data.web",
-    "Do you want to apply these changes?",
-    "Apply dev/app completed"
+    "atmos list stacks",
+    "staging",
+    "atmos list components -s dev",
+    "terraform",
+    "helm",
+    "kubernetes",
+    "ansible",
+    "atmos stack get vars.replicas -s dev -c app",
+    "atmos stack set vars.replicas 3 -s dev -c app",
+    "atmos list affected --ref baseline",
+    "stack.vars",
+    "atmos terraform plan app -s dev --ui",
+    "Plan dev/app completed",
+    "terraform_data.app"
   ],
   "how-it-works": [
     "app",

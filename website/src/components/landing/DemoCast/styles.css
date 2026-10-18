@@ -51,3 +51,26 @@
 @media (prefers-reduced-motion: reduce), (hover: none) {
   .landing-demo-cast-toggle { opacity: 1; transition: none; }
 }
+
+/* The hero's compact recording keeps commands readable in a half-width frame. */
+.lp-hero-visual .landing-demo-cast-viewport {
+  padding: 12px;
+}
+
+.lp-hero-visual .landing-demo-cast-player > pre {
+  padding: 4px;
+}
+
+/* Give the hero enough room before two narrow columns shrink terminal text. */
+@media screen and (min-width: 769px) and (max-width: 1200px) {
+  .lp-hero-grid {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+  }
+
+  .lp-hero-visual {
+    width: 100%;
+    max-width: 720px;
+    justify-self: center;
+  }
+}

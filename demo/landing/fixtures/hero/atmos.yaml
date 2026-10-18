@@ -8,6 +8,13 @@ components:
     init_run_reconfigure: true
     auto_generate_backend_file: false
 
+  helm:
+    base_path: components/helm
+  kubernetes:
+    base_path: components/kubernetes
+  ansible:
+    base_path: components/ansible
+
 stacks:
   base_path: "stacks"
   included_paths:

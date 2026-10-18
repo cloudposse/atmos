@@ -3,3 +3,16 @@ components:
     app:
       vars:
         replicas: 2
+  helm:
+    ingress:
+      chart: .
+      namespace: atmos-demo
+  kubernetes:
+    namespace:
+      paths: [manifests]
+  ansible:
+    web:
+      settings:
+        ansible:
+          playbook: site.yml
+          inventory: inventory.ini

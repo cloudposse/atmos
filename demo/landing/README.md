@@ -41,7 +41,7 @@ No VHS, ttyd, FFmpeg, or recording fonts are required.
 
 | Cast | Demonstration |
 | --- | --- |
-| `hero` | Apply a stack with `--ui`: review the plan, confirm, and watch live resource progress. |
+| `hero` | Discover environments and workload types, get/set configuration, inspect affected components, then preview the change with `--ui`. |
 | `how-it-works` | Discover mixed workloads and plan stack-resolved configuration. |
 | `terraform` | Inspect component instances and their dependency graph. |
 | `kubernetes` | Deploy a namespace with native Kubernetes and a ready Helm application on k3s. |
@@ -59,8 +59,12 @@ Review every changed cast in the homepage at desktop and mobile sizes. The playe
 pauses offscreen, supports manual pause/play, and respects reduced motion. Commit
 both the scenario definition and its generated cast; no videos or posters are needed.
 
-The hero uses cloud-free `terraform_data` resources with short local delays so
-real dependency ordering and concurrent progress stay readable. Its recorder
-unsets GitHub Actions CI detection only for the local UI command; the Local = CI
+The hero tells the platform story before showing the UI: discover stacks and mixed
+workloads, read and change one component's configuration, identify the affected
+instance, then preview the change with a brief `--ui` plan. Its cloud-free
+`terraform_data` resource is seeded before recording so the plan shows the real
+replica change from 2 to 3. The 64-column recording keeps text readable in the
+homepage frame; screen clears separate the short chapters without YAML dumps.
+The recorder unsets CI detection only for the local UI command. The Local = CI
 cast keeps `atmos list affected` and `atmos terraform apply --affected --ci`
 without `--ui`.

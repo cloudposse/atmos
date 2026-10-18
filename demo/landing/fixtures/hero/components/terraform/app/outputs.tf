@@ -1,3 +1,3 @@
 output "replicas" {
-  value = terraform_data.api.output
+  value = terraform_data.app.output
 }
