@@ -1,5 +1,7 @@
 package config
 
+import "github.com/cloudposse/atmos/pkg/config/projectroot"
+
 const (
 	AtmosCommand         = "atmos"
 	CliConfigFileName    = "atmos"
@@ -25,13 +27,13 @@ const (
 	WindowsAppDataEnvVar    = "LOCALAPPDATA"
 
 	// Config file names for local configuration detection.
-	AtmosConfigFileName    = "atmos.yaml"
-	DotAtmosConfigFileName = ".atmos.yaml"
+	AtmosConfigFileName    = projectroot.AtmosConfigFileName
+	DotAtmosConfigFileName = projectroot.DotAtmosConfigFileName
 
 	// Config directory names for local configuration detection.
-	AtmosConfigDirName            = ".atmos"
-	AtmosDefaultImportsDirName    = "atmos.d"
-	DotAtmosDefaultImportsDirName = ".atmos.d"
+	AtmosConfigDirName            = projectroot.AtmosConfigDirName
+	AtmosDefaultImportsDirName    = projectroot.AtmosDefaultImportsDirName
+	DotAtmosDefaultImportsDirName = projectroot.DotAtmosDefaultImportsDirName
 
 	// GlobalOptionsFlag is a custom flag to specify helmfile `GLOBAL OPTIONS`
 	// https://github.com/roboll/helmfile#cli-reference

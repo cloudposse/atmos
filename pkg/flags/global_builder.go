@@ -85,6 +85,7 @@ func (b *GlobalOptionsBuilder) registerLoggingFlags(defaults *global.Flags) {
 	defer perf.Track(nil, "flags.GlobalOptionsBuilder.registerLoggingFlags")()
 
 	b.options = append(b.options, WithBoolFlag("explain", "", false, "Explain policy decisions on stderr without changing execution"))
+	b.options = append(b.options, WithEnvVars("explain", ExplainEnvVar))
 
 	b.options = append(b.options, WithStringFlag("logs-level", "", defaults.LogsLevel, "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages"))
 	b.options = append(b.options, WithEnvVars("logs-level", "ATMOS_LOGS_LEVEL"))

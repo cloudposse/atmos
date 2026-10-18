@@ -1,0 +1,24 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: lifecycle-cleanup-failed-apply
+  description: "Require a cleanup command after a failed Kubernetes apply."
+spec:
+  policies:
+    cleanup-failed-apply:
+      on: operation
+      engine: starlark
+      action: hooks
+      rule: |
+        return ctx.input["event"] == "after.kubernetes.apply" and ctx.input["status"] == "failure"
+
+      hooks:
+        - ref: cleanup
+          event: after.kubernetes.apply
+          required: true
+          require_success: true
+  hooks:
+    cleanup:
+      kind: command
+      command: /opt/platform/bin/cleanup-component
+  tools: {}

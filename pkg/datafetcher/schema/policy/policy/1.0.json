@@ -56,7 +56,7 @@
                   }
                 }
               },
-              "reason": {"type": "string"},
+              "reason": {"type": "string", "description": "Optional static Markdown explanation and suggested alternative, displayed when the rule denies an operation. No template or input interpolation."},
               "with": {"type": "object"},
               "match": {
                 "type": "object", "additionalProperties": false,

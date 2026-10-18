@@ -8,10 +8,17 @@ import (
 	"sort"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	cipkg "github.com/cloudposse/atmos/pkg/ci"
-	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/policy"
+)
+
+var ciContextParser = flags.NewStandardParser(
+	flags.WithBoolFlag("paths", "", false, "List observed field paths and types instead of snapshot values"),
+	flags.WithStringFlag("query", "q", "", "YQ expression to filter the JSON output"),
+	flags.WithEnvVars("query", "ATMOS_QUERY"),
 )
 
 const (
@@ -38,31 +45,35 @@ Use --paths to list observed field paths and JSON types without field values.
 Paths work in CEL; prefix them with "ctx." for Starlark. This is an inspection
 of the current event, not an exhaustive provider schema.
 
+Use --query (-q) to filter the snapshot or --paths output with a YQ expression.
+Results remain JSON; a query selecting multiple results emits one JSON value per result.
+
 Native payloads may contain private information. Review output before sharing it.`,
 		Args: cobra.NoArgs,
 		RunE: runCIContext,
 	}
-	command.Flags().Bool("paths", false, "List observed field paths and types instead of snapshot values")
+	ciContextParser.RegisterFlags(command)
 	return command
 }
 
 func runCIContext(cmd *cobra.Command, _ []string) error {
-	paths, err := cmd.Flags().GetBool("paths")
-	if err != nil {
+	v := viper.New()
+	if err := ciContextParser.BindFlagsToViper(cmd, v); err != nil {
 		return err
 	}
+	paths, query := v.GetBool("paths"), v.GetString("query")
 	snapshot, err := cipkg.CollectPolicySnapshot(cmd.Context())
 	if err != nil {
 		return err
 	}
 	if !paths {
-		return data.WriteJSON(map[string]any{"ci": snapshot})
+		return writeCIContext(map[string]any{"ci": snapshot}, query)
 	}
 	fields, err := ciContextPaths(snapshot)
 	if err != nil {
 		return err
 	}
-	return data.WriteJSON(fields)
+	return writeCIContext(fields, query)
 }
 
 type ciContextField struct {

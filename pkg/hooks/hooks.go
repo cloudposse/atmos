@@ -268,7 +268,7 @@ func (h *Hooks) runResolvedHook(name string, kind *Kind, executionHook *Hook, ct
 		Kind:          kind,
 		Event:         ctx.event,
 		AtmosConfig:   ctx.atmosConfig,
-		Info:          ctx.info,
+		Info:          h.withRootModule(ctx.info),
 		Cmd:           ctx.cmd,
 		Args:          ctx.args,
 		HookName:      name,
@@ -357,6 +357,25 @@ func (h *Hooks) rawHookSection(name string) (map[string]any, bool) {
 	}
 	rawHook, ok := hooksSection[name].(map[string]any)
 	return rawHook, ok
+}
+
+// withRootModule returns info with FinalComponent set to the component's root
+// module (the `component` section, i.e. metadata.component) when the caller left
+// it empty. Hook working directories derive from FinalComponent: without it they
+// fall back to the component instance name, which names a directory only when the
+// instance and its root module happen to share a name. The multi-component
+// dispatcher passes only the instance name. The caller's struct is not mutated.
+func (h *Hooks) withRootModule(info *schema.ConfigAndStacksInfo) *schema.ConfigAndStacksInfo {
+	if info == nil || info.FinalComponent != "" {
+		return info
+	}
+	rootModule, ok := h.sections["component"].(string)
+	if !ok || rootModule == "" {
+		return info
+	}
+	resolved := *info
+	resolved.FinalComponent = rootModule
+	return &resolved
 }
 
 // executionStackInfo returns a copy of info with the component, settings, vars,

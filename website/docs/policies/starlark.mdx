@@ -43,7 +43,7 @@ default when `engine` is omitted. Both languages can coexist in one document or 
 
 | Binding | Contents |
 |---|---|
-| `ctx.input` | Native data for `terraform.plan`, `operation`, or `atmos.affected` |
+| `ctx.input` | Native data for the rule's `on` kind; all [supported input kinds](/policies#choose-an-input) are available |
 | `ctx.params` | Rule's `with` object; empty by default |
 | `ctx.ci` | Provider-native snapshot, or `None` outside detected CI |
 | `ctx.request` | `kind`, `revisions`, and optional instance `subject` |

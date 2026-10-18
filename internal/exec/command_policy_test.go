@@ -122,3 +122,54 @@ func TestFunctionPolicyBlocksLazyExec(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "!exec should-never-run", value, "skipping execution is safe")
 }
+
+func TestComponentAdmissionDestroyInput(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ATMOS_POLICY_DIR", dir)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "guard.yaml"), []byte(`apiVersion: atmos/v1
+kind: Policy
+metadata: {name: no-destroy}
+spec:
+  policies:
+    guard:
+      on: component.command
+      action: deny
+      rule: input.destroy
+`), 0o600))
+	tests := []struct {
+		name          string
+		componentType string
+		subCommand    string
+		cliArgs       []string
+		args          []string
+		denied        bool
+	}{
+		{name: "terraform destroy", componentType: "terraform", subCommand: "destroy", denied: true},
+		{name: "apply -destroy", componentType: "terraform", subCommand: "apply", args: []string{"-destroy", "-auto-approve"}, denied: true},
+		{name: "apply --destroy=true", componentType: "terraform", subCommand: "apply", args: []string{"--destroy=true"}, denied: true},
+		{name: "apply -destroy=1 in cli args", componentType: "terraform", subCommand: "apply", cliArgs: []string{"-destroy=1"}, denied: true},
+		{name: "plan -destroy", componentType: "terraform", subCommand: "plan", args: []string{"-destroy"}, denied: true},
+		{name: "deploy -destroy", componentType: "terraform", subCommand: "deploy", args: []string{"-destroy"}, denied: true},
+		{name: "apply after separator", componentType: "terraform", subCommand: "apply", args: []string{"--", "-destroy"}, denied: true},
+		{name: "apply -destroy=false", componentType: "terraform", subCommand: "apply", args: []string{"-destroy=false", "-auto-approve"}},
+		{name: "plain apply", componentType: "terraform", subCommand: "apply", args: []string{"-auto-approve"}},
+		{name: "plain plan", componentType: "terraform", subCommand: "plan"},
+		{name: "helmfile destroy", componentType: "helmfile", subCommand: "destroy", denied: true},
+		{name: "helmfile sync", componentType: "helmfile", subCommand: "sync", args: []string{"-destroy"}},
+		{name: "packer ignores flag", componentType: "packer", subCommand: "build", args: []string{"-destroy"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			info := &schema.ConfigAndStacksInfo{
+				ComponentType: tc.componentType, SubCommand: tc.subCommand, ComponentFromArg: "app", Stack: "dev",
+				CliArgs: tc.cliArgs, AdditionalArgsAndFlags: tc.args,
+			}
+			err := enforceComponentAdmission(&schema.AtmosConfiguration{}, info)
+			if tc.denied {
+				require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

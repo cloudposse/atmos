@@ -20,7 +20,7 @@ Cap the number of changed managed resources in one Terraform plan.
 | Field | Value |
 |---|---|
 | Input | `terraform.plan` |
-| Engine | `cel` |
+| Engines | `cel`, `starlark` |
 | Action | `deny` |
 | Selects when | The number of managed resources whose actions are not `['no-op']` exceeds `params.maximum`. |
 | Required data | Native saved-plan JSON from Terraform/OpenTofu. No CI token required. |
@@ -33,6 +33,10 @@ Plans with up to `maximum` changed resources pass; a plan with more is denied. C
 change, not per action; a replacement counts once.
 
 ## Policy
+
+Choose CEL or Starlark on the [policy page](https://atmos.tools/policies/library/terraform-limit-change-count).
+The default manifest below uses CEL; the [Starlark variant](https://atmos.tools/policies/library/terraform-limit-change-count/variants/starlark/policy.yaml)
+uses the same configuration and test cases. Install only one implementation.
 
 [View and copy policy.yaml](https://atmos.tools/policies/library/terraform-limit-change-count/policy.yaml).
 

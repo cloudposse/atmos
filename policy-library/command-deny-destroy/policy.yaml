@@ -1,0 +1,11 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: command-deny-destroy
+  description: Deny Terraform destroy, including the destroy flag on plan, apply, and deploy.
+spec:
+  policies:
+    guard:
+      on: command
+      action: deny
+      rule: input.command == 'terraform destroy' || input.destroy

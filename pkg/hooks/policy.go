@@ -285,3 +285,14 @@ func validatePolicySteps(ref string, hook *Hook) error {
 	}
 	return nil
 }
+
+// IsPolicyAdmissionError reports whether err is a policy admission failure: a
+// denial, an unmet requirement, or a policy that could not be loaded or
+// evaluated. Callers that resolve component configuration on a best-effort basis
+// before running hooks must not swallow these. Admission fails closed, so hooks
+// must not run for a command that policy did not admit.
+func IsPolicyAdmissionError(err error) bool {
+	defer perf.Track(nil, "hooks.IsPolicyAdmissionError")()
+
+	return policy.IsAdmissionError(err)
+}

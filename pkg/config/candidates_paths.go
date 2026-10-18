@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/config/projectroot"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
@@ -62,8 +63,7 @@ func parentConfigSearchDir(wd string) string {
 // The wd argument anchors the search; "" means the process working directory.
 func gitRootConfigSearchDir(wd string) (string, error) {
 	// Check if git root discovery is disabled.
-	//nolint:forbidigo // ATMOS_GIT_ROOT_BASEPATH is bootstrap config, not application configuration.
-	if os.Getenv("ATMOS_GIT_ROOT_BASEPATH") == "false" {
+	if projectroot.GitRootDiscoveryDisabled() {
 		return "", nil
 	}
 

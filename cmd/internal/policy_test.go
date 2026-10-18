@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 )
 
 func TestCommandAdmissionBeforeHooks(t *testing.T) {
@@ -158,11 +159,105 @@ func TestCommandAdmissionUsesCanonicalPolicyCommandAnnotation(t *testing.T) {
 	other := &cobra.Command{Use: "other", Run: func(*cobra.Command, []string) {}}
 	root.AddCommand(alias, other)
 
-	require.ErrorIs(t, checkCommandAdmission(root, alias), errUtils.ErrPolicyDenied, "the annotation names the policy-visible command")
-	require.NoError(t, checkCommandAdmission(root, other), "commands without the annotation use their own path")
+	require.ErrorIs(t, checkCommandAdmission(root, alias, nil), errUtils.ErrPolicyDenied, "the annotation names the policy-visible command")
+	require.NoError(t, checkCommandAdmission(root, other, nil), "commands without the annotation use their own path")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	alias.SetContext(ctx)
-	require.ErrorIs(t, checkCommandAdmission(root, alias), errUtils.ErrPolicyEvaluation, "the command's context governs evaluation")
+	require.ErrorIs(t, checkCommandAdmission(root, alias, nil), errUtils.ErrPolicyEvaluation, "the command's context governs evaluation")
+}
+
+const destroyDenyManifest = "apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: no-destroy}\nspec:\n  policies:\n    guard:\n      on: command\n      action: deny\n      rule: input.destroy\n"
+
+func newDestroyAdmissionRoot(family, sub string) *cobra.Command {
+	root := &cobra.Command{Use: "atmos", SilenceErrors: true, SilenceUsage: true}
+	parent := &cobra.Command{Use: family}
+	parent.AddCommand(&cobra.Command{
+		Use: sub, Run: func(*cobra.Command, []string) {}, Args: cobra.ArbitraryArgs,
+		FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true},
+	})
+	root.AddCommand(parent)
+	return root
+}
+
+func TestCommandAdmissionDestroyInput(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ATMOS_POLICY_DIR", dir)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "deny.yaml"), []byte(destroyDenyManifest), 0o600))
+	tests := []struct {
+		name   string
+		family string
+		args   []string
+		denied bool
+	}{
+		{name: "destroy command", family: "terraform", args: []string{"terraform", "destroy", "vpc", "-s", "dev"}, denied: true},
+		{name: "apply -destroy", family: "terraform", args: []string{"terraform", "apply", "vpc", "-s", "dev", "-destroy", "-auto-approve"}, denied: true},
+		{name: "apply --destroy=true", family: "terraform", args: []string{"terraform", "apply", "vpc", "--destroy=true"}, denied: true},
+		{name: "apply after separator", family: "terraform", args: []string{"terraform", "apply", "vpc", "--", "-destroy"}, denied: true},
+		{name: "plan -destroy", family: "terraform", args: []string{"terraform", "plan", "vpc", "-destroy"}, denied: true},
+		{name: "deploy -destroy", family: "terraform", args: []string{"terraform", "deploy", "vpc", "-destroy"}, denied: true},
+		{name: "apply -destroy=false", family: "terraform", args: []string{"terraform", "apply", "vpc", "-destroy=false", "-auto-approve"}},
+		{name: "plain plan", family: "terraform", args: []string{"terraform", "plan", "vpc", "-s", "dev"}},
+		{name: "helmfile destroy", family: "helmfile", args: []string{"helmfile", "destroy", "app"}, denied: true},
+		{name: "helmfile apply with destroy flag", family: "helmfile", args: []string{"helmfile", "apply", "app", "-destroy"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := newDestroyAdmissionRoot(tc.family, tc.args[1])
+			err := CheckEarlyCommandAdmission(root, tc.args)
+			if tc.denied {
+				require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestCommandAdmissionDestroyInputDuringExecution(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ATMOS_POLICY_DIR", dir)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "deny.yaml"), []byte(destroyDenyManifest), 0o600))
+	t.Cleanup(compat.ResetSeparated)
+
+	t.Run("pass-through flags kept aside by the compatibility translator", func(t *testing.T) {
+		compat.SetSeparated([]string{"-destroy", "-auto-approve"})
+		root := newDestroyAdmissionRoot("terraform", "apply")
+		root.SetArgs([]string{"terraform", "apply", "vpc"})
+		_, err := Execute(root)
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	})
+
+	t.Run("separated false value", func(t *testing.T) {
+		compat.SetSeparated([]string{"-destroy=false"})
+		root := newDestroyAdmissionRoot("terraform", "apply")
+		root.SetArgs([]string{"terraform", "apply", "vpc"})
+		_, err := Execute(root)
+		require.NoError(t, err)
+	})
+
+	t.Run("no separated flags", func(t *testing.T) {
+		compat.ResetSeparated()
+		root := newDestroyAdmissionRoot("terraform", "apply")
+		root.SetArgs([]string{"terraform", "apply", "vpc"})
+		_, err := Execute(root)
+		require.NoError(t, err)
+	})
+
+	t.Run("destroy command", func(t *testing.T) {
+		compat.ResetSeparated()
+		root := newDestroyAdmissionRoot("terraform", "destroy")
+		root.SetArgs([]string{"terraform", "destroy", "vpc"})
+		_, err := Execute(root)
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	})
+
+	t.Run("positional after separator", func(t *testing.T) {
+		compat.ResetSeparated()
+		root := newDestroyAdmissionRoot("terraform", "apply")
+		root.SetArgs([]string{"terraform", "apply", "vpc", "--", "-destroy"})
+		_, err := Execute(root)
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	})
 }
