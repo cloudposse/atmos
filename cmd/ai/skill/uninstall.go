@@ -52,6 +52,10 @@ var uninstallCmd = &cobra.Command{
 		force := v.GetBool("force")
 
 		// Create installer (which manages registry).
+		if handled, err := runDeclared(cmd, args, v); handled {
+			return err
+		}
+
 		installer, err := marketplace.NewInstaller(version.Version)
 		if err != nil {
 			return fmt.Errorf("failed to initialize installer: %w", err)
@@ -106,6 +110,7 @@ func init() {
 
 	// Register flags on the command.
 	uninstallParser.RegisterFlags(uninstallCmd)
+	sourceFlags().RegisterFlags(uninstallCmd)
 
 	// Bind flags to Viper for environment variable support.
 	if err := uninstallParser.BindToViper(viper.GetViper()); err != nil {

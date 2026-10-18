@@ -54,7 +54,7 @@ type QuestionOption struct {
 // stdinIsTerminal reports whether stdin is a terminal. It is a seam: tests replace it to force or refuse the
 // interactive path without a real terminal.
 var stdinIsTerminal = func() bool {
-	return terminal.New().IsTTY(terminal.Stdin)
+	return terminal.HasRealTTYInput()
 }
 
 // runForm runs a built huh form. It is a seam: tests replace it to drive the form in accessible

@@ -290,20 +290,22 @@ current schema.
   local resource-usage summary; previously the omitted value enabled that summary
   when subprocess metrics were available. Explicit `true` and `false` retain their
   meaning. The stored default is unchanged, so this command-specific interpretation
-  ships independently of edition pins while `KindBehavior` resolution is unavailable.
+  ships independently of edition pins because `KindBehavior` resolution was not implemented
+  when this behavior shipped.
   See [PR #3295](https://github.com/cloudposse/atmos/pull/3295) and
   [the migration section](git-hook-steps.md#migration-and-editions).
 
   **Additional post-editions candidate (2026-10-09):** for the `claude-code` AI provider, a
   configuration with `mcp.servers` used to start Claude Code with
-  `--dangerously-skip-permissions`, so every tool call ran unattended. `atmos ai ask` and
-  `atmos ai exec` now route those requests through the Atmos permission system
+  `--dangerously-skip-permissions`, so every tool call ran unattended. `atmos ai chat`, `atmos ai ask`, and
+  `atmos ai exec` now route delegated requests through the Atmos permission system
   (`ai.tools.mode`), so the same stored configuration prompts, and fails without a terminal
   unless `ai.tools.mode` is `allow` or `yolo`. The new `ai.tools.mode` key and the deprecated
   `yolo_mode` / `require_confirmation` aliases are not journaled because no shipped default
   changes. This runtime behavior is not yet selected by an edition pin: it has no named
   `KindBehavior` transition, so a project pinned to an earlier edition gets the new approval
-  prompts too. See [PR #3350](https://github.com/cloudposse/atmos/pull/3350) and the migration note in
+  prompts too. See [PR #3350](https://github.com/cloudposse/atmos/pull/3350),
+  [PR #3352](https://github.com/cloudposse/atmos/pull/3352), and the migration note in
   [atmos-ai-local-providers.md](atmos-ai-local-providers.md#interactive-approval-and-progress-claude-code).
 
   **Not gatable:** the auth credential realm isolation change (2026-02-10,

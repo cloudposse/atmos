@@ -176,7 +176,7 @@ func TestCLIPrompter_Prompt_WithCacheShowsTheRequestAndChoices(t *testing.T) {
 			tool:       promptTool,
 			params:     promptParams,
 			wantShown:  []string{requestTitle, "Tool", "Bash", "atmos list stacks", "Allow execution?"},
-			wantAlways: []string{"2. Always allow this command", "4. Always deny this command"},
+			wantAlways: []string{"2. Always allow Bash(atmos list stacks)", "4. Always deny Bash(atmos list stacks)"},
 		},
 		{
 			name:       "tool-wide decisions name the tool",
