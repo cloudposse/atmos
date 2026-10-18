@@ -69,6 +69,16 @@ type File struct {
 	// post-migration update wrote, with no further template updates ever
 	// applied and no warning. See determineBaseContent's own doc comment.
 	OriginalSourcePath string
+
+	// Delimiters, when it holds exactly two non-empty entries (left and
+	// right), is the template delimiter pair for everything ProcessFile
+	// renders for this file: its content and its path. It takes precedence
+	// over the scaffold config's spec.delimiters, which is how a
+	// spec.files[].delimiters override (resolved by pkg/generator/ui) reaches
+	// the engine. Any other value (nil, wrong length, an empty side) is
+	// ignored and the scaffold config's delimiters, or the "{{"/"}}" default,
+	// apply.
+	Delimiters []string
 }
 
 // FileSkippedError represents when a file is intentionally skipped during processing.
@@ -77,12 +87,20 @@ type File struct {
 type FileSkippedError struct {
 	Path         string // Original file path from the template
 	RenderedPath string // Rendered path after template processing
+	// Reason, when non-empty, overrides the generic "(skipped)" UI label with a
+	// more specific explanation (e.g. "the user deleted this file" -- see
+	// ProcessFile's update-mode deletion check). Empty for every other skip
+	// reason, preserving today's generic message.
+	Reason string
 }
 
 // Error returns a formatted error message indicating the file was skipped.
 func (e *FileSkippedError) Error() string {
 	defer perf.Track(nil, "engine.FileSkippedError.Error")()
 
+	if e.Reason != "" {
+		return fmt.Sprintf("file skipped: %s (rendered as: %s): %s", e.Path, e.RenderedPath, e.Reason)
+	}
 	return fmt.Sprintf("file skipped: %s (rendered as: %s)", e.Path, e.RenderedPath)
 }
 
@@ -103,6 +121,10 @@ type Processor struct {
 	baseStorage baseContentLoader
 	targetPath  string // Target directory for file generation
 	DryRun      bool   // When true, compute rendering/merge but skip writing to disk
+	// recreateDeleted, when true, disables deletedByUser's skip check: --update
+	// recreates a file the user deleted instead of leaving the deletion in
+	// place. False (the default) preserves the deletion. See SetRecreateDeleted.
+	recreateDeleted bool
 }
 
 // NewProcessor creates a new template processor with default settings.
@@ -117,10 +139,12 @@ func NewProcessor() *Processor {
 }
 
 // ProcessTemplate processes Go templates in file content.
+// It honors the delimiters configured in the scaffold config's spec.delimiters
+// (falling back to the default "{{"/"}}" when the config doesn't set a pair).
 func (p *Processor) ProcessTemplate(content string, targetPath string, scaffoldConfig interface{}, userValues map[string]interface{}) (string, error) {
 	defer perf.Track(nil, "engine.Processor.ProcessTemplate")()
 
-	return p.ProcessTemplateWithDelimiters(content, targetPath, scaffoldConfig, userValues, []string{defaultLeftDelimiter, defaultRightDelimiter})
+	return p.ProcessTemplateWithDelimiters(content, targetPath, scaffoldConfig, userValues, extractDelimiters(scaffoldConfig))
 }
 
 // ProcessTemplateWithDelimiters processes Go templates in file content with custom delimiters.
@@ -250,8 +274,8 @@ func buildTemplateFuncMap(userValues map[string]interface{}) template.FuncMap {
 func (p *Processor) ProcessFile(file File, targetPath string, force, update bool, scaffoldConfig interface{}, userValues map[string]interface{}) error {
 	defer perf.Track(nil, "engine.Processor.ProcessFile")()
 
-	// Extract delimiters from config
-	delimiters := extractDelimiters(scaffoldConfig)
+	// The file's own delimiters win over the scaffold config's.
+	delimiters := fileDelimiters(file.Delimiters, scaffoldConfig)
 
 	// Process and validate the file path
 	renderedPath, err := p.processFilePath(file.Path, targetPath, scaffoldConfig, userValues, delimiters)
@@ -260,7 +284,7 @@ func (p *Processor) ProcessFile(file File, targetPath string, force, update bool
 	}
 
 	// Validate path security: reject absolute paths, path traversal, and unrendered templates.
-	if err := validateRenderedPath(renderedPath, file.Path); err != nil {
+	if err := validateRenderedPath(renderedPath, file.Path, delimiters); err != nil {
 		return err
 	}
 
@@ -294,8 +318,75 @@ func (p *Processor) ProcessFile(file File, targetPath string, force, update bool
 		return p.handleExistingFile(file, fullPath, targetPath, force, update, scaffoldConfig, userValues, delimiters)
 	}
 
+	// Under --update, a path with no file on disk isn't necessarily new: the
+	// user may have deliberately deleted a file the template previously
+	// generated. Respect that deletion instead of silently recreating it --
+	// see deletedByUser's own doc comment. --recreate-deleted (SetRecreateDeleted)
+	// opts back into the old unconditional-recreate behavior; it's a separate
+	// axis from --force/--merge-strategy on purpose -- see SetRecreateDeleted's
+	// doc comment for why those can't express this.
+	if update && !p.recreateDeleted && p.baseStorage != nil {
+		skipErr, err := p.deletedByUser(file, fullPath, renderedPath)
+		if err != nil {
+			return err
+		}
+		if skipErr != nil {
+			return skipErr
+		}
+	}
+
 	// Process and write new file
 	return p.writeNewFile(file, fullPath, targetPath, false, scaffoldConfig, userValues, delimiters)
+}
+
+// deletedByUser reports whether fullPath -- absent on disk -- was previously
+// generated by the template at this exact path and has since been deleted by
+// the user, so ProcessFile can skip recreating it instead of silently
+// overwriting that deletion.
+//
+// Deliberately does NOT call determineBaseContent (which mergeFile uses for
+// an EXISTING file): that helper's migration fallback consults
+// file.OriginalSourcePath when nothing is found at the current path, to
+// recover a merge base for a file a spec.files[].target: rename has already
+// moved (see determineBaseContentMigrationFallback's doc comment) -- a case
+// that, by definition, only matters once the file already exists on disk at
+// its new path. Here the file does NOT exist yet: a fresh path with no
+// history of its own but a hit on OriginalSourcePath is exactly the
+// documented "first --update after target: changed" case, which must still
+// fall through to writeNewFile, not be mistaken for a user deletion.
+// Consulting the migration fallback in this not-yet-written branch would
+// permanently block that file from ever being created, with an error message
+// that actively misattributes the cause to the user. So this looks up
+// baseStorage.LoadBase directly, at the current path only.
+func (p *Processor) deletedByUser(file File, fullPath, renderedPath string) (*FileSkippedError, error) {
+	relativePath, err := filepath.Rel(p.targetPath, fullPath)
+	if err != nil {
+		relativePath = file.Path
+	}
+
+	_, found, err := p.baseStorage.LoadBase(relativePath)
+	if err != nil {
+		return nil, errUtils.Build(errUtils.ErrThreeWayMerge).
+			WithCause(err).
+			WithExplanationf("Failed to check whether `%s` was previously generated", file.Path).
+			WithHint("Verify the merge base is available: for `--update-strategy=tracked`, check the base ref exists (`git show <base-ref>`); for `--update-strategy=rendered`, check the pristine re-render of the recorded ref succeeded").
+			WithContext("file_path", file.Path).
+			WithContext("relative_path", relativePath).
+			WithExitCode(2).
+			Err()
+	}
+	if !found {
+		// No history at exactly this path -- genuinely new, or a target:
+		// rename's fresh write at the new path (see this function's own doc
+		// comment). Let the caller proceed to writeNewFile either way.
+		return nil, nil
+	}
+
+	return &FileSkippedError{
+		Path:         file.Path,
+		RenderedPath: renderedPath,
+		Reason:       "it existed previously but was removed locally; not recreating it (pass --recreate-deleted to always recreate it)",
+	}, nil
 }
 
 // validateWriteTarget confirms fullPath's containing directory resolves under
@@ -423,6 +514,16 @@ func writeFileSecure(fullPath string, content []byte, perm os.FileMode, overwrit
 	return err
 }
 
+// fileDelimiters returns the delimiter pair ProcessFile uses for a file:
+// its own File.Delimiters (fileOverride) when that holds exactly two non-empty
+// entries, otherwise the scaffold config's (see extractDelimiters).
+func fileDelimiters(fileOverride []string, scaffoldConfig interface{}) []string {
+	if len(fileOverride) == 2 && fileOverride[0] != "" && fileOverride[1] != "" {
+		return []string{fileOverride[0], fileOverride[1]}
+	}
+	return extractDelimiters(scaffoldConfig)
+}
+
 // extractDelimiters extracts template delimiters from scaffold config or returns defaults.
 func extractDelimiters(scaffoldConfig interface{}) []string {
 	delimiters := []string{defaultLeftDelimiter, defaultRightDelimiter}
@@ -447,7 +548,8 @@ func extractDelimiters(scaffoldConfig interface{}) []string {
 
 // tryExtractFromPointerConfig tries to extract delimiters from *config.ScaffoldConfig.
 func tryExtractFromPointerConfig(scaffoldConfig interface{}) []string {
-	if cfg, ok := scaffoldConfig.(*config.ScaffoldConfig); ok {
+	// A typed nil pointer is a non-nil interface, so guard before dereferencing.
+	if cfg, ok := scaffoldConfig.(*config.ScaffoldConfig); ok && cfg != nil {
 		if len(cfg.Spec.Delimiters) == 2 {
 			return []string{cfg.Spec.Delimiters[0], cfg.Spec.Delimiters[1]}
 		}
@@ -541,7 +643,15 @@ func fileExists(path string) bool {
 
 // validateRenderedPath validates that a rendered path is safe.
 // Rejects absolute paths, path traversal attempts (..), and unrendered template markers.
-func validateRenderedPath(renderedPath, originalPath string) error {
+// The unrendered-marker check uses the scaffold's active delimiter pair (spec.delimiters),
+// so a custom pair such as "[[ ]]" is detected when left unrendered, while a literal "{{" or
+// "${{" is legitimate in a path rendered under it. Falls back to the default "{{"/"}}" pair
+// when delimiters doesn't hold exactly two entries.
+func validateRenderedPath(renderedPath, originalPath string, delimiters []string) error {
+	if len(delimiters) != 2 {
+		delimiters = []string{defaultLeftDelimiter, defaultRightDelimiter}
+	}
+
 	// Clean the path to normalize it.
 	cleaned := filepath.Clean(renderedPath)
 
@@ -573,7 +683,7 @@ func validateRenderedPath(renderedPath, originalPath string) error {
 	}
 
 	// Reject unrendered template markers (indicates missing variables).
-	if strings.Contains(renderedPath, defaultLeftDelimiter) || strings.Contains(renderedPath, defaultRightDelimiter) {
+	if strings.Contains(renderedPath, delimiters[0]) || strings.Contains(renderedPath, delimiters[1]) {
 		return errUtils.Build(errUtils.ErrUnprocessedTemplate).
 			WithExplanationf("Unrendered template in file path: `%s`", renderedPath).
 			WithHint("Ensure all template variables in the path are defined").
@@ -637,10 +747,10 @@ func (p *Processor) handleExistingFile(file File, fullPath, targetPath string, f
 		// Create a temporary file with processed content for merging
 		tempFile := file
 		tempFile.Content = processedContent
-		// Clear the IsTemplate flag so mergeFile doesn't re-process the already-rendered content
+		// Clear the IsTemplate flag: the content is already rendered (mergeFile uses it as-is)
 		tempFile.IsTemplate = false
 
-		if err := p.mergeFile(fullPath, tempFile, targetPath); err != nil {
+		if err := p.mergeFile(fullPath, &tempFile); err != nil {
 			return err // Error already formatted by mergeFile
 		}
 		return nil

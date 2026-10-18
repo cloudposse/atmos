@@ -7,6 +7,11 @@ description: >-
 cast:
   file: /casts/examples/demo-context/name-template.cast
   title: atmos configuration context
+related_docs:
+  - label: "Describe configuration"
+    url: /cli/commands/describe/config
+  - label: "Templates"
+    url: /templates/
 ---
 
 # Example: Demo Context
@@ -17,8 +22,8 @@ Learn more about [Describe Config](https://atmos.tools/cli/commands/describe/con
 
 ## What You'll See
 
-- [Context providers](https://atmos.tools/stacks/templates#context) for dynamic values
-- [Name templates](https://atmos.tools/stacks/naming) using context values
+- [Context providers](https://atmos.tools/templates/) for dynamic values
+- [Name templates](https://atmos.tools/stacks/name) using context values
 - Configuration merging from imports and mixins
 
 ## Try It

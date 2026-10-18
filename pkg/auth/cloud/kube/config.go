@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -105,6 +106,13 @@ type KubeconfigManager struct {
 // NewKubeconfigManager creates a manager with the given path and permissions.
 // If customPath is empty, uses XDG default (~/.config/atmos/kube/config).
 // If modeStr is empty, defaults to "0600".
+//
+// A non-empty customPath is expanded so committable, multi-developer configs and
+// quoted CLI values stay portable: environment variables ($VAR and ${VAR}) are
+// substituted and a leading ~ (or ~/) resolves to the current user's home
+// directory. This covers the integration config path (spec.cluster.kubeconfig.path),
+// the --kubeconfig flag, and the KUBECONFIG/ATMOS_KUBECONFIG env vars alike,
+// since they all flow through here.
 func NewKubeconfigManager(customPath, modeStr string) (*KubeconfigManager, error) {
 	defer perf.Track(nil, "kube.NewKubeconfigManager")()
 
@@ -116,6 +124,12 @@ func NewKubeconfigManager(customPath, modeStr string) (*KubeconfigManager, error
 			return nil, fmt.Errorf("%w: %w", errUtils.ErrKubeconfigPath, err)
 		}
 		path = defaultPath
+	} else {
+		expanded, err := expandKubeconfigPath(path)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrKubeconfigPath, err)
+		}
+		path = expanded
 	}
 
 	// Parse file mode.
@@ -337,6 +351,105 @@ func DefaultKubeconfigPath() (string, error) {
 	}
 
 	return filepath.Join(kubeDir, "config"), nil
+}
+
+// expandKubeconfigPath expands a kubeconfig path so configs stay portable across
+// users and machines. Expansion happens in four steps:
+//
+//  1. Environment variables ($VAR, ${VAR}) are substituted. The documented
+//     portable form ${HOME}/$HOME resolves via os.UserHomeDir so it works on
+//     Windows too, where HOME is often unset and the home directory comes from
+//     USERPROFILE. Any OTHER variable that is not set is reported as an error
+//     rather than silently removed - a dropped segment would redirect the write
+//     to an unintended path.
+//  2. A KUBECONFIG-style value may list several files separated by
+//     os.PathListSeparator. kubectl writes changes to the first entry (skipping
+//     empty filenames) and the AWS CLI uses the first path as its default
+//     destination, so a list is reduced to its first non-empty element; a list
+//     with no usable entry is an error. A single path (the --kubeconfig flag or
+//     a configured spec.cluster.kubeconfig.path) contains no separator and is
+//     left unchanged.
+//  3. A leading ~ (or ~/) resolves to the current user's home directory; a bare
+//     ~ maps to the home directory itself.
+//  4. The result is cleaned to an OS-native path (filepath.Clean), so a config
+//     written with forward slashes yields backslashes on Windows.
+//
+// Only $VAR/${VAR} syntax is expanded; Windows %VAR% is left as-is.
+func expandKubeconfigPath(path string) (string, error) {
+	defer perf.Track(nil, "kube.expandKubeconfigPath")()
+
+	if path == "" {
+		return "", nil
+	}
+
+	// Substitute environment variables, erroring on unresolved references.
+	expanded, err := expandPathEnvVars(path)
+	if err != nil {
+		return "", err
+	}
+	path = expanded
+
+	// Reduce a KUBECONFIG-style multi-file list to its first non-empty entry.
+	// kubectl skips empty filenames (e.g. a leading or doubled separator), so a
+	// value like ":/home/dev/.kube/config" still resolves to the usable file.
+	if entries := filepath.SplitList(path); len(entries) > 1 {
+		path = ""
+		for _, entry := range entries {
+			if entry != "" {
+				path = entry
+				break
+			}
+		}
+		if path == "" {
+			return "", fmt.Errorf("%w: kubeconfig path list contains no usable entry", errUtils.ErrKubeconfigPath)
+		}
+	}
+
+	// Expand a leading ~ to the user's home directory.
+	if path == "~" || strings.HasPrefix(path, "~/") || strings.HasPrefix(path, `~\`) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("%w: %w", errUtils.ErrKubeconfigPath, err)
+		}
+		if path == "~" {
+			path = home
+		} else {
+			path = filepath.Join(home, path[2:])
+		}
+	}
+
+	// Normalize to an OS-native, cleaned path so the result is consistent
+	// regardless of how the config or env value was written (e.g. forward
+	// slashes in a committed config become backslashes on Windows).
+	return filepath.Clean(path), nil
+}
+
+// expandPathEnvVars substitutes $VAR/${VAR} references in a path. HOME resolves
+// via os.UserHomeDir so the documented ${HOME} form works cross-platform (on
+// Windows HOME may be unset while the home directory comes from USERPROFILE).
+// Any other variable that is not set is returned as an error, so an unresolved
+// reference fails loudly instead of silently corrupting the write path.
+func expandPathEnvVars(path string) (string, error) {
+	var missing []string
+
+	expanded := os.Expand(path, func(name string) string {
+		if name == "HOME" {
+			if home, err := os.UserHomeDir(); err == nil {
+				return home
+			}
+		}
+		if value, ok := os.LookupEnv(name); ok {
+			return value
+		}
+		missing = append(missing, name)
+		return ""
+	})
+
+	if len(missing) > 0 {
+		return "", fmt.Errorf("%w: unresolved environment variable(s) %v in kubeconfig path %q", errUtils.ErrKubeconfigPath, missing, path)
+	}
+
+	return expanded, nil
 }
 
 // writeConfig writes a kubeconfig to the file, replacing any existing content.

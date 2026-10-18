@@ -316,7 +316,7 @@ func castRecorderEnv(step *schema.WorkflowStep, vars *Variables) (map[string]str
 	if len(step.Env) == 0 {
 		return env, nil
 	}
-	resolvedEnv, err := vars.ResolveEnvMap(step.Env)
+	resolvedEnv, err := vars.ResolveStepEnvMap(step, step.Env)
 	if err != nil {
 		return nil, fmt.Errorf("step '%s': %w", step.Name, err)
 	}
@@ -503,7 +503,7 @@ func applyCastStepEnv(castStep *schema.WorkflowStep, vars *Variables) error {
 	if len(castStep.Env) == 0 {
 		return nil
 	}
-	resolvedEnv, err := vars.ResolveEnvMap(castStep.Env)
+	resolvedEnv, err := vars.ResolveStepEnvMap(castStep, castStep.Env)
 	if err != nil {
 		return fmt.Errorf("step '%s': %w", castStep.Name, err)
 	}

@@ -67,7 +67,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           # Operating-system background services on the hosted Windows and
@@ -126,6 +126,9 @@ jobs:
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
             *.pool.ntp.org:123
+            raw.githubusercontent.com:443
+            go.dev:443
+            golang.org:443
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -146,7 +149,7 @@ jobs:
         id: go
 
       - name: Set up Atmos
-        uses: cloudposse/github-action-setup-atmos@60878d48037763f759aedee74e9cc0c2dc88e9ec # v3.5.0
+        uses: cloudposse/github-action-setup-atmos@9e8d1e2db56fe851a85871d5993d63e182b66536 # v3.6.0
         with:
           atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
           install-wrapper: false
@@ -169,7 +172,7 @@ jobs:
       # Warm the same cache namespaces the real jobs compile in. Flags must
       # match the real invocations or Go's action IDs differ and the warm
       # entries go unused: atmos builds with CGO_ENABLED=0 + GOFIPS140=latest
-      # (see .goreleaser.yml, magefiles/build.go, docs/prd/fips-140-mode.md).
+      # (see .goreleaser.yml, magefiles/build/build.go, docs/prd/fips-140-mode.md).
       - name: Warm the build cache (go build ./...)
         env:
           CGO_ENABLED: "0"

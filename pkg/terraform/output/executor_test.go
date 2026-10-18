@@ -25,6 +25,7 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/refcache"
 	"github.com/cloudposse/atmos/pkg/terraform/tfvars"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -548,7 +549,7 @@ func TestExecutor_GetOutput_CacheHit(t *testing.T) {
 	atmosConfig := validAtmosConfig(t)
 
 	// Pre-populate cache.
-	stackSlug := stackComponentKey("cached-stack", "cached-component")
+	stackSlug := refcache.NewKey(atmosConfig, "cached-stack", "cached-component")
 	terraformOutputsCache.Store(stackSlug, map[string]any{
 		"cached_value": "from-cache",
 	})
@@ -590,7 +591,7 @@ func TestExecutor_GetOutput_CacheHitIsVisible(t *testing.T) {
 	// Pre-populate the cache with two outputs for the same component+stack,
 	// mirroring a real fetch that caches every output at once. Neither
 	// lookup below triggers DescribeComponent -- both are cache hits.
-	stackSlug := stackComponentKey("fixtures", "vpc")
+	stackSlug := refcache.NewKey(atmosConfig, "fixtures", "vpc")
 	terraformOutputsCache.Store(stackSlug, map[string]any{
 		"vpc_id":   "vpc-abc123",
 		"vpc_cidr": "10.0.0.0/16",
@@ -628,10 +629,10 @@ func TestResolveOutputFromCache_MissReturnsNil(t *testing.T) {
 
 	// A unique, never-populated stackSlug guarantees test isolation --
 	// nothing else in this package's test suite could have cached it.
-	stackSlug := stackComponentKey("never-cached-stack", "never-cached-component")
+	stackSlug := refcache.NewKey(atmosConfig, "never-cached-stack", "never-cached-component")
 	terraformOutputsCache.Delete(stackSlug) // defensive: ensure a clean slate.
 
-	result := resolveOutputFromCache(atmosConfig, stackSlug, "never-cached-component", "never-cached-stack", "some_output")
+	result := resolveOutputFromCache(atmosConfig, &stackSlug, "never-cached-component", "never-cached-stack", "some_output")
 	assert.Nil(t, result, "a cache miss must return nil so the caller falls through to a real fetch")
 }
 
@@ -653,7 +654,7 @@ func TestResolveOutputFromCache_GetOutputVariableErrorIsVisible(t *testing.T) {
 	restoreUI := iolib.PushUIWriter(&uiOutput)
 	t.Cleanup(restoreUI)
 
-	stackSlug := stackComponentKey("malformed-yq-stack", "malformed-yq-component")
+	stackSlug := refcache.NewKey(atmosConfig, "malformed-yq-stack", "malformed-yq-component")
 	terraformOutputsCache.Store(stackSlug, map[string]any{
 		"vpc_id": "vpc-abc123",
 	})
@@ -662,7 +663,7 @@ func TestResolveOutputFromCache_GetOutputVariableErrorIsVisible(t *testing.T) {
 	// An unbalanced `[` is not a missing key -- it is a yq syntax error,
 	// which getOutputVariable/extractYqValue propagate as a real error
 	// rather than an "exists: false" result.
-	result := resolveOutputFromCache(atmosConfig, stackSlug, "malformed-yq-component", "malformed-yq-stack", "vpc_id[")
+	result := resolveOutputFromCache(atmosConfig, &stackSlug, "malformed-yq-component", "malformed-yq-stack", "vpc_id[")
 	require.NotNil(t, result)
 	require.Error(t, result.err)
 	assert.Contains(t, result.err.Error(), "failed to evaluate YQ expression")
@@ -682,7 +683,7 @@ func TestExecutor_GetOutput_NonexistentKey(t *testing.T) {
 	atmosConfig := validAtmosConfig(t)
 
 	// Pre-populate cache.
-	stackSlug := stackComponentKey("nonexistent-stack", "nonexistent-component")
+	stackSlug := refcache.NewKey(atmosConfig, "nonexistent-stack", "nonexistent-component")
 	terraformOutputsCache.Store(stackSlug, map[string]any{
 		"existing_key": "value",
 	})
@@ -763,15 +764,17 @@ func TestSummarizeValue(t *testing.T) {
 
 func TestCheckOutputsCache(t *testing.T) {
 	// Test cache miss.
-	result := checkOutputsCache("miss-slug", "component", "stack")
+	missKey := refcache.NewKey(nil, "miss-stack", "component")
+	result := checkOutputsCache(&missKey, "component", "miss-stack")
 	assert.Nil(t, result)
 
 	// Test cache hit.
 	cached := map[string]any{"key": "value"}
-	terraformOutputsCache.Store("hit-slug", cached)
-	defer terraformOutputsCache.Delete("hit-slug")
+	hitKey := refcache.NewKey(nil, "hit-stack", "component")
+	terraformOutputsCache.Store(hitKey, cached)
+	defer terraformOutputsCache.Delete(hitKey)
 
-	result = checkOutputsCache("hit-slug", "component", "stack")
+	result = checkOutputsCache(&hitKey, "component", "hit-stack")
 	assert.Equal(t, cached, result)
 }
 
@@ -1191,13 +1194,13 @@ func TestExecutor_GetAllOutputs_CacheHit(t *testing.T) {
 	mockDescriber := NewMockComponentDescriber(ctrl)
 	exec := NewExecutor(mockDescriber)
 
+	atmosConfig := validAtmosConfig(t)
+
 	// Pre-populate cache.
-	stackSlug := stackComponentKey("cache-hit-stack", "cache-hit-component")
+	stackSlug := refcache.NewKey(atmosConfig, "cache-hit-stack", "cache-hit-component")
 	cachedOutputs := map[string]any{"cached_key": "cached_value"}
 	terraformOutputsCache.Store(stackSlug, cachedOutputs)
 	defer terraformOutputsCache.Delete(stackSlug)
-
-	atmosConfig := validAtmosConfig(t)
 
 	// No DescribeComponent call expected.
 	outputs, err := exec.GetAllOutputs(atmosConfig, "cache-hit-component", "cache-hit-stack", false, nil, nil)
@@ -1444,43 +1447,6 @@ func TestExecutor_GetOutput_ExecuteError(t *testing.T) {
 	_, _, err := exec.GetOutput(atmosConfig, "exec-err-stack", "exec-err-component", "output", true, nil, nil)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrTerraformOutputFailed), "expected ErrTerraformOutputFailed")
-}
-
-// TestHighlightValue_NilConfig tests the highlightValue function with nil config.
-func TestHighlightValue_NilConfig(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		config   *schema.AtmosConfiguration
-		expected string
-	}{
-		{
-			name:     "nil config returns input unchanged",
-			input:    `{"key": "value"}`,
-			config:   nil,
-			expected: `{"key": "value"}`,
-		},
-		{
-			name:     "with config attempts highlighting",
-			input:    `{"key": "value"}`,
-			config:   validAtmosConfig(t),
-			expected: `{"key": "value"}`, // May be highlighted or not depending on TTY.
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := highlightValue(tt.input, tt.config)
-			// For nil config, result should be exactly the input.
-			if tt.config == nil {
-				assert.Equal(t, tt.expected, result)
-			} else {
-				// For non-nil config, result may be highlighted or unchanged.
-				// Just ensure it contains the key content.
-				assert.Contains(t, result, "key")
-			}
-		})
-	}
 }
 
 // TestExecutor_ExecuteWithSections_ComponentPathResolution tests that component paths
@@ -1964,99 +1930,109 @@ func TestExecutor_Execute_SkipInit_DirectCall(t *testing.T) {
 // template functions fails with: exec: "tofu": executable file not found in $PATH
 // even though tofu was installed via `atmos toolchain install`.
 func TestExecutor_ExecuteWithSections_ToolchainResolvesExecutable(t *testing.T) {
-	// Restore package-global toolchain config after test to avoid leaking
-	// t.TempDir() paths into subsequent tests.
-	origToolchainConfig := toolchain.GetAtmosConfig()
-	t.Cleanup(func() {
-		toolchain.SetAtmosConfig(origToolchainConfig)
-	})
+	for _, source := range []string{"dependencies", "tool-versions"} {
+		t.Run(source, func(t *testing.T) {
+			// Restore package-global toolchain config after test to avoid leaking
+			// t.TempDir() paths into subsequent tests.
+			origToolchainConfig := toolchain.GetAtmosConfig()
+			t.Cleanup(func() {
+				toolchain.SetAtmosConfig(origToolchainConfig)
+			})
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
 
-	mockDescriber := NewMockComponentDescriber(ctrl)
-	mockRunner := NewMockTerraformRunner(ctrl)
+			mockDescriber := NewMockComponentDescriber(ctrl)
+			mockRunner := NewMockTerraformRunner(ctrl)
 
-	// Track what executable path is passed to the runner factory.
-	var capturedExecutable string
-	customFactory := func(workdir, executable string) (TerraformRunner, error) {
-		capturedExecutable = executable
-		return mockRunner, nil
+			// Track what executable path is passed to the runner factory.
+			var capturedExecutable string
+			customFactory := func(workdir, executable string) (TerraformRunner, error) {
+				capturedExecutable = executable
+				return mockRunner, nil
+			}
+
+			exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+
+			// Create a temp dir structure simulating a toolchain install.
+			tempDir := t.TempDir()
+			componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+			require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+			// Create a fake toolchain binary at the expected toolchain install path.
+			toolchainDir := filepath.Join(tempDir, "toolchain")
+			binaryDir := filepath.Join(toolchainDir, "bin", "opentofu", "opentofu", "1.8.0")
+			require.NoError(t, os.MkdirAll(binaryDir, 0o755))
+			binaryName := "tofu"
+			if runtime.GOOS == "windows" {
+				binaryName = "tofu.exe"
+			}
+			fakeBinary := filepath.Join(binaryDir, binaryName)
+			require.NoError(t, os.WriteFile(fakeBinary, []byte("#!/bin/sh\n"), 0o755))
+
+			atmosConfig := &schema.AtmosConfiguration{
+				BasePath:         tempDir,
+				BasePathAbsolute: tempDir,
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						BasePath:                "components/terraform",
+						AutoGenerateBackendFile: false,
+						InitRunReconfigure:      false,
+					},
+				},
+				Toolchain: schema.Toolchain{
+					InstallPath: toolchainDir,
+				},
+				Logs: schema.Logs{
+					Level: "info",
+				},
+			}
+
+			// Sections with bare "tofu" executable and toolchain dependencies.
+			sections := map[string]any{
+				cfg.CommandSectionName:   "tofu",
+				cfg.WorkspaceSectionName: "test-workspace",
+				cfg.ComponentSectionName: "vpc",
+				"component_info": map[string]any{
+					"component_type": "terraform",
+				},
+				cfg.BackendTypeSectionName: "s3",
+				cfg.BackendSectionName: map[string]any{
+					"bucket": "test-bucket",
+					"key":    "test-key",
+				},
+				"dependencies": map[string]any{
+					"tools": map[string]any{
+						"opentofu": "1.8.0",
+					},
+				},
+			}
+
+			if source == "tool-versions" {
+				delete(sections, "dependencies")
+				require.NoError(t, os.WriteFile(filepath.Join(tempDir, ".tool-versions"), []byte("opentofu/opentofu 1.8.0\n"), 0o600))
+			}
+
+			// Setup mock expectations for the full execution path.
+			mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+			mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
+			mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
+			mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+				"vpc_id": {Value: []byte(`"vpc-123"`)},
+			}, nil)
+
+			outputs, err := exec.ExecuteWithSections(atmosConfig, "vpc", "dev-ue1", sections, nil)
+			require.NoError(t, err)
+			assert.Equal(t, "vpc-123", outputs["vpc_id"])
+
+			// Verify the executable was resolved to the absolute toolchain path,
+			// not passed as the bare "tofu" name.
+			assert.True(t, filepath.IsAbs(capturedExecutable),
+				"expected executable to be resolved to an absolute path, got %q", capturedExecutable)
+			assert.Equal(t, fakeBinary, capturedExecutable,
+				"expected executable to be resolved to the toolchain binary path")
+		})
 	}
-
-	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
-
-	// Create a temp dir structure simulating a toolchain install.
-	tempDir := t.TempDir()
-	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
-	require.NoError(t, os.MkdirAll(componentDir, 0o755))
-
-	// Create a fake toolchain binary at the expected toolchain install path.
-	toolchainDir := filepath.Join(tempDir, "toolchain")
-	binaryDir := filepath.Join(toolchainDir, "bin", "opentofu", "opentofu", "1.8.0")
-	require.NoError(t, os.MkdirAll(binaryDir, 0o755))
-	binaryName := "tofu"
-	if runtime.GOOS == "windows" {
-		binaryName = "tofu.exe"
-	}
-	fakeBinary := filepath.Join(binaryDir, binaryName)
-	require.NoError(t, os.WriteFile(fakeBinary, []byte("#!/bin/sh\n"), 0o755))
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Components: schema.Components{
-			Terraform: schema.Terraform{
-				BasePath:                "components/terraform",
-				AutoGenerateBackendFile: false,
-				InitRunReconfigure:      false,
-			},
-		},
-		Toolchain: schema.Toolchain{
-			InstallPath: toolchainDir,
-		},
-		Logs: schema.Logs{
-			Level: "info",
-		},
-	}
-
-	// Sections with bare "tofu" executable and toolchain dependencies.
-	sections := map[string]any{
-		cfg.CommandSectionName:   "tofu",
-		cfg.WorkspaceSectionName: "test-workspace",
-		cfg.ComponentSectionName: "vpc",
-		"component_info": map[string]any{
-			"component_type": "terraform",
-		},
-		cfg.BackendTypeSectionName: "s3",
-		cfg.BackendSectionName: map[string]any{
-			"bucket": "test-bucket",
-			"key":    "test-key",
-		},
-		"dependencies": map[string]any{
-			"tools": map[string]any{
-				"opentofu": "1.8.0",
-			},
-		},
-	}
-
-	// Setup mock expectations for the full execution path.
-	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
-	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
-	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
-		"vpc_id": {Value: []byte(`"vpc-123"`)},
-	}, nil)
-
-	outputs, err := exec.ExecuteWithSections(atmosConfig, "vpc", "dev-ue1", sections, nil)
-	require.NoError(t, err)
-	assert.Equal(t, "vpc-123", outputs["vpc_id"])
-
-	// Verify the executable was resolved to the absolute toolchain path,
-	// not passed as the bare "tofu" name.
-	assert.True(t, filepath.IsAbs(capturedExecutable),
-		"expected executable to be resolved to an absolute path, got %q", capturedExecutable)
-	assert.Equal(t, fakeBinary, capturedExecutable,
-		"expected executable to be resolved to the toolchain binary path")
 }
 
 // TestExecutor_GetOutputWithOptions_SkipInit verifies that GetOutputWithOptions with
@@ -2127,7 +2103,7 @@ func TestExecutor_GetOutputWithOptions_CacheHit(t *testing.T) {
 
 	atmosConfig := validAtmosConfig(t)
 
-	stackSlug := stackComponentKey("opts-cache-stack", "opts-cache-component")
+	stackSlug := refcache.NewKey(atmosConfig, "opts-cache-stack", "opts-cache-component")
 	terraformOutputsCache.Store(stackSlug, map[string]any{"cached_out": "hit-value"})
 	defer terraformOutputsCache.Delete(stackSlug)
 

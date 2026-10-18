@@ -44,7 +44,7 @@ type ComponentsOptions struct {
 	Skip             []string
 	ErrorMode        string
 	Tags             []string
-	LabelsRaw        string
+	LabelsRaw        []string
 	// IncludeDependencies/IncludeDependents preview the dependency closure
 	// (0 = off, -1 = unlimited, N>0 = N levels): the listed components are
 	// exactly the ones a terraform bulk run with the same selection flags
@@ -117,8 +117,8 @@ func parseComponentsOptions(cmd *cobra.Command, v *viper.Viper) *ComponentsOptio
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
 		ErrorMode:        v.GetString("error-mode"),
-		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
-		LabelsRaw:        v.GetString("labels"),
+		Tags:             tags.ParseTagsFlag(v.GetString(tagsViperKey)),
+		LabelsRaw:        tags.ReadLabelsFlagKey(v, labelsViperKey),
 	}
 }
 

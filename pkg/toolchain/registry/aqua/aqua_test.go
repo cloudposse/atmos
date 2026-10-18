@@ -528,7 +528,7 @@ func TestAquaRegistry_GetLatestVersion(t *testing.T) {
 
 	version, err := ar.GetLatestVersion("test", "tool")
 	require.NoError(t, err)
-	assert.Equal(t, "1.5.0", version) // Should skip draft v1.6.0 and prerelease v2.0.0-beta
+	assert.Equal(t, "v1.5.0", version) // Should skip draft v1.6.0 and prerelease v2.0.0-beta
 }
 
 func TestAquaRegistry_GetLatestVersion_RetriesUnauthenticatedAfterForbidden(t *testing.T) {
@@ -589,7 +589,7 @@ func TestAquaRegistry_FetchVersionFromPage_RecoversFromTransientNetworkError(t *
 
 	version, nextURL, err := ar.fetchVersionFromPage("https://api.github.com/repos/test/tool/releases?per_page=100", "", false)
 	require.NoError(t, err)
-	assert.Equal(t, "1.5.0", version)
+	assert.Equal(t, "v1.5.0", version)
 	assert.Empty(t, nextURL)
 	assert.Equal(t, 2, mock.calls, "expected exactly one retry after the transient connection reset")
 }
@@ -604,7 +604,7 @@ func TestAquaRegistry_FetchVersionsFromPage_RecoversFromTransientNetworkError(t 
 
 	versions, nextURL, err := ar.fetchVersionsFromPage(context.Background(), "https://api.github.com/repos/test/tool/releases?per_page=100", "", false)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"1.5.0"}, versions)
+	assert.Equal(t, []string{"v1.5.0"}, versions)
 	assert.Empty(t, nextURL)
 	assert.Equal(t, 2, mock.calls, "expected exactly one retry after the transient connection reset")
 }
@@ -832,14 +832,14 @@ func TestAquaRegistry_GetAvailableVersions(t *testing.T) {
 	versions, err := ar.GetAvailableVersions("test", "tool")
 	require.NoError(t, err)
 	require.Len(t, versions, 3) // Only non-prerelease, non-draft versions
-	assert.Equal(t, "1.5.0", versions[0])
-	assert.Equal(t, "1.4.0", versions[1])
-	assert.Equal(t, "1.3.0", versions[2])
+	assert.Equal(t, "v1.5.0", versions[0])
+	assert.Equal(t, "v1.4.0", versions[1])
+	assert.Equal(t, "v1.3.0", versions[2])
 
-	// All versions should be valid semver without 'v' prefix
+	// Without registry metadata, preserve the exact release tags.
 	for _, version := range versions {
 		assert.NotEmpty(t, version)
-		assert.False(t, strings.HasPrefix(version, versionPrefix))
+		assert.True(t, strings.HasPrefix(version, versionPrefix))
 	}
 }
 
@@ -888,7 +888,7 @@ func TestAquaRegistry_GetLatestVersion_WithPagination(t *testing.T) {
 
 	version, err := ar.GetLatestVersion("test", "tool")
 	require.NoError(t, err)
-	assert.Equal(t, "1.8.0", version) // Should find v1.8.0 on page 2
+	assert.Equal(t, "v1.8.0", version) // Should find v1.8.0 on page 2
 	assert.Equal(t, 2, requestCount, "should have made 2 requests for pagination")
 }
 
@@ -938,8 +938,8 @@ func TestAquaRegistry_GetAvailableVersions_WithPagination(t *testing.T) {
 	versions, err := ar.GetAvailableVersions("test", "tool")
 	require.NoError(t, err)
 	require.Len(t, versions, 2) // Only v2.0.0 and v1.8.0
-	assert.Equal(t, "2.0.0", versions[0])
-	assert.Equal(t, "1.8.0", versions[1])
+	assert.Equal(t, "v2.0.0", versions[0])
+	assert.Equal(t, "v1.8.0", versions[1])
 	assert.Equal(t, 2, requestCount, "should have made 2 requests for pagination")
 }
 
@@ -2724,7 +2724,7 @@ func TestGetLatestVersion_GitHubTag(t *testing.T) {
 
 // TestGetLatestTag tests the getLatestTag function directly.
 func TestGetLatestTag(t *testing.T) {
-	t.Run("strips default v prefix when prefix is empty", func(t *testing.T) {
+	t.Run("preserves tag when metadata is unavailable", func(t *testing.T) {
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(`[{"name": "v2.0.0"}]`))
@@ -2734,7 +2734,7 @@ func TestGetLatestTag(t *testing.T) {
 		ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
 		version, err := ar.getLatestTag("test", "tool", "", false)
 		require.NoError(t, err)
-		assert.Equal(t, "2.0.0", version)
+		assert.Equal(t, "v2.0.0", version)
 	})
 
 	t.Run("strips custom prefix", func(t *testing.T) {

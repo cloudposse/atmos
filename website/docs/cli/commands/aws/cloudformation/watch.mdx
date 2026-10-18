@@ -1,0 +1,74 @@
+---
+title: atmos aws cloudformation watch
+sidebar_label: watch
+sidebar_class_name: command
+id: watch
+description: Attach to a stack's in-progress (or already-terminal) operation and stream events.
+---
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
+import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
+
+<Intro>
+Stream events from an existing stack operation until it finishes. The operation
+can have been started by Atmos, the AWS Console, or another tool.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
+
+<CastPlayer title="atmos aws cloudformation watch --help" src="/casts/screengrabs/atmos-aws-cloudformation-watch--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation watch <component> --stack <stack> [options]
+```
+
+## Examples
+
+```shell
+atmos aws cloudformation watch vpc -s plat-ue2-dev
+```
+
+Watch all or affected components in dependency order:
+
+```shell
+atmos aws cloudformation watch --all -s plat-ue2-dev
+atmos aws cloudformation watch --affected --base origin/main
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
+
+<SelectionFlags />
+
+<GitFlags />
+</dl>
+
+## Behavior
+
+With bulk selection, `--stack` is an optional filter. Omit it to select components across stacks.
+
+If the stack ends in a failed status, `watch` exits non-zero, the same
+failure signal `apply`/`delete` give when the operation they started fails.
+
+This command does not fire [lifecycle hooks](/stacks/components/aws-cloudformation#lifecycle-hooks).

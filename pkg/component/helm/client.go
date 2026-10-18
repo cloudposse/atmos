@@ -15,12 +15,14 @@ import (
 	"helm.sh/helm/v4/pkg/kube"
 	"helm.sh/helm/v4/pkg/registry"
 	helmrelease "helm.sh/helm/v4/pkg/release"
+	rcommon "helm.sh/helm/v4/pkg/release/common"
 	release "helm.sh/helm/v4/pkg/release/v1"
 	"helm.sh/helm/v4/pkg/storage"
 	"helm.sh/helm/v4/pkg/storage/driver"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	authkube "github.com/cloudposse/atmos/pkg/auth/cloud/kube"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -157,7 +159,21 @@ func installRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	client := newInstallClient(actx, spec, dryRun)
 	manifest, err := runInstall(ctx, client, actx.settings, spec)
 	if err != nil {
-		return "", releaseOperationError("install", spec, err)
+		// Only diagnose and uninstall when the install actually reached the cluster
+		// (a release record exists). A pre-mutation failure - a bad chart reference,
+		// a chart-load error, or cancellation before the install action runs - leaves
+		// nothing to inspect or remove, so recovery would be a pointless no-op (and
+		// `uninstall <name>` must not fire for an install that never applied anything).
+		diagnostics := ""
+		if !dryRun && releaseRecordExists(actx, spec.ReleaseName) {
+			// Capture crash-looping pod diagnostics BEFORE the uninstall deletes the
+			// failed first-install resources, then perform the uninstall Atmos owns.
+			diagnostics = diagnoseReleaseFailure(ctx, actx, spec)
+			if spec.Lifecycle.Policy.OnFailure == failurePolicyUninstall {
+				err = uninstallFailedInstall(actx, spec, err)
+			}
+		}
+		return "", releaseOperationErrorWithDiagnostics("install", spec, err, diagnostics)
 	}
 	return manifest, nil
 }
@@ -212,16 +228,20 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	client.WaitOptions = releaseWaitOptions(operationCtx)
 
 	rel, err := client.RunWithContext(operationCtx, spec.ReleaseName, loaded, spec.Values)
-	if err != nil && !dryRun && spec.Lifecycle.Policy.OnFailure == failurePolicyRollback {
-		if historyErr := enforceReleaseHistoryLimit(actx.cfg.Releases, spec.ReleaseName, spec.Lifecycle.Policy.MaxHistory); historyErr != nil {
-			err = errors.Join(err, fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseHistory, spec.ReleaseName, historyErr))
-		}
-	}
 	if err != nil {
-		if ctxErr := operationCtx.Err(); ctxErr != nil {
-			return "", releaseOperationError("upgrade", spec, errors.Join(ctxErr, err))
+		// Capture crash-looping pod diagnostics BEFORE the rollback replaces the
+		// failing pods, then perform the rollback Atmos now owns.
+		diagnostics := ""
+		if !dryRun {
+			diagnostics = diagnoseReleaseFailure(ctx, actx, spec)
+			if spec.Lifecycle.Policy.OnFailure == failurePolicyRollback {
+				err = rollbackFailedUpgrade(actx, spec, err)
+			}
 		}
-		return "", releaseOperationError("upgrade", spec, err)
+		if ctxErr := operationCtx.Err(); ctxErr != nil {
+			err = errors.Join(ctxErr, err)
+		}
+		return "", releaseOperationErrorWithDiagnostics("upgrade", spec, err, diagnostics)
 	}
 	rendered, ok := rel.(*release.Release)
 	if !ok {
@@ -366,20 +386,149 @@ func deleteRelease(ctx context.Context, spec *chartSpec, dryRun bool) error {
 }
 
 func releaseOperationError(operation string, spec *chartSpec, cause error) error {
+	return releaseOperationErrorWithDiagnostics(operation, spec, cause, "")
+}
+
+// releaseOperationErrorWithDiagnostics builds the #2849 failure error and, when
+// diagnostics is non-empty, folds the crash-looping pod summary into the
+// explanation so the cause is legible from the Atmos output alone
+// (cloudposse/atmos#3271).
+func releaseOperationErrorWithDiagnostics(operation string, spec *chartSpec, cause error, diagnostics string) error {
 	policy := spec.Lifecycle.Policy
-	return errUtils.Build(errUtils.ErrHelmReleaseOperation).
+	builder := errUtils.Build(errUtils.ErrHelmReleaseOperation).
 		WithCause(cause).
 		WithContext("operation", operation).
 		WithContext("release", spec.ReleaseName).
 		WithContext("namespace", spec.Namespace).
 		WithContext("wait_strategy", policy.WaitStrategy).
 		WithContext("timeout", policy.Timeout).
-		WithContext("timeout_field", spec.Lifecycle.TimeoutField).
-		Err()
+		WithContext("timeout_field", spec.Lifecycle.TimeoutField)
+	if diagnostics != "" {
+		builder = builder.WithExplanation("workload diagnostics:\n" + diagnostics)
+	}
+	return builder.Err()
+}
+
+// releaseDiagnosticsTimeout bounds the best-effort pod-diagnostics collection so a
+// slow or unreachable cluster never delays surfacing the original failure.
+const releaseDiagnosticsTimeout = 30 * time.Second
+
+// releaseErrWrapFormat wraps a sentinel, the release name, and a cause into one
+// error ("sentinel "release": cause").
+const releaseErrWrapFormat = "%w %q: %w"
+
+// diagnoseReleaseFailure collects crash-looping pod diagnostics for a failed
+// release operation before any rollback/uninstall deletes the evidence. The log
+// tail and events are gated behind debug/trace so normal output is unchanged. It
+// derives a short, independently-bounded context so a cluster that is slow to
+// answer cannot stall the error, and so a readiness timeout on the operation
+// context does not pre-cancel the queries.
+func diagnoseReleaseFailure(ctx context.Context, actx *actionContext, spec *chartSpec) string {
+	diagCtx, cancel := context.WithTimeout(ctx, releaseDiagnosticsTimeout)
+	defer cancel()
+	verbose := log.GetLevel() <= log.DebugLevel
+	return collectReleaseFailureDiagnostics(diagCtx, actx, spec, verbose)
+}
+
+// rollbackFailedUpgrade performs the rollback Atmos owns (Helm's inline
+// RollbackOnFailure is disabled so diagnostics can run first), joining any
+// rollback or history-trim error onto the upgrade error. MaxHistory and
+// CleanupOnFail mirror the configured policy; enforceReleaseHistoryLimit remains
+// as the authoritative history trim.
+func rollbackFailedUpgrade(actx *actionContext, spec *chartSpec, upgradeErr error) error {
+	policy := spec.Lifecycle.Policy
+
+	// Roll back to the latest *successful* revision, mirroring Helm's own
+	// failRelease: version 0 would target the immediately-previous revision, which
+	// may itself be a failed one.
+	targetVersion, ok, selErr := lastSuccessfulRevision(actx.cfg.Releases, spec.ReleaseName)
+	if selErr != nil {
+		return errors.Join(upgradeErr, fmt.Errorf(releaseErrWrapFormat, errUtils.ErrHelmReleaseRollback, spec.ReleaseName, selErr))
+	}
+	if !ok {
+		// No previously successful release to roll back to; leave the failed release
+		// in place rather than rolling back to another failed revision.
+		return upgradeErr
+	}
+
+	rollback := action.NewRollback(actx.cfg)
+	rollback.Version = targetVersion
+	rollback.MaxHistory = policy.MaxHistory
+	rollback.CleanupOnFail = policy.CleanupOnFailure
+	rollback.WaitStrategy = policy.WaitStrategy
+	rollback.WaitForJobs = policy.WaitForJobs
+	rollback.Timeout = policy.Timeout
+	// Honor the release's chart-hook and apply-method policy, matching the upgrade.
+	rollback.DisableHooks = !policy.ChartHooks
+	rollback.ForceConflicts = policy.ForceConflicts
+	if policy.ServerSideApply != serverSideApplyUnset {
+		rollback.ServerSideApply = string(policy.ServerSideApply)
+	}
+	if rbErr := rollback.Run(spec.ReleaseName); rbErr != nil {
+		upgradeErr = errors.Join(upgradeErr, fmt.Errorf(releaseErrWrapFormat, errUtils.ErrHelmReleaseRollback, spec.ReleaseName, rbErr))
+	}
+	if historyErr := enforceReleaseHistoryLimit(actx.cfg.Releases, spec.ReleaseName, policy.MaxHistory); historyErr != nil {
+		upgradeErr = errors.Join(upgradeErr, fmt.Errorf(releaseErrWrapFormat, errUtils.ErrHelmReleaseHistory, spec.ReleaseName, historyErr))
+	}
+	return upgradeErr
+}
+
+// lastSuccessfulRevision returns the highest release revision whose status is
+// deployed or superseded (a previously successful release). A rollback after a
+// failed upgrade must target such a revision rather than an earlier failed one.
+func lastSuccessfulRevision(releases *storage.Storage, name string) (int, bool, error) {
+	history, err := releases.History(name)
+	if err != nil {
+		if errors.Is(err, driver.ErrReleaseNotFound) {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+	best := -1
+	for _, stored := range history {
+		rel, ok := stored.(*release.Release)
+		if !ok || rel.Info == nil {
+			continue
+		}
+		if rel.Info.Status != rcommon.StatusDeployed && rel.Info.Status != rcommon.StatusSuperseded {
+			continue
+		}
+		if rel.Version > best {
+			best = rel.Version
+		}
+	}
+	return best, best >= 0, nil
+}
+
+// uninstallFailedInstall removes a failed first install (Atmos owns the
+// uninstall-on-failure so diagnostics can run first), joining any uninstall error
+// onto the install error. A release that is already gone is not an error.
+func uninstallFailedInstall(actx *actionContext, spec *chartSpec, installErr error) error {
+	policy := spec.Lifecycle.Policy
+	uninstall := action.NewUninstall(actx.cfg)
+	uninstall.WaitStrategy = policy.WaitStrategy
+	uninstall.Timeout = policy.Timeout
+	// Honor the release's chart-hook policy, matching the install.
+	uninstall.DisableHooks = !policy.ChartHooks
+	if _, rbErr := uninstall.Run(spec.ReleaseName); rbErr != nil && !errors.Is(rbErr, driver.ErrReleaseNotFound) {
+		installErr = errors.Join(installErr, fmt.Errorf(releaseErrWrapFormat, errUtils.ErrHelmReleaseUninstall, spec.ReleaseName, rbErr))
+	}
+	return installErr
+}
+
+// releaseRecordExists reports whether a release of the given name has a stored
+// revision, i.e. the operation reached the cluster. Used to skip failure recovery
+// for pre-mutation errors that never created a release.
+func releaseRecordExists(actx *actionContext, name string) bool {
+	_, err := actx.cfg.Releases.Last(name)
+	return err == nil
 }
 
 func configureInstallLifecycle(client *action.Install, policy effectiveReleasePolicy) {
-	client.RollbackOnFailure = policy.OnFailure == failurePolicyUninstall
+	// Atmos owns the uninstall-on-failure so it can capture crash-looping pod
+	// diagnostics before the failed resources are deleted (cloudposse/atmos#3271);
+	// see installRelease. Helm's own RollbackOnFailure is therefore left off.
+	client.RollbackOnFailure = false
 	client.WaitStrategy = policy.WaitStrategy
 	client.WaitForJobs = policy.WaitForJobs
 	client.Timeout = policy.Timeout
@@ -398,7 +547,11 @@ func configureInstallLifecycle(client *action.Install, policy effectiveReleasePo
 }
 
 func configureUpgradeLifecycle(client *action.Upgrade, policy effectiveReleasePolicy) {
-	client.RollbackOnFailure = policy.OnFailure == failurePolicyRollback
+	// Atmos owns the rollback-on-failure so it can capture crash-looping pod
+	// diagnostics before the rollback replaces the failing pods
+	// (cloudposse/atmos#3271); see upgradeRelease. Helm's own RollbackOnFailure is
+	// therefore left off.
+	client.RollbackOnFailure = false
 	client.WaitStrategy = policy.WaitStrategy
 	client.WaitForJobs = policy.WaitForJobs
 	client.Timeout = policy.Timeout

@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/merge"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -391,4 +392,65 @@ func clearExistingIdentityDefaults(authConfig *schema.AuthConfig) {
 			authConfig.Identities[name] = identity
 		}
 	}
+}
+
+// Raw auth-layer keys shared by the default-identity helpers.
+const (
+	authLayerIdentitiesKey = "identities"
+	authLayerDefaultKey    = "default"
+)
+
+// ClearSupersededAuthDefaults applies "more specific wins" to `default: true`
+// identity markers across raw auth layers ordered from least to most specific
+// (for example stack-level, base component, component, overrides). When a layer
+// marks an identity as default, every less specific layer's `default: true`
+// markers are replaced with `default: false`, so a single default survives the
+// deep merge instead of both silently surviving and leaving the choice ambiguous.
+//
+// Layers are never mutated: layers that need changes are returned as copies, and
+// the others are returned as-is. A layer's own markers are never cleared by itself.
+func ClearSupersededAuthDefaults(layers []map[string]any) []map[string]any {
+	defer perf.Track(nil, "auth.ClearSupersededAuthDefaults")()
+
+	result := make([]map[string]any, len(layers))
+	copy(result, layers)
+	// Walk from the most specific layer down, remembering whether a more specific layer declares a default.
+	superseded := false
+	for i := len(layers) - 1; i >= 0; i-- {
+		if superseded {
+			result[i] = withoutDefaultMarkers(layers[i])
+		}
+		if componentAuthHasDefault(layers[i]) {
+			superseded = true
+		}
+	}
+	return result
+}
+
+// withoutDefaultMarkers returns a copy of an auth layer whose `default: true` identity markers are false.
+func withoutDefaultMarkers(layer map[string]any) map[string]any {
+	identities, ok := layer[authLayerIdentitiesKey].(map[string]any)
+	if !ok || !componentAuthHasDefault(layer) {
+		return layer
+	}
+	clearedIdentities := make(map[string]any, len(identities))
+	for name, raw := range identities {
+		clearedIdentities[name] = raw
+		entry, isMap := raw.(map[string]any)
+		if !isMap || entry[authLayerDefaultKey] != true {
+			continue
+		}
+		cleared := make(map[string]any, len(entry))
+		for key, value := range entry {
+			cleared[key] = value
+		}
+		cleared[authLayerDefaultKey] = false
+		clearedIdentities[name] = cleared
+	}
+	cleared := make(map[string]any, len(layer))
+	for key, value := range layer {
+		cleared[key] = value
+	}
+	cleared[authLayerIdentitiesKey] = clearedIdentities
+	return cleared
 }

@@ -387,6 +387,21 @@ func TestRunStackGet_ExplicitFile(t *testing.T) {
 	assert.Equal(t, "us-east-1\n", stdout.String())
 }
 
+func TestRunStackGet_ExplicitFile_Unreadable(t *testing.T) {
+	resetEditFlags(t)
+	chdirToValidAtmosProject(t)
+	_ = initStackConfigTestWriter(t)
+
+	flagStack = "nonprod"
+	flagComponent = "mycomponent"
+	flagFile = filepath.Join(t.TempDir(), "does-not-exist.yaml")
+
+	err := runStackGet([]string{"vars.region"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrFileNotFound)
+	assert.Contains(t, err.Error(), "does-not-exist.yaml")
+}
+
 func TestRunStackGet_ExplicitFile_PathNotFound(t *testing.T) {
 	resetEditFlags(t)
 	chdirToValidAtmosProject(t)

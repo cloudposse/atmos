@@ -102,14 +102,34 @@ Atmos follows a clear precedence order for terminal settings, with command-line 
 5. **Configuration File** (lowest priority): `settings.terminal.pager: true`
 
 ### Color Configuration Precedence
-1. **NO_COLOR Environment Variable** (highest priority): `NO_COLOR=1` (disables all color)
+1. **Disable Controls** (highest priority): nonempty `NO_COLOR`, `--no-color`, or `ATMOS_NO_COLOR=true` disable all color, including forced color and logs. `--no-color=false` overrides `ATMOS_NO_COLOR`, but nonempty `NO_COLOR` always disables color.
 2. **CLICOLOR=0**: `CLICOLOR=0` (disables color unless forced)
 3. **CLICOLOR_FORCE**: `CLICOLOR_FORCE=1` (forces color even for non-TTY)
 4. **Force Flags**: `--force-color` or `ATMOS_FORCE_COLOR=true` (forces TrueColor)
-5. **Disable Flags**: `--no-color` or `ATMOS_NO_COLOR=true` (disables color)
-6. **Enable Flags**: `--color` or `ATMOS_COLOR=true` (enables color **only if TTY**)
-7. **Configuration File** (lowest priority): `settings.terminal.color: true` (enables color **only if TTY**)
-8. **Default**: Automatically detects TTY and terminal capabilities
+5. **Enable Flags**: `--color` or `ATMOS_COLOR=true` (enables color **only if TTY**)
+6. **Configuration File** (lowest priority): `settings.terminal.color: true` (enables color **only if TTY**)
+7. **Default**: Automatically detects TTY and terminal capabilities
+
+Log color has one more control, `logs.color` (`--logs-color`, `ATMOS_LOGS_COLOR`). Setting it to `false` keeps
+logs plain while terminal output stays colored. See [Logs](/cli/configuration/logs).
+
+`CLICOLOR` remains supported independently of `NO_COLOR`. `CLICOLOR=1` (or another nonzero value)
+permits automatic color on supported terminals and in color-capable CI environments such as GitHub
+Actions; it does not force color into pipes or files. `CLICOLOR=0` disables automatic color, including
+the version logo, unless color is explicitly forced. An empty `CLICOLOR` leaves detection unchanged.
+
+When the variables contradict each other, nonempty `NO_COLOR` wins:
+
+```shell
+CLICOLOR=1 NO_COLOR=1 atmos version                 # Plain output
+CLICOLOR=1 NO_COLOR=0 atmos version                 # Also plain: NO_COLOR is nonempty
+CLICOLOR=1 NO_COLOR= atmos version                  # Automatic terminal/CI detection
+CLICOLOR=0 atmos version                           # Plain output
+CLICOLOR=0 atmos --force-color version              # Forced color
+CLICOLOR=0 NO_COLOR=1 atmos --force-color version   # Plain output: NO_COLOR wins
+```
+
+These rules apply to Atmos output; child processes may implement their own color conventions.
 
 ## Force Flags for Screenshot Generation
 
@@ -174,6 +194,16 @@ Atmos automatically degrades color output based on terminal capabilities:
 - When piping output: `atmos describe stacks | grep vpc` - color automatically disabled
 - When redirecting: `atmos terraform output > file.txt` - color automatically disabled
 - When using `--force-color`: Color preserved even when piping
+
+## Terminals That Never Answer Queries
+
+Terminal UI libraries (such as Bubble Tea and termenv, which Atmos and many other CLI tools use) ask the terminal for its foreground color, background color, and cursor position at startup, then wait for the reply. Atmos answers these queries itself for the pseudo-terminals it owns, such as recorded sessions and child commands that run without forwarded input.
+
+Terminals and harnesses that never answer these queries (some CI runners, remote shells, and AI tool harnesses) can make startup wait about 5 seconds for each query. In those environments, set `TERM=screen-256color` (or `tmux-256color`) so the libraries skip the queries:
+
+```shell
+TERM=screen-256color atmos terraform plan vpc -s dev
+```
 
 ## Syntax Highlighting
 

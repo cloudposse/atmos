@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"os"
 	"runtime"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 )
 
 func TestDisplayDocs(t *testing.T) {
@@ -112,4 +114,37 @@ func TestDisplayDocs(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrInvalidPagerCommand)
 	})
+}
+
+// TestDisplayDocs_PagerOutputMasksSecretSplitAcrossWrites proves a registered secret that the
+// pager emits across two writes is masked in the output rather than leaked in halves.
+func TestDisplayDocs_PagerOutputMasksSecretSplitAcrossWrites(t *testing.T) {
+	const secret = "pager-split-secret-value"
+	iolib.Reset()
+	t.Cleanup(iolib.Reset)
+	require.NoError(t, iolib.Initialize())
+	iolib.RegisterSecret(secret)
+
+	// The test binary doubles as the pager so the test is cross-platform.
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	viper.Set("pager", exe)
+	t.Setenv(splitOutputPagerEnv, "1")
+
+	out, err := os.CreateTemp(t.TempDir(), "stdout")
+	require.NoError(t, err)
+	origStdout := os.Stdout
+	os.Stdout = out
+	t.Cleanup(func() { os.Stdout = origStdout })
+
+	runErr := DisplayDocs("ignored", true)
+	os.Stdout = origStdout
+	require.NoError(t, out.Close())
+	require.NoError(t, runErr)
+
+	got, err := os.ReadFile(out.Name())
+	require.NoError(t, err)
+	assert.Equal(t, "doc="+iolib.MaskReplacement+" done\n", string(got))
 }

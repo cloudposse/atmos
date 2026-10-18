@@ -1,7 +1,6 @@
 package hooks
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
@@ -12,7 +11,7 @@ import (
 
 // Run executes the configured command for the named hook, forwarding the hook
 // arguments and stdin.
-func Run(cfg *schema.GitConfig, hookName string, hookArgs []string) error {
+func Run(cfg *schema.GitConfig, hookName string, hookArgs []string, opts ...RunOption) error {
 	defer perf.Track(nil, "hooks.Run")()
 
 	if cfg == nil || cfg.Hooks == nil {
@@ -24,15 +23,26 @@ func Run(cfg *schema.GitConfig, hookName string, hookArgs []string) error {
 		return NotConfiguredError(hookName, cfg.Hooks)
 	}
 
+	if err := validateHookConfig(hookName, entry); err != nil {
+		return wrapHookError(hookName, err)
+	}
+	if len(entry.Steps) > 0 {
+		return runSteps(hookName, entry, hookArgs, opts)
+	}
+
+	dir, mergedEnv, err := resolveHookEnvironment()
+	if err != nil {
+		return wrapHookError(hookName, err)
+	}
+
 	command := buildHookCommand(entry.Command, hookArgs)
 
 	// Execute via the shared shell runner that workflows and custom commands use.
 	// ShellRunner inherits os.Stdin via interp.StdIO(os.Stdin, ...) so hooks that
 	// read from stdin (pre-push, pre-receive) work correctly.
 	// ExitCodeError is returned when the child exits non-zero, preserving the code.
-	mergedEnv := os.Environ()
-	if err := u.ShellRunner(command, hookName, ".", mergedEnv, os.Stdout); err != nil {
-		return fmt.Errorf("%w", err)
+	if err := u.ShellRunner(command, hookName, dir, mergedEnv, os.Stdout); err != nil {
+		return wrapHookError(hookName, err)
 	}
 
 	return nil

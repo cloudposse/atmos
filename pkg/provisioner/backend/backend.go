@@ -16,11 +16,13 @@ type ProvisionResult struct {
 }
 
 // BackendCreateFunc is a function that creates a Terraform backend.
+// Optional settings are supplied through CreateOption values; backend types ignore options that do not apply.
 type BackendCreateFunc func(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	backendConfig map[string]any,
 	authContext *schema.AuthContext,
+	opts ...CreateOption,
 ) (*ProvisionResult, error)
 
 // BackendDeleteFunc is a function that deletes a Terraform backend.
@@ -246,6 +248,49 @@ func ProvisionBackend(
 		return nil, fmt.Errorf("%w: %s", errUtils.ErrCreateNotImplemented, backendType)
 	}
 
+	// Read optional create settings from provision.backend (not from the generated backend config).
+	opts, err := CreateOptionsFromComponent(componentConfig, backendType)
+	if err != nil {
+		return nil, err
+	}
+
 	// Execute create function.
-	return createFunc(ctx, atmosConfig, backendConfig, authContext)
+	return createFunc(ctx, atmosConfig, backendConfig, authContext, opts...)
+}
+
+// CreateOptionsFromComponent builds the create options for a component's backend from its
+// provision.backend section. Every caller that invokes a BackendCreateFunc, including the
+// automatic provisioning that runs on terraform init, uses it so the options stay consistent.
+//
+// Settings that apply to a single backend type are read only for that type, so an unrelated
+// backend ignores them even when the value is malformed. The values are checked here, before
+// any existence check or AWS call, so a bad value fails fast.
+func CreateOptionsFromComponent(componentConfig map[string]any, backendType string) ([]CreateOption, error) {
+	defer perf.Track(nil, "backend.CreateOptionsFromComponent")()
+
+	if backendType != backendTypeS3 {
+		return nil, nil
+	}
+
+	provision, _ := componentConfig["provision"].(map[string]any)
+	provisionBackend, _ := provision["backend"].(map[string]any)
+
+	raw, present := provisionBackend["bucket_namespace"]
+	if !present || raw == nil {
+		return nil, nil
+	}
+
+	namespace, ok := raw.(string)
+	if !ok {
+		return nil, errUtils.Build(errUtils.ErrInvalidBucketNamespace).
+			WithExplanationf("Got value of type %T", raw).
+			WithHint("Set 'provision.backend.bucket_namespace' to a string").
+			Err()
+	}
+
+	if err := validateBucketNamespace(namespace); err != nil {
+		return nil, err
+	}
+
+	return []CreateOption{WithBucketNamespace(namespace)}, nil
 }

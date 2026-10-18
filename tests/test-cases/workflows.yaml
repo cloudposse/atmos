@@ -137,8 +137,8 @@ tests:
       diff: []
       stderr:
         - "invalid workflow step type"
-        - "Step type 'invalid' is not supported"
-        - "Each step must specify a valid type: 'atmos', 'shell', 'script', 'exec'"
+        - "Step step1 of workflow invalid-step-type uses unsupported type invalid"
+        - "Registered step types:"
       exit_code: 1
 
   - name: atmos workflow invalid from step

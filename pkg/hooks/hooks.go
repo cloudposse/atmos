@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -14,18 +15,18 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci"
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/helm"       // Register helm CI plugin.
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/helmfile"   // Register helmfile CI plugin.
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/kubernetes" // Register kubernetes CI plugin.
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform"  // Register terraform CI plugin.
-	_ "github.com/cloudposse/atmos/pkg/ci/providers/generic"  // Register generic CI provider.
-	_ "github.com/cloudposse/atmos/pkg/ci/providers/github"   // Register GitHub Actions CI provider.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/cloudformation" // Register cloudformation CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/helm"           // Register helm CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/helmfile"       // Register helmfile CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/kubernetes"     // Register kubernetes CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform"      // Register terraform CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/providers/generic"      // Register generic CI provider.
+	_ "github.com/cloudposse/atmos/pkg/ci/providers/github"       // Register GitHub Actions CI provider.
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 var errRenderedHookNotMap = errors.New("rendered hook is not a map")
@@ -245,8 +246,13 @@ func (h *Hooks) runHookIfMatch(name string, hook *Hook, ctx *hookRunContext) err
 }
 
 func (h *Hooks) runResolvedHook(name string, kind *Kind, executionHook *Hook, ctx *hookRunContext) error {
+	depth, err := enterHook(name, ctx.event)
+	if err != nil {
+		return err
+	}
 	resolved := kind.ResolveDefaults(executionHook)
 	execCtx := &ExecContext{
+		HookDepth:     depth,
 		Hook:          resolved,
 		Kind:          kind,
 		Event:         ctx.event,
@@ -432,15 +438,18 @@ func processHookExecutionSlice(atmosConfig *schema.AtmosConfiguration, values []
 
 // processHookExecutionStringMap renders both the keys and values of a
 // string-keyed map. Keys are rendered too because hook fields like `outputs`
-// use templated keys (e.g. `"{{ .vars.stage }}_label"`).
+// use templated keys (e.g. `"{{ .vars.stage }}_label"`). Values of the fields a
+// step payload lists in `literal_fields` (written with !literal) are kept exactly
+// as written.
 func processHookExecutionStringMap(atmosConfig *schema.AtmosConfiguration, values map[string]any, info *schema.ConfigAndStacksInfo) (map[string]any, error) {
+	literal := schema.LiteralFieldsFromValue(values[schema.LiteralFieldsKey])
 	result := make(map[string]any, len(values))
 	for key, item := range values {
 		stringKey, err := processHookExecutionMapKey(atmosConfig, key, info)
 		if err != nil {
 			return nil, err
 		}
-		processedValue, err := processHookExecutionValue(atmosConfig, item, info)
+		processedValue, err := processHookExecutionMapItem(atmosConfig, key, item, literal, info)
 		if err != nil {
 			return nil, err
 		}
@@ -451,19 +460,64 @@ func processHookExecutionStringMap(atmosConfig *schema.AtmosConfiguration, value
 
 // processHookExecutionAnyMap renders an `any`-keyed map (as produced by YAML
 // unmarshalling) and normalizes it to a string-keyed map, stringifying and
-// rendering each key.
+// rendering each key. It honors `literal_fields` like processHookExecutionStringMap.
 func processHookExecutionAnyMap(atmosConfig *schema.AtmosConfiguration, values map[any]any, info *schema.ConfigAndStacksInfo) (map[string]any, error) {
+	literal := schema.LiteralFieldsFromValue(values[schema.LiteralFieldsKey])
 	result := make(map[string]any, len(values))
 	for key, item := range values {
 		stringKey, err := processHookExecutionMapKey(atmosConfig, fmt.Sprint(key), info)
 		if err != nil {
 			return nil, err
 		}
-		processedValue, err := processHookExecutionValue(atmosConfig, item, info)
+		processedValue, err := processHookExecutionMapItem(atmosConfig, fmt.Sprint(key), item, literal, info)
 		if err != nil {
 			return nil, err
 		}
 		result[stringKey] = processedValue
+	}
+	return result, nil
+}
+
+// processHookExecutionMapItem renders one map value, except that a field listed in literal is
+// returned as written, and in an `env` map each value listed as `env.NAME` is returned as written.
+func processHookExecutionMapItem(atmosConfig *schema.AtmosConfiguration, key string, item any, literal []string, info *schema.ConfigAndStacksInfo) (any, error) {
+	if len(literal) == 0 {
+		return processHookExecutionValue(atmosConfig, item, info)
+	}
+	if slices.Contains(literal, key) {
+		return item, nil
+	}
+	if key == schema.StepKeyEnv {
+		return processHookExecutionEnv(atmosConfig, item, literal, info)
+	}
+	return processHookExecutionValue(atmosConfig, item, info)
+}
+
+// processHookExecutionEnv renders the values of a step `env` map, keeping the values listed as
+// `env.NAME` in literal as written. Any other shape of value is rendered normally.
+func processHookExecutionEnv(atmosConfig *schema.AtmosConfiguration, item any, literal []string, info *schema.ConfigAndStacksInfo) (any, error) {
+	entries := map[string]any{}
+	switch env := item.(type) {
+	case map[string]any:
+		entries = env
+	case map[any]any:
+		for name, value := range env {
+			entries[fmt.Sprint(name)] = value
+		}
+	default:
+		return processHookExecutionValue(atmosConfig, item, info)
+	}
+	result := make(map[string]any, len(entries))
+	for name, value := range entries {
+		if schema.IsLiteralEnvName(literal, name) {
+			result[name] = value
+			continue
+		}
+		processed, err := processHookExecutionValue(atmosConfig, value, info)
+		if err != nil {
+			return nil, err
+		}
+		result[name] = processed
 	}
 	return result, nil
 }
@@ -709,35 +763,28 @@ func (h *Hooks) resolveDeps(atmosConfig *schema.AtmosConfiguration, info *schema
 	return deps, nil
 }
 
-// installDeps installs missing tools and updates h.toolchainPATH to
-// point at the installed pinned versions. No-op when deps is empty.
+// installDeps installs the hooks' explicit tool dependencies and updates
+// h.toolchainPATH to point at the pinned versions. Tools from the project's
+// .tool-versions manifest join the PATH only if they are already installed;
+// hooks never download manifest tools, and explicit dependencies win by identity.
 func (h *Hooks) installDeps(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, deps map[string]string) error {
-	if len(deps) == 0 {
-		return nil
+	if len(deps) > 0 {
+		log.Debug(
+			"Installing hook dependencies",
+			"component", info.ComponentFromArg,
+			"stack", info.Stack,
+			"tools", deps,
+		)
 	}
-	log.Debug(
-		"Installing hook dependencies",
-		"component", info.ComponentFromArg,
-		"stack", info.Stack,
-		"tools", deps,
-	)
-	installer := dependencies.NewInstaller(atmosConfig)
-	if err := installer.EnsureTools(deps); err != nil {
+	env, err := dependencies.ForDependencies(atmosConfig, deps)
+	if err != nil {
 		return errUtils.Build(errUtils.ErrToolInstall).
 			WithCause(err).
 			WithExplanationf("Failed to install dependencies for hooks on component %q", info.ComponentFromArg).
 			WithHint("Run `atmos toolchain install <tool>@<version>` manually to diagnose").
 			Err()
 	}
-
-	path, err := dependencies.BuildToolchainPATH(atmosConfig, deps)
-	if err != nil {
-		return errUtils.Build(errUtils.ErrPathResolution).
-			WithCause(err).
-			WithExplanation("Failed to build toolchain PATH after installing hook dependencies").
-			Err()
-	}
-	h.toolchainPATH = path
+	h.toolchainPATH = env.PATH()
 	return nil
 }
 
@@ -917,20 +964,11 @@ func RunCIHooks(opts *RunCIHooksOptions) error {
 	}
 
 	// Skip CI hooks entirely on local runs unless the user explicitly forced CI mode.
-	// This avoids emitting experimental warnings or performing any CI-specific setup
+	// This avoids performing CI-specific setup
 	// when no CI provider is actually available.
 	if !opts.ForceCIMode && !ci.IsCI() {
 		log.Debug("Skipping CI hooks because no CI provider was detected and CI mode was not forced")
 		return nil
-	}
-
-	// CI integration is experimental. Check settings.experimental to decide
-	// whether to proceed, warn, or block — mirroring command-level behavior.
-	// This runs after the ci.enabled check so the warning only appears when CI is active.
-	if opts.AtmosConfig != nil {
-		if err := checkExperimental(opts.AtmosConfig); err != nil {
-			return err
-		}
 	}
 
 	// Execute CI actions based on provider bindings.
@@ -1007,46 +1045,4 @@ func RunPerComponentHooks(opts *RunPerComponentHooksOptions) error {
 	log.Info("Running hooks", "event", opts.Event, logKeyStatus, opts.Outcome.Status,
 		"component", opts.Info.ComponentFromArg, "stack", opts.Info.Stack)
 	return hooksForComponent.RunAll(opts.Event, opts.AtmosConfig, opts.Info, opts.Cmd, opts.Args)
-}
-
-// ciExperimentalFeature is the feature name used in experimental warnings for CI hooks.
-const ciExperimentalFeature = "ci"
-
-// checkExperimental checks settings.experimental and returns an error if CI
-// hooks should not run. Mirrors the command-level experimental gating in cmd/root.go.
-func checkExperimental(atmosConfig *schema.AtmosConfiguration) error {
-	mode := atmosConfig.Settings.Experimental
-	if mode == "" {
-		mode = "warn-daily" // Default matches command-level behavior.
-	}
-
-	switch mode {
-	case "silence":
-		// Proceed without any warning.
-		return nil
-	case "disable":
-		log.Debug("CI hooks disabled by settings.experimental=disable")
-		return errUtils.Build(errUtils.ErrExperimentalDisabled).
-			WithContext("feature", ciExperimentalFeature).
-			WithHint("Enable with settings.experimental: warn").
-			Err()
-	case "warn":
-		ui.Experimental(ciExperimentalFeature)
-		return nil
-	case "warn-daily":
-		if cfg.ClaimExperimentalWarning(ciExperimentalFeature) {
-			ui.Experimental(ciExperimentalFeature)
-		}
-		return nil
-	case "error":
-		ui.Experimental(ciExperimentalFeature)
-		return errUtils.Build(errUtils.ErrExperimentalRequiresIn).
-			WithContext("feature", ciExperimentalFeature).
-			WithHint("Enable with settings.experimental: warn").
-			Err()
-	default:
-		// Unknown mode — treat as warn for forward compatibility.
-		ui.Experimental(ciExperimentalFeature)
-		return nil
-	}
 }

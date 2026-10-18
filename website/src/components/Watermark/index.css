@@ -58,3 +58,11 @@ html[data-theme='dark'] .cloudposse-logo__dark {
 body:has(.slide-deck) .cloudposse-logo {
   display: none;
 }
+
+/* Keep the scroll control above the logo's reserved bottom-right area. */
+@media (min-width: 769px) {
+  body:has(.cloudposse-logo--visible) .theme-back-to-top-button {
+    right: 2%;
+    bottom: calc(2vh + 3.5rem);
+  }
+}

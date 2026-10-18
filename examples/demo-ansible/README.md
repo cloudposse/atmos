@@ -1,9 +1,16 @@
 ---
 title: Ansible
-tags: [Automation]
+tags: [Components]
 cast:
   file: /casts/examples/demo-ansible/playbook.cast
   title: atmos Ansible playbook
+related_docs:
+  - label: "Ansible commands"
+    url: /cli/commands/ansible/usage
+  - label: "Ansible component configuration"
+    url: /stacks/components/ansible
+  - label: "Ansible Playbook"
+    url: /cli/commands/ansible/playbook
 ---
 
 # Example: Ansible Hello World

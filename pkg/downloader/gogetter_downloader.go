@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/go-getter"
 
 	"github.com/cloudposse/atmos/pkg/auth/broker"
+	s3source "github.com/cloudposse/atmos/pkg/downloader/s3"
 	"github.com/cloudposse/atmos/pkg/github"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -24,14 +25,19 @@ func (c *goGetterClient) Get() error {
 	return c.client.Get()
 }
 
-// Metadata returns best-effort HTTP cache metadata (ETag/Last-Modified) captured while Get() ran,
-// or a zero-value FetchMetadata when this client never attached an HTTP transport (git, file, hg
-// sources never populate it -- see FetchMetadata's own doc comment).
+// Metadata returns provenance captured during this download, including the Git
+// commit from the checkout before go-getter extracts a requested subdirectory.
 func (c *goGetterClient) Metadata() FetchMetadata {
-	if c.metadata == nil {
-		return FetchMetadata{}
+	var metadata FetchMetadata
+	if c.metadata != nil {
+		metadata = c.metadata.captured
 	}
-	return c.metadata.captured
+	if c.client != nil {
+		if gitGetter, ok := c.client.Getters["git"].(*CustomGitGetter); ok {
+			metadata.GitCommit = gitGetter.ResolvedCommit
+		}
+	}
+	return metadata
 }
 
 type goGetterClientFactory struct {
@@ -115,6 +121,8 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		Dst:              dest,
 		Mode:             clientMode,
 		DisableSymlinks:  false,
+		// Warn when an archive carries link entries, which go-getter extracts as empty files.
+		Decompressors: linkAuditedDecompressors(),
 		Getters: map[string]getter.Getter{
 			// Overriding 'git'.
 			"git":   &CustomGitGetter{RetryConfig: f.retryConfig, RetryAuthErrors: retryAuthErrors, OnRetry: f.onRetry},
@@ -122,7 +130,7 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 			"hg":    &getter.HgGetter{},
 			"http":  httpGetter,
 			"https": httpGetter,
-			// "s3": &getter.S3Getter{}, // add as needed.
+			"s3":    s3source.NewGetter(ctx),
 			// "gcs": &getter.GCSGetter{},
 		},
 	}

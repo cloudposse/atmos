@@ -68,6 +68,10 @@ func wrapGitHubAPIError(err error) error {
 }
 
 // createCheckRun sets a commit status on a commit.
+//
+// GitHub commit statuses are not check runs, so the state mapping is lossy: in_progress is reported
+// as pending, and error and cancelled are both reported as error. The returned CheckRun keeps the
+// requested state, so callers still see the distinction locally.
 func (p *Provider) createCheckRun(ctx context.Context, opts *provider.CreateCheckRunOptions) (*provider.CheckRun, error) {
 	state := mapCheckRunStateToStatusState(opts.Status)
 
@@ -77,15 +81,18 @@ func (p *Provider) createCheckRun(ctx context.Context, opts *provider.CreateChec
 	}
 
 	return &provider.CheckRun{
-		ID:     status.GetID(),
-		Name:   status.GetContext(),
-		Status: opts.Status,
-		Title:  status.GetDescription(),
+		ID:         status.GetID(),
+		Name:       status.GetContext(),
+		Status:     opts.Status,
+		Title:      status.GetDescription(),
+		DetailsURL: opts.DetailsURL,
 	}, nil
 }
 
 // updateCheckRun updates a commit status on a commit.
-// Since the Status API is idempotent by context, this is just another CreateStatus call.
+// Since the Status API is idempotent by context, this is just another CreateStatus call: statuses
+// are correlated by their Name (the status context), and opts.ID is not needed to find the one to update.
+// The same lossy state mapping as createCheckRun applies.
 func (p *Provider) updateCheckRun(ctx context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
 	state := mapCheckRunStateToStatusState(opts.Status)
 
@@ -95,10 +102,11 @@ func (p *Provider) updateCheckRun(ctx context.Context, opts *provider.UpdateChec
 	}
 
 	return &provider.CheckRun{
-		ID:     status.GetID(),
-		Name:   status.GetContext(),
-		Status: opts.Status,
-		Title:  status.GetDescription(),
+		ID:         status.GetID(),
+		Name:       status.GetContext(),
+		Status:     opts.Status,
+		Title:      status.GetDescription(),
+		DetailsURL: opts.DetailsURL,
 	}, nil
 }
 
@@ -129,13 +137,19 @@ func truncateDescription(desc string) string {
 }
 
 // CreateCheckRun creates a new commit status on a commit.
+//
+// GitHub commit statuses have four states (pending, success, failure, error), so the check run states
+// map as: pending and in_progress become pending; success stays success; failure stays failure; error and
+// cancelled become error. The returned CheckRun keeps the requested state and the details URL.
 func (p *Provider) CreateCheckRun(ctx context.Context, opts *provider.CreateCheckRunOptions) (*provider.CheckRun, error) {
 	defer perf.Track(nil, "github.Provider.CreateCheckRun")()
 
 	return p.createCheckRun(ctx, opts)
 }
 
-// UpdateCheckRun updates an existing commit status on a commit.
+// UpdateCheckRun updates an existing commit status on a commit. Statuses are keyed by their
+// context (the check name), so UpdateCheckRunOptions.ID is not needed and is ignored. The state
+// mapping is the one documented on CreateCheckRun.
 func (p *Provider) UpdateCheckRun(ctx context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
 	defer perf.Track(nil, "github.Provider.UpdateCheckRun")()
 

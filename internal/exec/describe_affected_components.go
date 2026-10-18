@@ -12,6 +12,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/secrets"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 // Affected reason constants.
@@ -35,6 +36,10 @@ const (
 	affectedReasonDeleted         = "deleted"
 	affectedReasonDeletedStack    = "deleted.stack"
 
+	// Dependent reason: a dependent lifted into the top-level affected list, either by --tags/--labels
+	// promotion or by --flatten. The literal matches what pkg/list/extract/affected.go reports for dependent rows.
+	affectedReasonDependent = "dependent"
+
 	// Secret-file dependency: a component is affected because a SOPS secret file it consumes
 	// changed. SOPS secret files are implicit file dependencies derived from the component's
 	// declared secrets (store-backed secrets are not files and contribute nothing).
@@ -54,6 +59,20 @@ const (
 	affectedReasonStackAuth                   = "stack.auth"
 	affectedReasonStackCommand                = "stack.command"
 	affectedReasonStackDependencies           = "stack.dependencies"
+
+	// Affected reasons for aws/cloudformation-specific sections.
+	affectedReasonStackStackName             = "stack.stack_name"
+	affectedReasonStackTemplate              = "stack.template"
+	affectedReasonStackPath                  = "stack.path"
+	affectedReasonStackParameters            = "stack.parameters"
+	affectedReasonStackCapabilities          = "stack.capabilities"
+	affectedReasonStackTags                  = "stack.tags"
+	affectedReasonStackStackPolicy           = "stack.stack_policy"
+	affectedReasonStackRoleArn               = "stack.role_arn"
+	affectedReasonStackNotificationArns      = "stack.notification_arns"
+	affectedReasonStackDisableRollback       = "stack.disable_rollback"
+	affectedReasonStackTerminationProtection = "stack.termination_protection"
+	affectedReasonStackTimeoutInMinutes      = "stack.timeout_in_minutes"
 )
 
 // Deletion type constants.
@@ -77,10 +96,65 @@ const (
 	sectionNameValuesF   = "values_files"
 	sectionNameChart     = "chart"
 	sectionNameRepos     = "repositories"
+
+	// Section name constants for aws/cloudformation-specific isEqual comparisons.
+	sectionNameStackName             = "stack_name"
+	sectionNameTemplate              = "template"
+	sectionNamePath                  = "path"
+	sectionNameParameters            = "parameters"
+	sectionNameCapabilities          = "capabilities"
+	sectionNameTags                  = "tags"
+	sectionNameStackPolicy           = "stack_policy"
+	sectionNameRoleArn               = "role_arn"
+	sectionNameNotificationArns      = "notification_arns"
+	sectionNameDisableRollback       = "disable_rollback"
+	sectionNameTerminationProtection = "termination_protection"
+	sectionNameTimeoutInMinutes      = "timeout_in_minutes"
 )
 
+// AffectedFilter narrows which components `describe affected` reports.
+// The zero value applies no filtering beyond the always-on abstract/disabled exclusions.
+type AffectedFilter struct {
+	// ExcludeLocked drops components with `metadata.locked: true`.
+	ExcludeLocked bool
+	// Tags keeps only components whose `metadata.tags` contain at least one of these tags (match any).
+	Tags []string
+	// Labels keeps only components whose `metadata.labels` contain every one of these key/value pairs (match all).
+	Labels map[string]string
+	// DeferSelectors keeps Tags and Labels on the filter but stops the live-component processors from
+	// applying them. The caller applies them after the dependents are resolved, so a dependent that
+	// matches can still be promoted when its excluded parent is dropped. Deleted components are still
+	// matched inside findAffected, because their metadata only exists in BASE and they never have dependents.
+	DeferSelectors bool
+}
+
+// hasSelectors reports whether the filter restricts components by `metadata.tags` or `metadata.labels`.
+func (f AffectedFilter) hasSelectors() bool {
+	return len(f.Tags) > 0 || len(f.Labels) > 0
+}
+
+// selectorsApplyNow reports whether the live-component processors must apply the selectors themselves,
+// which is the case unless the caller deferred them until the dependents are resolved.
+func (f AffectedFilter) selectorsApplyNow() bool {
+	return f.hasSelectors() && !f.DeferSelectors
+}
+
+// matchesSelectors reports whether the component metadata satisfies the tags and labels selectors.
+// Tags and labels that are not already resolved to a list or a map of strings (for example an
+// unrendered template when `--process-templates=false`) never match, so an undecidable component
+// is excluded rather than leaking past a selector that is meant to keep it out.
+func (f AffectedFilter) matchesSelectors(metadataSection map[string]any) bool {
+	if len(f.Tags) > 0 && !tags.MatchesTags(tags.ToStringSlice(metadataSection[metadataTagsKey]), f.Tags, tags.TagModeAny) {
+		return false
+	}
+	if len(f.Labels) > 0 && !tags.MatchesLabels(tags.ToStringMap(metadataSection[metadataLabelsKey]), f.Labels) {
+		return false
+	}
+	return true
+}
+
 // shouldSkipComponent determines if a component should be skipped based on metadata.
-func shouldSkipComponent(metadataSection map[string]any, componentName string, excludeLocked bool) bool {
+func shouldSkipComponent(metadataSection map[string]any, componentName string, filter AffectedFilter) bool {
 	// Skip abstract components.
 	if metadataType, ok := metadataSection["type"].(string); ok {
 		if metadataType == "abstract" {
@@ -94,11 +168,17 @@ func shouldSkipComponent(metadataSection map[string]any, componentName string, e
 	}
 
 	// Skip locked components if requested.
-	if excludeLocked && isComponentLocked(metadataSection) {
+	if filter.ExcludeLocked && isComponentLocked(metadataSection) {
 		return true
 	}
 
-	return false
+	// Deferred selectors are applied by the caller once the dependents are resolved.
+	if filter.DeferSelectors {
+		return false
+	}
+
+	// Skip components that do not match the `--tags` / `--labels` selectors.
+	return !filter.matchesSelectors(metadataSection)
 }
 
 // addAffectedComponent adds an affected component to the list.
@@ -253,7 +333,7 @@ func processTerraformComponentsIndexed(
 	patternCache *componentPathPatternCache,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
-	excludeLocked bool,
+	filter AffectedFilter,
 ) ([]schema.Affected, error) {
 	var affected []schema.Affected
 
@@ -265,8 +345,12 @@ func processTerraformComponentsIndexed(
 
 		// Check metadata section and skip if needed.
 		metadataSection, hasMetadata := componentSection[sectionNameMetadata].(map[string]any)
+		// A selector (--tags/--labels) can only match metadata, so components without a metadata section are excluded.
+		if !hasMetadata && filter.selectorsApplyNow() {
+			continue
+		}
 		if hasMetadata {
-			if shouldSkipComponent(metadataSection, componentName, excludeLocked) {
+			if shouldSkipComponent(metadataSection, componentName, filter) {
 				continue
 			}
 
@@ -368,7 +452,7 @@ func processSimpleComponentsIndexed(
 	patternCache *componentPathPatternCache,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
-	excludeLocked bool,
+	filter AffectedFilter,
 ) ([]schema.Affected, error) {
 	var affected []schema.Affected
 
@@ -379,8 +463,12 @@ func processSimpleComponentsIndexed(
 		}
 
 		metadataSection, hasMetadata := componentSection[sectionNameMetadata].(map[string]any)
+		// A selector (--tags/--labels) can only match metadata, so components without a metadata section are excluded.
+		if !hasMetadata && filter.selectorsApplyNow() {
+			continue
+		}
 		if hasMetadata {
-			if shouldSkipComponent(metadataSection, componentName, excludeLocked) {
+			if shouldSkipComponent(metadataSection, componentName, filter) {
 				continue
 			}
 
@@ -450,7 +538,7 @@ func processKubernetesComponentsIndexed(
 	patternCache *componentPathPatternCache,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
-	excludeLocked bool,
+	filter AffectedFilter,
 ) ([]schema.Affected, error) {
 	var affected []schema.Affected
 
@@ -461,8 +549,12 @@ func processKubernetesComponentsIndexed(
 		}
 
 		metadataSection, hasMetadata := componentSection[sectionNameMetadata].(map[string]any)
+		// A selector (--tags/--labels) can only match metadata, so components without a metadata section are excluded.
+		if !hasMetadata && filter.selectorsApplyNow() {
+			continue
+		}
 		if hasMetadata {
-			if shouldSkipComponent(metadataSection, componentName, excludeLocked) {
+			if shouldSkipComponent(metadataSection, componentName, filter) {
 				continue
 			}
 
@@ -578,7 +670,7 @@ func processHelmComponentsIndexed(
 	patternCache *componentPathPatternCache,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
-	excludeLocked bool,
+	filter AffectedFilter,
 ) ([]schema.Affected, error) {
 	var affected []schema.Affected
 
@@ -589,8 +681,12 @@ func processHelmComponentsIndexed(
 		}
 
 		metadataSection, hasMetadata := componentSection[sectionNameMetadata].(map[string]any)
+		// A selector (--tags/--labels) can only match metadata, so components without a metadata section are excluded.
+		if !hasMetadata && filter.selectorsApplyNow() {
+			continue
+		}
 		if hasMetadata {
-			if shouldSkipComponent(metadataSection, componentName, excludeLocked) {
+			if shouldSkipComponent(metadataSection, componentName, filter) {
 				continue
 			}
 
@@ -691,7 +787,243 @@ func stringSlice(value any) []string {
 			return []string{typed}
 		}
 	}
+
 	return nil
+}
+
+// processCloudFormationComponentsIndexed detects affected aws/cloudformation
+// components, mirroring processHelmComponentsIndexed's shape (SDK-native
+// component types use the *Indexed helpers, not the legacy per-file scan path).
+//
+//nolint:funlen // Mirrors the per-type indexed processors (Terraform/Helmfile/Packer/Kubernetes/Helm) with aws/cloudformation-specific sections.
+func processCloudFormationComponentsIndexed(
+	stackName string,
+	cloudFormationSection map[string]any,
+	remoteStacks *map[string]any,
+	currentStacks *map[string]any,
+	atmosConfig *schema.AtmosConfiguration,
+	filesIndex *changedFilesIndex,
+	patternCache *componentPathPatternCache,
+	includeSpaceliftAdminStacks bool,
+	includeSettings bool,
+	filter AffectedFilter,
+) ([]schema.Affected, error) {
+	var affected []schema.Affected
+
+	for componentName, compSection := range cloudFormationSection {
+		componentSection, ok := compSection.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		metadataSection, hasMetadata := componentSection[sectionNameMetadata].(map[string]any)
+		// A selector (--tags/--labels) can only match metadata, so components without a metadata section are excluded.
+		if !hasMetadata && filter.selectorsApplyNow() {
+			continue
+		}
+		if hasMetadata && shouldSkipComponent(metadataSection, componentName, filter) {
+			continue
+		}
+
+		locator := remoteComponentLocator{
+			remoteStacks:  remoteStacks,
+			stackName:     stackName,
+			componentType: cfg.CloudFormationComponentType,
+			componentName: componentName,
+		}
+
+		if err := checkCloudFormationMetadataAffected(
+			&affected, atmosConfig, componentName, stackName, &componentSection,
+			metadataSection, hasMetadata, locator, remoteStacks,
+			includeSpaceliftAdminStacks, currentStacks, includeSettings,
+		); err != nil {
+			return nil, err
+		}
+
+		component := GetComponentFolder(&componentSection, componentName)
+
+		changed, err := isComponentFolderChangedIndexed(component, cfg.CloudFormationComponentType, atmosConfig, filesIndex, patternCache)
+		if err != nil {
+			return nil, err
+		}
+		if changed {
+			err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.CloudFormationComponentType,
+				&componentSection, affectedReasonComponent, includeSpaceliftAdminStacks, currentStacks, includeSettings)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		if err := addCloudFormationSectionAffected(&affected, atmosConfig, componentName, stackName, &componentSection, remoteStacks, currentStacks, includeSpaceliftAdminStacks, includeSettings); err != nil {
+			return nil, err
+		}
+
+		if err := checkCloudFormationSettingsAffected(
+			&affected, atmosConfig, componentName, stackName, &componentSection,
+			locator, remoteStacks, currentStacks, filesIndex,
+			includeSpaceliftAdminStacks, includeSettings,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	return affected, nil
+}
+
+// checkCloudFormationMetadataAffected compares the `metadata` section
+// symmetrically: a component whose metadata was removed locally (hasMetadata
+// == false) but still exists remotely must be detected as changed too, not
+// silently skipped just because there's nothing local to gate the comparison
+// on. Split out of processCloudFormationComponentsIndexed to keep its
+// cyclomatic complexity down.
+func checkCloudFormationMetadataAffected(
+	affected *[]schema.Affected,
+	atmosConfig *schema.AtmosConfiguration,
+	componentName string,
+	stackName string,
+	componentSection *map[string]any,
+	metadataSection map[string]any,
+	hasMetadata bool,
+	locator remoteComponentLocator,
+	remoteStacks *map[string]any,
+	includeSpaceliftAdminStacks bool,
+	currentStacks *map[string]any,
+	includeSettings bool,
+) error {
+	if !hasMetadata && !locator.sectionPresent(sectionNameMetadata) {
+		return nil
+	}
+	if isEqual(remoteStacks, stackName, cfg.CloudFormationComponentType, componentName, metadataSection, sectionNameMetadata) {
+		return nil
+	}
+	return addAffectedComponent(affected, atmosConfig, componentName, stackName, cfg.CloudFormationComponentType,
+		componentSection, affectedReasonStackMetadata, includeSpaceliftAdminStacks, currentStacks, includeSettings)
+}
+
+// checkCloudFormationSettingsAffected compares the `settings` section
+// symmetrically, same rationale as checkCloudFormationMetadataAffected above.
+// When neither side has a `settings` section, `dependencies.components` —
+// which lives at the top level of componentSection, not under settings —
+// must still be checked independently of settings presence, so this falls
+// back to checkDependencyChangesIndexed directly instead of skipping the
+// dependency check entirely. Split out of processCloudFormationComponentsIndexed
+// to keep its cyclomatic complexity down.
+func checkCloudFormationSettingsAffected(
+	affected *[]schema.Affected,
+	atmosConfig *schema.AtmosConfiguration,
+	componentName string,
+	stackName string,
+	componentSection *map[string]any,
+	locator remoteComponentLocator,
+	remoteStacks *map[string]any,
+	currentStacks *map[string]any,
+	filesIndex *changedFilesIndex,
+	includeSpaceliftAdminStacks bool,
+	includeSettings bool,
+) error {
+	settingsSection, hasSettings := (*componentSection)[cfg.SettingsSectionName].(map[string]any)
+	if hasSettings || locator.sectionPresent(cfg.SettingsSectionName) {
+		return checkSettingsAndDependenciesIndexed(
+			affected, atmosConfig, componentName, stackName, cfg.CloudFormationComponentType,
+			componentSection, settingsSection, remoteStacks, currentStacks, filesIndex,
+			includeSpaceliftAdminStacks, includeSettings,
+		)
+	}
+	return checkDependencyChangesIndexed(
+		affected, atmosConfig, componentName, stackName, cfg.CloudFormationComponentType,
+		componentSection, nil, filesIndex,
+		includeSpaceliftAdminStacks, currentStacks, includeSettings,
+	)
+}
+
+// addCloudFormationSectionAffected checks shared vars, env, source, and provision
+// sections together with aws/cloudformation-specific first-class sections
+// (stack_name, template, path, parameters, capabilities, tags,
+// stack_policy, role_arn, notification_arns, disable_rollback,
+// termination_protection, timeout_in_minutes) for inline config changes
+// between the remote and current stacks, mirroring addHelmSectionAffected.
+func addCloudFormationSectionAffected(
+	affected *[]schema.Affected,
+	atmosConfig *schema.AtmosConfiguration,
+	componentName string,
+	stackName string,
+	componentSection *map[string]any,
+	remoteStacks *map[string]any,
+	currentStacks *map[string]any,
+	includeSpaceliftAdminStacks bool,
+	includeSettings bool,
+) error {
+	sections := []struct {
+		name   string
+		reason string
+	}{
+		{sectionNameVars, affectedReasonStackVars},
+		{sectionNameEnv, affectedReasonStackEnv},
+		{sectionNameSource, affectedReasonStackSource},
+		{sectionNameProvision, affectedReasonStackProvision},
+		{sectionNameStackName, affectedReasonStackStackName},
+		{sectionNameTemplate, affectedReasonStackTemplate},
+		{sectionNamePath, affectedReasonStackPath},
+		{sectionNameParameters, affectedReasonStackParameters},
+		{sectionNameCapabilities, affectedReasonStackCapabilities},
+		{sectionNameTags, affectedReasonStackTags},
+		{sectionNameStackPolicy, affectedReasonStackStackPolicy},
+		{sectionNameRoleArn, affectedReasonStackRoleArn},
+		{sectionNameNotificationArns, affectedReasonStackNotificationArns},
+		{sectionNameDisableRollback, affectedReasonStackDisableRollback},
+		{sectionNameTerminationProtection, affectedReasonStackTerminationProtection},
+		{sectionNameTimeoutInMinutes, affectedReasonStackTimeoutInMinutes},
+	}
+
+	for _, section := range sections {
+		value, localOk := (*componentSection)[section.name]
+		remoteValue, remoteOk := remoteCloudFormationSectionValue(remoteStacks, stackName, componentName, section.name)
+
+		// Compare presence and values on both sides: a section present on
+		// only one side (added or removed) is a change, not just a differing
+		// value on a section present on both. Skipping when the section is
+		// merely absent locally would silently miss a removed `tags`,
+		// `stack_policy`, `role_arn`, etc. that still exists on the remote
+		// ref — the exact regression this symmetric check guards against.
+		if !localOk && !remoteOk {
+			continue
+		}
+		if localOk && remoteOk && reflect.DeepEqual(value, remoteValue) {
+			continue
+		}
+
+		err := addAffectedComponent(affected, atmosConfig, componentName, stackName, cfg.CloudFormationComponentType,
+			componentSection, section.reason, includeSpaceliftAdminStacks, currentStacks, includeSettings)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// remoteCloudFormationSectionValue reports whether the named aws/cloudformation
+// section exists on the remote-ref version of the component (regardless of
+// whether its value matches the local one), and returns that value if so.
+func remoteCloudFormationSectionValue(remoteStacks *map[string]any, stackName, componentName, sectionName string) (any, bool) {
+	remoteStackSection, ok := (*remoteStacks)[stackName].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	remoteComponentsSection, ok := remoteStackSection["components"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	remoteComponentTypeSection, ok := remoteComponentsSection[cfg.CloudFormationComponentType].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	remoteComponentSection, ok := remoteComponentTypeSection[componentName].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	value, ok := remoteComponentSection[sectionName]
+	return value, ok
 }
 
 func addHelmSectionAffected(
@@ -903,16 +1235,39 @@ func checkSecretFileChangesIndexed(
 }
 
 // getSecretFileDependencies returns the SOPS files the component's declared secrets resolve to,
-// as file dependencies. Store-backed secrets contribute nothing (they are not files). It is
-// best-effort: declarations whose provider/path cannot be resolved are skipped.
+// as file dependencies. Store-backed secrets contribute nothing (they are not files).
+//
+// `describe affected` normally runs without credentials, so a SOPS declaration whose backend is a
+// YAML-function selector (for example `sops: !aws.cloudformation.output ...`) cannot be resolved
+// here. Skipping it would silently hide a changed secret file, so the component is instead treated
+// as affected by any change under the locations its SOPS providers can use (folder dependencies),
+// and a warning names the component and declaration. Other declarations that cannot be resolved
+// are skipped.
 func getSecretFileDependencies(atmosConfig *schema.AtmosConfiguration, stackName, componentName string, componentSection map[string]any) []schema.ComponentDependency {
-	files := secrets.NewService(atmosConfig, stackName, componentName, componentSection).FileDependencies()
-	if len(files) == 0 {
+	set := secrets.NewService(atmosConfig, stackName, componentName, componentSection).ResolveFileDependencies()
+	for i := range set.Unresolved {
+		u := &set.Unresolved[i]
+		log.Warn(
+			"SOPS secret backend selector cannot be resolved without credentials; treating the component as affected by any change under the SOPS provider locations",
+			"component", componentName,
+			"stack", stackName,
+			"secret", u.Declaration,
+			"field", u.Field,
+			"selector", u.Selector,
+			"folders", u.Locations.Folders,
+			"files", u.Locations.Files,
+			"reason", u.Err,
+		)
+	}
+	if len(set.Files) == 0 && len(set.Folders) == 0 {
 		return nil
 	}
-	deps := make([]schema.ComponentDependency, 0, len(files))
-	for _, f := range files {
+	deps := make([]schema.ComponentDependency, 0, len(set.Files))
+	for _, f := range set.Files {
 		deps = append(deps, schema.ComponentDependency{Kind: "file", Path: f})
+	}
+	for _, f := range set.Folders {
+		deps = append(deps, schema.ComponentDependency{Kind: "folder", Path: f})
 	}
 	return deps
 }

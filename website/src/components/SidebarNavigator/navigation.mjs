@@ -10,7 +10,9 @@ export function findSection(items, activePath) {
   function score(item) {
     const own =
       item.href && normalizePath(item.href) === path
-        ? item.type === "category" || item.docId
+        ? !item.customProps?.yamlReference &&
+          !item.customProps?.navigationReference &&
+          (item.type === "category" || item.docId)
           ? 2
           : 1
         : 0;
@@ -28,7 +30,7 @@ export function findSection(items, activePath) {
   return section;
 }
 
-/** Clone resolved items with closed categories and hide inactive unlisted pages. */
+/** Preserve category expansion defaults and hide inactive unlisted pages. */
 export function prepareItems(items, activePath) {
   return items
     .filter(
@@ -41,14 +43,14 @@ export function prepareItems(items, activePath) {
         ? {
             ...item,
             collapsible: true,
-            collapsed: true,
+            collapsed: item.collapsed ?? true,
             items: prepareItems(item.items, activePath),
           }
         : item,
     );
 }
 
-/** Prune by label and ancestry, expanding matches without changing saved menus. */
+/** Prune by label, page title, and ancestry, expanding matches without changing saved menus. */
 export function filterItems(items, query, ancestors = []) {
   const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   if (!terms.length) return items;
@@ -61,7 +63,11 @@ export function filterItems(items, query, ancestors = []) {
   return items.flatMap((item) => {
     if (item.type === "html") return [];
     const labels = [...ancestors, item.label];
-    const text = labels.join(" ").toLocaleLowerCase();
+    // Match the page title too, since many labels are YAML keys (e.g. `commands`).
+    const text = [...labels, item.customProps?.title]
+      .filter(Boolean)
+      .join(" ")
+      .toLocaleLowerCase();
     if (terms.every((term) => text.includes(term))) return [expand(item)];
     if (item.type !== "category") return [];
     const children = filterItems(item.items, query, labels);

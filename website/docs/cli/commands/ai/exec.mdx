@@ -427,7 +427,7 @@ fi
 2. **Set `--no-tools` for simple queries** - Faster execution when tools aren't needed
 3. **Use `--session` for multi-turn workflows** - Maintains context across calls
 4. **Check exit codes in scripts** - Handle errors appropriately
-5. **Disable tool confirmation in CI/CD** - Set `require_confirmation: false` in config
+5. **Disable tool confirmation in CI/CD** - Set `ai.tools.mode: allow` in config (use `yolo` only in isolated runners). The older `require_confirmation: false` and `yolo_mode: true` settings are deprecated aliases for these modes
 6. **Use `--output` for file persistence** - Avoid shell redirection issues
 7. **Parse JSON with jq** - Robust handling of structured output
 8. **Set appropriate timeouts** - Adjust `timeout_seconds` based on your needs

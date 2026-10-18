@@ -122,6 +122,9 @@ type describeStacksProcessor struct {
 	// processor does not go through processStacks (utils.go), so it must resolve deferred
 	// YAML functions itself instead of silently losing their contribution (#2888).
 	deferredContexts AllStacksDeferredContexts
+	// rawStackConfigs holds each stack manifest's own (pre-merge) configuration, keyed by stack
+	// file name. Stack-level locals survive only there; they feed the Starlark ctx.locals scope.
+	rawStackConfigs map[string]map[string]any
 	// evalSections is the opt-in evaluation-scope filter set by
 	// ExecuteDescribeStacksWithEvalSections: when non-nil, template rendering and YAML-function
 	// resolution (Stages 2/3, plus Go-template rendering) only run for these top-level component
@@ -367,6 +370,7 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 		{cfg.HelmSectionName, processComponentTypeOpts{applyMetadataInheritance: true}},
 		{cfg.ContainerSectionName, processComponentTypeOpts{}},
 		{cfg.EmulatorSectionName, processComponentTypeOpts{}},
+		{cfg.CloudFormationSectionName, processComponentTypeOpts{applyMetadataInheritance: true}},
 	}
 
 	for _, te := range typeEntries {
@@ -465,6 +469,10 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	}
 
 	info := buildConfigAndStacksInfo(componentName, stackFileName, stackManifestName, secs)
+	// Match the identity a single-component command (describe component, terraform plan) reports.
+	info.ComponentType = typeName
+	info.StackFile = stackFileName
+	info.StackLocalsSection = stackLocalsForComponent(p.rawStackConfigs, stackFileName, typeName)
 	info.EvaluationPaths = deferred.ExpandEvaluationPaths(componentSection, p.evalPaths, p.atmosConfig.Templates.Settings.Delimiters...)
 
 	// Ensure the component key is present in the info's ComponentSection.
@@ -477,6 +485,11 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	// that read info.Context see non-zero values (matching the original monolith's behaviour).
 	stackName, resolvedContext, err := resolveStackName(p.atmosConfig, stackFileName, stackManifestName, info, secs.vars)
 	if err != nil {
+		return err
+	}
+	// A name built from a !starlark value is not computable; fail before the stack filter so the
+	// encoded program text never becomes a stack key.
+	if err := ensureLiteralStackIdentity(stackFileName, stackName, info.ComponentSection); err != nil {
 		return err
 	}
 	info.Context = resolvedContext
@@ -584,11 +597,12 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		if !isComponentEnabled(secs.metadata, componentName) {
 			skip = disabledComponentTerraformSkip(p.skip)
 		}
+		yamlSkip, finishValues := prepareConfigurationValues(p.atmosConfig, &info, skip, p.evaluationSections(&info))
 		componentSection, err = processComponentSectionYAMLFunctions(
 			p.atmosConfig,
 			&info,
 			componentSection,
-			skip,
+			yamlSkip,
 			p.onWarning,
 			!p.resolveSecrets && iolib.MaskingEnabled(),
 			p.evaluationSections(&info),
@@ -602,6 +616,10 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		if err != nil {
 			return err
 		}
+		if err := finishValues(); err != nil {
+			return err
+		}
+		componentSection = info.ComponentSection
 	}
 	if hasLiteralMocks {
 		componentSection[cfg.MocksSectionName] = literalMocks
@@ -806,7 +824,7 @@ func resolveStackName(
 		return stackManifestName, schema.Context{}, nil
 
 	case atmosConfig.Stacks.NameTemplate != "":
-		name, err := ProcessTmpl(atmosConfig, "describe-stacks-name-template",
+		name, err := processStackNameTemplate(atmosConfig, stackFileName,
 			atmosConfig.Stacks.NameTemplate, info.ComponentSection, false)
 		if err != nil {
 			return "", schema.Context{}, err
@@ -1195,10 +1213,10 @@ func processComponentSectionTemplates(
 // The evalSections parameter is the opt-in evaluation-scope filter (see deferred.IsSectionRequired): when
 // non-nil, only the top-level sections it names are walked for
 // `!terraform.state`/`!terraform.output`/`!store`/etc. YAML functions. Skipped sections are
-// restored untouched afterward. Stage 2's YAML-function resolution has no cross-section
-// dependency -- each tag resolves independently of its siblings (only a shared ResolutionContext
-// exists, for cycle detection) -- so narrowing its input map is safe without needing a separate
-// "context" the way Go-template rendering does.
+// restored untouched afterward. Starlark values can read dependencies outside the
+// selected sections through info.ComponentSection; the configuration resolver
+// overlays the rendered evaluation input onto that context without changing the
+// excluded fields in the returned component.
 func processComponentSectionYAMLFunctions(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
@@ -1342,6 +1360,7 @@ func hasStackExplicitComponents(stackSection map[string]any) bool {
 		cfg.HelmSectionName,
 		cfg.ContainerSectionName,
 		cfg.EmulatorSectionName,
+		cfg.CloudFormationSectionName,
 	} {
 		if typeMap, ok := comps[typeName].(map[string]any); ok && len(typeMap) > 0 {
 			return true

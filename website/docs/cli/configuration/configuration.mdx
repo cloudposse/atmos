@@ -188,6 +188,23 @@ Atmos extends standard YAML with custom functions that provide powerful tools fo
 
     See the [`!cwd` documentation](/functions/yaml/cwd) for more details.
   </dd>
+
+  <dt>`!literal`</dt>
+  <dd>
+    Keep a value exactly as written, so Atmos never renders its `{{ }}` text as a template. In custom commands, it also keeps a step's `script`, `command`, and other step fields out of run-time template rendering.
+
+    ```yaml
+    commands:
+      - name: report
+        steps:
+          - type: script
+            interpreter: starlark
+            script: !literal |
+              print("Atmos templates look like {{ .vars.stage }}")
+    ```
+
+    See the [`!literal` documentation](/functions/yaml/literal) for more details.
+  </dd>
 </dl>
 
 ## Base Path

@@ -1,0 +1,118 @@
+---
+title: "!aws.cloudformation.output"
+sidebar_position: 16
+sidebar_label: "!aws.cloudformation.output"
+sidebar_class_name: command
+description: Read the deployed Outputs of an aws/cloudformation component directly in Atmos stack manifests
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Read an output from a deployed CloudFormation component in an Atmos stack
+manifest. Use the value as input to Terraform, CloudFormation, or another
+component type.
+</Intro>
+
+<Experimental />
+
+## Usage
+
+The `!aws.cloudformation.output` function is called with either two or three parameters:
+
+```yaml
+  # Get the `output-key` Output of the `component` in the current stack
+  !aws.cloudformation.output <component> <output-key>
+
+  # Get the `output-key` Output of the `component` in the provided `stack`
+  !aws.cloudformation.output <component> <stack> <output-key>
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>The `aws/cloudformation` component name.</dd>
+
+  <dt>`stack`</dt>
+  <dd>(Optional) Atmos stack name. Defaults to the current stack when omitted.</dd>
+
+  <dt>`output-key`</dt>
+  <dd>The exact key declared under `Outputs` in the template. This is a direct
+  key lookup; YQ expressions are not supported.</dd>
+</dl>
+
+:::tip
+You can use [Atmos Stack Manifest Templating](/templates) in the `!aws.cloudformation.output` YAML function expressions.
+Atmos processes the templates first, and then executes the `!aws.cloudformation.output` function, allowing you to provide the parameters to
+the function dynamically.
+:::
+
+:::note Type-Aware Merging
+Atmos supports type-aware merging of YAML functions and concrete values, allowing them to coexist in the inheritance chain without type conflicts.
+See the full explanation: [YAML Function Merging](/reference/yaml-function-merging)
+:::
+
+## Requirements
+
+- The referenced component must have a resolved `stack_name`.
+- Its stack must already be deployed with resources.
+- The requested output key must exist. An empty value is valid; a missing key
+  is an error that lists available keys.
+- The lookup requires AWS credentials and access to the deployed stack.
+
+A stack in `REVIEW_IN_PROGRESS`, `ROLLBACK_COMPLETE`, `ROLLBACK_FAILED`,
+`CREATE_FAILED`, or a `DELETE_*` state cannot supply outputs. Deploy the
+producer first, or recover its failed deployment before resolving the reference.
+
+### Authentication
+
+The producer's default direct target identity takes precedence over the
+consumer's CLI identity. When that target declares no auth, the lookup uses the
+caller's credentials. See
+[output-reference authentication](/stacks/components/aws-cloudformation#output-references).
+
+## Examples
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    my_lambda_component:
+      vars:
+        # Read the `VpcId` Output of the aws/cloudformation `vpc` component in the current stack
+        vpc_id: !aws.cloudformation.output vpc VpcId
+
+        # Read an Output from a different, hardcoded stack
+        shared_bucket: !aws.cloudformation.output logging plat-ue2-audit LogBucketName
+
+        # Use the `.stack` template identifier to reference the current stack explicitly
+        subnet_ids: !aws.cloudformation.output vpc {{ .stack }} PrivateSubnetIds
+```
+</File>
+
+## Output lookups
+
+Atmos does not cache the result of the `!aws.cloudformation.output` function. Every evaluation of the
+function calls `DescribeStacks` again, so each use in your manifests costs one API call, and the value
+always reflects the deployed stack at that moment.
+
+The [`atmos.Component`](/functions/template/atmos.Component) template function resolves `.outputs` through
+the same lookup and caches the component's sections for the duration of one Atmos command. Use it when
+several values come from the same component and you want a single API call.
+
+## Considerations
+
+- Output references are not allowed in `metadata.tags` or `metadata.labels`.
+  These selectors must be resolved without AWS calls.
+- Internal lookups return real values. Commands that describe a stack or
+  component can expose sensitive output values.
+- Deploy dependencies before components that read their outputs. Plan recovery
+  procedures for dependencies in other accounts or regions.
+
+## See Also
+
+- [`!terraform.output`](/functions/yaml/terraform.output) — The Terraform/OpenTofu equivalent
+- [`atmos.Component`](/functions/template/atmos.Component) — The template-function equivalent, which also resolves `.outputs` for `aws/cloudformation` targets
+- [`atmos aws cloudformation output`](/cli/commands/aws/cloudformation/output) — Show a deployed stack's Outputs from the CLI

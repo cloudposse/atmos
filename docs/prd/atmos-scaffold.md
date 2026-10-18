@@ -83,6 +83,28 @@ and `pkg/generator/` for the source of truth on current behavior.
   [PR #2989](https://github.com/cloudposse/atmos/pull/2989) for the base-ref
   pinning this builds on and [PR #3047](https://github.com/cloudposse/atmos/pull/3047)
   for the conflict-marker correctness fixes it depends on.
+- **File deletion handling during `--update`**: `--update-strategy=rendered`
+  deletes a file the template stopped generating between the old and new ref,
+  but only when the on-disk copy is still byte-identical to the old pristine
+  render — if local edits survived, the file is left untouched and the update
+  fails with an unresolved merge conflict (`ErrMergeConflict`, exit code 1)
+  instead of silently deleting or silently keeping it, so a human reviews it.
+  `--update-strategy=tracked` does **not** support this: there is no re-render
+  of "the template at whatever ref produced this base commit" available, no
+  reliable record of what that ref even was, and naively enumerating the git
+  tree at `--base-ref` would conflate files the template actually owns with
+  unrelated files that merely happen to exist in that historical commit — this
+  is a documented limitation, not an oversight. Independently of strategy,
+  `--update` also no longer recreates a file the user deliberately deleted:
+  both strategies check whether a base exists for a path that's missing on
+  disk, and skip regenerating it if so, rather than silently overwriting the
+  deletion (matching how tools like Copier treat user-deleted paths). Pass
+  `--recreate-deleted` to opt back into the old unconditional-recreate
+  behavior. It's a flag of its own rather than reusing `--force`: `--force`
+  combined with `--update` already means "on conflict, the template's version
+  wins" (`--force` with an explicit non-`theirs` `--merge-strategy` is
+  rejected as contradictory), so tying recreation to it would make "manual
+  conflict resolution" and "recreate what I deleted" mutually exclusive.
 
 **Still not implemented** (see "Future Enhancements" below):
 - ❌ Remote-template caching/version pinning beyond a single `--ref`
@@ -94,6 +116,30 @@ and `pkg/generator/` for the source of truth on current behavior.
   See `pkg/generator/engine.DefaultMergeThreshold` for the shared default. Only `0` disables
   the check entirely (guaranteed to never fail); the computed change percentage itself has no
   upper bound, so no positive value is a guaranteed bypass the way `0` is.
+
+**Implemented since the above was written**:
+- ✅ `!include`/`!include.raw` and a fixed set of other context-free YAML functions
+  (`!env`, `!random`, `!cwd`, the `!git.*`/`!repo-root` family, `!literal`) in
+  `scaffold.yaml`, resolved before schema validation via a shared tag walker
+  (`pkg/utils.WalkYAMLTags`/`ScaffoldTagPolicy`) extracted from the stack-manifest loader's
+  own tag dispatcher, rather than a bespoke `!include`-only one. Any other YAML function
+  (one needing real stack/component/backend context, e.g. `!terraform.state`, `!store`,
+  `!secret`) is rejected with a clear error naming the tag, never silently left unresolved.
+  See `pkg/function/tag.ScaffoldYAML` for the canonical supported-tag list.
+  - `!exec` is deliberately excluded despite needing no stack context: `scaffold.yaml` is
+    resolved for *every* configured template just to populate `atmos scaffold list`/the
+    interactive picker, not only the one a user selects or generates. A field-test pass
+    confirmed this live — `atmos scaffold list` alone executed a `!exec` command from a
+    configured template's manifest. Allowing shell execution here would let any configured
+    template (including a shared/vendored one) run arbitrary code merely by being listed.
+  - Deliberately **not** done as part of this work, left as a follow-up: migrating
+    `pkg/config/process_yaml.go` (`atmos.yaml`'s own loader) onto the same shared walker.
+    Its handlers write into a `viper.Viper` sink rather than a `yaml.Node`, and — found
+    while investigating this — that file also uses a different YAML library
+    (`go.yaml.in/yaml/v3`) than `pkg/utils`/`pkg/manifest` (`gopkg.in/yaml.v3`), so even
+    the smaller fix of pointing its own `handleInclude` at the shared
+    `utils.ProcessIncludeTag` isn't a same-type drop-in; it would need an explicit
+    conversion step or a library migration first.
 
 ## Goals
 
@@ -240,6 +286,7 @@ atmos scaffold
     --base-ref                  # Git ref to use as the 3-way merge base with --update-strategy=tracked (defaults to HEAD)
     --merge-strategy            # Conflict resolution for --update: manual (default), ours, theirs
     --max-changes               # Maximum percentage of changed lines allowed in a 3-way merge before --update fails (default 50, minimum 0/no upper bound, 0 disables the check entirely; ATMOS_SCAFFOLD_MAX_CHANGES/ATMOS_INIT_MAX_CHANGES)
+    --recreate-deleted          # Recreate a file during --update even if you deleted it locally (default: false, the deletion is left in place)
 
   list                          # List available templates
 
@@ -1459,6 +1506,15 @@ engines assume stack/component context scaffold generation doesn't have).
 `--skip-hooks`/`--skip-hooks=name1,name2` bypasses hooks for a run, mirroring
 `terraform`'s flag of the same name. See "Template Structure" above for a
 worked example.
+
+With the embedded interpreter, these hooks can use `type: script` with
+`interpreter: starlark` under `with:`. Atmos executes the script in process through
+the shared step handler. Relative filesystem operations default to the generated
+project directory; pass collected answers with templated `env` values such as
+`NAME: '{{ .Answers.name }}'`. Scripts can call the step library and fail generation
+with a structured error. This does not add stack/component context to scaffold hooks.
+The scaffold hook regression test exercises answers, filesystem access, step calls,
+and script failure propagation. See [the Atmos SDK](atmos-sdk.md).
 
 Future: `command`/`store`/`git` scaffold hook kinds, once/if there's a real
 need to run them outside a stack/component context.

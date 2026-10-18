@@ -1,0 +1,9 @@
+MIT:
+  full_name: MIT License
+  url: https://opensource.org/licenses/MIT
+Apache-2.0:
+  full_name: Apache License 2.0
+  url: https://www.apache.org/licenses/LICENSE-2.0
+GPL-3.0:
+  full_name: GNU General Public License v3.0
+  url: https://www.gnu.org/licenses/gpl-3.0.html

@@ -3,27 +3,23 @@ title: atmos vendor config
 sidebar_label: config
 sidebar_class_name: command
 id: config
-description: Read, edit, and list raw vendor manifest config by dot-notation path — the canonical CRUD+list interface for vendor.yaml.
+description: "Inspect and update the sources, versions, and file-selection settings in your vendoring manifests."
 ---
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 
 <Intro>
-`atmos vendor config` is the **canonical** command set for reading, editing, and
-listing raw settings in `vendor.yaml` using arbitrary dot-notation paths (e.g.
-`spec.sources[0].version`). [`atmos vendor get`](/cli/commands/vendor/vendor-get) and
-[`atmos vendor set`](/cli/commands/vendor/vendor-set) are convenience aliases that
-resolve a **component name** to its `spec.sources[N].version` path and delegate to
-`get`/`set` here, so you don't have to know the source's index in the manifest.
-Use `atmos vendor config` directly when you need to address a path that isn't a
-component's pinned version (tags, source URLs, `included_paths`, etc.), or when you
-want `list`/`format`, which have no component-name shortcut.
+Inspect and update the sources, versions, and file-selection settings in your vendoring manifests.
+Use these commands to automate dependency configuration changes while preserving the YAML's comments
+and structure.
 </Intro>
 
 <CastPlayer title="atmos vendor config --help" src="/casts/screengrabs/atmos-vendor-config--help.cast" static chrome />
 
 ## Usage
+
+Address fields in `vendor.yaml` using dot-notation paths, such as `spec.sources[0].version`, source URLs, tags, or `included_paths`. For a component's pinned version, [`atmos vendor get`](/cli/commands/vendor/vendor-get) and [`atmos vendor set`](/cli/commands/vendor/vendor-set) accept its name instead of a manifest index. Use `atmos vendor config` directly for other fields and for `list` or `format`.
 
 ```shell
 atmos vendor config get <path> [--file <manifest>]

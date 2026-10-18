@@ -1,0 +1,88 @@
+---
+slug: literal-steps-and-reliable-command-inputs
+title: "Write Braces in Your Steps, and Trust Your Command Inputs"
+authors: [osterman]
+tags: [enhancement, bugfix]
+---
+Every step in a custom command or workflow passes through Go templates before it runs.
+That is convenient until a script needs literal braces: a Starlark format string, a
+Helm-style placeholder, or `{{ }}` text meant for another tool. Escaping does not help,
+because a custom command renders its steps more than once, and `atmos.yaml` refused
+the `!literal` function that stack manifests already support. Custom-command inputs had
+rough edges too: an argument containing a comma was split in two, integer flags never
+reached the step, and a step's `timeout:` was not enforced.
+<!--truncate-->
+
+## The Problem
+
+Templates are rendered over the whole step definition, including the script body. A
+step with a line such as `print("{{ name }}")` failed before it ever ran, and the error
+named an internal template instead of your step. The same rendering also ran over the
+environment Atmos inherited from your shell, so a variable that happened to contain
+braces could break an unrelated script step or reach child processes rewritten.
+
+Custom commands also had input problems that were easy to miss:
+
+- An argument value such as `api,v2` arrived split into separate arguments.
+- A flag declared with `type: int` showed up as a string flag and was missing from the
+  values passed to steps.
+- An optional argument without a default failed as if it were required.
+- `timeout:` on script, shell, and Atmos steps was accepted but never enforced, and an
+  unknown `output:` mode was silently ignored.
+
+## The Fix
+
+Tag any step field with [`!literal`](/functions/yaml/literal), in `atmos.yaml` or in a
+workflow file, and Atmos uses it exactly as written. It works for `script`, `command`,
+`interpreter`, `working_directory`, and individual `env` values, in sequential steps,
+parallel and matrix children, workflows, and lifecycle hooks.
+
+Atmos now renders only the environment values you declare; everything inherited from
+your shell passes through unchanged. Template errors name the step, the field, and the
+included file, and suggest `!literal` when the body contains braces. Parallel and matrix
+children render with the same template functions as sequential steps.
+
+For custom commands, argument values arrive exactly as typed,
+[integer flags](/cli/configuration/commands/flags#integer-flags) are typed values, and
+[optional arguments](/cli/configuration/commands/arguments#optional-arguments) can omit a
+default. Step `timeout:` values are enforced, and `output:` accepts only `raw`, `log`,
+`viewport`, or `none`.
+
+## How to Use It
+
+Mark a script body as literal when it contains braces:
+
+```yaml
+commands:
+  - name: greet
+    description: Print a greeting
+    arguments:
+      - name: name
+        description: Who to greet
+        required: false
+    flags:
+      - name: times
+        type: int
+        default: 1
+        description: How many greetings
+    steps:
+      - name: greet
+        type: script
+        interpreter: starlark
+        timeout: 30s
+        script: !literal |
+          name = ctx.arguments["name"] or "world"
+          for _ in range(ctx.flags["times"]):
+              print("{{ Hello }}, %s!" % name)
+```
+
+Running `atmos greet platform --times=2` prints `{{ Hello }}, platform!` twice. The
+script reads its inputs through `ctx.arguments` and `ctx.flags`, so nothing is
+interpolated into the source. See the
+[script step reference](/steps/type/script#literal-script) for details.
+
+## Get Involved
+
+Tell us how you use templates and scripts together in
+[GitHub Discussions](https://github.com/cloudposse/atmos/discussions), or open an issue
+if a step field still renders when you expect it to stay literal.

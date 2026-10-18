@@ -39,3 +39,24 @@ func TestProvider_LogGroup_WriteErrorPropagates(t *testing.T) {
 	assert.Error(t, p.StartLogGroup("hook"))
 	assert.Error(t, p.EndLogGroup())
 }
+
+// SuppressLogGrouping reports true only while running inside a deprecated
+// marketplace action, so ci grouping is disabled there and stdout stays pure.
+func TestProvider_SuppressLogGrouping(t *testing.T) {
+	p := NewProvider()
+
+	t.Run("legacy action suppresses grouping", func(t *testing.T) {
+		t.Setenv("GITHUB_ACTION_REPOSITORY", "cloudposse/github-action-atmos-get-setting")
+		assert.True(t, p.SuppressLogGrouping())
+	})
+
+	t.Run("current action does not suppress grouping", func(t *testing.T) {
+		t.Setenv("GITHUB_ACTION_REPOSITORY", "cloudposse/github-action-setup-atmos")
+		assert.False(t, p.SuppressLogGrouping())
+	})
+
+	t.Run("no action repository does not suppress grouping", func(t *testing.T) {
+		t.Setenv("GITHUB_ACTION_REPOSITORY", "")
+		assert.False(t, p.SuppressLogGrouping())
+	})
+}

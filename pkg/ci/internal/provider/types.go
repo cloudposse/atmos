@@ -3,9 +3,12 @@ package provider
 
 import (
 	"context"
+	"io"
 
 	"github.com/cloudposse/atmos/pkg/ci/cache"
 )
+
+//go:generate mockgen -typed -destination=../../mock_provider_test.go -package=ci github.com/cloudposse/atmos/pkg/ci/internal/provider Provider
 
 // BaseResolution contains the resolved base commit for affected detection.
 type BaseResolution struct {
@@ -97,6 +100,68 @@ type LogGrouper interface {
 	EndLogGroup() error
 }
 
+// LogGroupingSuppressor is an optional capability for providers that run in a
+// context where log grouping must be disabled because stdout has to stay free
+// of CI workflow-command metadata.
+//
+// A log group's `::group::`/`::endgroup::` markers have to bracket the stdout
+// content they fold, and the CI runner does not guarantee ordering between
+// stdout and stderr, so group markers cannot simply be moved to stderr the way
+// standalone annotations can. The only safe option in such a context is to not
+// emit them at all. The canonical case is a deprecated GitHub Action that
+// captures the atmos process's stdout and parses it as JSON (e.g.
+// cloudposse/github-action-atmos-get-settings): a `::group::` line on stdout
+// would corrupt that JSON.
+//
+// When a detected provider reports true here, ci grouping is disabled for the
+// whole run (every dimension and both grouping entry points). Annotations are
+// unaffected — they remain on stderr regardless. See issue #3309.
+type LogGroupingSuppressor interface {
+	// SuppressLogGrouping reports whether log grouping must be disabled for the
+	// current run to keep stdout free of CI workflow-command metadata.
+	SuppressLogGrouping() bool
+}
+
+// CommitCommenter is an optional capability for providers that can comment on a commit,
+// which is how a run with no pull request (a push) reports in the same place a pull request
+// comment would. Providers without it make a commit-targeted comment fall back to local rendering.
+type CommitCommenter interface {
+	// PostCommitComment posts or upserts a comment on a commit, matching an existing comment
+	// by the marker as PostComment does.
+	PostCommitComment(ctx context.Context, opts *PostCommitCommentOptions) (*Comment, error)
+}
+
+// ConfigValidator is an optional capability for providers whose environment can be
+// misconfigured in a way that must stop the run before any write is attempted, for
+// example an unparsable API base URL that would otherwise send the token nowhere useful.
+type ConfigValidator interface {
+	// ValidateConfig returns an error when the provider's environment is unusable.
+	ValidateConfig() error
+}
+
+// OutputBinder is implemented by providers that render locally and can be bound to a
+// specific writer (for example a script step's stderr) instead of the global UI channel.
+type OutputBinder interface {
+	// BindOutput returns a provider that writes its local renderings to w.
+	BindOutput(w io.Writer) Provider
+}
+
+// EnvExporter exports values to later steps of the same job (GitHub Actions:
+// $GITHUB_ENV and $GITHUB_PATH).
+type EnvExporter interface {
+	// WriteEnv makes key=value visible to subsequent steps.
+	WriteEnv(key, value string) error
+	// AddPath prepends dir to PATH for subsequent steps.
+	AddPath(dir string) error
+}
+
+// ValueMasker asks the provider to redact a value in its own log output
+// (GitHub Actions: ::add-mask::).
+type ValueMasker interface {
+	// MaskValue registers value for redaction in the provider's logs.
+	MaskValue(value string) error
+}
+
 // CacheProvider is an optional capability for CI providers that expose a remote
 // build cache (for example, the GitHub Actions cache). Providers implement this
 // when their platform offers a documented cache store reachable from within a
@@ -148,6 +213,9 @@ type Context struct {
 
 	// RunNumber is the run number (increments per workflow).
 	RunNumber int
+
+	// RunURL links to this CI run's page (e.g. the GitHub Actions run URL). Empty when the provider cannot determine it.
+	RunURL string
 
 	// Workflow is the name of the workflow.
 	Workflow string
@@ -215,4 +283,7 @@ type PRInfo struct {
 
 	// URL is the PR URL.
 	URL string
+
+	// Fork reports whether the pull request head lives in a fork of the base repository.
+	Fork bool
 }

@@ -1,0 +1,646 @@
+// Package cloudformation implements the `atmos aws cloudformation` (alias `cfn`)
+// command group for the native aws/cloudformation component type.
+package cloudformation
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
+	"github.com/cloudposse/atmos/cmd/aws/cloudformation/backend"
+	"github.com/cloudposse/atmos/cmd/aws/cloudformation/source"
+	"github.com/cloudposse/atmos/cmd/terraform/shared"
+	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
+)
+
+const (
+	flagAll      = "all"
+	flagAffected = "affected"
+	flagTags     = "tags"
+	flagLabels   = "labels"
+	// The valueTrue const is the string representation of a set boolean flag.
+	valueTrue = "true"
+
+	flagAutoApprove = "auto-approve"
+
+	// The msgSkipConfirmation const is the shared --auto-approve flag description
+	// across every mutating operation.
+	msgSkipConfirmation = "Skip interactive confirmation."
+
+	// The subCommandApply/subCommandDelete consts are the Operation-dispatch
+	// identifiers shared by the top-level apply/deploy and delete verbs, and by
+	// verb-group entries that reuse the same literal (e.g. `changeset delete`'s
+	// use name).
+	subCommandApply  = "apply"
+	subCommandDelete = "delete"
+)
+
+// Operation subcommand names, named so they're not repeated as raw string
+// literals across command registration, flag gating, and example text.
+const (
+	opRender   = "render"
+	opPlan     = "plan"
+	opDiff     = "diff"
+	opApply    = "apply"
+	opDeploy   = "deploy"
+	opDelete   = "delete"
+	opValidate = "validate"
+	opOutput   = "output"
+)
+
+const (
+	// The outputKeyFlag const is the key under which `output`'s optional second
+	// positional argument (a single Output key) reaches the executor.
+	outputKeyFlag = "key"
+
+	// The invokedVerbFlag const is the key under which a top-level alias verb
+	// (`plan`, `deploy`) reaches the executor, so CI summaries can name the verb
+	// the user ran instead of the shared dispatch identifier (`diff`, `apply`).
+	invokedVerbFlag = "invoked-verb"
+
+	// The flagSkipHooks const is the --skip-hooks flag name and the viper key
+	// pkg/hooks reads (hooks.ResolveSkipHooks).
+	flagSkipHooks = "skip-hooks"
+)
+
+var cloudFormationParser *flags.StandardParser
+
+// stackFlagCompletion reuses cmd/terraform/shared's generic stack-name
+// completion (component/stack listing is not terraform-specific despite the
+// package's name — cmd/aws/cloudformation/backend already reuses it verbatim
+// for the same reason). Package-local alias: cloudformation.go lives in
+// package cloudformation, a different package than cmd/aws/cloudformation/backend.
+var stackFlagCompletion = shared.StackFlagCompletion
+
+var (
+	cfnInitCliConfig     = cfg.InitCliConfig
+	cfnDescribeStacks    = e.ExecuteDescribeStacks
+	cfnListAllComponents = component.ListAllComponents
+)
+
+// CloudFormationCmd is the `atmos aws cloudformation` command group, mounted
+// under `atmos aws` alongside ecr/eks/security/compliance. The nested
+// Annotations-based experimental gate mirrors cmd/terraform/backend/backend.go:
+// no registry-level IsExperimental() change is needed, and `aws` itself (and
+// its other subcommands) stay stable.
+var CloudFormationCmd = &cobra.Command{
+	Use:     "cloudformation",
+	Aliases: []string{"cfn"},
+	Short:   "Manage native aws/cloudformation components",
+	Long:    "Deploy, inspect, and delete native aws/cloudformation stacks using the AWS SDK for Go v2. No external binary dependency.",
+	Example: `  atmos aws cloudformation apply vpc --stack=dev
+  atmos aws cloudformation deploy vpc --stack=dev
+  atmos aws cloudformation diff vpc --stack=dev
+  atmos aws cloudformation delete vpc --stack=dev
+  atmos aws cloudformation output vpc --stack=dev --format=json`,
+	Annotations: map[string]string{
+		"experimental": "true",
+	},
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		return cmd.Usage()
+	},
+}
+
+func init() {
+	cloudFormationParser = flags.NewStandardParser(flags.WithStackFlag(), flags.WithDryRunFlag())
+	cloudFormationParser.RegisterPersistentFlags(CloudFormationCmd)
+
+	if err := cloudFormationParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	CloudFormationCmd.AddCommand(newOperationCommand(opRender, opRender, "Render the template client-side without deploying or validating it"))
+	CloudFormationCmd.AddCommand(newOperationCommand(opPlan, opDiff, "Preview changes an apply would make"))
+	CloudFormationCmd.AddCommand(newOperationCommand(opDiff, opDiff, "Show changes an apply would make"))
+	CloudFormationCmd.AddCommand(newOperationCommand(opApply, subCommandApply, "Create or update the stack"))
+	CloudFormationCmd.AddCommand(newOperationCommand(opDeploy, subCommandApply, "Apply with --auto-approve"))
+	CloudFormationCmd.AddCommand(newOperationCommand(opDelete, subCommandDelete, "Delete the stack"))
+	CloudFormationCmd.AddCommand(newOperationCommand(opValidate, opValidate, "Validate the template server-side"))
+	outputCmd := newOperationCommand(opOutput, opOutput, "Show the deployed stack's Outputs")
+	outputCmd.Aliases = []string{"outputs"}
+	CloudFormationCmd.AddCommand(outputCmd)
+	CloudFormationCmd.AddCommand(newChangesetCmd())
+	CloudFormationCmd.AddCommand(newDriftCmd())
+	CloudFormationCmd.AddCommand(newGetCmd())
+	CloudFormationCmd.AddCommand(newStackSetCmd())
+	CloudFormationCmd.AddCommand(newOperationCommand("fmt", "fmt", "Format the local template in place (or check formatting with --check)"))
+	CloudFormationCmd.AddCommand(newOperationCommand("tree", "tree", "Render the nested-stack dependency tree"))
+	CloudFormationCmd.AddCommand(newOperationCommand("logs", "logs", "Show the combined event log across a stack and its nested stacks"))
+	CloudFormationCmd.AddCommand(newOperationCommand("watch", "watch", "Attach to a stack's in-progress (or already-terminal) operation and stream events"))
+	CloudFormationCmd.AddCommand(newListCmd())
+	CloudFormationCmd.AddCommand(source.GetSourceCommand())
+	CloudFormationCmd.AddCommand(backend.GetBackendCommand())
+}
+
+// newChangesetCmd is the `atmos aws cloudformation changeset` verb group: manual
+// control over changesets, complementing apply/deploy/diff's implicit flow.
+func newChangesetCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "changeset",
+		Short: "Manage aws/cloudformation changesets directly",
+		Long: "Create, inspect, execute, or delete changesets for a deployed CloudFormation stack.\n" +
+			"Use these commands to review a changeset before executing it or manage a named\n" +
+			"changeset separately from apply, deploy, and diff.",
+		Example: "  atmos aws cloudformation changeset create vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation changeset list vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation changeset execute vpc --stack plat-ue2-dev --changeset-name reviewed-change",
+		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Usage() },
+	}
+	cmd.AddCommand(newOperationCommand("create", "changeset-create", "Create a changeset and leave it for later review/execution"))
+	cmd.AddCommand(newOperationCommand("execute", "changeset-execute", "Execute a previously-created, named changeset"))
+	cmd.AddCommand(newOperationCommand("list", "changeset-list", "List a stack's changesets"))
+	cmd.AddCommand(newOperationCommand(subCommandDelete, "changeset-delete", "Delete a named changeset"))
+	return cmd
+}
+
+// newDriftCmd is the `atmos aws cloudformation drift` verb group.
+func newDriftCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "drift",
+		Short: "Detect and describe drift against a deployed stack",
+		Long: "Detect differences between a deployed CloudFormation stack's actual resource\n" +
+			"configuration and its template. Use detect to start drift detection and\n" +
+			"describe to inspect the most recent results.",
+		Example: "  atmos aws cloudformation drift detect vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation drift describe vpc --stack plat-ue2-dev",
+		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Usage() },
+	}
+	cmd.AddCommand(newOperationCommand("detect", "drift-detect", "Run drift detection against the deployed stack"))
+	cmd.AddCommand(newOperationCommand("describe", "drift-describe", "Show the results of the most recent drift detection"))
+	return cmd
+}
+
+// newGetCmd is the `atmos aws cloudformation get` verb group.
+func newGetCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "get",
+		Short: "Fetch a deployed stack's template or policy",
+		Long: "Fetch a deployed CloudFormation stack's template or stack policy from the\n" +
+			"CloudFormation API. To inspect the local template without contacting AWS,\n" +
+			"use render instead.",
+		Example: "  atmos aws cloudformation get template vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation get policy vpc --stack plat-ue2-dev",
+		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Usage() },
+	}
+	cmd.AddCommand(newOperationCommand("template", "get-template", "Fetch the deployed stack's template"))
+	cmd.AddCommand(newOperationCommand("policy", "get-policy", "Fetch the deployed stack's policy"))
+	return cmd
+}
+
+// newOperationCommand builds an `atmos aws cloudformation <use> [component]`
+// command (optionally nested under a verb group, e.g. `changeset create`).
+// Use is the cobra command name (what the user types); subCommand is the
+// internal Operation-dispatch identifier passed to provider.Execute (e.g.
+// "changeset-create") and to operationFlagOptions/getOperationFlags — they
+// differ for grouped verbs, where the same subCommand can be reached under a
+// friendlier use (e.g. "plan" and "diff" both dispatch as "diff").
+func newOperationCommand(use, subCommand, short string) *cobra.Command {
+	var parser *flags.StandardParser
+	long, example := operationHelpText(use, subCommand)
+	cmd := &cobra.Command{
+		Use:     use + " [component]",
+		Short:   short,
+		Long:    long,
+		Example: example,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Flag-combination errors are checked before parsing: the parser wraps
+			// every validator error as "invalid positional arguments", which is the
+			// wrong headline for a bad flag combination.
+			if err := validateFlagSelection(cmd); err != nil {
+				return err
+			}
+			parsed, err := parser.Parse(cmd.Context(), args)
+			if err != nil {
+				return err
+			}
+			return runOperation(cmd, subCommand, parsed.GetPositionalArgs())
+		},
+	}
+
+	options := operationFlagOptions(use, subCommand)
+	options = append(options, flags.WithConditionalCompletionPrompt(
+		"stack",
+		"Choose a stack",
+		stackFlagCompletion,
+		func(_ *flags.ParsedConfig) bool { return !hasSelectionFlags(cmd) },
+	))
+	options = append(options, flags.WithConditionalPositionalArgPrompt(
+		"component",
+		"Choose an aws/cloudformation component",
+		componentArgCompletion,
+		func(_ *flags.ParsedConfig) bool { return !hasSelectionFlags(cmd) },
+	))
+	parser = flags.NewStandardParser(options...)
+	specs, usage := operationPositionalArgs(cmd, use, subCommand)
+	parser.SetPositionalArgs(specs, validateOperationArgs, usage)
+	parser.RegisterFlags(cmd)
+	if skipHooksVerbs[subCommand] {
+		// Bind the parsed --skip-hooks (and ATMOS_SKIP_HOOKS) into viper, where
+		// pkg/hooks resolves it for the executor's before/after hooks.
+		if err := parser.BindToViper(viper.GetViper()); err != nil {
+			panic(err)
+		}
+	}
+	cmd.ValidArgsFunction = componentArgCompletion
+
+	return cmd
+}
+
+// operationPositionalArgs builds the positional-argument specs for an operation
+// command: the component, plus `output`'s optional Output key (which also
+// widens cmd.Use so the help shows it).
+func operationPositionalArgs(cmd *cobra.Command, use, subCommand string) ([]*flags.PositionalArgSpec, string) {
+	argsBuilder := flags.NewPositionalArgsBuilder()
+	argsBuilder.AddArg(&flags.PositionalArgSpec{
+		Name:           "component",
+		Description:    "aws/cloudformation component",
+		Required:       true,
+		TargetField:    "Component",
+		CompletionFunc: componentArgCompletion,
+		PromptTitle:    "Choose an aws/cloudformation component",
+	})
+	if subCommand == opOutput {
+		cmd.Use = use + " [component] [key]"
+		argsBuilder.AddArg(&flags.PositionalArgSpec{
+			Name:        outputKeyFlag,
+			Description: "Output key to print on its own",
+			Required:    false,
+			TargetField: "Key",
+		})
+	}
+	specs, _, usage := argsBuilder.Build()
+	return specs, usage
+}
+
+// operationFlagOptions returns the standard-parser options for an
+// aws/cloudformation operation command: the shared selection/affected flags
+// plus operation-specific flags. Use is the cobra command name (only needed to
+// distinguish apply's and deploy's differing --auto-approve default);
+// subCommand is the unique Operation-dispatch identifier every other switch
+// below keys on (use alone collides across verb groups, e.g. top-level
+// `delete` and `changeset delete`).
+func operationFlagOptions(use, subCommand string) []flags.Option {
+	options := []flags.Option{
+		// Registered locally (not just inherited from CloudFormationCmd's
+		// persistent --stack) so the missing-stack interactive prompt below can
+		// populate it: WithConditionalCompletionPrompt only takes effect for a
+		// flag registered on this same parser (see promptForSingleMissingFlag).
+		flags.WithStackFlag(),
+		// The root command's persistent --identity has no shorthand, so each verb registers the
+		// identity flag locally from the global flag registry. That is where -i comes from, the
+		// same -i/--identity pair `atmos terraform` and the backend verbs expose.
+		flags.WithIdentityFlag(),
+		flags.WithBoolFlag("ci", "", false, "Enable native CI integration (requires ci.enabled)."),
+		flags.WithBoolFlag(flagAll, "", false, "Process all aws/cloudformation components in dependency order."),
+		flags.WithBoolFlag(flagAffected, "", false, "Process affected aws/cloudformation components in dependency order."),
+		flags.WithBoolFlag("include-dependents", "", false, "Include dependent components when processing affected aws/cloudformation components."),
+		flags.WithStringFlag("repo-path", "", "", "Path to the already cloned target repository to use as the affected baseline."),
+		flags.WithStringFlag("base", "", "", "Git base ref or SHA to compare against for affected detection."),
+		flags.WithStringFlag("ref", "", "", "Git ref to compare against for affected detection."),
+		flags.WithStringFlag("sha", "", "", "Git SHA to compare against for affected detection."),
+		flags.WithStringFlag("ssh-key", "", "", "Path to the SSH private key used to clone the target ref for affected detection."),
+		flags.WithStringFlag("ssh-key-password", "", "", "Password for the SSH private key used to clone the target ref for affected detection."),
+		flags.WithBoolFlag("clone-target-ref", "", false, "Clone the target ref instead of checking it out in the current repository for affected detection."),
+		flags.WithStringSliceFlag(flagTags, "", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
+		flags.WithViperKey(flagTags, "aws.cloudformation.tags"),
+		flags.WithStringSliceFlag(flagLabels, "", nil, "Filter by labels (repeatable and/or comma-separated key=value or key:value pairs, matches all): --labels cost-center=platform --labels compliance=sox"),
+		flags.WithViperKey(flagLabels, "aws.cloudformation.labels"),
+	}
+	options = append(options, operationSpecificFlagOptions(use, subCommand)...)
+	if skipHooksVerbs[subCommand] {
+		options = append(options, skipHooksFlagOptions()...)
+	}
+	return options
+}
+
+// skipHooksVerbs are the verbs that fire lifecycle hooks (before/after
+// diff/apply/delete/drift/changeset-create/changeset-execute events) and therefore accept --skip-hooks.
+var skipHooksVerbs = map[string]bool{
+	opDiff:              true,
+	subCommandApply:     true,
+	subCommandDelete:    true,
+	"drift-detect":      true,
+	"drift-describe":    true,
+	"changeset-create":  true,
+	"changeset-execute": true,
+}
+
+// skipHooksFlagOptions registers --skip-hooks with the same semantics as
+// `atmos terraform` (see cmd/terraform/flags.go): --skip-hooks with no value
+// skips every hook for this invocation, --skip-hooks=a,b skips only the named
+// hooks. ATMOS_SKIP_HOOKS is the equivalent environment variable.
+func skipHooksFlagOptions() []flags.Option {
+	return []flags.Option{
+		flags.WithStringFlag(flagSkipHooks, "", "", "Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to skip all, or --skip-hooks=name1,name2 to skip specific hooks by name."),
+		flags.WithNoOptDefVal(flagSkipHooks, "*"),
+		flags.WithEnvVars(flagSkipHooks, "ATMOS_SKIP_HOOKS"),
+	}
+}
+
+// operationSpecificFlagOptions returns the flags specific to one operation,
+// split out of operationFlagOptions to keep its cyclomatic complexity low.
+func operationSpecificFlagOptions(use, subCommand string) []flags.Option {
+	switch subCommand {
+	case subCommandApply:
+		return []flags.Option{
+			flags.WithBoolFlag(flagAutoApprove, "", use == opDeploy, msgSkipConfirmation),
+			flags.WithStringFlag("target", "", "", "Provision target to deliver to. Defaults to provision.default, otherwise the implicit direct-deploy target."),
+		}
+	case subCommandDelete:
+		return []flags.Option{
+			flags.WithBoolFlag(flagAutoApprove, "", false, msgSkipConfirmation),
+			flags.WithStringSliceFlag("retain-resources", "", nil, "Logical IDs of resources to retain (only valid for a DELETE_FAILED stack)."),
+			flags.WithBoolFlag("disable-termination-protection", "", false, "Disable termination protection before deleting (never done silently)."),
+		}
+	case opOutput:
+		return []flags.Option{
+			flags.WithStringFlag("format", "", "table", "Output format: json|yaml|hcl|env|dotenv|bash|csv|tsv|table|github."),
+			flags.WithBoolFlag("flatten", "", false, "Flatten nested Outputs into compound keys."),
+			flags.WithBoolFlag("uppercase", "", false, "Uppercase Output keys."),
+		}
+	case "changeset-execute":
+		return []flags.Option{
+			flags.WithRequiredStringFlag("changeset-name", "", "Name of the changeset to execute."),
+			flags.WithBoolFlag(flagAutoApprove, "", false, msgSkipConfirmation),
+		}
+	case "changeset-delete":
+		return []flags.Option{
+			flags.WithRequiredStringFlag("changeset-name", "", "Name of the changeset to delete."),
+			flags.WithBoolFlag(flagAutoApprove, "", false, msgSkipConfirmation),
+		}
+	case "drift-detect":
+		return []flags.Option{
+			flags.WithBoolFlag("fail-on-drift", "", false, "Exit non-zero if drift is detected (for CI)."),
+		}
+	case "get-template":
+		return []flags.Option{
+			flags.WithBoolFlag("original", "", false, "Fetch the user-submitted template instead of the processed one."),
+		}
+	case "fmt":
+		return []flags.Option{
+			flags.WithBoolFlag("check", "", false, "Report whether the template is formatted without writing changes (non-zero exit if not)."),
+		}
+	default:
+		return phase3FlagOptions(subCommand)
+	}
+}
+
+// phase3FlagOptions returns flags specific to stackset/observability
+// operations, split out of operationSpecificFlagOptions to keep its
+// cyclomatic complexity low.
+func phase3FlagOptions(subCommand string) []flags.Option {
+	switch subCommand {
+	case "stackset-create", "stackset-update":
+		return []flags.Option{
+			flags.WithBoolFlag(flagAutoApprove, "", false, msgSkipConfirmation),
+			flags.WithStringFlag("target", "", "", "The `kind: aws/stackset` provision target to use. Required when more than one is declared."),
+		}
+	case "stackset-delete":
+		return []flags.Option{
+			flags.WithBoolFlag(flagAutoApprove, "", false, msgSkipConfirmation),
+		}
+	case "logs":
+		return []flags.Option{
+			flags.WithBoolFlag("chart", "", false, "Render a per-resource timeline instead of a flat chronological event list."),
+			flags.WithBoolFlag("follow", "f", false, "Continuously stream new events until interrupted (tail -f style)."),
+		}
+	default:
+		return nil
+	}
+}
+
+// validateLogsFollowChart rejects --follow combined with --chart. Only "logs"
+// registers either flag; on every other verb both resolve to false and this is
+// a no-op.
+func validateLogsFollowChart(cmd *cobra.Command) error {
+	follow, _ := cmd.Flags().GetBool("follow")
+	chart, _ := cmd.Flags().GetBool("chart")
+	if follow && chart {
+		return errUtils.ErrAwsCloudFormationLogsFollowChartExclusive
+	}
+	return nil
+}
+
+// validateIncludeDependents rejects --include-dependents when --affected isn't
+// also set. GraphSelectionForBulk only ever reads --include-dependents inside
+// its --affected branch, so passing it with --all or --tags/--labels-only
+// silently does nothing today — reject rather than let it look like it worked.
+func validateIncludeDependents(cmd *cobra.Command) error {
+	includeDependents, _ := cmd.Flags().GetBool("include-dependents")
+	affected, _ := cmd.Flags().GetBool(flagAffected)
+	if includeDependents && !affected {
+		return errUtils.ErrAwsCloudFormationIncludeDependentsRequiresAffected
+	}
+	return nil
+}
+
+// validateFlagCombinations rejects invalid flag combinations that aren't the
+// --all/--affected mutual-exclusion check (kept in validateFlagSelection since
+// it reads the all/affected values).
+func validateFlagCombinations(cmd *cobra.Command) error {
+	if err := validateLogsFollowChart(cmd); err != nil {
+		return err
+	}
+	return validateIncludeDependents(cmd)
+}
+
+// validateFlagSelection rejects invalid flag combinations and malformed
+// --labels before any parsing or prompting. Combination errors carry the
+// "invalid flag combination" headline and stay on one line.
+func validateFlagSelection(cmd *cobra.Command) error {
+	all, _ := cmd.Flags().GetBool(flagAll)
+	affected, _ := cmd.Flags().GetBool(flagAffected)
+	if all && affected {
+		return fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationInvalidFlagCombination, errUtils.ErrAwsCloudFormationFlagsMutuallyExclusive)
+	}
+	if err := validateFlagCombinations(cmd); err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationInvalidFlagCombination, err)
+	}
+
+	labelsFlag, _ := cmd.Flags().GetStringSlice(flagLabels)
+	if _, err := tags.ParseLabelsFlag(labelsFlag); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateOperationArgs validates the positional arguments against the
+// selection flags. Only output/outputs accepts an optional second positional
+// argument (the Output key to print); every other verb takes the component
+// alone.
+func validateOperationArgs(cmd *cobra.Command, args []string) error {
+	if hasSelectionFlags(cmd) {
+		return validateSelectionFlags(args)
+	}
+	maxArgs := 1
+	if cmd.Name() == opOutput {
+		maxArgs = 2
+	}
+	if len(args) < 1 || len(args) > maxArgs {
+		return errUtils.ErrAwsCloudFormationComponentArgRequired
+	}
+	return nil
+}
+
+func hasSelectionFlags(cmd *cobra.Command) bool {
+	all, _ := cmd.Flags().GetBool(flagAll)
+	affected, _ := cmd.Flags().GetBool(flagAffected)
+	tagsFlag, _ := cmd.Flags().GetStringSlice(flagTags)
+	labelsFlag, _ := cmd.Flags().GetStringSlice(flagLabels)
+	return all || affected || len(tagsFlag) > 0 || len(labelsFlag) > 0
+}
+
+func validateSelectionFlags(args []string) error {
+	if len(args) != 0 {
+		return errUtils.ErrAwsCloudFormationComponentArgWithSelection
+	}
+	return nil
+}
+
+// componentArgCompletion returns names for native aws/cloudformation
+// components, optionally limited to the selected stack.
+func componentArgCompletion(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	info := buildConfigAndStacksInfo(cmd)
+	atmosConfig, err := cfnInitCliConfig(info, true)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	stacksMap, err := cfnDescribeStacks(&atmosConfig, info.Stack, nil, []string{cfg.CloudFormationComponentType}, nil, false, false, false, false, nil, nil)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	components, err := cfnListAllComponents(cmd.Context(), cfg.CloudFormationComponentType, stacksMap)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return components, cobra.ShellCompDirectiveNoFileComp
+}
+
+func runOperation(cmd *cobra.Command, subCommand string, args []string) error {
+	info := initConfigAndStacksInfo(cmd, subCommand, args)
+	provider := component.MustGetProvider(cfg.CloudFormationComponentType)
+
+	return provider.Execute(&component.ExecutionContext{
+		ComponentType:       cfg.CloudFormationComponentType,
+		Component:           info.ComponentFromArg,
+		Stack:               info.Stack,
+		Command:             cfg.CloudFormationComponentType,
+		SubCommand:          subCommand,
+		ConfigAndStacksInfo: info,
+		Args:                args,
+		Flags:               operationFlags(cmd, subCommand, args),
+	})
+}
+
+// operationFlags returns the typed operation options for the provider, plus
+// `output`'s optional second positional argument (the single Output key to
+// print) under the "key" flag.
+func operationFlags(cmd *cobra.Command, subCommand string, args []string) map[string]any {
+	result := getOperationFlags(cmd)
+	if subCommand == opOutput && len(args) > 1 {
+		result[outputKeyFlag] = args[1]
+	}
+	if isTopLevelAliasVerb(cmd, subCommand) {
+		result[invokedVerbFlag] = cmd.Name()
+	}
+	return result
+}
+
+// isTopLevelAliasVerb reports whether cmd is a top-level verb that dispatches
+// under a different operation identifier, such as `plan` (dispatched as `diff`)
+// or `deploy` (dispatched as `apply`). Grouped verbs such as `changeset create`
+// also differ from their identifier, but they are not aliases of another verb.
+func isTopLevelAliasVerb(cmd *cobra.Command, subCommand string) bool {
+	return cmd.Name() != subCommand && cmd.Parent() == CloudFormationCmd
+}
+
+// getOperationFlags preserves typed operation options when dispatching Cobra commands to the component
+// provider.
+func getOperationFlags(cmd *cobra.Command) map[string]any {
+	result := make(map[string]any)
+	for _, name := range []string{flagAll, flagAffected, "ci", "include-dependents", "clone-target-ref", flagAutoApprove, "disable-termination-protection", "flatten", "uppercase", "fail-on-drift", "original", "check", "chart", "follow"} {
+		if flag := cmd.Flag(name); flag != nil {
+			result[name] = flag.Value.String() == valueTrue
+		}
+	}
+	for _, name := range []string{"repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "target", "format", "changeset-name"} {
+		if flag := cmd.Flag(name); flag != nil {
+			result[name] = flag.Value.String()
+		}
+	}
+	if retainFlag, err := cmd.Flags().GetStringSlice("retain-resources"); err == nil && len(retainFlag) > 0 {
+		result["retain-resources"] = retainFlag
+	}
+	return result
+}
+
+func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
+	v := viper.GetViper()
+	globalFlags := flags.ParseGlobalFlags(cmd, v)
+
+	info := schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		Identity:                cfg.NormalizeIdentityValue(globalFlags.Identity.Value()),
+		ProfilesFromArg:         globalFlags.Profile,
+		ProcessTemplates:        true,
+		ProcessFunctions:        true,
+	}
+
+	applySelectionFlags(cmd, &info)
+	return info
+}
+
+// applySelectionFlags applies the stack/dry-run/all/affected/tags/labels flags
+// onto info, split out of buildConfigAndStacksInfo to keep its cyclomatic
+// complexity low.
+func applySelectionFlags(cmd *cobra.Command, info *schema.ConfigAndStacksInfo) {
+	if stackFlag := cmd.Flag("stack"); stackFlag != nil && stackFlag.Value.String() != "" {
+		info.Stack = stackFlag.Value.String()
+	}
+	if set, dryRun := cloudFormationParser.IsBoolFlagExplicitlySet(cmd, "dry-run"); set {
+		info.DryRun = dryRun
+	}
+	if allFlag := cmd.Flag(flagAll); allFlag != nil && allFlag.Value.String() == valueTrue {
+		info.All = true
+	}
+	if affectedFlag := cmd.Flag(flagAffected); affectedFlag != nil && affectedFlag.Value.String() == valueTrue {
+		info.Affected = true
+	}
+	applyTagsAndLabelsFlags(cmd, info)
+}
+
+// applyTagsAndLabelsFlags applies the tags/labels selection flags onto info.
+func applyTagsAndLabelsFlags(cmd *cobra.Command, info *schema.ConfigAndStacksInfo) {
+	if tagsSlice, err := cmd.Flags().GetStringSlice(flagTags); err == nil {
+		info.Tags = tags.ParseTagsFlag(strings.Join(tagsSlice, ","))
+	}
+	if labelsSlice, err := cmd.Flags().GetStringSlice(flagLabels); err == nil {
+		// Error ignored: validateFlagSelection already rejected malformed --labels before RunE.
+		info.Labels, _ = tags.ParseLabelsFlag(labelsSlice)
+	}
+}
+
+func initConfigAndStacksInfo(cmd *cobra.Command, subCommand string, args []string) schema.ConfigAndStacksInfo {
+	info := buildConfigAndStacksInfo(cmd)
+	info.ComponentType = cfg.CloudFormationComponentType
+	info.SubCommand = subCommand
+	info.CliArgs = []string{cfg.CloudFormationComponentType, subCommand}
+	if len(args) > 0 {
+		info.ComponentFromArg = args[0]
+	}
+	return info
+}

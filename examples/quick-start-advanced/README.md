@@ -8,6 +8,15 @@ description: >-
 cast:
   file: /casts/examples/quick-start-advanced/list-instances.cast
   title: atmos quick start advanced
+related_docs:
+  - label: "Terraform commands"
+    url: /cli/commands/terraform/usage
+  - label: "Stack configuration"
+    url: /stacks
+  - label: "Quick Start"
+    url: /quick-start
+  - label: "Advanced Tutorial"
+    url: /quick-start/advanced
 ---
 
 # Atmos Quick Start (Advanced)
@@ -140,7 +149,7 @@ atmos terraform plan --all --labels tier=foundational -s plat-ue2-dev --use-mock
 
 ## Operator commands
 
-This example also registers operator-focused [custom commands](https://atmos.tools/core-concepts/custom-commands)
+This example also registers operator-focused [custom commands](https://atmos.tools/cli/configuration/commands)
 in `atmos.yaml`:
 
 ```shell

@@ -2,6 +2,7 @@ package merge
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -689,6 +690,48 @@ func TestCountDifferentLines_InsertionOnly(t *testing.T) {
 	}
 	if theirsChanged == 0 {
 		t.Error("expected non-zero changed-line count for an insertion-only diff (theirs)")
+	}
+}
+
+// TestCountDifferentLinesApprox_MatchesExactForSimpleDiff proves
+// countDifferentLinesApprox's multiset approximation agrees with the exact
+// LCS-based count for a diff that doesn't reorder any lines -- the case its
+// own doc comment claims exactness for.
+func TestCountDifferentLinesApprox_MatchesExactForSimpleDiff(t *testing.T) {
+	base := []string{"line 1", "line 2", "line 3"}
+	changed := []string{"line 1", "changed line 2", "line 3", "new line 4"}
+
+	exact := countDifferentLines(base, changed)
+	approx := countDifferentLinesApprox(base, changed)
+	if exact != approx {
+		t.Errorf("exact LCS count = %d, approx multiset count = %d; want them to agree for a non-reordering diff", exact, approx)
+	}
+}
+
+// TestCountDifferentLines_LargeInputUsesApproxFallback proves input beyond
+// maxLCSLines on either side routes through the O(m+n)
+// countDifferentLinesApprox fallback instead of allocating the exact
+// algorithm's O(m*n) LCS table -- see countDifferentLines's own doc comment
+// for why that table is unbounded memory risk at this size. Matching
+// countDifferentLinesApprox's own direct result (rather than asserting an
+// exact number) proves the fallback actually ran, without the test itself
+// hanging on the O(m*n) path if the guard regressed.
+func TestCountDifferentLines_LargeInputUsesApproxFallback(t *testing.T) {
+	base := make([]string, maxLCSLines+1)
+	changed := make([]string, maxLCSLines+1)
+	for i := range base {
+		base[i] = fmt.Sprintf("line %d", i)
+		changed[i] = base[i]
+	}
+	changed[0] = "changed line 0"
+
+	got := countDifferentLines(base, changed)
+	want := countDifferentLinesApprox(base, changed)
+	if got != want {
+		t.Errorf("countDifferentLines with %d lines = %d, want it to match countDifferentLinesApprox's %d", len(base), got, want)
+	}
+	if got == 0 {
+		t.Error("expected a non-zero changed-line count for a one-line diff")
 	}
 }
 

@@ -2,7 +2,7 @@
 
 **Status:** Proposed (Component Updater PR publishing is implemented separately)
 **Version:** 0.4
-**Last Updated:** 2026-07-30
+**Last Updated:** 2026-10-06
 **Author:** Atmos Team
 
 **Related PRDs:**
@@ -10,6 +10,7 @@
 - [Provisioner System](./provisioner-system.md)
 - [Source Provisioner](./source-provisioner.md)
 - [Custom Hooks](./custom-hooks.md)
+- [Local Git hook steps](./git-hook-steps.md)
 - [Native CI Integration](./native-ci-integration.md)
 - [Native Component Updater PR Workflow](./component-updater.md)
 - [Atmos Pro STS](./atmos-pro-sts.md)
@@ -36,7 +37,7 @@ The first concrete consumers are:
 1. Kubernetes components rendering manifests into deployment repositories for Argo CD and Flux.
 2. Terraform components committing generated artifacts in the current repository after lifecycle events such as `after.terraform.apply`, via a `git` hook kind.
 3. Native CI workflows using `atmos git clone` as an Atmos-aware replacement for GitHub clone/checkout action patterns.
-4. Local Git hooks using Atmos-managed `.git/hooks/*` shims that delegate to workflows or custom commands.
+4. Local Git hooks using Atmos-managed `.git/hooks/*` shims that run configured commands or inline step lists.
 
 V1 ships a single `cli` provider that shells out to the Git CLI. The Component Updater additionally registers a focused GitHub API pull-request publisher; its behavior is defined in the [Component Updater PRD](./component-updater.md), not as general provisioner PR support.
 
@@ -469,10 +470,15 @@ Uninstall behavior:
 Run behavior:
 
 1. Load Atmos config for the current repository.
-2. Resolve `git.hooks.<hook-name>.command`.
-3. Execute the configured command via the shared workflow/command dispatch (`workflow.CommandRunner`), inheriting ToolchainPATH, env, and identity behavior.
-4. Forward hook args **and stdin** (hooks such as `pre-push` and `pre-receive` receive their input on stdin, not argv).
-5. Propagate the command's exit code.
+2. Select exactly one of `git.hooks.<hook-name>.command` or a non-empty `steps` list.
+3. For commands, use the shared shell runner with the inherited process environment.
+    This path does not independently provision tools or assume an identity.
+4. Forward command-hook args **and stdin** (hooks such as `pre-push` and
+    `pre-receive` receive input on stdin, not argv), preserving subprocess exit behavior.
+5. For steps, use `step.AutomationLibrary.RunSteps` in-process. Embedded Starlark
+    scripts receive `ctx.args`; steps share results and environment changes and stop
+    on failure. Handler-specific stdin/TTY requirements still apply. Workflow
+    scheduler policies are rejected. See [Git-hook steps](git-hook-steps.md).
 6. Fail with `ErrGitHookNotConfigured` when the hook is not configured (see Error Handling).
 
 Because hook args are arbitrary strings that may look like flags (`commit-msg "$1"`), `hooks run` must disable Cobra flag parsing for trailing args (`DisableFlagParsing` with manual hook-name extraction, or `FParseErrWhitelist{UnknownFlags: true}`), following the existing passthrough-command precedent.
@@ -906,7 +912,7 @@ Command docs and config docs should cross-link following existing documentation 
 ### Phase 3: Local Git Hook Shims
 
 1. Add `atmos git hooks install` / `uninstall`.
-2. Add `atmos git hooks run` (dispatching through `workflow.CommandRunner`, forwarding args and stdin).
+2. Add `atmos git hooks run` (shared shell runner for commands; synchronous registered step runner for `steps`).
 3. Implement overwrite protection, `--force`, and the `core.hooksPath` warning.
 4. Keep local Git hooks separate from Atmos lifecycle events.
 
@@ -973,6 +979,9 @@ These tests should not require external network access.
 5. Generated hook scripts are executable and delegate to `atmos git hooks run <hook> "$@"`.
 6. `hooks run` forwards args and stdin to the configured command and propagates exit codes.
 7. Missing hook config fails clearly.
+8. Inline Starlark steps run in-process, preserve hook arguments, and share named outputs.
+9. Command/steps conflicts, empty definitions, duplicate names, and unsupported scheduling policies fail.
+10. Filesystem checks cover byte limits and tracked symlinks against working-tree contents.
 
 ### `git` Hook Kind Tests
 
@@ -1021,7 +1030,7 @@ Run focused tests for:
 1. **Inline repository config for `provision.git`?** No. V1 requires named repositories under `git.repositories`.
 2. **Default path when `provision.git.path` is omitted?** Purely XDG: artifacts stage to `$XDG_CACHE_HOME/atmos/git/artifacts/<component-type>/<stack>/<component>`. There is no repository-relative default; writing into a repository always requires an explicit `path`.
 3. **GitHub-only or provider-agnostic CI detection for no-arg clone?** Provider-agnostic from day one: the existing `pkg/ci` provider interface already supplies the needed metadata with a generic fallback.
-4. **How do Git hook commands execute?** Local Git hook shims dispatch through the existing `workflow.CommandRunner`; lifecycle-bound Git operations are a `pkg/hooks` kind using the existing hooks engine. No new execution mechanism is introduced.
+4. **How do Git hook commands execute?** Local Git hook shims dispatch through the shared shell runner for `command` or the automation step adapter for `steps`. Lifecycle-bound Git operations are a separate `pkg/hooks` kind. See [Git-hook steps](git-hook-steps.md) for the implemented contract.
 
 ## Open Questions
 

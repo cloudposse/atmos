@@ -2,7 +2,7 @@
 title: atmos validate
 sidebar_label: validate
 sidebar_class_name: command
-description: "Validate Atmos Configurations"
+description: "Catch configuration errors before they interrupt a deployment."
 ---
 import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
@@ -11,7 +11,8 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-Validate the entire project or target an individual Atmos validation command.
+Catch configuration errors before they interrupt a deployment. Run project checks locally or in CI
+to validate Atmos configuration, stack manifests, formatting rules, and GitHub Actions workflows.
 </Intro>
 
 Run `atmos validate` with no subcommand to validate the whole project. It runs configuration/schema validation, stack-manifest validation, EditorConfig validation, and GitHub Actions workflow validation in that order. Atmos runs every applicable check and then prints a pass/fail/skipped summary; it exits non-zero if any check fails.

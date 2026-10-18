@@ -193,6 +193,7 @@ func FindAllStackConfigsInPaths(
 	return absolutePaths, relativePaths, nil
 }
 
+// processEnvVars applies the ATMOS_* environment variable overrides to the Atmos configuration.
 func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "config.processEnvVars")()
 
@@ -304,6 +305,10 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	}
 
 	if err := normalizeConfiguredMocksMode(atmosConfig); err != nil {
+		return err
+	}
+
+	if err := normalizeConfiguredToolchainInstall(atmosConfig); err != nil {
 		return err
 	}
 
@@ -455,33 +460,25 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	jsonschemaBasePath := os.Getenv("ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH")
 	if len(jsonschemaBasePath) > 0 {
 		log.Debug("Set atmosConfig.Schemas[\"jsonschema\"] using ENV variable", "ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH", jsonschemaBasePath)
-		atmosConfig.Schemas["jsonschema"] = schema.ResourcePath{
-			BasePath: jsonschemaBasePath,
-		}
+		atmosConfig.SetResourcePath("jsonschema", schema.ResourcePath{BasePath: jsonschemaBasePath})
 	}
 
 	opaBasePath := os.Getenv("ATMOS_SCHEMAS_OPA_BASE_PATH")
 	if len(opaBasePath) > 0 {
 		log.Debug("Set atmosConfig.Schemas[\"opa\"] using ENV variable", "ATMOS_SCHEMAS_OPA_BASE_PATH", opaBasePath)
-		atmosConfig.Schemas["opa"] = schema.ResourcePath{
-			BasePath: opaBasePath,
-		}
+		atmosConfig.SetResourcePath("opa", schema.ResourcePath{BasePath: opaBasePath})
 	}
 
 	cueBasePath := os.Getenv("ATMOS_SCHEMAS_CUE_BASE_PATH")
 	if len(cueBasePath) > 0 {
 		log.Debug("Set atmosConfig.Schemas[\"cue\"] using ENV variable", "ATMOS_SCHEMAS_CUE_BASE_PATH", cueBasePath)
-		atmosConfig.Schemas["cue"] = schema.ResourcePath{
-			BasePath: cueBasePath,
-		}
+		atmosConfig.SetResourcePath("cue", schema.ResourcePath{BasePath: cueBasePath})
 	}
 
 	atmosManifestJsonSchemaPath := os.Getenv("ATMOS_SCHEMAS_ATMOS_MANIFEST")
 	if len(atmosManifestJsonSchemaPath) > 0 {
 		log.Debug("Set atmosConfig.Schemas[\"atmos\"] using ENV variable", "ATMOS_SCHEMAS_ATMOS_MANIFEST", atmosManifestJsonSchemaPath)
-		atmosConfig.Schemas["atmos"] = schema.SchemaRegistry{
-			Manifest: atmosManifestJsonSchemaPath,
-		}
+		atmosConfig.SetSchemaRegistry("atmos", schema.SchemaRegistry{Manifest: atmosManifestJsonSchemaPath})
 	}
 
 	tfAppendUserAgent := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT")
@@ -552,6 +549,31 @@ func normalizeConfiguredMocksMode(atmosConfig *schema.AtmosConfiguration) error 
 	}
 	atmosConfig.Components.Terraform.Mocks.Mode = mode
 	return nil
+}
+
+// normalizeConfiguredToolchainInstall lower-cases and validates toolchain.install as loaded from
+// atmos.yaml or ATMOS_TOOLCHAIN_INSTALL (bound through Viper), so a typo fails at config load
+// instead of being accepted silently until a tool is needed.
+func normalizeConfiguredToolchainInstall(atmosConfig *schema.AtmosConfiguration) error {
+	policy, err := normalizeInitEnumValue(string(atmosConfig.Toolchain.Install),
+		schema.ToolchainInstall.IsValid, errUtils.ErrInvalidToolchainInstall)
+	if err != nil {
+		return errUtils.Build(err).
+			WithHintf("Set `toolchain.install` (or `ATMOS_TOOLCHAIN_INSTALL`) to one of: %s", toolchainInstallValuesList()).
+			WithContext("value", string(atmosConfig.Toolchain.Install)).
+			Err()
+	}
+	atmosConfig.Toolchain.Install = policy
+	return nil
+}
+
+// toolchainInstallValuesList renders the valid toolchain.install values for hints.
+func toolchainInstallValuesList() string {
+	values := make([]string, 0, len(schema.ToolchainInstallValues))
+	for _, value := range schema.ToolchainInstallValues {
+		values = append(values, string(value))
+	}
+	return strings.Join(values, ", ")
 }
 
 // normalizeInitEnumValue trims and lower-cases value, then validates it with isValid, returning
@@ -882,29 +904,33 @@ func applyInitEnumFlag[T ~string](raw, flagName string, isValid func(T) bool, se
 	return nil
 }
 
+// setSchemaDirs applies the schema directory and manifest overrides from the command line to the Atmos configuration.
 func setSchemaDirs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.JsonSchemaDir) > 0 {
-		atmosConfig.Schemas["jsonschema"] = schema.ResourcePath{BasePath: configAndStacksInfo.JsonSchemaDir}
+		atmosConfig.SetResourcePath("jsonschema", schema.ResourcePath{BasePath: configAndStacksInfo.JsonSchemaDir})
 		log.Debug(cmdLineArg, JsonSchemaDirFlag, configAndStacksInfo.JsonSchemaDir)
 	}
 	if len(configAndStacksInfo.OpaDir) > 0 {
-		atmosConfig.Schemas["opa"] = schema.ResourcePath{BasePath: configAndStacksInfo.OpaDir}
+		atmosConfig.SetResourcePath("opa", schema.ResourcePath{BasePath: configAndStacksInfo.OpaDir})
 		log.Debug(cmdLineArg, OpaDirFlag, configAndStacksInfo.OpaDir)
 	}
 	if len(configAndStacksInfo.CueDir) > 0 {
-		atmosConfig.Schemas["cue"] = schema.ResourcePath{BasePath: configAndStacksInfo.CueDir}
+		atmosConfig.SetResourcePath("cue", schema.ResourcePath{BasePath: configAndStacksInfo.CueDir})
 		log.Debug(cmdLineArg, CueDirFlag, configAndStacksInfo.CueDir)
 	}
 	if len(configAndStacksInfo.AtmosManifestJsonSchema) > 0 {
-		atmosConfig.Schemas["atmos"] = schema.SchemaRegistry{
-			Manifest: configAndStacksInfo.AtmosManifestJsonSchema,
-		}
+		atmosConfig.SetSchemaRegistry("atmos", schema.SchemaRegistry{Manifest: configAndStacksInfo.AtmosManifestJsonSchema})
 		log.Debug(cmdLineArg, AtmosManifestJsonSchemaFlag, configAndStacksInfo.AtmosManifestJsonSchema)
 	}
 	return nil
 }
 
+// setLoggingConfig resolves log color and applies explicit command-line level and file overrides.
+// Invalid color or level values return an error instead of silently choosing a default.
 func setLoggingConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
+	if err := setLoggingColor(atmosConfig, configAndStacksInfo.LogsColor); err != nil {
+		return err
+	}
 	if len(configAndStacksInfo.LogsLevel) > 0 {
 		normalizedLevel, err := log.ParseLogLevel(configAndStacksInfo.LogsLevel)
 		if err != nil {

@@ -1,0 +1,85 @@
+components:
+  aws/cloudformation:
+    app:
+      path: template.yaml
+      stack_name: atmos-cfn-advanced-app-local
+      capabilities:
+        - CAPABILITY_IAM
+      parameters:
+        ArtifactBucket: "{{ .vars.artifact_bucket }}"
+        ArtifactKey: 'lambda/{{ getenv "ATMOS_DEMO_RELEASE" "v1" }}/handler.zip'
+      settings:
+        aws_cloudformation:
+          region: us-east-1
+      provision:
+        targets:
+          artifacts:
+            kind: aws/s3
+            bucket: "{{ .vars.artifact_bucket }}"
+            region: us-east-1
+      hooks:
+        build-and-publish:
+          events: [before.aws/cloudformation.apply]
+          kind: steps
+          on_failure: fail
+          with:
+            - name: build
+              type: shell
+              command: python3 build.py
+              env:
+                ATMOS_DEMO_RELEASE: '{{ getenv "ATMOS_DEMO_RELEASE" "v1" }}'
+            - name: build-summary
+              type: toast
+              level: info
+              content: |-
+                Built Lambda **{{ .atmos_component }}** ((· release {{ getenv "ATMOS_DEMO_RELEASE" "v1" }}))
+                → `components/cloudformation/app/.build/package/`
+            - name: test
+              type: shell
+              command: python3 -B -m unittest discover -s tests -v
+            - name: package
+              type: archive
+              source: .build/package/
+              destination: .build/handler.zip
+              mtime: epoch
+            - name: publish
+              type: publish
+              source: .build/handler.zip
+              destination: 'lambda/{{ getenv "ATMOS_DEMO_RELEASE" "v1" }}/handler.zip'
+              target: artifacts
+            - name: record-publish
+              type: script
+              interpreter: python3
+              script: |
+                import json
+                from pathlib import Path
+                result = {
+                    "changed": {{ "{{ .steps.publish.metadata.changed }}" }},
+                    "unchanged": {{ "{{ .steps.publish.metadata.unchanged }}" }},
+                }
+                Path(".build/publish.json").write_text(json.dumps(result))
+        validate:
+          events: [after.aws/cloudformation.apply]
+          kind: steps
+          on_failure: fail
+          with:
+            - name: endpoint
+              type: shell
+              command: >-
+                atmos --chdir=../../.. auth exec --identity local-aws --
+                python3 components/cloudformation/app/function_url.py
+            - name: response
+              type: http
+              url: '{{ "{{ .steps.endpoint.value }}" }}'
+              expect:
+                status: [200]
+                response:
+                  - '^\{"message": "hello from Atmos", "release": "{{ getenv "ATMOS_DEMO_RELEASE" "v1" }}"\}$'
+              timeout: 60s
+              retry:
+                max_attempts: 10
+                backoff_strategy: constant
+                initial_delay: 2s
+            - name: show-response
+              type: log
+              content: '{{ "{{ .steps.response.value }}" }}'

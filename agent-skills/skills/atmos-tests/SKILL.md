@@ -19,6 +19,7 @@ parallel/dependency, matrix, script/interpreter, and post-apply hook examples.
 Use [atmos-steps](../atmos-steps/SKILL.md) for shared step fields and the relevant
 surface skill: [custom commands](../atmos-custom-commands/SKILL.md),
 [workflows](../atmos-workflows/SKILL.md), or [hooks](../atmos-hooks/SKILL.md).
+For embedded Starlark script checks, also read [atmos-starlark](../atmos-starlark/SKILL.md).
 
 ## Authoring Process
 

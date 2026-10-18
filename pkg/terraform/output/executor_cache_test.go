@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/terraform/refcache"
 )
 
 func TestInvalidateComponentOutputs(t *testing.T) {
@@ -16,13 +18,13 @@ func TestInvalidateComponentOutputs(t *testing.T) {
 			ResetOutputsCache()
 			t.Cleanup(ResetOutputsCache)
 
-			key := stackComponentKey("us-east-1-dev", "vpc")
+			key := refcache.NewKey(nil, "us-east-1-dev", "vpc")
 			terraformOutputsCache.Store(key, outputs)
 			// Include names that would collide if invalidation joined them with a hyphen.
-			otherKeys := []string{
-				stackComponentKey("us-east-1", "dev-vpc"),
-				stackComponentKey("us-east-1-dev", "other"),
-				stackComponentKey("other", "vpc"),
+			otherKeys := []refcache.Key{
+				refcache.NewKey(nil, "us-east-1", "dev-vpc"),
+				refcache.NewKey(nil, "us-east-1-dev", "other"),
+				refcache.NewKey(nil, "other", "vpc"),
 			}
 			for _, otherKey := range otherKeys {
 				terraformOutputsCache.Store(otherKey, map[string]any{"vpc_id": "unchanged"})

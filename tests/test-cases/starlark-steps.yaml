@@ -1,0 +1,1341 @@
+# Regression cases for the embedded Starlark script interpreter (type: script, interpreter: starlark).
+# The fixture uses pure Starlark (no subprocess), so every case runs on every OS. Hook cases run a
+# real terraform plan and need tofu.
+tests:
+  - name: starlark workflow env scoping and dict output
+    enabled: true
+    snapshot: true
+    description: "Only the step's declared env is visible in env, and a dict output reaches the next step through .steps.<name>.value"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "basic"
+      - "--file"
+      - "starlark"
+    expect:
+      diff: []
+      stdout:
+        - 'env keys: \["STEP_INPUT"\]'
+        - 'next step sees: \{"answer":42,"declared":"from-step"\}'
+        - "decoded answer: 42"
+      exit_code: 0
+
+  - name: starlark workflow string output is raw
+    enabled: true
+    snapshot: true
+    description: "A string output is passed to the next step raw (abc), not JSON-quoted"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "output-string"
+      - "--file"
+      - "starlark"
+    expect:
+      diff: []
+      stdout:
+        - '\[abc\]'
+      exit_code: 0
+
+  - name: starlark workflow dry-run skips parallel child
+    enabled: true
+    snapshot: true
+    description: "A Starlark child of a parallel step is not executed under --dry-run (the child would fail() if it ran)"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "dryrun-parallel"
+      - "--file"
+      - "starlark"
+      - "--dry-run"
+    expect:
+      diff: []
+      stdout:
+        - !not "the child ran"
+      stderr:
+        - "summary: 1 succeeded, 0 failed"
+      exit_code: 0
+
+  - name: starlark workflow parallel child runs without dry-run
+    enabled: true
+    snapshot: false
+    description: "Negative path for the dry-run case: the same child does run without --dry-run and fails the workflow"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "dryrun-parallel"
+      - "--file"
+      - "starlark"
+    expect:
+      stderr:
+        - "summary: 0 succeeded, 1 failed"
+        - "the child ran, but it must be skipped under --dry-run"
+      exit_code: 1
+
+  - name: starlark workflow templates in parallel child
+    enabled: true
+    snapshot: true
+    description: "Go templates in script are rendered for a sequential step and for a child of type parallel"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "template-parallel"
+      - "--file"
+      - "starlark"
+    expect:
+      diff: []
+      stdout:
+        - "seq: rendered"
+        - "child: rendered"
+      exit_code: 0
+
+  - name: starlark workflow top-level for and if
+    enabled: true
+    snapshot: true
+    description: "Top-level for and if statements are allowed"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "dialect-allowed"
+      - "--file"
+      - "starlark"
+    expect:
+      diff: []
+      stdout:
+        - "region us-east-1"
+        - "region us-west-2"
+        - "mode is fast"
+      exit_code: 0
+
+  - name: starlark workflow global reassignment fails with hint
+    enabled: true
+    snapshot: true
+    description: "Reassigning a global fails and the error explains how to restructure the script"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "dialect-reassign"
+      - "--file"
+      - "starlark"
+    expect:
+      diff: []
+      stderr:
+        - "cannot reassign global x"
+        - "Starlark globals are assigned once"
+      exit_code: 1
+
+  - name: starlark workflow components.get in step and parallel child
+    enabled: true
+    snapshot: true
+    description: "components.get works in a sequential workflow step and in a parallel child, and the handle prints compactly"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "components-get"
+      - "--file"
+      - "starlark"
+    expect:
+      diff: []
+      stdout:
+        - 'seq handle: component\(name = "api", stack = "dev", type = "app"\)'
+        - 'seq vars: \{"image":"nginx:1.25","replicas":2,"stage":"dev"\}'
+        - 'child vars: \{"image":"nginx:1.25","replicas":2,"stage":"dev"\}'
+        - 'child settings: \{"team":"platform"\}'
+      exit_code: 0
+
+  - name: starlark command ctx.component
+    enabled: true
+    snapshot: true
+    description: "ctx.component in a component-scoped custom command prints compactly and exposes every attribute"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "sl"
+      - "comp"
+      - "api"
+      - "--stack"
+      - "dev"
+    expect:
+      diff: []
+      stdout:
+        - 'ctx.component: component\(name = "api", stack = "dev", type = "app"\)'
+        - "name=api stack=dev type=app impl=api"
+        - 'vars=\{"image":"nginx:1.25","replicas":2,"stage":"dev"\}'
+        - 'settings=\{"team":"platform"\}'
+        - 'env=\{"APP_ENV":"dev"\}'
+      exit_code: 0
+
+  - name: starlark command ctx.component in parallel child
+    enabled: true
+    snapshot: true
+    description: "ctx.component and components.get both resolve inside a parallel child of a component-scoped custom command"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "sl"
+      - "comp-parallel"
+      - "api"
+      - "--stack"
+      - "dev"
+    expect:
+      diff: []
+      stdout:
+        - 'child ctx.component: component\(name = "api", stack = "dev", type = "app"\)'
+        - 'child ctx.component.vars: \{"image":"nginx:1.25","replicas":2,"stage":"dev"\}'
+        - 'child components.get vars: \{"image":"nginx:1.25","replicas":2,"stage":"dev"\}'
+      exit_code: 0
+
+  - name: starlark command working_directory in parallel child
+    enabled: true
+    snapshot: true
+    description: "A parallel child honors the custom command working_directory: fs.read_file and load() resolve relative to it"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "sl-wd"
+    expect:
+      diff: []
+      stdout:
+        - "parallel child marker: marker-in-wd-sub"
+        - "parallel child load: mod loaded from wd/sub/lib"
+      exit_code: 0
+
+  - name: starlark command missing working_directory
+    enabled: true
+    snapshot: false
+    description: "A custom command whose working_directory does not exist fails before the script runs"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "sl-wd-missing"
+    expect:
+      stdout:
+        - !not "must not run"
+      stderr:
+        - "Invalid working_directory"
+        - "working directory does not exist"
+      exit_code: 1
+
+  - name: starlark workflow missing working_directory
+    enabled: true
+    snapshot: false
+    description: "A workflow step whose working_directory does not exist fails before the script runs"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "wd-missing"
+      - "--file"
+      - "starlark"
+    expect:
+      stdout:
+        - !not "must not run"
+      stderr:
+        - "failed to execute"
+        - "must name an existing directory"
+      exit_code: 1
+
+  - name: starlark workflow step retry re-runs the script
+    enabled: true
+    snapshot: true
+    description: "retry on a direct script step re-runs the Starlark script; the snapshot records one attempt line per attempt"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "retry-attempts"
+      - "--file"
+      - "starlark"
+    expect:
+      diff: []
+      stdout:
+        - "attempt output"
+      stderr:
+        - "max attempts \\(3\\) exceeded"
+      exit_code: 1
+
+  - name: starlark workflow exec failure message
+    enabled: true
+    snapshot: false
+    description: "A command that cannot start surfaces as an exec.run error naming the binary"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "exec-missing"
+      - "--file"
+      - "starlark"
+    expect:
+      stderr:
+        - "failed to start definitely-not-a-real-binary-xyz"
+        - "Error in exec.run"
+      exit_code: 1
+
+  - name: starlark workflow runtime error traceback
+    enabled: true
+    snapshot: true
+    description: "A runtime error (dict key miss) reports the message and a traceback through each frame"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "runtime-error"
+      - "--file"
+      - "starlark"
+    expect:
+      diff: []
+      stderr:
+        - 'key "missing" not in dict'
+        - "Traceback"
+        - "in <toplevel>"
+        - "in outer"
+        - "in inner"
+      exit_code: 1
+
+  - name: starlark workflow interpreter name is case-sensitive
+    enabled: true
+    snapshot: false
+    description: "interpreter: Starlark is not the embedded interpreter and the error suggests the right spelling"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "interpreter-case"
+      - "--file"
+      - "starlark"
+    expect:
+      stderr:
+        - "Did you mean starlark\\?"
+        - "case-sensitive"
+      exit_code: 1
+
+  - name: starlark workflow test suite tally
+    enabled: true
+    snapshot: false
+    description: "type: test suite with Starlark leaves: passing, fail(), parallel child, matrix expansion, and a skipped leaf"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "test-suite"
+      - "--file"
+      - "tests"
+    expect:
+      stderr:
+        - "expected at least 3 replicas, got 2"
+        - "parallel child assertion failed"
+        - "region eu-west-1 is not a US region"
+        - "passes( \\([0-9]+\\.[0-9]s\\))? \\[passed\\]"
+        - "par-pass( \\([0-9]+\\.[0-9]s\\))? \\[passed\\]"
+        - "region=us-east-1 \\[passed\\]"
+        - "region=eu-west-1 \\[failed\\]"
+        - "skipped \\[skipped\\]"
+        - "7/7 · 3 passed, 3 failed, 1 skipped, 0 canceled"
+      exit_code: 1
+
+  - name: starlark workflow test suite all pass
+    enabled: true
+    snapshot: false
+    description: "A type: test suite whose Starlark leaves all pass exits 0 with the tally"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "test-all-pass"
+      - "--file"
+      - "tests"
+    expect:
+      stderr:
+        - "2/2 · 2 passed, 0 failed, 0 skipped, 0 canceled"
+      exit_code: 0
+
+  - name: starlark hooks ctx.component and components.get
+    enabled: true
+    snapshot: false
+    description: "Step and steps hooks on a terraform component run Starlark: ctx.component prints compactly, components.get resolves another component, and a parallel hook step feeds the next hook step"
+    preconditions: ["tofu"]
+    workdir: "fixtures/scenarios/starlark-steps/"
+    sandbox: true
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "mock"
+      - "--stack"
+      - "dev"
+    expect:
+      stdout:
+        - 'hook env keys: \["HOOK_STEP"\]'
+        - 'hook ctx.component: component\(name = "mock", stack = "dev", type = "terraform"\)'
+        - "hook ctx.component.vars.message: hello-from-mock"
+        - 'hook components.get: component\(name = "api", stack = "dev", type = "app"\)'
+        - 'hook steps saw: \["a","b"\]'
+      exit_code: 0
+
+  - name: starlark hooks include loads sibling next to the included file
+    enabled: true
+    snapshot: false
+    description: "A step hook and a steps hook whose script is !include scripts/hooks/*.star resolve load() against the included file, not the component working directory"
+    preconditions: ["tofu"]
+    workdir: "fixtures/scenarios/starlark-steps/"
+    sandbox: true
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "mock"
+      - "--stack"
+      - "dev"
+    expect:
+      stderr:
+        - "hook include: hello from hooks/helpers.star, check.star"
+        - "hook steps include: hello from hooks/helpers.star, steps-check.star"
+      exit_code: 0
+
+  - name: starlark hooks include records script_source in describe output
+    enabled: true
+    snapshot: false
+    description: "describe component shows the project-relative script_source Atmos recorded next to a hook script that came from !include, for both a step and a steps hook"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "mock"
+      - "--stack"
+      - "dev"
+    expect:
+      stdout:
+        - 'script_source: scripts/hooks/check\.star'
+        - 'script_source: scripts/hooks/steps-check\.star'
+        - '(?s)script_source_sha256:[^\n]*\n?\s*[0-9a-f]{64}'
+      exit_code: 0
+
+  - name: starlark hooks inline override shows inherited provenance in describe output
+    enabled: true
+    snapshot: false
+    description: "A child stack that overrides only the script of an inherited hook keeps the base's script_source and script_source_sha256 in the merged describe output"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "mock"
+      - "--stack"
+      - "inherit"
+    expect:
+      stdout:
+        - '(?m)^\s*load\("helpers\.star", "greet"\)\r?\n\s*ui\.info\("hook inherited override: " \+ greet\("inline"\)\)\r?$'
+        - 'script_source: scripts/hooks/check\.star'
+        - 'script_source_sha256: '
+      exit_code: 0
+
+  - name: starlark hooks inline override ignores inherited script_source
+    enabled: true
+    snapshot: false
+    description: "The inline script a child stack substitutes for an inherited !include script resolves load() against the component working directory (decoy helpers.star), not against scripts/hooks"
+    preconditions: ["tofu"]
+    workdir: "fixtures/scenarios/starlark-steps/"
+    sandbox: true
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "mock"
+      - "--stack"
+      - "inherit"
+    expect:
+      stderr:
+        - "hook inherited override: hello from the component working directory, inline"
+      exit_code: 0
+
+  - name: starlark workflow include bare path loads sibling
+    enabled: true
+    snapshot: true
+    description: "A bare !include path resolves against the project base path and load() inside the included file resolves against that file"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "include-bare"
+      - "--file"
+      - "starlark"
+    expect:
+      diff: []
+      stdout:
+        - 'hello, main.star'
+      exit_code: 0
+
+  - name: starlark workflow include bare path from nested directory
+    enabled: true
+    snapshot: false
+    description: "The same workflow run from a nested directory gives the identical result: bare !include is base-path relative, not working-directory relative"
+    workdir: "fixtures/scenarios/starlark-steps/wd/sub"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "../.."
+    command: "atmos"
+    args:
+      - "workflow"
+      - "include-bare"
+      - "--file"
+      - "starlark"
+    expect:
+      stdout:
+        - 'hello, main.star'
+      exit_code: 0
+
+  - name: starlark workflow include dot path from nested directory
+    enabled: true
+    snapshot: false
+    description: "A ./ !include path resolves against the workflow manifest and its load() of ../ resolves against the included file, wherever Atmos runs from"
+    workdir: "fixtures/scenarios/starlark-steps/wd/sub"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "../.."
+    command: "atmos"
+    args:
+      - "workflow"
+      - "include-dot"
+      - "--file"
+      - "starlark"
+    expect:
+      stdout:
+        - 'hello, local.star'
+      exit_code: 0
+
+  - name: starlark workflow include in parallel child
+    enabled: true
+    snapshot: false
+    description: "A child of a parallel step keeps the file its included script came from"
+    workdir: "fixtures/scenarios/starlark-steps/wd/sub"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "../.."
+    command: "atmos"
+    args:
+      - "workflow"
+      - "include-parallel"
+      - "--file"
+      - "starlark"
+    expect:
+      stdout:
+        - 'hello, main.star'
+      exit_code: 0
+
+  - name: starlark workflow include traceback names the file
+    enabled: true
+    snapshot: true
+    description: "A runtime error in an included file names that file and the correct line in the traceback"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "include-traceback"
+      - "--file"
+      - "starlark"
+    expect:
+      diff: []
+      stderr:
+        - 'scripts[/\\]boom\.star:7:8: in'
+        - 'scripts[/\\]boom\.star:4:18: in'
+        - 'list index 5 out of range'
+      exit_code: 1
+
+  - name: starlark workflow inline load uses working_directory
+    enabled: true
+    snapshot: false
+    description: "load() in an inline script still resolves against the step working_directory"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "inline-load"
+      - "--file"
+      - "starlark"
+    expect:
+      stdout:
+        - 'inline load: mod loaded from wd/sub/lib'
+      exit_code: 0
+
+  - name: starlark workflow task timeout
+    enabled: true
+    snapshot: false
+    description: "A pure Starlark task that never returns is stopped by its timeout and fails the step"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "timeout-task"
+      - "--file"
+      - "starlark"
+    expect:
+      stderr:
+        - 'task "spin" timed out after 200ms'
+      exit_code: 1
+
+  - name: starlark custom command include loads sibling from nested directory
+    enabled: true
+    snapshot: false
+    description: "A custom command script from !include resolves its bare path against the project base path and its load() against that file, from a nested directory"
+    workdir: "fixtures/scenarios/starlark-steps/wd/sub"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "../.."
+    command: "atmos"
+    args:
+      - "sl-inc"
+    expect:
+      stdout:
+        - 'hello, main.star'
+      exit_code: 0
+
+  - name: starlark custom command include in parallel child
+    enabled: true
+    snapshot: false
+    description: "A parallel child of a custom command keeps the file its !include script came from"
+    workdir: "fixtures/scenarios/starlark-steps/wd/sub"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "../.."
+    command: "atmos"
+    args:
+      - "sl-inc-parallel"
+    expect:
+      stdout:
+        - 'hello, main.star'
+      exit_code: 0
+
+  - name: starlark log builtin hidden below the log level
+    enabled: true
+    snapshot: false
+    description: "log.info is shown and log.debug is hidden at the Info log level; neither reaches stdout"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    env:
+      ATMOS_LOGS_LEVEL: Info
+    command: "atmos"
+    args:
+      - "workflow"
+      - "log-levels"
+      - "--file"
+      - "starlark"
+    expect:
+      stdout:
+        - "data-marker"
+        - !not "log-info-marker"
+        - !not "log-debug-marker"
+      stderr:
+        - "log-info-marker"
+        - "attempts=2"
+        - !not "log-debug-marker"
+      exit_code: 0
+
+  - name: starlark log builtin shows debug at the Debug log level
+    enabled: true
+    snapshot: false
+    description: "log.debug and log.info both reach the log stream at the Debug level and never stdout"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    env:
+      ATMOS_LOGS_LEVEL: Debug
+    command: "atmos"
+    args:
+      - "workflow"
+      - "log-levels"
+      - "--file"
+      - "starlark"
+    expect:
+      stdout:
+        - "data-marker"
+        - !not "log-info-marker"
+        - !not "log-debug-marker"
+      stderr:
+        - "log-debug-marker"
+        - "component=api"
+        - "log-info-marker"
+        - "step=diag"
+      exit_code: 0
+
+
+  # ---------------------------------------------------------------------------------------------
+  # Step library, process cleanup, retry conditions, selective !starlark evaluation, and hook
+  # recursion (WP5).
+  # ---------------------------------------------------------------------------------------------
+
+  - name: starlark steps library rejects a field of another step type (shell url)
+    enabled: true
+    snapshot: false
+    description: "steps.shell(url=...) used to be accepted and ignored; the error names the step type and lists the valid fields"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-steps'
+      - 'shell-foreign-field'
+    expect:
+      stderr:
+        - 'unknown field "url" for step type "shell"'
+        - 'valid\s+fields:\s+command'
+      exit_code: 1
+
+  - name: starlark steps library rejects a field of another step type (join command)
+    enabled: true
+    snapshot: false
+    description: "steps.join(command=...) used to be accepted and ignored"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-steps'
+      - 'join-foreign-field'
+    expect:
+      stderr:
+        - 'unknown field "command" for step type "join"'
+      exit_code: 1
+
+  - name: starlark steps library rejects a misspelled field on sleep
+    enabled: true
+    snapshot: false
+    description: "sleep keeps naming its valid fields"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-steps'
+      - 'sleep-bogus'
+    expect:
+      stderr:
+        - 'unknown field "bogus" for step type "sleep"'
+      exit_code: 1
+
+  - name: starlark steps library still reports scheduler policies with their own message
+    enabled: true
+    snapshot: false
+    description: "A policy field such as needs is not an unknown field; it keeps the message that says where it is supported"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-steps'
+      - 'workflow-only'
+    expect:
+      stderr:
+        - 'needs is not supported in a direct step call'
+        - !not 'unknown field'
+      exit_code: 1
+
+  - name: starlark steps library capture output points at exec.run
+    enabled: true
+    snapshot: false
+    description: "steps.shell(output=capture) lists the valid step output modes and says to use exec.run(output=capture)"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-steps'
+      - 'shell-capture'
+    expect:
+      stderr:
+        - 'invalid step output mode'
+        - 'raw, log, viewport, none'
+        - 'exec\.run\(argv, output="capture"\)'
+      exit_code: 1
+
+  - name: starlark steps library runs a shell step
+    enabled: true
+    snapshot: false
+    description: "A declared field set still works end to end"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-steps'
+      - 'shell-stream'
+    expect:
+      stdout:
+        - 'hi-stream'
+        - 'metadata=\{"exit_code":0'
+      exit_code: 0
+
+  - name: starlark steps library runs a step through steps.run
+    enabled: true
+    snapshot: false
+    description: "steps.run dispatches by type name"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-steps'
+      - 'run-shell'
+    expect:
+      stdout:
+        - 'hi-run'
+      exit_code: 0
+
+  - name: starlark steps library passes a prompt default
+    enabled: true
+    snapshot: false
+    description: "input and confirm return their defaults without a terminal"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-steps'
+      - 'input-default'
+    expect:
+      stdout:
+        - 'value="api"'
+      exit_code: 0
+
+  - name: starlark steps library prompt without a default needs a terminal
+    enabled: true
+    snapshot: false
+    description: "The error says a default makes the step run without a terminal"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-steps'
+      - 'input-nodefault'
+    expect:
+      stderr:
+        - 'interactive terminal required for step'
+        - 'Set default: on the step'
+      exit_code: 1
+
+  - name: starlark steps library join builds a value
+    enabled: true
+    snapshot: false
+    description: "steps.join returns the joined options"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-steps'
+      - 'join'
+    expect:
+      stdout:
+        - 'value="a,b"'
+      exit_code: 0
+
+  - name: starlark steps library reports a failing command
+    enabled: true
+    snapshot: false
+    description: "A failing shell step raises with the command exit code"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-steps'
+      - 'shell-failing'
+    expect:
+      stderr:
+        - 'subcommand exited with code 4'
+      exit_code: 4
+
+  - name: starlark steps library wait-all needs the workflow executor
+    enabled: true
+    snapshot: false
+    description: "Background control steps are not available in direct calls"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-steps'
+      - 'wait-all'
+    expect:
+      stderr:
+        - 'wait-all steps require workflow executor context'
+      exit_code: 1
+
+  - name: starlark steps library unknown type
+    enabled: true
+    snapshot: false
+    description: "steps.run of an unregistered type fails"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-steps'
+      - 'run-nonexistent'
+    expect:
+      stderr:
+        - 'unknown step type: nonexistent'
+      exit_code: 1
+
+  - name: starlark steps library nested script step
+    enabled: true
+    snapshot: false
+    description: "A script step can run a script step"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-steps'
+      - 'nested-script'
+    expect:
+      stdout:
+        - 'value="1\\n"'
+      exit_code: 0
+
+  - name: starlark steps library shell timeout is a step timeout
+    enabled: true
+    snapshot: false
+    description: "steps.shell(timeout=) maps the overrun to the step timeout with the step name, type, and duration"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    skip:
+      os: windows
+    command: "atmos"
+    args:
+      - 'ft-steps'
+      - 'shell-timeout'
+    expect:
+      stderr:
+        - 'step timed out'
+        - "Step 'nap' \\(type shell\\) did not finish within its timeout of 300ms"
+        - !not 'context deadline exceeded context deadline exceeded'
+      exit_code: 1
+
+  - name: starlark steps library atmos timeout is a step timeout
+    enabled: true
+    snapshot: false
+    description: "steps.atmos(timeout=) maps the overrun to the step timeout"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-steps'
+      - 'atmos-timeout'
+    expect:
+      stderr:
+        - 'step timed out'
+        - "Step 'nested' \\(type atmos\\) did not finish within its timeout of 1ms"
+      exit_code: 1
+
+  - name: starlark custom command script timeout is a step timeout
+    enabled: true
+    snapshot: false
+    description: "The custom command ft-timeout reports the step timeout naming the step and its type"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    skip:
+      os: windows
+    command: "atmos"
+    args:
+      - 'ft-timeout'
+    expect:
+      stderr:
+        - 'step timed out'
+        - "Step 'slow' \\(type script\\) did not finish within its timeout of 1s"
+      exit_code: 1
+
+  - name: starlark steps library typo of wait-all is a Starlark error
+    enabled: true
+    snapshot: false
+    description: "steps.wait-all() is a subtraction, not the step"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-wait-all-typo'
+    expect:
+      stderr:
+        - 'all: got 0 arguments, want 1'
+      exit_code: 1
+
+  - name: starlark retry conditions without conditions retry every failure
+    enabled: true
+    snapshot: false
+    description: "No conditions keeps the old behavior: all three attempts run"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-retry-conditions'
+      - 'no-conditions'
+    expect:
+      stdout:
+        - '(?s)wp5-attempt.*wp5-attempt.*wp5-attempt'
+      stderr:
+        - 'max attempts \(3\) exceeded'
+      exit_code: 1
+
+  - name: starlark retry conditions that match stderr retry
+    enabled: true
+    snapshot: false
+    description: "A condition matching the attempt's stderr retries to the limit"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-retry-conditions'
+      - 'stderr-match'
+    expect:
+      stdout:
+        - '(?s)wp5-attempt.*wp5-attempt.*wp5-attempt'
+      stderr:
+        - 'max attempts \(3\) exceeded'
+      exit_code: 1
+
+  - name: starlark retry conditions that match stdout retry
+    enabled: true
+    snapshot: false
+    description: "A condition matching the attempt's stdout retries"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-retry-conditions'
+      - 'stdout-match'
+    expect:
+      stdout:
+        - '(?s)wp5-attempt.*wp5-attempt.*wp5-attempt'
+      exit_code: 1
+
+  - name: starlark retry conditions that match the error text retry
+    enabled: true
+    snapshot: false
+    description: "A condition matching the error text (exit code) retries"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-retry-conditions'
+      - 'error-text-match'
+    expect:
+      stdout:
+        - '(?s)wp5-attempt.*wp5-attempt.*wp5-attempt'
+      exit_code: 1
+
+  - name: starlark retry conditions that match nothing stop at the first failure
+    enabled: true
+    snapshot: false
+    description: "Negative path: a failure no condition matches is not retried and is not a retry-exhaustion error"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-retry-conditions'
+      - 'never-matches'
+    expect:
+      stdout:
+        - 'wp5-attempt'
+        - !not '(?s)wp5-attempt.*wp5-attempt'
+      stderr:
+        - 'subcommand exited with code 1'
+        - !not 'max attempts'
+      exit_code: 1
+
+  - name: starlark retry conditions reject an invalid pattern before running
+    enabled: true
+    snapshot: false
+    description: "An invalid regular expression is a configuration error and the step does not run"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-retry-conditions'
+      - 'invalid-pattern'
+    expect:
+      stdout:
+        - !not 'wp5-attempt'
+      stderr:
+        - 'invalid retry condition pattern'
+      exit_code: 1
+
+  - name: starlark retry with initial_delay succeeds on the third attempt
+    enabled: true
+    snapshot: false
+    description: "ft-retry-flaky fails twice and passes on attempt three"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    skip:
+      os: windows
+    command: "atmos"
+    args:
+      - 'ft-retry-flaky-run'
+    expect:
+      stdout:
+        - 'attempt 1'
+        - 'attempt 2'
+        - 'succeeded on attempt 3'
+      exit_code: 0
+
+  - name: starlark shell step timeout leaves no process behind
+    enabled: true
+    snapshot: false
+    description: "A shell step running sh -c 'sleep 300.77 & wait' with timeout 1s must not leave the sleep running, and atmos must return"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    skip:
+      os: windows
+    command: "atmos"
+    args:
+      - 'ft-shell-orphans'
+    expect:
+      stdout:
+        - 'NO-SURVIVORS'
+        - !not 'SURVIVORS-FOUND'
+      exit_code: 0
+
+  - name: starlark atmos wrapper lists components
+    enabled: true
+    snapshot: false
+    description: "atmos.list returns parsed data"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-atmos'
+      - 'list-components'
+    expect:
+      stdout:
+        - 'type\(data\)=list'
+        - '"Component": "mock"'
+      exit_code: 0
+
+  - name: starlark atmos wrapper describes a component
+    enabled: true
+    snapshot: false
+    description: "atmos.describe returns the component vars"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-atmos'
+      - 'describe-vars'
+    expect:
+      stdout:
+        - 'vars=\{"message":"hello-from-mock","stage":"dev"\}'
+      exit_code: 0
+
+  - name: starlark atmos wrapper reads config with a positional path
+    enabled: true
+    snapshot: false
+    description: "atmos.config get returns the value"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-atmos'
+      - 'config-positional'
+    expect:
+      stdout:
+        - 'exit_code=0'
+        - 'data="\./"'
+      exit_code: 0
+
+  - name: starlark atmos wrapper runs an argv
+    enabled: true
+    snapshot: false
+    description: "atmos.run captures the nested command"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-atmos'
+      - 'run-version'
+    expect:
+      stdout:
+        - 'exit_code=0'
+        - 'Atmos'
+      exit_code: 0
+
+  - name: starlark atmos wrapper rejects an unknown subcommand
+    enabled: true
+    snapshot: false
+    description: "atmos.nonexistent is not a module member"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - 'ft-atmos'
+      - 'nonexistent'
+    expect:
+      stderr:
+        - 'module has no \.nonexistent field or method'
+      exit_code: 1
+
+  - name: starlark selective evaluation reads only the vars the script names
+    enabled: true
+    snapshot: false
+    description: "A settings-only query evaluates the !starlark value that reads ctx.vars[label] without running the sibling vars.guard (!exec exit 3)"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    env:
+      ATMOS_STACKS_INCLUDED_PATHS: 'ft/selective.yaml'
+    args:
+      - 'describe'
+      - 'component'
+      - 'static-read'
+      - '-s'
+      - 'selective'
+      - '--query'
+      - '.settings'
+    expect:
+      stdout:
+        - 'note: plain-selective'
+        - 'by_get: plain-get'
+      exit_code: 0
+
+  - name: starlark selective evaluation list instances skips unrelated values
+    enabled: true
+    snapshot: false
+    description: "list instances with a settings column evaluates the !starlark note and leaves vars.guard alone"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    env:
+      ATMOS_STACKS_INCLUDED_PATHS: 'ft/selective.yaml'
+    args:
+      - 'list'
+      - 'instances'
+      - '--columns'
+      - 'Note={{.settings.note}}'
+      - '--columns'
+      - 'Component={{.component}}'
+    expect:
+      stdout:
+        - 'plain-selective\s+static-read'
+        - 'plain\s+no-starlark'
+      exit_code: 0
+
+  - name: starlark selective evaluation describe stacks sections skips unrelated values
+    enabled: true
+    snapshot: false
+    description: "describe stacks --sections settings does not run vars.guard because the script only reads one var"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    env:
+      ATMOS_STACKS_INCLUDED_PATHS: 'ft/selective.yaml'
+    args:
+      - 'describe'
+      - 'stacks'
+      - '--sections'
+      - 'settings'
+    expect:
+      stdout:
+        - 'note: plain-selective'
+      exit_code: 0
+
+  - name: starlark selective evaluation still evaluates the section that is asked for
+    enabled: true
+    snapshot: false
+    description: "Negative path: asking for vars evaluates vars.guard, which fails with exit code 3"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    env:
+      ATMOS_STACKS_INCLUDED_PATHS: 'ft/selective.yaml'
+    args:
+      - 'describe'
+      - 'component'
+      - 'static-read'
+      - '-s'
+      - 'selective'
+      - '--query'
+      - '.vars'
+    expect:
+      stderr:
+        - 'subcommand exited with code 3'
+      exit_code: 3
+
+  - name: starlark selective evaluation falls back to full evaluation for a whole-section read
+    enabled: true
+    snapshot: false
+    description: "json.encode(ctx.vars) cannot be bounded statically, so vars.guard runs and fails"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    env:
+      ATMOS_STACKS_INCLUDED_PATHS: 'ft/dynamic.yaml'
+    args:
+      - 'describe'
+      - 'component'
+      - 'dynamic-read'
+      - '-s'
+      - 'dynamic'
+      - '--query'
+      - '.settings'
+    expect:
+      stderr:
+        - 'vars\.guard'
+        - 'subcommand exited with code 3'
+      exit_code: 3
+
+  - name: starlark selective evaluation of a component without starlark is unchanged
+    enabled: true
+    snapshot: false
+    description: "A component with no !starlark never evaluated vars.guard for a settings query"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    env:
+      ATMOS_STACKS_INCLUDED_PATHS: 'ft/selective.yaml'
+    args:
+      - 'describe'
+      - 'component'
+      - 'no-starlark'
+      - '-s'
+      - 'selective'
+      - '--query'
+      - '.settings'
+    expect:
+      stdout:
+        - 'note: plain'
+      exit_code: 0
+
+  - name: starlark hook depth is exported to the hook's commands
+    enabled: true
+    snapshot: false
+    description: "A hook runs one level deeper than the command that triggered it and exports ATMOS_HOOK_DEPTH"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    preconditions: ["tofu"]
+    sandbox: true
+    command: "atmos"
+    env:
+      ATMOS_STACKS_INCLUDED_PATHS: 'ft/hook-depth.yaml'
+    args:
+      - 'terraform'
+      - 'plan'
+      - 'mock-depth'
+      - '-s'
+      - 'depth'
+    expect:
+      stdout:
+        - 'hook depth: 1'
+      exit_code: 0
+
+  - name: starlark hook depth counts up from the inherited level
+    enabled: true
+    snapshot: false
+    description: "A nested command that inherits ATMOS_HOOK_DEPTH=7 runs its hook at level 8"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    preconditions: ["tofu"]
+    sandbox: true
+    command: "atmos"
+    env:
+      ATMOS_STACKS_INCLUDED_PATHS: 'ft/hook-depth.yaml'
+      ATMOS_HOOK_DEPTH: '7'
+    args:
+      - 'terraform'
+      - 'plan'
+      - 'mock-depth'
+      - '-s'
+      - 'depth'
+    expect:
+      stdout:
+        - 'hook depth: 8'
+      exit_code: 0
+
+  - name: starlark hook depth stops at the recursion limit
+    enabled: true
+    snapshot: false
+    description: "At depth 8 the hook does not run: the error names the hook and the event"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    preconditions: ["tofu"]
+    sandbox: true
+    command: "atmos"
+    env:
+      ATMOS_STACKS_INCLUDED_PATHS: 'ft/hook-depth.yaml'
+      ATMOS_HOOK_DEPTH: '8'
+    args:
+      - 'terraform'
+      - 'plan'
+      - 'mock-depth'
+      - '-s'
+      - 'depth'
+    expect:
+      stdout:
+        - !not 'hook depth'
+      stderr:
+        - 'hook recursion limit exceeded'
+        - 'report-depth'
+        - 'before\.terraform\.plan'
+      exit_code: 1
+
+  - name: starlark atmos.yaml rejects the !starlark tag
+    enabled: true
+    snapshot: false
+    description: "!starlark is only evaluated in stack manifests; the error names the config file and the key"
+    workdir: "fixtures/scenarios/starlark-steps/"
+    command: "atmos"
+    args:
+      - '--config'
+      - 'configs/starlark-in-config.yaml'
+      - 'config'
+      - 'get'
+      - 'settings.note'
+    expect:
+      stderr:
+        - '!starlark is not supported in atmos\.yaml'
+        - 'starlark-in-config\.yaml'
+        - 'settings\.note'
+      exit_code: 1

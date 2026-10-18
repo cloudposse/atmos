@@ -2,7 +2,7 @@
 title: atmos workflow
 sidebar_label: workflow
 sidebar_class_name: command
-description: Use this command to perform sequential execution of `atmos`, `shell`, and `script` commands defined as workflow steps.
+description: "Turn recurring tasks—such as setting up a development environment, validating changes, or deploying infrastructure—into named workflows your team can run with one command."
 ---
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
@@ -12,7 +12,9 @@ import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
-Use this command to perform sequential execution of `atmos`, `shell`, and `script` commands defined as workflow steps.
+Turn recurring tasks—such as setting up a development environment, validating changes, or deploying
+infrastructure—into named workflows your team can run with one command. Combine Atmos commands,
+shell commands, scripts, and other step types in reusable automation.
 </Intro>
 
 <DemoVideo id="workflow-run" title="atmos workflow" showCaption={false} />
@@ -97,6 +99,12 @@ Pass `--tags` and `--labels` to apply the existing component selectors to every 
 atmos workflow deploy --tags networking --labels deployment:dev
 ```
 
+Combine multiple selectors in one comma-separated `--labels` value:
+
+```shell
+atmos workflow deploy --tags networking --labels deployment:dev,cost-center:platform
+```
+
 For example, a step with `command: terraform apply --include-dependencies` receives both selectors and lets the Terraform command select the matching components.
 
 ### Inline Script Step
@@ -178,7 +186,7 @@ Run `atmos workflow --help` to see all the available options
   <dd>Component tag selector. Tags match any provided value and are forwarded to every `type: atmos` workflow step.</dd>
 
   <dt>`--labels` <em>(optional)</em></dt>
-  <dd>Component label selector. Labels match all provided key-value pairs and are forwarded to every `type: atmos` workflow step.</dd>
+  <dd>Component label selector. Labels match all provided key-value pairs (comma-separated in one flag value) and are forwarded to every `type: atmos` workflow step.</dd>
 
   <dt>`--from-step` <em>(optional)</em></dt>
   <dd>Start the workflow from the named step.</dd>

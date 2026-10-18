@@ -21,6 +21,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestFindAffected verifies affected detection across current and remote stacks for the table of scenarios.
 func TestFindAffected(t *testing.T) {
 	tests := []struct {
 		name                        string
@@ -271,7 +272,7 @@ func TestFindAffected(t *testing.T) {
 				tt.includeSpaceliftAdminStacks,
 				tt.includeSettings,
 				tt.stackToFilter,
-				false,
+				AffectedFilter{ExcludeLocked: false},
 				"", // gitRepoRoot - empty for unit tests with absolute paths.
 			)
 
@@ -373,7 +374,7 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 		affected, err := findAffected(
 			&stacks, &stacks, atmosConfig,
 			[]string{filepath.Join(tempDir, "components", "terraform", "vpc", "main.tf")},
-			false, false, "", false, "",
+			false, false, "", AffectedFilter{ExcludeLocked: false}, "",
 		)
 
 		assert.NoError(t, err)
@@ -394,7 +395,7 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 		affected, err := findAffected(
 			&stacks, &stacks, atmosConfig,
 			[]string{filepath.Join(tempDir, "components", "terraform", "vpc", "variables.tf")},
-			false, false, "", false, "",
+			false, false, "", AffectedFilter{ExcludeLocked: false}, "",
 		)
 
 		assert.NoError(t, err)
@@ -417,7 +418,7 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 		affected, err := findAffected(
 			&stacks, &stacks, atmosConfig,
 			[]string{filepath.Join(tempDir, "components", "terraform", "vpc-sourced", "main.tf")},
-			false, false, "", false, "",
+			false, false, "", AffectedFilter{ExcludeLocked: false}, "",
 		)
 
 		assert.NoError(t, err)
@@ -454,7 +455,7 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 		affected, err := findAffected(
 			&stacks, &stacks, atmosConfig,
 			[]string{filepath.Join(tempDir, "components", "terraform", "vpc-map", "main.tf")},
-			false, false, "", false, "",
+			false, false, "", AffectedFilter{ExcludeLocked: false}, "",
 		)
 
 		assert.NoError(t, err)
@@ -484,7 +485,7 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 		affected, err := findAffected(
 			&currentStacks, &remoteStacks, atmosConfig,
 			[]string{}, // No file changes, only stack config changes.
-			false, false, "", false, "",
+			false, false, "", AffectedFilter{ExcludeLocked: false}, "",
 		)
 
 		assert.NoError(t, err)
@@ -511,7 +512,7 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 		affected, err := findAffected(
 			&currentStacks, &remoteStacks, atmosConfig,
 			[]string{filepath.Join(tempDir, "components", "terraform", "vpc", "main.tf")},
-			false, false, "", false, "",
+			false, false, "", AffectedFilter{ExcludeLocked: false}, "",
 		)
 
 		assert.NoError(t, err)
@@ -540,7 +541,7 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 		affected, err := findAffected(
 			&currentStacks, &remoteStacks, atmosConfig,
 			[]string{},
-			false, false, "", false, "",
+			false, false, "", AffectedFilter{ExcludeLocked: false}, "",
 		)
 
 		assert.NoError(t, err)
@@ -677,7 +678,7 @@ func TestFindAffectedHelmfileAndPackerComponents(t *testing.T) {
 			stacks := buildComponentStackData(tt.componentType, "dev", tt.componentName, componentConfig)
 			changedFilePath := filepath.Join(tempDir, tt.basePath, tt.componentName, tt.changedFile)
 
-			affected, err := findAffected(&stacks, &stacks, atmosConfig, []string{changedFilePath}, false, false, "", false, "")
+			affected, err := findAffected(&stacks, &stacks, atmosConfig, []string{changedFilePath}, false, false, "", AffectedFilter{ExcludeLocked: false}, "")
 
 			assert.NoError(t, err)
 			require.Len(t, affected, 1)
@@ -830,10 +831,10 @@ func TestFindAffectedWithGitRepoRoot(t *testing.T) {
 				&tt.remoteStacks,
 				tt.atmosConfig,
 				tt.changedFiles,
-				false, // includeSpaceliftAdminStacks.
-				false, // includeSettings.
-				"",    // stackToFilter.
-				false, // excludeLocked.
+				false,                                // includeSpaceliftAdminStacks.
+				false,                                // includeSettings.
+				"",                                   // stackToFilter.
+				AffectedFilter{ExcludeLocked: false}, // excludeLocked.
 				tt.gitRepoRoot,
 			)
 
@@ -843,6 +844,7 @@ func TestFindAffectedWithGitRepoRoot(t *testing.T) {
 	}
 }
 
+// TestExecuteDescribeAffected verifies that executeDescribeAffected reports an error when repository operations fail.
 func TestExecuteDescribeAffected(t *testing.T) {
 	tests := []struct {
 		name                  string
@@ -894,7 +896,7 @@ func TestExecuteDescribeAffected(t *testing.T) {
 				tc.processTemplates,
 				tc.processYamlFunctions,
 				tc.skip,
-				false,
+				AffectedFilter{ExcludeLocked: false},
 				nil,
 				false,
 				DescribeStacksErrorOptions{},
@@ -962,6 +964,7 @@ func createMockRepoWithHeadError(t *testing.T) *git.Repository {
 	}
 }
 
+// TestFindAffectedWithExcludeLocked verifies that locked components are included or excluded according to the exclude-locked setting.
 func TestFindAffectedWithExcludeLocked(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -1052,7 +1055,7 @@ func TestFindAffectedWithExcludeLocked(t *testing.T) {
 				false,
 				true, // includeSettings
 				"",
-				tt.excludeLocked,
+				AffectedFilter{ExcludeLocked: tt.excludeLocked},
 				"", // gitRepoRoot - empty for unit tests with absolute paths.
 			)
 
@@ -1062,6 +1065,7 @@ func TestFindAffectedWithExcludeLocked(t *testing.T) {
 	}
 }
 
+// TestFindAffectedWithIncludeSettings verifies that settings are captured on affected entries only when includeSettings is set.
 func TestFindAffectedWithIncludeSettings(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -1140,7 +1144,7 @@ func TestFindAffectedWithIncludeSettings(t *testing.T) {
 				false,
 				tt.includeSettings,
 				"",
-				false,
+				AffectedFilter{ExcludeLocked: false},
 				"", // gitRepoRoot - empty for unit tests with absolute paths.
 			)
 
@@ -1151,6 +1155,7 @@ func TestFindAffectedWithIncludeSettings(t *testing.T) {
 	}
 }
 
+// TestFindAffectedWithNilStacks verifies that findAffected returns no affected components, without error, for empty stacks.
 func TestFindAffectedWithNilStacks(t *testing.T) {
 	t.Run("nil current stacks", func(t *testing.T) {
 		emptyStacks := map[string]any{}
@@ -1162,7 +1167,7 @@ func TestFindAffectedWithNilStacks(t *testing.T) {
 			false,
 			false,
 			"",
-			false,
+			AffectedFilter{ExcludeLocked: false},
 			"", // gitRepoRoot - empty for unit tests.
 		)
 
@@ -1171,6 +1176,7 @@ func TestFindAffectedWithNilStacks(t *testing.T) {
 	})
 }
 
+// TestFindAffectedWithSpaceliftAdminStacks verifies that findAffected processes stacks without error when includeSpaceliftAdminStacks is set.
 func TestFindAffectedWithSpaceliftAdminStacks(t *testing.T) {
 	t.Run("includeSpaceliftAdminStacks flag", func(t *testing.T) {
 		currentStacks := map[string]any{
@@ -1203,7 +1209,7 @@ func TestFindAffectedWithSpaceliftAdminStacks(t *testing.T) {
 			true, // includeSpaceliftAdminStacks
 			false,
 			"",
-			false,
+			AffectedFilter{ExcludeLocked: false},
 			"", // gitRepoRoot - empty for unit tests.
 		)
 
@@ -1213,6 +1219,7 @@ func TestFindAffectedWithSpaceliftAdminStacks(t *testing.T) {
 	})
 }
 
+// TestExecuteDescribeAffectedLocalRepoHeadError verifies that executeDescribeAffected fails when the local repository Head returns an error.
 func TestExecuteDescribeAffectedLocalRepoHeadError(t *testing.T) {
 	t.Run("fails when local repo Head() returns error", func(t *testing.T) {
 		localRepo := createMockRepoWithHeadError(t)
@@ -1238,7 +1245,7 @@ func TestExecuteDescribeAffectedLocalRepoHeadError(t *testing.T) {
 			false,
 			false,
 			nil,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 			nil,
 			false,
 			DescribeStacksErrorOptions{},
@@ -1286,7 +1293,7 @@ func TestExecuteDescribeAffected_RebaseOntoWorktreeFails(t *testing.T) {
 		false,
 		false,
 		nil,
-		false,
+		AffectedFilter{ExcludeLocked: false},
 		nil,
 		false,
 		DescribeStacksErrorOptions{},
@@ -1299,6 +1306,7 @@ func TestExecuteDescribeAffected_RebaseOntoWorktreeFails(t *testing.T) {
 	assert.Nil(t, remoteHead)
 }
 
+// TestExecuteDescribeAffectedRemoteRepoHeadError verifies that executeDescribeAffected fails when the remote repository Head returns an error.
 func TestExecuteDescribeAffectedRemoteRepoHeadError(t *testing.T) {
 	t.Run("fails when remote repo Head() returns error", func(t *testing.T) {
 		localRepo := createMockRepoWithHead(t)
@@ -1324,7 +1332,7 @@ func TestExecuteDescribeAffectedRemoteRepoHeadError(t *testing.T) {
 			false,
 			false,
 			nil,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 			nil,
 			false,
 			DescribeStacksErrorOptions{},
@@ -1362,6 +1370,7 @@ func TestRemoteRepoIsNotGitRepoError(t *testing.T) {
 	})
 }
 
+// TestShouldSkipComponent verifies which components are skipped, such as abstract, disabled, and (when excluded) locked components.
 func TestShouldSkipComponent(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -1426,7 +1435,7 @@ func TestShouldSkipComponent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := shouldSkipComponent(tt.metadataSection, tt.componentName, tt.excludeLocked)
+			result := shouldSkipComponent(tt.metadataSection, tt.componentName, AffectedFilter{ExcludeLocked: tt.excludeLocked})
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -1553,6 +1562,7 @@ func TestGetRelevantFilesWithUnknownComponentType(t *testing.T) {
 	})
 }
 
+// TestFindAffectedWithEnvChanges verifies that changes to a component env section are detected as affected.
 func TestFindAffectedWithEnvChanges(t *testing.T) {
 	t.Run("detects env section changes", func(t *testing.T) {
 		currentStacks := map[string]any{
@@ -1605,7 +1615,7 @@ func TestFindAffectedWithEnvChanges(t *testing.T) {
 			false,
 			false,
 			"",
-			false,
+			AffectedFilter{ExcludeLocked: false},
 			"/test",
 		)
 
@@ -1616,6 +1626,7 @@ func TestFindAffectedWithEnvChanges(t *testing.T) {
 	})
 }
 
+// TestProcessTerraformComponentsIndexed verifies indexed processing of terraform components, including settings changes.
 func TestProcessTerraformComponentsIndexed(t *testing.T) {
 	t.Run("processes terraform component with settings changes", func(t *testing.T) {
 		terraformSection := map[string]any{
@@ -1672,7 +1683,7 @@ func TestProcessTerraformComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		assert.NoError(t, err)
@@ -1682,6 +1693,7 @@ func TestProcessTerraformComponentsIndexed(t *testing.T) {
 	})
 }
 
+// TestFindAffectedSkipsAbstractComponents verifies that abstract components are not reported as affected.
 func TestFindAffectedSkipsAbstractComponents(t *testing.T) {
 	t.Run("skips abstract components", func(t *testing.T) {
 		currentStacks := map[string]any{
@@ -1740,7 +1752,7 @@ func TestFindAffectedSkipsAbstractComponents(t *testing.T) {
 			false,
 			false,
 			"",
-			false,
+			AffectedFilter{ExcludeLocked: false},
 			"/test",
 		)
 
@@ -1750,6 +1762,7 @@ func TestFindAffectedSkipsAbstractComponents(t *testing.T) {
 	})
 }
 
+// TestFindAffectedSkipsDisabledComponents verifies that disabled components are not reported as affected.
 func TestFindAffectedSkipsDisabledComponents(t *testing.T) {
 	t.Run("skips disabled components", func(t *testing.T) {
 		currentStacks := map[string]any{
@@ -1808,7 +1821,7 @@ func TestFindAffectedSkipsDisabledComponents(t *testing.T) {
 			false,
 			false,
 			"",
-			false,
+			AffectedFilter{ExcludeLocked: false},
 			"/test",
 		)
 
@@ -1818,6 +1831,7 @@ func TestFindAffectedSkipsDisabledComponents(t *testing.T) {
 	})
 }
 
+// TestProcessComponentsIndexedVarsEnvChanges verifies that vars and env changes are detected for each non-terraform component type.
 func TestProcessComponentsIndexedVarsEnvChanges(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -1956,7 +1970,7 @@ func TestProcessComponentsIndexedVarsEnvChanges(t *testing.T) {
 
 			affected, err := processSimpleComponentsIndexed(
 				tt.componentType, tt.stackName, componentSection, &remoteStacks, &currentStacks,
-				atmosConfig, filesIndex, patternCache, false, false, false,
+				atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
 			)
 
 			require.NoError(t, err)
@@ -2002,7 +2016,7 @@ func TestProcessSimpleComponentsIndexed_SkipsAndSettings(t *testing.T) {
 
 		affected, err := processSimpleComponentsIndexed(
 			cfg.ContainerComponentType, stackName, section, &remote, &current,
-			atmosConfig, filesIndex, patternCache, false, false, false,
+			atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
 		)
 		require.NoError(t, err)
 		assert.Empty(t, affected, "abstract components must not be reported as affected")
@@ -2017,7 +2031,7 @@ func TestProcessSimpleComponentsIndexed_SkipsAndSettings(t *testing.T) {
 
 		affected, err := processSimpleComponentsIndexed(
 			cfg.ContainerComponentType, stackName, section, &remote, &current,
-			atmosConfig, filesIndex, patternCache, false, false, false,
+			atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
 		)
 		require.NoError(t, err)
 		assert.Empty(t, affected, "a non-map component section must be skipped")
@@ -2047,7 +2061,7 @@ func TestProcessSimpleComponentsIndexed_SkipsAndSettings(t *testing.T) {
 
 		affected, err := processSimpleComponentsIndexed(
 			cfg.ContainerComponentType, stackName, section, &remote, &current,
-			atmosConfig, filesIndex, patternCache, false, false, false,
+			atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
 		)
 		require.NoError(t, err)
 		require.NotEmpty(t, affected, "emptying a populated settings section must be reported")
@@ -2081,7 +2095,7 @@ func TestProcessSimpleComponentsIndexed_SkipsAndSettings(t *testing.T) {
 
 		affected, err := processSimpleComponentsIndexed(
 			cfg.ContainerComponentType, stackName, section, &remote, &current,
-			atmosConfig, filesIndex, patternCache, false, false, false,
+			atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
 		)
 		require.NoError(t, err)
 		assert.Empty(t, affected, "an unchanged component with no settings section must not be reported as affected")
@@ -2110,7 +2124,7 @@ func TestProcessSimpleComponentsIndexed_SkipsAndSettings(t *testing.T) {
 
 		affected, err := processSimpleComponentsIndexed(
 			cfg.ContainerComponentType, stackName, section, &remote, &current,
-			atmosConfig, filesIndex, patternCache, false, false, false,
+			atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
 		)
 		require.NoError(t, err)
 		require.NotEmpty(t, affected, "removing a populated settings section must be reported")
@@ -2139,7 +2153,7 @@ func TestProcessSimpleComponentsIndexed_SkipsAndSettings(t *testing.T) {
 
 		affected, err := processSimpleComponentsIndexed(
 			cfg.ContainerComponentType, stackName, section, &remote, &current,
-			atmosConfig, filesIndex, patternCache, false, false, false,
+			atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
 		)
 		require.NoError(t, err)
 		require.NotEmpty(t, affected, "adding a settings section must be reported")
@@ -2168,7 +2182,7 @@ func TestProcessSimpleComponentsIndexed_SkipsAndSettings(t *testing.T) {
 
 		affected, err := processSimpleComponentsIndexed(
 			cfg.ContainerComponentType, stackName, section, &remote, &current,
-			atmosConfig, filesIndex, patternCache, false, false, false,
+			atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
 		)
 		require.NoError(t, err)
 		require.NotEmpty(t, affected)
@@ -2208,7 +2222,7 @@ func TestProcessSimpleComponentsIndexed_FileDependencyWithoutSettings(t *testing
 
 	affected, err := processSimpleComponentsIndexed(
 		cfg.AnsibleComponentType, stackName, section, &remote, &current,
-		atmosConfig, filesIndex, patternCache, false, false, false,
+		atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
 	)
 	require.NoError(t, err)
 	require.NotEmpty(t, affected, "a changed file dependency must be detected even without a settings section")
@@ -2368,12 +2382,12 @@ func TestProcessComponentsSourceAndProvisionChanges(t *testing.T) {
 			case "terraform":
 				affected, err = processTerraformComponentsIndexed(
 					tt.stackName, componentSection, &remoteStacks, &currentStacks,
-					atmosConfig, filesIndex, patternCache, false, false, false,
+					atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
 				)
 			default:
 				affected, err = processSimpleComponentsIndexed(
 					tt.componentType, tt.stackName, componentSection, &remoteStacks, &currentStacks,
-					atmosConfig, filesIndex, patternCache, false, false, false,
+					atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
 				)
 			}
 

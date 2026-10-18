@@ -38,7 +38,7 @@ tests:
         - "has_changes=true"
         - "has_errors=false"
         - "exit_code=0"
-        - "summary="
+        - "summary<<EOF"
         - '<summary><a id="result-prod-mycomponent" />Plan: 1 to add, 0 to change, 0 to destroy.</summary>'
 
   - name: "atmos terraform plan without ci"
@@ -90,7 +90,7 @@ tests:
         - "has_changes=false"
         - "has_errors=true"
         - "exit_code=1"
-        - "summary="
+        - "summary<<EOF"
         - '## Plan Failed for `mycomponent/failure` in `prod`'
         - "PLAN-FAILED-ff0000"
         - '<a id="result-prod-mycomponent_failure" />'
@@ -137,6 +137,8 @@ tests:
     env:
       GITHUB_ACTIONS: "true"
       GITHUB_TOKEN: "test-token-for-ci"
+      # Unroutable on purpose: the fake token must never reach the real api.github.com.
+      GITHUB_API_URL: "http://127.0.0.1:9"
       GITHUB_OUTPUT: "github-output.txt"
       GITHUB_STEP_SUMMARY: "github-step-summary.txt"
       GITHUB_REPOSITORY: "test-owner/test-repo"
@@ -152,7 +154,11 @@ tests:
     expect:
       exit_code: 0
       stderr:
-        - "CI hook"
+        # The fake GitHub endpoint skips status reporting; local artifact upload
+        # and GitHub output/summary generation must still complete successfully.
+        - "CI check run creation skipped"
+        - "CI check run update skipped"
+        - !not "CI hook handler failed"
       file_contains:
         "github-output.txt":
           - "has_changes=true"
