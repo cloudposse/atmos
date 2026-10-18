@@ -11213,7 +11213,7 @@
               "type": "null"
             }
           ],
-          "description": "Duration for pause/wait actions."
+          "description": "Duration for pause actions and cast playback groups."
         },
         "interval": {
           "anyOf": [
@@ -16654,7 +16654,7 @@
               "type": "null"
             }
           ],
-          "description": "Duration for pause/wait actions."
+          "description": "Duration for pause actions and cast playback groups."
         },
         "interval": {
           "anyOf": [
