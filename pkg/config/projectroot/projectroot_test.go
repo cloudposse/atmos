@@ -103,6 +103,15 @@ func TestSearchDirs(t *testing.T) {
 			prepare: func(t *testing.T) { touch(t, root, AtmosConfigFileName) }, want: []string{sub, root},
 		},
 		{
+			name: "parent directory with atmos.yaml inside a repository follows the git root", cwd: sub, git: gitRootOf(root, nil),
+			prepare: func(t *testing.T) { touch(t, filepath.Join(root, "components"), AtmosConfigFileName) },
+			want:    []string{sub, root, filepath.Join(root, "components")},
+		},
+		{
+			name: "parent directory that is the git root is listed once", cwd: sub, git: gitRootOf(root, nil),
+			prepare: func(t *testing.T) { touch(t, root, AtmosConfigFileName) }, want: []string{sub, root},
+		},
+		{
 			name: "parent directory with atmos.yaml when git root disabled", cwd: sub, git: gitRootOf(root, nil),
 			env: map[string]string{GitRootBasePathEnvVar: "false"}, prepare: func(t *testing.T) { touch(t, root, DotAtmosConfigFileName) },
 			want: []string{sub, root},
@@ -112,7 +121,7 @@ func TestSearchDirs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			isolate(t)
 			// Local-config fixtures are removed so cases stay independent.
-			for _, dir := range []string{root, sub} {
+			for _, dir := range []string{root, filepath.Join(root, "components"), sub} {
 				for _, name := range []string{AtmosConfigFileName, DotAtmosConfigFileName} {
 					require.NoError(t, removeIfExists(filepath.Join(dir, name)))
 				}

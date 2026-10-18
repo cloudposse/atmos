@@ -25,6 +25,13 @@ Require a designated reviewer before applying or deploying a production instance
 
 ## Configuration
 
+The policy covers instances labeled `stage: prod`, so it protects only what carries that label. A production stack without `metadata.labels.stage: prod` is not selected, and `atmos helm deploy app -s prod` then runs without approval. Require the label on every production instance, and review changes to it as you review the policy itself. To select production by an authoritative identifier instead, replace the label selector with exact stack names:
+
+```yaml
+match:
+  stacks: [prod]
+```
+
 Replace `platform-maintainer` with your maintained GitHub user logins and set `minimum`. Requires a current PR checkout and `GITHUB_TOKEN` with `pull-requests: read`. Fixture evaluation returns an outstanding obligation; the Native CI adapter verifies live reviews separately. It does not verify organization teams.
 
 ## Use

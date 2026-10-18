@@ -9,6 +9,8 @@ spec:
       on: component.command
       action: require_approval
       rule: input.command in ['apply', 'deploy']
+      # Covers only instances labeled stage: prod. Replace with `stacks: [<exact stack>]` to select
+      # production by name instead.
       match:
         labels: {stage: prod}
       approvals:

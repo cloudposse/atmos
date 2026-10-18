@@ -48,8 +48,10 @@ return an error without writing partial results.
 ## Inspect a snapshot
 
 ```shell
-# Save the snapshot privately instead of dumping it into job logs.
-(umask 077; atmos ci context > ci-context.json)
+# Save the snapshot privately instead of dumping it into job logs. Removing any
+# earlier file first matters: umask applies only to a newly created file, so a
+# repeat run would otherwise keep the old, possibly wider, permissions.
+(umask 077; rm -f ci-context.json; atmos ci context > ci-context.json)
 
 # Inspect only the event name and collection status.
 atmos ci context --query '{"event_name": .ci.metadata.data.GITHUB_EVENT_NAME, "status": .ci.event.status}'

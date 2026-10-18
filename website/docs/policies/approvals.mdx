@@ -100,9 +100,13 @@ on:
     types: [submitted, edited, dismissed]
 ```
 
-Run only the required read-only policy check on review events—do not replay plan/apply or their
-lifecycle hooks. Use a repository-level required check independent of component matrices. Ensure
-each event checks the current candidate revision and publishes to the required revision/context.
+A review event can only re-run the governed command or its workflow job. Atmos has no separate
+read-only command that re-collects reviews and re-evaluates a `terraform.plan` or `operation`
+approval: `atmos policy check` validates the bundle, and `atmos policy test` evaluates supplied
+fixtures without collecting live reviews. After a review changes, rerun the workflow job that runs
+the governed command, and keep any plan or apply it performs behind the same gate. Use a
+repository-level required check independent of component matrices, and ensure each run checks the
+current candidate revision and publishes to the required revision and context.
 
 GitHub provides no atomic review-and-execution transaction. A dismissal after a completed check
 cannot retroactively revoke the already-published success unless the workflow reruns and replaces it.

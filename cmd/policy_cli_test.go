@@ -54,6 +54,8 @@ spec:
 
 func TestPolicyExplainArgument(t *testing.T) {
 	_ = NewTestKit(t)
+	// The arguments alone decide each case, whatever the caller's environment holds.
+	t.Setenv("ATMOS_EXPLAIN", "false")
 	require.NotNil(t, RootCmd.PersistentFlags().Lookup("explain"))
 	for _, tc := range []struct {
 		args []string
@@ -185,4 +187,14 @@ spec:
 	_, found = os.LookupEnv(flags.ExplainEnvVar)
 	assert.False(t, found, "no explain request means nothing is forwarded")
 	restore()
+}
+
+func TestPolicyExplainEnvironmentIsTheDefaultAndArgumentsWin(t *testing.T) {
+	_ = NewTestKit(t)
+	t.Setenv("ATMOS_EXPLAIN", "true")
+	require.True(t, policyExplainRequested([]string{"terraform", "plan"}), "a nested process inherits the parent's setting")
+	require.False(t, policyExplainRequested([]string{"terraform", "plan", "--explain=false"}), "the command line wins")
+	require.False(t, policyExplainRequested([]string{"terraform", "plan", "--explain", "false"}), "a literal value wins")
+	t.Setenv("ATMOS_EXPLAIN", "false")
+	require.True(t, policyExplainRequested([]string{"terraform", "plan", "--explain"}))
 }

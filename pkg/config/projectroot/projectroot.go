@@ -127,8 +127,10 @@ func FindConfigInParentDirs(startDir string) string {
 //  2. The directory of ATMOS_CLI_CONFIG_PATH, when set (a file path resolves to its directory).
 //  3. cwd.
 //  4. Unless cwd has local Atmos configuration, or step 1 or 2 applied: the Git
-//     repository root (skipped with ATMOS_GIT_ROOT_BASEPATH=false), else the
-//     nearest ancestor holding atmos.yaml.
+//     repository root (skipped with ATMOS_GIT_ROOT_BASEPATH=false), then the
+//     nearest ancestor holding atmos.yaml. Config loading reads both, so both
+//     can supply project-level files, as in a monorepo whose atmos.yaml and
+//     policy.d sit in a subdirectory of the repository.
 //
 // cwd is included even when config selection applies, so a policy.d next to the
 // working directory is never silently dropped. Callers use the first directory
@@ -172,7 +174,8 @@ func SearchDirs(cwd string, args []string) []string {
 	}
 	if root := gitRoot(cwd); root != "" {
 		add(root)
-	} else if parent := FindConfigInParentDirs(cwd); parent != "" {
+	}
+	if parent := FindConfigInParentDirs(cwd); parent != "" {
 		add(parent)
 	}
 	return dirs

@@ -52,9 +52,9 @@ const defaultDirectoryName = "policy.d"
 // The default is the policy.d next to the configuration that atmos.yaml discovery
 // selects, using the same precedence: --config/--config-path (then ATMOS_CONFIG and
 // ATMOS_CONFIG_PATH), ATMOS_CLI_CONFIG_PATH, the working directory, then the Git
-// root unless ATMOS_GIT_ROOT_BASEPATH=false (or the nearest ancestor holding
-// atmos.yaml outside a repository). The first of those directories holding a
-// policy.d wins; the working directory is always considered.
+// root unless ATMOS_GIT_ROOT_BASEPATH=false, then the nearest ancestor holding
+// atmos.yaml, which config loading also reads. The first of those directories
+// holding a policy.d wins; the working directory is always considered.
 // Discovery does not establish trust. A missing default is allowed; an explicit
 // missing directory is returned so loading fails rather than falling back.
 func DirectoryFromEnvironment() (string, error) {
