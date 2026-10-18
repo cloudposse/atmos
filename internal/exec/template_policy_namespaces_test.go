@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/hairyhenderson/gomplate/v3/data"
@@ -74,8 +75,33 @@ func fileNamespaceCalls() map[string]fileNamespaceCall {
 	}
 }
 
+// retryingTempDir returns t.TempDir plus a cleanup that empties it with retries first. On Windows,
+// antivirus and indexing can briefly hold a handle on freshly written files, which makes the single
+// removal attempt in t.TempDir fail intermittently with "being used by another process". Cleanups run
+// last-in first-out, so this one empties the directory before t.TempDir removes it.
+func retryingTempDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	t.Cleanup(func() {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return
+		}
+		for _, entry := range entries {
+			path := filepath.Join(dir, entry.Name())
+			for range 20 {
+				if os.RemoveAll(path) == nil {
+					break
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
+	})
+	return dir
+}
+
 func TestPolicyFileFuncsSourceConfinement(t *testing.T) {
-	root := t.TempDir()
+	root := retryingTempDir(t)
 	allowed := filepath.Join(root, "allowed")
 	require.NoError(t, os.Mkdir(allowed, 0o700))
 	inside := filepath.Join(allowed, "public.txt")
