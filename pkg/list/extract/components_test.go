@@ -861,9 +861,9 @@ func TestGetLabelsFromMetadata(t *testing.T) {
 			want:     map[string]string{},
 		},
 		{
-			name:     "non_string_values_are_dropped",
-			metadata: map[string]any{"labels": map[string]any{"team": "platform", "count": 3, "flag": true}},
-			want:     map[string]string{"team": "platform"},
+			name:     "booleans_become_selector_strings_and_other_non_strings_are_dropped",
+			metadata: map[string]any{"labels": map[string]any{"team": "platform", "count": 3, "on": true, "off": false}},
+			want:     map[string]string{"team": "platform", "on": "true", "off": "false"},
 		},
 	}
 

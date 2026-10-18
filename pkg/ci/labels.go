@@ -2,6 +2,7 @@ package ci
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -44,7 +45,7 @@ func Labels(ctx context.Context) ([]string, error) {
 	}
 	run, err := p.Context()
 	if err != nil {
-		return nil, fmt.Errorf("%w: resolving review context: %w", errUtils.ErrCILabelsFetchFailed, err)
+		return nil, labelsFailure(fmt.Errorf("resolving review context: %w", err), false)
 	}
 	if run == nil || (run.PullRequest == nil && run.MergeQueue == nil) {
 		return []string{}, nil
@@ -54,7 +55,7 @@ func Labels(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("%w: %s cannot read review labels", errUtils.ErrCIOperationNotSupported, p.Name())
 	}
 	if err := provider.ValidateLabelsContext(run); err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrCILabelsFetchFailed, err)
+		return nil, labelsFailure(err, run.MergeQueue != nil)
 	}
 	number := provider.LabelsReviewNumber(run)
 	key := labelsKey{p.Name(), run.ServerURL, run.RepoOwner, run.RepoName, number}
@@ -68,11 +69,31 @@ func Labels(ctx context.Context) ([]string, error) {
 	defer cancel()
 	labels, err := reader.Labels(ctx, run)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s %s/%s review %d: %w", errUtils.ErrCILabelsFetchFailed, p.Name(), run.RepoOwner, run.RepoName, number, err)
+		return nil, labelsFailure(fmt.Errorf("%s %s/%s review %d: %w", p.Name(), run.RepoOwner, run.RepoName, number, err), false)
 	}
 	snapshot := append([]string{}, labels...)
 	slices.Sort(snapshot)
 	snapshot = slices.Compact(snapshot)
 	labelSnapshots.values[key] = snapshot
 	return slices.Clone(snapshot), nil
+}
+
+// labelsFailure classifies a label read failure and attaches the fix the user needs. The failure
+// sentinel is added only when the cause does not already carry it, so providers may wrap their own.
+func labelsFailure(err error, mergeQueue bool) error {
+	if !errors.Is(err, errUtils.ErrCILabelsFetchFailed) {
+		err = fmt.Errorf("%w: %w", errUtils.ErrCILabelsFetchFailed, err)
+	}
+	builder := errUtils.Build(err)
+	switch {
+	case errors.Is(err, errUtils.ErrGitHubTokenNotFound):
+		builder.WithHint("Provide a token through ATMOS_CI_GITHUB_TOKEN, ATMOS_PRO_GITHUB_TOKEN, GITHUB_TOKEN, or GH_TOKEN. In GitHub Actions, pass `GITHUB_TOKEN: ${{ github.token }}` to the Atmos step")
+	case mergeQueue && errors.Is(err, errUtils.ErrInvalidArguments):
+		builder.WithHint("Merge-queue runs are identified from a ref like refs/heads/gh-readonly-queue/<base>/pr-<number>-<sha>; enable the merge_group trigger and run Atmos from that event").
+			WithHint("Use --skip=ci.labels to leave !ci.labels expressions unevaluated")
+	default:
+		builder.WithHint("Reading labels needs a token with `pull-requests: read` on the repository and access to the GitHub API").
+			WithHint("Use --skip=ci.labels to leave !ci.labels expressions unevaluated")
+	}
+	return builder.Err()
 }

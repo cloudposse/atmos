@@ -4,9 +4,12 @@ package ci
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"sync"
 	"testing"
 
+	cockroachdb "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -166,5 +169,37 @@ func TestLabelsErrors(t *testing.T) {
 		_, err := Labels(context.Background())
 		require.ErrorIs(t, err, errUtils.ErrCILabelsFetchFailed)
 		require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+	})
+}
+
+// Fetch failures must say how to fix them and must not repeat the failure prefix.
+func TestLabelsErrorsAreActionable(t *testing.T) {
+	hintsOf := func(err error) string { return strings.Join(cockroachdb.GetAllHints(err), "\n") }
+
+	t.Run("missing token names every accepted variable", func(t *testing.T) {
+		p, _ := setupLabelsProvider(t)
+		p.err = errUtils.ErrGitHubTokenNotFound
+		_, err := Labels(context.Background())
+		require.ErrorIs(t, err, errUtils.ErrGitHubTokenNotFound)
+		for _, name := range []string{"ATMOS_CI_GITHUB_TOKEN", "ATMOS_PRO_GITHUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN"} {
+			assert.Contains(t, hintsOf(err), name)
+		}
+	})
+	t.Run("API failure does not repeat the failure prefix and hints at permissions", func(t *testing.T) {
+		p, _ := setupLabelsProvider(t)
+		p.err = errors.Join(errUtils.ErrCILabelsFetchFailed, errUtils.ErrInvalidConfig)
+		_, err := Labels(context.Background())
+		require.ErrorIs(t, err, errUtils.ErrCILabelsFetchFailed)
+		assert.Equal(t, 1, strings.Count(err.Error(), errUtils.ErrCILabelsFetchFailed.Error()), err.Error())
+		assert.Contains(t, hintsOf(err), "pull-requests: read")
+	})
+	t.Run("unresolved merge queue ref explains the expected ref format", func(t *testing.T) {
+		_, run := setupLabelsProvider(t)
+		run.PullRequest = nil
+		run.MergeQueue = &MergeQueueInfo{HeadRef: "unrecognized-ref"}
+		_, err := Labels(context.Background())
+		require.ErrorIs(t, err, errUtils.ErrCILabelsFetchFailed)
+		assert.Contains(t, hintsOf(err), "gh-readonly-queue")
+		assert.Contains(t, hintsOf(err), "merge_group")
 	})
 }

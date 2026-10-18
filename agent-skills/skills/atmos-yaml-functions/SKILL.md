@@ -32,6 +32,7 @@ templates first, then executes the YAML functions.
 | `!emulator` | Resolve local emulator connection details |
 | `!labels` | Read all metadata labels, or `!labels key [default]` for one string value |
 | `!tags` / `!labels.keys` / `!labels.values` | Read metadata tags, sorted label keys, or values ordered by key |
+| `!ci.labels` | Read live CI pull request / merge-queue labels as a sorted list, or `!ci.labels [preview]` for an all-of boolean; GitHub Actions, needs a token with `pull-requests: read` |
 | `!env` | Read environment variables (from stack `env:` sections or OS) |
 | `!exec` | Execute shell scripts and use the output |
 | `!include` | Include local or remote files (YAML, JSON, HCL, text) |

@@ -44,6 +44,9 @@ func parseCILabelsSequence(sequence *yaml.Node) ([]string, error) {
 		if item.Kind != yaml.ScalarNode || item.Tag != "!!str" {
 			return nil, fmt.Errorf("%w: !ci.labels labels must be literal strings", errUtils.ErrInvalidArguments)
 		}
+		if item.Value == "" {
+			return nil, fmt.Errorf("%w: !ci.labels labels must not be empty", errUtils.ErrInvalidArguments)
+		}
 		labels = append(labels, item.Value)
 	}
 	return labels, nil

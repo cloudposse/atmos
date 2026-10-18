@@ -460,3 +460,25 @@ func TestStacks_VarsFromHelmfile(t *testing.T) {
 	assert.Equal(t, "acme", vars["namespace"])
 	assert.Equal(t, "plat", vars["tenant"])
 }
+
+// Boolean labels (for example a resolved `!ci.labels [preview]`) must be selectable with
+// --labels key:true / key:false, matching describe affected and the terraform bulk paths.
+func TestStacks_BooleanLabelsFilter(t *testing.T) {
+	stacksMap := map[string]any{
+		"preview-on": map[string]any{"components": map[string]any{"terraform": map[string]any{
+			"app": map[string]any{"metadata": map[string]any{"labels": map[string]any{"preview": true}}},
+		}}},
+		"preview-off": map[string]any{"components": map[string]any{"terraform": map[string]any{
+			"app": map[string]any{"metadata": map[string]any{"labels": map[string]any{"preview": false}}},
+		}}},
+	}
+	on, err := Stacks(stacksMap, nil, map[string]string{"preview": "true"})
+	require.NoError(t, err)
+	require.Len(t, on, 1)
+	assert.Equal(t, "preview-on", on[0]["stack"])
+
+	off, err := Stacks(stacksMap, nil, map[string]string{"preview": "false"})
+	require.NoError(t, err)
+	require.Len(t, off, 1)
+	assert.Equal(t, "preview-off", off[0]["stack"])
+}

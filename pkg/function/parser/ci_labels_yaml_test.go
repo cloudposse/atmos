@@ -34,7 +34,7 @@ func TestCILabelsYAMLDeferral(t *testing.T) {
 
 func TestCILabelsYAMLInvalid(t *testing.T) {
 	t.Parallel()
-	for _, input := range []string{"[]", "[123]", "[true]", "[null]", "{}", "[!env TOKEN]", "[[preview]]", "preview"} {
+	for _, input := range []string{"[]", "[123]", "[true]", "[null]", "{}", "[!env TOKEN]", "[[preview]]", "preview", `"[preview]"`, `[""]`} {
 		t.Run(input, func(t *testing.T) {
 			t.Parallel()
 			var doc yaml.Node

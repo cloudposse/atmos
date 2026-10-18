@@ -1715,8 +1715,11 @@
               "description": "Logical component identity used for workspace key prefix auto-generation. Inheritable from base components."
             },
             "enabled": {
-              "type": "boolean",
-              "description": "Flag to enable or disable the component"
+              "anyOf": [
+                {"type": "boolean"},
+                {"type": "string", "pattern": "^!"}
+              ],
+              "description": "Flag to enable or disable the component A YAML function (for example !ci.labels) is evaluated before use."
             },
             "component": {
               "type": "string",
@@ -1801,8 +1804,11 @@
               "additionalProperties": true,
               "properties": {
                 "enabled": {
-                  "type": "boolean",
-                  "description": "Enable Atmos Pro for this stack or component, including automatic exception reporting in GitHub Actions."
+                  "anyOf": [
+                    {"type": "boolean"},
+                    {"type": "string", "pattern": "^!"}
+                  ],
+                  "description": "Enable Atmos Pro for this stack or component, including automatic exception reporting in GitHub Actions. A YAML function (for example !ci.labels) is evaluated before use."
                 },
                 "errors": {
                   "type": "object",

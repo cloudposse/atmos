@@ -20,7 +20,11 @@ func EncodeCILabels(node *yaml.Node) (string, error) {
 	args := strings.TrimSpace(node.Value)
 	switch node.Kind {
 	case yaml.ScalarNode:
-		// Scalar arguments are validated by the same parser as the function registry.
+		// Only the bare form is a scalar; a quoted or plain scalar such as "[preview]" would be
+		// re-parsed as a list by ParseCILabels, hiding that the YAML argument is not a sequence.
+		if args != "" {
+			return "", fmt.Errorf("%w: !ci.labels requires no arguments or a nonempty list of strings, got the scalar %q", errUtils.ErrInvalidArguments, args)
+		}
 	case yaml.SequenceNode:
 		sequence := *node
 		sequence.Tag = "!!seq"

@@ -41,8 +41,13 @@ vars:
   ready: !ci.labels ["needs review", "true"]
 ```
 
-Arguments must be a nonempty list of strings. Empty lists, mappings, non-string elements,
-aliases, and nested function calls are errors. Block sequences are also supported.
+Arguments must be a nonempty list of nonempty strings. Empty lists, empty names, quoted or bare
+scalars such as `"[preview]"`, mappings, non-string elements, aliases, and nested function calls are
+errors. Block sequences are also supported. Write the bare form on its own line (`key: !ci.labels`);
+inside a one-line flow mapping such as `{ labels: !ci.labels }` YAML reads the closing brace as part of the tag.
+
+Because the expression is evaluated after merging, `atmos validate stacks` and `atmos describe stacks`
+accept it in boolean fields such as `settings.pro.enabled` and `metadata.enabled`.
 
 ## Selecting affected components
 

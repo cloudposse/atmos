@@ -2534,8 +2534,11 @@
               ]
             },
             "enabled": {
-              "type": "boolean",
-              "description": "Flag to enable or disable the component"
+              "anyOf": [
+                {"type": "boolean"},
+                {"type": "string", "pattern": "^!"}
+              ],
+              "description": "Flag to enable or disable the component A YAML function (for example !ci.labels) is evaluated before use."
             },
             "component": {
               "type": "string",
@@ -2647,8 +2650,11 @@
               ]
             },
             "enabled": {
-              "type": "boolean",
-              "description": "Flag to enable or disable components stack-wide by default"
+              "anyOf": [
+                {"type": "boolean"},
+                {"type": "string", "pattern": "^!"}
+              ],
+              "description": "Flag to enable or disable components stack-wide by default A YAML function (for example !ci.labels) is evaluated before use."
             },
             "locked": {
               "type": "boolean",
@@ -2681,8 +2687,11 @@
               "additionalProperties": true,
               "properties": {
                 "enabled": {
-                  "type": "boolean",
-                  "description": "Enable Atmos Pro for this stack or component, including automatic exception reporting in GitHub Actions."
+                  "anyOf": [
+                    {"type": "boolean"},
+                    {"type": "string", "pattern": "^!"}
+                  ],
+                  "description": "Enable Atmos Pro for this stack or component, including automatic exception reporting in GitHub Actions. A YAML function (for example !ci.labels) is evaluated before use."
                 },
                 "errors": {
                   "type": "object",

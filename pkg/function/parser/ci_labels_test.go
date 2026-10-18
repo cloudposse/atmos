@@ -36,7 +36,7 @@ func TestParseCILabelsInvalid(t *testing.T) {
 	for _, input := range []string{
 		"[]", "preview", "{}", "null", "[true]", "[123]", "[null]", "[[preview]]",
 		"[{preview: true}]", "[preview", "[!env SECRET]", "[&label preview, *label]",
-		"[preview]\n---\n[deploy]", "# only a comment", "!other [preview]",
+		"[preview]\n---\n[deploy]", "# only a comment", "!other [preview]", `[""]`,
 	} {
 		t.Run(input, func(t *testing.T) {
 			t.Parallel()
