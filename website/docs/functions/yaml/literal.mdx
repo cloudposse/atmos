@@ -172,9 +172,28 @@ These step fields honor `!literal`:
     <dt>`working_directory`</dt>
     <dd>The working directory of a step.</dd>
 
+    <dt>`timeout`</dt>
+    <dd>The timeout of a step.</dd>
+
     <dt>`env` values</dt>
-    <dd>Each value in a step's `env` map, tagged on its own, such as `GREETING: !literal "{{ not a template }}"`.</dd>
+    <dd>
+        Each value in a step's `env` map, tagged on its own, such as `GREETING: !literal "{{ not a template }}"`.
+        This covers the `env` of a `parallel` or `matrix` step too, and the command-level `env` of a custom command.
+    </dd>
 </dl>
+
+A step written as a plain string works as well: `- !literal 'echo "{{ not a template }}"'` is a command step whose text
+Atmos does not render.
+
+A `!literal` tag on any other field of a step fails when the configuration loads. The error names the field and the step
+and lists the supported fields: `!literal is not supported on field "type" of step "build"; it is supported on script,
+command, interpreter, working_directory, timeout, and on individual env values`. Atmos performs this check for the
+steps of custom commands.
+
+A `script` or `command` loaded with [`!include.raw`](/functions/yaml/include.raw) is used exactly as written, with no Go
+template rendering, so it needs no `!literal` tag. A script loaded with `!include` is still rendered as a template. When
+a rendering error comes from an included script that contains `{{`, the error hint tells you to move that text into a
+`load()`ed module or to include the file with `!include.raw`.
 
 Other fields of the same step keep rendering as templates, so you can combine a literal `script` with a templated `env` value. Only a field that carries the tag directly is literal: tagging a whole `env` map or `steps` list has no effect on the entries inside it.
 

@@ -33,7 +33,6 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
-	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/runner/freshness"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -713,7 +712,11 @@ func ExecuteWorkflow(
 		// Prepare environment variables: start with baseEnv (system + global + toolchain).
 		// Then merge workflow-level, persistent env-step, and step-level env vars.
 		// If identity is specified, also authenticate and add credentials.
-		stepEnv, err := prepareStepEnvironment(baseEnv, stepIdentity, step.Name, authManager, resolvedWorkflowEnv, persistentEnv, resolvedStepEnv)
+		environmentIdentity := stepIdentity
+		if commandType == "publish" {
+			environmentIdentity = "" // Publishing authenticates only after target and dry-run validation.
+		}
+		stepEnv, err := prepareStepEnvironment(baseEnv, environmentIdentity, step.Name, authManager, resolvedWorkflowEnv, persistentEnv, resolvedStepEnv)
 		if err != nil {
 			if workflowErr == nil {
 				workflowErr = err
@@ -783,6 +786,7 @@ func ExecuteWorkflow(
 		// One option set for every extended-step call below so toolchain PATH and the
 		// auth manager are never dropped on any dispatch path.
 		extendedOpts := extendedStepOptions{
+			Identity:      stepIdentity,
 			DryRun:        dryRun,
 			FinalStack:    finalStack,
 			AtmosConfig:   &atmosConfig,
@@ -921,7 +925,7 @@ func ExecuteWorkflow(
 				default:
 					// The step's timeout cancels the shell command through the context.
 					err = stepPkg.RunWithStepDeadline(context.Background(), &step, stepVars(), func(shellCtx context.Context) error {
-						return retry.Do(shellCtx, step.Retry, func() error {
+						return stepPkg.RetryWithConditions(shellCtx, step.Retry, func() error {
 							return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
 								return process.RunShellStep(shellCtx, &process.ShellSessionSpec{
 									Command:     command,
@@ -982,7 +986,7 @@ func ExecuteWorkflow(
 				ui.Infof("Executing command: `atmos %s`", command)
 				// The step's timeout cancels the atmos subprocess through the context.
 				err = stepPkg.RunWithStepDeadline(context.Background(), &step, stepVars(), func(atmosCtx context.Context) error {
-					return retry.Do(atmosCtx, step.Retry, func() error {
+					return stepPkg.RetryWithConditions(atmosCtx, step.Retry, func() error {
 						return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
 							writer := stepPkg.NewCommandOutputWriter(&step, workflowDefinition)
 							_, _, runErr := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
@@ -1180,6 +1184,7 @@ func ExecuteWorkflow(
 var stepExecutorState *stepPkg.StepExecutor
 
 type extendedStepOptions struct {
+	Identity      string
 	DryRun        bool
 	FinalStack    string
 	AtmosConfig   *schema.AtmosConfiguration
@@ -1193,6 +1198,9 @@ func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep,
 
 	// Execute the step.
 	stepCopy := *workflowStep
+	if stepCopy.Type == "publish" && opts.Identity != "" {
+		stepCopy.Identity = opts.Identity
+	}
 	stepCopy.DryRun = opts.DryRun
 	stepCopy.Stack = opts.FinalStack
 	// Extended step types (archive, file, junit, workdir, container, ...) resolve

@@ -123,8 +123,15 @@ and mutually exclusive `quality:ready` / `quality:not-ready` labels. Label
 names, colors, and descriptions live in `.github/settings.yml`, alongside the
 repository's existing labels and labels referenced by its automation.
 
-A non-draft PR is ready when all requirements pass:
+A PR is ready when all requirements pass:
 
+- The PR is marked ready for review. A draft PR is never ready, and the checklist
+  shows this as its own **Ready for review** requirement.
+- GitHub reports no merge conflicts with `main` (**No merge conflicts**). GitHub
+  computes mergeability lazily after a push or base update; until it does, the
+  requirement is reported as unavailable evidence rather than a failure, and the
+  previous report is kept and retried. Other mergeable states such as blocked,
+  behind, or unstable are not conflicts.
 - All current PR workflows, check runs, and commit statuses have finished
   successfully (neutral and skipped CI results are allowed). Failures,
   cancellations, timeouts, pending results, and API errors block readiness.
@@ -140,6 +147,12 @@ A non-draft PR is ready when all requirements pass:
   resolution state and are not included.
 - Fewer than 150 files changed (149 passes; 150 fails).
 - No benchmark report processing error is recorded for the current head.
+
+Benchmark report recovery resolves PRs whose head commit exists only in a fork
+through the fork's head branch, because GitHub's commit association endpoint
+lists nothing for them. If a completed benchmark run still has no PR to publish
+for, the gate is published with performance pending and a workflow warning is
+printed, instead of silently doing nothing.
 
 Performance slowdowns are advisory and do not block this gate. Benchmark
 execution failures still count as CI failures. Malformed or incomplete benchmark
@@ -183,7 +196,7 @@ name the actual blocking results and are quoted as evidence, never instructions.
 | `bench:fetch <repo> <ref> <outputDir>` | Fetch up to 10 compatible, successful main snapshots reachable from the immutable 40-character main SHA. Candidate defaults to the sibling `candidate` directory. |
 | `bench:compare <snapshotsDir> <candidateDir> <outputDir>` | Compare the same candidate independently with each snapshot; write `report.md`, `report.json`, and separate benchstat output for each pair. |
 | `bench:report <repo> <runID>` | Validate a completed PR benchmark run, download data, regenerate comparisons with trusted code, and update the composite comment, summary, and labels. |
-| `quality:report <repo>` | Reconcile quality gates for PRs associated with the Actions event, or open main PRs updated in the last 24 hours on scheduled runs. Manual runs reconcile all open main PRs. Recover missing benchmark reports. |
+| `quality:report <repo>` | Reconcile quality gates for PRs associated with the Actions event (including fork PRs), or open main PRs with a head commit from the last 24 hours or no report for their current head on scheduled runs. Manual runs reconcile all open main PRs. Recover missing benchmark reports. |
 
 Run these from the repository root with `go tool mage`, for example:
 
@@ -219,11 +232,33 @@ with roots, branches, and leaves across ten stacks. It validates the entire
 nested dependency tree and exercises the resolution path used by Pro uploads
 without uploading anything.
 
+The `FunctionsRepeated/instances=200` affected workload adds 600 references per
+pass to one static target through `!terraform.output`, `!terraform.state`, and
+`atmos.Component`. Consumers use one lookup kind each, so a stale value in one
+path cannot be hidden by another path detecting the change. Scenarios cover
+unchanged repositories, a changed referenced value, and the same change with
+`--include-dependents`. Checks outside timing assert resolved values in HEAD and
+BASE, exact affected instance names, and all 200 dependents. Masking stays enabled
+at its default; static backends need neither cloud access nor Terraform. This
+covers inspection caching and repeated deferred target descriptions. The
+non-static output/auth-disabled wrapper path and actual OIDC authentication need
+separate unit tests; static backends return before that wrapper is created.
+
+The `StoreCallerStacks/stacks=20/keys=11` workload spreads 200 consumers across
+20 caller stacks, changes their shared component, and enables dependents with
+`--process-functions=false --skip=store.get --skip=store`. Unlike the default
+CLI harness, it leaves identity selection implicit and uses fake ambient AWS
+credentials against a loopback SSM server. It verifies resolved store values,
+all 200 affected identities, and exactly 22 reads (11 per HEAD/BASE root).
+This detects caller-stack cache fragmentation for stores without configured
+auth identities; it does not model a configured default identity or real AWS latency.
+
 Builds and fixture setup are excluded from measurements. Packages run
 sequentially with `GOMAXPROCS=2`, CGO disabled, no race/coverage instrumentation,
 and a one-second calibration for in-process benchmarks. Every CLI sample uses
 one fresh process with isolated home/configuration/application caches, no cloud
-credentials, and authentication, telemetry, version checks, and Pro disabled.
+credentials, and authentication, telemetry, version checks, and Pro disabled
+except for the ambient-store scenario described above.
 CLI results report elapsed time only; harness allocations are not CLI memory.
 In-process results also include bytes and allocations per operation.
 
@@ -290,20 +325,39 @@ The read-only `Quality Gate Signal` forwards PR/review activity to the same
 completion coordinator. Quality Gate no longer independently subscribes to
 workflow completions, checks, statuses, or comments. A 15-minute best-effort
 schedule recovers missed events and late external results, including Codecov and
-review-thread resolution. It selects open PRs targeting `main` updated within the
-last 24 hours (inclusive), using GitHub's `updated_at` including bot activity, and
-stops paging once it reaches older PRs. Manual runs still select all open `main`
-PRs; event-associated reports are not restricted by age. Reconciliation defers
-while Actions workflows are still pending; completion of Actions workflows does
-not imply that external checks have finished or passed.
+review-thread resolution. It selects open PRs targeting `main` whose head commit
+(the later of author and committer date) is within the last 24 hours (inclusive),
+plus any PR with no gate report for its current head, or whose report for that
+head has a gate whose evidence was unavailable, at any age. GitHub's
+`updated_at` is not used as an activity signal because the gate's own labels and
+comments, Mergify, CodeRabbit and Codecov advance it for nearly every PR; it only
+skips the commit lookup for PRs not updated since the cutoff. PRs without a
+usable report are reconciled first, rotated by schedule slot so a PR that hangs
+or fails every run cannot keep the PRs behind it from being visited.
+Event-associated reports are not restricted by age.
+Commits that exist only in a fork are resolved through the fork's head branch
+(`workflow_run` payloads) or a commit SHA search, and a PR matches only while its
+head is exactly that commit. Manual runs still select all open `main` PRs.
+Reconciliation defers while Actions workflows are still pending; completion of
+Actions workflows does not imply that external checks have finished or passed.
+
+Each PR is reconciled under its own deadline, so one slow or failing PR cannot
+starve the PRs behind it. Every failure is logged as a workflow warning
+annotation; the run exits non-zero only when every attempted PR failed (a
+systemic problem such as credentials or an outage). Isolated failures are retried
+by the next scheduled run. When the run budget ends, unvisited PRs are left for
+the next run. If a gate's evidence cannot be read (for example an API error),
+the existing report for that head, its comment and its label, is kept and the
+run reports the failure, instead of publishing "not ready" and flipping the
+label back when the next run succeeds.
 
 Unchanged readiness labels and report comments are not rewritten. Each scheduled
 run logs its UTC cutoff and selected PR count. Report concurrency coalesces work
 per PR/head, while scheduled recovery has its own group; publication freshness
 checks protect overlapping writers. Labels and comments are eventually consistent
 with GitHub events and are not a replacement for required checks. The schedule
-bounds activity by recency, not a fixed request budget, and the completion
-coordinator still wakes on relevant workflow completions.
+bounds activity by head-commit recency, not a fixed request budget, and the
+completion coordinator still wakes on relevant workflow completions.
 
 These trusted reporters become active after their workflows and Mage code reach
 the default branch. No compatible main snapshots exist until collection has run
@@ -345,7 +399,11 @@ can produce statistics and demonstrate detection.
 
 `ATMOS_BENCH_FIELD_FILTER` selects another CLI benchmark expression; for example,
 `^BenchmarkCLI$/^DescribeAffected$/^instances=1000$` replays the three 1,000-instance
-scenarios, and `^BenchmarkCLI$` runs the entire CLI suite. Sample count and
+scenarios, and `^BenchmarkCLI$` runs the entire CLI suite. For repeated function
+lookups use `^BenchmarkCLI$/^DescribeAffected$/^FunctionsRepeated$`. Append
+`/^instances=200$/^change=none$` to isolate timing on historical releases that
+fail the changed-value correctness checks; those failures must remain visible
+and must not be interpreted as a passing performance result. Sample count and
 regression threshold use the ordinary benchmark environment variables. Historical
 field-test manifests record the measured revision, source ref, harness revision,
 and workload fingerprints, and are deliberately incompatible with CI snapshots.
@@ -401,6 +459,7 @@ runner-specific gaps explicit.
 
 | Documented problem | Workload / current coverage |
 | --- | --- |
+| [Inspection and deferred component function caches](../docs/fixes/2026-10-13-describe-affected-function-lookup-cache.md) | 200 consumers / 600 references per pass across output, state, and Component, static backend with default masking; unchanged, changed referenced values, and dependents. HEAD/BASE and complete result assertions guard cache correctness. No cloud/OIDC or non-static output executor latency. |
 | [Deferred store lookups, #3353](../docs/fixes/2026-10-09-deferred-store-template-lookup-cache.md) | Real CLI against loopback SSM, 2,200 references / 11 keys, plus in-process backend-read assertion. Field-test release sequence above verifies the regression and recovery. |
 | [Shared inheritance and cache contention](../docs/fixes/2026-05-23-describe-affected-component-inheritance-perf.md) | Shared imports and two inheritance levels at 100/1,000/10,000 instances; repeated locals extraction; template and YAML-resolution microbenchmarks. |
 | [Native merge and deep copies](../docs/fixes/2026-03-19-deep-merge-native-fixes.md) | Curated deep-copy, two/five-input merge, and production-scale merge benchmarks; inherited CLI fixtures. |

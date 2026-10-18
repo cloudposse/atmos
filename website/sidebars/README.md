@@ -49,5 +49,9 @@ cards all use this generated list. Custom Components belongs to the sidebar grou
 without declaring a native `component_type`. Child guides and configuration
 fields do not enter the native-type table.
 
+Native component overviews belong in `docs/components/` so their sidebar links
+stay in the Component Library. Link from each overview to its detailed stack
+configuration page in `docs/stacks/components/`.
+
 Adding an overview or child guide requires no edit to `sidebars.js`. Run
 `pnpm --dir website test:navigation` to validate the generator and navigation.

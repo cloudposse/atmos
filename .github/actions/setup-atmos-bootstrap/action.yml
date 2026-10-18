@@ -9,6 +9,10 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Test pinned bootstrap installer
+      shell: bash
+      run: node --test "$GITHUB_ACTION_PATH/../../scripts/install-atmos-bootstrap.test.mjs"
+
     - name: Install pinned Atmos release
       shell: bash
       env:

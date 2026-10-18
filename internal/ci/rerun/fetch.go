@@ -33,21 +33,24 @@ type RESTClient interface {
 // `<https://api.github.com/...&page=2>; rel="next", <...>; rel="last"`.
 var nextLinkPattern = regexp.MustCompile(`<([^>]+)>;\s*rel="next"`)
 
-// jobsPageSizes are the page sizes FetchJobs tries, largest first. GitHub has
-// answered HTTP 502 to every request for a re-run attempt's job list at 100 per
-// page while 75 and smaller succeeded, so a server error restarts the listing
-// with a smaller page instead of failing the whole poll.
-var jobsPageSizes = []int{100, 50, 25}
+// jobsPageSizes are the page sizes FetchJobs tries, largest first: GitHub's
+// default size, then smaller pages. A server error restarts the listing with the
+// next size instead of failing the whole poll.
+var jobsPageSizes = []int{30, 15, 10}
 
 // FetchJobs pages through repos/{repo}/actions/runs/{runID}/attempts/{runAttempt}/jobs,
 // following the Link header until it stops offering a "next" page - the same
-// request `gh api ... --paginate` makes. It starts at per_page=100; when GitHub
+// request `gh api ... --paginate` makes. It starts at per_page=30; when GitHub
 // answers a page with a 5xx, it restarts the listing from the first page with
 // the next smaller size (page boundaries shift with the size, so a restart
 // avoids duplicated or skipped jobs). The last server error is returned only
 // when every size fails; other errors are returned immediately. It is the only
 // exported function in this package that talks to the network on the read
 // path; classify.go's Classify/Verdict/etc. remain pure.
+//
+// Keep pages at GitHub's default size: a 98-job rerun repeatedly returned
+// HTTP 502 with 100-job pages, while 30-job pages returned every job.
+// Following every Link header preserves complete shard validation.
 func FetchJobs(ctx context.Context, client RESTClient, repo, runID, runAttempt string) ([]Job, error) {
 	defer perf.Track(nil, "rerun.FetchJobs")()
 

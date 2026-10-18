@@ -9,9 +9,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const scriptTemplateField = "script"
+
 // literalHintFields are the string fields whose body commonly contains `{{` that is not meant
 // as a template, so a render failure there gets the `!literal` hint.
-var literalHintFields = map[string]bool{"script": true, "command": true}
+var literalHintFields = map[string]bool{scriptTemplateField: true, "command": true}
 
 // TemplateFieldError reports that rendering a step field as a template failed. The message
 // names the step and the field and, for a script read from a file with !include, the source file,
@@ -20,26 +22,32 @@ var literalHintFields = map[string]bool{"script": true, "command": true}
 func TemplateFieldError(step *schema.WorkflowStep, field string, cause error) error {
 	defer perf.Track(nil, "step.TemplateFieldError")()
 
+	includedScript := field == scriptTemplateField && step.ScriptSource != ""
 	where := fmt.Sprintf("step %q field %s", step.Name, field)
-	if field == "script" && step.ScriptSource != "" {
+	if includedScript {
 		where += fmt.Sprintf(" (%s)", step.ScriptSource)
 	}
 	builder := errUtils.Build(errUtils.ErrTemplateEvaluation).
 		WithCause(fmt.Errorf("%s: %w", where, cause)).
 		WithContext("step", step.Name).
 		WithContext("field", field)
-	if field == "script" && step.ScriptSource != "" {
+	if includedScript {
 		builder = builder.WithContext("source", step.ScriptSource)
 	}
 	if literalHintFields[field] && !step.IsLiteral(field) && fieldHasTemplateOpen(step, field) {
-		builder = builder.WithHintf("If the %s contains `{{` that is not a template expression, write the field with the `!literal` YAML tag so it is used exactly as written.", field)
+		if includedScript {
+			// The YAML tag cannot be written inside the included file, so name what works there.
+			builder = builder.WithHint("If the script contains `{{` that is not a template expression, move that text into a `load()`ed module, or include the file with `!include.raw` so it is used exactly as written.")
+		} else {
+			builder = builder.WithHintf("If the %s contains `{{` that is not a template expression, write the field with the `!literal` YAML tag so it is used exactly as written.", field)
+		}
 	}
 	return builder.Err()
 }
 
 func fieldHasTemplateOpen(step *schema.WorkflowStep, field string) bool {
 	switch field {
-	case "script":
+	case scriptTemplateField:
 		return strings.Contains(step.Script, templateOpenDelim)
 	case "command":
 		return strings.Contains(step.Command, templateOpenDelim)

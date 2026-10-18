@@ -1,0 +1,131 @@
+---
+title: atmos aws cloudformation source pull
+sidebar_label: source pull
+sidebar_class_name: command
+id: pull
+description: Vendor component source from source configuration
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Use this command to vendor an `aws/cloudformation` component source based on its `source` configuration. This downloads the component from the specified URI and places it in the appropriate component directory.
+</Intro>
+
+<ActionCard title="Source-Based Version Pinning">
+    Configure source locations, version pins, and authentication.
+    <div>
+      <PrimaryCTA to="/stacks/components/aws-cloudformation#source-provisioning">Source Configuration</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<CastPlayer title="atmos aws cloudformation source pull --help=all" src="/casts/screengrabs/atmos-aws-cloudformation-source-pull--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation source pull <component> --stack <stack> [flags]
+```
+
+## Examples
+
+### Basic Usage
+
+Vendor a component source for a specific stack:
+
+```shell
+atmos aws cloudformation source pull vpc --stack dev
+```
+
+### Force Re-vendor
+
+Re-vendor even if the component directory already exists:
+
+```shell
+atmos aws cloudformation source pull vpc --stack dev --force
+```
+
+### With Identity Override
+
+Use a specific identity for authentication:
+
+```shell
+atmos aws cloudformation source pull vpc --stack dev --identity admin
+```
+
+### Preview with `--dry-run`
+
+Use `--dry-run` to check the component, source configuration, and destination without downloading:
+
+```shell
+atmos aws cloudformation source pull vpc --stack dev --dry-run
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>The name of the Atmos component to vendor. Required for unattended use; when omitted, interactive mode offers component selection if candidates are available.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>The Atmos stack name, also settable via `ATMOS_STACK`. Required for unattended use; when unset, interactive mode offers stack selection if candidates are available.</dd>
+
+  <dt>`--force` / `-f`</dt>
+  <dd>Force re-vendor even if the component directory already exists. Without this flag, the command skips vendoring if the directory exists.</dd>
+
+  <dt>`--identity` / `-i`</dt>
+  <dd>Identity to use for authentication when downloading from protected sources. Overrides the component's default identity.</dd>
+  <dt>`--dry-run`</dt>
+  <dd>Validate static configuration and show the destination without authentication,
+  downloads, or deletion.</dd>
+</dl>
+
+## Description
+
+The command downloads the configured source, applies path filters, and copies
+the result to the component's resolved directory. Existing downloads are skipped
+unless `--force` is set.
+
+The destination follows the base component, `working_directory`, and workdir
+settings. See [Component Directories](/stacks/components/aws-cloudformation#component-directories).
+
+## Configuration
+
+The component must have `source` configured in its stack manifest:
+
+```yaml
+components:
+  "aws/cloudformation":
+    vpc:
+      source:
+        uri: github.com/cloudposse/cloudformation-aws-components//modules/vpc
+        version: 1.0.0
+        included_paths:
+          - "*.yaml"
+        excluded_paths:
+          - "*.md"
+          - "tests/**"
+```
+
+## Output
+
+On success:
+```text
+Vendoring component 'vpc' from source...
+Downloading from github.com/cloudposse/cloudformation-aws-components//modules/vpc?ref=1.0.0
+✓ Successfully vendored component to components/cloudformation/vpc
+```
+
+## See Also
+
+- [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) — Design pattern for per-environment version control
+- [`atmos aws cloudformation source`](/cli/commands/aws/cloudformation/source) — Parent command overview
+- [`atmos aws cloudformation source describe`](/cli/commands/aws/cloudformation/source/describe) — View source configuration
+- [`atmos aws cloudformation source list`](/cli/commands/aws/cloudformation/source/list) — List components with source
+- [`atmos aws cloudformation source delete`](/cli/commands/aws/cloudformation/source/delete) — Remove vendored source

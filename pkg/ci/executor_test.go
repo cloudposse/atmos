@@ -10,9 +10,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	plugin "github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 // boolPtr returns a pointer to a bool value.
@@ -975,6 +978,107 @@ func TestCreatePlanfileStore(t *testing.T) {
 		assert.NotNil(t, store)
 		assert.Equal(t, "local/dir", store.Name())
 	})
+
+	t.Run("configured s3 store with a store-level identity", func(t *testing.T) {
+		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
+		t.Setenv("GITHUB_ACTIONS", "")
+
+		// Capture the identity the backend resolves with, so we prove the
+		// store-level identity (not the component's) actually reached the S3
+		// backend. A non-empty store identity defers S3 client init, so no AWS
+		// call is made during construction.
+		resolver := &capturingPlanfileResolver{}
+		original := defaultResolverFactory
+		defaultResolverFactory = func(_ authtypes.AuthManager, _ *schema.ConfigAndStacksInfo) store.AuthContextResolver {
+			return resolver
+		}
+		t.Cleanup(func() { defaultResolverFactory = original })
+
+		cfg := &schema.AtmosConfiguration{}
+		cfg.Auth = schema.AuthConfig{
+			Identities: map[string]schema.Identity{"aws-backend": {}},
+		}
+		cfg.Components.Terraform.Planfiles = schema.PlanfilesConfig{
+			Default: "s3",
+			Stores: map[string]schema.PlanfileStoreSpec{
+				"s3": {
+					Type:     "aws/s3",
+					Identity: "aws-backend",
+					Options: map[string]any{
+						"bucket": "my-planfiles-bucket",
+						"region": "us-east-1",
+					},
+				},
+			},
+		}
+
+		st, err := createPlanfileStore(ExecuteOptions{
+			AtmosConfig: cfg,
+			// The component authenticates with a different (non-AWS) identity;
+			// the store-level identity must be used for the S3 backend.
+			Info: &schema.ConfigAndStacksInfo{
+				Identity:    "azure-plan",
+				AuthManager: &planfileIdentityStubAuthManager{},
+			},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, st)
+		assert.Equal(t, "aws/s3", st.Name())
+
+		// Trigger the deferred client init so the backend resolves its identity.
+		// The capturing resolver returns an error to short-circuit before any
+		// real S3 call; we only assert which identity the backend passed to it.
+		_, _ = st.Exists(context.Background(), "some/planfile/key")
+		assert.Equal(t, "aws-backend", resolver.gotIdentity,
+			"the S3 backend must resolve with the store-level identity, not the component's")
+	})
+
+	t.Run("unknown store identity is rejected at creation", func(t *testing.T) {
+		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
+		t.Setenv("GITHUB_ACTIONS", "")
+
+		cfg := &schema.AtmosConfiguration{}
+		// auth.identities does NOT define "typo-identity".
+		cfg.Auth = schema.AuthConfig{
+			Identities: map[string]schema.Identity{"aws-backend": {}},
+		}
+		cfg.Components.Terraform.Planfiles = schema.PlanfilesConfig{
+			Default: "s3",
+			Stores: map[string]schema.PlanfileStoreSpec{
+				"s3": {
+					Type:     "aws/s3",
+					Identity: "typo-identity",
+					Options:  map[string]any{"bucket": "b", "region": "us-east-1"},
+				},
+			},
+		}
+
+		st, err := createPlanfileStore(ExecuteOptions{AtmosConfig: cfg})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrIdentityNotInConfig)
+		assert.Nil(t, st)
+	})
+}
+
+// planfileIdentityStubAuthManager / capturingPlanfileResolver let
+// TestCreatePlanfileStore exercise the identity-aware S3 path without a live
+// auth manager. They are declared here (not reused) to keep this test file
+// self-contained.
+type planfileIdentityStubAuthManager struct {
+	authtypes.AuthManager
+}
+
+// capturingPlanfileResolver records the identity name the backend resolves with
+// (proving the store-level identity reached the backend) and returns an error
+// to short-circuit before any real cloud call.
+type capturingPlanfileResolver struct {
+	store.AuthContextResolver
+	gotIdentity string
+}
+
+func (r *capturingPlanfileResolver) ResolveAWSAuthContext(_ context.Context, identityName string) (*store.AWSAuthConfig, error) {
+	r.gotIdentity = identityName
+	return nil, fmt.Errorf("resolver stub: stop before real S3 call")
 }
 
 func TestBuildHookContext(t *testing.T) {
@@ -1099,4 +1203,87 @@ func TestExecute_SummaryContentFlowsToOutput(t *testing.T) {
 	summaryOutput, ok := fcp.writer.outputs["summary"]
 	assert.True(t, ok, "output variables should include 'summary'")
 	assert.Equal(t, fcp.writer.summaries[0], summaryOutput, "summary output should match rendered summary")
+}
+
+// invalidURLProvider is a detected provider whose environment validation fails.
+type invalidURLProvider struct {
+	mockProvider
+}
+
+func (p *invalidURLProvider) ValidateConfig() error {
+	return fmt.Errorf("%w: GITHUB_API_URL=%q", errUtils.ErrInvalidURL, "not-a-url")
+}
+
+func TestExecute_InvalidProviderConfigIsAHardError(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+	Register(&invalidURLProvider{mockProvider: mockProvider{name: "github-actions", detected: true}})
+
+	ClearPlugins()
+	handlerCalled := false
+	require.NoError(t, RegisterPlugin(&stubPlugin{
+		componentType: "terraform",
+		bindings: []plugin.HookBinding{{
+			Event: "before.terraform.plan",
+			Handler: func(*plugin.HookContext) error {
+				handlerCalled = true
+				return nil
+			},
+		}},
+	}))
+
+	err := Execute(ExecuteOptions{
+		Event:       "before.terraform.plan",
+		AtmosConfig: &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+		Info:        &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc"},
+	})
+	require.ErrorIs(t, err, errUtils.ErrInvalidURL)
+	assert.False(t, handlerCalled, "no handler runs when the provider environment is invalid")
+}
+
+func TestExecute_HandlerInvalidURLErrorPropagates(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+	Register(&capturingProvider{mockProvider: mockProvider{name: "generic", detected: false}})
+
+	ClearPlugins()
+	require.NoError(t, RegisterPlugin(&stubPlugin{
+		componentType: "terraform",
+		bindings: []plugin.HookBinding{{
+			Event: "before.terraform.plan",
+			Handler: func(*plugin.HookContext) error {
+				return fmt.Errorf("%w: GITHUB_API_URL=%q", errUtils.ErrInvalidURL, "not-a-url")
+			},
+		}},
+	}))
+
+	err := Execute(ExecuteOptions{
+		Event:       "before.terraform.plan",
+		ForceCIMode: true,
+		AtmosConfig: &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+		Info:        &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc"},
+	})
+	require.ErrorIs(t, err, errUtils.ErrInvalidURL)
+}
+
+func TestExecute_InvalidProviderConfigSkipsUnhandledEvents(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+	Register(&invalidURLProvider{mockProvider: mockProvider{name: "github-actions", detected: true}})
+
+	ClearPlugins()
+	require.NoError(t, RegisterPlugin(&stubPlugin{
+		componentType: "terraform",
+		bindings:      []plugin.HookBinding{{Event: "before.terraform.plan"}},
+	}))
+	for _, event := range []string{"before.terraform.apply", "before.terraform.plan", "before.unknown.plan"} {
+		t.Run(event, func(t *testing.T) {
+			err := Execute(ExecuteOptions{
+				Event:       event,
+				AtmosConfig: &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+				Info:        &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc"},
+			})
+			require.NoError(t, err, "an event without a handler cannot use the invalid API URL")
+		})
+	}
 }

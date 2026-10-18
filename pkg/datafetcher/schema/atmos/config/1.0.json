@@ -2197,6 +2197,217 @@
       "type": "object",
       "description": "AuthConsoleConfig defines global console behavior settings under auth.console."
     },
+    "AwsCloudFormation": {
+      "properties": {
+        "base_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "template": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Template is the path to the CloudFormation template, relative to the component's base path."
+        },
+        "stack_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "StackName is the explicit CloudFormation stack name (no legacy name-pattern interpolation)."
+        },
+        "parameters": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Parameters are CloudFormation template parameters, normalized at the API boundary\n(scalars stringified, lists comma-joined for List\u003cType\u003e/CommaDelimitedList)."
+        },
+        "capabilities": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Capabilities are the acknowledged IAM capabilities (e.g. CAPABILITY_IAM, CAPABILITY_NAMED_IAM)."
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Tags are applied to the CloudFormation stack."
+        },
+        "stack_policy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StackPolicy"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "StackPolicy protects specific resources from update during UpdateStack."
+        },
+        "role_arn": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "RoleArn is the IAM role CloudFormation assumes to deploy the stack."
+        },
+        "notification_arns": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "NotificationArns are SNS topic ARNs CloudFormation publishes stack events to."
+        },
+        "disable_rollback": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "DisableRollback prevents automatic rollback on stack creation failure."
+        },
+        "termination_protection": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "TerminationProtection prevents the stack from being deleted; must be explicitly disabled before delete."
+        },
+        "timeout_in_minutes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "TimeoutInMinutes bounds how long stack creation may run before CloudFormation rolls back."
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Source holds global source configuration defaults for JIT-vendored components."
+        }
+      },
+      "type": "object",
+      "description": "AwsCloudFormation defines configuration for native aws/cloudformation components.\nCloudFormation components deploy a stack-scoped CloudFormation stack directly through the\nAWS SDK for Go v2, with no external binary/toolchain dependency."
+    },
     "CIAnnotationsConfig": {
       "properties": {
         "enabled": {
@@ -2464,16 +2675,6 @@
             }
           ],
           "description": "create, update, upsert"
-        },
-        "template": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
         }
       },
       "type": "object",
@@ -2623,7 +2824,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "AllowUnsafeForkExecution opts out of the fork-checkout safety gate that\nrefuses to clone untrusted fork content under pull_request_target and\nworkflow_run events. Leave false unless a fork-facing workflow has a\ndocumented reason to bypass it. See\ndocs/prd/native-ci/framework/fork-pr-trust-gate.md."
+          "description": "AllowUnsafeForkExecution opts out of both fork safety gates for\npull_request_target and workflow_run events: the clone gate that refuses\nto check out untrusted fork content, and the posting gate that holds\ncomments, commit statuses, environment and path exports, and SARIF\nuploads for a fork pull request. ATMOS_ALLOW_UNSAFE_FORK_EXECUTION sets\nthe same switch. Leave false unless a fork-facing workflow has a\ndocumented reason to bypass it. See\ndocs/prd/native-ci/framework/fork-pr-trust-gate.md."
         }
       },
       "type": "object",
@@ -2824,6 +3025,30 @@
             }
           ],
           "description": "Helmfile contains template overrides for helmfile commands.\nKeys are command names (e.g., \"diff\", \"apply\"), values are template file paths."
+        },
+        "container": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Container maps a container operation name (`image`) to a template file name under base_path."
         }
       },
       "type": "object",
@@ -3952,6 +4177,19 @@
           "anyOf": [
             {
               "$ref": "#/$defs/ContainerComponentsConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "aws/cloudformation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AwsCloudFormation"
             },
             {
               "type": "null"
@@ -8050,6 +8288,17 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Identity optionally names the Atmos auth identity the store uses to\nauthenticate (resolved via `auth.identities`), independent of the\ncomponent's active identity. When empty, the store inherits the\ncomponent's identity (the prior behavior). This lets a multi-cloud setup\nstore planfiles in, say, an AWS S3 bucket while the component itself\nauthenticates with a non-AWS identity."
         }
       },
       "type": "object",
@@ -8637,6 +8886,17 @@
           ],
           "description": "Kind selects the target provisioner (e.g. \"git\", \"kubernetes\")."
         },
+        "packaging": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Packaging names the aws/s3 target used to package a CloudFormation deployment template."
+        },
         "repository": {
           "anyOf": [
             {
@@ -8700,6 +8960,126 @@
             }
           ],
           "description": "PullRequest configures pull-request publishing (git kind; not yet supported by the cli provider)."
+        },
+        "bucket": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Bucket is the destination S3 bucket for packaged template/asset uploads (aws/s3 kind)."
+        },
+        "prefix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Prefix is the destination key prefix within Bucket (aws/s3 kind)."
+        },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Region is the bucket's region (aws/s3 kind). Required: it builds the\nhttps:// TemplateURL CreateChangeSet needs for a packaged template, and\nunlike the CloudFormation client's own region resolution there is no\nreliable way to recover it after the S3 upload has already happened."
+        },
+        "accounts": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Accounts are the target AWS account IDs for stack instances (aws/stackset kind, self-managed permissions)."
+        },
+        "regions": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Regions are the target AWS regions for stack instances (aws/stackset kind)."
+        },
+        "permission_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "PermissionModel is \"SELF_MANAGED\" (default) or \"SERVICE_MANAGED\" (aws/stackset kind)."
+        },
+        "administration_role_arn": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "AdministrationRoleArn is the IAM role CloudFormation assumes to create/manage the StackSet (aws/stackset kind, self-managed permissions)."
+        },
+        "execution_role_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ExecutionRoleName is the IAM role name CloudFormation assumes in each target account (aws/stackset kind, self-managed permissions)."
         }
       },
       "type": "object",
@@ -9361,6 +9741,34 @@
       },
       "type": "object",
       "description": "SourceSettings holds global source configuration defaults for JIT-vendored components."
+    },
+    "StackPolicy": {
+      "properties": {
+        "file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "File is the path to the stack policy JSON document, relative to the component's base path."
+        },
+        "body": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object"
+            }
+          ],
+          "description": "Body is an inline stack policy document, either a JSON string or a map serialized to JSON.\nIt is mutually exclusive with File and needs no component directory."
+        }
+      },
+      "type": "object",
+      "description": "StackPolicy references a CloudFormation stack policy document."
     },
     "Stacks": {
       "properties": {
@@ -10079,7 +10487,7 @@
           "description": "File picker fields."
         },
         "source": {
-          "description": "Source: workdir provisioning (string or source map), or the directory/file to archive (archive step type, string only)."
+          "description": "Source: workdir provisioning (string or source map), or a local directory/file for archive and publish steps (string only)."
         },
         "reset": {
           "anyOf": [
@@ -10869,6 +11277,17 @@
           ],
           "description": "Workflow container override or false to run on host."
         },
+        "target": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object"
+            }
+          ],
+          "description": "Target selects a named component target or an inline publishing target."
+        },
         "format": {
           "anyOf": [
             {
@@ -10889,7 +11308,7 @@
               "type": "null"
             }
           ],
-          "description": "Pack: archive file to write. Extract: directory to extract into."
+          "description": "Archive output/extraction path, or publish path relative to its target."
         },
         "subpath": {
           "anyOf": [
@@ -11913,6 +12332,20 @@
             }
           ]
         },
+        "plan_diff": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TerraformPlanDiff"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "PlanDiff configures exclusions shared by plan-diff and deployment plan verification."
+        },
         "lint": {
           "anyOf": [
             {
@@ -12581,6 +13014,39 @@
         }
       },
       "type": "object"
+    },
+    "TerraformPlanDiff": {
+      "properties": {
+        "ignore_changes": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "IgnoreChanges excludes exact resource_type.attribute names from Atmos comparisons.\nOnly top-level attributes are supported; globs and nested paths are invalid."
+        }
+      },
+      "type": "object",
+      "description": "TerraformPlanDiff configures Atmos plan comparisons, not Terraform lifecycle behavior."
     },
     "TerraformRCConfig": {
       "properties": {
@@ -15462,7 +15928,7 @@
           "description": "File picker fields."
         },
         "source": {
-          "description": "Source: workdir provisioning (string or source map), or the directory/file to archive (archive step type, string only)."
+          "description": "Source: workdir provisioning (string or source map), or a local directory/file for archive and publish steps (string only)."
         },
         "reset": {
           "anyOf": [
@@ -16293,6 +16759,17 @@
           ],
           "description": "Run the emulator without persistence for this step (emulator step type)."
         },
+        "target": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object"
+            }
+          ],
+          "description": "Target selects a named component target or an inline publishing target."
+        },
         "format": {
           "anyOf": [
             {
@@ -16313,7 +16790,7 @@
               "type": "null"
             }
           ],
-          "description": "Pack: archive file to write. Extract: directory to extract into."
+          "description": "Archive output/extraction path, or publish path relative to its target."
         },
         "subpath": {
           "anyOf": [
@@ -17010,6 +17487,16 @@
       ]
     },
     "containerDirAbsolutePath": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "cloudFormationDirAbsolutePath": {
       "anyOf": [
         {
           "type": "string"

@@ -634,6 +634,11 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	if err := schema.ValidateTerraformFlagsKeys(v.GetStringMap("components.terraform.flags")); err != nil {
 		return atmosConfig, fmt.Errorf("atmos.yaml components.terraform.flags: %w", err)
 	}
+	if err := atmosConfig.Components.Terraform.PlanDiff.Validate(); err != nil {
+		return atmosConfig, errUtils.Build(err).
+			WithHint("Each entry names one top-level attribute on every resource of a type, such as `aws_db_instance.latest_restorable_time`; resource addresses, module paths, and wildcards are not supported.").
+			Err()
+	}
 
 	extractEnvMapsFromViper(v, &atmosConfig)
 
@@ -852,6 +857,10 @@ func setEnv(v *viper.Viper) {
 
 	// CI log-group settings (env override for the schema field with no CLI flag).
 	bindEnv(v, "ci.groups.mode", "ATMOS_CI_GROUPS_MODE")
+
+	// Fork safety gate opt-out. The same variable also releases the `atmos git clone` gate (cmd/git/flags.go),
+	// so one setting releases both the clone gate and the reporter's posting gate.
+	bindEnv(v, "ci.allow_unsafe_fork_execution", "ATMOS_ALLOW_UNSAFE_FORK_EXECUTION")
 
 	// Cast recording dimensions (env override for recording pipelines, e.g. docs screengrabs).
 	bindEnv(v, "cast.recording.width", "ATMOS_CAST_RECORDING_WIDTH")
@@ -2002,6 +2011,9 @@ func preprocessAtmosYamlFuncExceptCommands(content []byte, v *viper.Viper, sourc
 	if err := goyaml.Unmarshal(content, &root); err != nil {
 		return err
 	}
+	if err := rejectStarlarkTags(&root, sourceFile); err != nil {
+		return err
+	}
 	if len(root.Content) > 0 && root.Content[0].Kind == goyaml.MappingNode {
 		mapping := root.Content[0]
 		for i := 0; i < len(mapping.Content); i += 2 {
@@ -2041,6 +2053,9 @@ func commandsAreUnset(content []byte) bool {
 func extractCommandsWithYamlFunctionsForFile(content []byte, sourceFile string) (interface{}, error) {
 	var root goyaml.Node
 	if err := goyaml.Unmarshal(content, &root); err != nil {
+		return nil, err
+	}
+	if err := rejectStarlarkTags(&root, sourceFile); err != nil {
 		return nil, err
 	}
 	if len(root.Content) == 0 || root.Content[0].Kind != goyaml.MappingNode {

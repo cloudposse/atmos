@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,8 +58,12 @@ func TestBenchReportRunValidationAndPublication(t *testing.T) {
 						return errors.New("unavailable")
 					}
 					return githubtest.Respond(run, response)
-				case strings.Contains(path, "/pulls?"):
+				case strings.Contains(path, "/commits/") && strings.Contains(path, "/pulls?"):
 					require.Contains(t, path, "/commits/"+run.HeadSHA+"/pulls?", "association must use the PR head, not the merge")
+					return githubtest.Respond([]githubapi.PR{pr}, response)
+				case strings.Contains(path, "/pulls?"):
+					// The head-branch fallback runs when the listed PR does not match.
+					require.Equal(t, "stale", scenario, "only a moved head needs the fallback")
 					return githubtest.Respond([]githubapi.PR{pr}, response)
 				case strings.Contains(path, "/git/commits/"):
 					require.True(t, strings.HasSuffix(path, "/"+benchTestMerge))
@@ -118,6 +123,127 @@ func TestBenchReportRunValidationAndPublication(t *testing.T) {
 			}
 		})
 	}
+}
+
+// GitHub's commit association endpoint returns [] for a commit that exists only
+// in a fork, so the PR must be resolved through the fork's head branch.
+func TestBenchAssociatedPRsResolveForkOnlyCommits(t *testing.T) {
+	const forkOwner, forkBranch = "contributor", "fix/example-branch"
+	cases := []struct {
+		name        string
+		commitPRs   func(pr githubapi.PR) []githubapi.PR
+		headPRs     func(pr githubapi.PR) []githubapi.PR
+		wantNumbers []int
+		wantHead    bool
+	}{
+		{
+			name:        "fork-only commit is found through the head branch",
+			commitPRs:   func(githubapi.PR) []githubapi.PR { return []githubapi.PR{} },
+			headPRs:     func(pr githubapi.PR) []githubapi.PR { return []githubapi.PR{pr} },
+			wantNumbers: []int{42},
+			wantHead:    true,
+		},
+		{
+			name:        "fallback is not used when the commit endpoint lists the PR",
+			commitPRs:   func(pr githubapi.PR) []githubapi.PR { return []githubapi.PR{pr} },
+			headPRs:     func(pr githubapi.PR) []githubapi.PR { return []githubapi.PR{pr} },
+			wantNumbers: []int{42},
+		},
+		{
+			name:      "head that moved after the run is not associated",
+			commitPRs: func(githubapi.PR) []githubapi.PR { return []githubapi.PR{} },
+			headPRs: func(pr githubapi.PR) []githubapi.PR {
+				pr.Head.SHA = githubtest.Base
+				return []githubapi.PR{pr}
+			},
+			wantHead: true,
+		},
+		{
+			name:      "PR on a non-main base is not associated",
+			commitPRs: func(githubapi.PR) []githubapi.PR { return []githubapi.PR{} },
+			headPRs: func(pr githubapi.PR) []githubapi.PR {
+				pr.Base.Ref = "release"
+				return []githubapi.PR{pr}
+			},
+			wantHead: true,
+		},
+		{
+			name:      "closed PR is not associated",
+			commitPRs: func(githubapi.PR) []githubapi.PR { return []githubapi.PR{} },
+			headPRs: func(pr githubapi.PR) []githubapi.PR {
+				pr.State = "closed"
+				return []githubapi.PR{pr}
+			},
+			wantHead: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			run := githubtest.Run()
+			run.Event, run.Branch = "pull_request", forkBranch
+			run.HeadRepository.FullName = forkOwner + "/atmos"
+			pr := githubtest.PR(run)
+			headCalls := 0
+			fake := &githubtest.FakeAPI{T: t, Get: func(path string, response any) error {
+				switch {
+				case strings.Contains(path, "/commits/"+run.HeadSHA+"/pulls?"):
+					return githubtest.Respond(tc.commitPRs(pr), response)
+				case strings.Contains(path, "/pulls?"):
+					headCalls++
+					parsed, err := url.Parse(path)
+					require.NoError(t, err)
+					require.Equal(t, "repos/"+githubtest.Repo+"/pulls", parsed.Path)
+					require.Equal(t, "open", parsed.Query().Get("state"))
+					require.Equal(t, "main", parsed.Query().Get("base"))
+					require.Equal(t, forkOwner+":"+forkBranch, parsed.Query().Get("head"))
+					return githubtest.Respond(tc.headPRs(pr), response)
+				}
+				t.Fatalf("unexpected path %s", path)
+				return nil
+			}}
+			prs, err := benchAssociatedPRs(context.Background(), fake, githubtest.Repo, &run)
+			require.NoError(t, err)
+			var got []int
+			for i := range prs {
+				if PRMatches(&prs[i], &run, githubtest.Repo) {
+					got = append(got, prs[i].Number)
+				}
+			}
+			require.Equal(t, tc.wantNumbers, got)
+			require.Equal(t, tc.wantHead, headCalls == 1, "head-branch lookups: %d", headCalls)
+		})
+	}
+}
+
+// The reporter must publish exactly once for a fork-only commit even though the
+// commit association endpoint returns nothing.
+func TestBenchReportRunPublishesForkOnlyCommit(t *testing.T) {
+	benchSetUpRun(t)
+	run := githubtest.Run()
+	run.Event, run.Branch = "pull_request", "fix/example-branch"
+	run.Conclusion = "failure"
+	run.HeadRepository.FullName = "contributor/atmos"
+	pr := githubtest.PR(run)
+	fake := &githubtest.FakeAPI{T: t, Get: func(path string, response any) error {
+		switch {
+		case strings.HasSuffix(path, "actions/runs/10"):
+			return githubtest.Respond(run, response)
+		case strings.Contains(path, "/commits/"+run.HeadSHA+"/pulls?"):
+			return githubtest.Respond([]githubapi.PR{}, response)
+		case strings.Contains(path, "/pulls?") && strings.Contains(path, "head=contributor%3Afix%2Fexample-branch"):
+			return githubtest.Respond([]githubapi.PR{pr}, response)
+		}
+		t.Fatalf("unexpected path %s", path)
+		return nil
+	}}
+	var numbers []int
+	err := ReportRun(context.Background(), fake, githubtest.Repo, 10, func(number int, body string, _ *githubapi.Run) error {
+		numbers = append(numbers, number)
+		require.Contains(t, body, "execution failure")
+		return nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, []int{42}, numbers)
 }
 
 func TestBenchPRAndArtifactPaginationErrors(t *testing.T) {

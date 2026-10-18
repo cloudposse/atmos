@@ -302,12 +302,13 @@ func TestTerraformNodeHooksAfter_ReinjectsStoreAuthResolver(t *testing.T) {
 
 // TestRunCIHooksForNode_RunCIHooksError covers runCIHooksForNode's RunCIHooks
 // error branch (log.Warn). Constructing an AtmosConfiguration directly with
-// CI.Enabled=true and Settings.Experimental="disable" makes checkExperimental
-// (inside RunCIHooks) return an error without needing any fixture on disk —
+// CI.Enabled=true and an invalid GitHub API URL make provider validation
+// return an error without needing any fixture on disk —
 // runCIHooksForNode takes atmosConfig as a parameter rather than loading it
 // itself.
 func TestRunCIHooksForNode_RunCIHooksError(t *testing.T) {
-	withoutCIDetection(t)
+	withGitHubActionsDetection(t)
+	t.Setenv("ATMOS_CI_GITHUB_API_URL", "://invalid")
 
 	cmd := newHookTestCmd()
 	require.NoError(t, cmd.Flags().Set("ci", "true"))
@@ -329,7 +330,8 @@ func TestRunCIHooksForNode_RunCIHooksError(t *testing.T) {
 // TestRunCIHooksForNode_RunCIHooksError for the new before-side counterpart
 // (issue #3007's deploy fix): it must fail gracefully (log.Warn), not panic.
 func TestRunCIHooksForNodeBefore_RunCIHooksError(t *testing.T) {
-	withoutCIDetection(t)
+	withGitHubActionsDetection(t)
+	t.Setenv("ATMOS_CI_GITHUB_API_URL", "://invalid")
 
 	cmd := newHookTestCmd()
 	require.NoError(t, cmd.Flags().Set("ci", "true"))
@@ -1188,9 +1190,9 @@ func TestTerraformPlanCIResultHandler(t *testing.T) {
 		// Covers the `if err := h.RunCIHooks(...); err != nil { return err }`
 		// branch — distinct from the "returns config init errors" subtest
 		// above, which fails earlier at cfg.InitCliConfig. This needs a valid
-		// project (so InitCliConfig succeeds) with ci.enabled=true and
-		// settings.experimental=disable, so RunCIHooks itself fails inside
-		// checkExperimental.
+		// project (so InitCliConfig succeeds) and an invalid GitHub API URL.
+		withGitHubActionsDetection(t)
+		t.Setenv("ATMOS_CI_GITHUB_API_URL", "://invalid")
 		tempDir := t.TempDir()
 		require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "stacks", "test.yaml"), []byte("vars:\n  stage: test\n"), 0o644))
@@ -1302,10 +1304,9 @@ func TestTerraformPlanCIBeforeHandler(t *testing.T) {
 	})
 
 	t.Run("returns RunCIHooks errors", func(t *testing.T) {
-		// Same experimental-functions-disabled trick as
-		// TestTerraformPlanCIResultHandler's "returns RunCIHooks errors":
-		// a valid project (InitCliConfig succeeds) with ci.enabled=true and
-		// settings.experimental=disable makes RunCIHooks itself fail.
+		// A valid project reaches provider validation, which rejects the URL.
+		withGitHubActionsDetection(t)
+		t.Setenv("ATMOS_CI_GITHUB_API_URL", "://invalid")
 		tempDir := t.TempDir()
 		require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "stacks", "test.yaml"), []byte("vars:\n  stage: test\n"), 0o644))

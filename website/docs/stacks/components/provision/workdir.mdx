@@ -9,14 +9,15 @@ id: component-provision-workdir
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
-import Experimental from '@site/src/components/Experimental'
 import Note from '@site/src/components/Note'
 
 <Intro>
 `provision.workdir` creates an isolated working directory for each component instance under `.workdir/<componentType>/<stack>-<componentName>-<hash>/`. The component source is staged into this directory and all toolchain commands execute there, enabling concurrent execution and just-in-time source provisioning without `.terraform/`, lockfile, or generated-varfile collisions.
 </Intro>
 
-<Experimental />
+[Just-in-time source vendoring](/cli/commands/terraform/source), including its automatic
+workdir support, and the `terraform workdir` management commands are stable.
+Workdir provisioning for local-only components remains experimental; see the [graduation announcement](/changelog/core-features-graduate-to-stable).
 
 ## Schema
 

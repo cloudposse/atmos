@@ -51,6 +51,9 @@ const config = {
         [
             'docusaurus-plugin-image-zoom', {},
         ],
+        // Replaces the default og:image/twitter:image with a per-page card
+        // (title + description) rendered after the build.
+        path.resolve(__dirname, './plugins/social-cards'),
         [
             '@docusaurus/plugin-client-redirects', {
                 redirects: [
@@ -58,6 +61,8 @@ const config = {
                         from: '/changelog/starlark-yaml-values',
                         to: '/changelog/starlark-custom-commands'
                     },
+                    // Preserve the original Rain migration guide URL.
+                    {from: '/migration/from-rain', to: '/migration/rain'},
                     // Advanced Quick Start: "Configure Repository" + "Configure CLI"
                     // were merged into a single "Configure the Project" step.
                     {
@@ -408,6 +413,10 @@ const config = {
                 // URLs (still bookmarked/indexed externally) to their current
                 // /changelog/<slug> location.
                 createRedirects(existingPath) {
+                    // Scripting guides previously lived under /automation.
+                    if (existingPath === '/scripting' || existingPath.startsWith('/scripting/')) {
+                        return [existingPath.replace(/^\/scripting(?=\/|$)/, '/automation')];
+                    }
                     if (existingPath === '/steps' || existingPath.startsWith('/steps/')) {
                         return [existingPath.replace(/^\/steps(?=\/|$)/, '/workflows/steps')];
                     }
@@ -654,6 +663,10 @@ const config = {
     themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
         ({
+            // Default Open Graph / Twitter card image. Generated at build time by
+            // scripts/generate-social-card.mjs (gitignored). The social-cards plugin
+            // swaps it for a per-page card after the build.
+            image: 'img/social-card.png',
             docs: {
                 sidebar: {
                     hideable: true,

@@ -21,9 +21,6 @@ func qualityGuidance(pr *githubapi.PR, gates []qualityGate, performance string) 
 			steps = append(steps, step)
 		}
 	}
-	if pr.Draft {
-		steps = append(steps, "Problem: This PR is a draft.\n   Next: When it is ready for review, mark the PR ready for review.")
-	}
 	if strings.Contains(performance, "**warning**") {
 		steps = append(steps, "Investigate the advisory performance warning: reproduce the flagged workload with go tool mage bench:run, then bench:fetch and bench:compare. Compare the same candidate against each main snapshot independently. Use bench:fieldTest for a known-good/bad revision pair. Inspect backend-read counts and timing variability before attributing a slowdown. Performance warnings do not block readiness.")
 	}

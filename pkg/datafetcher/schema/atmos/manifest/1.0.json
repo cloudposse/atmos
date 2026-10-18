@@ -23,6 +23,9 @@
     "helm": {
       "$ref": "#/definitions/helm"
     },
+    "aws/cloudformation": {
+      "$ref": "#/definitions/aws_cloudformation"
+    },
     "packer": {
       "$ref": "#/definitions/packer"
     },
@@ -369,6 +372,9 @@
             },
             "helm": {
               "$ref": "#/definitions/helm_components"
+            },
+            "aws/cloudformation": {
+              "$ref": "#/definitions/aws_cloudformation_components"
             },
             "packer": {
               "$ref": "#/definitions/packer_components"
@@ -1459,6 +1465,204 @@
         }
       ]
     },
+    "aws_cloudformation": {
+      "title": "aws_cloudformation",
+      "description": "aws/cloudformation component type defaults",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "aws_cloudformation_components": {
+      "title": "aws_cloudformation_components",
+      "description": "aws/cloudformation components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/aws_cloudformation_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "aws_cloudformation_component_manifest": {
+      "title": "aws_cloudformation_component_manifest",
+      "description": "aws/cloudformation component manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "component": {
+              "$ref": "#/definitions/component"
+            },
+            "template": {
+              "description": "Inline CloudFormation template body: a YAML/JSON string, or a structured map. Mutually exclusive with 'path'.",
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "object",
+                  "minProperties": 1
+                }
+              ]
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Path to the CloudFormation template file, relative to the component's base path. Mutually exclusive with 'template'."
+            },
+            "stack_name": {
+              "type": "string"
+            },
+            "parameters": {
+              "description": "Template parameters: a map of name to value, or a list of {ParameterKey, ParameterValue} entries.",
+              "type": ["object", "array"]
+            },
+            "capabilities": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "stack_policy": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Stack policy: 'file' (path relative to the component's base path) or inline 'body'. 'file' and 'body' are mutually exclusive.",
+              "properties": {
+                "file": {
+                  "type": "string"
+                },
+                "body": {
+                  "description": "Inline stack policy: a JSON string, or a structured map serialized to JSON. Mutually exclusive with 'file'.",
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "role_arn": {
+              "type": "string"
+            },
+            "notification_arns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "disable_rollback": {
+              "type": "boolean"
+            },
+            "termination_protection": {
+              "type": "boolean"
+            },
+            "timeout_in_minutes": {
+              "type": "integer"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            }
+          },
+          "required": [],
+          "not": {
+            "required": [
+              "template",
+              "path"
+            ]
+          }
+        }
+      ]
+    },
     "packer": {
       "title": "packer",
       "description": "Packer section",
@@ -1920,6 +2124,53 @@
         }
       ]
     },
+    "provision_target_auth": {
+      "title": "provision_target_auth",
+      "description": "Per-target authentication for a provision target. Accepts the same sections as component-level auth (providers, identities, integrations, realm) plus the 'identity' shorthand that selects a named identity. Unknown keys are rejected so typos such as 'identitty' fail validation.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "type": "string",
+              "description": "Name of the Atmos Auth identity used for this target (shorthand for selecting an identity defined in global, component, or target auth)."
+            },
+            "realm": {
+              "type": "string",
+              "description": "Credential isolation realm."
+            },
+            "providers": {
+              "$ref": "#/definitions/auth_providers"
+            },
+            "identities": {
+              "$ref": "#/definitions/auth_identities"
+            },
+            "integrations": {
+              "type": "object",
+              "description": "Client-only credential materializations (e.g., ECR, EKS).",
+              "additionalProperties": true
+            },
+            "logs": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "keyring": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "console": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      ]
+    },
     "provision": {
       "title": "provision",
       "description": "Provision section for component provisioning configuration, including workdir and delivery targets",
@@ -1961,14 +2212,7 @@
                     "description": "For kind 'git': true fans out one file per rendered object under 'path' (a directory); false writes 'path' as a single multi-document YAML file. When unset, inferred from whether the last segment of 'path' looks like a manifest filename (matches /\\.(ya?ml|json)$/i): a match defaults to single-file mode, otherwise the directory default is preserved."
                   },
                   "auth": {
-                    "type": "object",
-                    "properties": {
-                      "identity": {
-                        "type": "string",
-                        "description": "Atmos Auth identity used for the delivery"
-                      }
-                    },
-                    "additionalProperties": false
+                    "$ref": "#/definitions/provision_target_auth"
                   },
                   "commit": {
                     "type": "object",
@@ -1998,6 +2242,22 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  "bucket": {
+                    "type": "string",
+                    "description": "For kind 'aws/s3': destination S3 bucket for packaged template/asset uploads."
+                  },
+                  "prefix": {
+                    "type": "string",
+                    "description": "For kind 'aws/s3': destination key prefix within bucket."
+                  },
+                  "region": {
+                    "type": "string",
+                    "description": "For kind 'aws/s3': the bucket's region."
+                  },
+                  "packaging": {
+                    "type": "string",
+                    "description": "Name of the declared aws/s3 target used to package a CloudFormation deployment template"
                   }
                 },
                 "required": [
@@ -3992,7 +4252,7 @@
         },
         "destination": {
           "type": "string",
-          "description": "Archive step type: archive file to write when packing, or directory to extract into when extracting."
+          "description": "Archive output/extraction path, or publish destination relative to the target root."
         },
         "subpath": {
           "type": "string",
@@ -4062,6 +4322,68 @@
               "items": {
                 "type": "string"
               }
+            }
+          ]
+        },
+        "target": {
+          "description": "Publish step: named component provision target or inline target definition.",
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "object",
+              "required": [
+                "kind"
+              ],
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "bucket": {
+                  "type": "string"
+                },
+                "prefix": {
+                  "type": "string"
+                },
+                "region": {
+                  "type": "string"
+                },
+                "content_type": {
+                  "type": "string"
+                },
+                "cache_control": {
+                  "type": "string"
+                },
+                "repository": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "auth": {
+                  "$ref": "#/definitions/provision_target_auth"
+                },
+                "commit": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "signing": {
+                      "type": "string",
+                      "enum": [
+                        "auto",
+                        "always",
+                        "never"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
             }
           ]
         }

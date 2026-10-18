@@ -21,17 +21,24 @@ import (
 
 // Package-level function variables for testing (can be replaced in tests).
 var (
-	initCliConfigFunc     = cfg.InitCliConfig
-	mergeAuthFunc         = auth.MergeComponentAuthFromConfig
-	createAuthFunc        = auth.CreateAndAuthenticateManager
-	describeComponentFunc = executeDescribeComponentDefault
-	provisionSourceFunc   = source.Provision
+	initCliConfigFunc          = cfg.InitCliConfig
+	mergeAuthFunc              = auth.MergeComponentAuthFromConfig
+	createAuthFunc             = auth.CreateAndAuthenticateManager
+	describeComponentFunc      = executeDescribeComponentDefault
+	describeTypedComponentFunc = executeDescribeTypedComponentDefault
+	provisionSourceFunc        = source.Provision
 )
 
 // executeDescribeComponentDefault is the default implementation for describing components.
 func executeDescribeComponentDefault(component, stack string) (map[string]any, error) {
+	return executeDescribeTypedComponentDefault("", component, stack)
+}
+
+// executeDescribeTypedComponentDefault restricts lookup to the source command's provider.
+func executeDescribeTypedComponentDefault(componentType, component, stack string) (map[string]any, error) {
 	return e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
 		Component:            component,
+		ComponentType:        componentType,
 		Stack:                stack,
 		ProcessTemplates:     false,
 		ProcessYamlFunctions: false,
@@ -80,9 +87,15 @@ func ParseCommonFlags(cmd *cobra.Command, parser *flags.StandardParser) (*Common
 func InitConfigAndAuth(component, stack, identity string, globalFlags *global.Flags) (*schema.AtmosConfiguration, *schema.AuthContext, error) {
 	defer perf.Track(nil, "source.cmd.InitConfigAndAuth")()
 
+	return initConfigAndAuth("", component, stack, identity, globalFlags)
+}
+
+// initConfigAndAuth uses the command's provider for component-level authentication.
+func initConfigAndAuth(componentType, component, stack, identity string, globalFlags *global.Flags) (*schema.AtmosConfiguration, *schema.AuthContext, error) {
 	// Build config info with global flag values.
 	configInfo := schema.ConfigAndStacksInfo{
 		ComponentFromArg: component,
+		ComponentType:    componentType,
 		Stack:            stack,
 	}
 
@@ -101,7 +114,7 @@ func InitConfigAndAuth(component, stack, identity string, globalFlags *global.Fl
 	}
 
 	// Load component configuration to get component-level auth settings.
-	componentConfig, err := describeComponentFunc(component, stack)
+	componentConfig, err := describeSourceComponent(componentType, component, stack)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load component config: %w", err)
 	}
@@ -135,6 +148,14 @@ func DescribeComponent(component, stack string) (map[string]any, error) {
 	defer perf.Track(nil, "source.cmd.DescribeComponent")()
 
 	return describeComponentFunc(component, stack)
+}
+
+// describeSourceComponent preserves untyped lookup for legacy helper callers while source commands select their provider.
+func describeSourceComponent(componentType, component, stack string) (map[string]any, error) {
+	if componentType == "" {
+		return DescribeComponent(component, stack)
+	}
+	return describeTypedComponentFunc(componentType, component, stack)
 }
 
 // ProvisionSourceOptions holds parameters for provisioning a component source.

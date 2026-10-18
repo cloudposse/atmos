@@ -20,11 +20,13 @@ import (
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfgpkg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	atmostmpl "github.com/cloudposse/atmos/pkg/template"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -61,45 +63,76 @@ func ProcessTmpl(
 ) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmpl")()
 
-	return processTmpl(atmosConfig, tmplName, tmplValue, tmplData, templateProcessOptions{ignoreMissing: ignoreMissingTemplateValues})
+	return processTmpl(atmosConfig, &tmplInput{name: tmplName, value: tmplValue, data: tmplData, ignoreMissing: ignoreMissingTemplateValues})
 }
 
-type templateProcessOptions struct {
-	ignoreMissing bool
-	prepare       func(*template.Template)
+// tmplInput describes a template to render with processTmpl.
+type tmplInput struct {
+	prepare func(*template.Template)
+	name    string
+	value   string
+	data    any
+	// manifestLoadFile is set while a stack manifest (or a section of it) is rendered during stack
+	// loading. atmos.Component then must not describe the target component: that loads every stack
+	// manifest again, including the one being rendered, and recursed without limit. Plain
+	// atmos.Component actions are left as template text for the later per-component render; other
+	// forms fail with ErrComponentFuncDuringManifestLoad.
+	manifestLoadFile string
+	ignoreMissing    bool
+	// skipComponentDeferral keeps the manifest-load guard active but evaluates Component calls
+	// immediately so import paths, which have no later render pass, reject them.
+	skipComponentDeferral bool
 }
 
-// processTmpl allows a caller to guard parsed expressions before executing them.
-func processTmpl(
-	atmosConfig *schema.AtmosConfiguration,
-	tmplName, tmplValue string,
-	tmplData any,
-	options templateProcessOptions,
-) (rendered string, renderErr error) {
-	protectedSource, restoreSource, protectErr := starlarksource.Protect(tmplValue, tmplName)
+// manifestLoadOnlyContextKeys returns the top-level keys of the manifest-load template context that
+// the later per-component render does not have: file-scoped `locals` and import `context` values.
+// The `vars`, `settings` and `env` sections are excluded because the component sections provide them.
+func manifestLoadOnlyContextKeys(tmplData any) []string {
+	ctxMap, ok := tmplData.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	keys := make([]string, 0, len(ctxMap))
+	for key := range ctxMap {
+		switch key {
+		case cfgpkg.VarsSectionName, cfgpkg.SettingsSectionName, cfgpkg.EnvSectionName:
+			continue
+		}
+		keys = append(keys, key)
+	}
+
+	return keys
+}
+
+// processTmpl parses and executes Go templates. A non-empty in.manifestLoadFile selects the
+// manifest-load behavior.
+func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendered string, renderErr error) {
+	protectedSource, restoreSource, protectErr := starlarksource.Protect(in.value, in.name)
 	if protectErr != nil {
 		return "", protectErr
 	}
-	tmplValue = protectedSource
 	defer func() {
 		if renderErr == nil {
 			rendered = restoreSource(rendered)
 		}
 	}()
 
-	d := data.Data{}
-	ctx := context.TODO()
-
 	// Add Gomplate, Sprig and Atmos template functions.
-	cfg := atmosConfig
-	if cfg == nil {
-		cfg = &schema.AtmosConfiguration{}
-	}
-	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), getSprigFuncMap(), FuncMap(cfg, &schema.ConfigAndStacksInfo{}, ctx, &d))
+	funcs := buildTemplateFuncMap(atmosConfig, in.manifestLoadFile)
 
-	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
+	t, err := template.New(in.name).Funcs(funcs).Parse(protectedSource)
 	if err != nil {
 		return "", err
+	}
+
+	// While stack manifests are loading, leave atmos.Component actions as template text for the
+	// later per-component render (which runs after all manifests are loaded) and render the rest
+	// of the manifest now. `locals` and import context values exist only in this pass, so
+	// they are resolved inside the deferred actions. Actions that cannot be deferred fail with
+	// ErrComponentFuncDuringManifestLoad.
+	if in.manifestLoadFile != "" && !in.skipComponentDeferral {
+		atmostmpl.DeferCalls(t.Tree, "atmos", "Component", in.data, manifestLoadOnlyContextKeys(in.data)...)
 	}
 
 	// Control the behavior during execution if a map is indexed with a key that is not present in the map.
@@ -109,22 +142,39 @@ func processTmpl(
 
 	option := "missingkey=error"
 
-	if options.ignoreMissing {
+	if in.ignoreMissing {
 		option = "missingkey=default"
 	}
 
 	t.Option(option)
-	if options.prepare != nil {
-		options.prepare(t)
+	if in.prepare != nil {
+		in.prepare(t)
 	}
 
 	var res bytes.Buffer
-	err = t.Execute(&res, tmplData)
+	err = t.Execute(&res, in.data)
 	if err != nil {
 		return "", err
 	}
 
 	return res.String(), nil
+}
+
+// buildTemplateFuncMap combines template functions with the appropriate manifest-load guard.
+func buildTemplateFuncMap(atmosConfig *schema.AtmosConfiguration, manifestLoadFile string) template.FuncMap {
+	d := data.Data{}
+	ctx := context.TODO()
+	tmplConfig := atmosConfig
+	if tmplConfig == nil {
+		tmplConfig = &schema.AtmosConfiguration{}
+	}
+	var atmosFuncMap template.FuncMap
+	if manifestLoadFile != "" {
+		atmosFuncMap = manifestLoadFuncMap(tmplConfig, &schema.ConfigAndStacksInfo{}, ctx, &d, manifestLoadFile)
+	} else {
+		atmosFuncMap = FuncMap(tmplConfig, &schema.ConfigAndStacksInfo{}, ctx, &d)
+	}
+	return lo.Assign(gomplate.CreateFuncs(ctx, &d), getSprigFuncMap(), atmosFuncMap)
 }
 
 // convertRawEnvToStringMap converts a raw env value (any) to map[string]string.

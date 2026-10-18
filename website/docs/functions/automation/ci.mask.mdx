@@ -34,12 +34,14 @@ The return value is `None`.
 
 - The value is registered with Atmos output masking immediately, so every line printed after the call redacts it. This
   includes `ui.*`, `print`, summaries, comments, and the output of later commands.
-- In CI, the call also emits the runner's mask command, so the runner redacts the value from its logs, including the
-  output of steps that run after the script.
+- When [`ci.enabled`](/cli/configuration/ci) is true and a CI provider is detected, the call also emits the runner's
+  mask command, so the runner redacts the value from its logs, including the output of steps that run after the script.
+  The runner command goes to stderr, so it never mixes into data a script prints to stdout.
 - Masking applies from the call onward. Text that was already printed is not changed, so mask a value before you print it.
 - The value still reaches [`ci.output`](/functions/automation/ci.output) and [`ci.env`](/functions/automation/ci.env)
   unchanged, so later steps can use it.
-- The call is not gated by the `ci.*.enabled` flags. Masking is a safety measure, so it always applies.
+- Atmos's own masking is not gated by any flag, because masking is a safety measure. Only the runner's mask command
+  depends on `ci.enabled`: with `ci.enabled` off, Atmos output still redacts the value, but the runner does not.
 
 ## Examples
 

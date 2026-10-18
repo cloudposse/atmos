@@ -57,6 +57,15 @@ func isTTYForPromptInput() bool {
 	return enabled
 }
 
+// ConfirmationAvailable reports whether PromptForConfirmation can prompt. Callers use
+// it to fail fast with ErrInteractiveNotAvailable before running expensive checks
+// whose result would only be followed by an impossible confirmation prompt.
+func ConfirmationAvailable() bool {
+	defer perf.Track(nil, "flags.ConfirmationAvailable")()
+
+	return isTTYForPromptInput()
+}
+
 // IsInteractive reports whether interactive prompts should be shown (interactive
 // mode enabled, stdin is a TTY, and not running in CI). Callers that load their
 // own options before prompting use this to gate that work and to surface a clear

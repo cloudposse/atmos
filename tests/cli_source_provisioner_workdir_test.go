@@ -12,10 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/cmd"
+	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 )
 
-// Note: resetViperState is defined in cli_source_provisioner_test.go
-// and shared across test files in this package.
+// Source command state helpers are shared with cli_source_provisioner_test.go.
 
 // TestSourceWorkdir_SourceOnly tests source describe for component with source but no workdir.
 func TestSourceWorkdir_SourceOnly(t *testing.T) {
@@ -82,20 +82,20 @@ func TestSourceWorkdir_DescribeComponent_LocalWithWorkdir(t *testing.T) {
 
 // TestSourceWorkdir_DeleteMissingForce tests that delete requires --force flag.
 func TestSourceWorkdir_DeleteMissingForce(t *testing.T) {
-	resetViperState() // Prevent flag leakage from previous tests
-	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
+	resetSourceCommandState(t)
+	t.Setenv("ATMOS_DRY_RUN", "false")
+	t.Setenv("ATMOS_INTERACTIVE", "false")
+	sourceFixture(t, "source-provisioner-workdir")
 
 	// Create the target directory so delete has something to operate on.
 	// With workdir enabled, the target directory is .workdir/terraform/<stack>-<component>-<hash>.
-	targetDir := filepath.Join(".workdir", "terraform", "dev-vpc-remote-workdir-b01dcf0a")
+	targetDir, err := workdir.BuildPath(".", "terraform", "vpc-remote-workdir", "dev", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(targetDir, 0o755))
-	t.Cleanup(func() {
-		_ = os.RemoveAll(".workdir")
-	})
 
 	cmd.RootCmd.SetArgs([]string{"terraform", "source", "delete", "vpc-remote-workdir", "--stack", "dev"})
 
-	err := cmd.Execute()
+	err = cmd.Execute()
 	require.Error(t, err)
 	assert.True(t, strings.Contains(err.Error(), "force") || strings.Contains(err.Error(), "--force") ||
 		strings.Contains(err.Error(), "interactive"),
@@ -113,7 +113,7 @@ func TestSourceWorkdir_DeleteMissingForce(t *testing.T) {
 func TestJITSource_MetadataComponentSubpath(t *testing.T) {
 	setupJITSourceWorkdirFixture(t)
 
-	resetViperState()
+	resetSourceCommandState(t)
 	cmd.RootCmd.SetArgs([]string{
 		"terraform", "generate", "varfile", "null-label-exports",
 		"--stack", "dev",
@@ -179,7 +179,7 @@ func TestJITSource_MetadataComponentSubpath_TerraformShell(t *testing.T) {
 		_, copyErr = io.Copy(&buf, r)
 	}()
 
-	resetViperState()
+	resetSourceCommandState(t)
 	cmd.RootCmd.SetArgs([]string{
 		"terraform", "shell", "null-label-exports",
 		"--stack", "dev",
