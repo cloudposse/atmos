@@ -200,3 +200,88 @@ func TestAffectedPolicyInstanceCountComponentTypes(t *testing.T) {
 	_, err := affectedPolicyInstanceCount(stackWith("unknown/type"))
 	require.ErrorIs(t, err, errUtils.ErrPolicyInputUnavailable, "an unlisted component type fails closed")
 }
+
+// A source-only change must select the instances of every inspectable component type, not only
+// those whose directory the original matching knew about.
+func TestAffectedPolicySourceOnlyChangeForEveryComponentType(t *testing.T) {
+	original := affectedPolicyEmulatorBasePath
+	affectedPolicyEmulatorBasePath = func(*schema.AtmosConfiguration) string { return filepath.Join("components", "emulator") }
+	t.Cleanup(func() { affectedPolicyEmulatorBasePath = original })
+
+	tests := []struct {
+		kind      string
+		directory string
+		configure func(*schema.AtmosConfiguration)
+	}{
+		{kind: cfg.CloudFormationComponentType, directory: filepath.Join("components", "cloudformation"), configure: func(c *schema.AtmosConfiguration) {
+			c.CloudFormationDirAbsolutePath = filepath.Join(c.BasePathAbsolute, "components", "cloudformation")
+		}},
+		{kind: cfg.EmulatorComponentType, directory: filepath.Join("components", "emulator")},
+	}
+	for _, tc := range tests {
+		t.Run(tc.kind, func(t *testing.T) {
+			manifest := "name: prod\ncomponents:\n  " + tc.kind + ":\n    app:\n      metadata:\n        labels: {owner: platform}\n"
+			source := filepath.Join(tc.directory, "app", "main.txt")
+			basePath, base := affectedPolicyRepo(t, map[string]string{"stacks/prod.yaml": manifest, source: "old"})
+			headPath, head := affectedPolicyRepo(t, map[string]string{"stacks/prod.yaml": manifest, source: "new"})
+			config := affectedPolicyTestConfig(headPath)
+			if tc.configure != nil {
+				tc.configure(config)
+			}
+
+			request, err := collectAffectedPolicyRequest(config, head, base, headPath, basePath)
+
+			require.NoError(t, err)
+			var input policy.AffectedInput
+			require.NoError(t, json.Unmarshal(request.Input, &input))
+			require.Len(t, input.Instances, 1)
+			require.Equal(t, tc.kind, input.Instances[0].Identity.ComponentType)
+			require.Equal(t, []string{"component_files"}, input.Instances[0].Reasons)
+
+			unchanged, err := collectAffectedPolicyRequest(config, head, head, headPath, headPath)
+			require.NoError(t, err)
+			require.NoError(t, json.Unmarshal(unchanged.Input, &input))
+			require.Empty(t, input.Instances, "identical source selects nothing")
+		})
+	}
+}
+
+func TestAffectedPolicyComponentDirectories(t *testing.T) {
+	original := affectedPolicyEmulatorBasePath
+	t.Cleanup(func() { affectedPolicyEmulatorBasePath = original })
+	root := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePathAbsolute: root, CloudFormationDirAbsolutePath: filepath.Join(root, "cfn")}
+
+	t.Run("relative emulator base path resolves against the project", func(t *testing.T) {
+		affectedPolicyEmulatorBasePath = func(*schema.AtmosConfiguration) string { return "emu" }
+		directories := affectedPolicyComponentDirectories(config)
+		require.Equal(t, filepath.Join(root, "emu"), directories[cfg.EmulatorComponentType])
+		require.Equal(t, filepath.Join(root, "cfn"), directories[cfg.CloudFormationComponentType])
+	})
+	t.Run("absolute emulator base path is kept", func(t *testing.T) {
+		absolute := filepath.Join(root, "absolute-emu")
+		affectedPolicyEmulatorBasePath = func(*schema.AtmosConfiguration) string { return absolute }
+		require.Equal(t, absolute, affectedPolicyComponentDirectories(config)[cfg.EmulatorComponentType])
+	})
+	t.Run("no emulator provider leaves the type unmatched", func(t *testing.T) {
+		affectedPolicyEmulatorBasePath = func(*schema.AtmosConfiguration) string { return "" }
+		require.NotContains(t, affectedPolicyComponentDirectories(config), cfg.EmulatorComponentType)
+	})
+	t.Run("registry lookup finds no provider in this package", func(t *testing.T) {
+		affectedPolicyEmulatorBasePath = original
+		require.NotPanics(t, func() { _ = affectedPolicyComponentDirectories(config) })
+	})
+}
+
+// The base-component cache key has no checkout path, so collection must clear it on every exit,
+// including a configuration error, before HEAD is resolved.
+func TestAffectedPolicyInventoryClearsBaseComponentCacheOnError(t *testing.T) {
+	baseComponentConfigCache.Store("stale:component:base", &schema.BaseComponentConfig{})
+	t.Cleanup(ClearBaseComponentConfigCache)
+
+	_, err := collectAffectedPolicyInventory(&schema.AtmosConfiguration{BasePathAbsolute: t.TempDir()}, t.TempDir(), filepath.Join(t.TempDir(), "missing-checkout"))
+	require.Error(t, err)
+
+	_, found := baseComponentConfigCache.Load("stale:component:base")
+	require.False(t, found, "the cache is cleared even when collection fails")
+}

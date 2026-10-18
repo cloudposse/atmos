@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -19,6 +20,8 @@ import (
 // Templates and YAML functions remain literal: evaluating BASE must not execute
 // commands or fetch live values. Filters and display degradation never apply.
 func collectAffectedPolicyInventory(config *schema.AtmosConfiguration, root, checkout string) (policy.InventorySnapshot, error) {
+	// The cache key has no checkout path, so BASE entries must not survive into the HEAD resolution.
+	defer ClearBaseComponentConfigCache()
 	copyConfig, err := affectedPolicyConfig(config, root, checkout)
 	if err != nil {
 		return policy.InventorySnapshot{}, err
@@ -54,7 +57,7 @@ func affectedPolicyConfig(config *schema.AtmosConfiguration, root, checkout stri
 		&copyConfig.TerraformDirAbsolutePath, &copyConfig.HelmfileDirAbsolutePath,
 		&copyConfig.PackerDirAbsolutePath, &copyConfig.AnsibleDirAbsolutePath,
 		&copyConfig.HelmDirAbsolutePath, &copyConfig.KubernetesDirAbsolutePath,
-		&copyConfig.ContainerDirAbsolutePath,
+		&copyConfig.ContainerDirAbsolutePath, &copyConfig.CloudFormationDirAbsolutePath,
 	}
 	for _, path := range paths {
 		if *path == "" {
@@ -141,11 +144,7 @@ func affectedPolicySnapshot(stacks map[string]any) (policy.InventorySnapshot, er
 }
 
 func affectedPolicySourceChanges(config *schema.AtmosConfiguration, root string, before, after policy.InventorySnapshot, files []policy.FileChange) ([]policy.ObjectIdentity, error) {
-	paths := map[string]string{
-		"terraform": config.TerraformDirAbsolutePath, "helmfile": config.HelmfileDirAbsolutePath,
-		"packer": config.PackerDirAbsolutePath, "ansible": config.AnsibleDirAbsolutePath,
-		"helm": config.HelmDirAbsolutePath, "kubernetes": config.KubernetesDirAbsolutePath, "container": config.ContainerDirAbsolutePath,
-	}
+	paths := affectedPolicyComponentDirectories(config)
 	identities := []policy.ObjectIdentity{}
 	for _, snapshot := range []policy.InventorySnapshot{before, after} {
 		for stack, kinds := range snapshot.Stacks {
@@ -163,6 +162,37 @@ func affectedPolicySourceChanges(config *schema.AtmosConfiguration, root string,
 		}
 	}
 	return identities, nil
+}
+
+// affectedPolicyEmulatorBasePath resolves the emulator base path through the component registry,
+// which honors a configured base_path and falls back to the default. The emulator package imports
+// this one, so its provider cannot be called directly. It is a variable so tests can supply a path
+// without registering a provider.
+var affectedPolicyEmulatorBasePath = func(config *schema.AtmosConfiguration) string {
+	provider, ok := component.GetProvider(cfg.EmulatorComponentType)
+	if !ok {
+		return ""
+	}
+	return provider.GetBasePath(config)
+}
+
+// affectedPolicyComponentDirectories maps each inspectable component type to the absolute directory
+// holding its component source, so a source-only change selects the instances that use it.
+func affectedPolicyComponentDirectories(config *schema.AtmosConfiguration) map[string]string {
+	directories := map[string]string{
+		"terraform": config.TerraformDirAbsolutePath, "helmfile": config.HelmfileDirAbsolutePath,
+		"packer": config.PackerDirAbsolutePath, "ansible": config.AnsibleDirAbsolutePath,
+		"helm": config.HelmDirAbsolutePath, "kubernetes": config.KubernetesDirAbsolutePath,
+		"container":                     config.ContainerDirAbsolutePath,
+		cfg.CloudFormationComponentType: config.CloudFormationDirAbsolutePath,
+	}
+	if base := affectedPolicyEmulatorBasePath(config); base != "" {
+		if !filepath.IsAbs(base) {
+			base = filepath.Join(config.BasePathAbsolute, base)
+		}
+		directories[cfg.EmulatorComponentType] = base
+	}
+	return directories
 }
 
 func affectedPolicyComponentFiles(root, directory, name string, data json.RawMessage, files []policy.FileChange) (bool, error) {
