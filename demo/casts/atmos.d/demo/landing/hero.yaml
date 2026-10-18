@@ -39,42 +39,97 @@ commands:
       mode: raw
       cast: ../../website/static/casts/demo/landing/hero.cast
     steps:
+    # Return the prompt immediately, hold for reading, then press Enter once.
     - type: simulate
       text: atmos list stacks
     - type: shell
       command: atmos list stacks
       duration: 650ms
-      interval: 3s
+      interval: 0s
+    - type: simulate
+      mode: prompt
+    - type: sleep
+      timeout: 3s
+      interval: 0s
+      output: none
+    - type: shell
+      command: printf '\n'
+      interval: 0s
     - type: simulate
       text: atmos list components -s dev
     - type: shell
       command: atmos list components -s dev
       duration: 650ms
-      interval: 4s
+      interval: 0s
+    - type: simulate
+      mode: prompt
+    - type: sleep
+      timeout: 4s
+      interval: 0s
+      output: none
+    - type: shell
+      command: printf '\n'
+      interval: 0s
     - type: simulate
       text: atmos stack get vars.replicas -s dev -c app
     - type: shell
       command: atmos stack get vars.replicas -s dev -c app
       duration: 500ms
-      interval: 3s
+      interval: 0s
+    - type: simulate
+      mode: prompt
+    - type: sleep
+      timeout: 3s
+      interval: 0s
+      output: none
+    - type: shell
+      command: printf '\n'
+      interval: 0s
     - type: simulate
       text: atmos stack set vars.replicas 3 -s dev -c app
     - type: shell
       command: atmos stack set vars.replicas 3 -s dev -c app
       duration: 650ms
-      interval: 3s
+      interval: 0s
+    - type: simulate
+      mode: prompt
+    - type: sleep
+      timeout: 3s
+      interval: 0s
+      output: none
+    - type: shell
+      command: printf '\n'
+      interval: 0s
     - type: simulate
       text: atmos stack get vars.replicas -s dev -c app
     - type: shell
       command: atmos stack get vars.replicas -s dev -c app
       duration: 500ms
-      interval: 3s
+      interval: 0s
+    - type: simulate
+      mode: prompt
+    - type: sleep
+      timeout: 3s
+      interval: 0s
+      output: none
+    - type: shell
+      command: printf '\n'
+      interval: 0s
     - type: simulate
       text: atmos list affected --ref baseline
     - type: shell
       command: atmos list affected --ref baseline
       duration: 650ms
-      interval: 4s
+      interval: 0s
+    - type: simulate
+      mode: prompt
+    - type: sleep
+      timeout: 4s
+      interval: 0s
+      output: none
+    - type: shell
+      command: printf '\n'
+      interval: 0s
     - type: session
       shell: scripts/cast-shell.sh
       timeout: 45s
@@ -83,11 +138,11 @@ commands:
         text: "> "
         timeout: 10s
       - type: write
-        text: atmos terraform plan app -s dev --ui
+        text: atmos terraform plan app -s dev
       - type: key
         key: enter
       - type: wait
-        text: OUTPUTS CHANGED
+        regex: '(?s)OUTPUTS CHANGED.*> '
         timeout: 30s
       - type: pause
         duration: 3s

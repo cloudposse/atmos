@@ -38,6 +38,15 @@ def check(action, name):
     assert_no_local_paths(text)
     if name == 'hero' and '\x1b[999A' in text:
         raise SystemExit('hero: preserve terminal history between commands')
+    if name == 'hero':
+        prefix = ''
+        for delay, stream, output in events:
+            if delay >= 2.9 and not strip_ansi(prefix).rstrip().endswith('>'):
+                raise SystemExit('hero: reading pauses must follow the returned prompt')
+            if stream in ('o', 'e'):
+                prefix += output
+        if '--ui' in plain:
+            raise SystemExit('hero: enable the UI in atmos.yaml instead of passing --ui')
     if name == 'local-ci' and '--ui' in plain:
         raise SystemExit('local-ci: interactive UI does not belong in CI')
     for needle in expectations[name]:

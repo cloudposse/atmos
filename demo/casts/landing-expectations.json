@@ -11,7 +11,7 @@
     "atmos stack set vars.replicas 3 -s dev -c app",
     "atmos list affected --ref baseline",
     "stack.vars",
-    "atmos terraform plan app -s dev --ui",
+    "atmos terraform plan app -s dev",
     "Plan dev/app completed",
     "terraform_data.app"
   ],
