@@ -837,3 +837,31 @@ func TestReadPolicyHTTPDatasourceHonorsContextCancellation(t *testing.T) {
 	require.Nil(t, result)
 	require.Zero(t, hits.Load())
 }
+
+// A redirect target that policy denies must surface as the policy denial, never as an unreachable
+// source: otherwise datasourceReachable would quietly return false instead of failing closed.
+func TestPolicyDatasourceRedirectDenialIsAPolicyOutcome(t *testing.T) {
+	var blocked atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/blocked", http.StatusFound) })
+	mux.HandleFunc("/blocked", func(w http.ResponseWriter, _ *http.Request) {
+		blocked.Add(1)
+		_, _ = w.Write([]byte("secret"))
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	templatePolicy(t, "source", "input.path == '/blocked'", nil)
+	d := newTemplateData(t, nil, nil)
+
+	result, err := policyDatasource(d, "test", server.URL+"/start", false)
+
+	require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	require.NotErrorIs(t, err, errUtils.ErrPolicyInputUnavailable)
+	require.Nil(t, result)
+	require.Zero(t, blocked.Load(), "the denied redirect target is never contacted")
+
+	probe := fmt.Sprintf(`{{ if datasourceReachable %q }}reachable{{ else }}unreachable{{ end }}`, server.URL+"/start")
+	rendered, err := ProcessTmpl(&schema.AtmosConfiguration{}, "test", probe, nil, false)
+	require.ErrorContains(t, err, "policy")
+	require.NotEqual(t, "unreachable", rendered, "a denied redirect fails closed instead of reading as unreachable")
+}

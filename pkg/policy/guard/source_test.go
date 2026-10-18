@@ -377,3 +377,29 @@ func TestDescribeSourceWindowsFileURLResolvesDrivePath(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, resolved, input.Path)
 }
+
+// A file URL without an absolute path must be rejected: resolving it would describe the working
+// directory, which is often inside an allowed root, instead of the destination a reader would use.
+func TestDescribeSourceRejectsFileURLsWithoutAbsolutePath(t *testing.T) {
+	for _, raw := range []string{"file:../../etc/passwd", "file:relative/path", "file://localhost", "file://"} {
+		t.Run(raw, func(t *testing.T) {
+			_, err := DescribeSource("download", raw, "")
+			require.ErrorIs(t, err, errUtils.ErrPolicyInputInvalid)
+		})
+	}
+
+	root := t.TempDir()
+	for _, raw := range []string{"file://" + filepath.ToSlash(root), "file://localhost" + filepath.ToSlash(root)} {
+		t.Run("accepts "+raw, func(t *testing.T) {
+			if runtime.GOOS == windowsOS {
+				t.Skip("Windows file URLs need a drive path, covered separately")
+			}
+			input, err := DescribeSource("download", raw, "")
+			require.NoError(t, err)
+			require.Equal(t, "file", input.Scheme)
+			resolved, err := filepath.EvalSymlinks(root)
+			require.NoError(t, err)
+			require.Equal(t, resolved, input.Path)
+		})
+	}
+}

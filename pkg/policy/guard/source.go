@@ -48,12 +48,9 @@ func DescribeSource(operation, raw, sourceFile string) (SourceInput, error) {
 		if input.Remote {
 			return input, nil
 		}
-		if parsed.Host != "" && parsed.Host != "localhost" {
-			return input, fmt.Errorf("%w: nonlocal file authority", errUtils.ErrPolicyInputInvalid)
-		}
-		transport = parsed.Path
-		if runtime.GOOS == windowsOS {
-			transport = trimWindowsDriveSlash(transport)
+		transport, err = fileURLTransport(parsed)
+		if err != nil {
+			return input, err
 		}
 	}
 	input.Scheme = "file"
@@ -68,6 +65,22 @@ func DescribeSource(operation, raw, sourceFile string) (SourceInput, error) {
 		input.PathResolved = true
 	}
 	return input, nil
+}
+
+// fileURLTransport returns the local path a file URL names. A file URL with an opaque part or no
+// path, such as file:../x or file://localhost, names no absolute path, and resolving it would
+// describe the working directory instead of the destination the reader would use.
+func fileURLTransport(parsed *url.URL) (string, error) {
+	if parsed.Host != "" && parsed.Host != "localhost" {
+		return "", fmt.Errorf("%w: nonlocal file authority", errUtils.ErrPolicyInputInvalid)
+	}
+	if parsed.Opaque != "" || parsed.Path == "" {
+		return "", fmt.Errorf("%w: file URL has no absolute path", errUtils.ErrPolicyInputInvalid)
+	}
+	if runtime.GOOS == windowsOS {
+		return trimWindowsDriveSlash(parsed.Path), nil
+	}
+	return parsed.Path, nil
 }
 
 // windowsOS is the runtime.GOOS value for Windows.

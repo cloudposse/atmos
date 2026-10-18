@@ -68,6 +68,10 @@ func readPolicyHTTPDatasource(d *data.Data, file string, target *url.URL, header
 	req.Header = headers.Clone()
 	response, err := client.Do(req)
 	if err != nil {
+		// A redirect target can be denied or need approval; that decision must not be reported as an unreachable source.
+		if isPolicyOutcome(err) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("%w: guarded datasource fetch failed", errUtils.ErrPolicyInputUnavailable)
 	}
 	defer response.Body.Close()
