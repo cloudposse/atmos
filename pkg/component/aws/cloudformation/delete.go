@@ -165,12 +165,14 @@ func handleDeleteStackError(ctx context.Context, attempt deleteAttempt, deleteAP
 // disableTerminationProtectionIfNeeded, called immediately before DeleteStack
 // (see deleteStack) -- so a later validation gate (e.g. --retain-resources)
 // failing can never leave protection disabled with no DeleteStack call, and
-// therefore no restoration path, ever having run. Otherwise, a local `true`
-// short-circuits without an API call; a local `false` is verified against the
-// stack's live EnableTerminationProtection, since local config can drift
-// (apply only ever turns protection on, never off). Returns the described
-// stack (nil if no live lookup was needed) so later steps can reuse it
-// instead of issuing another DescribeStacks call.
+// therefore no restoration path, ever having run. Otherwise the stack is
+// described first, so a stack that does not exist surfaces as a missing-stack
+// error (an idempotent "nothing to delete") regardless of the local
+// termination_protection config. The stack is then treated as protected when
+// either the local config is `true` or its live EnableTerminationProtection is
+// set, since local config can drift (apply only ever turns protection on,
+// never off). Returns the described stack (nil when the gate is skipped) so
+// later steps can reuse it instead of issuing another DescribeStacks call.
 func validateTerminationProtectionGate(ctx context.Context, client CloudFormationClient, spec *stackSpec, opts deleteOptions) (*cfntypes.Stack, error) {
 	defer perf.Track(nil, "cloudformation.validateTerminationProtectionGate")()
 
@@ -178,16 +180,15 @@ func validateTerminationProtectionGate(ctx context.Context, client CloudFormatio
 		return nil, nil
 	}
 
-	protected := spec.TerminationProtection
-	var describedStack *cfntypes.Stack
-	if !protected {
-		var err error
-		describedStack, err = describeStack(ctx, client, spec.StackName)
-		if err != nil {
-			return nil, err
-		}
-		protected = aws.ToBool(describedStack.EnableTerminationProtection)
+	// Always look the stack up first: a stack that no longer exists has nothing
+	// to protect, so a missing-stack error from DescribeStacks propagates (and is
+	// reported by deleteStack as "nothing to delete") before the local
+	// termination_protection config can block the delete.
+	describedStack, err := describeStack(ctx, client, spec.StackName)
+	if err != nil {
+		return nil, err
 	}
+	protected := spec.TerminationProtection || aws.ToBool(describedStack.EnableTerminationProtection)
 	if protected {
 		return describedStack, errUtils.Build(errUtils.ErrAwsCloudFormationTerminationProtectionEnabled).
 			WithExplanationf("Stack %q has termination_protection enabled.", spec.StackName).

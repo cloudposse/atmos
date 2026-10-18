@@ -59,6 +59,8 @@ type Variables struct {
 	// HookStdin holds the standard input a Git hook received. The first shell step reads it as its
 	// standard input. It is shared by every branch cloned from this Variables.
 	HookStdin *HookStdin
+	// PublishInfo carries an immutable component scope for named publishing targets.
+	PublishInfo *schema.ConfigAndStacksInfo
 	// componentWorkingDir is the effective on-disk working directory of the
 	// hook's component (pkg/hooks.ComponentPath's return value), used only to
 	// anchor a bare-relative (non-dot-prefixed) explicit step.WorkingDirectory

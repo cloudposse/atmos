@@ -6,19 +6,22 @@ id: list
 description: List deployed CloudFormation stacks in the account.
 ---
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-  List the account's deployed CloudFormation stacks (`ListStacks`), annotated
-  with whether each one matches an `aws/cloudformation` component's
-  `stack_name` configured in the given Atmos stack, or in any Atmos stack when
-  `--stack` is omitted. Unlike every other verb,
-  `list` is account-wide, not scoped to a single component — there is no
-  `[component]` argument, and it does not support `--all`/`--affected`/`--tags`/`--labels`.
+List deployed CloudFormation stacks in an AWS account and region. Each stack is
+marked as managed when its name matches a configured Atmos component.
 </Intro>
 
 <Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
 
 <CastPlayer title="atmos aws cloudformation list --help" src="/casts/screengrabs/atmos-aws-cloudformation-list--help.cast" static chrome />
 
@@ -27,6 +30,8 @@ import Experimental from '@site/src/components/Experimental'
 ```shell
 atmos aws cloudformation list [--stack <stack>] [options]
 ```
+
+## Examples
 
 Annotate against the components configured in every Atmos stack:
 
@@ -52,22 +57,17 @@ List stacks in a specific region:
 atmos aws cloudformation list --stack plat-ue2-dev --region us-west-2
 ```
 
+## Arguments
+
+This command does not take positional arguments.
+
 ## Flags
 
 <dl>
   <dt>`--stack`, `-s` <em>(optional)</em></dt>
-  <dd>
-    Atmos stack to annotate against. Its configured `aws/cloudformation`
-    components' `stack_name` values determine which deployed stacks are
-    marked `managed` vs. `unmanaged`. Without `--stack`, the `stack_name`
-    values of every Atmos stack's components count, so a stack that Atmos
-    defines is never reported as `unmanaged` just because no stack was named.
-    A stack name that does not exist is an error. Templates are processed (so
-    `stack_name` may reference e.g. `{{ .vars.stage }}`), but YAML functions
-    are not — they aren't needed to resolve `stack_name`, and some require
-    their own authentication, which would slow this command down
-    unnecessarily.
-  </dd>
+  <dd>Atmos stack whose component names determine the `managed` annotation.
+  Omit to compare against all Atmos stacks. An unknown stack is an error.
+  Go templates in stack names are evaluated; YAML functions are not.</dd>
 
   <dt>`--identity`, `-i` <em>(optional)</em></dt>
   <dd>
@@ -91,6 +91,13 @@ atmos aws cloudformation list --stack plat-ue2-dev --region us-west-2
   <dd>AWS region to list stacks in. Defaults to the active identity's region, then the AWS SDK's standard resolution chain.</dd>
 </dl>
 
+## Behavior
+
+This command lists stacks in one AWS account and region. It does not take a
+component argument or support `--all`, `--affected`, `--tags`, or `--labels`.
+The `--stack` flag controls annotations; it does not restrict which AWS stacks
+are returned.
+
 ## Output
 
 The table starts with a header row. Each following line shows whether the
@@ -98,7 +105,7 @@ stack is `managed` (its name matches an `aws/cloudformation` component's
 configured `stack_name` in the queried stack, or in any stack when `--stack`
 is omitted) or `unmanaged`, its status, and its name:
 
-```
+```text
 MANAGED   STATUS                         STACK NAME
 managed   CREATE_COMPLETE                vpc-plat-ue2-dev
 unmanaged UPDATE_COMPLETE                some-other-stack

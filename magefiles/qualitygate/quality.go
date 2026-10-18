@@ -208,9 +208,21 @@ func (q *qualityClient) reconcile(number int) error {
 // Keep evidence fresh after a reporting failure without marking the run handled.
 // Refresh retains the original run so stale heads and newer attempts cannot be overwritten.
 func (q *qualityClient) recoverBenchmarkReport(number int, run *githubapi.Run) error {
-	err := bench.ReportRun(q.ctx, q.api, q.repo, run.ID, q.refresh)
+	published := 0
+	err := bench.ReportRun(q.ctx, q.api, q.repo, run.ID, func(n int, body string, reported *githubapi.Run) error {
+		if n == number {
+			published++
+		}
+		return q.refresh(n, body, reported)
+	})
 	if err == nil {
-		return nil
+		if published > 0 {
+			return nil
+		}
+		// ReportRun found no PR to publish for. Never leave the gate unpublished
+		// because of an association gap: publish with performance pending.
+		fmt.Printf("::warning title=Quality gate benchmark recovery::PR #%d: benchmark run %d produced no report; publishing the quality gate without performance results\n", number, run.ID)
+		return q.refresh(number, "", nil)
 	}
 	performance := qualityBenchmarkError + "\nComparison unavailable: benchmark report processing failed. See the reporter job logs; reconciliation will retry."
 	refreshErr := q.refresh(number, performance, run)

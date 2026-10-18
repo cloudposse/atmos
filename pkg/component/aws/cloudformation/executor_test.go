@@ -63,6 +63,12 @@ func TestEventsFor(t *testing.T) {
 		{OperationDelete, hooks.BeforeAwsCloudFormationDelete, hooks.AfterAwsCloudFormationDelete},
 		{OperationDriftDetect, hooks.BeforeAwsCloudFormationDriftDetect, hooks.AfterAwsCloudFormationDriftDetect},
 		{OperationDriftDescribe, hooks.BeforeAwsCloudFormationDriftDescribe, hooks.AfterAwsCloudFormationDriftDescribe},
+		{OperationChangesetCreate, hooks.BeforeAwsCloudFormationChangesetCreate, hooks.AfterAwsCloudFormationChangesetCreate},
+		{OperationChangesetExecute, hooks.BeforeAwsCloudFormationChangesetExecute, hooks.AfterAwsCloudFormationChangesetExecute},
+		{OperationChangesetList, hooks.HookEvent(""), hooks.HookEvent("")},
+		{OperationChangesetDelete, hooks.HookEvent(""), hooks.HookEvent("")},
+		{OperationValidate, hooks.HookEvent(""), hooks.HookEvent("")},
+		{OperationOutput, hooks.HookEvent(""), hooks.HookEvent("")},
 		{OperationRender, hooks.HookEvent(""), hooks.HookEvent("")},
 	}
 	for _, tt := range tests {
@@ -289,9 +295,10 @@ func TestRenderDiffSummary_ListsResourceChanges(t *testing.T) {
 	})
 	// The summary count must match what the per-resource loop actually prints:
 	// only entries with a non-nil ResourceChange, excluding hook-only changes.
-	assert.Contains(t, out, "vpc: 2 resource change(s)")
+	assert.Contains(t, out, "Changes for vpc: 2 resources")
 	assert.Contains(t, out, "MyBucket")
-	assert.Contains(t, out, "(replacement: True)")
+	assert.Contains(t, out, "Replacement")
+	assert.Contains(t, out, "True")
 	assert.Contains(t, out, "MyRole")
 	assert.NotContains(t, out, "MyRole (replacement", "an Add with no Replacement must not print a replacement annotation")
 }

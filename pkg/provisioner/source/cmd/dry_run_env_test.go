@@ -1,14 +1,11 @@
 package cmd
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestSourceDryRun_EnvironmentPrecedence(t *testing.T) {
@@ -30,27 +27,19 @@ func TestSourceDryRun_EnvironmentPrecedence(t *testing.T) {
 		} {
 			t.Run(verb+"/"+tt.name, func(t *testing.T) {
 				t.Setenv("ATMOS_DRY_RUN", tt.env)
-				viper.Reset()
-				t.Cleanup(viper.Reset)
+				env := newDryRunEnv(t, dryRunScenario{section: vpcSection(nil), existing: true, provisioned: true})
 				viper.Set("dry-run", !tt.dryRun)
-				ctrl := gomock.NewController(t)
-				loader := NewMockConfigLoader(ctrl)
-				creator := NewMockAuthCreator(ctrl)
-				provisioner := NewMockSourceProvisioner(ctrl)
-				oldInit, oldCreate, oldProvision := initCliConfigFunc, createAuthFunc, provisionSourceFunc
-				t.Cleanup(func() { initCliConfigFunc, createAuthFunc, provisionSourceFunc = oldInit, oldCreate, oldProvision })
-				initCliConfigFunc, createAuthFunc, provisionSourceFunc = loader.InitCliConfig, creator.CreateAuthManager, provisioner.Provision
-				configErr := errors.New("configuration reached")
-				if !tt.dryRun {
-					loader.EXPECT().InitCliConfig(gomock.Any(), gomock.Any()).Return(schema.AtmosConfiguration{}, configErr)
-				}
 				root := mountSourceCommand(t, verb, tt.inherited)
-				root.SetArgs(append([]string{"source", verb, "vpc", "--stack", "dev"}, tt.cli...))
-				err := root.Execute()
-				if tt.dryRun {
-					require.NoError(t, err)
-				} else {
-					require.ErrorIs(t, err, configErr)
+				root.SetArgs(append([]string{"source", verb, "vpc", "--stack", "dev", "--force"}, tt.cli...))
+				require.NoError(t, root.Execute())
+				switch {
+				case tt.dryRun:
+					assert.Zero(t, env.provisions)
+					assert.DirExists(t, env.targetDir)
+				case verb == "pull":
+					assert.Equal(t, 1, env.provisions)
+				default:
+					assert.NoDirExists(t, env.targetDir)
 				}
 			})
 		}

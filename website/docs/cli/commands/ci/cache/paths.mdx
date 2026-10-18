@@ -8,15 +8,12 @@ description: Print the cache key and paths for use with actions/cache.
 ---
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
-import Experimental from '@site/src/components/Experimental'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Print the resolved cache **key**, **paths**, and **restore-keys** so a native cache (such as GitHub's `actions/cache`) can do the storage while Atmos supplies *what* to cache from your `ci.cache` configuration. Unlike `restore`/`save`, this needs no CI provider or runtime token, so it works on any OS and CI system.
 </Intro>
-
-<Experimental/>
 
 <ActionCard title="Configure the CI Cache">
     The key and paths printed by this command come from the `ci.cache` section of your `atmos.yaml`.

@@ -37,6 +37,9 @@ type TagContext struct {
 	// handler was invoked with -- used by handlers (e.g. !append) that must
 	// resolve nested tags inside content they rewrite before finishing.
 	Walk func(node *yaml.Node) error
+	// WalkIn is Walk with a different file context: used by !include to
+	// resolve tags nested inside an included file relative to that file.
+	WalkIn func(node *yaml.Node, file string) error
 }
 
 // TagHandler resolves a single recognized YAML tag on node in place
@@ -83,6 +86,11 @@ func walkYAMLTags(ctx TagContext, node *yaml.Node, policy TagWalkPolicy) error {
 	ctx.Walk = func(n *yaml.Node) error {
 		return walkYAMLTags(ctx, n, policy)
 	}
+	ctx.WalkIn = func(n *yaml.Node, inFile string) error {
+		included := ctx
+		included.File = inFile
+		return walkYAMLTags(included, n, policy)
+	}
 
 	var after func()
 	if policy.Prepare != nil {
@@ -113,6 +121,11 @@ func childTagContext(ctx TagContext, parent *yaml.Node, index int, policy TagWal
 	child.parent = parent
 	child.dataSection = ctx.dataSection || isScriptSourceDataValue(parent, index)
 	child.Walk = func(value *yaml.Node) error { return walkYAMLTags(child, value, policy) }
+	child.WalkIn = func(value *yaml.Node, file string) error {
+		included := child
+		included.File = file
+		return walkYAMLTags(included, value, policy)
+	}
 	return child
 }
 
@@ -127,7 +140,28 @@ func dispatchTag(ctx TagContext, n *yaml.Node, policy TagWalkPolicy, file string
 		return false, nil
 	}
 
+	// A registered foreign tag (see yaml_tag_foreign.go) is rewritten in place
+	// into its native long form; the walker then recurses into the rewritten
+	// children so nested tags inside the value are still resolved.
+	if rewrite, ok := lookupForeignTagRewriter(tag); ok {
+		if err := rewrite(n); err != nil {
+			return false, fmt.Errorf("%w: '%s' found in file '%s': %w", errUtils.ErrUnsupportedYamlTag, tag, file, err)
+		}
+		return false, nil
+	}
+
 	if !fntag.IsValidYAML(tag) {
+		// A foreign tag a subsystem recognizes but does not emulate (e.g. a
+		// Rain directive) gets that subsystem's own hint instead of the
+		// generic supported-tags list.
+		if hints := lookupForeignTagHint(tag); len(hints) > 0 {
+			builder := errUtils.Build(errUtils.ErrUnsupportedYamlTag).
+				WithExplanationf("'%s' found in file '%s'", tag, file)
+			for _, hint := range hints {
+				builder = builder.WithHint(hint)
+			}
+			return false, builder.Err()
+		}
 		// Exact message shape preserved verbatim from before this walker was
 		// extracted -- existing tests assert on it via err.Error().
 		supportedTags := strings.Join(fntag.AllYAML(), ", ")
@@ -202,7 +236,7 @@ func handleAppendTag(ctx TagContext, node *yaml.Node, _ string) (bool, error) {
 // by delegating straight to the existing leaf functions -- shared verbatim
 // between the stack-manifest and scaffold-manifest policies.
 func handleIncludeTag(ctx TagContext, node *yaml.Node, val string) (bool, error) {
-	return false, ProcessIncludeTag(ctx.AtmosConfig, node, val, ctx.File)
+	return ProcessIncludeTagWalked(ctx.AtmosConfig, node, val, ctx.File, ctx.WalkIn)
 }
 
 func handleIncludeRawTag(ctx TagContext, node *yaml.Node, val string) (bool, error) {

@@ -20,6 +20,8 @@ type EnvVarContext interface {
 	GetComponentEnvSection() map[string]any
 }
 
+// ProcessTagEnv resolves !env from component environment settings, then the OS
+// environment, then its default; an unset variable without a default warns and returns empty.
 func ProcessTagEnv(
 	input string,
 	envContext EnvVarContext,
@@ -66,6 +68,10 @@ func ProcessTagEnv(
 	if envVarDefault != "" {
 		return envVarDefault, nil
 	}
+
+	// An unset variable without a default resolves to an empty string. Warn so
+	// the empty value is never silent; an explicit default is how to opt in.
+	log.Warn("environment variable is not set and has no default; using empty string", "function", "!env", "variable", envVarName)
 
 	return "", nil
 }

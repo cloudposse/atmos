@@ -7,7 +7,7 @@
     "generate:media-kit": "node scripts/generate-media-kit.mjs",
     "generate:social-card": "node scripts/generate-social-card.mjs",
     "prestart": "node scripts/generate-media-kit.mjs && node scripts/generate-social-card.mjs",
-    "prebuild": "node --test scripts/command-intros.test.mjs plugins/file-browser/example-docs.test.mjs plugins/doc-release-data/drafts.test.mjs src/components/FileBrowser/index-page.test.mjs scripts/social-card.test.mjs plugins/social-cards/social-cards.test.mjs && node scripts/generate-media-kit.mjs && node scripts/generate-social-card.mjs && node scripts/copy-theme.mjs",
+    "prebuild": "node --test scripts/command-intros.test.mjs plugins/file-browser/example-docs.test.mjs plugins/doc-release-data/drafts.test.mjs src/components/FileBrowser/index-page.test.mjs src/components/FileBrowser/markdown-links.test.mjs src/components/FileBrowser/example-detail.test.mjs src/components/FileBrowser/example-detail-design.test.mjs scripts/social-card.test.mjs plugins/social-cards/social-cards.test.mjs && node scripts/generate-media-kit.mjs && node scripts/generate-social-card.mjs && node scripts/copy-theme.mjs",
     "start": "node scripts/start-docusaurus.mjs",
     "build": "docusaurus build",
     "postbuild": "cp build/llms.txt static/llms.txt && cp build/llms-full.txt static/llms-full.txt",

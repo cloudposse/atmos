@@ -10,12 +10,9 @@ import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-The `!aws.cloudformation.output` YAML function reads the deployed
-[Outputs](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/outputs-section-structure.html)
-of a native `aws/cloudformation` component directly in Atmos stack manifests,
-by calling the CloudFormation `DescribeStacks` API. It is the Terraform&harr;CloudFormation
-interop bridge: the sibling of [`!terraform.output`](/functions/yaml/terraform.output),
-but for `aws/cloudformation` targets instead of Terraform/OpenTofu ones.
+Read an output from a deployed CloudFormation component in an Atmos stack
+manifest. Use the value as input to Terraform, CloudFormation, or another
+component type.
 </Intro>
 
 <Experimental />
@@ -42,12 +39,8 @@ The `!aws.cloudformation.output` function is called with either two or three par
   <dd>(Optional) Atmos stack name. Defaults to the current stack when omitted.</dd>
 
   <dt>`output-key`</dt>
-  <dd>
-  The exact CloudFormation Output's logical key (the value of the `Outputs.<key>` entry
-  in the target's template). Unlike [`!terraform.output`](/functions/yaml/terraform.output),
-  this is a direct lookup by key, not a [YQ](https://mikefarah.gitbook.io/yq) expression —
-  CloudFormation Outputs are always a flat key/value map, so there is nothing to query into.
-  </dd>
+  <dd>The exact key declared under `Outputs` in the template. This is a direct
+  key lookup; YQ expressions are not supported.</dd>
 </dl>
 
 :::tip
@@ -63,11 +56,22 @@ See the full explanation: [YAML Function Merging](/reference/yaml-function-mergi
 
 ## Requirements
 
-- The target component must be a native `aws/cloudformation` component with a resolved `stack_name` — `!aws.cloudformation.output` errors if the target has no `stack_name` configured.
-- The target stack must already be deployed. `!aws.cloudformation.output` calls the live `DescribeStacks` API; there is no local-state equivalent (`aws/cloudformation` has no Terraform/OpenTofu-style state file to read instead).
-- The target stack must hold deployed resources. A stack that only holds a preview changeset (`REVIEW_IN_PROGRESS`, left behind by `diff` or `plan` on a component that was never applied) or that failed to create (`ROLLBACK_COMPLETE`, `ROLLBACK_FAILED`, `CREATE_FAILED`), or is being deleted (`DELETE_*`), is an error: `stack "<name>" has status <status>`. Apply the target component first.
-- The `output-key` must exist. A key the stack does not declare is an error that lists the keys it does have, instead of resolving to `null`. A key that exists with an empty value is not an error.
-- Resolving the function requires AWS authentication — it uses the target component's own auth if it authenticates independently, otherwise the enclosing component's (propagated from `--identity`).
+- The referenced component must have a resolved `stack_name`.
+- Its stack must already be deployed with resources.
+- The requested output key must exist. An empty value is valid; a missing key
+  is an error that lists available keys.
+- The lookup requires AWS credentials and access to the deployed stack.
+
+A stack in `REVIEW_IN_PROGRESS`, `ROLLBACK_COMPLETE`, `ROLLBACK_FAILED`,
+`CREATE_FAILED`, or a `DELETE_*` state cannot supply outputs. Deploy the
+producer first, or recover its failed deployment before resolving the reference.
+
+### Authentication
+
+The producer's default direct target identity takes precedence over the
+consumer's CLI identity. When that target declares no auth, the lookup uses the
+caller's credentials. See
+[output-reference authentication](/stacks/components/aws-cloudformation#output-references).
 
 ## Examples
 
@@ -100,13 +104,12 @@ several values come from the same component and you want a single API call.
 
 ## Considerations
 
-- `!aws.cloudformation.output` **is not allowed** in `metadata.tags` or `metadata.labels` values — the same restriction as [`!terraform.output`](/functions/yaml/terraform.output#considerations). Selectors (`--tags`/`--labels`) drive component-scoping decisions before evaluation, so they must be resolvable without authentication, API calls, or nondeterminism.
-
-- Using `!aws.cloudformation.output` with secrets can expose sensitive data to standard output (stdout) in any commands that describe stacks or components.
-
-- Consider cold-start scenarios: if the dependent `aws/cloudformation` stack does not exist, or exists without deployed resources (for example `REVIEW_IN_PROGRESS` after a `diff`), the function returns an error. A misspelled `output-key` is an error too, so a typo cannot reach the consuming component as an empty value.
-
-- Be mindful of disaster recovery (DR) implications when using it across regions.
+- Output references are not allowed in `metadata.tags` or `metadata.labels`.
+  These selectors must be resolved without AWS calls.
+- Internal lookups return real values. Commands that describe a stack or
+  component can expose sensitive output values.
+- Deploy dependencies before components that read their outputs. Plan recovery
+  procedures for dependencies in other accounts or regions.
 
 ## See Also
 
