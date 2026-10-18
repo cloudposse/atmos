@@ -236,6 +236,8 @@ func TestExecuteAnnotatesPolicyDenialInCI(t *testing.T) {
 
 	run := func(t *testing.T, githubActions string) (string, error) {
 		t.Helper()
+		// The kit snapshots os.Args and RootCmd state before this run changes them, and its cleanup restores
+		// both and re-initializes the default UI formatter, so nothing here leaks into later tests.
 		_ = NewTestKit(t)
 		t.Setenv("GITHUB_ACTIONS", githubActions)
 		stderr := &bytes.Buffer{}

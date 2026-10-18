@@ -158,9 +158,10 @@ produces one annotation from the error's title, message, and explanation. When t
 its cause, the annotation is anchored there.
 
 These annotations follow `ci.enabled` and `ci.annotations.enabled` once `atmos.yaml` is loaded. A command that fails
-before configuration loads, such as a [command policy](/policies/admission#block-a-command) denial, is still annotated
-whenever a CI provider is detected, because that is the only CI signal it can produce. Failures of nested Atmos
-commands run by scripts are reported once, by the nested command.
+before configuration loads, such as a built-in command denied by a [command policy](/policies/admission#block-a-command),
+is still annotated whenever a CI provider is detected, because that is the only CI signal it can produce. Custom commands
+are admitted after configuration loads, so they follow the switches. Failures of nested Atmos commands run by scripts,
+workflow steps, and custom commands are reported once, by the nested command.
 
 An invalid `GITHUB_API_URL` or `ATMOS_CI_GITHUB_API_URL` fails the command, both in scripts and in the `--ci` flow of
 Terraform commands, instead of sending the token to an unintended host.
