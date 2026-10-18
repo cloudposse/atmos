@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/go-git/go-billy/v5/osfs"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/utils/merkletrie"
 
@@ -106,6 +108,11 @@ func affectedPolicyTree(repo *git.Repository) (*object.Tree, string, error) {
 	worktree, err := repo.Worktree()
 	if err != nil {
 		return nil, "", err
+	}
+	// go-git does not read core.excludesFile, so a file ignored only by the user's global excludes
+	// would look untracked and block the analysis. An unreadable global file keeps the strict check.
+	if global, globalErr := gitignore.LoadGlobalPatterns(osfs.New(string(filepath.Separator))); globalErr == nil {
+		worktree.Excludes = append(worktree.Excludes, global...)
 	}
 	status, err := worktree.Status()
 	if err != nil {

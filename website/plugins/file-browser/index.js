@@ -694,13 +694,37 @@ module.exports = function fileBrowserPlugin(context, options) {
   const mergedExcludePatterns = [...DEFAULT_EXCLUDE_PATTERNS, ...excludePatterns];
   const absoluteSourceDir = path.resolve(context.siteDir, sourceDir);
 
+  // Options handed to the route components. The missing-source path returns them too, so the
+  // content lifecycle never sees an undefined options object.
+  const contentOptions = {
+    id,
+    docsSidebar,
+    routeBasePath,
+    title,
+    description,
+    githubRepo,
+    githubBranch,
+    githubPath,
+    disclaimer,
+    searchable,
+    cardIcon,
+    cardCtaLabel,
+    enableCopyMarkdown,
+    titleAsCode,
+    installCommandLabel,
+    installCommandTemplate,
+  };
+
   return {
     name: 'file-browser',
 
     async loadContent() {
       if (!fs.existsSync(absoluteSourceDir)) {
         console.warn(`[file-browser] Source directory not found: ${absoluteSourceDir}`);
-        return { tree: { examples: [], featured: [], tags: [], totalFiles: 0, totalExamples: 0 } };
+        return {
+          tree: { examples: [], featured: [], tags: [], totalFiles: 0, totalExamples: 0 },
+          options: contentOptions,
+        };
       }
 
       const tree = scanExamples(absoluteSourceDir, {
@@ -718,24 +742,7 @@ module.exports = function fileBrowserPlugin(context, options) {
 
       return {
         tree,
-        options: {
-          id,
-          docsSidebar,
-          routeBasePath,
-          title,
-          description,
-          githubRepo,
-          githubBranch,
-          githubPath,
-          disclaimer,
-          searchable,
-          cardIcon,
-          cardCtaLabel,
-          enableCopyMarkdown,
-          titleAsCode,
-          installCommandLabel,
-          installCommandTemplate,
-        },
+        options: contentOptions,
       };
     },
 

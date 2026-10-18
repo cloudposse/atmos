@@ -57,10 +57,18 @@ func (h *Hooks) runPolicyHooks(run *hookRunContext) error {
 		return err
 	}
 	if h.sections != nil {
+		config := run.atmosConfig
+		if config == nil {
+			config = h.config
+		}
+		var delimiters []string
+		if config != nil {
+			delimiters = config.Templates.Settings.Delimiters
+		}
 		request.Subject, err = policy.NewSubject(policy.ObjectIdentity{
 			Name: run.info.ComponentFromArg, Stack: run.info.Stack,
 			ComponentType: strings.Split(string(run.event.Normalize()), ".")[1],
-		}, h.sections["metadata"], run.atmosConfig.Templates.Settings.Delimiters...)
+		}, h.sections["metadata"], delimiters...)
 		if err != nil {
 			return err
 		}

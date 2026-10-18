@@ -215,3 +215,26 @@ func TestStarlarkPolicyHookExecution(t *testing.T) {
 	require.ErrorIs(t, h.RunAll(AfterHelmApply, config, info, nil, nil), errUtils.ErrPolicyDenied)
 	require.EqualValues(t, 1, calls.Load(), "a CEL denial blocks Starlark-selected hooks")
 }
+
+// A nil per-run configuration falls back to the one the hooks were built with, and to defaults when
+// there is none, instead of dereferencing it while building the policy subject.
+func TestPolicyHookSubjectToleratesNilConfiguration(t *testing.T) {
+	newHooks := func(config *schema.AtmosConfiguration) *Hooks {
+		return &Hooks{config: config, policyBundle: &policy.Bundle{Rules: []policy.Rule{{
+			ID: "platform/deny", On: policy.Operation, Engine: policy.CELEngine, Expression: "true",
+			Match: &policy.Selector{Labels: map[string]string{"stage": "prod"}}, Effects: policy.Effects{Deny: true},
+		}}}, sections: map[string]any{"metadata": map[string]any{"labels": map[string]any{"stage": "prod"}}}}
+	}
+	info := &schema.ConfigAndStacksInfo{Stack: "test", ComponentFromArg: "app"}
+	for name, config := range map[string]*schema.AtmosConfiguration{
+		"stored configuration": {},
+		"no configuration":     nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHooks(config)
+			require.NotPanics(t, func() {
+				require.ErrorIs(t, h.RunAll(BeforeTerraformPlan, nil, info, nil, nil), errUtils.ErrPolicyDenied)
+			})
+		})
+	}
+}

@@ -15,9 +15,10 @@ Check the installed Atmos version/help and the matching source/docs. Do not infe
 from the PRD: `atmos policy check/test/explain` is proposed, not implemented in this branch.
 
 The current opt-in is `policy.d/` in the invocation directory, overridden by `ATMOS_POLICY_DIR`, containing strict `atmos/v1`
-`kind: Policy` documents. Only inline CEL runs. The language interface anticipates restricted
-Starlark; neither Starlark nor Rego is available through this loader. Existing Rego validation
-is separate and remains supported. Do not migrate legacy configuration to proposed `policy:`
+`kind: Policy` documents. Inline CEL and restricted Starlark run. A Starlark predicate is a
+function body over detached, read-only JSON data that must return a strict boolean; it has no
+automation host, module loader, filesystem, network, or logging API. Rego is not available
+through this loader. Existing Rego validation is separate and remains supported. Do not migrate legacy configuration to proposed `policy:`
 attachments yet.
 
 Use central `match` selectors for instance attachments: literal labels (all), tags (any by default,

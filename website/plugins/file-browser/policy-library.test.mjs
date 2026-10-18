@@ -105,3 +105,19 @@ test('documentation navigation uses resolved docs links and fails on a missing s
 test('incomplete policy pages fail the build rather than publishing missing code', () => {
   assert.throws(() => policyPage({name: 'missing', root: {children: []}}), /Incomplete policy/);
 });
+
+test('a missing source directory still yields the options the route lifecycle reads', async () => {
+  const browser = plugin({siteDir}, {
+    id: 'missing',
+    sourceDir: '../no-such-directory',
+    routeBasePath: '/missing',
+    title: 'Missing',
+    description: 'No source',
+    docsSidebar: 'cli',
+  });
+  const content = await browser.loadContent();
+  assert.deepEqual(content.tree.examples, []);
+  assert.equal(content.options.id, 'missing');
+  assert.equal(content.options.routeBasePath, '/missing');
+  assert.equal(content.options.docsSidebar, 'cli');
+});

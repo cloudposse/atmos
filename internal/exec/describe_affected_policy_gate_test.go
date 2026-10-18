@@ -3,6 +3,7 @@ package exec
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -95,4 +96,30 @@ func TestAffectedPolicyTreeRejectsUnavailableHistory(t *testing.T) {
 		_, _, err = affectedPolicyTree(repo)
 		require.ErrorIs(t, err, plumbing.ErrObjectNotFound)
 	})
+}
+
+// go-git ignores core.excludesFile, so the clean-worktree check loads the user's global excludes itself.
+func TestAffectedPolicyTreeHonorsGlobalExcludes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("global excludes load through a chrooted root filesystem that Windows paths do not map onto")
+	}
+	root, repo := affectedPolicyRepo(t, map[string]string{"stacks/prod.yaml": affectedTestManifest})
+	require.NoError(t, os.WriteFile(filepath.Join(root, "build.log"), []byte("generated"), 0o600))
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	_, _, err := affectedPolicyTree(repo)
+	require.ErrorIs(t, err, errUtils.ErrPolicyInputUnavailable, "an untracked file blocks the analysis without global excludes")
+
+	excludes := filepath.Join(home, "global-ignore")
+	require.NoError(t, os.WriteFile(excludes, []byte("*.log\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[core]\n\texcludesfile = "+filepath.ToSlash(excludes)+"\n"), 0o600))
+	tree, _, err := affectedPolicyTree(repo)
+	require.NoError(t, err, "a file ignored only by the global excludes is not a dirty worktree")
+	require.NotNil(t, tree)
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "notes.txt"), []byte("not ignored"), 0o600))
+	_, _, err = affectedPolicyTree(repo)
+	require.ErrorIs(t, err, errUtils.ErrPolicyInputUnavailable, "other untracked files still block it")
 }
