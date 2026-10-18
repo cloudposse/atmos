@@ -3,7 +3,7 @@
 This is an experimental Go API and opt-in Terraform saved-plan integration, not a complete
 security boundary. It implements the first slices of [the Policies PRD](../../docs/prd/policies.md).
 The narrow directory manifest and command gate are documented in
-[Saved Plan Policies](../../website/docs/cli/commands/terraform/plan-policies.mdx).
+[Saved Plan Policies](../../website/docs/policies/terraform-plan.mdx).
 
 See the [contributor guide](../../website/docs/contribute/policy-engine.mdx) for a runnable Go example,
 the CEL input reference, decision semantics, affected inventories, and adapter integration guidance.

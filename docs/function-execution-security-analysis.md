@@ -135,7 +135,7 @@ The one URI validator is inconsistent and not a universal gate.
 |---|---|---|
 | `--skip=<fn>` | stack processing path only, per-invocation | does not protect the `atmos.yaml` load path; not a persistent policy |
 | `--process-functions=false` | describe-family commands only, all-or-nothing | not available for `plan`/`apply`; no granularity |
-| `settings.templates.settings.enabled|sprig.enabled|gomplate.enabled` | template engine | coarse on/off; enabling an engine enables its dangerous funcs; doesn't affect `!exec`/`!include` |
+| `settings.templates.settings.enabled\|sprig.enabled\|gomplate.enabled` | template engine | coarse on/off; enabling an engine enables its dangerous funcs; doesn't affect `!exec`/`!include` |
 | `gomplate.timeout` | datasource/exec calls | bounds duration, not capability |
 | `pkg/ci/forktrust.go` | CI fork-PR gate | governs *who triggers CI*, not the integrity/trust of imported/vendored content |
 

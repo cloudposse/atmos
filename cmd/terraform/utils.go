@@ -1768,7 +1768,7 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 // A changed but explicitly empty --from-plan flag selects the canonical plan.
 // Viper IsSet cannot distinguish this from the parser's registered empty default.
 func applyFromPlanSelection(info *schema.ConfigAndStacksInfo, command *cobra.Command) {
-	if command.Flags().Changed("from-plan") {
+	if flag := command.Flags().Lookup("from-plan"); flag != nil && flag.Changed && flag.Value.String() == "" {
 		info.UseTerraformPlan = true
 	}
 }

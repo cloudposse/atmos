@@ -162,7 +162,7 @@ pre-commit autoupdate
 The experimental `pkg/policy` core is documented in the
 [policy engine contributor guide](../website/docs/contribute/policy-engine.mdx). It covers the Go API,
 CEL evaluation, provider-native CI snapshots, affected inputs, and the boundary between evaluation
-and enforcement. The opt-in [saved-plan gate](../website/docs/cli/commands/terraform/plan-policies.mdx)
+and enforcement. The opt-in [saved-plan gate](../website/docs/policies/terraform-plan.mdx)
 wires CEL plan policies into Terraform commands; existing component validation is unchanged.
 The [sample library](../examples/policies/README.md) includes per-policy tests and lifecycle hooks;
 the [capability catalog](../website/docs/contribute/policy-library.mdx) distinguishes implemented
