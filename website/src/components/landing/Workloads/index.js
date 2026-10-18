@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { motion, useScroll, useTransform, useReducedMotion } from 'framer-motion';
 import { SiGithubactions } from 'react-icons/si';
-import DemoVideo from '@site/src/components/landing/DemoVideo';
+import DemoCast from '@site/src/components/landing/DemoCast';
 
 // Job-to-be-done sections — the heart of the page. Each is a real job, proven
 // with a terminal demo, a monospace feature list, and a product-proof line.
@@ -14,18 +14,18 @@ const WORKLOADS = [
     title: 'Run Terraform like a platform team.',
     desc: 'Plan and apply across every component in dependency order, with bounded concurrency. Backends and providers are generated for you. Drift is caught automatically.',
     features: ['Dependency graph', 'Auto backends', 'Registry cache', { label: 'Drift detection', isPro: true }],
-    proof: 'Atmos lists the Terraform instances and resolved stack values it will pass to Terraform.',
+    proof: 'Atmos lists the Terraform instances in a stack and shows the dependency graph from app to cluster to VPC.',
     slug: 'terraform',
     terminalTitle: 'Terraform, orchestrated',
   },
   {
     eyebrow: 'Kubernetes & Helm',
     title: 'Ship Kubernetes and Helm the same way.',
-    desc: 'Helmfile is a first-class workload. Atmos models Kubernetes releases beside the rest of your stack, with the same CLI you already use for Terraform.',
-    features: ['Helmfile native', 'Stack-aware releases', 'Toolchain aware'],
-    proof: 'Atmos starts a local k3s sandbox off camera, installs declared Helm tooling, then deploys the release from the stack.',
+    desc: 'Deploy native Kubernetes manifests and Helm charts beside the rest of your stack, with the same CLI you already use for Terraform.',
+    features: ['Native Kubernetes and Helm', 'Stack-aware releases', 'Built-in authentication'],
+    proof: 'Atmos creates a namespace with a Kubernetes component, then deploys a Helm release and waits for it to become ready.',
     slug: 'kubernetes',
-    terminalTitle: 'Helm, the platform way',
+    terminalTitle: 'Native Kubernetes and Helm',
   },
   {
     eyebrow: 'Containers & Emulators',
@@ -141,7 +141,7 @@ function WorkloadSection({ w, i }) {
         viewport={{ once: true, amount: 0.25 }}
         transition={{ duration: 0.6, delay: 0.1, ease: 'easeOut' }}
       >
-        <DemoVideo title={w.terminalTitle} slug={w.slug} />
+        <DemoCast title={w.terminalTitle} slug={w.slug} />
       </motion.div>
     </motion.section>
   );

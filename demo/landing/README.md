@@ -1,103 +1,60 @@
-# Landing-page demos (VHS)
+# Landing-page casts
 
-Animated terminal recordings for the homepage sections. Each `*.tape` runs a real,
-on-topic Atmos command — most against a local cloud **emulator**, so the demos show
-actual provisioning with no cloud credentials. The renders are embedded by
-[`website/src/components/landing/DemoVideo`](../../website/src/components/landing/DemoVideo).
+The homepage plays committed native Atmos asciicasts using the same recorder and
+CastPlayer as the examples. Its terminal window styling is preserved by DemoCast.
 
-## The recorder is an Atmos custom command
+All landing fixtures live in `demo/landing/fixtures/`. Each generation command
+copies its fixture into `.context/cast-fixtures/landing/<name>` using a `workdir`
+step before running real commands. Recordings never execute against or copy from
+`examples/`, and never modify the source fixture.
 
-Recording is wrapped as `atmos demo …` (defined in [`atmos.yaml`](./atmos.yaml)), so the
-exact same command runs on a laptop and in CI — the page's own "Local = CI" thesis:
+From the repository root:
 
-```shell
-cd demo/landing
-atmos demo check hero        # FAST dry-run → readable .ascii, short timeout (do this first!)
-atmos demo record hero       # full render of one tape → website/static/img/demos/
-atmos demo record all        # render every tape
-atmos demo publish --profile=managers --identity=plat-prod/terraform  # local SSO → docs S3/CDN origin
-atmos demo clean             # remove local renders + stop stray emulator containers
+```sh
+cd demo/casts
+atmos casts generate demo landing hero
+atmos casts validate demo landing hero
+atmos casts generate demo landing
+atmos casts validate demo landing
 ```
 
-**Always `atmos demo check <name>` first.** It renders the tape to inspectable text
-(`website/static/img/demos/<name>.ascii`) with a 90s timeout and prints the final frame — so a
-broken command or a stuck `Wait` shows up in seconds, not after a multi-minute video render. Only
-`record` once the dry-run looks right. (`atmos build` first — see prerequisites; the recorder puts
-`./build/atmos` on PATH so the demos use this branch's `atmos`, not an older one.)
+The commands build this branch's Atmos into `.context/bin` automatically. Outputs
+are committed at `website/static/casts/demo/landing/<name>.cast`. They travel with
+the website deployment and PR previews; no separate media publishing is needed.
+The manual/label-gated `landing-demos` workflow generates and validates all nine
+casts and makes them downloadable as an artifact for review and commit.
 
-CI runs the same entrypoint: [`.github/workflows/landing-demos.yaml`](../../.github/workflows/landing-demos.yaml).
-In CI, `atmos demo publish` uses the command's `docs/publish` GitHub OIDC identity.
-Locally, override that identity with `--identity=plat-prod/terraform` so publishing
-uses manager SSO credentials from `--profile=managers`.
-The `managers` profile is project-local, so run these commands from `demo/landing`.
-If the local SSO session has expired, refresh it first:
-
-```shell
-atmos auth login --profile=managers --identity=plat-prod/terraform
-```
-
-## The renders are never committed
-
-`website/static/img/demos/` is **gitignored**. The binaries (`*.webm`, `*.mp4`, poster
-`*.png`) are synced to S3/CDN by `atmos demo publish`; the site references the remote URL
-via `customFields.demosBaseUrl` (env `ATMOS_DEMOS_BASE_URL`). When that base is empty (local
-dev), `DemoVideo` falls back to the gitignored local copies so you can preview before publishing.
+The command definitions live under `demo/casts/atmos.d/demo/landing/`. Shared
+terminal dimensions and environment settings live in `demo/casts/landing-defaults.yaml`.
+Use `mode: steps` for real commands with typed introductions, and nested `session`
+steps for interactive prompts. Session waits match actual output; command failures
+abort the recording. Validation rejects error output, machine paths, unmasked demo
+secrets, and missing scenario-specific results.
 
 ## Prerequisites
 
-- The recording toolchain — [`vhs`](https://github.com/charmbracelet/vhs) and its `ffmpeg`
-  runtime dependency — is **auto-installed** by `atmos demo record`/`check` via Atmos
-  toolchain (declared under `toolchain:` in [`atmos.yaml`](./atmos.yaml), pinned in each
-  command's `dependencies.tools`). FFmpeg publishes source only, so the aqua-managed
-  `ffmpeg` alias uses the third-party `Tyrrrz/FFmpegBin` prebuilt distribution.
-- `ttyd` is required by VHS at runtime, but it is intentionally **not** a command dependency
-  because its aqua package has no macOS binary. Install it once with `brew install ttyd` on
-  macOS; CI installs it from the same Atmos toolchain on Linux.
-- The `FiraCode Nerd Font` is expected for the rendered glyphs.
-- A container runtime (Docker or Podman) for the emulator-backed tapes — this is the one
-  thing that can't be auto-installed (it's a system daemon, not a single binary).
-- The Kubernetes landing fixture installs `helmfile`, `helm`, and `kubectl` through Atmos toolchain
-  dependencies; `emulators.tape` brings up the AWS/GCP/Azure (Floci) and k3s emulators.
-- The AWS CLI for `atmos demo publish`.
-- **A locally built atmos** (`atmos build`, on `PATH`): the emulator commands these tapes use
-  are newer than the latest published release.
+- Go, Python 3, Git, and Terraform on PATH.
+- Docker or Podman for Kubernetes, emulators, and DX.
+- Internet access for container images and Terraform providers.
 
-## How a tape is structured
+No VHS, ttyd, FFmpeg, or recording fonts are required.
 
-Each tape sources [`defaults.tape`](./defaults.tape) (shared look + the wait behavior), then:
+| Cast | Demonstration |
+| --- | --- |
+| `hero` | Discover stacks and components. |
+| `how-it-works` | Discover mixed workloads and plan stack-resolved configuration. |
+| `terraform` | Inspect component instances and their dependency graph. |
+| `kubernetes` | Deploy a namespace with native Kubernetes and a ready Helm application on k3s. |
+| `emulators` | Start local cloud emulators and provision an AWS resource. |
+| `local-ci` | Read/set/read a stack value, inspect the diff, and apply only affected instances. |
+| `secrets` | Initialize, rotate, mask, and inject declared secrets. |
+| `dx` | Select a component and stack interactively and deploy it. |
+| `extensibility` | Start the MCP server and show readiness for an agent. |
 
-1. **Hidden setup** — sets a stable green `❯ ` prompt, `cd`s into the example, and (usually)
-   starts the emulator off camera.
-2. **On camera** — types the topical command(s). A bare `Wait` blocks until the command
-   finishes, anchored on the `❯ ` prompt (`WaitPattern` in `defaults.tape`). This is the VHS
-   "wait for output" capability that makes recording *real* (variable-duration) commands
-   possible — no brittle `Sleep` guesses.
-3. **Hidden teardown** — destroys resources and stops the emulator.
+Keep every recording focused: prefer tables, getters, concise diffs, and results.
+Avoid full YAML dumps; any YAML shown must be a small, clean snippet explaining
+one action.
 
-If a command's output or timing changes and a `Wait` hangs, adjust `WaitTimeout`/`WaitPattern`
-in `defaults.tape`.
-
-> [!IMPORTANT]
-> **Do not use `Wait+Screen /regex/` for commands whose output scrolls** (e.g.
-> `terraform plan`/`apply`/`deploy`). VHS bug
-> [charmbracelet/vhs#657](https://github.com/charmbracelet/vhs/issues/657) /
-> [#659](https://github.com/charmbracelet/vhs/issues/659): once the terminal scrolls,
-> `Wait+Screen` (and `.ascii`/`.txt` capture) search the **top of the scrollback** instead
-> of the visible viewport, so the match times out and the recording aborts — even though the
-> **video renders the scrolled output correctly** (the bug is only in VHS's text-capture
-> path, not the recording). Use a bare `Wait /❯$/` (wait for the prompt to return) for those
-> commands. `Wait+Screen` is fine only when the matched text stays within one screen (no
-> scroll). This is also why long terraform demos do **not** need `--mask`/`ATMOS_MASK`
-> tricks: masking doesn't affect the video; the only requirement is the right `Wait`.
-
-| Tape | Section | Example | Emulator |
-|------|---------|---------|----------|
-| `hero.tape` | Hero | `demo/landing/fixtures/hero` | none |
-| `how-it-works.tape` | How It Works | temp copy of `demo/landing/fixtures/how-it-works` | none |
-| `terraform.tape` | Terraform & OpenTofu | `demo/landing/fixtures/terraform` | none |
-| `kubernetes.tape` | Kubernetes & Helm | `demo/landing/fixtures/kubernetes` | k3s |
-| `emulators.tape` | Containers & Emulators | `demo/landing/fixtures/emulators` | aws/gcp/azure (Floci) + k3s |
-| `local-ci.tape` | Local = CI | temp repo from `demo/landing/fixtures/local-ci` | none |
-| `secrets.tape` | Secrets & Stores | temp copy of `demo/landing/fixtures/secrets` | none |
-| `dx.tape` | Developer experience | `demo/landing/fixtures/dx` | aws |
-| `extensibility.tape` | Extensible by design | temp copy of `demo/landing/fixtures/extensibility` | none |
+Review every changed cast in the homepage at desktop and mobile sizes. The player
+pauses offscreen, supports manual pause/play, and respects reduced motion. Commit
+both the scenario definition and its generated cast; no videos or posters are needed.

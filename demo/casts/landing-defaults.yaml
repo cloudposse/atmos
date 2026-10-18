@@ -1,0 +1,32 @@
+cast:
+  rate: 12ms
+  width: 64
+  height: 24
+simulate:
+  mode: typed
+  cursor: true
+  prompt:
+    text: '> '
+    style: command
+  rate: 35ms
+  jitter: 0.25
+env:
+  COLUMNS: "64"
+  LINES: "24"
+  NO_COLOR: ''
+  TERM: xterm-256color
+  COLORTERM: truecolor
+  ATMOS_FORCE_COLOR: '1'
+  CLICOLOR_FORCE: '1'
+  FORCE_COLOR: '1'
+  ATMOS_FORCE_TTY: 'true'
+  ATMOS_KEYRING_TYPE: memory
+  ATMOS_EXPERIMENTAL: silence
+  ATMOS_LOGS_LEVEL: Warning
+  ATMOS_PAGER: 'false'
+  NO_PAGER: '1'
+  GIT_PAGER: cat
+  TF_INPUT: 'false'
+  ATMOS_KEYRING_PASSWORD: demo-password-123
+  ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE: 'true'
+  ATMOS_INTERACTIVE: 'true'

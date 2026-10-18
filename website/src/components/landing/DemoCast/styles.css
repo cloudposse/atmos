@@ -1,0 +1,53 @@
+/* Preserve the homepage video frame while rendering selectable cast text. */
+.landing-demo-cast-viewport {
+  position: relative;
+  padding: 16px;
+  background: #111111;
+}
+
+.landing-demo-cast .landing-demo-cast-player {
+  aspect-ratio: 2 / 1;
+  max-width: none;
+  border: 0;
+  border-radius: 2px;
+  overflow: hidden;
+  background: #111111;
+  --atmos-terminal-bg: #111111;
+  --atmos-terminal-text: #f9f9f9;
+}
+
+.landing-demo-cast .landing-demo-cast-player > pre {
+  padding: clamp(8px, 1vw, 12px);
+  overflow: auto;
+  font-size: 32px;
+  line-height: 1.25;
+  scrollbar-width: none;
+}
+
+.landing-demo-cast-player > pre::-webkit-scrollbar {
+  display: none;
+}
+
+.landing-demo-cast-toggle {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  padding: 4px 10px;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #171717;
+  color: #f9f9f9;
+  font: inherit;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 150ms;
+}
+
+.landing-demo-cast:hover .landing-demo-cast-toggle,
+.landing-demo-cast:focus-within .landing-demo-cast-toggle {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce), (hover: none) {
+  .landing-demo-cast-toggle { opacity: 1; transition: none; }
+}

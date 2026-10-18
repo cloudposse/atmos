@@ -35,7 +35,6 @@ on:
       - Verify Repository Symlinks
       - Verify SHA Pinning
       - Version Tracker
-      - vhs
       - Website Preview Build
     types: [completed]
 

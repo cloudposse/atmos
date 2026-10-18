@@ -5,7 +5,7 @@ import { FaAws } from 'react-icons/fa6';
 import { SiGooglecloud } from 'react-icons/si';
 import { VscAzure } from 'react-icons/vsc';
 import PrimaryCTA from '@site/src/components/PrimaryCTA';
-import DemoVideo from '@site/src/components/landing/DemoVideo';
+import DemoCast from '@site/src/components/landing/DemoCast';
 
 // Three-line monospace value prop, Vercel-style.
 const VALUE_PROPS = ['Run it on your laptop', 'Run it the same in CI', 'Run it with agents'];
@@ -15,6 +15,7 @@ const VALUE_PROPS = ['Run it on your laptop', 'Run it the same in CI', 'Run it w
 const TOOLS = [
   { label: 'Terraform', to: '/components/terraform' },
   { label: 'OpenTofu', to: '/components/terraform' },
+  { label: 'CloudFormation', to: '/components/cloudformation' },
   { label: 'Packer', to: '/components/packer' },
   { label: 'Ansible', to: '/components/ansible' },
   { label: 'Helmfile', to: '/components/helmfile' },
@@ -72,7 +73,7 @@ function Hero() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.15, ease: 'easeOut' }}
           >
-            <DemoVideo title="Discover your whole platform" slug="hero" />
+            <DemoCast title="Discover your whole platform" slug="hero" />
           </motion.div>
         </div>
         {/* Full-width band below the hero grid so the tools have real horizontal

@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import Link from '@docusaurus/Link';
-import DemoVideo from '@site/src/components/landing/DemoVideo';
+import DemoCast from '@site/src/components/landing/DemoCast';
 
 const EXTENSIONS = [
   { title: 'Custom commands', desc: 'Your task runner, built in — wrap any script as a first-class atmos command, with flags, args, and identity.', to: '/cli/configuration/commands' },
@@ -29,7 +29,7 @@ function Extensibility() {
         viewport={{ once: true, amount: 0.3 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
       >
-        <DemoVideo title="Built for your agents" slug="extensibility" />
+        <DemoCast title="Built for your agents" slug="extensibility" />
       </motion.div>
       <div className="lp-extend-grid">
         {EXTENSIONS.map((ext, i) => (

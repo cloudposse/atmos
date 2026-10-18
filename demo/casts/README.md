@@ -2,6 +2,10 @@
 
 This directory contains deterministic fixtures and workflows for regenerating committed website asciicasts.
 
+Keep every cast focused on an action and its result. Prefer native Atmos getters,
+setters, tables, and concise diffs over full configuration dumps. If YAML is needed,
+show only a small, clean snippet that explains the action; never show walls of YAML.
+
 Curated casts are written to `website/static/casts` so the website serves them from `/casts/...`.
 Each committed cast path mirrors the repo-relative source path, followed by an action-oriented cast name:
 
@@ -74,3 +78,11 @@ the generated casts are reproducible without mutating the source examples.
 
 `casts generate all` is intentionally the slow path. Prefer the per-demo commands
 while tuning recordings.
+
+## Homepage recordings
+
+`atmos casts generate demo landing` regenerates the dedicated homepage casts.
+Use a trailing name such as `kubernetes` to record just one. These commands build
+Atmos with `casts setup landing` and copy only `demo/landing/fixtures/`; they do
+not provision the example fixtures used by the broader `casts setup`. See
+[the landing demo guide](../landing/README.md).

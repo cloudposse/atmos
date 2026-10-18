@@ -50,7 +50,18 @@ This creates operational overhead, especially when different environments need d
 
 ## Solution
 
-Use the `source` field directly in component configuration. The source provisioner handles just-in-time vendoring automatically.
+Use the `source` field directly in component configuration. The source provisioner handles just-in-time vendoring automatically. Source provisioning is currently experimental.
+
+For independent versions in different stacks and automatic refresh on version, URI, or TTL changes, enable [workdir provisioning](/stacks/components/provision/workdir). For example, import this stack default alongside the component configurations below:
+
+```yaml
+terraform:
+  provision:
+    workdir:
+      enabled: true
+```
+
+Without an isolated workdir, Atmos downloads to the component directory on first use and reuses it while it is non-empty. Use `atmos terraform source pull <component> -s <stack> --force` to refresh that directory explicitly.
 
 ### String Form (Simple)
 
@@ -235,17 +246,9 @@ atmos terraform plan vpc --stack dev
 # → Terraform runs
 ```
 
-**Under the hood:**
+Atmos resolves the source and provisions it before Terraform initialization. With workdir provisioning enabled, each component instance runs in an isolated directory, and source metadata controls refreshes when the URI or version changes or the configured TTL expires. Without workdir provisioning, Atmos reuses a non-empty component directory until you explicitly pull an update.
 
-1. **Source Provisioner Hook**: Registers for `before.terraform.init` event
-2. **Configuration Check**: Extracts `source` from component configuration
-3. **Skip if Exists**: If target directory exists and is non-empty, skip provisioning
-4. **Download**: Uses go-getter to fetch component at specified version
-5. **Path Filtering**: Applies `included_paths` and `excluded_paths` patterns
-6. **Target Directory**: Places component in the configured component path
-7. **Execution**: Terraform runs against the vendored component
-
-The source provisioner only downloads if the component directory doesn't exist or is empty.
+Path filters control which source files are copied. Terraform runs against the resolved local working directory in either mode.
 
 ## CLI Commands
 

@@ -1,0 +1,56 @@
+{
+  "hero": [
+    "dev",
+    "prod",
+    "staging",
+    "myapp"
+  ],
+  "how-it-works": [
+    "app",
+    "ingress",
+    "ami",
+    "web",
+    "local-dev",
+    "deployment"
+  ],
+  "terraform": [
+    "vpc",
+    "cluster",
+    "app",
+    "dns"
+  ],
+  "kubernetes": [
+    "applied v1/Namespace atmos-demo",
+    "Helm install succeeded",
+    "Applied Helm release app"
+  ],
+  "emulators": [
+    "aws",
+    "gcp",
+    "azure",
+    "k3s",
+    "parameter_name"
+  ],
+  "local-ci": [
+    "Stockholm",
+    "Berlin",
+    "terraform_data.app",
+    "Apply complete!"
+  ],
+  "secrets": [
+    "DATADOG_API_KEY",
+    "DB_PASSWORD",
+    "initialized",
+    "Component command received declared secrets"
+  ],
+  "dx": [
+    "Choose a component",
+    "Choose a stack",
+    "Apply complete!"
+  ],
+  "extensibility": [
+    "Starting Atmos MCP",
+    "Waiting for an agent",
+    "MCP server stopped"
+  ]
+}

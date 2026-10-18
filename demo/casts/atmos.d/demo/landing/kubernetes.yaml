@@ -1,0 +1,65 @@
+commands:
+- name: casts generate demo landing kubernetes
+  description: Record Native Kubernetes and Helm using the dedicated landing fixture.
+  env: !include 'cast-defaults.yaml .env.command'
+  steps:
+  - type: shell
+    command: atmos casts setup landing
+  - type: workdir
+    name: prepare-fixture
+    source: ../landing/fixtures/kubernetes
+    path: ../../.context/cast-fixtures/landing/kubernetes
+    reset: true
+  - type: shell
+    command: atmos emulator up landing-kubernetes -s local
+    working_directory: ../../.context/cast-fixtures/landing/kubernetes
+    env: !include 'landing-defaults.yaml .env'
+    output: none
+  - type: cast
+    name: kubernetes
+    working_directory: ../../.context/cast-fixtures/landing/kubernetes
+    title: Native Kubernetes and Helm
+    mode: steps
+    defaults:
+      cast: !include 'landing-defaults.yaml .cast'
+      simulate: !include 'landing-defaults.yaml .simulate'
+    env: !include 'landing-defaults.yaml .env'
+    show:
+      labels: false
+    output:
+      mode: raw
+      cast: ../../website/static/casts/demo/landing/kubernetes.cast
+    steps:
+    - type: simulate
+      text: atmos list instances -s local
+    - type: shell
+      command: atmos list instances -s local
+      duration: 650ms
+      interval: 1s
+    - type: simulate
+      text: atmos kubernetes deploy namespace -s local --identity local-k8s
+    - type: shell
+      command: atmos kubernetes deploy namespace -s local --identity local-k8s
+      duration: 650ms
+      interval: 1s
+    - type: simulate
+      text: atmos helm deploy app -s local --identity local-k8s
+    - type: shell
+      command: atmos helm deploy app -s local --identity local-k8s
+      duration: 650ms
+      interval: 1s
+  - type: shell
+    command: atmos emulator down landing-kubernetes -s local
+    working_directory: ../../.context/cast-fixtures/landing/kubernetes
+    env: !include 'landing-defaults.yaml .env'
+    output: none
+    when: always
+  - type: shell
+    command: python3 landing_checks.py sanitize kubernetes
+  - type: shell
+    command: atmos casts validate demo landing kubernetes
+- name: casts validate demo landing kubernetes
+  description: Validate the kubernetes homepage recording.
+  steps:
+  - type: shell
+    command: python3 landing_checks.py validate kubernetes

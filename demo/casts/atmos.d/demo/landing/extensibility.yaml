@@ -1,0 +1,62 @@
+commands:
+- name: casts generate demo landing extensibility
+  description: Record Built for your agents using the dedicated landing fixture.
+  env: !include 'cast-defaults.yaml .env.command'
+  steps:
+  - type: shell
+    command: atmos casts setup landing
+  - type: workdir
+    name: prepare-fixture
+    source: ../landing/fixtures/extensibility
+    path: ../../.context/cast-fixtures/landing/extensibility
+    reset: true
+  - type: cast
+    name: extensibility
+    working_directory: ../../.context/cast-fixtures/landing/extensibility
+    title: Built for your agents
+    mode: steps
+    defaults:
+      cast: !include 'landing-defaults.yaml .cast'
+      simulate: !include 'landing-defaults.yaml .simulate'
+    env: !include 'landing-defaults.yaml .env'
+    show:
+      labels: false
+    output:
+      mode: raw
+      cast: ../../website/static/casts/demo/landing/extensibility.cast
+    steps:
+    - type: session
+      shell: /bin/sh
+      timeout: 180s
+      steps:
+      - type: wait
+        text: "> "
+        timeout: 10s
+      - type: write
+        text: atmos mcp start
+      - type: key
+        key: enter
+      - type: wait
+        text: agent…
+        timeout: 30s
+      - type: pause
+        duration: 3s
+      - type: key
+        key: "\x03"
+      - type: wait
+        text: stopped
+        timeout: 30s
+      - type: wait
+        text: "> "
+        timeout: 30s
+      - type: pause
+        duration: 700ms
+  - type: shell
+    command: python3 landing_checks.py sanitize extensibility
+  - type: shell
+    command: atmos casts validate demo landing extensibility
+- name: casts validate demo landing extensibility
+  description: Validate the extensibility homepage recording.
+  steps:
+  - type: shell
+    command: python3 landing_checks.py validate extensibility

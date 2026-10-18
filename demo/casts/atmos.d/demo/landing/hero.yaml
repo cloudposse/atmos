@@ -1,0 +1,48 @@
+commands:
+- name: casts generate demo landing hero
+  description: Record Discover your whole platform using the dedicated landing fixture.
+  env: !include 'cast-defaults.yaml .env.command'
+  steps:
+  - type: shell
+    command: atmos casts setup landing
+  - type: workdir
+    name: prepare-fixture
+    source: ../landing/fixtures/hero
+    path: ../../.context/cast-fixtures/landing/hero
+    reset: true
+  - type: cast
+    name: hero
+    working_directory: ../../.context/cast-fixtures/landing/hero
+    title: Discover your whole platform
+    mode: steps
+    defaults:
+      cast: !include 'landing-defaults.yaml .cast'
+      simulate: !include 'landing-defaults.yaml .simulate'
+    env: !include 'landing-defaults.yaml .env'
+    show:
+      labels: false
+    output:
+      mode: raw
+      cast: ../../website/static/casts/demo/landing/hero.cast
+    steps:
+    - type: simulate
+      text: atmos list stacks
+    - type: shell
+      command: atmos list stacks
+      duration: 650ms
+      interval: 1s
+    - type: simulate
+      text: atmos list components -s dev
+    - type: shell
+      command: atmos list components -s dev
+      duration: 650ms
+      interval: 1s
+  - type: shell
+    command: python3 landing_checks.py sanitize hero
+  - type: shell
+    command: atmos casts validate demo landing hero
+- name: casts validate demo landing hero
+  description: Validate the hero homepage recording.
+  steps:
+  - type: shell
+    command: python3 landing_checks.py validate hero
