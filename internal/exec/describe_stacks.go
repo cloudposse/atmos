@@ -479,6 +479,11 @@ func executeDescribeStacks(
 		atmosConfig.AuthManager = authManager
 	}
 	authDisabled = authDisabled || authdeferred.AuthDisabled(authManager)
+	// Explicit identities bind to stores here, as describe component does. The deferred
+	// manager binds credentials per store read instead.
+	if !authdeferred.IsDeferred(authManager) {
+		injectDescribeComponentStoreAuthResolver(atmosConfig, authManager)
+	}
 
 	stacksMap, rawStackConfigs, deferredContexts, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
 	if err != nil {
@@ -562,6 +567,11 @@ func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentKind 
 		// component source trees. Leave component_path unset until a real source
 		// path is configured.
 		return ""
+	case cfg.CloudFormationSectionName:
+		// A template path is as meaningful a "base path" as a Terraform root
+		// module. Deliberately not fixing this for helm/kubernetes here — the
+		// PRD scopes that out; they remain "" as a pre-existing, unrelated gap.
+		return atmosConfig.Components.CloudFormation.BasePath
 	default:
 		return ""
 	}
@@ -629,7 +639,23 @@ func propagateAuth(configAndStacksInfo *schema.ConfigAndStacksInfo, authManager 
 	}
 	configAndStacksInfo.AuthManager = authManager
 	managerStackInfo := authManager.GetStackInfo()
+	// Carry the caller's original identity selection so evaluation sees the same request
+	// describe component and deploy do.
+	if managerStackInfo != nil && managerStackInfo.RequestedIdentity != nil {
+		configAndStacksInfo.RequestedIdentity = managerStackInfo.RequestedIdentity
+	}
 	if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
 		configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
 	}
+}
+
+// PropagateAuth exposes propagateAuth to command-layer callers outside this
+// package (e.g. the SDK-native aws/cloudformation component) that need
+// info.AuthContext populated, not just info.AuthManager, so identity-aware SDK
+// client construction (including Floci emulator endpoint routing) picks up the
+// active identity's resolved AuthContext.
+func PropagateAuth(configAndStacksInfo *schema.ConfigAndStacksInfo, authManager auth.AuthManager) {
+	defer perf.Track(nil, "exec.PropagateAuth")()
+
+	propagateAuth(configAndStacksInfo, authManager)
 }

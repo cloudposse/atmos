@@ -384,3 +384,59 @@ Replace deprecated wrapper actions with direct commands:
 | Deprecated `cloudposse/github-action-setup-atmos` | `container: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}` |
 
 Deprecated: do not use `integrations.github.gitops`; model CI behavior directly in workflows and stack settings.
+
+## Reporting From Scripts
+
+The `ci` module is available in standalone scripts and in script steps of custom commands, workflows,
+and hooks, including parallel and matrix children.
+
+```python
+build = ci.check("build", state = "in_progress", description = "Building")
+result = ci.group("Test", lambda: exec.run(["go", "test", "./..."], check = False))
+ci.summary(template = "deploy.md", data = {"stack": "prod", "count": 2})
+ci.comment("Built " + ci.context.sha[:7], key = "build-report")   # target = "auto"
+build.update("success", description = "Done")
+```
+
+- **Gates.** Every write needs `ci.enabled: true` plus the feature flag. A gated call warns, renders
+  locally, and the script continues. The warning names `ci.enabled` when the master switch is off, and
+  the per-feature key only when the master is on. Atmos never turns `ci.enabled` on inside a CI run.
+- **Local rendering.** With no recognized provider the `generic` provider prints every call on stderr:
+  annotations as `path:line: level: message (title)`, multiline outputs in heredoc form, comments as a
+  preview that is never posted. `ATMOS_CI_OUTPUT`/`ATMOS_CI_SUMMARY`/`ATMOS_CI_ENV`/`ATMOS_CI_PATH`
+  redirect outputs to files, and `ATMOS_CI_PR`/`ATMOS_CI_REPOSITORY`/`ATMOS_CI_SHA` supply context.
+- **Forced CI mode.** `--ci`, `ATMOS_CI=true`, or `CI=true` on an unrecognized platform makes the
+  generic provider the detected one: gates apply, `ci.context.local` is `False`, and the `ATMOS_CI_*`
+  files are written.
+- **GHES.** `GITHUB_API_URL` or `ATMOS_CI_GITHUB_API_URL` (which wins) sets the API base; an invalid URL
+  fails the command.
+- **Fork posting gate.** Under `pull_request_target`/`workflow_run`, comments, commit statuses,
+  environment and `PATH` exports, and SARIF uploads are held for a fork pull request (head and base
+  `full_name` differ; a deleted fork or unreadable payload counts as a fork). Summaries, outputs,
+  annotations, groups, and masks are never held. `ci.allow_unsafe_fork_execution` or
+  `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION` releases this gate and the clone gate. Native Terraform plan
+  comments and statuses use the same gate. The pull request number comes from the event payload.
+- **Comment targets.** `ci.comment(target="auto"|"pr"|"commit")`; `auto` posts to the pull request
+  when known and otherwise to a commit comment on the SHA (needs `contents: write`). `behavior="update"`
+  requires `key`.
+- **Templates.** Scripts have no configured default template: `data=` requires `template=` on
+  `ci.summary` and `ci.comment`. `ci.summary.template` applies only to native commands. A relative
+  `ci.templates.base_path` resolves against the Atmos `base_path`. A missing key in `data` fails and
+  names the key.
+
+Reference points:
+
+- `ci.comment(target = "auto" | "pr" | "commit")`: default `auto`. `pr` with no pull request fails with the hint
+  to pass the pull request number or run in a pull request context. A commit comment needs `contents: write`;
+  a pull request comment needs `pull-requests: write`; `ci.check` needs `statuses: write`.
+- GitHub maps check states onto commit statuses: `in_progress` becomes pending and `cancelled` becomes error.
+  `check.update()` sends the id, and `check.url` is the details URL (the request URL, else the run URL).
+- Local rendering of an `update` with no earlier comment fails the way GitHub does. Local previews read
+  `commit comment preview (...)` when no pull request is known.
+- Annotations and `::add-mask::` commands go to stderr. Log-group markers go to stdout so they bracket
+  command output; legacy GitHub Actions that parse stdout disable grouping. `::add-mask::` is emitted only
+  when `ci.enabled` is true. Repeated `ci.base()` calls do not duplicate `safe.directory` entries.
+- Forced CI mode (`--ci`, `ATMOS_CI=true`, `CI=true` without a recognized provider) makes the generic provider the
+  detected provider. `ATMOS_CI_PR_FORK` only fills `ci.context.pr.fork`; it never gates anything there.
+- Container image comments (`atmos container build/push`): one comment per `registry/repository`, truncated at
+  65,000 characters, attempted only when `ci.comments.enabled` is on, failures logged as warnings.

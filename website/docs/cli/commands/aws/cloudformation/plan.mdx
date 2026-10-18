@@ -1,0 +1,66 @@
+---
+title: atmos aws cloudformation plan
+sidebar_label: plan
+sidebar_class_name: command
+id: plan
+description: Alias for `atmos aws cloudformation diff` — preview the changes an apply would make.
+---
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
+import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
+import SkipHooksFlag from '@site/docs/cli/commands/aws/cloudformation/_partials/_skip-hooks-flag.mdx'
+
+<Intro>
+Preview changes to a CloudFormation stack. This is an alias for
+[`diff`](/cli/commands/aws/cloudformation/diff), including its changeset cleanup
+and stack-status checks.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
+
+<CastPlayer title="atmos aws cloudformation plan --help" src="/casts/screengrabs/atmos-aws-cloudformation-plan--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation plan <component> --stack <stack> [options]
+```
+
+## Examples
+
+```shell
+atmos aws cloudformation plan vpc -s plat-ue2-dev
+
+# Plan components filtered by tags or labels (composes with --all/--affected)
+atmos aws cloudformation plan --all --tags production,tier-1
+atmos aws cloudformation plan --affected --labels cost-center=platform
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
+
+<SelectionFlags />
+
+<GitFlags />
+
+<SkipHooksFlag />
+</dl>

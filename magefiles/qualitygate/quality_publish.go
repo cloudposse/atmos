@@ -93,7 +93,13 @@ func (q *qualityClient) refresh(number int, performance string, run *githubapi.R
 		if qualityObsolete(existing, run) {
 			return nil
 		}
-		body, ready := q.render(&pr, existing, performance, run)
+		body, ready, unavailable := q.render(&pr, existing, performance, run)
+		if len(unavailable) > 0 && qualityPublishedFor(existing, pr.Head.SHA) {
+			// Missing evidence is not a verdict. Replacing a report for this same head
+			// would flip its label and comment on every transient API failure; keep the
+			// last published state and let the failure surface for a retry.
+			return bench.Error("evidence unavailable for %s; kept the published report for %s", strings.Join(unavailable, ", "), pr.Head.SHA)
+		}
 		valid, err := q.stillCurrent(&pr, run)
 		if err != nil || !valid {
 			return err
@@ -132,20 +138,37 @@ func qualityEligible(pr *githubapi.PR, repo string) bool {
 	return pr.State == "open" && pr.Base.Ref == "main" && pr.Base.Repo.FullName == repo
 }
 
-func (q *qualityClient) render(pr *githubapi.PR, existing *githubapi.Comment, performance string, run *githubapi.Run) (string, bool) {
+func qualityPublishedFor(existing *githubapi.Comment, sha string) bool {
+	return existing != nil && strings.Contains(existing.Body, qualityHeadMarker(sha))
+}
+
+// render returns the report body, the readiness verdict, and the names of gates
+// whose evidence was unavailable (each logged with its cause).
+func (q *qualityClient) render(pr *githubapi.PR, existing *githubapi.Comment, performance string, run *githubapi.Run) (string, bool, []string) {
 	if performance == "" {
 		performance = qualityPreservePerformance(existing, pr.Head.SHA)
 	}
 	evaluator := *q
 	evaluator.benchmarkReportFailed = strings.Contains(performance, qualityBenchmarkError)
 	gates := evaluator.evaluate(pr)
+	var unavailable []string
+	for i := range gates {
+		if gates[i].Unavailable {
+			unavailable = append(unavailable, gates[i].Name)
+			fmt.Printf("PR #%d: %s: %s\n", pr.Number, gates[i].Name, gates[i].Detail)
+		}
+	}
 	body, ready := qualityMarkdown(pr, gates, performance)
 	if run != nil {
 		body += fmt.Sprintf("\n<!-- atmos-benchmark-run:%d:%d -->\n", run.ID, run.Attempt)
-	} else if existing != nil && strings.Contains(existing.Body, qualityHeadMarker(pr.Head.SHA)) {
-		body += "\n" + githubapi.CommentRunPattern.FindString(existing.Body) + "\n"
+	} else if qualityPublishedFor(existing, pr.Head.SHA) {
+		// Carry the run marker only when there is one; appending a bare newline pair
+		// would make a never-benchmarked comment differ from itself and rewrite once.
+		if marker := githubapi.CommentRunPattern.FindString(existing.Body); marker != "" {
+			body += "\n" + marker + "\n"
+		}
 	}
-	return body, ready
+	return body, ready, unavailable
 }
 
 // Publish reports false without writing the comment when another writer changed
@@ -238,7 +261,7 @@ func qualityPreservePerformance(existing *githubapi.Comment, sha string) string 
 
 func qualityMarkdown(pr *githubapi.PR, gates []qualityGate, performance string) (string, bool) {
 	var out strings.Builder
-	ready := !pr.Draft
+	ready := true
 	for i := range gates {
 		gate := &gates[i]
 		ready = ready && (gate.Passed || gate.Advisory)
@@ -250,9 +273,6 @@ func qualityMarkdown(pr *githubapi.PR, gates []qualityGate, performance string) 
 	fmt.Fprintf(&out, "%s\n<!-- coderabbit do not respond to this -->\n<h2>Quality Gate &nbsp; <a href=\"https://github.com/%s/pull/%d/checks\"><img height=\"28\" align=\"top\" alt=\"Quality Gate %s\" src=\"https://img.shields.io/badge/%s?style=for-the-badge\" /></a></h2>\n\n", qualityMarker, pr.Base.Repo.FullName, pr.Number, status, badge)
 	qualityGateList(&out, gates)
 	fmt.Fprintf(&out, "<sub>Current commit: <code>%s</code> · <code>%s</code></sub>\n%s\n\n", pr.Head.SHA, label, qualityHeadMarker(pr.Head.SHA))
-	if pr.Draft {
-		fmt.Fprint(&out, "Draft PRs are not ready for merge.\n\n")
-	}
 	qualityDetails(&out, gates)
 	out.WriteString(qualityGuidance(pr, gates, performance))
 	if performance == "Performance measurements pending for this commit." {
@@ -268,10 +288,7 @@ func qualityMarkdown(pr *githubapi.PR, gates []qualityGate, performance string) 
 func qualityGateList(out *strings.Builder, gates []qualityGate) {
 	for i := range gates {
 		gate := &gates[i]
-		icon := "⏳"
-		if gate.Advisory && !gate.Passed {
-			icon = "⚠️"
-		}
+		icon := "⚠️"
 		if gate.Passed {
 			icon = "✅"
 		}

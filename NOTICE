@@ -145,6 +145,10 @@ APACHE 2.0 LICENSED DEPENDENCIES
     License: Apache-2.0
     URL: https://github.com/aws/aws-sdk-go-v2/blob/service/bedrockruntime/v1.60.0/service/bedrockruntime/LICENSE.txt
 
+  - github.com/aws/aws-sdk-go-v2/service/cloudformation
+    License: Apache-2.0
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/cloudformation/v1.76.4/service/cloudformation/LICENSE.txt
+
   - github.com/aws/aws-sdk-go-v2/service/ecr
     License: Apache-2.0
     URL: https://github.com/aws/aws-sdk-go-v2/blob/service/ecr/v1.63.0/service/ecr/LICENSE.txt

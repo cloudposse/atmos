@@ -241,7 +241,14 @@ components:
 
     <dl>
       <dt>`planfiles.stores`</dt>
-      <dd>Named store definitions. Each store has a `type` (`github/artifacts`, `aws/s3`, or `local/dir`) and backend-specific `options`.</dd>
+      <dd>
+        Named store definitions. Each store has a `type` (`github/artifacts`, `aws/s3`, or `local/dir`),
+        backend-specific `options`, and an optional `identity` - an [Atmos Auth identity](/cli/configuration/auth)
+        (from `auth.identities`) the store authenticates with, independent of the component's identity. This
+        is useful for multi-cloud setups (e.g. storing planfiles in an `aws/s3` bucket while the component
+        authenticates with a non-AWS identity). When omitted, the store inherits the component's identity
+        (the prior behavior). See [Store Identity](/ci/planfile-storage).
+      </dd>
 
       <dt>`planfiles.default`</dt>
       <dd>Name of the store to use when no priority list is set.</dd>

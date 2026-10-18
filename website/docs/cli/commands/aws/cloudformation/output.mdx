@@ -1,0 +1,165 @@
+---
+title: atmos aws cloudformation output
+sidebar_label: output
+sidebar_class_name: command
+id: output
+description: Show a deployed CloudFormation stack's Outputs.
+---
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
+import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
+
+<Intro>
+  Show the deployed stack's `Outputs` (`DescribeStacks`), formatted for
+  consumption by shells, other tools, or other Atmos components. `apply`
+  renders this same view automatically at the end of a successful deploy.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
+
+<CastPlayer title="atmos aws cloudformation output --help" src="/casts/screengrabs/atmos-aws-cloudformation-output--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation output <component> [key] --stack <stack> [options]
+```
+
+## Examples
+
+```shell
+atmos aws cloudformation output vpc -s plat-ue2-dev
+```
+
+Print a single Output by its key. The value is written bare, so it is safe to use in a shell
+pipeline:
+
+```shell
+atmos aws cloudformation output vpc VpcId -s plat-ue2-dev
+VPC_ID=$(atmos aws cloudformation output vpc VpcId -s plat-ue2-dev)
+```
+
+Choose an output format:
+
+```shell
+atmos aws cloudformation output vpc -s plat-ue2-dev --format=json
+atmos aws cloudformation output vpc -s plat-ue2-dev --format=env
+atmos aws cloudformation output vpc -s plat-ue2-dev --format=github
+```
+
+Flatten nested Outputs into compound keys, or uppercase every key:
+
+```shell
+atmos aws cloudformation output vpc -s plat-ue2-dev --format=dotenv --flatten --uppercase
+```
+
+Show output for all or affected components:
+
+```shell
+atmos aws cloudformation output --all -s plat-ue2-dev
+atmos aws cloudformation output --affected --base origin/main
+```
+
+With more than one component selected, the JSON and YAML formats print a single document keyed by stack and then by component, so the result stays parseable:
+
+```shell
+atmos aws cloudformation output --all --format=json
+```
+
+```json
+{
+  "plat-ue2-dev": {
+    "vpc": { "VpcId": "vpc-0123456789abcdef0" },
+    "dns": { "ZoneId": "Z0123456789ABCDEFGHIJ" }
+  }
+}
+```
+
+The table format prints a heading naming the component and stack above each table. The other formats print each component's outputs in turn.
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless `--all`/`--affected`/`--tags`/`--labels` is set)</em></dt>
+  <dd>The `aws/cloudformation` component.</dd>
+
+  <dt>`key` <em>(optional)</em></dt>
+  <dd>
+    The Output key to print on its own. With the default `table` format the value is written bare, one line, on stdout.
+    With `--format=json` the value is JSON-encoded, with `--format=yaml` YAML-encoded, and the other formats
+    render a single `KEY=value`-style entry. A key the stack does not have is an error that lists the
+    keys it does have. A key cannot be combined with `--all`, `--affected`, `--tags`, or `--labels`.
+  </dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
+
+  <dt>`--format` <em>(optional, default `table`)</em></dt>
+  <dd>Output format: `json`, `yaml`, `hcl`, `env`, `dotenv`, `bash`, `csv`, `tsv`, `table`, or `github`. An unsupported value is an error that names the value and lists the valid formats.</dd>
+
+  <dt>`--flatten` <em>(optional)</em></dt>
+  <dd>Flatten nested Outputs into compound keys.</dd>
+
+  <dt>`--uppercase` <em>(optional)</em></dt>
+  <dd>Uppercase Output keys.</dd>
+
+<SelectionFlags />
+
+<GitFlags />
+</dl>
+
+:::note
+`outputs` is accepted as an alias for `output`.
+:::
+
+## Stack state
+
+The `output` command reads the deployed stack, so the stack has to be deployed:
+
+- A stack that is not deployed is an error: `REVIEW_IN_PROGRESS` (a preview changeset created by
+  `diff` or `plan` on a component that was never applied), `ROLLBACK_COMPLETE`, `ROLLBACK_FAILED`,
+  `CREATE_FAILED`, and the `DELETE_*` statuses. Apply the component, or delete a stack that is stuck in
+  a failed create first.
+- A deployed stack that declares no `Outputs` prints `Stack <name> has no outputs` instead of an empty
+  table. `--format=json` and the other structured formats still print an empty document, so
+  pipelines keep getting parseable output.
+
+JSON output is written without HTML escaping, so masked values read `<MASKED>`.
+
+## Masking
+
+With masking enabled, output presentation requires both
+`cloudformation:GetTemplate` and `cloudformation:DescribeStacks`.
+Atmos reads the deployed template's `NoEcho` metadata, without requiring a
+local template or source download.
+
+### Values Masked
+
+- Outputs that reference `NoEcho` parameters, including intrinsic expressions
+  and indirect resource or condition dependencies.
+- Known parameter and default literals registered for masking.
+- A single selected output key, using the same rules as the full output listing.
+
+Unreadable or malformed template metadata stops presentation before values are
+printed. Changes to local parameters do not bypass deployed-template masking.
+
+### Limits and Overrides
+
+Use `--mask=false` to disable presentation masking. Internal YAML output
+lookups return real values for component dependencies.
+
+Secrets transformed in ways that leave no detectable template reference may
+not be recognized. Keep secrets out of CloudFormation outputs.

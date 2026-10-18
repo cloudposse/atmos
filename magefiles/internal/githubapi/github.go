@@ -4,8 +4,10 @@ package githubapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"time"
 
@@ -48,7 +50,13 @@ type PR struct {
 	Draft        bool      `json:"draft"`
 	Number       int       `json:"number"`
 	State        string    `json:"state"`
-	User         struct {
+	// Mergeable is nil until GitHub has lazily computed it after a push or base move.
+	Mergeable      *bool  `json:"mergeable"`
+	MergeableState string `json:"mergeable_state"`
+	Labels         []struct {
+		Name string `json:"name"`
+	} `json:"labels"`
+	User struct {
 		Login string `json:"login"`
 		Type  string `json:"type"`
 	} `json:"user"`
@@ -78,6 +86,47 @@ type Comment struct {
 
 func Get(ctx context.Context, client API, path string, response any) error {
 	return client.DoWithContext(ctx, http.MethodGet, path, nil, response)
+}
+
+// ErrPRPaginationLimit reports that a PR listing exceeded PageLimit pages.
+var ErrPRPaginationLimit = errors.New("PR pagination limit exceeded")
+
+// ListOpenMainPRs lists open PRs against main from a paginated pulls endpoint.
+// The path is a complete API path that already carries a query string. When
+// headSHA is set, only PRs whose head is exactly that commit qualify, so a PR
+// whose head moved after an event is never selected for the stale commit.
+func ListOpenMainPRs(ctx context.Context, client API, path, headSHA string) ([]PR, error) {
+	var matched []PR
+	for page := 1; page <= PageLimit; page++ {
+		var prs []PR
+		if err := Get(ctx, client, fmt.Sprintf("%s&per_page=%d&page=%d", path, PageSize, page), &prs); err != nil {
+			return nil, err
+		}
+		for i := range prs {
+			pr := &prs[i]
+			if pr.State == "open" && pr.Base.Ref == "main" && (headSHA == "" || pr.Head.SHA == headSHA) {
+				matched = append(matched, *pr)
+			}
+		}
+		if len(prs) < PageSize {
+			return matched, nil
+		}
+	}
+	return nil, ErrPRPaginationLimit
+}
+
+// OpenPRsForHead resolves open main PRs by their head branch. GitHub's commit
+// association endpoint lists nothing for a commit that exists only in a fork,
+// but the exact owner:branch lookup is strongly consistent. Every result's head
+// is verified against sha.
+func OpenPRsForHead(ctx context.Context, client API, repo string, head HeadRef) ([]PR, error) {
+	query := url.QueryEscape(head.Owner + ":" + head.Branch)
+	return ListOpenMainPRs(ctx, client, fmt.Sprintf("repos/%s/pulls?state=open&base=main&head=%s", repo, query), head.SHA)
+}
+
+// HeadRef identifies a PR head by its fork owner, branch and expected commit.
+type HeadRef struct {
+	Owner, Branch, SHA string
 }
 
 func NotFound(err error) bool {

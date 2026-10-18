@@ -1,0 +1,348 @@
+package cloudformation
+
+import (
+	"testing"
+
+	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	cockroachErrors "github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+)
+
+func TestBuildStackSpec_RequiresStackName(t *testing.T) {
+	_, err := buildStackSpec(map[string]any{"path": "template.yaml"})
+	require.ErrorIs(t, err, errUtils.ErrMissingAwsCloudFormationStackName)
+}
+
+func TestBuildStackSpec_RequiresTemplateUnlessAbstract(t *testing.T) {
+	_, err := buildStackSpec(map[string]any{"stack_name": "vpc"})
+	require.ErrorIs(t, err, errUtils.ErrMissingAwsCloudFormationTemplate)
+
+	spec, err := buildStackSpec(map[string]any{
+		"stack_name": "vpc",
+		"metadata":   map[string]any{"type": "abstract"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "vpc", spec.StackName)
+	assert.Empty(t, spec.TemplatePath)
+}
+
+func TestBuildStackSpec_PathIsFileReference(t *testing.T) {
+	spec, err := buildStackSpec(map[string]any{
+		"stack_name": "vpc",
+		"path":       "template.yaml",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "template.yaml", spec.TemplatePath)
+	assert.Empty(t, spec.TemplateBody)
+}
+
+func TestBuildStackSpec_InlineStringTemplate(t *testing.T) {
+	spec, err := buildStackSpec(map[string]any{
+		"stack_name": "vpc",
+		"template":   "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, spec.TemplatePath)
+	assert.Equal(t, "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n", spec.TemplateBody)
+}
+
+func TestBuildStackSpec_InlineMapTemplate(t *testing.T) {
+	spec, err := buildStackSpec(map[string]any{
+		"stack_name": "vpc",
+		"template": map[string]any{
+			"Resources": map[string]any{
+				"Bucket": map[string]any{"Type": "AWS::S3::Bucket"},
+			},
+		},
+	})
+	require.NoError(t, err)
+	assert.Empty(t, spec.TemplatePath)
+	assert.Contains(t, spec.TemplateBody, "Resources:")
+	assert.Contains(t, spec.TemplateBody, "AWS::S3::Bucket")
+}
+
+func TestBuildStackSpec_TemplateAndPathMutuallyExclusive(t *testing.T) {
+	_, err := buildStackSpec(map[string]any{
+		"stack_name": "vpc",
+		"template":   "Resources: {}\n",
+		"path":       "template.yaml",
+	})
+	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationTemplateAndPathMutuallyExclusive)
+}
+
+func TestBuildStackSpec_FullConfig(t *testing.T) {
+	componentSection := map[string]any{
+		"stack_name": "acme-plat-ue2-dev-vpc",
+		"path":       "template.yaml",
+		"parameters": map[string]any{
+			"CidrBlock":   "10.0.0.0/16",
+			"Environment": "dev",
+			"AZs":         []any{"us-east-2a", "us-east-2b"},
+		},
+		"capabilities": []any{"CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"},
+		"tags":         map[string]any{"Team": "platform", "Environment": "dev"},
+		"stack_policy": map[string]any{"file": "stack-policy.json"},
+		"role_arn":     "arn:aws:iam::123456789012:role/cfn-deploy",
+		"notification_arns": []any{
+			"arn:aws:sns:us-east-2:123456789012:notify",
+		},
+		"disable_rollback":       true,
+		"termination_protection": true,
+		"timeout_in_minutes":     30,
+	}
+
+	spec, err := buildStackSpec(componentSection)
+	require.NoError(t, err)
+
+	assert.Equal(t, "acme-plat-ue2-dev-vpc", spec.StackName)
+	assert.Equal(t, "template.yaml", spec.TemplatePath)
+	assert.Equal(t, "stack-policy.json", spec.StackPolicyFile)
+	assert.Equal(t, "arn:aws:iam::123456789012:role/cfn-deploy", spec.RoleArn)
+	assert.Equal(t, []string{"arn:aws:sns:us-east-2:123456789012:notify"}, spec.NotificationArns)
+	assert.True(t, spec.DisableRollback)
+	assert.True(t, spec.TerminationProtection)
+	assert.Equal(t, int32(30), spec.TimeoutInMinutes)
+
+	require.Len(t, spec.Parameters, 3)
+	paramMap := make(map[string]string, len(spec.Parameters))
+	for _, p := range spec.Parameters {
+		paramMap[*p.ParameterKey] = *p.ParameterValue
+	}
+	assert.Equal(t, "10.0.0.0/16", paramMap["CidrBlock"])
+	assert.Equal(t, "dev", paramMap["Environment"])
+	assert.Equal(t, "us-east-2a,us-east-2b", paramMap["AZs"], "list parameters are comma-joined for List<Type>/CommaDelimitedList")
+
+	require.Len(t, spec.Capabilities, 2)
+	assert.Contains(t, spec.Capabilities, cfntypes.Capability("CAPABILITY_IAM"))
+	assert.Contains(t, spec.Capabilities, cfntypes.Capability("CAPABILITY_NAMED_IAM"))
+
+	require.Len(t, spec.Tags, 2)
+	tagMap := make(map[string]string, len(spec.Tags))
+	for _, tag := range spec.Tags {
+		tagMap[*tag.Key] = *tag.Value
+	}
+	assert.Equal(t, "platform", tagMap["Team"])
+	assert.Equal(t, "dev", tagMap["Environment"])
+}
+
+func TestNormalizeParameters_RejectsNestedMap(t *testing.T) {
+	_, err := normalizeParameters(map[string]any{
+		"Bad": map[string]any{"nested": "value"},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+}
+
+func TestNormalizeParameters_Nil(t *testing.T) {
+	params, err := normalizeParameters(nil)
+	require.NoError(t, err)
+	assert.Nil(t, params)
+}
+
+// TestBuildStackSpec_PropagatesParameterError verifies buildStackSpec's own
+// error-propagation branch for normalizeParameters failing, not just
+// normalizeParameters itself (TestNormalizeParameters_RejectsNestedMap).
+func TestBuildStackSpec_PropagatesParameterError(t *testing.T) {
+	_, err := buildStackSpec(map[string]any{
+		"stack_name": "vpc",
+		"template":   "template.yaml",
+		"parameters": map[string]any{
+			"Bad": map[string]any{"nested": "value"},
+		},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+}
+
+// TestStringifyParameterValue covers every branch of stringifyParameterValue:
+// string passthrough, list join, nested-list error propagation, nil, and the
+// default scalar (%v) fallback for types like bool/int that aren't string.
+func TestStringifyParameterValue(t *testing.T) {
+	t.Run("string", func(t *testing.T) {
+		v, err := stringifyParameterValue("hello")
+		require.NoError(t, err)
+		assert.Equal(t, "hello", v)
+	})
+
+	t.Run("list is comma-joined", func(t *testing.T) {
+		v, err := stringifyParameterValue([]any{"a", "b", "c"})
+		require.NoError(t, err)
+		assert.Equal(t, "a,b,c", v)
+	})
+
+	t.Run("list propagates a nested item's error", func(t *testing.T) {
+		_, err := stringifyParameterValue([]any{"ok", map[string]any{"nested": "value"}})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+	})
+
+	t.Run("null cannot silently become an empty parameter", func(t *testing.T) {
+		_, err := stringifyParameterValue(nil)
+		require.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationParameters)
+	})
+
+	t.Run("bool falls back to default %v formatting", func(t *testing.T) {
+		v, err := stringifyParameterValue(true)
+		require.NoError(t, err)
+		assert.Equal(t, "true", v)
+	})
+
+	t.Run("map is rejected", func(t *testing.T) {
+		_, err := stringifyParameterValue(map[string]any{"x": "y"})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+	})
+}
+
+// TestNormalizeStringSlice_AlreadyStringSlice covers the []string passthrough
+// branch (as opposed to the []any conversion branch already exercised by
+// TestBuildStackSpec_FullConfig/TestNormalizeCapabilities_Empty).
+func TestNormalizeStringSlice_AlreadyStringSlice(t *testing.T) {
+	assert.Equal(t, []string{"a", "b"}, normalizeStringSlice([]string{"a", "b"}))
+}
+
+func TestNormalizeCapabilities_Empty(t *testing.T) {
+	for _, raw := range []any{nil, []any{}} {
+		got, err := normalizeCapabilities(raw)
+		require.NoError(t, err)
+		assert.Nil(t, got)
+	}
+}
+
+// Capabilities are validated locally against the SDK enum so a typo fails with
+// the valid set instead of surfacing as a late AWS API error.
+func TestNormalizeCapabilities_Validation(t *testing.T) {
+	t.Run("accepts every SDK enum value", func(t *testing.T) {
+		valid := cfntypes.Capability("").Values()
+		require.NotEmpty(t, valid)
+		raw := make([]any, 0, len(valid))
+		for _, v := range valid {
+			raw = append(raw, string(v))
+		}
+		got, err := normalizeCapabilities(raw)
+		require.NoError(t, err)
+		assert.Equal(t, valid, got)
+	})
+
+	t.Run("rejects an unknown value naming it and the valid set", func(t *testing.T) {
+		_, err := normalizeCapabilities([]any{"CAPABILITY_IAM", "CAPABILITY_IAMM"})
+		require.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationCapabilities)
+		assert.Contains(t, err.Error(), "CAPABILITY_IAMM")
+		for _, valid := range cfntypes.Capability("").Values() {
+			assert.Contains(t, err.Error(), string(valid))
+		}
+	})
+
+	t.Run("buildStackSpec propagates the error", func(t *testing.T) {
+		_, err := buildStackSpec(map[string]any{
+			"stack_name":   "vpc",
+			"template":     "Resources: {}\n",
+			"capabilities": []any{"CAPABILITY_IAMM"},
+		})
+		require.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationCapabilities)
+	})
+}
+
+func TestNormalizeTags(t *testing.T) {
+	t.Run("map form is sorted by key and scalars are stringified", func(t *testing.T) {
+		got, err := normalizeTags(map[string]any{"Team": "platform", "Env": "dev", "Count": 3, "On": true})
+		require.NoError(t, err)
+		require.Len(t, got, 4)
+		assert.Equal(t, "Count", *got[0].Key)
+		assert.Equal(t, "3", *got[0].Value)
+		assert.Equal(t, "Env", *got[1].Key)
+		assert.Equal(t, "On", *got[2].Key)
+		assert.Equal(t, "true", *got[2].Value)
+		assert.Equal(t, "Team", *got[3].Key)
+		assert.Equal(t, "platform", *got[3].Value)
+	})
+
+	t.Run("absent or empty yields no tags without error", func(t *testing.T) {
+		got, err := normalizeTags(nil)
+		require.NoError(t, err)
+		assert.Nil(t, got)
+
+		got, err = normalizeTags(map[string]any{})
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	rejected := []struct {
+		name string
+		raw  any
+	}{
+		{"AWS CLI list of Key/Value maps", []any{map[string]any{"Key": "Team", "Value": "platform"}}},
+		{"string list as produced by !tags", []any{"a", "b"}},
+		{"plain string", "not-a-map"},
+		{"number", 42},
+		{"bool", true},
+		{"nested map value", map[string]any{"Team": map[string]any{"name": "platform"}}},
+		{"nested list value", map[string]any{"Team": []any{"platform"}}},
+	}
+	for _, tt := range rejected {
+		t.Run("rejects "+tt.name, func(t *testing.T) {
+			got, err := normalizeTags(tt.raw)
+			require.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+			assert.Nil(t, got)
+			assert.Contains(t, cockroachErrors.GetAllHints(err), tagsShapeHint)
+		})
+	}
+
+	t.Run("explanation names the offending type", func(t *testing.T) {
+		_, err := normalizeTags([]any{"a"})
+		require.Error(t, err)
+		assert.Contains(t, cockroachErrors.FlattenDetails(err), "tags must be a map of tag names to string values, got []interface {}")
+	})
+}
+
+func TestBuildStackSpec_RejectsListTags(t *testing.T) {
+	_, err := buildStackSpec(map[string]any{
+		"stack_name": "vpc",
+		"template":   "Resources: {}\n",
+		"tags":       []any{map[string]any{"Key": "Team", "Value": "platform"}},
+	})
+	require.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+	assert.Contains(t, err.Error(), "tags")
+
+	spec, err := buildStackSpec(map[string]any{
+		"stack_name": "vpc",
+		"template":   "Resources: {}\n",
+		"tags":       map[string]any{"Team": "platform"},
+	})
+	require.NoError(t, err)
+	require.Len(t, spec.Tags, 1)
+	assert.Equal(t, "Team", *spec.Tags[0].Key)
+}
+
+func TestToInt32_ClampsOverflow(t *testing.T) {
+	assert.Equal(t, int32(30), toInt32(30))
+	assert.Equal(t, int32(30), toInt32(int32(30)))
+	assert.Equal(t, int32(30), toInt32(int64(30)))
+	assert.Equal(t, int32(30), toInt32(float64(30)))
+	assert.Equal(t, int32(2147483647), toInt32(int64(9999999999)))
+	assert.Equal(t, int32(-2147483648), toInt32(int64(-9999999999)))
+	assert.Equal(t, int32(0), toInt32("not-a-number"))
+}
+
+func TestIsAbstractComponent(t *testing.T) {
+	assert.True(t, isAbstractComponent(map[string]any{
+		"metadata": map[string]any{"type": "abstract"},
+	}))
+	assert.False(t, isAbstractComponent(map[string]any{
+		"metadata": map[string]any{"type": "real"},
+	}))
+	assert.False(t, isAbstractComponent(map[string]any{}))
+}
+
+func TestBuildStackSpec_WarnsForIgnoredTimeout(t *testing.T) {
+	section := map[string]any{"stack_name": "vpc", "template": "template.yaml", "timeout_in_minutes": 30}
+	output := captureStderr(t, func() { _, err := buildStackSpec(section); require.NoError(t, err) })
+	assert.Contains(t, normalizeUIOutput(output), "timeout_in_minutes")
+	assert.Contains(t, normalizeUIOutput(output), "ignored")
+	delete(section, "timeout_in_minutes")
+	output = captureStderr(t, func() { _, err := buildStackSpec(section); require.NoError(t, err) })
+	assert.NotContains(t, output, "timeout_in_minutes")
+}

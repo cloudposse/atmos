@@ -79,7 +79,7 @@ const BATTERIES = [
     title: 'Workflows & Automation',
     desc: 'Build CLI apps, extend Atmos with custom subcommands, and automate tasks with workflows, hooks, tests, and Atmos Automation Language.',
     tag: 'WORKFLOWS · COMMANDS · HOOKS',
-    to: '/automation',
+    to: '/scripting',
   },
   {
     icon: RiCloudLine,

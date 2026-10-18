@@ -38,6 +38,7 @@ func TestHelperProcess(t *testing.T) {
 	case "exit":
 		os.Exit(7)
 	case "sleep":
+		_, _ = os.Stdout.WriteString("started")
 		time.Sleep(2 * time.Second)
 	default:
 		os.Exit(2)
@@ -81,8 +82,20 @@ func TestDefaultRunnerPreservesExitCode(t *testing.T) {
 	assert.True(t, errors.As(result.Err, &exitErr))
 }
 
+// cancelOnProcessOutput cancels only after the child has actually started.
+type cancelOnProcessOutput struct {
+	cancel context.CancelFunc
+}
+
+func (w cancelOnProcessOutput) Write(p []byte) (int, error) {
+	w.cancel()
+	return len(p), nil
+}
+
 func TestDefaultRunnerCancelsWithContext(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	deadline, stop := context.WithTimeout(t.Context(), 10*time.Second)
+	defer stop()
+	ctx, cancel := context.WithCancel(deadline)
 	defer cancel()
 
 	command, args, env := processHelperCommand(t, "sleep")
@@ -90,13 +103,15 @@ func TestDefaultRunnerCancelsWithContext(t *testing.T) {
 		Command: command,
 		Args:    args,
 		Env:     env,
+		Streams: Streams{Stdout: cancelOnProcessOutput{cancel: cancel}},
 	})
 
 	require.Error(t, result.Err)
+	assert.True(t, result.Started)
 	assert.True(t, result.Canceled)
 	assert.NotEqual(t, 0, result.ExitCode)
 	assert.ErrorIs(t, result.Err, errUtils.ErrProcessWaitFailed)
-	assert.ErrorIs(t, result.Err, context.DeadlineExceeded)
+	assert.ErrorIs(t, result.Err, context.Canceled)
 }
 
 func TestDefaultRunnerDryRunDoesNotStartProcess(t *testing.T) {

@@ -1,6 +1,6 @@
 ---
 title: Ansible
-tags: [Automation]
+tags: [Components]
 cast:
   file: /casts/examples/demo-ansible/playbook.cast
   title: atmos Ansible playbook

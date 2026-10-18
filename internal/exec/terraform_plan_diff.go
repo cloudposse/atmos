@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/plandiff"
 )
 
 // Static errors.
@@ -47,6 +48,9 @@ type PlanFileOptions struct {
 // TerraformPlanDiff represents the plan-diff command implementation.
 func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(atmosConfig, "exec.TerraformPlanDiff")()
+	if _, err := plandiff.Policy(atmosConfig); err != nil {
+		return err
+	}
 
 	// Process stacks to resolve component metadata (metadata.component, component_folder_prefix).
 	// This is required to get the correct FinalComponent and ComponentFolderPrefix.
@@ -153,6 +157,10 @@ func validateOriginalPlanFile(origPlanFile, componentPath string) (string, error
 
 // comparePlansAndGenerateDiff compares two plan files and generates a diff.
 func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, origPlanFile, newPlanFile string) error {
+	policy, err := plandiff.Policy(atmosConfig)
+	if err != nil {
+		return err
+	}
 	// Get the JSON representation of the original plan
 	origPlanJSON, err := getTerraformPlanJSON(atmosConfig, info, componentPath, origPlanFile)
 	if err != nil {
@@ -177,12 +185,11 @@ func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *s
 		return errors.Wrap(err, "error parsing new plan JSON")
 	}
 
-	// Sort maps to ensure consistent ordering
-	origPlan = sortMapKeys(origPlan)
-	newPlan = sortMapKeys(newPlan)
+	// Warn about ignore_changes entries that cannot match anything in these plans.
+	plandiff.WarnUnmatchedIgnoreChanges(atmosConfig.Components.Terraform.PlanDiff.IgnoreChanges, origPlan, newPlan)
 
 	// Generate the diff
-	diff, hasDiff := generatePlanDiff(origPlan, newPlan)
+	diff, hasDiff := plandiff.Compare(origPlan, newPlan, policy)
 
 	// Print the diff
 	if hasDiff {

@@ -26,6 +26,10 @@ type TaskSpec struct {
 	Env     []string
 	Streams Streams
 	DryRun  bool
+	// SkipMetrics leaves the subprocess's resource usage out of the end-of-invocation summary.
+	// Steps that report their own result, such as shell and atmos steps, set it so running them
+	// through the runner does not add a "Total for this invocation" line they never printed.
+	SkipMetrics bool
 }
 
 // Streams contains the standard streams passed to a subprocess.
@@ -121,12 +125,13 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 
 	err = group.tolerateWaitDelay(ctx, cmd.Wait())
 	group.finished()
-	recordWaitOutcome(ctx, cmd, &result, err)
+	recordWaitOutcome(ctx, cmd, &result, err, !spec.SkipMetrics)
 	return result
 }
 
-// recordWaitOutcome fills result from the finished command and its Wait error.
-func recordWaitOutcome(ctx context.Context, cmd *exec.Cmd, result *Result, err error) {
+// recordWaitOutcome fills result from the finished command and its Wait error. The command's
+// resource usage joins the process-wide summary when accumulate is set.
+func recordWaitOutcome(ctx context.Context, cmd *exec.Cmd, result *Result, err error, accumulate bool) {
 	// Collect subprocess-tree metrics unconditionally, once, regardless of
 	// success/failure — cmd.ProcessState is populated by Wait() either way,
 	// and callers (e.g. the exec-metadata upload) need usage data even for a
@@ -134,7 +139,9 @@ func recordWaitOutcome(ctx context.Context, cmd *exec.Cmd, result *Result, err e
 	// end-of-invocation aggregate summary (DisplayFinalSummary) covers every
 	// subprocess spawned during the whole atmos run, not just the last one.
 	result.Metrics = metricsprocess.CollectFromProcessState(cmd, time.Since(result.StartedAt))
-	metricsprocess.Accumulate(result.Metrics)
+	if accumulate {
+		metricsprocess.Accumulate(result.Metrics)
+	}
 	if err == nil {
 		return
 	}
