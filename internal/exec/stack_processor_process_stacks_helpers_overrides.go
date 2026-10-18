@@ -51,6 +51,8 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 		return fmt.Errorf("%w: 'components.%s.%s.overrides' in the manifest '%s'", errUtils.ErrInvalidComponentOverrides, opts.ComponentType, opts.Component, opts.StackName)
 	}
 	result.ComponentOverrides = componentOverrides
+	// Sections set to `!unset` in overrides drop every lower layer in the final merge.
+	componentOverrides, result.ComponentOverridesUnsetSections = splitUnsetSections(componentOverrides)
 	if opts.ComponentType == cfg.HelmComponentType {
 		result.ComponentOverridesHelm = extractHelmOverrideSection(componentOverrides)
 	}

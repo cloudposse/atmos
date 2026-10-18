@@ -4818,6 +4818,11 @@ func TestManifestSchemaErrorMessage(t *testing.T) {
 		"file references must use the !include YAML tag",
 		manifestSchemaErrorMessage("does not match pattern '^!include'"),
 	)
+	assert.Equal(
+		t,
+		"file references must use the !include YAML tag, or !unset to remove the section",
+		manifestSchemaErrorMessage("does not match pattern '^!(include|unset)'"),
+	)
 	assert.Equal(t, "does not match pattern '^component'", manifestSchemaErrorMessage("does not match pattern '^component'"))
 }
 
