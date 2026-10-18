@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sort"
 
+	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/doctor/monorepo"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -160,14 +161,34 @@ type Engine struct {
 	Monorepo monorepo.Verifier
 }
 
-// StackValidator checks decoded static inputs with the production stack consumers.
+// SourceReader reads stack manifests as doctor sees them: current content, or a repair candidate while one is verified.
+type SourceReader interface {
+	ReadFile(path string) ([]byte, error)
+}
+
+// StackInputs are the static stack manifests captured for the stack consumers.
+type StackInputs struct {
+	// Files are the top-level manifests, as slash paths relative to the stacks base path, after
+	// stacks.included_paths and stacks.excluded_paths are applied.
+	Files []string
+	// Reader supplies the content of each manifest and of everything it imports.
+	Reader SourceReader
+}
+
+// StackValidator checks static inputs with the production stack consumers.
 type StackValidator interface {
-	Validate(context.Context, *schema.AtmosConfiguration, map[string]map[string]any) error
+	Validate(context.Context, *schema.AtmosConfiguration, StackInputs) error
 }
 
 // DependencyValidator checks the production dependency graph without evaluating configuration.
 type DependencyValidator interface {
-	ValidateDependencies(context.Context, *schema.AtmosConfiguration, map[string]map[string]any) error
+	ValidateDependencies(context.Context, *schema.AtmosConfiguration, StackInputs) error
+}
+
+// DependencyTargetReporter reports the dependencies the runtime would select for each component, so
+// a repair can be shown not to change the dependency graph.
+type DependencyTargetReporter interface {
+	DependencyTargets(context.Context, *schema.AtmosConfiguration, StackInputs) (map[dependency.ComponentRef][]dependency.ComponentRef, error)
 }
 
 func (r *Report) sort() {

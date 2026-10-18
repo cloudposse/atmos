@@ -2,9 +2,11 @@ package doctor
 
 import (
 	"strings"
+	"sync"
 
 	"github.com/spf13/pflag"
 
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
 )
@@ -29,17 +31,27 @@ const (
 func IsInvocation(args []string, rootFlags *pflag.FlagSet) bool {
 	defer perf.Track(nil, "doctor.IsInvocation")()
 
-	for len(args) > 0 {
-		arg := args[0]
+	_, ok := InvocationIndex(args, rootFlags)
+	return ok
+}
+
+// InvocationIndex reports whether args invoke the doctor command and, when they do, the index of the
+// "doctor" token. Callers use the index to treat the leading root flags and the command's own arguments
+// separately, because an optional-value root flag such as --pager must never absorb the command name.
+func InvocationIndex(args []string, rootFlags *pflag.FlagSet) (int, bool) {
+	defer perf.Track(nil, "doctor.InvocationIndex")()
+
+	for i := 0; i < len(args); {
+		arg := args[i]
 		if arg == flagTerminator {
-			return false
+			return 0, false
 		}
 		if !strings.HasPrefix(arg, "-") || arg == "-" {
-			return arg == commandName
+			return i, arg == commandName
 		}
-		args = args[1+leadingFlagValues(arg, args[1:], rootFlags):]
+		i += 1 + leadingFlagValues(arg, args[i+1:], rootFlags)
 	}
-	return false
+	return 0, false
 }
 
 // leadingFlagValues returns how many arguments following flag arg it consumes as its value.
@@ -106,15 +118,36 @@ func valuesForFlag(flag *pflag.Flag, rest []string) int {
 		}
 		return 0
 	case flag.NoOptDefVal != "":
-		// Optional-value flags consume the next argument only when it is not itself a flag.
-		if len(rest) > 0 && !strings.HasPrefix(rest[0], "-") {
-			return 1
-		}
-		return 0
+		return optionalValueFlagValues(flag, rest)
 	case len(rest) > 0:
 		return 1
 	}
 	return 0
+}
+
+// optionalValueFlagValues returns how many arguments an optional-value (NoOptDefVal) flag consumes.
+// Such a flag consumes the next argument only when it is not itself a flag and is not the doctor command
+// name, so "atmos --pager doctor" dispatches doctor. Flags whose registry entry opts out of space-separated
+// values (for example --cast) never consume a following token.
+func optionalValueFlagValues(flag *pflag.Flag, rest []string) int {
+	if registered := globalFlags().Get(flag.Name); registered != nil && !registered.GetNoOptDefValConsumesNextArg() {
+		return 0
+	}
+	if len(rest) > 0 && !strings.HasPrefix(rest[0], "-") && rest[0] != commandName {
+		return 1
+	}
+	return 0
+}
+
+var (
+	globalFlagsOnce     sync.Once
+	globalFlagsRegistry *flags.FlagRegistry
+)
+
+// globalFlags returns the registry of global flags, built once on first use.
+func globalFlags() *flags.FlagRegistry {
+	globalFlagsOnce.Do(func() { globalFlagsRegistry = flags.GlobalFlagsRegistry() })
+	return globalFlagsRegistry
 }
 
 func isBoolean(flag *pflag.Flag) bool {

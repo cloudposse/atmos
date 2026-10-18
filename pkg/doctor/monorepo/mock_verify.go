@@ -41,7 +41,7 @@ func (m *MockVerifier) EXPECT() *MockVerifierMockRecorder {
 }
 
 // Verify mocks base method.
-func (m *MockVerifier) Verify(ctx context.Context, result Result, ref string) Verification {
+func (m *MockVerifier) Verify(ctx context.Context, result *Result, ref string) Verification {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Verify", ctx, result, ref)
 	ret0, _ := ret[0].(Verification)

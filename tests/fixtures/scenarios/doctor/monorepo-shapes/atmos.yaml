@@ -1,0 +1,13 @@
+# Monorepo-shapes doctor fixture: vendor sources that point at the archived terraform-aws-components
+# monorepo in less common spellings: mixed-case host and owner, a subdirectory written inside the
+# query string, and a module subdirectory below a component.
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths: ["**/*"]
+  name_template: "{{ .vars.stage }}"

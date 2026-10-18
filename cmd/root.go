@@ -6,10 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -90,7 +90,6 @@ import (
 	// Import adapters to register them with the config package.
 	_ "github.com/cloudposse/atmos/pkg/config/adapters"
 	"github.com/cloudposse/atmos/pkg/data"
-	"github.com/cloudposse/atmos/pkg/diagnostics"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -124,8 +123,6 @@ import (
 )
 
 const (
-	// LogFileMode is the file mode for log files.
-	logFileMode = 0o644
 	// DefaultTopFunctionsMax is the default number of top functions to display in performance summary.
 	defaultTopFunctionsMax = 50
 	// VerboseFlagName is the name of the verbose flag.
@@ -691,106 +688,18 @@ func maybePromoteLogLevelForDebugMode(atmosConfig *schema.AtmosConfiguration, co
 }
 
 // SetupLogger configures the global logger based on the provided Atmos configuration.
-//
-//nolint:revive,cyclop // Function complexity is acceptable for logger configuration.
+// The implementation lives in pkg/startup so commands that skip the root pre-run share it; this wrapper
+// keeps the log file handle for Cleanup and exits on an unusable log file or an unsupported log level.
 func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
-	disabled := globalColorDisabled(atmosConfig)
-	log.Default().SetColorEnabled(atmosConfig.Logs.Color == nil || *atmosConfig.Logs.Color, disabled)
-	forceColor := !disabled && (atmosConfig.Settings.Terminal.ForceColor || viper.GetBool("force-color"))
-	if disabled {
-		ui.SetColorProfile(termenv.Ascii)
+	handle, err := startup.SetupLogger(atmosConfig)
+	if handle != nil {
+		logFileHandle = handle
 	}
-	if forceColor {
-		lipgloss.SetColorProfile(termenv.TrueColor)
-		log.SetColorProfile(termenv.TrueColor)
-		theme.InvalidateStyleCache()
+	title := ""
+	if errors.Is(err, errUtils.ErrOpenFile) {
+		title = "Failed to open log file"
 	}
-	diagnostics.Configure(atmosConfig.Diagnostics)
-
-	switch atmosConfig.Logs.Level {
-	case "Trace":
-		log.SetLevel(log.TraceLevel)
-	case "Debug":
-		log.SetLevel(log.DebugLevel)
-	case "Info":
-		log.SetLevel(log.InfoLevel)
-	case "Warning":
-		log.SetLevel(log.WarnLevel)
-	case "Off":
-		log.SetLevel(math.MaxInt32)
-	default:
-		log.SetLevel(log.WarnLevel)
-	}
-
-	// Get theme-aware log styles.
-	var styles *log.Styles
-	if !disabled && (atmosConfig.Logs.Color == nil || *atmosConfig.Logs.Color) && (forceColor || atmosConfig.Settings.Terminal.IsColorEnabled(term.IsTTYSupportForStderr())) {
-		// Get color scheme for the configured theme.
-		scheme, err := theme.GetColorSchemeForTheme(atmosConfig.Settings.Terminal.Theme)
-		if err == nil && scheme != nil {
-			// Use themed styles.
-			styles = theme.GetLogStyles(scheme)
-		} else {
-			// Fallback to default styles if theme loading fails.
-			styles = log.DefaultStyles()
-		}
-	} else {
-		// Use no-color styles.
-		styles = theme.GetLogStylesNoColor()
-	}
-
-	// Add TRCE level for trace logging (using same style as DEBU).
-	if debugStyle, ok := styles.Levels[log.DebugLevel]; ok {
-		styles.Levels[log.TraceLevel] = debugStyle.SetString("TRCE")
-	} else {
-		styles.Levels[log.TraceLevel] = lipgloss.NewStyle().SetString("TRCE")
-	}
-
-	log.SetStyles(styles)
-	// Only set output if a log file is configured.
-	if atmosConfig.Logs.File != "" {
-		var output io.Writer
-
-		switch atmosConfig.Logs.File {
-		case "/dev/stderr":
-			output = iolib.MaskWriter(os.Stderr)
-		case "/dev/stdout":
-			output = iolib.MaskWriter(os.Stdout)
-		case "/dev/null":
-			output = io.Discard // More efficient than opening os.DevNull
-		default:
-			logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, logFileMode)
-			errUtils.CheckErrorPrintAndExit(err, "Failed to open log file", "")
-			// Store the file handle for later cleanup instead of deferring close.
-			logFileHandle = logFile
-			output = iolib.MaskWriter(logFile)
-		}
-
-		log.SetOutput(output)
-	}
-	if forceColor {
-		// A new log destination resets the profile, so apply forced color after SetOutput.
-		log.SetColorProfile(termenv.TrueColor)
-	}
-	if _, err := log.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
-		// Enrich the error with proper formatting for user-facing output.
-		// The error from ParseLogLevel has format: "sentinel\nexplanation"
-		// Extract the explanation text (everything after the first newline).
-		errMsg := err.Error()
-		parts := strings.SplitN(errMsg, "\n", 2)
-		explanation := ""
-		if len(parts) > 1 {
-			explanation = parts[1]
-		}
-
-		// Build enriched error from the wrapped error, adding the explanation as a detail.
-		// This ensures the formatter can extract both the sentinel message and the explanation.
-		enrichedErr := errUtils.Build(log.ErrInvalidLogLevel).
-			WithExplanation(explanation).
-			Err()
-		errUtils.CheckErrorPrintAndExit(enrichedErr, "", "")
-	}
-	log.Debug("Set", "logs-level", log.GetLevelString(), "logs-file", atmosConfig.Logs.File)
+	errUtils.CheckErrorPrintAndExit(err, title, "")
 }
 
 // setupColorProfile configures the global lipgloss color profile based on Atmos configuration.
@@ -878,6 +787,7 @@ func Cleanup() {
 	// before closing the log file, so it runs on normal exit and on signals.
 	cicache.RunPendingSave()
 	cleanupLogFile()
+	startup.CloseLogFile()
 }
 
 // RenderFlags renders a flag set with colors and proper text wrapping.
@@ -1830,15 +1740,19 @@ func Execute() error {
 	// fully initialized yet (custom commands/aliases not added). This is safe because
 	// --chdir is a global persistent flag defined in init().
 	if err := processEarlyChdirFlag(); err != nil {
+		// A doctor invocation with a machine format still receives its operational_error report.
+		if _, ok := doctorcmd.InvocationIndex(os.Args[1:], RootCmd.PersistentFlags()); ok {
+			return doctorcmd.FailBeforeDispatch(os.Args[1:], err)
+		}
 		return err
 	}
 	// Doctor must inspect malformed and executable YAML without evaluating it.
 	// Dispatch before configuration, project init, authentication, or tool installation.
 	// Flag arity comes from the registered root flags, so any root flag may precede the command.
-	if doctorcmd.IsInvocation(os.Args[1:], RootCmd.PersistentFlags()) {
+	if index, ok := doctorcmd.InvocationIndex(os.Args[1:], RootCmd.PersistentFlags()); ok {
 		// Other commands get this folding in preprocessArgs, which runs after configuration
 		// loading; without it Cobra reads the value of "--no-color false doctor" as a command.
-		if args := preprocessNativeFlags(os.Args[1:]); !slicesEqual(args, os.Args[1:]) {
+		if args := preprocessDoctorArgs(os.Args[1:], index); !slicesEqual(args, os.Args[1:]) {
 			RootCmd.SetArgs(args)
 		}
 		_, err := internal.Execute(RootCmd)
@@ -2158,6 +2072,29 @@ func preprocessNativeFlags(args []string) []string {
 	return preprocessCommandBoolFlags(preprocessNoOptDefValFlags(args))
 }
 
+// preprocessDoctorArgs folds native flag values for a doctor invocation whose command token is at
+// doctorIndex. The leading root flags and the command's own arguments are folded separately so an
+// optional-value root flag directly before the command ("--pager doctor") never absorbs the command name.
+func preprocessDoctorArgs(args []string, doctorIndex int) []string {
+	if doctorIndex < 0 || doctorIndex > len(args) {
+		return preprocessNativeFlags(args)
+	}
+	leading := preprocessNativeFlags(args[:doctorIndex])
+	command := preprocessNativeFlags(args[doctorIndex:])
+	// Build a fresh slice: the folded halves may alias the caller's arguments.
+	return append(append(make([]string, 0, len(leading)+len(command)), leading...), command...)
+}
+
+// isRootCommandToken reports whether token names a command registered on the root command, or one of its aliases.
+func isRootCommandToken(token string) bool {
+	for _, c := range RootCmd.Commands() {
+		if c.Name() == token || slices.Contains(c.Aliases, token) {
+			return true
+		}
+	}
+	return false
+}
+
 // preprocessNoOptDefValFlags rewrites space-separated NoOptDefVal flags to equals syntax.
 // This is necessary because Cobra's NoOptDefVal feature only works with equals syntax:
 //   - --identity=value works correctly
@@ -2180,8 +2117,10 @@ func preprocessNoOptDefValFlags(args []string) []string {
 	}
 
 	// Use the preprocess pipeline for native flag preprocessing.
+	// A registered command name or alias directly after an optional-value flag stays the command:
+	// "--pager terraform plan" must not become "--pager=terraform plan".
 	pipeline := preprocess.NewPipeline(
-		preprocess.NewNoOptDefValPreprocessor(flagInfos),
+		preprocess.NewNoOptDefValPreprocessor(flagInfos, preprocess.WithCommandMatcher(isRootCommandToken)),
 		// Fold "--bool-flag true|false" into "--bool-flag=true|false" so the literal
 		// is not left behind as a stray positional argument.
 		preprocess.NewBoolValuePreprocessor(flagInfos),
@@ -2636,12 +2575,20 @@ func rootHelpFunc(command *cobra.Command, args []string) {
 		defer castcmd.FinalizeRecording()
 	}
 
+	// Config-free commands (doctor) must not touch atmos.yaml, so the telemetry disclosure and the
+	// update check, which both load it, are skipped for them.
+	configFree := doctorcmd.IsConfigFree(command)
+
 	// Logo and version are now printed by customRenderAtmosHelp
-	telemetry.PrintTelemetryDisclosure()
+	if !configFree {
+		telemetry.PrintTelemetryDisclosure()
+	}
 
 	renderRootHelp(command)
 
-	CheckForAtmosUpdateAndPrintMessage(atmosConfig)
+	if !configFree {
+		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
+	}
 }
 
 // profileFlagCompletion provides shell completion for the global --profile flag.

@@ -1,12 +1,16 @@
 package doctor
 
 import (
+	"bytes"
 	"context"
+	"path/filepath"
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/filesystem"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/validation"
 )
@@ -21,7 +25,7 @@ func (e *Engine) checkStacks(ctx context.Context, p *project, o *Options, r *Rep
 		return nil
 	}
 	if !e.canCheckStacks(p) {
-		r.Checks = append(r.Checks, Check{ID: ruleStacks, Status: "incomplete", Files: count, Reason: "Effective stack validation needs complete static inputs and a stack validator; imports, profiles, excluded sources, and executable/template inputs remain unverified"})
+		r.Checks = append(r.Checks, Check{ID: ruleStacks, Status: "incomplete", Files: count, Reason: "Effective stack validation is incomplete because " + e.stackBlocker(p) + "; templates, YAML functions, profiles, and remote or templated imports remain unverified"})
 		return nil
 	}
 	config, err := staticConfig(p)
@@ -30,7 +34,7 @@ func (e *Engine) checkStacks(ctx context.Context, p *project, o *Options, r *Rep
 		r.Checks = append(r.Checks, Check{ID: ruleStacks, Status: "incomplete", Files: count, Reason: "Configuration could not be decoded for stack validation: " + err.Error()})
 		return nil //nolint:nilerr // Undecodable configuration is recorded as an incomplete check, not an operational failure.
 	}
-	inputs, err := staticInputs(p, config)
+	inputs, err := e.staticInputs(p, config)
 	if err != nil {
 		return err
 	}
@@ -42,7 +46,7 @@ func (e *Engine) checkStacks(ctx context.Context, p *project, o *Options, r *Rep
 		r.Findings = append(r.Findings, Finding{RuleID: ruleStacks, Category: categoryValidation, Severity: validation.SeverityError, Message: err.Error(), Status: statusManual, Remediation: "Review stack inheritance and duplicate instance declarations"})
 	}
 	status := checkStatus(r, ruleStacks)
-	r.Checks = append(r.Checks, Check{ID: ruleStacks, Status: status, Files: len(inputs)})
+	r.Checks = append(r.Checks, Check{ID: ruleStacks, Status: status, Files: len(inputs.Files)})
 	e.emit(Event{Phase: "Check", Label: "Static stacks", Done: true, Status: status})
 	return nil
 }
@@ -61,27 +65,41 @@ func staticConfig(p *project) (*schema.AtmosConfiguration, error) {
 	return &config, nil
 }
 
-func staticInputs(p *project, config *schema.AtmosConfiguration) (map[string]map[string]any, error) {
-	inputs := map[string]map[string]any{}
+// staticInputs lists the top-level stack manifests below the stacks base path that the stack
+// consumers load, honoring stacks.included_paths and stacks.excluded_paths. The reader serves
+// the documents doctor captured, so a repair candidate is validated instead of the disk.
+func (e *Engine) staticInputs(p *project, config *schema.AtmosConfiguration) (StackInputs, error) {
+	inputs := StackInputs{Reader: projectReader{project: p, fs: e.FS}}
 	for _, d := range p.docs {
-		if d.kind != "stack" || d.node == nil {
+		if d.kind != documentStack || d.node == nil || !within(p.stackDir, d.path) {
 			continue
 		}
 		path := relative(p.stackDir, d.path)
 		included, err := stackPathIncluded(config, path)
 		if err != nil {
-			return nil, err
+			return StackInputs{}, err
 		}
-		if !included {
-			continue
+		if included {
+			inputs.Files = append(inputs.Files, path)
 		}
-		var values map[string]any
-		if err := d.node.Decode(&values); err != nil {
-			return nil, err
-		}
-		inputs[path] = values
 	}
 	return inputs, nil
+}
+
+// projectReader serves the content doctor captured for a document and reads anything else, such as
+// an imported file excluded from the run, through the engine's file system.
+type projectReader struct {
+	project *project
+	fs      filesystem.FileSystem
+}
+
+func (r projectReader) ReadFile(path string) ([]byte, error) {
+	defer perf.Track(nil, "doctor.projectReader.ReadFile")()
+
+	if d, ok := r.project.byPath[filepath.Clean(path)]; ok {
+		return bytes.Clone(d.content), nil
+	}
+	return r.fs.ReadFile(path)
 }
 
 func stackPathIncluded(config *schema.AtmosConfiguration, path string) (bool, error) {

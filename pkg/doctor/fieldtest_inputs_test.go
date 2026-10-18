@@ -2,7 +2,9 @@ package doctor
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/validation"
+	"github.com/cloudposse/atmos/pkg/validator"
 )
 
 // Compile-time sentinels: a rename of these schema fields must fail the build here.
@@ -339,4 +342,123 @@ func TestFilterDiscoveryFindingsKeepsGlobalNotices(t *testing.T) {
 	all := &Report{Findings: []Finding{{File: "b.yaml"}}}
 	filterDiscoveryFindings(&Options{}, p, all)
 	require.Len(t, all.Findings, 1, "without --affected nothing is filtered")
+}
+
+// A value that fits none of the alternatives of a deeply nested union must be reported once, at the
+// value itself, not again by every enclosing union.
+func TestMeaningfulFailuresReportsTheOffendingValueOnce(t *testing.T) {
+	const content = "components:\n  terraform:\n    app:\n      settings:\n        depends_on: 5\n"
+	results, err := validator.NewYAMLSchemaValidator(&schema.AtmosConfiguration{}).ValidateYAMLContent(stackSchema, []byte(content))
+	require.NoError(t, err)
+	require.Greater(t, len(results), 1, "the fixture must cascade through several enclosing unions")
+
+	kept := meaningfulFailures(results)
+
+	require.NotEmpty(t, kept)
+	require.Less(t, len(kept), len(results))
+	for _, failure := range kept {
+		require.Equal(t, "components.terraform.app.settings.depends_on", failure.Field(), failure.String())
+	}
+}
+
+func TestMeaningfulFailuresKeepsIndependentFailures(t *testing.T) {
+	const content = "components:\n  terraform:\n    app:\n      settings:\n        depends_on: 5\n      vars: 7\n"
+	results, err := validator.NewYAMLSchemaValidator(&schema.AtmosConfiguration{}).ValidateYAMLContent(stackSchema, []byte(content))
+	require.NoError(t, err)
+
+	fields := map[string]bool{}
+	for _, failure := range meaningfulFailures(results) {
+		fields[failure.Field()] = true
+	}
+
+	require.True(t, fields["components.terraform.app.settings.depends_on"], "%v", fields)
+	require.True(t, fields["components.terraform.app.vars"], "%v", fields)
+}
+
+// The scheduler executes the list form of the deprecated depends_on, so the manifest schema must accept it.
+func TestManifestSchemaAcceptsListFormDependsOn(t *testing.T) {
+	v := validator.NewYAMLSchemaValidator(&schema.AtmosConfiguration{})
+	for _, tt := range []struct {
+		name, depends string
+		valid         bool
+	}{
+		{"strings and objects", "[vpc, {component: db, stack: prod}]", true},
+		{"map form", "{1: {component: vpc}}", true},
+		{"entry without a component", "[{stack: prod}]", false},
+		{"unknown entry key", "[{component: db, tier: x}]", false},
+		{"scalar", "5", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			content := "components:\n  terraform:\n    app:\n      settings:\n        depends_on: " + tt.depends + "\n"
+			results, err := v.ValidateYAMLContent(stackSchema, []byte(content))
+			require.NoError(t, err)
+			require.Equal(t, tt.valid, len(results) == 0, "%v", results)
+		})
+	}
+}
+
+func templateImportNotices(r *Report) []Finding {
+	var notices []Finding
+	findings := ecFindings(r, ruleImports)
+	for i := range findings {
+		if findings[i].Status == statusVerificationIncomplete && strings.HasPrefix(findings[i].Reason, "Template import not evaluated") {
+			notices = append(notices, findings[i])
+		}
+	}
+	return notices
+}
+
+// One template imported by many stacks is one notice, located at the first importer, that names the others.
+func TestTemplateImportNoticeIsReportedOncePerTemplate(t *testing.T) {
+	root := newProject(t)
+	projectFile(t, root, "atmos.yaml", "{}\n")
+	projectFile(t, root, "stacks/catalog/shared.yaml.tmpl", "vars:\n  a: {{ .a }}\n")
+	projectFile(t, root, "stacks/catalog/other.yaml.tmpl", "vars:\n  b: {{ .b }}\n")
+	for i := 1; i <= 17; i++ {
+		projectFile(t, root, fmt.Sprintf("stacks/s%02d.yaml", i), "import:\n  - catalog/shared\nvars: {}\n")
+	}
+	projectFile(t, root, "stacks/t01.yaml", "vars: {}\nimport:\n  - catalog/other\n")
+
+	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleImports}})
+
+	notices := templateImportNotices(&r)
+	require.Len(t, notices, 2, "one notice per template file: %+v", notices)
+	byTarget := map[string]Finding{}
+	for i := range notices {
+		byTarget[strings.SplitN(notices[i].Reason, " (", 2)[0]] = notices[i]
+	}
+	shared := byTarget["Template import not evaluated: stacks/catalog/shared.yaml.tmpl"]
+	require.Equal(t, "stacks/s01.yaml", shared.File, "located at the first importer")
+	require.Equal(t, 2, shared.Line)
+	require.Equal(t, "Template import not evaluated: stacks/catalog/shared.yaml.tmpl (imported by 17 files: stacks/s01.yaml, stacks/s02.yaml, stacks/s03.yaml, … +14 more)", shared.Reason)
+	other := byTarget["Template import not evaluated: stacks/catalog/other.yaml.tmpl"]
+	require.Equal(t, "stacks/t01.yaml", other.File)
+	require.Equal(t, "Template import not evaluated: stacks/catalog/other.yaml.tmpl", other.Reason, "a single importer needs no list")
+}
+
+func TestTemplateImportNoticeListsFewImportersInFull(t *testing.T) {
+	root := newProject(t)
+	projectFile(t, root, "atmos.yaml", "{}\n")
+	projectFile(t, root, "stacks/shared.yaml.tmpl", "vars:\n  a: {{ .a }}\n")
+	projectFile(t, root, "stacks/a.yaml", "import: [shared]\n")
+	projectFile(t, root, "stacks/b.yaml", "import: [shared]\n")
+
+	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleImports}})
+
+	notices := templateImportNotices(&r)
+	require.Len(t, notices, 1)
+	require.Equal(t, "Template import not evaluated: stacks/shared.yaml.tmpl (imported by 2 files: stacks/a.yaml, stacks/b.yaml)", notices[0].Reason)
+}
+
+// Running only the repair categories still shows the notices, once per template.
+func TestTemplateImportNoticeIsVisibleToRepairRunsOnce(t *testing.T) {
+	root := newProject(t)
+	projectFile(t, root, "atmos.yaml", "{}\n")
+	projectFile(t, root, "stacks/shared.yaml.tmpl", "vars:\n  a: {{ .a }}\n")
+	projectFile(t, root, "stacks/a.yaml", "import: [shared]\n")
+	projectFile(t, root, "stacks/b.yaml", "import: [shared]\n")
+
+	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{categoryDeprecations}})
+
+	require.Len(t, templateImportNotices(&r), 1)
 }

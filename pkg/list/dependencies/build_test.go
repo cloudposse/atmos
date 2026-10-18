@@ -427,3 +427,21 @@ func TestBuildGraph_MalformedDependenciesSectionFails(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
 	require.ErrorIs(t, err, errUtils.ErrInvalidDependenciesSection)
 }
+
+// The scheduler executes the list form of settings.depends_on, so list dependencies must show it.
+func TestBuildGraph_SettingsDependsOnListForm(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"vpc": {},
+			"db":  {},
+			"app": {"settings": map[string]any{"depends_on": []any{"vpc", map[string]any{"component": "db"}}}},
+		},
+	})
+
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	app, ok := graph.GetNode(NodeID("app", "dev"))
+	require.True(t, ok)
+	assert.ElementsMatch(t, []string{NodeID("vpc", "dev"), NodeID("db", "dev")}, app.Dependencies)
+}

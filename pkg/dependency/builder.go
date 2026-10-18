@@ -68,7 +68,7 @@ func (b *GraphBuilder) Build() (*Graph, error) {
 
 	// Validate the graph for cycles.
 	if hasCycle, cyclePath := b.graph.HasCycles(); hasCycle {
-		return nil, fmt.Errorf("%w: %v", ErrCircularDependency, cyclePath)
+		return nil, &CircularDependencyError{Path: cyclePath}
 	}
 
 	// Identify root nodes.

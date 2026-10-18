@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -61,6 +62,8 @@ func TestMachineFormatsReportEveryInvocationErrorAsJSON(t *testing.T) {
 			{"dry-run without fix", []string{"--dry-run"}, "--dry-run requires --fix", true},
 			{"list-checks with fix", []string{"--list-checks", "--fix"}, "--fix cannot be combined with --list-checks", false},
 			{"invalid exclude glob", []string{"--exclude=["}, "", false},
+			{"positional argument", []string{"extra"}, `unexpected argument "extra"`, false},
+			{"unknown flag after format", []string{"--bogus"}, "unknown flag: --bogus", false},
 		} {
 			t.Run(format+"/"+tt.name, func(t *testing.T) {
 				isolateAmbientConfig(t)
@@ -217,7 +220,7 @@ func TestFixRunReportsFixedCountsAndCheckRunReportsFixable(t *testing.T) {
 		want   string
 		absent string
 	}{
-		{"check only", []string{"--offline"}, "1 finding (1 fixable).\nRun: atmos doctor --fix", "Fixed"},
+		{"check only", []string{"--offline"}, "1 finding (1 fixable).\nRun: atmos doctor --fix --offline", "Fixed"},
 		{"dry run", []string{"--offline", "--fix", "--dry-run"}, "repair verified.", "Fixed"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -241,4 +244,88 @@ func TestFindingIsPrintedOnce(t *testing.T) {
 	require.NoError(t, executeDoctor(t, "--offline"))
 
 	assert.Equal(t, 1, strings.Count(plainText(stderr), "Legacy command-provides declaration"))
+}
+
+// TestMachineFormatsReportUnknownFlagsParsedBeforeFormat covers a flag error raised before --format is
+// parsed: the format has to come from the raw command line.
+func TestMachineFormatsReportUnknownFlagsParsedBeforeFormat(t *testing.T) {
+	for _, format := range []string{"json", "sarif"} {
+		t.Run(format, func(t *testing.T) {
+			isolateAmbientConfig(t)
+			newProjectDir(t, map[string]string{"atmos.yaml": "{}\n"})
+			stdout, stderr := captureIO(t)
+
+			err := executeDoctor(t, "--bogus", "--format="+format)
+
+			requireExitCode(t, err, 2)
+			assert.Empty(t, stderr.String(), "machine formats keep the human channel clean")
+			report := decodeReport(t, format, stdout.Bytes())
+			assert.Contains(t, report.OperationalError, "unknown flag: --bogus")
+			assert.Equal(t, 1, report.Version)
+		})
+	}
+}
+
+// TestUsageErrorsHintAtDoctorHelp verifies text-mode usage errors point at doctor's own help and are not
+// rewrapped as unknown root commands.
+func TestUsageErrorsHintAtDoctorHelp(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		args []string
+	}{
+		{"positional argument", []string{"extra"}},
+		{"unknown flag", []string{"--bogus"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			isolateAmbientConfig(t)
+			newProjectDir(t, map[string]string{"atmos.yaml": "{}\n"})
+			stdout, _ := captureIO(t)
+
+			err := executeDoctor(t, tt.args...)
+
+			requireExitCode(t, err, 2)
+			require.ErrorIs(t, err, diagnostic.ErrOptions)
+			assert.Contains(t, hintsOf(err), "atmos doctor --help")
+			assert.NotContains(t, hintsOf(err), "atmos --help")
+			assert.NotContains(t, err.Error(), "unknown command", "the root's unknown-command conversion must not match")
+			assert.Empty(t, stdout.String())
+		})
+	}
+}
+
+func TestFormatFromRawArgsIgnoresUnrelatedTokens(t *testing.T) {
+	previous := rawArgs
+	t.Cleanup(func() { rawArgs = previous })
+
+	rawArgs = func() []string { return []string{"--cast", "doctor", "--bogus", "--format", "json"} }
+	assert.Equal(t, "json", requestedFormat(NewCommand()))
+
+	rawArgs = func() []string { return []string{"doctor", "--bogus"} }
+	assert.Equal(t, formatText, requestedFormat(NewCommand()))
+}
+
+func TestFailBeforeDispatch(t *testing.T) {
+	cause := errors.New("directory does not exist: /missing")
+
+	for _, format := range []string{"json", "sarif"} {
+		t.Run(format, func(t *testing.T) {
+			stdout, stderr := captureIO(t)
+
+			err := FailBeforeDispatch([]string{"--chdir=/missing", "doctor", "--format=" + format}, cause)
+
+			requireExitCode(t, err, 2)
+			assert.Empty(t, stderr.String())
+			report := decodeReport(t, format, stdout.Bytes())
+			assert.Equal(t, 1, report.Version)
+			assert.Contains(t, report.OperationalError, "/missing")
+		})
+	}
+
+	t.Run("text formats keep the original error", func(t *testing.T) {
+		stdout, _ := captureIO(t)
+
+		assert.Equal(t, cause, FailBeforeDispatch([]string{"--chdir=/missing", "doctor"}, cause))
+		assert.Equal(t, cause, FailBeforeDispatch([]string{"doctor", "--format=text"}, cause))
+		assert.Empty(t, stdout.String())
+	})
 }

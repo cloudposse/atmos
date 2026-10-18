@@ -262,13 +262,23 @@ func TestEcExplicitConfigFilesReplaceDefaultDiscovery(t *testing.T) {
 func TestEcMissingExplicitConfigFileIsReported(t *testing.T) {
 	root := newProject(t)
 	projectFile(t, root, "atmos.yaml", "{}\n")
-	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}, ConfigFiles: []string{"missing.yaml"}})
-	found := ecFindings(&r, ruleImports)
-	require.Len(t, found, 1)
-	require.Equal(t, "Local source does not exist", found[0].Message)
-	require.Equal(t, "missing.yaml", found[0].File)
-	require.Equal(t, validation.SeverityError, found[0].Severity)
-	require.Equal(t, 1, r.ExitCode("error"))
+	missing := filepath.Join(root, "missing.yaml")
+
+	t.Run("alone it is the no-project error naming the path", func(t *testing.T) {
+		r, err := testEngine(t).Run(context.Background(), Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}, ConfigFiles: []string{"missing.yaml"}})
+		require.ErrorIs(t, err, ErrNoConfiguration)
+		require.Contains(t, r.OperationalError, "Configured path does not exist: "+missing+" (from --config)")
+		require.Equal(t, 2, r.ExitCode("error"))
+	})
+
+	t.Run("beside a real file it is an error finding", func(t *testing.T) {
+		r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema, ruleImports}, ConfigFiles: []string{"atmos.yaml", "missing.yaml"}})
+		found := ecFindings(&r, ruleImports)
+		require.Len(t, found, 1)
+		require.Equal(t, "Configured path does not exist: "+missing+" (from --config)", found[0].Message)
+		require.Equal(t, validation.SeverityError, found[0].Severity)
+		require.Equal(t, 1, r.ExitCode("error"))
+	})
 }
 
 // ecCancelAfterRead cancels the run once the first source has been read, which places the
@@ -595,4 +605,71 @@ func TestEcEmittedFindingsAreProjectRelative(t *testing.T) {
 	require.Equal(t, "deep/vendor.yaml", events[0].Finding.File, "absolute paths become project-relative")
 	require.Equal(t, "stacks/dev.yaml", events[1].Finding.File, "project-relative paths are unchanged")
 	require.Empty(t, events[2].Finding.File)
+}
+
+// excludeNotices returns the notices that report --exclude patterns that matched nothing.
+func excludeNotices(r *Report) []Finding {
+	var found []Finding
+	for i := range r.Findings {
+		if r.Findings[i].RuleID == ruleExclude {
+			found = append(found, r.Findings[i])
+		}
+	}
+	return found
+}
+
+func TestExcludePatternsThatMatchNothingAreReported(t *testing.T) {
+	root := newProject(t)
+	projectFile(t, root, "atmos.yaml", "{}\n")
+	projectFile(t, root, "stacks/skip.yaml", ecBroken)
+	projectFile(t, root, "stacks/keep.yaml", ecBroken)
+
+	tests := []struct {
+		name    string
+		exclude []string
+		only    []string
+		want    []string
+	}{
+		{"a matching pattern is silent", []string{"stacks/skip.yaml"}, []string{ruleSchema, ruleImports}, nil},
+		{"a pattern that matches nothing is reported", []string{"nothing/**"}, []string{ruleSchema, ruleImports}, []string{"nothing/**"}},
+		{"only the unmatched pattern is reported", []string{"stacks/skip.yaml", "nope.yaml"}, []string{ruleSchema, ruleImports}, []string{"nope.yaml"}},
+		{"every unmatched pattern is reported in order", []string{"a/**", "stacks/*.yaml", "b/**"}, []string{ruleSchema}, []string{"a/**", "b/**"}},
+		{"--only does not filter the notice", []string{"nothing/**"}, []string{ruleHookEvent}, []string{"nothing/**"}},
+		{"no patterns, no notice", nil, []string{ruleSchema}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := ecRun(t, &Options{Root: root, Offline: true, Only: tt.only, Exclude: tt.exclude})
+			var got []string
+			for _, f := range excludeNotices(&r) {
+				require.Equal(t, validation.SeverityNotice, f.Severity)
+				require.Empty(t, f.File)
+				require.Contains(t, f.Remediation, "relative to the project root")
+				require.Contains(t, f.Message, "matched no project inputs; patterns are relative to the project root "+root)
+				got = append(got, strings.Split(f.Message, `"`)[1])
+			}
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestUnmatchedExcludeNoticeNeverTripsFailOnWarning(t *testing.T) {
+	root := newProject(t)
+	projectFile(t, root, "atmos.yaml", "{}\n")
+	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleSchema}, Exclude: []string{"nothing/**"}})
+	require.Len(t, excludeNotices(&r), 1)
+	require.Zero(t, r.ExitCode("warning"))
+}
+
+func TestExcludePatternMatchingOnlyAnEditorConfigFileIsNotReported(t *testing.T) {
+	root := newProject(t)
+	projectFile(t, root, "atmos.yaml", "{}\n")
+	projectFile(t, root, ".editorconfig", "root = true\n[*]\nindent_style = space\n")
+	projectFile(t, root, "docs/readme.txt", "hello\n")
+
+	r := ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleEditorConfig}, Exclude: []string{"docs/readme.txt"}})
+	require.Empty(t, excludeNotices(&r), "%+v", r.Findings)
+
+	r = ecRun(t, &Options{Root: root, Offline: true, Only: []string{ruleEditorConfig}, Exclude: []string{"docs/missing.txt"}})
+	require.Len(t, excludeNotices(&r), 1)
 }

@@ -129,6 +129,8 @@ func TestEditorConfigValidation(t *testing.T) {
 		files  map[string]string
 		mutate func(*Options)
 		status string
+		// git initializes a Git repository in the project before the run.
+		git bool
 		// failing lists files expected to carry an editorconfig error, with their lines.
 		failing map[string]int
 		checked int
@@ -161,9 +163,64 @@ func TestEditorConfigValidation(t *testing.T) {
 			mutate: func(o *Options) { o.Affected, o.Selected = true, []string{"b.txt"} },
 			status: "failed", failing: map[string]int{"b.txt": 2}, checked: 1,
 		},
+		{
+			name: "gitignored files are not validated inside a Git work tree",
+			git:  true,
+			files: map[string]string{
+				".editorconfig": vtSpaceConfig, ".editorconfig-checker.json": "{}\n", ".gitignore": ".workdir/\n",
+				"a.txt": vtTabbedText, ".workdir/vendored/bad.txt": vtTabbedText,
+			},
+			status: "failed", failing: map[string]int{"a.txt": 2}, checked: 5,
+		},
+		{
+			name: "untracked files that Git does not ignore are validated",
+			git:  true,
+			files: map[string]string{
+				".editorconfig": vtSpaceConfig, ".editorconfig-checker.json": "{}\n",
+				"a.txt": vtTabbedText, "pending/bad.txt": vtTabbedText,
+			},
+			status: "failed", failing: map[string]int{"a.txt": 2, "pending/bad.txt": 2}, checked: 5,
+		},
+		{
+			name: "validate.editorconfig.exclude globs are honored relative to the project root",
+			git:  true,
+			files: map[string]string{
+				"atmos.yaml":    "validate:\n  editorconfig:\n    exclude: [\"vendor/**\"]\n",
+				".editorconfig": vtSpaceConfig, ".editorconfig-checker.json": "{}\n",
+				"a.txt": vtTabbedText, "vendor/lib/bad.txt": vtTabbedText,
+			},
+			status: "failed", failing: map[string]int{"a.txt": 2}, checked: 4,
+		},
+		{
+			name: "validate.editorconfig.disable_indentation turns the check off",
+			files: map[string]string{
+				"atmos.yaml":    "validate:\n  editorconfig:\n    disable_indentation: true\n",
+				".editorconfig": vtSpaceConfig, ".editorconfig-checker.json": "{}\n", "a.txt": vtTabbedText,
+			},
+			status: statusPassed, checked: 4,
+		},
+		{
+			name: "default excludes skip log files",
+			files: map[string]string{
+				".editorconfig": vtSpaceConfig, ".editorconfig-checker.json": "{}\n", "a.txt": vtTabbedText, "run.log": vtTabbedText,
+			},
+			status: "failed", failing: map[string]int{"a.txt": 2}, checked: 4,
+		},
+		{
+			name: "validate.editorconfig.ignore_defaults validates files the defaults skip",
+			files: map[string]string{
+				"atmos.yaml":    "validate:\n  editorconfig:\n    ignore_defaults: true\n",
+				".editorconfig": vtSpaceConfig, ".editorconfig-checker.json": "{}\n", "a.txt": vtTabbedText, "run.log": vtTabbedText,
+			},
+			status: "failed", failing: map[string]int{"a.txt": 2, "run.log": 2}, checked: 5,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := newProject(t)
+			if tc.git {
+				output, err := gitCommand(root, "init", "--quiet").CombinedOutput()
+				require.NoError(t, err, string(output))
+			}
 			if _, ok := tc.files["atmos.yaml"]; !ok {
 				projectFile(t, root, "atmos.yaml", "{}\n")
 			}

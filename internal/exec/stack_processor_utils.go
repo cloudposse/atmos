@@ -815,6 +815,59 @@ func ProcessYAMLConfigFile(
 	return result, err
 }
 
+// StackSourceReader reads the content of a stack manifest.
+type StackSourceReader interface {
+	ReadFile(path string) ([]byte, error)
+}
+
+// StackLoadOptions tunes how ProcessYAMLConfigFileWithOptions loads a manifest and its imports.
+// The zero value matches ProcessYAMLConfigFile with empty parent context.
+type StackLoadOptions struct {
+	// Reader supplies the content of the manifest and of every manifest it imports, in place of the
+	// cached read from disk. Import resolution, such as glob expansion, still looks at the file system.
+	Reader StackSourceReader
+	// IgnoreMissingFiles treats a manifest that cannot be read as empty.
+	IgnoreMissingFiles bool
+	// SkipTemplates keeps Go templates unevaluated in the manifest and in everything it imports,
+	// whatever each import declares.
+	SkipTemplates bool
+}
+
+// ProcessYAMLConfigFileWithOptions is ProcessYAMLConfigFile for callers that only need to choose where
+// manifests are read from and whether templates are evaluated. It recursively processes and deep-merges
+// all the imports of the manifest and returns the final stack config.
+func ProcessYAMLConfigFileWithOptions(
+	atmosConfig *schema.AtmosConfiguration,
+	basePath string,
+	filePath string,
+	options StackLoadOptions,
+) (*schema.StackManifestProcessingResult, error) {
+	defer perf.Track(atmosConfig, "exec.ProcessYAMLConfigFileWithOptions")()
+
+	result, _, err := processYAMLConfigFileWithContextInternal(
+		atmosConfig,
+		basePath,
+		filePath,
+		basePath,
+		schema.StackImportNestedImportsLocal,
+		map[string]map[string]any{},
+		nil,
+		nil,
+		options.IgnoreMissingFiles,
+		options.SkipTemplates,
+		atmosConfig != nil && atmosConfig.Templates.Settings.IgnoreMissingTemplateValues,
+		false,
+		map[string]any{},
+		map[string]any{},
+		map[string]any{},
+		map[string]any{},
+		"",
+		nil,
+		&options,
+	)
+	return result, err
+}
+
 // ProcessYAMLConfigFileWithContext takes a path to a YAML stack manifest,
 // recursively processes and deep-merges all the imports with context tracking,
 // and returns the final stack config.
@@ -858,6 +911,7 @@ func ProcessYAMLConfigFileWithContext(
 		parentHelmfileOverridesImports,
 		atmosManifestJsonSchemaFilePath,
 		mergeContext,
+		nil,
 	)
 }
 
@@ -1122,6 +1176,7 @@ func processYAMLConfigFileWithContextInternal(
 	parentHelmfileOverridesImports map[string]any,
 	atmosManifestJsonSchemaFilePath string,
 	mergeContext *m.MergeContext,
+	loadOptions *StackLoadOptions,
 ) (*schema.StackManifestProcessingResult, *m.MergeContext, error) {
 	var stackConfigs []map[string]any
 	inheritedNestedImports = normalizeNestedImports(inheritedNestedImports)
@@ -1154,9 +1209,12 @@ func processYAMLConfigFileWithContextInternal(
 	// Use uncached file reads when provenance tracking is enabled to ensure YAML position tracking works correctly.
 	var stackYamlConfig string
 	var err error
-	if atmosConfig != nil && atmosConfig.TrackProvenance {
+	switch {
+	case loadOptions != nil && loadOptions.Reader != nil:
+		stackYamlConfig, err = readStackSource(loadOptions.Reader, filePath)
+	case atmosConfig != nil && atmosConfig.TrackProvenance:
 		stackYamlConfig, err = GetFileContentWithoutCache(filePath)
-	} else {
+	default:
 		stackYamlConfig, err = GetFileContent(filePath)
 	}
 	// If the file does not exist (`err != nil`), and `ignoreMissingFiles = true`, don't return the error.
@@ -1658,7 +1716,7 @@ func processYAMLConfigFileWithContextInternal(
 					mergedContext,
 					childImportContext,
 					ignoreMissingFiles,
-					importStruct.SkipTemplatesProcessing,
+					importStruct.SkipTemplatesProcessing || (loadOptions != nil && loadOptions.SkipTemplates),
 					importStruct.IgnoreMissingTemplateValues || (atmosConfig != nil && atmosConfig.Templates.Settings.IgnoreMissingTemplateValues),
 					importStruct.SkipIfMissing,
 					parentTerraformOverridesInline,
@@ -1674,6 +1732,7 @@ func processYAMLConfigFileWithContextInternal(
 					// (here) to catch them — which it couldn't while this was hardcoded to "".
 					atmosManifestJsonSchemaFilePath,
 					mergeContext,
+					loadOptions,
 				)
 				if processErr != nil {
 					results[index] = importFileResult{index: index, err: processErr}
@@ -1871,6 +1930,18 @@ func processYAMLConfigFileWithContextInternal(
 		HelmfileOverridesInline:   parentHelmfileOverridesInline,
 		HelmfileOverridesImports:  parentHelmfileOverridesImports,
 	}, mergeContext, nil
+}
+
+// readStackSource reads a manifest through an injected reader, reporting failures like GetFileContent does.
+func readStackSource(reader StackSourceReader, filePath string) (string, error) {
+	content, err := reader.ReadFile(filePath)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrReadFile).
+			WithCause(err).
+			WithContext("path", filePath).
+			Err()
+	}
+	return string(content), nil
 }
 
 // applyHelmTypeOverrides applies the effective stack-level helm.overrides block
