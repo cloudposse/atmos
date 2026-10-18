@@ -2,12 +2,12 @@ package exec
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/hairyhenderson/gomplate/v3/conv"
 	"github.com/hairyhenderson/gomplate/v3/data"
 	"github.com/hairyhenderson/gomplate/v3/funcs" //nolint:staticcheck // Gomplate v3 namespace API.
+	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -29,8 +29,9 @@ func guardedTemplateJSON(input any) (map[string]any, error) {
 	if !enabled {
 		return data.JSON(value)
 	}
+	// Decode with YAML (a JSON superset) so whole numbers stay ints, matching native gomplate data.JSON.
 	var result map[string]any
-	if err := json.Unmarshal([]byte(value), &result); err != nil {
+	if err := yaml.Unmarshal([]byte(value), &result); err != nil {
 		return nil, err
 	}
 	if _, encrypted := result["_public_key"]; encrypted {

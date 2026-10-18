@@ -1550,7 +1550,7 @@ func processYAMLConfigFileWithContextInternal(
 		// (`settings`/`vars`/`env`) defined by earlier imports in this manifest, plus
 		// this import's own `context`. Only the path string is rendered here; the
 		// imported file's content templating (and its deferral logic) is left untouched.
-		renderedImp, impErr := renderImportPath(atmosConfig, relativeFilePath, imp, accumulatedImportContext, importStruct)
+		renderedImp, impErr := renderImportPath(atmosConfig, relativeFilePath, filePath, imp, accumulatedImportContext, importStruct)
 		if impErr != nil {
 			return nil, nil, impErr
 		}
@@ -2035,6 +2035,7 @@ func emptyStackManifestProcessingResult() *schema.StackManifestProcessingResult 
 func renderImportPath(
 	atmosConfig *schema.AtmosConfiguration,
 	relativeFilePath string,
+	filePath string,
 	imp string,
 	accumulatedImportContext map[string]any,
 	importStruct schema.StackImport,
@@ -2063,6 +2064,8 @@ func renderImportPath(
 		tmplData = merged
 	}
 
+	// Pass the manifest's real path as the policy source so function and source rules see its
+	// provenance (local/remote) instead of the synthetic template name resolving to "unknown".
 	rendered, err := processTmpl(atmosConfig, &tmplInput{
 		name:                  fmt.Sprintf("import-path(%s)", relativeFilePath),
 		value:                 imp,
@@ -2070,6 +2073,7 @@ func renderImportPath(
 		ignoreMissing:         ignoreMissing,
 		manifestLoadFile:      relativeFilePath,
 		skipComponentDeferral: true,
+		sourceFile:            filePath,
 	})
 	if err != nil {
 		wrapped := fmt.Errorf("%w: import path '%s' in file '%s': %w",

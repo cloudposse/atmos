@@ -2,6 +2,7 @@ package exec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"text/template"
@@ -114,7 +115,11 @@ func policySourceFunction(name string, fn any, file string, d *data.Data) any {
 	case "datasourceReachable":
 		return func(alias string, args ...string) (bool, error) {
 			_, err := policyDatasource(d, file, alias, true, args...)
-			return err == nil, err
+			if err != nil && isPolicyOutcome(err) {
+				return false, err
+			}
+			// Like native gomplate, any other failure (unknown alias, fetch error) is simply "not reachable".
+			return err == nil, nil
 		}
 	// These namespaces hide their destinations inside the provider SDK.
 	case "aws", "gcp":
@@ -123,6 +128,18 @@ func policySourceFunction(name string, fn any, file string, d *data.Data) any {
 		}
 	}
 	return fn
+}
+
+// isPolicyOutcome reports whether err is a genuine policy decision that must fail closed.
+// Input-unavailable and input-invalid errors are excluded because datasource reads wrap
+// ordinary failures (HTTP errors, unknown aliases) in those sentinels.
+func isPolicyOutcome(err error) bool {
+	for _, sentinel := range []error{errUtils.ErrPolicyDenied, errUtils.ErrPolicyEvaluation, errUtils.ErrPolicyInvalid, errUtils.ErrPolicyRequirements, errUtils.ErrPolicyEngineUnknown} {
+		if errors.Is(err, sentinel) {
+			return true
+		}
+	}
+	return false
 }
 
 func templateCallError(out []reflect.Type, err error) []reflect.Value {

@@ -2,7 +2,6 @@ package exec
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"mime"
@@ -144,8 +143,9 @@ func policyDatasourceTarget(d *data.Data, alias string, args []string) (*url.URL
 }
 
 func parsePolicyJSONDatasource(content []byte) (any, error) {
+	// Decode with YAML (a JSON superset) so whole numbers stay ints, matching native gomplate data.JSON.
 	var result any
-	if err := json.Unmarshal(content, &result); err != nil {
+	if err := yaml.Unmarshal(content, &result); err != nil {
 		return nil, err
 	}
 	if object, ok := result.(map[string]any); ok {

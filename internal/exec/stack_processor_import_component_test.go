@@ -25,7 +25,7 @@ func TestRenderImportPath_ComponentGuard(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := renderImportPath(templatedImportContextConfig(), "deploy/dev.yaml", tt.path,
+			got, err := renderImportPath(templatedImportContextConfig(), "deploy/dev.yaml", "deploy/dev.yaml", tt.path,
 				map[string]any{}, schema.StackImport{IgnoreMissingTemplateValues: tt.ignoreMissing})
 
 			require.Error(t, err)

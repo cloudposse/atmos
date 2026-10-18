@@ -16,6 +16,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -4788,14 +4789,48 @@ func TestProcessYAMLConfigFile_TemplatedImportPath_TemplatesDisabled(t *testing.
 func TestRenderImportPath_NoTemplateIsNoOp(t *testing.T) {
 	atmosConfig := templatedImportContextConfig()
 
-	out, err := renderImportPath(atmosConfig, "file.yaml", "catalog/plain/service", map[string]any{}, schema.StackImport{})
+	out, err := renderImportPath(atmosConfig, "file.yaml", "file.yaml", "catalog/plain/service", map[string]any{}, schema.StackImport{})
 	require.NoError(t, err)
 	assert.Equal(t, "catalog/plain/service", out)
 
 	literal := "catalog/{{ .x }}/service"
-	out, err = renderImportPath(atmosConfig, "file.yaml", literal, map[string]any{}, schema.StackImport{SkipTemplatesProcessing: true})
+	out, err = renderImportPath(atmosConfig, "file.yaml", "file.yaml", literal, map[string]any{}, schema.StackImport{SkipTemplatesProcessing: true})
 	require.NoError(t, err)
 	assert.Equal(t, literal, out)
+}
+
+// TestRenderImportPath_PolicySeesManifestProvenance verifies import-path templates are guarded
+// against the importing manifest's real file, so a provenance-based rule sees local/remote
+// instead of "unknown" (the synthetic template name does not exist on disk).
+func TestRenderImportPath_PolicySeesManifestProvenance(t *testing.T) {
+	guard.ResetOrigins()
+	t.Cleanup(guard.ResetOrigins)
+	manifest := filepath.Join(t.TempDir(), "stack.yaml")
+	require.NoError(t, os.WriteFile(manifest, []byte("import: []\n"), 0o600))
+	t.Setenv("IMPORT_PATH_ENV", "catalog")
+	atmosConfig := templatedImportContextConfig()
+	const importPath = `{{ env "IMPORT_PATH_ENV" }}/service`
+
+	// Deny the env function unless the manifest is local; unknown or remote provenance is denied.
+	templatePolicy(t, "function", "input.engine == 'go-template' && input.name == 'env' && input.provenance != 'local'", nil)
+
+	t.Run("local manifest is admitted", func(t *testing.T) {
+		out, err := renderImportPath(atmosConfig, "stack.yaml", manifest, importPath, map[string]any{}, schema.StackImport{})
+		require.NoError(t, err)
+		assert.Equal(t, "catalog/service", out)
+	})
+
+	t.Run("remote manifest is denied", func(t *testing.T) {
+		guard.RegisterRemote(manifest, "https://example.com/stack.yaml")
+		t.Cleanup(guard.ResetOrigins)
+		_, err := renderImportPath(atmosConfig, "stack.yaml", manifest, importPath, map[string]any{}, schema.StackImport{})
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	})
+
+	t.Run("missing source file yields unknown provenance and is denied", func(t *testing.T) {
+		_, err := renderImportPath(atmosConfig, "stack.yaml", "", importPath, map[string]any{}, schema.StackImport{})
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	})
 }
 
 // TestExtractImportPathSections verifies only settings/vars/env are extracted.

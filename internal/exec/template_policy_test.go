@@ -10,8 +10,10 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/hairyhenderson/gomplate/v3/data"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -169,4 +171,108 @@ func TestOptionalStackImportsDoNotSuppressPolicies(t *testing.T) {
 	templatePolicy(t, "source", "true", nil)
 	_, err := ProcessYAMLConfigFile(&schema.AtmosConfiguration{}, root, file, map[string]map[string]any{}, nil, true, true, false, true, nil, nil, nil, nil, "")
 	require.ErrorContains(t, err, "policy")
+}
+
+// TestTemplateGuardedJSONKeepsIntegers verifies source-guarded JSON decoding matches native
+// gomplate behavior: whole numbers stay integers instead of rendering as float64 (`1e+06`).
+func TestTemplateGuardedJSONKeepsIntegers(t *testing.T) {
+	templatePolicy(t, "source", "false", nil)
+
+	t.Run("guardedTemplateJSON decodes whole numbers as int", func(t *testing.T) {
+		result, err := guardedTemplateJSON(`{"n":1000000,"f":1.5}`)
+		require.NoError(t, err)
+		require.Equal(t, 1000000, result["n"])
+		require.Equal(t, 1.5, result["f"])
+	})
+
+	t.Run("parsePolicyJSONDatasource decodes whole numbers as int", func(t *testing.T) {
+		result, err := parsePolicyJSONDatasource([]byte(`{"n":1000000}`))
+		require.NoError(t, err)
+		object, ok := result.(map[string]any)
+		require.True(t, ok)
+		require.Equal(t, 1000000, object["n"])
+	})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"n":1000000}`))
+	}))
+	defer server.Close()
+
+	for name, source := range map[string]string{
+		"json":       `{{ (json "{\"n\":1000000}").n }}`,
+		"data.JSON":  `{{ (data.JSON "{\"n\":1000000}").n }}`,
+		"datasource": fmt.Sprintf(`{{ (ds %q).n }}`, server.URL),
+	} {
+		t.Run("renders "+name, func(t *testing.T) {
+			rendered, err := ProcessTmpl(&schema.AtmosConfiguration{}, "test", source, nil, false)
+			require.NoError(t, err)
+			require.Equal(t, "1000000", rendered)
+		})
+	}
+
+	t.Run("EJSON rejection is unchanged", func(t *testing.T) {
+		_, err := guardedTemplateJSON(`{"_public_key":"x"}`)
+		require.ErrorIs(t, err, errUtils.ErrPolicyInputUnavailable)
+		_, err = parsePolicyJSONDatasource([]byte(`{"_public_key":"x"}`))
+		require.ErrorIs(t, err, errUtils.ErrPolicyInputUnavailable)
+	})
+}
+
+// TestTemplateDatasourceReachableIsBooleanProbe verifies datasourceReachable reports ordinary
+// failures as false (so `else` branches run) while still failing closed on policy outcomes.
+func TestTemplateDatasourceReachableIsBooleanProbe(t *testing.T) {
+	const probe = `{{ if datasourceReachable %q }}reachable{{ else }}unreachable{{ end }}`
+
+	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusInternalServerError) }))
+	defer failing.Close()
+	healthy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) }))
+	defer healthy.Close()
+	closed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	closedURL := closed.URL
+	closed.Close()
+
+	t.Run("ordinary failures return false without aborting the render", func(t *testing.T) {
+		templatePolicy(t, "source", "false", nil)
+		for name, alias := range map[string]string{
+			"http 500 status":    failing.URL,
+			"connection refused": closedURL,
+			"unknown datasource": "no-such-alias",
+			"unsupported scheme": "ftp://example.invalid/data",
+		} {
+			rendered, err := ProcessTmpl(&schema.AtmosConfiguration{}, "test", fmt.Sprintf(probe, alias), nil, false)
+			require.NoError(t, err, name)
+			require.Equal(t, "unreachable", rendered, name)
+		}
+	})
+
+	t.Run("reachable source returns true", func(t *testing.T) {
+		templatePolicy(t, "source", "false", nil)
+		rendered, err := ProcessTmpl(&schema.AtmosConfiguration{}, "test", fmt.Sprintf(probe, healthy.URL), nil, false)
+		require.NoError(t, err)
+		require.Equal(t, "reachable", rendered)
+	})
+
+	t.Run("denied source fails closed", func(t *testing.T) {
+		templatePolicy(t, "source", "true", nil)
+		for _, alias := range []string{healthy.URL, failing.URL} {
+			rendered, err := ProcessTmpl(&schema.AtmosConfiguration{}, "test", fmt.Sprintf(probe, alias), nil, false)
+			require.ErrorContains(t, err, "policy")
+			require.NotEqual(t, "unreachable", rendered)
+		}
+	})
+
+	t.Run("wrapper propagates only genuine policy outcomes", func(t *testing.T) {
+		templatePolicy(t, "source", "true", nil)
+		probeFn, ok := policySourceFunction("datasourceReachable", nil, "", &data.Data{}).(func(string, ...string) (bool, error))
+		require.True(t, ok)
+		reachable, err := probeFn(healthy.URL)
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+		require.False(t, reachable)
+
+		templatePolicy(t, "source", "false", nil)
+		reachable, err = probeFn(failing.URL)
+		require.NoError(t, err)
+		require.False(t, reachable)
+	})
 }
