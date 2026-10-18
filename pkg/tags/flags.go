@@ -51,13 +51,10 @@ func ReadLabelsFlagKey(v *viper.Viper, key string) []string {
 // labelsFlagSource is the default source name used in --labels parse errors.
 const labelsFlagSource = "--labels"
 
-// ParseLabelsFlag parses a slice of key=value (or key:value) pairs into a map[string]string.
-// The input is shaped the way pflag's StringSlice flag type hands it over: comma-splitting within
-// a single occurrence happens in pflag itself and repeated occurrences accumulate
-// (e.g. --labels a=1,b=2 --labels c=3). Elements are still comma-split here so a scalar value read
-// by ReadLabelsFlag (one element holding the whole comma-separated list, as ATMOS_LABELS="a=1,b=2"
-// or a plain string in config arrives) parses the same way without splitting label values on
-// whitespace. Duplicate keys are last-wins. Errors name the "--labels" flag as their source.
+// ParseLabelsFlag parses repeatable key=value (or key:value) selectors. Each flag occurrence
+// is preserved verbatim by StringArray; comma splitting belongs to this label grammar, so
+// quotes remain ordinary characters. Scalar environment/configuration values follow the same
+// grammar. Duplicate keys are last-wins. Errors name the "--labels" flag as their source.
 func ParseLabelsFlag(input []string) (map[string]string, error) {
 	defer perf.Track(nil, "tags.ParseLabelsFlag")()
 

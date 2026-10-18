@@ -50,7 +50,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	// commandLineLabels stays a single comma-joined string here because it's only ever
 	// forwarded verbatim as one `--labels=...` occurrence to nested workflow/atmos
 	// invocations (see workflowCommandFilters below), never parsed into a map in this
-	// file -- the downstream --labels flag (also a StringSlice) comma-splits it again.
+	// file -- the downstream label parser splits the comma-separated pairs.
 	commandLineLabels := strings.Join(commandLineLabelsSlice, ",")
 	processStacks := commandLineStack != ""
 

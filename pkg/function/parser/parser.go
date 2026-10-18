@@ -465,6 +465,14 @@ func splitOptionsWith(input string, allowed map[string]bool) (string, options, e
 		if item.typeName != tokenPipe || index+1 >= len(tokens) {
 			continue
 		}
+		if allowed[optionEval] {
+			// A quoted "eval" is a yq string, and eval (.path) is a yq
+			// function call. Neither opts into evaluating included functions.
+			if tokens[index+1].typeName != tokenText ||
+				(index+2 < len(tokens) && strings.HasPrefix(tokens[index+2].value, "(")) {
+				continue
+			}
+		}
 		if allowed[unquote(tokens[index+1].value)] {
 			return parseOptions(input, tokens, index, allowed)
 		}

@@ -72,7 +72,12 @@ func TestIncludeYAML_ForeignTagReachesRewriter(t *testing.T) {
 	writeFile(t, dir, "template.yml", "Outputs:\n  Id:\n    Value: !x-ref Bucket\n")
 	manifestPath := writeFile(t, dir, "stack.yaml", "x: 1\n")
 
-	for _, manifest := range []string{"template: !include ./template.yml\n", "template: !include ./template.yml | eval\n"} {
+	for _, manifest := range []string{
+		"template: !include ./template.yml\n",
+		"template: !include ./template.yml | eval\n",
+		"template: !include ./template.yml .\n",
+		"template: !include ./template.yml . | eval\n",
+	} {
 		result, err := UnmarshalYAMLFromFile[map[string]any](&schema.AtmosConfiguration{BasePath: dir}, manifest, manifestPath)
 		require.NoError(t, err)
 		value := result["template"].(map[string]any)["Outputs"].(map[string]any)["Id"].(map[string]any)["Value"]

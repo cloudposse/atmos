@@ -25,7 +25,7 @@ var (
 	// excluded by selectorReadAllowedReceiver.
 	bareSelectorReadPattern = regexp.MustCompile(`(\S+)\.(?:GetString|GetStringSlice|IsSet)\("(?:tags|labels)"\)`)
 	// A selector flag definition (literal names or the shared constants).
-	selectorFlagDefinitionPattern = regexp.MustCompile(`With(?:String|StringSlice)Flag\((?:"(?:tags|labels)"|(?:flagTags|flagLabels|tagsFlagName)\b)`)
+	selectorFlagDefinitionPattern = regexp.MustCompile(`With(?:String|StringSlice|StringArray)Flag\((?:"(?:tags|labels)"|(?:flagTags|flagLabels|tagsFlagName)\b)`)
 	viperKeyOptionPattern         = regexp.MustCompile(`\bWithViperKey\(`)
 )
 
@@ -148,6 +148,7 @@ func TestSelectorGuard_DetectsViolations(t *testing.T) {
 		{"cobra flag read is allowed", "x, _ := cmd.Flags().GetString(\"tags\")", 0},
 		{"commented read is ignored", "// v.GetString(\"tags\")", 0},
 		{"definition without override", "flags.WithStringFlag(\"tags\", \"\", \"\", \"Tags\"),", 1},
+		{"array definition without override", "flags.WithStringArrayFlag(\"labels\", \"\", nil, \"Labels\"),", 1},
 		{"slice definition without override", "flags.WithStringSliceFlag(\"labels\", \"\", nil, \"Labels\"),", 1},
 		{"definition with override", "flags.WithStringFlag(\"tags\", \"\", \"\", \"Tags\"),\nflags.WithViperKey(\"tags\", \"x.tags\"),", 0},
 		{"unrelated flag", "flags.WithStringFlag(\"stack\", \"s\", \"\", \"Stack\"),", 0},

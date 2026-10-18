@@ -14,7 +14,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/function/parser"
-	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -224,7 +223,7 @@ func spliceYAMLText(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, yam
 
 	query, val, file := opts.query, opts.val, opts.file
 	if query != "" {
-		evaluated, err := evaluateYqToYAML(atmosConfig, yamlText, query)
+		evaluated, err := evaluateIncludeQuery(atmosConfig, yamlText, query)
 		if err != nil {
 			return fmt.Errorf("%w: %s, stack manifest: %s, error: %w",
 				ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
@@ -254,6 +253,12 @@ func spliceYAMLText(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, yam
 		setStringScalar(node, trimmed)
 		return nil
 	}
+	// Match EvaluateYqExpression's empty-string query contract. An empty
+	// value nested in a returned map, or included without a query, stays empty.
+	if query != "" && contentNode.Kind == yaml.ScalarNode && contentNode.Tag == "!!str" && contentNode.Value == "" {
+		*node = yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}
+		return nil
+	}
 
 	if !opts.eval {
 		literalizeAtmosTags(contentNode)
@@ -262,18 +267,21 @@ func spliceYAMLText(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, yam
 	return nil
 }
 
-// literalizeAtmosTags drops every Atmos YAML function tag in the subtree,
-// keeping the tagged value as plain data (`!env HOME` -> "HOME"). Foreign
-// tags are left alone for their rewriters.
+// literalizeAtmosTags keeps included values as plain data (`!env HOME` -> "HOME"),
+// including unregistered tags from other formats. Registered foreign rewriters
+// and migration diagnostics retain their tags for the walker.
 func literalizeAtmosTags(node *yaml.Node) {
 	if node == nil {
 		return
 	}
 	tag := strings.TrimSpace(node.Tag)
-	if strings.HasPrefix(tag, "!") && !strings.HasPrefix(tag, "!!") && fntag.IsValidYAML(tag) {
-		node.Tag = ""
-		if node.Kind == yaml.ScalarNode {
-			node.Tag = "!!str"
+	if strings.HasPrefix(tag, "!") && !strings.HasPrefix(tag, "!!") {
+		_, registered := lookupForeignTagRewriter(tag)
+		if !registered && len(lookupForeignTagHint(tag)) == 0 {
+			node.Tag = ""
+			if node.Kind == yaml.ScalarNode {
+				node.Tag = "!!str"
+			}
 		}
 	}
 	for _, child := range node.Content {
