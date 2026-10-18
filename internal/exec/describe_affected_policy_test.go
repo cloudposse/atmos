@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -178,4 +179,24 @@ func TestAffectedPolicyFileMovesAndRevisions(t *testing.T) {
 	}, files)
 	require.NoError(t, verifyAffectedPolicyRevision(head, revision))
 	require.ErrorIs(t, verifyAffectedPolicyRevision(head, "wrong-revision"), errUtils.ErrPolicyInputUnavailable)
+}
+
+func TestAffectedPolicyInstanceCountComponentTypes(t *testing.T) {
+	stackWith := func(kind string) map[string]any {
+		return map[string]any{"prod": map[string]any{"components": map[string]any{
+			kind: map[string]any{"first": map[string]any{}, "second": map[string]any{}},
+		}}}
+	}
+	for _, kind := range affectedPolicyComponentTypes {
+		t.Run(kind, func(t *testing.T) {
+			count, err := affectedPolicyInstanceCount(stackWith(kind))
+			require.NoError(t, err)
+			require.Equal(t, 2, count)
+		})
+	}
+	require.Contains(t, affectedPolicyComponentTypes, cfg.CloudFormationComponentType,
+		"aws/cloudformation instances must be inspectable by affected policies")
+
+	_, err := affectedPolicyInstanceCount(stackWith("unknown/type"))
+	require.ErrorIs(t, err, errUtils.ErrPolicyInputUnavailable, "an unlisted component type fails closed")
 }

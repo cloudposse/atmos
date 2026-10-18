@@ -87,6 +87,13 @@ func affectedPolicyConfig(config *schema.AtmosConfiguration, root, checkout stri
 	return &copyConfig, nil
 }
 
+// affectedPolicyComponentTypes lists the component types an affected inventory may contain.
+// A type outside this list fails closed, because policies could not inspect its instances.
+var affectedPolicyComponentTypes = []string{
+	"terraform", "helmfile", "packer", "ansible", "helm", "kubernetes", "container", "emulator",
+	cfg.CloudFormationComponentType,
+}
+
 func affectedPolicyInstanceCount(stacks map[string]any) (int, error) {
 	count := 0
 	for _, value := range stacks {
@@ -99,7 +106,7 @@ func affectedPolicyInstanceCount(stacks map[string]any) (int, error) {
 			return 0, fmt.Errorf("%w: malformed components", errUtils.ErrPolicyInputInvalid)
 		}
 		for kind, value := range components {
-			if !slices.Contains([]string{"terraform", "helmfile", "packer", "ansible", "helm", "kubernetes", "container", "emulator"}, kind) {
+			if !slices.Contains(affectedPolicyComponentTypes, kind) {
 				return 0, fmt.Errorf("%w: unsupported affected inventory component type %q", errUtils.ErrPolicyInputUnavailable, kind)
 			}
 			instances, ok := value.(map[string]any)
