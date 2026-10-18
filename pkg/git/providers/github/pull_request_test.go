@@ -14,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	githubci "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	ghendpoints "github.com/cloudposse/atmos/pkg/github"
 )
 
 // TestPullRequestBodyBadge proves *Provider implements atmosgit.PullRequestBodyBadger (so
@@ -364,4 +365,16 @@ func TestNewRepoEndpointsClient(t *testing.T) {
 
 		assert.ErrorIs(t, err, errUtils.ErrGitHubTokenNotFound)
 	})
+}
+
+// TestClientForEndpointsRejectsInvalidEnterpriseURL verifies an Enterprise Server API URL the
+// GitHub client cannot parse is reported as an authorization configuration error.
+func TestClientForEndpointsRejectsInvalidEnterpriseURL(t *testing.T) {
+	_, err := clientForEndpoints(githubci.NewClientWithToken("token"), ghendpoints.Endpoints{
+		APIURL:    "https://ghe.example.com/%zz",
+		UploadURL: "https://ghe.example.com/api/uploads",
+	})
+
+	require.ErrorIs(t, err, errUtils.ErrGitHubAuthorization)
+	assert.Contains(t, err.Error(), "https://ghe.example.com/%zz")
 }

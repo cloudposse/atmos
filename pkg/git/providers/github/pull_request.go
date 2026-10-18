@@ -67,7 +67,12 @@ func newRepoEndpointsClient() (client, error) {
 	if err != nil {
 		return nil, err
 	}
-	endpoints := ghendpoints.RepoEndpoints()
+	return clientForEndpoints(c, ghendpoints.RepoEndpoints())
+}
+
+// clientForEndpoints returns c unchanged for public GitHub.com, or a copy pointed at the
+// Enterprise Server API that endpoints names.
+func clientForEndpoints(c client, endpoints ghendpoints.Endpoints) (client, error) {
 	if endpoints.APIURL == publicAPIURL {
 		return c, nil
 	}
