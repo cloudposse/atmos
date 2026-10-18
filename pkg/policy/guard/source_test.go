@@ -403,3 +403,36 @@ func TestDescribeSourceRejectsFileURLsWithoutAbsolutePath(t *testing.T) {
 		})
 	}
 }
+
+// A scheme-like prefix that no reader treats as a remote is a local path. Describing it as a remote
+// scheme would hide the real destination from rules that confine file reads.
+func TestDescribeSourceSchemeLikeLocalPathsAreFiles(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	for _, raw := range []string{"evil:/passwd", "x:/etc/passwd", "foo:bar"} {
+		t.Run(raw, func(t *testing.T) {
+			input, err := DescribeSource("download", raw, "")
+			require.NoError(t, err)
+			require.Equal(t, "file", input.Scheme)
+			require.False(t, input.Remote)
+			require.NotEmpty(t, input.Path)
+		})
+	}
+}
+
+func TestDescribeSourceKeepsRemoteClassification(t *testing.T) {
+	for raw, scheme := range map[string]string{
+		"https://example.com/a.yaml":         "https",
+		"s3::https://example.com/bucket/key": "https",
+		"git::https://example.com/org/repo":  "https",
+		"git@example.com:org/repo.git":       "ssh",
+		"github.com/org/repo":                "https",
+	} {
+		t.Run(raw, func(t *testing.T) {
+			input, err := DescribeSource("download", raw, "")
+			require.NoError(t, err)
+			require.True(t, input.Remote)
+			require.Equal(t, scheme, input.Scheme)
+		})
+	}
+}

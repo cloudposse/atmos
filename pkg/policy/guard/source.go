@@ -40,7 +40,10 @@ func DescribeSource(operation, raw, sourceFile string) (SourceInput, error) {
 	if err != nil {
 		return input, fmt.Errorf("%w: invalid source URI (details withheld)", errUtils.ErrPolicyInputInvalid)
 	}
-	if parsed.Scheme != "" && (len(parsed.Scheme) != 1 || !filepath.IsAbs(transport)) {
+	// A scheme-like prefix names a remote only when the reader treats it as one. Otherwise, as in
+	// x:/etc/passwd, the reader sees a local path, and the source must be described as that path.
+	isFileURL := strings.HasPrefix(strings.ToLower(transport), "file:")
+	if parsed.Scheme != "" && (isRemote(raw) || isFileURL) && (len(parsed.Scheme) != 1 || !filepath.IsAbs(transport)) {
 		input.Scheme = strings.ToLower(parsed.Scheme)
 		input.Host = strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
 		input.Remote = input.Scheme != "file"

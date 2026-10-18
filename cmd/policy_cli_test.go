@@ -59,6 +59,11 @@ func TestPolicyExplainArgument(t *testing.T) {
 		{[]string{"--explain=false"}, false},
 		{[]string{"--", "--explain"}, false},
 		{[]string{"--explain", "--explain=false"}, false},
+		{[]string{"terraform", "plan", "--explain", "false"}, false},
+		{[]string{"--explain", "true"}, true},
+		{[]string{"--explain", "FALSE", "--", "--explain"}, false},
+		{[]string{"terraform", "plan", "vpc", "--explain", "stack-name"}, true},
+		{[]string{"--explain", "false", "--explain"}, true},
 	} {
 		require.Equal(t, tc.want, policyExplainRequested(tc.args))
 	}
