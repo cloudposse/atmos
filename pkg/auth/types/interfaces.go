@@ -28,6 +28,44 @@ const (
 	PathTypeDirectory PathType = "directory"
 )
 
+// IntegrationOverrides carries per-invocation overrides supplied by CLI flags to
+// commands that run a named integration (e.g. `atmos azure aks update-kubeconfig`
+// and `atmos aws eks update-kubeconfig`, both with --integration). An empty field
+// means "no override; use the integration's configured value". Overrides apply
+// only to the single ExecuteIntegration call and never mutate stored config.
+type IntegrationOverrides struct {
+	// KubeconfigPath overrides spec.cluster.kubeconfig.path for cluster
+	// integrations (aws/eks, azure/aks, gcp/gke).
+	KubeconfigPath string
+
+	// Alias overrides spec.cluster.alias (the kubeconfig context name) for
+	// cluster integrations.
+	Alias string
+}
+
+// IntegrationOption applies an optional override to an ExecuteIntegration call.
+type IntegrationOption func(*IntegrationOverrides)
+
+// WithKubeconfigPath overrides the integration's kubeconfig path for this call.
+// It is a no-op when path is empty, so callers can forward an unset flag safely.
+func WithKubeconfigPath(path string) IntegrationOption {
+	return func(o *IntegrationOverrides) {
+		if path != "" {
+			o.KubeconfigPath = path
+		}
+	}
+}
+
+// WithAlias overrides the integration's kubeconfig context alias for this call.
+// It is a no-op when alias is empty, so callers can forward an unset flag safely.
+func WithAlias(alias string) IntegrationOption {
+	return func(o *IntegrationOverrides) {
+		if alias != "" {
+			o.Alias = alias
+		}
+	}
+}
+
 // Path represents a credential file or directory used by the provider/identity.
 type Path struct {
 	// Location is the filesystem path (may contain ~ for home directory).
@@ -323,7 +361,11 @@ type AuthManager interface {
 	// ExecuteIntegration executes a named integration.
 	// This authenticates the integration's linked identity first, then executes the integration.
 	// Use this for explicit integration execution via `atmos aws ecr login <integration>`.
-	ExecuteIntegration(ctx context.Context, integrationName string) error
+	// Optional opts carry per-invocation overrides from CLI flags (e.g. the
+	// --kubeconfig/--alias flags of `atmos aws eks|azure aks update-kubeconfig
+	// --integration ...`). They apply only to this call and never mutate the
+	// integration's stored configuration.
+	ExecuteIntegration(ctx context.Context, integrationName string, opts ...IntegrationOption) error
 
 	// ExecuteIdentityIntegrations executes all linked integrations for an identity.
 	// This authenticates the identity first, then executes all its linked integrations.

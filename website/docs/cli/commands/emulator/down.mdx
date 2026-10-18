@@ -7,13 +7,10 @@ description: Stop and remove an emulator's container
 ---
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
-import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 Use this command to stop and remove the emulator's container. The container is discovered by the label derived from its canonical instance address. Persisted state is **kept** — the next [`atmos emulator up`](/cli/commands/emulator/up) resumes from it. Use [`atmos emulator reset`](/cli/commands/emulator/reset) to wipe persisted state instead.
 </Intro>
-
-<Experimental />
 
 <CastPlayer title="atmos emulator down --help" src="/casts/screengrabs/atmos-emulator-down--help.cast" static chrome />
 

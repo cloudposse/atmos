@@ -40,8 +40,8 @@ var toolchainCmd = &cobra.Command{
 	Long:  `A standalone tool to install CLI binaries using registry metadata.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Call root command's PersistentPreRun first to ensure root command initialization runs.
-		// This includes config loading, I/O initialization, and experimental command checks.
-		// Without this, the toolchain command would bypass the experimental mode handling.
+		// This includes config loading, I/O initialization, and experimental setting checks.
+		// Stable commands must still honor gates on experimental configuration settings.
 		// We use cmd.Root() because cmd.Parent() would return the toolchain command (not root)
 		// when running subcommands like "toolchain list".
 		if root := cmd.Root(); root != nil && root.PersistentPreRun != nil {
@@ -199,5 +199,5 @@ func (t *ToolchainCommandProvider) GetCompatibilityFlags() map[string]compat.Com
 
 // IsExperimental returns whether this command is experimental.
 func (t *ToolchainCommandProvider) IsExperimental() bool {
-	return true
+	return false
 }

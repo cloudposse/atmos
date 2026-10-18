@@ -284,14 +284,14 @@ func (m *Manager) EnsureIdentityEnvironment(ctx context.Context, identityName st
 }
 
 // ExecuteIntegration delegates an explicitly requested auth operation.
-func (m *Manager) ExecuteIntegration(ctx context.Context, integrationName string) error {
+func (m *Manager) ExecuteIntegration(ctx context.Context, integrationName string, opts ...types.IntegrationOption) error {
 	defer perf.Track(nil, "auth.deferred.Manager.ExecuteIntegration")()
 
 	delegate, err := m.base()
 	if err != nil {
 		return err
 	}
-	return delegate.ExecuteIntegration(ctx, integrationName)
+	return delegate.ExecuteIntegration(ctx, integrationName, opts...)
 }
 
 // ExecuteIdentityIntegrations delegates an explicitly requested auth operation.

@@ -1,6 +1,7 @@
 package ci
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -189,23 +190,11 @@ func createPlanfileStore(opts ExecuteOptions) (planfile.Store, error) {
 		AtmosConfig: opts.AtmosConfig,
 	}
 
-	// Use the default store from configuration if available.
+	// Explicit configuration takes precedence over environment-based detection.
 	if opts.AtmosConfig != nil {
 		planfilesConfig := opts.AtmosConfig.Components.Terraform.Planfiles
-		if planfilesConfig.Default != "" {
-			if storeSpec, ok := planfilesConfig.Stores[planfilesConfig.Default]; ok {
-				if err := validateStoreIdentity(opts.AtmosConfig, planfilesConfig.Default, storeSpec.Identity); err != nil {
-					return nil, err
-				}
-				artOpts.Type = storeSpec.Type
-				artOpts.Options = storeSpec.Options
-				attachStoreIdentity(&artOpts, opts.Info, storeSpec.Identity)
-				backend, err := artifact.NewStore(artOpts)
-				if err != nil {
-					return nil, err
-				}
-				return adapter.NewStore(backend), nil
-			}
+		if planfilesConfig.Default != "" || len(planfilesConfig.Priority) > 0 {
+			return configuredPlanfileStore(&opts, &planfilesConfig)
 		}
 	}
 
@@ -226,6 +215,30 @@ func createPlanfileStore(opts ExecuteOptions) (planfile.Store, error) {
 		"path": ".atmos/planfiles",
 	}
 	backend, err := artifact.NewStore(artOpts)
+	if err != nil {
+		return nil, err
+	}
+	return adapter.NewStore(backend), nil
+}
+
+// configuredPlanfileStore uses the artifact selector's default/priority contract.
+// Selection errors must not silently redirect plans to an environment-derived store.
+func configuredPlanfileStore(opts *ExecuteOptions, config *schema.PlanfilesConfig) (planfile.Store, error) {
+	stores := make(map[string]artifact.StoreOptions, len(config.Stores))
+	checkers := make(map[string]artifact.EnvironmentChecker, len(config.Stores))
+	for name, spec := range config.Stores {
+		if err := validateStoreIdentity(opts.AtmosConfig, name, spec.Identity); err != nil {
+			return nil, err
+		}
+		storeOpts := artifact.StoreOptions{Type: spec.Type, Options: spec.Options}
+		attachStoreIdentity(&storeOpts, opts.Info, spec.Identity)
+		stores[name] = storeOpts
+		checkers[name] = planfileEnvironmentChecker{
+			options:       storeOpts,
+			requireUpload: extractEventPrefix(opts.Event) == "after" && extractCommand(opts.Event) == "plan",
+		}
+	}
+	backend, err := artifact.SelectStore(context.Background(), config.Priority, stores, checkers, config.Default, opts.AtmosConfig)
 	if err != nil {
 		return nil, err
 	}

@@ -235,7 +235,7 @@ func (f *qualityGraphAPI) DoWithContext(ctx context.Context, method, path string
 	return githubtest.Respond(map[string]any{"data": map[string]any{"repository": map[string]any{"pullRequest": pr}}}, response)
 }
 
-func TestQualityFileLimitAndDraft(t *testing.T) {
+func TestQualityFileLimit(t *testing.T) {
 	for _, count := range []int{0, 149, 150, 151} {
 		pr := githubtest.PR(githubtest.Run())
 		pr.ChangedFiles = &count
@@ -244,9 +244,63 @@ func TestQualityFileLimitAndDraft(t *testing.T) {
 		require.Equal(t, count < 150, gate.Passed)
 		_, ready := qualityMarkdown(&pr, []qualityGate{gate}, "advisory regression")
 		require.Equal(t, count < 150, ready)
-		pr.Draft = true
-		_, ready = qualityMarkdown(&pr, []qualityGate{{Passed: true}}, "")
-		require.False(t, ready)
+	}
+}
+
+func TestQualityReadyForReviewGate(t *testing.T) {
+	cases := []struct {
+		name       string
+		draft      bool
+		wantPassed bool
+		wantDetail string
+	}{
+		{name: "draft", draft: true, wantDetail: "Draft"},
+		{name: "ready for review", wantPassed: true, wantDetail: "Marked ready for review"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pr := githubtest.PR(githubtest.Run())
+			pr.Draft = tc.draft
+			gate, err := checkReadyForReview(nil, &pr)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantPassed, gate.Passed)
+			require.Equal(t, tc.wantDetail, gate.Detail)
+			if !tc.wantPassed {
+				require.Equal(t, "This PR is a draft.", gate.Problem)
+				require.Contains(t, gate.NextAction, "ready for review")
+			}
+		})
+	}
+}
+
+// The draft state is a first-class gate: the verdict, label and checklist all
+// derive from the registry rather than a hidden override.
+func TestQualityDraftVerdictComesFromRegistry(t *testing.T) {
+	allPass := func(*qualityClient, *githubapi.PR) (qualityGate, error) { return qualityGate{Passed: true}, nil }
+	registry, err := defaultQualityRegistry()
+	require.NoError(t, err)
+	for i := range registry.definitions {
+		if registry.definitions[i].ID != "ready-for-review" {
+			registry.definitions[i].Check = allPass
+		}
+	}
+	for _, draft := range []bool{true, false} {
+		pr := githubtest.PR(githubtest.Run())
+		pr.Draft = draft
+		gates := registry.evaluate(nil, &pr)
+		body, ready := qualityMarkdown(&pr, gates, "")
+		require.Equal(t, !draft, ready)
+		require.Equal(t, "ready-for-review", gates[0].ID)
+		if draft {
+			require.False(t, gates[0].Passed)
+			require.Contains(t, body, "⚠️ [Ready for review]")
+			require.Contains(t, body, "<code>"+qualityNotReady+"</code>")
+			require.Contains(t, body, "Problem: This PR is a draft.")
+			require.Contains(t, body, "Quality Gate not ready")
+			continue
+		}
+		require.Contains(t, body, "✅ [Ready for review]")
+		require.Contains(t, body, "<code>"+qualityReady+"</code>")
 	}
 }
 
@@ -527,5 +581,7 @@ func TestQualityGuidanceOnlyUnmetGates(t *testing.T) {
 	require.Empty(t, qualityGuidance(&pr, []qualityGate{{Passed: true}}, ""))
 	require.Contains(t, qualityGuidance(&pr, nil, "**warning**"), "advisory performance warning")
 	pr.Draft = true
-	require.Contains(t, qualityGuidance(&pr, nil, ""), "mark the PR ready for review")
+	require.Empty(t, qualityGuidance(&pr, nil, ""), "draft guidance comes from the Ready for review gate, not a special case")
+	gate := qualityGate{Name: "Ready for review", Problem: "This PR is a draft.", NextAction: "Mark the PR ready for review when the work is complete."}
+	require.Contains(t, qualityGuidance(&pr, []qualityGate{gate}, ""), "Mark the PR ready for review")
 }

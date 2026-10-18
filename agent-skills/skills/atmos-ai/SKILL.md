@@ -62,7 +62,15 @@ ai:
       max_turns: 10
   tools:
     enabled: true
+    mode: require_confirmation   # require_confirmation (default) | allow | yolo
 ```
+
+`ai.tools.mode` controls tool approval. `require_confirmation` prompts, `allow` never prompts
+(`ai.tools.blocked` still applies), and `yolo` bypasses blocked/restricted checks. The older
+`yolo_mode` and `require_confirmation` booleans are deprecated aliases; `mode` wins when set.
+With `claude-code`, `atmos ai ask` shows an approval prompt in the terminal and continues in the
+same run; in CI without a terminal, set `ai.tools.mode: allow` or add the tool to
+`ai.providers.claude-code.allowed_tools`.
 
 ## AI Uses Atmos: MCP and Skills
 

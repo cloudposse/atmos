@@ -234,8 +234,14 @@ func (m *manager) executeIntegration(ctx context.Context, integrationName string
 // ExecuteIntegration exposes integration execution for the standalone ecr-login command.
 // This authenticates the integration's linked identity first, then executes the integration.
 // Auto-triggered integrations are skipped during authentication to avoid duplicate execution.
-func (m *manager) ExecuteIntegration(ctx context.Context, integrationName string) error {
+func (m *manager) ExecuteIntegration(ctx context.Context, integrationName string, opts ...types.IntegrationOption) error {
 	defer perf.Track(nil, "auth.Manager.ExecuteIntegration")()
+
+	// Collect per-invocation CLI overrides (e.g. --kubeconfig/--alias).
+	var overrides types.IntegrationOverrides
+	for _, opt := range opts {
+		opt(&overrides)
+	}
 
 	// Look up integration config.
 	if m.config.Integrations == nil {
@@ -269,10 +275,11 @@ func (m *manager) ExecuteIntegration(ctx context.Context, integrationName string
 
 	log.Debug("Authenticated identity for integration", "identity", identityName, "whoami", whoami.Identity)
 
-	// Create and execute the integration.
+	// Create and execute the integration. CLI overrides are applied to a copy of
+	// the config so the shared integration config in m.config is never mutated.
 	integration, err := integrations.Create(&integrations.IntegrationConfig{
 		Name:   integrationName,
-		Config: &integrationConfig,
+		Config: applyIntegrationOverrides(integrationConfig, overrides),
 		Realm:  m.realm.Value,
 	})
 	if err != nil {
@@ -280,6 +287,46 @@ func (m *manager) ExecuteIntegration(ctx context.Context, integrationName string
 	}
 
 	return integration.Execute(ctx, whoami.Credentials)
+}
+
+// applyIntegrationOverrides returns an integration config with any non-empty CLI
+// overrides applied to its cluster settings. The input is passed by value, but
+// its Spec and Cluster are pointers shared with m.config, so the branch we touch
+// is cloned before mutation - the caller's stored config is never changed.
+// Overrides only apply to cluster integrations (aws/eks, azure/aks, gcp/gke);
+// for any other kind, or when no overrides are set, the config is returned as-is.
+func applyIntegrationOverrides(config schema.Integration, overrides types.IntegrationOverrides) *schema.Integration {
+	defer perf.Track(nil, "auth.applyIntegrationOverrides")()
+
+	if overrides.KubeconfigPath == "" && overrides.Alias == "" {
+		return &config
+	}
+	if config.Spec == nil || config.Spec.Cluster == nil {
+		return &config
+	}
+
+	// Clone Spec and Cluster so the shared pointers in m.config stay untouched.
+	specCopy := *config.Spec
+	clusterCopy := *config.Spec.Cluster
+
+	if overrides.Alias != "" {
+		clusterCopy.Alias = overrides.Alias
+	}
+
+	if overrides.KubeconfigPath != "" {
+		// Clone the (optional) kubeconfig settings so mode/update are preserved
+		// while only the path is overridden.
+		kubeconfigCopy := schema.KubeconfigSettings{}
+		if clusterCopy.Kubeconfig != nil {
+			kubeconfigCopy = *clusterCopy.Kubeconfig
+		}
+		kubeconfigCopy.Path = overrides.KubeconfigPath
+		clusterCopy.Kubeconfig = &kubeconfigCopy
+	}
+
+	specCopy.Cluster = &clusterCopy
+	config.Spec = &specCopy
+	return &config
 }
 
 // ExecuteIdentityIntegrations executes all integrations that reference this identity.
