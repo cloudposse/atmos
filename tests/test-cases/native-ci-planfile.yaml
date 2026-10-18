@@ -154,7 +154,11 @@ tests:
     expect:
       exit_code: 0
       stderr:
-        - "CI hook"
+        # The fake GitHub endpoint skips status reporting; local artifact upload
+        # and GitHub output/summary generation must still complete successfully.
+        - "CI check run creation skipped"
+        - "CI check run update skipped"
+        - !not "CI hook handler failed"
       file_contains:
         "github-output.txt":
           - "has_changes=true"
