@@ -38,6 +38,7 @@ BUILT-IN COMMANDS
       describe [command]                     Show details about Atmos configurations and components
       devcontainer [command] [EXPERIMENTAL]  Manage development containers
       docs [command]                         Open Atmos documentation or display component-specific docs
+      doctor                                 Diagnose project health and apply verified migrations
       emulator [command]                     Manage local emulators for AWS, GCP, Azure, Kubernetes, Vault, and OCI
                                              registries
       env                                    Output environment variables configured in atmos.yaml

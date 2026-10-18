@@ -334,6 +334,18 @@ func buildTerraformGraphForNodes(
 	selectedNodeIDs map[string]bool,
 	validationSources map[string]bool,
 ) (*dependency.Graph, error) {
+	return buildTerraformGraphWithWarnings(stacks, leftDelim, selectedNodeIDs, validationSources, log.Warn)
+}
+
+// ValidateTerraformGraph checks the execution graph without emitting legacy
+// dependency warnings. Diagnostic callers report findings through their own UI.
+func ValidateTerraformGraph(stacks map[string]any, leftDelim string) error {
+	defer perf.Track(nil, "scheduler.adapters.ValidateTerraformGraph")()
+	_, err := buildTerraformGraphWithWarnings(stacks, leftDelim, nil, nil, nil)
+	return err
+}
+
+func buildTerraformGraphWithWarnings(stacks map[string]any, leftDelim string, selectedNodeIDs, validationSources map[string]bool, warn func(any, ...any)) (*dependency.Graph, error) {
 	builder := dependency.NewBuilder()
 	targets := make(map[string]terraformTargetState)
 
@@ -366,7 +378,7 @@ func buildTerraformGraphForNodes(
 		if selectedNodeIDs != nil && !selectedNodeIDs[fromID] {
 			return nil
 		}
-		return addTerraformDependencies(builder, targets, validationSources, selectedNodeIDs, leftDelim, stackName, componentName, componentSection)
+		return addTerraformDependencies(builder, targets, validationSources, selectedNodeIDs, leftDelim, stackName, componentName, componentSection, warn)
 	}); err != nil {
 		return nil, fmt.Errorf("adding dependencies: %w", err)
 	}
@@ -1127,7 +1139,12 @@ func addTerraformDependencies(
 	stackName string,
 	componentName string,
 	componentSection map[string]any,
+	warningHandlers ...func(any, ...any),
 ) error {
+	warn := log.Warn
+	if len(warningHandlers) > 0 {
+		warn = warningHandlers[0]
+	}
 	fromID := terraformNodeID(componentName, stackName)
 	dependencies, modern, err := terraformDependenciesWithSource(componentSection, stackName, leftDelim)
 	if err != nil {
@@ -1161,7 +1178,9 @@ func addTerraformDependencies(
 		//nolint:nestif // Required, optional, legacy, and disabled states have distinct contracts.
 		if !target.available {
 			if !modern {
-				log.Warn("Dependency target not found", "from", fromID, "to", toID)
+				if warn != nil {
+					warn("Dependency target not found", "from", fromID, "to", toID)
+				}
 				continue
 			}
 			if dep.IsRequired() && shouldValidateTerraformDependencyTarget(fromID, validationSources) {

@@ -1,0 +1,323 @@
+---
+title: atmos doctor
+sidebar_label: doctor
+sidebar_class_name: command
+description: Diagnose project health and apply verified configuration migrations.
+---
+
+import Intro from '@site/src/components/Intro';
+import ActionCard from '@site/src/components/ActionCard';
+import PrimaryCTA from '@site/src/components/PrimaryCTA';
+import CastPlayer from '@site/src/components/CastPlayer';
+
+<Intro>
+`atmos doctor` checks authored project configuration, deprecations, and upstream
+repository health. `atmos doctor --fix` applies supported migrations only after
+verifying their runtime field behavior and unrelated YAML values.
+</Intro>
+
+<ActionCard title="Configure Validation Schemas">
+    Choose schemas and file patterns for project validation.
+    <div>
+      <PrimaryCTA to="/cli/configuration/schemas">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<CastPlayer src="/casts/demo/fixtures/doctor/doctor.cast" title="Diagnose and verify repairs" chrome controls scrubber />
+
+## Usage
+
+```shell
+atmos doctor
+atmos doctor --fix --dry-run
+atmos doctor --fix
+atmos doctor --format=json
+atmos doctor --fail-on=warning
+atmos doctor --only=deprecations
+atmos doctor --only=sources
+atmos doctor --fix --only=component-monorepo
+atmos doctor --affected --base=origin/main
+atmos doctor --exclude='tests/fixtures/**'
+atmos doctor --list-checks
+atmos doctor --offline
+```
+
+## Flags
+
+<dl>
+  <dt>`--fix`</dt>
+  <dd>Apply eligible, verified repairs. Disabled by default.</dd>
+  <dt>`--dry-run`</dt>
+  <dd>Stage and verify repairs without writing files or backups. Requires `--fix`.</dd>
+  <dt>`--format`</dt>
+  <dd>Choose `text` (default), `rich`, `json`, or `sarif`. Both human formats show compiler-style diagnostics with source excerpts.</dd>
+  <dt>`--fail-on`</dt>
+  <dd>Fail on `error` (default), `warning`, or `none`. Operational failures always fail. Notice-level findings never count toward the threshold.</dd>
+  <dt>`--only`</dt>
+  <dd>Comma-separated check IDs or categories. All built-in checks run by default.</dd>
+  <dt>`--exclude`</dt>
+  <dd>Repeatable project-relative glob pattern. Supports `**`.</dd>
+  <dt>`--affected`</dt>
+  <dd>Scope checks to changed inputs, expanding configuration and stack changes to their dependent checks.</dd>
+  <dt>`--base`</dt>
+  <dd>Git comparison base for `--affected`. Uses the existing validation base selection when omitted. Requires `--affected`.</dd>
+  <dt>`--list-checks`</dt>
+  <dd>Print the built-in check catalog to stdout without inspecting the project. Combine it only with `--format` and `--fail-on`; any other doctor flag is rejected, as is `--format=rich`.</dd>
+  <dt>`--offline`</dt>
+  <dd>Disable repository metadata requests and the GitHub lookups that verify component moves. Disabled by default.</dd>
+</dl>
+
+Doctor also honors the global `--chdir`, `--config`, `--config-path`, and `--profile` flags,
+which can appear before or after the command name.
+
+Invalid option values and combinations exit `2` before any project file is read. The error
+names the option and lists the valid values. With `--format=json` or `--format=sarif`, the
+same failure is written to stdout as a report whose `operational_error` field holds the
+message, so tools parse one shape for every outcome.
+
+## Configuration discovery
+
+Doctor finds the Atmos configuration the same way every other command does, without
+parsing it first, so it can diagnose a configuration that is malformed.
+
+- Running from a subdirectory finds the nearest parent directory that contains `atmos.yaml`,
+  and that directory becomes the project root.
+- `ATMOS_CLI_CONFIG_PATH` selects the configuration directory and turns off parent and
+  Git-root discovery.
+- `--config` selects one or more configuration files, and `--config-path` selects one or
+  more directories. Either one turns off automatic discovery, as it does for Atmos itself.
+- `atmos.d` and `.atmos.d` directories are read relative to the configuration file's
+  directory, not the current directory.
+- Only active profiles are inspected: those named by `--profile` or `ATMOS_PROFILE`, and
+  `profiles.default` when neither is set. A profile that cannot be found is reported.
+- Home and system configuration is not part of the project. Its presence is reported as
+  an input doctor cannot verify.
+
+When no project configuration can be found, doctor stops with an operational failure and
+exits `2`, because a clean result for a project it never found would be misleading.
+
+## Checks and repairs
+
+<dl>
+<dt><code>schema</code></dt>
+<dd>Configuration, authored stack, and configured custom schemas.</dd>
+<dt><code>yaml-functions</code></dt>
+<dd>Unknown YAML function names, such as <code>!terraform.staet</code>, with source locations and suggestions for unambiguous spelling corrections. Uses Atmos's canonical function catalog without executing functions. Also checks quoted function strings in known dotted namespaces such as `!terraform.*`. Native explicit YAML tags, including <code>!!str</code> and verbatim type tags, retain their YAML meaning; explicitly typed strings, URI tags, literal values, and unrelated strings are not interpreted as function names. Argument signatures and runtime results are not validated.</dd>
+<dt><code>imports</code></dt>
+<dd>Local source discovery and unresolved-input diagnostics. Imports resolve the way Atmos resolves them: relative to the importing file, with the <code>.yaml</code>, <code>.yml</code>, and template extensions tried in turn.</dd>
+<dt><code>stacks</code></dt>
+<dd>Production inheritance and duplicate-instance checks for complete static inputs.</dd>
+<dt><code>editorconfig</code></dt>
+<dd>Existing EditorConfig validation.</dd>
+<dt><code>github-actions</code></dt>
+<dd>Existing actionlint validation. A <code>.github/actionlint.yaml</code> file is honored, so custom self-hosted runner labels declared there are not reported.</dd>
+<dt><code>deprecated-field</code></dt>
+<dd>Schema-annotated deprecations, with replacement guidance.</dd>
+<dt><code>command-provides</code></dt>
+<dd>Argument <code>type</code> and flag <code>semantic_type</code> to <code>provides</code>, for <code>stack</code> or <code>component</code>.</dd>
+<dt><code>hook-event</code></dt>
+<dd>Recognized hyphenated lifecycle events to dotted events.</dd>
+<dt><code>terraform-reconfigure</code></dt>
+<dd>Explicit <code>init_run_reconfigure: false</code> to <code>init.reconfigure: never</code>, or <code>true</code> to <code>auto</code>.</dd>
+<dt><code>modernization</code></dt>
+<dd>Advisory findings for legacy `cloudposse/github-action-atmos-*` GitHub Actions.</dd>
+<dt><code>component-monorepo</code></dt>
+<dd>Component sources that still point at the archived <code>cloudposse/terraform-aws-components</code> monorepo. Doctor moves each one to its <code>cloudposse-terraform-components</code> repository at the same version, after verifying the files are identical. It belongs to the <code>modernization</code> category.</dd>
+<dt><code>source-repository</code></dt>
+<dd>Vendor, component <code>source</code>, and <code>component.yaml</code> <code>spec.source.uri</code> upstream repository health. A check with nothing to inspect is reported as skipped, not passed.</dd>
+</dl>
+
+Select check IDs or categories (`validation`, `deprecations`, `modernization`,
+`sources`) with `--only`. Ordinary custom-command flag `type` is not deprecated.
+
+Doctor reads YAML without running hooks, project commands, authentication flows,
+provisioning, or automatic tool installation. It does not evaluate templates,
+remote imports, remote state, secrets, or executable YAML functions to justify a
+repair. Imported template files such as `*.yaml.tmpl` are reported as not evaluated
+and are never parsed as plain YAML. Remote custom schemas and schemas with external
+references are reported as incomplete; their complete input closure cannot yet be
+captured. Excluded sources, layered configurations, and profiles can leave
+verification incomplete. The report states this explicitly. Full runtime
+validation remains available through `atmos validate stacks`.
+
+A failure in one check, such as an unreadable file, is recorded against that check. The
+remaining checks still run, and the run exits `2` at the end.
+
+A repair is blocked only by inputs that can change what it means. Templates and YAML
+functions elsewhere in a file, such as custom command `steps`, `description`, or
+`stacks.name_template`, do not block a migration of `components.terraform` or of a
+command's `arguments` and `flags`. A repair is blocked when a dynamic value sits in the
+keys the repair reads, or when another configuration layer could change the edited
+value: an `import`, an `atmos.d` file, an active profile (including `profiles.default`),
+or configuration outside the project. Which of these applies depends on the repair: stack
+and workflow files are not layered configuration, so a template in one of them does not
+block a change to `atmos.yaml`. Every blocked finding names the file and line, or the layer,
+that blocked it and tells you how to make the change by hand. A finding that no repair can
+resolve never suggests running `--fix`.
+
+Doctor automatically moves component-level Terraform `settings.depends_on` lists to
+`dependencies.components` when each entry contains a literal `component` and an
+optional literal `stack`. It preserves comments and unrelated settings. This repair
+intentionally adopts modern required-dependency semantics: missing or disabled targets
+and dependency cycles are reported as errors, even when the migration itself succeeds.
+`--fix --dry-run` reports errors from the proposed configuration without changing files.
+These errors remain visible after repairs even with `--only=deprecations`.
+
+Dependency repairs require complete static inputs so doctor can validate the resulting
+production dependency graph. Legacy context selectors, file/folder entries, other
+legacy shapes, and declarations that already contain `dependencies.components` require
+manual review. Stack naming migrations also remain manual.
+
+## Source repository health
+
+Doctor checks literal vendor sources and component `source`/`source.uri` declarations.
+GitHub and configured GitHub Enterprise metadata checks use existing credentials,
+timeouts, and one request per repository per check phase. Other hosts and dynamic
+URLs are reported as incomplete coverage. Use `--offline` to disable network checks.
+
+With `--offline`, each repository the check would have queried produces a notice. Notices
+are informational: they do not change the exit code, even with `--fail-on=warning`.
+
+Archived repositories produce warnings. Confirmed removal is distinguished from
+an inaccessible repository. A GitHub 404 can mean private content or missing
+permissions, so doctor does not call it confirmed deletion. Rate limits, access
+denials, and network failures are inconclusive. The source health check never rewrites
+source URLs; only the `component-monorepo` repair does, after verifying the files are identical.
+
+## Moving components off the archived monorepo
+
+Cloud Posse archived the `cloudposse/terraform-aws-components` monorepo and moved its
+components to individual repositories in the `cloudposse-terraform-components` organization.
+A few components were split into several repositories or removed before the move, so only
+components with a successor repository can be migrated automatically; the rest are
+reported for manual review. A source that still names the monorepo keeps working today, but
+it receives no further fixes. The `component-monorepo` check finds these sources and moves
+them without changing the version you pinned:
+
+```yaml
+# vendor.yaml, before
+- component: dns-primary
+  source: "git::https://github.com/cloudposse/terraform-aws-components.git//modules/dns-primary?depth=1&ref=1.495.0"
+```
+
+```yaml
+# vendor.yaml, after
+- component: dns-primary
+  source: "git::https://github.com/cloudposse-terraform-components/aws-dns-primary.git//src?depth=1&ref=1.495.0"
+```
+
+The successor repositories keep the monorepo's historical tags, such as `1.495.0`, and the
+component code lives in their `src` directory. Doctor changes only the repository and the
+path: the scheme, the `.git` suffix, the `ref`, other query parameters such as `depth=1`,
+the `version` field, comments, and quoting stay as written. A `ref={{ .Version }}` placeholder
+is kept as it is and keeps using the `version` field beside it.
+
+Several successor names differ from the module path. For example, `aws-sso` moved to
+`aws-identity-center` and `argocd-repo` moved to `argocd-github-repo`, so doctor looks every
+component up in the map Cloud Posse published instead of deriving the name.
+
+Doctor reads these locations, including every vendor manifest that `atmos vendor pull` reads
+through `spec.imports`:
+
+- `spec.source.uri` in a `component.yaml`
+- `spec.sources[].source` in a vendor manifest, such as `vendor.yaml` and the manifests it imports
+- `source` and `source.uri` of a component in a stack
+
+### Verification
+
+Before any repair, doctor resolves the version the source fetches: the literal `ref`, or the
+`version` field for a `{{ .Version }}` placeholder. It then reads the Git tree of
+`modules/<component>` in the monorepo and the tree of `src` in the successor repository at that
+tag through the GitHub API, with the credentials and timeouts the other GitHub checks use. Equal
+trees mean the files are byte-identical, and only then is the repair available. One lookup
+serves every source that uses the same component and version.
+
+| Result | Finding status |
+| --- | --- |
+| The trees are equal | `available`, or `fixed` with `--fix` |
+| The trees differ, or the tag is missing from either repository | `verification-failed`, with the reason |
+| Verification was skipped with `--offline`, GitHub rate limited the request, or the request failed | `verification-incomplete`, with the reason |
+
+Nothing is written for a source that is not `available`. The check never changes a version, so
+run it before `atmos vendor update` if you also want newer releases.
+
+### Sources that need a manual change
+
+Doctor reports these sources with a specific explanation and leaves them untouched:
+
+- Components that were split into subcomponents, such as `tgw` and `spacelift`, have no single
+  successor repository. Follow the
+  [special migration procedure](https://docs.cloudposse.com/learn/maintenance/tutorials/how-to-update-components-yaml-to-new-organization/).
+- Components that were removed before the migration, such as `eks/efs`, have no successor.
+- A version that is not one tag, such as `CUSTOM, > 1.422` or a semver range, cannot be checked.
+  Pin one tag first.
+- A source without a `ref`, with a templated repository or path, or written as an SSH URL.
+- Mixins (`spec.mixins[].uri`) that point at the monorepo.
+
+## Verification and recovery
+
+Repairs are staged in memory at their original logical paths. Doctor compares
+actual runtime field consumers, all unrelated YAML nodes, and candidate schema
+results using fresh validators. Conflicting destination fields, lost comments,
+unsupported anchors, and failed comparisons prevent the repair. There is no flag
+to bypass verification. A dry run writes neither project files nor backups.
+
+Before writing, doctor warns about affected dirty, staged, untracked, or ignored
+files, or unavailable Git. `--fix` authorizes eligible edits without another prompt.
+Doctor never changes Git state.
+
+A repair rewrites the file through the YAML editor, which preserves comments, tags, and
+anchors but can reformat other parts of the file. Blank lines and folded scalars may change
+their layout. The values are unchanged and verified; only the formatting differs. Review the
+diff of a repaired file before committing it.
+
+Comments on a migrated key move with it: the legacy key's head, inline, and foot
+comments are carried onto the replacement key, every other comment must be unchanged,
+and comment blocks at the end of a document are compared as text.
+
+Exact originals are saved beneath the Atmos XDG data directory at
+`doctor/backups/<run-id>`, with private permissions. `manifest.json` records each
+original path, permission mode as an octal string such as `"0644"`, backup filename,
+and before/after SHA-256 hashes.
+To recover, compare the current file to `after_sha256`, copy its `.original` backup
+to the recorded path, and restore the recorded permission mode. Review later edits
+before overwriting them.
+
+All backups finish before the first write. Each replacement is atomic, but a
+multi-file run is not a transaction. Failures or cancellation stop further writes;
+the report identifies files already changed and retains their backups. Doctor reads
+symlinked sources but never writes through them. Findings in a symlinked file are
+reported for manual review, and repairs in other files still proceed.
+
+## Output and exit codes
+
+The default output shows each finding with its severity, rule, file location, and a
+YAML source excerpt with a caret at the reported location. Repair status, suggested
+actions, and explanations appear on separate lines. `--format=rich` uses the same
+presentation. Themes and `--no-color` apply to both formats.
+
+Live progress is replaced by concise phase summaries. The final report includes
+skipped or incomplete checks, recovery instructions when applicable, and a single
+`atmos doctor --fix` suggestion when repairs are available. A dry run reports verified
+repairs separately from applied changes. Missing source files do not hide findings.
+
+Human reports and progress use stderr. Non-terminal output uses the same report
+layout without animation. JSON and SARIF use stdout and suppress human output. JSON includes fix decisions, changed files,
+verification coverage, backup location, `dry_run`, and `operational_error` for operational
+and invocation failures.
+
+Without `--fix`, the summary counts what remains and what a repair run could apply, for
+example `3 findings (2 fixable).`, followed by `Run: atmos doctor --fix`. With `--fix`, it
+reports what it applied, for example `Fixed 2 findings in 1 file. 1 finding remains.` A dry
+run reports the repairs it verified, for example `2 repairs verified. 3 findings remain.`
+
+Warnings are advisory by default. `--fail-on=warning` makes them blocking;
+`--fail-on=none` suppresses finding-based failure. Exit codes are `0` when the
+threshold is satisfied, `1` for blocking findings, `2` for operational or invocation
+failures (including a missing project configuration), and `130` for cancellation. Fixed findings no longer count toward the
+threshold; dry runs evaluate the unchanged files.
+
+`--fix` also exits `1` when a repair it attempted fails verification, whatever the
+`--fail-on` threshold, because the run did not deliver what you asked for. A failed
+write is an operational failure and exits `2`. A dry run reports a rejected repair
+but only applies the threshold.

@@ -27,6 +27,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/startup"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 	pkgversion "github.com/cloudposse/atmos/pkg/version"
@@ -1838,7 +1839,7 @@ func TestSyncGlobalFlagsToViper(t *testing.T) {
 			cmd := &cobra.Command{Use: "test"}
 			tt.setupCmd(cmd)
 
-			syncGlobalFlagsToViper(cmd)
+			startup.SyncGlobalFlagsToViper(cmd)
 			tt.checkViper(t)
 		})
 	}
@@ -1894,7 +1895,7 @@ func TestConfigureEarlyColorProfile(t *testing.T) {
 
 			// Should not panic.
 			assert.NotPanics(t, func() {
-				configureEarlyColorProfile(cmd)
+				startup.ConfigureEarlyColorProfile(cmd)
 			})
 		})
 	}

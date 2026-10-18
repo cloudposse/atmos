@@ -1,0 +1,57 @@
+commands:
+  - name: casts generate demo fixtures doctor doctor
+    description: Record project diagnostics and a verified dry run
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        output: none
+        command: atmos casts setup
+      - type: cast
+        name: doctor
+        working_directory: "../../.context/cast-fixtures/doctor"
+        title: atmos doctor
+        mode: steps
+        defaults:
+          # Keep a complete compiler-style dry-run report visible.
+          cast:
+            rate: 12ms
+            width: 120
+            height: 64
+          simulate: !include cast-defaults.yaml .simulate
+        show:
+          labels: false
+        output:
+          cast: "../../website/static/casts/demo/fixtures/doctor/doctor.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: shell
+            name: diagnose
+            output: raw
+            command: atmos --config atmos.yaml doctor --only=deprecations --offline
+          - type: shell
+            name: verify
+            output: raw
+            command: atmos --config atmos.yaml doctor --only=deprecations --fix --dry-run --offline --fail-on=none
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_error_output, assert_no_local_paths
+          decoded = load_text("../../website/static/casts/demo/fixtures/doctor/doctor.cast")
+          plain = strip_ansi(decoded)
+          for needle in ["Atmos Doctor · Diagnose", "Atmos Doctor · Dry run", "warning[command-provides]", "warning[terraform-reconfigure]", "-->", "^", "= repair:", "= note:", "warning[component-dependencies]", "error[dependencies]", "database", "proposed migration", "Candidate verified", "Dry run:", "Run: atmos doctor --fix"]:
+              if needle not in plain:
+                  raise SystemExit(f"doctor cast missing {needle!r}")
+          if plain.count("Run: atmos doctor --fix") != 2:
+              raise SystemExit("doctor cast must show one fix command per report")
+          if "(passed)" in plain or "(findings)" in plain:
+              raise SystemExit("doctor cast still contains per-file completion rows")
+          if plain.count("warning[component-dependencies]") != 2 or plain.count("error[dependencies]") != 1:
+              raise SystemExit("doctor cast must show each migration and projected error exactly once per report")
+          if "WARN Dependency target not found" in plain:
+              raise SystemExit("doctor cast contains a duplicate unformatted dependency warning")
+          assert_no_error_output(decoded)
+          assert_no_local_paths(decoded)

@@ -1,0 +1,46 @@
+package doctor
+
+const (
+	categoryValidation           = "validation"
+	categoryDeprecations         = "deprecations"
+	ruleCommandProvides          = "command-provides"
+	ruleTerraformReconfigure     = "terraform-reconfigure"
+	documentConfig               = "config"
+	documentStack                = "stack"
+	documentVendor               = "vendor"
+	httpsScheme                  = "https://"
+	schemeSeparator              = "://"
+	repositoryInconclusive       = "inconclusive"
+	repositoryOfflineMessage     = "Repository checks were disabled with --offline"
+	statusVerificationFailed     = "verification-failed"
+	statusVerificationIncomplete = "verification-incomplete"
+	statusManual                 = "manual"
+	reasonSymlinkedSource        = "Not fixed automatically because a symlinked source requires manual review; doctor does not write through symlinks"
+	statusFixed                  = "fixed"
+	statusPassed                 = "passed"
+	statusFindings               = "findings"
+	statusSkipped                = "skipped"
+	statusFailed                 = "failed"
+	ruleSchema                   = "schema"
+	ruleYAMLFunctions            = "yaml-functions"
+	ruleSourceRepository         = "source-repository"
+	ruleHookEvent                = "hook-event"
+	ruleDeprecatedField          = "deprecated-field"
+	ruleModernization            = "modernization"
+	ruleComponentMonorepo        = "component-monorepo"
+	ruleEditorConfig             = "editorconfig"
+	ruleGitHubActions            = "github-actions"
+	ruleImports                  = "imports"
+	ruleStacks                   = "stacks"
+	ruleDependencies             = "dependencies"
+	ruleComponentDependencies    = "component-dependencies"
+	keyBasePath                  = "base_path"
+	semanticComponent            = "component"
+	semanticStack                = "stack"
+	remediationFix               = "Run atmos doctor --fix"
+	dot                          = "."
+	octalBase                    = 8
+	modeBits                     = 32
+	privateDirectoryMode         = 0o700
+	privateFileMode              = 0o600
+)
