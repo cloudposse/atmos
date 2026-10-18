@@ -1,0 +1,5 @@
+components:
+  terraform:
+    app:
+      vars:
+        replicas: 2

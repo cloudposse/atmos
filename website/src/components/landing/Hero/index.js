@@ -73,7 +73,7 @@ function Hero() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.15, ease: 'easeOut' }}
           >
-            <DemoCast title="Discover your whole platform" slug="hero" />
+            <DemoCast title="Watch your stack deploy" slug="hero" />
           </motion.div>
         </div>
         {/* Full-width band below the hero grid so the tools have real horizontal

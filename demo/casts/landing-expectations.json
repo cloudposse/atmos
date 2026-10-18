@@ -1,9 +1,11 @@
 {
   "hero": [
-    "dev",
-    "prod",
-    "staging",
-    "myapp"
+    "atmos terraform apply app -s dev --ui",
+    "dev/app",
+    "terraform_data.api",
+    "terraform_data.web",
+    "Do you want to apply these changes?",
+    "Apply dev/app completed"
   ],
   "how-it-works": [
     "app",
@@ -35,7 +37,9 @@
     "Stockholm",
     "Berlin",
     "terraform_data.app",
-    "Apply complete!"
+    "Apply complete!",
+    "atmos list affected --ref baseline",
+    "atmos terraform apply --affected --ref baseline --ci"
   ],
   "secrets": [
     "DATADOG_API_KEY",

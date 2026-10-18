@@ -1,6 +1,6 @@
 commands:
 - name: casts generate demo landing hero
-  description: Record Discover your whole platform using the dedicated landing fixture.
+  description: Record Watch your stack deploy using the dedicated landing fixture.
   env: !include 'cast-defaults.yaml .env.command'
   steps:
   - type: shell
@@ -10,13 +10,21 @@ commands:
     source: ../landing/fixtures/hero
     path: ../../.context/cast-fixtures/landing/hero
     reset: true
+  - type: shell
+    command: atmos terraform workspace new app -s dev
+    working_directory: ../../.context/cast-fixtures/landing/hero
+    env: !include 'landing-defaults.yaml .env'
+    output: none
   - type: cast
     name: hero
     working_directory: ../../.context/cast-fixtures/landing/hero
-    title: Discover your whole platform
+    title: Watch your stack deploy
     mode: steps
     defaults:
-      cast: !include 'landing-defaults.yaml .cast'
+      cast:
+        rate: 12ms
+        width: 100
+        height: 24
       simulate: !include 'landing-defaults.yaml .simulate'
     env: !include 'landing-defaults.yaml .env'
     show:
@@ -25,18 +33,29 @@ commands:
       mode: raw
       cast: ../../website/static/casts/demo/landing/hero.cast
     steps:
-    - type: simulate
-      text: atmos list stacks
-    - type: shell
-      command: atmos list stacks
-      duration: 650ms
-      interval: 1s
-    - type: simulate
-      text: atmos list components -s dev
-    - type: shell
-      command: atmos list components -s dev
-      duration: 650ms
-      interval: 1s
+    - type: session
+      shell: scripts/cast-shell.sh
+      timeout: 120s
+      steps:
+      - type: wait
+        text: "> "
+        timeout: 10s
+      - type: write
+        text: atmos terraform apply app -s dev --ui
+      - type: key
+        key: enter
+      - type: wait
+        text: Do you want to apply these changes?
+        timeout: 30s
+      - type: pause
+        duration: 3s
+      - type: write
+        text: "y"
+      - type: wait
+        regex: 'Apply [^\r\n]*completed'
+        timeout: 30s
+      - type: pause
+        duration: 3s
   - type: shell
     command: python3 landing_checks.py sanitize hero
   - type: shell

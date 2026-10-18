@@ -2,7 +2,7 @@
 import json
 import sys
 from pathlib import Path
-from cast_checks import (assert_body_color, assert_no_error_output, assert_no_experimental,
+from cast_checks import (assert_body_color, assert_progress_color, assert_no_error_output, assert_no_experimental,
                          assert_no_local_paths, load_text, sanitize_paths, strip_ansi)
 
 
@@ -33,6 +33,10 @@ def check(action, name):
     assert_no_error_output(text)
     assert_no_experimental(text)
     assert_no_local_paths(text)
+    if name == 'hero':
+        assert_progress_color(text)
+    if name == 'local-ci' and '--ui' in plain:
+        raise SystemExit('local-ci: interactive UI does not belong in CI')
     for needle in expectations[name]:
         if needle.lower() not in plain.lower():
             raise SystemExit(f'{name}: missing expected output {needle!r}')
