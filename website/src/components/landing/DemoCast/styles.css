@@ -29,22 +29,32 @@
   display: none;
 }
 
-/* Keep seeking available on touch screens without covering terminal output. */
+/* Use CastPlayer's overlay without reserving space below the terminal. */
 .landing-demo-cast [data-cast-controls] {
-  position: static;
-  flex-shrink: 0;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  width: 100%;
-  margin: 0;
-  padding: 4px 8px;
-  border-top: 1px solid #292929;
-  border-radius: 0;
-  background: #111111;
   font-size: 12px;
+}
+
+.landing-demo-cast:hover [data-cast-controls],
+.landing-demo-cast:focus-within [data-cast-controls] {
   opacity: 1;
   pointer-events: auto;
   transform: none;
-  transition: none;
+}
+
+/* Touch devices cannot hover; keep playback and seeking available. */
+@media (hover: none) {
+  .landing-demo-cast [data-cast-controls] {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-demo-cast [data-cast-controls] {
+    transition: none;
+  }
 }
 
 .landing-demo-cast [data-cast-controls] > span {

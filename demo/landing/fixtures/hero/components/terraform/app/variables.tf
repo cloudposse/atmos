@@ -2,6 +2,6 @@ variable "stage" {
   type = string
 }
 
-variable "replicas" {
+variable "retention_seconds" {
   type = number
 }

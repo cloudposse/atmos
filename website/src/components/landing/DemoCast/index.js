@@ -34,7 +34,7 @@ export default function DemoCast({ title, slug, className }) {
         </div>
         <div className="landing-demo-cast-viewport">
           <CastPlayer src={src} title={title} chrome={false} controls scrubber
-            showCommand={false} autoplay={!reduceMotion} loop paused={!isVisible}
+            showCommand={false} autoplay={reduceMotion === false} loop paused={!isVisible}
             idleSkip={false} speed={1} maxScrollRate={1} className="landing-demo-cast-player" />
         </div>
       </div>

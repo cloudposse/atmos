@@ -28,3 +28,11 @@ stacks:
 logs:
   file: "/dev/stderr"
   level: Info
+
+# The hero provisions only the local AWS emulator; no cloud account is needed.
+auth:
+  identities:
+    local-aws:
+      kind: aws/emulator
+      emulator: landing-hero-aws
+      default: true

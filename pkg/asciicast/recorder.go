@@ -73,6 +73,9 @@ type Recorder struct {
 	command       string
 	outputRate    time.Duration
 	lastEventTime time.Duration
+	elapsed       func() time.Duration
+	timeOffset    time.Duration
+	playback      *playbackBuffer
 }
 
 // Term describes the recorded terminal in asciicast v3 headers.
@@ -357,7 +360,7 @@ func isRedrawChunk(content string) bool {
 }
 
 func (r *Recorder) writeEventLocked(stream, content string) error {
-	now := time.Since(r.started)
+	now := r.recordingElapsed() + r.timeOffset
 	if r.outputRate <= 0 || stream == "i" || stream == "r" || isRedrawChunk(content) {
 		eventTime := maxDuration(now, r.lastEventTime)
 		return r.writeRelativeEvent(eventTime, stream, content)
@@ -376,6 +379,11 @@ func (r *Recorder) writeEventLocked(stream, content string) error {
 }
 
 func (r *Recorder) writeRelativeEvent(eventTime time.Duration, stream, content string) error {
+	if r.playback != nil {
+		r.playback.events = append(r.playback.events, playbackEvent{eventTime, stream, content})
+		r.lastEventTime = eventTime
+		return nil
+	}
 	delta := eventTime - r.lastEventTime
 	if delta < 0 {
 		delta = 0

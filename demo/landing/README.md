@@ -41,7 +41,7 @@ No VHS, ttyd, FFmpeg, or recording fonts are required.
 
 | Cast | Demonstration |
 | --- | --- |
-| `hero` | Discover environments and workload types, get/set configuration, inspect affected components, then preview the change in the native UI. |
+| `hero` | Discover environments and workload types, get/set configuration, inspect affected components, then plan and deploy all Terraform components in the dev stack. |
 | `how-it-works` | Discover mixed workloads and plan stack-resolved configuration. |
 | `terraform` | Inspect component instances and their dependency graph. |
 | `kubernetes` | Deploy a namespace and application together with `atmos kubernetes deploy --all` on k3s. |
@@ -52,6 +52,8 @@ No VHS, ttyd, FFmpeg, or recording fonts are required.
 | `extensibility` | Start the MCP server and show readiness for an agent. |
 
 Keep every recording focused: prefer tables, getters, concise diffs, and results.
+Use short typed `#` comments to explain the next action, with a brief reading pause
+at the returned prompt instead of leaving it idle for several seconds.
 Disable local CPU, memory, and timing summaries with
 `ATMOS_SETTINGS_METRICS_ENABLED=false` in the shared recording environment.
 Avoid full YAML dumps; any YAML shown must be a small, clean snippet explaining
@@ -65,10 +67,13 @@ both the scenario definition and its generated cast; no videos or posters are ne
 
 The hero tells the platform story before showing the UI: discover stacks and mixed
 workloads, read and change one component's configuration, identify the affected
-instance, then preview the change with a brief UI plan. The fixture enables
+instance, then preview the change with a brief UI plan and run
+`atmos terraform deploy --stack dev --all` to apply it. The fixture enables
 `components.terraform.ui.enabled` in `atmos.yaml`, so the command needs no `--ui`
-flag. Its cloud-free `terraform_data` resource is seeded before recording so the
-plan shows the real replica change from 2 to 3. The 64-column recording keeps text readable in the
+flag. Its AWS SQS queue is seeded in a dedicated local Floci emulator before recording,
+so the plan shows message retention changing from 3,600 to 86,400 seconds. The apply
+records the AWS provider waiting for the queue attributes to propagate. Docker or
+Podman is required; the emulator is removed after recording, including on failure. The 64-column recording keeps text readable in the
 homepage frame. Commands share one continuous terminal history and scroll
 naturally; do not insert screen clears between them. Pause for three seconds
 at the returned shell prompt after each result, or four seconds for the workload
@@ -82,3 +87,7 @@ the stack picker for three seconds before selecting it.
 The hero shell unsets CI detection so its local UI preview remains interactive.
 The Local = CI cast keeps `atmos list affected` and `atmos terraform apply --affected --ci`
 without `--ui`.
+
+The hero wraps deployment Enter and its completion wait in a `type: playback` group
+with `duration: 4s`. The real deployment still completes normally; only its recorded
+timestamps are scaled. Typing and the three-second reading pause stay outside the group.

@@ -2,7 +2,7 @@ components:
   terraform:
     app:
       vars:
-        replicas: 2
+        retention_seconds: 3600
   helm:
     ingress:
       chart: .
