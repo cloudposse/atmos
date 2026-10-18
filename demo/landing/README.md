@@ -64,7 +64,11 @@ workloads, read and change one component's configuration, identify the affected
 instance, then preview the change with a brief `--ui` plan. Its cloud-free
 `terraform_data` resource is seeded before recording so the plan shows the real
 replica change from 2 to 3. The 64-column recording keeps text readable in the
-homepage frame; screen clears separate the short chapters without YAML dumps.
+homepage frame. Commands share one continuous terminal history and scroll
+naturally; do not insert screen clears between them. Pause for three seconds
+after each result, or four seconds for the workload and affected-component tables,
+so viewers can read the output before the next command starts. Landing players
+disable idle skipping to preserve these authored reading pauses.
 The recorder unsets CI detection only for the local UI command. The Local = CI
 cast keeps `atmos list affected` and `atmos terraform apply --affected --ci`
 without `--ui`.

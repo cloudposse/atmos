@@ -38,7 +38,7 @@ export default function DemoCast({ title, slug, className }) {
           <CastPlayer src={src} title={title} chrome={false} controls={false}
             showCommand={false} autoplay loop paused={!isVisible || paused}
             static={Boolean(reduceMotion && userPaused === null)}
-            speed={1} maxScrollRate={1} className="landing-demo-cast-player" />
+            idleSkip={false} speed={1} maxScrollRate={1} className="landing-demo-cast-player" />
           <button type="button" className="landing-demo-cast-toggle"
             aria-label={`${paused ? 'Play' : 'Pause'} ${title}`}
             onClick={() => setUserPaused(!paused)}>

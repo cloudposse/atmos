@@ -36,6 +36,8 @@ def check(action, name):
     assert_no_error_output(text)
     assert_no_experimental(text)
     assert_no_local_paths(text)
+    if name == 'hero' and '\x1b[999A' in text:
+        raise SystemExit('hero: preserve terminal history between commands')
     if name == 'local-ci' and '--ui' in plain:
         raise SystemExit('local-ci: interactive UI does not belong in CI')
     for needle in expectations[name]:

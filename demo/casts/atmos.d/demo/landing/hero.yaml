@@ -44,45 +44,37 @@ commands:
     - type: shell
       command: atmos list stacks
       duration: 650ms
-      interval: 2s
-    - type: shell
-      command: printf '\033[999A\033[J'
+      interval: 3s
     - type: simulate
       text: atmos list components -s dev
     - type: shell
       command: atmos list components -s dev
       duration: 650ms
-      interval: 3s
-    - type: shell
-      command: printf '\033[999A\033[J'
+      interval: 4s
     - type: simulate
       text: atmos stack get vars.replicas -s dev -c app
     - type: shell
       command: atmos stack get vars.replicas -s dev -c app
       duration: 500ms
-      interval: 1s
+      interval: 3s
     - type: simulate
       text: atmos stack set vars.replicas 3 -s dev -c app
     - type: shell
       command: atmos stack set vars.replicas 3 -s dev -c app
       duration: 650ms
-      interval: 1s
+      interval: 3s
     - type: simulate
       text: atmos stack get vars.replicas -s dev -c app
     - type: shell
       command: atmos stack get vars.replicas -s dev -c app
       duration: 500ms
-      interval: 2s
-    - type: shell
-      command: printf '\033[999A\033[J'
+      interval: 3s
     - type: simulate
       text: atmos list affected --ref baseline
     - type: shell
       command: atmos list affected --ref baseline
       duration: 650ms
-      interval: 3s
-    - type: shell
-      command: printf '\033[999A\033[J'
+      interval: 4s
     - type: session
       shell: scripts/cast-shell.sh
       timeout: 45s
