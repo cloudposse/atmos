@@ -61,7 +61,7 @@ terraform:
       enabled: true
 ```
 
-Without an isolated workdir, Atmos downloads to the component directory on first use and reuses it while it is non-empty. Use `atmos terraform source pull <component> -s <stack> --force` to refresh that directory explicitly.
+Without an isolated workdir, Atmos downloads to the component directory on first use and normally reuses it while it is non-empty. If Atmos owns the downloaded remote source (recorded in `.atmos/source.json`) and a TTL is configured, Atmos can refresh that directory automatically when the TTL expires. Use `atmos terraform source pull <component> -s <stack> --force` to refresh that directory explicitly.
 
 ### String Form (Simple)
 
@@ -246,7 +246,7 @@ atmos terraform plan vpc --stack dev
 # → Terraform runs
 ```
 
-Atmos resolves the source and provisions it before Terraform initialization. With workdir provisioning enabled, each component instance runs in an isolated directory, and source metadata controls refreshes when the URI or version changes or the configured TTL expires. Without workdir provisioning, Atmos reuses a non-empty component directory until you explicitly pull an update.
+Atmos resolves the source and provisions it before Terraform initialization. With workdir provisioning enabled, each component instance runs in an isolated directory, and source metadata controls refreshes when the URI or version changes or the configured TTL expires. Without workdir provisioning, Atmos normally reuses a non-empty component directory, but an Atmos-owned remote source can refresh automatically when its configured TTL expires. Use `atmos terraform source pull <component> -s <stack> --force` for an explicit refresh.
 
 Path filters control which source files are copied. Terraform runs against the resolved local working directory in either mode.
 
