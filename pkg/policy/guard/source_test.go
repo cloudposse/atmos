@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -343,4 +344,36 @@ func TestRememberTreeWalksEveryContainer(t *testing.T) {
 		assert.Equal(t, remote, ValueOrigin(value), value)
 	}
 	assert.Equal(t, "unknown", ValueOrigin("42").Provenance, "non-string scalars are not retained")
+}
+
+func TestTrimWindowsDriveSlash(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"/C:/Users/me/data.json", "C:/Users/me/data.json"},
+		{"/d:/", "d:/"},
+		{"/D:", "D:"},
+		{"/tmp/data.json", "/tmp/data.json"},
+		{"C:/already/clean", "C:/already/clean"},
+		{"/1:/not-a-drive", "/1:/not-a-drive"},
+		{"/CD:/not-a-drive", "/CD:/not-a-drive"},
+		{"/C:file", "/C:file"},
+		{"", ""},
+	} {
+		require.Equal(t, tc.want, trimWindowsDriveSlash(tc.in), tc.in)
+	}
+}
+
+func TestDescribeSourceWindowsFileURLResolvesDrivePath(t *testing.T) {
+	if runtime.GOOS != windowsOS {
+		t.Skip("file URL drive paths only exist on Windows")
+	}
+	file := filepath.Join(t.TempDir(), "data.json")
+	require.NoError(t, os.WriteFile(file, []byte("{}"), 0o600))
+
+	input, err := DescribeSource("download", "file:///"+filepath.ToSlash(file), "")
+
+	require.NoError(t, err)
+	require.True(t, input.PathResolved)
+	resolved, err := filepath.EvalSymlinks(file)
+	require.NoError(t, err)
+	require.Equal(t, resolved, input.Path)
 }

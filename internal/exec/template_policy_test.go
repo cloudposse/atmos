@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -513,9 +514,13 @@ func TestPolicyDatasourceTarget(t *testing.T) {
 
 func TestPolicyDatasourceWithoutSourceRulesUsesNativeReaders(t *testing.T) {
 	templatePolicy(t, "function", "false", nil)
-	file := filepath.Join(t.TempDir(), "values.json")
-	require.NoError(t, os.WriteFile(file, []byte(`{"a":"b"}`), 0o600))
-	d := newTemplateData(t, []string{"values=" + templateDatasourceURL(file)}, nil)
+	// An HTTP source keeps this portable: gomplate cannot read file:///C:/... URLs on Windows.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"a":"b"}`))
+	}))
+	t.Cleanup(server.Close)
+	d := newTemplateData(t, []string{"values=" + server.URL + "/values.json"}, nil)
 
 	parsed, err := policyDatasource(d, "test", "values", false)
 	require.NoError(t, err)
@@ -556,6 +561,9 @@ func TestPolicyDatasourceUnguardedSchemeIsUnavailable(t *testing.T) {
 }
 
 func TestPolicyDatasourceLocalFiles(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("gomplate reads file datasources through filepath.FromSlash and cannot open file:///C:/... URLs on Windows")
+	}
 	root := t.TempDir()
 	allowed := filepath.Join(root, "allowed")
 	require.NoError(t, os.Mkdir(allowed, 0o700))

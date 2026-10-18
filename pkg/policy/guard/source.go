@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -51,6 +52,9 @@ func DescribeSource(operation, raw, sourceFile string) (SourceInput, error) {
 			return input, fmt.Errorf("%w: nonlocal file authority", errUtils.ErrPolicyInputInvalid)
 		}
 		transport = parsed.Path
+		if runtime.GOOS == windowsOS {
+			transport = trimWindowsDriveSlash(transport)
+		}
 	}
 	input.Scheme = "file"
 	absolute, err := filepath.Abs(transport)
@@ -64,6 +68,23 @@ func DescribeSource(operation, raw, sourceFile string) (SourceInput, error) {
 		input.PathResolved = true
 	}
 	return input, nil
+}
+
+// windowsOS is the runtime.GOOS value for Windows.
+const windowsOS = "windows"
+
+// trimWindowsDriveSlash turns the path of a Windows file URL, such as /C:/dir, into C:/dir. The
+// URL form carries a leading slash before the drive letter that filepath cannot resolve, which
+// would place an allowed local path outside every allowed root.
+func trimWindowsDriveSlash(path string) string {
+	if len(path) >= 3 && path[0] == '/' && path[2] == ':' && isASCIILetter(path[1]) && (len(path) == 3 || path[3] == '/') {
+		return path[1:]
+	}
+	return path
+}
+
+func isASCIILetter(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
 }
 
 func isSCP(raw string) bool {

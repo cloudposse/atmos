@@ -109,6 +109,9 @@ spec:
 
 func TestCheckWithholdsEvaluationDetails(t *testing.T) {
 	writePolicy(t, "apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: safety}\nspec:\n  policies:\n    exec:\n      on: function\n      action: deny\n      rule: 'false'\n")
+	// A live CI provider would collect its snapshot with the cancelled context and return that error first.
+	restore := ci.SwapRegistryForTest()
+	defer restore()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 

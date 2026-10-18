@@ -134,7 +134,8 @@ func policyDatasourceTarget(d *data.Data, alias string, args []string) (*url.URL
 			return nil, nil, errUtils.ErrPolicyInputInvalid
 		}
 		if target.Scheme == "file" {
-			target.Path = filepath.Join(target.Path, relative.Path)
+			// The file URL path is a URL path, so join it with forward slashes on every OS.
+			target = target.JoinPath(relative.Path)
 		} else {
 			target = target.ResolveReference(relative)
 		}

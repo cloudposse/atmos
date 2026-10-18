@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -54,6 +55,9 @@ func TestCustomGitGetterClearsCommitAfterFailure(t *testing.T) {
 // an allowed source clones with hardened git flags and reports its commit through the policy wrapper.
 func TestFetchWithMetadataGitUnderSourcePolicy(t *testing.T) {
 	requireRealGit(t)
+	if runtime.GOOS == "windows" {
+		t.Skip("git cannot reliably clone a local file:// repository on Windows runners")
+	}
 	enableSourcePolicy(t)
 	repoDir := initCloneTestGitRepo(t, map[string]string{"example/file.txt": "guarded"})
 	wantCommit := runCloneTestGit(t, repoDir, "rev-parse", "HEAD")
