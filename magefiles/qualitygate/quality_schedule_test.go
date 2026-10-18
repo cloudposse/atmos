@@ -213,13 +213,13 @@ func TestQualityScheduledSelection(t *testing.T) {
 			wantCommits:  []int{1, 2, 5},
 		},
 		{
-			name: "only open main PRs",
+			name: "open PRs include feature branch targets",
 			prs: []schedulePR{
 				{number: 1, updated: now, state: "closed"},
-				{number: 2, updated: now, base: "release"},
+				{number: 2, updated: now, base: "feature/prerequisite"},
 				{number: 3, updated: now},
 			},
-			want: []int{3},
+			want: []int{2, 3},
 		},
 		{
 			name: "missing updated_at is not treated as stale",

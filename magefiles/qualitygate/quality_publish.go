@@ -135,7 +135,15 @@ func qualityObsolete(existing *githubapi.Comment, run *githubapi.Run) bool {
 }
 
 func qualityEligible(pr *githubapi.PR, repo string) bool {
-	return pr.State == "open" && pr.Base.Ref == "main" && pr.Base.Repo.FullName == repo
+	return pr.State == "open" && pr.Base.Ref != "" && pr.Base.Repo.FullName == repo
+}
+
+// A base update or retarget invalidates the evaluated mergeability and checks
+// even when the PR head has not moved.
+func qualitySameRevision(pr, current *githubapi.PR, repo string) bool {
+	return qualityEligible(current, repo) && current.Head.SHA == pr.Head.SHA &&
+		current.Draft == pr.Draft && current.MergeSHA == pr.MergeSHA &&
+		current.Base.Ref == pr.Base.Ref && current.Base.SHA == pr.Base.SHA
 }
 
 func qualityPublishedFor(existing *githubapi.Comment, sha string) bool {
@@ -201,7 +209,7 @@ func (q *qualityClient) stillCurrent(pr *githubapi.PR, run *githubapi.Run) (bool
 	if err := q.get(fmt.Sprintf("pulls/%d", pr.Number), &current); err != nil {
 		return false, err
 	}
-	if current.Head.SHA != pr.Head.SHA || current.State != "open" || current.Draft != pr.Draft || current.MergeSHA != pr.MergeSHA {
+	if !qualitySameRevision(pr, &current, q.repo) {
 		return false, nil
 	}
 	if run != nil {

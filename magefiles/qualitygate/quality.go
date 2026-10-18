@@ -125,7 +125,7 @@ func (q *qualityClient) eventPRs(now time.Time) ([]int, error) {
 		sha = event.WorkflowRun.HeadSHA
 	}
 	if sha == "" {
-		return q.prNumbers("pulls?state=open&base=main", "")
+		return q.prNumbers("pulls?state=open", "")
 	}
 	if !githubapi.SHAPattern.MatchString(sha) {
 		return nil, bench.Error("invalid event SHA")

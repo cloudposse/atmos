@@ -122,10 +122,10 @@ func TestCheckMergeConflicts(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.wantPassed, gate.Passed)
 			if tc.wantPassed {
-				require.Equal(t, "No merge conflicts with main", gate.Detail)
+				require.Equal(t, "No merge conflicts with the target branch", gate.Detail)
 				return
 			}
-			require.Equal(t, "This PR has merge conflicts with main.", gate.Problem)
+			require.Equal(t, "This PR has merge conflicts with its target branch.", gate.Problem)
 			require.Contains(t, gate.NextAction, "Rebase")
 		})
 	}
@@ -164,7 +164,7 @@ func TestMergeConflictsGateThroughRegistry(t *testing.T) {
 			case tc.wantUnav:
 				require.Contains(t, body, "GitHub evidence was unavailable")
 			case !tc.wantReady:
-				require.Contains(t, body, "This PR has merge conflicts with main.")
+				require.Contains(t, body, "This PR has merge conflicts with its target branch.")
 				require.Contains(t, body, "https://github.com/cloudposse/atmos/pull/42/conflicts")
 			}
 		})

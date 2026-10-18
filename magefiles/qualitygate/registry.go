@@ -97,7 +97,7 @@ func defaultQualityRegistry() (*gateRegistry, error) {
 			Name:         "No merge conflicts",
 			Check:        checkMergeConflicts,
 			EvidencePath: "/conflicts",
-			Remediation:  "Rebase the PR branch onto main or merge main into it, resolve the conflicts, and push. GitHub recomputes mergeability after the push.",
+			Remediation:  "Rebase the PR branch onto its target branch or merge that branch into it, resolve the conflicts, and push. GitHub recomputes mergeability after the push.",
 		},
 		gateDefinition{
 			ID:           "ci",
@@ -168,9 +168,9 @@ func checkMergeConflicts(_ *qualityClient, pr *githubapi.PR) (qualityGate, error
 		return qualityGate{}, bench.Error("GitHub has not computed mergeability yet")
 	}
 	if pr.MergeableState == "dirty" || (pr.Mergeable != nil && !*pr.Mergeable) {
-		return qualityGate{Detail: "Merge conflicts with main", Problem: "This PR has merge conflicts with main.", NextAction: "Rebase the PR branch onto main or merge main into it, resolve the conflicts, and push."}, nil
+		return qualityGate{Detail: "Merge conflicts with the target branch", Problem: "This PR has merge conflicts with its target branch.", NextAction: "Rebase the PR branch onto its target branch or merge that branch into it, resolve the conflicts, and push."}, nil
 	}
-	return qualityGate{Passed: true, Detail: "No merge conflicts with main"}, nil
+	return qualityGate{Passed: true, Detail: "No merge conflicts with the target branch"}, nil
 }
 
 func checkBenchmarkReport(q *qualityClient, _ *githubapi.PR) (qualityGate, error) {

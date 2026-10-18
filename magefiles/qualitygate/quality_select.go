@@ -29,11 +29,11 @@ const (
 	qualityReasonUnknown     = "selection check failed"
 )
 
-// prNumbers lists open main PRs from a paginated pulls endpoint. When headSHA is
+// prNumbers lists eligible open PRs from a paginated pulls endpoint. When headSHA is
 // set, only PRs whose head is exactly that commit qualify, so a PR whose head
 // moved after the event is never reconciled for the stale commit.
 func (q *qualityClient) prNumbers(path, headSHA string) ([]int, error) {
-	prs, err := githubapi.ListOpenMainPRs(q.ctx, q.api, "repos/"+q.repo+"/"+path, headSHA)
+	prs, err := q.openPRs(path, headSHA)
 	if err != nil {
 		return nil, err
 	}
@@ -54,9 +54,10 @@ func prNumbersOf(prs []githubapi.PR) []int {
 // events that do not carry the fork owner and branch. Both verify the head SHA.
 func (q *qualityClient) unlistedPRNumbers(sha, owner, branch string) ([]int, error) {
 	if owner != "" && branch != "" {
-		prs, err := githubapi.OpenPRsForHead(q.ctx, q.api, q.repo, githubapi.HeadRef{Owner: owner, Branch: branch, SHA: sha})
-		if err != nil || len(prs) > 0 {
-			return prNumbersOf(prs), err
+		path := "pulls?state=open&head=" + url.QueryEscape(owner+":"+branch)
+		numbers, err := q.prNumbers(path, sha)
+		if err != nil || len(numbers) > 0 {
+			return numbers, err
 		}
 	}
 	return q.searchPRNumbers(sha)
@@ -83,14 +84,14 @@ func (q *qualityClient) searchPRNumbers(sha string) ([]int, error) {
 		if err := q.get(fmt.Sprintf("pulls/%d", item.Number), &pr); err != nil {
 			return nil, err
 		}
-		if pr.State == "open" && pr.Base.Ref == "main" && pr.Head.SHA == sha {
+		if qualityEligible(&pr, q.repo) && pr.Head.SHA == sha {
 			numbers = append(numbers, item.Number)
 		}
 	}
 	return numbers, nil
 }
 
-// recentPRNumbers selects open main PRs that need a scheduled reconcile: those
+// recentPRNumbers selects open PRs that need a scheduled reconcile: those
 // with no gate report for their current head or a report with unavailable
 // evidence (any age) and those whose head commit is newer than the cutoff.
 //
@@ -104,7 +105,7 @@ func (q *qualityClient) searchPRNumbers(sha string) ([]int, error) {
 // skipped even if review threads resolved since; those need the head-change or
 // review events to reach the gate, since the schedule no longer sees them.
 func (q *qualityClient) recentPRNumbers(cutoff time.Time) ([]int, error) {
-	prs, err := q.openMainPRs()
+	prs, err := q.openPRs("pulls?state=open&sort=updated&direction=desc", "")
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +126,7 @@ func (q *qualityClient) recentPRNumbers(cutoff time.Time) ([]int, error) {
 			unpublished = append(unpublished, pr.Number)
 		}
 	}
-	fmt.Printf("Scheduled quality recovery: %d open main PRs, %d needing a report, %d with a recent head commit\n", len(prs), len(unpublished), len(recent))
+	fmt.Printf("Scheduled quality recovery: %d open PRs, %d needing a report, %d with a recent head commit\n", len(prs), len(unpublished), len(recent))
 	unpublished = rotatePRNumbers(unpublished, int(cutoff.Unix()/int64(qualityScheduleInterval/time.Second)))
 	return append(unpublished, recent...), nil
 }
@@ -144,16 +145,18 @@ func rotatePRNumbers(numbers []int, slot int) []int {
 	return append(append(make([]int, 0, len(numbers)), numbers[offset:]...), numbers[:offset]...)
 }
 
-func (q *qualityClient) openMainPRs() ([]githubapi.PR, error) {
+// openPRs accepts an API path with a query string, retaining repository and
+// optional current-head checks for every page regardless of the target branch.
+func (q *qualityClient) openPRs(path, headSHA string) ([]githubapi.PR, error) {
 	var all []githubapi.PR
 	for page := 1; page <= githubapi.PageLimit; page++ {
 		var prs []githubapi.PR
-		path := fmt.Sprintf("pulls?state=open&base=main&sort=updated&direction=desc&per_page=100&page=%d", page)
-		if err := q.get(path, &prs); err != nil {
+		pagePath := fmt.Sprintf("%s&per_page=%d&page=%d", path, githubapi.PageSize, page)
+		if err := q.get(pagePath, &prs); err != nil {
 			return nil, err
 		}
 		for i := range prs {
-			if prs[i].State == "open" && prs[i].Base.Ref == "main" {
+			if qualityEligible(&prs[i], q.repo) && (headSHA == "" || prs[i].Head.SHA == headSHA) {
 				all = append(all, prs[i])
 			}
 		}
