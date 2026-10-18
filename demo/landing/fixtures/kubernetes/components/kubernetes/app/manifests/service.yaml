@@ -1,10 +1,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}
+  name: app
+  namespace: atmos-demo
 spec:
   selector:
-    app: {{ .Release.Name }}
+    app: app
   ports:
     - port: 80
       targetPort: http

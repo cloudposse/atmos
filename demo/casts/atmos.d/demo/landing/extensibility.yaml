@@ -50,7 +50,10 @@ commands:
         text: "> "
         timeout: 30s
       - type: pause
-        duration: 700ms
+        duration: 3s
+    - type: shell
+      command: printf '\r\033[2K'
+      interval: 0s
   - type: shell
     command: python3 landing_checks.py sanitize extensibility
   - type: shell

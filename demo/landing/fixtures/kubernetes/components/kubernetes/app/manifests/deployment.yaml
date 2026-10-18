@@ -1,20 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}
+  name: app
+  namespace: atmos-demo
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: 1
   selector:
     matchLabels:
-      app: {{ .Release.Name }}
+      app: app
   template:
     metadata:
       labels:
-        app: {{ .Release.Name }}
+        app: app
     spec:
       containers:
         - name: nginx
-          image: {{ .Values.image | quote }}
+          image: nginx:1.27.5-alpine
           ports:
             - name: http
               containerPort: 80

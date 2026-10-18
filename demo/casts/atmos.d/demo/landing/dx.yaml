@@ -49,20 +49,37 @@ commands:
       - type: wait
         text: Choose a component
         timeout: 30s
+      - type: pause
+        duration: 1200ms
       - type: key
         key: down
+      - type: pause
+        duration: 900ms
+      - type: key
+        key: up
+      - type: pause
+        duration: 900ms
+      - type: key
+        key: down
+      - type: pause
+        duration: 1500ms
       - type: key
         key: enter
       - type: wait
         text: Choose a stack
         timeout: 30s
+      - type: pause
+        duration: 3s
       - type: key
         key: enter
       - type: wait
         text: Apply complete!
         timeout: 180s
       - type: pause
-        duration: 2s
+        duration: 3s
+    - type: shell
+      command: printf '\r\033[2K'
+      interval: 0s
   - type: shell
     command: atmos terraform destroy s3-bucket -s dev -auto-approve
     working_directory: ../../.context/cast-fixtures/landing/dx

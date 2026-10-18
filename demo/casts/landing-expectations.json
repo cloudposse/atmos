@@ -31,8 +31,9 @@
   ],
   "kubernetes": [
     "applied v1/Namespace atmos-demo",
-    "Helm install succeeded",
-    "Applied Helm release app"
+    "atmos kubernetes deploy --all",
+    "applied apps/v1/Deployment atmos-demo/app",
+    "applied v1/Service atmos-demo/app"
   ],
   "emulators": [
     "aws",

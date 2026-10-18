@@ -23,9 +23,9 @@ const WORKLOADS = [
     title: 'Ship Kubernetes and Helm the same way.',
     desc: 'Deploy native Kubernetes manifests and Helm charts beside the rest of your stack, with the same CLI you already use for Terraform.',
     features: ['Native Kubernetes and Helm', 'Stack-aware releases', 'Built-in authentication'],
-    proof: 'Atmos creates a namespace with a Kubernetes component, then deploys a Helm release and waits for it to become ready.',
+    proof: 'One command deploys every Kubernetes component in dependency order, from the namespace to the application.',
     slug: 'kubernetes',
-    terminalTitle: 'Native Kubernetes and Helm',
+    terminalTitle: 'Kubernetes, deployed together',
   },
   {
     eyebrow: 'Containers & Emulators',

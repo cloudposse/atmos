@@ -36,6 +36,9 @@ def check(action, name):
     assert_no_error_output(text)
     assert_no_experimental(text)
     assert_no_local_paths(text)
+    for metric in ('CPU:', 'Peak memory', 'Total for this invocation'):
+        if metric in plain:
+            raise SystemExit(f'{name}: disable metrics in homepage recordings')
     if name == 'hero' and '\x1b[999A' in text:
         raise SystemExit('hero: preserve terminal history between commands')
     if name == 'hero':

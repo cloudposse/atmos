@@ -23,6 +23,7 @@ env:
   ATMOS_KEYRING_TYPE: memory
   ATMOS_EXPERIMENTAL: silence
   ATMOS_LOGS_LEVEL: Warning
+  ATMOS_SETTINGS_METRICS_ENABLED: 'false'
   ATMOS_PAGER: 'false'
   NO_PAGER: '1'
   GIT_PAGER: cat

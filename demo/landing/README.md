@@ -44,7 +44,7 @@ No VHS, ttyd, FFmpeg, or recording fonts are required.
 | `hero` | Discover environments and workload types, get/set configuration, inspect affected components, then preview the change in the native UI. |
 | `how-it-works` | Discover mixed workloads and plan stack-resolved configuration. |
 | `terraform` | Inspect component instances and their dependency graph. |
-| `kubernetes` | Deploy a namespace with native Kubernetes and a ready Helm application on k3s. |
+| `kubernetes` | Deploy a namespace and application together with `atmos kubernetes deploy --all` on k3s. |
 | `emulators` | Start local cloud emulators and provision an AWS resource. |
 | `local-ci` | Read/set/read a stack value, inspect the diff, and apply only affected instances. |
 | `secrets` | Initialize, rotate, mask, and inject declared secrets. |
@@ -52,11 +52,15 @@ No VHS, ttyd, FFmpeg, or recording fonts are required.
 | `extensibility` | Start the MCP server and show readiness for an agent. |
 
 Keep every recording focused: prefer tables, getters, concise diffs, and results.
+Disable local CPU, memory, and timing summaries with
+`ATMOS_SETTINGS_METRICS_ENABLED=false` in the shared recording environment.
 Avoid full YAML dumps; any YAML shown must be a small, clean snippet explaining
 one action.
 
 Review every changed cast in the homepage at desktop and mobile sizes. The player
-pauses offscreen, supports manual pause/play, and respects reduced motion. Commit
+pauses offscreen and provides play/pause, a seek bar, and elapsed/total time.
+Reduced motion disables autoplay while keeping manual playback and seeking available.
+Terminal output stays left-aligned, including inside centered homepage sections. Commit
 both the scenario definition and its generated cast; no videos or posters are needed.
 
 The hero tells the platform story before showing the UI: discover stacks and mixed
@@ -72,6 +76,9 @@ and affected-component tables. The prompt must appear immediately when the comma
 finishes; the reading pause belongs before typing the next command. After the pause,
 press Enter once to leave an empty `>` prompt line between commands. Landing players
 disable idle skipping to preserve these authored reading pauses.
+Interactive menus also need reading time: demonstrate moving down, up, then down
+through the component picker, pausing on each selection before confirming. Hold
+the stack picker for three seconds before selecting it.
 The hero shell unsets CI detection so its local UI preview remains interactive.
 The Local = CI cast keeps `atmos list affected` and `atmos terraform apply --affected --ci`
 without `--ui`.

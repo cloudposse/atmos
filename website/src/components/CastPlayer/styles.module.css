@@ -232,6 +232,12 @@
   height: 1.25rem;
 }
 
+/* Fixed-width digits keep the readout (and the scrubber beside it) from jittering as the time advances. */
+.time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .controls input {
   width: 100%;
   accent-color: #a1a1aa;

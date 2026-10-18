@@ -8,10 +8,8 @@ import './styles.css';
 export default function DemoCast({ title, slug, className }) {
   const src = useBaseUrl(`/casts/demo/landing/${slug}.cast`);
   const reduceMotion = useReducedMotion();
-  const [userPaused, setUserPaused] = useState(null);
   const [isVisible, setIsVisible] = useState(false);
   const viewportRef = useRef(null);
-  const paused = userPaused ?? reduceMotion ?? false;
 
   useEffect(() => {
     if (typeof IntersectionObserver === 'undefined') {
@@ -35,15 +33,9 @@ export default function DemoCast({ title, slug, className }) {
           <div className="window-title">{title}</div>
         </div>
         <div className="landing-demo-cast-viewport">
-          <CastPlayer src={src} title={title} chrome={false} controls={false}
-            showCommand={false} autoplay loop paused={!isVisible || paused}
-            static={Boolean(reduceMotion && userPaused === null)}
+          <CastPlayer src={src} title={title} chrome={false} controls scrubber
+            showCommand={false} autoplay={!reduceMotion} loop paused={!isVisible}
             idleSkip={false} speed={1} maxScrollRate={1} className="landing-demo-cast-player" />
-          <button type="button" className="landing-demo-cast-toggle"
-            aria-label={`${paused ? 'Play' : 'Pause'} ${title}`}
-            onClick={() => setUserPaused(!paused)}>
-            {paused ? 'Play' : 'Pause'}
-          </button>
         </div>
       </div>
     </div>

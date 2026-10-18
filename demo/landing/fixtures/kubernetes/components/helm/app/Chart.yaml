@@ -1,5 +1,0 @@
-apiVersion: v2
-name: app
-description: A small application for the Atmos landing demo.
-version: 0.1.0
-type: application

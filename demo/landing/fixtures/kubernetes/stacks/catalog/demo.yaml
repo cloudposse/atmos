@@ -1,21 +1,14 @@
-# The namespace is owned by Kubernetes; Helm installs into it.
+# Deploy the namespace before its application in one bulk operation.
 components:
   kubernetes:
     namespace:
       metadata:
         component: namespace
       paths: [manifests]
-  helm:
     app:
       metadata:
         component: app
-      chart: .
-      namespace: atmos-demo
-      create_namespace: false
-      release:
-        timeout: 3m
-        wait:
-          strategy: watcher
-      values:
-        replicaCount: 1
-        image: nginx:1.27.5-alpine
+      paths: [manifests]
+      dependencies:
+        components:
+          - name: namespace

@@ -21,6 +21,7 @@
   overflow: auto;
   font-size: 32px;
   line-height: 1.25;
+  text-align: left;
   scrollbar-width: none;
 }
 
@@ -28,28 +29,27 @@
   display: none;
 }
 
-.landing-demo-cast-toggle {
-  position: absolute;
-  right: 24px;
-  bottom: 24px;
-  padding: 4px 10px;
-  border: 1px solid #444;
-  border-radius: 4px;
-  background: #171717;
-  color: #f9f9f9;
-  font: inherit;
+/* Keep seeking available on touch screens without covering terminal output. */
+.landing-demo-cast [data-cast-controls] {
+  position: static;
+  flex-shrink: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  width: 100%;
+  margin: 0;
+  padding: 4px 8px;
+  border-top: 1px solid #292929;
+  border-radius: 0;
+  background: #111111;
   font-size: 12px;
-  opacity: 0;
-  transition: opacity 150ms;
-}
-
-.landing-demo-cast:hover .landing-demo-cast-toggle,
-.landing-demo-cast:focus-within .landing-demo-cast-toggle {
   opacity: 1;
+  pointer-events: auto;
+  transform: none;
+  transition: none;
 }
 
-@media (prefers-reduced-motion: reduce), (hover: none) {
-  .landing-demo-cast-toggle { opacity: 1; transition: none; }
+.landing-demo-cast [data-cast-controls] > span {
+  grid-column: auto;
+  white-space: nowrap;
 }
 
 /* The hero's compact recording keeps commands readable in a half-width frame. */
