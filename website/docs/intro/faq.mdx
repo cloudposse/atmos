@@ -97,7 +97,9 @@ Follow the [editor and AI assistant setup guide](/projects/setup-editor/ai-assis
 
 Choose the method for the data you need. For deployed Terraform/OpenTofu outputs, use [`!terraform.state`](/functions/yaml/terraform.state) with a supported backend, or [`!terraform.output`](/functions/yaml/terraform.output) when you need the underlying CLI's output handling. For deployed CloudFormation Outputs, use [`!aws.cloudformation.output`](/functions/yaml/aws.cloudformation.output).
 
-[`atmos.Component`](/functions/template/atmos.Component) can read component configuration and supported deployed outputs in templates. [External stores](/stacks/sharing-state/stores) let different tools publish and consume persisted values; [named workflow outputs](/steps/outputs) pass results between steps within a run. A workflow result is not automatically persisted for a later deployment. See [sharing data between components](/stacks/sharing-state) to compare the options.
+**Terraform CLI lookups can make large configurations very slow.** `!terraform.output` and [`atmos.Component`](/functions/template/atmos.Component) for Terraform targets prepare the component, initialize it when needed, select the workspace, and run `terraform output`. `atmos.Component` eagerly loads outputs even if you only read `.vars` or `.settings`. Output caching helps within one command, but does not persist across commands; prefer direct state reads for outputs and imports or inheritance for shared configuration.
+
+`atmos.Component` also supports component configuration and outputs for other supported types, including CloudFormation. [External stores](/stacks/sharing-state/stores) let different tools publish and consume persisted values; [named workflow outputs](/steps/outputs) pass results between steps within a run. A workflow result is not automatically persisted for a later deployment. See [sharing data between components](/stacks/sharing-state) to compare the options.
 
 </FAQItem>
 
