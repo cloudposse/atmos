@@ -436,3 +436,26 @@ func TestDescribeSourceKeepsRemoteClassification(t *testing.T) {
 		})
 	}
 }
+
+func TestSaveHooksRestoresTheWiringItFound(t *testing.T) {
+	originalErr := errors.New("original evaluator")
+	SetEnabled(func(string) (bool, error) { return true, nil })
+	SetEvaluator(func(context.Context, string, json.RawMessage) error { return originalErr })
+	restore := SaveHooks()
+
+	SetEnabled(func(string) (bool, error) { return false, nil })
+	SetEvaluator(func(context.Context, string, json.RawMessage) error { return nil })
+	enabled, err := Enabled("source")
+	require.NoError(t, err)
+	require.False(t, enabled, "the fake is installed")
+
+	restore()
+	enabled, err = Enabled("source")
+	require.NoError(t, err)
+	require.True(t, enabled, "the saved lookup is back")
+	require.ErrorIs(t, evaluate(context.Background(), "source", SourceInput{}), originalErr, "the saved evaluator is back")
+
+	// Leave no hooks behind for other tests in the package.
+	SetEnabled(nil)
+	SetEvaluator(nil)
+}

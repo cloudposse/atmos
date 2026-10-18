@@ -198,6 +198,21 @@ func SetEnabled(enabled func(string) (bool, error)) {
 	state.enabled = enabled
 }
 
+// SaveHooks captures the installed capability lookup and evaluator and returns a function that
+// reinstalls them. Tests that replace the hooks with fakes use it to restore the wiring they found.
+func SaveHooks() func() {
+	defer perf.Track(nil, "guard.SaveHooks")()
+
+	state.RLock()
+	enabled, evaluate := state.enabled, state.evaluate
+	state.RUnlock()
+	return func() {
+		state.Lock()
+		defer state.Unlock()
+		state.enabled, state.evaluate = enabled, evaluate
+	}
+}
+
 // Enabled reports whether this invocation has rules for a capability.
 func Enabled(kind string) (bool, error) {
 	defer perf.Track(nil, "guard.Enabled")()

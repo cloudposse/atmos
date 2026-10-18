@@ -2,7 +2,6 @@ package downloader
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -15,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
 )
 
@@ -48,45 +46,12 @@ func enableInvalidPolicy(t *testing.T) {
 	writePolicyDir(t, "apiVersion: atmos/v1\nkind: Policy\nspec: [unterminated\n")
 }
 
-// restoreAdmissionHooks reinstalls working guard wiring after a test replaced it with fakes. It reads
-// the configured policy directory on each call, as admission does outside the CLI. The package tests
-// cannot import admission, which reaches this package through pkg/ci and pkg/git.
+// restoreAdmissionHooks reinstalls the guard wiring found when it is called, after a test replaced it
+// with fakes. The package tests cannot import admission or policy, which reach this package through
+// pkg/ci and pkg/git, so the wiring comes from the external test package that loads admission.
 func restoreAdmissionHooks(t *testing.T) {
 	t.Helper()
-	t.Cleanup(func() {
-		guard.SetEnabled(directoryHasRules)
-		guard.SetEvaluator(directoryCheck)
-	})
-}
-
-// directoryBundle loads the policy directory named by the environment, or nil when there is none.
-func directoryBundle() (*policy.Bundle, error) {
-	directory, err := policy.DirectoryFromEnvironment()
-	if err != nil || directory == "" {
-		return nil, err
-	}
-	return policy.LoadDirectory(directory)
-}
-
-func directoryHasRules(kind string) (bool, error) {
-	bundle, err := directoryBundle()
-	return bundle != nil && len(bundle.RulesFor(policy.InputKind(kind))) > 0, err
-}
-
-func directoryCheck(ctx context.Context, kind string, input json.RawMessage) error {
-	bundle, err := directoryBundle()
-	if err != nil || bundle == nil {
-		return err
-	}
-	rules := bundle.RulesFor(policy.InputKind(kind))
-	if len(rules) == 0 {
-		return nil
-	}
-	decision, err := policy.NewEngine().Evaluate(ctx, &policy.Request{Kind: policy.InputKind(kind), Input: input}, rules)
-	if err != nil {
-		return err
-	}
-	return policy.EnforceDecision(decision)
+	t.Cleanup(guard.SaveHooks())
 }
 
 // recordingGetter is a go-getter Getter that records which methods were invoked.
