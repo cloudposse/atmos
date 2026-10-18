@@ -98,3 +98,33 @@ func TestDatasourceFileErrors(t *testing.T) {
 		})
 	}
 }
+
+// TestRenderWithBuildsFunctionsFromDatasourceURLs gives the builder the render's own datasource files.
+func TestRenderWithBuildsFunctionsFromDatasourceURLs(t *testing.T) {
+	t.Parallel()
+	data := map[string]any{"name": "example"}
+
+	var topLevel, config *url.URL
+	actual, err := RenderWith(&schema.AtmosConfiguration{}, "readme", `{{ name }}|{{ (ds "config").name }}`, data,
+		func(top, cfg *url.URL) (template.FuncMap, error) {
+			topLevel, config = top, cfg
+			return template.FuncMap{"name": func() string { return "built" }}, nil
+		})
+	require.NoError(t, err)
+	assert.Equal(t, "built|example", actual)
+	require.NotNil(t, topLevel)
+	require.NotNil(t, config)
+	assert.Equal(t, "file", topLevel.Scheme)
+	assert.Equal(t, "file", config.Scheme)
+	assert.NotEqual(t, topLevel.String(), config.String())
+}
+
+// TestRenderWithBuilderErrorStopsTheRender returns the builder's error before any template runs.
+func TestRenderWithBuilderErrorStopsTheRender(t *testing.T) {
+	t.Parallel()
+	failure := assert.AnError
+	actual, err := RenderWith(&schema.AtmosConfiguration{}, "readme", `unreached`, map[string]any{},
+		func(*url.URL, *url.URL) (template.FuncMap, error) { return nil, failure })
+	require.ErrorIs(t, err, failure)
+	assert.Empty(t, actual)
+}
