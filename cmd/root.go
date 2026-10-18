@@ -1709,6 +1709,17 @@ func applyCIGitCloneBootstrap(cmd *cobra.Command, args []string, tmpConfig *sche
 	return true
 }
 
+// AnnotateFailure reports the error that failed the command as CI annotations through
+// the detected provider, using the loaded configuration when there is one. Reporting
+// is best effort and never replaces the failure itself.
+func AnnotateFailure(err error) {
+	defer perf.Track(&atmosConfig, "cmd.AnnotateFailure")()
+
+	if annotateErr := ci.AnnotateFailure(&atmosConfig, err); annotateErr != nil {
+		log.Debug("Failed to annotate command failure", "error", annotateErr)
+	}
+}
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // Execute runs the root CLI command and performs one-time global startup tasks.
 // It processes a leading --chdir before loading configuration, loads and wires the CLI

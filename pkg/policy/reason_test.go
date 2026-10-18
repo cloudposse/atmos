@@ -143,3 +143,39 @@ func TestDenialReasonsPreserveAllBlockingRules(t *testing.T) {
 	decision.Status = EvaluationError
 	require.Equal(t, errUtils.ErrPolicyEvaluation, EnforceDecision(decision))
 }
+
+func TestDenialViolations(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	err := EnforceDecision(Decision{Status: Deny, Findings: []Finding{
+		{RuleID: "allow-plan", Status: Allow},
+		{RuleID: "protect-eip/guard", Status: Deny, Effects: Effects{Deny: true, Reason: "  EIPs cannot be destroyed.  "}},
+		{RuleID: "no-destroy/guard", Status: Deny, Effects: Effects{Deny: true}},
+	}})
+	require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	require.Equal(t, errUtils.ExitCodePolicyDenied, errUtils.GetExitCode(err))
+
+	want := []Violation{
+		{RuleID: "protect-eip/guard", Reason: "EIPs cannot be destroyed."},
+		{RuleID: "no-destroy/guard"},
+	}
+	require.Equal(t, want, Violations(err))
+
+	// Wrapping keeps the violations reachable, and callers receive a copy.
+	wrapped := fmt.Errorf("plan failed: %w", err)
+	got := Violations(wrapped)
+	require.Equal(t, want, got)
+	got[0].RuleID = "mutated"
+	require.Equal(t, want, Violations(err))
+
+	// Carrying violations leaves the rendered explanation intact.
+	output := strings.Join(strings.Fields(errUtils.Format(wrapped, errUtils.DefaultFormatterConfig())), " ")
+	require.Contains(t, output, "protect-eip/guard: EIPs cannot be destroyed.")
+	require.Contains(t, output, "Denied by no-destroy/guard.")
+}
+
+func TestViolationsIgnoresOtherErrors(t *testing.T) {
+	require.Nil(t, Violations(nil))
+	require.Nil(t, Violations(errUtils.ErrPolicyDenied))
+	require.Nil(t, Violations(EnforceDecision(Decision{Status: EvaluationError})))
+	require.Nil(t, Violations(EnforceDecision(Decision{Status: AwaitingApproval})))
+}

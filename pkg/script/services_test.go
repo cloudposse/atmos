@@ -282,4 +282,9 @@ func TestNestedAtmosFailure(t *testing.T) {
 	ordinary := NestedAtmosFailure([]string{"terraform", "plan"}, 2, cause)
 	assert.Equal(t, "atmos terraform plan exited with code 2", ordinary.Error())
 	assert.Empty(t, cockroach.GetAllDetails(ordinary), "streamed output is not repeated")
+
+	// Both are marked as nested Atmos failures, so CI reporting skips what the child reported.
+	assert.True(t, cockroach.Is(denied, errUtils.ErrNestedAtmosFailed))
+	assert.True(t, cockroach.Is(ordinary, errUtils.ErrNestedAtmosFailed))
+	assert.ErrorIs(t, ordinary, errUtils.ErrScriptProcessFailed, "the process-failure sentinel still matches")
 }
