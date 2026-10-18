@@ -29,9 +29,10 @@ Count managed resource changes against a configurable budget.
 
 `maximum`: `5`. `deletion_weight`: `3`.
 
-Each managed resource with a delete action costs three points, including replacement in either
-order. Other changed managed resources cost one point. No-op resources and data reads cost zero.
-The threshold is inclusive. The budget applies to one plan, not multiple component runs.
+Each managed resource with a delete action costs `deletion_weight` points (default `3`), including
+replacement in either order. Other changed managed resources cost one point. No-op resources and
+data reads cost zero. A plan passes while its total is at most `maximum`. The budget applies to one
+plan, not multiple component runs.
 
 ## Policy
 

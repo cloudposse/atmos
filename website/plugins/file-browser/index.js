@@ -845,7 +845,7 @@ module.exports = function fileBrowserPlugin(context, options) {
       if (!docsSidebar) return;
       const content = allContent['file-browser'][id];
       const version = allContent['docusaurus-plugin-content-docs']?.default?.loadedVersions
-        .find(version => version.versionName === 'current');
+        ?.find(version => version.versionName === 'current');
       if (!version?.sidebars[docsSidebar]) {
         throw new Error(`[file-browser] Documentation sidebar not found: ${docsSidebar}`);
       }

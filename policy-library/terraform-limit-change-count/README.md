@@ -29,7 +29,8 @@ Cap the number of changed managed resources in one Terraform plan.
 
 `maximum`: `10`.
 
-The threshold is inclusive. Count is per resource change, not per action; a replacement counts once.
+Plans with up to `maximum` changed resources pass; a plan with more is denied. Count is per resource
+change, not per action; a replacement counts once.
 
 ## Policy
 
