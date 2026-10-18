@@ -32,16 +32,16 @@ Older configs may instead use `type: component`/`type: stack` on arguments, or
 `semantic_type: component`/`semantic_type: stack` on flags — both still work but are deprecated in
 favor of `provides:`, which uses the same field name on both.
 
-### Example: Script Runner
+### Example: Custom Component
 
-Here's a complete example of a custom command that runs script components:
+Here's a complete example of a custom command that runs example components:
 
 **atmos.yaml:**
 
 ```yaml
 commands:
-  - name: script
-    description: "Run script components"
+  - name: example
+    description: "Run example components"
     arguments:
       - name: component
         description: "Component name"
@@ -54,8 +54,8 @@ commands:
         provides: stack               # This flag provides the stack name
         required: true
     component:
-      type: script                   # Define the custom component type
-      base_path: components/script   # Optional: defaults to components/<type>
+      type: example                   # Define the custom component type
+      base_path: components/example   # Optional: defaults to components/<type>
     steps:
       - 'echo "Running {{ .Component.component }} in {{ .Component.atmos_stack }}"'
       - 'echo "App: {{ .Component.vars.app_name }}"'
@@ -63,29 +63,29 @@ commands:
       - 'cd {{ .Component.vars.script_dir }} && ./deploy.sh'
 ```
 
-**stacks/catalog/script/deploy-app.yaml:**
+**stacks/catalog/example/deploy-app.yaml:**
 
 ```yaml
 components:
-  script:                          # Matches component.type in the command
+  example:                          # Matches component.type in the command
     deploy-app:                    # Component name
       vars:
         app_name: "myapp"
         version: "1.0.0"
-        script_dir: "${atmos.base_path}/components/script/deploy-app"
+        script_dir: "${atmos.base_path}/components/example/deploy-app"
 ```
 
 **stacks/deploy/dev.yaml:**
 
 ```yaml
 import:
-  - catalog/script/deploy-app
+  - catalog/example/deploy-app
 
 vars:
   stage: dev
 
 components:
-  script:
+  example:
     deploy-app:
       vars:
         version: "1.0.0-dev"      # Override for dev environment
@@ -94,7 +94,7 @@ components:
 **Usage:**
 
 ```shell
-atmos script deploy-app -s dev
+atmos example deploy-app --stack dev
 # Output:
 # Running deploy-app in dev
 # App: myapp
@@ -109,7 +109,7 @@ When using custom component types, the `{{ .Component }}` object contains:
 | Variable | Description |
 |----------|-------------|
 | `{{ .Component.component }}` | Component name |
-| `{{ .Component.component_type }}` | Component type (e.g., "script") |
+| `{{ .Component.component_type }}` | Component type (e.g., "example") |
 | `{{ .Component.atmos_stack }}` | Stack name |
 | `{{ .Component.vars.* }}` | Variables defined in the component |
 | `{{ .Component.settings.* }}` | Settings defined in the component |
@@ -126,7 +126,7 @@ in your steps (or the scripts they invoke) as ordinary environment variables.
 <File title="stacks/deploy/prod.yaml">
 ```yaml
 components:
-  script:
+  example:
     deploy-app:
       secrets:
         vars:
@@ -155,7 +155,7 @@ commands:
         provides: stack
         required: true
     component:
-      type: script
+      type: example
     steps:
       # $DB_PASSWORD is exported from the component env section — no need to inline it.
       - './deploy.sh'
@@ -171,13 +171,23 @@ arguments. Step output is masked, but that is defense‑in‑depth, not the prim
 See [Passing Secrets](/cli/configuration/secrets) for the full list of supported secret backends
 (AWS SSM/Secrets Manager, Vault, Azure Key Vault, GCP Secret Manager, 1Password, SOPS, and more).
 
+### Implementing custom components with Starlark
+
+Use [Atmos scripting](/scripting) for custom-component logic that needs conditions,
+loops, validation, or reusable functions. A `type: script` step with
+`interpreter: starlark` reads the command's resolved configuration through
+[`ctx.component`](/functions/automation/ctx.component). See the
+[custom-component walkthrough](/components/custom#implement-components-with-starlark)
+for an example and [script steps](/steps/type/script#custom-components) for parallel
+operations across components.
+
 ### Configuration Options
 
 The `component:` section supports:
 
 | Option | Description |
 |--------|-------------|
-| `type` | **Required.** The component type name (e.g., "script", "ansible", "manifest") |
+| `type` | **Required.** The component type name (e.g., "example", "ansible", "manifest") |
 | `base_path` | Optional. Base directory for components of this type. Defaults to `components/<type>` |
 
 ### Comparison with component_config
