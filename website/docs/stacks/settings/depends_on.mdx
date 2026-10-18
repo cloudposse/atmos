@@ -72,7 +72,7 @@ components:
 ```
 </File>
 
-`atmos doctor --fix` migrates the list form to `dependencies.components` when every entry names a literal `component` and an optional `stack`; the map form is reported for a manual change. It checks that the migration leaves every component's effective dependencies unchanged and rejects the repair when it would change them, for example when an inherited base declares a list and the inheriting component declares its own. See [`atmos doctor`](/cli/commands/doctor).
+`atmos doctor --fix` migrates the list form to `dependencies.components` when every entry names a literal `component` and an optional `stack`; the map form is reported for a manual change. It rejects the repair when the migration would change which components any component depends on, for example when an inherited base declares a list and the inheriting component declares its own. The migration intentionally adopts the required semantics of `dependencies.components`: a missing or disabled target, which the list form only warns about, is reported as an error after the migration instead of blocking it, so you can fix the reference. See [`atmos doctor`](/cli/commands/doctor).
 
 ## Field Mapping
 
