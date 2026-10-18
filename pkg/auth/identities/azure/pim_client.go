@@ -4,13 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -21,12 +18,6 @@ import (
 // pimAPIVersion is the Authorization RBAC REST api-version used for PIM
 // role-assignment-schedule operations (per the Microsoft docs referenced in the PRD).
 const pimAPIVersion = "2020-10-01"
-
-// secondsPerHour and secondsPerMinute convert a duration to ISO-8601 components.
-const (
-	secondsPerHour   = 3600
-	secondsPerMinute = 60
-)
 
 // defaultARMRequestTimeout bounds a single ARM request when the caller injects no HTTP
 // client, so a stalled endpoint cannot hang authentication indefinitely.
@@ -437,31 +428,6 @@ func normalizeRoleDefinitionID(id string) string {
 	return id
 }
 
-// goDurationToISO8601 converts a Go time.Duration to the ISO-8601 duration ARM expects
-// for scheduleInfo.expiration (for example 8h -> "PT8H", 90m -> "PT1H30M").
-func goDurationToISO8601(d time.Duration) string {
-	totalSeconds := int64(d.Seconds())
-	if totalSeconds <= 0 {
-		return ""
-	}
-	hours := totalSeconds / secondsPerHour
-	minutes := (totalSeconds % secondsPerHour) / secondsPerMinute
-	seconds := totalSeconds % secondsPerMinute
-
-	var sb strings.Builder
-	sb.WriteString("PT")
-	if hours > 0 {
-		fmt.Fprintf(&sb, "%dH", hours)
-	}
-	if minutes > 0 {
-		fmt.Fprintf(&sb, "%dM", minutes)
-	}
-	if seconds > 0 {
-		fmt.Fprintf(&sb, "%dS", seconds)
-	}
-	return sb.String()
-}
-
 // armPolicyAssignmentEnvelope is the ARM list response shape for roleManagementPolicyAssignments.
 type armPolicyAssignmentEnvelope struct {
 	Value    []armPolicyAssignmentItem `json:"value"`
@@ -592,166 +558,4 @@ func (c *armPIMClient) listPolicyAssignments(ctx context.Context) ([]armPolicyAs
 	}
 
 	return items, nil
-}
-
-// addUnit converts val of the given unit into nanoseconds and accumulates it into total,
-// guarding against values that exceed or overflow the time.Duration range.
-func addUnit(total time.Duration, val float64, unit time.Duration) (time.Duration, error) {
-	if val < 0 || math.IsNaN(val) || math.IsInf(val, 0) {
-		return 0, errors.New("invalid ISO-8601 duration: value must be non-negative")
-	}
-	ns := val * float64(unit)
-	if ns < 0 || ns > float64(math.MaxInt64) || float64(total)+ns > float64(math.MaxInt64) {
-		return 0, errors.New("ISO-8601 duration overflows time.Duration")
-	}
-	added := time.Duration(ns)
-	if added < 0 || math.MaxInt64-added < total {
-		return 0, errors.New("ISO-8601 duration overflows time.Duration")
-	}
-	return total + added, nil
-}
-
-// parseISO8601Duration parses an ISO-8601 duration string into a time.Duration.
-// It supports day (D), hour (H), minute (M), and second (S) designators, as well as
-// week (W), month (M), and year (Y).
-func parseISO8601Duration(s string) (time.Duration, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0, errors.New("empty ISO-8601 duration")
-	}
-	if !strings.HasPrefix(s, "P") && !strings.HasPrefix(s, "p") {
-		return 0, fmt.Errorf("invalid ISO-8601 duration %q: missing 'P' prefix", s)
-	}
-	s = s[1:]
-	if s == "" {
-		return 0, errors.New("invalid ISO-8601 duration: empty after 'P'")
-	}
-
-	var datePart, timePart string
-	tIdx := strings.IndexAny(s, "Tt")
-	if tIdx >= 0 {
-		datePart = s[:tIdx]
-		timePart = s[tIdx+1:]
-		if timePart == "" && datePart == "" {
-			return 0, errors.New("invalid ISO-8601 duration: no designators found")
-		}
-	} else {
-		datePart = s
-	}
-
-	var total time.Duration
-	foundDesignator := false
-
-	if datePart != "" {
-		cur := ""
-		for _, r := range datePart {
-			switch {
-			case (r >= '0' && r <= '9') || r == '.':
-				cur += string(r)
-			case r == 'Y' || r == 'y':
-				val, err := strconv.ParseFloat(cur, 64)
-				if err != nil || cur == "" {
-					return 0, fmt.Errorf("invalid ISO-8601 duration: bad year in %q", datePart)
-				}
-				total, err = addUnit(total, val, 365*24*time.Hour)
-				if err != nil {
-					return 0, err
-				}
-				cur = ""
-				foundDesignator = true
-			case r == 'M' || r == 'm':
-				val, err := strconv.ParseFloat(cur, 64)
-				if err != nil || cur == "" {
-					return 0, fmt.Errorf("invalid ISO-8601 duration: bad month in %q", datePart)
-				}
-				total, err = addUnit(total, val, 30*24*time.Hour)
-				if err != nil {
-					return 0, err
-				}
-				cur = ""
-				foundDesignator = true
-			case r == 'W' || r == 'w':
-				val, err := strconv.ParseFloat(cur, 64)
-				if err != nil || cur == "" {
-					return 0, fmt.Errorf("invalid ISO-8601 duration: bad week in %q", datePart)
-				}
-				total, err = addUnit(total, val, 7*24*time.Hour)
-				if err != nil {
-					return 0, err
-				}
-				cur = ""
-				foundDesignator = true
-			case r == 'D' || r == 'd':
-				val, err := strconv.ParseFloat(cur, 64)
-				if err != nil || cur == "" {
-					return 0, fmt.Errorf("invalid ISO-8601 duration: bad day in %q", datePart)
-				}
-				total, err = addUnit(total, val, 24*time.Hour)
-				if err != nil {
-					return 0, err
-				}
-				cur = ""
-				foundDesignator = true
-			default:
-				return 0, fmt.Errorf("invalid ISO-8601 duration character %q in date part", r)
-			}
-		}
-		if cur != "" {
-			return 0, fmt.Errorf("invalid ISO-8601 duration: unparsed number %q in date part", cur)
-		}
-	}
-
-	if timePart != "" {
-		cur := ""
-		for _, r := range timePart {
-			switch {
-			case (r >= '0' && r <= '9') || r == '.':
-				cur += string(r)
-			case r == 'H' || r == 'h':
-				val, err := strconv.ParseFloat(cur, 64)
-				if err != nil || cur == "" {
-					return 0, fmt.Errorf("invalid ISO-8601 duration: bad hour in %q", timePart)
-				}
-				total, err = addUnit(total, val, time.Hour)
-				if err != nil {
-					return 0, err
-				}
-				cur = ""
-				foundDesignator = true
-			case r == 'M' || r == 'm':
-				val, err := strconv.ParseFloat(cur, 64)
-				if err != nil || cur == "" {
-					return 0, fmt.Errorf("invalid ISO-8601 duration: bad minute in %q", timePart)
-				}
-				total, err = addUnit(total, val, time.Minute)
-				if err != nil {
-					return 0, err
-				}
-				cur = ""
-				foundDesignator = true
-			case r == 'S' || r == 's':
-				val, err := strconv.ParseFloat(cur, 64)
-				if err != nil || cur == "" {
-					return 0, fmt.Errorf("invalid ISO-8601 duration: bad second in %q", timePart)
-				}
-				total, err = addUnit(total, val, time.Second)
-				if err != nil {
-					return 0, err
-				}
-				cur = ""
-				foundDesignator = true
-			default:
-				return 0, fmt.Errorf("invalid ISO-8601 duration character %q in time part", r)
-			}
-		}
-		if cur != "" {
-			return 0, fmt.Errorf("invalid ISO-8601 duration: unparsed number %q in time part", cur)
-		}
-	}
-
-	if !foundDesignator {
-		return 0, errors.New("invalid ISO-8601 duration: no valid designators found")
-	}
-
-	return total, nil
 }

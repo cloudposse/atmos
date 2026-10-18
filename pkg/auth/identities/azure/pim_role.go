@@ -307,10 +307,7 @@ func (i *pimRoleIdentity) submitActivation(ctx context.Context, client PIMClient
 	if err != nil {
 		return "", "", err
 	}
-	isoDuration, err := i.resolveEffectiveDuration(ctx, client)
-	if err != nil {
-		return "", "", err
-	}
+	isoDuration := i.resolveEffectiveDuration(ctx, client)
 	requestName := i.newRequestName()
 	result, err := client.CreateActivationRequest(ctx, &ActivationRequest{
 		RequestName:           requestName,
@@ -422,24 +419,24 @@ func (i *pimRoleIdentity) resolveJustification() (string, error) {
 // resolveEffectiveDuration converts the configured Go-style duration to ISO-8601,
 // clamping to the role's PIM policy maximum if one is configured and the requested
 // duration exceeds it. Returns "" when duration is unset or unparseable.
-func (i *pimRoleIdentity) resolveEffectiveDuration(ctx context.Context, client PIMClient) (string, error) {
+func (i *pimRoleIdentity) resolveEffectiveDuration(ctx context.Context, client PIMClient) string {
 	if i.duration == "" {
-		return "", nil
+		return ""
 	}
 	d, err := time.ParseDuration(i.duration)
 	if err != nil {
 		i.warn(fmt.Sprintf("Invalid duration %q for PIM activation on identity %q; using the role's policy default.", i.duration, i.name))
-		return "", nil
+		return ""
 	}
 	if d <= 0 {
-		return "", nil
+		return ""
 	}
 
 	policyMax, found, err := client.PolicyMaxDuration(ctx, i.roleDefinitionID)
 	if err != nil {
 		log.Debug("Could not read PIM policy maximum; sending configured duration",
 			azureCloud.LogFieldIdentity, i.name, "error", err)
-		return goDurationToISO8601(d), nil
+		return goDurationToISO8601(d)
 	}
 	if found && policyMax > 0 && d > policyMax {
 		clampedISO := goDurationToISO8601(policyMax)
@@ -450,10 +447,10 @@ func (i *pimRoleIdentity) resolveEffectiveDuration(ctx context.Context, client P
 			"policy_max", policyMax.String(),
 			"effective", clampedISO,
 		)
-		return clampedISO, nil
+		return clampedISO
 	}
 
-	return goDurationToISO8601(d), nil
+	return goDurationToISO8601(d)
 }
 
 // isoDuration converts the configured Go-style duration to the ISO-8601 form ARM expects,
