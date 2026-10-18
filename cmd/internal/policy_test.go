@@ -1,13 +1,15 @@
 package internal
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestCommandAdmissionBeforeHooks(t *testing.T) {
@@ -122,4 +124,45 @@ func TestRootCommandAdmissionBeforeHooks(t *testing.T) {
 			require.Equal(t, !errorHook, plainHookRan, "retain Cobra's PersistentPreRunE precedence")
 		})
 	}
+}
+
+func TestEarlyCommandAdmissionSkipsUnresolvableCommands(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ATMOS_POLICY_DIR", dir)
+	// A deny-everything rule proves that skipped invocations are never evaluated.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "deny.yaml"), []byte("apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: safety}\nspec:\n  policies:\n    all:\n      on: command\n      action: deny\n      rule: \"true\"\n"), 0o600))
+	root := &cobra.Command{Use: "atmos", SilenceErrors: true, SilenceUsage: true}
+	group := &cobra.Command{Use: "group"}
+	group.AddCommand(&cobra.Command{Use: "leaf", Run: func(*cobra.Command, []string) {}})
+	root.AddCommand(group)
+
+	t.Run("unknown command is left to cobra", func(t *testing.T) {
+		require.NoError(t, CheckEarlyCommandAdmission(root, []string{"nonexistent"}))
+	})
+
+	t.Run("non-runnable group is not a command invocation", func(t *testing.T) {
+		require.NoError(t, CheckEarlyCommandAdmission(root, []string{"group"}))
+	})
+
+	t.Run("runnable leaf is still evaluated", func(t *testing.T) {
+		require.ErrorIs(t, CheckEarlyCommandAdmission(root, []string{"group", "leaf"}), errUtils.ErrPolicyDenied)
+	})
+}
+
+func TestCommandAdmissionUsesCanonicalPolicyCommandAnnotation(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ATMOS_POLICY_DIR", dir)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "deny.yaml"), []byte("apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: safety}\nspec:\n  policies:\n    canonical:\n      on: command\n      action: deny\n      rule: input.command == 'terraform plan' && input.path == ['terraform', 'plan']\n"), 0o600))
+	root := &cobra.Command{Use: "atmos", SilenceErrors: true, SilenceUsage: true}
+	alias := &cobra.Command{Use: "tf-plan", Annotations: map[string]string{"policy-command": "terraform plan"}, Run: func(*cobra.Command, []string) {}}
+	other := &cobra.Command{Use: "other", Run: func(*cobra.Command, []string) {}}
+	root.AddCommand(alias, other)
+
+	require.ErrorIs(t, checkCommandAdmission(root, alias), errUtils.ErrPolicyDenied, "the annotation names the policy-visible command")
+	require.NoError(t, checkCommandAdmission(root, other), "commands without the annotation use their own path")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	alias.SetContext(ctx)
+	require.ErrorIs(t, checkCommandAdmission(root, alias), errUtils.ErrPolicyEvaluation, "the command's context governs evaluation")
 }

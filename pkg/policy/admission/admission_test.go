@@ -6,9 +6,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/policy"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/ci/providers/github"
+	"github.com/cloudposse/atmos/pkg/policy"
 )
 
 func TestFunctionAdmissionPinsPolicies(t *testing.T) {
@@ -44,4 +47,73 @@ func TestAdmissionMissingDefault(t *testing.T) {
 	require.NoError(t, Function(context.Background(), "repo-root"))
 	require.NoError(t, Function(context.Background(), "git.ref"))
 	require.ErrorIs(t, Check(context.Background(), nil), errUtils.ErrPolicyInputInvalid)
+}
+
+// writePolicy installs one policy document and points the loader at it.
+func writePolicy(t *testing.T, document string) {
+	t.Helper()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "policy.yaml"), []byte(document), 0o600))
+	t.Setenv("ATMOS_POLICY_DIR", dir)
+}
+
+func TestCheckWithoutRulesForTheRequestKind(t *testing.T) {
+	writePolicy(t, "apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: safety}\nspec:\n  policies:\n    exec:\n      on: function\n      action: deny\n      rule: 'true'\n")
+	var events []policy.Explanation
+	cleanup := policy.BeginExplanation(func(e policy.Explanation) { events = append(events, e) }, nil)
+	defer cleanup()
+
+	err := Check(context.Background(), &policy.Request{Kind: policy.Source, Input: []byte(`{}`)})
+
+	require.NoError(t, err, "rules for other capabilities never apply")
+	require.Equal(t, []policy.Explanation{{Kind: policy.Source, Status: "gate reached; no configured rules"}}, events)
+}
+
+func TestCheckFailsClosedWhenCISnapshotCannotBeCollected(t *testing.T) {
+	writePolicy(t, "apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: safety}\nspec:\n  policies:\n    exec:\n      on: function\n      action: deny\n      rule: 'false'\n")
+	restore := ci.SwapRegistryForTest()
+	defer restore()
+	ci.Register(github.NewProvider())
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("GITHUB_EVENT_PATH", "")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := Check(ctx, &policy.Request{Kind: policy.Function, Input: []byte(`{"name":"exec"}`)})
+
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestCheckFailsClosedWhenApprovalsCannotBeVerified(t *testing.T) {
+	writePolicy(t, `apiVersion: atmos/v1
+kind: Policy
+metadata: {name: review}
+spec:
+  policies:
+    exec:
+      on: function
+      action: require_approval
+      rule: "true"
+      approvals:
+        - id: platform
+          provider: github-actions
+          spec: {reviewers: [alice], minimum: 1}
+`)
+	restore := ci.SwapRegistryForTest()
+	defer restore()
+
+	err := Check(context.Background(), &policy.Request{Kind: policy.Function, Input: []byte(`{"name":"exec"}`)})
+
+	require.ErrorIs(t, err, errUtils.ErrPolicyInputUnavailable, "no CI provider can verify the review obligation")
+}
+
+func TestCheckWithholdsEvaluationDetails(t *testing.T) {
+	writePolicy(t, "apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: safety}\nspec:\n  policies:\n    exec:\n      on: function\n      action: deny\n      rule: 'false'\n")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := Check(ctx, &policy.Request{Kind: policy.Function, Input: []byte(`{"name":"secret-argument"}`)})
+
+	require.ErrorIs(t, err, errUtils.ErrPolicyEvaluation)
+	require.NotContains(t, err.Error(), "secret-argument")
 }

@@ -171,3 +171,80 @@ func TestPolicyApprovalTargetValidation(t *testing.T) {
 	request.Revisions.Head = "different-checkout"
 	require.Error(t, validateApprovalCheckout(request, nil, "head"))
 }
+
+func TestPolicyApprovalFailsClosedWithoutGitHubToken(t *testing.T) {
+	for _, name := range []string{"ATMOS_CI_GITHUB_TOKEN", "ATMOS_PRO_GITHUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN", "ATMOS_CI_GITHUB_API_URL", "GITHUB_API_URL"} {
+		t.Setenv(name, "")
+	}
+	provider := NewProvider()
+	decision, err := provider.ResolvePolicyApprovals(context.Background(), approvalTestRequest(t, "head"), approvalTestDecision())
+	require.ErrorIs(t, err, errUtils.ErrPolicyInputUnavailable)
+	require.Equal(t, policy.AwaitingApproval, decision.Status, "the awaiting decision is returned unchanged")
+}
+
+func TestPolicyApprovalRejectsMismatchedPullRequest(t *testing.T) {
+	t.Parallel()
+	head, err := atmosgit.GetCurrentCommitSHA()
+	require.NoError(t, err)
+	for name, tc := range map[string]struct {
+		status int
+		body   string
+	}{
+		"pull request lookup fails": {status: http.StatusNotFound, body: `{"message":"Not Found"}`},
+		"pull request is closed":    {body: fmt.Sprintf(`{"number":7,"state":"closed","head":{"sha":%q},"base":{"sha":"base","repo":{"full_name":"acme/infra"}}}`, head)},
+		"head moved":                {body: `{"number":7,"state":"open","head":{"sha":"someone-else"},"base":{"sha":"base","repo":{"full_name":"acme/infra"}}}`},
+		"base repository differs":   {body: fmt.Sprintf(`{"number":7,"state":"open","head":{"sha":%q},"base":{"sha":"base","repo":{"full_name":"other/infra"}}}`, head)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			reviewReads := 0
+			provider := newPRSearchTestProvider(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if strings.HasSuffix(r.URL.Path, "/reviews") {
+					reviewReads++
+				}
+				if tc.status != 0 {
+					w.WriteHeader(tc.status)
+				}
+				_, _ = fmt.Fprint(w, tc.body)
+			}))
+			decision, err := provider.ResolvePolicyApprovals(context.Background(), approvalTestRequest(t, head), approvalTestDecision())
+			require.ErrorIs(t, err, errUtils.ErrPolicyInputUnavailable)
+			require.Equal(t, policy.AwaitingApproval, decision.Status)
+			require.Zero(t, reviewReads, "reviews are never read for a mismatched pull request")
+		})
+	}
+}
+
+func TestPolicyApprovalRejectsDifferentCheckout(t *testing.T) {
+	t.Parallel()
+	checkout, err := atmosgit.GetCurrentCommitSHA()
+	require.NoError(t, err)
+	for name, tc := range map[string]struct {
+		prHead      string
+		requestHead string
+	}{
+		"checkout is neither the PR head nor its merge commit": {prHead: "pr-head-not-checked-out"},
+		"request pins a different head than the checkout":      {prHead: checkout, requestHead: "pinned-elsewhere"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			reviewReads := 0
+			provider := newPRSearchTestProvider(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if strings.HasSuffix(r.URL.Path, "/reviews") {
+					reviewReads++
+					_, _ = fmt.Fprint(w, `[]`)
+					return
+				}
+				_, _ = fmt.Fprintf(w, `{"number":7,"state":"open","head":{"sha":%q},"base":{"sha":"base","repo":{"full_name":"acme/infra"}}}`, tc.prHead)
+			}))
+			request := approvalTestRequest(t, tc.prHead)
+			request.Revisions.Head = tc.requestHead
+			_, err := provider.ResolvePolicyApprovals(context.Background(), request, approvalTestDecision())
+			require.ErrorIs(t, err, errUtils.ErrPolicyInputUnavailable)
+			require.Contains(t, err.Error(), "checked-out PR revision")
+			require.Zero(t, reviewReads, "reviews are never read for the wrong checkout")
+		})
+	}
+}

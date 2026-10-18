@@ -811,3 +811,82 @@ func TestLocalAdapter_processNestedImports_ResolveFailureSkips(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, got)
 }
+
+// writeSourcePolicy points ATMOS_POLICY_DIR at one source rule that denies when rule evaluates to true.
+func writeSourcePolicy(t *testing.T, rule string) {
+	t.Helper()
+	directory := t.TempDir()
+	manifest := fmt.Sprintf("apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: imports}\nspec:\n  policies:\n    deny:\n      on: source\n      action: deny\n      rule: %q\n", rule)
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "policy.yaml"), []byte(manifest), 0o600))
+	t.Setenv("ATMOS_POLICY_DIR", directory)
+}
+
+func TestLocalAdapter_SourcePolicy(t *testing.T) {
+	const blockedRule = "input.operation == 'import' && input.path.endsWith('blocked.yaml')"
+
+	setup := func(t *testing.T) string {
+		t.Helper()
+		config.ResetImportAdapterRegistry()
+		config.SetDefaultAdapter(&LocalAdapter{})
+		t.Cleanup(config.ResetImportAdapterRegistry)
+		writeSourcePolicy(t, blockedRule)
+		return t.TempDir()
+	}
+	write := func(t *testing.T, dir, name, content string) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
+	}
+
+	t.Run("denied local import is rejected", func(t *testing.T) {
+		dir := setup(t)
+		write(t, dir, "blocked.yaml", "settings:\n  x: 1\n")
+
+		paths, err := (&LocalAdapter{}).Resolve(context.Background(), "blocked.yaml", dir, dir, 1, 10, nil)
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+		assert.Nil(t, paths)
+	})
+
+	t.Run("allowed local import resolves", func(t *testing.T) {
+		dir := setup(t)
+		write(t, dir, "allowed.yaml", "settings:\n  x: 1\n")
+
+		paths, err := (&LocalAdapter{}).Resolve(context.Background(), "allowed.yaml", dir, dir, 1, 10, nil)
+		require.NoError(t, err)
+		require.Len(t, paths, 1)
+		assert.Equal(t, filepath.Join(dir, "allowed.yaml"), paths[0].FilePath)
+	})
+
+	t.Run("denied nested import aborts the parent import", func(t *testing.T) {
+		dir := setup(t)
+		write(t, dir, "blocked.yaml", "settings:\n  x: 1\n")
+		write(t, dir, "main.yaml", "import:\n  - blocked.yaml\n")
+
+		paths, err := (&LocalAdapter{}).Resolve(context.Background(), "main.yaml", dir, dir, 1, 10, nil)
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+		assert.Nil(t, paths)
+	})
+
+	t.Run("allowed nested import is resolved alongside its parent", func(t *testing.T) {
+		dir := setup(t)
+		write(t, dir, "child.yaml", "settings:\n  child: true\n")
+		write(t, dir, "main.yaml", "import:\n  - child.yaml\n")
+
+		paths, err := (&LocalAdapter{}).Resolve(context.Background(), "main.yaml", dir, dir, 1, 10, nil)
+		require.NoError(t, err)
+		require.Len(t, paths, 2)
+		assert.Equal(t, filepath.Join(dir, "main.yaml"), paths[0].FilePath)
+		assert.Equal(t, filepath.Join(dir, "child.yaml"), paths[1].FilePath)
+	})
+
+	t.Run("non-policy nested failures are tolerated", func(t *testing.T) {
+		dir := setup(t)
+		write(t, dir, "child.yaml", "settings:\n  child: true\n")
+		write(t, dir, "main.yaml", "import:\n  - child.yaml\n")
+
+		// Resolving the nested import exceeds the maximum depth, which is not a policy error.
+		paths, err := (&LocalAdapter{}).Resolve(context.Background(), "main.yaml", dir, dir, 1, 1, nil)
+		require.NoError(t, err)
+		require.Len(t, paths, 1)
+		assert.Equal(t, filepath.Join(dir, "main.yaml"), paths[0].FilePath)
+	})
+}

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/tags"
@@ -63,6 +64,32 @@ func TestTaggedSelectorRejectsAmbiguousOrExecutableSyntax(t *testing.T) {
 			require.NoError(t, os.WriteFile(filepath.Join(directory, "policy.yaml"), []byte(document), 0o600))
 			_, err := LoadDirectory(directory)
 			require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+		})
+	}
+}
+
+func TestSelectorUnmarshalYAMLShapes(t *testing.T) {
+	for name, tc := range map[string]struct {
+		selector string
+		wantErr  bool
+		want     Selector
+	}{
+		"scalar is not a selector":                {selector: "pci", wantErr: true},
+		"sequence is not a selector":              {selector: "[pci]", wantErr: true},
+		"alias to a literal value is allowed":     {selector: "{components: &c [vpc], stacks: *c}", want: Selector{Components: []string{"vpc"}, Stacks: []string{"vpc"}}},
+		"alias inside a list is rejected":         {selector: "{labels: {stage: &s prod}, tags: [*s]}", wantErr: true},
+		"executable tag inside any list rejected": {selector: "{tags: !any [!env PCI]}", wantErr: true},
+		"nested executable tag is rejected":       {selector: "{labels: {stage: [!exec date]}}", wantErr: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var got Selector
+			err := yaml.Unmarshal([]byte(tc.selector), &got)
+			if tc.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
 		})
 	}
 }

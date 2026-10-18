@@ -325,3 +325,47 @@ func TestValidatePolicyBundleOffline(t *testing.T) {
 		})
 	}
 }
+
+func TestValidatePolicyBundleDefinitions(t *testing.T) {
+	require.NoError(t, ValidatePolicyBundle(nil), "an absent bundle has nothing to validate")
+	require.NoError(t, ValidatePolicyBundle(&policy.Bundle{}), "a bundle without hooks has nothing to validate")
+
+	for _, tc := range []struct {
+		name, definition string
+		wantErr          error
+	}{
+		{"invalid on_failure value", `{"kind":"command","command":"echo","on_failure":"explode"}`, errUtils.ErrInvalidHookOnFailure},
+		{"step without a type", `{"kind":"step","with":{}}`, errUtils.ErrInvalidConfig},
+		{"step with unregistered type", `{"kind":"step","type":"no-such-step-type","with":{}}`, errUtils.ErrUnknownStepType},
+		{"steps with unregistered type", `{"kind":"steps","with":[{"type":"no-such-step-type"}]}`, errUtils.ErrUnknownStepType},
+		{"step with undecodable with block", `{"kind":"step","type":"http","with":{"env":"not-a-map"}}`, errUtils.ErrInvalidConfig},
+		{"steps without a list", `{"kind":"steps"}`, errUtils.ErrInvalidConfig},
+		{"steps with an empty list", `{"kind":"steps","with":[]}`, errUtils.ErrInvalidConfig},
+		{"hook with unknown field", `{"kind":"command","command":"echo","bogus":true}`, errUtils.ErrPolicyRequirements},
+		{"hook with its own event selection", `{"kind":"command","command":"echo","events":["after.terraform.plan"]}`, errUtils.ErrPolicyRequirements},
+		{"nested skip control", `{"kind":"steps","with":[{"type":"shell","with":{"background":true}}]}`, errUtils.ErrPolicyRequirements},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			bundle := &policy.Bundle{Hooks: map[string]json.RawMessage{"test/hook": json.RawMessage(tc.definition)}}
+			require.ErrorIs(t, ValidatePolicyBundle(bundle), tc.wantErr)
+		})
+	}
+
+	t.Run("steps without an explicit type default to shell", func(t *testing.T) {
+		bundle := &policy.Bundle{Hooks: map[string]json.RawMessage{"test/hook": json.RawMessage(`{"kind":"steps","with":[{"command":"echo governed"}]}`)}}
+		require.NoError(t, ValidatePolicyBundle(bundle))
+	})
+
+	t.Run("steps with a typed http step", func(t *testing.T) {
+		bundle := &policy.Bundle{Hooks: map[string]json.RawMessage{"test/hook": json.RawMessage(`{"kind":"steps","with":[{"type":"http","url":"https://example.test/hook"}]}`)}}
+		require.NoError(t, ValidatePolicyBundle(bundle))
+	})
+
+	t.Run("one invalid hook fails the whole bundle", func(t *testing.T) {
+		bundle := &policy.Bundle{Hooks: map[string]json.RawMessage{
+			"test/valid":   json.RawMessage(`{"kind":"command","command":"echo"}`),
+			"test/missing": json.RawMessage(`{"kind":"command"}`),
+		}}
+		require.Error(t, ValidatePolicyBundle(bundle))
+	})
+}

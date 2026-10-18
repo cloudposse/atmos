@@ -2,12 +2,17 @@ package policy
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
 )
 
@@ -56,6 +61,87 @@ spec:
 	}
 }
 
+func TestSourceRequestWithinAllowedRoots(t *testing.T) {
+	root := t.TempDir()
+	inside := filepath.Join(root, "data.txt")
+
+	t.Run("no roots leaves the request untouched", func(t *testing.T) {
+		request := &Request{Kind: Source, Input: json.RawMessage(`{"path":"relative"}`)}
+		got, err := sourceRequest(request, nil)
+		require.NoError(t, err)
+		assert.Same(t, request, got)
+	})
+
+	t.Run("malformed input is rejected", func(t *testing.T) {
+		_, err := sourceRequest(&Request{Kind: Source, Input: json.RawMessage(`[1]`)}, []string{root})
+		require.Error(t, err)
+	})
+
+	for name, tc := range map[string]struct {
+		input string
+		want  bool
+	}{
+		"resolved path inside":              {input: `{"path":` + quoteJSON(t, inside) + `,"path_resolved":true}`, want: true},
+		"resolved path equal to root":       {input: `{"path":` + quoteJSON(t, root) + `,"path_resolved":true}`, want: true},
+		"unresolved path is never inside":   {input: `{"path":` + quoteJSON(t, inside) + `,"path_resolved":false}`, want: false},
+		"missing resolution flag":           {input: `{"path":` + quoteJSON(t, inside) + `}`, want: false},
+		"relative path is never inside":     {input: `{"path":"data.txt","path_resolved":true}`, want: false},
+		"parent of the root":                {input: `{"path":` + quoteJSON(t, filepath.Dir(root)) + `,"path_resolved":true}`, want: false},
+		"non-string path":                   {input: `{"path":7,"path_resolved":true}`, want: false},
+		"sibling sharing the root's prefix": {input: `{"path":` + quoteJSON(t, root+"-sibling") + `,"path_resolved":true}`, want: false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			request := &Request{Kind: Source, Input: json.RawMessage(tc.input)}
+			got, err := sourceRequest(request, []string{root})
+			require.NoError(t, err)
+			var decoded map[string]any
+			require.NoError(t, json.Unmarshal(got.Input, &decoded))
+			assert.Equal(t, tc.want, decoded["within_allowed_roots"])
+			// The caller's request is never mutated.
+			assert.NotContains(t, string(request.Input), "within_allowed_roots")
+		})
+	}
+}
+
+func quoteJSON(t *testing.T, value string) string {
+	t.Helper()
+	raw, err := json.Marshal(value)
+	require.NoError(t, err)
+	return string(raw)
+}
+
+func TestResolveRoots(t *testing.T) {
+	base := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(base, "relative"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(base, "file.txt"), []byte("x"), 0o600))
+	canonicalBase, err := filepath.EvalSymlinks(base)
+	require.NoError(t, err)
+
+	t.Run("relative and absolute roots are canonicalized", func(t *testing.T) {
+		got, err := resolveRoots([]string{"relative", base}, base)
+		require.NoError(t, err)
+		assert.Equal(t, []string{filepath.Join(canonicalBase, "relative"), canonicalBase}, got)
+	})
+
+	t.Run("no roots yields no constraint", func(t *testing.T) {
+		got, err := resolveRoots(nil, base)
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	for name, root := range map[string]string{
+		"empty root":        "",
+		"blank root":        "  ",
+		"nonexistent root":  "missing",
+		"root is not a dir": "file.txt",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := resolveRoots([]string{root}, base)
+			require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+		})
+	}
+}
+
 func TestExplainPreservesDecisions(t *testing.T) {
 	var events []Explanation
 	rules := []Rule{
@@ -91,6 +177,117 @@ func TestOfflinePolicyFixtures(t *testing.T) {
 		require.NoError(t, os.WriteFile(cases, []byte(raw), 0o600))
 		_, err = RunTests(t.Context(), bundle, cases)
 		require.Error(t, err)
+	}
+}
+
+func TestRunTestsRejectsUnusableFixtures(t *testing.T) {
+	bundle := &Bundle{Rules: []Rule{{ID: "deny", On: Command, Engine: CELEngine, Expression: "true", Effects: Effects{Deny: true}}}}
+	dir := t.TempDir()
+	valid := filepath.Join(dir, "valid.json")
+	require.NoError(t, os.WriteFile(valid, []byte(`[{"name":"denied","request":{"kind":"command","input":{}},"status":"deny"}]`), 0o600))
+
+	t.Run("missing bundle", func(t *testing.T) {
+		results, err := RunTests(t.Context(), nil, valid)
+		require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+		assert.Nil(t, results)
+	})
+
+	t.Run("missing cases file", func(t *testing.T) {
+		results, err := RunTests(t.Context(), bundle, filepath.Join(dir, "missing.json"))
+		require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+		assert.Nil(t, results)
+	})
+
+	t.Run("cases path is a directory", func(t *testing.T) {
+		_, err := RunTests(t.Context(), bundle, dir)
+		require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+	})
+
+	t.Run("oversized cases file", func(t *testing.T) {
+		large := filepath.Join(dir, "large.json")
+		require.NoError(t, os.WriteFile(large, []byte(strings.Repeat(" ", maxTestCaseBytes+1)), 0o600))
+		_, err := RunTests(t.Context(), bundle, large)
+		require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+		assert.Contains(t, err.Error(), "too large")
+	})
+
+	for name, raw := range map[string]string{
+		"duplicate names":       `[{"name":"a","request":{"kind":"command","input":{}},"status":"deny"},{"name":"a","request":{"kind":"command","input":{}},"status":"deny"}]`,
+		"empty name":            `[{"name":"","request":{"kind":"command","input":{}},"status":"deny"}]`,
+		"unknown error kind":    `[{"name":"a","request":{"kind":"command","input":{}},"status":"deny","error":"bogus"}]`,
+		"not an array":          `{"name":"a"}`,
+		"trailing second value": `[{"name":"a","request":{"kind":"command","input":{}},"status":"deny"}] []`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(dir, "case.json")
+			require.NoError(t, os.WriteFile(path, []byte(raw), 0o600))
+			_, err := RunTests(t.Context(), bundle, path)
+			require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+		})
+	}
+}
+
+func TestRunTestsMatchesExpectedErrorsAndEffects(t *testing.T) {
+	hook := HookRequirement{Ref: "platform/lint", Event: "before.terraform.plan", Required: true}
+	approval := ApprovalRequirement{ID: "review", Provider: "github-actions", Spec: json.RawMessage(`{"reviewers":["alice"],"minimum":1}`)}
+	bundle := &Bundle{Rules: []Rule{
+		{ID: "hooked", On: Operation, Engine: CELEngine, Expression: "true", Effects: Effects{Hooks: []HookRequirement{hook}}},
+		{ID: "attached", On: ComponentCommand, Engine: CELEngine, Expression: "true", Match: &Selector{Stacks: []string{"prod"}}, Effects: Effects{Deny: true}},
+		{ID: "unknown-engine", On: Function, Engine: "nope", Expression: "true"},
+		{ID: "review", On: Source, Engine: CELEngine, Expression: "true", Effects: Effects{Approvals: []ApprovalRequirement{approval}}},
+	}}
+	run := func(t *testing.T, raw string) ([]TestResult, error) {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "cases.json")
+		require.NoError(t, os.WriteFile(path, []byte(raw), 0o600))
+		return RunTests(t.Context(), bundle, path)
+	}
+	hookJSON := `{"ref":"platform/lint","event":"before.terraform.plan","required":true,"require_success":false}`
+
+	for name, tc := range map[string]struct {
+		cases      string
+		wantPassed bool
+	}{
+		"input unavailable is expected":  {`[{"name":"x","request":{"kind":"component.command","input":{}},"status":"error","error":"input_unavailable"}]`, true},
+		"evaluation error is expected":   {`[{"name":"x","request":{"kind":"function","input":{}},"status":"error","error":"evaluation"}]`, true},
+		"unexpected error fails":         {`[{"name":"x","request":{"kind":"function","input":{}},"status":"error"}]`, false},
+		"wrong error kind fails":         {`[{"name":"x","request":{"kind":"function","input":{}},"status":"error","error":"input_unavailable"}]`, false},
+		"hook effects match":             {`[{"name":"x","request":{"kind":"operation","input":{}},"status":"allow","hooks":[` + hookJSON + `]}]`, true},
+		"hook effects missing":           {`[{"name":"x","request":{"kind":"operation","input":{}},"status":"allow"}]`, false},
+		"approvals match when declared":  {`[{"name":"x","request":{"kind":"source","input":{}},"status":"awaiting_approval","approvals":[{"id":"review","provider":"github-actions","spec":{"reviewers":["alice"],"minimum":1}}]}]`, true},
+		"approvals mismatch fails":       {`[{"name":"x","request":{"kind":"source","input":{}},"status":"awaiting_approval","approvals":[{"id":"other","provider":"github-actions","spec":{}}]}]`, false},
+		"approvals unchecked when unset": {`[{"name":"x","request":{"kind":"source","input":{}},"status":"awaiting_approval"}]`, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			results, err := run(t, tc.cases)
+			require.Len(t, results, 1)
+			assert.Equal(t, tc.wantPassed, results[0].Passed, "results: %+v err: %v", results, err)
+			assert.Equal(t, !tc.wantPassed, errors.Is(err, errUtils.ErrPolicyEvaluation))
+		})
+	}
+}
+
+func TestTestErrorMatches(t *testing.T) {
+	unavailable := fmt.Errorf("%w: rule", errUtils.ErrPolicyInputUnavailable)
+	evaluation := fmt.Errorf("%w: rule", errUtils.ErrPolicyEvaluation)
+	for name, tc := range map[string]struct {
+		expected string
+		err      error
+		want     bool
+	}{
+		"no error expected and none raised":    {"", nil, true},
+		"no error expected but one raised":     {"", evaluation, false},
+		"unavailable input expected":           {"input_unavailable", unavailable, true},
+		"unavailable input expected, none":     {"input_unavailable", nil, false},
+		"unavailable input expected, other":    {"input_unavailable", evaluation, false},
+		"evaluation expected":                  {"evaluation", evaluation, true},
+		"evaluation expected, other":           {"evaluation", errors.New("unrelated"), false},
+		"unknown expectation never matches":    {"bogus", evaluation, false},
+		"unknown expectation, no error raised": {"bogus", nil, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, testErrorMatches(tc.expected, tc.err))
+		})
 	}
 }
 
