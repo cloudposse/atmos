@@ -1,0 +1,18 @@
+stacks:
+  base_path: stacks
+  included_paths:
+    - "orgs/**/*"
+
+docs:
+  generate:
+    readme:
+      base-dir: .
+      input:
+        - "./README.yaml"
+      template: "./README.md.gomplate"
+      output: "./README.md"
+      terraform:
+        enabled: true
+        source: .
+        sort_by: required
+        format: markdown

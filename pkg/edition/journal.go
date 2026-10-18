@@ -242,6 +242,15 @@ var journal = []Entry{
 		Description: "Component runs install their own pinned command from .tool-versions; pinned projects install only explicit dependencies. Every command inherits installed project selections under every policy.",
 		Ref:         "https://github.com/cloudposse/atmos/pull/3346",
 	},
+	{
+		Date:        "2026-10-17",
+		Key:         "docs.terraform.formatter_settings",
+		Kind:        KindBehavior,
+		Old:         "terraform-docs formatter defaults",
+		New:         "configured Terraform documentation formatting",
+		Description: "README generation honors explicit section visibility, hide_empty, and indent_level; earlier pins retain the legacy formatter output.",
+		Ref:         "https://github.com/cloudposse/atmos/pull/3404",
+	},
 }
 
 // Journal returns a copy of the journal sorted by date (oldest first), then key.
