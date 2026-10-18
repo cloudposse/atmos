@@ -6,12 +6,12 @@ stacks:
     - "deploy/**/*"
   name_template: "{{.vars.stage}}"
 components:
-  example:
-    base_path: "components/example"
+  script:
+    base_path: "components/script"
 
 commands:
-  - name: example
-    description: "Run example components"
+  - name: script
+    description: "Run script components"
     arguments:
       - name: component
         description: "Component name"
@@ -24,7 +24,7 @@ commands:
         provides: stack
         required: true
     component:
-      type: example
+      type: script
     steps:
       - 'echo "Component: {{ .Component.component }}"'
       - 'echo "Stack: {{ .Component.atmos_stack }}"'

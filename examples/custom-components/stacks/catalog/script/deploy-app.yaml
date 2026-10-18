@@ -1,5 +1,5 @@
 components:
-  example:
+  script:
     deploy-app:
       vars:
         app_name: "myapp"

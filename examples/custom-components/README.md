@@ -19,12 +19,7 @@ This example demonstrates how to define [custom component types](https://atmos.t
 
 ## Overview
 
-Custom component types allow you to extend Atmos beyond the built-in component types. This example defines an `example` type and accesses its configuration from stack files via Go templates.
-
-For implementation logic with conditions, loops, and reusable functions, use
-[Atmos scripting (Starlark)](https://atmos.tools/scripting). A `type: script` step
-with `interpreter: starlark` reads the resolved configuration through
-`ctx.component`. See the [Starlark custom-component walkthrough](https://atmos.tools/components/custom#implement-components-with-starlark).
+Custom component types allow you to extend Atmos beyond the built-in component types (Terraform, Helmfile, Packer). You can define any component type (e.g., `script`, `ansible`, `manifest`) and access its configuration from stack files via Go templates.
 
 ## Structure
 
@@ -32,12 +27,12 @@ with `interpreter: starlark` reads the resolved configuration through
 examples/custom-components/
 ├── atmos.yaml                           # Atmos configuration with custom command
 ├── components/
-│   └── example/
+│   └── script/
 │       └── deploy-app/
 │           └── deploy.sh                # Example script (not executed)
 └── stacks/
     ├── catalog/
-    │   └── example/
+    │   └── script/
     │       └── deploy-app.yaml          # Base component configuration
     └── deploy/
         └── dev.yaml                     # Stack with overrides
@@ -47,13 +42,13 @@ examples/custom-components/
 
 1. Inspect the custom component type configuration:
     ```bash
-    atmos describe config --format=yaml --query .components.example
+    atmos describe config --format=yaml --query .components.script
     ```
 
 2. Run the custom command:
     ```bash
     cd examples/custom-components
-    atmos example deploy-app --stack dev
+    atmos script deploy-app -s dev
     ```
 
 3. Expected output:
@@ -69,12 +64,12 @@ examples/custom-components/
 ## How It Works
 
 1. **Custom Command Definition** (`atmos.yaml`):
-    - The `example` command defines a custom component type
+    - The `script` command defines a custom component type
     - Arguments and flags with `provides: component` and `provides: stack` identify which values to use
     - The `component:` section specifies the component type name
 
 2. **Stack Configuration** (`stacks/`):
-    - Components are defined under `components.example.<name>`
+    - Components are defined under `components.script.<name>`
     - Standard Atmos inheritance and overrides work as expected
 
 3. **Template Access**:

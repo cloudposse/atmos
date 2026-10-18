@@ -28,8 +28,8 @@ Define a `component.type` on a custom command and tell Atmos which argument prov
 ```yaml
 # atmos.yaml
 commands:
-  - name: example
-    description: "Run example components"
+  - name: script
+    description: "Run script components"
     arguments:
       - name: component
         provides: component      # Provides the component name
@@ -40,7 +40,7 @@ commands:
         provides: stack           # Provides the stack name
         required: true
     component:
-      type: example               # Your custom component type
+      type: script               # Your custom component type
     steps:
       - 'echo "App: {{ .Component.vars.app_name }}"'
       - 'echo "Version: {{ .Component.vars.version }}"'
@@ -51,7 +51,7 @@ Configure the component in stack manifests just like a native type—with full i
 ```yaml
 # stacks/deploy/dev.yaml
 components:
-  example:                        # Matches component.type
+  script:                        # Matches component.type
     deploy-app:
       vars:
         app_name: "myapp"
@@ -61,39 +61,12 @@ components:
 Run it:
 
 ```shell
-atmos example deploy-app --stack dev
+atmos script deploy-app -s dev
 # App: myapp
 # Version: 1.0.0
 ```
 
 Global `vars`, `settings`, and `env` are merged automatically, and a component's `env` section is exported as real environment variables—making it straightforward to pass [secrets](/cli/configuration/secrets) securely.
-
-## Implement components with Starlark
-
-Use [Atmos scripting](/scripting), based on Starlark, to implement custom components
-with validation, conditions, loops, and reusable functions. The interpreter ships
-with Atmos. Replace the command's shell steps with a `type: script` step:
-
-```yaml
-    steps:
-      - type: script
-        interpreter: starlark
-        script: |
-          component = ctx.component
-          if not component.vars.get("app_name"):
-              fail("app_name is required")
-          print("App: {}".format(component.vars["app_name"]))
-          print("Version: {}".format(component.vars["version"]))
-```
-
-[`ctx.component`](/functions/automation/ctx.component) provides the resolved
-component configuration. Use its [`exec()` method](/functions/automation/component.exec)
-to call tools from the component directory, and move shared logic into `.star`
-files with [`!include`](/steps/type/script#loading-files). Atmos supports
-[tests](/scripting/testing) for these functions and commands.
-
-Here, `example` names the custom command and component type; `script` names the
-step type that runs the Starlark implementation.
 
 ## Native vs. Custom
 
@@ -102,11 +75,11 @@ step type that runs the Starlark implementation.
 | Orchestration | Built into Atmos | You supply the `steps` |
 | Definition | Always available | Defined via a custom command |
 | Stack configuration | `components.<type>.<name>` | `components.<type>.<name>` |
-| Configuration access | Native flags/varfiles | `{{ .Component.* }}` templates or `ctx.component` in Starlark |
+| Configuration access | Native flags/varfiles | `{{ .Component.* }}` templates |
 
 ## Try It
 
-Explore a complete, working example that defines a custom `example` component type and configures it through stacks.
+Explore a complete, working example that defines a custom `script` component type and configures it through stacks.
 
 <EmbedExample example="custom-components" />
 
