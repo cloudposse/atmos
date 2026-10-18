@@ -576,3 +576,23 @@ func TestEcCancellationStopsDocumentChecks(t *testing.T) {
 	require.Equal(t, []string{"atmos.yaml"}, checked, "no document is checked after cancellation")
 	require.Equal(t, 2, r.ExitCode("none"))
 }
+
+// TestEcEmittedFindingsAreProjectRelative keeps progress events aligned with their row labels. Rows
+// are labeled relative to the project root, which can differ from the working directory when the
+// configuration is found in a parent directory or the project is anchored at the Git root.
+func TestEcEmittedFindingsAreProjectRelative(t *testing.T) {
+	root := t.TempDir()
+	var events []Event
+	e := Engine{Observe: func(event Event) { events = append(events, event) }}
+
+	e.emitFindings(root, []Finding{
+		{File: filepath.Join(root, "deep", "vendor.yaml")},
+		{File: "stacks/dev.yaml"},
+		{},
+	})
+
+	require.Len(t, events, 3)
+	require.Equal(t, "deep/vendor.yaml", events[0].Finding.File, "absolute paths become project-relative")
+	require.Equal(t, "stacks/dev.yaml", events[1].Finding.File, "project-relative paths are unchanged")
+	require.Empty(t, events[2].Finding.File)
+}

@@ -122,7 +122,7 @@ func (e *Engine) checkRepositories(ctx context.Context, p *project, o *Options, 
 		}
 		finding := repositoryFinding(&ref, health)
 		r.Findings = append(r.Findings, finding)
-		e.emitFindings(r.Findings[len(r.Findings)-1:])
+		e.emitFindings(p.root, r.Findings[len(r.Findings)-1:])
 	}
 	r.Checks = append(r.Checks, repositoryCheck(r, count, incompleteCount))
 	return ctx.Err()

@@ -1,7 +1,6 @@
 package doctor
 
 import (
-	"os"
 	"path/filepath"
 	"time"
 
@@ -91,12 +90,8 @@ func fileOutcome(worst map[string]validation.Severity, event *diagnostic.Event) 
 	}
 }
 
-// progressPath normalizes engine paths to slash-separated, working-directory-relative form.
+// progressPath normalizes engine paths to slash-separated form. The engine already emits finding
+// paths relative to the project root, the same root its row labels use.
 func progressPath(path string) string {
-	if root, err := os.Getwd(); err == nil && filepath.IsAbs(path) {
-		if rel, err := filepath.Rel(root, path); err == nil {
-			path = rel
-		}
-	}
 	return filepath.ToSlash(path)
 }

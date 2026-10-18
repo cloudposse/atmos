@@ -345,8 +345,6 @@ func TestProgressObserverTranslatesEngineEvents(t *testing.T) {
 
 func TestProgressObserverFileOutcomeReflectsFindings(t *testing.T) {
 	t.Chdir(t.TempDir())
-	wd, err := os.Getwd()
-	require.NoError(t, err)
 
 	for _, tt := range []struct {
 		name     string
@@ -359,7 +357,8 @@ func TestProgressObserverFileOutcomeReflectsFindings(t *testing.T) {
 		{"clean file is only checked", nil, "passed", 1, "clean.yaml", "checked"},
 		{"error finding in the file fails the row", []diagnostic.Finding{{File: "bad.yaml", Severity: validation.SeverityError}}, "passed", 1, "bad.yaml", "failed"},
 		{"warning finding marks the row", []diagnostic.Finding{{File: "warn.yaml", Severity: validation.SeverityWarning}}, "passed", 1, "warn.yaml", "findings"},
-		{"discovery findings carry absolute paths", []diagnostic.Finding{{File: filepath.Join(wd, "atmos.yaml"), Severity: validation.SeverityError}}, "passed", 1, "atmos.yaml", "failed"},
+		// The engine emits project-relative paths, so a project rooted above the working directory still matches its rows.
+		{"project-relative findings match rows below the working directory", []diagnostic.Finding{{File: "deep/vendor.yaml", Severity: validation.SeverityError}}, "passed", 1, "deep/vendor.yaml", "failed"},
 		{"error outranks an earlier warning", []diagnostic.Finding{{File: "mix.yaml", Severity: validation.SeverityWarning}, {File: "mix.yaml", Severity: validation.SeverityError}}, "passed", 1, "mix.yaml", "failed"},
 		{"findings in another file do not leak", []diagnostic.Finding{{File: "other.yaml", Severity: validation.SeverityError}}, "passed", 1, "clean.yaml", "checked"},
 		{"findings without a file mark no row", []diagnostic.Finding{{Severity: validation.SeverityError}}, "passed", 1, "clean.yaml", "checked"},

@@ -32,7 +32,7 @@ func (e *Engine) run(ctx context.Context, o *Options) (r Report, err error) {
 	}
 	broadenAffected(o, p)
 	filterDiscoveryFindings(o, p, &r)
-	e.emitFindings(r.Findings)
+	e.emitFindings(p.root, r.Findings)
 	e.emit(Event{Phase: "Discover", Label: "Project inputs", Done: true, Status: statusPassed})
 	err = e.inspect(ctx, p, o, &r)
 	return r, err
@@ -50,7 +50,7 @@ func (e *Engine) inspect(ctx context.Context, p *project, o *Options, r *Report)
 	if err = ctx.Err(); err != nil {
 		return err
 	}
-	e.emitFindings(r.Findings[before:])
+	e.emitFindings(p.root, r.Findings[before:])
 	if err = e.checkRepositories(ctx, p, o, r); err != nil {
 		return err
 	}
@@ -90,10 +90,15 @@ func (e *Engine) emit(event Event) {
 	}
 }
 
-func (e *Engine) emitFindings(findings []Finding) {
+// emitFindings sends findings to the observer with paths relative to the project root, the same
+// root the per-file row labels use, so the observer can match findings to their rows.
+func (e *Engine) emitFindings(root string, findings []Finding) {
 	for i := range findings {
 		finding := &findings[i]
 		f := *finding
+		if filepath.IsAbs(f.File) {
+			f.File = relative(root, f.File)
+		}
 		e.emit(Event{Phase: "Check", Finding: &f})
 	}
 }
@@ -233,7 +238,7 @@ func (e *Engine) checkDocuments(ctx context.Context, p *project, o *Options, r *
 		if len(r.Findings) > before {
 			status = statusFindings
 		}
-		e.emitFindings(r.Findings[before:])
+		e.emitFindings(p.root, r.Findings[before:])
 		e.emit(Event{Phase: "Check", Label: relative(p.root, d.path), Index: i + 1, Done: true, Status: status})
 	}
 	appendScanCoverage(o, r, checked)

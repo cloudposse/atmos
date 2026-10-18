@@ -264,19 +264,22 @@ Discover -> Check -> Stage fixes -> Verify -> Back up -> Apply -> Recheck
 ```text
 ✓ Configuration schema                 18 files checked
 ✓ Custom-command migration             behavior verified
-! Legacy dependency migration          manual change required
+✓ Legacy dependency migration          required semantics adopted
 ⠋ Verifying stack names                42/60 instances
 
 Fixed 2 findings in 1 file.
 Stack names and Terraform workspaces unchanged across 60 instances.
-1 migration skipped: missing-target behavior would change.
+1 dependency error remains: app requires missing-a in prod.
 Backup: <backup location>
 ```
 
 ## Acceptance and delivery
 
 - Every enabled fixer passes production-consumer contract and project tests.
-- Known legacy missing-target differences are refused with explanations.
+- Simple dependency-list migrations adopt modern required semantics and report the resulting
+  graph errors (missing or unavailable targets, cycles) instead of being refused. Other
+  dependency variants whose missing-target behavior would change remain manual, with
+  explanations.
 - Negative controls detect material changes; second --fix is a no-op.
 - Preserve unrelated values, comments, tags, anchors, types, and permissions. Comments on a
   migrated key move to its replacement. Blank lines and folded scalars may be reformatted by

@@ -63,8 +63,10 @@ Git status is a recovery warning, not evidence of semantic equivalence.
 
 Do not assume `settings.depends_on` is equivalent to `dependencies.components`:
 legacy missing targets warn and succeed, while modern required targets fail.
-Adding `required: false` also changes edge metadata. Naming and dependency repairs
-remain manual until production-consumer contracts and project equivalence pass.
+Adding `required: false` also changes edge metadata. `atmos doctor --fix` migrates
+simple lists (entries with a literal `component` and optional `stack`) automatically
+and intentionally adopts required semantics, reporting any resulting graph errors.
+Context selectors, file/folder entries, and naming repairs remain manual.
 
 Use `atmos doctor --only=sources` to check vendor and source-provisioned upstream
 repositories. Archived sources need manual review. A GitHub 404 can mean a private
