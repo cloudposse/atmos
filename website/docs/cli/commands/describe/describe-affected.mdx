@@ -1452,6 +1452,8 @@ trigger `component-1` and then `component-2` and `component-3` in the order of d
 The `atmos describe affected` command automatically detects components and stacks that exist in the BASE branch
 but have been deleted in HEAD. This enables CI/CD pipelines to trigger `terraform destroy` for removed infrastructure.
 
+This command reports changes; it does not execute teardown. `atmos terraform destroy --affected` currently filters out deleted components and destroys affected Terraform components still present in the current configuration. It is not a deletion-only selector. Use the deletion records to build a separate, reviewed teardown workflow, or destroy components before removing their configuration.
+
 ### How it Works
 
 When comparing HEAD (current branch) with BASE (target branch), Atmos not only detects modifications but also:
@@ -1481,59 +1483,76 @@ atmos describe affected --query '[.[] | select(.deleted == true and .stack == "p
 
 ### CI/CD Pipeline Example
 
-Here's a GitHub Actions workflow that separates apply and destroy operations:
+The following GitHub Actions jobs excerpt separates apply and destroy operations for a pull-request event. It pins HEAD to the PR's head commit and records the merge base with the event's target commit as BASE. Using the fork point avoids interpreting unrelated target-branch additions as PR deletions. Configure the `production` environment's protection rules before using the deployment jobs; an environment name alone does not require approval.
 
 ```yaml
 jobs:
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
+      base_sha: ${{ steps.revisions.outputs.base_sha }}
       modified: ${{ steps.affected.outputs.modified }}
       deleted: ${{ steps.affected.outputs.deleted }}
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
       - uses: cloudposse/github-action-setup-atmos@v2
 
+      - name: Record comparison revision
+        id: revisions
+        env:
+          TARGET_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          BASE_SHA=$(git merge-base HEAD "$TARGET_SHA")
+          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+
       - name: Detect affected
         id: affected
+        env:
+          BASE_SHA: ${{ steps.revisions.outputs.base_sha }}
         run: |
           # Get all affected components
-          atmos describe affected --format json > affected.json
+          atmos describe affected --base "$BASE_SHA" --format json > affected.json
 
           # Filter modified components (for apply)
-          jq '[.[] | select(.deleted != true)]' affected.json > modified.json
+          jq '[.[] | select(.component_type == "terraform" and .deleted != true)]' affected.json > modified.json
           echo "modified=$(cat modified.json | jq -c)" >> $GITHUB_OUTPUT
 
           # Filter deleted components (for destroy)
-          jq '[.[] | select(.deleted == true)]' affected.json > deleted.json
+          jq '[.[] | select(.component_type == "terraform" and .deleted == true)]' affected.json > deleted.json
           echo "deleted=$(cat deleted.json | jq -c)" >> $GITHUB_OUTPUT
 
   apply:
     needs: detect-changes
+    runs-on: ubuntu-latest
     if: needs.detect-changes.outputs.modified != '[]'
+    environment: production
     strategy:
       matrix:
         include: ${{ fromJson(needs.detect-changes.outputs.modified) }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
       - uses: cloudposse/github-action-setup-atmos@v2
       - run: atmos terraform apply ${{ matrix.component }} -s ${{ matrix.stack }}
 
   destroy:
     needs: detect-changes
+    runs-on: ubuntu-latest
     if: needs.detect-changes.outputs.deleted != '[]'
     environment: production  # Requires manual approval via GitHub Environment protection rules
     strategy:
       matrix:
         include: ${{ fromJson(needs.detect-changes.outputs.deleted) }}
     steps:
-      # IMPORTANT: Check out the BASE branch (target branch), not HEAD.
+      # Check out the same immutable BASE commit used for detection.
       # The deleted component's configuration only exists in BASE.
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.base_ref }}
+          ref: ${{ needs.detect-changes.outputs.base_sha }}
       - uses: cloudposse/github-action-setup-atmos@v2
       - run: atmos terraform destroy ${{ matrix.component }} -s ${{ matrix.stack }} --auto-approve
 ```
@@ -1544,9 +1563,11 @@ includes `environment: production` to require manual approval via
 [GitHub Environment protection rules](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#environment-protection-rules).
 Always review the list of deleted components before running `terraform destroy`.
 
-**Important:** The destroy job must check out the **BASE branch** (target branch, e.g., `main`) rather than HEAD.
+**Important:** The destroy job must check out the **exact BASE commit used for detection** rather than HEAD or a moving branch name.
 This is because `terraform destroy` needs access to the component's stack configuration and Terraform files,
 which only exist in BASE — they've been deleted in HEAD.
+
+For a post-merge workflow, retain the original comparison SHAs and deletion list; checking out the latest `main` after the merge will not recover the removed configuration. Restore any externally provisioned component sources at their required versions as well. The independent matrix jobs above do not enforce dependency ordering: for related deletions, arrange teardown explicitly with dependents before prerequisites using the previous configuration. Review surviving dependents and potential renames before treating a deletion record as approval to destroy.
 :::
 
 [Abstract components](/design-patterns/inheritance-patterns/abstract-component) (`metadata.type: abstract`)

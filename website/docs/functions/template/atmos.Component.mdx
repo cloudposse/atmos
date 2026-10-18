@@ -14,6 +14,12 @@ The `atmos.Component` template function allows reading any Atmos section or any 
 Atmos component in a stack, and use it in `Go` templates in Atmos component configurations.
 </Intro>
 
+:::tip Choose the reader for the data you need
+For **Terraform/OpenTofu outputs**, prefer [`!terraform.state`](/functions/yaml/terraform.state) when your backend supports direct reads. Accessing `.outputs` through `atmos.Component` uses the Terraform output execution path, which can require initialization and workspace selection. YAML functions also avoid interpolating complex values into YAML text.
+
+Keep using `atmos.Component` for component configuration such as `.vars` and `.settings`, or for supported outputs in a template. Native CloudFormation `.outputs` uses the CloudFormation integration; [`!aws.cloudformation.output`](/functions/yaml/aws.cloudformation.output) is its direct YAML equivalent. See [sharing data and outputs](/stacks/sharing-state) for the comparison.
+:::
+
 ## Usage
 
 ```yaml
