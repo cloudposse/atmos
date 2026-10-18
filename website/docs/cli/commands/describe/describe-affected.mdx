@@ -1483,7 +1483,7 @@ atmos describe affected --query '[.[] | select(.deleted == true and .stack == "p
 
 ### CI/CD Pipeline Example
 
-The following GitHub Actions jobs excerpt separates apply and destroy operations for a pull-request event. It pins HEAD to the PR's head commit and records the merge base with the event's target commit as BASE. Using the fork point avoids interpreting unrelated target-branch additions as PR deletions. Configure the `production` environment's protection rules before using the deployment jobs; an environment name alone does not require approval.
+The following GitHub Actions jobs excerpt applies modified components and prepares deleted configuration for review during a pull-request event. Detection pins HEAD to the PR's head commit and records the merge base with the event's target commit as BASE. Using the fork point avoids interpreting unrelated target-branch additions as PR deletions. Apply uses the event's merge revision so it includes target-branch changes. Configure the `production` environment's protection rules before using the apply job; an environment name alone does not require approval.
 
 ```yaml
 jobs:
@@ -1535,37 +1535,39 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.sha }}
       - uses: cloudposse/github-action-setup-atmos@v2
       - run: atmos terraform apply ${{ matrix.component }} -s ${{ matrix.stack }}
 
-  destroy:
+  prepare-deletions:
     needs: detect-changes
     runs-on: ubuntu-latest
     if: needs.detect-changes.outputs.deleted != '[]'
-    environment: production  # Requires manual approval via GitHub Environment protection rules
     strategy:
       matrix:
         include: ${{ fromJson(needs.detect-changes.outputs.deleted) }}
     steps:
       # Check out the same immutable BASE commit used for detection.
-      # The deleted component's configuration only exists in BASE.
+      # Recover the deleted definition; this is not proof of deployed identity.
       - uses: actions/checkout@v6
         with:
           ref: ${{ needs.detect-changes.outputs.base_sha }}
       - uses: cloudposse/github-action-setup-atmos@v2
-      - run: atmos terraform destroy ${{ matrix.component }} -s ${{ matrix.stack }} --auto-approve
+      - name: Inspect recovered configuration without resolving functions or templates
+        env:
+          COMPONENT: ${{ matrix.component }}
+          STACK: ${{ matrix.stack }}
+        run: |
+          atmos describe component "$COMPONENT" -s "$STACK" \
+            --process-functions=false --process-templates=false > recovered-component.yaml
 ```
 
 :::warning Destroy Operations
-Destruction of cloud resources is irreversible. The example above uses `--auto-approve` for automation but
-includes `environment: production` to require manual approval via
-[GitHub Environment protection rules](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#environment-protection-rules).
-Always review the list of deleted components before running `terraform destroy`.
+The example prepares configuration without destroying resources. Recover the deleted definition from the **exact BASE commit used for detection**, not HEAD or a moving branch name. BASE is the fork point, however, and may differ from the configuration that was actually deployed. For example, the target branch could have migrated a backend or workspace after the PR branched.
 
-**Important:** The destroy job must check out the **exact BASE commit used for detection** rather than HEAD or a moving branch name.
-This is because `terraform destroy` needs access to the component's stack configuration and Terraform files,
-which only exist in BASE — they've been deleted in HEAD.
+Before teardown, verify the resolved backend, workspace, account, and component sources against deployment records and the deployed state. The inspection step disables processing, so its output alone cannot establish that identity. If it differs from the deployed configuration, recover the configuration and sources from the immutable revision used by that deployment. Do not automatically destroy using an unverified fork-point snapshot.
+
+After verifying identity and reviewing the destruction plan, run an explicit [Terraform destroy](/cli/commands/terraform/destroy) from the recovered deployment configuration. Configure credentials and any required [GitHub Environment protection rules](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#environment-protection-rules) for a separate teardown job. Keep recovered configuration private; it can contain sensitive values even with processing disabled.
 
 For a post-merge workflow, retain the original comparison SHAs and deletion list; checking out the latest `main` after the merge will not recover the removed configuration. Restore any externally provisioned component sources at their required versions as well. The independent matrix jobs above do not enforce dependency ordering: for related deletions, arrange teardown explicitly with dependents before prerequisites using the previous configuration. Review surviving dependents and potential renames before treating a deletion record as approval to destroy.
 :::
