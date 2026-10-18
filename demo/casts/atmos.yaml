@@ -45,6 +45,11 @@ commands:
         path: "../../.context/cast-fixtures/basic"
         reset: true
       - type: workdir
+        name: ai-ask-fixture
+        source: fixtures/ai-ask
+        path: "../../.context/cast-fixtures/ai-ask"
+        reset: true
+      - type: workdir
         name: emulator-aws-fixture
         source: "../../examples/emulator-aws"
         path: "../../.context/cast-fixtures/emulator-aws"
