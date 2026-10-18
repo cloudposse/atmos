@@ -30,6 +30,7 @@ func isAtmosYAMLFunction(s string) bool {
 	// the winning expression replaces the field and evaluates once against the
 	// final component context, including dependencies on other computed fields.
 	postMergeFunctions := []string{
+		u.AtmosYamlFuncCILabels,
 		u.AtmosYamlFuncTemplate,
 		u.AtmosYamlFuncTerraformOutput,
 		u.AtmosYamlFuncTerraformState,

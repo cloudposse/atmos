@@ -1913,6 +1913,8 @@ func applyCIGitCloneBootstrap(cmd *cobra.Command, args []string, tmpConfig *sche
 // command, captures telemetry, and handles unknown-command errors by showing usage.
 // This function is invoked once from main.main.
 func Execute() error {
+	ci.ResetLabelsCache()
+	defer ci.ResetLabelsCache()
 	atmosGit.ResetRootTagCache()
 	defer atmosGit.ResetRootTagCache()
 	defer initcmd.SetAtmosConfig(nil)

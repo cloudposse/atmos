@@ -2565,8 +2565,11 @@
               ]
             },
             "enabled": {
-              "type": "boolean",
-              "description": "Flag to enable or disable the component"
+              "anyOf": [
+                {"type": "boolean"},
+                {"type": "string", "pattern": "^!"}
+              ],
+              "description": "Flag to enable or disable the component. A YAML function (for example !ci.labels) is evaluated before use."
             },
             "component": {
               "type": "string",
@@ -2628,9 +2631,9 @@
             "labels": {
               "type": "object",
               "additionalProperties": {
-                "type": "string"
+                "type": ["string", "boolean"]
               },
-              "description": "User-defined key-value labels for categorizing and filtering components (atmos list components --labels)."
+              "description": "User-defined string or boolean labels for categorizing and filtering components. Boolean values match --labels key:true or key:false."
             }
           },
           "required": []
@@ -2652,9 +2655,9 @@
             "labels": {
               "type": "object",
               "additionalProperties": {
-                "type": "string"
+                "type": ["string", "boolean"]
               },
-              "description": "User-defined key-value labels for categorizing and filtering components (atmos list components --labels)."
+              "description": "User-defined string or boolean labels for categorizing and filtering components. Boolean values match --labels key:true or key:false."
             },
             "tags": {
               "type": "array",
@@ -2678,8 +2681,11 @@
               ]
             },
             "enabled": {
-              "type": "boolean",
-              "description": "Flag to enable or disable components stack-wide by default"
+              "anyOf": [
+                {"type": "boolean"},
+                {"type": "string", "pattern": "^!"}
+              ],
+              "description": "Flag to enable or disable components stack-wide by default. A YAML function (for example !ci.labels) is evaluated before use."
             },
             "locked": {
               "type": "boolean",
@@ -2712,8 +2718,11 @@
               "additionalProperties": true,
               "properties": {
                 "enabled": {
-                  "type": "boolean",
-                  "description": "Enable Atmos Pro for this stack or component, including automatic exception reporting in GitHub Actions."
+                  "anyOf": [
+                    {"type": "boolean"},
+                    {"type": "string", "pattern": "^!"}
+                  ],
+                  "description": "Enable Atmos Pro for this stack or component, including automatic exception reporting in GitHub Actions. A YAML function (for example !ci.labels) is evaluated before use."
                 },
                 "errors": {
                   "type": "object",

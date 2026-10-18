@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	perf "github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 const (
@@ -221,25 +222,16 @@ func getStringSliceFromMetadata(m map[string]any, key string) []string {
 	return result
 }
 
-// getStringMapFromMetadata safely extracts a map[string]string from a metadata
-// field that was YAML-decoded as map[string]any. Returns an empty (non-nil)
-// map if the key is absent or not an object, so callers always get a
-// rangeable value.
+// getStringMapFromMetadata extracts a map[string]string from a metadata field
+// that was YAML-decoded as map[string]any. It delegates to tags.ToStringMap so
+// list filtering, describe affected, and the terraform bulk paths agree on how
+// values (including booleans) are normalized for --labels selectors. Returns an
+// empty (non-nil) map if the key is absent or not an object, so callers always
+// get a rangeable value.
 func getStringMapFromMetadata(m map[string]any, key string) map[string]string {
 	defer perf.Track(nil, "list.extract.getStringMapFromMetadata")()
 
-	raw, ok := m[key].(map[string]any)
-	if !ok {
-		return map[string]string{}
-	}
-
-	result := make(map[string]string, len(raw))
-	for k, v := range raw {
-		if s, ok := v.(string); ok {
-			result[k] = s
-		}
-	}
-	return result
+	return tags.ToStringMap(m[key])
 }
 
 // GetTagsFromMetadata extracts metadata.tags as a []string for callers

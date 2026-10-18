@@ -183,8 +183,9 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 			}
 			return nil, wrapped
 		}
+		// A bad YAML function argument is not a template problem, so it gets no hint.
 		hint := ""
-		if !strings.HasSuffix(filePath, u.TemplateExtension) {
+		if !strings.HasSuffix(filePath, u.TemplateExtension) && !stderrors.Is(err, errUtils.ErrInvalidArguments) {
 			hint = " (hint: if this file contains Go template directives, rename it to .yaml.tmpl)"
 		}
 		return nil, fmt.Errorf("%w: failed to parse YAML for locals extraction%s: %w", errUtils.ErrInvalidStackManifest, hint, err)

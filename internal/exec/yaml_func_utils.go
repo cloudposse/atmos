@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/emulator"
+	functionpkg "github.com/cloudposse/atmos/pkg/function"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -559,8 +561,10 @@ func processCustomTagsWithContext(
 		return result, err
 	}
 
-	// If any other YAML explicit tag (not currently supported by Atmos) is used, return it w/o processing.
-	return input, nil
+	// Delegate registry-backed functions; unrecognized expressions are preserved.
+	return functionpkg.EvaluateDeferredYAML(context.Background(), input, skip, &functionpkg.ExecutionContext{
+		AtmosConfig: atmosConfig, Stack: currentStack, StackInfo: stackInfo,
+	})
 }
 
 func skipFunc(skip []string, f string) bool {

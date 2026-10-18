@@ -1495,6 +1495,7 @@ var (
 	ErrCICheckRunMissingComponent = errors.New("check run requires a resolved component and stack")
 	ErrCIStatusContextIncomplete  = errors.New("status context requires all parts to be non-empty")
 	ErrCIStatusFetchFailed        = errors.New("failed to fetch CI status")
+	ErrCILabelsFetchFailed        = errors.New("failed to fetch CI review labels")
 	ErrCIOutputWriteFailed        = errors.New("failed to write CI output")
 	ErrCISummaryWriteFailed       = errors.New("failed to write CI summary")
 	ErrCIAnnotationFailed         = errors.New("failed to emit CI annotations")

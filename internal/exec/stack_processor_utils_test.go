@@ -4842,6 +4842,26 @@ func BenchmarkLocalsRepeated(b *testing.B) {
 	}
 }
 
+// A bad YAML function argument is not a Go-template problem, so the ".yaml.tmpl" rename hint
+// must not be attached to it (it sent users looking in the wrong place), while genuine
+// template syntax errors keep the hint.
+func TestExtractLocalsFromRawYAML_FunctionArgumentErrorHasNoTemplateHint(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	const templateHint = "rename it to .yaml.tmpl"
+
+	_, err := extractLocalsFromRawYAML(atmosConfig, "vars:\n  v: !ci.labels []\n", "bad-function-argument.yaml")
+	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrInvalidArguments)
+	require.ErrorIs(t, err, errUtils.ErrInvalidStackManifest)
+	assert.NotContains(t, err.Error(), templateHint)
+	assert.Contains(t, err.Error(), "!ci.labels")
+
+	_, err = extractLocalsFromRawYAML(atmosConfig, "vars:\n  v: {{ .x }}\n", "bad-template-syntax.yaml")
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, errUtils.ErrInvalidArguments)
+	assert.Contains(t, err.Error(), templateHint)
+}
+
 // TestExtractLocalsFromRawYAML_UnsupportedTagHints verifies the parse-failure hint: a CloudFormation
 // short-form intrinsic gets CloudFormation-specific advice instead of the unrelated suggestion to
 // rename the file to .yaml.tmpl, while any other unsupported tag keeps the generic advice.
