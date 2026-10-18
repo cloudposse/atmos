@@ -25,7 +25,7 @@ const (
 // stdinIsTerminal reports whether stdin is a terminal. It is a seam: tests replace it to force or refuse the
 // interactive path without a real terminal.
 var stdinIsTerminal = func() bool {
-	return terminal.New().IsTTY(terminal.Stdin)
+	return terminal.HasRealTTYInput()
 }
 
 // runForm runs a built huh form. It is a seam: tests replace it to drive the form in accessible
@@ -221,13 +221,9 @@ func alwaysDenyLabel(tool Tool) string {
 }
 
 // alwaysLabel builds an "Always <verb> ..." label. A tool whose remembered decision is
-// scoped to a specific command says "this command"; otherwise the decision covers the
-// whole tool, so the label names it.
+// scoped to a command or path names that scope; otherwise it names the whole tool.
 func alwaysLabel(verb string, tool Tool) string {
-	if scoped, ok := tool.(ScopedTool); ok && scoped.CacheKey() != tool.Name() {
-		return "Always " + verb + " this command"
-	}
-	return "Always " + verb + " " + prettyToolName(tool.Name())
+	return "Always " + verb + " " + prettyToolName(cacheKeyFor(tool))
 }
 
 // promptWithCache presents the four cached-permission choices via a huh select

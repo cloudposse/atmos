@@ -152,6 +152,9 @@ func processNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	if node == nil {
 		return nil
 	}
+	if node.Tag == "!version" && node.Kind != yaml.ScalarNode {
+		return unsupportedAtmosYamlTagError(node.Tag, currentPath)
+	}
 
 	switch node.Kind {
 	case yaml.DocumentNode:
@@ -239,6 +242,12 @@ func sequenceNeedsProcessing(node *yaml.Node) bool {
 }
 
 func processSequenceNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
+	// Sequence decoding and !append resolution can bypass processNode, so validate
+	// version tags throughout the subtree before taking either path.
+	if err := rejectSequenceVersionTags(node, currentPath); err != nil {
+		return err
+	}
+
 	// Handle !append tag for list concatenation during merging.
 	if node.Tag == u.AtmosYamlFuncAppend {
 		return handleAppend(node, v, currentPath)
@@ -649,6 +658,15 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 	}
 
 	switch node.Tag {
+	case "!version":
+		parts := strings.Split(currentPath, ".")
+		if len(parts) != 4 || parts[0] != "ai" || parts[1] != "skills" || parts[3] != "ref" || strings.TrimSpace(node.Value) == "" {
+			return unsupportedAtmosYamlTagError(node.Tag, currentPath)
+		}
+		node.Value = schema.SkillVersionMarker + node.Value
+		node.Tag = "!!str"
+		v.Set(currentPath, node.Value)
+		return nil
 	case u.AtmosYamlFuncUnset:
 		// The !unset tag is handled in processMappingNode by skipping the key.
 		// If we reach here, it means !unset was used in a context where it can't

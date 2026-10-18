@@ -557,3 +557,41 @@ func assertHasFolderEntry(t *testing.T, entries []ComponentDependency, path stri
 	}
 	t.Errorf("expected Components to contain a folder entry %q, got %#v", path, entries)
 }
+
+func TestParseLegacyDependsOn(t *testing.T) {
+	t.Run("list form is honored", func(t *testing.T) {
+		deps := ParseLegacyDependsOn([]any{
+			"vpc",
+			map[string]any{"component": "db", "stack": "prod"},
+			map[any]any{"component": "cache"},
+		})
+		require.Len(t, deps, 3)
+		assert.Equal(t, ComponentDependency{Component: "vpc"}, deps[0])
+		assert.Equal(t, ComponentDependency{Component: "db", Stack: "prod"}, deps[1])
+		assert.Equal(t, ComponentDependency{Component: "cache"}, deps[2])
+	})
+
+	t.Run("map form keeps context fields and is ordered by key", func(t *testing.T) {
+		deps := ParseLegacyDependsOn(map[string]any{
+			"2": map[string]any{"component": "db", "stage": "prod", "namespace": "cp", "tenant": "t", "environment": "ue1"},
+			"1": map[string]any{"component": "vpc", "stack": "dev"},
+		})
+		require.Len(t, deps, 2)
+		assert.Equal(t, ComponentDependency{Component: "vpc", Stack: "dev"}, deps[0])
+		assert.Equal(t, ComponentDependency{Component: "db", Namespace: "cp", Tenant: "t", Environment: "ue1", Stage: "prod"}, deps[1])
+	})
+
+	t.Run("map with non-string keys", func(t *testing.T) {
+		deps := ParseLegacyDependsOn(map[any]any{1: map[string]any{"component": "vpc"}})
+		require.Equal(t, []ComponentDependency{{Component: "vpc"}}, deps)
+	})
+
+	t.Run("entries without a component are dropped", func(t *testing.T) {
+		assert.Empty(t, ParseLegacyDependsOn([]any{"", map[string]any{"stack": "dev"}, map[string]any{"file": "a.txt"}, 123}))
+	})
+
+	t.Run("unsupported shapes yield nothing", func(t *testing.T) {
+		assert.Nil(t, ParseLegacyDependsOn("vpc"))
+		assert.Nil(t, ParseLegacyDependsOn(nil))
+	})
+}

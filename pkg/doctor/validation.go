@@ -11,7 +11,6 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	ecconfig "github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
-	ecfiles "github.com/editorconfig-checker/editorconfig-checker/v3/pkg/files"
 	ecvalidation "github.com/editorconfig-checker/editorconfig-checker/v3/pkg/validation"
 
 	civalidate "github.com/cloudposse/atmos/pkg/ci/validate"
@@ -117,8 +116,14 @@ func (e *Engine) checkEditorConfig(p *project, o *Options, r *Report) error {
 	if err := config.Parse(); err != nil {
 		return err
 	}
-	config.PassedFiles = []string{p.root}
-	paths, err := ecfiles.GetFiles(*config)
+	// validate.editorconfig in atmos.yaml shapes the run exactly as it does for
+	// "atmos validate editorconfig", and files come from the same Git-aware selection.
+	settings, err := validation.EditorConfigSettingsFromMap(p.config)
+	if err != nil {
+		return err
+	}
+	validation.ApplyEditorConfigSettings(config, &settings)
+	paths, err := validation.EditorConfigFiles(p.root, config, settings.Exclude)
 	if err != nil {
 		return err
 	}
@@ -144,14 +149,15 @@ func selectedPaths(p *project, o *Options, paths []string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !within(p.root, abs) || !selected(o, p, &document{path: abs}) {
+		if !within(p.root, abs) {
 			continue
 		}
-		remaining, err := validation.ExcludePaths([]string{relative(p.root, abs)}, o.Exclude)
+		// Every selected-or-not path counts toward the --exclude patterns that match it.
+		excluded, err := p.excludes(o, relative(p.root, abs))
 		if err != nil {
 			return nil, err
 		}
-		if len(remaining) > 0 {
+		if !excluded && selected(o, p, &document{path: abs}) {
 			result = append(result, abs)
 		}
 	}

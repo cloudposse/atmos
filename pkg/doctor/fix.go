@@ -6,20 +6,16 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
-	"time"
 
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/validation"
 	"github.com/cloudposse/atmos/pkg/validator"
-	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 type candidate struct {
@@ -88,8 +84,8 @@ func (e *Engine) fix(ctx context.Context, p *project, o *Options, r *Report, edi
 	if len(candidates) == 0 {
 		return nil
 	}
-	verified, err := e.verifyCandidateProject(ctx, o, r, candidates)
-	if err != nil || !verified {
+	candidates, err = e.verifyCandidateProject(ctx, &fixRun{p, o, r, v}, candidates)
+	if err != nil || len(candidates) == 0 {
 		return err
 	}
 	if err = e.unchanged(ctx, p, o); err != nil {
@@ -120,6 +116,12 @@ func (e *Engine) stageCandidates(ctx context.Context, p *project, r *Report, edi
 		if isSymlink(d.path) {
 			// A symlinked document may be read, but a write would replace the link or edit a shared target.
 			rejectSymlinked(r, changes)
+			e.emit(Event{Phase: "Stage fixes", Label: relative(p.root, d.path), Done: true, Status: statusVerificationIncomplete, Total: len(groups)})
+			continue
+		}
+		if isReadOnly(d.path) {
+			// A read-only document is a deliberate lock; the atomic write would replace it without complaint.
+			rejectReadOnly(r, changes)
 			e.emit(Event{Phase: "Stage fixes", Label: relative(p.root, d.path), Done: true, Status: statusVerificationIncomplete, Total: len(groups)})
 			continue
 		}
@@ -220,6 +222,10 @@ func (e *Engine) applyCandidates(ctx context.Context, p *project, o *Options, r 
 		if isSymlink(c.doc.path) {
 			return fmt.Errorf("%w: %s became a symlink; doctor does not write through symlinks", ErrChanged, relative(p.root, c.doc.path))
 		}
+		// A file can become read-only after staging; the write must not replace it.
+		if isReadOnly(c.doc.path) {
+			return fmt.Errorf("%w: %s became read-only; doctor does not overwrite read-only files", ErrChanged, relative(p.root, c.doc.path))
+		}
 		if err := e.FS.WriteFileAtomic(c.doc.path, c.content, c.doc.mode); err != nil {
 			return err
 		}
@@ -306,7 +312,7 @@ func (e *Engine) verifyProject(ctx context.Context, o *Options, r *Report, candi
 		return err
 	}
 	if migratesDependencies {
-		return recordDependencyVerification(r, &after, o.DryRun)
+		return e.verifyDependencies(ctx, o, r, &after, candidates)
 	}
 	return nil
 }
@@ -357,70 +363,6 @@ func schemaErrors(v validator.Validator, source string, content []byte) (map[str
 	return out, nil
 }
 
-func (e *Engine) backup(candidates []candidate, r *Report) error {
-	var base string
-	var err error
-	if e.BackupDir != nil {
-		base, err = e.BackupDir()
-	} else {
-		base, err = xdg.GetXDGDataDir("doctor/backups", privateDirectoryMode)
-	}
-	if err != nil {
-		return err
-	}
-	if err = os.MkdirAll(base, privateDirectoryMode); err != nil {
-		return err
-	}
-	dir, err := os.MkdirTemp(base, time.Now().UTC().Format("20060102T150405Z-")+"*")
-	if err != nil {
-		return err
-	}
-	r.Backup = dir
-	entries := make([]RecoveryEntry, 0, len(candidates))
-	for i, c := range candidates {
-		name := fmt.Sprintf("%06d.original", i)
-		if err = os.WriteFile(filepath.Join(dir, name), c.doc.content, privateFileMode); err != nil {
-			return err
-		}
-		entries = append(entries, RecoveryEntry{Path: c.doc.path, Copy: name, Mode: RecoveryMode(c.doc.mode.Perm()), Before: digest(c.doc.content), After: digest(c.content)})
-	}
-	manifest, err := json.MarshalIndent(entries, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err = os.WriteFile(filepath.Join(dir, "manifest.json"), append(manifest, '\n'), privateFileMode); err != nil {
-		return err
-	}
-	r.Recovery = "Use manifest.json to copy each .original backup to its recorded path and restore its recorded permission mode. Compare after_sha256 before overwriting later edits."
-	return nil
-}
-
-func (e *Engine) gitWarnings(ctx context.Context, p *project, candidates []candidate, r *Report) {
-	git := func(args ...string) ([]byte, error) {
-		//nolint:gosec // Read-only Git subcommands use argument arrays and place paths after --.
-		return exec.CommandContext(ctx, "git", append([]string{"-C", p.root}, args...)...).Output()
-	}
-	warn := func(file, message string) {
-		r.Findings = append(r.Findings, Finding{RuleID: "recovery", Category: "recovery", Severity: validation.SeverityWarning, File: file, Message: message, Status: statusManual})
-		e.emit(Event{Phase: "Back up", Label: message, Status: "warning", Done: true})
-	}
-	if _, err := git("rev-parse", "--show-toplevel"); err != nil {
-		warn("", "Git is unavailable or this project is outside a repository; exact backups will be created before editing")
-		return
-	}
-	for _, c := range candidates {
-		path := relative(p.root, c.doc.path)
-		out, err := git("status", "--porcelain=v1", "--untracked-files=all", "--ignored", "--", path)
-		if err != nil {
-			warn(path, "Unable to inspect Git status for "+path)
-			continue
-		}
-		if len(strings.TrimSpace(string(out))) > 0 {
-			warn(path, "Editing "+path+": staged, unstaged, untracked, or ignored content exists; preserve the recovery backup")
-		}
-	}
-}
-
 func (e *Engine) verifySchemaClosure(ctx context.Context, p *project, o *Options) error {
 	options := *o
 	options.Only = []string{ruleSchema}
@@ -444,11 +386,11 @@ func retainDecisions(p *project, r, checked *Report) {
 	decisions := map[string]Finding{}
 	for i := range r.Findings {
 		f := &r.Findings[i]
-		if f.Status == statusFixed || f.RuleID == "recovery" {
+		if f.Status == statusFixed || f.RuleID == ruleRecovery {
 			retained = append(retained, *f)
 		}
 		// A rejected repair keeps its decision; the recheck cannot know why staging refused it.
-		if f.Status == statusVerificationFailed || f.Reason == reasonSymlinkedSource {
+		if f.Status == statusVerificationFailed || f.Reason == reasonSymlinkedSource || f.Reason == reasonReadOnlySource {
 			decisions[f.RuleID+"/"+f.File+"/"+f.Path] = *f
 		}
 	}
@@ -462,17 +404,19 @@ func retainDecisions(p *project, r, checked *Report) {
 	r.Findings = retained
 }
 
-func (e *Engine) verifyCandidateProject(ctx context.Context, o *Options, r *Report, candidates []candidate) (bool, error) {
+// fixRun carries the shared inputs of the steps that verify repair candidates.
+type fixRun struct {
+	p *project
+	o *Options
+	r *Report
+	v validator.Validator
+}
+
+func (e *Engine) verifyCandidateProject(ctx context.Context, run *fixRun, candidates []candidate) ([]candidate, error) {
+	o, r := run.o, run.r
 	e.emit(Event{Phase: "Verify", Label: "Complete candidate project", Total: len(candidates) + 1})
 	if err := e.verifyProject(ctx, o, r, candidates); err != nil {
-		if ctx.Err() != nil {
-			return false, ctx.Err()
-		}
-		for _, c := range candidates {
-			rejectCandidate(r, c.edits, err)
-		}
-		e.emit(Event{Phase: "Verify", Label: "Complete candidate project", Total: len(candidates) + 1, Done: true, Status: statusVerificationFailed})
-		return false, nil
+		return e.candidateProjectFailed(ctx, run, candidates, err)
 	}
 	status := statusPassed
 	for _, check := range r.Checks {
@@ -486,7 +430,30 @@ func (e *Engine) verifyCandidateProject(ctx context.Context, o *Options, r *Repo
 		reason = "Repair transformations, comments, unrelated YAML nodes, and candidate schemas verified through a source overlay; dependency migrations adopt modern required semantics"
 	}
 	r.Checks = append(r.Checks, Check{ID: "semantic-verification", Status: statusPassed, Files: len(candidates), Reason: reason})
-	return true, nil
+	return candidates, nil
+}
+
+// candidateProjectFailed handles a failed whole-project verification. A dependency migration that
+// changes the graph is refused on its own and the remaining candidates are verified again; any
+// other failure rejects every candidate.
+func (e *Engine) candidateProjectFailed(ctx context.Context, run *fixRun, candidates []candidate, err error) ([]candidate, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	e.emit(Event{Phase: "Verify", Label: "Complete candidate project", Total: len(candidates) + 1, Done: true, Status: statusVerificationFailed})
+	var graph *dependencyGraphError
+	if errors.As(err, &graph) {
+		// Only the migrations that change the graph are refused; unrelated repairs are verified again without them.
+		narrowed := e.rejectDependencyMigrations(ctx, run, candidates, err)
+		if len(narrowed) == 0 {
+			return nil, nil
+		}
+		return e.verifyCandidateProject(ctx, run, narrowed)
+	}
+	for _, c := range candidates {
+		rejectCandidate(run.r, c.edits, err)
+	}
+	return nil, nil
 }
 
 func markDryRun(r *Report, candidates []candidate) {

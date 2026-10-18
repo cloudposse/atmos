@@ -17,6 +17,7 @@ func TestRewriteForms(t *testing.T) {
 		repository string
 		ref        string
 		kind       RefKind
+		subpath    string
 	}{
 		{
 			name:   "bare host with .git and the version template",
@@ -91,6 +92,30 @@ func TestRewriteForms(t *testing.T) {
 			module: "vpc", repository: "aws-vpc", kind: RefNone,
 		},
 		{
+			name:   "mixed-case host, owner, and repository keep the host spelling",
+			source: "GitHub.com/CloudPosse/terraform-aws-components.git//modules/acm?ref=1.495.0",
+			want:   "GitHub.com/cloudposse-terraform-components/aws-acm.git//src?ref=1.495.0",
+			module: "acm", repository: "aws-acm", ref: "1.495.0", kind: RefLiteral,
+		},
+		{
+			name:   "mixed-case scheme and upper-case .git keep their spelling",
+			source: "Git::HTTPS://GITHUB.COM/CLOUDPOSSE/Terraform-AWS-Components.GIT//modules/vpc?ref=1.0.0",
+			want:   "Git::HTTPS://GITHUB.COM/cloudposse-terraform-components/aws-vpc.GIT//src?ref=1.0.0",
+			module: "vpc", repository: "aws-vpc", ref: "1.0.0", kind: RefLiteral,
+		},
+		{
+			name:   "directory inside a mapped module moves below src",
+			source: "github.com/cloudposse/terraform-aws-components.git//modules/eks/cluster/modules/foo?ref=1.495.0",
+			want:   "github.com/cloudposse-terraform-components/aws-eks-cluster.git//src/modules/foo?ref=1.495.0",
+			module: "eks/cluster", repository: "aws-eks-cluster", ref: "1.495.0", kind: RefLiteral, subpath: "modules/foo",
+		},
+		{
+			name:   "directory inside a module with a trailing slash and the version placeholder",
+			source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc/modules/a/b/?ref={{.Version}}",
+			want:   "github.com/cloudposse-terraform-components/aws-vpc.git//src/modules/a/b?ref={{.Version}}",
+			module: "vpc", repository: "aws-vpc", ref: "{{.Version}}", kind: RefVersion, subpath: "modules/a/b",
+		},
+		{
 			name:   "ref that is another template",
 			source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{ .vars.tag }}",
 			want:   "github.com/cloudposse-terraform-components/aws-vpc.git//src?ref={{ .vars.tag }}",
@@ -107,6 +132,7 @@ func TestRewriteForms(t *testing.T) {
 			assert.Equal(t, "cloudposse-terraform-components/"+tt.repository, got.Slug())
 			assert.Equal(t, tt.ref, got.Ref)
 			assert.Equal(t, tt.kind, got.RefKind)
+			assert.Equal(t, tt.subpath, got.Subpath)
 
 			again, ok := Rewrite(got.Source)
 			assert.False(t, ok, "a rewritten source must not be rewritten again: %+v", again)
@@ -134,6 +160,10 @@ func TestRewriteRefusals(t *testing.T) {
 		{"templated repository", "github.com/cloudposse/{{ .repo }}.git//modules/vpc?ref=1.0.0", false, nil},
 		{"other host", "gitlab.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.0.0", false, nil},
 		{"raw content URL", "https://raw.githubusercontent.com/cloudposse/terraform-aws-components/1.0.0/mixins/provider.tf", false, nil},
+		{"subdirectory inside the query", "github.com/cloudposse/terraform-aws-components.git?ref=1.495.0//modules/alb", true, ErrSubdirInQuery},
+		{"subdirectory inside the query with other parameters", "git::https://github.com/cloudposse/terraform-aws-components.git?depth=1&ref=1.495.0//modules/eks/cluster", true, ErrSubdirInQuery},
+		{"unmapped parent keeps a deep path without a successor", "github.com/cloudposse/terraform-aws-components.git//modules/eks/efs/modules/x?ref=1.0.0", true, ErrNoSuccessor},
+		{"parent traversal is never a module", "github.com/cloudposse/terraform-aws-components.git//modules/vpc/../eks/efs?ref=1.0.0", true, ErrNoSuccessor},
 		{"single slash subdirectory", "github.com/cloudposse/terraform-aws-components.git/modules/vpc?ref=1.0.0", false, nil},
 	}
 	for _, tt := range tests {
@@ -151,7 +181,57 @@ func TestRewriteRefusals(t *testing.T) {
 	}
 }
 
+func TestQuerySubdirCorrection(t *testing.T) {
+	tests := []struct{ name, source, want string }{
+		{"successor exists", "github.com/cloudposse/terraform-aws-components.git?ref=1.495.0//modules/alb", "github.com/cloudposse-terraform-components/aws-alb.git//src?ref=1.495.0"},
+		{"other parameters are kept in order", "git::https://github.com/cloudposse/terraform-aws-components.git?depth=1&ref=1.495.0//modules/alb&sshkey=x", "git::https://github.com/cloudposse-terraform-components/aws-alb.git//src?depth=1&ref=1.495.0&sshkey=x"},
+		{"trailing slash", "github.com/cloudposse/terraform-aws-components.git?ref=1.495.0//modules/alb/", "github.com/cloudposse-terraform-components/aws-alb.git//src?ref=1.495.0"},
+		{"no successor keeps the monorepo source", "github.com/cloudposse/terraform-aws-components.git?ref=1.0.0//modules/eks/efs", "github.com/cloudposse/terraform-aws-components.git//modules/eks/efs?ref=1.0.0"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reference, ok := Parse(tt.source)
+			require.True(t, ok)
+			got, ok := reference.QuerySubdirCorrection()
+			require.True(t, ok)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+
+	reference, ok := Parse("github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.0.0")
+	require.True(t, ok)
+	_, ok = reference.QuerySubdirCorrection()
+	assert.False(t, ok, "a source with its subdirectory in the right place needs no correction")
+}
+
+func TestParentModule(t *testing.T) {
+	tests := []struct {
+		module, parent, subpath string
+		ok                      bool
+	}{
+		{"eks/cluster/modules/foo", "eks/cluster", "modules/foo", true},
+		{"vpc/modules/a/b", "vpc", "modules/a/b", true},
+		{"vpc", "", "", false},
+		{"eks/efs", "", "", false},
+		{"eks/karpenter-node-pool/modules/x", "eks/karpenter-node-pool", "modules/x", true},
+		{"eks/karpenter/modules/x", "eks/karpenter", "modules/x", true},
+		{"eks/karpenter-extra/x", "", "", false},
+		{"vpc/../x", "", "", false},
+		{"vpc//x", "", "", false},
+		{"", "", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.module, func(t *testing.T) {
+			parent, subpath, ok := ParentModule(tt.module)
+			assert.Equal(t, tt.ok, ok)
+			assert.Equal(t, tt.parent, parent)
+			assert.Equal(t, tt.subpath, subpath)
+		})
+	}
+}
+
 func TestMentions(t *testing.T) {
+	assert.True(t, Mentions("GitHub.com/CloudPosse/Terraform-AWS-Components.git//modules/acm?ref=1.495.0"))
 	assert.True(t, Mentions("https://raw.githubusercontent.com/cloudposse/terraform-aws-components/1.0.0/mixins/provider.tf"))
 	assert.True(t, Mentions("git@github.com:cloudposse/terraform-aws-components.git"))
 	assert.False(t, Mentions("github.com/cloudposse/terraform-null-label.git"))

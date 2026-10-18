@@ -13,8 +13,6 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
-
-	"github.com/cloudposse/atmos/pkg/validation"
 )
 
 const (
@@ -48,6 +46,10 @@ type project struct {
 	// profiles are the active profiles: those selected with --profile or ATMOS_PROFILE, or else
 	// the profiles.default value of the base configuration, exactly as the loader chooses them.
 	profiles []string
+	// excludeHits counts the inputs each --exclude pattern matched, in the order of Options.Exclude.
+	excludeHits []int
+	// unparsedConfig is the first configuration file that did not parse. Its base_path is unknown.
+	unparsedConfig string
 }
 
 func parse(content []byte) (*yaml.Node, error) {
@@ -84,7 +86,7 @@ func (e *Engine) discover(ctx context.Context, o *Options, r *Report) (*project,
 	if err = e.loadProfiles(ctx, p, o, r, layout); err != nil {
 		return nil, err
 	}
-	sources, err := projectSources(ctx, p, o, layout.configDir)
+	sources, err := projectSources(ctx, p, o, r, layout.configDir)
 	if err != nil {
 		return nil, err
 	}
@@ -103,14 +105,18 @@ func (p *project) locate(o *Options, r *Report) (*configLayout, error) {
 	}
 	if !layout.project {
 		p.complete = false
-		return nil, noProjectError(o)
+		return nil, noProjectError(o, layout.missingConfigs)
+	}
+	for _, m := range layout.missingConfigs {
+		p.limit(limitConfig, "", 0, m.describe())
+		addFinding(o, r, missingConfigFinding(m))
 	}
 	for _, path := range layout.ambient {
 		reason := "Ambient configuration is merged at runtime but is outside the project: " + path
 		p.limit(limitConfig, "", 0, reason)
 		addNotice(o, r, incompleteNotice("", reason))
 	}
-	rerootProject(p, o, layout.root)
+	rerootProject(p, o, r, layout.root)
 	layout.sources = noteOutsideSources(p, o, r, layout.sources)
 	return layout, nil
 }
@@ -179,17 +185,35 @@ func importedSources(d *document, p *project, o *Options, r *Report, kind string
 	return sources
 }
 
-func projectSources(ctx context.Context, p *project, o *Options, configDir string) ([]source, error) {
+// sourceBase resolves the base path that stack and vendor sources are read from.
+func sourceBase(p *project, o *Options, r *Report, configDir string) (string, error) {
 	if configDir == "" {
 		configDir = p.root
 	}
 	base, err := projectBasePath(o, p, configDir)
 	if err != nil {
+		return "", err
+	}
+	if base == configDir || p.unparsedConfig == "" || stringAt(p.config, keyBasePath) != "" || runtimeBasePath(o) != "" {
+		return base, nil
+	}
+	// The configuration that did not parse may declare base_path. Anchoring at the Git root, as
+	// Atmos does for a configuration without one, would inspect unrelated files and misplace the
+	// syntax error, so only the configuration's own directory is inspected.
+	reason := "base_path could not be read because " + relative(configDir, p.unparsedConfig) + " does not parse; only its directory is inspected"
+	p.limit(limitConfig, p.unparsedConfig, 0, reason)
+	addNotice(o, r, incompleteNotice("", reason))
+	return configDir, nil
+}
+
+func projectSources(ctx context.Context, p *project, o *Options, r *Report, configDir string) ([]source, error) {
+	base, err := sourceBase(p, o, r, configDir)
+	if err != nil {
 		return nil, err
 	}
 	if base != p.root && within(base, p.root) {
 		// The runtime resolves everything below a base path above the invocation directory.
-		rerootProject(p, o, base)
+		rerootProject(p, o, r, base)
 	}
 	p.base = base
 	stackDir := stringAt(p.config, ruleStacks, keyBasePath)
@@ -279,12 +303,7 @@ func (e *Engine) readDocument(p *project, o *Options, r *Report, path, kind stri
 	rel := relative(p.root, path)
 	content, err := e.FS.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			p.limitKind(kind, "", 0, "Local source does not exist: "+rel)
-			addFinding(o, r, &Finding{RuleID: ruleImports, Category: categoryValidation, Severity: validation.SeverityError, File: rel, Message: "Local source does not exist", Status: statusManual})
-			return nil, nil
-		}
-		return nil, err
+		return nil, p.missingSource(o, r, kind, rel, err)
 	}
 	info, err := e.FS.Stat(path)
 	if err != nil {
@@ -300,9 +319,7 @@ func (e *Engine) readDocument(p *project, o *Options, r *Report, path, kind stri
 	}
 	d.node, err = parse(content)
 	if err != nil {
-		p.limitKind(kind, path, 0, "Configuration could not be parsed")
-		addFinding(o, r, parseFinding(rel, err))
-		d.node = nil
+		p.recordParseFailure(o, r, d, rel, err)
 	}
 	d.sites = dynamicSites(d.node, p.templateMarkers(d))
 	if len(d.sites) > 0 {
@@ -499,11 +516,11 @@ func allowSource(p *project, o *Options, r *Report, path, kind string) (bool, er
 		}
 	}
 	rel, _ := filepath.Rel(p.root, path)
-	filtered, err := validation.ExcludePaths([]string{filepath.ToSlash(rel)}, o.Exclude)
+	excluded, err := p.excludes(o, filepath.ToSlash(rel))
 	if err != nil {
 		return false, err
 	}
-	if len(filtered) == 0 {
+	if excluded {
 		p.limitKind(kind, path, 0, "Source is excluded by --exclude")
 		return false, nil
 	}

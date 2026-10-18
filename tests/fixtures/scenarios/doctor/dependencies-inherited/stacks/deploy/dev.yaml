@@ -1,0 +1,25 @@
+vars:
+  stage: dev
+
+components:
+  terraform:
+    vpc:
+      vars: {}
+    db:
+      vars: {}
+    # Abstract base with list-form legacy dependencies.
+    base:
+      metadata:
+        type: abstract
+      settings:
+        depends_on:
+          - component: vpc
+    # Concrete component inherits base but declares its own legacy map form.
+    app:
+      metadata:
+        component: app
+        inherits: [base]
+      settings:
+        depends_on:
+          1:
+            component: db

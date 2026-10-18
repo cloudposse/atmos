@@ -1,0 +1,4 @@
+components:
+  terraform:
+    vpc:
+      vars: {}

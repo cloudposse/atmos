@@ -169,6 +169,11 @@ func (run *monorepoRun) add(s *monorepoSite, status, message, reason, remediatio
 func (run *monorepoRun) addUnmovable(s *monorepoSite, reference *monorepo.Reference, err error) {
 	module := "modules/" + reference.Module
 	switch {
+	case errors.Is(err, monorepo.ErrSubdirInQuery):
+		corrected, _ := reference.QuerySubdirCorrection()
+		run.add(s, statusManual, monorepoMessage,
+			"The subdirectory is inside the query string; go-getter requires the //subdirectory before the ?, so this source does not select that directory",
+			"Change the source to "+corrected+" (the subdirectory goes before the query)")
 	case errors.Is(err, monorepo.ErrSplitComponent):
 		run.add(s, statusManual, fmt.Sprintf("Component %s was split into separate repositories", module),
 			"Its subcomponents moved to cloudposse-terraform-components/"+strings.Join(monorepo.Successors(reference.Module), ", "),
@@ -210,7 +215,7 @@ func (e *Engine) verifyMonorepo(ctx context.Context, run *monorepoRun, result *m
 	v := monorepo.Verification{Verdict: monorepo.VerdictUnverified, Reason: monorepoOfflineNote}
 	if !run.o.Offline {
 		e.emit(Event{Phase: "Check", Label: "Component repository " + result.Slug()})
-		v = e.Monorepo.Verify(ctx, *result, ref)
+		v = e.Monorepo.Verify(ctx, result, ref)
 		e.emit(Event{Phase: "Check", Label: "Component repository " + result.Slug(), Done: true, Status: verdictStatus(v.Verdict)})
 	}
 	run.verified[key] = v

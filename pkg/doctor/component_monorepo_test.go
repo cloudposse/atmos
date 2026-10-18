@@ -23,9 +23,9 @@ func recordingMonorepo(t *testing.T, answer monorepoAnswer) (*monorepo.MockVerif
 	var asked []string
 	verifier := monorepo.NewMockVerifier(gomock.NewController(t))
 	verifier.EXPECT().Verify(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, result monorepo.Result, ref string) monorepo.Verification {
+		func(_ context.Context, result *monorepo.Result, ref string) monorepo.Verification {
 			asked = append(asked, result.Module+"@"+ref)
-			return answer(result, ref)
+			return answer(*result, ref)
 		},
 	).AnyTimes()
 	return verifier, &asked
@@ -519,4 +519,61 @@ func TestMonorepoSiteClassification(t *testing.T) {
 			assert.Equal(t, tt.want, got, "%s %v", tt.kind, tt.path)
 		}
 	}
+}
+
+func TestMonorepoSourceSpellingAndDeepPaths(t *testing.T) {
+	root := newProject(t)
+	projectFile(t, root, "atmos.yaml", "{}\n")
+	projectFile(t, root, "vendor.yaml", strings.Join([]string{
+		"spec:",
+		"  sources:",
+		"    - component: acm",
+		"      source: GitHub.com/CloudPosse/terraform-aws-components.git//modules/acm?ref=1.495.0",
+		"    - component: foo",
+		"      source: github.com/cloudposse/terraform-aws-components.git//modules/eks/cluster/modules/foo?ref=1.495.0",
+		"    - component: bar",
+		"      source: github.com/cloudposse/terraform-aws-components.git//modules/eks/cluster/modules/bar?ref=1.495.0",
+		"    - component: alb",
+		"      source: git::https://github.com/cloudposse/terraform-aws-components.git?ref=1.495.0//modules/alb",
+		"    - component: removed",
+		"      source: github.com/cloudposse/terraform-aws-components.git//modules/eks/efs/modules/x?ref=1.495.0",
+		"",
+	}, "\n"))
+	verifier, asked := recordingMonorepo(t, identical)
+
+	r := runMonorepo(t, root, verifier, &Options{Fix: true})
+
+	statuses := monorepoStatuses(&r)
+	assert.Equal(t, statusFixed, statuses["vendor.yaml:spec.sources[0].source"], "mixed-case host and owner are detected")
+	assert.Equal(t, statusFixed, statuses["vendor.yaml:spec.sources[1].source"])
+	assert.Equal(t, statusFixed, statuses["vendor.yaml:spec.sources[2].source"])
+	assert.Equal(t, statusManual, statuses["vendor.yaml:spec.sources[3].source"])
+	assert.Equal(t, statusManual, statuses["vendor.yaml:spec.sources[4].source"])
+	assert.Equal(t, []string{"acm@1.495.0", "eks/cluster@1.495.0"}, *asked,
+		"the parent module is verified once for every directory inside it")
+
+	content := readScenarioFile(t, root, "vendor.yaml")
+	assert.Contains(t, content, "GitHub.com/cloudposse-terraform-components/aws-acm.git//src?ref=1.495.0")
+	assert.Contains(t, content, "github.com/cloudposse-terraform-components/aws-eks-cluster.git//src/modules/foo?ref=1.495.0")
+	assert.Contains(t, content, "github.com/cloudposse-terraform-components/aws-eks-cluster.git//src/modules/bar?ref=1.495.0")
+	assert.Contains(t, content, "git::https://github.com/cloudposse/terraform-aws-components.git?ref=1.495.0//modules/alb",
+		"a subdirectory inside the query is guidance only and is never rewritten")
+
+	found := ecFindings(&r, ruleComponentMonorepo)
+	var alb, removed *Finding
+	for i := range found {
+		switch found[i].Path {
+		case "spec.sources[3].source":
+			alb = &found[i]
+		case "spec.sources[4].source":
+			removed = &found[i]
+		}
+	}
+	require.NotNil(t, alb)
+	assert.False(t, alb.Fixable)
+	assert.Contains(t, alb.Reason, "subdirectory is inside the query string")
+	assert.Contains(t, alb.Reason, "before the ?")
+	assert.Contains(t, alb.Remediation, "git::https://github.com/cloudposse-terraform-components/aws-alb.git//src?ref=1.495.0")
+	require.NotNil(t, removed)
+	assert.Contains(t, removed.Message, "has no successor repository")
 }

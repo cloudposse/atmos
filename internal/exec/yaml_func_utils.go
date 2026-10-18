@@ -12,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/emulator"
 	functionpkg "github.com/cloudposse/atmos/pkg/function"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -271,24 +272,10 @@ func processCustomTags(
 }
 
 // matchesTag reports whether input starts with prefix as a complete YAML tag.
-// Any character that could extend the tag name (letters, digits, '.', '-', '_')
-// disqualifies the match; anything else (whitespace, but also punctuation like
-// '[', '{', '"' that unambiguously starts a value) is a valid boundary. The
-// whitespace-only check this replaced broke values whose Go template rendering
-// trims the separator (e.g. a `{{-` marker), producing `!template[...]` with no
-// space before the content.
+// The boundary rule lives in pkg/function/tag so atmos doctor applies the exact
+// same rule when it decides whether an untagged string is a function call.
 func matchesTag(input, prefix string) bool {
-	if !strings.HasPrefix(input, prefix) {
-		return false
-	}
-	rest := strings.TrimPrefix(input, prefix)
-	if rest == "" {
-		return true
-	}
-	c := rest[0]
-	isNameContinuation := c == '.' || c == '-' || c == '_' ||
-		(c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
-	return !isNameContinuation
+	return fntag.MatchesTag(input, prefix)
 }
 
 // matchesPrefix checks if input has the given tag prefix and the function is not skipped.

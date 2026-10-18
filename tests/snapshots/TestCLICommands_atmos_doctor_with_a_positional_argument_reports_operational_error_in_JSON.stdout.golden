@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "findings": [],
+  "checks": [],
+  "changed_files": [],
+  "fix": false,
+  "dry_run": false,
+  "operational_error": "invalid doctor options: unexpected argument \"extra\""
+}

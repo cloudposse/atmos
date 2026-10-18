@@ -15,12 +15,15 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/skills/marketplace"
+	"github.com/cloudposse/atmos/pkg/ai/skills/source"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	listformat "github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/list/output"
 	"github.com/cloudposse/atmos/pkg/list/renderer"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
@@ -55,6 +58,7 @@ var listUsageMarkdown string
 // listEntry is the merged view of a skill: a catalog entry, an installed skill,
 // or both. It powers the available-vs-installed listing.
 type listEntry struct {
+	sourceStatus    *source.Status
 	name            string
 	displayName     string
 	description     string
@@ -109,6 +113,15 @@ var listCmd = &cobra.Command{
 			return err
 		}
 
+		config, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+		if err != nil {
+			return err
+		}
+		engine, err := source.New(&config)
+		if err != nil {
+			return err
+		}
+		entries = appendSourceListEntries(cmd.Context(), entries, engine)
 		return renderSkillList(entries, installedOnly, detailed, outputFormat)
 	},
 }
@@ -311,6 +324,9 @@ func skillListColumns() []column.Config {
 		{Name: "Source", Value: "{{ .source }}"},
 		{Name: "State", Value: "{{ .state }}"},
 		{Name: "Category", Value: "{{ .category }}"},
+		{Name: "Scope", Value: "{{ .scope }}"},
+		{Name: "Track", Value: "{{ .track }}"},
+		{Name: "Destination", Value: "{{ .destination }}"},
 	}
 }
 
@@ -327,12 +343,18 @@ func skillListRows(entries []listEntry) []map[string]any {
 			"source":        e.displaySource,
 			"state":         entryState(&e),
 			"category":      e.category,
+			"scope":         sourceStatusField(&e, "scope"),
+			"track":         sourceStatusField(&e, "track"),
+			"destination":   sourceStatusField(&e, "path"),
 		})
 	}
 	return rows
 }
 
 func entryState(e *listEntry) string {
+	if e.sourceStatus != nil {
+		return e.sourceStatus.Status
+	}
 	if !e.installed {
 		return "available"
 	}
@@ -409,6 +431,12 @@ func writeEntryDetail(b *strings.Builder, e *listEntry) {
 	writeDetailField(b, "Version", versionWithUpdateNote(e))
 	writeDetailField(b, "Source", e.source)
 	writeDetailField(b, "Type", entryType(e))
+	if e.sourceStatus != nil {
+		writeDetailField(b, "State", e.sourceStatus.Status)
+		writeDetailField(b, "Scope", e.sourceStatus.Scope)
+		writeDetailField(b, "Track", e.sourceStatus.Track)
+		writeDetailField(b, "Destination", e.sourceStatus.Path)
+	}
 	if e.description != "" {
 		writeDetailField(b, "Description", e.description)
 	}
@@ -483,4 +511,19 @@ func formatTime(t time.Time) string {
 		// More than a week ago, show date.
 		return strings.TrimSpace(t.Format("Jan 2, 2006"))
 	}
+}
+
+func sourceStatusField(e *listEntry, field string) string {
+	if e.sourceStatus == nil {
+		return ""
+	}
+	switch field {
+	case "scope":
+		return e.sourceStatus.Scope
+	case "track":
+		return e.sourceStatus.Track
+	case "path":
+		return e.sourceStatus.Path
+	}
+	return ""
 }

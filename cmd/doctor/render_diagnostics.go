@@ -56,6 +56,15 @@ func (p reportRenderer) line(prefix, text string, style lipgloss.Style) {
 	}
 }
 
+// unwrapped writes one line that is never wrapped, for values such as paths that must stay copyable.
+// It still masks the text and strips terminal control sequences from it.
+//
+//nolint:gocritic // Lip Gloss styles are immutable values, matching its fluent API.
+func (p reportRenderer) unwrapped(prefix, text string, style lipgloss.Style) {
+	text = ansi.Strip(iolib.MaskString(text))
+	ui.Writeln(p.styles.Heading.Render(prefix) + style.Render(text))
+}
+
 func renderHeading(fix, dryRun bool) {
 	mode := "Diagnose"
 	if fix {
@@ -152,7 +161,12 @@ func (p reportRenderer) source(f *diagnostic.Finding, root string, severity lipg
 		}
 		line := strings.ReplaceAll(masked, "\t", "    ")
 		shown, marker := clipSource(highlightYAML(line, p.styles), p.width-gutter-3, column)
-		ui.Writeln(p.styles.Muted.Render(fmt.Sprintf("%*d | ", gutter, start+index)) + shown)
+		// A blank source line ends at the gutter bar, so the excerpt never carries trailing whitespace.
+		number := fmt.Sprintf("%*d | ", gutter, start+index)
+		if strings.TrimSpace(ansi.Strip(shown)) == "" {
+			number, shown = strings.TrimRight(number, reportSpace), ""
+		}
+		ui.Writeln(p.styles.Muted.Render(number) + shown)
 		if column > 0 {
 			ui.Writeln(p.styles.Muted.Render(blank) + strings.Repeat(reportSpace, marker-1) + severity.Render("^"))
 		}

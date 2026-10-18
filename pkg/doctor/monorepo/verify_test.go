@@ -63,7 +63,7 @@ func TestTreeVerifierVerify(t *testing.T) {
 			}
 			expectTrees(resolver, tt.legacy, successor)
 
-			got := NewTreeVerifier(resolver).Verify(context.Background(), result, "1.495.0")
+			got := NewTreeVerifier(resolver).Verify(context.Background(), &result, "1.495.0")
 
 			assert.Equal(t, tt.verdict, got.Verdict, got.Reason)
 			for _, part := range tt.contains {

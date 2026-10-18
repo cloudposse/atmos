@@ -3240,6 +3240,38 @@
             }
           },
           "additionalProperties": false
+        },
+        {
+          "type": "array",
+          "description": "Deprecated list form, executed the same way as the map form. Use dependencies.components instead.",
+          "items": {
+            "$ref": "#/definitions/depends_on_list_item"
+          }
+        }
+      ]
+    },
+    "depends_on_list_item": {
+      "title": "depends_on_list_item",
+      "description": "Deprecated entry of the list form of depends_on: a component name, or an object that names the component and optionally its stack",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "type": "string"
+            },
+            "stack": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "component"
+          ],
+          "additionalProperties": false
         }
       ]
     },

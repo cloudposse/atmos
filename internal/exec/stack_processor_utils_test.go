@@ -4842,6 +4842,108 @@ func BenchmarkLocalsRepeated(b *testing.B) {
 	}
 }
 
+// overlayStackReader serves selected files from memory and records every read it is asked for.
+type overlayStackReader struct {
+	files map[string]string
+	reads []string
+}
+
+func (r *overlayStackReader) ReadFile(path string) ([]byte, error) {
+	r.reads = append(r.reads, filepath.Base(path))
+	if content, ok := r.files[path]; ok {
+		return []byte(content), nil
+	}
+	return os.ReadFile(path)
+}
+
+func writeStackFixture(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, content := range files {
+		path := filepath.Join(dir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+	return dir
+}
+
+func TestProcessYAMLConfigFileWithOptionsReadsThroughTheInjectedReader(t *testing.T) {
+	ClearFileContentCache()
+	dir := writeStackFixture(t, map[string]string{
+		"catalog/base.yaml": "vars:\n  size: small\n",
+		"dev.yaml":          "import:\n  - catalog/base\nvars:\n  stage: dev\n",
+	})
+	reader := &overlayStackReader{files: map[string]string{
+		filepath.Join(dir, "catalog", "base.yaml"): "vars:\n  size: large\n",
+	}}
+
+	result, err := ProcessYAMLConfigFileWithOptions(&schema.AtmosConfiguration{}, dir, filepath.Join(dir, "dev.yaml"), StackLoadOptions{Reader: reader, SkipTemplates: true})
+
+	require.NoError(t, err)
+	vars, _ := result.DeepMergedConfig["vars"].(map[string]any)
+	assert.Equal(t, map[string]any{"size": "large", "stage": "dev"}, vars, "the import must come from the reader, not the disk")
+	assert.ElementsMatch(t, []string{"dev.yaml", "base.yaml"}, reader.reads)
+	assert.Contains(t, result.ImportsConfig, "catalog/base")
+}
+
+// The injected reader bypasses the process-wide content cache in both directions.
+func TestProcessYAMLConfigFileWithOptionsBypassesTheContentCache(t *testing.T) {
+	ClearFileContentCache()
+	t.Cleanup(ClearFileContentCache)
+	dir := writeStackFixture(t, map[string]string{"dev.yaml": "vars:\n  stage: dev\n"})
+	path := filepath.Join(dir, "dev.yaml")
+	cached, err := GetFileContent(path)
+	require.NoError(t, err)
+	require.Contains(t, cached, "dev")
+	reader := &overlayStackReader{files: map[string]string{path: "vars:\n  stage: prod\n"}}
+
+	result, err := ProcessYAMLConfigFileWithOptions(&schema.AtmosConfiguration{}, dir, path, StackLoadOptions{Reader: reader})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"stage": "prod"}, result.DeepMergedConfig["vars"])
+
+	after, err := GetFileContent(path)
+	require.NoError(t, err)
+	assert.Equal(t, cached, after, "an injected read must not poison the cache")
+}
+
+func TestProcessYAMLConfigFileWithOptionsDefaultsToCachedDiskReads(t *testing.T) {
+	ClearFileContentCache()
+	t.Cleanup(ClearFileContentCache)
+	dir := writeStackFixture(t, map[string]string{"dev.yaml": "vars:\n  stage: dev\n"})
+
+	result, err := ProcessYAMLConfigFileWithOptions(&schema.AtmosConfiguration{}, dir, filepath.Join(dir, "dev.yaml"), StackLoadOptions{})
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"stage": "dev"}, result.DeepMergedConfig["vars"])
+}
+
+func TestProcessYAMLConfigFileWithOptionsReportsReaderFailures(t *testing.T) {
+	dir := writeStackFixture(t, map[string]string{"dev.yaml": "vars: {}\n"})
+	missing := filepath.Join(dir, "missing.yaml")
+
+	_, err := ProcessYAMLConfigFileWithOptions(&schema.AtmosConfiguration{}, dir, missing, StackLoadOptions{Reader: &overlayStackReader{}})
+	require.ErrorIs(t, err, errUtils.ErrReadFile)
+
+	result, err := ProcessYAMLConfigFileWithOptions(&schema.AtmosConfiguration{}, dir, missing, StackLoadOptions{Reader: &overlayStackReader{}, IgnoreMissingFiles: true})
+	require.NoError(t, err)
+	assert.Empty(t, result.DeepMergedConfig)
+}
+
+// SkipTemplates keeps Go templates unevaluated through the whole import closure, even where an import asks for them.
+func TestProcessYAMLConfigFileWithOptionsSkipsTemplatesInImports(t *testing.T) {
+	ClearFileContentCache()
+	dir := writeStackFixture(t, map[string]string{
+		"catalog/base.yaml": "vars:\n  name: \"{{ .settings.prefix }}-base\"\nsettings:\n  prefix: acme\n",
+		"dev.yaml":          "import:\n  - path: catalog/base\n    context:\n      unused: 1\nvars:\n  stage: dev\n",
+	})
+
+	result, err := ProcessYAMLConfigFileWithOptions(&schema.AtmosConfiguration{}, dir, filepath.Join(dir, "dev.yaml"), StackLoadOptions{SkipTemplates: true})
+
+	require.NoError(t, err)
+	vars, _ := result.DeepMergedConfig["vars"].(map[string]any)
+	assert.Equal(t, "{{ .settings.prefix }}-base", vars["name"])
+}
+
 // A bad YAML function argument is not a Go-template problem, so the ".yaml.tmpl" rename hint
 // must not be attached to it (it sent users looking in the wrong place), while genuine
 // template syntax errors keep the hint.

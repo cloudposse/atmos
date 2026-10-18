@@ -67,13 +67,17 @@ atmos doctor --offline
   <dd>Disable repository metadata requests and the GitHub lookups that verify component moves. Disabled by default.</dd>
 </dl>
 
-Doctor also honors the global `--chdir`, `--config`, `--config-path`, and `--profile` flags,
-which can appear before or after the command name.
+Doctor also honors the global `--chdir`, `--config`, `--config-path`, `--profile`, and
+`--logs-level` / `--logs-file` flags, which can appear before or after the command name. Root
+flags such as `--cast` and `--pager` can precede `doctor` too, so a malformed `atmos.yaml` is
+still diagnosed instead of failing in normal configuration loading.
 
 Invalid option values and combinations exit `2` before any project file is read. The error
 names the option and lists the valid values. With `--format=json` or `--format=sarif`, the
 same failure is written to stdout as a report whose `operational_error` field holds the
-message, so tools parse one shape for every outcome.
+message, so tools parse one shape for every outcome. This covers invalid options, unexpected
+positional arguments, unknown flags, and a `--chdir` directory that does not exist. The failure
+ends with a hint to run `atmos doctor --help`.
 
 ## Configuration discovery
 
@@ -102,13 +106,15 @@ exits `2`, because a clean result for a project it never found would be misleadi
 <dt><code>schema</code></dt>
 <dd>Configuration, authored stack, and configured custom schemas.</dd>
 <dt><code>yaml-functions</code></dt>
-<dd>Unknown YAML function names, such as <code>!terraform.staet</code>, with source locations and suggestions for unambiguous spelling corrections. Uses Atmos's canonical function catalog without executing functions. Also checks quoted function strings in known dotted namespaces such as `!terraform.*`. Native explicit YAML tags, including <code>!!str</code> and verbatim type tags, retain their YAML meaning; explicitly typed strings, URI tags, literal values, and unrelated strings are not interpreted as function names. Argument signatures and runtime results are not validated.</dd>
+<dd>Unknown YAML function names, such as <code>!terraform.staet</code>, with source locations and suggestions for unambiguous spelling corrections. Uses Atmos's canonical function catalog without executing functions. `atmos.yaml` supports only the configuration function set (<code>!env</code>, <code>!exec</code>, <code>!include</code>, <code>!repo-root</code>, <code>!git.*</code>, <code>!cwd</code>, <code>!random</code>, <code>!unset</code>, <code>!literal</code>), so a stack-only function such as <code>!store</code> or <code>!terraform.state</code> there is an error. In stack manifests, an untagged string is treated as a function only when Atmos would evaluate it at runtime, so <code>'!terraform.state[0]'</code> is a known function. A quoted string that starts like a function in a known dotted namespace but that Atmos keeps as text, such as <code>"!git.branches are protected"</code>, is a warning with a suggested spelling. Native explicit YAML tags, including <code>!!str</code> and verbatim type tags, retain their YAML meaning; explicitly typed strings, URI tags, literal values, and unrelated strings are not interpreted as function names. Argument signatures and runtime results are not validated.</dd>
 <dt><code>imports</code></dt>
-<dd>Local source discovery and unresolved-input diagnostics. Imports resolve the way Atmos resolves them: relative to the importing file, with the <code>.yaml</code>, <code>.yml</code>, and template extensions tried in turn.</dd>
+<dd>Local source discovery and unresolved-input diagnostics. Imports resolve the way Atmos resolves them: relative to the importing file, with the <code>.yaml</code>, <code>.yml</code>, and template extensions tried in turn. Local imports, including glob patterns, are followed, so stack and dependency checks and repairs see the imported content. Templated imports, imports with <code>context</code>, and remote imports are reported as not evaluated and limit verification. Doctor reports each templated import file once, at its first importer.</dd>
 <dt><code>stacks</code></dt>
-<dd>Production inheritance and duplicate-instance checks for complete static inputs.</dd>
+<dd>Production inheritance and duplicate-instance checks for complete static inputs. A pure <code>stacks.name_template</code> is supported. When an input limits verification, the finding names the file and line of the blocker.</dd>
+<dt><code>dependencies</code></dt>
+<dd>Required-dependency validation of the effective <code>dependencies.components</code> graph. Doctor reports every error with the file and line of the dependency entry: missing or disabled targets and dependency cycles.</dd>
 <dt><code>editorconfig</code></dt>
-<dd>Existing EditorConfig validation.</dd>
+<dd>EditorConfig validation. Doctor selects the same files as <code>atmos validate editorconfig</code>: tracked and untracked files that Git does not ignore, filtered by the <code>validate.editorconfig</code> settings in <code>atmos.yaml</code>.</dd>
 <dt><code>github-actions</code></dt>
 <dd>Existing actionlint validation. A <code>.github/actionlint.yaml</code> file is honored, so custom self-hosted runner labels declared there are not reported.</dd>
 <dt><code>deprecated-field</code></dt>
@@ -121,8 +127,10 @@ exits `2`, because a clean result for a project it never found would be misleadi
 <dd>Explicit <code>init_run_reconfigure: false</code> to <code>init.reconfigure: never</code>, or <code>true</code> to <code>auto</code>.</dd>
 <dt><code>modernization</code></dt>
 <dd>Advisory findings for legacy `cloudposse/github-action-atmos-*` GitHub Actions.</dd>
+<dt><code>component-dependencies</code></dt>
+<dd>Legacy component-level Terraform <code>settings.depends_on</code> declarations, in map or list form, to <code>dependencies.components</code>. A migration that would change any component's effective dependencies is rejected.</dd>
 <dt><code>component-monorepo</code></dt>
-<dd>Component sources that still point at the archived <code>cloudposse/terraform-aws-components</code> monorepo. Doctor moves each one to its <code>cloudposse-terraform-components</code> repository at the same version, after verifying the files are identical. It belongs to the <code>modernization</code> category.</dd>
+<dd>Component sources that still point at the archived <code>cloudposse/terraform-aws-components</code> monorepo. Host, owner, and repository names are matched regardless of letter case. Doctor moves each one to its <code>cloudposse-terraform-components</code> repository at the same version, after verifying the files are identical. It belongs to the <code>modernization</code> category.</dd>
 <dt><code>source-repository</code></dt>
 <dd>Vendor, component <code>source</code>, and <code>component.yaml</code> <code>spec.source.uri</code> upstream repository health. A check with nothing to inspect is reported as skipped, not passed.</dd>
 </dl>
@@ -164,7 +172,13 @@ and dependency cycles are reported as errors, even when the migration itself suc
 These errors remain visible after repairs even with `--only=deprecations`.
 
 Dependency repairs require complete static inputs so doctor can validate the resulting
-production dependency graph. Legacy context selectors, file/folder entries, other
+production dependency graph. Local imports are followed, so a component that imports a
+catalog is verified against the merged result. Doctor compares the effective dependencies of
+every concrete component before and after the migration. If the migration would change any of
+them, the repair is rejected as `verification-failed` and names the difference, for example
+`changes the effective dependencies of app in dev: db → vpc`. This happens when an inherited
+base declares a legacy list and the inheriting component declares its own, because inheritance
+replaces the list instead of merging it. Legacy context selectors, file/folder entries, other
 legacy shapes, and declarations that already contain `dependencies.components` require
 manual review. Stack naming migrations also remain manual.
 
@@ -241,6 +255,19 @@ serves every source that uses the same component and version.
 Nothing is written for a source that is not `available`. The check never changes a version, so
 run it before `atmos vendor update` if you also want newer releases.
 
+### Source shapes
+
+Doctor recognizes these spellings of a monorepo source:
+
+- A mixed-case URL, such as `GitHub.com/CloudPosse/terraform-aws-components.git`. The rewrite
+  keeps the spelling you wrote for everything it does not change.
+- A subdirectory written inside the query string, such as
+  `...terraform-aws-components.git?ref=1.495.0//modules/alb`. go-getter needs the
+  `//subdirectory` before the `?`, so this source does not select that directory. Doctor
+  explains this and suggests the corrected source, but leaves the file for you to change.
+- A subdirectory of a component module, such as `//modules/eks/cluster/modules/foo`. The
+  source moves to the parent component's repository, at `src/modules/foo`.
+
 ### Sources that need a manual change
 
 Doctor reports these sources with a specific explanation and leaves them untouched:
@@ -262,9 +289,12 @@ results using fresh validators. Conflicting destination fields, lost comments,
 unsupported anchors, and failed comparisons prevent the repair. There is no flag
 to bypass verification. A dry run writes neither project files nor backups.
 
-Before writing, doctor warns about affected dirty, staged, untracked, or ignored
-files, or unavailable Git. `--fix` authorizes eligible edits without another prompt.
-Doctor never changes Git state.
+Before writing, doctor emits one notice that lists the affected dirty, staged, untracked, or
+ignored files (or says that Git is unavailable). The notice does not count toward `--fail-on`.
+`--fix` authorizes eligible edits without another prompt. Doctor never changes Git state.
+
+A read-only file is never overwritten. Doctor reports it for a manual change instead, and
+repairs in other files still proceed.
 
 A repair rewrites the file through the YAML editor, which preserves comments, tags, and
 anchors but can reformat other parts of the file. Blank lines and folded scalars may change
@@ -285,7 +315,10 @@ before overwriting them.
 
 All backups finish before the first write. Each replacement is atomic, but a
 multi-file run is not a transaction. Failures or cancellation stop further writes;
-the report identifies files already changed and retains their backups. Doctor reads
+the report identifies files already changed and retains their backups. If you interrupt a run
+(Ctrl-C), doctor prints the files it already changed and the backup location, and exits `130`.
+With `--format=json` or `--format=sarif` the report has an `operational_error` message that
+starts with `Interrupted` and summarizes the changed files; `changed_files` lists all of them. Doctor reads
 symlinked sources but never writes through them. Findings in a symlinked file are
 reported for manual review, and repairs in other files still proceed.
 
@@ -307,8 +340,10 @@ verification coverage, backup location, `dry_run`, and `operational_error` for o
 and invocation failures.
 
 Without `--fix`, the summary counts what remains and what a repair run could apply, for
-example `3 findings (2 fixable).`, followed by `Run: atmos doctor --fix`. With `--fix`, it
-reports what it applied, for example `Fixed 2 findings in 1 file. 1 finding remains.` A dry
+example `3 findings (2 fixable).`, followed by `Run: atmos doctor --fix`. The suggested command
+keeps the flags that scope the run, such as `--only`, `--exclude`, `--config`, `--profile`, and
+`--offline`. With `--fix`, it reports what it applied, for example
+`Fixed 2 findings in 1 file. 1 finding remains.`, or `Nothing to fix.` when no repair applied. A dry
 run reports the repairs it verified, for example `2 repairs verified. 3 findings remain.`
 
 Warnings are advisory by default. `--fail-on=warning` makes them blocking;
