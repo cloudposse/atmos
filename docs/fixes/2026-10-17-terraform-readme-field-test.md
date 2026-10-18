@@ -31,6 +31,10 @@ not expose. The native Terraform objects and sorting already worked.
   command-level absolute-path coverage, and a CLI formatting fixture.
 - Explain that Atmos 1.232.0 cannot parse the new function, even inside a guard;
   adopting repositories must upgrade before switching templates.
+- Rename the optional-only fixture's reserved `count` input to `item_count`.
+- Exercise datasource function isolation, metadata preservation, temporary-file
+  cleanup, and errors from invalid metadata, missing temporary directories,
+  failed downloads, and unwritable README destinations.
 
 ## Validation
 
@@ -46,6 +50,13 @@ not expose. The native Terraform objects and sorting already worked.
   through the production renderer and reviewed (only three blockquote prefixes changed).
 - `npm run build` completed successfully, including 22 website prebuild tests. It emitted
   existing MDX-normalization fallback and broken-anchor warnings on unrelated pages.
+- Terraform validation reproduced the reserved-name error and passed after the rename.
+- `go test ./pkg/docs ./pkg/template/datasource -coverprofile=.context/readme-review-coverage.out -count=1`
+  passed with 95.5% and 82.6% statement coverage respectively. These focused local
+  measurements do not replace Codecov's CI patch calculation (85% target).
+- Focused package tests also passed with `-race`; `go build ./...` and the
+  changed-file linter passed. Offline link validation confirmed the helper fixture
+  target exists, so the earlier missing-link review finding is already addressed.
 
 ## Follow-ups
 

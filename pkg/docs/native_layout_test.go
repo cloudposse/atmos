@@ -35,7 +35,7 @@ func TestNativeLayoutEmptySections(t *testing.T) {
 		{"resource-only", []string{"Resources", "terraform_data.sample"}, []string{"Data Sources", "Required Variables", "Optional Variables", "Context Variables"}},
 		{"data-only", []string{"Data Sources", "aws_caller_identity.current"}, []string{"## Resources", "Required Variables", "Optional Variables", "Context Variables"}},
 		{"required-only", []string{"Required Variables", "### `bucket`"}, []string{"Optional Variables", "Context Variables", "#context-variables"}},
-		{"optional-only", []string{"Optional Variables", "### `count`"}, []string{"Required Variables", "Context Variables"}},
+		{"optional-only", []string{"Optional Variables", "### `item_count`"}, []string{"Required Variables", "Context Variables"}},
 		{"empty", nil, []string{"Required Variables", "Optional Variables", "Context Variables", "Resources", "Data Sources", "Outputs"}},
 	}
 	for _, tc := range cases {
