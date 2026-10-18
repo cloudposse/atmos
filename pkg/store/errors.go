@@ -32,6 +32,7 @@ var (
 	ErrResourceNotFound     = errors.New("resource not found")
 	ErrPermissionDenied     = errors.New("permission denied")
 	ErrListSecretProperties = errors.New("failed to list secret properties")
+	ErrInvalidExpires       = errors.New("invalid expires value in azure key vault store configuration")
 
 	// Redis specific errors.
 	ErrParseRedisURL   = errors.New("failed to parse redis url")

@@ -842,3 +842,59 @@ func TestSourceMisplacedUnderMetadata(t *testing.T) {
 		})
 	}
 }
+
+// TestProvisionAndResolveComponentPath_TerraformWorkdirErrorKeepsCause verifies the rendered error
+// of a failed workdir provisioning keeps the inner explanation and path and prints the sentinel
+// text only once (errors.Join of a second sentinel used to duplicate it and drop the explanation).
+func TestProvisionAndResolveComponentPath_TerraformWorkdirErrorKeepsCause(t *testing.T) {
+	basePath := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
+	missing := filepath.Join(basePath, "components", "terraform", "vpc")
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent: "vpc",
+		Stack:          "dev",
+		ComponentSection: map[string]any{
+			"component":       "vpc",
+			"atmos_component": "vpc",
+			"atmos_stack":     "dev",
+			"provision":       map[string]any{"workdir": map[string]any{"enabled": true}},
+		},
+	}
+
+	_, _, err := ProvisionAndResolveComponentPath(
+		context.Background(), provisioner.OutputWriters{}, atmosConfig, info,
+		cfg.TerraformComponentType, missing,
+	)
+
+	require.ErrorIs(t, err, errUtils.ErrWorkdirProvision)
+	rendered := errUtils.Format(err, errUtils.FormatterConfig{})
+	assert.Contains(t, rendered, "local component path does not exist")
+	assert.Equal(t, 1, strings.Count(rendered, errUtils.ErrWorkdirProvision.Error()),
+		"the sentinel text must not be duplicated in %q", rendered)
+}
+
+// TestWrapWorkdirProvisionError verifies sentinel classification without duplicating the sentinel.
+func TestWrapWorkdirProvisionError(t *testing.T) {
+	cause := errors.New("disk full")
+	tests := []struct {
+		name         string
+		err          error
+		wantSame     bool
+		wantContains string
+	}{
+		{name: "already classified is returned unchanged", err: errUtils.Build(errUtils.ErrWorkdirProvision).WithExplanation("boom").Err(), wantSame: true},
+		{name: "unclassified is wrapped with its cause", err: cause, wantContains: "disk full"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := wrapWorkdirProvisionError(tt.err)
+			require.ErrorIs(t, got, errUtils.ErrWorkdirProvision)
+			if tt.wantSame {
+				assert.Equal(t, tt.err, got)
+				return
+			}
+			require.ErrorIs(t, got, tt.err)
+			assert.Contains(t, got.Error(), tt.wantContains)
+		})
+	}
+}

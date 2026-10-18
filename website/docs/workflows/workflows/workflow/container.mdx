@@ -8,7 +8,7 @@ slug: /workflows/container
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-With a `container` defined on a workflow, Atmos runs your `type: shell` steps inside a single persistent container for the duration of the workflow run, instead of on the host. Every step shares the same image, tools, and environment, so tools you install in an early step stay available to later steps. It uses the same container runtime that powers the [`type: container`](/workflows/steps/type/container) step.
+With a `container` defined on a workflow, Atmos runs your `type: shell` steps inside a single persistent container for the duration of the workflow run, instead of on the host. Every step shares the same image, tools, and environment, so tools you install in an early step stay available to later steps. It uses the same container runtime that powers the [`type: container`](/steps/type/container) step.
 </Intro>
 
 The example below uses every field. See [Mounts](#mounts), [Ports](#ports), and [Per-step overrides](#per-step-overrides) for the nested definitions.
@@ -54,7 +54,7 @@ workflows:
         container: false           # opt a single step out of the sandbox
 ```
 
-This field is different from [`steps[].type: container`](/workflows/steps/type/container), which is a step type for container build, push, run, and inspect operations.
+This field is different from [`steps[].type: container`](/steps/type/container), which is a step type for container build, push, run, and inspect operations.
 
 ## Fields
 

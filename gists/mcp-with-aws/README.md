@@ -1,6 +1,13 @@
 ---
 title: FinOps with AWS MCP Servers
 tags: [AI, AWS]
+related_docs:
+  - label: "Custom Commands"
+    url: /cli/configuration/commands
+  - label: "Authentication"
+    url: /stacks/auth
+  - label: "Toolchain"
+    url: /cli/configuration/toolchain
 ---
 
 # FinOps with AWS MCP Servers
@@ -56,7 +63,7 @@ flowchart TD
 
 ### Prerequisites
 
-- [Atmos](https://atmos.tools/quick-start/install-atmos) installed
+- [Atmos](https://atmos.tools/install) installed
 - AWS account with SSO configured
 - Python 3.13 (for MCP server packages)
 

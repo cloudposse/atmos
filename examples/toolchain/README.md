@@ -7,6 +7,13 @@ description: >-
 cast:
   file: /casts/examples/toolchain/demo-convert.cast
   title: atmos toolchain demo
+related_docs:
+  - label: "Toolchain commands"
+    url: /cli/commands/toolchain/usage
+  - label: "Toolchain configuration"
+    url: /cli/configuration/toolchain
+  - label: "Toolchain registries"
+    url: /cli/configuration/toolchain/registries
 ---
 
 # Example: Toolchain

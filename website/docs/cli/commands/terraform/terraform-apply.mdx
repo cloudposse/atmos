@@ -29,9 +29,7 @@ This command applies Terraform changes to your infrastructure. You can:
 - Apply a specific planfile using `--planfile <path>`
 - Auto-approve changes using `-auto-approve`
 
-:::tip
 For automated deployments, consider using `atmos terraform deploy` which automatically includes `-auto-approve`.
-:::
 
 :::note
 `apply` does **not** download stored planfiles or run
@@ -535,13 +533,19 @@ atmos terraform apply --tags production,tier-1
 # Apply components labeled cost-center=platform (matches all given labels)
 atmos terraform apply --labels cost-center=platform
 
+# Combine multiple selectors in one comma-separated --labels value
+atmos terraform apply --labels cost-center=platform,compliance=sox
+
 # Narrow an --affected run to only production-tagged components
 atmos terraform apply --affected --tags production
 ```
 
 ### Include Dependencies and Dependents
 
-Selector flags choose the seed set; `--include-dependencies` and `--include-dependents` expand it through the dependency graph. Expanded components are applied even when they do not match the selectors — they are prerequisites (or dependents) of what was selected. Prerequisites can live in other stacks, so `--include-dependencies` with `-s dev` legitimately applies prerequisite components outside the `dev` stack:
+`--include-dependencies` adds prerequisites even when they do not match the selectors or belong to another stack.
+`--include-dependents` honors `--tags` and `--labels`, retaining matching descendants of excluded components in dependency
+order. See [Terraform selection flags](/cli/commands/terraform/usage#flags) for full semantics.
+For example, `--include-dependencies` with `-s dev` can include prerequisites outside `dev`:
 
 ```shell
 # Apply dev-labeled components plus everything they depend on
@@ -575,7 +579,7 @@ Pass the depth with `=` (for example, `--include-dependencies=2`); a space-separ
     <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected`/`--components`/`--query` to narrow the selected set further; cannot be combined with a single component argument.</dd>
 
     <dt>`--labels`</dt>
-    <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--components`/`--query`/`--tags`; cannot be combined with a single component argument.</dd>
+    <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs in one flag value, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--components`/`--query`/`--tags`; cannot be combined with a single component argument.</dd>
 
     <dt>`--include-dependencies`</dt>
     <dd>Also apply everything the selected components depend on (their prerequisites), in dependency order — even when the prerequisites live in other stacks or do not match the selectors. Accepts an optional depth: the bare flag expands the full dependency chain, while `--include-dependencies=1` bounds it to direct dependencies. Requires a multi-component selection.<br/>Environment variable: `ATMOS_INCLUDE_DEPENDENCIES`</dd>
@@ -636,9 +640,7 @@ components:
     auto_generate_backend_file: true
 ```
 
-:::info
 See [Terraform Planfiles](/components/terraform/planfiles) for a comprehensive guide on working with planfiles in Atmos.
-:::
 
 :::note
 The `atmos terraform apply` command supports all native `terraform apply` options described in [Terraform apply options](https://developer.hashicorp.com/terraform/cli/commands/apply#apply-options), except that planfile arguments should use `--from-plan` or `--planfile` flags instead of being passed directly.

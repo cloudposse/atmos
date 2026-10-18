@@ -57,6 +57,8 @@ components:
     auto_generate_files: false
   container:
     base_path: components/container
+  aws/cloudformation:
+    base_path: components/cloudformation
 stacks:
   base_path: stacks
   included_paths:
@@ -68,6 +70,7 @@ stacks:
   inherit:
     metadata: true
 logs:
+  color: true
   file: /dev/stderr
   level: Debug
 diagnostics:
@@ -139,6 +142,7 @@ ansibleDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cl
 kubernetesDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
 helmDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
 containerDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/components/container
+cloudFormationDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/components/cloudformation
 vendorDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/vendor.yaml
 workflowsDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
 default: false
@@ -167,5 +171,10 @@ toolchain:
   use_tool_versions: false
   use_lock_file: true
   frozen_lock_file: false
+  install: auto
+init:
+  repository: github.com/cloudposse/atmos
+  depth: 1
+  git: true
 list:
   error_mode: warn

@@ -125,7 +125,7 @@ func (s *stubAuthManager) EnsureIdentityEnvironment(ctx context.Context, identit
 	return nil, nil
 }
 
-func (s *stubAuthManager) ExecuteIntegration(ctx context.Context, integrationName string) error {
+func (s *stubAuthManager) ExecuteIntegration(ctx context.Context, integrationName string, opts ...types.IntegrationOption) error {
 	return nil
 }
 

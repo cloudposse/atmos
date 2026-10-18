@@ -1,20 +1,5 @@
-import { getGroupedExperimentalFeatures } from '@site/src/data/experimentalFeatures';
-
-/**
- * Normalizes a route/href so the roadmap `docs:` values and the sidebar item
- * `href` permalinks compare equal regardless of the site's `trailingSlash`
- * setting: ensure a single leading slash and strip any trailing slash.
- */
-function normalizeRoute(route: string): string {
-  let normalized = route.trim();
-  if (!normalized.startsWith('/')) {
-    normalized = `/${normalized}`;
-  }
-  if (normalized.length > 1 && normalized.endsWith('/')) {
-    normalized = normalized.slice(0, -1);
-  }
-  return normalized;
-}
+import { getGroupedExperimentalFeatures } from "@site/src/data/experimentalFeatures";
+import { normalizeFeatureRoute } from "@site/src/data/featureStatus.mjs";
 
 /**
  * The set of doc routes that belong to experimental features, derived from the
@@ -26,7 +11,7 @@ const experimentalRoutes: Set<string> = new Set(
     .flatMap((group) => group.features)
     .map((feature) => feature.docs)
     .filter((docs): docs is string => Boolean(docs))
-    .map(normalizeRoute),
+    .map(normalizeFeatureRoute),
 );
 
 /**
@@ -38,7 +23,7 @@ export function isExperimentalRoute(href?: string): boolean {
   if (!href) {
     return false;
   }
-  return experimentalRoutes.has(normalizeRoute(href));
+  return experimentalRoutes.has(normalizeFeatureRoute(href));
 }
 
 export { experimentalRoutes };

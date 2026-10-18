@@ -395,3 +395,450 @@ func TestSetupUpdateBase_Rendered_PropagatesRenderFailure(t *testing.T) {
 
 	require.Error(t, err)
 }
+
+// TestHandleTemplateDeletions_NoRenderedBaseRoot_NoOp confirms
+// handleTemplateDeletions is a no-op outside --update-strategy=rendered
+// (ui.renderedBaseRoot is only ever set by setupUpdateBase for that
+// strategy).
+func TestHandleTemplateDeletions_NoRenderedBaseRoot_NoOp(t *testing.T) {
+	ui := createTestUI(t)
+
+	result, err := ui.handleTemplateDeletions(t.TempDir(), map[string]string{}, false)
+
+	require.NoError(t, err)
+	assert.Zero(t, result.successCount)
+	assert.Zero(t, result.errorCount)
+	assert.Empty(t, result.failedPaths)
+}
+
+// TestHandleTemplateDeletions_DeletesCleanRemoval confirms a file the
+// template stopped generating is deleted when the on-disk copy still matches
+// the old pristine render exactly.
+func TestHandleTemplateDeletions_DeletesCleanRemoval(t *testing.T) {
+	ui := createTestUI(t)
+	renderRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "old.txt"), []byte("old content\n"), 0o644))
+	ui.renderedBaseRoot = renderRoot
+
+	targetPath := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetPath, "old.txt"), []byte("old content\n"), 0o644))
+
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{}, false)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.successCount)
+	assert.Zero(t, result.errorCount)
+	assert.Empty(t, result.failedPaths)
+	_, statErr := os.Stat(filepath.Join(targetPath, "old.txt"))
+	assert.True(t, os.IsNotExist(statErr), "the file should be deleted")
+}
+
+// TestHandleTemplateDeletions_ConflictOnLocalEdit confirms a file removed
+// from the template, but with surviving local edits, is left untouched and
+// reported as an unresolved merge conflict rather than silently deleted or
+// silently kept.
+func TestHandleTemplateDeletions_ConflictOnLocalEdit(t *testing.T) {
+	ui := createTestUI(t)
+	renderRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "old.txt"), []byte("old content\n"), 0o644))
+	ui.renderedBaseRoot = renderRoot
+
+	targetPath := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetPath, "old.txt"), []byte("locally edited content\n"), 0o644))
+
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{}, false)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
+	assert.Zero(t, result.successCount)
+	assert.Equal(t, 1, result.errorCount)
+	assert.Equal(t, []string{"old.txt"}, result.failedPaths)
+
+	content, readErr := os.ReadFile(filepath.Join(targetPath, "old.txt"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "locally edited content\n", string(content), "local edits must survive untouched")
+}
+
+// TestHandleTemplateDeletions_ForceResolvesLocalEditConflict is a regression
+// test for a finding from a field-test pass: --force could not resolve a
+// deletion conflict at all, unlike every other conflict in this subsystem
+// (--force already means "the template's choice wins" for a content
+// conflict -- see merge.ResolveConflictStrategy). Passing force=true must now
+// delete the file through the local edits instead of leaving an unresolved
+// conflict.
+func TestHandleTemplateDeletions_ForceResolvesLocalEditConflict(t *testing.T) {
+	ui := createTestUI(t)
+	renderRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "old.txt"), []byte("old content\n"), 0o644))
+	ui.renderedBaseRoot = renderRoot
+
+	targetPath := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetPath, "old.txt"), []byte("locally edited content\n"), 0o644))
+
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{}, true)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.successCount)
+	assert.Zero(t, result.errorCount)
+	assert.Empty(t, result.failedPaths)
+
+	_, statErr := os.Stat(filepath.Join(targetPath, "old.txt"))
+	assert.True(t, os.IsNotExist(statErr), "--force must delete the file despite local edits")
+}
+
+// TestHandleTemplateDeletions_AlreadyAbsent_NoOp confirms a path that's
+// already gone on disk (the user beat atmos to deleting it, or it was never
+// generated at this target) produces no output and no count change.
+func TestHandleTemplateDeletions_AlreadyAbsent_NoOp(t *testing.T) {
+	ui := createTestUI(t)
+	renderRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "old.txt"), []byte("old content\n"), 0o644))
+	ui.renderedBaseRoot = renderRoot
+
+	targetPath := t.TempDir()
+	// old.txt deliberately never written to targetPath.
+
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{}, false)
+
+	require.NoError(t, err)
+	assert.Zero(t, result.successCount)
+	assert.Zero(t, result.errorCount)
+	assert.Empty(t, result.failedPaths)
+}
+
+// TestHandleTemplateDeletions_RefusesSymlinkDeletionCandidate is a
+// regression test for a bug found during field-testing: processDeletionCandidate
+// read a deletion candidate's content with no symlink check, unlike
+// engine.validateWriteTarget's write-side protection against exactly this.
+// A symlink at the candidate path let the byte-comparison transparently read
+// content from outside the target directory. It must now refuse to inspect a
+// symlink at all, leaving it untouched and reporting an error instead.
+func TestHandleTemplateDeletions_RefusesSymlinkDeletionCandidate(t *testing.T) {
+	ui := createTestUI(t)
+	renderRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "old.txt"), []byte("old content\n"), 0o644))
+	ui.renderedBaseRoot = renderRoot
+
+	targetPath := t.TempDir()
+	outsideDir := t.TempDir()
+	outsideFile := filepath.Join(outsideDir, "secret.txt")
+	require.NoError(t, os.WriteFile(outsideFile, []byte("outside content\n"), 0o644))
+
+	symlinkPath := filepath.Join(targetPath, "old.txt")
+	require.NoError(t, os.Symlink(outsideFile, symlinkPath))
+
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{}, false)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrSymlinkWrite)
+	assert.Zero(t, result.successCount)
+	assert.Equal(t, 1, result.errorCount)
+
+	_, lstatErr := os.Lstat(symlinkPath)
+	require.NoError(t, lstatErr, "the symlink must be left untouched")
+	_, outsideStatErr := os.Stat(outsideFile)
+	require.NoError(t, outsideStatErr, "the file the symlink points to must be left untouched")
+}
+
+// TestHandleTemplateDeletions_RefusesAncestorSymlinkEscape is a regression
+// test for a CodeRabbit finding on PR #3245: refuseSymlinkDeletionCandidate
+// only Lstat'd the leaf path, so a symlinked ANCESTOR directory (rather than
+// the leaf itself) went undetected -- fileExistsAt's os.Stat follows
+// symlinks, so it would find a real file through the symlinked directory,
+// and the leaf Lstat on that resolved path sees an ordinary file, not a
+// symlink. Passing force=true proves this is a hard block, not just the
+// usual content-conflict guard (which force is allowed to override).
+func TestHandleTemplateDeletions_RefusesAncestorSymlinkEscape(t *testing.T) {
+	ui := createTestUI(t)
+	renderRoot := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(renderRoot, "subdir"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "subdir", "leaked.txt"), []byte("leaked content\n"), 0o644))
+	ui.renderedBaseRoot = renderRoot
+
+	targetPath := t.TempDir()
+	outsideDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(outsideDir, "leaked.txt"), []byte("leaked content\n"), 0o644))
+
+	// targetPath/subdir is a symlink to outsideDir -- the leaf (leaked.txt)
+	// is an ordinary file; only its parent directory is a symlink.
+	symlinkDir := filepath.Join(targetPath, "subdir")
+	require.NoError(t, os.Symlink(outsideDir, symlinkDir))
+
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{}, true)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	assert.Zero(t, result.successCount)
+	assert.Equal(t, 1, result.errorCount)
+
+	_, lstatErr := os.Lstat(symlinkDir)
+	require.NoError(t, lstatErr, "the symlinked directory must be left untouched")
+	content, readErr := os.ReadFile(filepath.Join(outsideDir, "leaked.txt"))
+	require.NoError(t, readErr, "the file outside the target directory must survive")
+	assert.Equal(t, "leaked content\n", string(content))
+}
+
+// TestHandleTemplateDeletions_StillWantedPathIsUntouched confirms a path the
+// new render still wants (present in newPaths) is never treated as a
+// deletion candidate, even if it happens to also exist in the old render.
+func TestHandleTemplateDeletions_StillWantedPathIsUntouched(t *testing.T) {
+	ui := createTestUI(t)
+	renderRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "kept.txt"), []byte("old content\n"), 0o644))
+	ui.renderedBaseRoot = renderRoot
+
+	targetPath := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetPath, "kept.txt"), []byte("different content\n"), 0o644))
+
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{"kept.txt": "kept.txt"}, false)
+
+	require.NoError(t, err)
+	assert.Zero(t, result.successCount)
+	assert.Zero(t, result.errorCount)
+	assert.Empty(t, result.failedPaths)
+	content, readErr := os.ReadFile(filepath.Join(targetPath, "kept.txt"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "different content\n", string(content))
+}
+
+// TestHandleTemplateDeletions_DryRunDoesNotDelete confirms --dry-run reports
+// the same outcome but never touches disk.
+func TestHandleTemplateDeletions_DryRunDoesNotDelete(t *testing.T) {
+	ui := createTestUI(t)
+	ui.SetDryRun(true)
+	renderRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "old.txt"), []byte("old content\n"), 0o644))
+	ui.renderedBaseRoot = renderRoot
+
+	targetPath := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetPath, "old.txt"), []byte("old content\n"), 0o644))
+
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{}, false)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.successCount)
+	assert.Zero(t, result.errorCount)
+	assert.Empty(t, result.failedPaths)
+	_, statErr := os.Stat(filepath.Join(targetPath, "old.txt"))
+	require.NoError(t, statErr, "dry-run must not delete the file")
+}
+
+// deletionGuardScaffoldYAML declares one matrix file whose axis expression
+// references a missing answer, so engine.ExpandMatrix always fails it before
+// any combination is resolved (see
+// TestProcessMatrixedFileEntry_ExpansionErrorReturnsFailedPath in
+// matrix_test.go for the same failure shape at the single-entry level).
+const deletionGuardScaffoldYAML = `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: deletion-guard-template
+spec:
+  files:
+    - path: deploy.yaml
+      target: "deploy/{{ .matrix.environment }}.yaml"
+      matrix:
+        environment: answers.missing
+`
+
+func deletionGuardEmbedsConfig() *templates.Configuration {
+	return &templates.Configuration{
+		Name: "deletion-guard-template",
+		Files: []templates.File{
+			{Path: "scaffold.yaml", Content: deletionGuardScaffoldYAML, Permissions: 0o644},
+			{Path: "deploy.yaml", Content: "environment: {{ .matrix.environment }}\n", IsTemplate: true, Permissions: 0o644},
+		},
+	}
+}
+
+// TestExecuteWithSetup_SkipsTemplateDeletionWhenGenerationFailed is a
+// regression test for a finding on this PR: handleTemplateDeletions used to
+// run even when the main generation loop had already failed. A matrix entry
+// whose axis expression fails to resolve never reaches writeOneOutput, so
+// none of its outputs are ever recorded in seenRenderedPaths -- making a file
+// that genuinely survives from the old render indistinguishable from one the
+// template stopped generating. Running the deletion pass against that
+// incomplete set would delete it for the wrong reason. The deletion pass must
+// now be skipped entirely whenever the main loop already produced an error.
+func TestExecuteWithSetup_SkipsTemplateDeletionWhenGenerationFailed(t *testing.T) {
+	ui := createTestUI(t)
+	ui.SetUpdateStrategy(engine.UpdateStrategyRendered)
+
+	renderRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "keep-me.txt"), []byte("keep me\n"), 0o644))
+	ui.renderedBaseRoot = renderRoot
+
+	targetDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetDir, "keep-me.txt"), []byte("keep me\n"), 0o644))
+
+	err := ui.executeWithSetup(deletionGuardEmbedsConfig(), targetDir, false, true, true, "", map[string]interface{}{}, []string{"{{", "}}"})
+	require.Error(t, err, "the matrix expansion failure must still fail the run")
+
+	_, statErr := os.Stat(filepath.Join(targetDir, "keep-me.txt"))
+	require.NoError(t, statErr, "a file unrelated to the failed entry must survive a failed generation run, not be deleted")
+}
+
+// TestExecuteWithSetup_DeletionScanFailureStillFailsTheRun is a regression
+// test for a CodeRabbit finding on PR #3245: handleTemplateDeletions's own
+// filepath.WalkDir scan can fail (e.g. ui.renderedBaseRoot itself becoming
+// unreadable) before any individual deletion candidate is ever reached,
+// leaving templateDeletionResult.errorCount at 0 even though it returned a
+// real error, and executeWithSetup only ever folded deletionResult.errorCount
+// into its own errorCount, never whether deleteErr itself was non-nil. So
+// this case never tripped the failure branch below -- the run reported
+// success and would have persisted a new project record despite losing the
+// only rendered reference a later --update needs to find the remaining
+// obsolete files.
+func TestExecuteWithSetup_DeletionScanFailureStillFailsTheRun(t *testing.T) {
+	ui := createTestUI(t)
+	ui.SetUpdateStrategy(engine.UpdateStrategyRendered)
+	// A renderedBaseRoot that doesn't exist makes handleTemplateDeletions's
+	// own filepath.WalkDir fail on its very first (root) call, before any
+	// candidate is ever reached -- templateDeletionResult.errorCount stays 0.
+	ui.renderedBaseRoot = filepath.Join(t.TempDir(), "does-not-exist")
+
+	targetDir := t.TempDir()
+
+	err := ui.executeWithSetup(renderedBaseConfig(), targetDir, false, true, true, "", map[string]interface{}{"project_name": "demo"}, []string{"{{", "}}"})
+
+	require.Error(t, err, "a deletion-scan failure must still fail the whole run")
+}
+
+// TestExecuteWithSetup_RespectsUserDeletedFile confirms the ui-package
+// behavior of deletedByUser's skip: a file previously generated but absent on
+// disk must not be recreated.
+func TestExecuteWithSetup_RespectsUserDeletedFile(t *testing.T) {
+	ui := createTestUI(t)
+	renderRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "static.txt"), []byte("static content\n"), 0o644))
+
+	targetDir := t.TempDir()
+	ui.processor.SetupRenderedBaseStorage(targetDir, renderRoot)
+
+	err := ui.executeWithSetup(renderedBaseConfig(), targetDir, false, true, true, "", map[string]interface{}{"project_name": "demo"}, []string{"{{", "}}"})
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(filepath.Join(targetDir, "static.txt"))
+	assert.True(t, os.IsNotExist(statErr), "a file previously generated but absent on disk must not be recreated")
+}
+
+// TestReportWriteResult_SkipReasonReachesOutput closes a coverage gap:
+// reportWriteResult's Reason-label branch was only verified at the
+// engine-package level (the FileSkippedError.Reason field itself), never
+// that it actually reaches the rendered "(skipped: ...)" output line.
+// Calls reportWriteResult directly -- executeWithSetup always flushes
+// ui.output to the real UI channel before returning, so this can't be
+// observed by inspecting ui.output after a full run.
+func TestReportWriteResult_SkipReasonReachesOutput(t *testing.T) {
+	ui := createTestUI(t)
+	skipErr := &engine.FileSkippedError{
+		Path:         "static.txt",
+		RenderedPath: "static.txt",
+		Reason:       "it existed previously but was removed locally",
+	}
+
+	success, failed := ui.reportWriteResult(skipErr, "static.txt", false)
+
+	assert.False(t, success)
+	assert.False(t, failed)
+	assert.Contains(t, ui.output.String(), "it existed previously but was removed locally")
+}
+
+// TestExecuteWithSetup_RecreateDeletedRecreatesUserDeletedFile closes a
+// coverage gap on InitUI.SetRecreateDeleted's own wrapper body: no ui-package
+// test called it directly and confirmed it actually delegates to
+// engine.Processor.SetRecreateDeleted (already proven at the engine-package
+// level for the Processor itself).
+func TestExecuteWithSetup_RecreateDeletedRecreatesUserDeletedFile(t *testing.T) {
+	ui := createTestUI(t)
+	ui.SetRecreateDeleted(true)
+	renderRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "static.txt"), []byte("static content\n"), 0o644))
+
+	targetDir := t.TempDir()
+	ui.processor.SetupRenderedBaseStorage(targetDir, renderRoot)
+
+	err := ui.executeWithSetup(renderedBaseConfig(), targetDir, false, true, true, "", map[string]interface{}{"project_name": "demo"}, []string{"{{", "}}"})
+	require.NoError(t, err)
+
+	content, readErr := os.ReadFile(filepath.Join(targetDir, "static.txt"))
+	require.NoError(t, readErr, "SetRecreateDeleted(true) must recreate the file")
+	assert.Equal(t, "static content\n", string(content))
+}
+
+// TestHandleTemplateDeletions_DryRunForceReportsWithoutDeleting closes a
+// coverage gap in deletionStatusLabel: the locallyModified-and-dryRun
+// combination (--force would delete, but --dry-run must still report
+// without touching disk) was untested.
+func TestHandleTemplateDeletions_DryRunForceReportsWithoutDeleting(t *testing.T) {
+	ui := createTestUI(t)
+	ui.SetDryRun(true)
+	renderRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "old.txt"), []byte("old content\n"), 0o644))
+	ui.renderedBaseRoot = renderRoot
+
+	targetPath := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetPath, "old.txt"), []byte("locally edited content\n"), 0o644))
+
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{}, true)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.successCount)
+	assert.Zero(t, result.errorCount)
+	content, readErr := os.ReadFile(filepath.Join(targetPath, "old.txt"))
+	require.NoError(t, readErr, "dry-run must not delete even with --force")
+	assert.Equal(t, "locally edited content\n", string(content))
+}
+
+// TestRefuseSymlinkDeletionCandidate_NotExistReturnsNil closes a coverage gap:
+// refuseSymlinkDeletionCandidate's own os.IsNotExist branch was never
+// directly exercised -- processDeletionCandidate's fileExistsAt guard already
+// short-circuits before reaching it whenever the leaf genuinely doesn't
+// exist (see TestHandleTemplateDeletions_AlreadyAbsent_NoOp), so this calls
+// it directly instead.
+func TestRefuseSymlinkDeletionCandidate_NotExistReturnsNil(t *testing.T) {
+	ui := createTestUI(t)
+	targetPath := t.TempDir()
+
+	err := ui.refuseSymlinkDeletionCandidate(targetPath, "missing.txt", filepath.Join(targetPath, "missing.txt"))
+
+	require.NoError(t, err)
+}
+
+// TestRefuseSymlinkDeletionCandidate_UnresolvableTargetPathPropagatesError
+// closes a coverage gap: refuseSymlinkDeletionCandidate's
+// filepath.EvalSymlinks(targetPath) failure branch was never exercised.
+// Calls it directly (bypassing processDeletionCandidate's normal entry) with
+// a leaf that exists and isn't a symlink, but a targetPath that doesn't
+// exist at all.
+func TestRefuseSymlinkDeletionCandidate_UnresolvableTargetPathPropagatesError(t *testing.T) {
+	ui := createTestUI(t)
+	realDir := t.TempDir()
+	leaf := filepath.Join(realDir, "file.txt")
+	require.NoError(t, os.WriteFile(leaf, []byte("content\n"), 0o644))
+
+	err := ui.refuseSymlinkDeletionCandidate(filepath.Join(t.TempDir(), "does-not-exist"), "file.txt", leaf)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to resolve target directory")
+}
+
+// TestRefuseSymlinkDeletionCandidate_LstatErrorPropagates closes a coverage
+// gap: refuseSymlinkDeletionCandidate's non-IsNotExist Lstat error branch was
+// never exercised. An embedded NUL byte makes the path syntactically invalid
+// -- rejected by the os package itself before any platform-specific
+// filesystem call -- which reliably produces a non-IsNotExist error on every
+// platform. Stat-ing a path through a regular file instead (ENOTDIR on Unix)
+// isn't portable here: on Windows that same attempt surfaces as
+// ERROR_PATH_NOT_FOUND, which os.IsNotExist treats as true.
+func TestRefuseSymlinkDeletionCandidate_LstatErrorPropagates(t *testing.T) {
+	ui := createTestUI(t)
+	parentDir := t.TempDir()
+	badRelPath := "bad\x00name.txt"
+	badPath := filepath.Join(parentDir, badRelPath)
+
+	err := ui.refuseSymlinkDeletionCandidate(parentDir, badRelPath, badPath)
+
+	require.Error(t, err)
+	assert.False(t, os.IsNotExist(err))
+	assert.Contains(t, err.Error(), "failed to check")
+}

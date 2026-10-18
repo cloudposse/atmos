@@ -3,15 +3,15 @@ title: atmos describe component
 sidebar_label: component
 sidebar_class_name: command
 id: component
-description: Use this command to describe the complete configuration for an Atmos component in an Atmos stack.
+description: "Inspect the resolved configuration for a component in a particular stack."
 ---
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
-Use this command to describe the complete configuration for an [Atmos component](/components) in
-an [Atmos stack](/learn/stacks).
+Inspect the resolved configuration for a component in a particular stack. Use it to understand
+inherited values and check the settings Atmos will use before running a command.
 </Intro>
 
 <CastPlayer src="/casts/demo/fixtures/basic/describe-component.cast" title="atmos describe component" chrome controls scrubber />
@@ -74,7 +74,7 @@ atmos describe component station/2 --stack dev  # ✓ Explicit and unambiguous
 :::info YAML Functions and Authentication
 Default identity authentication occurs when an evaluated YAML function or Go template needs credentials. In `--error-mode=warn`, unavailable implicit authentication, including a stopped emulator, produces `(computed)` for affected values while preserving resolvable siblings. `silent` omits the summary and `strict` fails. Queries with dynamic dependencies may require evaluation of the entire component.
 
-Explicit `--identity` or `ATMOS_IDENTITY` selection authenticates before processing and remains fail-fast. `--identity=false` disables Atmos authentication. Malformed configuration, invalid expressions, and dependency cycles remain fatal. You can disable function/template processing with `--process-functions=false` or `--process-templates=false`.
+Explicit `--identity` or `ATMOS_IDENTITY` selection authenticates before processing and remains fail-fast. The selected identity also applies to stores that declare no `identity:` of their own, exactly as it does when the same component is deployed, so describe and deploy return the same values; a store with its own `identity:` keeps it. `--identity=false` disables Atmos authentication. Malformed configuration, invalid expressions, and dependency cycles remain fatal. You can disable function/template processing with `--process-functions=false` or `--process-templates=false`.
 :::
 
 :::tip

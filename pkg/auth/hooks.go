@@ -174,12 +174,19 @@ func authenticateAndWriteEnv(ctx context.Context, authManager types.AuthManager,
 	if stackInfo.ComponentEnvSection == nil {
 		stackInfo.ComponentEnvSection = make(map[string]any)
 	}
+	// Preserve explicit AWS ambient overrides when component env is appended later.
+	identityEnvKeys := make(map[string]bool)
+	if identity := authManager.GetIdentities()[identityName]; identity.Kind == "aws/ambient" {
+		for _, envVar := range identity.Env {
+			identityEnvKeys[envVar.Key] = true
+		}
+	}
 	for _, envVar := range envList {
 		if idx := strings.IndexByte(envVar, '='); idx >= 0 {
 			key := envVar[:idx]
 			value := envVar[idx+1:]
-			// Only write auth-managed vars to ComponentEnvSection, not the full os env.
-			if isAuthManagedVar(key) {
+			// Only write auth-managed and explicitly configured vars, not the full os env.
+			if isAuthManagedVar(key) || identityEnvKeys[key] {
 				stackInfo.ComponentEnvSection[key] = value
 			}
 		}

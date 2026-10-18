@@ -81,6 +81,138 @@ func ResolveEditableConfigFile(atmosConfig *schema.AtmosConfiguration, override 
 	return "", ErrNoEditableConfig
 }
 
+// configImportDirCandidates lists the default-import directory names probed for
+// config fragments, matching the directories mergeDefaultImports auto-discovers.
+var configImportDirCandidates = []string{AtmosDefaultImportsDirName, DotAtmosDefaultImportsDirName}
+
+// EffectiveConfigFilesAscending returns the config files that participate in the
+// merged configuration, in ascending precedence order (a later file overrides an
+// earlier one). Config-editing commands that must edit the file whose value is
+// actually effective for a key - rather than guessing by top-level section
+// presence - select the last (highest-precedence) candidate that declares the key
+// (cloudposse/atmos#3269).
+//
+// The order mirrors how Atmos loads config:
+//
+//  1. git-repository-root `atmos.d/` and `.atmos.d/` fragments (lowest precedence);
+//  2. the current working directory's `atmos.d/` and `.atmos.d/` fragments, but
+//     only when the CWD has its own root atmos.yaml - otherwise the loader uses
+//     the git root and the CWD fragments are not merged;
+//  3. the root atmos.yaml / .atmos.yaml itself (highest precedence - Atmos
+//     reapplies it after its imports, so an explicit root value overrides a
+//     fragment).
+//
+// Within a fragment directory, files follow SearchAtmosConfig order (depth, then
+// name), matching the loader's later-overrides-earlier merge.
+func EffectiveConfigFilesAscending(atmosConfig *schema.AtmosConfiguration) []string {
+	defer perf.Track(atmosConfig, "config.EffectiveConfigFilesAscending")()
+
+	var cwd string
+	cwdHasConfig := false
+	if wd, err := os.Getwd(); err == nil {
+		cwd = wd
+		if _, ok, probeErr := firstExistingConfig(wd); probeErr == nil && ok {
+			cwdHasConfig = true
+		}
+	}
+
+	var files []string
+	for _, dir := range fragmentDirsAscending(cwd, cwdHasConfig) {
+		files = append(files, fragmentFiles(dir)...)
+	}
+	if root, err := ResolveEditableConfigFile(atmosConfig, ""); err == nil {
+		files = append(files, root)
+	}
+	// Active profiles are merged over the root atmos.yaml, so they have the highest
+	// precedence and are appended last (cloudposse/atmos#3270 review).
+	files = append(files, activeProfileFiles(atmosConfig)...)
+	return files
+}
+
+// activeProfileFiles returns the config files of the active profiles, in ascending
+// precedence (the loader applies active profiles left-to-right, a later profile
+// overriding an earlier one, so the files are returned in that order). Profiles are
+// merged after the root atmos.yaml, so callers append these at the highest
+// precedence. Returns nil when no profile is active -- the common case for a plain
+// invocation with no --profile/ATMOS_PROFILE and no profiles.default.
+func activeProfileFiles(atmosConfig *schema.AtmosConfiguration) []string {
+	if atmosConfig == nil {
+		return nil
+	}
+	profiles := GetActiveProfiles(atmosConfig)
+	if len(profiles) == 0 {
+		return nil
+	}
+	locations, err := discoverProfileLocations(atmosConfig)
+	if err != nil {
+		return nil
+	}
+	var files []string
+	for _, name := range profiles {
+		dir, _, derr := findProfileDirectory(name, locations)
+		if derr != nil {
+			continue
+		}
+		found, serr := SearchAtmosConfig(dir)
+		if serr != nil {
+			continue
+		}
+		files = append(files, found...)
+	}
+	return files
+}
+
+// fragmentDirsAscending returns the directories whose atmos.d/.atmos.d fragments
+// are in effect, in ascending precedence: the git repository root first (lowest),
+// then the current working directory (higher) when it carries its own root config.
+func fragmentDirsAscending(cwd string, cwdHasConfig bool) []string {
+	seen := make(map[string]struct{})
+	var dirs []string
+	add := func(dir string) {
+		if dir == "" {
+			return
+		}
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			return
+		}
+		if _, ok := seen[abs]; ok {
+			return
+		}
+		seen[abs] = struct{}{}
+		dirs = append(dirs, abs)
+	}
+	// ProcessTagGitRoot returns "." (not an error) when there is no real git
+	// repository, which must not be treated as a root -- otherwise the CWD would be
+	// searched here, bypassing the cwdHasConfig gate below. This mirrors the guard
+	// in loadAtmosDFromGitRoot.
+	if gitRoot, err := u.ProcessTagGitRoot("!repo-root ."); err == nil && gitRoot != "" && gitRoot != "." {
+		add(gitRoot)
+	}
+	if cwdHasConfig {
+		add(cwd)
+	}
+	return dirs
+}
+
+// fragmentFiles returns the config fragment files under dir's atmos.d/ and
+// .atmos.d/ directories, in SearchAtmosConfig order.
+func fragmentFiles(dir string) []string {
+	var files []string
+	for _, importDir := range configImportDirCandidates {
+		base := filepath.Join(dir, importDir)
+		if info, err := os.Stat(base); err != nil || !info.IsDir() {
+			continue
+		}
+		found, err := SearchAtmosConfig(base)
+		if err != nil {
+			continue
+		}
+		files = append(files, found...)
+	}
+	return files
+}
+
 // resolveOverridePath resolves an explicit override that may point at either a
 // file or a directory containing an atmos.yaml.
 func resolveOverridePath(override string) (string, error) {

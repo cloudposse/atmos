@@ -1,0 +1,62 @@
+---
+slug: custom-terraform-readme-formatting
+title: "Custom Terraform Formatting in README Templates"
+authors: [osterman]
+tags: [enhancement]
+---
+
+Preformatted Terraform tables make it difficult to group variables or reproduce
+an existing README design. [Atmos README templates](/cli/commands/docs/generate#custom-terraform-formatting)
+can now access native Terraform objects through a `terraform` function, so you
+can render definition lists, badges, and collapsible sections yourself.
+
+<!--truncate-->
+
+Previously, templates received Terraform documentation as an already-formatted
+`terraform_docs` string. The new function provides the parsed module directly,
+including methods such as `.GetValue` and `.Type.Raw` and source positions.
+
+Enable Terraform documentation and select your template:
+
+```yaml title="atmos.yaml"
+docs:
+  generate:
+    readme:
+      base-dir: .
+      template: "./README.md.gomplate"
+      output: "./README.md"
+      terraform:
+        enabled: true
+        source: .
+```
+
+Then choose how to present the data:
+
+```gotemplate title="README.md.gomplate"
+{{ with terraform }}
+## Optional Variables
+{{ range .OptionalInputs }}
+### `{{ .Name }}`
+
+{{ .Description.Raw }}
+
+Type: `{{ .Type.Raw }}`
+
+Default: `{{ .GetValue }}`
+{{ end }}
+{{ end }}
+```
+
+Run `atmos docs generate readme` to render it. The `with` guard also handles
+disabled Terraform generation or a missing configured source directory.
+Existing templates can continue using `terraform_docs`. Its visibility,
+`hide_empty`, and `indent_level` settings now work for unpinned projects and
+editions on or after `2026-10-17`; earlier edition pins preserve the previous
+formatter behavior. The native objects remain available regardless of these settings.
+
+Atmos 1.232.0 and earlier cannot parse the new function, even inside a guard.
+Upgrade the repository's Atmos version before adopting a native template.
+
+See [Custom Terraform formatting](/cli/commands/docs/generate#custom-terraform-formatting)
+for the available objects and a complete example adapted from Cloud Posse's
+component README design.

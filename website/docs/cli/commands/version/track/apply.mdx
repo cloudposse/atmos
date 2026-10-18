@@ -3,10 +3,17 @@ title: atmos version track apply
 sidebar_position: 110
 sidebar_label: apply
 sidebar_class_name: command
-description: Rewrite version-managed files from the lock file.
+description: "Update version references in your project files to match the lock file."
 ---
+import Intro from '@site/src/components/Intro'
 
-Run the file managers over paths configured in `version.files` and rewrite version references from the lock file. The alias is `sync`.
+<Intro>
+Update version references in your project files to match the lock file. Use this command to keep
+workflows, configuration, and generated files aligned with the dependency versions you have
+selected.
+</Intro>
+
+The file managers rewrite paths configured in `version.files` using values from the lock file. The alias is `sync`.
 
 ## Usage
 

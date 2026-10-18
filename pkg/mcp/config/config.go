@@ -19,7 +19,14 @@ import (
 	atmosyaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
-const mcpServersPathPrefix = "mcp.servers."
+const (
+	mcpServersPathPrefix = "mcp.servers."
+	// The mcpServersPath and mcpEnabledPath constants are the dotted config paths
+	// used to locate which file owns the effective MCP config so edits land where
+	// they take effect rather than in a shadowed file (cloudposse/atmos#3269).
+	mcpServersPath = "mcp.servers"
+	mcpEnabledPath = "mcp.enabled"
+)
 
 var (
 	errEmptyTarget          = errors.New("target must not be empty")
@@ -237,11 +244,76 @@ func ParseHeaderPairs(pairs []string) (map[string]string, error) {
 	return result, nil
 }
 
-// ResolveFile picks the atmos.yaml file `add`/`remove` should edit, honoring
-// an explicit --config override the same way `atmos config set`/`get` does.
-func ResolveFile(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) (string, error) {
-	defer perf.Track(atmosConfig, "mcpconfig.ResolveFile")()
+// ResolveServerFile picks the file that `add`/`remove` should edit for
+// mcp.servers.<name>, honoring an explicit --config override the same way
+// `atmos config set` does. Without an override it selects by the server's
+// effective provenance so an edit is never silently shadowed by a
+// higher-precedence file (cloudposse/atmos#3269). Precedence:
+//
+//  1. an explicit --config override;
+//  2. the highest-precedence effective file that already declares the server
+//     (so an overwrite or remove targets the value that is actually in effect);
+//  3. for a new server, the highest-precedence effective file that already
+//     declares mcp.servers (joining existing servers, typically a .atmos.d
+//     fragment);
+//  4. the root atmos.yaml.
+//
+// The declared return reports whether the server already exists in the chosen
+// file (case 1 or 2), which `remove` uses to distinguish "edit here" from "not
+// configured".
+func ResolveServerFile(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration, name string) (file string, declared bool, err error) {
+	defer perf.Track(atmosConfig, "mcpconfig.ResolveServerFile")()
 
+	override, err := resolveConfigOverride(cmd)
+	if err != nil {
+		return "", false, err
+	}
+	if override != "" {
+		resolved, rerr := resolveOverrideFile(atmosConfig, override)
+		if rerr != nil {
+			return "", false, rerr
+		}
+		return resolved, fileDeclaresKey(resolved, serverPath(name)), nil
+	}
+
+	candidates := pkgconfig.EffectiveConfigFilesAscending(atmosConfig)
+	if owner := highestPrecedenceDeclaring(candidates, serverPath(name)); owner != "" {
+		return owner, true, nil
+	}
+	if holder := highestPrecedenceDeclaring(candidates, mcpServersPath); holder != "" {
+		return holder, false, nil
+	}
+	root, rerr := resolveRootFile(atmosConfig)
+	if rerr != nil {
+		return "", false, rerr
+	}
+	return root, false, nil
+}
+
+// ResolveEnableFile picks the file to write mcp.enabled to. Because the root
+// atmos.yaml is reapplied after its imports, an mcp.enabled written to a fragment
+// is shadowed by an explicit root value; so this targets the highest-precedence
+// file that already declares mcp.enabled, else the root atmos.yaml, which always
+// takes effect (cloudposse/atmos#3269).
+func ResolveEnableFile(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) (string, error) {
+	defer perf.Track(atmosConfig, "mcpconfig.ResolveEnableFile")()
+
+	override, err := resolveConfigOverride(cmd)
+	if err != nil {
+		return "", err
+	}
+	if override != "" {
+		return resolveOverrideFile(atmosConfig, override)
+	}
+	candidates := pkgconfig.EffectiveConfigFilesAscending(atmosConfig)
+	if owner := highestPrecedenceDeclaring(candidates, mcpEnabledPath); owner != "" {
+		return owner, nil
+	}
+	return resolveRootFile(atmosConfig)
+}
+
+// resolveConfigOverride extracts and validates a single --config override.
+func resolveConfigOverride(cmd *cobra.Command) (string, error) {
 	cfgFiles, _ := cmd.Flags().GetStringSlice("config")
 	override, err := pkgconfig.ResolveConfigOverride(cfgFiles)
 	if err != nil {
@@ -250,8 +322,18 @@ func ResolveFile(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) (st
 			WithHint("Pass a single --config file, or edit the target file directly.").
 			Err()
 	}
+	return override, nil
+}
 
-	file, err := pkgconfig.ResolveEditableConfigFile(atmosConfig, override)
+func resolveOverrideFile(atmosConfig *schema.AtmosConfiguration, override string) (string, error) {
+	return wrapResolve(pkgconfig.ResolveEditableConfigFile(atmosConfig, override))
+}
+
+func resolveRootFile(atmosConfig *schema.AtmosConfiguration) (string, error) {
+	return wrapResolve(pkgconfig.ResolveEditableConfigFile(atmosConfig, ""))
+}
+
+func wrapResolve(file string, err error) (string, error) {
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrInvalidArgumentError).
 			WithExplanation(err.Error()).
@@ -259,6 +341,30 @@ func ResolveFile(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) (st
 			Err()
 	}
 	return file, nil
+}
+
+// serverPath returns the dotted config path for a server entry.
+func serverPath(name string) string {
+	return mcpServersPathPrefix + name
+}
+
+// fileDeclaresKey reports whether file declares the dotted keyPath.
+func fileDeclaresKey(file, keyPath string) bool {
+	_, err := atmosyaml.GetFile(file, keyPath)
+	return err == nil
+}
+
+// highestPrecedenceDeclaring returns the last (highest-precedence) file in
+// candidates that declares keyPath, or "" when none do. The candidates must be
+// in ascending precedence order (see config.EffectiveConfigFilesAscending).
+func highestPrecedenceDeclaring(candidates []string, keyPath string) string {
+	target := ""
+	for _, f := range candidates {
+		if fileDeclaresKey(f, keyPath) {
+			target = f
+		}
+	}
+	return target
 }
 
 // Write serializes cfg to a compact JSON literal (valid YAML flow syntax) and

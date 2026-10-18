@@ -2,16 +2,16 @@
 title: atmos scaffold
 sidebar_label: scaffold
 sidebar_class_name: command
-description: Generate, validate, and update template-driven boilerplate with versioned Atmos scaffold manifests.
+description: "Give your team reusable templates for components, configuration, and projects."
 ---
 
 import Intro from '@site/src/components/Intro'
 import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
-Atmos scaffolds turn a template directory into a governed generation workflow. A template asks for
-validated values, conditionally generates files, runs declared finishing steps, and can later merge
-upstream template improvements into an existing project.
+Give your team reusable templates for components, configuration, and projects. Scaffolds generate
+consistent files from validated answers and can merge later template improvements into previously
+generated output.
 </Intro>
 
 ## Commands
@@ -86,6 +86,48 @@ spec:
 Use CEL operators such as `&&`, `||`, and `!` for compound conditions. The map form
 `{all: ...}`, `{any: ...}`, or `{not: ...}` is not accepted in scaffold manifests.
 
+### Template Delimiters
+
+Template files use `{{ }}` by default. A template that also generates files with template syntax
+of their own, such as a Helm chart or a GitHub Actions workflow, can choose different delimiters
+so those expressions pass through untouched. Set a template-wide pair with `spec.delimiters`, and
+override it for specific files with `delimiters` on a `spec.files` entry. Each pair is exactly two
+non-empty strings: the left and the right delimiter.
+
+```yaml title="scaffold.yaml"
+spec:
+  delimiters: ["{{", "}}"]          # template-wide default (optional)
+  files:
+    - path: "charts/**"             # Helm templates use {{ }} themselves
+      delimiters: ["[[", "]]"]
+    - path: ".github/workflows/*.yml.tmpl"
+      delimiters: ["<<", ">>"]      # keeps ${{ github.sha }} literal
+```
+
+With this manifest, a chart template can mix both syntaxes. Atmos fills in the `[[ ]]` expression
+and leaves Helm's `{{ }}` expression for Helm to render later:
+
+```yaml title="charts/app/templates/deployment.yaml"
+# atmos:template
+name: [[ .Config.name ]]
+image: "{{ .Values.image }}"
+```
+
+The delimiters for a file are chosen in this order:
+
+1. The `delimiters` of the matching `spec.files` entry. When several entries match the same file,
+   the last matching entry wins, the same rule as `path` and `when`.
+2. `spec.delimiters`.
+3. `{{` and `}}`.
+
+For `atmos init`, the delimiters the command passes in take the place of `spec.delimiters`.
+
+A file's delimiters apply to everything Atmos renders for that file: its content, its path, its
+`target`, and any `matrix` axis written as a Go template expression. The `when` condition is a CEL
+expression and never uses delimiters. Only templated files are rendered, which means files ending
+in `.tmpl` or marked with an `atmos:template` comment; every other file is copied as written. The
+generated `README` is not a `spec.files` entry and always uses `spec.delimiters`.
+
 ## Generation Hooks
 
 Scaffold hooks run around generation at `before.scaffold.generate` and
@@ -112,7 +154,7 @@ spec:
           command: terraform validate
 ```
 
-For `kind: step`, `type:` selects one registered [step type](/workflows/steps/type) and `with:`
+For `kind: step`, `type:` selects one registered [step type](/steps/type) and `with:`
 is its configuration. For `kind: steps`, `with:` is an ordered step list. The envelope owns
 `events`, `when`, `env`, `retry`, and `on_failure`; answer values are available in conditions as
 `answers` and in step templates as `{{ .Answers.<field> }}`. Hooks run in stable name order.
@@ -169,5 +211,5 @@ golden path.
 
 - [Generate from a scaffold](/cli/commands/scaffold/generate)
 - [Validate a scaffold](/cli/commands/scaffold/validate)
-- [Workflow and hook step types](/workflows/steps/type)
+- [Workflow and hook step types](/steps/type)
 - [Manage lifecycle events with hooks](/stacks/hooks)

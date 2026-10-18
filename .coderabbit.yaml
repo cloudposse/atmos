@@ -40,8 +40,9 @@ reviews:
     #labels:
     #  - "ready-for-review"
     drafts: false
+    # Review stacked PRs regardless of the intermediate base branch name.
     base_branches:
-      - "main"
+      - ".*"
   tools:
     ast-grep:
       essential_rules: true

@@ -665,7 +665,7 @@ func TestAffectedCommandLong(t *testing.T) {
 func TestAffectedFlagTypes(t *testing.T) {
 	stringFlags := []string{
 		"format", "delimiter", "sort", "ref", "sha",
-		"repo-path", "ssh-key", "ssh-key-password", "stack",
+		"repo-path", "ssh-key", "ssh-key-password", "stack", "tags",
 	}
 
 	boolFlags := []string{
@@ -674,7 +674,7 @@ func TestAffectedFlagTypes(t *testing.T) {
 	}
 
 	stringSliceFlags := []string{
-		"columns", "skip",
+		"columns", "skip", "labels",
 	}
 
 	for _, flagName := range stringFlags {
@@ -778,6 +778,7 @@ func TestAffectedFlagUsageStrings(t *testing.T) {
 		"format", "columns", "delimiter", "sort", "ref", "sha",
 		"repo-path", "ssh-key", "clone-target-ref", "include-dependents",
 		"stack", "exclude-locked", "process-templates", "process-functions", "skip",
+		"tags", "labels",
 	}
 
 	for _, flagName := range flagsToCheck {

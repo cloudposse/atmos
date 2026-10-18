@@ -4,11 +4,16 @@ tags: [Stacks]
 cast:
   file: /casts/examples/compositions/validate.cast
   title: atmos composition validation
+related_docs:
+  - label: "Composition commands and membership"
+    url: /cli/commands/composition/usage
+  - label: "Container component configuration"
+    url: /stacks/components/container
 ---
 
 # Compositions
 
-A **composition** defines a reusable slice of a stack across environments. The
+A [**composition**](https://atmos.tools/cli/commands/composition/usage) defines a reusable slice of a stack across environments. The
 top-level `compositions:` section declares every service that can belong to the
 slice, while each stack fulfills the subset it needs. Local development can run
 `frontend` and `api` while pointing at an external `database`; dev can use the

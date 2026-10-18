@@ -110,6 +110,10 @@ type ErrorInfo struct {
 
 	// Details contains additional error context.
 	Details map[string]interface{} `json:"details,omitempty"`
+
+	// Err is the original error. It is not part of the serialized output; it lets callers
+	// keep the error chain (sentinels and hints) instead of only the message.
+	Err error `json:"-"`
 }
 
 // Format represents the output format type.

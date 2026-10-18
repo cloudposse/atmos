@@ -1,0 +1,287 @@
+---
+title: Scripting
+sidebar_position: 1
+sidebar_label: Scripting
+description: Add Starlark scripts to Atmos workflows, custom commands, and lifecycle hooks. Run and test them locally or in CI.
+id: automation
+slug: /scripting
+---
+
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+import EmbedFile from '@site/src/components/EmbedFile'
+import Terminal from '@site/src/components/Terminal'
+import CastEmbed from '@site/src/components/CastEmbed'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Add scripts to workflows, custom commands, and hooks using the Atmos Automation
+Language, based on Starlark.
+</Intro>
+
+Use your Atmos stacks, cloud identities, and toolchain to build, deploy, and test.
+Combine built-in steps with shell commands; add scripts for conditions, loops,
+and shared functions. Run the same commands locally and in CI.
+
+## Choose an entry point {#choose-what-you-want-to-build}
+
+| Build | Use it for |
+| --- | --- |
+| [A workflow](#workflows-and-parallel-tasks) | A sequence of tasks, with parallel execution, retries, and timeouts |
+| [A custom command](#custom-commands) | An Atmos subcommand such as `atmos capacity` |
+| [A hook](#lifecycle-hooks) | Checks or actions triggered by component, scaffold, or Git events |
+| [A test suite](#testing-your-automation) | Tests for scripts, command results, and deployed services |
+| [A CLI app](#executable-scripts) | A standalone script with its own arguments, flags, and help |
+
+## Script step syntax
+
+Use `type: script` and `interpreter: starlark` to add a script to a step list:
+
+```yaml
+- name: report
+  type: script
+  interpreter: starlark
+  script: ui.info("Starting")
+```
+
+Workflows, custom commands, and Git hooks accept step lists. Component and
+scaffold hooks wrap steps with an event and a hook kind; see
+[hook syntax](/scripting/lifecycle-hooks#lifecycle-hook-syntax).
+
+## Workflows and parallel tasks
+
+Define a workflow in YAML, then run it with
+`atmos workflow <name> -f <file>`.
+
+Combine Atmos commands, shell commands, scripts, and control steps for parallel
+work, retries, and timeouts. The [workflow guide](/scripting/workflows) explains how to
+define and run a workflow; the [step reference](/steps) describes the
+building blocks.
+
+Use script steps for conditions, loops, and data processing.
+Store shared functions in `.star` files and include them from YAML; `load()`
+resolves sibling modules relative to the script file.
+
+Inside a program, `steps.task` describes a function call and `steps.parallel`
+runs independent calls with a concurrency limit. Each task can have its own
+timeout and retry policy. Results retain input order, and terminal output identifies
+the task that produced it.
+
+The [release-plan example](/steps/type/script#custom-components)
+loads a shared function and reads three components with at most two tasks running
+at once.
+
+Use retries for operations that are safe to repeat: a retry runs the entire task
+function again. See [task execution](/steps/type/script#embedded-starlark)
+for the available controls and component-resolution deadline behavior.
+
+Steps can collect user input and pass results to later steps. See
+[prompts and step outputs](/scripting/workflows#collect-input-and-pass-results-between-steps).
+
+## Custom commands
+
+Add project-specific subcommands to Atmos in `atmos.yaml`. Define their
+arguments, flags, defaults, help, and steps. Commands can run existing tools or
+Starlark scripts; Atmos parses inputs and passes them to the script.
+
+### Example: report capacity
+
+Save this configuration as `atmos.yaml`. The `commands:` entry registers the
+`capacity` subcommand, its flag, and the script step that implements it:
+
+<EmbedFile filePath="examples/starlark-commands/atmos.yaml" />
+
+Run the command through Atmos:
+
+<Terminal title="Run the custom command">
+```shell
+atmos capacity --replicas 3
+```
+</Terminal>
+
+It prints `3 replicas x 4 workers = 12 workers`.
+
+<CastEmbed src="/casts/examples/starlark-commands/capacity.cast" title="Custom command: atmos capacity --replicas 3" chrome controls scrubber />
+
+<ActionCard title="Add an Atmos subcommand">
+    Register a subcommand and define its arguments, flags, and steps.
+    <div>
+      <PrimaryCTA to="/scripting/custom-commands">Read the Guide</PrimaryCTA>
+    </div>
+</ActionCard>
+
+The [runnable capacity example](/examples/starlark-commands) includes the complete
+project. See [custom command configuration](/cli/configuration/commands) for command
+declarations, arguments, flags, and component context.
+
+Select `type: script` and `interpreter: starlark` for the program step.
+Script steps read parsed flags directly as `ctx.flags["replicas"]` and named
+positional arguments as `ctx.arguments["service"]`. Values keep their declared
+types.
+
+Use [error builders](/functions/automation/errors.build) to report failures with
+explanations and recovery hints.
+
+## Lifecycle hooks
+
+Hooks run actions when an event occurs. Use them around component operations,
+scaffold generation, or Git events such as `pre-commit`. Component and scaffold
+hooks select lifecycle events; Git hooks are configured separately in `atmos.yaml`.
+
+Component hooks receive `ctx.component`, `ctx.hook`, and `ctx.operation`.
+Scaffold hooks receive template inputs; Git hooks receive Git arguments.
+See [hook syntax and inputs](/scripting/lifecycle-hooks) before adding a hook.
+
+### Example: check component ownership
+
+This example requires an owner before Terraform plans. The `dev` stack passes;
+the `unowned` stack fails the check and never starts a plan. Its tiny Terraform
+module has no providers or resources, so you can try it without cloud credentials.
+
+<CastEmbed src="/casts/examples/starlark-hooks/owner-check.cast" title="Check component ownership before Terraform plans" chrome controls scrubber />
+
+<ActionCard title="Add a lifecycle hook">
+    Run scripts at component, scaffold, or Git events.
+    <div>
+      <PrimaryCTA to="/scripting/lifecycle-hooks">Read the Guide</PrimaryCTA>
+    </div>
+</ActionCard>
+
+The [runnable ownership example](/examples/starlark-hooks) shows both outcomes.
+See [hooks](/stacks/hooks) for events, failure policies, and configuration, and
+[lifecycle context](/steps/type/script#lifecycle-hook-context) for the
+fields available to scripts.
+
+## Testing your automation
+
+Use `test` steps to check script logic, command results, configuration, and
+deployed services. In scripts, call `fail()` with a useful message when a check fails.
+
+Group checks with the `test` step type to get a test tree and a summary of passed,
+failed, skipped, and canceled checks. Successful output stays hidden by default;
+failing checks show their captured output and error. Combine script checks with
+HTTP checks, shell commands, and other supported step types. Use parallel or
+matrix groups when checks can run independently.
+
+Test groups work in workflows, custom commands, and lifecycle hooks.
+
+<ActionCard title="Test your automation">
+    Group assertions, command checks, and service tests.
+    <div>
+      <PrimaryCTA to="/scripting/testing">Read the Testing Guide</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Custom CLI apps {#executable-scripts}
+
+A CLI app is an executable with its own arguments, flags, and help. Run it as
+`./myapp`; no extension or command registration in `atmos.yaml` is required.
+
+With Atmos on your `PATH`, save this as `myapp`. The first line selects Atmos
+as its interpreter. This example needs no stacks or external tools.
+
+<File title="myapp">
+```python
+#!/usr/bin/env atmos
+name = ctx.args[0] if ctx.args else "world"
+ui.success("Hello, {}!".format(name))
+```
+</File>
+
+<Terminal title="Run the script">
+```shell
+chmod +x myapp
+./myapp platform
+```
+</Terminal>
+
+It prints `Hello, platform!`. You can also use `atmos ./myapp platform`,
+including on systems without shebang support.
+
+The following script uses the built-in `fs` and `json` helpers to read a service
+manifest and report replica totals.
+
+<CastEmbed src="/casts/examples/starlark-script/summarize.cast" title="Custom CLI app: ./summarize.star services.json" chrome controls scrubber />
+
+<ActionCard title="Build a custom CLI app">
+    Declare arguments, flags, validation, and help.
+    <div>
+      <PrimaryCTA to="/scripting/standalone-cli-apps">Read the Guide</PrimaryCTA>
+    </div>
+</ActionCard>
+
+The [runnable script example](/examples/starlark-script) includes the service
+manifest and executable programs.
+
+The [release example](/scripting/standalone-cli-apps#what-your-program-can-do)
+builds a container image, pushes it to a registry, and deploys it with Terraform.
+
+### Declare script arguments and flags
+
+Declare arguments, flags, and help with `cli.command`, `cli.arg`, and `cli.flag`.
+Atmos parses and validates inputs before calling `main(args, flags)`.
+
+```python
+#!/usr/bin/env atmos
+def validate(args, flags):
+    if flags["replicas"] < 1:
+        fail("replicas must be positive")
+
+def main(args, flags):
+    print("{}: {} replicas".format(args["service"], flags["replicas"]))
+
+cli.command(
+    description = "Report a service's replica count",
+    args = [cli.arg("service", description="Service name")],
+    flags = [cli.flag("replicas", type="int", shorthand="r", default=2)],
+    validate = validate,
+    run = main,
+)
+```
+
+Save this as `replicas.star`. Run `atmos ./replicas.star api -r 3` (or `--replicas 3`),
+or `atmos ./replicas.star --help` for generated usage. Help does not run `main`.
+Flags support types, defaults, required values,
+and choices; an optional `validate` callback handles checks involving multiple
+inputs. Both callbacks receive parsed dictionaries directly.
+
+See the [command declaration reference](/steps/type/script#declaring-a-standalone-command)
+and [complete example](/examples/starlark-script).
+
+## Language overview {#atmos-automation-language}
+
+Atmos includes a Starlark interpreter with Python-like functions, conditions,
+loops, and structured data.
+
+Write `.star` files for standalone tools and shared code, or select
+`interpreter: starlark` in a YAML script step. Use `load()` to share functions
+between tools, custom commands, workflows, and hooks.
+
+### Why Starlark?
+
+Read [why Atmos uses Starlark](/scripting/language#why-starlark).
+
+## Use the same automation locally and in CI
+
+Commit your automation to the repository and run the same command locally and
+in CI. Atmos supplies the interpreter; external commands still need their tools
+and credentials.
+
+Keep triggers and approvals in your CI system. Add [native CI](/ci) for Terraform
+plan reporting, status checks, and planfile storage.
+
+## Built-in helpers and reference
+
+Atmos adds helpers for files, JSON, regular expressions, processes,
+component lookup, command invocation, task execution, and terminal output.
+`print` emits data; `ui` reports status; `log` emits diagnostics at the configured
+log level. Output streams while scripts run. When masking is enabled, registered secrets
+and matches for configured masking patterns are masked in displayed output.
+
+<ActionCard title="Language and API reference">
+    Browse syntax, helpers, execution controls, path resolution, and runtime limits.
+    <div>
+      <PrimaryCTA to="/scripting/language">Read the Language Overview</PrimaryCTA>
+    </div>
+</ActionCard>

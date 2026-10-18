@@ -2,13 +2,18 @@ package step
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/script"
 )
 
 // AtmosHandler executes atmos commands.
@@ -26,6 +31,9 @@ func init() {
 func (h *AtmosHandler) Validate(step *schema.WorkflowStep) error {
 	defer perf.Track(nil, "step.AtmosHandler.Validate")()
 
+	if err := h.ValidateOutput(step); err != nil {
+		return err
+	}
 	return h.ValidateRequired(step, "command", step.Command)
 }
 
@@ -38,6 +46,20 @@ func (h *AtmosHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 		return nil, err
 	}
 
+	// Render a templated `output:` before anything runs, so an unknown mode fails the step.
+	step, err = resolveOutputStep(step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	// Enforce the step's timeout: the atmos subprocess stops with the context.
+	deadline, err := StartStepDeadline(ctx, step, vars)
+	if err != nil {
+		return nil, err
+	}
+	defer deadline.Stop()
+	ctx = deadline.Context()
+
 	mode := OutputMode(step.Output)
 	if mode == "" {
 		mode = OutputModeLog
@@ -48,11 +70,13 @@ func (h *AtmosHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 		viewport: step.Viewport,
 		show:     GetShowConfig(step, nil),
 	}
-	return h.runAtmosCommand(ctx, step.Name, opts, output)
+	result, runErr := h.runAtmosCommand(ctx, step.Name, opts, output)
+	return result, deadline.Wrap(runErr)
 }
 
 // atmosExecOptions holds resolved options for command execution.
 type atmosExecOptions struct {
+	writers OutputWriters
 	command string
 	stack   string
 	workDir string
@@ -87,7 +111,11 @@ func (h *AtmosHandler) prepareExecution(ctx context.Context, step *schema.Workfl
 		return nil, err
 	}
 
+	if vars.OutputWriters.Stdout != nil || vars.OutputWriters.Stderr != nil {
+		envVars = append(vars.EnvSlice(), envVars...)
+	}
 	return &atmosExecOptions{
+		writers: vars.OutputWriters,
 		command: command,
 		stack:   stack,
 		workDir: workDir,
@@ -112,7 +140,7 @@ func (h *AtmosHandler) resolveWorkDir(step *schema.WorkflowStep, vars *Variables
 	if step.WorkingDirectory == "" {
 		return "", nil
 	}
-	workDir, err := vars.Resolve(step.WorkingDirectory)
+	workDir, err := vars.ResolveStepField(step, "working_directory", step.WorkingDirectory)
 	if err != nil {
 		return "", fmt.Errorf("step '%s': failed to resolve working_directory: %w", step.Name, err)
 	}
@@ -124,7 +152,7 @@ func (h *AtmosHandler) resolveEnvVars(step *schema.WorkflowStep, vars *Variables
 	if len(step.Env) == 0 {
 		return nil, nil
 	}
-	resolvedEnv, err := vars.ResolveEnvMap(step.Env)
+	resolvedEnv, err := vars.ResolveStepEnvMap(step, step.Env)
 	if err != nil {
 		return nil, fmt.Errorf("step '%s': %w", step.Name, err)
 	}
@@ -150,16 +178,46 @@ func (h *AtmosHandler) runAtmosCommand(ctx context.Context, stepName string, opt
 		return nil, fmt.Errorf("failed to determine atmos executable path: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, atmosBin, args...)
-	if opts.workDir != "" {
-		cmd.Dir = opts.workDir
-	}
-	cmd.Env = append(os.Environ(), opts.envVars...)
+	// Global --profile/--identity selections live only in this process; forward them so the
+	// nested atmos command runs with the same ones. Step env comes last and so wins.
+	env := append(script.ProcessEnvironment(os.Environ(), script.SelectionEnv(cfg.GetActiveProfiles(nil), cfg.GlobalViper().GetString(cfg.IdentityFlagName))), opts.envVars...)
 
 	writer := NewOutputModeWriter(output.mode, stepName, output.viewport, output.show)
-	stdout, stderr, err := writer.Execute(cmd)
+	writer.writers = opts.writers
+	// The nested command starts through the process runner so a step timeout or cancellation ends
+	// its whole process tree, including the commands it started, and not only the atmos process.
+	stdout, stderr, err := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+		result := process.NewDefaultRunner().Run(ctx, process.TaskSpec{
+			Command:     atmosBin,
+			Args:        args,
+			Dir:         opts.workDir,
+			Env:         env,
+			Streams:     process.Streams{Stdout: stdout, Stderr: stderr},
+			SkipMetrics: true,
+		})
+		return atmosProcessError(ctx, &result)
+	})
 
 	return h.buildAtmosResult(stdout, stderr, err), err
+}
+
+// atmosProcessError returns the error of a finished nested command. A non-zero exit is reported as
+// the underlying *exec.ExitError, so callers read the exit code from it as they always have; a
+// command that never started keeps the runner's full error.
+func atmosProcessError(ctx context.Context, result *process.Result) error {
+	if result.Err == nil {
+		return nil
+	}
+	// A command ended by cancellation or a deadline reports why it was stopped. Its own exit
+	// status ("signal: terminated") would otherwise become the exit code of the whole run.
+	if result.Canceled && ctx.Err() != nil {
+		return ctx.Err()
+	}
+	var exitErr *exec.ExitError
+	if result.Started && !result.Canceled && errors.As(result.Err, &exitErr) {
+		return exitErr
+	}
+	return result.Err
 }
 
 // buildAtmosResult creates a result from command output.
@@ -186,6 +244,20 @@ func (h *AtmosHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 		return nil, err
 	}
 
+	// Render a templated `output:` before anything runs, so an unknown mode fails the step.
+	step, err = resolveOutputStep(step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	// Enforce the step's timeout: the atmos subprocess stops with the context.
+	deadline, err := StartStepDeadline(ctx, step, vars)
+	if err != nil {
+		return nil, err
+	}
+	defer deadline.Stop()
+	ctx = deadline.Context()
+
 	// Get output mode from step or workflow.
 	mode := GetOutputMode(step, workflow)
 	viewport := GetViewportConfig(step, workflow)
@@ -195,7 +267,8 @@ func (h *AtmosHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 		viewport: viewport,
 		show:     GetShowConfig(step, workflow),
 	}
-	return h.runAtmosCommand(ctx, step.Name, opts, output)
+	result, runErr := h.runAtmosCommand(ctx, step.Name, opts, output)
+	return result, deadline.Wrap(runErr)
 }
 
 // containsStackFlag checks if args already contain -s or --stack.

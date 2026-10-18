@@ -154,11 +154,10 @@ func TestAuthCommandProvider_OptionalMethods(t *testing.T) {
 			"auth command has no top-level aliases")
 	})
 
-	t.Run("IsExperimental returns true", func(t *testing.T) {
-		// Auth is currently in experimental Pro Features. If this flips to
-		// stable, the change is intentional and the assertion should be flipped.
-		assert.True(t, provider.IsExperimental(),
-			"auth command is experimental (Pro Feature)")
+	t.Run("IsExperimental returns false", func(t *testing.T) {
+		// Pro Features grouping does not imply experimental status.
+		assert.False(t, provider.IsExperimental(),
+			"auth command is stable")
 	})
 }
 

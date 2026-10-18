@@ -1,21 +1,18 @@
 ---
 title: Job Summaries
 sidebar_label: Job Summaries
-description: Rich Markdown job summaries for Terraform plan, apply, test, Kubernetes, Helm, and Helmfile operations
+description: Rich Markdown job summaries for Terraform, Kubernetes, Helm, Helmfile, and CloudFormation operations
 id: job-summaries
 slug: /ci/job-summaries
 ---
 import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
-import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 When CI mode is enabled, Atmos writes rich Markdown summaries to `$GITHUB_STEP_SUMMARY` with
 resource badges, collapsible diffs, command output, and clear warnings about destructive changes.
 Kubernetes, Helm, and Helmfile components write compact summaries for their native operations.
 </Intro>
-
-<Experimental />
 
 ## Plan Summary
 
@@ -154,6 +151,24 @@ detected or forced with `--ci`/`ATMOS_CI`:
 Helmfile summaries are summaries-only. The summary includes component, stack, command status, a
 local reproduction command, and captured masked stdout/stderr in a collapsible section.
 
+## CloudFormation Summaries
+
+With `ci.enabled: true` and summary output enabled, CloudFormation commands
+publish the following results:
+
+| Commands | Summary contents |
+|---|---|
+| `diff`, `plan` | Resource changes or a no-changes result. |
+| `apply`, `deploy` | Stack outputs, with NoEcho-dependent values masked, and a no-changes result when applicable. |
+| `delete` | Stack operation result. |
+| `drift detect`, `drift describe` | Drift status, drifted resources, and property differences when available. |
+
+Titles preserve the invoked command, including `plan` and `deploy`. Each summary
+includes a reproduction command, with `--fail-on-drift` when used.
+
+CloudFormation also publishes [CI output variables](/ci#outputs). It does not
+publish commit statuses, PR comments, or stored artifacts.
+
 ## Configuration
 
 <dl>
@@ -209,9 +224,11 @@ ci:
 <dl>
   <dt>`ci.templates.base_path`</dt>
   <dd>
-    Directory containing custom template files, relative to the repository root.
+    Directory containing custom template files. A relative path resolves against the Atmos
+    [`base_path`](/cli/configuration#base-path). The `.atmos/ci/templates` value in the examples is a suggested
+    location, not a default.
 
-    **Default:** `.atmos/ci/templates`
+    **Default:** None
   </dd>
 
   <dt>`ci.templates.terraform.plan`</dt>

@@ -46,9 +46,14 @@ See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html 
 		flags := cmd.Flags()
 
 		// If --integration is specified, use Go SDK path via auth manager.
+		// Forward --kubeconfig/--alias (and the KUBECONFIG/ATMOS_KUBECONFIG env vars bound to
+		// --kubeconfig) as per-invocation overrides so the integration path honors them the same
+		// way the direct path does. Read --kubeconfig from Viper so its env bindings take effect.
 		integration, _ := flags.GetString("integration")
 		if integration != "" {
-			return executeEKSUpdateKubeconfigViaIntegration(integration)
+			kubeconfig := v.GetString("eks.kubeconfig")
+			alias, _ := flags.GetString("alias")
+			return executeEKSUpdateKubeconfigViaIntegration(integration, kubeconfig, alias)
 		}
 
 		// If --name is provided without component/stack and without profile/role-arn,

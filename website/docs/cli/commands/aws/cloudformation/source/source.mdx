@@ -1,0 +1,231 @@
+---
+title: atmos aws cloudformation source
+sidebar_label: source
+sidebar_class_name: command
+id: source
+description: Manage aws/cloudformation component sources with JIT vendoring
+---
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+import DocCardList from '@theme/DocCardList'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Manage downloaded CloudFormation sources. Use these commands to pull, inspect,
+list, or delete sources declared in stack manifests.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="Source Configuration">
+  Configure source locations, version pins, path filters, and authentication.
+  <div>
+    <PrimaryCTA to="/stacks/components/aws-cloudformation#source-provisioning">Configuration Reference</PrimaryCTA>
+  </div>
+</ActionCard>
+
+<CastPlayer title="atmos aws cloudformation source --help" src="/casts/screengrabs/atmos-aws-cloudformation-source--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation source <subcommand> [options]
+```
+
+## Automatic Provisioning
+
+The template-loading commands `render`, `validate`, `diff`/`plan`, `apply`/`deploy`, `fmt`, and `changeset create` provision a configured source when needed before loading the template. `source pull` explicitly downloads the source. `source delete`, `source describe`, and `source list` manage or inspect source state without downloading it. Dry runs do not provision sources.
+
+## Examples
+
+### Vendor a Component
+
+```shell
+atmos aws cloudformation source pull vpc --stack dev
+```
+
+### Force Re-vendor
+
+Refresh the configured source, even if its directory exists:
+
+```shell
+atmos aws cloudformation source pull vpc --stack dev --force
+```
+
+Update the URI or version in stack configuration to download a different revision.
+
+### View Source Configuration
+
+```shell
+atmos aws cloudformation source describe vpc --stack dev
+```
+
+### List Components with Sources
+
+```shell
+atmos aws cloudformation source list --stack dev
+```
+
+### Delete Vendored Source
+
+Remove the vendored component directory without prompting (`--force` skips confirmation; omit it to confirm interactively):
+
+```shell
+atmos aws cloudformation source delete vpc --stack dev --force
+```
+
+Omitting the component and stack requests interactive selection before deletion confirmation:
+
+```shell
+atmos aws cloudformation source delete
+```
+
+Selection requires interactive mode, terminal input, and available candidates, and is disabled in CI. For unattended deletion, use the explicit component, `--stack`, and `--force` invocation above; `--force` does not bypass missing-value validation.
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>The Atmos component name. For `pull`, `describe`, and `delete`, provide it explicitly or select it interactively when a candidate is available. For `list`, it is an optional filter; omit it to list all components with sources.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>Atmos stack name, also settable via `ATMOS_STACK`. For `pull`, `describe`, and `delete`, an unset stack triggers interactive selection when available; non-interactive use requires a stack value. For `list`, the stack is an optional filter; omit it to list across stacks.</dd>
+
+  <dt>`--identity`, `-i`</dt>
+  <dd>Identity for authenticated source downloads.</dd>
+
+  <dt>`--force` / `-f`</dt>
+  <dd>Force re-vendor even if component directory exists (`pull` command), or skip deletion confirmation (`delete` command).</dd>
+
+  <dt>`--dry-run`</dt>
+  <dd>Preview a pull or deletion without authentication, downloads, or deletion.</dd>
+</dl>
+
+## Subcommands
+
+<DocCardList />
+
+## Automatic Provisioning
+
+Commands that need template files download their configured source before use.
+For example, the first `plan` downloads a missing source:
+
+```shell
+atmos aws cloudformation plan vpc --stack dev
+```
+
+Deployed-stack reads and stack deletion do not need a source download.
+Named changeset execution may need source files for a configured stack policy.
+Dry-run never downloads sources.
+
+## CLI Commands
+
+Use `pull --force` for an explicit refresh, `describe` to inspect configuration,
+`list` to find configured sources, and `delete` to remove a download.
+
+## How It Works
+
+1. Resolve the component's source and destination.
+2. Download the source when a refresh is needed.
+3. Apply inclusion and exclusion filters.
+4. Make the downloaded files available to the component.
+
+See [caching and refresh](/stacks/components/aws-cloudformation#caching-and-refresh)
+for URI, version, and TTL handling.
+
+## Source Specification
+
+### String Format (Simple)
+
+```yaml
+source: github.com/acme/cfn-templates.git//vpc?ref=1.2.0
+```
+
+### Map Format (Full Control)
+
+```yaml
+source:
+  uri: github.com/acme/cfn-templates.git//vpc
+  version: 1.2.0
+  included_paths:
+    - "*.yaml"
+  excluded_paths:
+    - "tests/**"
+```
+
+### Source Fields
+
+See the [source field reference](/stacks/components/aws-cloudformation#source-fields)
+for URI, version, filters, TTL, and retry settings.
+
+## Authentication
+
+### Component-Level Identity
+
+Downloads use the component's resolved identity. Configure it through
+[Atmos Auth](/stacks/auth). For private buckets, use an authenticated
+[S3 source URI](/stacks/components/aws-cloudformation#private-s3-sources).
+
+### Identity Flag Override
+
+```shell
+atmos aws cloudformation source pull vpc --stack dev --identity admin
+```
+
+## Configuration Patterns
+
+### Inheritance with source
+
+Declare a source in a catalog component and inherit it in each stack. See
+[source-based version pinning](/design-patterns/version-management/source-based-versioning).
+
+### Version Override per Environment
+
+Override `source.version` in the environment's stack to select a different Git
+revision. Use a workdir when instances need separate downloaded sources.
+See [Workdirs](/stacks/components/aws-cloudformation#workdirs).
+
+## Supported Source Types
+
+### Git Sources
+
+```yaml
+source:
+  uri: git::https://github.com/acme/cfn-templates.git//vpc
+  version: 1.2.0
+```
+
+For SSH, use `git::ssh://git@github.com/acme/cfn-templates.git//vpc`.
+
+### S3 Sources
+
+```yaml
+source:
+  uri: s3://my-cfn-templates/vpc.yaml?region=us-east-1
+```
+
+### HTTP/HTTPS Sources
+
+```yaml
+source:
+  uri: https://releases.example.com/templates/vpc-1.2.0.tar.gz
+```
+
+### OCI Registry Sources
+
+```yaml
+source:
+  uri: oci::registry.example.com/templates/vpc:1.2.0
+```
+
+## See Also
+
+- [Source configuration](/stacks/components/aws-cloudformation#source-provisioning)
+- [Source-based version pinning](/design-patterns/version-management/source-based-versioning)
+- [CloudFormation commands](/cli/commands/aws/cloudformation)

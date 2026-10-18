@@ -9,15 +9,31 @@ import (
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/emulator"
+	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets"
 	secretdeferred "github.com/cloudposse/atmos/pkg/secrets/deferred"
 	storedeferred "github.com/cloudposse/atmos/pkg/store/deferred"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version/manager"
 )
+
+// isUnsetTagString reports whether item is a raw string carrying the !unset tag while !unset is not skipped.
+func isUnsetTagString(item any, skip []string) bool {
+	str, ok := item.(string)
+	return ok && strings.HasPrefix(str, u.AtmosYamlFuncUnset) && !skipFunc(skip, u.AtmosYamlFuncUnset)
+}
+
+// isUnsetListItem reports whether a list item is removed by !unset processing.
+func isUnsetListItem(item any, skip []string) bool {
+	if marker, ok := item.(UnsetMarker); ok && marker.IsUnset {
+		return true
+	}
+	return isUnsetTagString(item, skip)
+}
 
 // UnsetMarker is a special type to mark values that should be deleted from the configuration.
 type UnsetMarker struct {
@@ -120,6 +136,11 @@ func processNodesWithContext(
 	stackInfo *schema.ConfigAndStacksInfo,
 	onWarning func(DegradationWarning),
 ) (map[string]any, error) {
+	if containsStarlark(data) {
+		resolver := newConfigurationResolver(atmosConfig, data, withConfigurationContext(currentStack, stackInfo), withConfigurationFunctions(skip, resolutionCtx))
+		resolver.warning = onWarning
+		return resolver.resolveMap(nil, data)
+	}
 	newMap := make(map[string]any)
 	var firstErr error
 
@@ -174,7 +195,7 @@ func processNodesWithContext(
 			newNestedMap := make(map[string]any)
 			for k, val := range v {
 				// Check if the value is a string with !unset tag and it's not skipped.
-				if strVal, ok := val.(string); ok && strings.HasPrefix(strVal, u.AtmosYamlFuncUnset) && !skipFunc(skip, u.AtmosYamlFuncUnset) {
+				if isUnsetTagString(val, skip) {
 					// Skip adding this key to the map - effectively deleting it.
 					continue
 				}
@@ -196,7 +217,7 @@ func processNodesWithContext(
 			newSlice := make([]any, 0, len(v))
 			for _, val := range v {
 				// Check if the value is a string with !unset tag and it's not skipped.
-				if strVal, ok := val.(string); ok && strings.HasPrefix(strVal, u.AtmosYamlFuncUnset) && !skipFunc(skip, u.AtmosYamlFuncUnset) {
+				if isUnsetTagString(val, skip) {
 					// Skip adding this item to the slice - effectively deleting it.
 					continue
 				}
@@ -295,16 +316,39 @@ func processContextAwareTags(
 		result, err := processTagTerraformStateWithContext(atmosConfig, input, currentStack, resolutionCtx, stackInfo)
 		return result, true, err
 	}
+	if matchesPrefix(input, u.AtmosYamlFuncAwsCloudFormationOutput, skip) {
+		result, err := processTagAwsCloudFormationOutputWithContext(atmosConfig, input, currentStack, resolutionCtx, stackInfo)
+		return result, true, err
+	}
 	return nil, false, nil
 }
 
-// processSimpleTags processes tags that don't need cycle detection.
+// secretSelectorEvaluator lets `!secret` resolve a declaration's `store:`/`sops:` YAML-function
+// selector (for example `!aws.cloudformation.output ...`) with the same evaluator and processing
+// context that is walking the component. It only evaluates the selector value it is handed.
+func secretSelectorEvaluator(atmosConfig *schema.AtmosConfiguration, currentStack string, skip []string, resolutionCtx *ResolutionContext, stackInfo *schema.ConfigAndStacksInfo) secrets.SelectorEvaluator {
+	const key = "selector"
+	return func(_ []string, raw any) (any, error) {
+		ctx := resolutionCtx
+		if ctx == nil {
+			ctx = GetOrCreateResolutionContext()
+		}
+		evaluated, err := processNodesWithContext(atmosConfig, map[string]any{key: raw}, currentStack, skip, ctx, stackInfo, nil)
+		if err != nil {
+			return nil, err
+		}
+		return evaluated[key], nil
+	}
+}
+
+// processSimpleTags preserves the caller context for nested secret selectors.
 // Returns (result, handled, error) where handled indicates if a matching tag was found.
 func processSimpleTags(
 	atmosConfig *schema.AtmosConfiguration,
 	input string,
 	currentStack string,
 	skip []string,
+	resolutionCtx *ResolutionContext,
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (any, bool, error) {
 	// Handle !unset tag - return marker to indicate value should be deleted.
@@ -322,7 +366,8 @@ func processSimpleTags(
 		return res, true, nil
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncSecret, skip) {
-		res, err := secretdeferred.NewValue(atmosConfig, input, currentStack, stackInfo).Resolve()
+		res, err := secretdeferred.NewValue(atmosConfig, input, currentStack, stackInfo,
+			secrets.WithSelectorEvaluator(secretSelectorEvaluator(atmosConfig, currentStack, skip, resolutionCtx, stackInfo))).Resolve()
 		if err != nil {
 			return nil, true, err
 		}
@@ -498,6 +543,9 @@ func processCustomTagsWithContext(
 	resolutionCtx *ResolutionContext,
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (any, error) {
+	if starlarksource.IsEncoded(input) && matchesPrefix(input, starlarksource.Tag, skip) {
+		return newConfigurationResolver(atmosConfig, nil, withConfigurationContext(currentStack, stackInfo), withConfigurationFunctions(skip, resolutionCtx)).resolveString(input)
+	}
 	if err := prepareDeferredYAMLAuth(atmosConfig, input, skip, stackInfo); err != nil {
 		return nil, err
 	}
@@ -507,7 +555,7 @@ func processCustomTagsWithContext(
 	}
 
 	// Try simple tags.
-	if result, handled, err := processSimpleTags(atmosConfig, input, currentStack, skip, stackInfo); handled {
+	if result, handled, err := processSimpleTags(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo); handled {
 		return result, err
 	}
 

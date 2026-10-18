@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	runnerstep "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -58,10 +59,17 @@ type ExecContext struct {
 	// so the installed pinned versions take precedence over the operator's
 	// PATH. Empty when the component declares no hook dependencies.
 	ToolchainPATH string
+	// HookDepth is the nesting level this hook's commands and steps run at; engines export it as
+	// ATMOS_HOOK_DEPTH. Zero (a directly constructed context) leaves the variable unset.
+	HookDepth int
 	// Stdout and Stderr receive subprocess output when a concurrent caller
 	// supplies serialized component writers. Nil uses the process streams.
 	Stdout io.Writer
 	Stderr io.Writer
+	// ComponentResolver backs `components.get` in embedded script steps. Nil selects
+	// the execution-pipeline resolver (see scriptComponentResolver); callers and tests
+	// inject their own to avoid loading stacks.
+	ComponentResolver runnerstep.ComponentInfoResolver
 
 	// OutputFile is the temp file path the tool wrote structured output to.
 	// Populated by CommandEngine before calling ResultHandler.

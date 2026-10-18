@@ -374,3 +374,190 @@ func TestScaffoldGenerate_MaxChangesThreshold_EndToEnd(t *testing.T) {
 	assert.Contains(t, merged, "<<<<<<<", "the default manual conflict strategy must write real conflict markers")
 	assert.Contains(t, merged, "l2\nl3\nl4\nl5\nl6", "the untouched tail of the file must survive the merge unchanged")
 }
+
+// buildRemovalTemplateRepo creates a local git repo with two tagged versions
+// of a scaffold template, mirroring buildTwoTagTemplateRepo, but where v2
+// stops generating removed.txt entirely (rather than changing its content).
+// Static.txt is present at both tags and never changes, a stand-in for a
+// file the template leaves alone so an unrelated file's behavior in the same
+// update can be asserted unaffected.
+func buildRemovalTemplateRepo(t *testing.T) (repoDir string) {
+	t.Helper()
+	repoDir = t.TempDir()
+	repo, err := git.PlainInitWithOptions(repoDir, &git.PlainInitOptions{
+		InitOptions: git.InitOptions{DefaultBranch: plumbing.NewBranchReferenceName("main")},
+	})
+	require.NoError(t, err)
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+
+	writeFile := func(name, content string) {
+		path := filepath.Join(repoDir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+	sig := &object.Signature{Name: "Test User", Email: "test@example.com", When: time.Now()}
+
+	writeFile("scaffold.yaml", renderedE2EScaffoldYAML)
+	writeFile("static.txt", "static content\n")
+	writeFile("removed.txt", "removed content\n")
+	require.NoError(t, wt.AddGlob("."))
+	commit1, err := wt.Commit("v1", &git.CommitOptions{Author: sig})
+	require.NoError(t, err)
+	_, err = repo.CreateTag("v1", commit1, nil)
+	require.NoError(t, err)
+
+	require.NoError(t, os.Remove(filepath.Join(repoDir, "removed.txt")))
+	require.NoError(t, wt.AddGlob("."))
+	commit2, err := wt.Commit("v2", &git.CommitOptions{Author: sig})
+	require.NoError(t, err)
+	_, err = repo.CreateTag("v2", commit2, nil)
+	require.NoError(t, err)
+
+	return repoDir
+}
+
+// TestScaffoldGenerate_UpdateStrategyRendered_DeletesRemovedFile_EndToEnd
+// drives a real generate-at-v1, update-to-v2 cycle where v2 stops generating
+// removed.txt, and asserts the real --update run deletes it: before this
+// fix, a file the template stopped generating survived forever, silently.
+func TestScaffoldGenerate_UpdateStrategyRendered_DeletesRemovedFile_EndToEnd(t *testing.T) {
+	requireGitBinaryForRenderedE2E(t)
+	t.Cleanup(func() { viper.Reset() })
+
+	repoDir := buildRemovalTemplateRepo(t)
+	src := "git::" + renderedE2EFileURI(repoDir)
+	targetDir := t.TempDir()
+
+	cmd1 := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd1)
+	require.NoError(t, cmd1.Flags().Set("ref", "v1"))
+	require.NoError(t, cmd1.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd1.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, scaffoldGenerateCmd.RunE(cmd1, []string{src, targetDir}))
+
+	removedPath := filepath.Join(targetDir, "removed.txt")
+	staticPath := filepath.Join(targetDir, "static.txt")
+	require.FileExists(t, removedPath)
+
+	cmd2 := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd2)
+	require.NoError(t, cmd2.Flags().Set("ref", "v2"))
+	require.NoError(t, cmd2.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd2.Flags().Set("update", "true"))
+	require.NoError(t, cmd2.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, scaffoldGenerateCmd.RunE(cmd2, []string{src, targetDir}))
+
+	_, statErr := os.Stat(removedPath)
+	assert.True(t, os.IsNotExist(statErr), "a file the template stopped generating must be deleted on a clean --update")
+	assert.Equal(t, "static content\n", readRenderedFile(t, staticPath), "an unrelated file must be unaffected by the deletion pass")
+}
+
+// TestScaffoldGenerate_UpdateStrategyRendered_ConflictsOnLocallyEditedRemovedFile_EndToEnd
+// mirrors the test above, but the user hand-edits removed.txt before v2 stops
+// generating it: the update must leave the hand-edit untouched and fail with
+// an unresolved merge conflict instead of silently deleting or silently
+// keeping it.
+func TestScaffoldGenerate_UpdateStrategyRendered_ConflictsOnLocallyEditedRemovedFile_EndToEnd(t *testing.T) {
+	requireGitBinaryForRenderedE2E(t)
+	t.Cleanup(func() { viper.Reset() })
+
+	repoDir := buildRemovalTemplateRepo(t)
+	src := "git::" + renderedE2EFileURI(repoDir)
+	targetDir := t.TempDir()
+
+	cmd1 := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd1)
+	require.NoError(t, cmd1.Flags().Set("ref", "v1"))
+	require.NoError(t, cmd1.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd1.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, scaffoldGenerateCmd.RunE(cmd1, []string{src, targetDir}))
+
+	removedPath := filepath.Join(targetDir, "removed.txt")
+	require.NoError(t, os.WriteFile(removedPath, []byte("hand-edited content\n"), 0o644))
+
+	cmd2 := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd2)
+	require.NoError(t, cmd2.Flags().Set("ref", "v2"))
+	require.NoError(t, cmd2.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd2.Flags().Set("update", "true"))
+	require.NoError(t, cmd2.Flags().Set("update-strategy", "rendered"))
+	err := scaffoldGenerateCmd.RunE(cmd2, []string{src, targetDir})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
+	finalContent, readErr := os.ReadFile(removedPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, "hand-edited content\n", string(finalContent), "a locally-edited file the template removed must survive the conflict untouched")
+}
+
+// TestScaffoldGenerate_UpdateStrategyRendered_RespectsUserDeletedFile_EndToEnd
+// drives a real generate-at-v1, update-to-v2 cycle where the user deletes a
+// file the template still generates at v2 (update.txt, changed but never
+// removed between tags): the update must not recreate it, matching copier's
+// documented handling of user-deleted paths.
+func TestScaffoldGenerate_UpdateStrategyRendered_RespectsUserDeletedFile_EndToEnd(t *testing.T) {
+	requireGitBinaryForRenderedE2E(t)
+	t.Cleanup(func() { viper.Reset() })
+
+	repoDir, _, _ := buildTwoTagTemplateRepo(t)
+	src := "git::" + renderedE2EFileURI(repoDir)
+	targetDir := t.TempDir()
+
+	cmd1 := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd1)
+	require.NoError(t, cmd1.Flags().Set("ref", "v1"))
+	require.NoError(t, cmd1.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd1.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, scaffoldGenerateCmd.RunE(cmd1, []string{src, targetDir}))
+
+	updatePath := filepath.Join(targetDir, "update.txt")
+	require.FileExists(t, updatePath)
+	require.NoError(t, os.Remove(updatePath))
+
+	cmd2 := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd2)
+	require.NoError(t, cmd2.Flags().Set("ref", "v2"))
+	require.NoError(t, cmd2.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd2.Flags().Set("update", "true"))
+	require.NoError(t, cmd2.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, scaffoldGenerateCmd.RunE(cmd2, []string{src, targetDir}))
+
+	_, statErr := os.Stat(updatePath)
+	assert.True(t, os.IsNotExist(statErr), "a file the user deleted must not be recreated by --update")
+	assert.Equal(t, "static content\n", readRenderedFile(t, filepath.Join(targetDir, "static.txt")), "an unrelated file must be unaffected")
+}
+
+// TestScaffoldGenerate_UpdateStrategyRendered_RecreateDeletedOptsBackIn_EndToEnd
+// mirrors the test above, but with --recreate-deleted set: the deleted file
+// must be recreated with the new ref's content instead of staying deleted.
+func TestScaffoldGenerate_UpdateStrategyRendered_RecreateDeletedOptsBackIn_EndToEnd(t *testing.T) {
+	requireGitBinaryForRenderedE2E(t)
+	t.Cleanup(func() { viper.Reset() })
+
+	repoDir, _, _ := buildTwoTagTemplateRepo(t)
+	src := "git::" + renderedE2EFileURI(repoDir)
+	targetDir := t.TempDir()
+
+	cmd1 := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd1)
+	require.NoError(t, cmd1.Flags().Set("ref", "v1"))
+	require.NoError(t, cmd1.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd1.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, scaffoldGenerateCmd.RunE(cmd1, []string{src, targetDir}))
+
+	updatePath := filepath.Join(targetDir, "update.txt")
+	require.FileExists(t, updatePath)
+	require.NoError(t, os.Remove(updatePath))
+
+	cmd2 := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd2)
+	require.NoError(t, cmd2.Flags().Set("ref", "v2"))
+	require.NoError(t, cmd2.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd2.Flags().Set("update", "true"))
+	require.NoError(t, cmd2.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, cmd2.Flags().Set("recreate-deleted", "true"))
+	require.NoError(t, scaffoldGenerateCmd.RunE(cmd2, []string{src, targetDir}))
+
+	assert.Equal(t, "v2 content\n", readRenderedFile(t, updatePath), "--recreate-deleted must recreate a file the user deleted")
+}

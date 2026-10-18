@@ -3,14 +3,15 @@ title: atmos composition
 sidebar_label: composition
 sidebar_class_name: command
 id: usage
-description: List, validate, and operate first-class composition lifecycles.
+description: "Manage the services that make up an application together."
 ---
 import Intro from '@site/src/components/Intro'
 import Terminal from '@site/src/components/Terminal'
 
 <Intro>
-Use the `atmos composition` subcommands to list declared compositions, validate stack fulfillment,
-and operate every fulfilled member in a composition as one stack-scoped lifecycle.
+Manage the services that make up an application together. A composition lets you bring up an API,
+database, and supporting services for a selected stack, then inspect their status and logs without
+operating each service separately.
 </Intro>
 
 A composition is declared once under the top-level `compositions` section and fulfilled by components

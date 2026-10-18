@@ -40,6 +40,9 @@ exclude_path = [
   # Go template files (badge URLs contain unrendered `{{ }}` placeholders,
   # e.g. pkg/ci/plugins/terraform/templates/test.md) — not real documentation.
   "pkg/ci",
+  # Golden Markdown fixtures for the container image summary renderer; they carry
+  # placeholder repository URLs (github.com/example/app) by design.
+  "pkg/container/testdata",
 ]
 
 # URL patterns to exclude (regex)

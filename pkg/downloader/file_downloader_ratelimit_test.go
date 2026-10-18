@@ -1,6 +1,9 @@
 package downloader
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -33,7 +36,7 @@ func TestFileDownloader_Fetch_GitHubURL_RateLimitPreCheckDoesNotBlockWhenAlready
 
 	mockClient := NewMockDownloadClient(ctrl)
 	mockFactory := NewMockClientFactory(ctrl)
-	src := "https://raw.githubusercontent.com/cloudposse/atmos/main/README.md"
+	src := mock.URL() + "/cloudposse/atmos/raw/main/README.md"
 	mockFactory.EXPECT().NewClient(gomock.Any(), src, "dest", ClientModeFile).Return(mockClient, nil)
 	mockClient.EXPECT().Get().Return(nil)
 
@@ -70,4 +73,37 @@ func TestFileDownloader_Fetch_NonGitHubURL_SkipsRateLimitPreCheck(t *testing.T) 
 
 	require.NoError(t, err)
 	assert.Equal(t, 0, mock.RequestCount("/api/v3/rate_limit"))
+}
+
+// Raw content downloads use a separate service from the REST API. Exhausting the
+// REST budget must not prevent mixins or stack imports from being downloaded.
+func TestFileDownloader_RawContentIgnoresRESTQuota(t *testing.T) {
+	for _, metadata := range []bool{false, true} {
+		name := "fetch"
+		if metadata {
+			name = "metadata"
+		}
+		t.Run(name, func(t *testing.T) {
+			mock := httpmock.NewGitHubMockServer(t)
+			mock.Setenv(t)
+			mock.SetRateLimit(0, time.Now().Add(time.Hour))
+			const path = "cloudposse/terraform-null-label/0.25.0/exports/context.tf"
+			const content = "variable \"namespace\" {}\n"
+			mock.RegisterFile(path, content)
+			dest := filepath.Join(t.TempDir(), "context.tf")
+			fd := NewGoGetterDownloader(nil, WithHTTPClient(mock.HTTPClient()))
+			var err error
+			if metadata {
+				_, err = fd.(ContextFileDownloader).FetchWithMetadataContext(context.Background(), "https://raw.githubusercontent.com/"+path, dest, ClientModeFile, time.Second)
+			} else {
+				err = fd.Fetch("https://raw.githubusercontent.com/"+path, dest, ClientModeFile, time.Second)
+			}
+			require.NoError(t, err)
+			downloaded, err := os.ReadFile(dest)
+			require.NoError(t, err)
+			assert.Equal(t, content, string(downloaded))
+			assert.Zero(t, mock.RequestCount("/api/v3/rate_limit"), "raw downloads must not wait for REST quota")
+			assert.Positive(t, mock.RequestCount("/"+path), "raw content must be fetched over HTTP")
+		})
+	}
 }

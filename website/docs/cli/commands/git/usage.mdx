@@ -3,7 +3,7 @@ title: atmos git
 sidebar_label: git
 sidebar_class_name: command
 id: usage
-description: GitOps enablement for Atmos — make automated Git commits easy, safe, and conventional both locally and in CI across every project.
+description: "Publish generated configuration and other artifacts to Git as part of your infrastructure workflows."
 ---
 import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
@@ -13,7 +13,9 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-`atmos git` is GitOps enablement for Atmos: it makes **automated Git commits easy, safe, and conventional** — the same way on your laptop and in CI, across every project. Treat Git repositories as artifact repositories: render or generate files, place them into a repository worktree, and publish them — committed and pushed automatically — from the CLI, from [hooks](/stacks/hooks#kind-git) (e.g. after `terraform apply`), or from native CI workflows. Initialize, clone, pull, inspect, diff, commit, push, and clean managed repositories by logical name, with consistent authentication, commit signing, and safety rules so no two pipelines reinvent their own brittle `git` scripting.
+Publish generated configuration and other artifacts to Git as part of your infrastructure workflows.
+Atmos manages repository operations with shared authentication, signing settings, and safeguards
+that you can reuse locally and in CI.
 </Intro>
 
 <Experimental />
@@ -28,6 +30,8 @@ import PrimaryCTA from '@site/src/components/PrimaryCTA'
 <CastPlayer title="atmos git --help" src="/casts/screengrabs/atmos-git--help.cast" static chrome />
 
 ## Managed Repositories
+
+Publish generated files from the CLI, from [`kind: git` lifecycle hooks](/stacks/hooks#kind-git) such as `after.terraform.apply`, or from native CI workflows. Managed repositories support initialization, cloning, pulling, inspection, diffs, commits, pushing, and cleanup by logical name.
 
 Define repositories once under `git.repositories` in `atmos.yaml`, then refer to them everywhere by logical name:
 

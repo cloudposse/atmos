@@ -1,0 +1,58 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: example
+  description: Test fixture exercising per-file template delimiters (spec.files[].delimiters).
+spec:
+  # Template-wide default. Files that carry template syntax of their own
+  # (Helm charts, GitHub Actions workflows) override it below.
+  delimiters: ["{{", "}}"]
+
+  fields:
+    - name: name
+      label: Application name
+      type: input
+      default: myapp
+    - name: environments
+      label: Extra environment stacks (optional)
+      description: >-
+        One stacks/<env>.yaml file is generated per selected environment, via
+        spec.files[].matrix.
+      type: multiselect
+      options:
+        - dev
+        - staging
+        - prod
+      default:
+        - dev
+        - staging
+    # collectKeys needs a map-shaped answer; a multiselect answer is a list.
+    - name: env_defs
+      type: computed
+      value:
+        dev: {}
+        staging: {}
+
+  files:
+    # The whole Helm chart is rendered with [[ ]], so Helm's own {{ }} syntax
+    # passes through to the generated chart untouched.
+    - path: "charts/**"
+      delimiters: ["[[", "]]"]
+    # Workflows use << >> so GitHub's ${{ github.sha }} stays literal.
+    - path: ".github/workflows/*.yml.tmpl"
+      delimiters: ["<<", ">>"]
+    # One stack file per selected environment. The entry's [[ ]] pair governs
+    # the target and the matrix axis expression as well as the content.
+    - path: environment.yaml
+      delimiters: ["[[", "]]"]
+      target: "stacks/[[ .matrix.environment ]].yaml"
+      matrix:
+        environment: '[[ collectKeys answers.env_defs ]]'
+    # A multiselect-driven matrix axis (list-shaped answer, no expression).
+    - path: env-list.yaml
+      delimiters: ["[[", "]]"]
+      target: "stacks-list/[[ .matrix.environment ]].yaml"
+      matrix:
+        environment: answers.environments
+    # notes.md.tmpl uses the spec-level {{ }} pair (no entry needed).
+    # plain.txt has no .tmpl suffix or magic comment, so it is copied as written.

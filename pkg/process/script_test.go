@@ -6,12 +6,16 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/signals"
 )
 
 // TestMain lets the test binary itself act as a cross-platform "exit 0" or
@@ -21,6 +25,12 @@ import (
 func TestMain(m *testing.M) {
 	// If _ATMOS_TEST_EXIT_ZERO is set, exit immediately with code 0.
 	if os.Getenv("_ATMOS_TEST_EXIT_ZERO") == "1" {
+		os.Exit(0)
+	}
+	// If _ATMOS_TEST_PROCESS_MODE is set, act as a helper child for the process
+	// group tests (see process_group_test.go) instead of running tests.
+	if mode := os.Getenv(helperModeEnv); mode != "" {
+		runProcessHelper(mode)
 		os.Exit(0)
 	}
 	os.Exit(m.Run())
@@ -159,4 +169,28 @@ func TestFormatScriptDisplay_EmptyInputsReturnEmpty(t *testing.T) {
 	assert.Equal(t, "", FormatScriptDisplay("", "echo ok"))
 	assert.Equal(t, "", FormatScriptDisplay("bash", ""))
 	assert.Equal(t, "", FormatScriptDisplay("   ", "   "))
+}
+
+func TestRunScriptExitCleanupKillsDirectChild(t *testing.T) {
+	dir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	helper := helperSpec(t, modeSleep, dir, nil)
+	spec := &ScriptSpec{Interpreter: helper.Command, Dir: dir, Env: helper.Env}
+	done := make(chan error, 1)
+	go func() { done <- RunScript(ctx, spec, io.Discard, io.Discard) }()
+	waitForPID(t, dir, "child")
+	require.Eventually(t, func() bool { return len(liveChildren()) == 1 }, pidWait, 10*time.Millisecond)
+
+	signals.RunExitCleanups()
+
+	select {
+	case err := <-done:
+		var exitErr *exec.ExitError
+		require.ErrorAs(t, err, &exitErr, "exit cleanup must terminate the script interpreter")
+	case <-time.After(goneWait):
+		t.Fatal("RunScript did not finish after exit cleanup")
+	}
+	assert.NoError(t, ctx.Err(), "exit cleanup must leave the caller context active")
+	assert.Empty(t, liveChildren())
 }

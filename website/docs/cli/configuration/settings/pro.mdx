@@ -54,7 +54,7 @@ settings:
     base_url: "https://app.cloudposse.com"
     endpoint: "api/v1"
     workspace_id: "your-workspace-id"
-    max_payload_bytes: 4194304
+    max_payload_bytes: 3145728
     github_oidc:
       request_url: ""
       request_token: ""
@@ -126,10 +126,10 @@ settings:
 
   <dt>`settings.pro.max_payload_bytes`</dt>
   <dd>
-    Maximum payload size (in bytes) before Atmos automatically chunks upload requests to Atmos Pro. When `atmos describe affected --upload` or `atmos list instances --upload` produces a payload larger than this threshold, it is split into multiple smaller requests with batch metadata for server-side reassembly.
+    Maximum payload size (in bytes) before Atmos automatically chunks upload requests to Atmos Pro. When `atmos describe affected --upload` or `atmos list instances --upload` produces a payload larger than this threshold, it is split into multiple smaller requests based on serialized item sizes, with batch metadata for server-side reassembly. The default leaves headroom below the server request-body limit. If the server rejects a request as too large (HTTP 413), Atmos retries the complete upload with a smaller byte budget, up to three times. An individual component that the server rejects on its own must be reduced in size.
 
     - **Type:** `integer`
-    - **Default:** `4194304` (4 MB)
+    - **Default:** `3145728` (3 MiB)
   </dd>
 
   <dt>`settings.pro.exec.sync_timeout`</dt>
@@ -581,6 +581,50 @@ Inspect the resolved runner with
 [`atmos describe component cluster -s <stack>`](/cli/commands/describe/component).
 You can also select components by it using
 [`atmos list components --labels runner=self-hosted-large`](/cli/commands/list/components).
+
+### Pull request number input
+
+Dispatched workflows run from the default branch, so on their own they only know the commit SHA.
+Atmos Pro can also pass the pull request number as a workflow input named `pr_number`.
+Unlike the Go templates in [workflow input templating](#workflow-input-templating), which
+the Atmos CLI renders before uploading, Atmos Pro fills in `pr_number` at dispatch time.
+It is not a template placeholder, so do not write `{{ .pr_number }}`.
+
+Declare the input in the workflow to receive it:
+
+```yaml title=".github/workflows/atmos-pro-terraform-plan.yaml"
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Pull request number, when available"
+        required: false
+        type: string
+```
+
+Then use it in a step, guarded for runs that have no pull request:
+
+```yaml
+- name: Comment on the pull request
+  if: ${{ inputs.pr_number != '' }}
+  run: gh pr comment "${{ inputs.pr_number }}" --body "Plan complete"
+  env:
+    GH_TOKEN: ${{ github.token }}
+```
+
+- Atmos Pro always sends `sha`, `component`, and `stack`. It sends `pr_number` (a string such as `"42"`)
+  only when the workflow declares it under `on.workflow_dispatch.inputs`, so existing workflows are unaffected.
+- The value is the pull request that triggered the run. For a merge queue run, it is the pull request that entered the queue.
+- Triggers with no pull request, such as `release`, and drift detection runs send no value. Declare the input with
+  `required: false`; a workflow that sets `required: true` fails on those runs with GitHub’s "missing input" error.
+- Legacy workflows that declare the `atmos_pro_run_id` input do not receive `pr_number`.
+- The name is reserved. A `pr_number` set under `inputs` in `settings.pro` is replaced by the real pull request
+  number when one exists and dropped when it does not, the same as `sha`, `component`, and `stack`.
+
+<Note>
+If Atmos Pro cannot read the workflow file to check its declared inputs, it sends `pr_number` anyway.
+A workflow that does not declare it is then rejected by GitHub for that dispatch (HTTP 422, "Unexpected inputs provided").
+</Note>
 
 ### Execution metrics and runner sizing
 

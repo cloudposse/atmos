@@ -26,7 +26,7 @@ var addLongMarkdown string
 
 var addCmd = &cobra.Command{
 	Use:   "add [preset-name|url|command] [flags]",
-	Short: "Add an MCP server to mcp.servers in atmos.yaml",
+	Short: "Add an MCP server to mcp.servers in atmos.yaml or a .atmos.d fragment",
 	Long:  addLongMarkdown,
 	Args:  cobra.MaximumNArgs(1),
 	RunE:  executeMCPAdd,
@@ -141,7 +141,7 @@ func resolveAddInputs(
 		return addInputs{}, err
 	}
 
-	file, err := mcpconfig.ResolveFile(cmd, atmosConfig)
+	file, _, err := mcpconfig.ResolveServerFile(cmd, atmosConfig, name)
 	if err != nil {
 		return addInputs{}, err
 	}
@@ -213,7 +213,7 @@ func enableMCPInteractively(cmd *cobra.Command, atmosConfig *schema.AtmosConfigu
 		return notEnabledErr
 	}
 
-	file, err := mcpconfig.ResolveFile(cmd, atmosConfig)
+	file, err := mcpconfig.ResolveEnableFile(cmd, atmosConfig)
 	if err != nil {
 		return err
 	}
@@ -275,7 +275,7 @@ func offerSelfInstall(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration
 	if err != nil {
 		return false, err
 	}
-	file, err := mcpconfig.ResolveFile(cmd, atmosConfig)
+	file, _, err := mcpconfig.ResolveServerFile(cmd, atmosConfig, name)
 	if err != nil {
 		return false, err
 	}

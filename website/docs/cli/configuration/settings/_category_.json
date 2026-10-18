@@ -1,6 +1,6 @@
 {
   "label": "settings",
-  "collapsed": false,
+  "collapsed": true,
   "link": {
     "type": "doc",
     "id": "settings"

@@ -9,14 +9,17 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	workflowPkg "github.com/cloudposse/atmos/pkg/workflow"
 )
 
 // ExecuteWorkflowCmd executes an Atmos workflow.
@@ -43,10 +46,12 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	commandLineLabels, err := flags.GetString("labels")
-	if err != nil {
-		return err
-	}
+	commandLineLabelsSlice := tags.ReadLabelsFlag(viper.GetViper())
+	// commandLineLabels stays a single comma-joined string here because it's only ever
+	// forwarded verbatim as one `--labels=...` occurrence to nested workflow/atmos
+	// invocations (see workflowCommandFilters below), never parsed into a map in this
+	// file -- the downstream --labels flag (also a StringSlice) comma-splits it again.
+	commandLineLabels := strings.Join(commandLineLabelsSlice, ",")
 	processStacks := commandLineStack != ""
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
@@ -141,7 +146,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 
 	workflowPath := ResolveWorkflowFilePath(&atmosConfig, workflowFile)
 
-	workflowConfig, err := LoadWorkflowConfig(workflowPath)
+	workflowConfig, err := LoadWorkflowConfig(&atmosConfig, workflowPath)
 	if err != nil {
 		return err
 	}
@@ -194,7 +199,7 @@ func ResolveWorkflowFilePath(atmosConfig *schema.AtmosConfiguration, file string
 // LoadWorkflowConfig reads and parses a workflow manifest file at the given (already-resolved,
 // see ResolveWorkflowFilePath) path into its WorkflowConfig map (workflow name -> definition,
 // for every workflow defined in that file).
-func LoadWorkflowConfig(workflowPath string) (schema.WorkflowConfig, error) {
+func LoadWorkflowConfig(atmosConfig *schema.AtmosConfiguration, workflowPath string) (schema.WorkflowConfig, error) {
 	defer perf.Track(nil, "exec.LoadWorkflowConfig")()
 
 	if !u.FileExists(workflowPath) {
@@ -209,7 +214,7 @@ func LoadWorkflowConfig(workflowPath string) (schema.WorkflowConfig, error) {
 		return nil, fmt.Errorf("%w: %s: %w", errUtils.ErrReadFile, filepath.ToSlash(displayPath(workflowPath)), err)
 	}
 
-	workflowManifest, err := u.UnmarshalYAML[schema.WorkflowManifest](string(fileContent))
+	workflowManifest, err := workflowPkg.LoadManifest(atmosConfig, workflowPath, fileContent)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %w", errUtils.ErrInvalidWorkflowManifest, filepath.ToSlash(displayPath(workflowPath)), err)
 	}

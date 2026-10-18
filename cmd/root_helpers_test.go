@@ -641,6 +641,7 @@ func TestHandleConfigInitError(t *testing.T) {
 		args        []string
 		expectError bool
 		expectNil   bool
+		wantIs      error
 	}{
 		{
 			name:      "version command with error returns nil",
@@ -703,6 +704,20 @@ func TestHandleConfigInitError(t *testing.T) {
 			expectError: true,
 		},
 		{
+			name:        "invalid logs color is fatal for version",
+			initErr:     fmt.Errorf("wrapped: %w", errUtils.ErrInvalidLogsColor),
+			wantIs:      errUtils.ErrInvalidLogsColor,
+			args:        []string{"atmos", "version"},
+			expectError: true,
+		},
+		{
+			name:        "invalid logs color is fatal for help",
+			initErr:     fmt.Errorf("wrapped: %w", errUtils.ErrInvalidLogsColor),
+			wantIs:      errUtils.ErrInvalidLogsColor,
+			args:        []string{"atmos", "--help"},
+			expectError: true,
+		},
+		{
 			name:        "other errors returned as-is",
 			initErr:     errors.New("some other error"),
 			args:        []string{"atmos", "terraform", "plan"},
@@ -718,6 +733,8 @@ func TestHandleConfigInitError(t *testing.T) {
 			switch {
 			case tt.expectNil:
 				assert.Nil(t, err)
+			case tt.wantIs != nil:
+				assert.ErrorIs(t, err, tt.wantIs)
 			case tt.expectError:
 				assert.Error(t, err)
 			default:
@@ -1195,7 +1212,7 @@ func TestConvertToTermenvProfile(t *testing.T) {
 
 // TestFindExperimentalParent tests finding experimental parent commands.
 // This function uses a two-pass approach:
-// - First pass: Look for registry-based experimental commands (top-level like devcontainer, toolchain)
+// - First pass: Look for registry-based experimental commands (top-level like devcontainer, scaffold)
 // - Second pass: Look for annotation-based experimental subcommands (terraform backend, etc.)
 // This ensures that when running "devcontainer list", it returns "devcontainer" not "list".
 func TestFindExperimentalParent(t *testing.T) {

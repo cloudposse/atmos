@@ -4,11 +4,16 @@ tags: [Components]
 cast:
   file: /casts/examples/source-provisioning/sources.cast
   title: atmos source provisioning
+related_docs:
+  - label: "Terraform source commands"
+    url: /cli/commands/terraform/source
+  - label: "Component source configuration"
+    url: /vendor/component-manifest/source
 ---
 
 # Source Provisioning
 
-Demonstrates JIT (Just-in-Time) source provisioning from both **local** and **remote** sources.
+Demonstrates JIT (Just-in-Time) [source provisioning](https://atmos.tools/cli/commands/terraform/source/) from both **local** and **remote** sources.
 
 ## Components
 

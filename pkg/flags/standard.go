@@ -40,6 +40,7 @@ type StandardFlagParser struct {
 	cmd                  *cobra.Command // Command for manual flag parsing
 	viper                *viper.Viper   // Viper instance for precedence handling
 	viperPrefix          string
+	viperKeys            map[string]string            // Flag name -> explicit Viper key override
 	validValues          map[string][]string          // Valid values for flags (flag name -> valid values)
 	validationMsgs       map[string]string            // Custom validation error messages (flag name -> message)
 	parsedFlags          *pflag.FlagSet               // Combined FlagSet used in last Parse() call (for Changed checks)
@@ -76,6 +77,7 @@ func NewStandardFlagParser(opts ...Option) *StandardFlagParser {
 	return &StandardFlagParser{
 		registry:             config.registry,
 		viperPrefix:          config.viperPrefix,
+		viperKeys:            config.viperKeys,
 		validValues:          make(map[string][]string),
 		validationMsgs:       make(map[string]string),
 		flagPrompts:          config.flagPrompts,
@@ -996,8 +998,12 @@ func ValidateValue(name, value string, validValues []string, kind ValueKind) err
 }
 
 // getViperKey returns the Viper key for a flag name.
-// If a prefix is set, it's prepended to the flag name.
+// An explicit per-flag override (WithViperKey) wins; otherwise, if a prefix is set,
+// it's prepended to the flag name.
 func (p *StandardFlagParser) getViperKey(flagName string) string {
+	if key, ok := p.viperKeys[flagName]; ok && key != "" {
+		return key
+	}
 	if p.viperPrefix != "" {
 		return p.viperPrefix + "." + flagName
 	}
@@ -1189,6 +1195,12 @@ func (p *StandardFlagParser) promptForSingleMissingFlag(flagName string, result 
 		return nil // User explicitly set the value (even if empty), don't prompt.
 	}
 
+	// Skip the prompt when the caller's shouldPrompt gate returns false (e.g. a
+	// bulk/selection mode like --all or --affected where no single value applies).
+	if promptConfig.ShouldPrompt != nil && !promptConfig.ShouldPrompt(result) {
+		return nil
+	}
+
 	// Prompt for missing required flag.
 	selectedValue, err := PromptForMissingRequired(
 		flagName,
@@ -1204,6 +1216,20 @@ func (p *StandardFlagParser) promptForSingleMissingFlag(flagName string, result 
 	if selectedValue != "" {
 		result.Flags[flagName] = selectedValue
 		markFieldPrompted(result, flagName)
+
+		// Persist the selection onto the underlying Cobra flag too. Callers that
+		// read cmd.Flag(name) directly after Parse() (rather than exclusively
+		// through the returned ParsedConfig/StandardOptions) must observe the
+		// prompted value — mirroring cmd/terraform/shared.PromptForStack's
+		// existing cmd.Flag("stack").Value.Set(...) write-back.
+		if cobraFlag != nil {
+			if setErr := cobraFlag.Value.Set(selectedValue); setErr == nil {
+				cobraFlag.Changed = true
+				if p.viper != nil {
+					_ = p.viper.BindPFlag(p.getViperKey(flagName), cobraFlag)
+				}
+			}
+		}
 	}
 
 	return nil

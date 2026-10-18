@@ -4,14 +4,19 @@ tags: [Hooks, Automation]
 cast:
   file: /casts/examples/http-webhooks/local-endpoints.cast
   title: atmos HTTP webhooks
+related_docs:
+  - label: "Run workflows"
+    url: /cli/commands/workflow
+  - label: "HTTP steps"
+    url: /steps/type/http
 ---
 
 # HTTP Step Type
 
-This example demonstrates the `http` workflow step type, which performs an HTTP
+This example demonstrates the [`http` workflow step type](https://atmos.tools/steps/type/http), which performs an HTTP
 request with a configurable method/verb, query-string parameters, headers, and a request
 body (raw or form/JSON). Requests get per-attempt timeouts and retries that compose with
-the step's `retry:` policy.
+the step's [`retry:` policy](https://atmos.tools/steps/retry).
 
 > `webhook` is an accepted alias for `http` — `type: webhook` behaves identically and is
 > handy for the fire-a-notification use case.

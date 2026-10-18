@@ -61,7 +61,7 @@ BUILT-IN COMMANDS
       untaint                           Remove the 'tainted' state from a resource instance
       validate                          Check whether the configuration is valid
       version                           Show the current Terraform version
-      workdir [command] [EXPERIMENTAL]  Manage component working directories
+      workdir [command]                 Manage component working directories
       workspace [command]               Manage Terraform workspaces
 
 CUSTOM COMMANDS
@@ -94,8 +94,10 @@ FLAGS
       --init-pass-vars               Pass the generated varfile to terraform init using --var-file flag (OpenTofu
                                      feature)
 
-      --labels string                Filter by labels (comma-separated key=value or key:value pairs, matches all): --
-                                     labels=cost-center=platform,compliance=sox
+      --labels strings               Filter by labels (comma-separated key=value or key:value pairs within an
+                                     occurrence, and/or repeated, matches all): --labels=cost-
+                                     center=platform,compliance=sox or --labels cost-center=platform --labels
+                                     compliance=sox
 
       --process-functions            Enable/disable YAML functions processing in Atmos stack manifests (default
                                      true)
@@ -173,6 +175,9 @@ GLOBAL FLAGS
 
       --justification string                 Reason recorded for privileged auth actions such as PIM role activation (--
                                              justification=REASON)
+
+      --logs-color                           Enable log color when available; --no-color and NO_COLOR always override
+                                             (default true)
 
       --logs-file string                     The file to write Atmos logs to. Logs can be written to any file or any
                                              standard file descriptor, including '/dev/stdout', '/dev/stderr' and

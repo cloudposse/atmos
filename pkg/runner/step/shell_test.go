@@ -45,7 +45,7 @@ func TestShellHandlerExecution(t *testing.T) {
 			Name:    "test_echo",
 			Type:    "shell",
 			Command: "echo hello",
-			Output:  "capture",
+			Output:  "none",
 		}
 		vars := NewVariables()
 
@@ -60,7 +60,7 @@ func TestShellHandlerExecution(t *testing.T) {
 			Name:    "test_exit",
 			Type:    "shell",
 			Command: "exit 42",
-			Output:  "capture",
+			Output:  "none",
 		}
 		vars := NewVariables()
 
@@ -74,7 +74,7 @@ func TestShellHandlerExecution(t *testing.T) {
 			Name:    "test_env",
 			Type:    "shell",
 			Command: "echo $TEST_VAR",
-			Output:  "capture",
+			Output:  "none",
 			Env: map[string]string{
 				"TEST_VAR": "custom_value",
 			},
@@ -91,7 +91,7 @@ func TestShellHandlerExecution(t *testing.T) {
 			Name:    "test_inherited_env",
 			Type:    "shell",
 			Command: "echo $INHERITED_VAR",
-			Output:  "capture",
+			Output:  "none",
 		}
 		vars := NewVariables()
 		vars.SetEnv("INHERITED_VAR", "from_variables")
@@ -106,7 +106,7 @@ func TestShellHandlerExecution(t *testing.T) {
 			Name:    "test_env_override",
 			Type:    "shell",
 			Command: "echo $OVERRIDE_VAR",
-			Output:  "capture",
+			Output:  "none",
 			Env: map[string]string{
 				"OVERRIDE_VAR": "from_step",
 			},
@@ -125,7 +125,7 @@ func TestShellHandlerExecution(t *testing.T) {
 			Name:    "test_baseline_env",
 			Type:    "shell",
 			Command: "echo $BASELINE_OS_ENV",
-			Output:  "capture",
+			Output:  "none",
 		}
 		vars := NewVariables()
 
@@ -139,7 +139,7 @@ func TestShellHandlerExecution(t *testing.T) {
 			Name:    "test_template",
 			Type:    "shell",
 			Command: "echo {{ .steps.input.value }}",
-			Output:  "capture",
+			Output:  "none",
 		}
 		vars := NewVariables()
 		vars.Set("input", NewStepResult("template_value"))
@@ -160,7 +160,7 @@ func TestShellHandlerExecution(t *testing.T) {
 			Name:             "test_workdir",
 			Type:             "shell",
 			Command:          "echo *",
-			Output:           "capture",
+			Output:           "none",
 			WorkingDirectory: dir,
 		}
 		vars := NewVariables()
@@ -175,7 +175,7 @@ func TestShellHandlerExecution(t *testing.T) {
 			Name:    "test_cancel",
 			Type:    "shell",
 			Command: "sleep 10",
-			Output:  "capture",
+			Output:  "none",
 		}
 		vars := NewVariables()
 
@@ -191,7 +191,7 @@ func TestShellHandlerExecution(t *testing.T) {
 			Name:    "test_stderr",
 			Type:    "shell",
 			Command: "echo error >&2 && exit 1",
-			Output:  "capture",
+			Output:  "none",
 		}
 		vars := NewVariables()
 
@@ -206,7 +206,7 @@ func TestShellHandlerExecution(t *testing.T) {
 			Name:    "test_bad_command",
 			Type:    "shell",
 			Command: "echo {{ .invalid.template",
-			Output:  "capture",
+			Output:  "none",
 		}
 		vars := NewVariables()
 
@@ -221,7 +221,7 @@ func TestShellHandlerExecution(t *testing.T) {
 			Type:             "shell",
 			Command:          "echo hello",
 			WorkingDirectory: "{{ .invalid.template",
-			Output:           "capture",
+			Output:           "none",
 		}
 		vars := NewVariables()
 
@@ -260,7 +260,7 @@ func TestShellHandlerExecuteWithWorkflow(t *testing.T) {
 			Command: "echo workflow_test",
 		}
 		workflow := &schema.WorkflowDefinition{
-			Output: "capture",
+			Output: "none",
 		}
 		vars := NewVariables()
 
@@ -274,7 +274,7 @@ func TestShellHandlerExecuteWithWorkflow(t *testing.T) {
 			Name:    "test_override",
 			Type:    "shell",
 			Command: "echo override_test",
-			Output:  "capture",
+			Output:  "none",
 		}
 		workflow := &schema.WorkflowDefinition{
 			Output: "log",
@@ -291,7 +291,7 @@ func TestShellHandlerExecuteWithWorkflow(t *testing.T) {
 			Name:    "test_template_env",
 			Type:    "shell",
 			Command: "echo $MY_VAR",
-			Output:  "capture",
+			Output:  "none",
 			Env: map[string]string{
 				"MY_VAR": "{{ .steps.value.value }}",
 			},
@@ -316,7 +316,7 @@ func TestShellHandlerExecuteWithWorkflow(t *testing.T) {
 			Name:             "test_workflow_workdir",
 			Type:             "shell",
 			Command:          "echo *",
-			Output:           "capture",
+			Output:           "none",
 			WorkingDirectory: dir,
 		}
 		workflow := &schema.WorkflowDefinition{}
@@ -337,7 +337,7 @@ func TestShellHandlerExecutePropagatesEnvTemplateError(t *testing.T) {
 		Name:    "test_bad_env",
 		Type:    "shell",
 		Command: "echo hello",
-		Output:  "capture",
+		Output:  "none",
 		Env: map[string]string{
 			"BAD": "{{ .invalid.template",
 		},
@@ -412,7 +412,7 @@ func TestShellHandlerWithOutputModes(t *testing.T) {
 	handler, ok := Get("shell")
 	require.True(t, ok)
 
-	outputModes := []string{"capture", "none", "raw", "log"}
+	outputModes := []string{"none", "raw", "log"}
 
 	for _, mode := range outputModes {
 		t.Run("output_mode_"+mode, func(t *testing.T) {
@@ -426,8 +426,8 @@ func TestShellHandlerWithOutputModes(t *testing.T) {
 
 			result, err := handler.Execute(context.Background(), step, vars)
 			require.NoError(t, err)
-			// In capture mode, we should have output.
-			if mode == "capture" || mode == "raw" {
+			// In none and raw modes, the output is captured.
+			if mode == "none" || mode == "raw" {
 				assert.Contains(t, result.Value, "test_output")
 			}
 			// All modes should have exit code metadata.
@@ -447,7 +447,7 @@ func TestShellHandlerExecuteWithWorkflowErrorCases(t *testing.T) {
 			Name:    "test_invalid_cmd",
 			Type:    "shell",
 			Command: "echo {{ .invalid.template",
-			Output:  "capture",
+			Output:  "none",
 		}
 		workflow := &schema.WorkflowDefinition{}
 		vars := NewVariables()
@@ -462,7 +462,7 @@ func TestShellHandlerExecuteWithWorkflowErrorCases(t *testing.T) {
 			Type:             "shell",
 			Command:          "echo hello",
 			WorkingDirectory: "{{ .invalid.template",
-			Output:           "capture",
+			Output:           "none",
 		}
 		workflow := &schema.WorkflowDefinition{}
 		vars := NewVariables()
@@ -476,7 +476,7 @@ func TestShellHandlerExecuteWithWorkflowErrorCases(t *testing.T) {
 			Name:    "test_invalid_env",
 			Type:    "shell",
 			Command: "echo hello",
-			Output:  "capture",
+			Output:  "none",
 			Env: map[string]string{
 				"BAD": "{{ .invalid.template",
 			},
@@ -493,7 +493,7 @@ func TestShellHandlerExecuteWithWorkflowErrorCases(t *testing.T) {
 			Name:    "test_show",
 			Type:    "shell",
 			Command: "echo show_test",
-			Output:  "capture",
+			Output:  "none",
 		}
 		showCommand := true
 		workflow := &schema.WorkflowDefinition{
@@ -514,7 +514,7 @@ func TestShellHandlerExecuteWithWorkflowErrorCases(t *testing.T) {
 			Name:    "test_step_show",
 			Type:    "shell",
 			Command: "echo step_show_test",
-			Output:  "capture",
+			Output:  "none",
 			Show: &schema.ShowConfig{
 				Command: &showCommand,
 			},
@@ -532,7 +532,7 @@ func TestShellHandlerExecuteWithWorkflowErrorCases(t *testing.T) {
 			Name:    "test_nil_workflow",
 			Type:    "shell",
 			Command: "echo nil_workflow",
-			Output:  "capture",
+			Output:  "none",
 		}
 		vars := NewVariables()
 
@@ -546,7 +546,7 @@ func TestShellHandlerExecuteWithWorkflowErrorCases(t *testing.T) {
 			Name:    "test_failing_command",
 			Type:    "shell",
 			Command: "echo failure_output >&2 && exit 3",
-			Output:  "capture",
+			Output:  "none",
 		}
 		workflow := &schema.WorkflowDefinition{}
 		vars := NewVariables()
@@ -563,7 +563,7 @@ func TestShellHandlerExecuteWithWorkflowErrorCases(t *testing.T) {
 			Name:    "test_stderr_success",
 			Type:    "shell",
 			Command: "echo 'stdout' && echo 'stderr' >&2",
-			Output:  "capture",
+			Output:  "none",
 		}
 		workflow := &schema.WorkflowDefinition{}
 		vars := NewVariables()
@@ -622,7 +622,7 @@ func TestShellHandlerInteractiveStepUsesShellSession(t *testing.T) {
 		Type:        "shell",
 		Command:     "exit 0",
 		Interactive: true,
-		Output:      "capture",
+		Output:      "none",
 	}
 
 	result, err := handler.Execute(context.Background(), step, NewVariables())
@@ -642,7 +642,7 @@ func TestShellHandlerInteractiveStepWithWorkflowUsesShellSession(t *testing.T) {
 		Command:     "exit 0",
 		Interactive: true,
 	}
-	workflow := &schema.WorkflowDefinition{Output: "capture"}
+	workflow := &schema.WorkflowDefinition{Output: "none"}
 
 	result, err := handler.ExecuteWithWorkflow(context.Background(), step, NewVariables(), workflow)
 	require.NoError(t, err)

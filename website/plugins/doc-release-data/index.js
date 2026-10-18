@@ -22,6 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const matter = require('gray-matter');
 const { getBuildTimestamp } = require('../build-timestamp');
+const { historicalPathFor, changedLinesAtHistoricalPath } = require('./history');
 
 // A page that already existed at the latest stable tag is still considered released
 // as long as fewer than this fraction of its lines changed since that tag. Above this
@@ -209,6 +210,15 @@ function determineRelease(filePath, repoState) {
       if (totalLines > 0 && changedLines / totalLines < UNRELEASED_THRESHOLD) {
         return latestStableTag;
       }
+    } else {
+      const historicalPath = historicalPathFor(relPath, repoState.historicalPaths);
+      if (historicalPath) {
+        const changedLines = changedLinesAtHistoricalPath(repoRoot, latestStableTag, historicalPath, filePath);
+        const totalLines = countLines(filePath);
+        if (changedLines !== null && totalLines > 0 && changedLines / totalLines < UNRELEASED_THRESHOLD) {
+          return latestStableTag;
+        }
+      }
     }
   }
 
@@ -306,12 +316,18 @@ module.exports = function docReleaseDataPlugin(context, options) {
       const repoState = {
         repoRoot: getRepoRoot(),
         latestStableTag: getLatestStableTag(),
+        historicalPaths: options.historicalPaths || [],
       };
 
       // Find all doc files recursively.
       const files = findDocFiles(docsDir);
 
       for (const filePath of files) {
+        const frontmatter = extractFrontmatter(filePath);
+        // Draft pages have no production route and must not appear in /unreleased.
+        if (frontmatter.draft === true) {
+          continue;
+        }
         const release = determineRelease(filePath, repoState);
         const urlPath = getDocUrlPath(filePath, docsDir);
 
@@ -323,8 +339,6 @@ module.exports = function docReleaseDataPlugin(context, options) {
 
         // For unreleased docs, extract metadata for the index page.
         if (release === 'unreleased') {
-          const frontmatter = extractFrontmatter(filePath);
-
           // Determine the correct URL path.
           // Docusaurus URL routing rules:
           // 1. slug (explicit) takes highest priority

@@ -131,7 +131,7 @@ Positional arguments are defined as a list under `arguments`:
 arguments:
   - name: string           # Required: Argument name
     description: string    # Optional: Help text
-    required: boolean      # Optional: Whether argument is required (default: false)
+    required: boolean      # Optional: Set to false to allow omission
     default: string        # Optional: Default value if not provided
 ```
 
@@ -150,7 +150,12 @@ steps:
 
 ### Required vs Optional
 
-If `required: true` and no value is provided, the command fails unless a `default` is specified.
+Arguments are required by default. Use `required: false` to make an argument optional,
+or set a non-empty `default` to supply a value when the user omits it.
+
+An optional argument without a default becomes an empty string in
+`{{ .Arguments.<name> }}` and `ctx.arguments`. Values preserve commas, empty strings,
+and non-ASCII text.
 
 ```yaml
 arguments:
@@ -189,8 +194,8 @@ flags:
     shorthand: string      # Optional: Single-character shorthand (used as -x)
     description: string    # Optional: Help text
     required: boolean      # Optional: Whether flag is required (default: false)
-    type: string           # Optional: "bool" for boolean flags (default: string)
-    default: string|bool   # Optional: Default value
+    type: string           # Optional: "string" (default), "bool", or "int"; other types are rejected
+    default: string|bool|int # Optional: Default value (a whole number for int flags)
 ```
 
 ### Access in Templates
@@ -262,7 +267,10 @@ atmos mycommand --auto-approve=false   # auto-approve=false (explicit override)
 
 ### Flag Defaults
 
-Both string and boolean flags support defaults:
+String, boolean, and integer flags support defaults. An `int` flag is an integer in templates
+and `ctx.flags`, and its default must be a whole number. It reads base-10 digits only (`010` is 10, `0x10` is
+rejected). A `default` whose type does not match the flag (an unquoted `2` on a `string` flag, `"true"` on a `bool`
+flag) makes the command a stub that logs a warning naming the flag and reports the error when run:
 
 ```yaml
 flags:

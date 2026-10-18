@@ -6,12 +6,15 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
+	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
 func TestGetAvailableConfigurations(t *testing.T) {
@@ -108,6 +111,86 @@ func TestConfiguration_README(t *testing.T) {
 
 	if atmosConfig.README == "" {
 		t.Error("Expected atmos template to have README content")
+	}
+}
+
+// TestLoadConfiguration_EmbeddedTemplateLocalIncludeDoesNotResolveAgainstCWD
+// proves an embedded template's local !include target never resolves
+// against the process's CWD. Passing config.SourceEmbedded ("embedded")
+// directly as the scaffold source directory let a local !include target
+// resolve as a path relative to CWD (e.g. "./x.yaml" -> "embedded/x.yaml"),
+// silently reading whatever coincidentally exists there. Seeds a real
+// "embedded/x.yaml" under a controlled CWD to prove it is never read:
+// loading must fail cleanly instead.
+func TestLoadConfiguration_EmbeddedTemplateLocalIncludeDoesNotResolveAgainstCWD(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "embedded"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "embedded", "x.yaml"), []byte("should: never-be-read"), 0o644))
+	t.Chdir(dir)
+
+	fsys := fstest.MapFS{
+		"basic/scaffold.yaml": &fstest.MapFile{Data: []byte(`apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: basic
+spec:
+  fields:
+    - name: derived
+      type: computed
+      value: !include ./x.yaml
+`)},
+	}
+
+	_, err := loadConfiguration(fsys, "basic", "basic", config.SourceEmbedded, "")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldLoadConfig)
+}
+
+// TestConfiguration_IncludeSourceDir proves each of IncludeSourceDir's three
+// branches returns the directory its own doc comment promises: LocalDir when
+// set (a remote source, fully hydrated), the fixed non-existent sentinel
+// directory for an embedded template (Source holding config.SourceEmbedded),
+// and Source unchanged for a local-directory template.
+func TestConfiguration_IncludeSourceDir(t *testing.T) {
+	tests := []struct {
+		name   string
+		config Configuration
+		check  func(t *testing.T, got string)
+	}{
+		{
+			name:   "prefers LocalDir when set",
+			config: Configuration{Source: "original-remote-ref", LocalDir: "/tmp/real-fetch-dir"},
+			check: func(t *testing.T, got string) {
+				t.Helper()
+				assert.Equal(t, "/tmp/real-fetch-dir", got)
+			},
+		},
+		{
+			name:   "embedded template never resolves against CWD",
+			config: Configuration{Source: config.SourceEmbedded},
+			check: func(t *testing.T, got string) {
+				t.Helper()
+				assert.NotEqual(t, config.SourceEmbedded, got)
+				assert.True(t, filepath.IsAbs(got), "expected an absolute sentinel path, got %q", got)
+				_, err := os.Stat(got)
+				assert.True(t, os.IsNotExist(err), "the embedded-template sentinel directory must never coincidentally exist")
+			},
+		},
+		{
+			name:   "local-directory template keeps Source unchanged",
+			config: Configuration{Source: "/some/local/template/dir"},
+			check: func(t *testing.T, got string) {
+				t.Helper()
+				assert.Equal(t, "/some/local/template/dir", got)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.check(t, tt.config.IncludeSourceDir())
+		})
 	}
 }
 
