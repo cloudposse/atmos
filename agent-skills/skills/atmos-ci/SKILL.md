@@ -264,6 +264,12 @@ atmos describe affected --format=matrix --include-dependents --flatten --labels=
 - `atmos terraform --affected|--all --include-dependents --tags|--labels` selects the same components as
   `describe affected`: non-matching dependents are skipped and their matching dependents still run in order.
   Prerequisites from `--include-dependencies` are not filtered.
+- Boolean `metadata.labels` values (for example `preview: !ci.labels [preview]`) are selected with
+  `--labels preview:true` or `preview:false` on `describe affected`, `list components`/`list stacks`, and the
+  terraform bulk commands. `!ci.labels` reads the live PR (or merge-queue PR) labels from the GitHub API once per
+  invocation, using `ATMOS_CI_GITHUB_TOKEN`, `ATMOS_PRO_GITHUB_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN`; outside a
+  review it returns `[]`/`false`, and `--skip=ci.labels` keeps the expression without any request. See
+  `website/docs/functions/yaml/ci.labels.mdx`.
 - With `--include-dependents`, a non-matching affected component is removed and its matching dependents become
   top-level entries with `affected: dependent`. `--flatten` (env `ATMOS_DESCRIBE_AFFECTED_FLATTEN`; requires
   `--include-dependents`; not with `--upload`) lifts every remaining dependent into the top-level list, which is

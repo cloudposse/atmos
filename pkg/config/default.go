@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -170,9 +171,9 @@ var (
 						Source:        "src/",
 						Enabled:       false,
 						Format:        "markdown",
-						ShowProviders: false,
-						ShowInputs:    true,
-						ShowOutputs:   true,
+						ShowProviders: lo.ToPtr(false),
+						ShowInputs:    lo.ToPtr(true),
+						ShowOutputs:   lo.ToPtr(true),
 						SortBy:        "name",
 						HideEmpty:     false,
 						IndentLevel:   2,

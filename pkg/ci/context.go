@@ -10,6 +10,9 @@ type Context = provider.Context
 // PRInfo is the public alias for pull request metadata.
 type PRInfo = provider.PRInfo
 
+// MergeQueueInfo identifies the review associated with a merge-queue check run.
+type MergeQueueInfo = provider.MergeQueueInfo
+
 // Comment, CommentBehavior, and the check-run types are re-exported from the
 // internal provider package so callers outside pkg/ci can post comments and
 // manage check runs without importing an internal package. They are type

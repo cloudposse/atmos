@@ -435,6 +435,44 @@ func (mr *MockIdentityMockRecorder) Validate() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*MockIdentity)(nil).Validate))
 }
 
+// MockJustificationConsumer is a mock of JustificationConsumer interface.
+type MockJustificationConsumer struct {
+	ctrl     *gomock.Controller
+	recorder *MockJustificationConsumerMockRecorder
+	isgomock struct{}
+}
+
+// MockJustificationConsumerMockRecorder is the mock recorder for MockJustificationConsumer.
+type MockJustificationConsumerMockRecorder struct {
+	mock *MockJustificationConsumer
+}
+
+// NewMockJustificationConsumer creates a new mock instance.
+func NewMockJustificationConsumer(ctrl *gomock.Controller) *MockJustificationConsumer {
+	mock := &MockJustificationConsumer{ctrl: ctrl}
+	mock.recorder = &MockJustificationConsumerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockJustificationConsumer) EXPECT() *MockJustificationConsumerMockRecorder {
+	return m.recorder
+}
+
+// ConsumesJustification mocks base method.
+func (m *MockJustificationConsumer) ConsumesJustification() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ConsumesJustification")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// ConsumesJustification indicates an expected call of ConsumesJustification.
+func (mr *MockJustificationConsumerMockRecorder) ConsumesJustification() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConsumesJustification", reflect.TypeOf((*MockJustificationConsumer)(nil).ConsumesJustification))
+}
+
 // MockAuthManager is a mock of AuthManager interface.
 type MockAuthManager struct {
 	ctrl     *gomock.Controller
@@ -533,17 +571,22 @@ func (mr *MockAuthManagerMockRecorder) ExecuteIdentityIntegrations(ctx, identity
 }
 
 // ExecuteIntegration mocks base method.
-func (m *MockAuthManager) ExecuteIntegration(ctx context.Context, integrationName string) error {
+func (m *MockAuthManager) ExecuteIntegration(ctx context.Context, integrationName string, opts ...IntegrationOption) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExecuteIntegration", ctx, integrationName)
+	varargs := []any{ctx, integrationName}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ExecuteIntegration", varargs...)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ExecuteIntegration indicates an expected call of ExecuteIntegration.
-func (mr *MockAuthManagerMockRecorder) ExecuteIntegration(ctx, integrationName any) *gomock.Call {
+func (mr *MockAuthManagerMockRecorder) ExecuteIntegration(ctx, integrationName any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteIntegration", reflect.TypeOf((*MockAuthManager)(nil).ExecuteIntegration), ctx, integrationName)
+	varargs := append([]any{ctx, integrationName}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteIntegration", reflect.TypeOf((*MockAuthManager)(nil).ExecuteIntegration), varargs...)
 }
 
 // GetCachedCredentials mocks base method.

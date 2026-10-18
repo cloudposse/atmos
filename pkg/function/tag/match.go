@@ -44,7 +44,7 @@ var stringFormTags = []string{
 	Exec, Secret, Store, StoreGet, Template, TerraformOutput, TerraformState, Env,
 	RepoRoot, GitRoot, GitSha, GitBranch, GitRef, GitRepository, GitOwner, GitName, GitHost, GitURL,
 	Unset, AwsAccountID, AwsCallerIdentityArn, AwsCallerIdentityUserID, AwsRegion, AwsOrganizationID,
-	AwsCloudFormationOutput, Emulator, Version, Tags, Labels, LabelsKeys, LabelsValues,
+	AwsCloudFormationOutput, CILabels, Emulator, Version, Tags, Labels, LabelsKeys, LabelsValues,
 }
 
 // StringFormYAML returns the YAML tags (with the "!" prefix) that the runtime resolves when

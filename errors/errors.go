@@ -1232,7 +1232,9 @@ var (
 	ErrProvisionTargetKindUnknown = errors.New("provision target kind is not registered")
 	ErrProvisionTargetKindMissing = errors.New("provision target is missing a kind")
 	ErrProvisionTargetNoFetch     = errors.New("provision target kind does not support reading current state")
-	ErrGitPullRequestNotSupported = errors.New("git pull request publishing is not supported by the cli provider")
+
+	// Git target pull-request publishing errors.
+	ErrGitTargetPullRequestConfig = errors.New("invalid git target pull_request configuration")
 
 	// Backend provisioning errors.
 	ErrBucketRequired             = errors.New("backend.bucket is required")
@@ -1494,6 +1496,7 @@ var (
 	ErrCICheckRunMissingComponent = errors.New("check run requires a resolved component and stack")
 	ErrCIStatusContextIncomplete  = errors.New("status context requires all parts to be non-empty")
 	ErrCIStatusFetchFailed        = errors.New("failed to fetch CI status")
+	ErrCILabelsFetchFailed        = errors.New("failed to fetch CI review labels")
 	ErrCIOutputWriteFailed        = errors.New("failed to write CI output")
 	ErrCISummaryWriteFailed       = errors.New("failed to write CI summary")
 	ErrCIAnnotationFailed         = errors.New("failed to emit CI annotations")
@@ -1664,6 +1667,11 @@ var (
 	ErrCLIProviderExecFailed        = errors.New("CLI provider execution failed")
 	ErrCLIProviderParseResponse     = errors.New("failed to parse CLI provider response")
 	ErrCLIProviderToolsNotSupported = errors.New("tool execution not supported for CLI providers; use MCP pass-through instead")
+	ErrCLIProviderEmptyResponse     = errors.New("CLI provider returned an empty response")
+	ErrCLIProviderMaxTurns          = errors.New("CLI provider reached its maximum number of turns before answering")
+	ErrCLIProviderToolDenied        = errors.New("CLI provider tool use was not approved")
+	ErrAIEmptyResponse              = errors.New("AI returned an empty response")
+	ErrAIToolsInvalidMode           = errors.New("invalid ai.tools.mode")
 
 	// Web search errors.
 	ErrWebSearchFailed      = errors.New("web search request failed")

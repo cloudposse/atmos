@@ -142,6 +142,11 @@ YAML supports three types of data: core, defined, and user-defined.
    Use [`!labels key [default]`](/functions/yaml/labels#single-label-lookup) to read one label,
    with an optional fallback when the key is absent.
 
+ - The [__`!ci.labels`__](/functions/yaml/ci.labels) YAML function reads the live labels on the current CI
+   pull request (or, for merge queue runs, the queued pull request) and returns either the sorted label list or a
+   boolean for `!ci.labels [preview]`. Use it to drive `settings.pro.enabled`, `metadata.enabled`, or
+   `metadata.labels` from the review, then select with `--labels preview:true`.
+
 :::tip
 You can combine [Atmos Stack Manifest Templating](/templates) with Atmos YAML functions within the same stack configuration.
 Atmos processes templates first, followed by YAML functions, enabling you to dynamically provide parameters to the YAML functions.

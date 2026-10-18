@@ -591,96 +591,6 @@ func TestCLIPrompter_checkCachedPermission_NotInCache(t *testing.T) {
 	assert.False(t, decision)
 }
 
-func TestCLIPrompter_displayPrompt_NoCache(t *testing.T) {
-	p := NewCLIPrompter()
-	tool := &MockTool{name: "test_tool", description: "A test tool."}
-
-	// Capture stderr by temporarily redirecting it.
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-
-	oldStderr := os.Stderr
-	os.Stderr = w
-
-	p.displayPrompt(tool, nil)
-
-	w.Close()
-	os.Stderr = oldStderr
-
-	var buf strings.Builder
-	_, err = io.Copy(&buf, r)
-	require.NoError(t, err)
-	r.Close()
-
-	output := buf.String()
-	assert.Contains(t, output, "test_tool")
-	assert.Contains(t, output, "A test tool.")
-	// The choice options are now presented via a huh select/confirm form in
-	// Prompt, not printed as plain text by displayPrompt.
-}
-
-func TestCLIPrompter_displayPrompt_WithCache(t *testing.T) {
-	tmpDir := t.TempDir()
-	cache, err := NewPermissionCache(tmpDir)
-	require.NoError(t, err)
-
-	p := NewCLIPrompterWithCache(cache)
-	tool := &MockTool{name: "test_tool", description: "A test tool."}
-	params := map[string]interface{}{"key": "value"}
-
-	// Capture stderr.
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-
-	oldStderr := os.Stderr
-	os.Stderr = w
-
-	p.displayPrompt(tool, params)
-
-	w.Close()
-	os.Stderr = oldStderr
-
-	var buf strings.Builder
-	_, err = io.Copy(&buf, r)
-	require.NoError(t, err)
-	r.Close()
-
-	output := buf.String()
-	assert.Contains(t, output, "test_tool")
-	// Parameters section should be printed.
-	assert.Contains(t, output, "key")
-}
-
-func TestCLIPrompter_displayPrompt_NoParams(t *testing.T) {
-	tmpDir := t.TempDir()
-	cache, err := NewPermissionCache(tmpDir)
-	require.NoError(t, err)
-
-	p := NewCLIPrompterWithCache(cache)
-	tool := &MockTool{name: "test_tool", description: "A test tool."}
-
-	// Capture stderr.
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-
-	oldStderr := os.Stderr
-	os.Stderr = w
-
-	p.displayPrompt(tool, map[string]interface{}{})
-
-	w.Close()
-	os.Stderr = oldStderr
-
-	var buf strings.Builder
-	_, err = io.Copy(&buf, r)
-	require.NoError(t, err)
-	r.Close()
-
-	output := buf.String()
-	// Empty params map - Parameters section should not be printed.
-	assert.NotContains(t, output, "Parameters:")
-}
-
 func TestCLIPrompter_handleCachedResponse_Always(t *testing.T) {
 	tmpDir := t.TempDir()
 	cache, err := NewPermissionCache(tmpDir)
@@ -694,7 +604,7 @@ func TestCLIPrompter_handleCachedResponse_Always(t *testing.T) {
 	oldStderr := os.Stderr
 	os.Stderr = w
 
-	result := p.handleCachedResponse("a", "test_tool")
+	result, _ := p.handleCachedResponse("a", "test_tool")
 
 	w.Close()
 	os.Stderr = oldStderr
@@ -716,7 +626,7 @@ func TestCLIPrompter_handleCachedResponse_AlwaysLong(t *testing.T) {
 	oldStderr := os.Stderr
 	os.Stderr = w
 
-	result := p.handleCachedResponse("always", "test_tool2")
+	result, _ := p.handleCachedResponse("always", "test_tool2")
 
 	w.Close()
 	os.Stderr = oldStderr
@@ -733,7 +643,7 @@ func TestCLIPrompter_handleCachedResponse_Yes(t *testing.T) {
 
 	p := NewCLIPrompterWithCache(cache)
 
-	result := p.handleCachedResponse("y", "test_tool")
+	result, _ := p.handleCachedResponse("y", "test_tool")
 	assert.True(t, result)
 	// Should NOT be in cache (allow once, not persisted).
 	assert.False(t, cache.IsAllowed("test_tool"))
@@ -746,7 +656,7 @@ func TestCLIPrompter_handleCachedResponse_YesLong(t *testing.T) {
 
 	p := NewCLIPrompterWithCache(cache)
 
-	result := p.handleCachedResponse("yes", "test_tool")
+	result, _ := p.handleCachedResponse("yes", "test_tool")
 	assert.True(t, result)
 	assert.False(t, cache.IsAllowed("test_tool"))
 }
@@ -763,7 +673,7 @@ func TestCLIPrompter_handleCachedResponse_Deny(t *testing.T) {
 	oldStderr := os.Stderr
 	os.Stderr = w
 
-	result := p.handleCachedResponse("d", "test_tool")
+	result, _ := p.handleCachedResponse("d", "test_tool")
 
 	w.Close()
 	os.Stderr = oldStderr
@@ -785,7 +695,7 @@ func TestCLIPrompter_handleCachedResponse_DenyLong(t *testing.T) {
 	oldStderr := os.Stderr
 	os.Stderr = w
 
-	result := p.handleCachedResponse("deny", "test_tool2")
+	result, _ := p.handleCachedResponse("deny", "test_tool2")
 
 	w.Close()
 	os.Stderr = oldStderr
@@ -802,13 +712,13 @@ func TestCLIPrompter_handleCachedResponse_Default(t *testing.T) {
 
 	p := NewCLIPrompterWithCache(cache)
 
-	result := p.handleCachedResponse("n", "test_tool")
+	result, _ := p.handleCachedResponse("n", "test_tool")
 	assert.False(t, result)
 
-	result = p.handleCachedResponse("no", "test_tool")
+	result, _ = p.handleCachedResponse("no", "test_tool")
 	assert.False(t, result)
 
-	result = p.handleCachedResponse("", "test_tool")
+	result, _ = p.handleCachedResponse("", "test_tool")
 	assert.False(t, result)
 }
 
@@ -898,7 +808,7 @@ func TestCLIPrompter_Prompt_NoTTY(t *testing.T) {
 			tool := &MockTool{name: "test_tool", description: "A test tool."}
 			ctx := context.Background()
 
-			// Suppress the header written by displayPrompt.
+			// Suppress anything written to stderr.
 			r, w, err := os.Pipe()
 			require.NoError(t, err)
 			oldStderr := os.Stderr
@@ -949,7 +859,7 @@ func TestCLIPrompter_handleCachedResponse_SaveError(t *testing.T) {
 			oldStderr := os.Stderr
 			os.Stderr = w
 
-			result := p.handleCachedResponse(tt.response, "fail_tool")
+			result, _ := p.handleCachedResponse(tt.response, "fail_tool")
 
 			w.Close()
 			os.Stderr = oldStderr
@@ -985,7 +895,7 @@ func TestCLIPrompter_handleCachedResponse_AddAllow_Duplicate(t *testing.T) {
 	os.Stderr = w
 
 	// Adding again via "a" should not error (duplicate handling).
-	result := p.handleCachedResponse("a", "dup_tool")
+	result, _ := p.handleCachedResponse("a", "dup_tool")
 
 	w.Close()
 	os.Stderr = oldStderr
