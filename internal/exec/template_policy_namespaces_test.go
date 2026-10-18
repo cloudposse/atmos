@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -76,9 +77,10 @@ func fileNamespaceCalls() map[string]fileNamespaceCall {
 }
 
 // retryingTempDir returns t.TempDir plus a cleanup that empties it with retries first. On Windows,
-// antivirus and indexing can briefly hold a handle on freshly written files, which makes the single
-// removal attempt in t.TempDir fail intermittently with "being used by another process". Cleanups run
-// last-in first-out, so this one empties the directory before t.TempDir removes it.
+// antivirus, indexing, and directory handles the file functions leave for the finalizer to close can
+// briefly hold a path, which makes the single removal attempt in t.TempDir fail intermittently with
+// "being used by another process". Collecting garbage before each attempt runs those finalizers.
+// Cleanups run last-in first-out, so this one empties the directory before t.TempDir removes it.
 func retryingTempDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -90,6 +92,7 @@ func retryingTempDir(t *testing.T) string {
 		for _, entry := range entries {
 			path := filepath.Join(dir, entry.Name())
 			for range 20 {
+				runtime.GC()
 				if os.RemoveAll(path) == nil {
 					break
 				}
