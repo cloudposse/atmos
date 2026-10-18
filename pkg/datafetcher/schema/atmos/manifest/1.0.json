@@ -2538,7 +2538,7 @@
                 {"type": "boolean"},
                 {"type": "string", "pattern": "^!"}
               ],
-              "description": "Flag to enable or disable the component A YAML function (for example !ci.labels) is evaluated before use."
+              "description": "Flag to enable or disable the component. A YAML function (for example !ci.labels) is evaluated before use."
             },
             "component": {
               "type": "string",
@@ -2654,7 +2654,7 @@
                 {"type": "boolean"},
                 {"type": "string", "pattern": "^!"}
               ],
-              "description": "Flag to enable or disable components stack-wide by default A YAML function (for example !ci.labels) is evaluated before use."
+              "description": "Flag to enable or disable components stack-wide by default. A YAML function (for example !ci.labels) is evaluated before use."
             },
             "locked": {
               "type": "boolean",
