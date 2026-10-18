@@ -58,16 +58,24 @@ func (m *manager) authenticateChain(ctx context.Context, _ string) (types.ICrede
 	// Fast path: check process-level in-memory cache.
 	// Credentials authenticated during this process are guaranteed correct, unlike
 	// keyring/file caches which may hold stale data from previous runs.
+	//
+	// A direct standalone chain (a single identity that owns its credentials, such as
+	// aws/credential-process) bypasses this cache: helper credentials may carry no expiration,
+	// so isCredentialValid would treat them as valid and skip the helper for the whole process.
+	// Multi-step chains still cache their final downstream credentials.
+	skipProcessCache := len(m.chain) == 1 && m.chainRootIsStandalone()
 	cacheKey := m.chainCacheKey()
-	if entry, ok := processCredentialCache.Load(cacheKey); ok {
-		cached := entry.(*processCachedCreds)
-		if valid, _ := m.isCredentialValid("process-cache", cached.credentials); valid {
-			log.Debug("Using process-cached credentials for chain", logKeyChain, m.chain)
-			return cached.credentials, nil
+	if !skipProcessCache {
+		if entry, ok := processCredentialCache.Load(cacheKey); ok {
+			cached := entry.(*processCachedCreds)
+			if valid, _ := m.isCredentialValid("process-cache", cached.credentials); valid {
+				log.Debug("Using process-cached credentials for chain", logKeyChain, m.chain)
+				return cached.credentials, nil
+			}
+			// Expired — remove stale entry.
+			processCredentialCache.Delete(cacheKey)
+			log.Debug("Process-cached credentials expired, re-authenticating", logKeyChain, m.chain)
 		}
-		// Expired — remove stale entry.
-		processCredentialCache.Delete(cacheKey)
-		log.Debug("Process-cached credentials expired, re-authenticating", logKeyChain, m.chain)
 	}
 
 	// Validate every identity in the chain before authenticating any step. Authentication starts
@@ -105,7 +113,7 @@ func (m *manager) authenticateChain(ctx context.Context, _ string) (types.ICrede
 	// avoids the redundant cache lookup entirely. Re-authentication for
 	// ambient is a no-op, so the savings the cache provides are immaterial
 	// for this kind.
-	if creds != nil {
+	if creds != nil && !skipProcessCache {
 		processCredentialCache.Store(cacheKey, &processCachedCreds{
 			credentials: creds,
 		})

@@ -580,7 +580,9 @@ func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 	case 0:
 		// No default identities found.
 		if !isInteractive() {
-			return "", promptUnavailableBuilder(errUtils.ErrNoDefaultIdentity).Err()
+			return "", promptUnavailableBuilder(errUtils.ErrNoDefaultIdentity).
+				WithHint("Mark an identity as default with `default: true` in atmos.yaml").
+				Err()
 		}
 		// In interactive mode, prompt user to choose from all identities.
 		return m.promptForIdentity("No default identity configured. Please choose an identity:", m.ListIdentities())
@@ -611,7 +613,7 @@ func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 func promptUnavailableBuilder(sentinel error) *errUtils.ErrorBuilder {
 	return errUtils.Build(sentinel).
 		WithExplanation("An interactive identity prompt is needed, but this session cannot show one (it requires stdin and stderr to be terminals outside CI)").
-		WithHint("Pass `--identity=<name>`, or mark an identity as default with `default: true` in atmos.yaml").
+		WithHint("Pass `--identity=<name>` to choose an identity without a prompt").
 		WithHint("To authenticate interactively, run `atmos auth login --identity=<name>` in a terminal")
 }
 

@@ -374,3 +374,53 @@ func TestAuthenticateChain_StandaloneSingleElementChain_Unchanged(t *testing.T) 
 	assert.Same(t, rootCreds, got)
 	assert.Equal(t, int32(1), root.standaloneCalls.Load())
 }
+
+// TestAuthenticateChain_StandaloneSingleElementChain_BypassesProcessCache verifies credentials from a
+// direct standalone chain are never served from the process cache, because helper credentials without
+// an expiration would otherwise be reused and skip the helper for the whole process.
+func TestAuthenticateChain_StandaloneSingleElementChain_BypassesProcessCache(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+
+	root := &standaloneRootIdentity{creds: &testCreds{}, loadErr: errors.New("no credential files")}
+	m := &manager{
+		config: &schema.AuthConfig{
+			Identities: map[string]schema.Identity{"root": {Kind: "aws/credential-process"}},
+		},
+		providers:       map[string]types.Provider{},
+		identities:      map[string]types.Identity{"root": root},
+		credentialStore: &testStore{data: map[string]any{}},
+		chain:           []string{"root"},
+		realm:           realm.RealmInfo{Value: "test-realm"},
+	}
+
+	for range 2 {
+		_, err := m.authenticateChain(context.Background(), "root")
+		require.NoError(t, err)
+	}
+
+	assert.Equal(t, int32(2), root.standaloneCalls.Load(), "helper must run on every authentication")
+	_, cached := processCredentialCache.Load(m.chainCacheKey())
+	assert.False(t, cached, "direct standalone credentials must not be written to the process cache")
+}
+
+// TestAuthenticateChain_StandaloneRootMultiStepChain_StillUsesProcessCache is the negative path: the
+// process-cache bypass applies to direct standalone chains only, so a chain with a downstream step
+// keeps reusing its final credentials.
+func TestAuthenticateChain_StandaloneRootMultiStepChain_StillUsesProcessCache(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+
+	exp := time.Now().UTC().Add(time.Hour)
+	root := &standaloneRootIdentity{creds: &testCreds{exp: &exp}, loadErr: errors.New("no credential files")}
+	child := &recordingChildIdentity{creds: &testCreds{exp: &exp}}
+	m := newStandaloneRootChainManager(root, child, map[string]types.Provider{})
+
+	for range 2 {
+		_, err := m.authenticateChain(context.Background(), "child")
+		require.NoError(t, err)
+	}
+
+	assert.Equal(t, int32(1), child.calls.Load(), "second call must be served from the process cache")
+	assert.Equal(t, int32(1), root.standaloneCalls.Load())
+}

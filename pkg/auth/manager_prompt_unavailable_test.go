@@ -82,3 +82,23 @@ func TestGetDefaultIdentity_SingleDefaultNeedsNoPrompt(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "dev", name)
 }
+
+// TestGetDefaultIdentity_DefaultHintOnlyWhenNoDefaultExists verifies the `default: true` hint appears only
+// when no default identity is configured, not for forced selection or conflicting defaults.
+func TestGetDefaultIdentity_DefaultHintOnlyWhenNoDefaultExists(t *testing.T) {
+	disableInteractivePrompts(t)
+	const defaultHint = "Mark an identity as default"
+	hintsFor := func(identities map[string]schema.Identity, forceSelect bool) string {
+		m := &manager{config: &schema.AuthConfig{Identities: identities}}
+		_, err := m.GetDefaultIdentity(forceSelect)
+		require.Error(t, err)
+		return strings.Join(cockroachErrors.GetAllHints(err), "\n")
+	}
+
+	assert.Contains(t, hintsFor(map[string]schema.Identity{"dev": {Kind: "aws/user"}}, false), defaultHint)
+	assert.NotContains(t, hintsFor(map[string]schema.Identity{"dev": {Kind: "aws/user"}}, true), defaultHint)
+	assert.NotContains(t, hintsFor(map[string]schema.Identity{
+		"dev":  {Kind: "aws/user", Default: true},
+		"prod": {Kind: "aws/user", Default: true},
+	}, false), defaultHint)
+}
