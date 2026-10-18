@@ -1,18 +1,23 @@
 package utils
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"strings"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/admission"
 )
 
 func ProcessTagExec(
 	input string,
 ) (any, error) {
 	defer perf.Track(nil, "utils.ProcessTagExec")()
+	if err := admission.FunctionValue(context.Background(), "exec", input); err != nil {
+		return nil, err
+	}
 
 	log.Debug("Executing Atmos YAML function", "function", input)
 	str, err := getStringAfterTag(input, AtmosYamlFuncExec)

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
@@ -83,6 +84,52 @@ func TestPolicyHookFailuresBlock(t *testing.T) {
 	require.NoError(t, h.RunAll(AfterHelmApply, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, nil, nil))
 	delete(h.policyBundle.Hooks, "test/callback")
 	require.ErrorIs(t, h.RunAll(AfterHelmApply, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, nil, nil), errUtils.ErrPolicyRequirements)
+}
+
+func TestPolicyHookEvaluationFailureBlocksWithoutLeakingInput(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+	definition, err := json.Marshal(map[string]any{"kind": "step", "type": "http", "with": map[string]any{"url": server.URL}})
+	require.NoError(t, err)
+	run := func(h *Hooks) error {
+		return h.RunAll(AfterHelmApply, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, nil, nil)
+	}
+
+	broken := policyTestHooks(AfterHelmApply, definition)
+	broken.policyBundle.Rules[0].Expression = "input.missing.field == 'x'"
+	err = run(broken)
+	require.ErrorIs(t, err, errUtils.ErrPolicyEvaluation)
+	require.ErrorContains(t, err, "input details withheld")
+	require.NotContains(t, err.Error(), "missing.field", "evaluation errors must not echo expression or input details")
+	require.Zero(t, calls.Load(), "evaluation failure must block hook execution")
+
+	// A rule that evaluates cleanly never reports an evaluation failure.
+	healthy := policyTestHooks(AfterHelmApply, definition)
+	require.NoError(t, run(healthy))
+	require.EqualValues(t, 1, calls.Load(), "a healthy policy must execute its required hook")
+}
+
+func TestPolicyHookApprovalRequiresVerifyingProvider(t *testing.T) {
+	restore := ci.SwapRegistryForTest()
+	defer restore()
+	h := policyTestHooks(AfterHelmApply, json.RawMessage(`{"kind":"command","command":"true"}`))
+	spec := json.RawMessage(`{"reviewers":["alice"],"minimum":1}`)
+	h.policyBundle.Rules[0].Effects.Approvals = []policy.ApprovalRequirement{{ID: "platform", Provider: "github-actions", Spec: spec}}
+	run := func() error {
+		return h.RunAll(AfterHelmApply, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, nil, nil)
+	}
+
+	// Without a CI provider that can verify reviews, a pending approval fails closed.
+	err := run()
+	require.ErrorIs(t, err, errUtils.ErrPolicyInputUnavailable)
+
+	// A rule that does not match never needs a provider.
+	h.policyBundle.Rules[0].Expression = "false"
+	require.NoError(t, run())
 }
 
 func policyTestHooks(event HookEvent, definition json.RawMessage) *Hooks {
@@ -254,4 +301,27 @@ func TestPolicyHookAttachmentsRejectUnresolvedTemplatedMetadata(t *testing.T) {
 	h.sections["metadata"] = map[string]any{"labels": map[string]any{"stage": "prod"}}
 	require.ErrorIs(t, h.RunAll(BeforeTerraformPlan, &schema.AtmosConfiguration{}, info, nil, nil), errUtils.ErrPolicyDenied,
 		"a materialized label selects the instance")
+}
+
+func TestValidatePolicyBundleOffline(t *testing.T) {
+	for _, tc := range []struct {
+		name, definition string
+		invalid          bool
+	}{
+		{"missing executable is still valid offline", `{"kind":"command","command":"not-installed-policy-test-binary"}`, false},
+		{"missing command", `{"kind":"command"}`, true},
+		{"unknown kind", `{"kind":"unknown"}`, true},
+		{"HTTP without URL", `{"kind":"step","type":"http","with":{}}`, true},
+		{"steps without URL", `{"kind":"steps","with":[{"type":"http"}]}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			bundle := &policy.Bundle{Hooks: map[string]json.RawMessage{"test/hook": json.RawMessage(tc.definition)}}
+			err := ValidatePolicyBundle(bundle)
+			if tc.invalid {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }

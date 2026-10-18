@@ -30,6 +30,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -1256,6 +1257,8 @@ func loadConfigFile(path string, fileName string) (*viper.Viper, error) {
 		if canRetryWithResolvedDotenvMergeIncludes(err) {
 			if retryErr := readConfigWithResolvedDotenvMergeIncludes(tempViper, path, fileName); retryErr == nil {
 				return tempViper, nil
+			} else if guard.IsPolicyError(retryErr) {
+				return nil, retryErr
 			}
 		}
 		// Return sentinel error unwrapped for type checking
@@ -1393,6 +1396,9 @@ func loadDotenvIncludeAsYAMLNode(configFile, includeValue string) (*yaml.Node, e
 		includeFile = filepath.Join(filepath.Dir(configFile), includeFile)
 	}
 
+	if err := admitConfigInclude(configFile, includeFile); err != nil {
+		return nil, err
+	}
 	res, err := filetype.ParseFileByExtension(os.ReadFile, includeFile)
 	if err != nil {
 		return nil, err
@@ -2035,6 +2041,7 @@ func preprocessAtmosYamlFuncExceptCommands(content []byte, v *viper.Viper, sourc
 	if err := preprocessGitHookSteps(&root, v, sourceFile); err != nil {
 		return err
 	}
+	rememberConfigOrigins(&root, sourceFile)
 	return processNode(&root, v, "")
 }
 
@@ -2837,6 +2844,9 @@ func mergeDotenvIncludeCaseMap(configFile, path, includeValue string, mergedCase
 		includeFile = filepath.Join(filepath.Dir(configFile), includeFile)
 	}
 
+	if err := admitConfigInclude(configFile, includeFile); err != nil {
+		return
+	}
 	data, err := os.ReadFile(includeFile)
 	if err != nil {
 		log.Trace("Skipping dotenv include case map extraction for unreadable file", "file", includeFile, "error", err)

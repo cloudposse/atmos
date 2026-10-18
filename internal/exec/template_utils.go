@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"sync"
 	"text/template"
@@ -23,6 +24,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	atmostmpl "github.com/cloudposse/atmos/pkg/template"
 	"github.com/cloudposse/atmos/pkg/template/datasource"
@@ -81,6 +83,9 @@ type tmplInput struct {
 	// skipComponentDeferral keeps the manifest-load guard active but evaluates Component calls
 	// immediately so import paths, which have no later render pass, reject them.
 	skipComponentDeferral bool
+	// sourceFile is the manifest or file the template came from. Policy guards attribute the
+	// template's function calls to it; when empty, the template name is used.
+	sourceFile string
 }
 
 // manifestLoadOnlyContextKeys returns the top-level keys of the manifest-load template context that
@@ -117,8 +122,16 @@ func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendere
 		}
 	}()
 
-	// Add Gomplate, Sprig and Atmos template functions.
-	funcs := buildTemplateFuncMap(atmosConfig, in.manifestLoadFile)
+	// Add Gomplate, Sprig and Atmos template functions, attributed to the template's source file
+	// for policy guards.
+	sourceFile := in.sourceFile
+	if sourceFile == "" {
+		sourceFile = in.name
+	}
+	funcs, err := buildTemplateFuncMap(atmosConfig, in.manifestLoadFile, sourceFile)
+	if err != nil {
+		return "", err
+	}
 
 	t, err := template.New(in.name).Funcs(funcs).Parse(protectedSource)
 	if err != nil {
@@ -159,8 +172,9 @@ func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendere
 	return res.String(), nil
 }
 
-// buildTemplateFuncMap combines template functions with the appropriate manifest-load guard.
-func buildTemplateFuncMap(atmosConfig *schema.AtmosConfiguration, manifestLoadFile string) template.FuncMap {
+// buildTemplateFuncMap combines template functions with the appropriate manifest-load guard and
+// wraps them with policy admission for the file the template came from.
+func buildTemplateFuncMap(atmosConfig *schema.AtmosConfiguration, manifestLoadFile, sourceFile string) (template.FuncMap, error) {
 	d := data.Data{}
 	ctx := context.TODO()
 	tmplConfig := atmosConfig
@@ -173,7 +187,8 @@ func buildTemplateFuncMap(atmosConfig *schema.AtmosConfiguration, manifestLoadFi
 	} else {
 		atmosFuncMap = FuncMap(tmplConfig, &schema.ConfigAndStacksInfo{}, ctx, &d)
 	}
-	return lo.Assign(gomplate.CreateFuncs(ctx, &d), getSprigFuncMap(), atmosFuncMap)
+	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), getSprigFuncMap(), atmosFuncMap)
+	return policyTemplateFuncs(funcs, sourceFile, &d)
 }
 
 // convertRawEnvToStringMap converts a raw env value (any) to map[string]string.
@@ -455,7 +470,11 @@ func ProcessTmplWithDatasources(
 		funcs = lo.Assign(funcs, FuncMap(atmosConfig, configAndStacksInfo, context.TODO(), &d))
 
 		// Process the template
-		t := template.New(tmplName).Funcs(funcs)
+		guardedFuncs, err := policyTemplateFuncs(funcs, tmplName, &d)
+		if err != nil {
+			return "", err
+		}
+		t := template.New(tmplName).Funcs(guardedFuncs)
 
 		leftDelimiter, rightDelimiter, err := resolveTemplateDelimiters(effectiveDelimiters)
 		if err != nil {
@@ -625,5 +644,19 @@ func ProcessTmplWithDatasourcesGomplate(
 ) (string, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmplWithDatasourcesGomplate")()
 
-	return datasource.Render(atmosConfig, tmplName, tmplValue, mergedData, nil)
+	return datasource.RenderWith(atmosConfig, tmplName, tmplValue, mergedData, func(topLevel, config *url.URL) (template.FuncMap, error) {
+		policyData := &data.Data{Ctx: context.Background(), Sources: map[string]*data.Source{".": {URL: topLevel}, "config": {URL: config}}}
+		functionPolicies, err := guard.Enabled("function")
+		if err != nil {
+			return nil, err
+		}
+		sourcePolicies, err := guard.Enabled("source")
+		if err != nil {
+			return nil, err
+		}
+		if !functionPolicies && !sourcePolicies {
+			return nil, nil
+		}
+		return policyTemplateFuncs(gomplate.CreateFuncs(context.Background(), policyData), tmplName, policyData)
+	})
 }

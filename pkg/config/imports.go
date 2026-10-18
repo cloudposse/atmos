@@ -14,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -115,20 +116,23 @@ func processConfigImportsWithFSAndBasePathSource(source *schema.AtmosConfigurati
 
 	log.Debug("processConfigImports resolved paths", "count", len(resolvedPaths))
 
-	return mergeResolvedImports(resolvedPaths, dst, fs), nil
+	return mergeResolvedImports(resolvedPaths, dst, fs)
 }
 
 // mergeResolvedImports merges each resolved import file into dst and returns the
 // directory of the last imported file that declares a base_path (empty if none).
 // Files that fail to merge or re-read are skipped so a single bad import does not
 // abort the whole configuration load.
-func mergeResolvedImports(resolvedPaths []ResolvedPaths, dst *viper.Viper, fs filesystem.FileSystem) string {
+func mergeResolvedImports(resolvedPaths []ResolvedPaths, dst *viper.Viper, fs filesystem.FileSystem) (string, error) {
 	basePathSourceDir := ""
 	for _, resolvedPath := range resolvedPaths {
 		// Trace: log what we're about to merge (sanitized).
 		log.Trace("attempting to merge import", "import", SanitizeImport(resolvedPath.ImportPaths), keyFilePath, resolvedPath.FilePath)
 		err := mergeConfigFile(resolvedPath.FilePath, dst)
 		if err != nil {
+			if isPolicyError(err) {
+				return "", err
+			}
 			log.Warn("error loading config file", "import", SanitizeImport(resolvedPath.ImportPaths), keyFilePath, resolvedPath.FilePath, "error", err)
 			continue
 		}
@@ -143,7 +147,7 @@ func mergeResolvedImports(resolvedPaths []ResolvedPaths, dst *viper.Viper, fs fi
 			basePathSourceDir = filepath.Dir(resolvedPath.FilePath)
 		}
 	}
-	return basePathSourceDir
+	return basePathSourceDir, nil
 }
 
 // ProcessImportsFromAdapter is the public entry point for adapters to process nested imports.
@@ -185,9 +189,17 @@ func processImports(atmosConfig *schema.AtmosConfiguration, basePath string, imp
 
 		// Use the adapter registry to find the appropriate adapter.
 		adapter := FindImportAdapter(importPath)
+		if len(adapter.Schemes()) > 0 {
+			if gateErr := guard.Source(ctx, "import", importPath, basePath); gateErr != nil {
+				return nil, gateErr
+			}
+		}
 		paths, resolveErr = adapter.Resolve(ctx, importPath, basePath, tempDir, currentDepth, maxDepth, atmosConfig)
 
 		if resolveErr != nil {
+			if guard.IsPolicyError(resolveErr) {
+				return nil, resolveErr
+			}
 			log.Warn("failed to resolve import", "path", SanitizeImport(importPath), "error", resolveErr)
 			continue
 		}
@@ -357,3 +369,5 @@ func findMatchingFiles(patterns []string) ([]string, error) {
 
 	return filePaths, nil
 }
+
+func isPolicyError(err error) bool { return guard.IsPolicyError(err) }

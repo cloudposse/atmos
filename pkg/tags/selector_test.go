@@ -6,10 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	errUtils "github.com/cloudposse/atmos/errors"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // TestTemplateDelims covers the effective-delimiter fallback: a well-formed

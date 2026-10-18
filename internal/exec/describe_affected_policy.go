@@ -15,18 +15,15 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/policy"
+	"github.com/cloudposse/atmos/pkg/policy/admission"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // Affected policies run once for the whole comparison, before any display or
 // scheduler filtering. No lifecycle hooks are dispatched by this gate.
 func enforceAffectedPolicies(config *schema.AtmosConfiguration, local, remote *git.Repository, localPath, remotePath string) error {
-	directory, err := policy.DirectoryFromEnvironment()
-	if err != nil || directory == "" {
-		return err
-	}
-	bundle, err := policy.LoadDirectory(directory)
-	if err != nil {
+	bundle, err := admission.LoadBundle()
+	if err != nil || bundle == nil {
 		return err
 	}
 	rules := bundle.RulesFor(policy.AtmosAffected)
@@ -50,6 +47,10 @@ func evaluateAffectedPolicies(request *policy.Request, rules []policy.Rule) erro
 	if err != nil {
 		// Never print inventory values, which may include sensitive configuration.
 		return fmt.Errorf("%w: affected evaluation failed (input details withheld)", errUtils.ErrPolicyEvaluation)
+	}
+	decision, err = ci.ResolvePolicyApprovals(context.Background(), request, decision)
+	if err != nil {
+		return err
 	}
 	return policy.EnforceDecision(decision)
 }

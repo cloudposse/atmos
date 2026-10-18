@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/spf13/cobra"
@@ -159,6 +160,7 @@ func RegisterAll(root *cobra.Command) error {
 			// - FParseErrWhitelist: Allows the same flag parsing behavior
 			// - ValidArgsFunction: Provides the same shell completion
 			aliasCmd := &cobra.Command{
+				Annotations:        map[string]string{"policy-command": strings.TrimPrefix(sourceCmd.CommandPath(), root.Name()+" ")},
 				Use:                alias.Name,
 				Short:              alias.Short,
 				Long:               alias.Long,

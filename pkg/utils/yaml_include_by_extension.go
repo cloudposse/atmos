@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	neturl "net/url"
@@ -16,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/function/parser"
 	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -110,6 +112,9 @@ func processIncludeTagInternal(
 
 	// Process the file
 	if localFile != "" {
+		if err := guard.Source(context.Background(), "include", localFile, file); err != nil {
+			return false, err
+		}
 		if isYAMLInclude(localFile, forceRaw) {
 			data, err := os.ReadFile(localFile)
 			if err != nil {
@@ -119,6 +124,7 @@ func processIncludeTagInternal(
 			if err := spliceYAMLText(atmosConfig, node, string(data), includeSplice{query: includeQuery, eval: evalFunctions, val: val, file: file}); err != nil {
 				return false, err
 			}
+			guard.RememberNode(node, includeOrigin(localFile, includeFile, file))
 			if evalFunctions && mode.walkIn != nil {
 				// Resolve tags nested in the included file relative to that file.
 				return true, mode.walkIn(node, localFile)
@@ -131,6 +137,9 @@ func processIncludeTagInternal(
 			return false, err
 		}
 	} else if shouldFetchRemote(includeFile) {
+		if err := guard.Source(context.Background(), "include", includeFile, file); err != nil {
+			return false, err
+		}
 		if isYAMLInclude(includeFile, forceRaw) {
 			raw, err := processRemoteFile(atmosConfig, includeFile, true)
 			if err != nil {
@@ -151,6 +160,7 @@ func processIncludeTagInternal(
 			if err := spliceYAMLText(atmosConfig, node, text, includeSplice{query: includeQuery, eval: evalFunctions, val: val, file: file}); err != nil {
 				return false, err
 			}
+			guard.RememberNode(node, includeOrigin(localFile, includeFile, file))
 			if evalFunctions && mode.walkIn != nil {
 				return true, mode.walkIn(node, file)
 			}
@@ -180,8 +190,22 @@ func processIncludeTagInternal(
 		}
 	}
 
+	guard.RememberTree(res, includeOrigin(localFile, includeFile, file))
 	// Update the YAML node with the result
 	return false, updateYamlNode(node, res, val, file)
+}
+
+// includeOrigin attributes included content to its source: the local file when one was found,
+// otherwise the remote include target, and always the parent manifest when that is remote.
+func includeOrigin(localFile, includeFile, parentFile string) guard.Origin {
+	origin := guard.FileOrigin(localFile)
+	if localFile == "" {
+		origin = guard.FileOrigin(includeFile)
+	}
+	if parent := guard.FileOrigin(parentFile); parent.Provenance == "remote" {
+		origin = parent
+	}
+	return origin
 }
 
 // includeSplice carries the per-include inputs spliceYAMLText needs: the yq
