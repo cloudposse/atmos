@@ -10,6 +10,7 @@ import (
 	yaml "gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -177,4 +178,52 @@ func TestHandleAppendTag_NestedInvalidTagPropagatesError(t *testing.T) {
 func writeIncludeFixtureUtils(t *testing.T, dir, name, content string) {
 	t.Helper()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
+}
+
+// Resolving a file's origin stats every path component and takes the guard lock, so a walk must
+// do it once per file rather than once per scalar node.
+func TestTagContextFileOriginIsResolvedOncePerFile(t *testing.T) {
+	guard.ResetOrigins()
+	t.Cleanup(guard.ResetOrigins)
+	dir := t.TempDir()
+	file := filepath.Join(dir, "stack.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("a: b\n"), 0o600))
+	ctx := TagContext{File: file, origin: &tagOrigin{}}
+
+	require.Equal(t, "local", ctx.fileOrigin().Provenance)
+	guard.RegisterRemote(dir, "https://example.com/stacks")
+	require.Equal(t, "local", ctx.fileOrigin().Provenance, "the memoized origin is reused for the whole walk")
+	require.Equal(t, "remote", TagContext{File: file}.fileOrigin().Provenance, "a context without a memo resolves the file fresh")
+}
+
+func TestWalkYAMLTagsRemembersScalarOriginsPerFile(t *testing.T) {
+	policy := TagWalkPolicy{Defer: true}
+	walk := func(t *testing.T, file string) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(file, []byte("a: b\n"), 0o600)) // An origin is only known for an existing file.
+		var doc yaml.Node
+		require.NoError(t, yaml.Unmarshal([]byte("one: origin-probe-one\nlist:\n  - origin-probe-two\n  - nested: origin-probe-three\n"), &doc))
+		require.NoError(t, WalkYAMLTags(&schema.AtmosConfiguration{}, &doc, file, policy))
+	}
+	values := []string{"origin-probe-one", "origin-probe-two", "origin-probe-three"}
+
+	t.Run("local file", func(t *testing.T) {
+		guard.ResetOrigins()
+		t.Cleanup(guard.ResetOrigins)
+		walk(t, filepath.Join(t.TempDir(), "stack.yaml"))
+		for _, value := range values {
+			require.Equal(t, "local", guard.ValueOrigin(value).Provenance, value)
+		}
+	})
+
+	t.Run("file under a remote root", func(t *testing.T) {
+		guard.ResetOrigins()
+		t.Cleanup(guard.ResetOrigins)
+		dir := t.TempDir()
+		guard.RegisterRemote(dir, "https://example.com/stacks")
+		walk(t, filepath.Join(dir, "stack.yaml"))
+		for _, value := range values {
+			require.Equal(t, "remote", guard.ValueOrigin(value).Provenance, value)
+		}
+	})
 }

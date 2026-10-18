@@ -3,6 +3,8 @@ package exec
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -247,4 +249,60 @@ func TestAtmosFuncsResolveRemembersRemoteProvenance(t *testing.T) {
 	assert.Equal(t, remoteInput, resolved)
 	assert.Equal(t, "remote", guard.ValueOrigin(remoteInput).Provenance)
 	assert.Equal(t, "unknown", guard.ValueOrigin("never-resolved-value").Provenance)
+}
+
+// Without a source rule nothing guards the read, so repeated template calls must keep using the
+// per-alias cache instead of fetching the datasource again. With a source rule every call is checked.
+func TestAtmosFuncsGomplateDatasourceCaching(t *testing.T) {
+	var hits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"n":1}`))
+	}))
+	t.Cleanup(server.Close)
+	funcs := func(t *testing.T, alias string) AtmosFuncs {
+		t.Helper()
+		t.Cleanup(func() { gomplateDatasourceFuncSyncMap.Delete(alias) })
+		d, err := data.NewData([]string{alias + "=" + server.URL + "/data.json"}, nil)
+		require.NoError(t, err)
+		return AtmosFuncs{atmosConfig: &schema.AtmosConfiguration{}, ctx: context.Background(), gomplateData: d, sourceFile: "stack.yaml"}
+	}
+
+	t.Run("no source rule reuses the alias cache", func(t *testing.T) {
+		templatePolicy(t, "function", "false", nil)
+		hits.Store(0)
+
+		// Each template render builds its own datasource set, so only the shared alias cache can avoid a refetch.
+		first, err := funcs(t, "cached-alias").GomplateDatasource("cached-alias")
+		require.NoError(t, err)
+		second, err := funcs(t, "cached-alias").GomplateDatasource("cached-alias")
+		require.NoError(t, err)
+
+		require.Equal(t, first, second)
+		require.EqualValues(t, 1, hits.Load(), "the second render is served from the cache")
+	})
+
+	t.Run("a source rule checks and reads every call", func(t *testing.T) {
+		templatePolicy(t, "source", "false", nil)
+		hits.Store(0)
+
+		for range 2 {
+			result, err := funcs(t, "guarded-alias").GomplateDatasource("guarded-alias")
+			require.NoError(t, err)
+			require.Equal(t, map[string]any{"n": 1}, result)
+		}
+
+		require.EqualValues(t, 2, hits.Load(), "guarded reads are not cached across renders")
+	})
+
+	t.Run("a rule lookup failure is returned", func(t *testing.T) {
+		templatePolicyInvalid(t)
+		f := funcs(t, "invalid-alias")
+
+		result, err := f.GomplateDatasource("invalid-alias")
+
+		require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+		require.Nil(t, result)
+	})
 }

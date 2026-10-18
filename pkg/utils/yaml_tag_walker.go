@@ -34,6 +34,9 @@ import (
 type TagContext struct {
 	AtmosConfig *schema.AtmosConfiguration
 	File        string
+	// origin memoizes File's origin for the walk: resolving it stats every path component and
+	// takes the guard lock, so it must not run once per scalar node.
+	origin      *tagOrigin
 	parent      *yaml.Node
 	dataSection bool
 	// Walk recurses into node's own children under the SAME policy this
@@ -78,7 +81,22 @@ type TagWalkPolicy struct {
 // valid tag with no handler). An invalid tag (one fntag.IsValidYAML
 // rejects) is always a hard error, regardless of policy.
 func WalkYAMLTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string, policy TagWalkPolicy) error {
-	return walkYAMLTags(TagContext{AtmosConfig: atmosConfig, File: file}, node, policy)
+	return walkYAMLTags(TagContext{AtmosConfig: atmosConfig, File: file, origin: &tagOrigin{}}, node, policy)
+}
+
+// tagOrigin resolves a walked file's origin at most once.
+type tagOrigin struct {
+	once   sync.Once
+	origin guard.Origin
+}
+
+// fileOrigin returns the origin of the file being walked, resolving it once per walk.
+func (c TagContext) fileOrigin() guard.Origin {
+	if c.origin == nil {
+		return guard.FileOrigin(c.File)
+	}
+	c.origin.once.Do(func() { c.origin.origin = guard.FileOrigin(c.File) })
+	return c.origin.origin
 }
 
 func walkYAMLTags(ctx TagContext, node *yaml.Node, policy TagWalkPolicy) error {
@@ -92,6 +110,7 @@ func walkYAMLTags(ctx TagContext, node *yaml.Node, policy TagWalkPolicy) error {
 	ctx.WalkIn = func(n *yaml.Node, inFile string) error {
 		included := ctx
 		included.File = inFile
+		included.origin = &tagOrigin{}
 		return walkYAMLTags(included, n, policy)
 	}
 
@@ -127,6 +146,7 @@ func childTagContext(ctx TagContext, parent *yaml.Node, index int, policy TagWal
 	child.WalkIn = func(value *yaml.Node, file string) error {
 		included := child
 		included.File = file
+		included.origin = &tagOrigin{}
 		return walkYAMLTags(included, value, policy)
 	}
 	return child
@@ -137,7 +157,7 @@ func childTagContext(ctx TagContext, parent *yaml.Node, index int, policy TagWal
 // children afterward (see TagHandler's doc comment for skipChildren).
 func dispatchTag(ctx TagContext, n *yaml.Node, policy TagWalkPolicy, file string) (bool, error) {
 	if n.Kind == yaml.ScalarNode {
-		guard.RememberValue(n.Value, guard.FileOrigin(file))
+		guard.RememberValue(n.Value, ctx.fileOrigin())
 	}
 	tag := strings.TrimSpace(n.Tag)
 	if tag == "" || strings.HasPrefix(tag, "!!") {
@@ -184,7 +204,7 @@ func dispatchTag(ctx TagContext, n *yaml.Node, policy TagWalkPolicy, file string
 	}
 	if policy.Defer {
 		n.Value = getValueWithTag(n)
-		guard.RememberValue(n.Value, guard.FileOrigin(file))
+		guard.RememberValue(n.Value, ctx.fileOrigin())
 		n.Tag = ""
 		return false, nil
 	}

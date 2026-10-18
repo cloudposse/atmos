@@ -111,6 +111,14 @@ func (f AtmosFuncs) GomplateDatasource(alias string, args ...string) (any, error
 	if err := guard.Function(f.ctx, "atmos.GomplateDatasource", policyTemplateEngine, guard.FileOrigin(f.sourceFile)); err != nil {
 		return nil, err
 	}
+	sourceRules, err := guard.Enabled("source")
+	if err != nil {
+		return nil, err
+	}
+	if !sourceRules {
+		// Nothing guards the read, so keep the per-alias cache that avoids fetching a datasource again.
+		return gomplateDatasourceFunc(alias, f.gomplateData, args...)
+	}
 	return policyDatasource(f.gomplateData, f.sourceFile, alias, false, args...)
 }
 
