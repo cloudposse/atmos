@@ -37,7 +37,7 @@ type Verification struct {
 
 // Verifier proves that a rewritten source selects the same files as the original at one ref.
 type Verifier interface {
-	Verify(ctx context.Context, result Result, ref string) Verification
+	Verify(ctx context.Context, result *Result, ref string) Verification
 }
 
 // TreeResolver reads the Git tree SHA of a directory at a ref.
@@ -71,7 +71,7 @@ func NewTreeVerifier(trees TreeResolver) *TreeVerifier {
 }
 
 // Verify compares modules/<module> in the monorepo with src in the successor repository at ref.
-func (v *TreeVerifier) Verify(ctx context.Context, result Result, ref string) Verification {
+func (v *TreeVerifier) Verify(ctx context.Context, result *Result, ref string) Verification {
 	defer perf.Track(nil, "monorepo.TreeVerifier.Verify")()
 
 	ctx, cancel := context.WithTimeout(ctx, verifyTimeout)

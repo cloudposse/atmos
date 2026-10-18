@@ -13,8 +13,6 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
-
-	"github.com/cloudposse/atmos/pkg/validation"
 )
 
 const (
@@ -305,12 +303,7 @@ func (e *Engine) readDocument(p *project, o *Options, r *Report, path, kind stri
 	rel := relative(p.root, path)
 	content, err := e.FS.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			p.limitKind(kind, "", 0, "Local source does not exist: "+rel)
-			addFinding(o, r, &Finding{RuleID: ruleImports, Category: categoryValidation, Severity: validation.SeverityError, File: rel, Message: "Local source does not exist", Status: statusManual})
-			return nil, nil
-		}
-		return nil, err
+		return nil, p.missingSource(o, r, kind, rel, err)
 	}
 	info, err := e.FS.Stat(path)
 	if err != nil {
@@ -326,12 +319,7 @@ func (e *Engine) readDocument(p *project, o *Options, r *Report, path, kind stri
 	}
 	d.node, err = parse(content)
 	if err != nil {
-		if kind == documentConfig && p.unparsedConfig == "" {
-			p.unparsedConfig = path
-		}
-		p.limitKind(kind, path, 0, "Configuration could not be parsed")
-		addFinding(o, r, parseFinding(rel, err))
-		d.node = nil
+		p.recordParseFailure(o, r, d, rel, err)
 	}
 	d.sites = dynamicSites(d.node, p.templateMarkers(d))
 	if len(d.sites) > 0 {

@@ -215,7 +215,7 @@ func (e *Engine) verifyMonorepo(ctx context.Context, run *monorepoRun, result *m
 	v := monorepo.Verification{Verdict: monorepo.VerdictUnverified, Reason: monorepoOfflineNote}
 	if !run.o.Offline {
 		e.emit(Event{Phase: "Check", Label: "Component repository " + result.Slug()})
-		v = e.Monorepo.Verify(ctx, *result, ref)
+		v = e.Monorepo.Verify(ctx, result, ref)
 		e.emit(Event{Phase: "Check", Label: "Component repository " + result.Slug(), Done: true, Status: verdictStatus(v.Verdict)})
 	}
 	run.verified[key] = v

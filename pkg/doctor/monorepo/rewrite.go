@@ -15,6 +15,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+// wrappedValueFormat wraps a sentinel error with the value it applies to.
+const wrappedValueFormat = "%w: %s"
+
 const (
 	// LegacyOwner and LegacyRepository identify the archived monorepo.
 	LegacyOwner      = "cloudposse"
@@ -107,7 +110,7 @@ type Result struct {
 }
 
 // Slug returns the successor as owner/repository.
-func (r Result) Slug() string {
+func (r *Result) Slug() string {
 	defer perf.Track(nil, "monorepo.Result.Slug")()
 
 	return SuccessorOwner + "/" + r.Repository
@@ -128,23 +131,13 @@ func Mentions(value string) bool {
 func Parse(source string) (Reference, bool) {
 	defer perf.Track(nil, "monorepo.Parse")()
 
-	rest := source
-	prefix := ""
-	for _, scheme := range []string{"git::", "https://"} {
-		if len(rest) >= len(scheme) && strings.EqualFold(rest[:len(scheme)], scheme) {
-			prefix += rest[:len(scheme)]
-			rest = rest[len(scheme):]
-		}
-	}
-	if len(rest) < len(legacyLocation) || !strings.EqualFold(rest[:len(legacyLocation)], legacyLocation) {
+	prefix, rest := stripSchemes(source)
+	location, rest, ok := cutPrefixFold(rest, legacyLocation)
+	if !ok {
 		return Reference{}, false
 	}
-	ref := Reference{prefix: prefix, host: rest[:len(host)]}
-	rest = rest[len(legacyLocation):]
-	if len(rest) >= len(gitSuffix) && strings.EqualFold(rest[:len(gitSuffix)], gitSuffix) {
-		ref.dotGit = rest[:len(gitSuffix)]
-		rest = rest[len(gitSuffix):]
-	}
+	ref := Reference{prefix: prefix, host: location[:len(host)]}
+	ref.dotGit, rest, _ = cutPrefixFold(rest, gitSuffix)
 	rest, ref.query, _ = strings.Cut(rest, "?")
 	switch {
 	case rest == "":
@@ -158,6 +151,27 @@ func Parse(source string) (Reference, bool) {
 		ref.splitQuerySubdir()
 	}
 	return ref, true
+}
+
+// stripSchemes removes the optional git:: forcing prefix and https:// scheme, matched without regard
+// to case, and returns them as written along with the rest of the source.
+func stripSchemes(source string) (prefix, rest string) {
+	rest = source
+	for _, scheme := range []string{"git::", "https://"} {
+		var matched string
+		matched, rest, _ = cutPrefixFold(rest, scheme)
+		prefix += matched
+	}
+	return prefix, rest
+}
+
+// cutPrefixFold reports whether s starts with prefix without regard to case, and returns the prefix
+// as written in s and the remainder. When it does not, matched is empty and rest is s.
+func cutPrefixFold(s, prefix string) (matched, rest string, ok bool) {
+	if len(s) < len(prefix) || !strings.EqualFold(s[:len(prefix)], prefix) {
+		return "", s, false
+	}
+	return s[:len(prefix)], s[len(prefix):], true
 }
 
 // splitQuerySubdir separates a subdirectory misplaced after the ref value, as in
@@ -244,11 +258,11 @@ func (r *Reference) Rewrite() (Result, error) {
 
 	switch {
 	case r.querySubdir != "":
-		return Result{}, fmt.Errorf("%w: %s", ErrSubdirInQuery, r.querySubdir)
+		return Result{}, fmt.Errorf(wrappedValueFormat, ErrSubdirInQuery, r.querySubdir)
 	case r.Module == "":
 		return Result{}, ErrNoModule
 	case strings.Contains(r.Module, templateOpen):
-		return Result{}, fmt.Errorf("%w: %s", ErrTemplatedModule, r.Module)
+		return Result{}, fmt.Errorf(wrappedValueFormat, ErrTemplatedModule, r.Module)
 	}
 	module, subpath := r.Module, ""
 	repository, ok := Repository(module)
@@ -260,9 +274,9 @@ func (r *Reference) Rewrite() (Result, error) {
 	}
 	if !ok {
 		if len(Successors(r.Module)) > 0 {
-			return Result{}, fmt.Errorf("%w: %s", ErrSplitComponent, r.Module)
+			return Result{}, fmt.Errorf(wrappedValueFormat, ErrSplitComponent, r.Module)
 		}
-		return Result{}, fmt.Errorf("%w: %s", ErrNoSuccessor, r.Module)
+		return Result{}, fmt.Errorf(wrappedValueFormat, ErrNoSuccessor, r.Module)
 	}
 	source := r.prefix + r.host + "/" + SuccessorOwner + "/" + repository + r.dotGit + subdirMarker + SuccessorPath
 	if subpath != "" {

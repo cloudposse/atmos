@@ -23,9 +23,9 @@ func recordingMonorepo(t *testing.T, answer monorepoAnswer) (*monorepo.MockVerif
 	var asked []string
 	verifier := monorepo.NewMockVerifier(gomock.NewController(t))
 	verifier.EXPECT().Verify(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, result monorepo.Result, ref string) monorepo.Verification {
+		func(_ context.Context, result *monorepo.Result, ref string) monorepo.Verification {
 			asked = append(asked, result.Module+"@"+ref)
-			return answer(result, ref)
+			return answer(*result, ref)
 		},
 	).AnyTimes()
 	return verifier, &asked
