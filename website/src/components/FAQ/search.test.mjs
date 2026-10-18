@@ -73,12 +73,15 @@ test('FAQ Markdown export retains every category, question, answer, code example
   const questions = Array.from(source.matchAll(/question="([^"]+)"/g), (match) => match[1]);
   const categories = Array.from(source.matchAll(/<FAQSection[^>]*title="([^"]+)"/g), (match) => match[1]);
   assert.ok(questions.length > 0);
-  assert.equal(categories.length, 5);
+  assert.equal(categories.length, 6);
   for (const question of questions) assert.ok(markdown.includes(`### ${question}`), question);
   for (const category of categories) assert.ok(markdown.includes(`## ${category}`), category);
   assert.match(markdown, /You can use your existing Terraform with Atmos today/);
   assert.match(markdown, /atmos ai skill install atmos-migration/);
   assert.match(markdown, /command: tofu/);
+  assert.match(markdown, /!aws\.cloudformation\.output/);
+  assert.match(markdown, /atmos terraform apply --all -s dev/);
+  assert.match(markdown, /atmos terraform destroy --affected/);
   assert.match(markdown, /\/migration\/native-terraform/);
   assert.match(markdown, /\/ai\/skills/);
   assert.doesNotMatch(markdown, /<FAQ/);
