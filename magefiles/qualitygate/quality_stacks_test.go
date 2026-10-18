@@ -159,3 +159,62 @@ func TestQualityUnavailableEvidenceAfterBaseChange(t *testing.T) {
 		})
 	}
 }
+
+// TestQualityUnavailableEvidenceRevisionRace reevaluates changes observed while evidence is being collected.
+func TestQualityUnavailableEvidenceRevisionRace(t *testing.T) {
+	for _, scenario := range []string{"base advanced", "retargeted", "head advanced", "draft changed", "merge changed", "closed", "newer report"} {
+		t.Run(scenario, func(t *testing.T) {
+			state := &stateFixture{labels: []string{qualityReady}, reviewsFail: true}
+			previous := state.pr()
+			current := previous
+			switch scenario {
+			case "base advanced", "newer report":
+				current.Base.SHA = githubtest.SHA
+			case "retargeted":
+				current.Base.Ref = "feature/prerequisite"
+			case "head advanced":
+				current.Head.SHA = githubtest.Base
+			case "draft changed":
+				current.Draft = true
+			case "merge changed":
+				current.MergeSHA = githubtest.Base
+			case "closed":
+				current.State = "closed"
+			}
+			state.comment, _ = qualityMarkdown(&previous, nil, "Performance measurements pending for this commit.")
+			q := state.client(t)
+			api := q.api.(*qualityGraphAPI)
+			get := api.Get
+			reads := 0
+			api.Get = func(path string, response any) error {
+				if strings.HasSuffix(path, "/pulls/42") {
+					reads++
+					if reads == 1 {
+						return githubtest.Respond(previous, response)
+					}
+					return githubtest.Respond(current, response)
+				}
+				if scenario == "newer report" && reads > 1 && strings.Contains(path, "/comments?") {
+					state.comment, _ = qualityMarkdown(&current, nil, "Performance measurements pending for this commit.")
+				}
+				return get(path, response)
+			}
+			err := q.refresh(previous.Number, "", nil)
+			if scenario == "newer report" {
+				require.ErrorContains(t, err, "evidence unavailable")
+				require.Empty(t, state.writes)
+				return
+			}
+			require.NoError(t, err)
+			if scenario == "closed" {
+				require.Empty(t, state.writes)
+				return
+			}
+			require.Contains(t, state.writes, "DELETE repos/"+githubtest.Repo+"/issues/42/labels/"+qualityReady)
+			require.Len(t, state.comments, 1)
+			require.Contains(t, state.comments[0], "Quality Gate not ready")
+			require.Contains(t, state.comments[0], qualityHeadMarker(current.Head.SHA))
+			require.Contains(t, state.comments[0], qualityBaseMarker(&current))
+		})
+	}
+}

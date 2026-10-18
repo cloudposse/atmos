@@ -78,20 +78,18 @@ func qualityBaseMarker(pr *githubapi.PR) string {
 
 // refresh evaluates and publishes current PR evidence while rejecting stale or superseded snapshots.
 func (q *qualityClient) refresh(number int, performance string, run *githubapi.Run) error {
-	var pr githubapi.PR
-	if err := q.get(fmt.Sprintf("pulls/%d", number), &pr); err != nil {
-		return err
-	}
-	if !qualityEligible(&pr, q.repo) {
-		return nil
-	}
-	if run != nil && !bench.PRMatches(&pr, run, q.repo) {
-		return nil
-	}
 	// Scheduled and event reporters for one PR can run concurrently. Publish only
 	// when the comment is unchanged since rendering; otherwise re-render from the
 	// other writer's result so a stale snapshot never overwrites a fresher one.
+	var stalePublished *githubapi.Comment
 	for range qualityPublishAttempts {
+		var pr githubapi.PR
+		if err := q.get(fmt.Sprintf("pulls/%d", number), &pr); err != nil {
+			return err
+		}
+		if !qualityEligible(&pr, q.repo) || (run != nil && !bench.PRMatches(&pr, run, q.repo)) {
+			return nil
+		}
 		existing, err := q.existing(number)
 		if err != nil {
 			return err
@@ -100,15 +98,24 @@ func (q *qualityClient) refresh(number int, performance string, run *githubapi.R
 			return nil
 		}
 		body, ready, unavailable := q.render(&pr, existing, performance, run)
-		if len(unavailable) > 0 && qualityPublishedRevision(existing, &pr) {
+		valid, err := q.stillCurrent(&pr, run)
+		if err != nil {
+			return err
+		}
+		if len(unavailable) > 0 && qualityPublishedRevision(existing, &pr) && !qualitySameComment(existing, stalePublished) {
+			if !valid {
+				// Re-evaluate the new revision instead of retaining stale readiness,
+				// including draft or merge changes that keep the same head and base.
+				stalePublished = existing
+				continue
+			}
 			// Missing evidence is not a verdict. Replacing a report for this head and base
 			// would flip its label and comment on every transient API failure; keep the
 			// last published state and let the failure surface for a retry.
 			return bench.Error("evidence unavailable for %s; kept the published report for %s", strings.Join(unavailable, ", "), pr.Head.SHA)
 		}
-		valid, err := q.stillCurrent(&pr, run)
-		if err != nil || !valid {
-			return err
+		if !valid {
+			return nil
 		}
 		latest, err := q.existing(number)
 		if err != nil {
