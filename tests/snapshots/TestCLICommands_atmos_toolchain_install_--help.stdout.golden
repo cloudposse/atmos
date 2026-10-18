@@ -1,8 +1,6 @@
 
 👽 test linux/amd64
 
-[EXPERIMENTAL]
-
 Install one or more CLI binaries using metadata from the registry.
 
 The tool(s) should be specified in the format: owner/repo@version
