@@ -40,10 +40,7 @@ func DescribeSource(operation, raw, sourceFile string) (SourceInput, error) {
 	if err != nil {
 		return input, fmt.Errorf("%w: invalid source URI (details withheld)", errUtils.ErrPolicyInputInvalid)
 	}
-	// A scheme-like prefix names a remote only when the reader treats it as one. Otherwise, as in
-	// x:/etc/passwd, the reader sees a local path, and the source must be described as that path.
-	isFileURL := strings.HasPrefix(strings.ToLower(transport), "file:")
-	if parsed.Scheme != "" && (isRemote(raw) || isFileURL) && (len(parsed.Scheme) != 1 || !filepath.IsAbs(transport)) {
+	if hasTransportScheme(raw, transport, parsed) {
 		input.Scheme = strings.ToLower(parsed.Scheme)
 		input.Host = strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
 		input.Remote = input.Scheme != "file"
@@ -68,6 +65,21 @@ func DescribeSource(operation, raw, sourceFile string) (SourceInput, error) {
 		input.PathResolved = true
 	}
 	return input, nil
+}
+
+// hasTransportScheme reports whether the reader treats the source as a URL rather than a local path.
+// A scheme-like prefix names a remote only when the reader treats it as one. Otherwise, as in
+// x:/etc/passwd, the reader sees a local path, and the source must be described as that path. An
+// explicit file: URL keeps its handling, and a Windows drive path is never a scheme.
+func hasTransportScheme(raw, transport string, parsed *url.URL) bool {
+	if parsed.Scheme == "" {
+		return false
+	}
+	isFileURL := strings.HasPrefix(strings.ToLower(transport), "file:")
+	if !isRemote(raw) && !isFileURL {
+		return false
+	}
+	return len(parsed.Scheme) != 1 || !filepath.IsAbs(transport)
 }
 
 // fileURLTransport returns the local path a file URL names. A file URL with an opaque part or no

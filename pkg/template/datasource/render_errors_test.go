@@ -101,7 +101,7 @@ func TestDatasourceFileErrors(t *testing.T) {
 
 // TestRenderWithBuildsFunctionsFromDatasourceURLs gives the builder the render's own datasource files.
 func TestRenderWithBuildsFunctionsFromDatasourceURLs(t *testing.T) {
-	t.Parallel()
+	// Not parallel: gomplate keeps a package-level cleanup hook that concurrent renderers race on.
 	data := map[string]any{"name": "example"}
 
 	var topLevel, config *url.URL
