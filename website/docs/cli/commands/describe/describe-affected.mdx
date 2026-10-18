@@ -1500,16 +1500,22 @@ steps:
     run: atmos describe affected
 ```
 
-For a GitHub Actions job matrix, select the matrix output format:
+For changes that do not remove component definitions, select the matrix output format to build a GitHub Actions job matrix:
 
 ```yaml
 - id: affected
   run: atmos describe affected --format=matrix
 ```
 
-Atmos writes `matrix` and `count` to `$GITHUB_OUTPUT` automatically when CI integration is enabled. See [Deploy Affected Components](/integrations/github-actions/deploy-affected) for the complete native CI workflow, including empty selections and deployment jobs. Matrix output is scheduling metadata; it is not a deletion-aware teardown plan.
+Atmos writes `matrix` and `count` to `$GITHUB_OUTPUT` automatically when CI integration is enabled. See [Deploy Affected Components](/integrations/github-actions/deploy-affected) for the native CI workflow once you have verified that the selection contains no deleted components.
 
-For deletion review, use the built-in queries above. Keep deleted components separate from plan/apply jobs: a deleted definition cannot be executed from the current configuration, and `terraform destroy --affected` filters it out. Detection does not destroy infrastructure.
+:::warning Matrix output currently includes deleted components
+Matrix conversion includes deleted entries but does not retain their `deleted` marker. Feeding these rows directly to plan, apply, or deploy jobs can therefore attempt to execute definitions that are absent from the checkout. The Terraform `--affected` filter does not protect a job that invokes an explicitly named component without that flag.
+
+Review the default JSON output or use the built-in deletion queries above before choosing a deployment matrix. `--query` does not filter `--format=matrix` output. If the change includes deletions, keep them separate from deployment jobs; the matrix example above does not perform that separation or provide a teardown plan.
+:::
+
+Removing configuration does not destroy infrastructure, and `terraform destroy --affected` filters out deleted definitions. Teardown needs their previous configuration as described below.
 
 :::warning Recover and verify configuration before teardown
 Retain the comparison head and resolved base commit SHAs with the deletion list. The `Auto-detected CI base` log identifies the selected comparison base; see [CI Auto-Detection](#ci-auto-detection) for event-specific resolution. An explicit `--base` is useful when replaying a recorded comparison, rather than a requirement for normal CI detection.
