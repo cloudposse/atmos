@@ -118,7 +118,7 @@ func (c *EmulatorCommandProvider) GetCompatibilityFlags() map[string]compat.Comp
 }
 
 // IsExperimental returns whether this command is experimental.
-func (c *EmulatorCommandProvider) IsExperimental() bool { return true }
+func (c *EmulatorCommandProvider) IsExperimental() bool { return false }
 
 // buildConfigAndStacksInfo creates a ConfigAndStacksInfo with global flags populated.
 func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
