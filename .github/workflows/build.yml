@@ -26,7 +26,7 @@ jobs:
       id-token: write
       contents: write
       pull-requests: write
-    uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@281621d6f2e63a883ea884559ffdbb4895c1bd98 # main
+    uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@4ae67ee1158b9c6466074b7729e1efe197cfd665 # main
     # `secrets: inherit`, not an explicit map: shared-release-branches.yml doesn't declare a
     # `workflow_call.secrets:` schema, so GitHub rejects a named-secret map against it outright
     # (this job only triggers on `release`/`workflow_dispatch`, not `pull_request`, so the
@@ -135,7 +135,7 @@ jobs:
 
       - name: "Docker Build"
         id: build
-        uses: cloudposse/github-action-docker-build-push@ff59bd5b5c0c953aef60f5eb9b80178fff407597 # v3.2.1
+        uses: cloudposse/github-action-docker-build-push@03997104add13375854c688f0d50c7dc16b3deac # v3.2.2
         with:
           registry: ghcr.io
           organization: "${{ github.event.repository.owner.login }}"
@@ -183,7 +183,7 @@ jobs:
 
       - name: "Upload Trivy scan results to code-scanning"
         if: always()
-        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           sarif_file: trivy-results.sarif
 
@@ -314,7 +314,7 @@ jobs:
 
       # syft binary that .goreleaser.yml's sboms: block shells out to.
       - name: "Install syft"
-        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
 
       - name: "Run goreleaser release"
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
@@ -374,7 +374,7 @@ jobs:
       # from .goreleaser.yml's per-archive sboms: block (bound to individual
       # archives, uploaded to the release directly by GoReleaser itself).
       - name: "Generate and attest source-tree SBOM"
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           path: .
           format: spdx-json
