@@ -91,6 +91,7 @@ func TestDefaultRegistryContainsEveryRequiredGate(t *testing.T) {
 	}
 }
 
+// TestCheckMergeConflicts distinguishes conflicts, unknown mergeability, and unrelated branch protection states.
 func TestCheckMergeConflicts(t *testing.T) {
 	yes, no := true, false
 	cases := []struct {
@@ -131,6 +132,7 @@ func TestCheckMergeConflicts(t *testing.T) {
 	}
 }
 
+// TestMergeConflictsGateThroughRegistry verifies mergeability affects the report verdict and target-branch guidance.
 func TestMergeConflictsGateThroughRegistry(t *testing.T) {
 	allPass := func(*qualityClient, *githubapi.PR) (qualityGate, error) { return qualityGate{Passed: true}, nil }
 	registry, err := defaultQualityRegistry()

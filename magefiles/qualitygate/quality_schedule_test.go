@@ -109,6 +109,7 @@ func (s *scheduleServer) listed(p *schedulePR) githubapi.PR {
 	return pr
 }
 
+// commentsFor serves trusted report fixtures with revision markers or the requested missing-evidence state.
 func (s *scheduleServer) commentsFor(number int, response any) error {
 	for i := range s.prs {
 		p := &s.prs[i]
@@ -128,6 +129,8 @@ func (s *scheduleServer) commentsFor(number int, response any) error {
 		case scheduleCommentNone:
 			return githubtest.Respond([]githubapi.Comment{{ID: 1, Body: "unrelated"}}, response)
 		}
+		pr := s.listed(p)
+		body += qualityBaseMarker(&pr) + "\n"
 		comment := githubapi.Comment{ID: 17, Body: body}
 		comment.User.Login, comment.User.Type = "github-actions[bot]", "Bot"
 		return githubtest.Respond([]githubapi.Comment{comment}, response)
@@ -135,6 +138,7 @@ func (s *scheduleServer) commentsFor(number int, response any) error {
 	return fmt.Errorf("no fixture for PR #%d", number)
 }
 
+// TestQualityScheduledSelection checks recovery eligibility, ordering, and bounded metadata reads.
 func TestQualityScheduledSelection(t *testing.T) {
 	t.Setenv("GITHUB_EVENT_NAME", "schedule")
 	t.Setenv("GITHUB_EVENT_PATH", "")

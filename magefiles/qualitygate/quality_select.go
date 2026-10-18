@@ -24,6 +24,7 @@ const qualitySearchLimit = 10
 const (
 	qualityReasonNone        = ""
 	qualityReasonUnpublished = "no report for current head"
+	qualityReasonBaseChanged = "no report for current base"
 	qualityReasonUnavailable = "report has unavailable evidence"
 	qualityReasonRecent      = "recent head commit"
 	qualityReasonUnknown     = "selection check failed"
@@ -63,6 +64,7 @@ func (q *qualityClient) unlistedPRNumbers(sha, owner, branch string) ([]int, err
 	return q.searchPRNumbers(sha)
 }
 
+// searchPRNumbers verifies SHA search results against each eligible PR's current head.
 func (q *qualityClient) searchPRNumbers(sha string) ([]int, error) {
 	query := url.Values{
 		"q":        {fmt.Sprintf("repo:%s type:pr state:open sha:%s", q.repo, sha)},
@@ -92,7 +94,7 @@ func (q *qualityClient) searchPRNumbers(sha string) ([]int, error) {
 }
 
 // recentPRNumbers selects open PRs that need a scheduled reconcile: those
-// with no gate report for their current head or a report with unavailable
+// with no gate report for their current head and base or a report with unavailable
 // evidence (any age) and those whose head commit is newer than the cutoff.
 //
 // GitHub's updated_at is not an activity signal: the gate's own labels and
@@ -101,7 +103,7 @@ func (q *qualityClient) searchPRNumbers(sha string) ([]int, error) {
 // always advances updated_at, so a PR last updated before the cutoff cannot
 // have a newer head commit, and its commit date is never fetched.
 //
-// A PR that is stale, labeled, and has a report for its current head is
+// A PR that is stale, labeled, and has a report for its current head and base is
 // skipped even if review threads resolved since; those need the head-change or
 // review events to reach the gate, since the schedule no longer sees them.
 func (q *qualityClient) recentPRNumbers(cutoff time.Time) ([]int, error) {
@@ -179,6 +181,11 @@ func (q *qualityClient) scheduledReason(pr *githubapi.PR, cutoff time.Time) (str
 	}
 	if existing == nil || !strings.Contains(existing.Body, qualityHeadMarker(pr.Head.SHA)) {
 		return qualityReasonUnpublished, nil
+	}
+	// A prerequisite can advance or the PR can be retargeted without a new head.
+	// Legacy reports without a base marker also need one fresh evaluation.
+	if !strings.Contains(existing.Body, qualityBaseMarker(pr)) {
+		return qualityReasonBaseChanged, nil
 	}
 	// A report that could not read some evidence is not final: retry it at any
 	// age so it is replaced once the evidence recovers.

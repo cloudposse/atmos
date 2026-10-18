@@ -35,7 +35,7 @@ type qualityGate struct {
 	Advisory                           bool
 	Passed                             bool
 	// Unavailable marks a gate whose evidence could not be read. It is missing
-	// evidence, not a verdict, so it must not replace a published report.
+	// evidence, not a verdict, so it must not replace a report for the same revision.
 	Unavailable bool
 }
 
@@ -59,7 +59,7 @@ func (q *qualityClient) get(path string, response any) error {
 
 // Report refreshes the PRs associated with the current Actions event. Scheduled
 // runs reconcile PRs with a recent head commit or no report for their current
-// head; manual runs reconcile all open PRs. One failing PR never blocks the rest.
+// head and base; manual runs reconcile all open PRs. One failing PR never blocks the rest.
 func (Quality) Report(repo string) error {
 	started := time.Now().UTC()
 	if !githubapi.RepoPattern.MatchString(repo) {
@@ -79,6 +79,8 @@ func (Quality) Report(repo string) error {
 	return q.reconcileAll(prs)
 }
 
+// eventPRs resolves event-associated PRs, scheduled recovery candidates, or all eligible open PRs.
+//
 //nolint:revive // Explicit event precedence handles reviews, external checks, and workflow runs.
 func (q *qualityClient) eventPRs(now time.Time) ([]int, error) {
 	if os.Getenv("GITHUB_EVENT_NAME") == "schedule" {

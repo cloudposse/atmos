@@ -71,6 +71,12 @@ func (q *qualityClient) write(method, path string, value any) error {
 
 func qualityHeadMarker(sha string) string { return "<!-- atmos-quality-head:" + sha + " -->" }
 
+// qualityBaseMarker records the evaluated target revision with a URL-encoded branch name.
+func qualityBaseMarker(pr *githubapi.PR) string {
+	return "<!-- atmos-quality-base:" + url.QueryEscape(pr.Base.Ref) + ":" + pr.Base.SHA + " -->"
+}
+
+// refresh evaluates and publishes current PR evidence while rejecting stale or superseded snapshots.
 func (q *qualityClient) refresh(number int, performance string, run *githubapi.Run) error {
 	var pr githubapi.PR
 	if err := q.get(fmt.Sprintf("pulls/%d", number), &pr); err != nil {
@@ -94,8 +100,8 @@ func (q *qualityClient) refresh(number int, performance string, run *githubapi.R
 			return nil
 		}
 		body, ready, unavailable := q.render(&pr, existing, performance, run)
-		if len(unavailable) > 0 && qualityPublishedFor(existing, pr.Head.SHA) {
-			// Missing evidence is not a verdict. Replacing a report for this same head
+		if len(unavailable) > 0 && qualityPublishedRevision(existing, &pr) {
+			// Missing evidence is not a verdict. Replacing a report for this head and base
 			// would flip its label and comment on every transient API failure; keep the
 			// last published state and let the failure surface for a retry.
 			return bench.Error("evidence unavailable for %s; kept the published report for %s", strings.Join(unavailable, ", "), pr.Head.SHA)
@@ -134,16 +140,23 @@ func qualityObsolete(existing *githubapi.Comment, run *githubapi.Run) bool {
 	return run != nil && existing != nil && qualityNewer(existing.Body, run)
 }
 
+// qualityEligible accepts open PRs targeting any named branch in the trusted repository.
 func qualityEligible(pr *githubapi.PR, repo string) bool {
 	return pr.State == "open" && pr.Base.Ref != "" && pr.Base.Repo.FullName == repo
 }
 
+// qualitySameRevision checks that the evaluated PR metadata still describes the current PR.
 // A base update or retarget invalidates the evaluated mergeability and checks
 // even when the PR head has not moved.
 func qualitySameRevision(pr, current *githubapi.PR, repo string) bool {
 	return qualityEligible(current, repo) && current.Head.SHA == pr.Head.SHA &&
 		current.Draft == pr.Draft && current.MergeSHA == pr.MergeSHA &&
 		current.Base.Ref == pr.Base.Ref && current.Base.SHA == pr.Base.SHA
+}
+
+// qualityPublishedRevision requires a report for both the current head and target revision.
+func qualityPublishedRevision(existing *githubapi.Comment, pr *githubapi.PR) bool {
+	return qualityPublishedFor(existing, pr.Head.SHA) && strings.Contains(existing.Body, qualityBaseMarker(pr))
 }
 
 func qualityPublishedFor(existing *githubapi.Comment, sha string) bool {
@@ -204,6 +217,7 @@ func (q *qualityClient) publish(number int, existing *githubapi.Comment, body st
 	return true, q.write(method, path, map[string]string{"body": body})
 }
 
+// stillCurrent rechecks the PR revision and optional benchmark attempt before publication.
 func (q *qualityClient) stillCurrent(pr *githubapi.PR, run *githubapi.Run) (bool, error) {
 	var current githubapi.PR
 	if err := q.get(fmt.Sprintf("pulls/%d", pr.Number), &current); err != nil {
@@ -267,6 +281,7 @@ func qualityPreservePerformance(existing *githubapi.Comment, sha string) string 
 	return strings.TrimSpace(section)
 }
 
+// qualityMarkdown renders gate evidence, revision markers, and performance data with the readiness verdict.
 func qualityMarkdown(pr *githubapi.PR, gates []qualityGate, performance string) (string, bool) {
 	var out strings.Builder
 	ready := true
@@ -280,7 +295,7 @@ func qualityMarkdown(pr *githubapi.PR, gates []qualityGate, performance string) 
 	}
 	fmt.Fprintf(&out, "%s\n<!-- coderabbit do not respond to this -->\n<h2>Quality Gate &nbsp; <a href=\"https://github.com/%s/pull/%d/checks\"><img height=\"28\" align=\"top\" alt=\"Quality Gate %s\" src=\"https://img.shields.io/badge/%s?style=for-the-badge\" /></a></h2>\n\n", qualityMarker, pr.Base.Repo.FullName, pr.Number, status, badge)
 	qualityGateList(&out, gates)
-	fmt.Fprintf(&out, "<sub>Current commit: <code>%s</code> · <code>%s</code></sub>\n%s\n\n", pr.Head.SHA, label, qualityHeadMarker(pr.Head.SHA))
+	fmt.Fprintf(&out, "<sub>Current commit: <code>%s</code> · <code>%s</code></sub>\n%s\n\n", pr.Head.SHA, label, qualityHeadMarker(pr.Head.SHA)+"\n"+qualityBaseMarker(pr))
 	qualityDetails(&out, gates)
 	out.WriteString(qualityGuidance(pr, gates, performance))
 	if performance == "Performance measurements pending for this commit." {

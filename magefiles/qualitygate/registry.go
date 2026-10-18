@@ -82,6 +82,7 @@ func (d *gateDefinition) decorate(pr *githubapi.PR, gate *qualityGate) {
 	gate.URL = fmt.Sprintf("https://github.com/%s/pull/%d%s", pr.Base.Repo.FullName, pr.Number, d.EvidencePath)
 }
 
+// defaultQualityRegistry assembles the required gates in report order.
 // Add a gate here: its check, report link and agent guidance travel together.
 func defaultQualityRegistry() (*gateRegistry, error) {
 	return newGateRegistry(
@@ -164,7 +165,7 @@ func checkReadyForReview(_ *qualityClient, pr *githubapi.PR) (qualityGate, error
 func checkMergeConflicts(_ *qualityClient, pr *githubapi.PR) (qualityGate, error) {
 	if pr.Mergeable == nil && pr.MergeableState != "dirty" {
 		// GitHub computes mergeability lazily after a push or base move. Report
-		// missing evidence so the previous report is kept and the check retried.
+		// missing evidence so a report for the same head and base is kept and retried.
 		return qualityGate{}, bench.Error("GitHub has not computed mergeability yet")
 	}
 	if pr.MergeableState == "dirty" || (pr.Mergeable != nil && !*pr.Mergeable) {

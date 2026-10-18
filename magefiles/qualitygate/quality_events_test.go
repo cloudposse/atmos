@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestQualityEventSelection checks event precedence and includes eligible stacked PRs in fallback selection.
 func TestQualityEventSelection(t *testing.T) {
 	t.Setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
 	cases := []struct {
