@@ -88,7 +88,7 @@ func TestComponentFunc_DisabledEnclosing_ReturnsEmptySections(t *testing.T) {
 		},
 	}
 
-	got, err := componentFunc(&schema.AtmosConfiguration{}, info, "target", "some-stack")
+	got, err := componentFunc(t.Context(), &schema.AtmosConfiguration{}, info, "target", "some-stack")
 	require.NoError(t, err)
 
 	sections, ok := got.(map[string]any)

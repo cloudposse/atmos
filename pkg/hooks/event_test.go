@@ -44,3 +44,40 @@ func TestHookEvent_Normalize_OutputRefreshNotAliased(t *testing.T) {
 	assert.Equal(t, BeforeTerraformRefresh, BeforeTerraformRefresh.Normalize())
 	assert.Equal(t, AfterTerraformRefresh, AfterTerraformRefresh.Normalize())
 }
+
+// AWS CloudFormation's CLI verbs (plan, deploy) are aliases for the canonical
+// executor-emitted events (diff, apply): the executor only ever fires
+// Before/AfterAwsCloudFormationDiff and Before/AfterAwsCloudFormationApply
+// (see eventsFor in pkg/component/aws/cloudformation/executor.go), so a hook
+// configured for "before.aws/cloudformation.plan" or
+// "...deploy" must normalize to the event the executor actually emits, or it
+// would never fire.
+func TestHookEvent_Normalize_AwsCloudFormationPlanDeployAliased(t *testing.T) {
+	assert.Equal(t, BeforeAwsCloudFormationDiff, BeforeAwsCloudFormationPlan.Normalize())
+	assert.Equal(t, AfterAwsCloudFormationDiff, AfterAwsCloudFormationPlan.Normalize())
+	assert.Equal(t, BeforeAwsCloudFormationApply, BeforeAwsCloudFormationDeploy.Normalize())
+	assert.Equal(t, AfterAwsCloudFormationApply, AfterAwsCloudFormationDeploy.Normalize())
+}
+
+// The changeset events are canonical, not aliases: Normalize must leave them
+// untouched and must not collapse them onto the apply or diff events, or a
+// hook configured for apply would also fire around changeset create/execute.
+func TestHookEvent_Normalize_AwsCloudFormationChangesetNotAliased(t *testing.T) {
+	for _, event := range []HookEvent{
+		BeforeAwsCloudFormationChangesetCreate,
+		AfterAwsCloudFormationChangesetCreate,
+		BeforeAwsCloudFormationChangesetExecute,
+		AfterAwsCloudFormationChangesetExecute,
+	} {
+		t.Run(string(event), func(t *testing.T) {
+			assert.Equal(t, event, event.Normalize())
+			assert.NotEqual(t, BeforeAwsCloudFormationApply, event.Normalize())
+			assert.NotEqual(t, AfterAwsCloudFormationApply, event.Normalize())
+			assert.False(t, Hook{Events: []string{string(BeforeAwsCloudFormationApply), string(AfterAwsCloudFormationApply)}}.MatchesEvent(event))
+		})
+	}
+	assert.Equal(t, "before.aws/cloudformation.changeset-create", string(BeforeAwsCloudFormationChangesetCreate))
+	assert.Equal(t, "after.aws/cloudformation.changeset-create", string(AfterAwsCloudFormationChangesetCreate))
+	assert.Equal(t, "before.aws/cloudformation.changeset-execute", string(BeforeAwsCloudFormationChangesetExecute))
+	assert.Equal(t, "after.aws/cloudformation.changeset-execute", string(AfterAwsCloudFormationChangesetExecute))
+}

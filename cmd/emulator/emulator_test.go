@@ -70,7 +70,7 @@ func TestEmulatorCommandProvider(t *testing.T) {
 	assert.Nil(t, provider.GetFlagsBuilder())
 	assert.Nil(t, provider.GetPositionalArgsBuilder())
 	assert.Nil(t, provider.GetCompatibilityFlags())
-	assert.True(t, provider.IsExperimental())
+	assert.False(t, provider.IsExperimental())
 }
 
 func TestEmulatorRootRunEShowsUsage(t *testing.T) {

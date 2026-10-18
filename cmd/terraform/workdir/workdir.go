@@ -26,9 +26,6 @@ var workdirCmd = &cobra.Command{
 }
 
 func init() {
-	// Mark this subcommand as experimental.
-	workdirCmd.Annotations = map[string]string{"experimental": "true"}
-
 	// Add subcommands.
 	workdirCmd.AddCommand(listCmd)
 	workdirCmd.AddCommand(describeCmd)

@@ -43,7 +43,7 @@ func Attach(atmosConfig *schema.AtmosConfiguration, client any, message string, 
 		if err != nil {
 			return nil, fmt.Errorf("failed to set up tool approval: %w", err)
 		}
-		approvable.SetApprover(approval.NewPermissionApprover(checker))
+		approvable.SetApprover(approval.NewPermissionApprover(checker, approval.WithPromptHooks(before, after)))
 	}
 
 	if managed, ok := client.(approval.TimeoutManaged); ok {

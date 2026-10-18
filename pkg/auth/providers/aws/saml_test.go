@@ -192,7 +192,7 @@ func (s stubSamlMgr) EnsureIdentityEnvironment(context.Context, string) (map[str
 	return nil, nil
 }
 
-func (s stubSamlMgr) ExecuteIntegration(context.Context, string) error {
+func (s stubSamlMgr) ExecuteIntegration(context.Context, string, ...types.IntegrationOption) error {
 	return nil
 }
 

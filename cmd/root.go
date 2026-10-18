@@ -79,6 +79,7 @@ import (
 	// Import component providers to register them with the component registry.
 	// The init() function in each package registers the provider.
 	_ "github.com/cloudposse/atmos/pkg/component/ansible"
+	_ "github.com/cloudposse/atmos/pkg/component/aws/cloudformation"
 	_ "github.com/cloudposse/atmos/pkg/component/container"
 	_ "github.com/cloudposse/atmos/pkg/component/emulator"
 	_ "github.com/cloudposse/atmos/pkg/component/helm"
@@ -1092,7 +1093,7 @@ func isCompletionCommand(cmd *cobra.Command) bool {
 // from their parent (e.g., "atmos devcontainer list" triggers the devcontainer warning).
 //
 // The function uses a two-pass approach:
-//  1. First, check for registry-based experimental commands (top-level like devcontainer, toolchain).
+//  1. First, check for registry-based experimental commands (top-level like devcontainer, scaffold).
 //     These are the "original" experimental commands and should be preferred.
 //  2. Second, check for annotation-based experimental subcommands (like terraform backend).
 //     This handles explicit subcommand-level experimental status.

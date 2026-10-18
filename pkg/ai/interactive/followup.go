@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -16,8 +15,30 @@ import (
 	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
+// isTTY reports whether a standard stream is a terminal. It is a seam: tests replace it to simulate
+// terminals and pipes.
+var isTTY = func(stream terminal.Stream) bool {
+	switch stream {
+	case terminal.Stdin:
+		return terminal.HasRealTTYInput()
+	case terminal.Stdout:
+		return terminal.IsTTYWriter(os.Stdout)
+	default:
+		return terminal.New().IsTTY(stream)
+	}
+}
+
+// isCI reports whether the process runs in a CI environment. It is a seam: tests replace it to simulate CI.
+var isCI = telemetry.IsCI
+
+// runForm runs a built huh form. It is a seam: tests replace it to drive the form in accessible
+// mode with scripted input, so a prompt never blocks on a real terminal.
+var runForm = func(form *huh.Form) error {
+	return form.Run()
+}
+
 // TurnFunc runs one conversation turn and returns the answer text.
-// History holds every earlier question and answer, oldest first.
+// The history argument holds every earlier question and answer, oldest first.
 type TurnFunc func(question string, history []types.Message) (string, error)
 
 // Conversation continues a one-shot question as a conversation: after each answer
@@ -77,14 +98,23 @@ func (c Conversation) Continue(history []types.Message, turn TurnFunc) error {
 
 // terminalAvailable reports whether a person can type a follow-up and see the result.
 func terminalAvailable() bool {
-	return terminal.HasRealTTYInput() && terminal.IsTTYWriter(os.Stdout) && !telemetry.IsCI()
+	return isTTY(terminal.Stdin) && isTTY(terminal.Stdout) && !isCI()
 }
 
 // promptFollowUp asks for the next question.
 func promptFollowUp() (string, error) {
 	var question string
 
-	if err := newFollowUpForm(&question).Run(); err != nil {
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Follow up?").
+				Placeholder("Type a reply, or press Enter or Esc to finish").
+				Value(&question),
+		),
+	).WithKeyMap(uiutils.NewAtmosKeyMap()).WithTheme(uiutils.NewAtmosHuhTheme())
+
+	if err := runForm(form); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
 			return "", errUtils.ErrUserAborted
 		}
@@ -92,18 +122,4 @@ func promptFollowUp() (string, error) {
 	}
 
 	return question, nil
-}
-
-// newFollowUpForm binds Escape and Ctrl-C to finish the conversation.
-func newFollowUpForm(question *string) *huh.Form {
-	keymap := huh.NewDefaultKeyMap()
-	keymap.Quit = key.NewBinding(key.WithKeys("ctrl+c", "esc"))
-	return huh.NewForm(
-		huh.NewGroup(
-			huh.NewInput().
-				Title("Follow up?").
-				Placeholder("Type a reply, or press Enter to finish").
-				Value(question),
-		),
-	).WithTheme(uiutils.NewAtmosHuhTheme()).WithKeyMap(keymap)
 }

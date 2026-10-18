@@ -24,6 +24,9 @@ type Request struct {
 type Decision struct {
 	// Allow is true when the tool may run.
 	Allow bool
+	// UpdatedInput replaces the tool input when Allow is true and it is not nil.
+	// Questions to the user use it to return the answers.
+	UpdatedInput map[string]any
 	// Message is returned to the model when the tool is denied.
 	Message string
 	// Interrupt asks the provider to stop the whole run (user pressed Ctrl-C).

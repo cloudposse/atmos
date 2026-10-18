@@ -116,7 +116,7 @@ func nativeSecretReferenceLoaders() map[string]func(*schema.AtmosConfiguration) 
 			return GetTerraformState(config, "!terraform.state", "dev", "producer", "credential", false, nil, nil)
 		},
 		"atmos.Component": func(config *schema.AtmosConfiguration) (any, error) {
-			sections, err := componentFunc(config, nil, "producer", "dev")
+			sections, err := componentFunc(context.Background(), config, nil, "producer", "dev")
 			if err != nil {
 				return nil, err
 			}

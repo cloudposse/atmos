@@ -141,6 +141,9 @@ var chatCmd = &cobra.Command{
 		var executor *tools.Executor
 		if atmosConfig.AI.Tools.Enabled {
 			toolsResult, toolsErr := initializeAIToolsAndExecutor(&atmosConfig, mcpServers, "")
+			if isInvalidToolMode(toolsErr) {
+				return toolsErr
+			}
 			if toolsErr != nil {
 				log.Warnf("Failed to initialize AI tools: %v", toolsErr)
 			}

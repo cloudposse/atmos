@@ -22,6 +22,18 @@ const (
 	choiceAlwaysDeny  = "d"
 )
 
+// stdinIsTerminal reports whether stdin is a terminal. It is a seam: tests replace it to force or refuse the
+// interactive path without a real terminal.
+var stdinIsTerminal = func() bool {
+	return terminal.HasRealTTYInput()
+}
+
+// runForm runs a built huh form. It is a seam: tests replace it to drive the form in accessible
+// mode with scripted input, so a prompt never blocks on a real terminal.
+var runForm = func(form *huh.Form) error {
+	return form.Run()
+}
+
 // CLIPrompter implements Prompter using command-line prompts.
 type CLIPrompter struct {
 	cache *PermissionCache
@@ -134,10 +146,11 @@ func printReceipt(tool Tool, params map[string]interface{}, allowed, saved bool)
 	}
 	suffix := ""
 	if saved {
-		suffix = " (saved to " + settingsPathHint + ")"
+		suffix = " (saved to " + ui.InlineCode(settingsPathHint) + ")"
 	}
-	budget := requestWidth() + formGutter - receiptGutter - len(verb) - len(" ") - len(suffix)
-	line := verb + " " + summarizeRequest(tool, params, budget) + suffix
+	// The command is shown as a code span, which adds two backticks to the line.
+	budget := requestWidth() + formGutter - receiptGutter - len(verb) - len(" ") - len(suffix) - 2
+	line := verb + " " + ui.InlineCode(summarizeRequest(tool, params, budget)) + suffix
 
 	if allowed {
 		ui.Success(line)
@@ -155,7 +168,7 @@ func (p *CLIPrompter) Prompt(ctx context.Context, tool Tool, params map[string]i
 
 	// Prompts require a TTY; fail loudly instead of silently defaulting to deny.
 	// Checked before anything is printed so non-interactive logs stay free of a dangling request.
-	if !terminal.HasRealTTYInput() {
+	if !stdinIsTerminal() {
 		return false, errUtils.ErrInteractiveNotAvailable
 	}
 
@@ -188,7 +201,7 @@ func requestTheme() *huh.Theme {
 
 // runRequestForm runs the form and maps huh errors onto Atmos errors.
 func runRequestForm(form *huh.Form) error {
-	if err := form.Run(); err != nil {
+	if err := runForm(form); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
 			return errUtils.ErrUserAborted
 		}
@@ -199,12 +212,18 @@ func runRequestForm(form *huh.Form) error {
 
 // alwaysAllowLabel names the "always allow" choice for the tool, saying what it covers.
 func alwaysAllowLabel(tool Tool) string {
-	return "Always allow " + prettyToolName(cacheKeyFor(tool))
+	return alwaysLabel("allow", tool)
 }
 
 // alwaysDenyLabel names the "always deny" choice for the tool, saying what it covers.
 func alwaysDenyLabel(tool Tool) string {
-	return "Always deny " + prettyToolName(cacheKeyFor(tool))
+	return alwaysLabel("deny", tool)
+}
+
+// alwaysLabel builds an "Always <verb> ..." label. A tool whose remembered decision is
+// scoped to a command or path names that scope; otherwise it names the whole tool.
+func alwaysLabel(verb string, tool Tool) string {
+	return "Always " + verb + " " + prettyToolName(cacheKeyFor(tool))
 }
 
 // promptWithCache presents the four cached-permission choices via a huh select
@@ -226,7 +245,7 @@ func (p *CLIPrompter) promptWithCache(tool Tool, params map[string]interface{}) 
 				).
 				Value(&response),
 		),
-	).WithTheme(requestTheme())
+	).WithKeyMap(uiutils.NewAtmosKeyMap()).WithTheme(requestTheme())
 
 	if err := runRequestForm(form); err != nil {
 		return false, err
@@ -250,7 +269,7 @@ func (p *CLIPrompter) promptWithoutCache(tool Tool, params map[string]interface{
 				Negative("Deny").
 				Value(&allowed),
 		),
-	).WithTheme(requestTheme())
+	).WithKeyMap(uiutils.NewAtmosKeyMap()).WithTheme(requestTheme())
 
 	if err := runRequestForm(form); err != nil {
 		return false, err

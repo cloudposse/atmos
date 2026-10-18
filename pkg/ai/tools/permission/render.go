@@ -15,8 +15,6 @@ import (
 )
 
 const (
-	renderSpace   = " "
-	renderNewline = "\n"
 	// The defaultRenderWidth constant is used when the terminal width is unknown.
 	defaultRenderWidth = 80
 	// The maxRenderWidth constant caps the request block so it stays readable on very wide terminals.
@@ -60,6 +58,10 @@ const (
 	highlightStyle = "dracula"
 	// The ellipsis constant marks truncated text.
 	ellipsis = "…"
+	// The space constant is a single blank column.
+	space = " "
+	// The newline constant separates lines of output.
+	newline = "\n"
 )
 
 // requestWidth returns the width the request block should be rendered to: the real
@@ -117,7 +119,7 @@ type requestRow struct {
 // width is injected by the caller.
 func renderRequest(tool Tool, params map[string]interface{}, width int) string {
 	title, body := renderRequestParts(tool, params, width)
-	return title + renderNewline + body
+	return title + newline + body
 }
 
 // renderRequestParts renders the request as a title line and a body. The body is
@@ -133,7 +135,7 @@ func renderRequestParts(tool Tool, params map[string]interface{}, width int) (st
 		lines = append(lines, renderCommandPanel(command, width)...)
 	}
 
-	return renderTitle(width), strings.Join(lines, renderNewline)
+	return renderTitle(width), strings.Join(lines, newline)
 }
 
 // renderTitle renders the heading followed by a muted rule that fills the width.
@@ -143,7 +145,7 @@ func renderTitle(width int) string {
 	if fill <= 0 {
 		return styles.Title.Render(requestTitle)
 	}
-	return styles.Title.Render(requestTitle) + renderSpace + styles.Muted.Render(strings.Repeat("─", fill))
+	return styles.Title.Render(requestTitle) + space + styles.Muted.Render(strings.Repeat("─", fill))
 }
 
 // collectRows builds the key/value rows (Tool, Why, then sorted parameters) and
@@ -192,7 +194,7 @@ func renderRows(rows []requestRow, width int) []string {
 		keyWidth = max(keyWidth, min(runewidth.StringWidth(row.key), maxKeyWidth))
 	}
 	valueWidth := max(width-rowIndent-keyWidth-keyGap, minValueWidth)
-	hanging := strings.Repeat(renderSpace, rowIndent+keyWidth+keyGap)
+	hanging := strings.Repeat(space, rowIndent+keyWidth+keyGap)
 
 	var out []string
 	for _, row := range rows {
@@ -201,7 +203,7 @@ func renderRows(rows []requestRow, width int) []string {
 		wrapped = capLines(wrapped, maxValueLines)
 		for i, line := range wrapped {
 			if i == 0 {
-				out = append(out, strings.Repeat(renderSpace, rowIndent)+styles.Muted.Render(key)+strings.Repeat(renderSpace, keyGap)+line)
+				out = append(out, strings.Repeat(space, rowIndent)+styles.Muted.Render(key)+strings.Repeat(space, keyGap)+line)
 				continue
 			}
 			out = append(out, hanging+line)
@@ -217,11 +219,11 @@ func renderCommandPanel(command string, width int) []string {
 	styles := theme.GetCurrentStyles()
 	bar := styles.Muted.Render(panelPrefix)
 
-	out := []string{styles.Muted.Render(strings.TrimRight(panelPrefix, renderSpace))}
+	out := []string{styles.Muted.Render(strings.TrimRight(panelPrefix, space))}
 	for _, line := range wrapText(command, width-panelPrefixWidth, continuationIndent) {
 		out = append(out, bar+highlightShell(line))
 	}
-	return append(out, styles.Muted.Render(strings.TrimRight(panelPrefix, renderSpace)))
+	return append(out, styles.Muted.Render(strings.TrimRight(panelPrefix, space)))
 }
 
 // highlightShell applies bash syntax highlighting to a single line, returning the
@@ -234,7 +236,7 @@ func highlightShell(line string) string {
 	if err != nil {
 		return line
 	}
-	return strings.TrimRight(highlighted, renderNewline)
+	return strings.TrimRight(highlighted, newline)
 }
 
 // capLines limits lines to max entries, replacing the overflow with a summary line.
@@ -252,12 +254,12 @@ func capLines(lines []string, limit int) []string {
 // lines are prefixed with contIndent (in addition to the line's own indentation).
 // No returned line is wider than width.
 func wrapText(text string, width int, contIndent string) []string {
-	text = strings.ReplaceAll(text, "\r\n", renderNewline)
-	text = strings.ReplaceAll(text, "\t", strings.Repeat(renderSpace, tabWidth))
+	text = strings.ReplaceAll(text, "\r\n", newline)
+	text = strings.ReplaceAll(text, "\t", strings.Repeat(space, tabWidth))
 	width = max(width, 1)
 
 	var out []string
-	for _, line := range strings.Split(text, renderNewline) {
+	for _, line := range strings.Split(text, newline) {
 		out = append(out, wrapLine(line, width, contIndent)...)
 	}
 	return out
@@ -265,12 +267,12 @@ func wrapText(text string, width int, contIndent string) []string {
 
 // wrapLine wraps a single logical line.
 func wrapLine(line string, width int, contIndent string) []string {
-	line = strings.TrimRight(line, renderSpace)
+	line = strings.TrimRight(line, space)
 	if runewidth.StringWidth(line) <= width {
 		return []string{line}
 	}
 
-	lead := line[:len(line)-len(strings.TrimLeft(line, renderSpace))]
+	lead := line[:len(line)-len(strings.TrimLeft(line, space))]
 	if runewidth.StringWidth(lead)+runewidth.StringWidth(contIndent) > width/2 {
 		lead = ""
 	}
@@ -280,7 +282,7 @@ func wrapLine(line string, width int, contIndent string) []string {
 	}
 
 	w := &lineWrapper{width: width, indent: indent, cur: lead}
-	for _, token := range splitSpaces(strings.TrimLeft(line, renderSpace)) {
+	for _, token := range splitSpaces(strings.TrimLeft(line, space)) {
 		w.add(token)
 	}
 	return w.finish()
@@ -297,7 +299,7 @@ type lineWrapper struct {
 
 // add appends a token (a run of spaces or a word), starting a new line when needed.
 func (w *lineWrapper) add(token string) {
-	if strings.HasPrefix(token, renderSpace) {
+	if strings.HasPrefix(token, space) {
 		w.addSpaces(token)
 		return
 	}
@@ -344,7 +346,7 @@ func (w *lineWrapper) addWord(token string) {
 
 // flush ends the current line and starts a continuation line.
 func (w *lineWrapper) flush() {
-	w.out = append(w.out, strings.TrimRight(w.cur, renderSpace))
+	w.out = append(w.out, strings.TrimRight(w.cur, space))
 	w.cur = w.indent
 	w.hasWord = false
 }
@@ -352,7 +354,7 @@ func (w *lineWrapper) flush() {
 // finish returns the accumulated lines.
 func (w *lineWrapper) finish() []string {
 	if w.hasWord || len(w.out) == 0 {
-		w.out = append(w.out, strings.TrimRight(w.cur, renderSpace))
+		w.out = append(w.out, strings.TrimRight(w.cur, space))
 	}
 	return w.out
 }
@@ -403,7 +405,7 @@ func requestSubject(params map[string]interface{}) string {
 // truncateOneLine collapses all whitespace (including newlines) and truncates the
 // result to at most maxWidth display columns, marking truncation with an ellipsis.
 func truncateOneLine(s string, maxWidth int) string {
-	collapsed := strings.Join(strings.Fields(s), renderSpace)
+	collapsed := strings.Join(strings.Fields(s), space)
 	return runewidth.Truncate(collapsed, maxWidth, ellipsis)
 }
 

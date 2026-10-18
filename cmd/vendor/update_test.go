@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -177,4 +178,90 @@ spec:
 	require.Len(t, result.Updates, 1, "only the tier=1-labeled component must be selected")
 	assert.Equal(t, "first", result.Updates[0].Component)
 	assert.Equal(t, "updated", result.Status)
+}
+
+func TestVendorUpdateCommand_LabelsPull(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	cmd := &cobra.Command{Use: "update", RunE: vendorUpdateCmd.RunE}
+	vendorUpdateParser.RegisterFlags(cmd)
+	cmd.Flags().String("base-path", "", "")
+	cmd.Flags().StringSlice("config", nil, "")
+	cmd.Flags().StringSlice("config-path", nil, "")
+	cmd.Flags().StringSlice("profile", nil, "")
+	root := t.TempDir()
+	source := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(source, "main.tf"), []byte("# selected source\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte(`base_path: "."
+stacks:
+  base_path: stacks
+  included_paths: ["**/*.yaml"]
+  excluded_paths: []
+components:
+  terraform:
+    base_path: components/terraform
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "stacks", "dev.yaml"), []byte(`vars:
+  stage: dev
+components:
+  terraform:
+    first:
+      metadata:
+        labels:
+          team: platform
+    second:
+      metadata:
+        labels:
+          team: other
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, DefaultVendorManifest), []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: first
+      source: '`+filepath.ToSlash(source)+`'
+      targets: ["components/terraform/first"]
+    - component: second
+      source: '`+filepath.ToSlash(source)+`'
+      targets: ["components/terraform/second"]
+`), 0o644))
+	chdirTest(t, root)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+	captureVendorStdout(t)
+	require.NoError(t, cmd.Flags().Set("labels", "team=platform"))
+	require.NoError(t, cmd.Flags().Set("pull", "true"))
+	require.NoError(t, cmd.RunE(cmd, nil))
+	got, err := os.ReadFile(filepath.Join(root, "components", "terraform", "first", "main.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "# selected source\n", string(got))
+	assert.NoDirExists(t, filepath.Join(root, "components", "terraform", "second"))
+}
+
+func TestVendorCommands_ScalarLabelsPreserveSpaces(t *testing.T) {
+	for _, command := range []*cobra.Command{vendorUpdateCmd, vendorVerifyCmd, vendorDiffCmd} {
+		t.Run(command.Name(), func(t *testing.T) {
+			viper.Reset()
+			t.Cleanup(viper.Reset)
+			cmd := &cobra.Command{Use: command.Use, RunE: command.RunE}
+			switch command {
+			case vendorUpdateCmd:
+				vendorUpdateParser.RegisterFlags(cmd)
+			case vendorVerifyCmd:
+				vendorVerifyParser.RegisterFlags(cmd)
+			case vendorDiffCmd:
+				vendorDiffParser.RegisterFlags(cmd)
+			}
+			cmd.Flags().String("base-path", "", "")
+			cmd.Flags().StringSlice("config", nil, "")
+			cmd.Flags().StringSlice("config-path", nil, "")
+			cmd.Flags().StringSlice("profile", nil, "")
+			viper.Set(vendorLabelsViperKey, "team = platform,owner=platform engineering")
+			require.NoError(t, cmd.Flags().Set("component", "vpc"))
+			err := cmd.RunE(cmd, nil)
+			// Valid labels reach selector conflict validation instead of failing to parse.
+			require.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+			assert.NotErrorIs(t, err, errUtils.ErrInvalidFlag)
+		})
+	}
 }

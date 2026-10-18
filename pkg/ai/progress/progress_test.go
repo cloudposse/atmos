@@ -134,7 +134,7 @@ func TestProgress_PromptHooksPauseAndResume(t *testing.T) {
 }
 
 func TestProgress_HandleEvents(t *testing.T) {
-	running := "Running atmos list stacks…"
+	running := "Running `atmos list stacks`…"
 
 	tests := []struct {
 		name        string
@@ -155,7 +155,7 @@ func TestProgress_HandleEvents(t *testing.T) {
 			name:        "tool start without a summary falls back to the tool name",
 			interactive: true,
 			events:      []approval.Event{{Kind: approval.ToolStart, Tool: "Bash"}},
-			want:        []string{"start", "update:Running Bash…"},
+			want:        []string{"start", "update:Running `Bash`…"},
 		},
 		{
 			name:        "outside a terminal only tool starts produce a status line",
@@ -197,7 +197,7 @@ func TestProgress_HandleWhilePausedIsRememberedNotShown(t *testing.T) {
 	assert.Equal(t, []string{"start", "stop"}, ind.calls, "a paused spinner must not be updated")
 
 	p.Resume()
-	assert.Equal(t, []string{"start", "stop", "start", "update:Running atmos list stacks…"}, ind.calls,
+	assert.Equal(t, []string{"start", "stop", "start", "update:Running `atmos list stacks`…"}, ind.calls,
 		"resume restores the latest tool label")
 }
 
@@ -223,7 +223,7 @@ func TestProgress_Attach(t *testing.T) {
 
 		p.Start()
 		reporter.handler(approval.Event{Kind: approval.ToolStart, Tool: "Bash", Summary: "atmos list stacks"})
-		assert.Equal(t, []string{"start", "update:Running atmos list stacks…"}, ind.calls)
+		assert.Equal(t, []string{"start", "update:Running `atmos list stacks`…"}, ind.calls)
 	})
 
 	t.Run("ignores providers that do not report progress", func(t *testing.T) {

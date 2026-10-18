@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -70,6 +71,12 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration, mcpSer
 		Executor: executor,
 		MCPMgr:   mcpMgr,
 	}, nil
+}
+
+// isInvalidToolMode reports whether tool setup failed because ai.tools.mode is not a valid value.
+// Callers stop on it: carrying on without tools would silently drop the user's setting.
+func isInvalidToolMode(err error) bool {
+	return errors.Is(err, errUtils.ErrAIToolsInvalidMode)
 }
 
 // registerMCPServerTools registers external MCP server tools with toolchain resolution,

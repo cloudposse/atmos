@@ -108,7 +108,12 @@ func (e *Executor) Execute(ctx context.Context, opts Options) *formatter.Executi
 func (e *Executor) executeSimple(ctx context.Context, prompt string, history []types.Message, result *formatter.ExecutionResult) {
 	var response string
 	var err error
-	if len(history) > 0 {
+	if sender, ok := e.client.(systemPromptSender); ok {
+		messages := make([]types.Message, 0, len(history)+1)
+		messages = append(messages, history...)
+		messages = append(messages, types.Message{Role: types.RoleUser, Content: prompt})
+		response, err = sender.SendMessageWithSystemPrompt(ctx, responseStylePrompt, messages)
+	} else if len(history) > 0 {
 		messages := make([]types.Message, 0, len(history)+1)
 		messages = append(messages, history...)
 		messages = append(messages, types.Message{Role: types.RoleUser, Content: withResponseStyle(prompt)})
@@ -222,9 +227,14 @@ names in backticks, and use fenced code blocks with a language for multi-line sn
 paragraphs and flat lists, and avoid HTML. If there is a useful next step, end with at most one short,
 concrete question that offers it.`
 
-// withResponseStyle prefixes a prompt that is sent without a system prompt with the response style.
-// Not every provider accepts an empty tool list alongside a system prompt, so the plain path
-// carries the guidance in the message instead.
+// systemPromptSender is implemented by providers that can send a system prompt without tools.
+type systemPromptSender interface {
+	SendMessageWithSystemPrompt(ctx context.Context, systemPrompt string, messages []types.Message) (string, error)
+}
+
+// withResponseStyle prefixes a prompt with the response style. Providers without a plain
+// system-prompt method (see systemPromptSender) get the guidance in the message instead,
+// because not every provider accepts an empty tool list alongside a system prompt.
 func withResponseStyle(prompt string) string {
 	return responseStylePrompt + "\n\n---\n\n" + prompt
 }

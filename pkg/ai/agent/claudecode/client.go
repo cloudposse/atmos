@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -30,6 +31,10 @@ const (
 	DefaultBinary = "claude"
 	// DefaultMaxTurns is the default maximum agentic turns per invocation.
 	DefaultMaxTurns = 5
+
+	// The askUserQuestionGuidance constant tells the model to use the AskUserQuestion tool for choices.
+	askUserQuestionGuidance = "When you need the user to choose between options or to confirm something before you " +
+		"continue, use the AskUserQuestion tool instead of asking in prose."
 )
 
 // Client invokes the Claude Code CLI in non-interactive mode.
@@ -150,6 +155,13 @@ func (c *Client) SendMessageWithSystemPromptAndTools(
 	}, nil
 }
 
+// SendMessageWithSystemPrompt sends messages with a system prompt via --append-system-prompt, without tools.
+func (c *Client) SendMessageWithSystemPrompt(ctx context.Context, systemPrompt string, messages []types.Message) (string, error) {
+	defer perf.Track(nil, "claudecode.Client.SendMessageWithSystemPrompt")()
+
+	return c.execClaude(ctx, base.FormatMessagesAsPrompt(messages), systemPrompt)
+}
+
 // GetModel returns the provider name.
 func (c *Client) GetModel() string {
 	return c.model
@@ -184,6 +196,12 @@ func (c *Client) buildArgs(systemPrompt string) []string {
 
 	if c.maxBudget > 0 {
 		args = append(args, "--max-budget-usd", fmt.Sprintf("%.2f", c.maxBudget))
+	}
+
+	// When the user can be asked, steer the model toward Claude Code's multiple-choice tool
+	// instead of asking in prose, where a short reply like "yes" has no structure.
+	if c.approver != nil {
+		systemPrompt = strings.TrimSpace(systemPrompt + "\n\n" + askUserQuestionGuidance)
 	}
 
 	if systemPrompt != "" {

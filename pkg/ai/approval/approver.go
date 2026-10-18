@@ -27,17 +27,45 @@ type PermissionApprover struct {
 	checker *permission.Checker
 	// sem serializes Approve so parallel tool calls never overlap prompts.
 	sem chan struct{}
+	// asker shows the model's multiple-choice questions to the user.
+	asker Asker
+	// before and after bracket a question to the user (for example to pause a spinner).
+	before, after func()
+}
+
+// ApproverOption configures a PermissionApprover.
+type ApproverOption func(*PermissionApprover)
+
+// WithPromptHooks registers callbacks that run immediately before and after the user is asked a
+// question. Permission prompts get their hooks from permission.WithPromptHooks instead.
+func WithPromptHooks(before, after func()) ApproverOption {
+	return func(a *PermissionApprover) {
+		a.before = before
+		a.after = after
+	}
+}
+
+// WithAsker replaces how questions are shown to the user.
+func WithAsker(asker Asker) ApproverOption {
+	return func(a *PermissionApprover) {
+		a.asker = asker
+	}
 }
 
 // Compile-time check that PermissionApprover implements Approver.
 var _ Approver = (*PermissionApprover)(nil)
 
 // NewPermissionApprover creates an approver backed by the given permission checker.
-func NewPermissionApprover(checker *permission.Checker) *PermissionApprover {
-	return &PermissionApprover{
+func NewPermissionApprover(checker *permission.Checker, opts ...ApproverOption) *PermissionApprover {
+	a := &PermissionApprover{
 		checker: checker,
 		sem:     make(chan struct{}, 1),
+		asker:   terminalAsker{},
 	}
+	for _, opt := range opts {
+		opt(a)
+	}
+	return a
 }
 
 // Approve decides whether the requested tool invocation may run. Calls are
@@ -51,6 +79,11 @@ func (a *PermissionApprover) Approve(ctx context.Context, req Request) (Decision
 		defer func() { <-a.sem }()
 	case <-ctx.Done():
 		return Decision{}, ctx.Err()
+	}
+
+	// A question for the user is not a permission request: show it instead of asking whether the tool may run.
+	if req.ToolName == AskUserQuestionTool {
+		return a.askQuestions(ctx, req)
 	}
 
 	tool := newRequestTool(req)
@@ -92,6 +125,7 @@ type requestTool struct {
 
 var _ permission.ScopedTool = (*requestTool)(nil)
 
+// newRequestTool wraps a provider request so the permission checker can evaluate it.
 func newRequestTool(req Request) *requestTool {
 	return &requestTool{req: req}
 }

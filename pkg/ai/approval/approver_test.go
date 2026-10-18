@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -340,4 +341,64 @@ type funcPrompter struct {
 
 func (f *funcPrompter) Prompt(context.Context, permission.Tool, map[string]interface{}) (bool, error) {
 	return f.fn()
+}
+
+// TestPermissionApprover_ToolsDisabledMessage covers the deny mode, which turns every tool off.
+func TestPermissionApprover_ToolsDisabledMessage(t *testing.T) {
+	prompter := &stubPrompter{allow: true}
+	checker := permission.NewChecker(&permission.Config{Mode: permission.ModeDeny}, prompter)
+	approver := NewPermissionApprover(checker)
+
+	got, err := approver.Approve(context.Background(), bashRequest)
+
+	require.NoError(t, err)
+	assert.False(t, got.Allow)
+	assert.False(t, got.Interrupt)
+	assert.False(t, got.NonInteractive)
+	assert.Equal(t, "Tools are disabled by the AI tool settings.", got.Message)
+	assert.Zero(t, prompter.callCount(), "a disabled tool is never prompted for")
+}
+
+// TestFlattenInput covers how provider tool input is rendered for the permission prompt.
+func TestFlattenInput(t *testing.T) {
+	tests := []struct {
+		name  string
+		input map[string]any
+		want  map[string]interface{}
+	}{
+		{name: "nil input has no parameters", input: nil, want: nil},
+		{name: "empty input has no parameters", input: map[string]any{}, want: nil},
+		{
+			name: "values are rendered as text",
+			input: map[string]any{
+				"command": "ls",
+				"missing": nil,
+				"timeout": 30,
+				"flag":    true,
+				"list":    []any{"a", 1},
+				"object":  map[string]any{"k": "v"},
+			},
+			want: map[string]interface{}{
+				"command": "ls",
+				"missing": "",
+				"timeout": "30",
+				"flag":    "true",
+				"list":    `["a",1]`,
+				"object":  `{"k":"v"}`,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, flattenInput(tt.input))
+		})
+	}
+}
+
+// TestStringify_UnencodableValueIsStillShown covers a map that JSON cannot encode: it is printed, not dropped.
+func TestStringify_UnencodableValueIsStillShown(t *testing.T) {
+	got := stringify(map[string]any{"callback": func() {}})
+
+	assert.True(t, strings.HasPrefix(got, "map[callback:"), "got %q", got)
 }

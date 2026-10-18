@@ -19,6 +19,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/approval"
+	"github.com/cloudposse/atmos/pkg/ai/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -515,4 +516,104 @@ func TestStartFailure(t *testing.T) {
 	c := &Client{binaryPath: filepath.Join(t.TempDir(), "does-not-exist"), maxTurns: 1}
 	_, err := c.SendMessage(t.Context(), "hi")
 	assert.ErrorIs(t, err, errUtils.ErrCLIProviderExecFailed)
+}
+
+func TestSendMessageWithSystemPrompt_UsesAppendSystemPrompt(t *testing.T) {
+	c, logPath := newFakeClient(t, scenarioPlain)
+
+	out, err := c.SendMessageWithSystemPrompt(t.Context(), "Respond in Markdown.", []types.Message{
+		{Role: types.RoleUser, Content: "hi"},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "hello from claude", out)
+	var args []string
+	for _, e := range readFakeLog(t, logPath) {
+		if e.Kind == "args" {
+			args = e.Args
+		}
+	}
+	idx := indexOf(args, "--append-system-prompt")
+	require.GreaterOrEqual(t, idx, 0, "the system prompt is passed to claude, not folded into the message")
+	assert.Equal(t, "Respond in Markdown.", args[idx+1])
+}
+
+func TestExecClaude_QuestionAnswersReachClaude(t *testing.T) {
+	c, _ := newFakeClient(t, scenarioQuestion)
+	approver := &fakeApprover{fn: func(_ context.Context, req approval.Request) (approval.Decision, error) {
+		updated := map[string]any{}
+		for key, value := range req.Input {
+			updated[key] = value
+		}
+		updated["answers"] = map[string]any{"Count only stacks that have components?": "Yes"}
+		return approval.Decision{Allow: true, UpdatedInput: updated}, nil
+	}}
+	c.SetApprover(approver)
+
+	out, err := c.SendMessage(t.Context(), "count")
+
+	require.NoError(t, err)
+	assert.Contains(t, out, "behavior=allow")
+	assert.Contains(t, out, `"answers":{"Count only stacks that have components?":"Yes"}`, "the answers are sent back as the tool input")
+	assert.Contains(t, out, `"questions"`, "the original questions are kept in the input")
+	calls := approver.calls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, "AskUserQuestion", calls[0].ToolName)
+}
+
+func TestBuildArgs_AskUserQuestionGuidanceOnlyWithApprover(t *testing.T) {
+	t.Run("with an approver the model is told to use the question tool", func(t *testing.T) {
+		c := &Client{maxTurns: 3}
+		c.SetApprover(&fakeApprover{})
+
+		args := c.buildArgs("Respond in Markdown.")
+
+		idx := indexOf(args, "--append-system-prompt")
+		require.GreaterOrEqual(t, idx, 0)
+		assert.Contains(t, args[idx+1], "Respond in Markdown.")
+		assert.Contains(t, args[idx+1], "AskUserQuestion")
+	})
+
+	t.Run("with an approver and no other system prompt the guidance is still sent", func(t *testing.T) {
+		c := &Client{maxTurns: 3}
+		c.SetApprover(&fakeApprover{})
+
+		args := c.buildArgs("")
+
+		idx := indexOf(args, "--append-system-prompt")
+		require.GreaterOrEqual(t, idx, 0)
+		assert.True(t, strings.HasPrefix(args[idx+1], "When you need the user to choose"))
+	})
+
+	t.Run("without an approver there is nobody to ask, so no guidance", func(t *testing.T) {
+		c := &Client{maxTurns: 3}
+
+		args := c.buildArgs("")
+
+		assert.Equal(t, -1, indexOf(args, "--append-system-prompt"))
+		assert.NotContains(t, strings.Join(args, " "), "AskUserQuestion")
+	})
+}
+
+// A result line that is a JSON object but has a field of the wrong type is a protocol problem.
+// It must not fall back to the plain-text path, which would return the raw JSON as the answer.
+func TestSessionEvaluateResult_MistypedFieldIsAParseError(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+	}{
+		{name: "turn count as a string", line: `{"type":"result","subtype":"success","is_error":false,"result":"all done","num_turns":"two"}`},
+		{name: "errors as objects", line: `{"type":"result","subtype":"error","is_error":true,"result":null,"errors":[{"message":"boom"}]}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sess := &session{result: []byte(tt.line)}
+
+			out, err := sess.evaluateResult()
+
+			require.ErrorIs(t, err, errUtils.ErrCLIProviderParseResponse)
+			assert.Empty(t, out, "the raw result line is never returned as the answer")
+		})
+	}
 }

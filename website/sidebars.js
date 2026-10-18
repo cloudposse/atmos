@@ -99,7 +99,8 @@ module.exports = {
                                 'migration/justfile',
                                 'migration/taskfile',
                             ]
-                        }
+                        },
+                        'migration/rain'
                     ]
                 },
             ]

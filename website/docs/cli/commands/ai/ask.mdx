@@ -6,6 +6,7 @@ id: ask
 description: Ask the AI assistant a question directly from the command line
 ---
 import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 import Terminal from '@site/src/components/Terminal'
 import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
@@ -237,24 +238,36 @@ ATMOS_AI_MCP=aws-billing atmos ai ask "Show our billing summary"
 
 When the AI needs to run a tool, for example `atmos list stacks`, `ask` pauses and shows an approval prompt in your terminal. Claude waits while you decide and then continues in the same run. There are no extra flags, and you do not need to re-run the command.
 
+<CastEmbed src="/casts/demo/fixtures/ai-ask/interactive-ask.cast" title="atmos ai ask" chrome controls scrubber />
+
 <Terminal title="atmos ai ask (claude-code)">
 ```console
-  Permission required ────────────────────────────────────────────────────────────
+$ atmos ai ask "how many stacks do we have?"
+⣽ Running atmos list stacks…
+
+  Permission required ────────────────────────────────────────────────
   Tool  Bash
-  Why   List all Atmos stacks
+  Why   Count and list Atmos stacks
   │
   │ atmos list stacks
   │
 
+┃ Allow execution?
+┃ "Always" choices are saved to .atmos/ai.settings.local.json
+┃ > Allow once
+┃   Always allow Bash(atmos list stacks)
+┃   Deny once
+┃   Always deny Bash(atmos list stacks)
+```
+</Terminal>
 
-  Allow execution?
-  "Always" choices are saved to .atmos/ai.settings.local.json
-  > Allow once
-    Always allow Bash(atmos list stacks)
-    Deny once
-    Always deny Bash(atmos list stacks)
+After you choose, the prompt disappears and a one-line receipt stays, so the answer is easy to find:
 
-↑ up • ↓ down • / filter • enter submit
+<Terminal title="atmos ai ask (claude-code)">
+```console
+✓ Allowed Bash: atmos list stacks
+
+You have 289 stacks.
 ```
 </Terminal>
 
@@ -274,7 +287,7 @@ Use the arrow keys to choose an option and press Enter.
   <dd>Refuse the call and remember the decision in `.atmos/ai.settings.local.json`.</dd>
 </dl>
 
-Press **Ctrl-C** at the prompt to abort the run.
+Press **Esc**, **Ctrl-D**, or **Ctrl-C** at the prompt to abort the run.
 
 To skip prompts for tools you trust, list them in `ai.tools.allowed`, or set `ai.tools.mode` in your `atmos.yaml`:
 
@@ -293,6 +306,30 @@ See [AI Tools](/cli/configuration/ai/tools) for the full permission flow, and th
 When approval would be needed and no terminal is available, `atmos ai ask` fails with an error instead of waiting. Run the command in a terminal, set `ai.tools.mode: allow` (or `yolo` in an isolated runner), or add the tool to `ai.providers.claude-code.allowed_tools`. For automation, [`atmos ai exec`](/cli/commands/ai/exec) is designed for non-interactive use.
 :::
 
+### Questions From the AI
+
+When the AI needs you to choose between options or confirm something before it continues, it asks with a selection list instead of a free-form question in its reply. This works with the `claude-code` provider.
+
+<Terminal title="atmos ai ask (claude-code)">
+```console
+$ atmos ai ask "how many stacks do we have?"
+
+┃ Count only stacks that have components?
+┃ Count
+┃ > Yes — Count them
+┃   No — Keep all of them
+┃   Other…
+
+✓ Count: `Yes`
+
+You have 112 stacks with components deployed.
+```
+</Terminal>
+
+Use the arrow keys and press Enter. Choose **Other…** to type an answer that is not listed. Some questions allow several choices; use Space to mark each one. Your answer goes back to the AI, which continues in the same run. Press **Esc**, **Ctrl-D**, or **Ctrl-C** to abort the run.
+
+A question is not a tool permission, so `ai.tools.mode`, `allowed`, and `blocked` do not apply to it. In CI and other places without a terminal, the AI is told nobody can answer and carries on with reasonable assumptions.
+
 ### Follow-Up Questions
 
 An answer often ends with an offer to go further, such as "I can break that down by tenant if you'd like". In a terminal, `ask` keeps the conversation open so you can accept the offer without retyping the question or starting over.
@@ -309,7 +346,7 @@ break the count down by tenant or region if you'd like.
 ```
 </Terminal>
 
-Type a reply and press Enter to ask another question. Each follow-up carries the earlier questions and answers as context, so short replies like "yes, by tenant" work. Press Enter on an empty line, Esc, or Ctrl-C to finish.
+Type a reply and press Enter to ask another question. Each follow-up carries the earlier questions and answers as context, so short replies like "yes, by tenant" work. To finish, press Enter on an empty line, or press Esc, Ctrl-D, or Ctrl-C.
 
 The follow-up prompt appears only when both input and output are a terminal and the command is not running in CI. When you pipe the output or run in a script, `ask` prints the answer and exits, as it always did.
 

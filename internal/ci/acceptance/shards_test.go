@@ -95,7 +95,7 @@ func TestTargetFromCheckName(t *testing.T) {
 func TestCheckShardResults_AllSucceeded(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := rerun.NewMockRESTClient(ctrl)
-	client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, "repos/cloudposse/atmos/actions/runs/42/attempts/1/jobs?per_page=100", nil).
+	client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, "repos/cloudposse/atmos/actions/runs/42/attempts/1/jobs?per_page=30", nil).
 		Return(jobsPage(t, [2]string{"Build (linux)", "success"}, shard("linux", 1, "success"), shard("linux", 2, "success"), shard("linux", 3, "success"), //nolint:bodyclose // closed by the code under test, not this fixture.
 			shard("macos", 1, "failure")), nil)
 

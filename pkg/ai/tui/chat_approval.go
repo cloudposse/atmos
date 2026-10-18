@@ -49,18 +49,19 @@ func (p *chatPrompter) Prompt(ctx context.Context, tool permission.Tool, params 
 // configureProviderApproval also runs after provider switching so policy follows the active client.
 func (m *ChatModel) configureProviderApproval(client ai.Client) error {
 	if provider, ok := client.(approval.Approvable); ok {
+		terminal := func() chatTerminal {
+			if m.program == nil {
+				return nil
+			}
+			return m.program
+		}
 		checker, err := permission.NewFromConfig(m.atmosConfig, permission.WithPromptWrapper(func(inner permission.Prompter) permission.Prompter {
-			return &chatPrompter{inner: inner, terminal: func() chatTerminal {
-				if m.program == nil {
-					return nil
-				}
-				return m.program
-			}}
+			return &chatPrompter{inner: inner, terminal: terminal}
 		}))
 		if err != nil {
 			return err
 		}
-		provider.SetApprover(approval.NewPermissionApprover(checker))
+		provider.SetApprover(&chatQuestionApprover{inner: approval.NewPermissionApprover(checker), terminal: terminal})
 	}
 	if provider, ok := client.(approval.TimeoutManaged); ok {
 		provider.SetTimeout(m.requestTimeout())

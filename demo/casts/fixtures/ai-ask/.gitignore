@@ -1,0 +1,10 @@
+**/.terraform/**
+**/.terraform.lock.hcl
+**/.terraform.tfstate/**
+**/.terraform.tfstate.backup/**
+**/*.tfvars.json
+**/*.planfile
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/terraform.tfstate.d/**
+**/cache.*.txt

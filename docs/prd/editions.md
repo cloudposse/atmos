@@ -168,6 +168,12 @@ layer. `Diff`, `Between`, and `DescribePin` include their descriptive old/new va
 can inspect the changes before advancing a pin. The framework does not retroactively gate the
 historical candidates below: each requires its own retained compatibility path and tests.
 
+The `docs.terraform.formatter_settings` transition (`2026-10-17`,
+[PR #3404](https://github.com/cloudposse/atmos/pull/3404)) makes README generation
+honor configured section visibility, empty-section hiding, and heading levels.
+Earlier pins retain terraform-docs formatter defaults. Sorting and native module
+objects are unaffected by this transition.
+
 ## Historical drift this feature surfaced (and fixed)
 
 Building the journal required 12 months of git archaeology over the default layers, which exposed
@@ -279,16 +285,6 @@ current schema.
   [the migration note](https://atmos.tools/changelog/pro-upload-byte-packing#how-to-use-it)
   and [the fix log](../fixes/2026-10-07-pro-upload-byte-packing-and-413-recovery.md).
 
-  **Additional post-editions candidate (2026-10-09):** configuring `mcp.servers`
-  previously made Claude Code auto-approve every tool in `atmos ai ask` and `atmos ai exec`.
-  Both commands now enforce Atmos tool permissions; the same configuration with the default
-  `require_confirmation` policy fails in unattended runs when a tool needs approval.
-  Set `ai.tools.mode: allow` (retaining blocked tools) or pre-approve specific Claude Code
-  tools to migrate. No literal configuration default changes, and edition pins do not restore
-  the former bypass. See [PR #3352](https://github.com/cloudposse/atmos/pull/3352),
-  [the migration example](https://atmos.tools/cli/commands/ai/exec#claude-code-tool-permissions),
-  and [the provider PRD](atmos-ai-local-providers.md).
-
   **Additional post-editions candidate (2026-10-07):** when
   `settings.metrics.enabled` is omitted, `atmos git hooks run` now suppresses its
   local resource-usage summary; previously the omitted value enabled that summary
@@ -298,6 +294,19 @@ current schema.
   when this behavior shipped.
   See [PR #3295](https://github.com/cloudposse/atmos/pull/3295) and
   [the migration section](git-hook-steps.md#migration-and-editions).
+
+  **Additional post-editions candidate (2026-10-09):** for the `claude-code` AI provider, a
+  configuration with `mcp.servers` used to start Claude Code with
+  `--dangerously-skip-permissions`, so every tool call ran unattended. `atmos ai chat`, `atmos ai ask`, and
+  `atmos ai exec` now route delegated requests through the Atmos permission system
+  (`ai.tools.mode`), so the same stored configuration prompts, and fails without a terminal
+  unless `ai.tools.mode` is `allow` or `yolo`. The new `ai.tools.mode` key and the deprecated
+  `yolo_mode` / `require_confirmation` aliases are not journaled because no shipped default
+  changes. This runtime behavior is not yet selected by an edition pin: it has no named
+  `KindBehavior` transition, so a project pinned to an earlier edition gets the new approval
+  prompts too. See [PR #3350](https://github.com/cloudposse/atmos/pull/3350),
+  [PR #3352](https://github.com/cloudposse/atmos/pull/3352), and the migration note in
+  [atmos-ai-local-providers.md](atmos-ai-local-providers.md#interactive-approval-and-progress-claude-code).
 
   **Not gatable:** the auth credential realm isolation change (2026-02-10,
   [changelog/auth-realm-isolation](https://atmos.tools/changelog/auth-realm-isolation)) is a hard
@@ -327,5 +336,5 @@ current schema.
 | 2026-10-07 | 1.5 | Recorded the Pro upload runtime budget fallback as a behavior-gating candidate. |
 | 2026-10-07 | 1.6 | Recorded opt-in local resource-usage summaries for Git hook invocations as a behavior-gating candidate. |
 | 2026-10-09 | 1.7 | Journaled `toolchain.install` (`declared` to `auto`): a brand-new key that governs how `.tool-versions` is used by component runs, which previously had a fixed answer. |
-| 2026-10-09 | 1.8 | Recorded Claude Code permission enforcement for existing MCP configurations in ask and exec as a behavior-gating candidate. |
-| 2026-10-13 | 1.9 | Implemented named behavior transitions and inspection alongside value changes; historical candidates remain ungated. |
+| 2026-10-13 | 1.8 | Implemented named behavior transitions and inspection alongside value changes; historical candidates remain ungated. |
+| 2026-10-09 | 1.9 | Recorded unattended `claude-code` tool approval under `mcp.servers` becoming a permission prompt as a behavior-gating candidate. |

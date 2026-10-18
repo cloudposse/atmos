@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -130,4 +131,39 @@ func TestResultError_PlainFailureDoesNotLeakSelfExplainingSentinels(t *testing.T
 	err := ResultError(result)
 
 	assert.NotErrorIs(t, err, errUtils.ErrUserAborted)
+}
+
+// The provider timeout is built on ErrCLIProviderExecFailed with a hint. It is not in the
+// self-explaining list, but formatting it into a message would drop the hint the user needs.
+func TestResultError_HintedProviderErrorKeepsItsHints(t *testing.T) {
+	timeout := errUtils.Build(errUtils.ErrCLIProviderExecFailed).
+		WithHint("Raise `ai.timeout_seconds` in atmos.yaml").
+		Err()
+	result := &formatter.ExecutionResult{
+		Success: false,
+		Error:   &formatter.ErrorInfo{Message: timeout.Error(), Err: timeout},
+	}
+
+	err := ResultError(result)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAIExecutionFailed, "still reported as an execution failure")
+	assert.ErrorIs(t, err, errUtils.ErrCLIProviderExecFailed, "the provider cause is kept")
+	assert.ErrorContains(t, err, timeout.Error(), "the provider's message is kept")
+	hints := cockroachErrors.GetAllHints(err)
+	require.Len(t, hints, 1)
+	assert.Contains(t, hints[0], "ai.timeout_seconds")
+}
+
+func TestResultError_ErrorWithoutHintsIsWrappedWithItsMessage(t *testing.T) {
+	cause := errors.New("connection reset")
+	result := &formatter.ExecutionResult{
+		Success: false,
+		Error:   &formatter.ErrorInfo{Message: cause.Error(), Err: cause},
+	}
+
+	err := ResultError(result)
+
+	assert.EqualError(t, err, "AI execution failed: connection reset")
+	assert.Empty(t, cockroachErrors.GetAllHints(err))
 }

@@ -376,29 +376,28 @@ settings.
 
 ### Permission Prompts
 
-When a tool requires confirmation, Atmos shows the tool and its parameters:
+When a tool requires confirmation, Atmos shows what the tool is about to do. Long commands are wrapped to the width of your terminal and shown in their own panel:
 
 ```
-  Permission required ────────────────────────────────────────────────────────────
-  Tool       atmos_describe_component
-  Why        Describe an Atmos component configuration in a specific stack
+  Permission required ────────────────────────────────────────────────
+  Tool  atmos_describe_component
+  Why   Describe an Atmos component configuration in a specific stack
   component  vpc
   stack      prod-use1
 
-
-  Allow execution?
-  "Always" choices are saved to .atmos/ai.settings.local.json
-  > Allow once
-    Always allow atmos_describe_component
-    Deny once
-    Always deny atmos_describe_component
-
-↑ up • ↓ down • / filter • enter submit
+┃ Allow execution?
+┃ "Always" choices are saved to .atmos/ai.settings.local.json
+┃ > Allow once
+┃   Always allow atmos_describe_component
+┃   Deny once
+┃   Always deny atmos_describe_component
 ```
+
+Allow once is the default, so pressing Enter never saves a permanent decision. After you choose, the prompt is replaced by a one-line receipt such as `✓ Allowed Bash: atmos list stacks`.
 
 <dl>
   <dt>**Allow once**</dt>
-  <dd>Run the tool this time only.</dd>
+  <dd>Run the tool this time only. This is the default choice.</dd>
 
   <dt>**Always allow**</dt>
   <dd>Run the tool now and remember the decision in `.atmos/ai.settings.local.json`.</dd>

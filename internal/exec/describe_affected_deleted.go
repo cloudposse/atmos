@@ -14,8 +14,8 @@ import (
 // (processStackAffected in describe_affected_utils_parallel.go); otherwise a deleted component of a
 // type present there but missing here goes unreported. Native `helm` and `kubernetes` were
 // originally omitted (#3199), and `ansible`, `container`, and `emulator` were added alongside the
-// added/modified path in #3203, giving the full eight-type canonical set that `describe component`
-// and `describe dependents` also use.
+// added/modified path in #3203. CloudFormation joins that canonical set alongside its dedicated
+// added/modified processor; dependency lookup also includes these types.
 var deletableComponentTypes = []string{
 	cfg.TerraformComponentType,
 	cfg.HelmfileComponentType,
@@ -25,6 +25,7 @@ var deletableComponentTypes = []string{
 	cfg.EmulatorComponentType,
 	cfg.KubernetesComponentType,
 	cfg.HelmComponentType,
+	cfg.CloudFormationComponentType,
 }
 
 // detectDeletedComponents detects components and stacks that exist in BASE (remoteStacks)

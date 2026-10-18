@@ -28,6 +28,7 @@ const (
 	scenarioTools            = "tools"
 	scenarioAsk              = "ask"
 	scenarioAskTwo           = "ask_two"
+	scenarioQuestion         = "question"
 	scenarioEmpty            = "empty"
 	scenarioMaxTurns         = "max_turns"
 	scenarioIsError          = "is_error"
@@ -181,6 +182,8 @@ func (f *fakeClaude) play(scenario string) int {
 		return f.playAsk()
 	case scenarioAskTwo:
 		return f.playAskTwo()
+	case scenarioQuestion:
+		return f.playQuestion()
 	case scenarioEmpty:
 		emit(successResult(""))
 	case scenarioMaxTurns:
@@ -296,5 +299,23 @@ func (f *fakeClaude) playAskTwo() int {
 		return 1
 	}
 	emit(successResult(fmt.Sprintf("r1=%s/%v/%q;r2=%s/%v/%q", b1, i1, m1, b2, i2, m2)))
+	return 0
+}
+
+// playQuestion sends an AskUserQuestion request, as Claude does when it wants the user to choose.
+func (f *fakeClaude) playQuestion() int {
+	input := obj{"questions": []any{obj{
+		"question": "Count only stacks that have components?", "header": "Count", "multiSelect": false,
+		"options": []any{obj{"label": "Yes", "description": "Count them"}, obj{"label": "No", "description": "Keep all"}},
+	}}}
+	emit(toolUse("toolu_q", "AskUserQuestion", input))
+	emit(fakeControlRequest("req-q", "AskUserQuestion", "toolu_q", input))
+	behavior, interrupt, message, updated := f.readControlResponse()
+	if interrupt {
+		emit(interruptedResult())
+		return 1
+	}
+	emit(toolResult("toolu_q", behavior != "allow"))
+	emit(successResult(fmt.Sprintf("behavior=%s message=%q input=%s", behavior, message, updated)))
 	return 0
 }

@@ -192,7 +192,11 @@ func (s *session) handleControlRequest(ctx context.Context, msg *streamMessage) 
 func (s *session) applyDecision(requestID string, req *controlRequest, decision approval.Decision) {
 	switch {
 	case decision.Allow:
-		s.write(encodeAllow(requestID, req.Input))
+		input := req.Input
+		if decision.UpdatedInput != nil {
+			input = decision.UpdatedInput
+		}
+		s.write(encodeAllow(requestID, input))
 	case decision.Interrupt:
 		s.interrupted = true
 		s.denied = nil
@@ -228,7 +232,8 @@ func denialKey(toolUseID, toolName string) string {
 func (s *session) evaluateResult() (string, error) {
 	var resp claudeResponse
 	if err := json.Unmarshal(s.result, &resp); err != nil {
-		return parseResponse(s.result)
+		// A field type mismatch must not return raw JSON as a successful answer.
+		return "", fmt.Errorf("%w: %s: %w", errUtils.ErrCLIProviderParseResponse, ProviderName, err)
 	}
 	remaining := resp.PermissionDenials[:0:0]
 	for _, denial := range resp.PermissionDenials {

@@ -1,7 +1,7 @@
 // Package progress shows what an AI request is doing.
 //
-// It wraps the shared spinner so that provider tool events ("Running atmos list
-// stacks…") update the spinner text, and so the spinner steps aside while an
+// It wraps the shared spinner so that provider tool events ("Running `atmos list
+// stacks`…") update the spinner text, and so the spinner steps aside while an
 // approval prompt owns the terminal.
 package progress
 
@@ -12,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/ai/approval"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
@@ -136,7 +137,7 @@ func (p *Progress) Handle(event approval.Event) {
 		if label == "" {
 			label = event.Tool
 		}
-		p.current = fmt.Sprintf("Running %s…", label)
+		p.current = fmt.Sprintf("Running %s…", ui.InlineCode(label))
 	case approval.ToolDone:
 		p.current = p.message
 		// Outside a terminal every update is a new status line; only the start of a tool is worth one.
