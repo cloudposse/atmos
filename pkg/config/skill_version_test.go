@@ -130,3 +130,48 @@ func TestSequenceVersionValidationPreservesValues(t *testing.T) {
 		"resolved",
 	}, v.Get("items"))
 }
+
+// TestLoadConfigRejectsAliasedVersionInSequences covers anchors declared under
+// commands, which are decoded separately from the rest of the configuration.
+func TestLoadConfigRejectsAliasedVersionInSequences(t *testing.T) {
+	for _, list := range []string{"[*version]", "[[*version]]", "!append [*version]"} {
+		t.Run(list, func(t *testing.T) {
+			writeEditionTestConfig(t, "commands:\n  - name: example\n    env: &version !version {literal: main}\ndevcontainer:\n  examples: "+list+"\n")
+			_, err := LoadConfig(&schema.ConfigAndStacksInfo{})
+			require.ErrorIs(t, err, errUtils.ErrUnsupportedYamlTag)
+			require.ErrorContains(t, err, "!version")
+			require.ErrorContains(t, err, "devcontainer.examples[0]")
+		})
+	}
+}
+
+// TestSequenceVersionAliases validates parsed alias targets and terminates on
+// cycles while still inspecting subsequent siblings.
+func TestSequenceVersionAliases(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		content string
+		path    string
+	}{
+		{name: "scalar", content: "anchor: &ref !version tool\nitems: [*ref]", path: "items[0]"},
+		{name: "sequence", content: "anchor: &ref !version []\nitems: [*ref]", path: "items[0]"},
+		{name: "nested alias", content: "anchor: &ref !version {}\ncontainer: &group {nested: *ref}\nitems: [*group]", path: "items[0].nested"},
+		{name: "shared literal", content: "anchor: &ref {literal: \"!version tool\"}\nitems: [*ref, *ref]"},
+		{name: "cycle", content: "anchor: &ref [*ref]\nitems: [*ref]"},
+		{name: "cycle then invalid sibling", content: "anchor: &ref [*ref, !version {}]\nitems: [*ref]", path: "items[0][1]"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var root yaml.Node
+			require.NoError(t, yaml.Unmarshal([]byte(tc.content), &root))
+			mapping := root.Content[0]
+			items := mapping.Content[len(mapping.Content)-1]
+			err := rejectSequenceVersionTags(items, "items")
+			if tc.path == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, errUtils.ErrUnsupportedYamlTag)
+				require.ErrorContains(t, err, tc.path)
+			}
+		})
+	}
+}
