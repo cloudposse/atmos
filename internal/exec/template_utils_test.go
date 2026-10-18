@@ -108,6 +108,7 @@ func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
 
 const experimentalTemplate = `ip: '{{ net.CIDRHost 1 "10.0.0.0/24" }}'`
 
+// TestProcessTmpl_GomplateExperimental tests experimental Gomplate function activation.
 func TestProcessTmpl_GomplateExperimental(t *testing.T) {
 	t.Parallel()
 
@@ -153,6 +154,7 @@ func TestProcessTmpl_GomplateExperimental(t *testing.T) {
 	})
 }
 
+// TestProcessTmplWithDatasources_GomplateExperimental tests experimental setting inheritance and stack overrides.
 func TestProcessTmplWithDatasources_GomplateExperimental(t *testing.T) {
 	t.Parallel()
 
@@ -191,6 +193,7 @@ func TestProcessTmplWithDatasources_GomplateExperimental(t *testing.T) {
 	})
 }
 
+// TestProcessTmplWithDatasources_GomplateExperimentalEvaluations tests experimental settings across evaluation passes.
 func TestProcessTmplWithDatasources_GomplateExperimentalEvaluations(t *testing.T) {
 	t.Parallel()
 
