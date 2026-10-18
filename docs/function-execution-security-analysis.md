@@ -141,10 +141,8 @@ The one URI validator is inconsistent and not a universal gate.
 
 ## CVE Posture
 
-Atmos already tracks upstream CVEs in this area. **CVE-2025-8959** is a go-getter symlink flaw in
-subdirectory downloads that permits reads beyond the destination directory. The go-getter fix for it
-changed how `///` root-clone URIs behave, and `normalizeVendorURI` in `internal/exec/vendor_utils.go`
-adapts vendor URIs to that change. This analysis surfaces **Atmos-specific** attack vectors (F-1…F-6) that are not
+Atmos already tracks upstream CVEs in this area; for example, go-getter **CVE-2025-8959**, a symlink
+flaw in subdirectory downloads that permits reads beyond the destination directory. This analysis surfaces **Atmos-specific** attack vectors (F-1…F-6) that are not
 upstream CVEs but are exploitable design gaps in how Atmos *uses* these capabilities.
 
 ## Mapping to Remediation
