@@ -45,7 +45,7 @@ upload an oversized template but never create the bucket: when it is missing the
 
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     vpc:
       provision:
         backend:
@@ -109,7 +109,7 @@ Multi-account/multi-region orchestration, resolved from a `kind: aws/stackset` p
 
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     vpc:
       provision:
         targets:
