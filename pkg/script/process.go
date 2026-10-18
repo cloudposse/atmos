@@ -191,6 +191,21 @@ func NestedAtmosFailure(args []string, exitCode int, cause error) error {
 	return err
 }
 
+// MarkNestedAtmosFailure marks the error of a nested Atmos command, started by a workflow or custom
+// command step through the shell executor, whose child exited with a non-zero code. The child reports
+// its own failure, including its CI annotation, so the parent must not annotate it again. The error is
+// otherwise unchanged: its message, exit code, and errors.As lookups stay the same. Silent exits,
+// launch failures, and cancellations carry no child report and are returned as they are.
+func MarkNestedAtmosFailure(err error) error {
+	defer perf.Track(nil, "script.MarkNestedAtmosFailure")()
+
+	var exitErr errUtils.ExitCodeError
+	if !errors.As(err, &exitErr) || exitErr.Silent || exitErr.Code <= 0 {
+		return err
+	}
+	return cockroach.Mark(err, errUtils.ErrNestedAtmosFailed)
+}
+
 // lastLines returns at most n trailing non-empty lines of text.
 func lastLines(text string, n int) string {
 	lines := strings.Split(strings.TrimRight(text, "\r\n"), "\n")
