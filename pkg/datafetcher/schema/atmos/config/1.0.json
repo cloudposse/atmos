@@ -11904,6 +11904,19 @@
             }
           ]
         },
+        "experimental": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
         "timeout": {
           "anyOf": [
             {

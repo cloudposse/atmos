@@ -698,9 +698,10 @@ type TemplatesSettingsGomplateDatasource struct {
 }
 
 type TemplatesSettingsGomplate struct {
-	Enabled     bool                                           `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
-	Timeout     int                                            `yaml:"timeout" json:"timeout" mapstructure:"timeout"`
-	Datasources map[string]TemplatesSettingsGomplateDatasource `yaml:"datasources" json:"datasources" mapstructure:"datasources"`
+	Enabled      bool                                           `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Experimental *bool                                          `yaml:"experimental,omitempty" json:"experimental,omitempty" mapstructure:"experimental,omitempty"`
+	Timeout      int                                            `yaml:"timeout" json:"timeout" mapstructure:"timeout"`
+	Datasources  map[string]TemplatesSettingsGomplateDatasource `yaml:"datasources" json:"datasources" mapstructure:"datasources"`
 }
 
 // SourceSettings holds global source configuration defaults for JIT-vendored components.
