@@ -1,8 +1,10 @@
 package asciicast
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"regexp"
 	"strings"
@@ -376,5 +378,81 @@ func TestRunSessionWaitIgnoresTypedCommandEcho(t *testing.T) {
 				t.Fatalf("wait finished %s after Enter, before the command could have printed", elapsed)
 			}
 		})
+	}
+}
+
+// TestWriteEndingInNewlineSubmitsLine covers a write whose text carries its own
+// newline instead of a separate Enter key: the line is submitted, so a wait must
+// not match its echo, and nothing stays pending for a later bare Enter.
+func TestWriteEndingInNewlineSubmitsLine(t *testing.T) {
+	tests := []struct {
+		name      string
+		text      string
+		wantSpans []string
+	}{
+		{name: "line feed", text: "sleep 3; echo READY\n", wantSpans: []string{"sleep 3; echo READY"}},
+		{name: "carriage return", text: "sleep 3; echo READY\r", wantSpans: []string{"sleep 3; echo READY"}},
+		{name: "crlf counts once", text: "sleep 3; echo READY\r\n", wantSpans: []string{"sleep 3; echo READY"}},
+		{name: "two lines", text: "echo ONE\necho READY\n", wantSpans: []string{"echo ONE", "echo READY"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := newEchoTestState(false)
+			action := &SessionAction{Type: "write", Text: tt.text, Rate: "0"}
+			if err := runTypedWrite(t.Context(), &syncWriter{w: io.Discard}, state, action, 0); err != nil {
+				t.Fatalf("runTypedWrite error: %v", err)
+			}
+			if len(state.echo.spans) != len(tt.wantSpans) {
+				t.Fatalf("spans = %+v, want %d", state.echo.spans, len(tt.wantSpans))
+			}
+			for i, want := range tt.wantSpans {
+				if got := state.echo.spans[i].typed; got != want {
+					t.Fatalf("span %d typed = %q, want %q", i, got, want)
+				}
+			}
+			if state.echo.pending || state.echo.pendingText.Len() != 0 {
+				t.Fatal("a submitted line must not stay pending")
+			}
+
+			appendEchoTestOutput(state, "> sleep 3; echo READY\r\n")
+			if outputMatches(state, "READY", nil) {
+				t.Fatal("wait matched the echo of a line submitted by its own newline")
+			}
+			appendEchoTestOutput(state, "READY\r\n")
+			if !outputMatches(state, "READY", nil) {
+				t.Fatal("wait did not match the command output after the echo")
+			}
+
+			// A later bare Enter (for example confirming a prompt) records nothing.
+			state.noteKeyPress("enter")
+			if len(state.echo.spans) != len(tt.wantSpans) {
+				t.Fatalf("bare Enter after a submitted write created a span: %+v", state.echo.spans)
+			}
+		})
+	}
+}
+
+func TestRunTypedWriteSendsTextUnchanged(t *testing.T) {
+	var buf bytes.Buffer
+	state := newEchoTestState(false)
+	text := "echo ONE\r\necho TWO\npartial"
+	if err := runTypedWrite(t.Context(), &syncWriter{w: &buf}, state, &SessionAction{Type: "write", Text: text, Rate: "0"}, 0); err != nil {
+		t.Fatalf("runTypedWrite error: %v", err)
+	}
+	if got := buf.String(); got != text {
+		t.Fatalf("written = %q, want %q", got, text)
+	}
+	if !state.echo.pending || state.echo.pendingText.String() != "partial" {
+		t.Fatalf("unterminated tail should stay pending, got pending=%v text=%q", state.echo.pending, state.echo.pendingText.String())
+	}
+}
+
+func TestRunTypedWriteRejectsInvalidRate(t *testing.T) {
+	state := newEchoTestState(false)
+	for _, text := range []string{"", "x\n"} {
+		err := runTypedWrite(t.Context(), &syncWriter{w: io.Discard}, state, &SessionAction{Type: "write", Text: text, Rate: "fast"}, 0)
+		if err == nil || !strings.Contains(err.Error(), "invalid write rate") {
+			t.Fatalf("text %q: expected invalid write rate error, got %v", text, err)
+		}
 	}
 }

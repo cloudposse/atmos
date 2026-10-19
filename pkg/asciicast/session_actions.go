@@ -25,8 +25,7 @@ func runAction(ctx context.Context, input *syncWriter, state *sessionState, acti
 	case "playback":
 		return runPlaybackAction(ctx, input, state, action, opts)
 	case "write":
-		state.noteTypedWrite(action.Text)
-		return runWriteAction(ctx, input, action, opts.WriteRate)
+		return runTypedWrite(ctx, input, state, action, opts.WriteRate)
 	case "key":
 		state.noteKeyPress(action.Key)
 		return runKeyAction(ctx, input, action, opts.KeyInterval)
@@ -76,6 +75,44 @@ func runScreenshotAction(action *SessionAction) error {
 		return ErrScreenshotActionRequiresPath
 	}
 	iolib.RecordMarker(action.Path)
+	return nil
+}
+
+// runTypedWrite types a write action's text. A newline inside the text submits
+// the line exactly as an Enter key does, so each submitted line is recorded for
+// echo tracking at the moment its newline is typed.
+func runTypedWrite(ctx context.Context, input *syncWriter, state *sessionState, action *SessionAction, fallback time.Duration) error {
+	text := action.Text
+	if text == "" {
+		return runWriteAction(ctx, input, action, fallback)
+	}
+	write := func(part string) error {
+		segment := *action
+		segment.Text = part
+		return runWriteAction(ctx, input, &segment, fallback)
+	}
+	for text != "" {
+		end := strings.IndexAny(text, "\r\n")
+		if end < 0 {
+			state.noteTypedWrite(text)
+			return write(text)
+		}
+		if end > 0 {
+			state.noteTypedWrite(text[:end])
+			if err := write(text[:end]); err != nil {
+				return err
+			}
+		}
+		terminator := text[end : end+1]
+		if terminator == "\r" && strings.HasPrefix(text[end+1:], "\n") {
+			terminator = "\r\n"
+		}
+		state.noteSubmittedLine()
+		if err := write(terminator); err != nil {
+			return err
+		}
+		text = text[end+len(terminator):]
+	}
 	return nil
 }
 

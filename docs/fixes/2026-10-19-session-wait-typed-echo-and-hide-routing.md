@@ -43,19 +43,21 @@ rule avoids both:
 ## Changes
 
 - `pkg/asciicast/session_echo.go` (new): an `echoTracker` on `sessionState` records each line typed with
-  `write` actions and submitted with an Enter key. The line's echo ends at the first newline that
+  `write` actions and submitted with an Enter key or with a newline inside the written text (for example
+  `text: "atmos workflow deploy-vpc -s dev\n"`). The line's echo ends at the first newline that
   follows the Enter, or at the Enter after a 500 ms grace period when no newline arrives (programs with
   echo disabled). A wait whose text or regex matches a submitted line's typed text searches only after
   that line's echo; other waits search exactly as before. A write without Enter, and a bare Enter, record
   nothing. Tracking is off on Windows, where sessions use pipes with no terminal echo.
-- `pkg/asciicast/session_actions.go`: `runAction` reports writes and key presses to the tracker,
+- `pkg/asciicast/session_actions.go`: `runAction` reports writes and key presses to the tracker, and
+  `runTypedWrite` records each newline in written text as a submitted line at the moment it is typed,
   `outputMatches` applies the tracker's search start, and `waitForOutput` re-checks when an open echo's
   grace period expires. Timeout and regex parsing moved into `parseWaitAction`.
 - `pkg/asciicast/session.go`: the tracker field, its Windows switch, and updated wait-buffer comments.
 - `pkg/runner/step/cast.go`: `isCastSessionPTYAction` includes `hide` and `show`.
 - Tests: `pkg/asciicast/session_echo_test.go` (new) covers scoped and unscoped waits, the end-anchored
-  prompt case, a form redraw while typing, open echoes and the grace timer, writes without Enter, bare
-  Enter, Enter aliases, and a real `RunSession` whose fake shell prints only after a delay.
+  prompt case, a form redraw while typing, open echoes and the grace timer, writes without Enter, writes
+  ending in `\n`, `\r`, or `\r\n`, bare Enter, Enter aliases, and a real `RunSession` whose fake shell prints only after a delay.
   `pkg/runner/step/cast_test.go` checks `hide`/`show` routing, and
   `pkg/runner/step/automation_cast_test.go` checks that a hidden command's output stays out of a
   recorder cast. Session tests that typed before the fake shell started reading now wait for a startup
@@ -74,7 +76,7 @@ rule avoids both:
   0 issues; `gofumpt -l` reported no files.
 - Real recordings with a fresh `build/atmos` (scratch fixtures under the gitignored `.context/`):
   - YAML `sleep 3; echo READY` with a 1 s wait now times out; with a longer timeout it waits for the
-    output.
+    output. The same holds when the newline is part of the written text instead of a separate Enter key.
   - YAML and recorder `hide → send → wait → show` sequences publish no hidden output.
   - A YAML end-anchored prompt wait (`\$ $`) after `sleep 2; echo done` no longer returns early; the cast
     shows `done` before the next typed command.
@@ -95,6 +97,5 @@ The remaining findings from the same `cast.recorder` field-test pass are introdu
 stay in scope for this PR rather than becoming issues. That includes the demo `finish()` defaulting to
 generation in standalone scripts, the demo policy's color check, the terminal last-command exit status,
 assertions on replaced values, fingerprint portability, the policy return value, and the error-message
-improvements. Re-recording the three screengrab help casts recorded outside the pipeline in #3278
-(`atmos-config-get--help`, `atmos-stack-config-get--help`, `atmos-stack-get--help`) is awaiting a
-decision.
+improvements. The screengrab help casts recorded outside the pipeline in #3278 were re-recorded; see
+`docs/fixes/2026-10-19-validate-committed-casts-in-ci.md`.
