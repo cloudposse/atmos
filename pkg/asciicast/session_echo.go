@@ -177,6 +177,15 @@ func (s *sessionState) noteKeyPress(key string) {
 	if err != nil || seq != "\r" {
 		return
 	}
+	s.noteSubmittedLine()
+}
+
+// noteSubmittedLine is called just before the bytes that submit the pending
+// typed line are sent: an Enter key, or a newline inside written text.
+func (s *sessionState) noteSubmittedLine() {
+	if s == nil {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.echo.noteEnter(s.output.Len(), time.Now())
