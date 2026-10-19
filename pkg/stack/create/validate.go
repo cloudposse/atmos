@@ -83,14 +83,14 @@ func discoverable(config *schema.AtmosConfiguration, file string) error {
 		return err
 	}
 	if !included {
-		return fmt.Errorf("%w: %s does not match stacks.included_paths", errUtils.ErrInvalidConfig, relative)
+		return fmt.Errorf("%w: %s does not match stacks.included_paths", errUtils.ErrInvalidConfig, filepath.ToSlash(relative))
 	}
 	excluded, err := matchesPatterns(config.Stacks.ExcludedPaths, relative, false)
 	if err != nil {
 		return err
 	}
 	if excluded {
-		return fmt.Errorf("%w: %s matches stacks.excluded_paths", errUtils.ErrInvalidConfig, relative)
+		return fmt.Errorf("%w: %s matches stacks.excluded_paths", errUtils.ErrInvalidConfig, filepath.ToSlash(relative))
 	}
 	return nil
 }

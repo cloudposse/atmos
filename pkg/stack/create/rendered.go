@@ -44,7 +44,7 @@ func validateRendered(config *schema.AtmosConfiguration, root string, files []en
 		}
 	}
 	if primary == nil {
-		return nil, fmt.Errorf("%w: scaffold did not generate stack manifest %s", errUtils.ErrInvalidConfig, manifest)
+		return nil, fmt.Errorf("%w: scaffold did not generate stack manifest %s", errUtils.ErrInvalidConfig, filepath.ToSlash(manifest))
 	}
 	return primary, nil
 }
