@@ -61,15 +61,22 @@ func NewSubject(identity ObjectIdentity, metadata any, delimiters ...string) (*S
 	return subject, nil
 }
 
-func (s *Selector) validate() error {
+// validate checks a selector's shape and that its values are literal. Values are tested against the
+// default delimiter and every extra one, such as the template delimiter an instance is configured with:
+// a value such as [[ .stage ]] would otherwise pass as a literal, match nothing, and silently detach the
+// policy instead of failing closed.
+func (s *Selector) validate(extraDelimiters ...string) error {
 	if s == nil {
 		return nil
 	}
 	if s.TagMode != "" && s.TagMode != tags.TagModeAny && s.TagMode != tags.TagModeAll {
 		return fmt.Errorf("%w: match.tag_mode must be any or all", errUtils.ErrPolicyInvalid)
 	}
-	if unresolvedMetadata(SubjectMetadata{Tags: s.Tags, Labels: s.Labels}, "{{") {
-		return fmt.Errorf("%w: attachment selectors must be literal values", errUtils.ErrPolicyInvalid)
+	metadata := SubjectMetadata{Tags: s.Tags, Labels: s.Labels}
+	for _, left := range append([]string{"{{"}, extraDelimiters...) {
+		if left != "" && unresolvedMetadata(metadata, left) {
+			return fmt.Errorf("%w: attachment selectors must be literal values", errUtils.ErrPolicyInvalid)
+		}
 	}
 	return nil
 }
@@ -82,7 +89,11 @@ func (s *Selector) Matches(subject *Subject) (bool, error) {
 	if s == nil {
 		return true, nil
 	}
-	if err := s.validate(); err != nil {
+	var configuredDelimiter []string
+	if subject != nil {
+		configuredDelimiter = append(configuredDelimiter, subject.TemplateLeft)
+	}
+	if err := s.validate(configuredDelimiter...); err != nil {
 		return false, err
 	}
 	if err := validateSubject(subject); err != nil {

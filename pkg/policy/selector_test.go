@@ -131,3 +131,34 @@ func TestSelectorDirectoryRejectsInvalidAttachments(t *testing.T) {
 		})
 	}
 }
+
+// A selector value in the configured template delimiter is unresolved, not a literal that matches
+// nothing. Treating it as a literal would silently detach the policy from every instance.
+func TestSelectorRejectsValuesInTheConfiguredDelimiter(t *testing.T) {
+	subject := func(left string) *Subject {
+		return &Subject{
+			ObjectIdentity: ObjectIdentity{Name: "app", Stack: "prod", ComponentType: "terraform"},
+			Metadata:       SubjectMetadata{Tags: []string{}, Labels: map[string]string{"stage": "prod"}},
+			TemplateLeft:   left,
+		}
+	}
+	selector := &Selector{Labels: map[string]string{"stage": "[[ .stage ]]"}}
+
+	_, err := selector.Matches(subject("[["))
+	require.ErrorIs(t, err, errUtils.ErrPolicyInvalid, "the configured delimiter marks the value as unresolved")
+
+	_, err = selector.Matches(subject(""))
+	require.NoError(t, err, "without that delimiter configured the value is a plain literal")
+
+	_, err = selector.Matches(subject("{{"))
+	require.NoError(t, err, "a different delimiter does not make it a template")
+
+	defaults := &Selector{Labels: map[string]string{"stage": "{{ .stage }}"}}
+	_, err = defaults.Matches(subject("[["))
+	require.ErrorIs(t, err, errUtils.ErrPolicyInvalid, "the default delimiter still counts under a custom one")
+
+	literal := &Selector{Labels: map[string]string{"stage": "prod"}}
+	matched, err := literal.Matches(subject("[["))
+	require.NoError(t, err)
+	require.True(t, matched)
+}

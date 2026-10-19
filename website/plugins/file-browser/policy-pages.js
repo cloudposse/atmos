@@ -14,6 +14,10 @@ function policyPage(example) {
   if (!sections.Configuration || !sections.Contract || !data.command) {
     throw new Error(`Policy ${example.name} needs Contract, Configuration, and command metadata`);
   }
+  const fixtures = JSON.parse(cases.content);
+  if (!Array.isArray(fixtures) || fixtures.length === 0) {
+    throw new Error(`Policy ${example.name} needs at least one test case`);
+  }
   return {
     name: example.name,
     title: example.title,
@@ -25,7 +29,7 @@ function policyPage(example) {
     configuration: sections.Configuration,
     contract: sections.Contract,
     command: data.command,
-    cases: JSON.parse(cases.content),
+    cases: fixtures,
   };
 }
 

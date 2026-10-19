@@ -121,3 +121,20 @@ test('a missing source directory still yields the options the route lifecycle re
   assert.equal(content.options.routeBasePath, '/missing');
   assert.equal(content.options.docsSidebar, 'cli');
 });
+
+test('a policy page needs at least one fixture so previews cannot render an empty example list', () => {
+  const readme = '---\ncommand: atmos terraform plan vpc -s prod\n---\n\n## Contract\n\nA contract.\n\n## Configuration\n\nA configuration.\n';
+  const example = cases => ({
+    name: 'empty',
+    root: {
+      readme: {content: readme},
+      children: [
+        {name: 'policy.yaml', content: 'apiVersion: atmos/v1\n'},
+        {name: 'tests', children: [{name: 'cases.json', content: cases}]},
+      ],
+    },
+  });
+  assert.throws(() => policyPage(example('[]')), /needs at least one test case/);
+  assert.throws(() => policyPage(example('{}')), /needs at least one test case/);
+  assert.equal(policyPage(example('[{"name": "denied"}]')).cases.length, 1);
+});
