@@ -73,11 +73,15 @@ failure intent is stamped onto each resolved file (`ResolvedPaths.SkipIfMissing`
 failure fails closed or warn-and-skips consistently.
 
 **Nested-import contract:** `skip_if_missing`/`when` are honored per entry at resolve time in each
-`processImports` pass. A required nested import that fails closed (`ErrRequiredImportFailed`)
-propagates through both adapters (`GoGetterAdapter` wraps with `%w`; `LocalAdapter` no longer
-swallows it) and through `processImports` even when the importing (parent) entry is optional — an
-optional parent must not mask a required child. At merge time, the importing entry's intent still
-governs its resolved subtree for ordinary (non-required) merge failures.
+`processImports` pass. A required nested import that fails closed (`ErrRequiredImportFailed`) or is
+malformed (`ErrInvalidConfigImport`) propagates through both adapters (`GoGetterAdapter` wraps with
+`%w`; `LocalAdapter` no longer swallows these) and through `classifyImportResolveError` even when
+the importing (parent) entry is optional — an optional parent must not mask a fail-closed child. A
+depth-limit breach (`ErrMaxImportDepth`) reached while descending into nested imports is converted
+to `ErrRequiredImportFailed` only when an over-depth entry is required; when every over-depth entry
+is optional it is tolerated (the parent still resolves), preserving historical behavior. At merge
+time, the importing entry's intent still governs its resolved subtree for ordinary (non-required)
+merge failures.
 
 ### 2. Optional MCP servers
 

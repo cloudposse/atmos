@@ -465,6 +465,36 @@ func TestLocalAdapter_RequiredNestedImportFailsClosed(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrRequiredImportFailed)
 }
 
+// TestLocalAdapter_NestedDepthLimit verifies that a depth-limit breach reached while descending
+// into nested imports is classified by the over-depth entries' own intent (issue #3430 review
+// follow-up): a required nested import fails closed, while an optional one is tolerated so the
+// parent still resolves. Resolving main.yaml at maxDepth 1 puts its nested import at depth 2.
+func TestLocalAdapter_NestedDepthLimit(t *testing.T) {
+	setup := func(t *testing.T, mainImport string) string {
+		t.Helper()
+		config.ResetImportAdapterRegistry()
+		config.SetDefaultAdapter(&LocalAdapter{})
+		t.Cleanup(config.ResetImportAdapterRegistry)
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "main.yaml"), []byte(mainImport), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "child.yaml"), []byte("vars: {}\n"), 0o600))
+		return dir
+	}
+
+	t.Run("required nested import fails closed", func(t *testing.T) {
+		dir := setup(t, "import:\n  - path: child.yaml\n    skip_if_missing: false\n")
+		_, err := (&LocalAdapter{}).Resolve(context.Background(), "main.yaml", dir, dir, 1, 1, nil)
+		require.ErrorIs(t, err, errUtils.ErrRequiredImportFailed)
+	})
+
+	t.Run("optional nested import is tolerated", func(t *testing.T) {
+		dir := setup(t, "import:\n  - child.yaml\n")
+		paths, err := (&LocalAdapter{}).Resolve(context.Background(), "main.yaml", dir, dir, 1, 1, nil)
+		require.NoError(t, err, "an optional nested import tolerates a depth-limit breach")
+		require.Len(t, paths, 1, "the parent file still resolves")
+	})
+}
+
 // TestLocalAdapter_NoNestedImports tests file without nested imports.
 func TestLocalAdapter_NoNestedImports(t *testing.T) {
 	tempDir := t.TempDir()
