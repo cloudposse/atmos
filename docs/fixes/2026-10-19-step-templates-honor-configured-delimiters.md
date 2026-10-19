@@ -14,7 +14,7 @@ This is the editions framework's `KindBehavior` case: an existing configuration 
 
 ## Changes
 
-- `pkg/edition/journal.go`: one `KindBehavior` entry, `templates.step_delimiters`, dated `2026-10-19`. Its `Ref` is the placeholder `TODO-PR-URL` until the PR exists.
+- `pkg/edition/journal.go`: one `KindBehavior` entry, `templates.step_delimiters`, dated `2026-10-19`. Its `Ref` is https://github.com/cloudposse/atmos/pull/3436.
 - `pkg/template/delimiters` (new): the `Delimiters{Left, Right}` value type (zero value is the default pair), `Parse` (the validation that `resolveTemplateDelimiters` carried, which now delegates to it), and `ForSteps(atmosConfig)`, which returns the configured pair only when `BehaviorChanged(atmosConfig.Edition, "templates.step_delimiters")` is true. Invalid pins and invalid delimiter lists are returned as errors. Helpers: `Contains`, `ContainsAny`, `Wrap`, `Protect`/`Unprotect`, `Apply`.
 - `pkg/runner/step`: `Variables` carries the pair (`SetTemplateDelimiters`, `ApplyTemplateDelimiters`, `TemplateDelimiters`, copied by `Clone`). Detection, the multi-pass loop, protection and restoration of protected roots, the built-in fallback renderer, and `output:` detection use it. `Variables.TemplateFieldError` names the configured opening in the `!literal` hint.
 - `internal/exec`: `ProcessStepTmpl` parses with a supplied pair (`tmplInput.delims` is applied before parsing). `workflow_utils.go` and the two control adapters are inline call sites that resolve the pair once and pass it on.
@@ -41,4 +41,4 @@ Old and new paths:
 
 ## Follow-ups
 
-Replace the `TODO-PR-URL` placeholder in the journal entry and in `docs/prd/editions.md` with the pull request URL once it exists.
+None.

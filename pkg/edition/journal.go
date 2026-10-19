@@ -258,7 +258,7 @@ var journal = []Entry{
 		Old:         "workflow, custom-command, and hook step templates always use {{ }}",
 		New:         "step templates use templates.settings.delimiters",
 		Description: "Workflow, custom-command, and lifecycle-hook step templates honor the configured templates.settings.delimiters; earlier pins keep the default {{ }} for steps.",
-		Ref:         "TODO-PR-URL",
+		Ref:         "https://github.com/cloudposse/atmos/pull/3436",
 	},
 }
 
