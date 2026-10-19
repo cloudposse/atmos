@@ -997,7 +997,7 @@ func ExecuteWorkflow(
 									WithProcessStreams(process.Streams{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr}),
 								)
 							})
-							return runErr
+							return writer.MarkNestedAtmosFailure(runErr)
 						})
 					})
 				})

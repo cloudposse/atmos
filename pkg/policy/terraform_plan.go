@@ -88,11 +88,14 @@ func EnforceDecision(decision Decision) error {
 // decision apart from usage and runtime failures.
 func denialError(findings []Finding) error {
 	var blocks []string
+	var violations []Violation
 	for _, finding := range findings {
 		if finding.Status != Deny {
 			continue
 		}
-		if reason := strings.TrimSpace(finding.Effects.Reason); reason != "" {
+		reason := strings.TrimSpace(finding.Effects.Reason)
+		violations = append(violations, Violation{RuleID: finding.RuleID, Reason: reason})
+		if reason != "" {
 			blocks = append(blocks, finding.RuleID+":\n\n"+reason)
 			continue
 		}
@@ -102,7 +105,40 @@ func denialError(findings []Finding) error {
 	if len(blocks) > 0 {
 		builder = builder.WithExplanation(strings.Join(blocks, "\n\n"))
 	}
-	return builder.Err()
+	return &violationsError{cause: builder.Err(), violations: violations}
+}
+
+// Violation identifies one rule that denied an execution, so reporters such as CI
+// annotations can name the rule without parsing the rendered explanation. Reason is
+// the author's static Markdown and is empty when the rule has none.
+type Violation struct {
+	RuleID string
+	Reason string
+}
+
+// violationsError attaches the denying rules to a denial without changing its
+// message, explanation, sentinel, or exit code.
+type violationsError struct {
+	cause      error
+	violations []Violation
+}
+
+// Error returns the denial message unchanged.
+func (e *violationsError) Error() string { return e.cause.Error() } //nolint:lintroller // Trivial error-interface method; perf.Track overhead is unwarranted.
+
+// Unwrap keeps the sentinel, explanation, and exit code reachable.
+func (e *violationsError) Unwrap() error { return e.cause } //nolint:lintroller // Trivial error-interface method; perf.Track overhead is unwarranted.
+
+// Violations returns the rules that denied err, in decision order, or nil when err
+// is not a policy denial. Wrapping err does not hide its violations.
+func Violations(err error) []Violation {
+	defer perf.Track(nil, "policy.Violations")()
+
+	var denial *violationsError
+	if !errors.As(err, &denial) {
+		return nil
+	}
+	return append([]Violation(nil), denial.violations...)
 }
 
 // IsAdmissionError reports whether err is a policy admission failure: a denial,

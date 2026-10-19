@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 
+	cockroach "github.com/cockroachdb/errors"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/automation"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -182,11 +184,26 @@ func NestedAtmosFailure(args []string, exitCode int, cause error) error {
 	if denied {
 		message = deniedMessage(label, exitCode)
 	}
-	err := serviceFailure(errUtils.ErrScriptProcessFailed, cause, "%s", message)
+	err := cockroach.Mark(serviceFailure(errUtils.ErrScriptProcessFailed, cause, "%s", message), errUtils.ErrNestedAtmosFailed)
 	if denied {
 		err = errUtils.WithExitCode(err, errUtils.ExitCodePolicyDenied)
 	}
 	return err
+}
+
+// MarkNestedAtmosFailure marks the error of a nested Atmos command, started by a workflow or custom
+// command step through the shell executor, whose child exited with a non-zero code. The child reports
+// its own failure, including its CI annotation, so the parent must not annotate it again. The error is
+// otherwise unchanged: its message, exit code, and errors.As lookups stay the same. Silent exits,
+// launch failures, and cancellations carry no child report and are returned as they are.
+func MarkNestedAtmosFailure(err error) error {
+	defer perf.Track(nil, "script.MarkNestedAtmosFailure")()
+
+	var exitErr errUtils.ExitCodeError
+	if !errors.As(err, &exitErr) || exitErr.Silent || exitErr.Code <= 0 {
+		return err
+	}
+	return cockroach.Mark(err, errUtils.ErrNestedAtmosFailed)
 }
 
 // lastLines returns at most n trailing non-empty lines of text.

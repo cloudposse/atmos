@@ -77,6 +77,19 @@ project initialization and configuration loading. Configuration is loaded to reg
 commands before their CLI admission; use function policies to control YAML execution during that loading.
 Help rendering and external programs invoked without Atmos are not command admission targets.
 
+Admission of built-in commands runs before `atmos.yaml` loads, so a denial here cannot post commit statuses or job
+summaries. When a CI provider is detected, such as GitHub Actions, Atmos reports one error annotation per denying
+rule instead. It needs no CI configuration. Custom-command denials happen after configuration loads, so they
+follow `ci.enabled` and `ci.annotations.enabled`:
+
+```text
+::error title=Policy no-destroy/direct-destroy denied execution::Denied by no-destroy/direct-destroy.
+```
+
+The annotation message is the rule's `reason` as plain text, or `Denied by <rule>.` when the rule has
+none. These annotations have no file location, because the command is denied before any stack is read.
+See [failure annotations](/cli/configuration/ci#failure-annotations) for how other failures are reported.
+
 ### Destroy detection
 
 Matching `input.command == 'terraform destroy'` alone misses

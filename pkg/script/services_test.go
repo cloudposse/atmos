@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -282,4 +283,42 @@ func TestNestedAtmosFailure(t *testing.T) {
 	ordinary := NestedAtmosFailure([]string{"terraform", "plan"}, 2, cause)
 	assert.Equal(t, "atmos terraform plan exited with code 2", ordinary.Error())
 	assert.Empty(t, cockroach.GetAllDetails(ordinary), "streamed output is not repeated")
+
+	// Both are marked as nested Atmos failures, so CI reporting skips what the child reported.
+	assert.True(t, cockroach.Is(denied, errUtils.ErrNestedAtmosFailed))
+	assert.True(t, cockroach.Is(ordinary, errUtils.ErrNestedAtmosFailed))
+	assert.ErrorIs(t, ordinary, errUtils.ErrScriptProcessFailed, "the process-failure sentinel still matches")
+}
+
+func TestMarkNestedAtmosFailure(t *testing.T) {
+	t.Parallel()
+
+	failed := errUtils.ExitCodeError{Code: 3}
+	tests := []struct {
+		name       string
+		err        error
+		wantMarked bool
+	}{
+		{name: "child exited non-zero", err: failed, wantMarked: true},
+		{name: "child denied by policy", err: errUtils.ExitCodeError{Code: errUtils.ExitCodePolicyDenied}, wantMarked: true},
+		{name: "wrapped exit code", err: fmt.Errorf("step failed: %w", failed), wantMarked: true},
+		{name: "silent exit", err: errUtils.ExitCodeError{Code: 3, Silent: true}},
+		{name: "zero exit code", err: errUtils.ExitCodeError{}},
+		{name: "launch failure", err: errUtils.ErrScriptProcessFailed},
+		{name: "cancellation", err: context.Canceled},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := MarkNestedAtmosFailure(tc.err)
+			require.Error(t, got)
+			assert.Equal(t, tc.wantMarked, cockroach.Is(got, errUtils.ErrNestedAtmosFailed))
+			// Marking never changes what callers already see.
+			assert.Equal(t, tc.err.Error(), got.Error())
+			assert.Equal(t, errUtils.GetExitCode(tc.err), errUtils.GetExitCode(got))
+			assert.ErrorIs(t, got, tc.err)
+		})
+	}
+
+	assert.NoError(t, MarkNestedAtmosFailure(nil))
 }
