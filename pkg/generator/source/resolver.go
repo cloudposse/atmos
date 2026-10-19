@@ -186,10 +186,9 @@ func Resolve(atmosConfig *schema.AtmosConfiguration, name, src string, timeout t
 // fetchOCI pulls a source directory from an oci:// registry reference
 // into a temporary directory without interpreting its contents. Mirrors
 // fetchRemoteDirectory's temp-dir/cleanup/provenance shape, but fetches via
-// pkg/oci.ProcessImage (the same primitive atmos vendor pull and JIT
-// component-source provisioning already use) instead of go-getter, since
-// OCI registries aren't a go-getter scheme. The returned cleanup function
-// removes the temporary directory.
+// the shared downloader's OCI getter (downloader.FetchOCIContext, the same
+// path atmos vendor pull, JIT component-source provisioning, and !include
+// use). The returned cleanup function removes the temporary directory.
 func fetchOCI(atmosConfig *schema.AtmosConfiguration, src string, timeout time.Duration) (*Directory, func(), error) {
 	noop := func() {}
 
@@ -227,7 +226,7 @@ func fetchOCI(atmosConfig *schema.AtmosConfiguration, src string, timeout time.D
 		}
 	}
 
-	if err := oci.ProcessImage(ctx, atmosConfig, fetchRef, tempDir); err != nil {
+	if err := downloader.FetchOCIContext(ctx, atmosConfig, fetchRef, tempDir, timeout); err != nil {
 		cleanup()
 		return nil, noop, errUtils.Build(errUtils.ErrScaffoldFetchSource).
 			WithCause(err).

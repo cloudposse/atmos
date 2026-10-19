@@ -1027,6 +1027,7 @@ var (
 	ErrCreateTempDirectory   = ErrCreateTempDir // Alias to avoid duplicate sentinels
 	ErrInvalidImageReference = errors.New("invalid image reference")
 	ErrPullImage             = errors.New("failed to pull image")
+	ErrOCIGetFileUnsupported = errors.New("oci:// sources must be fetched in directory mode, not as a single file")
 	ErrGetImageDescriptor    = errors.New("cannot get a descriptor for the OCI image")
 	ErrGetImageLayers        = errors.New("failed to get image layers")
 	ErrProcessLayer          = errors.New("failed to process layer")

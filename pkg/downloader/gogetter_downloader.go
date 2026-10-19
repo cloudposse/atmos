@@ -137,6 +137,7 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 			"http":  httpGetter,
 			"https": httpGetter,
 			"s3":    s3source.NewGetter(ctx),
+			"oci":   &OCIGetter{AtmosConfig: f.atmosConfig},
 			// "gcs": &getter.GCSGetter{},
 		},
 	}
@@ -161,6 +162,12 @@ func WithProgress(progress getter.ProgressTracker) GoGetterOption {
 // paths return false so local-only fetches do not trigger provisioning.
 func isRemoteSource(src string) bool {
 	s := strings.TrimPrefix(src, GitPrefix)
+
+	// OCI registries authenticate through go-containerregistry (docker keychain, ghcr.io token),
+	// never through the git/GitHub credential brokers this check gates.
+	if strings.HasPrefix(s, ociScheme) {
+		return false
+	}
 
 	if i := strings.Index(s, schemeSeparator); i >= 0 {
 		return !strings.EqualFold(s[:i], "file")

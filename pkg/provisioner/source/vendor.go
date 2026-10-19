@@ -12,7 +12,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/downloader"
-	"github.com/cloudposse/atmos/pkg/oci"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/vendor"
@@ -229,7 +228,7 @@ func VendorSource(
 }
 
 // downloadSource populates tempDir from uri, branching between the OCI-native
-// path (oci.ProcessImage) and go-getter for everything else.
+// path (downloader.FetchOCIContext) and go-getter for everything else.
 func downloadSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, uri, tempDir string) error {
 	if vendor.IsOCIURI(uri) {
 		return downloadOCISource(ctx, atmosConfig, uri, tempDir)
@@ -237,16 +236,12 @@ func downloadSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 	return downloadGoGetterSource(ctx, atmosConfig, sourceSpec, uri, tempDir)
 }
 
-// downloadOCISource pulls an oci:// source directly via pkg/oci. Go-containerregistry
-// doesn't understand the "oci://" scheme prefix itself, so it's trimmed first (mirroring
-// the legacy vendor pull path in internal/exec/vendor_component_utils.go). The pull is
-// bounded to DefaultVendorTimeout, matching the go-getter path's explicit timeout.
+// downloadOCISource pulls an oci:// source through the shared downloader's OCI getter. The
+// "oci://" scheme prefix is trimmed first, since FetchOCIContext takes a bare image reference.
+// The pull is bounded to DefaultVendorTimeout, matching the go-getter path's explicit timeout.
 func downloadOCISource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri, tempDir string) error {
-	ctx, cancel := context.WithTimeout(ctx, DefaultVendorTimeout)
-	defer cancel()
-
 	imageRef := strings.TrimPrefix(uri, "oci://")
-	if err := oci.ProcessImage(ctx, atmosConfig, imageRef, tempDir); err != nil {
+	if err := downloader.FetchOCIContext(ctx, atmosConfig, imageRef, tempDir, DefaultVendorTimeout); err != nil {
 		return errUtils.Build(errUtils.ErrSourceProvision).
 			WithCause(err).
 			WithExplanation("Failed to download OCI source").

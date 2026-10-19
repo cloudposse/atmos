@@ -232,10 +232,10 @@ To download remote files, Atmos uses [`go-getter`](https://github.com/hashicorp/
    settings: !include sftp://user@remote-server:/path/to/settings.yaml
    ```
 
-- **oci** (Open Container Initiative) - unlike the other remote protocols, OCI registries aren't a
-  [`go-getter`](https://github.com/hashicorp/go-getter) scheme, so `!include` pulls the whole image
-  and extracts the requested file from it, the same way `atmos vendor pull` and `atmos scaffold generate`
-  already fetch OCI artifacts
+- **oci** (Open Container Initiative) - Atmos registers an `oci` getter alongside the
+  [`go-getter`](https://github.com/hashicorp/go-getter) protocols, shared with `atmos vendor pull` and
+  `atmos scaffold generate`. An OCI artifact is pulled and extracted as a whole, so `!include` then picks
+  the requested file out of the extracted image
   ```yaml
   vars: !include oci://ghcr.io/my-org/my-image:v1.0.0//path/to/vars.yaml
   ```

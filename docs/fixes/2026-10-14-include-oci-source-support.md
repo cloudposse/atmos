@@ -19,13 +19,10 @@ this repo for OCI pulls).
   through `downloader.NewGoGetterDownloader`, whose `Getters` map
   (`pkg/downloader/gogetter_downloader.go`) only registers `git`, `file`, `hg`, `http`, and `https`.
   There is no `"oci"` getter, and go-getter has no built-in concept of an OCI registry.
-- Elsewhere in the repo, every existing `oci://` consumer (component vendoring in
-  `pkg/vendoring/install/fetch.go`, scaffold template sourcing in
-  `pkg/generator/source/resolver.go`) already special-cases `oci://` and calls
-  `pkg/oci.ProcessImage` directly instead of going through `go-getter` — `resolver.go`'s own
-  comment states why: "OCI registries aren't a go-getter scheme." There was no precedent anywhere
-  in the codebase for wiring OCI support into `go-getter` itself (e.g. via a custom `getter.Getter`
-  implementation), so this fix follows the same established pattern rather than inventing a new one.
+- Elsewhere in the repo, every existing `oci://` consumer (component vendoring, scaffold template
+  sourcing, component source provisioning) called `pkg/oci.ProcessImage` directly instead of going
+  through `go-getter`, each with its own copy of the dispatch. A maintainer review on the PR asked
+  for one shared path instead of another per-consumer carve-out for `!include`.
 - `pkg/oci.ProcessImage` pulls an entire OCI image and extracts all of its layers into a directory;
   there is no registry API to fetch a single layer-internal path on its own. `!include`, unlike
   vendoring/scaffold, needs one specific file, so the fix needed a way to name a path inside the
@@ -33,6 +30,15 @@ this repo for OCI pulls).
 
 ## Changes
 
+- `pkg/downloader/oci_getter.go` (new): `OCIGetter`, a `getter.Getter` registered as `"oci"` in
+  `goGetterClientFactory.NewClient`, backed by `pkg/oci.ProcessImage` (directory mode only), plus
+  `FetchOCIContext`, the shared helper that normalizes the reference and fetches through the
+  downloader. `isRemoteSource` excludes `oci://` so the git/GitHub credential brokers are not
+  triggered for registry pulls. The vendoring, scaffold, and component-provisioning callers were
+  migrated onto it, preserving their timeouts, error wrapping, hints, and digest pinning.
+- go-getter's own `//subdir` selection only copies directories (a subdir that resolves to a single
+  file silently copies nothing; verified against go-getter v1.8.6), so single-file selection stays
+  in `!include`.
 - `pkg/utils/yaml_include_by_extension.go`: `processRemoteFile` now detects `oci://` sources and
   routes them to a new `processOCIIncludeFile`, which:
   - Splits the include value into the OCI image reference and an in-image file path using

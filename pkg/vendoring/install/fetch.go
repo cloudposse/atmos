@@ -103,9 +103,7 @@ func fetchRemote(ctx context.Context, atmosConfig *schema.AtmosConfiguration, ur
 }
 
 func fetchOCI(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri, tempDir string) (string, error) {
-	ociCtx, cancel := context.WithTimeout(ctx, fetchTimeout)
-	defer cancel()
-	if err := oci.ProcessImage(ociCtx, atmosConfig, uri, tempDir); err != nil {
+	if err := downloader.FetchOCIContext(ctx, atmosConfig, uri, tempDir, fetchTimeout); err != nil {
 		return "", fmt.Errorf("%w: %w", ErrProcessOCIImage, err)
 	}
 	return tempDir, nil

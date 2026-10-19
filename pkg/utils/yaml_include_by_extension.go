@@ -18,7 +18,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/function/parser"
 	"github.com/cloudposse/atmos/pkg/github"
-	"github.com/cloudposse/atmos/pkg/oci"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -421,10 +420,9 @@ func processLocalFile(localFile string, forceRaw bool) (any, error) {
 func processRemoteFile(atmosConfig *schema.AtmosConfiguration, includeFile string, forceRaw bool) (any, error) {
 	defer perf.Track(atmosConfig, "utils.processRemoteFile")()
 
-	// go-getter has no "oci" entry in its Getters map (see
-	// downloader.goGetterClientFactory.NewClient) -- OCI registries aren't a go-getter scheme.
-	// Fetch it via pkg/oci instead, the same primitive component vendoring and scaffold
-	// template sourcing already use to pull OCI artifacts.
+	// oci:// sources need one file picked out of the pulled image, which go-getter's own
+	// "//subdir" handling cannot do (it only copies directories), so the pick happens here
+	// after the shared OCI getter has pulled the image.
 	if strings.HasPrefix(includeFile, "oci://") {
 		return processOCIIncludeFile(atmosConfig, includeFile, forceRaw)
 	}
@@ -457,8 +455,8 @@ func processRemoteFile(atmosConfig *schema.AtmosConfiguration, includeFile strin
 
 // processOCIIncludeFile pulls a single file out of an OCI artifact for !include/!include.raw.
 // An OCI registry has no API to fetch one layer-internal path on its own -- the whole image is
-// pulled and its layers extracted (pkg/oci.ProcessImage, the same primitive component vendoring
-// and scaffold template sourcing already use), then the requested file is read back out of the
+// pulled and its layers extracted (downloader.FetchOCIContext, the shared OCI getter component
+// vendoring and scaffold template sourcing also use), then the requested file is read back out of the
 // extracted tree.
 //
 // The file to include is named with go-getter's own "//" subdirectory convention (already used
@@ -482,10 +480,7 @@ func processOCIIncludeFile(atmosConfig *schema.AtmosConfiguration, includeFile s
 		_ = os.RemoveAll(tempDir)
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), ociIncludeTimeout)
-	defer cancel()
-
-	if err := oci.ProcessImage(ctx, atmosConfig, strings.TrimPrefix(imageRef, "oci://"), tempDir); err != nil {
+	if err := downloader.FetchOCIContext(context.Background(), atmosConfig, strings.TrimPrefix(imageRef, "oci://"), tempDir, ociIncludeTimeout); err != nil {
 		return nil, err
 	}
 
