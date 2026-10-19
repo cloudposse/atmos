@@ -9,6 +9,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -80,7 +81,7 @@ func newTask(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, 
 		return nil, err
 	}
 	if timeout != "" {
-		t.timeout, err = time.ParseDuration(timeout)
+		t.timeout, err = duration.ParseString(timeout)
 		if err != nil || t.timeout <= 0 {
 			return nil, invalidArg("timeout %q for task %q must be a positive duration such as \"30s\" or \"5m\"", timeout, t.name)
 		}

@@ -2,9 +2,9 @@ package step
 
 import (
 	"fmt"
-	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	durationpkg "github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -12,7 +12,7 @@ import (
 const castPlaybackStepType = "playback"
 
 func validateCastPlaybackGroup(parent, group *schema.WorkflowStep, session bool) error {
-	duration, err := time.ParseDuration(group.Duration)
+	duration, err := durationpkg.ParseString(group.Duration)
 	if err != nil || duration <= 0 || len(group.Steps) == 0 {
 		return fmt.Errorf("%w: expected positive duration and nested steps", errUtils.ErrInvalidCastPlayback)
 	}
@@ -45,7 +45,7 @@ func (r castChildStepRunner) runPlaybackGroup(group *schema.WorkflowStep) error 
 	if err := validateCastPlaybackGroup(r.castStep, group, false); err != nil {
 		return err
 	}
-	duration, _ := time.ParseDuration(group.Duration)
+	duration, _ := durationpkg.ParseString(group.Duration)
 	clone := *r.castStep
 	clone.Steps = group.Steps
 	nested := r

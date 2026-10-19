@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	durationpkg "github.com/cloudposse/atmos/pkg/duration"
 )
 
 func runPlaybackAction(ctx context.Context, input io.Writer, state *sessionState, action *SessionAction, opts *SessionOptions) error {
-	duration, err := time.ParseDuration(action.Duration)
+	duration, err := durationpkg.ParseString(action.Duration)
 	if err != nil || duration <= 0 || len(action.Actions) == 0 {
 		return fmt.Errorf("%w: expected positive duration and nested actions", errUtils.ErrInvalidCastPlayback)
 	}

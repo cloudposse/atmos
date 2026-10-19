@@ -109,6 +109,10 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 	// the step or workflow opts in through output or show.labels.
 	writer := NewCommandOutputWriter(step, workflow)
 	writer.writers = vars.OutputWriters
+	if _, embedded := script.Get(invocation.interpreter); !embedded {
+		// External scripts receive source text or no input, never the parent's terminal.
+		writer = writer.WithStdin(nil)
+	}
 	var embedded script.Result
 	stdout, stderr, err := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
 		if engine, ok := script.Get(invocation.interpreter); ok {

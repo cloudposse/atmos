@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/cloudposse/atmos/pkg/duration"
 	schemaPkg "github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -1147,7 +1148,7 @@ var (
 
 	// Credential errors.
 	ErrCredentialsInvalid = errors.New("credentials are invalid or have been revoked")
-	ErrInvalidDuration    = errors.New("invalid duration format")
+	ErrInvalidDuration    = duration.ErrInvalid // Alias so errors.Is matches pkg/duration errors.
 
 	// Auth manager and identity/provider resolution errors (centralized sentinels).
 	ErrFailedToInitializeAuthManager = errors.New("failed to initialize auth manager")

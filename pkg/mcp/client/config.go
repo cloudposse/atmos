@@ -7,6 +7,7 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -52,7 +53,7 @@ func ParseConfig(name string, cfg schema.MCPServerConfig) (*ParsedConfig, error)
 	timeout := defaultTimeout
 	if cfg.Timeout != "" {
 		var err error
-		timeout, err = time.ParseDuration(cfg.Timeout)
+		timeout, err = duration.ParseDuration(cfg.Timeout)
 		if err != nil {
 			return nil, fmt.Errorf("%w: server %q: %w", errUtils.ErrMCPServerInvalidTimeout, name, err)
 		}

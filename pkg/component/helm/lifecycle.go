@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/duration"
 )
 
 const helmTimeoutMigrationActive = true
@@ -436,7 +437,7 @@ func hasExplicitLifecycleFlags(flags map[string]any) bool {
 }
 
 func applyTimeout(resolution *releaseLifecycleResolution, value, field string) error {
-	parsed, err := time.ParseDuration(value)
+	parsed, err := duration.ParseString(value)
 	if err != nil {
 		return fmt.Errorf("%w: %s=%q: %w", errUtils.ErrHelmTimeoutInvalid, field, value, err)
 	}

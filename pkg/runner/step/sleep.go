@@ -5,6 +5,7 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -42,7 +43,7 @@ func (h *SleepHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 	defer perf.Track(nil, "step.SleepHandler.Execute")()
 
 	// Parse duration from timeout field.
-	duration := time.Second // Default to 1 second.
+	sleepFor := time.Second // Default to 1 second.
 	if step.Timeout != "" {
 		resolved, err := vars.Resolve(step.Timeout)
 		if err != nil {
@@ -52,7 +53,7 @@ func (h *SleepHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 				WithContext("field", "timeout").
 				Err()
 		}
-		parsed, err := time.ParseDuration(resolved)
+		parsed, err := duration.ParseNonNegative(resolved)
 		if err != nil {
 			return nil, errUtils.Build(errUtils.ErrInvalidDuration).
 				WithCause(err).
@@ -60,13 +61,13 @@ func (h *SleepHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 				WithContext("value", resolved).
 				Err()
 		}
-		duration = parsed
+		sleepFor = parsed
 	}
 
 	// Create a timer that respects context cancellation.
 	select {
-	case <-time.After(duration):
-		return NewStepResult(duration.String()), nil
+	case <-time.After(sleepFor):
+		return NewStepResult(sleepFor.String()), nil
 	case <-ctx.Done():
 		return nil, errUtils.Build(errUtils.ErrUserAborted).
 			WithCause(ctx.Err()).

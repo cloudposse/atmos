@@ -17,6 +17,7 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/duration"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
@@ -589,7 +590,7 @@ func resolveHTTPTimeout(step *schema.WorkflowStep, vars *Variables) (time.Durati
 			WithContext("field", "timeout").
 			Err()
 	}
-	parsed, err := time.ParseDuration(resolved)
+	parsed, err := duration.ParseNonNegative(resolved)
 	if err != nil {
 		return 0, errUtils.Build(errUtils.ErrInvalidDuration).
 			WithCause(err).

@@ -7,9 +7,9 @@ import (
 	"io"
 	"os/exec"
 	"runtime"
-	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/safenum"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -136,7 +136,7 @@ func (h *SpinHandler) createExecContext(ctx context.Context, step *schema.Workfl
 		return ctx, nil, nil
 	}
 
-	timeout, err := time.ParseDuration(step.Timeout)
+	timeout, err := duration.ParseNonNegative(step.Timeout)
 	if err != nil {
 		return ctx, nil, errUtils.Build(errUtils.ErrInvalidDuration).
 			WithCause(err).

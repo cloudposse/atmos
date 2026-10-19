@@ -17,6 +17,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/automation"
 	"github.com/cloudposse/atmos/pkg/ci"
+	durationpkg "github.com/cloudposse/atmos/pkg/duration"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -399,7 +400,7 @@ func (executor *ControlCommandExecutor) finalStack(step *schema.WorkflowStep) st
 func executeControlSleep(ctx context.Context, step *schema.WorkflowStep) (*ControlChildResult, error) {
 	duration := time.Second
 	if strings.TrimSpace(step.Timeout) != "" {
-		parsed, err := time.ParseDuration(step.Timeout)
+		parsed, err := durationpkg.ParseNonNegative(step.Timeout)
 		if err != nil {
 			return &ControlChildResult{}, err
 		}
