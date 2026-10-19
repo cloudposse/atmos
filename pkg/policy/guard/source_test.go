@@ -478,3 +478,28 @@ func TestDescribeSourceEnvDatasources(t *testing.T) {
 	require.Equal(t, "file", input.Scheme)
 	require.Contains(t, filepath.ToSlash(input.Path), "env:POLICY_VAR")
 }
+
+// S3 and GCS shorthand sources are remote, as the include reader's go-getter detection decides, so
+// admission describes the https endpoint and provenance records them as remote.
+func TestDescribeSourceS3AndGCSShorthandAreRemote(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for raw, host := range map[string]string{
+		"bucket.s3.amazonaws.com/key.yaml":            "s3.amazonaws.com",
+		"www.googleapis.com/storage/v1/bucket/x.yaml": "www.googleapis.com",
+	} {
+		t.Run(raw, func(t *testing.T) {
+			input, err := DescribeSource("include", raw, "")
+			require.NoError(t, err)
+			require.True(t, input.Remote)
+			require.Equal(t, "https", input.Scheme)
+			require.Equal(t, host, input.Host)
+			require.Equal(t, "remote", FileOrigin(raw).Provenance)
+		})
+	}
+
+	// Ordinary relative paths stay local.
+	input, err := DescribeSource("include", "stacks/a.yaml", "")
+	require.NoError(t, err)
+	require.False(t, input.Remote)
+	require.Equal(t, "file", input.Scheme)
+}

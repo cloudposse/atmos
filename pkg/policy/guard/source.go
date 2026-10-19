@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strings"
 
+	getter "github.com/hashicorp/go-getter"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -149,7 +151,25 @@ func isRemote(raw string) bool {
 	if strings.Contains(raw, schemeSeparator) {
 		return !strings.HasPrefix(strings.ToLower(raw), "file://")
 	}
-	return strings.HasPrefix(raw, "github.com/") || strings.HasPrefix(raw, "gitlab.com/") || strings.HasPrefix(raw, "bitbucket.org/")
+	return strings.HasPrefix(raw, "github.com/") || strings.HasPrefix(raw, "gitlab.com/") || strings.HasPrefix(raw, "bitbucket.org/") ||
+		remoteShorthandURL(raw) != ""
+}
+
+// remoteShorthandURL returns the URL go-getter detects for an S3 or GCS shorthand source such as
+// bucket.s3.amazonaws.com/key.yaml, or "" when the value is not one. The include reader decides
+// remoteness with the same detectors, so admission and provenance cannot treat these as local files.
+func remoteShorthandURL(raw string) string {
+	for _, detector := range []getter.Detector{&getter.S3Detector{}, &getter.GCSDetector{}} {
+		detected, ok, err := detector.Detect(raw, "")
+		if err != nil || !ok || detected == "" {
+			continue
+		}
+		if _, rest, found := strings.Cut(detected, "::"); found {
+			return rest
+		}
+		return detected
+	}
+	return ""
 }
 
 func safeSource(raw string) string {
@@ -177,6 +197,8 @@ func normalizeTransport(raw string) string {
 		host, _, _ := strings.Cut(transport, "/")
 		if host == "github.com" || host == "gitlab.com" || host == "bitbucket.org" {
 			transport = "https://" + transport
+		} else if detected := remoteShorthandURL(transport); detected != "" {
+			transport = detected
 		}
 	}
 	return transport

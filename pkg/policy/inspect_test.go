@@ -16,3 +16,16 @@ func TestSameJSONIgnoresObjectKeyOrder(t *testing.T) {
 	require.False(t, sameJSON(json.RawMessage(`null`), json.RawMessage(`[]`)), "null and an empty list stay distinct")
 	require.False(t, sameJSON(json.RawMessage(`{`), json.RawMessage(`{`)), "undecodable values never match")
 }
+
+func TestTestEffectsMatchAcceptsEmptyListsForNoEffects(t *testing.T) {
+	none := Decision{}
+	withApproval := Decision{Findings: []Finding{{Effects: Effects{Approvals: []ApprovalRequirement{{ID: "platform"}}}}}}
+
+	require.True(t, testEffectsMatch(none, &TestCase{}), "omitted expectations assert nothing about approvals")
+	require.True(t, testEffectsMatch(none, &TestCase{Hooks: []HookRequirement{}, Approvals: []ApprovalRequirement{}}),
+		"explicit empty lists assert that a rule requests no hooks or approvals")
+	require.False(t, testEffectsMatch(withApproval, &TestCase{Approvals: []ApprovalRequirement{}}),
+		"an empty approvals list fails when an approval is requested")
+	require.True(t, testEffectsMatch(withApproval, &TestCase{}), "omitted approvals skip the check")
+	require.True(t, testEffectsMatch(withApproval, &TestCase{Approvals: []ApprovalRequirement{{ID: "platform"}}}))
+}

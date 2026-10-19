@@ -135,7 +135,11 @@ func testEffectsMatch(decision Decision, tc *TestCase) bool {
 		hooks = append(hooks, finding.Effects.Hooks...)
 		approvals = append(approvals, finding.Effects.Approvals...)
 	}
-	return sameJSON(hooks, tc.Hooks) && (tc.Approvals == nil || sameJSON(approvals, tc.Approvals))
+	// Two empty lists are equal whether they decoded as nil or as an empty list, so a fixture can assert
+	// that a rule requests no hooks or approvals. An omitted approvals list asserts nothing.
+	hooksMatch := (len(hooks) == 0 && len(tc.Hooks) == 0) || sameJSON(hooks, tc.Hooks)
+	approvalsMatch := tc.Approvals == nil || (len(approvals) == 0 && len(tc.Approvals) == 0) || sameJSON(approvals, tc.Approvals)
+	return hooksMatch && approvalsMatch
 }
 
 func validateTestCases(cases []TestCase) error {
