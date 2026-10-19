@@ -17952,10 +17952,11 @@
           "$ref": "#/$defs/ConfigImports"
         },
         {
-          "type": "null"
+          "type": "string",
+          "description": "Single import path, glob, or remote URL (optional - fail open)."
         },
         {
-          "$ref": "#/$defs/yamlFunction"
+          "type": "null"
         }
       ]
     },

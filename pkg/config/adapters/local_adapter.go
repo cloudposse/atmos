@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 
@@ -98,8 +99,12 @@ type nestedImportParams struct {
 // processNestedImports handles nested import statements in a config file.
 func (l *LocalAdapter) processNestedImports(v *viper.Viper, p nestedImportParams) ([]config.ResolvedPaths, error) {
 	// Read the raw `import:` value (not GetStringSlice) so object-form nested entries
-	// (skip_if_missing, when) survive; NormalizeConfigImports accepts both forms.
-	imports := config.NormalizeConfigImports(v.Get("import"))
+	// (skip_if_missing, when) survive; NormalizeConfigImports accepts both forms. A malformed
+	// object entry is a hard error, not a silent omission.
+	imports, err := config.NormalizeConfigImports(v.Get("import"))
+	if err != nil {
+		return nil, err
+	}
 	if len(imports) == 0 {
 		return nil, nil
 	}
@@ -110,7 +115,9 @@ func (l *LocalAdapter) processNestedImports(v *viper.Viper, p nestedImportParams
 	}
 	nestedPaths, err := config.ProcessImportsFromAdapter(p.atmosConfig, importBasePath, imports, p.tempDir, p.currentDepth+1, p.maxDepth)
 	if err != nil {
-		if guard.IsPolicyError(err) {
+		// Policy denials and required-import failures (fail closed) must propagate; other nested
+		// resolution errors stay non-fatal (a bad optional nested import is skipped).
+		if guard.IsPolicyError(err) || errors.Is(err, errUtils.ErrRequiredImportFailed) {
 			return nil, err
 		}
 		log.Debug("failed to process nested imports from", "path", p.path, "error", err)

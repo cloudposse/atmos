@@ -86,11 +86,16 @@ func startAndRegisterTools(mgr *Manager, registry *tools.Registry, startOpts []S
 
 // shouldSkipOptionalServer reports whether a server start failure should be downgraded to a
 // warn-and-skip instead of an error: the server is marked optional and failed specifically
-// because its identity could not be resolved in the active auth context
-// (errUtils.ErrMCPServerAuthUnavailable). Any other failure of an optional server, and any
+// because its identity could not be resolved in the active auth context. That surfaces as
+// errUtils.ErrMCPServerAuthUnavailable when no auth manager is available, or
+// errUtils.ErrIdentityNotFound when an auth manager exists but the named identity is not defined
+// in this context (the common cross-repo case). Any other failure of an optional server, and any
 // failure of a non-optional server, is still an error.
 func shouldSkipOptionalServer(cfg *ParsedConfig, err error) bool {
-	return cfg != nil && cfg.Optional && errors.Is(err, errUtils.ErrMCPServerAuthUnavailable)
+	if cfg == nil || !cfg.Optional {
+		return false
+	}
+	return errors.Is(err, errUtils.ErrMCPServerAuthUnavailable) || errors.Is(err, errUtils.ErrIdentityNotFound)
 }
 
 // startAndRegisterSession starts a single MCP server session and registers its bridged

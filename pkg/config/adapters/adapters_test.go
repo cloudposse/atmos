@@ -448,6 +448,23 @@ settings:
 	assert.Contains(t, paths, config.ResolvedPaths{FilePath: nestedPath, ImportPaths: "nested.yaml", ImportType: config.LOCAL, SkipIfMissing: true})
 }
 
+// TestLocalAdapter_RequiredNestedImportFailsClosed verifies the local adapter propagates a
+// required (object-form) nested import failure instead of swallowing it (issue #3430 review
+// follow-up): a missing `skip_if_missing: false` nested import fails the whole resolution closed.
+func TestLocalAdapter_RequiredNestedImportFailsClosed(t *testing.T) {
+	config.ResetImportAdapterRegistry()
+	config.SetDefaultAdapter(&LocalAdapter{})
+	t.Cleanup(config.ResetImportAdapterRegistry)
+
+	tempDir := t.TempDir()
+	mainYAML := "import:\n  - path: does-not-exist.yaml\n    skip_if_missing: false\n"
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "main.yaml"), []byte(mainYAML), 0o600))
+
+	adapter := &LocalAdapter{}
+	_, err := adapter.Resolve(context.Background(), "main.yaml", tempDir, tempDir, 1, 10, nil)
+	require.ErrorIs(t, err, errUtils.ErrRequiredImportFailed)
+}
+
 // TestLocalAdapter_NoNestedImports tests file without nested imports.
 func TestLocalAdapter_NoNestedImports(t *testing.T) {
 	tempDir := t.TempDir()

@@ -74,7 +74,9 @@ DEPLOY_ENV=prod atmos --chdir examples/cli-config-imports describe config --form
 See the fail-closed behavior - remove the required import's target and the load aborts:
 
 ```shell
-mv configs.d/required-logging.yaml /tmp/   # temporarily remove a required import target
+# temporarily remove a required import target
+mv examples/cli-config-imports/configs.d/required-logging.yaml /tmp/
 atmos --chdir examples/cli-config-imports describe config   # aborts: "required config import failed to load"
-mv /tmp/required-logging.yaml configs.d/   # restore
+# restore
+mv /tmp/required-logging.yaml examples/cli-config-imports/configs.d/
 ```

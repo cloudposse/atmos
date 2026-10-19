@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -110,11 +111,14 @@ func TestProcessImports_WhenGating(t *testing.T) {
 // decode correctly through the raw-value path used by adapters and profile loading.
 func TestNormalizeConfigImports(t *testing.T) {
 	t.Run("nil returns nil", func(t *testing.T) {
-		assert.Nil(t, NormalizeConfigImports(nil))
+		out, err := NormalizeConfigImports(nil)
+		require.NoError(t, err)
+		assert.Nil(t, out)
 	})
 
 	t.Run("string slice becomes optional imports", func(t *testing.T) {
-		out := NormalizeConfigImports([]string{"a.yaml", "b.yaml"})
+		out, err := NormalizeConfigImports([]string{"a.yaml", "b.yaml"})
+		require.NoError(t, err)
 		require.Len(t, out, 2)
 		assert.Equal(t, "a.yaml", out[0].Path)
 		assert.True(t, out[0].SkipIfMissing)
@@ -123,11 +127,12 @@ func TestNormalizeConfigImports(t *testing.T) {
 	})
 
 	t.Run("mixed string and object entries", func(t *testing.T) {
-		out := NormalizeConfigImports([]any{
+		out, err := NormalizeConfigImports([]any{
 			"legacy.yaml",
 			map[string]any{"path": "required.yaml"},
 			map[string]any{"path": "opt.yaml", "skip_if_missing": true, "when": "local"},
 		})
+		require.NoError(t, err)
 		require.Len(t, out, 3)
 		assert.Equal(t, "legacy.yaml", out[0].Path)
 		assert.True(t, out[0].SkipIfMissing)
@@ -139,10 +144,39 @@ func TestNormalizeConfigImports(t *testing.T) {
 	})
 
 	t.Run("empty string entries are dropped", func(t *testing.T) {
-		out := NormalizeConfigImports([]any{"", "kept.yaml"})
+		out, err := NormalizeConfigImports([]any{"", "kept.yaml"})
+		require.NoError(t, err)
 		require.Len(t, out, 1)
 		assert.Equal(t, "kept.yaml", out[0].Path)
 	})
+
+	t.Run("malformed object entry is an error, not a silent drop", func(t *testing.T) {
+		// An uncompilable CEL `when` makes the entry fail to decode; it must surface as an error
+		// so a required entry is not silently converted into an optional omission.
+		_, err := NormalizeConfigImports([]any{
+			map[string]any{"path": "bad.yaml", "when": "!cel ((("},
+		})
+		require.ErrorIs(t, err, errUtils.ErrInvalidConfigImport)
+	})
+}
+
+// TestProcessImports_OptionalParentDoesNotMaskRequiredNested verifies that a required nested
+// import failure (ErrRequiredImportFailed, as surfaced by an adapter processing nested imports)
+// propagates even when the importing (parent) entry is optional (issue #3430 review follow-up).
+func TestProcessImports_OptionalParentDoesNotMaskRequiredNested(t *testing.T) {
+	ResetImportAdapterRegistry()
+	t.Cleanup(ResetImportAdapterRegistry)
+	adapter := &recordingSchemeAdapter{
+		schemes: []string{"https://"},
+		err:     fmt.Errorf("%w: nested required import", errUtils.ErrRequiredImportFailed),
+	}
+	RegisterImportAdapter(adapter)
+
+	tempDir := t.TempDir()
+	// The parent entry is optional, but the adapter surfaces a required nested failure.
+	imp := schema.ConfigImport{Path: "https://example.com/parent.yaml", SkipIfMissing: true}
+	_, err := processImports(nil, tempDir, []schema.ConfigImport{imp}, tempDir, 1, MaximumImportLvL)
+	require.ErrorIs(t, err, errUtils.ErrRequiredImportFailed, "an optional parent must not mask a required nested failure")
 }
 
 // TestProcessImports_StringImportStillResolvesExistingFile is a backward-compatibility guard:

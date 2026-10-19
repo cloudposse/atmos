@@ -2032,8 +2032,12 @@ func mergeConfigFileWithImports(path string, v *viper.Viper) error {
 	}
 
 	// Read the raw `import:` value (not GetStringSlice) so object-form entries
-	// (skip_if_missing, when) survive; NormalizeConfigImports accepts both forms.
-	imports := NormalizeConfigImports(tempViper.Get("import"))
+	// (skip_if_missing, when) survive; NormalizeConfigImports accepts both forms. A malformed
+	// object entry is a hard error, not a silent omission.
+	imports, err := NormalizeConfigImports(tempViper.Get("import"))
+	if err != nil {
+		return err
+	}
 	if len(imports) > 0 {
 		var importConfig schema.AtmosConfiguration
 		if err = v.UnmarshalKey("settings", &importConfig.Settings, atmosDecodeHook()); err != nil {

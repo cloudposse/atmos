@@ -30,6 +30,7 @@ func TestParseConfig_CarriesOptional(t *testing.T) {
 // its identity cannot be resolved; every other case remains an error.
 func TestShouldSkipOptionalServer(t *testing.T) {
 	authUnavailable := fmt.Errorf("%w: server %q", errUtils.ErrMCPServerAuthUnavailable, "central-logs")
+	identityNotFound := fmt.Errorf("%w: identity %q", errUtils.ErrIdentityNotFound, "central-logging")
 	otherErr := fmt.Errorf("some other failure")
 
 	tests := []struct {
@@ -39,8 +40,10 @@ func TestShouldSkipOptionalServer(t *testing.T) {
 		want bool
 	}{
 		{"optional server with auth unavailable is skipped", &ParsedConfig{Optional: true}, authUnavailable, true},
+		{"optional server with identity-not-found is skipped", &ParsedConfig{Optional: true}, identityNotFound, true},
 		{"optional server with other error is not skipped", &ParsedConfig{Optional: true}, otherErr, false},
 		{"required server with auth unavailable is not skipped", &ParsedConfig{Optional: false}, authUnavailable, false},
+		{"required server with identity-not-found is not skipped", &ParsedConfig{Optional: false}, identityNotFound, false},
 		{"nil config is not skipped", nil, authUnavailable, false},
 	}
 	for _, tt := range tests {

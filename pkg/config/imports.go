@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -213,14 +214,9 @@ func processImports(atmosConfig *schema.AtmosConfiguration, basePath string, imp
 
 		paths, resolveErr := resolveSingleImport(ctx, atmosConfig, imp, basePath, tempDir, currentDepth, maxDepth)
 		if resolveErr != nil {
-			if guard.IsPolicyError(resolveErr) {
-				return nil, resolveErr
+			if err := classifyImportResolveError(imp, resolveErr); err != nil {
+				return nil, err
 			}
-			// Required (non-optional) imports fail closed; optional imports warn and skip.
-			if !imp.SkipIfMissing {
-				return nil, fmt.Errorf("%w: %s: %w", errUtils.ErrRequiredImportFailed, SanitizeImport(imp.Path), resolveErr)
-			}
-			log.Warn("failed to resolve import", "path", SanitizeImport(imp.Path), "error", resolveErr)
 			continue
 		}
 
@@ -250,6 +246,25 @@ func osEnvMap() map[string]string {
 	return env
 }
 
+// classifyImportResolveError decides how a resolve failure is treated. It returns a non-nil error
+// to propagate (fail closed) and nil to warn-and-skip an optional import. Policy denials and a
+// required nested failure (ErrRequiredImportFailed, already surfaced by a deeper pass) always
+// propagate - an optional parent must not mask a required child. Otherwise a required
+// (non-optional) import fails closed and an optional one warns and continues.
+func classifyImportResolveError(imp schema.ConfigImport, resolveErr error) error {
+	if guard.IsPolicyError(resolveErr) {
+		return resolveErr
+	}
+	if errors.Is(resolveErr, errUtils.ErrRequiredImportFailed) {
+		return resolveErr
+	}
+	if !imp.SkipIfMissing {
+		return fmt.Errorf("%w: %s: %w", errUtils.ErrRequiredImportFailed, SanitizeImport(imp.Path), resolveErr)
+	}
+	log.Warn("failed to resolve import", "path", SanitizeImport(imp.Path), "error", resolveErr)
+	return nil
+}
+
 // resolveSingleImport applies the source-admission policy gate (for scheme-based adapters) and
 // resolves one import via its registered adapter.
 //
@@ -271,22 +286,26 @@ func resolveSingleImport(ctx context.Context, atmosConfig *schema.AtmosConfigura
 // raw Viper value (adapters processing nested imports, profile loading) rather than unmarshaling
 // into a typed struct. A bare string becomes an optional (fail-open) import, preserving the
 // historical warn-and-skip behavior for backward compatibility.
-func NormalizeConfigImports(raw any) schema.ConfigImports {
+func NormalizeConfigImports(raw any) (schema.ConfigImports, error) {
 	if raw == nil {
-		return nil
+		return nil, nil
 	}
 	if typed, ok := raw.(schema.ConfigImports); ok {
-		return typed
+		return typed, nil
 	}
 
 	items := rawImportItems(raw)
 	result := make(schema.ConfigImports, 0, len(items))
 	for _, item := range items {
-		if imp, ok := configImportFromItem(item); ok {
+		imp, ok, err := configImportFromItem(item)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
 			result = append(result, imp)
 		}
 	}
-	return result
+	return result, nil
 }
 
 // rawImportItems coerces a raw decoded `import:` value into a slice of entries to normalize,
@@ -307,14 +326,16 @@ func rawImportItems(raw any) []any {
 }
 
 // configImportFromItem converts one raw import entry (a bare string or a decoded object map) into
-// a ConfigImport. A bare string becomes an optional (fail-open) import. It returns false when the
-// entry is empty or cannot be decoded.
-func configImportFromItem(item any) (schema.ConfigImport, bool) {
+// a ConfigImport. A bare string becomes an optional (fail-open) import. The returned bool is false
+// for an entry that is intentionally skipped (an empty string or an empty path). A decode failure
+// returns errUtils.ErrInvalidConfigImport so a malformed required entry fails loudly instead of
+// being silently dropped and treated as an optional omission.
+func configImportFromItem(item any) (schema.ConfigImport, bool, error) {
 	if s, ok := item.(string); ok {
 		if s == "" {
-			return schema.ConfigImport{}, false
+			return schema.ConfigImport{}, false, nil
 		}
-		return schema.ConfigImport{Path: s, SkipIfMissing: true}, true
+		return schema.ConfigImport{Path: s, SkipIfMissing: true}, true, nil
 	}
 
 	var imp schema.ConfigImport
@@ -323,17 +344,15 @@ func configImportFromItem(item any) (schema.ConfigImport, bool) {
 		Result:     &imp,
 	})
 	if err != nil {
-		log.Warn("failed to build decoder for config import", "error", err)
-		return schema.ConfigImport{}, false
+		return schema.ConfigImport{}, false, fmt.Errorf("%w: %w", errUtils.ErrInvalidConfigImport, err)
 	}
 	if err := decoder.Decode(item); err != nil {
-		log.Warn("failed to decode config import entry", "error", err)
-		return schema.ConfigImport{}, false
+		return schema.ConfigImport{}, false, fmt.Errorf("%w: %w", errUtils.ErrInvalidConfigImport, err)
 	}
 	if imp.Path == "" {
-		return schema.ConfigImport{}, false
+		return schema.ConfigImport{}, false, nil
 	}
-	return imp, true
+	return imp, true, nil
 }
 
 // SearchAtmosConfig searches for a config file in path. The path is directory, file or a pattern.

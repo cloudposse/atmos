@@ -99,7 +99,10 @@ func (g *GoGetterAdapter) Resolve(
 		// Process nested imports from the remote file. Read the raw value (not GetStringSlice)
 		// so object-form entries (skip_if_missing, when) survive; NormalizeConfigImports accepts
 		// both the legacy string list and the object form.
-		imports := config.NormalizeConfigImports(v.Get("import"))
+		imports, err := config.NormalizeConfigImports(v.Get("import"))
+		if err != nil {
+			return nil, err
+		}
 
 		if len(imports) > 0 {
 			importBasePath, err := config.ResolveConfigImportBasePath(v.GetString("base_path"), tempFile, basePath)
@@ -144,7 +147,7 @@ func warnIfUnpinnedRef(importPath string) {
 	if display == "" {
 		display = "<none>"
 	}
-	log.Warn("remote config import is not pinned to a commit SHA or version tag; it will absorb upstream edits on every cache refresh - pin it with `?ref=<tag-or-sha>` for reproducible, tamper-evident imports",
+	log.Warn("remote config import is not pinned; it will absorb upstream edits on every cache refresh - pin it with `?ref=<commit-sha>` for an immutable, tamper-evident import, or a version tag as a conventional (movable) version reference",
 		"import", config.SanitizeImport(importPath), "ref", display)
 }
 

@@ -61,8 +61,11 @@ package decodes string/list/map `when` values:
 
 Code paths that read the raw `import:` value from Viper rather than unmarshaling into a typed struct
 (the local/go-getter adapters processing nested imports, and profile loading via
-`mergeConfigFileWithImports`) use `config.NormalizeConfigImports(raw any)`, the counterpart to the
-decode hook, which accepts both the legacy string-list form and the object form.
+`mergeConfigFileWithImports`) use `config.NormalizeConfigImports(raw any) (ConfigImports, error)`,
+the counterpart to the decode hook, which accepts both the legacy string-list form and the object
+form. A malformed object entry (e.g. an uncompilable `when` or a bad `skip_if_missing`) returns
+`errUtils.ErrInvalidConfigImport` rather than being silently dropped — a required entry must never
+become an optional omission because it failed to decode.
 
 In `processImports`, a resolve failure of a **required** import returns
 `errUtils.ErrRequiredImportFailed` (fail closed); an **optional** import warns and continues. The
@@ -70,11 +73,11 @@ failure intent is stamped onto each resolved file (`ResolvedPaths.SkipIfMissing`
 failure fails closed or warn-and-skips consistently.
 
 **Nested-import contract:** `skip_if_missing`/`when` are honored per entry at resolve time in each
-`processImports` pass. At merge time, the importing entry's intent governs its resolved subtree (a
-required top-level import's files are required; a nested optional entry inside a required parent is
-treated as required at merge). This keeps the core guarantee — a required top-level import fails
-closed — simple and well-defined, without threading per-entry merge intent through the adapter
-interface.
+`processImports` pass. A required nested import that fails closed (`ErrRequiredImportFailed`)
+propagates through both adapters (`GoGetterAdapter` wraps with `%w`; `LocalAdapter` no longer
+swallows it) and through `processImports` even when the importing (parent) entry is optional — an
+optional parent must not mask a required child. At merge time, the importing entry's intent still
+governs its resolved subtree for ordinary (non-required) merge failures.
 
 ### 2. Optional MCP servers
 

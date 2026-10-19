@@ -1069,6 +1069,10 @@ var (
 	// cannot be resolved or merged. Object-form imports are required by default (fail closed);
 	// set `skip_if_missing: true` to opt back into warn-and-skip.
 	ErrRequiredImportFailed = errors.New("required config import failed to load")
+	// ErrInvalidConfigImport is returned when an object-form CLI-config import entry cannot be
+	// decoded (e.g. a malformed `skip_if_missing` or `when` value). A malformed entry must fail
+	// loudly rather than being silently dropped and treated as an optional omission.
+	ErrInvalidConfigImport = errors.New("invalid config import entry")
 
 	// Profiler-related errors.
 	ErrProfilerStart           = errors.New("profiler start failed")
