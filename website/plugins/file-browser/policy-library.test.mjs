@@ -266,7 +266,7 @@ function variantExample() {
     readme: {content: readFileSync(path.join(libraryDir, name, 'README.md'), 'utf8')},
     children: [
       {name: 'policy.yaml', content: readFileSync(path.join(libraryDir, name, 'policy.yaml'), 'utf8')},
-      {name: 'tests', children: [{name: 'cases.json', content: '[]'}]},
+      {name: 'tests', children: [{name: 'cases.json', content: '[{"name": "case"}]'}]},
       {name: 'variants', children: [{name: 'starlark', children: [
         {name: 'policy.yaml', content: readFileSync(path.join(libraryDir, name, 'variants/starlark/policy.yaml'), 'utf8')},
       ]}]},

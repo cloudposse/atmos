@@ -246,7 +246,7 @@ export default function PolicyPage({
   const variant = policy.variants.find((item) => item.engine === engine)!;
   const destination = `policy.d/${policy.name}.yaml`;
   const url = (changes: Record<string, string>) =>
-    policyViewUrl(location.pathname, location.search, {
+    policyViewUrl(location.pathname, isBrowser ? location.search : "", {
       view,
       engine,
       ...changes,
