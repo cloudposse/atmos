@@ -110,7 +110,9 @@ func ParseString(s string) (time.Duration, error) {
 	}
 	d, err := time.ParseDuration(raw)
 	if err != nil {
-		return 0, fmt.Errorf(errFormat, ErrInvalid, raw)
+		// Keep Go's message (`time: invalid duration "..."`) as the cause: it names the value and
+		// is what users and existing tests recognize.
+		return 0, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	return d, nil
 }
@@ -185,7 +187,7 @@ func parseWithDays(raw string) (time.Duration, bool, error) {
 	}
 	tail, err := time.ParseDuration(rest)
 	if err != nil {
-		return 0, true, fmt.Errorf(errFormat, ErrInvalid, raw)
+		return 0, true, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	if (tail > 0 && total > math.MaxInt64-tail) || (tail < 0 && total < math.MinInt64-tail) {
 		return 0, true, fmt.Errorf(errFormat, ErrOverflow, raw)
