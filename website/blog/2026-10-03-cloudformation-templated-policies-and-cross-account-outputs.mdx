@@ -45,7 +45,7 @@ Put stack-specific content in an inline template and policy:
 
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     database:
       stack_name: "database-{{ .vars.stage }}"
       template:
@@ -76,7 +76,7 @@ in global or component auth:
 
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     network:
       provision:
         targets:

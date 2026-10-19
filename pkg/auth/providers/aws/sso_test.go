@@ -499,14 +499,12 @@ func TestPollForAccessToken_ContextCancellation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a context with a short timeout to simulate cancellation.
-	// Use 1ms timeout (not nanoseconds) for cross-platform compatibility.
-	// Windows has ~15.6ms timer resolution, so very short timeouts may not work reliably.
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
 	defer cancel()
 
-	// Wait for context to expire. Use 50ms to ensure the timeout has triggered
-	// across all platforms including Windows with its coarser timer resolution.
-	time.Sleep(50 * time.Millisecond)
+	// Synchronize with cancellation instead of assuming a fixed sleep gives the
+	// deadline callback enough time to run on a busy CI worker.
+	<-ctx.Done()
 
 	// Note: We can't easily test pollForAccessToken in isolation without a real OIDC client.
 	// The context cancellation is tested indirectly through the Authenticate method.

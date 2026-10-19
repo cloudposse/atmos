@@ -189,7 +189,7 @@ processing.
 
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     vpc:
       stack_name: acme-plat-ue2-dev-vpc      # explicit; no legacy name-pattern interpolation
       path: template.yaml                    # file relative to the component directory (or inline `template:`)
@@ -463,7 +463,7 @@ verbatim. CloudFormation dynamic references need one level of escaping:
 
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     app:
       stack_name: "app-{{ .vars.stage }}"
       template:
@@ -870,7 +870,7 @@ top-level `source:` section, gated on `supportsSourceProvision` (see
 
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     # Point at a repo (subdirectory = the component dir: template + stack policy + assets)
     vpc:
       source:

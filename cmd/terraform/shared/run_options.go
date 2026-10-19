@@ -52,6 +52,7 @@ type RunOptions struct {
 	// distinguish `--verify-plan=false` from the flag being unset, so the
 	// tri-state resolution reads the Cobra flag directly via
 	// resolveVerifyPlanMode (cmd/terraform/utils.go).
+	FromPlan         bool
 	PlanFile         string
 	PlanSkipPlanfile bool
 	DeployRunInit    bool
@@ -94,6 +95,7 @@ type RunOptions struct {
 func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 	defer perf.Track(nil, "terraform.shared.ParseRunOptions")()
 
+	fromPlan := v.GetString("from-plan")
 	opts := &RunOptions{
 		ProcessTemplates:        v.GetBool("process-templates"),
 		ProcessFunctions:        v.GetBool("process-functions"),
@@ -106,6 +108,7 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 		InitMode:                v.GetString("init-mode"),
 		InitReconfigure:         v.GetString("init-reconfigure"),
 		InitUpgrade:             v.GetString("init-upgrade"),
+		FromPlan:                fromPlan != "" && fromPlan != "false",
 		PlanFile:                v.GetString("planfile"),
 		PlanSkipPlanfile:        v.GetBool("skip-planfile"),
 		DeployRunInit:           v.GetBool("deploy-run-init"),
@@ -129,6 +132,12 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 		return nil, err
 	}
 	opts.Labels = labels
+	// Cobra consumes --from-plan before the legacy argument parser sees it.
+	// Its true sentinel selects the canonical plan, false disables selection,
+	// and any other nonempty value selects a path. An explicit planfile wins.
+	if opts.FromPlan && fromPlan != "true" && opts.PlanFile == "" {
+		opts.PlanFile = fromPlan
+	}
 
 	if opts.UseMocks, opts.MocksMode, err = cfg.ParseUseMocksValue(v.GetString("use-mocks"), cfg.UseMocksFlagAndEnvSource); err != nil {
 		return nil, err
@@ -234,6 +243,9 @@ func ApplyRunOptions(info *schema.ConfigAndStacksInfo, opts *RunOptions) {
 		info.InitUpgrade = opts.InitUpgrade
 	}
 
+	if opts.FromPlan {
+		info.UseTerraformPlan = true
+	}
 	if opts.PlanFile != "" {
 		info.PlanFile = opts.PlanFile
 		info.UseTerraformPlan = true

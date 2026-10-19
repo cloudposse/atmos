@@ -1,0 +1,106 @@
+---
+title: atmos policy
+sidebar_label: policy
+slug: /cli/commands/policy
+sidebar_class_name: command
+sidebar_position: 1
+description: Validate, inspect, and test policy bundles without executing project configuration.
+---
+
+import Intro from "@site/src/components/Intro"
+
+<Intro>
+The `policy` commands support policy authoring. They read literal policy documents from
+`policy.d/`, or the directory selected by `ATMOS_POLICY_DIR`, without loading `atmos.yaml`,
+discovering stacks, contacting CI APIs, installing tools, or executing hooks.
+</Intro>
+
+```shell
+atmos policy check
+atmos policy list
+atmos policy schema function
+atmos policy test tests/cases.json
+```
+
+These commands produce JSON on stdout. Invalid configuration, unsupported input kinds, malformed
+fixtures, and failed expectations return a nonzero exit status. They deliberately do not enforce
+command admission against themselves, so a broken or denying bundle can still be inspected.
+Normal operational commands retain their policy gates.
+
+## check
+
+`atmos policy check` validates document fields, CEL/Starlark compilation, unique rule identities,
+selectors, CI requirements, approval specifications, hook references and definitions, and tool-pin
+consistency. It checks configuration, not whether an operation would be allowed. It does not require
+installed hook executables or CI credentials. An absent or empty policy bundle is an error.
+
+## list
+
+`atmos policy list` prints the loaded definitions in deterministic order, including rule IDs,
+input kinds, expressions, selectors, parameters, and effects. This is a view of the configured bundle;
+it does not resolve remote libraries or execute predicates. Treat literal policy parameters as
+potentially private when sharing the output.
+
+## schema
+
+<dl>
+  <dt><code>input-kind</code></dt>
+  <dd>One of <code>command</code>, <code>component.command</code>, <code>function</code>,
+  <code>source</code>, <code>operation</code>, <code>terraform.plan</code>, or
+  <code>atmos.affected</code>. Prints the JSON Schema for <code>input</code>, rather than the
+  entire request envelope. Terraform retains its native plan shape.</dd>
+</dl>
+
+Use `atmos ci context` to inspect the provider-native CI snapshot. A schema describes available
+fields; it does not attest that a particular command collected them.
+
+## test
+
+<dl>
+  <dt><code>cases.json</code></dt>
+  <dd>A nonempty JSON array of named fixtures, at most 16 MiB. Each fixture supplies a complete
+  policy request and the expected aggregate decision. The format matches the policy library's
+  <code>tests/cases.json</code> files.</dd>
+</dl>
+
+```json
+[
+  {
+    "name": "deny exec",
+    "request": {
+      "kind": "function",
+      "input": {"name": "exec", "engine": "yaml", "provenance": "local", "source_file": "example.yaml"}
+    },
+    "status": "deny"
+  }
+]
+```
+
+Statuses are `allow`, `deny`, `not_applicable`, `awaiting_approval`, and `error`. A false predicate
+normally produces `not_applicable`. Optional `error` values are `input_unavailable` or `evaluation`.
+Use `hooks` to assert the selected hook requirements and `approvals` to assert approval requirements.
+Approval fixtures test the outstanding requirement, not live review verification. No network calls or
+hook execution occur. Fixtures contain supplied data and cannot authorize a real operation.
+
+## Explain an operation
+
+```shell
+atmos terraform plan vpc -s prod --explain
+atmos terraform plan vpc -s prod --dry-run --explain
+```
+
+<dl>
+  <dt><code>--explain</code></dt>
+  <dd>Add policy diagnostics to stderr while preserving normal command execution, enforcement,
+  and stdout. Reports reached gates, rule outcomes, selector exclusions, approval verification,
+  selected hook requirements, and configured input kinds never reached. Input values and function
+  arguments are not printed.</dd>
+  <dt><code>ATMOS_EXPLAIN</code></dt>
+  <dd>Environment equivalent of `--explain`. The command-line flag takes precedence. When `--explain`
+  is set, Atmos exports `ATMOS_EXPLAIN=true` to the processes it starts, so nested Atmos commands run by
+  scripts, steps, workflows, and custom commands report their own policy diagnostics too.</dd>
+</dl>
+
+`--explain` is not a preview flag. Combine it with a command's existing `--dry-run` when supported.
+Dry-run cannot evaluate a saved-plan policy without a real plan; the diagnostic explicitly reports
+that no saved-plan verdict was obtained. A failed earlier gate can prevent later gates from being reached.

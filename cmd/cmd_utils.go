@@ -1581,7 +1581,7 @@ func executeCustomCommand(
 							e.WithProcessStreams(process.Streams{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr}),
 						)
 					})
-					return runErr
+					return writer.MarkNestedAtmosFailure(runErr)
 				})
 			case schema.TaskTypeParallel, schema.TaskTypeMatrix:
 				// Route through the same control-step engine workflows use, so `needs:`,

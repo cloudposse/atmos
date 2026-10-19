@@ -1,171 +1,192 @@
 ---
 name: gh-stack
-description: "Split large work (e.g. a multi-phase PRD) into a sequence of reviewable, dependent PRs using GitHub's gh stack CLI (github/gh-stack) in this repo: gh stack init/add/submit/checkout/rebase/merge, plus three repo-specific gotchas that cause commits to land on the wrong branch or a GitHub-reported conflict to get wrongly dismissed as a false positive. Invoke before starting stacked-branch work, or when a gh stack command fails unexpectedly (e.g. an unrelated file failing pre-commit), or when GitHub reports a PR conflict."
+description: "Create, link, repair, and maintain dependent GitHub PRs with gh stack. Use before creating or updating stacked branches, propagating a lower-layer fix, resolving stack conflicts, or coordinating stack CI and CodeRabbit reviews. Covers native stack registration, preserving reviews, the 150-file review limit, and publication rate limits. Not Atmos configuration stacks."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
-  version: "1.0.0"
+  version: "2.0.0"
 ---
 
-# GitHub PR Stacks (`gh stack`)
+# GitHub PR stacks
 
-Not to be confused with **`atmos-stacks`** (Atmos's own stack-config subsystem) or **`atmos-git`**
-(Atmos's git integration feature). This skill is about splitting *your own implementation work* —
-e.g. a large PRD with multiple rollout phases — into a chain of small, sequentially-based PRs using
-GitHub's [`gh stack`](https://github.com/github/gh-stack) CLI extension
-(`gh extension install github/gh-stack`; Conductor's cloud workspaces have it preinstalled, local
-workspaces need the extension installed once).
+Use this skill for dependent pull requests. Read
+[maintenance and recovery](references/maintenance.md) before changing an existing published stack
+or operating its CI/review queue. Use the [pull-request skill](../pull-request/SKILL.md) for labels,
+signing, descriptions, and release documentation.
 
-Use this when a task is too large for one PR — each layer becomes its own branch, based on the layer
-below it, each with its own PR, reviewed and mergeable independently while still expressing "this
-depends on that."
+## Discover the tool and the actual stack
 
-## Core commands
+Start with `gh stack --help` and the relevant subcommand's `--help`; commands and supported flags
+can change. If the extension is missing, identify `github/gh-stack` as the required extension
+(`gh extension install github/gh-stack`). Follow the environment's installation permissions;
+do not silently replace native stacks with an unregistered branch chain.
 
-| Command | What it does |
+A feature branch based on another feature branch is only a dependency chain. GitHub's native
+stack is a separate object. Creating PRs with `gh pr create --base <parent>` alone does not register
+that object. Check both the configured base branches and native stack membership. A bottom PR may
+target `main` and still belong to a stack; also look for open PRs based on its head branch.
+
+When native registration is requested or otherwise authorized, use `gh stack link` for existing PRs
+in the intended bottom-to-top order. Inspect current remote membership first, since linking changes
+the stack. Do not convert an ordinary chain into a native stack merely to inspect it. Verify the
+resulting object and ordering on GitHub, not just local branch ancestry. For example, after
+substituting the actual repository and PR number:
+
+```bash
+gh stack link <bottom-pr> <middle-pr> <top-pr>
+gh api graphql -f query='{ repository(owner:"OWNER", name:"REPO") {
+  pullRequest(number:123) { stack { number size entries(first:100) {
+    nodes { position pullRequest { number } }
+  } } }
+} }'
+```
+
+Paginate if the returned entries do not cover the reported size. `gh stack link` can register remote
+PRs without initializing local tracking; a local `gh stack view` failure alone does not prove the
+remote stack is absent. Inspect the installed checkout/link help to reconcile local tracking.
+
+If the user requests an independent PR, branch from its requested trunk, explicitly target that
+trunk, and do not link it into the active stack or import the stack's implementation commits.
+
+## Commands and side effects
+
+The installed command help is authoritative. Current command roles are:
+
+| Command | Purpose and publication effects |
 |---|---|
-| `gh stack init` | Initializes a stack with the current branch as layer 1 (based on the trunk, usually `main`) |
-| `gh stack add <branch>` | Creates and checks out a new branch on top of the current top of the stack |
-| `gh stack submit` | Pushes every branch and creates/updates every PR in the stack (4 sequential steps: push branches, create PRs, update base branches, create/update the stack object — not atomic; a mid-run failure can leave some branches pushed with no PR yet, or a partially-updated stack. Rerunning is safe — it picks up wherever it left off) |
-| `gh stack view` | Shows the full stack (branches, PR numbers, merge-readiness) |
-| `gh stack checkout [<stack-number> / <pr-number> / <pr-url> / <branch>]` | Resolves an identifier, fetching a remote stack when needed; no argument opens the available-stack picker |
-| `gh stack switch` | Opens the branch picker for the current stack; accepts no identifier |
-| `gh stack rebase` / `gh stack sync` | Fetches trunk, cascades a rebase across every branch in the stack |
-| `gh stack merge` | Merges one or more ready PRs in the stack (doesn't require merging the whole stack at once) |
+| `gh stack init` / `add <branch>` | Initialize local stack tracking / create the next branch. |
+| `gh stack view` | Inspect the locally tracked stack. |
+| `gh stack checkout <identifier>` | Resolve a stack, PR, URL, or branch and check it out; may fetch remote tracking. |
+| `gh stack switch` | Interactive branch picker; use `checkout` for an explicit identifier. |
+| `gh stack link` | Register/update native membership. Branch-name arguments also push branches and create missing PRs; use PR numbers/URLs when only linking existing PRs. |
+| `gh stack submit` | Push branches, create/update PRs and bases, then register/update the native stack. These phases are not one atomic transaction. |
+| `gh stack rebase` | Cascade a local rebase onto updated parents; does not publish the result. |
+| `gh stack push` | Publish branches after a justified, authorized history rewrite using per-branch leases. Updates are not atomic; reconcile partial success. Use ordinary fast-forward pushes for routine updates. |
+| `gh stack sync` | Fetch, reconcile, cascade-rebase, and push branches atomically with leases, then synchronize PR/stack state. **Not a read-only probe.** |
+| `gh stack merge` | Atomically merge a contiguous bottom portion, through the chosen PR, or the whole stack. Requires merge authorization. |
 
-## Three gotchas that will bite you in this repo
+After an interrupted push/submit/sync, inspect which branches, PRs, bases, and native stack entries actually
+changed before resuming. Do not assume an error means nothing was published.
 
-### 1. Switching stack layers does NOT clear your staged changes
+## Choose propagation for the actual stack type
 
-`gh stack checkout` resolves stack numbers, PR numbers, PR URLs, and locally tracked branch names.
-It can fetch a remote stack and set up local tracking; with no argument it opens the available-stack
-picker. `gh stack switch` only opens the branch picker for the current stack: it does not accept an
-identifier, so use `gh stack checkout <branch>`, not `gh stack switch <branch>`. Once either command
-resolves *which* branch to land on, the actual switch goes through git's own checkout, which does not
-reset the index or the working tree — it only touches files that differ between the two branches. If you have
-staged **or unstaged** changes for **files that are identical on both branches**, those changes
-silently ride along to whatever branch you land on next.
+**Native GitHub stacks require linear history between their branches before merging.** When a
+lower branch or trunk update breaks that relationship, GitHub prescribes a cascading rebase.
+Do not use parent merge commits as a general substitute for this native-stack repair. A clean
+local merge, or a repository that permits merge commits, does not establish native merge eligibility.
+The method used to land the stack (merge, squash, or rebase) is a separate choice.
+See GitHub's [linear-history requirement](https://docs.github.com/en/pull-requests/reference/stacked-pull-requests#linear-history).
 
-This is exactly how a real incident happened: branch-1 changes were `git add`ed, the commit failed
-(see gotcha #2), the session ran `gh stack checkout <parent-branch>` to fix something unrelated, and
-those still-staged branch-1 files rode along and got swept into the parent's commit.
+Batch confirmed fixes before a necessary rebase, then validate the affected branches once. Deferring
+propagation while collecting fixes can save CI and review quota; it does not waive the native
+linearity requirement. Inspect the installed `gh stack rebase` scope flags and the actual dependency
+boundary instead of automatically rewriting every branch after each finding. `rebase` and `sync`
+are mutations, never status commands. Follow the detailed
+[native-stack repair procedure](references/maintenance.md#repair-native-stack-history).
 
-**Rule: before switching stack layers, get to a genuinely clean state first** — commit what you have.
-`git restore --staged .` alone is not enough: it unstages, but leaves any working-tree modifications
-in place, which still ride along the same way staged changes do. If some changes truly aren't ready
-to commit, they still need to be fully out of the working tree before switching — but getting there
-must never mean silently discarding uncommitted work. **Never discard changes (`git checkout -- .`,
-`git clean -fd`, `git reset --hard`, etc.) without the user's explicit, per-change approval** — this
-matches this repo's Git Safety Protocol. Preserve the work first, then switch:
+Before requesting reviews, verify that every dependent layer in the intended review block contains
+its current direct parent and has that parent as its sole merge base. Assess the bottom PR's trunk
+freshness separately; an unrelated trunk advance alone does not require rewriting or delaying reviews.
+Do not skip stale intermediate layers by
+merging a lower update directly into a higher PR. Deferred propagation is unfinished integration;
+hold reviews for affected heads until the batch is stable. See the
+[parent-chain checks](references/maintenance.md#validate-the-parent-chain-before-requesting-reviews).
 
-- Commit it, even as a throwaway WIP commit on the current branch (`git commit -m 'WIP: <tag>'`) —
-  with the user's approval, `git reset --mixed HEAD~1` restores it as unstaged changes once you're
-  back on this layer. Use this only for your own unpublished WIP commit at the branch tip.
-- Or copy the dirty files out to a temporary worktree, or a patch file written safely: create a
-  private temp directory (`dir=$(mktemp -d)`), exclusively create the patch file inside it
-  (`patch=$(mktemp "$dir/XXXXXX")` — avoids following a pre-existing symlink at a predictable
-  shared `/tmp/<tag>.patch` path), and capture with `git diff HEAD > "$patch"` — `HEAD`, not a bare
-  `git diff`, so both staged and unstaged tracked changes are captured (a bare `git diff` only
-  compares the working tree against the index and silently drops anything already staged); untracked
-  files still need separate handling (copy them by hand — don't `git stash -u`, per this repo's
-  no-stash convention). Reapply after switching back, then remove the temp directory.
+For an ordinary dependent PR chain outside native stacks, signed parent merges may be appropriate
+when repository policy and the user's history preferences permit them. Verify that classification
+first; do not unlink a native stack to avoid its requirements without user authorization.
 
-Only if neither is viable and the changes are genuinely disposable, ask the user for explicit approval
-before discarding — never remove uncommitted work by default. Never switch layers mid-edit with dirty
-state for work you haven't finished placing.
+GitHub documents retained approvals after a native stack rebase when the PR diff is unchanged,
+even with stale-approval dismissal enabled. Do not assume every rebase loses every approval, or
+that every approval will survive a conflict resolution. Check GitHub review applicability, CodeRabbit
+review evidence, and CI separately; a retained review can refer to an earlier commit. For non-bot
+PRs, Atmos's Quality Gate currently requires exact-head CodeRabbit approval; bot-authored PRs are
+exempt. Read the live review's commit ID: GitHub may
+associate a retained approval with the new head, satisfying that requirement without another review.
+Unchanged diffs or patch IDs do not guarantee retention. Before publication, report the affected
+approved PRs and contiguous prefix at risk. Verify the gate implementation and use incremental review for a confirmed gap; changed
+SHAs never automatically justify full CodeRabbit reviews. See
+[approval and CI verification](references/maintenance.md#verify-approvals-after-a-native-rebase).
 
-**After every stack checkout, verify before you commit:**
+Publish normal updates with ordinary fast-forward pushes. If a push is rejected, fetch and inspect
+the remote changes; do not automatically retry with a force-push flag. An explicit lease is an
+exception for a specifically justified, authorized operation, not the default publication command.
+
+Do not merge new trunk commits through every PR merely because trunk advanced. Check native
+linearity, conflicts, required freshness, and the combined result first. Explain the affected range
+and validation/review cost before a required rewrite. Honor explicit history restrictions and
+existing authorization; do not add a new permission round when the repair is already authorized.
+
+## Build approvals from the bottom
+
+Prioritize a contiguous approved bottom block, not an increasing count of approvals scattered
+through the stack. Verify applicable reviews in native stack order, including retained approvals
+after a native rebase, and distinguish those from the repository's exact-head CodeRabbit gate. Identify
+the first gap under the requested approval criterion, and
+spend review quota on closing gaps in the intended bottom block before higher layers. Preserve
+already approved heads where possible; necessary changes require fresh evidence. Report the
+approved bottom prefix separately from total approvals and from the prefix with all merge
+requirements satisfied. Verify the actual boundary before proposing a split or partial merge;
+see [review scheduling and reporting](references/maintenance.md#build-a-contiguous-approved-bottom-block).
+
+## Keep each PR reviewable
+
+**Stay below the 150-file review boundary.** The repository quality gate currently requires
+`changedFiles < 150` (at most **149**); see `qualityFileCount` in
+`magefiles/qualitygate/quality.go`. Apply the stricter of the user's budget, repository gate, and bot
+configuration, and verify those when they change. This is not a GitHub diff limit. Check it when
+planning layers, after moving files or rebasing/updating parents, and again after publication. Count against the PR's actual parent, not `main` for every layer:
+
 ```bash
-git log --oneline -3          # confirm you're on the branch/commit you expect
-git status --short            # confirm only the files you intend to touch are dirty/staged
-git diff --cached --stat      # right before committing — confirm the staged set matches your intent
+git merge-base --all <actual-parent-sha> <candidate-head-sha>
+git diff --name-only <actual-parent-sha>...<candidate-head-sha>
+gh pr view <number> --json changedFiles,headRefOid,baseRefName,baseRefOid
 ```
 
-### 2. The EditorConfig hook's affected set differs from your staged diff
+Count the complete path list (use NUL-delimited output in automation); do not rely on a truncated
+API file listing or count only new edits. Multiple merge bases make the comparison ambiguous:
+repair the ancestry or investigate before accepting its count. Keep some room below the effective limit when
+splitting work. Prefer moving cohesive docs, examples, casts, or tests with their owning behavior
+to an appropriate existing subsequent PR when authorized; recheck both layers' independent validity,
+counts, and native stack membership. Do not create an extra PR contrary to the user's requested shape.
 
-`atmos-validate-editorconfig` runs on every commit (`always_run: true`), but its
-`atmos validate --affected` command normally selects committed changes since the merge base,
-unstaged changes, and untracked files, subject to the hook's exclusions. It does not collect the
-staged diff separately: a staged-only path can be missed unless another part of that affected set
-also includes it. Selected EditorConfig rule changes trigger a full scan instead.
+## Worktree and ownership safeguards
 
-On a stacked branch, lower-layer changes can appear in that committed range: **a commit on layer 2
-can fail because of a formatting issue in a file that only layer 1 touched**, even though your
-layer-2 commit never touches that file. A passing hook is not proof that every staged file was checked.
+- Use clean, isolated worktrees for independent layer fixes. Give parallel agents ownership of
+  specific layers/files and keep one coordinator responsible for propagation, publication, and
+  review requests. Do not let multiple workers push the same branch or spend the same review quota.
+- Checkout does not clear staged or unstaged edits to files shared between branches. Before switching,
+  inspect `git status --short`, `git log -3 --oneline`, and `git diff --cached --stat`. Preserve unfinished
+  work; do not discard or stash it to get a clean checkout. Unstaging alone does not isolate edits.
+- An affected-file hook can inspect inherited committed changes, while missing a staged-only path.
+  Diagnose the owning layer before fixing a hook failure; a passing hook alone is not proof that all
+  staged files were checked. Run applicable checks explicitly in isolated worktrees when needed.
+- Fix confirmed findings at the earliest affected layer. During propagation, preserve later intentional
+  behavior as well as the fix: later docs may correctly supersede an earlier rollout phase's wording.
+  Resolve overlapping logic semantically; neither concatenating both sides nor taking one side wholesale
+  is a general conflict-resolution strategy.
+- Preserve signed commits and hooks. If signing fails (including a locked signing agent), retain the
+  prepared work and report the blocker; do not bypass signing to publish.
 
-If a commit fails on a file you didn't stage and don't recognize as part of your change, check
-whether it's inherited from a lower stack layer before assuming your own change broke something.
-Fix it **on the layer that owns the file** (usually the lowest layer that introduced or touched it),
-commit it there, then bring the fix forward to upper layers (see the fast-forward trick below) —
-don't let an upper layer's commit accidentally absorb an unrelated lower-layer fix (see gotcha #1).
+## Finish the requested scope
 
-## Bringing a lower-layer fix forward without disturbing a dirty upper layer
+Use the [maintenance reference](references/maintenance.md) to freeze candidate heads, publish safely,
+and coordinate final-head CI/coverage and applicable CodeRabbit approval evidence. Report those states separately.
+Default to incremental CodeRabbit requests (`@coderabbitai review`). Unattended queues must not
+request full reviews or automatically escalate to them; see the reference for handling missing approvals.
 
-If the upper layer has **zero commits of its own yet** (fresh from `gh stack add`, still just staged/
-unstaged changes in the working tree) and the layer below it gets a new commit, you don't need
-`gh stack rebase` (which requires a clean index) and you don't need to stash (a stray stash is easy to
-forget and this repo's convention is to avoid `git stash` — commit or fast-forward instead):
+Merge only when explicitly authorized. When available and compatible with repository rules,
+`gh stack merge` can merge the selected bottom portion atomically, avoiding a repeated
+merge-one/rebase/review cycle. GitHub still enforces protection rules and native stack linearity;
+atomic merge is not a bypass. Approval to repair history is also separate from approval to land PRs.
+Verify the selected PRs, current heads, and merge method before invoking it. Do not treat approval
+to fix CI or request reviews as approval to merge or close PRs.
 
-```bash
-git merge --ff-only <parent-layer-latest-commit>
-```
+## Label each PR separately
 
-This fast-forwards the branch pointer and merges in the parent's new commit's file changes without
-touching your working tree's dirty files, as long as those dirty files don't conflict with what the
-fast-forward brings in (they won't, if the parent commit only touched files you haven't touched).
-
-Once the upper layer has real commits of its own, use `gh stack rebase`/`gh stack sync` instead — but
-only from a genuinely clean worktree first. `github/gh-stack` requires zero uncommitted changes,
-staged or not, for these commands, and does not stash them automatically. Unstaging alone (`git
-restore --staged .`) is not enough — it clears the index but leaves working-tree modifications in
-place, and those still block the command. Commit what you have or safely move it out of the working
-tree first (per gotcha #1), not just unstage it. Once clean, `gh stack rebase`/`gh stack sync` is the
-tool built for cascading a real rebase across every branch in the stack.
-
-### 3. Compare GitHub's current PR head and configured base
-
-GitHub computes a pull request's mergeability against its **configured base branch**. For a
-stacked PR, that is the preceding branch; only the bottom PR normally targets `main`. GitHub does
-not simulate rebasing the lower layers onto current `main` before checking an upper PR.
-
-When GitHub reports `CONFLICTING`, inspect the PR's current base and head with
-`gh pr view <num> --json baseRefName,baseRefOid,headRefName,headRefOid,mergeable`, then fetch those
-branches before comparing them locally. A pairwise `git merge-tree --write-tree` only answers
-whether the two supplied commits merge cleanly. Stale remote-tracking refs, a different configured
-base, or a GitHub result still being recomputed can explain a disagreement. Confirm the exact
-commit IDs on both sides and recheck GitHub's result; do not dismiss a conflict based on a local
-comparison of different commits. `UNKNOWN` means GitHub has not finished computing mergeability.
-
-**Stack freshness is a separate check.** After `git fetch origin`, use
-`git merge-base --is-ancestor origin/main origin/<bottom-layer-branch>` to check whether the stack
-includes current `main`. `gh stack rebase` cascades a rebase onto the updated trunk and each updated
-parent. It can surface conflicts that do not exist between the currently published PR heads and
-bases. A clean pairwise merge does not prove that this future cascade will be conflict-free, and a
-conflict during that cascade does not explain GitHub's status for a different pair of commits.
-
-Use `gh stack rebase` when the stack needs that cascade, then resolve and validate the resulting
-conflicts locally. **Do not use `gh stack sync` as a read-only probe**: per its `--help`, it fetches,
-reconciles the remote stack with the local one, cascade-rebases, and then **pushes every branch
-atomically** (`--force-with-lease --atomic`) and syncs PR state on GitHub. Run it only when those
-remote changes are intended and permitted by the publication schedule. `gh stack rebase` does not
-push. After publishing, verify each PR's final head, actual base, and GitHub mergeability again.
-
-When resolving the conflicts `gh stack rebase` surfaces, first check whether the two sides are
-actually independent, then combine them — don't reflexively keep both. In this repo, stacked layers
-usually add independent, coexisting things to the same shared file (e.g. two different component
-types each adding their own `case` in the same switch statement, or their own field in the same
-struct); for those, prefer **keeping both sides** over picking one — a conflict here is usually not
-“which change is correct,” it's “both changes are correct and need to be merged.” But when the two
-sides touch the same case, field, or logic in incompatible ways, keeping both blindly produces
-duplicate cases or contradictory logic — resolve the conflict semantically instead, picking the
-correct combined behavior rather than concatenating both raw hunks, and re-run the affected checks
-afterward.
-
-## PR labeling across a stack
-
-Per the `pull-request` skill's semver-label rule: **the label is per-PR, not per-feature.** If a
+Per the `pull-request` skill's semver-label rule, **the label is per-PR, not per-feature.** If a
 five-layer stack adds one user-visible feature, only the final layer that wires it up gets
-`minor`/`major` — the foundation/plumbing layers underneath it get `no-release`. Don't label every
-layer in a stack the same way just because they're part of one larger effort.
+`minor`/`major`; the foundation and plumbing layers underneath it get `no-release`. Do not give
+every layer the same label because they belong to one larger effort.
 
 `no-release` classifies non-user-visible work for the PR policy and release-documentation checks;
 it does not suppress a version bump. The release-drafter resolver in `.github/auto-release.yml`

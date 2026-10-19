@@ -3,11 +3,13 @@ package step
 import (
 	"context"
 	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -468,6 +470,35 @@ func TestAtmosHandler_Execute_Subprocess(t *testing.T) {
 		require.Error(t, err)
 		assert.Equal(t, 3, result.Metadata["exit_code"])
 		assert.Contains(t, result.Error, "fake-atmos-error")
+		// The failure names the command and the exit code instead of a bare "exit status 3".
+		assert.Equal(t, "atmos terraform apply exited with code 3", err.Error())
+		assert.NotContains(t, err.Error(), "policy")
+		assert.Equal(t, 3, errUtils.GetExitCode(err))
+		var exitErr *exec.ExitError
+		require.ErrorAs(t, err, &exitErr, "the underlying exit error stays reachable")
+	})
+
+	t.Run("policy denial is named and keeps its exit code", func(t *testing.T) {
+		t.Parallel()
+		step := &schema.WorkflowStep{
+			Name:    "destroy",
+			Command: "terraform destroy mycomponent",
+			Stack:   "nonprod",
+			Output:  string(OutputModeNone),
+			Env:     map[string]string{"_ATMOS_STEP_FAKE": "deny"},
+		}
+
+		result, err := atmosHandler.Execute(context.Background(), step, NewVariables())
+		require.Error(t, err)
+		assert.Equal(t, "a policy denied atmos terraform destroy mycomponent -s nonprod (exit code 77)", err.Error())
+		assert.Equal(t, errUtils.ExitCodePolicyDenied, errUtils.GetExitCode(err))
+		assert.Equal(t, errUtils.ExitCodePolicyDenied, result.Metadata["exit_code"])
+	})
+
+	t.Run("cancellation is not described as an exit code", func(t *testing.T) {
+		t.Parallel()
+		assert.NoError(t, describeAtmosFailure([]string{"version"}, nil))
+		assert.Equal(t, context.Canceled, describeAtmosFailure([]string{"version"}, context.Canceled))
 	})
 
 	t.Run("invalid command template returns error before execution", func(t *testing.T) {

@@ -2,6 +2,7 @@ package downloader
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,12 +10,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/hashicorp/go-getter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestGoGetterClient_Get(t *testing.T) {
@@ -273,3 +276,98 @@ func TestFetchWithMetadata_LocalFileReturnsEmptyMetadata(t *testing.T) {
 
 // Unix-specific test moved to gogetter_downloader_unix_test.go:
 // - TestGoGetterGet_File
+
+func TestNewClient_SourcePolicy(t *testing.T) {
+	wantSchemes := []string{"file", "git", "hg", "http", "https", "s3"}
+
+	t.Run("denied source never creates a client", func(t *testing.T) {
+		enableSourcePolicy(t)
+
+		client, err := (&goGetterClientFactory{}).NewClient(context.Background(), "https://localhost/stack.yaml", t.TempDir(), ClientModeFile)
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+		assert.Nil(t, client)
+	})
+
+	t.Run("invalid policy directory fails closed", func(t *testing.T) {
+		enableInvalidPolicy(t)
+
+		client, err := (&goGetterClientFactory{}).NewClient(context.Background(), "https://example.com/stack.yaml", t.TempDir(), ClientModeFile)
+		require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+		assert.Nil(t, client)
+	})
+
+	t.Run("source rules guard every getter and disable symlinks", func(t *testing.T) {
+		enableSourcePolicy(t)
+
+		dc, err := (&goGetterClientFactory{}).NewClient(context.Background(), "https://example.com/stack.yaml", t.TempDir(), ClientModeFile)
+		require.NoError(t, err)
+		ggc, ok := dc.(*goGetterClient)
+		require.True(t, ok)
+		assert.True(t, ggc.client.DisableSymlinks)
+		require.Len(t, ggc.client.Getters, len(wantSchemes))
+		for _, scheme := range wantSchemes {
+			wrapped, ok := ggc.client.Getters[scheme].(*policyGetter)
+			require.Truef(t, ok, "getter for %q must be policy guarded, got %T", scheme, ggc.client.Getters[scheme])
+			assert.Equal(t, scheme, wrapped.scheme)
+			assert.NotNil(t, wrapped.Getter)
+		}
+	})
+
+	t.Run("guarded git getter still reports its resolved commit", func(t *testing.T) {
+		enableSourcePolicy(t)
+
+		dc, err := (&goGetterClientFactory{}).NewClient(context.Background(), "https://example.com/repo.git", t.TempDir(), ClientModeDir)
+		require.NoError(t, err)
+		ggc, ok := dc.(*goGetterClient)
+		require.True(t, ok)
+		wrapped, ok := ggc.client.Getters["git"].(*policyGetter)
+		require.True(t, ok)
+		gitGetter, ok := wrapped.Getter.(*CustomGitGetter)
+		require.True(t, ok)
+		gitGetter.ResolvedCommit = "0123456789abcdef"
+
+		assert.Equal(t, "0123456789abcdef", ggc.Metadata().GitCommit)
+	})
+
+	t.Run("rules for other capabilities leave getters native", func(t *testing.T) {
+		enableNonSourcePolicy(t)
+
+		dc, err := (&goGetterClientFactory{}).NewClient(context.Background(), "https://example.com/stack.yaml", t.TempDir(), ClientModeFile)
+		require.NoError(t, err)
+		ggc, ok := dc.(*goGetterClient)
+		require.True(t, ok)
+		assert.False(t, ggc.client.DisableSymlinks)
+		for _, scheme := range wantSchemes {
+			_, wrapped := ggc.client.Getters[scheme].(*policyGetter)
+			assert.Falsef(t, wrapped, "getter for %q must not be wrapped without source rules", scheme)
+		}
+		_, ok = ggc.client.Getters["git"].(*CustomGitGetter)
+		assert.True(t, ok)
+	})
+
+	t.Run("capability lookup failure after admission aborts client creation", func(t *testing.T) {
+		restoreAdmissionHooks(t)
+		lookupErr := errors.New("capability lookup failed")
+		calls := 0
+		guard.SetEnabled(func(string) (bool, error) {
+			calls++
+			if calls == 1 {
+				// The first lookup belongs to guard.Source, which passes when the capability is off.
+				return false, nil
+			}
+			return false, lookupErr
+		})
+
+		client, err := (&goGetterClientFactory{}).NewClient(context.Background(), "https://example.com/stack.yaml", t.TempDir(), ClientModeFile)
+		require.ErrorIs(t, err, lookupErr)
+		assert.Nil(t, client)
+		assert.Equal(t, 2, calls)
+	})
+}
+
+func TestGoGetterClient_MetadataWithoutGuard(t *testing.T) {
+	gitGetter := &CustomGitGetter{ResolvedCommit: "abc1234"}
+	gc := &goGetterClient{client: &getter.Client{Getters: map[string]getter.Getter{"git": gitGetter}}}
+
+	assert.Equal(t, "abc1234", gc.Metadata().GitCommit)
+}

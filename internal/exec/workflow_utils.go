@@ -190,7 +190,7 @@ func prepareStepEnvironment(
 	// Later layers take precedence, so a current step's env can override a value
 	// established by an earlier env step.
 	// This ensures duplicate keys are resolved before adding to the environment.
-	mergedEnv := make(map[string]string, len(workflowEnvMap)+len(persistentEnvMap)+len(stepEnvMap))
+	mergedEnv := make(map[string]string, len(workflowEnvMap))
 	for k, v := range workflowEnvMap {
 		mergedEnv[k] = v
 	}
@@ -289,7 +289,7 @@ func mergeWorkflowPath(overridePath string, toolchainPath string) string {
 		commonSuffix++
 	}
 
-	merged := make([]string, 0, len(overrideEntries)+len(toolchainEntries)-commonSuffix)
+	merged := make([]string, 0, len(overrideEntries))
 	merged = append(merged, overrideEntries[:len(overrideEntries)-commonSuffix]...)
 	merged = append(merged, toolchainEntries[:len(toolchainEntries)-commonSuffix]...)
 	merged = append(merged, overrideEntries[len(overrideEntries)-commonSuffix:]...)
@@ -997,7 +997,7 @@ func ExecuteWorkflow(
 									WithProcessStreams(process.Streams{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr}),
 								)
 							})
-							return runErr
+							return writer.MarkNestedAtmosFailure(runErr)
 						})
 					})
 				})

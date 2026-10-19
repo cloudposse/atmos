@@ -47,6 +47,7 @@ const atmosStepFakeEnvNameEnv = "_ATMOS_STEP_FAKE_ENV_NAME"
 // exits immediately instead of running the test suite:
 //   - "ok":               print a known marker to stdout, exit 0.
 //   - "fail":             print an error marker to stderr, exit 3.
+//   - "deny":             print a denial marker to stderr, exit 77 (policy denied).
 //   - "rm-glob-and-fail": delete files matching atmosStepFakeRMGlobEnv's glob
 //     pattern, then exit 1.
 //
@@ -68,6 +69,10 @@ func TestMain(m *testing.M) {
 	case "fail":
 		_, _ = os.Stderr.WriteString("fake-atmos-error")
 		os.Exit(3)
+	case "deny":
+		// A nested atmos command that a policy denied exits with errUtils.ExitCodePolicyDenied.
+		_, _ = os.Stderr.WriteString("policy denied execution")
+		os.Exit(77)
 	case "echo-selection":
 		// Report the profile and identity the nested command would run with.
 		_, _ = os.Stdout.WriteString(os.Getenv("ATMOS_PROFILE") + "|" + os.Getenv("ATMOS_IDENTITY"))

@@ -239,7 +239,7 @@ components:
         y: '{{ (atmos.Component "app" "mlE").vars.y }}'
 `,
 			wantErrIs:       errUtils.ErrCircularDependency,
-			wantErrContains: []string{"Component 'app' in stack 'mlE'"},
+			wantErrContains: []string{`Component "app" in stack "mlE"`},
 		},
 		{
 			name:      "locals and a two-component cycle is a clean cycle error",
@@ -259,7 +259,7 @@ components:
         y: '{{ (atmos.Component "base" "mlF").vars.x }}'
 `,
 			wantErrIs:       errUtils.ErrCircularDependency,
-			wantErrContains: []string{"Component 'app' in stack 'mlF'", "Component 'base' in stack 'mlF'"},
+			wantErrContains: []string{`Component "app" in stack "mlF"`, `Component "base" in stack "mlF"`},
 		},
 	}
 

@@ -1,4 +1,4 @@
-package starlark
+package value
 
 import (
 	"fmt"
@@ -7,22 +7,21 @@ import (
 	"go.starlark.net/starlark"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/script"
 )
 
-// itemErrors records the first failure hit while enumerating a mapping through Items, which
+// ItemErrors records the first failure hit while enumerating a mapping through Items, which
 // cannot return an error itself. EvaluateValue surfaces it once the script returns.
-type itemErrors struct {
+type ItemErrors struct {
 	err error
 }
 
-func (s *itemErrors) record(err error) {
+func (s *ItemErrors) record(err error) {
 	if s != nil && s.err == nil {
 		s.err = err
 	}
 }
 
-func configurationValue(raw any, sink *itemErrors) (starlark.Value, error) {
+func configurationValue(raw any, sink *ItemErrors) (starlark.Value, error) {
 	switch value := raw.(type) {
 	case nil:
 		return starlark.None, nil
@@ -43,12 +42,12 @@ func configurationValue(raw any, sink *itemErrors) (starlark.Value, error) {
 	}
 }
 
-func configurationInputCollection(raw any, sink *itemErrors) (starlark.Value, error) {
+func configurationInputCollection(raw any, sink *ItemErrors) (starlark.Value, error) {
 	switch value := raw.(type) {
-	case script.ValueMap:
+	case ValueMap:
 		return &configurationMap{values: value, sink: sink}, nil
 	case map[string]any:
-		return configurationValue(staticValueMap(value), sink)
+		return configurationValue(StaticMap(value), sink)
 	case []any:
 		values := make([]starlark.Value, len(value))
 		for i, item := range value {

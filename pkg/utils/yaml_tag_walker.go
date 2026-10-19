@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -31,6 +33,9 @@ import (
 type TagContext struct {
 	AtmosConfig *schema.AtmosConfiguration
 	File        string
+	// origin memoizes File's origin for the walk: resolving it stats every path component and
+	// takes the guard lock, so it must not run once per scalar node.
+	origin      *tagOrigin
 	parent      *yaml.Node
 	dataSection bool
 	// Walk recurses into node's own children under the SAME policy this
@@ -40,6 +45,12 @@ type TagContext struct {
 	// WalkIn is Walk with a different file context: used by !include to
 	// resolve tags nested inside an included file relative to that file.
 	WalkIn func(node *yaml.Node, file string) error
+	// WalkInRemote is WalkIn for remote content. File stays the outer manifest, which nested
+	// relative paths resolve against, while source names the remote origin that function
+	// admission and provenance attribute the content to.
+	WalkInRemote func(node *yaml.Node, file, source string) error
+	// source, when set, is the origin of the walked content, overriding File for attribution.
+	source string
 }
 
 // TagHandler resolves a single recognized YAML tag on node in place
@@ -75,7 +86,31 @@ type TagWalkPolicy struct {
 // valid tag with no handler). An invalid tag (one fntag.IsValidYAML
 // rejects) is always a hard error, regardless of policy.
 func WalkYAMLTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string, policy TagWalkPolicy) error {
-	return walkYAMLTags(TagContext{AtmosConfig: atmosConfig, File: file}, node, policy)
+	return walkYAMLTags(TagContext{AtmosConfig: atmosConfig, File: file, origin: &tagOrigin{}}, node, policy)
+}
+
+// tagOrigin resolves a walked file's origin at most once.
+type tagOrigin struct {
+	once   sync.Once
+	origin guard.Origin
+}
+
+// attribution is the file or URL the walked content comes from: the remote include target while
+// walking remote content, otherwise the file being walked.
+func (c *TagContext) attribution() string {
+	if c.source != "" {
+		return c.source
+	}
+	return c.File
+}
+
+// fileOrigin returns the origin of the content being walked, resolving it once per walk.
+func (c *TagContext) fileOrigin() guard.Origin {
+	if c.origin == nil {
+		return guard.FileOrigin(c.attribution())
+	}
+	c.origin.once.Do(func() { c.origin.origin = guard.FileOrigin(c.attribution()) })
+	return c.origin.origin
 }
 
 func walkYAMLTags(ctx TagContext, node *yaml.Node, policy TagWalkPolicy) error {
@@ -89,6 +124,15 @@ func walkYAMLTags(ctx TagContext, node *yaml.Node, policy TagWalkPolicy) error {
 	ctx.WalkIn = func(n *yaml.Node, inFile string) error {
 		included := ctx
 		included.File = inFile
+		included.source = ""
+		included.origin = &tagOrigin{}
+		return walkYAMLTags(included, n, policy)
+	}
+	ctx.WalkInRemote = func(n *yaml.Node, outerFile, source string) error {
+		included := ctx
+		included.File = outerFile
+		included.source = source
+		included.origin = &tagOrigin{}
 		return walkYAMLTags(included, n, policy)
 	}
 
@@ -124,6 +168,15 @@ func childTagContext(ctx TagContext, parent *yaml.Node, index int, policy TagWal
 	child.WalkIn = func(value *yaml.Node, file string) error {
 		included := child
 		included.File = file
+		included.source = ""
+		included.origin = &tagOrigin{}
+		return walkYAMLTags(included, value, policy)
+	}
+	child.WalkInRemote = func(value *yaml.Node, outerFile, source string) error {
+		included := child
+		included.File = outerFile
+		included.source = source
+		included.origin = &tagOrigin{}
 		return walkYAMLTags(included, value, policy)
 	}
 	return child
@@ -133,6 +186,9 @@ func childTagContext(ctx TagContext, parent *yaml.Node, index int, policy TagWal
 // policy, returning whether the walker must skip recursing into its
 // children afterward (see TagHandler's doc comment for skipChildren).
 func dispatchTag(ctx TagContext, n *yaml.Node, policy TagWalkPolicy, file string) (bool, error) {
+	if n.Kind == yaml.ScalarNode {
+		guard.RememberValue(n.Value, ctx.fileOrigin())
+	}
 	tag := strings.TrimSpace(n.Tag)
 	if tag == "" || strings.HasPrefix(tag, "!!") {
 		// No tag, or a standard YAML tag (!!str, !!int, ...) -- nothing to
@@ -171,10 +227,14 @@ func dispatchTag(ctx TagContext, n *yaml.Node, policy TagWalkPolicy, file string
 
 	val := strings.TrimSpace(n.Value)
 	if handler, ok := policy.Handlers[tag]; ok {
+		if err := guard.FunctionAt(context.Background(), tag, ctx.attribution()); err != nil {
+			return false, err
+		}
 		return handler(ctx, n, val)
 	}
 	if policy.Defer {
 		n.Value = getValueWithTag(n)
+		guard.RememberValue(n.Value, ctx.fileOrigin())
 		n.Tag = ""
 		return false, nil
 	}
@@ -236,7 +296,7 @@ func handleAppendTag(ctx TagContext, node *yaml.Node, _ string) (bool, error) {
 // by delegating straight to the existing leaf functions -- shared verbatim
 // between the stack-manifest and scaffold-manifest policies.
 func handleIncludeTag(ctx TagContext, node *yaml.Node, val string) (bool, error) {
-	return ProcessIncludeTagWalked(ctx.AtmosConfig, node, val, ctx.File, ctx.WalkIn)
+	return ProcessIncludeTagWalkedFrom(ctx.AtmosConfig, node, val, ctx.File, IncludeWalk{Local: ctx.WalkIn, Remote: ctx.WalkInRemote, Source: ctx.source})
 }
 
 func handleIncludeRawTag(ctx TagContext, node *yaml.Node, val string) (bool, error) {

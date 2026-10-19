@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -13,6 +14,7 @@ import (
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/script"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -114,7 +116,8 @@ func plainControlRunCommand(request *ControlCommandRequest) error {
 		return nil
 	}
 	program := request.Program
-	if program == schema.TaskTypeAtmos {
+	isAtmos := program == schema.TaskTypeAtmos
+	if isAtmos {
 		if exe, err := os.Executable(); err == nil {
 			program = exe
 		}
@@ -130,7 +133,17 @@ func plainControlRunCommand(request *ControlCommandRequest) error {
 	cmd.Stdin = request.Streams.Stdin
 	cmd.Stdout = controlWriter(request.Streams.Stdout, request.Stdout)
 	cmd.Stderr = controlWriter(request.Streams.Stderr, request.Stderr)
-	return cmd.Run()
+	err := cmd.Run()
+	if !isAtmos {
+		return err
+	}
+	// A nested Atmos command reports its own failure, including CI annotations; marking its exit keeps the
+	// parent from reporting the same failure a second time.
+	var exitErr *exec.ExitError
+	if err == nil || !errors.As(err, &exitErr) || exitErr.ExitCode() <= 0 {
+		return err
+	}
+	return script.NestedAtmosFailure(request.Args, exitErr.ExitCode(), err)
 }
 
 // interpreterShellRunner runs a control shell child through the in-process

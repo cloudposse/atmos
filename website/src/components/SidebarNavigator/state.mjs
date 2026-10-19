@@ -1,4 +1,4 @@
-import { findSection, normalizePath } from "./navigation.mjs";
+import { findSection, matchesPath, normalizePath } from "./navigation.mjs";
 
 export const historyStateKey = "atmosSidebar";
 /** Read an occurrence's tree identity, which remains stable when filtering. */
@@ -30,7 +30,7 @@ export function flattenItems(items) {
 /** Resolve an explicit occurrence first, then fall back to a canonical link. */
 export function findEntry(items, url, preferred) {
   const matches = flattenItems(items).filter(
-    (item) => item.href && normalizePath(item.href) === normalizePath(url),
+    (item) => matchesPath(item, url),
   );
   return (
     matches.find((item) => entryId(item) === preferred) ||
@@ -143,6 +143,7 @@ export function transitionNavigation(previous, items, sidebar, url, intent) {
 
 /** Suppress URL-based highlighting outside the selected occurrence's branch. */
 export function activeEntryPath(item, activePath, selected) {
+  if (item.customProps?.navigationMatchPrefix && matchesPath(item, activePath) && (!selected || selected === entryId(item))) return item.href;
   if (!selected) return activePath;
   const id = entryId(item);
   return id && (selected === id || selected.startsWith(`${id}/`))

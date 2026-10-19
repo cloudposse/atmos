@@ -16,6 +16,7 @@ import (
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/admission"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/secrets"
 	secretdeferred "github.com/cloudposse/atmos/pkg/secrets/deferred"
@@ -534,6 +535,15 @@ func processCustomTagsWithContext(
 ) (any, error) {
 	if starlarksource.IsEncoded(input) && matchesPrefix(input, starlarksource.Tag, skip) {
 		return newConfigurationResolver(atmosConfig, nil, withConfigurationContext(currentStack, stackInfo), withConfigurationFunctions(skip, resolutionCtx)).resolveString(input)
+	}
+	// Gate before deferred authentication or a resolver can perform I/O.
+	for _, tag := range fntag.AllYAML() {
+		if matchesPrefix(input, tag, skip) {
+			if err := admission.FunctionValue(context.Background(), tag, input); err != nil {
+				return nil, err
+			}
+			break
+		}
 	}
 	if err := prepareDeferredYAMLAuth(atmosConfig, input, skip, stackInfo); err != nil {
 		return nil, err

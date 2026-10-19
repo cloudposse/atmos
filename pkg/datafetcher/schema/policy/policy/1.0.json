@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Atmos inline policy document",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": {"const": "atmos/v1"},
+    "kind": {"const": "Policy"},
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {"type": "string", "pattern": "\\S"},
+        "description": {"type": "string", "description": "Plain-English policy purpose; not an expression or denial reason."}
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policies"],
+      "properties": {
+        "tools": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},
+        "hooks": {"type": "object", "additionalProperties": {"type": "object"}},
+        "policies": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {"pattern": "\\S"},
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["on", "rule", "action"],
+            "properties": {
+              "on": {"enum": ["terraform.plan", "operation", "atmos.affected", "function", "command", "component.command", "source"]},
+              "allowed_roots": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+              "engine": {"enum": ["cel", "starlark"], "default": "cel"},
+              "rule": {"type": "string", "minLength": 1, "maxLength": 65536},
+              "action": {"enum": ["deny", "hooks", "require_approval"]},
+              "approvals": {
+                "type": "array", "minItems": 1,
+                "items": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["id", "provider", "spec"],
+                  "properties": {
+                    "id": {"type": "string", "minLength": 1},
+                    "provider": {"const": "github-actions"},
+                    "spec": {
+                      "type": "object", "additionalProperties": false,
+                      "required": ["reviewers", "minimum"],
+                      "properties": {
+                        "reviewers": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$"}},
+                        "minimum": {"type": "integer", "minimum": 1}
+                      }
+                    }
+                  }
+                }
+              },
+              "reason": {"type": "string", "description": "Optional static Markdown explanation and suggested alternative, displayed when the rule denies an operation. No template or input interpolation."},
+              "with": {"type": "object"},
+              "match": {
+                "type": "object", "additionalProperties": false,
+                "properties": {
+                  "tags": {"type": "array", "items": {"type": "string"}},
+                  "labels": {"type": "object", "additionalProperties": {"type": "string"}},
+                  "components": {"type": "array", "items": {"type": "string"}},
+                  "stacks": {"type": "array", "items": {"type": "string"}},
+                  "component_types": {"type": "array", "items": {"type": "string"}}
+                }
+              },
+              "required_ci": {
+                "type": "array",
+                "items": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["provider", "schema", "dataset"],
+                  "properties": {
+                    "provider": {"type": "string", "minLength": 1},
+                    "schema": {"type": "string", "minLength": 1},
+                    "dataset": {"enum": ["metadata", "event", "facts"]},
+                    "fact": {"type": "string", "minLength": 1}
+                  }
+                }
+              },
+              "hooks": {
+                "type": "array", "minItems": 1,
+                "items": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["ref", "event"],
+                  "properties": {
+                    "ref": {"type": "string", "minLength": 1},
+                    "event": {"type": "string", "minLength": 1},
+                    "required": {"type": "boolean"},
+                    "require_success": {"type": "boolean"}
+                  }
+                }
+              }
+            },
+            "allOf": [{"if": {"required": ["allowed_roots"]}, "then": {"properties": {"on": {"const": "source"}}}},{
+              "if": {"properties": {"on": {"enum": ["atmos.affected", "function", "command", "source"]}}},
+              "then": {"not": {"required": ["match"]}}
+            }, {
+              "if": {"properties": {"action": {"const": "hooks"}}},
+              "then": {"required": ["hooks"], "properties": {"on": {"const": "operation"}}},
+              "else": {"not": {"required": ["hooks"]}}
+            }, {
+              "if": {"properties": {"action": {"const": "require_approval"}}},
+              "then": {"required": ["approvals"]},
+              "else": {"not": {"required": ["approvals"]}}
+            }]
+          }
+        }
+      }
+    }
+  }
+}

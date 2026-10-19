@@ -10,6 +10,11 @@ const (
 	// ExitCodeSIGINT is the POSIX exit code for SIGINT (Ctrl+C).
 	// Calculated as 128 + signal_number, where SIGINT is signal 2.
 	ExitCodeSIGINT = 130
+
+	// ExitCodePolicyDenied is the exit code for executions denied by a policy rule.
+	// It matches EX_NOPERM from sysexits.h and stays distinct from usage errors (2)
+	// and Terraform's -detailed-exitcode values, so callers can tell a denial apart.
+	ExitCodePolicyDenied = 77
 )
 
 // exitCoder wraps an error and specifies an exit code.

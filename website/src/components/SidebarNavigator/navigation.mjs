@@ -3,13 +3,21 @@ export function normalizePath(href = "") {
   return href.split(/[?#]/)[0].replace(/\/$/, "") || "/";
 }
 
+/** Explicitly opt a landing-page link into owning its generated child routes. */
+export function matchesPath(item, activePath) {
+  if (!item.href) return false;
+  const href = normalizePath(item.href);
+  const path = normalizePath(activePath);
+  return href === path || Boolean(item.customProps?.navigationMatchPrefix && path.startsWith(`${href}/`));
+}
+
 /** Find the owning section, preferring canonical pages over cross-section links. */
 export function findSection(items, activePath) {
   const path = normalizePath(activePath);
   /** Rank canonical matches above ordinary links throughout a subtree. */
   function score(item) {
     const own =
-      item.href && normalizePath(item.href) === path
+      matchesPath(item, path)
         ? !item.customProps?.yamlReference &&
           !item.customProps?.navigationReference &&
           (item.type === "category" || item.docId)

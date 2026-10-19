@@ -120,6 +120,26 @@ func Render(
 ) (string, error) {
 	defer perf.Track(atmosConfig, "datasource.Render")()
 
+	return RenderWith(atmosConfig, tmplName, tmplValue, mergedData, func(*url.URL, *url.URL) (template.FuncMap, error) {
+		return funcs, nil
+	})
+}
+
+// FuncsBuilder returns the custom functions for one render. It receives the file URLs of the root
+// ("." datasource) and "config" datasources, which exist only for the duration of the render.
+type FuncsBuilder func(topLevel, config *url.URL) (template.FuncMap, error)
+
+// RenderWith is Render with functions built from the render's own datasource URLs. Callers that
+// guard or wrap the functions, such as policy enforcement, need those URLs to construct them.
+func RenderWith(
+	atmosConfig *schema.AtmosConfiguration,
+	tmplName string,
+	tmplValue string,
+	mergedData map[string]interface{},
+	buildFuncs FuncsBuilder,
+) (string, error) {
+	defer perf.Track(atmosConfig, "datasource.RenderWith")()
+
 	tempDir, err := createTempDirectory()
 	if err != nil {
 		return "", err
@@ -132,6 +152,11 @@ func Render(
 	}
 
 	finalTopLevelFileURL, err := writeOuterTopLevelFile(tempDir, finalFileUrl.String(), mergedData)
+	if err != nil {
+		return "", err
+	}
+
+	funcs, err := buildFuncs(finalTopLevelFileURL, finalFileUrl)
 	if err != nil {
 		return "", err
 	}

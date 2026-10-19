@@ -1,0 +1,26 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: terraform-starlark-change-budget
+  description: Limit a plan's change budget, charging more for deletions and replacements.
+spec:
+  policies:
+    change-budget:
+      on: terraform.plan
+      engine: starlark
+      action: deny
+      reason: The plan exceeds the permitted change budget
+      with:
+        maximum: 5
+        deletion_weight: 3
+      rule: |
+        total = 0
+        for resource in ctx.input.get("resource_changes", []):
+            if resource["mode"] != "managed":
+                continue
+            actions = resource["change"]["actions"]
+            if "delete" in actions:
+                total += ctx.params["deletion_weight"]
+            elif actions != ["no-op"]:
+                total += 1
+        return total > ctx.params["maximum"]

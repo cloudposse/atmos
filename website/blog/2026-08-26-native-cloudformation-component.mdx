@@ -46,7 +46,7 @@ Declare a component that points to your template:
 ```yaml
 # stacks/catalog/vpc.yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     vpc:
       path: template.yaml
       stack_name: "{{ .vars.stage }}-vpc"

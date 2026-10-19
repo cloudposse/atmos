@@ -241,6 +241,25 @@ module.exports = {
         continuousIntegration,
         {
             type: 'category',
+            label: 'Policies',
+            link: {type: 'doc', id: 'policies/index'},
+            items: [
+                {type: 'link', label: 'Library', href: '/policies/library', customProps: {navigationMatchPrefix: true}},
+                'policies/configuration',
+                'policies/inputs',
+                'policies/admission',
+                'policies/sources',
+                'policies/approvals',
+                'policies/starlark',
+                'policies/terraform-plan',
+                'policies/affected',
+                'policies/hooks',
+                'policies/ci',
+                'policies/examples',
+            ]
+        },
+        {
+            type: 'category',
             label: 'Atmos AI & MCP',
             link: {type: 'doc', id: 'ai/ai'},
             items: [

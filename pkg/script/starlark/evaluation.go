@@ -4,14 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	starjson "go.starlark.net/lib/json"
 	"go.starlark.net/starlark"
-	"go.starlark.net/syntax"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/script"
+	"github.com/cloudposse/atmos/pkg/script/starlark/value"
 )
 
 const configurationStepLimit = 100_000
@@ -24,14 +23,10 @@ func (e *Engine) EvaluateValue(ctx context.Context, spec script.Evaluation) (any
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	sink := &itemErrors{}
-	globals := starlark.StringDict{
-		"ctx":   &configurationMap{values: spec.Context, attributes: true, sink: sink},
-		"json":  starjson.Module,
-		"sum":   starlark.NewBuiltin("sum", numericSum),
-		"round": starlark.NewBuiltin("round", numericRound),
-	}
-	program, err := configurationProgram(spec, globals)
+	globals, sink := value.Globals(spec.Context)
+	globals["sum"] = starlark.NewBuiltin("sum", numericSum)
+	globals["round"] = starlark.NewBuiltin("round", numericRound)
+	program, err := value.Compile(spec.Source, spec.Filename, spec.Line, globals)
 	if err != nil {
 		return nil, scriptError(ctx, err, "")
 	}
@@ -44,35 +39,16 @@ func (e *Engine) EvaluateValue(ctx context.Context, spec script.Evaluation) (any
 	if err != nil {
 		return nil, scriptError(ctx, err, "")
 	}
-	value, err := starlark.Call(thread, module["__atmos_value"], nil, nil)
+	resultValue, err := starlark.Call(thread, module["__atmos_value"], nil, nil)
 	if err != nil {
 		return nil, scriptError(ctx, err, "")
 	}
-	if sink.err != nil {
-		return nil, scriptError(ctx, sink.err, "")
+	if sink.Err() != nil {
+		return nil, scriptError(ctx, sink.Err(), "")
 	}
-	result, err := configurationResult(value, make(map[starlark.Value]bool))
+	result, err := value.Result(resultValue)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: !starlark return value: %w", errUtils.ErrStarlark, spec.Filename, err)
 	}
 	return result, nil
-}
-
-func configurationProgram(spec script.Evaluation, globals starlark.StringDict) (*starlark.Program, error) {
-	line := spec.Line
-	if line < 1 {
-		line = 1
-	}
-	file, err := fileOptions.Parse(spec.Filename, syntax.FilePortion{Content: []byte(spec.Source), FirstLine: line, FirstCol: 1}, 0)
-	if err != nil {
-		return nil, err
-	}
-	if len(file.Stmts) == 0 {
-		return nil, fmt.Errorf("%w: !starlark requires a function body with a return value", errUtils.ErrStarlark)
-	}
-	pos, _ := file.Stmts[0].Span()
-	file.Stmts = []syntax.Stmt{&syntax.DefStmt{
-		Def: pos, Name: &syntax.Ident{NamePos: pos, Name: "__atmos_value"}, Lparen: pos, Rparen: pos, Body: file.Stmts,
-	}}
-	return starlark.FileProgram(file, globals.Has)
 }

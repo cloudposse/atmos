@@ -23,7 +23,7 @@ Define each component's template and deployment settings in its stack manifest.
 <File title="atmos.yaml">
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     # Base path to native aws/cloudformation component directories (where local
     # templates live). Defaults to components/cloudformation.
     base_path: components/cloudformation
@@ -63,7 +63,7 @@ most specific wins:
 
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     vpc:
       settings:
         aws_cloudformation:

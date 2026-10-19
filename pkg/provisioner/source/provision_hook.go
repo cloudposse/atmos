@@ -224,7 +224,7 @@ type vendorTarget struct {
 
 // vendorToTarget provisions with progress reporting and removes a newly created target when downloading fails.
 func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, target vendorTarget) error {
-	progressMsg := fmt.Sprintf("Auto-provisioning source for '%s'", target.component)
+	progressMsg := fmt.Sprintf("Auto-provisioning source for %q", target.component)
 	completedMsg := fmt.Sprintf("Auto-provisioned source to %s", target.path)
 	out := ui.New(target.writers.Stderr)
 

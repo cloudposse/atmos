@@ -38,6 +38,8 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy"
+	"github.com/cloudposse/atmos/pkg/policy/admission"
 	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -376,6 +378,14 @@ func prepareHookContext(cmd_ *cobra.Command, args []string) (hookContext, error)
 	if info.ComponentFromArg != "" {
 		authManager, _ := info.AuthManager.(auth.AuthManager)
 		if resolved, procErr := e.ProcessStacks(&atmosConfig, info, true, false, false, nil, authManager); procErr != nil {
+			// Component admission (policy `component.command`) runs inside
+			// ProcessStacks and must gate everything else. Unlike the other
+			// best-effort failures above, a denial is authoritative: returning it
+			// here keeps every before.* hook from running (and RunE, with its
+			// after.* hooks, from starting) for a command policy has rejected.
+			if h.IsPolicyAdmissionError(procErr) {
+				return hookContext{info: info, atmosConfig: atmosConfig}, procErr
+			}
 			log.Debug("hook context: failed to resolve component metadata; hooks will use the unresolved component/stack", "error", procErr)
 		} else {
 			info = resolved
@@ -604,6 +614,9 @@ type terraformNodeHooks struct {
 	// graph nodes (research.md Decision 11/17).
 	mu      sync.Mutex
 	results []any
+	// admissionDenied holds the nodes (see nodeKey) that component admission
+	// rejected in Before. Nothing ran for them, so After skips their hooks.
+	admissionDenied map[string]struct{}
 }
 
 // execNodeResult is one {action, address} resource-change entry within a
@@ -1068,6 +1081,13 @@ func (n *terraformNodeHooks) BeforeWithWriters(_ context.Context, info *schema.C
 	// identity-aware store hooks (for example, after-apply output publishing)
 	// do not fall back to ambient credentials.
 	injectHookStoreAuthResolver(&atmosConfig, info)
+	// The scheduler runs this hook before the executor resolves the node (and
+	// with it, component admission). Check admission first so a denied node runs
+	// no before.* hooks, matching the single-component path.
+	if err := admitNodeComponent(&atmosConfig, info); err != nil {
+		n.markAdmissionDenied(info)
+		return err
+	}
 	if err := n.runUserHooksForNodeWithWriters(&atmosConfig, info, n.beforeEvent, h.Outcome{Status: h.RunSuccess}, writers); err != nil {
 		return err
 	}
@@ -1101,6 +1121,13 @@ func (n *terraformNodeHooks) After(ctx context.Context, info *schema.ConfigAndSt
 func (n *terraformNodeHooks) AfterWithWriters(_ context.Context, info *schema.ConfigAndStacksInfo, output string, execErr error, writers schema.ComponentNodeHookWriters) error {
 	defer perf.Track(nil, "terraform.terraformNodeHooks.After")()
 
+	// Admission rejected this node before anything started, so there is no
+	// operation outcome to report to after.* or CI hooks.
+	if n.consumeAdmissionDenied(info) {
+		n.recordExecResult(info, output, execErr)
+		return nil
+	}
+
 	injectLastAuthContext(info)
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
@@ -1124,6 +1151,52 @@ func (n *terraformNodeHooks) AfterWithWriters(_ context.Context, info *schema.Co
 	n.recordExecResult(info, output, execErr)
 
 	return hookErr
+}
+
+// admitNodeComponent runs component admission (policy `component.command`) for
+// one graph node and returns policy admission failures. It resolves a copy of
+// info, so the node is left untouched, and does nothing when no component
+// admission rules are configured. Other resolution failures are left to the
+// executor, which reports them authoritatively.
+func admitNodeComponent(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	enabled, err := admission.HasRules(policy.ComponentCommand)
+	if err != nil {
+		return err
+	}
+	if !enabled || info.ComponentFromArg == "" {
+		return nil
+	}
+	authManager, _ := info.AuthManager.(authtypes.AuthManager)
+	if _, err := e.ProcessStacks(atmosConfig, *info, true, false, false, nil, authManager); h.IsPolicyAdmissionError(err) {
+		return err
+	}
+	return nil
+}
+
+// nodeKey identifies a graph node across its Before and After hook calls.
+func nodeKey(info *schema.ConfigAndStacksInfo) string {
+	return info.Stack + "\x00" + info.ComponentFromArg
+}
+
+// markAdmissionDenied records that component admission rejected this node.
+func (n *terraformNodeHooks) markAdmissionDenied(info *schema.ConfigAndStacksInfo) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.admissionDenied == nil {
+		n.admissionDenied = make(map[string]struct{})
+	}
+	n.admissionDenied[nodeKey(info)] = struct{}{}
+}
+
+// consumeAdmissionDenied reports whether admission rejected this node and
+// clears the record.
+func (n *terraformNodeHooks) consumeAdmissionDenied(info *schema.ConfigAndStacksInfo) bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	key := nodeKey(info)
+	_, denied := n.admissionDenied[key]
+	delete(n.admissionDenied, key)
+	return denied
 }
 
 // injectLastAuthContext makes the credentials and endpoint selected for the
@@ -1676,6 +1749,7 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	// Apply parsed options to info BEFORE prompting, so hasMultiComponentFlags() works correctly.
 	// This fixes issue #1945: --all flag must be set before resolveAndPromptForArgs checks it.
 	applyOptionsToInfo(&info, opts)
+	applyFromPlanSelection(&info, actualCmd)
 
 	// Honor a component already chosen interactively in PreRunE (runBeforeHooks) so the
 	// prompt below sees both component and stack and does not ask again.
@@ -1762,6 +1836,14 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	shellOpts = append(shellOpts, e.WithInvokingCommand(actualCmd))
 
 	return executeSingleComponent(&info, shellOpts...)
+}
+
+// A changed but explicitly empty --from-plan flag selects the canonical plan.
+// Viper IsSet cannot distinguish this from the parser's registered empty default.
+func applyFromPlanSelection(info *schema.ConfigAndStacksInfo, command *cobra.Command) {
+	if flag := command.Flags().Lookup("from-plan"); flag != nil && flag.Changed && flag.Value.String() == "" {
+		info.UseTerraformPlan = true
+	}
 }
 
 func isCompoundTerraformCommandWithoutComponent(args []string) bool {

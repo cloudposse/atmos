@@ -157,6 +157,19 @@ pre-commit autoupdate
 
 ## Developer Tools
 
+### Policy Engine
+
+The experimental `pkg/policy` core is documented in the
+[policy engine contributor guide](policy-engine.md). It covers the Go API,
+CEL evaluation, provider-native CI snapshots, affected inputs, and the boundary between evaluation
+and enforcement. The opt-in [saved-plan gate](../website/docs/policies/terraform-plan.mdx)
+wires CEL plan policies into Terraform commands; existing component validation is unchanged.
+The [policy library](../policy-library/README.md) includes individually tested policies and lifecycle hooks;
+the [catalog contributor guide](policy-library.md) describes its fixtures and verification commands.
+The [capability reference](policy-capabilities.md) documents implemented component and CI inputs.
+Use the `atmos-policy` consumer skill when authoring
+these policies, rather than treating PRD syntax as shipped CLI functionality.
+
 ### Testing Atmos in Geodesic
 
 The `scripts/test-geodesic-prebuilt.sh` script allows you to quickly test Atmos changes inside a Geodesic container without rebuilding the entire Geodesic image.

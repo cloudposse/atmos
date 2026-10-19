@@ -25,6 +25,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 )
@@ -67,14 +68,20 @@ type Hooks struct {
 
 	// outcome is the lifecycle operation result (success/failure) for the next
 	// RunAll, set by SetOutcome. Zero value defaults to success.
-	outcome Outcome
+	outcome      Outcome
+	policyBundle *policy.Bundle
+	policyCI     *policy.CISnapshot
 }
 
 func (h Hooks) HasHooks() bool {
-	return len(h.items) > 0
+	return len(h.items) > 0 || h.policyBundle != nil
 }
 
 func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*Hooks, error) {
+	return getGovernedHooks(atmosConfig, info)
+}
+
+func getComponentHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*Hooks, error) {
 	if info.ComponentFromArg == "" || info.Stack == "" {
 		return &Hooks{
 			config: atmosConfig,
@@ -108,9 +115,10 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 	if !ok {
 		// No hooks defined or wrong type, return empty hooks.
 		return &Hooks{
-			config: atmosConfig,
-			info:   info,
-			items:  nil,
+			config:   atmosConfig,
+			info:     info,
+			items:    nil,
+			sections: sections,
 		}, nil
 	}
 
@@ -150,6 +158,9 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 	outcome := h.outcome
 	if outcome.Status == "" {
 		outcome.Status = RunSuccess
+	}
+	if err := h.runPolicyHooks(&hookRunContext{event: event, atmosConfig: atmosConfig, info: info, cmd: cmd, args: args, outcome: outcome}); err != nil {
+		return err
 	}
 
 	log.Debug("Running hooks", "count", len(h.items), logKeyStatus, outcome.Status)
@@ -257,7 +268,7 @@ func (h *Hooks) runResolvedHook(name string, kind *Kind, executionHook *Hook, ct
 		Kind:          kind,
 		Event:         ctx.event,
 		AtmosConfig:   ctx.atmosConfig,
-		Info:          ctx.info,
+		Info:          h.withRootModule(ctx.info),
 		Cmd:           ctx.cmd,
 		Args:          ctx.args,
 		HookName:      name,
@@ -346,6 +357,25 @@ func (h *Hooks) rawHookSection(name string) (map[string]any, bool) {
 	}
 	rawHook, ok := hooksSection[name].(map[string]any)
 	return rawHook, ok
+}
+
+// withRootModule returns info with FinalComponent set to the component's root
+// module (the `component` section, i.e. metadata.component) when the caller left
+// it empty. Hook working directories derive from FinalComponent: without it they
+// fall back to the component instance name, which names a directory only when the
+// instance and its root module happen to share a name. The multi-component
+// dispatcher passes only the instance name. The caller's struct is not mutated.
+func (h *Hooks) withRootModule(info *schema.ConfigAndStacksInfo) *schema.ConfigAndStacksInfo {
+	if info == nil || info.FinalComponent != "" {
+		return info
+	}
+	rootModule, ok := h.sections["component"].(string)
+	if !ok || rootModule == "" {
+		return info
+	}
+	resolved := *info
+	resolved.FinalComponent = rootModule
+	return &resolved
 }
 
 // executionStackInfo returns a copy of info with the component, settings, vars,

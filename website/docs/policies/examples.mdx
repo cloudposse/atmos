@@ -1,0 +1,73 @@
+---
+title: Policy Examples
+sidebar_label: Examples
+description: Tested CEL configurations for Terraform resource controls, GitHub event checks, and lifecycle hooks.
+---
+
+import Intro from '@site/src/components/Intro'
+import EmbedFile from '@site/src/components/EmbedFile'
+
+<Intro>
+Copy these tested policy configurations into your governing policy directory and adapt the
+parameters to your environment. For individually reusable policies, use the [Policy Library](/policies/library).
+</Intro>
+
+## Usage
+
+The bundles below demonstrate combinations of policies. The library provides
+[one policy per entry](/policies/library), with its own parameters and test cases.
+Each library entry has CEL and Starlark tabs containing complete, interchangeable manifests tested
+against the same inputs. Choose one implementation; do not install both versions of a policy.
+
+Save a document below as a `.yaml` file in your policy directory, then set:
+
+```shell
+export ATMOS_POLICY_DIR="$PWD/policy.d"
+```
+
+Every rule in that directory is loaded. Remove unwanted rules before enabling a document.
+For CI, use a [protected governing directory](/policies/configuration#enforcement).
+
+## Terraform resource controls
+
+| Rule | Denies when | Parameter defaults |
+|---|---|---|
+| `protect-stateful-resources` | A protected resource is deleted or replaced | `types`: RDS instance/cluster, S3 bucket |
+| `create-before-destroy` | A replacement destroys before creating | None |
+| `limit-change-count` | More than the maximum managed resources change | `maximum: 10` |
+| `disallow-resource-types` | A forbidden resource exists after the change | `types`: IAM users and access keys |
+| `allowed-instance-types` | An EC2 instance type is absent, unknown, or outside the allowlist | `allowed: [t3.micro, t3.small]` |
+| `require-owner-tag` | A planned EC2 instance lacks a known, nonempty `Owner` tag | None |
+
+<EmbedFile filePath="examples/policies/terraform/policy.yaml" />
+
+Run with [Terraform saved-plan commands](/policies/terraform-plan). Deleting a disallowed resource
+is permitted by the resource-type rule; deleting a resource protected by another rule still blocks.
+
+## GitHub event check
+
+| Rule | Denies when | Required input |
+|---|---|---|
+| `reject-fork-plan` | The PR head and base repositories differ | Complete GitHub Actions event |
+
+<EmbedFile filePath="examples/policies/github/policy.yaml" />
+
+Missing required CI context blocks the command, including local invocations. This is a plan-time
+check, not protection against running untrusted code before planning. See [CI Context](/policies/ci).
+
+## Lifecycle hooks and operation controls
+
+| Rule | Selection | Effect |
+|---|---|---|
+| `lint-successful-plan` | Successful Terraform plan | Require TFLint |
+| `scan-production` | Before Terraform plan in a `prod-` stack | Require Checkov |
+| `callback-after-apply` | Successful Helm apply | Require HTTP callback |
+| `cleanup-failed-apply` | Failed Kubernetes apply | Require cleanup command |
+| `deny-production-delete` | Before Helm delete in a `prod-` stack | Deny |
+
+Replace the callback URL and cleanup executable. Install the tools or add approved version pins
+under `spec.tools`. All selected hooks in this example must execute and succeed.
+
+<EmbedFile filePath="examples/policies/lifecycle/policy.yaml" />
+
+See [Hooks](/policies/hooks) for skip protection, ordering, retries, and post-apply failure semantics.

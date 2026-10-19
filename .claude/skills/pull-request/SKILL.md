@@ -16,6 +16,24 @@ Use this skill **every time you open or update a PR**. It encodes three policies
 
 If you violate any of these, CI fails and the PR can't merge. Follow this skill across both phases: complete the **pre-push checklist** before `git push`, then immediately work through the **post-push / PR checklist** (open the PR, apply the label, monitor CI).
 
+## Stacked PRs
+
+Before creating or updating dependent PRs, read the [gh-stack skill](../gh-stack/SKILL.md).
+Discover the `gh stack` extension and inspect native membership before choosing propagation.
+When native registration is requested or otherwise authorized, use `gh stack link` or the appropriate
+submission workflow and verify GitHub's membership and order. Setting `--base` alone creates only
+a branch chain; preserve an ordinary chain's classification unless conversion is authorized.
+Stay below the 150-file review boundary against each PR's actual parent; the repository quality
+gate currently permits at most 149 files. Native stacks require linear history between branches;
+batch fixes before a necessary cascading rebase instead of merging parents as a general workaround
+or rebasing after every finding. Verify the current direct-parent chain before requesting reviews.
+GitHub can retain approvals for unchanged PR diffs, but do not promise retention; report affected
+approvals at risk before publication. Verify reviews separately from CI. For non-bot PRs, Atmos's
+Quality Gate requires exact-head CodeRabbit approval (bot-authored PRs are exempt); inspect the live review commit ID before requesting another
+review, because GitHub may associate a retained approval with the new head.
+Coordinate history repair and publication through that skill.
+For an explicitly independent PR, target trunk and leave it outside the existing stack.
+
 ## The label decision tree
 
 The Atmos repo has four mutually exclusive release labels (plus other category labels that don't affect release docs):
@@ -114,15 +132,15 @@ Get this right the first time:
 
 3. **Never bypass signing with `--no-gpg-sign` or `-c commit.gpgsign=false`** even temporarily. The CLAUDE.md rules forbid this, and the resulting commit cannot be merged.
 
-If you discover unsigned commits already on the branch:
+Repair unsigned commits before publishing. If they are already published, inspect the affected
+branches and reviews, verify the required repair, and confirm that existing authorization covers
+rewriting that history. For stacked PRs, coordinate through the gh-stack skill; do not automatically
+rebase every descendant. If a permitted history rewrite is necessary, use an explicit expected-SHA
+lease to protect against concurrent remote work, never an unconditional force push. A lease does
+not itself authorize the rewrite, and restricted invocations may prohibit it.
 
-```bash
-# For the last N commits (interactive rebase, sign each):
-git rebase --exec 'git commit --amend --no-edit -S' -i HEAD~N
-git push --force-with-lease
-```
-
-Always use `--force-with-lease` (not `--force`) to avoid clobbering work from other sessions on the same branch.
+Normal updates use ordinary fast-forward pushes. A rejected push requires inspecting remote
+changes, not automatically escalating to a force-push flag.
 
 ## Pre-push checklist
 
@@ -172,37 +190,6 @@ gh pr create --body-file /tmp/pr-body.md
 ```
 
 (Alternatively, the single-quoted heredoc already disables shell expansion, so plain unescaped backticks work — but `--body-file` is more robust because file content survives shell quoting unchanged.)
-
-## Stacked PRs (GitHub stacks, not just base-branch chains)
-
-A PR whose base is another feature branch is only a **chain**. GitHub's native stacked pull
-requests are a separate, first-class object (`PullRequestStack`, with a stack number and ordered
-entries), and tools such as Conductor read that object, not the base branches. A chained PR shows
-the banner "This pull request can be stacked with other pull requests" and `stack: null` in the
-API until it is linked.
-
-Register or grow a stack with the `gh stack` extension (`gh extension install github/gh-stack`);
-there is no GraphQL mutation for it:
-
-```bash
-# Create or update a stack from existing PRs or branches, listed bottom to top.
-gh stack link 3263 3264 3266 3261 3274
-
-# Append a new PR or branch to the top of an existing stack (first argument is the stack number).
-gh stack link 3267 3312
-
-# Confirm what GitHub recorded (position 1 is closest to main).
-gh api graphql -f query='{ repository(owner:"cloudposse", name:"atmos") { pullRequest(number:3307) {
-  stack { number size entries(first:30) { nodes { position pullRequest { number } } } } } } }'
-```
-
-`gh stack link` never removes PRs from a stack and keeps draft status unless you pass `--open`.
-After `link`, `gh stack view` still reports "not part of a stack" because `link` deliberately skips
-local tracking; that is expected. Never claim a set of PRs is a stack from branch ancestry alone.
-
-When a PR in the middle of a stack changes, rebase every PR above it (verify replayed commits
-with `git patch-id --stable`) and push each with `--force-with-lease`; the stack object itself
-needs no update.
 
 ## Updating an existing PR
 
