@@ -40,7 +40,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@281621d6f2e63a883ea884559ffdbb4895c1bd98 # main
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@4ae67ee1158b9c6466074b7729e1efe197cfd665 # main
     with:
       # shared-go-auto-release.yml declares publish/prerelease/draft as
       # `type: string`, not boolean — quote/stringify these so the values
