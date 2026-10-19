@@ -50,6 +50,11 @@ Highest-severity findings:
   unknown stacks and positional arguments, and normalize disabled identities.
 - Report each outcome with success, error, or warning styling and a tally. Route
   grouped child stdout to stdout, and drop the redundant exit-status wrapper.
+- Add `--ci`, which passes `ATMOS_CI=true` to every component command. Keep GitHub
+  workflow commands such as `::add-mask::` at column 0 when concurrent output is
+  prefixed, so masking and annotations still apply. Give each component its own
+  invocation log group, and publish one combined job summary with namespaced
+  outputs instead of letting component outputs overwrite each other.
 
 `stack create`:
 
