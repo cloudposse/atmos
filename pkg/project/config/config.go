@@ -96,8 +96,16 @@ func init() {
 //     future updates.
 type ScaffoldConfig = manifest.Manifest[ScaffoldSpec]
 
+// StackOutput declares a stack-compatible scaffold's primary rendered output.
+type StackOutput struct {
+	Manifest string `yaml:"manifest" json:"manifest" jsonschema:"required,minLength=1,description=Rendered stack manifest path relative to the generation root"`
+}
+
 // ScaffoldSpec is the spec of an AtmosScaffoldConfig manifest.
 type ScaffoldSpec struct {
+	// Stack identifies the primary manifest for stack-specific generation.
+	Stack *StackOutput `yaml:"stack,omitempty" json:"stack,omitempty"`
+
 	// Source records where the template came from (e.g. "embedded", a local
 	// path, or a git URL once remote sources are supported). Written to
 	// project records; ignored in template manifests.

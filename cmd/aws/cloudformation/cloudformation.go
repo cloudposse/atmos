@@ -18,6 +18,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/stack/lifecycle"
 	"github.com/cloudposse/atmos/pkg/tags"
 )
 
@@ -110,6 +111,14 @@ var CloudFormationCmd = &cobra.Command{
 }
 
 func init() {
+	deployHandler := lifecycle.NativeHandler("aws", "cloudformation", "deploy")
+	deployHandler.HookEvents = []string{"before.aws/cloudformation.deploy", "after.aws/cloudformation.deploy"}
+	lifecycle.MustRegister("aws/cloudformation", lifecycle.Deploy, deployHandler)
+	destroyHandler := lifecycle.NativeHandler("aws", "cloudformation", "destroy")
+	destroyHandler.HookEvents = []string{"before.aws/cloudformation.delete", "after.aws/cloudformation.delete"}
+	destroyHandler.ApprovalArgs = []string{"--auto-approve"}
+	lifecycle.MustRegister("aws/cloudformation", lifecycle.Destroy, destroyHandler)
+
 	cloudFormationParser = flags.NewStandardParser(flags.WithStackFlag(), flags.WithDryRunFlag())
 	cloudFormationParser.RegisterPersistentFlags(CloudFormationCmd)
 
@@ -226,6 +235,9 @@ func newOperationCommand(use, subCommand, short string) *cobra.Command {
 	}
 
 	options := operationFlagOptions(use, subCommand)
+	if use == opDelete && subCommand == subCommandDelete {
+		cmd.Aliases = append(cmd.Aliases, "destroy")
+	}
 	options = append(options, flags.WithConditionalCompletionPrompt(
 		"stack",
 		"Choose a stack",

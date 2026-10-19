@@ -567,6 +567,8 @@ func (m spinnerModel) View() string {
 
 // InitUI handles the user interface for the init command.
 type InitUI struct {
+	creationPlan *CreationPlan
+
 	checkmark          string
 	xMark              string
 	grayStyle          lipgloss.Style
@@ -1155,7 +1157,7 @@ func (ui *InitUI) executeWithCommandValues(embedsConfig *tmpl.Configuration, tar
 // RunSetupForm runs the interactive setup form to collect configuration values
 // This method can be used by both init and scaffold commands.
 func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath string, useDefaults bool, cmdTemplateValues map[string]interface{}) (map[string]interface{}, map[string]string, error) {
-	mergedValues, valueSources, err := buildSetupValues(scaffoldConfig, targetPath, cmdTemplateValues)
+	mergedValues, valueSources, err := buildSetupValuesWithHistory(scaffoldConfig, targetPath, cmdTemplateValues, ui.creationPlan == nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1200,10 +1202,10 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 	return mergedValues, valueSources, nil
 }
 
-// buildSetupValues merges project defaults, any values already persisted at
+// buildSetupValuesWithHistory merges project defaults, any values already persisted at
 // targetPath, and the command-line-supplied values (highest priority),
 // tracking which source each field ultimately came from for display.
-func buildSetupValues(scaffoldConfig *config.ScaffoldConfig, targetPath string, cmdTemplateValues map[string]interface{}) (map[string]interface{}, map[string]string, error) {
+func buildSetupValuesWithHistory(scaffoldConfig *config.ScaffoldConfig, targetPath string, cmdTemplateValues map[string]interface{}, history bool) (map[string]interface{}, map[string]string, error) {
 	// Reject --set (or any other command-line-supplied) values targeting a
 	// type: computed field immediately, rather than letting ComputeFields
 	// silently overwrite them later with no explanation.
@@ -1212,9 +1214,13 @@ func buildSetupValues(scaffoldConfig *config.ScaffoldConfig, targetPath string, 
 	}
 
 	// Load existing user values from the scaffold template directory
-	userValues, err := config.LoadUserValues(targetPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load user values: %w", err)
+	userValues := map[string]interface{}{}
+	if history {
+		var err error
+		userValues, err = config.LoadUserValues(targetPath)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to load user values: %w", err)
+		}
 	}
 
 	// Deep merge project defaults with user values
@@ -1741,6 +1747,11 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	mergedValues, _, err := ui.RunSetupForm(scaffoldConfig, targetPath, useDefaults, cmdTemplateValues)
 	if err != nil {
 		return fmt.Errorf("failed to run setup form: %w", err)
+	}
+
+	if ui.creationPlan != nil {
+		ui.creationPlan.Config = scaffoldConfig
+		ui.creationPlan.Values = mergedValues
 	}
 
 	scaffoldHooks, err := config.DecodeHooks(scaffoldConfig.Spec.Hooks)

@@ -1,0 +1,118 @@
+---
+title: atmos stack deploy
+sidebar_label: deploy
+sidebar_class_name: command
+id: stack-deploy
+description: Deploy selected components across component types in dependency order.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Deploy stack components across component types using their registered deployment handlers.
+Dependencies determine readiness; independent components can run concurrently.
+</Intro>
+
+<CastPlayer title="atmos stack deploy --help" src="/casts/screengrabs/atmos-stack-deploy--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos stack deploy --all [--stack dev]
+atmos stack deploy --affected [--stack dev] [--base origin/main]
+atmos stack deploy --affected --include-dependencies=2 --dry-run
+```
+
+Specify exactly one of `--all` or `--affected`. No positional component argument is
+accepted. A stack filter narrows the initial selection. Dependency expansion is
+explicit and can cross stack boundaries. An unchanged prerequisite is not executed
+unless selected or included by expansion. Ordering is preserved through unchanged
+intermediate components.
+
+Component packages register handlers for a fixed set of lifecycle events:
+`build`, `test`, `deploy`, `destroy`, and `validate`. This command invokes only
+registered `deploy` handlers. Built-in deployment handlers cover Terraform,
+Helmfile, Helm, Kubernetes, and CloudFormation. A configured custom command named
+`deploy` with an explicit component-type binding can supply a handler, including
+nested command paths. Semantic `provides: component` and `provides: stack` inputs
+receive the selected component and stack. Ambiguous handlers and required inputs
+without defaults fail before execution. Packer `build` and Ansible `playbook` are
+not implicitly treated as deployment handlers.
+
+Each handler invokes the existing component command in a separate Atmos process,
+preserving its authentication, hooks, plan verification, and approval behavior.
+For example, Terraform's existing `deploy` command uses automatic approval.
+Runtime values are resolved when each component starts, so consumers see newly
+produced outputs. Shared Terraform source directories remain serialized.
+
+## Preview lifecycle hooks
+
+```shell
+atmos stack deploy --all --stack dev --dry-run
+```
+
+The preview lists each selected kind/stack/component, its resolved command,
+dependencies, and matching before/after lifecycle hooks. Hook previews show their
+declared actions and conditions, including image builds attached to deployment.
+Conditions and runtime expressions are left for execution. Hooks excluded by
+`--skip-hooks` are identified. A preview runs neither component commands nor hooks
+and is not an engine plan. Custom commands retain their own step behavior; Atmos
+does not invent lifecycle hook events for them.
+
+See `examples/stack-lifecycle` for a Terraform → Helm → Kubernetes chain and a
+conditional Docker build hook. Component types have no fixed priority.
+
+## Flags
+
+<dl>
+  <dt>`--all` / `--affected`</dt>
+  <dd>Required, mutually exclusive selection modes. Default: Neither.</dd>
+  <dt>`--stack`, `-s`</dt>
+  <dd>Intersect the initial selection with a canonical stack name. Default: All stacks.</dd>
+  <dt>`--base`</dt>
+  <dd>Git ref or SHA; also supports `--ref`, `--sha`, `--repo-path`, and clone/SSH options from affected detection. Default: Existing affected baseline rules.</dd>
+  <dt>`--include-dependencies[=N]`</dt>
+  <dd>Include prerequisites, optionally bounded by depth. Default: Disabled.</dd>
+  <dt>`--include-dependents[=N]`</dt>
+  <dd>Include consumers, optionally bounded by depth. Default: Disabled.</dd>
+  <dt>`--max-concurrency`</dt>
+  <dd>Limit active component operations. Default: `1`.</dd>
+  <dt>`--failure-mode`</dt>
+  <dd>`keep-going` finishes independent branches; dependents of failures are skipped. Default: `fail-fast`.</dd>
+  <dt>`--log-order`</dt>
+  <dd>`grouped` emits complete component logs in stable dependency order. Default: `stream`.</dd>
+  <dt>`--dry-run`</dt>
+  <dd>Preview selection, commands, relationships, and lifecycle hooks. Default: `false`.</dd>
+  <dt>`--identity`, `-i`</dt>
+  <dd>Forward the identity to each child. Default: Component command behavior.</dd>
+  <dt>`--auto-approve`</dt>
+  <dd>Supply the registered handler's approval arguments, where supported. Default: `false`.</dd>
+  <dt>`--allow-destroy`</dt>
+  <dd>Request deleted-component teardown with `--affected`; see the limitation below. Default: `false`.</dd>
+  <dt>`--skip-hooks[=names]`</dt>
+  <dd>Skip all hooks or the comma-separated names; previews identify skipped hooks.</dd>
+</dl>
+
+One worker preserves live input and output for native confirmation prompts, even
+with grouped logging. Concurrent workers receive no stdin; configure each
+component's noninteractive behavior. Empty selections succeed. Unsupported kinds
+and deleted definitions are reported. Required unsupported prerequisites fail
+explicit dependency expansion; optional unsupported prerequisites are omitted.
+
+## Removed definitions
+
+Without `--allow-destroy`, removed components and stacks are reported and left
+untouched. Deleted-definition recovery is not yet implemented. If
+`--affected --allow-destroy` selects a removed definition, the command reports it
+as blocked and fails **before any component operations start**. It does not fall
+back to destroying against the current checkout. The flag requires `--affected`
+and is invalid with `--all` or `stack destroy`.
+
+The flag concerns removed Atmos definitions. Resource deletion inside an ordinary
+engine deployment continues to follow that engine's plan and approval behavior.
+
+## Custom-command compatibility
+
+No top-level `atmos deploy` is added, so an existing top-level custom `deploy`
+retains its command path. Existing built-in/custom collision rules apply to
+`stack deploy`; a custom declaration cannot replace that built-in.

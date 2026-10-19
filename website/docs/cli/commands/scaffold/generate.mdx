@@ -106,6 +106,16 @@ their declared `options`; `false` remains a valid answer for a required boolean.
 earlier field answers through `answers`; use CEL (`&&`, `||`, `!`) for compound logic because the
 map-style `{all, any, not}` form is not accepted by scaffold manifests.
 
+## Stack-compatible scaffolds
+
+A scaffold used by [`stack create`](/cli/commands/stack/stack-create) declares
+`spec.stack.manifest`, the rendered manifest path relative to the generation root.
+Use `{{ .Config.stack_file }}` in both that declaration and the corresponding
+file's `target` to respect the caller's `--file` selection. The stack command uses
+the same template catalog and renderer, then validates the stack and all output
+paths before running hooks or creating files. General scaffolding and project
+initialization remain available for the same recipe.
+
 ## Computed Fields
 
 A `type: computed` field is never prompted for and can't be set with `--set` — its `value:` is

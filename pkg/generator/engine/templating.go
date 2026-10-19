@@ -117,6 +117,9 @@ type baseContentLoader interface {
 // It provides template rendering with Gomplate and Sprig functions,
 // file path templating, and intelligent file merging capabilities.
 type Processor struct {
+	// PreviewFile receives rendered new files during a dry run, without writing.
+	PreviewFile func(File)
+
 	merger      *merge.ThreeWayMerger
 	baseStorage baseContentLoader
 	targetPath  string // Target directory for file generation
@@ -776,6 +779,13 @@ func (p *Processor) writeNewFile(file File, fullPath, targetPath string, force b
 	// Dry-run: rendering above already ran (and would have surfaced template
 	// errors), but skip the actual write to disk.
 	if p.DryRun {
+		if p.PreviewFile != nil {
+			relative, err := filepath.Rel(targetPath, fullPath)
+			if err != nil {
+				return err
+			}
+			p.PreviewFile(File{Path: relative, Content: content, Permissions: file.Permissions})
+		}
 		return nil
 	}
 
