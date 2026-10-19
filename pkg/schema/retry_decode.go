@@ -9,6 +9,8 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 	"gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/duration"
 )
 
 // ErrInvalidRetryConfig is returned when a retry config cannot be decoded from a stack manifest.
@@ -21,7 +23,8 @@ var ErrInvalidRetryConfig = errors.New("invalid retry configuration")
 //
 //	cfg, err := schema.DecodeRetryConfig(componentSection["retry"])
 //
-// Duration fields like "2s" are parsed via mapstructure's StringToTimeDurationHookFunc.
+// Duration fields accept the shared Atmos duration format (see pkg/duration): "2s", "500ms",
+// "1h30m", "2d", or a bare number of seconds.
 // Errors are joined with ErrInvalidRetryConfig for predictable error checking.
 func DecodeRetryConfig(raw any) (*RetryConfig, error) {
 	if raw == nil {
@@ -45,7 +48,7 @@ func DecodeRetryConfig(raw any) (*RetryConfig, error) {
 		TagName:          "mapstructure",
 		WeaklyTypedInput: true,
 		ErrorUnused:      true,
-		DecodeHook:       mapstructure.StringToTimeDurationHookFunc(),
+		DecodeHook:       duration.DecodeHook(),
 	})
 	if err != nil {
 		return nil, errors.Join(ErrInvalidRetryConfig, err)

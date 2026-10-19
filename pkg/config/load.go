@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/provisioning"
 	"github.com/cloudposse/atmos/pkg/config/casemap"
 	"github.com/cloudposse/atmos/pkg/config/projectroot"
+	"github.com/cloudposse/atmos/pkg/duration"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/filetype"
@@ -2428,7 +2429,7 @@ func populateLegacyIdentityCaseMap(caseMaps *casemap.CaseMaps, atmosConfig *sche
 
 // atmosDecodeHook returns the combined decode hooks for Atmos configuration unmarshaling.
 // This includes:
-// - Default viper hooks (StringToTimeDurationHookFunc, StringToSliceHookFunc)
+// - The shared duration hook (pkg/duration) and the default StringToSliceHookFunc
 // - Custom TasksDecodeHook for flexible command steps parsing (strings or structs).
 func atmosDecodeHook() viper.DecoderConfigOption {
 	return viper.DecodeHook(getAtmosDecodeHookFunc())
@@ -2438,7 +2439,7 @@ func atmosDecodeHook() viper.DecoderConfigOption {
 // Extracted as a separate function to allow reuse in both Viper and mapstructure contexts.
 func getAtmosDecodeHookFunc() mapstructure.DecodeHookFunc {
 	return mapstructure.ComposeDecodeHookFunc(
-		mapstructure.StringToTimeDurationHookFunc(),
+		duration.DecodeHook(),
 		mapstructure.StringToSliceHookFunc(SliceSeparator),
 		commandEnvMapDecodeHook(),
 		schema.SkillRefDecodeHook(),

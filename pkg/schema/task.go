@@ -8,6 +8,8 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 	"gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/duration"
 )
 
 // Task type constants.
@@ -926,7 +928,7 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 		WeaklyTypedInput: true,
 		Metadata:         &decodeMetadata,
 		DecodeHook: mapstructure.ComposeDecodeHookFunc(
-			mapstructure.StringToTimeDurationHookFunc(),
+			duration.DecodeHook(),
 			ConditionDecodeHook(),
 			WorkflowStepDecodeHook(),
 		),

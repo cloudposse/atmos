@@ -5500,11 +5500,11 @@
           "anyOf": [
             {
               "type": "string",
-              "description": "Go duration string (e.g. \"500ms\", \"30s\", \"5m\")."
+              "description": "Duration such as \"500ms\", \"30s\", \"5m\", \"1h30m\", or \"2d\"; a bare number means seconds."
             },
             {
-              "type": "integer",
-              "description": "Duration in nanoseconds."
+              "type": "number",
+              "description": "Duration in seconds."
             },
             {
               "type": "null"
@@ -9551,11 +9551,11 @@
           "anyOf": [
             {
               "type": "string",
-              "description": "Go duration string (e.g. \"500ms\", \"30s\", \"5m\")."
+              "description": "Duration such as \"500ms\", \"30s\", \"5m\", \"1h30m\", or \"2d\"; a bare number means seconds."
             },
             {
-              "type": "integer",
-              "description": "Duration in nanoseconds."
+              "type": "number",
+              "description": "Duration in seconds."
             },
             {
               "type": "null"
@@ -9566,11 +9566,11 @@
           "anyOf": [
             {
               "type": "string",
-              "description": "Go duration string (e.g. \"500ms\", \"30s\", \"5m\")."
+              "description": "Duration such as \"500ms\", \"30s\", \"5m\", \"1h30m\", or \"2d\"; a bare number means seconds."
             },
             {
-              "type": "integer",
-              "description": "Duration in nanoseconds."
+              "type": "number",
+              "description": "Duration in seconds."
             },
             {
               "type": "null"
@@ -9607,11 +9607,11 @@
           "anyOf": [
             {
               "type": "string",
-              "description": "Go duration string (e.g. \"500ms\", \"30s\", \"5m\")."
+              "description": "Duration such as \"500ms\", \"30s\", \"5m\", \"1h30m\", or \"2d\"; a bare number means seconds."
             },
             {
-              "type": "integer",
-              "description": "Duration in nanoseconds."
+              "type": "number",
+              "description": "Duration in seconds."
             },
             {
               "type": "null"

@@ -21,6 +21,7 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/duration"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -128,7 +129,7 @@ func FormatMinValidity(d time.Duration) string {
 func ParseMinValidity(value string) (time.Duration, error) {
 	defer perf.Track(nil, "credentialprocess.ParseMinValidity")()
 
-	d, err := time.ParseDuration(value)
+	d, err := duration.ParseNonNegative(value)
 	if err != nil {
 		return 0, fmt.Errorf("%w --%s=%q: %w", errUtils.ErrInvalidFlagValue, MinValidityFlagName, value, err)
 	}

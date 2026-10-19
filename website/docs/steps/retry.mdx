@@ -53,6 +53,18 @@ Omitting a parameter disables that limit or uses the default behavior. Explicit 
 
 Atmos rejects unknown `retry` keys instead of ignoring them. The key for the wait before the first retry is `initial_delay`; `delay` is not a key, so a policy that uses it fails validation.
 
+## Duration values
+
+Every duration in Atmos configuration uses one format, whether it is a step `timeout`, a retry delay, a cache TTL, the version-check frequency, or an authentication session length:
+
+- Go durations: `500ms`, `30s`, `5m`, `1h30m`, `1.5s`
+- A bare number is seconds: `timeout: 10` and `timeout: "10"` both mean ten seconds
+- Days: `2d`, `1d12h`
+- Keywords: `minute`, `hourly`, `daily`, `weekly`, `monthly`, `yearly`
+- ISO-8601 durations where a cloud API expects them: `PT8H`
+
+Negative values are rejected. A value that is not a duration fails configuration loading with an error that names the field.
+
 ## Retry conditions
 
 When `conditions` is set, a failed attempt is retried only if at least one pattern matches. Each entry is a regular expression, optionally written between slashes (`/connection reset/`). Atmos matches the pattern against the attempt's stdout, its stderr, and the error text, so a message printed by the command and a message raised by Atmos both count. A failure that matches no pattern ends the retry loop at once, with no further attempts and no backoff wait.

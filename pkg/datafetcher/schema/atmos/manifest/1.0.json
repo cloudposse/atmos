@@ -1998,12 +1998,28 @@
               "description": "Maximum number of retry attempts"
             },
             "initial_delay": {
-              "type": "string",
-              "description": "Initial delay between retries (e.g., '1s', '500ms')"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "Initial delay between retries (e.g., '1s', '500ms')"
+                },
+                {
+                  "type": "number",
+                  "description": "Duration in seconds."
+                }
+              ]
             },
             "max_delay": {
-              "type": "string",
-              "description": "Maximum delay between retries (e.g., '30s', '1m')"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "Maximum delay between retries (e.g., '30s', '1m')"
+                },
+                {
+                  "type": "number",
+                  "description": "Duration in seconds."
+                }
+              ]
             },
             "backoff_strategy": {
               "type": "string",
@@ -2026,8 +2042,16 @@
               "description": "Random jitter factor (0-1) to add to delays"
             },
             "max_elapsed_time": {
-              "type": "string",
-              "description": "Maximum total time for all retry attempts (e.g., '5m', '1h')"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "Maximum total time for all retry attempts (e.g., '5m', '1h')"
+                },
+                {
+                  "type": "number",
+                  "description": "Duration in seconds."
+                }
+              ]
             }
           },
           "required": []
@@ -4504,12 +4528,28 @@
               "description": "Maximum number of retry attempts"
             },
             "initial_delay": {
-              "type": "string",
-              "description": "Initial delay between retries (e.g., '1s', '500ms')"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "Initial delay between retries (e.g., '1s', '500ms')"
+                },
+                {
+                  "type": "number",
+                  "description": "Duration in seconds."
+                }
+              ]
             },
             "max_delay": {
-              "type": "string",
-              "description": "Maximum delay between retries (e.g., '30s', '1m')"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "Maximum delay between retries (e.g., '30s', '1m')"
+                },
+                {
+                  "type": "number",
+                  "description": "Duration in seconds."
+                }
+              ]
             },
             "backoff_strategy": {
               "type": "string",
@@ -4532,8 +4572,16 @@
               "description": "Random jitter factor (0-1) to add to delays"
             },
             "max_elapsed_time": {
-              "type": "string",
-              "description": "Maximum total time for all retry attempts (e.g., '5m', '1h')"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "Maximum total time for all retry attempts (e.g., '5m', '1h')"
+                },
+                {
+                  "type": "number",
+                  "description": "Duration in seconds."
+                }
+              ]
             }
           },
           "required": []
