@@ -30,9 +30,9 @@ import (
 const flagSkipHooks = "skip-hooks"
 
 type lifecycleOptions struct {
-	verb, stack, identity, failureMode, logOrder     string
-	all, affected, dryRun, allowDestroy, autoApprove bool
-	concurrency, dependencies, dependents            int
+	verb, stack, identity, failureMode, logOrder         string
+	all, affected, dryRun, allowDestroy, autoApprove, ci bool
+	concurrency, dependencies, dependents                int
 }
 
 func init() {
@@ -65,6 +65,8 @@ func buildLifecycleParser(verb string) *flags.StandardParser {
 		flags.WithNoOptDefVal(flagSkipHooks, "*"),
 		flags.WithEnvVars(flagSkipHooks, "ATMOS_SKIP_HOOKS"),
 		flags.WithBoolFlag("auto-approve", "", false, "Pass the registered handler's automatic approval arguments where supported"),
+		flags.WithBoolFlag(flagCI, "", false, "Enable CI mode for automated pipelines (writes job summary, outputs)"),
+		flags.WithEnvVars(flagCI, "ATMOS_CI", "CI"),
 	)
 	if verb == "deploy" {
 		parser = flags.NewStandardParser(flags.WithFlagRegistry(parser.Registry()), flags.WithBoolFlag("allow-destroy", "", false, "Request deleted-component teardown (blocked until isolated recovery is available)"))
@@ -92,7 +94,11 @@ func lifecycleArgs(cmd *cobra.Command, args []string) error {
 
 func newLifecycleCommand(verb string) *cobra.Command {
 	parser := buildLifecycleParser(verb)
-	cmd := &cobra.Command{Use: verb, Short: lifecycleShort(verb), Args: lifecycleArgs}
+	cmd := &cobra.Command{
+		Use: verb, Short: lifecycleShort(verb), Args: lifecycleArgs,
+		// Children are top-level Atmos invocations that open their own CI log groups.
+		Annotations: map[string]string{annotationSkipInvocationGroup: "true"},
+	}
 	parser.RegisterFlags(cmd)
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		opts, err := resolveLifecycleOptions(cmd, parser, verb)
@@ -117,6 +123,7 @@ func resolveLifecycleOptions(cmd *cobra.Command, parser *flags.StandardParser, v
 	if err != nil {
 		return opts, err
 	}
+	opts.ci = lifecycleCIMode(cmd, v)
 	return opts, checkAffectedOnlyFlags(cmd, &opts)
 }
 
@@ -356,8 +363,8 @@ func lifecycleConfigArgument(name, value string) string {
 	return value
 }
 
-func lifecycleEnvironment(cmd *cobra.Command) []string {
-	env := os.Environ()
+func lifecycleEnvironment(cmd *cobra.Command, ciMode bool) []string {
+	env := withCIMode(os.Environ(), ciMode)
 	if skip := hooks.ResolveSkipHooks(cmd); skip != "" || cmd.Flags().Changed(flagSkipHooks) {
 		env = slices.DeleteFunc(env, func(entry string) bool { return strings.HasPrefix(entry, "ATMOS_SKIP_HOOKS=") })
 		env = append(env, "ATMOS_SKIP_HOOKS="+skip)
@@ -373,7 +380,7 @@ type lifecycleRun struct {
 }
 
 func runLifecyclePlan(cmd *cobra.Command, run *lifecycleRun) error {
-	config, plan, globalArgs, opts := run.config, run.plan, run.globalArgs, run.options
+	plan, globalArgs, opts := run.plan, run.globalArgs, run.options
 	for _, n := range plan.Notices {
 		ui.Infof("%s/%s/%s: %s", n.Kind, n.Stack, n.Component, n.Reason)
 	}
@@ -390,10 +397,23 @@ func runLifecyclePlan(cmd *cobra.Command, run *lifecycleRun) error {
 	if err := checkLifecycleApproval(plan, opts); err != nil {
 		return err
 	}
+	return executeLifecycleChildren(cmd, run)
+}
+
+// executeLifecycleChildren launches the planned children, then reports the
+// per-component results and, in CI mode, the combined summary and outputs.
+func executeLifecycleChildren(cmd *cobra.Command, run *lifecycleRun) error {
+	config, plan, globalArgs, opts := run.config, run.plan, run.globalArgs, run.options
 	executable, err := os.Executable()
 	if err != nil {
 		return err
 	}
+	environment := lifecycleEnvironment(cmd, opts.ci)
+	captured, err := newLifecycleCI(config, opts, plan, environment, newLifecycleReporter(config))
+	if err != nil {
+		return err
+	}
+	defer captured.cleanup()
 	streams := ioLayer.GetContext()
 	guards := make(map[string]func(*dependency.Node) func())
 	for kind, handler := range plan.Handlers {
@@ -401,12 +421,19 @@ func runLifecyclePlan(cmd *cobra.Command, run *lifecycleRun) error {
 			guards[kind] = handler.NewResourceGuard(config)
 		}
 	}
-	result := lifecycle.Execute(cmd.Context(), plan, &lifecycle.ExecutionOptions{
-		Executable: executable, GlobalArgs: globalArgs, Environment: lifecycleEnvironment(cmd),
+	execution := &lifecycle.ExecutionOptions{
+		Executable: executable, GlobalArgs: globalArgs, Environment: environment,
 		Streams: process.Streams{Stdin: streams.Input(), Stdout: streams.Data(), Stderr: streams.UI()}, Runner: process.NewDefaultRunner(),
 		Concurrency: opts.concurrency, KeepGoing: opts.failureMode == "keep-going", Grouped: opts.logOrder == "grouped",
 		ResourceGuards: guards,
-	})
+	}
+	if captured != nil {
+		execution.NodeEnvironment = captured.nodeEnvironment
+	}
+	result := lifecycle.Execute(cmd.Context(), plan, execution)
 	reportLifecycleResults(opts.verb, result.Results, len(plan.Notices))
+	if err := captured.publish(result.Results, len(plan.Notices)); err != nil {
+		ui.Warningf("Failed to publish the CI summary and outputs: %v", err)
+	}
 	return result.Err
 }

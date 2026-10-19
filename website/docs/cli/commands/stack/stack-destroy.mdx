@@ -88,6 +88,53 @@ line. The command finishes with a tally:
 With `fail-fast`, components still pending after a failure are skipped. With
 `keep-going`, only the components that wait on the failed one are skipped.
 
+## CI
+
+In CI mode, each component command runs with `ATMOS_CI=true`. Children inherit the rest
+of the environment, so provider variables such as `GITHUB_ACTIONS` pass through. The
+`--ci` flag sets `ATMOS_CI` for the children without forwarding the flag itself, because
+not every component command accepts it. Job summaries and outputs also require
+`ci.enabled: true` in `atmos.yaml`.
+
+Concurrent components would otherwise append to the same job summary and overwrite
+the same output keys. Atmos gives each component private summary and output files and,
+when the run finishes, writes:
+
+- One job summary: a table of component, kind, stack, and result with the tally,
+  followed by each component's own summary in a collapsible block, so per-component
+  detail is preserved.
+- One set of outputs, listed below.
+
+<dl>
+  <dt>`components_total`</dt>
+  <dd>Number of components in the plan, excluding the ones reported as excluded.</dd>
+  <dt>`components_succeeded`</dt>
+  <dd>Number of components that succeeded.</dd>
+  <dt>`components_failed`</dt>
+  <dd>Number of components that failed.</dd>
+  <dt>`components_skipped`</dt>
+  <dd>Number of components skipped because of an earlier failure.</dd>
+  <dt>`components_excluded`</dt>
+  <dd>Number of components excluded from the plan with a notice.</dd>
+  <dt>`success`</dt>
+  <dd>`true` when no component failed.</dd>
+  <dt>`results`</dt>
+  <dd>Compact JSON array with one entry per component: `kind`, `stack`, `component`, `status`, and `outputs`, the key-value outputs that component's command produced. The per-component `summary` output is omitted because the job summary already shows it.</dd>
+</dl>
+
+```shell
+atmos stack destroy --all --stack=dev --ci --max-concurrency=2
+```
+
+Workflow commands such as `::add-mask::`, `::group::`, `::error::`, `::warning::`, and
+`::notice::` stay intact with `--max-concurrency` greater than `1`. Atmos writes these
+lines without the component prefix, because CI providers only recognize them at the
+start of a line.
+
+Each component command groups its own output, and with `ci.groups.mode: invocation`
+each component gets exactly one group. The `stack destroy` command itself opens no
+group, because providers do not nest groups.
+
 ## Hooks
 
 Helm, Kubernetes, and CloudFormation expose `destroy` aliases for their existing
@@ -136,6 +183,8 @@ preview.
   <dd>Forward the identity to each child. Use `--identity` without a value to select interactively, which requires `--max-concurrency=1`. Environment variable: `ATMOS_IDENTITY`. Default: Component command behavior.</dd>
   <dt>`--auto-approve`</dt>
   <dd>Append each handler's registered approval arguments. Terraform destroy and CloudFormation destroy prompt without it; Helm, Kubernetes, and Helmfile deletes do not prompt. Default: `false`.</dd>
+  <dt>`--ci`</dt>
+  <dd>Run in CI mode. Every child component command runs with `ATMOS_CI=true`, and Atmos publishes one combined job summary and one set of outputs for the whole run. Without the flag, CI mode turns on when `ATMOS_CI` or `CI` is truthy or a CI provider is detected; an explicit `--ci=false` turns it off. Environment variables: `ATMOS_CI`, `CI`. Default: `false`.</dd>
   <dt>`--skip-hooks[=names]`</dt>
   <dd>Skip all hooks, or the comma-separated hook names; previews identify skipped hooks. Environment variable: `ATMOS_SKIP_HOOKS`.</dd>
 </dl>

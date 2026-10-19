@@ -300,3 +300,96 @@ func TestGuardEnclosesExecution(t *testing.T) {
 	bad := Execute(context.Background(), nil, &ExecutionOptions{})
 	require.Error(t, bad.Err)
 }
+
+func newPrefixWriter(out io.Writer) *lockedWriter {
+	return &lockedWriter{mu: &sync.Mutex{}, output: out, prefix: "[x] ", lineStart: true}
+}
+
+func TestLockedWriterWorkflowCommandsStayUnprefixed(t *testing.T) {
+	var out bytes.Buffer
+	w := newPrefixWriter(&out)
+	input := "::add-mask::secret\nplain line\n::group::build\r\ninside\r\n::endgroup::\n::error file=a.tf::bad\n::warning::w\n::notice::n\n"
+	n, err := w.Write([]byte(input))
+	require.NoError(t, err)
+	assert.Equal(t, len(input), n)
+	assert.Equal(t, "::add-mask::secret\n[x] plain line\n::group::build\r\n[x] inside\r\n::endgroup::\n::error file=a.tf::bad\n::warning::w\n::notice::n\n", out.String())
+}
+
+func TestLockedWriterHandlesFragmentedWrites(t *testing.T) {
+	var out bytes.Buffer
+	w := newPrefixWriter(&out)
+	// A workflow command split across writes, including inside the marker, stays unprefixed.
+	for _, chunk := range []string{":", ":add-mask::x\n", "par", "tial", " line\n", ":", "not a command\n"} {
+		n, err := w.Write([]byte(chunk))
+		require.NoError(t, err)
+		assert.Equal(t, len(chunk), n)
+	}
+	assert.Equal(t, "::add-mask::x\n[x] partial line\n[x] :not a command\n", out.String())
+}
+
+func TestLockedWriterFlushesHeldColon(t *testing.T) {
+	var out bytes.Buffer
+	w := newPrefixWriter(&out)
+	_, err := w.Write([]byte(":"))
+	require.NoError(t, err)
+	assert.Empty(t, out.String(), "a lone colon waits for the next byte")
+	w.flush()
+	assert.Equal(t, "[x] :", out.String())
+	w.flush()
+	assert.Equal(t, "[x] :", out.String(), "a second flush writes nothing")
+}
+
+func TestLockedWriterMidLineMarkerIsPrefixed(t *testing.T) {
+	var out bytes.Buffer
+	w := newPrefixWriter(&out)
+	_, err := w.Write([]byte("log ::group::x\n"))
+	require.NoError(t, err)
+	assert.Equal(t, "[x] log ::group::x\n", out.String())
+}
+
+func TestStreamModePassesWorkflowCommands(t *testing.T) {
+	runner := runnerFunc(func(_ context.Context, s process.TaskSpec) process.Result {
+		name := s.Args[len(s.Args)-1]
+		fmt.Fprintln(s.Streams.Stdout, "::group::"+name)
+		fmt.Fprintln(s.Streams.Stdout, "body "+name)
+		return process.Result{}
+	})
+	var data bytes.Buffer
+	result := Execute(context.Background(), executionPlan(t), &ExecutionOptions{Runner: runner, Concurrency: 2, Streams: process.Streams{Stdout: &data}})
+	require.NoError(t, result.Err)
+	labels := map[string]string{"a": "terraform", "b": "helm", "c": "kubernetes"}
+	for name, kind := range labels {
+		assert.Contains(t, "\n"+data.String(), "\n::group::"+name+"\n")
+		assert.Contains(t, data.String(), "["+kind+"/dev/"+name+"] body "+name+"\n")
+	}
+}
+
+func TestStreamModeFlushesDanglingColonOnExit(t *testing.T) {
+	runner := runnerFunc(func(_ context.Context, s process.TaskSpec) process.Result {
+		fmt.Fprint(s.Streams.Stdout, ":")
+		return process.Result{}
+	})
+	var data bytes.Buffer
+	result := Execute(context.Background(), executionPlan(t), &ExecutionOptions{Runner: runner, Concurrency: 2, Streams: process.Streams{Stdout: &data}})
+	require.NoError(t, result.Err)
+	assert.Equal(t, 3, strings.Count(data.String(), "] :"))
+}
+
+func TestNodeEnvironmentOverridesPerNode(t *testing.T) {
+	var mu sync.Mutex
+	seen := map[string][]string{}
+	runner := runnerFunc(func(_ context.Context, s process.TaskSpec) process.Result {
+		mu.Lock()
+		seen[s.Args[len(s.Args)-1]] = s.Env
+		mu.Unlock()
+		return process.Result{}
+	})
+	result := Execute(context.Background(), executionPlan(t), &ExecutionOptions{
+		Runner: runner, Concurrency: 2, Environment: []string{"KEEP=1", "OUT=shared"},
+		NodeEnvironment: func(n *dependency.Node) []string { return []string{"OUT=" + n.Component} },
+	})
+	require.NoError(t, result.Err)
+	for _, name := range []string{"a", "b", "c"} {
+		assert.ElementsMatch(t, []string{"KEEP=1", "OUT=" + name}, seen[name])
+	}
+}

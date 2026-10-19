@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -29,6 +30,10 @@ type ExecutionOptions struct {
 	KeepGoing      bool
 	Grouped        bool
 	ResourceGuards map[string]func(*dependency.Node) func()
+	// NodeEnvironment optionally returns KEY=VALUE entries applied on top of the
+	// child environment for one node. It runs on scheduler workers, so it must be
+	// safe for concurrent use.
+	NodeEnvironment func(node *dependency.Node) []string
 }
 
 // Execute runs a prevalidated plan with the shared ready-queue scheduler.
@@ -90,14 +95,11 @@ func (d *dispatcher) Dispatch(ctx context.Context, node *dependency.Node) (sched
 		return result, err
 	}
 	args := append(slices.Clone(d.opts.GlobalArgs), d.plan.Commands[node.ID]...)
-	env := childEnvironment(d.opts.Environment)
-	if handler := d.plan.Handlers[node.Type]; handler != nil && handler.WorkerEnvironment != nil {
-		env = overrideEnvironment(env, handler.WorkerEnvironment(d.opts.Concurrency))
-	}
 	processResult := d.opts.Runner.Run(ctx, process.TaskSpec{
 		Command: d.opts.Executable, Args: args, Dir: d.opts.Directory,
-		Env: env, Streams: streams,
+		Env: d.environment(node), Streams: streams,
 	})
+	flushStreams(&streams)
 	result.Value = processResult.ExitCode
 	if !processResult.Success() {
 		failure := fmt.Errorf("%w: %s (exit %d)", errUtils.ErrComponentExecutionFailed, Label(node), processResult.ExitCode)
@@ -107,6 +109,28 @@ func (d *dispatcher) Dispatch(ctx context.Context, node *dependency.Node) (sched
 		return result, errors.Join(failure, processResult.Err)
 	}
 	return result, nil
+}
+
+// environment builds one child's environment: the inherited base, then the
+// handler's worker overrides, then the per-node overrides.
+func (d *dispatcher) environment(node *dependency.Node) []string {
+	env := childEnvironment(d.opts.Environment)
+	if handler := d.plan.Handlers[node.Type]; handler != nil && handler.WorkerEnvironment != nil {
+		env = overrideEnvironment(env, handler.WorkerEnvironment(d.opts.Concurrency))
+	}
+	if d.opts.NodeEnvironment != nil {
+		env = overrideEnvironment(env, d.opts.NodeEnvironment(node))
+	}
+	return env
+}
+
+// flushStreams writes any line fragment the prefixing writers still hold once the child exits.
+func flushStreams(streams *process.Streams) {
+	for _, w := range []io.Writer{streams.Stdout, streams.Stderr} {
+		if locked, ok := w.(*lockedWriter); ok {
+			locked.flush()
+		}
+	}
 }
 
 // exitedNonZero reports a child that ran to completion and returned a plain
@@ -235,11 +259,22 @@ func (d *dispatcher) cleanup() {
 	}
 }
 
+// workflowCommandMarker begins a CI workflow command such as ::group:: or
+// ::add-mask::. Providers only recognize these at the start of a line.
+const workflowCommandMarker = "::"
+
+// lockedWriter serializes whole-line writes from concurrent children and, when
+// a prefix is set, labels each line with the component that wrote it. Lines that
+// begin with a workflow command marker are written unprefixed so CI providers
+// still recognize them.
 type lockedWriter struct {
 	mu        *sync.Mutex
 	output    io.Writer
 	prefix    string
 	lineStart bool
+	// held keeps a lone leading colon until the next byte shows whether the line
+	// is a workflow command.
+	held []byte
 }
 
 func (w *lockedWriter) Write(p []byte) (int, error) {
@@ -253,28 +288,72 @@ func (w *lockedWriter) Write(p []byte) (int, error) {
 	if w.prefix == "" {
 		return w.output.Write(p)
 	}
-	written := 0
-	for len(p) > 0 {
+	data := p
+	if len(w.held) > 0 {
+		data = slices.Concat(w.held, p)
+		w.held = nil
+	}
+	if err := w.writeLines(data); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+// writeLines writes data line by line, prefixing each line start except workflow commands.
+func (w *lockedWriter) writeLines(data []byte) error {
+	for len(data) > 0 {
 		if w.lineStart {
-			if _, err := io.WriteString(w.output, w.prefix); err != nil {
-				return written, err
+			held, err := w.beginLine(data)
+			if err != nil || held {
+				return err
 			}
-			w.lineStart = false
 		}
-		n := strings.IndexByte(string(p), '\n') + 1
+		n := bytes.IndexByte(data, '\n') + 1
 		if n == 0 {
-			n = len(p)
+			n = len(data)
 		}
-		count, err := w.output.Write(p[:n])
-		written += count
+		count, err := w.output.Write(data[:n])
 		if err != nil {
-			return written, err
+			return err
 		}
 		if count != n {
-			return written, io.ErrShortWrite
+			return io.ErrShortWrite
 		}
-		w.lineStart = p[n-1] == '\n'
-		p = p[n:]
+		w.lineStart = data[n-1] == '\n'
+		data = data[n:]
 	}
-	return written, nil
+	return nil
+}
+
+// beginLine handles the start of a line: it writes the prefix unless the line is a
+// workflow command. It reports held when data is a lone leading colon, which
+// waits for the next write to show whether the line is a workflow command.
+func (w *lockedWriter) beginLine(data []byte) (held bool, err error) {
+	marker := []byte(workflowCommandMarker)
+	if len(data) < len(marker) && bytes.HasPrefix(marker, data) {
+		w.held = slices.Clone(data)
+		return true, nil
+	}
+	w.lineStart = false
+	if bytes.HasPrefix(data, marker) {
+		return false, nil
+	}
+	_, err = io.WriteString(w.output, w.prefix)
+	return false, err
+}
+
+// flush writes a held fragment, which can only be a lone colon that never grew into a workflow command.
+func (w *lockedWriter) flush() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.held) == 0 || w.output == nil {
+		return
+	}
+	held := w.held
+	w.held = nil
+	if _, err := io.WriteString(w.output, w.prefix); err != nil {
+		return
+	}
+	_, _ = w.output.Write(held)
+	w.lineStart = false
 }
