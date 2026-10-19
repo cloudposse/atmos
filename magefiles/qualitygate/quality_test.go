@@ -5,6 +5,7 @@ package qualitygate
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -498,6 +499,8 @@ func qualityPublishGetter(t *testing.T, scenario string, pr *githubapi.PR, run *
 				current.Draft = true
 			}
 			return githubtest.Respond(current, response)
+		case pr.MergeSHA != "" && strings.HasSuffix(path, "/commits/"+pr.MergeSHA):
+			return githubtest.Respond(qualityCommitParents(githubtest.Base, pr.Head.SHA), response)
 		case strings.Contains(path, "/comments?"):
 			comments := []map[string]any{}
 			if scenario == "update" || scenario == "update marked" || scenario == "newer report" || scenario == "spoofed comment" {
@@ -541,18 +544,62 @@ func qualityPublishGetter(t *testing.T, scenario string, pr *githubapi.PR, run *
 	}
 }
 
-func TestQualityMergeCommitFailure(t *testing.T) {
-	pr := githubtest.PR(githubtest.Run())
-	pr.MergeSHA = githubtest.Base
-	q := qualityTestClient(t, func(path string, response any) error {
-		if strings.Contains(path, "check-runs") {
+// qualityCommitParents builds a commit response with the given parent SHAs.
+func qualityCommitParents(parents ...string) map[string]any {
+	list := make([]map[string]string, 0, len(parents))
+	for _, sha := range parents {
+		list = append(list, map[string]string{"sha": sha})
+	}
+	return map[string]any{"parents": list}
+}
+
+// qualityMergeCommitClient serves a merge commit with the given parents and a
+// failing check attached to it.
+func qualityMergeCommitClient(t *testing.T, pr *githubapi.PR, parents ...string) *qualityClient {
+	t.Helper()
+	return qualityTestClient(t, func(path string, response any) error {
+		switch {
+		case strings.HasSuffix(path, "/commits/"+pr.MergeSHA):
+			return githubtest.Respond(qualityCommitParents(parents...), response)
+		case strings.Contains(path, "check-runs"):
 			return githubtest.Respond(map[string]any{"check_runs": []qualityCheck{{Name: "integration", HeadSHA: pr.MergeSHA, Status: "completed", Conclusion: "failure"}}}, response)
 		}
 		return githubtest.Respond([]any{}, response)
 	})
+}
+
+func TestQualityMergeCommitFailure(t *testing.T) {
+	pr := githubtest.PR(githubtest.Run())
+	pr.MergeSHA = githubtest.Base
+	// GitHub's synthetic PR merge commit has the target branch and PR head as parents.
+	q := qualityMergeCommitClient(t, &pr, githubtest.Base, pr.Head.SHA)
 	states := map[string]string{"head CI": "success"}
 	require.NoError(t, q.mergeStates(&pr, states))
 	require.Equal(t, "failure", states["merge: check: /integration"])
+	require.Equal(t, "success", states["head CI"])
+}
+
+// A merge queue's temporary squash commit has only the target branch as parent;
+// its merge_group results must not change the PR head's readiness.
+func TestQualityMergeQueueCommitIgnored(t *testing.T) {
+	pr := githubtest.PR(githubtest.Run())
+	pr.MergeSHA = githubtest.Base
+	q := qualityMergeCommitClient(t, &pr, githubtest.Base)
+	states := map[string]string{"head CI": "success"}
+	require.NoError(t, q.mergeStates(&pr, states))
+	require.Equal(t, map[string]string{"head CI": "success"}, states)
+	require.True(t, qualityCIGate(states).Passed)
+}
+
+func TestQualityMergeCommitReadFailure(t *testing.T) {
+	pr := githubtest.PR(githubtest.Run())
+	pr.MergeSHA = githubtest.Base
+	q := qualityTestClient(t, func(path string, _ any) error {
+		return errors.New("API unavailable")
+	})
+	states := map[string]string{"head CI": "success"}
+	require.Error(t, q.mergeStates(&pr, states))
+	require.Equal(t, map[string]string{"head CI": "success"}, states)
 }
 
 func TestQualityGuidanceOnlyUnmetGates(t *testing.T) {
