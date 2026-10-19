@@ -1,0 +1,77 @@
+---
+title: Developing Policy Examples
+sidebar_label: Policy Examples
+sidebar_position: 6
+description: Test requirements and proposed input integrations for contributors adding policy examples.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Contributor reference for testing policy examples and adding input integrations.
+For runnable configurations, see [Policy Examples](/policies/examples).
+</Intro>
+
+## Tests
+
+The demonstration configurations live in `examples/policies/`. They are not the reusable policy
+library. `TestSampleLibrary` loads these files directly and requires cases for every rule.
+
+```shell
+go test ./pkg/policy -run TestSampleLibrary -v
+go test ./pkg/hooks -run 'TestPolicyHooksLifecycle|TestPolicyHookFailuresBlock'
+go test ./pkg/ci/... -run TestPolicySnapshot
+```
+
+Cover matching and nonmatching inputs, threshold boundaries, replacement ordering, deletion
+remediation, absent/null/unknown attributes, lifecycle outcomes, and missing required CI evidence.
+Hook integration tests use local HTTP endpoints, not production services or installed scanners.
+
+## Integration references
+
+- [Policy configuration](/policies/configuration): supported manifest fields and loading behavior.
+- [Inputs and expressions](/policies/inputs): user-visible input contracts.
+- [Hooks](/policies/hooks): execution and failure semantics.
+- [CI context](/policies/ci): supplied-event collector and permissions.
+- [Capabilities and integration gaps](/contribute/policy-capabilities): implementation planning.
+- [Engine API](/contribute/policy-engine): evaluator and collector extension points.
+
+## Proposed additions and tests
+
+These are research-backed proposals, **not runnable policies in this release**. Each requires an
+input collector or execution capability beyond the current library. Add executable examples only
+with fixtures and integration tests for that capability.
+
+| Proposed example | Required input / integration | Minimum acceptance cases |
+|---|---|---|
+| Deny privileged pods or host namespace access | Helm/Helmfile/Kubernetes rendered-object collector | Safe pod allows; privileged/host PID/network denies; init and ephemeral containers included |
+| Enforce non-root users, seccomp and capability restrictions | Versioned Pod Security profile | Restricted profile passes; exception expires; OS/version differences handled explicitly |
+| Require approved image registries and immutable digests | Rendered container specs, including init/ephemeral containers | Approved digest allows; mutable tag/wrong registry denies; missing image errors |
+| Require production resource requests/limits | Workload and pod-template inventory | Complete resources allow; missing CPU/memory denies; non-workload documents ignored |
+| Protect namespaces, PVCs and CRDs against deletion | Complete before/after object inventory | Update allows; delete/replacement requires approval; missing inventory errors |
+| Limit Ansible failure/unreachable hosts | Native recap plus completeness | No failures allows; unreachable blocks; absent host result is not success |
+| Require known Packer artifact provenance | Builder configuration and image artifact metadata | Approved builder/base image allows; unknown source blocks; missing artifact errors |
+| Deny privileged containers or host mounts | Resolved container runtime spec | Nonprivileged allows; host socket/mount denies; environment expansion cannot hide paths |
+| Protect labels while permitting additions | Structured before/after metadata and reviewer verifier | New ordinary label allows; protected remove/modify awaits review; absent versus null differs |
+| Detect indirect policy detachment | Complete attachment inventories and governing revision | Selector/import/discovery/parameter change requires review; policy deletion caught; ambiguous move blocks |
+| Protect workflow permission changes | Structured Actions workflow diff | Unchanged/read-only allows; write grant/unsafe event change requires review; renamed workflow still detected |
+| Require immutable Action references | Parsed workflow steps and reusable workflows | Commit SHA allows; mutable reference denies; local actions handled separately |
+| Require fresh designated reviewer approval | Current paginated PR review facts | Current head/non-author allows; dismissed/stale/self review blocks; partial/API-denied results error |
+| Request a reviewer or update one PR comment | Approval resolver and typed GitHub action hook | Pending selects action; satisfied selects none; insufficient permission errors; duplicate event updates same comment |
+| Limit changed/affected instances before fanout | Complete files/components/instances inventory | Boundary count allows; excess blocks; deletes included; incomplete analysis errors |
+| Enforce a current-component cost budget | Cost artifact bound to evaluated plan | Below cap allows; above denies; missing estimate/currency mismatch/zero baseline handled |
+| Require scanner completion and cap findings | Scanner report bound to current input | Clean completed scan allows; severe findings deny; empty/missing/stale/failed scan is not clean |
+| Approved deployment window | Trusted captured timestamp/timezone | In-window allows; boundary/DST tested; missing time errors; evaluator does not read clock |
+
+Kubernetes security examples should use versioned native semantics rather than a generic cloud
+resource schema. Digest selection identifies immutable image content; it does not itself establish
+image trust. [Pod Security Standards](https://kubernetes.io/docs/concepts/security/pod-security-standards/),
+[container image references](https://kubernetes.io/docs/concepts/containers/images/)
+
+Workflow-change examples address the fact that privileged workflow execution can execute attacker
+code. A label or approval must not be treated as permission to run untrusted PR code with secrets.
+[GitHub Actions secure-use guidance](https://docs.github.com/en/actions/reference/security/secure-use)
+
+These proposals govern the current invocation/job or a complete repository analysis before fanout.
+Combining outcomes across separate component jobs, global deployment budgets, durable retries, and
+service-side identity/approval orchestration remain Atmos Pro responsibilities.

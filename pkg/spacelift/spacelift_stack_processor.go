@@ -391,13 +391,13 @@ func TransformStackConfigToSpaceliftStacks(
 						res[spaceliftStackNameKey] = spaceliftConfig
 					} else {
 						errorMessage := fmt.Sprintf(
-							"\nDuplicate Spacelift stack name '%s' for component '%s' in the stack '%s'."+
-								"\nCheck if the component name is correct and the Spacelift stack name pattern 'stack_name_pattern=%s' is specific enough."+
+							"\nDuplicate Spacelift stack name %q for component %q in the stack %q."+
+								"\nCheck if the component name is correct and the Spacelift stack name pattern %q is specific enough."+
 								"\nDid you specify the correct context tokens {namespace}, {tenant}, {environment}, {stage}, {component}?",
 							spaceliftStackName,
 							component,
 							stackName,
-							spaceliftStackNamePattern,
+							"stack_name_pattern="+spaceliftStackNamePattern,
 						)
 						er := errors.New(errorMessage)
 						return nil, er

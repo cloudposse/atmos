@@ -1676,6 +1676,7 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	// Apply parsed options to info BEFORE prompting, so hasMultiComponentFlags() works correctly.
 	// This fixes issue #1945: --all flag must be set before resolveAndPromptForArgs checks it.
 	applyOptionsToInfo(&info, opts)
+	applyFromPlanSelection(&info, actualCmd)
 
 	// Honor a component already chosen interactively in PreRunE (runBeforeHooks) so the
 	// prompt below sees both component and stack and does not ask again.
@@ -1762,6 +1763,14 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	shellOpts = append(shellOpts, e.WithInvokingCommand(actualCmd))
 
 	return executeSingleComponent(&info, shellOpts...)
+}
+
+// A changed but explicitly empty --from-plan flag selects the canonical plan.
+// Viper IsSet cannot distinguish this from the parser's registered empty default.
+func applyFromPlanSelection(info *schema.ConfigAndStacksInfo, command *cobra.Command) {
+	if flag := command.Flags().Lookup("from-plan"); flag != nil && flag.Changed && flag.Value.String() == "" {
+		info.UseTerraformPlan = true
+	}
 }
 
 func isCompoundTerraformCommandWithoutComponent(args []string) bool {

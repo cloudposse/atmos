@@ -31,6 +31,7 @@ relevant skill before answering Atmos questions -- your training data may be out
 - **Native Helm** -- Experimental Helm chart deployment via the Helm Go SDK (no `helm`/`helmfile` binary).
 - **Native Kubernetes** -- Experimental manifest/Kustomize deployment via the Kubernetes Go SDK (no `kubectl`/`kustomize` binary).
 - **Hooks** -- Lifecycle automation before/after component operations.
+- **Policies** -- Experimental CEL saved-plan and lifecycle guardrails, with provider-native CI context.
 - **Steps** -- Shared typed actions used by workflows, custom commands, hooks, and cast recordings.
 - **Compositions** -- Named service groupings that validate systems made of component instances.
 - **GitOps** -- Native managed Git repositories, hooks, signed commits, and auth-aware clone/commit/push flows.
@@ -123,6 +124,7 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | Store backends (SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory), hooks, data sharing                    | `atmos-stores`          | `agent-skills/skills/atmos-stores/SKILL.md`          |
 | Secrets: `secrets.vars`, `!secret`, backends, secret init/set/get/import/push/pull/shell/exec/validate                | `atmos-secrets`         | `agent-skills/skills/atmos-secrets/SKILL.md`         |
 | Hooks: lifecycle events, hook kinds, `kind: step`/`kind: steps`, `when:` conditions, scoping, `--skip-hooks`, toolchain-aware checks and uploads | `atmos-hooks`           | `agent-skills/skills/atmos-hooks/SKILL.md`           |
+| Experimental CEL policy authoring/tests, saved-plan guardrails, policy-required hooks, provider-native inputs and capability boundaries | `atmos-policy` | `agent-skills/skills/atmos-policy/SKILL.md` |
 | JSON Schema for stack manifests and atmos.yaml, IDE auto-completion, validate stacks/schema/config, SchemaStore      | `atmos-schemas`         | `agent-skills/skills/atmos-schemas/SKILL.md`         |
 | Atmos CI: Native CI, GitHub Actions containers, collapsible log groups, Atlantis, affected/all matrices, OIDC profiles, cache, Pro dispatch | `atmos-ci`              | `agent-skills/skills/atmos-ci/SKILL.md`              |
 | Cache: CI cache and Terraform registry cache                                                                         | `atmos-cache`           | `agent-skills/skills/atmos-cache/SKILL.md`           |

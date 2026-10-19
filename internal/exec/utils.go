@@ -683,7 +683,7 @@ func findComponentInStacks(
 
 			log.Debug(
 				fmt.Sprintf(
-					"Found component '%s' in the stack '%s' in the stack manifest '%s'",
+					"Found component %q in the stack %q in the stack manifest %q",
 					candidateInfo.ComponentFromArg,
 					candidateInfo.Stack,
 					stackName,
@@ -1364,10 +1364,10 @@ func processStacks(
 						// Build explanation with file location if available.
 						var explanation string
 						if fileLocation != "" {
-							explanation = fmt.Sprintf("The Terraform component '%s' contains invalid HCL code at %s.",
+							explanation = fmt.Sprintf("The Terraform component %q contains invalid HCL code at %s.",
 								configAndStacksInfo.ComponentFromArg, fileLocation)
 						} else {
-							explanation = fmt.Sprintf("The Terraform component '%s' contains invalid HCL code.",
+							explanation = fmt.Sprintf("The Terraform component %q contains invalid HCL code.",
 								configAndStacksInfo.ComponentFromArg)
 						}
 

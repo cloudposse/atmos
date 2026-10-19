@@ -1,0 +1,76 @@
+---
+slug: policy-gates-and-hooks
+title: "Experimental Policy Gates and Required Hooks"
+authors: [osterman]
+tags: [feature, experimental]
+---
+
+A successful infrastructure command does not prove that a plan respected your safety rules or that
+the required scanner ran. Experimental [Atmos policies](/policies) let you reject saved Terraform plans and
+require lifecycle hooks using CEL expressions, with native GitHub Actions context available locally
+inside the job.
+
+<!--truncate-->
+
+## The Problem
+
+Guardrails scattered across workflow scripts are difficult to apply consistently. A destructive
+replacement can slip past a deletion-only check, and an optional hook can be skipped even when your
+deployment process requires it.
+
+## The Fix
+
+The opt-in policy integration evaluates native saved-plan JSON after Terraform planning and again
+before applying a private copy of the selected artifact. Lifecycle policies can deny operations or
+select existing hooks for Terraform, Helmfile, native Helm, and native Kubernetes. Required hooks
+cannot be skipped with `--skip-hooks`; requiring execution and requiring success are separate choices.
+
+GitHub Actions policies can inspect allowlisted runner metadata and the supplied native event
+without API credentials or additional token permissions. Missing required context blocks evaluation.
+The event records the trigger, not current review state. Policies evaluate the input and required
+hooks for the current invocation.
+
+## How to Use It
+
+Place this document in a protected policy directory:
+
+```yaml title="policy.d/safety.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: safety
+spec:
+  policies:
+    protect-databases:
+      on: terraform.plan
+      action: deny
+      reason: Database deletion and replacement require a different deployment process
+      rule: >-
+        has(input.resource_changes) && input.resource_changes.exists(r,
+          r.mode == 'managed' && r.type == 'aws_db_instance' &&
+          'delete' in r.change.actions)
+```
+
+Then run an explicit plan and saved-plan apply:
+
+```shell
+export ATMOS_POLICY_DIR=/trusted/policy.d
+atmos terraform plan database -s prod
+atmos terraform apply database -s prod --from-plan
+```
+
+With plan policies configured, implicit apply/deploy and direct destroy are rejected. These checks
+do not require `--affected`. Dry-run does not evaluate a saved plan and is not policy approval.
+
+Protect the governing directory, workflow, environment, and executable dependencies: this opt-in
+feature is not a sandbox against someone who controls the runner. A failed post-apply hook can fail
+the command, but cannot undo the completed apply.
+
+See [Policy Configuration](/policies/configuration) for the manifest and trust boundary,
+[Terraform Plans](/policies/terraform-plan) for saved-plan checks, and [Hooks](/policies/hooks)
+for required lifecycle actions.
+
+## Get Involved
+
+Try the [tested policy demonstrations](https://github.com/cloudposse/atmos/tree/main/examples/policies)
+and share feedback in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions).
