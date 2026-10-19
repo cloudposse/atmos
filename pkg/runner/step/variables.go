@@ -14,11 +14,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/script"
+	"github.com/cloudposse/atmos/pkg/template/delimiters"
 )
 
 const (
 	defaultTemplatePasses = 1
-	templateOpenDelim     = "{{"
 	protectedTemplateOpen = "\x00ATMOS_TMPL_OPEN\x00"
 )
 
@@ -76,6 +76,9 @@ type Variables struct {
 	templateRenderer    TemplateRenderer
 	templatePasses      int
 	protectedRoots      map[string]struct{}
+	// templateDelims is the delimiter pair step templates use for detection, multi-pass
+	// rendering, and value protection. The zero value is the default "{{" and "}}".
+	templateDelims delimiters.Delimiters
 	// stageIndex tracks current stage position (1-indexed).
 	stageIndex int
 	// totalStages tracks total number of stage steps in workflow.
@@ -328,6 +331,39 @@ func (v *Variables) SetTemplateRenderer(renderer TemplateRenderer) {
 	v.templateRenderer = renderer
 }
 
+// SetTemplateDelimiters sets the delimiter pair that step templates use. The pair must match
+// the one the template renderer parses with. The zero value selects the default "{{" and "}}".
+func (v *Variables) SetTemplateDelimiters(d delimiters.Delimiters) {
+	defer perf.Track(nil, "step.Variables.SetTemplateDelimiters")()
+
+	v.templateDelims = d.Normalize()
+}
+
+// ApplyTemplateDelimiters resolves the effective step delimiters from config (see
+// delimiters.ForSteps) and installs them. Hosts that render with the built-in renderer call it
+// once per invocation; hosts that install their own renderer pass the same pair to it.
+func (v *Variables) ApplyTemplateDelimiters(config *schema.AtmosConfiguration) error {
+	defer perf.Track(config, "step.Variables.ApplyTemplateDelimiters")()
+
+	d, err := delimiters.ForSteps(config)
+	if err != nil {
+		return err
+	}
+	v.SetTemplateDelimiters(d)
+	return nil
+}
+
+// TemplateDelimiters returns the delimiter pair step templates use. A nil receiver reports the
+// default pair.
+func (v *Variables) TemplateDelimiters() delimiters.Delimiters {
+	defer perf.Track(nil, "step.Variables.TemplateDelimiters")()
+
+	if v == nil {
+		return delimiters.Default()
+	}
+	return v.templateDelims.Normalize()
+}
+
 // SetTemplatePasses sets the maximum number of render passes used by Resolve.
 func (v *Variables) SetTemplatePasses(passes int) {
 	defer perf.Track(nil, "step.Variables.SetTemplatePasses")()
@@ -508,9 +544,10 @@ func (v *Variables) resolveTemplate(name, input string, data map[string]any) (st
 		passes = defaultTemplatePasses
 	}
 
+	delims := v.TemplateDelimiters()
 	result := input
 	for pass := 0; pass < passes; pass++ {
-		if pass > 0 && !strings.Contains(result, templateOpenDelim) {
+		if pass > 0 && !delims.Contains(result) {
 			break
 		}
 		processed, err := v.renderTemplatePass(fmt.Sprintf("%s-pass-%d", name, pass+1), result, safeData)
@@ -523,7 +560,7 @@ func (v *Variables) resolveTemplate(name, input string, data map[string]any) (st
 		}
 		input = processed
 	}
-	return strings.ReplaceAll(result, protectedTemplateOpen, templateOpenDelim), nil
+	return delims.Unprotect(result, protectedTemplateOpen), nil
 }
 
 func (v *Variables) renderTemplatePass(name, input string, data map[string]any) (string, error) {
@@ -531,7 +568,7 @@ func (v *Variables) renderTemplatePass(name, input string, data map[string]any) 
 		return v.templateRenderer(name, input, data)
 	}
 
-	tmpl, err := template.New(name).Parse(input)
+	tmpl, err := v.TemplateDelimiters().Apply(template.New(name)).Parse(input)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
@@ -549,10 +586,11 @@ func (v *Variables) protectTemplateData(data map[string]any) map[string]any {
 		return data
 	}
 
+	delims := v.TemplateDelimiters()
 	out := make(map[string]any, len(data))
 	for key, value := range data {
 		if _, ok := v.protectedRoots[key]; ok {
-			out[key] = protectTemplateValue(value)
+			out[key] = protectTemplateValue(delims, value)
 			continue
 		}
 		out[key] = value
@@ -560,21 +598,21 @@ func (v *Variables) protectTemplateData(data map[string]any) map[string]any {
 	return out
 }
 
-func protectTemplateValue(value any) any {
+func protectTemplateValue(delims delimiters.Delimiters, value any) any {
 	switch typed := value.(type) {
 	case string:
-		return strings.ReplaceAll(typed, templateOpenDelim, protectedTemplateOpen)
+		return delims.Protect(typed, protectedTemplateOpen)
 	case map[string]string:
 		out := make(map[string]string, len(typed))
 		for key, value := range typed {
-			out[key] = strings.ReplaceAll(value, templateOpenDelim, protectedTemplateOpen)
+			out[key] = delims.Protect(value, protectedTemplateOpen)
 		}
 		return out
 	case map[string]any:
 		out := make(map[string]any, len(typed))
 		for key, value := range typed {
 			if str, ok := value.(string); ok {
-				out[key] = strings.ReplaceAll(str, templateOpenDelim, protectedTemplateOpen)
+				out[key] = delims.Protect(str, protectedTemplateOpen)
 				continue
 			}
 			out[key] = value
@@ -583,7 +621,7 @@ func protectTemplateValue(value any) any {
 	case []string:
 		out := make([]string, len(typed))
 		for i, value := range typed {
-			out[i] = strings.ReplaceAll(value, templateOpenDelim, protectedTemplateOpen)
+			out[i] = delims.Protect(value, protectedTemplateOpen)
 		}
 		return out
 	default:

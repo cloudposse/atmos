@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode"
 )
 
 // ErrStepInvalidOutputMode is returned when a step or workflow sets an output mode that does not
@@ -42,12 +43,31 @@ func StepAcceptsOutputMode(stepType string) bool {
 
 // ValidateOutputMode fails with ErrStepInvalidOutputMode when mode is set and is not one of
 // StepOutputModes. An empty mode means "use the default". A templated mode is checked after
-// rendering, so a value containing a template expression is accepted here.
+// rendering, so a value that may contain a template expression is accepted here.
 func ValidateOutputMode(owner, mode string) error {
-	if strings.Contains(mode, "{{") {
+	if outputModeMayBeTemplated(mode) {
 		return nil
 	}
 	return ValidateRenderedOutputMode(owner, mode)
+}
+
+// outputModeMayBeTemplated reports whether mode may hold a template expression, which can only be
+// validated after rendering. The step template delimiters are not known where output modes are
+// validated, so the check is conservative: besides the default "{{", any value that is not a plain
+// word cannot be a mode and might be a template written with configured delimiters. Rendering
+// then validates the result with ValidateRenderedOutputMode, so such a value is never accepted for
+// good. A plain word that is not a mode, such as a typo, is still rejected immediately.
+func outputModeMayBeTemplated(mode string) bool {
+	mode = strings.TrimSpace(mode)
+	if strings.Contains(mode, "{{") {
+		return true
+	}
+	for _, r := range mode {
+		if !unicode.IsLetter(r) {
+			return true
+		}
+	}
+	return false
 }
 
 // ValidateRenderedOutputMode is ValidateOutputMode for a mode that has already been rendered: it

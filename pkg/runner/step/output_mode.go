@@ -284,11 +284,11 @@ func ResolveStepOutputMode(step *schema.WorkflowStep, vars *Variables) (string, 
 		return "", nil
 	}
 	rendered := raw
-	if vars != nil && strings.Contains(raw, "{{") {
+	if vars != nil && vars.TemplateDelimiters().Contains(raw) {
 		var err error
 		rendered, err = vars.ResolveStepField(step, "output", raw)
 		if err != nil {
-			return "", TemplateFieldError(step, "output", err)
+			return "", vars.TemplateFieldError(step, "output", err)
 		}
 		rendered = strings.TrimSpace(rendered)
 	}

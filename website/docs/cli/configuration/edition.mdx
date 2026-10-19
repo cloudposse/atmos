@@ -77,6 +77,10 @@ For example, the `2026-10-13` transition changes which attributes appear in
 the old display while current pins and unpinned projects use the new display. The transition date
 is inclusive, and partial dates use the same end-of-period rounding as default values.
 
+Another example is the `2026-10-19` transition for step templates. Workflow, custom command, and
+lifecycle hook steps use the delimiters from [`templates.settings.delimiters`](/templates#configure-templating)
+from that date on; earlier pins keep `{{ }}` for steps.
+
 Both `atmos list editions` and `atmos describe edition` include these transitions. Their keys
 identify behaviors, not YAML settings, and their old/new values describe the two behaviors.
 

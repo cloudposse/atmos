@@ -28,6 +28,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/template/delimiters"
 )
 
 var errRenderedHookNotMap = errors.New("rendered hook is not a map")
@@ -434,30 +435,50 @@ func withOutcomeTemplateData(section map[string]any, outcome Outcome) map[string
 	return augmented
 }
 
-// processHookExecutionValue recursively renders a hook value, dispatching on its
+// hookTemplateName labels hook templates in render errors.
+const hookTemplateName = "hook"
+
+// hookRenderer renders hook values with one resolved delimiter pair, so the envelope and every step
+// payload of a hook invocation detect and parse templates the same way.
+type hookRenderer struct {
+	atmosConfig *schema.AtmosConfiguration
+	delims      delimiters.Delimiters
+}
+
+// processHookExecutionValue renders a hook value with the step delimiters that atmosConfig selects
+// (see delimiters.ForSteps). Invalid edition pins and delimiter lists are returned as errors.
+func processHookExecutionValue(atmosConfig *schema.AtmosConfiguration, value any, info *schema.ConfigAndStacksInfo) (any, error) {
+	delims, err := delimiters.ForSteps(atmosConfig)
+	if err != nil {
+		return nil, err
+	}
+	return hookRenderer{atmosConfig: atmosConfig, delims: delims}.value(value, info)
+}
+
+// value recursively renders a hook value, dispatching on its
 // dynamic type. Strings are run through template/YAML-function processing; slices
 // and maps are walked element by element; all other scalars are returned as-is.
-func processHookExecutionValue(atmosConfig *schema.AtmosConfiguration, value any, info *schema.ConfigAndStacksInfo) (any, error) {
+func (r hookRenderer) value(value any, info *schema.ConfigAndStacksInfo) (any, error) {
 	switch v := value.(type) {
 	case string:
-		return processHookExecutionString(atmosConfig, v, info)
+		return r.str(v, info)
 	case []any:
-		return processHookExecutionSlice(atmosConfig, v, info)
+		return r.slice(v, info)
 	case map[string]any:
-		return processHookExecutionStringMap(atmosConfig, v, info)
+		return r.stringMap(v, info)
 	case map[any]any:
-		return processHookExecutionAnyMap(atmosConfig, v, info)
+		return r.anyMap(v, info)
 	default:
 		return value, nil
 	}
 }
 
-// processHookExecutionSlice renders each element of a slice and returns a new
+// slice renders each element of a slice and returns a new
 // slice of the processed values, preserving order.
-func processHookExecutionSlice(atmosConfig *schema.AtmosConfiguration, values []any, info *schema.ConfigAndStacksInfo) ([]any, error) {
+func (r hookRenderer) slice(values []any, info *schema.ConfigAndStacksInfo) ([]any, error) {
 	result := make([]any, 0, len(values))
 	for _, item := range values {
-		processed, err := processHookExecutionValue(atmosConfig, item, info)
+		processed, err := r.value(item, info)
 		if err != nil {
 			return nil, err
 		}
@@ -466,20 +487,20 @@ func processHookExecutionSlice(atmosConfig *schema.AtmosConfiguration, values []
 	return result, nil
 }
 
-// processHookExecutionStringMap renders both the keys and values of a
+// stringMap renders both the keys and values of a
 // string-keyed map. Keys are rendered too because hook fields like `outputs`
 // use templated keys (e.g. `"{{ .vars.stage }}_label"`). Values of the fields a
 // step payload lists in `literal_fields` (written with !literal) are kept exactly
 // as written.
-func processHookExecutionStringMap(atmosConfig *schema.AtmosConfiguration, values map[string]any, info *schema.ConfigAndStacksInfo) (map[string]any, error) {
+func (r hookRenderer) stringMap(values map[string]any, info *schema.ConfigAndStacksInfo) (map[string]any, error) {
 	literal := schema.LiteralFieldsFromValue(values[schema.LiteralFieldsKey])
 	result := make(map[string]any, len(values))
 	for key, item := range values {
-		stringKey, err := processHookExecutionMapKey(atmosConfig, key, info)
+		stringKey, err := r.mapKey(key, info)
 		if err != nil {
 			return nil, err
 		}
-		processedValue, err := processHookExecutionMapItem(atmosConfig, key, item, literal, info)
+		processedValue, err := r.mapItem(key, item, literal, info)
 		if err != nil {
 			return nil, err
 		}
@@ -488,18 +509,18 @@ func processHookExecutionStringMap(atmosConfig *schema.AtmosConfiguration, value
 	return result, nil
 }
 
-// processHookExecutionAnyMap renders an `any`-keyed map (as produced by YAML
+// anyMap renders an `any`-keyed map (as produced by YAML
 // unmarshalling) and normalizes it to a string-keyed map, stringifying and
-// rendering each key. It honors `literal_fields` like processHookExecutionStringMap.
-func processHookExecutionAnyMap(atmosConfig *schema.AtmosConfiguration, values map[any]any, info *schema.ConfigAndStacksInfo) (map[string]any, error) {
+// rendering each key. It honors `literal_fields` like hookRenderer.stringMap.
+func (r hookRenderer) anyMap(values map[any]any, info *schema.ConfigAndStacksInfo) (map[string]any, error) {
 	literal := schema.LiteralFieldsFromValue(values[schema.LiteralFieldsKey])
 	result := make(map[string]any, len(values))
 	for key, item := range values {
-		stringKey, err := processHookExecutionMapKey(atmosConfig, fmt.Sprint(key), info)
+		stringKey, err := r.mapKey(fmt.Sprint(key), info)
 		if err != nil {
 			return nil, err
 		}
-		processedValue, err := processHookExecutionMapItem(atmosConfig, fmt.Sprint(key), item, literal, info)
+		processedValue, err := r.mapItem(fmt.Sprint(key), item, literal, info)
 		if err != nil {
 			return nil, err
 		}
@@ -508,24 +529,24 @@ func processHookExecutionAnyMap(atmosConfig *schema.AtmosConfiguration, values m
 	return result, nil
 }
 
-// processHookExecutionMapItem renders one map value, except that a field listed in literal is
+// mapItem renders one map value, except that a field listed in literal is
 // returned as written, and in an `env` map each value listed as `env.NAME` is returned as written.
-func processHookExecutionMapItem(atmosConfig *schema.AtmosConfiguration, key string, item any, literal []string, info *schema.ConfigAndStacksInfo) (any, error) {
+func (r hookRenderer) mapItem(key string, item any, literal []string, info *schema.ConfigAndStacksInfo) (any, error) {
 	if len(literal) == 0 {
-		return processHookExecutionValue(atmosConfig, item, info)
+		return r.value(item, info)
 	}
 	if slices.Contains(literal, key) {
 		return item, nil
 	}
 	if key == schema.StepKeyEnv {
-		return processHookExecutionEnv(atmosConfig, item, literal, info)
+		return r.env(item, literal, info)
 	}
-	return processHookExecutionValue(atmosConfig, item, info)
+	return r.value(item, info)
 }
 
-// processHookExecutionEnv renders the values of a step `env` map, keeping the values listed as
+// env renders the values of a step `env` map, keeping the values listed as
 // `env.NAME` in literal as written. Any other shape of value is rendered normally.
-func processHookExecutionEnv(atmosConfig *schema.AtmosConfiguration, item any, literal []string, info *schema.ConfigAndStacksInfo) (any, error) {
+func (r hookRenderer) env(item any, literal []string, info *schema.ConfigAndStacksInfo) (any, error) {
 	entries := map[string]any{}
 	switch env := item.(type) {
 	case map[string]any:
@@ -535,7 +556,7 @@ func processHookExecutionEnv(atmosConfig *schema.AtmosConfiguration, item any, l
 			entries[fmt.Sprint(name)] = value
 		}
 	default:
-		return processHookExecutionValue(atmosConfig, item, info)
+		return r.value(item, info)
 	}
 	result := make(map[string]any, len(entries))
 	for name, value := range entries {
@@ -543,7 +564,7 @@ func processHookExecutionEnv(atmosConfig *schema.AtmosConfiguration, item any, l
 			result[name] = value
 			continue
 		}
-		processed, err := processHookExecutionValue(atmosConfig, value, info)
+		processed, err := r.value(value, info)
 		if err != nil {
 			return nil, err
 		}
@@ -552,11 +573,11 @@ func processHookExecutionEnv(atmosConfig *schema.AtmosConfiguration, item any, l
 	return result, nil
 }
 
-// processHookExecutionMapKey renders a map key and coerces the result back to a
+// mapKey renders a map key and coerces the result back to a
 // string. A rendered key that is not a string is stringified with fmt.Sprint so
 // it can still serve as a map key.
-func processHookExecutionMapKey(atmosConfig *schema.AtmosConfiguration, key string, info *schema.ConfigAndStacksInfo) (string, error) {
-	processedKey, err := processHookExecutionString(atmosConfig, key, info)
+func (r hookRenderer) mapKey(key string, info *schema.ConfigAndStacksInfo) (string, error) {
+	processedKey, err := r.str(key, info)
 	if err != nil {
 		return "", err
 	}
@@ -566,50 +587,50 @@ func processHookExecutionMapKey(atmosConfig *schema.AtmosConfiguration, key stri
 	return fmt.Sprint(processedKey), nil
 }
 
-// processHookExecutionString renders a single string value. A `!`-prefixed value
-// is evaluated as a YAML function; a value containing `{{` is rendered as a Go
+// str renders a single string value. A `!`-prefixed value
+// is evaluated as a YAML function; a value containing the template left delimiter (`{{` by default) is rendered as a Go
 // template against the component section; anything else is returned unchanged.
-func processHookExecutionString(atmosConfig *schema.AtmosConfiguration, value string, info *schema.ConfigAndStacksInfo) (any, error) {
+func (r hookRenderer) str(value string, info *schema.ConfigAndStacksInfo) (any, error) {
 	trimmed := strings.TrimSpace(value)
 	if strings.HasPrefix(trimmed, "!") {
-		return processHookExecutionYAMLFunction(atmosConfig, value, info)
+		return r.yamlFunction(value, info)
 	}
 
-	if strings.Contains(value, "{{") {
+	if r.delims.Contains(value) {
 		var tmplData any = map[string]any{}
 		if info != nil && info.ComponentSection != nil {
 			tmplData = info.ComponentSection
 		}
-		return e.ProcessTmpl(atmosConfig, "hook", value, tmplData, false)
+		return e.ProcessStepTmpl(r.atmosConfig, hookTemplateName, value, tmplData, r.delims)
 	}
 
 	return value, nil
 }
 
-// processHookExecutionYAMLFunction evaluates a `!`-prefixed YAML function (e.g.
+// yamlFunction evaluates a `!`-prefixed YAML function (e.g.
 // `!template`, `!store`) via the component YAML processor. When the function
 // yields a non-string (slice/map), the result is processed recursively; when it
 // yields a changed string, that string is re-processed so a `!template` that
-// expands to a `{{ }}` template is also rendered. An unchanged string is
+// expands to a template is also rendered. An unchanged string is
 // returned as-is to avoid infinite recursion.
-func processHookExecutionYAMLFunction(atmosConfig *schema.AtmosConfiguration, value string, info *schema.ConfigAndStacksInfo) (any, error) {
+func (r hookRenderer) yamlFunction(value string, info *schema.ConfigAndStacksInfo) (any, error) {
 	stack := ""
 	if info != nil {
 		stack = info.Stack
 	}
-	processor := e.NewComponentYAMLProcessor(atmosConfig, stack, nil, nil, info)
+	processor := e.NewComponentYAMLProcessor(r.atmosConfig, stack, nil, nil, info)
 	processed, err := processor.ProcessYAMLFunctionString(value)
 	if err != nil {
 		return nil, err
 	}
 	processedString, ok := processed.(string)
 	if !ok {
-		return processHookExecutionValue(atmosConfig, processed, info)
+		return r.value(processed, info)
 	}
 	if processedString == value {
 		return processedString, nil
 	}
-	return processHookExecutionString(atmosConfig, processedString, info)
+	return r.str(processedString, info)
 }
 
 // ResolveSkipHooks returns the effective --skip-hooks value. It prefers the

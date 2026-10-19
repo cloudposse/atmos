@@ -9,35 +9,65 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/script"
 	_ "github.com/cloudposse/atmos/pkg/script/starlark" // Register the embedded interpreter.
+	"github.com/cloudposse/atmos/pkg/template/delimiters"
 )
 
 const embeddedValidationTitle = "Embedded interpreter cannot run in a container"
+
+// EmbeddedOption configures the embedded interpreter checks.
+type EmbeddedOption func(*embeddedOptions)
+
+type embeddedOptions struct {
+	delims delimiters.Delimiters
+}
+
+// WithEmbeddedDelimiters sets the step template delimiters in effect. An interpreter that holds
+// either the default "{{" or this pair's left delimiter is treated as templated, so the
+// up-front check never rejects a value the runtime would render to something else.
+func WithEmbeddedDelimiters(d delimiters.Delimiters) EmbeddedOption {
+	return func(o *embeddedOptions) { o.delims = d.Normalize() }
+}
+
+func newEmbeddedOptions(opts []EmbeddedOption) embeddedOptions {
+	o := embeddedOptions{delims: delimiters.Default()}
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return o
+}
+
+// isTemplated reports whether an interpreter value may be a template. It is deliberately
+// conservative: the default left delimiter counts even when other delimiters are configured.
+func (o embeddedOptions) isTemplated(value string) bool {
+	return delimiters.Default().Contains(value) || o.delims.Contains(value)
+}
 
 // ValidateEmbeddedInterpreters rejects, before any step runs, a workflow whose steps would
 // run an embedded interpreter (such as Starlark) under an enabled container. Embedded
 // interpreters run inside the Atmos process, so they cannot execute in a container; without
 // this up-front check the failure only surfaces after earlier steps have already run.
-func ValidateEmbeddedInterpreters(workflowName string, def *schema.WorkflowDefinition) error {
+func ValidateEmbeddedInterpreters(workflowName string, def *schema.WorkflowDefinition, opts ...EmbeddedOption) error {
 	defer perf.Track(nil, "workflow.ValidateEmbeddedInterpreters")()
 
 	if def == nil {
 		return nil
 	}
-	return ValidateEmbeddedInterpreterSteps(workflowName, def.Container, def.Steps)
+	return ValidateEmbeddedInterpreterSteps(workflowName, def.Container, def.Steps, opts...)
 }
 
 // ValidateEmbeddedInterpreterSteps is the step-list form of ValidateEmbeddedInterpreters. The
 // ambient container is the workflow-level container (nil for custom commands, which only have
 // step-level containers). It recurses into parallel, matrix, and test children.
-func ValidateEmbeddedInterpreterSteps(owner string, ambient *schema.WorkflowContainer, steps []schema.WorkflowStep) error {
+func ValidateEmbeddedInterpreterSteps(owner string, ambient *schema.WorkflowContainer, steps []schema.WorkflowStep, opts ...EmbeddedOption) error {
 	defer perf.Track(nil, "workflow.ValidateEmbeddedInterpreterSteps")()
 
+	options := newEmbeddedOptions(opts)
 	for i := range steps {
 		step := &steps[i]
-		if err := validateEmbeddedStep(owner, ambient, step, i); err != nil {
+		if err := validateEmbeddedStep(owner, ambient, step, i, options); err != nil {
 			return err
 		}
-		if err := ValidateEmbeddedInterpreterSteps(owner, ambient, step.Steps); err != nil {
+		if err := ValidateEmbeddedInterpreterSteps(owner, ambient, step.Steps, opts...); err != nil {
 			return err
 		}
 	}
@@ -45,13 +75,13 @@ func ValidateEmbeddedInterpreterSteps(owner string, ambient *schema.WorkflowCont
 }
 
 // validateEmbeddedStep checks a single step (children are handled by the caller).
-func validateEmbeddedStep(owner string, ambient *schema.WorkflowContainer, step *schema.WorkflowStep, index int) error {
+func validateEmbeddedStep(owner string, ambient *schema.WorkflowContainer, step *schema.WorkflowStep, index int, options embeddedOptions) error {
 	if step.Type != schema.TaskTypeScript {
 		return nil
 	}
 	interpreter := strings.TrimSpace(step.Interpreter)
 	// Templated interpreters are only known at runtime, where the runtime checks remain.
-	if interpreter == "" || strings.Contains(interpreter, "{{") {
+	if interpreter == "" || options.isTemplated(interpreter) {
 		return nil
 	}
 	if _, embedded := script.Get(interpreter); !embedded {
@@ -95,10 +125,10 @@ func rejectEmbeddedScriptInContainer(step *schema.WorkflowStep) error {
 // container checks and the container command see the effective interpreter instead of the raw
 // template. The step must be a copy the caller owns. Non-script steps and plain interpreters
 // are left untouched.
-func RenderScriptInterpreter(step *schema.WorkflowStep, render func(string) (string, error)) error {
+func RenderScriptInterpreter(step *schema.WorkflowStep, render func(string) (string, error), opts ...EmbeddedOption) error {
 	defer perf.Track(nil, "workflow.RenderScriptInterpreter")()
 
-	if step == nil || render == nil || step.Type != schema.TaskTypeScript || !strings.Contains(step.Interpreter, "{{") {
+	if step == nil || render == nil || step.Type != schema.TaskTypeScript || !newEmbeddedOptions(opts).delims.Contains(step.Interpreter) {
 		return nil
 	}
 	// An interpreter written with !literal is already the effective one.

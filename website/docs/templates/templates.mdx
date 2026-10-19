@@ -59,7 +59,7 @@ Templating in Atmos stack manifests is configured in the `atmos.yaml` [CLI confi
   <dd>Number of evaluations/passes to process `Go` templates. If not defined, `evaluations` is automatically set to `1`. For more details, refer to [Template Evaluations and Template Processing Pipelines](#processing-pipelines).</dd>
 
   <dt>`templates.settings.delimiters`</dt>
-  <dd>A list of left and right delimiters to use to process the templates. If not defined, the default `Go` template delimiters `["{{", "}}"]` will be used.</dd>
+  <dd>A list of left and right delimiters to use to process the templates. If not defined, the default `Go` template delimiters `["{{", "}}"]` will be used. The delimiters also apply to the templates in [workflow](/workflows) steps, [custom command](/cli/configuration/commands/steps) steps, and [lifecycle hook](/stacks/hooks) steps. With `delimiters: ["[[", "]]"]`, a step field is written `[[ .steps.first.value ]]`, and `{{ }}` stays literal text. Projects [pinned](/cli/configuration/edition#behavior-changes) to an edition before `2026-10-19` keep `{{ }}` for step templates, whatever the setting says.</dd>
 
   <dt>`templates.settings.sprig.enabled`</dt>
   <dd>A boolean flag to enable/disable the [Sprig Functions](https://masterminds.github.io/sprig/) in Atmos stack manifests. Defaults to `true`.</dd>

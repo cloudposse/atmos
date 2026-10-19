@@ -68,6 +68,7 @@ func executeWorkflowControlStep(ctx context.Context, control *workflowControlCon
 		TemplateData: workflowControlTemplateData,
 		// Children render with the workflow's renderer and pass count, like sequential steps.
 		RenderTemplate: workflowControlRender,
+		Delimiters:     vars.TemplateDelimiters(),
 		StoreResult:    storeWorkflowControlResult,
 	})
 }

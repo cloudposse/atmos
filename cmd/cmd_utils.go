@@ -50,6 +50,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/taskgraph"
 	"github.com/cloudposse/atmos/pkg/taskgraph/adapters"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/template/delimiters"
 	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/upgrade"
@@ -1061,9 +1062,17 @@ func executeCustomCommand(
 		return
 	}
 
+	// Resolve the step template delimiters once: templates.settings.delimiters applies to step
+	// templates for projects on the templates.step_delimiters edition behavior, "{{ }}" otherwise.
+	stepDelims, err := delimiters.ForSteps(&atmosConfig)
+	if err != nil {
+		exitOrRecordDependencyErr(cmd, err, "", "")
+		return
+	}
+
 	// Reject embedded interpreters (Starlark) under a step-level container before any step runs.
 	// Custom commands have no command-level container, so the ambient container is nil.
-	if err := workflowPkg.ValidateEmbeddedInterpreterSteps(fmt.Sprintf("Custom command `%s`", commandConfig.Name), nil, workflowSteps); err != nil {
+	if err := workflowPkg.ValidateEmbeddedInterpreterSteps(fmt.Sprintf("Custom command `%s`", commandConfig.Name), nil, workflowSteps, workflowPkg.WithEmbeddedDelimiters(stepDelims)); err != nil {
 		exitOrRecordDependencyErr(cmd, err, "", "")
 		return
 	}
@@ -1092,8 +1101,9 @@ func executeCustomCommand(
 	// Initialize step executor once before loop - reused across steps to preserve outputs.
 	executor := stepPkg.NewStepExecutor()
 	stepVars := executor.Variables()
+	stepVars.SetTemplateDelimiters(stepDelims)
 	stepVars.SetTemplateRenderer(func(name, input string, data any) (string, error) {
-		return e.ProcessTmpl(&atmosConfig, name, input, data, false)
+		return e.ProcessStepTmpl(&atmosConfig, name, input, data, stepDelims)
 	})
 	stepVars.SetTemplatePasses(3)
 	stepVars.ProtectTemplateRoots("Arguments", "Flags", "flags", "TrailingArgs")
@@ -1188,7 +1198,7 @@ func executeCustomCommand(
 			// Legacy: If the custom command defines 'component_config' section with 'component' and 'stack' attributes,
 			// process the component stack config and expose it in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables.
 			// Process Go templates in the command's 'component_config.component'.
-			component, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
+			component, err := e.ProcessStepTmpl(&atmosConfig, fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, stepDelims)
 			if err != nil {
 				exitOrRecordDependencyErr(cmd, err, "", "")
 				return
@@ -1200,7 +1210,7 @@ func executeCustomCommand(
 			}
 
 			// Process Go templates in the command's 'component_config.stack'.
-			stack, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
+			stack, err := e.ProcessStepTmpl(&atmosConfig, fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, stepDelims)
 			if err != nil {
 				exitOrRecordDependencyErr(cmd, err, "", "")
 				return
@@ -1373,13 +1383,13 @@ func executeCustomCommand(
 		renderStep := &schema.WorkflowStep{Name: step.Name, Command: step.Command, LiteralFields: step.LiteralFields}
 		commandToRun, err := stepVars.ResolveStepField(renderStep, "command", step.Command)
 		if err != nil {
-			exitOrRecordDependencyErr(cmd, stepPkg.TemplateFieldError(renderStep, "command", err), "", "")
+			exitOrRecordDependencyErr(cmd, stepVars.TemplateFieldError(renderStep, "command", err), "", "")
 			return
 		}
 
 		// Render a templated `output:` (for example `{{ .Flags.mode }}`) so the mode takes effect, and
 		// fail the command when it renders to an unknown mode instead of running with the default.
-		if strings.Contains(step.Output, "{{") {
+		if stepDelims.Contains(step.Output) {
 			outputStep := step.ToWorkflowStep()
 			if outputErr := stepPkg.ApplyStepOutputMode(&outputStep, stepVars); outputErr != nil {
 				exitOrRecordDependencyErr(cmd, outputErr, "", "")
@@ -1550,7 +1560,7 @@ func executeCustomCommand(
 				workflowStep := step.ToWorkflowStep()
 				if workflowPkg.StepContainerOverride(&workflowStep) {
 					// Render a templated interpreter first so the container checks see the effective one.
-					if renderErr := workflowPkg.RenderScriptInterpreter(&workflowStep, executor.Variables().Resolve); renderErr != nil {
+					if renderErr := workflowPkg.RenderScriptInterpreter(&workflowStep, executor.Variables().Resolve, workflowPkg.WithEmbeddedDelimiters(stepDelims)); renderErr != nil {
 						return renderErr
 					}
 					return runContainerOverrideStep(stepCtx, &workflowStep, process.FormatScriptDisplay(workflowStep.Interpreter, step.Script))

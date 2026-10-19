@@ -10,9 +10,9 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependency"
-	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/template/delimiters"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -62,6 +62,10 @@ type ControlExecutionOptions struct {
 	// nil, children render with plain text/template.
 	RenderTemplate ControlRenderFunc
 	StoreResult    ControlStoreResultFunc
+	// Delimiters is the template delimiter pair of the context the parent step runs in. Children
+	// detect and parse templates with it, and the default output prefix is built from it. The zero
+	// value selects the default "{{" and "}}".
+	Delimiters delimiters.Delimiters
 }
 
 type controlOutputConfig struct {
@@ -102,6 +106,9 @@ func ExecuteControlStep(ctx context.Context, parent *schema.WorkflowStep, execut
 	}
 
 	outputCfg := effectiveControlOutput(parent)
+	if usesDefaultControlPrefix(parent) {
+		outputCfg.prefix = opts.Delimiters.Wrap(".step.name")
+	}
 	failCfg := effectiveControlFail(parent)
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -405,7 +412,7 @@ func resolveControlStep(step *schema.WorkflowStep, matrix map[string]string, tem
 		}
 		rendered, err := templates.resolve(*field.value, step.Name, matrix)
 		if err != nil {
-			return resolved, stepPkg.TemplateFieldError(step, field.name, err)
+			return resolved, templates.fieldError(step, field.name, err)
 		}
 		*field.value = rendered
 	}
@@ -418,7 +425,7 @@ func resolveControlStep(step *schema.WorkflowStep, matrix map[string]string, tem
 			}
 			rendered, err := templates.resolve(value, step.Name, matrix)
 			if err != nil {
-				return resolved, stepPkg.TemplateFieldError(step, "env."+key, err)
+				return resolved, templates.fieldError(step, "env."+key, err)
 			}
 			envMap[key] = rendered
 		}
@@ -437,6 +444,13 @@ func controlTemplateData(stepName string, matrix map[string]string, dataFunc Con
 	dataMap["matrix"] = matrix
 	dataMap["step"] = map[string]any{"name": stepName}
 	return dataMap
+}
+
+// usesDefaultControlPrefix reports whether the step leaves the parallel output prefix unset, so
+// the default prefix applies. The default is written with the default delimiters in
+// effectiveControlOutput; ExecuteControlStep rewrites it with the delimiters in effect.
+func usesDefaultControlPrefix(step *schema.WorkflowStep) bool {
+	return step.ParallelOutput == nil || strings.TrimSpace(step.ParallelOutput.Prefix) == ""
 }
 
 func effectiveControlOutput(step *schema.WorkflowStep) controlOutputConfig {
