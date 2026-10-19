@@ -105,6 +105,7 @@ func splitISO8601Parts(s string) (string, string, error) {
 	return datePart, timePart, nil
 }
 
+// iso8601DateUnit maps a date designator (Y, M, W, D) to its duration.
 func iso8601DateUnit(r rune) (time.Duration, bool) {
 	switch r {
 	case 'Y', 'y':
@@ -120,6 +121,7 @@ func iso8601DateUnit(r rune) (time.Duration, bool) {
 	}
 }
 
+// iso8601TimeUnit maps a time designator (H, M, S) to its duration.
 func iso8601TimeUnit(r rune) (time.Duration, bool) {
 	switch r {
 	case 'H', 'h':

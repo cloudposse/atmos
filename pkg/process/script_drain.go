@@ -18,6 +18,7 @@ type scriptPipe struct {
 	sink   io.Writer
 }
 
+// newScriptPipe creates an OS pipe whose read side is drained into sink.
 func newScriptPipe(sink io.Writer) (*scriptPipe, error) {
 	reader, writer, err := os.Pipe()
 	if err != nil {
@@ -26,13 +27,21 @@ func newScriptPipe(sink io.Writer) (*scriptPipe, error) {
 	return &scriptPipe{reader: reader, writer: writer, sink: writerOrDiscard(sink)}, nil
 }
 
+// close releases both ends of the pipe; errors are ignored because the handles may already be closed.
 func (p *scriptPipe) close() {
 	_ = p.reader.Close()
 	_ = p.writer.Close()
 }
 
+// drain copies the stream to its sink until EOF or until cancellation cleanup closes the
+// read handle. Only the cancellation callback closes the reader early, so os.ErrClosed is
+// our own cleanup rather than a destination failure; the caller reports the cause through
+// ctx.Err() instead.
 func (p *scriptPipe) drain(cancel context.CancelFunc, done chan<- error) {
 	_, err := io.Copy(p.sink, p.reader)
+	if errors.Is(err, os.ErrClosed) {
+		err = nil
+	}
 	if err != nil {
 		// A broken destination must also interrupt the producer and the other stream.
 		cancel()

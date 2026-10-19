@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -82,6 +83,8 @@ func TestRunScriptCancellationWhileDrainingOutput(t *testing.T) {
 	select {
 	case err := <-done:
 		assert.ErrorIs(t, err, context.Canceled)
+		assert.NotErrorIs(t, err, os.ErrClosed, "closing our own read handle during cancellation is not a failure")
+		assert.NotContains(t, err.Error(), "file already closed")
 	case <-time.After(childExitCleanupWait + time.Second):
 		t.Fatal("cancellation must interrupt output draining after the interpreter exits")
 	}
