@@ -247,15 +247,16 @@ func osEnvMap() map[string]string {
 }
 
 // classifyImportResolveError decides how a resolve failure is treated. It returns a non-nil error
-// to propagate (fail closed) and nil to warn-and-skip an optional import. Policy denials and a
-// required nested failure (ErrRequiredImportFailed, already surfaced by a deeper pass) always
-// propagate - an optional parent must not mask a required child. Otherwise a required
+// to propagate (fail closed) and nil to warn-and-skip an optional import. Three classes always
+// propagate regardless of this (parent) import's optionality, so an optional parent cannot mask
+// them: policy denials, a required nested failure already surfaced by a deeper pass
+// (ErrRequiredImportFailed), and a malformed import entry (ErrInvalidConfigImport) - a decode
+// failure must not be silently converted into an optional omission. Otherwise a required
 // (non-optional) import fails closed and an optional one warns and continues.
 func classifyImportResolveError(imp schema.ConfigImport, resolveErr error) error {
-	if guard.IsPolicyError(resolveErr) {
-		return resolveErr
-	}
-	if errors.Is(resolveErr, errUtils.ErrRequiredImportFailed) {
+	if guard.IsPolicyError(resolveErr) ||
+		errors.Is(resolveErr, errUtils.ErrRequiredImportFailed) ||
+		errors.Is(resolveErr, errUtils.ErrInvalidConfigImport) {
 		return resolveErr
 	}
 	if !imp.SkipIfMissing {

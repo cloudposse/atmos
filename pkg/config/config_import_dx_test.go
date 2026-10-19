@@ -160,23 +160,33 @@ func TestNormalizeConfigImports(t *testing.T) {
 	})
 }
 
-// TestProcessImports_OptionalParentDoesNotMaskRequiredNested verifies that a required nested
-// import failure (ErrRequiredImportFailed, as surfaced by an adapter processing nested imports)
-// propagates even when the importing (parent) entry is optional (issue #3430 review follow-up).
-func TestProcessImports_OptionalParentDoesNotMaskRequiredNested(t *testing.T) {
-	ResetImportAdapterRegistry()
-	t.Cleanup(ResetImportAdapterRegistry)
-	adapter := &recordingSchemeAdapter{
-		schemes: []string{"https://"},
-		err:     fmt.Errorf("%w: nested required import", errUtils.ErrRequiredImportFailed),
+// TestProcessImports_OptionalParentDoesNotMaskFailClosedNested verifies that a fail-closed nested
+// error surfaced by an adapter processing nested imports propagates even when the importing
+// (parent) entry is optional (issue #3430 review follow-up). Both a required nested failure
+// (ErrRequiredImportFailed) and a malformed nested entry (ErrInvalidConfigImport) must not be
+// masked by an optional parent.
+func TestProcessImports_OptionalParentDoesNotMaskFailClosedNested(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want error
+	}{
+		{"required nested failure", fmt.Errorf("%w: nested required import", errUtils.ErrRequiredImportFailed), errUtils.ErrRequiredImportFailed},
+		{"malformed nested entry", fmt.Errorf("%w: bad when", errUtils.ErrInvalidConfigImport), errUtils.ErrInvalidConfigImport},
 	}
-	RegisterImportAdapter(adapter)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ResetImportAdapterRegistry()
+			t.Cleanup(ResetImportAdapterRegistry)
+			RegisterImportAdapter(&recordingSchemeAdapter{schemes: []string{"https://"}, err: tc.err})
 
-	tempDir := t.TempDir()
-	// The parent entry is optional, but the adapter surfaces a required nested failure.
-	imp := schema.ConfigImport{Path: "https://example.com/parent.yaml", SkipIfMissing: true}
-	_, err := processImports(nil, tempDir, []schema.ConfigImport{imp}, tempDir, 1, MaximumImportLvL)
-	require.ErrorIs(t, err, errUtils.ErrRequiredImportFailed, "an optional parent must not mask a required nested failure")
+			tempDir := t.TempDir()
+			// The parent entry is optional, but the adapter surfaces a fail-closed nested error.
+			imp := schema.ConfigImport{Path: "https://example.com/parent.yaml", SkipIfMissing: true}
+			_, err := processImports(nil, tempDir, []schema.ConfigImport{imp}, tempDir, 1, MaximumImportLvL)
+			require.ErrorIs(t, err, tc.want, "an optional parent must not mask a fail-closed nested error")
+		})
+	}
 }
 
 // TestProcessImports_StringImportStillResolvesExistingFile is a backward-compatibility guard:

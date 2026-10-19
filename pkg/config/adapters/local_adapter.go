@@ -115,9 +115,12 @@ func (l *LocalAdapter) processNestedImports(v *viper.Viper, p nestedImportParams
 	}
 	nestedPaths, err := config.ProcessImportsFromAdapter(p.atmosConfig, importBasePath, imports, p.tempDir, p.currentDepth+1, p.maxDepth)
 	if err != nil {
-		// Policy denials and required-import failures (fail closed) must propagate; other nested
-		// resolution errors stay non-fatal (a bad optional nested import is skipped).
-		if guard.IsPolicyError(err) || errors.Is(err, errUtils.ErrRequiredImportFailed) {
+		// Policy denials, required-import failures, and malformed entries (all fail closed) must
+		// propagate; other nested resolution errors stay non-fatal (a bad optional nested import
+		// is skipped).
+		if guard.IsPolicyError(err) ||
+			errors.Is(err, errUtils.ErrRequiredImportFailed) ||
+			errors.Is(err, errUtils.ErrInvalidConfigImport) {
 			return nil, err
 		}
 		log.Debug("failed to process nested imports from", "path", p.path, "error", err)
