@@ -219,7 +219,7 @@ Resources:
 ```yaml
 # stacks/catalog/app.yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     app:
       template: !include ../../components/cloudformation/app/template.yaml | eval
 ```
@@ -270,7 +270,7 @@ Resources:
 ```yaml
 # stacks/catalog/app.yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     app:
       path: template.yaml
       vars:
@@ -332,7 +332,7 @@ config file are selected with a YQ expression:
 <File title="stacks/deploy/dev.yaml">
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     app:
       parameters: !include ../../params/dev.json
 ```
@@ -341,7 +341,7 @@ components:
 <File title="stacks/deploy/staging.yaml">
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     app:
       parameters: !include ../../params/rain-config.yaml .Parameters
       tags: !include ../../params/rain-config.yaml .Tags
@@ -435,7 +435,7 @@ command below accepts `--identity=<name>` when more than one identity is configu
 base_path: .
 
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     base_path: components/cloudformation
 
 stacks:
@@ -467,7 +467,7 @@ environment's stack manifest, and anything shared by a region or account becomes
 <File title="stacks/catalog/network.yaml">
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     network:
       metadata:
         type: abstract
@@ -481,7 +481,7 @@ components:
 <File title="stacks/catalog/app.yaml">
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     app:
       metadata:
         type: abstract
@@ -503,7 +503,7 @@ components:
 <File title="stacks/mixins/region/us-east-1.yaml">
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     network:
       settings:
         aws_cloudformation:
@@ -526,7 +526,7 @@ vars:
   stage: dev
 
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     network:
       metadata:
         type: real

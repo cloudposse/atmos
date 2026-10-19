@@ -8,7 +8,7 @@ vars:
   stage: local
 
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     demo:
       metadata:
         type: real
