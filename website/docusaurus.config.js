@@ -791,12 +791,6 @@ const config = {
         buildYear: getBuildDate().getUTCFullYear(),
         // Render downloads from the same revision as the deployed site, including PR casts.
         castGitRef: process.env.GITHUB_SHA || 'main',
-        // Optional base URL (no trailing slash) for landing-page demo recordings.
-        // The videos are published by `atmos demo publish` to the same docs-origin
-        // bucket under /img/demos/, so DemoVideo serves them same-origin from that
-        // path when this is empty. Set ATMOS_DEMOS_BASE_URL only to point at a
-        // separate CDN/host. See DemoVideo + demo/landing/ + .github/workflows/landing-demos.yaml.
-        demosBaseUrl: process.env.ATMOS_DEMOS_BASE_URL || '',
         },
 
     markdown: {

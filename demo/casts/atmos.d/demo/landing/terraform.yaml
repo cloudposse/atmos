@@ -1,0 +1,48 @@
+commands:
+- name: casts generate demo landing terraform
+  description: Record Terraform, orchestrated using the dedicated landing fixture.
+  env: !include 'cast-defaults.yaml .env.command'
+  steps:
+  - type: shell
+    command: atmos casts setup landing
+  - type: workdir
+    name: prepare-fixture
+    source: ../landing/fixtures/terraform
+    path: ../../.context/cast-fixtures/landing/terraform
+    reset: true
+  - type: cast
+    name: terraform
+    working_directory: ../../.context/cast-fixtures/landing/terraform
+    title: Terraform, orchestrated
+    mode: steps
+    defaults:
+      cast: !include 'landing-defaults.yaml .cast'
+      simulate: !include 'landing-defaults.yaml .simulate'
+    env: !include 'landing-defaults.yaml .env'
+    show:
+      labels: false
+    output:
+      mode: raw
+      cast: ../../website/static/casts/demo/landing/terraform.cast
+    steps:
+    - type: simulate
+      text: atmos list instances -s dev
+    - type: shell
+      command: atmos list instances -s dev
+      duration: 650ms
+      interval: 1s
+    - type: simulate
+      text: atmos list dependencies app -s dev
+    - type: shell
+      command: atmos list dependencies app -s dev
+      duration: 650ms
+      interval: 1s
+  - type: shell
+    command: python3 landing_checks.py sanitize terraform
+  - type: shell
+    command: atmos casts validate demo landing terraform
+- name: casts validate demo landing terraform
+  description: Validate the terraform homepage recording.
+  steps:
+  - type: shell
+    command: python3 landing_checks.py validate terraform

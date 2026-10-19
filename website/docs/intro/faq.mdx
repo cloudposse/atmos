@@ -3,150 +3,344 @@ slug: /faq
 title: Atmos FAQ
 sidebar_label: FAQ
 sidebar_position: 4
+hide_title: true
+hide_table_of_contents: true
+description: Answers about adopting and using Atmos, sharing outputs, dependencies, credentials, secrets, and infrastructure lifecycle.
 ---
-import ReactPlayer from 'react-player'
+import FAQ, { FAQSection } from '@site/src/components/FAQ'
 import FAQItem from '@site/src/components/FAQItem'
-import Intro from '@site/src/components/Intro'
 
-<Intro>
-Find answers to the most common questions about Atmos, from basic concepts to advanced usage patterns.
-</Intro>
+<div className="faq-intro">
 
-## General
+# Frequently asked questions
 
-<FAQItem question="Why is the tool called Atmos?">
+You can use Atmos with your existing Terraform—no rewrite required. Find answers to common questions below.
 
-*Once upon a time*, in the vast expanse of cloud computing, there was a need for a tool that could orchestrate and manage the complex layers of infrastructure with ease and precision. This tool would need to rise above the rest, be completely automated, providing oversight and control much like a protective layer enveloping the Earth. Thus, the idea of "atmos" was born, drawing inspiration from the visionary science fiction of the 1986 "Aliens" movie, where [atmospheric terraformers](https://avp.fandom.com/wiki/Atmosphere_Processing_Plant) transform alien worlds into hospitable realms.
+<nav className="faq-resource-links" aria-label="Adoption resources">
 
-<ReactPlayer className={"react-player"} controls url='https://www.youtube.com/watch?v=y9eM8SrvNdY&t=5s'/>
+[Migration guides ↗](/migration/native-terraform)
+[Agent skills ↗](/ai/skills)
 
-But there's more to the story. As the [Cloud Posse](https://cloudposse.com) delved deeper into crafting this tool, they discovered a wonderful coincidence. "Atmos" could stand for **"Automated Terraform Management & Orchestration Software"** perfectly encapsulating its purpose and capabilities. This serendipitous acronym was a delightful surprise, further cementing the name's destiny.
+</nav>
 
-</FAQItem>
+</div>
 
-<FAQItem question="Is Atmos a replacement for Terraform?">
+<FAQ>
 
-No, Atmos is an orchestration tool that supports Terraform, along with other tools like Helmfile and Packer. Plus, it even supports custom commands, so any tool can be powered by Atmos.
+<nav className="faq-category-links" aria-label="FAQ topics">
 
-</FAQItem>
+[Getting started](#getting-started)
+[Using Atmos](#using-atmos)
+[Terraform & architecture](#terraform-and-architecture)
+[Atmos & Terragrunt](#atmos-vs-terragrunt)
+[Integrations](#integrations)
+[About Atmos](#general)
 
-<FAQItem question="Does Atmos only work with AWS?">
+</nav>
 
-No, **Atmos is entirely cloud-agnostic**. There are funded startups and enterprises alike using Atmos on Amazon Web Services (AWS), Google Cloud Platform (GCP), and Microsoft Azure, among others.
+<FAQSection id="getting-started" title="Getting started">
 
-</FAQItem>
+<FAQItem variant="minimal" id="rewrite-terraform" question="Do I need to rewrite my Terraform?">
 
-<FAQItem question="Does Atmos require any subscriptions?">
+**No. You can use your existing Terraform with Atmos today.** An Atmos Terraform component is a Terraform root module—the code you already run with `terraform plan` and `terraform apply`.
 
-No, Atmos operates purely as a Command Line Interface (CLI) tool. It does not require any subscriptions, services, or daemons to run, ensuring straightforward and accessible functionality without ongoing costs.
+Point Atmos at your existing root modules, define a stack with their inputs, and run them through Atmos. You can keep your directory layout and [include existing `.tfvars` files](/migration/native-terraform). You don’t need Cloud Posse modules, a new architecture, or a rewrite to get started.
 
-</FAQItem>
-
-<FAQItem question="Is Atmos a commercial product?">
-
-Atmos is free and open source under the permissive Apache 2.0 license.
-
-:::tip Words of Wisdom
-We believe the most successful open-source tools are not themselves the end products sold in the market; instead, they serve as enablers, empowering others to build and innovate successful products.
-:::
-
-[Cloud Posse](https://cloudposse.com/), a DevOps Accelerator for Funded Startups and Enterprises, funds Atmos development.
+For the maximum benefits, we recommend [architectural design patterns](/design-patterns) such as reusable components, configuration inheritance, and independent lifecycles. Adopt these as your needs grow.
 
 </FAQItem>
 
-<FAQItem question="Are there any reference architectures for Atmos?">
+<FAQItem variant="minimal" id="migration-guides" question="How do I get started with an existing project?">
 
-Yes and no. Cloud Posse sells [reference architectures for AWS](https://cloudposse.com/services/) based on Atmos and Terraform, that are ideal for Funded Startups and Enterprises.
+Start with one root module and one environment. Add `atmos.yaml`, point `components.terraform.base_path` at your Terraform directory, and describe the component and its inputs in a stack. Then run a plan and compare it with your existing workflow.
 
-We plan to release some free reference architectures soon but cannot commit to a specific date.
+Choose the migration guide that matches your setup:
 
-Until then, please review our [Quick Start](/quick-start/), which takes you through deploying your first Terraform components using Atmos.
+- [Native Terraform](/migration/native-terraform), including existing variable files and scripts
+- [Terragrunt](/migration/terragrunt)
+- [Terraform workspaces](/migration/terraform-workspaces)
+- [Terramate](/migration/terramate)
 
-</FAQItem>
-
-<FAQItem question="What are some alternatives to Atmos?">
-
-Check out the [list of alternatives](/reference/alternatives) that have influenced its design.
-
-</FAQItem>
-
-## Atmos vs Terragrunt
-
-<FAQItem question="Is Atmos similar to Terragrunt?">
-
-Yes, Atmos is similar to Terragrunt in that it offers a robust command-line tool for operating with Terraform at scale. Both tools are designed to enhance Terraform's capabilities, allowing for more efficient management of complex infrastructure configurations. They support similar functionality, such as DRY (Don't Repeat Yourself) code practices, module management, and workflow orchestration, but they diverge significantly in their approach and philosophy.
+For a new project, start with the [Quick Start](/quick-start/). You can also adopt Atmos for existing [Makefiles](/migration/makefile), [Taskfiles](/migration/taskfile), and [Justfiles](/migration/justfile).
 
 </FAQItem>
 
-<FAQItem question="How is Atmos unlike Terragrunt?">
+<FAQItem variant="minimal" id="existing-state" question="Do I need to move state or recreate my infrastructure?">
 
-#### Atmos uses YAML over HCL
+**No. Adopting Atmos does not itself require either.** Keep the same Terraform backend, state location, and workspace so Atmos operates on the infrastructure you already manage.
 
-Atmos leverages YAML to introduce an opinionated Domain-Specific Language (DSL) for defining what constitutes a Stack, optimizing it for the management and orchestration of Terraform configurations. Designed to be tool-agnostic, Atmos offers a user-friendly CLI experience that supports a broad spectrum of workflows and infrastructure patterns, extending beyond just Terraform. Preferring YAML over HCL, Atmos advocates for using YAML for configuration due to its tool compatibility—any tool can read or write YAML, unlike HCL. With its reliance on YAML for configuration, Atmos seamlessly integrates with other tools that manipulate YAML, such as [`yq`](https://github.com/mikefarah/yq) and templating engines like [`gomplate`](https://github.com/hairyhenderson/gomplate).
+Match the existing backend settings and workspace explicitly; don’t assume Atmos’s generated defaults identify your current state. If your root module already declares its backend, you can disable automatic backend-file generation with `components.terraform.auto_generate_backend_file: false` in `atmos.yaml`.
 
-#### Atmos uses vendoring instead of just-in-time downloading
-
-Terragrunt facilitates the use of remote "root" modules, a feature Atmos also supports but implements more explicitly through "vendoring." This approach involves directly incorporating external modules into component folders ahead of time, rather than retrieving them on-the-fly. By committing these as artifacts, Atmos aligns more with the principles of immutable infrastructure, ensuring stability and reliability.
-
-#### Atmos works with vanilla Terraform
-
-Atmos is designed to be fully compatible with vanilla Terraform, ensuring that your Terraform HCL code remains operational with Terraform's native functionality, even if you choose not to use Atmos. This compatibility underscores Atmos's flexibility and its ability to integrate seamlessly into existing workflows. In contrast, Terragrunt employs a code generation strategy, utilizing a proprietary extension of HCL to introduce constructs and methods not directly interpretable by native Terraform.
-
-#### Atmos does not promote code generation for root modules
-
-Unlike Terragrunt, Atmos eschews code generation for composing DRY Terraform root modules, because that makes them more challenging to test. Instead, it encourages the use of modular architecture to maintain DRY principles, advocating for sufficient parameterization of components (root modules) to keep them versatile and highly reusable. The complexity is managed through configuration, with Atmos focusing on generating `.tfvars` files before running Terraform. This approach allows seamless integration with vanilla Terraform and offers an easy exit strategy by [generating and committing these files](/cli/commands/terraform/generate/varfiles).
-
-#### Atmos provides prescriptive guidance
-
-Atmos delivers prescriptive guidance on [design patterns](/design-patterns/) and [component architecture](/howto/inheritance) for Terraform root modules, establishing itself as an opinionated framework designed to enhance Terraform's capabilities. It offers [advanced features](/howto/inheritance) tailored for both straightforward and intricate deployment scenarios.
+Review a plan before applying. Splitting root modules or changing state locations is a separate architectural change, which you can plan later. See the [workspace migration guide](/migration/terraform-workspaces) and [brownfield considerations](/components/terraform/brownfield).
 
 </FAQItem>
 
-<FAQItem question="Can Atmos be used together with Terragrunt?">
+<FAQItem variant="minimal" id="agent-skills" question="Can my AI coding assistant help me adopt Atmos?">
 
-Yes, technically, Atmos and Terragrunt can be used in conjunction. However, it's important to acknowledge that this combination introduces a significant overlap in functionality and some philosophical differences. Developers generally prefer to minimize the number of layers in their tooling to avoid complexity, and integrating these two tools could steepen the learning curve for teams.
+Yes. We provide [agent skills](/ai/skills) that teach compatible coding assistants Atmos conventions and workflows, including migration, stacks, components, and Terraform operations.
 
-The key motivation for integrating Terragrunt within Atmos would be to offer a seamless CLI experience, facilitating a gradual transition to Atmos's methodologies. This strategy allows teams to utilize Terragrunt for existing infrastructure management while adopting Atmos for new projects.
+Install the migration skill:
 
-There are a few ways to accomplish it:
+```shell
+atmos ai skill install atmos-migration
+```
 
-1. Set the default `command` to call in the Atmos CLI Configuration for Terraform components.
-2. Override the `command` in the `settings` section for each component definition in the stack configuration (this respects inheritance, so the [`mixin`](/howto/mixins) pattern can be used.)
-
-</FAQItem>
-
-## Integrations
-
-<FAQItem question="Does Atmos work with Terraform Cloud and Terraform Enterprise?">
-
-Probably, but we haven't tested it extensively.
-
-Here's why it should work with any CI/CD system:
-
-- Atmos works with *vanilla* Terraform HCL code (we do not introduce any proprietary HCL code formats)
-- Atmos can [generate `.tfvar` files](/cli/commands/terraform/generate/varfiles) from the deep-merged configurations for any given stack, or all stacks at once
-- Commit those `.tfvar` files, then run Terraform as normal, passing the appropriate `.tfvar` file with the `-var-file` argument
-
-Our recommended way of practicing GitOps with Terraform is with [native CI integration](/ci) running in GitHub Actions.
+Follow the [editor and AI assistant setup guide](/projects/setup-editor/ai-assistants) to make skills available in your preferred tool. Pair the skill with the migration guide for your current setup; review the resulting configuration and Terraform plans as you would any infrastructure change.
 
 </FAQItem>
 
-<FAQItem question="Does Atmos work with Atlantis?">
+</FAQSection>
 
-Yes, it does. See our [integration page](/cli/configuration/integrations/atlantis).
+<FAQSection id="using-atmos" title="Using Atmos">
+
+<FAQItem variant="minimal" id="sharing-outputs" question="How should components share data and outputs?">
+
+Choose the method for the data you need. For deployed Terraform/OpenTofu outputs, use [`!terraform.state`](/functions/yaml/terraform.state) with a supported backend, or [`!terraform.output`](/functions/yaml/terraform.output) when you need the underlying CLI's output handling. For deployed CloudFormation Outputs, use [`!aws.cloudformation.output`](/functions/yaml/aws.cloudformation.output).
+
+**Terraform CLI lookups can make large configurations very slow.** `!terraform.output` and [`atmos.Component`](/functions/template/atmos.Component) for Terraform targets prepare the component, initialize it when needed, select the workspace, and run `terraform output`. `atmos.Component` eagerly loads outputs even if you only read `.vars` or `.settings`. Output caching helps within one command, but does not persist across commands; prefer direct state reads for outputs and imports or inheritance for shared configuration.
+
+`atmos.Component` also supports component configuration and outputs for other supported types, including CloudFormation. [External stores](/stacks/sharing-state/stores) let different tools publish and consume persisted values; [named workflow outputs](/steps/outputs) pass results between steps within a run. A workflow result is not automatically persisted for a later deployment. See [sharing data between components](/stacks/sharing-state) to compare the options.
+
+</FAQItem>
+
+<FAQItem variant="minimal" id="dependency-order" question="How do I run components in dependency order?">
+
+Declare [component dependencies](/stacks/dependencies/components) explicitly. For example, run all Terraform/OpenTofu components in one stack with:
+
+```shell
+atmos terraform apply --all -s dev
+```
+
+Atmos orders the selected Terraform components using their dependency graph. Output references supply data; declare the ordering relationships separately. To include prerequisites outside the selected stack, use the [dependency selection flags](/cli/commands/terraform/usage#flags).
+
+A plan does not create the outputs needed by a downstream component. For a first deployment, provision prerequisites or use [mocks for planning](/migration/terragrunt#mock_outputs--component-mocks). For operations across different tools, use [workflows](/workflows) to coordinate their commands; each component type has its own execution capabilities.
 
 </FAQItem>
 
-<FAQItem question="Does Atmos support OpenTofu?">
+<FAQItem variant="minimal" id="renaming-components" question="Can I rename stacks and components?">
 
-Yes, it does. Atmos works seamlessly with OpenTofu as a drop-in replacement for Terraform.
+Yes, but check whether the name participates in the identity of the deployed infrastructure. Terraform/OpenTofu need particular care: changing a stack or component name can change the generated backend path or workspace and make existing resources appear unmanaged. Preserve the existing state identity or plan a state migration. See [component migrations](/tutorials/atmos-component-migrations-in-yaml) and [workspace configuration](/components/terraform/workspaces).
+
+Other tools have different identities. For example, a CloudFormation component targets a [`stack_name`](/stacks/components/aws-cloudformation); preserve that name when reorganizing Atmos configuration for the same deployed stack. Also check resource names and references derived from the renamed values, then review the tool's plan or diff.
+
+</FAQItem>
+
+<FAQItem variant="minimal" id="removing-infrastructure" question="How do I remove infrastructure managed by Atmos?">
+
+Run the teardown operation for the component type, such as [`atmos terraform destroy`](/cli/commands/terraform/destroy) or [`atmos aws cloudformation delete`](/cli/commands/aws/cloudformation/delete). Removing a component from YAML alone does not execute teardown.
+
+[`atmos describe affected`](/cli/commands/describe/affected#detecting-deleted-components-in-affected-stacks) reports deleted components and stacks. However, `atmos terraform destroy --affected` currently selects affected Terraform components that still exist in the current configuration; it filters out deleted components. It is not a deletion-only selector.
+
+Destroy before removing the configuration, or use a reviewed deletion workflow that retrieves the component's configuration and code from the exact earlier revision used for the comparison. Keep that revision available through teardown.
 
 </FAQItem>
 
-## Business
+<FAQItem variant="minimal" id="tracing-configuration" question="How can I see where a configuration value came from?">
 
-<FAQItem question="How does Cloud Posse make money?">
+Use [`atmos describe config`](/cli/commands/describe/config) for the effective CLI configuration and [`atmos describe component`](/cli/commands/describe/component) for a component's resolved stack configuration:
 
-[Cloud Posse](https://cloudposse.com/) sells [reference architectures for AWS](https://cloudposse.com/services/) that are based on Atmos and Terraform. Our typical customers are **Funded Startups** and **Enterprises** that want to leverage AWS together with platforms like GitHub, GitHub Actions, Datadog, OpsGenie, Okta, etc.
+```shell
+atmos describe component vpc -s dev --provenance
+```
+
+Provenance identifies where values originated. Compare the result with `--process-templates=false` or `--process-functions=false` to isolate evaluation problems, and use `atmos validate stacks` to check stack configuration. See the [debugging guide](/troubleshoot/debugging) for a diagnostic sequence.
 
 </FAQItem>
+
+<FAQItem variant="minimal" id="selecting-credentials" question="How do I select credentials for a component?">
+
+Define providers and identities in your [authentication configuration](/cli/configuration/auth). A component can select a default identity through its [component-level auth configuration](/stacks/auth#component-level-identity-selection). Use `--identity` for an explicit selection when running a command, such as `atmos terraform plan vpc -s dev --identity dev-reader`.
+
+[Profiles](/cli/configuration/profiles) select a broader set of CLI configuration overrides, such as local versus CI settings. A profile can configure authentication, but it is not itself an identity. Check the selected credentials with [`atmos auth whoami`](/cli/commands/auth/whoami).
+
+</FAQItem>
+
+<FAQItem variant="minimal" id="handling-secrets" question="How should I handle secrets?">
+
+Configure a supported encrypted store with `secret: true`, declare the secrets you need, and resolve them with [`!secret`](/functions/yaml/secret). See [secrets configuration](/cli/configuration/secrets) for declarations, access controls, and backend setup.
+
+Use ordinary `!store` for non-sensitive shared configuration. Secret stores require the secret access path and mask values in command output. Terraform's `sensitive` marker does not by itself define how every downstream tool stores or displays a value; follow the receiving tool's secret-handling guidance too.
+
+</FAQItem>
+
+</FAQSection>
+
+<FAQSection id="terraform-and-architecture" title="Terraform and architecture">
+
+<FAQItem variant="minimal" id="terraform-replacement" question="Is Atmos a replacement for Terraform?">
+
+No. Atmos orchestrates Terraform or OpenTofu: it resolves stack configuration, supplies inputs, and runs the underlying CLI. Your infrastructure remains defined in standard Terraform code.
+
+Atmos also supports [Helmfile](/components/helmfile), [Packer](/components/packer), [CloudFormation](/components/cloudformation) (experimental), and [custom commands](/cli/configuration/commands) for other tools and team automation.
+
+</FAQItem>
+
+<FAQItem variant="minimal" id="architecture-patterns" question="Do I have to adopt a specific architecture or use Cloud Posse modules?">
+
+No. Your existing root modules can be Atmos components, including a larger root module you haven’t decomposed. The `components/terraform` directory is a configurable convention, and Cloud Posse’s component library is optional.
+
+You can use your own naming variables with [`stacks.name_template`](/cli/configuration/stacks#stack-naming-with-name_template-recommended). Cloud Posse context conventions, mixins, and deeply nested imports are optional; introduce them when they simplify your configuration.
+
+To get more value over time, we recommend separating reusable Terraform code from environment configuration, sharing defaults through imports and inheritance, and giving components independent lifecycles. These [design patterns](/design-patterns) improve reuse and maintainability; they are recommendations, not entry requirements. See [Thinking Like Atmos](/learn/mindset).
+
+</FAQItem>
+
+<FAQItem variant="minimal" id="remote-sources" question="Can Atmos download remote modules, or must I vendor them first?">
+
+Atmos supports both. Declare a component’s [`source`](/cli/commands/terraform/source) in stack configuration to provision remote code just in time, with versions selected per environment. You can also use [vendoring](/vendor/) to pull code ahead of time and optionally commit it for code review, local changes, and offline access.
+
+Source provisioning is currently experimental. Use [isolated workdirs](/stacks/components/provision/workdir) for per-stack source versions and refreshes when the URI or version changes or a configured TTL expires. Without workdir provisioning, Atmos normally reuses a non-empty component directory, but an Atmos-owned remote source can refresh when its configured TTL expires. Use `atmos terraform source pull <component> -s <stack> --force` for an explicit refresh.
+
+Choose [source-based versioning](/design-patterns/version-management/source-based-versioning) when you want remote references in your stacks. Choose [explicit vendoring](/design-patterns/version-management/vendoring-components) when keeping the component code in your repository is useful. Neither approach requires rewriting the Terraform module.
+
+</FAQItem>
+
+<FAQItem variant="minimal" id="generate-files" question="Can Atmos generate Terraform files?">
+
+Yes. Atmos can generate [variable files](/cli/commands/terraform/generate/varfiles), [backend configuration](/cli/commands/terraform/generate/backends), and files defined in a stack’s [`generate` section](/stacks/generate), including Terraform HCL, JSON, and supporting configuration.
+
+The general-purpose `generate` feature is currently experimental. Run `atmos terraform generate files`, or enable `components.terraform.auto_generate_files` to generate them before Terraform runs. Generation is available when it fits your workflow; parameterized root modules remain a useful architectural pattern.
+
+</FAQItem>
+
+<FAQItem variant="minimal" id="run-without-atmos" question="Can I still run Terraform without Atmos?">
+
+Yes. Components remain standard Terraform root modules. You need to supply the same inputs, backend configuration, workspace, credentials, and any generated files that Atmos normally prepares.
+
+Use [`atmos terraform shell`](/cli/commands/terraform/shell) for a configured shell, or [generate variable files](/cli/commands/terraform/generate/varfiles) and the other required configuration for an independent workflow. Generated files may contain sensitive values; keep them out of version control when they do.
+
+</FAQItem>
+
+</FAQSection>
+
+<FAQSection id="atmos-vs-terragrunt" title="Atmos and Terragrunt">
+
+<FAQItem variant="minimal" id="terragrunt-parity" question="Does Atmos support the capabilities I use in Terragrunt?">
+
+Atmos covers the core workflows teams commonly use Terragrunt for. The configuration model and command behavior differ, so migrate the intent of your configuration rather than translating every setting literally.
+
+| Capability | Atmos support |
+| --- | --- |
+| Reuse configuration and inputs | [Imports](/stacks/imports), inheritance, and deep merging |
+| Fetch remote modules and pin versions | Experimental component [sources](/cli/commands/terraform/source) and [vendoring](/vendor/) |
+| Generate Terraform configuration | Backend generation and the experimental [`generate` section](/stacks/generate) |
+| Order operations and share outputs | [Component dependencies](/stacks/dependencies/components) and [`!terraform.output`](/functions/yaml/terraform.output) |
+| Plan before dependencies exist | [Mocks and `--use-mocks`](/migration/terragrunt#mock_outputs--component-mocks) |
+| Run commands around Terraform operations | Lifecycle [hooks](/stacks/hooks) |
+| Configure and bootstrap state backends | Centralized [backend configuration](/stacks/backend) and experimental [backend provisioning](/stacks/components/provision/backend) for S3 and Azure |
+
+See the [Terragrunt migration guide](/migration/terragrunt) for examples and the behavior of each equivalent. Support for these workflows does not mean every Terragrunt flag or integration has an identical Atmos counterpart.
+
+</FAQItem>
+
+<FAQItem variant="minimal" id="terragrunt-differences" question="What are the main differences between Atmos and Terragrunt?">
+
+Atmos uses YAML stacks with imports, inheritance, templates, and functions to describe component configuration. Terragrunt uses HCL configuration for units and stacks. Both orchestrate standard Terraform/OpenTofu modules; their orchestration configuration is separate from Terraform’s own language and runtime.
+
+Atmos also brings multi-tool workflows, custom commands, authentication, toolchain management, configuration inspection, and affected-component detection into one CLI. Its [design patterns](/design-patterns) provide guidance for growing your infrastructure without requiring you to adopt them all at once.
+
+Choose based on your team’s configuration preferences and operating needs. The [migration guide](/migration/terragrunt) maps the concepts side by side, and the [alternatives page](/reference/alternatives) introduces other tools.
+
+</FAQItem>
+
+<FAQItem variant="minimal" id="terragrunt-coexistence" question="Can I adopt Atmos gradually while keeping Terragrunt?">
+
+Yes. Keep existing Terragrunt deployments in their current workflow while you introduce Atmos for one component or environment at a time. [Custom commands](/cli/configuration/commands) and [workflows](/workflows) can provide a common entry point for invoking your existing scripts and tools.
+
+For each migrated component, translate orchestration configuration into Atmos stacks, preserve the backend and workspace that identify its state, and compare plans before switching execution. Give each deployment a clear owner during the transition so the two workflows don’t apply concurrently to the same state. Follow the [Terragrunt migration guide](/migration/terragrunt).
+
+</FAQItem>
+
+</FAQSection>
+
+<FAQSection id="integrations" title="Integrations">
+
+<FAQItem variant="minimal" id="opentofu" question="Does Atmos support OpenTofu?">
+
+Yes. Set the Terraform component executable to `tofu` in `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    command: tofu
+```
+
+Continue using commands such as `atmos terraform plan vpc -s dev`; Atmos invokes OpenTofu underneath. See [Using OpenTofu](/cli/configuration/components/terraform#using-opentofu) for configuration details. Features specific to an engine, such as Terraform Cloud login, still depend on that engine.
+
+</FAQItem>
+
+<FAQItem variant="minimal" id="terraform-cloud" question="Does Atmos work with HCP Terraform and Terraform Enterprise?">
+
+Yes. Atmos supports configuration for Terraform’s `remote` backend and `cloud` integration, including organization and workspace selection. HCP Terraform was previously called Terraform Cloud. See [backend configuration](/stacks/backend#terraform-cloud--enterprise).
+
+HCP Terraform supports [saved remote plans with Terraform CLI 1.6 and later](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/run/cli#saved-plans). For older or legacy remote execution configurations that don’t support saving a plan, use `atmos terraform plan <component> -s <stack> --skip-planfile`, or set `components.terraform.plan.skip_planfile: true` in `atmos.yaml`. Follow the [planfile compatibility guidance](/components/terraform/planfiles#terraform-cloud-integration) for your execution mode.
+
+When Terraform runs in a hosted environment, ensure that environment receives the required module code, inputs, credentials, and generated configuration. Generating a local `.tfvars` file alone does not configure a hosted workspace or its execution workflow.
+
+</FAQItem>
+
+<FAQItem variant="minimal" id="ci-cd" question="How does Atmos fit into CI/CD?">
+
+Use the same Atmos commands locally and in CI. The [native CI integration](/ci) supports GitHub Actions workflows with affected-component detection, plans, PR feedback, and deployment orchestration.
+
+Start with the [GitHub Actions guides](/integrations/github-actions) for planning pull requests and applying changes. Other CI systems can invoke the CLI and provide the same configuration, tools, credentials, and state access.
+
+If you use the legacy Atmos Terraform Actions, follow the [native CI migration guide](/ci/migrate-legacy-actions). Native CI uses [component selection](/ci#choosing-which-components-run-in-ci) rather than the legacy `settings.github.actions_enabled` setting. Use [GitHub Environments and protection rules](/ci#gating-production-with-environments) to gate production deployments separately from planning.
+
+</FAQItem>
+
+<FAQItem variant="minimal" id="atlantis" question="Does Atmos work with Atlantis?">
+
+Yes. Atmos can [generate Atlantis repository configuration](/cli/configuration/integrations/atlantis) from your stacks and component settings. Configure Atlantis workflows to run Atmos and provide the required executables and credentials in its runtime.
+
+</FAQItem>
+
+<FAQItem variant="minimal" id="cloud-providers" question="Does Atmos only work with AWS?">
+
+No. Atmos is cloud-agnostic. Terraform and OpenTofu providers determine which infrastructure you can manage, including AWS, Azure, Google Cloud, and services outside those clouds.
+
+Cloud-specific conveniences such as authentication and automatic backend provisioning have their own supported providers. See the [multi-cloud overview](/multi-cloud) for details.
+
+</FAQItem>
+
+</FAQSection>
+
+<FAQSection id="general" title="About Atmos">
+
+<FAQItem variant="minimal" id="free-and-open-source" question="Is Atmos free? Do I need a subscription or Atmos Pro?">
+
+**Atmos CLI is free and open source under Apache 2.0.** You don’t need a subscription, hosted service, or daemon to use its core infrastructure and automation workflows.
+
+[Atmos Pro](/pro) is an optional service for visibility and coordination across teams, repositories, and environments. Your cloud resources and any external services you choose to use have their own costs.
+
+</FAQItem>
+
+<FAQItem variant="minimal" id="reference-architectures" question="Are there examples and reference architectures I can use?">
+
+Yes. The [Quick Start](/quick-start/) and [example projects](https://github.com/cloudposse/atmos/tree/main/examples) provide working configurations you can explore. You can use your own modules or the open-source [Cloud Posse component library](https://github.com/cloudposse-terraform-components).
+
+For teams that want a supported AWS reference architecture and implementation help, [Cloud Posse offers consulting services](https://cloudposse.com/consulting). Purchasing a reference architecture is not required to use Atmos.
+
+</FAQItem>
+
+<FAQItem variant="minimal" id="business" question="Who develops Atmos, and how is it funded?">
+
+[Cloud Posse](https://cloudposse.com/) funds Atmos development, alongside contributions from the community. Cloud Posse’s commercial offerings include infrastructure consulting, AWS reference architectures, and [Atmos Pro](/pro).
+
+</FAQItem>
+
+<FAQItem variant="minimal" id="name" question="Why is it called Atmos?">
+
+The name draws inspiration from the [atmospheric terraformers in Aliens](https://avp.fandom.com/wiki/Atmosphere_Processing_Plant). It also expands to **Automated Terraform Management &amp; Orchestration Software**.
+
+</FAQItem>
+
+<FAQItem variant="minimal" id="alternatives" question="What are some alternatives to Atmos?">
+
+See the [alternatives overview](/reference/alternatives) for related tools and projects that influenced Atmos. If you already use one, the migration guides can help you compare workflows before deciding whether to switch.
+
+</FAQItem>
+
+</FAQSection>
+
+</FAQ>

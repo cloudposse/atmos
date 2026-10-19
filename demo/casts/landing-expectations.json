@@ -1,0 +1,79 @@
+{
+  "hero": [
+    "atmos list stacks",
+    "staging",
+    "atmos list components --stack dev",
+    "terraform",
+    "helm",
+    "kubernetes",
+    "ansible",
+    "atmos stack get vars.retention_seconds --stack dev -c app",
+    "atmos stack set vars.retention_seconds 86400 --stack dev -c app",
+    "atmos list affected --ref baseline",
+    "stack.vars",
+    "atmos terraform plan app --stack dev",
+    "Plan dev/app completed",
+    "atmos terraform deploy --stack dev --all",
+    "Apply dev/app completed",
+    "aws_sqs_queue.app",
+    "# Discover your environments",
+    "# Mix different tools in one stack",
+    "# Read the value and where it comes from",
+    "# Change only the dev stack",
+    "# Check the effective value",
+    "# Find exactly what this change affects",
+    "# Preview the infrastructure change",
+    "# Apply the changes with live progress"
+  ],
+  "how-it-works": [
+    "app",
+    "ingress",
+    "ami",
+    "web",
+    "local-dev",
+    "deployment"
+  ],
+  "terraform": [
+    "vpc",
+    "cluster",
+    "app",
+    "dns"
+  ],
+  "kubernetes": [
+    "applied v1/Namespace atmos-demo",
+    "atmos kubernetes deploy --all",
+    "applied apps/v1/Deployment atmos-demo/app",
+    "applied v1/Service atmos-demo/app"
+  ],
+  "emulators": [
+    "aws",
+    "gcp",
+    "azure",
+    "k3s",
+    "parameter_name"
+  ],
+  "local-ci": [
+    "Stockholm",
+    "Berlin",
+    "terraform_data.app",
+    "Apply complete!",
+    "atmos list affected --ref baseline",
+    "atmos terraform apply --affected --ref baseline --ci"
+  ],
+  "secrets": [
+    "DATADOG_API_KEY",
+    "DB_PASSWORD",
+    "initialized",
+    "Component command received declared secrets"
+  ],
+  "dx": [
+    "Choose a component",
+    "Choose a stack",
+    "Apply complete!"
+  ],
+  "extensibility": [
+    "Starting Atmos MCP",
+    "Waiting for an agent",
+    "MCP server stopped"
+  ]
+}

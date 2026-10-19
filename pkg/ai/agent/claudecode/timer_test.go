@@ -3,6 +3,7 @@ package claudecode
 import (
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -34,31 +35,34 @@ func TestPausableTimer_Fires(t *testing.T) {
 }
 
 func TestPausableTimer_PausedTimeDoesNotCount(t *testing.T) {
-	fired := make(chan time.Time, 1)
-	start := time.Now()
-	timer := newPausableTimer(400*time.Millisecond, func() { fired <- time.Now() })
-	defer timer.stop()
+	// Use virtual time so scheduler delays cannot consume the active-time budget.
+	synctest.Test(t, func(t *testing.T) {
+		fired := make(chan time.Time, 1)
+		start := time.Now()
+		timer := newPausableTimer(400*time.Millisecond, func() { fired <- time.Now() })
+		defer timer.stop()
 
-	time.Sleep(100 * time.Millisecond)
-	timer.pause()
+		time.Sleep(100 * time.Millisecond)
+		timer.pause()
 
-	// Paused for far longer than the full duration: must not fire.
-	select {
-	case <-fired:
-		require.Fail(t, "timer fired while paused")
-	case <-time.After(700 * time.Millisecond):
-	}
+		// Paused for far longer than the full duration: must not fire.
+		select {
+		case <-fired:
+			require.Fail(t, "timer fired while paused")
+		case <-time.After(700 * time.Millisecond):
+		}
 
-	resumedAt := time.Now()
-	timer.resume()
-	select {
-	case at := <-fired:
-		// Roughly 300ms of budget remained when it was paused.
-		assert.GreaterOrEqual(t, at.Sub(resumedAt), 200*time.Millisecond)
-		assert.Greater(t, at.Sub(start), time.Second)
-	case <-time.After(5 * time.Second):
-		require.Fail(t, "timer did not fire after resume")
-	}
+		resumedAt := time.Now()
+		timer.resume()
+		select {
+		case at := <-fired:
+			// Exactly 300ms of budget remained when it was paused.
+			assert.Equal(t, 300*time.Millisecond, at.Sub(resumedAt))
+			assert.Equal(t, 1100*time.Millisecond, at.Sub(start))
+		case <-time.After(5 * time.Second):
+			require.Fail(t, "timer did not fire after resume")
+		}
+	})
 }
 
 func TestPausableTimer_StopPreventsFireAndResume(t *testing.T) {

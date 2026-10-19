@@ -21,6 +21,9 @@ commands:
         name: basic
         command: atmos casts generate demo fixtures basic
       - type: shell
+        name: landing
+        command: atmos casts generate demo landing
+      - type: shell
         name: examples
         command: atmos casts generate examples
       - type: shell
@@ -59,6 +62,9 @@ commands:
       - type: shell
         name: basic
         command: atmos casts validate demo fixtures basic
+      - type: shell
+        name: landing
+        command: atmos casts validate demo landing
       - type: shell
         name: examples
         command: atmos casts validate examples

@@ -33,9 +33,9 @@ Terragrunt and Atmos solve similar problems—managing Terraform at scale with D
 | **[Units](https://terragrunt.gruntwork.io/docs/getting-started/terminology/)** | Directory with `terragrunt.hcl` | Component instance in a stack |
 | **[Stacks](https://terragrunt.gruntwork.io/docs/features/stacks/)** | Collection of units (`terragrunt.stack.hcl`) | Stack file (e.g., `prod.yaml`) |
 
-### What Atmos Has That Terragrunt Doesn't
+### Additional Atmos Capabilities
 
-Beyond the conceptual differences, Atmos provides several capabilities that don't exist in Terragrunt:
+Atmos also provides the following capabilities. Compare their behavior with your existing tools and workflows when planning a migration:
 
 | Feature | Description |
 |---------|-------------|
@@ -53,7 +53,7 @@ Beyond the conceptual differences, Atmos provides several capabilities that don'
 
 <Tabs>
   <TabItem value="terragrunt" label="Terragrunt" default>
-    Terragrunt uses HCL syntax for configuration, which might feel familiar if you're accustomed to Terraform—but it can also be confusing since it's *not actually Terraform code*. You're writing HCL that looks like Terraform but behaves differently, with proprietary functions like `find_in_parent_folders()` and `dependency` blocks that don't exist in Terraform.
+    Terragrunt uses HCL syntax for configuration, which might feel familiar if you're accustomed to Terraform—but it can also be confusing since it's *not actually Terraform code*. You're writing HCL that looks like Terraform but behaves differently, with Terragrunt-specific functions like `find_in_parent_folders()` and `dependency` blocks that don't exist in Terraform.
 
     ```plaintext
     infrastructure/
@@ -125,13 +125,13 @@ Beyond the conceptual differences, Atmos provides several capabilities that don'
 **Key difference:** Atmos cleanly separates components (native Terraform code) from stacks (YAML configuration). With Terragrunt, HCL configuration files are scattered throughout your directory structure alongside—and sometimes confused with—actual Terraform code.
 
 :::info Configuration Lives in YAML, Not the Filesystem
-Atmos philosophically treats the filesystem as **organization only**—it doesn't influence behavior. All configuration semantics live in YAML stack files and their imports. This means:
+Atmos makes stack configuration explicit through YAML files and imports. Paths still locate components and imports, and stack filenames provide a fallback name when no explicit name or naming template is configured. See [Stack Names](/stacks/name). This means:
 - You can query any component's fully-resolved configuration with `atmos describe component`
 - You can trace where any value came from with `atmos describe component --provenance`
 - You can output configuration as JSON/YAML for tooling integration
-- Directory structure is purely for human organization, not runtime behavior
+- You can organize stack directories for your team while defining configuration reuse through explicit imports
 
-This is fundamentally different from Terragrunt, where the directory hierarchy *is* the configuration—`path_relative_to_include()` and `find_in_parent_folders()` derive meaning from filesystem location.
+Terragrunt also offers path-aware functions such as `path_relative_to_include()` and `find_in_parent_folders()`. When translating those expressions, preserve the resulting backend keys and other values rather than assuming a new directory layout will produce the same configuration.
 :::
 
 ## Concept Mapping
@@ -142,7 +142,7 @@ If you're familiar with Terragrunt, the concepts below will help you translate w
 
 <Tabs>
   <TabItem value="terragrunt" label="Terragrunt" default>
-    Terragrunt uses `include` blocks with proprietary functions like `find_in_parent_folders()` to locate and merge parent configurations. You must specify whether to `expose` included values, and the path resolution can be complex with nested directory structures.
+    Terragrunt uses `include` blocks with Terragrunt-specific functions like `find_in_parent_folders()` to locate and merge parent configurations. You must specify whether to `expose` included values, and the path resolution can be complex with nested directory structures.
 
     <File title="terragrunt.hcl">
     ```hcl
@@ -287,11 +287,11 @@ If you're familiar with Terragrunt, the concepts below will help you translate w
   </TabItem>
 </Tabs>
 
-### Terraform Source → Component + [Vendoring](/vendor/)
+### Terraform Source → [Source Provisioning](/cli/commands/terraform/source) or [Vendoring](/vendor/)
 
 <Tabs>
   <TabItem value="terragrunt" label="Terragrunt" default>
-    Terragrunt specifies the Terraform module source directly in each `terragrunt.hcl` file. The source is fetched at runtime, and you manage versions by changing the `ref` parameter. Each environment directory needs its own copy of this source reference.
+    Terragrunt specifies the Terraform module source directly in each `terragrunt.hcl` file. The source is fetched at runtime, and you manage versions by changing the `ref` parameter. Shared configuration can supply the source reference through includes.
 
     <File title="vpc/terragrunt.hcl">
     ```hcl
@@ -953,7 +953,7 @@ In Atmos terminology, root modules are called **components**. Each component is 
     ```
   </TabItem>
   <TabItem value="atmos" label="After (Atmos)">
-    Atmos expects root modules (components) in `components/terraform/`. The modules themselves are unchanged—just move or rename the directory. Your Terraform code remains pure and portable.
+    Atmos runs your existing root modules as components. Set `components.terraform.base_path` to their current parent directory, such as `modules`. Moving them to the conventional `components/terraform/` directory shown below is optional; the Terraform code can stay unchanged.
 
     ```plaintext
     components/terraform/
@@ -965,7 +965,7 @@ In Atmos terminology, root modules are called **components**. Each component is 
         └── variables.tf
     ```
 
-    Simply rename `modules/` to `components/terraform/`.
+    Keep `modules/` with `components.terraform.base_path: modules`, or choose the illustrated layout if you want to reorganize.
   </TabItem>
 </Tabs>
 
@@ -989,7 +989,7 @@ In Atmos terminology, root modules are called **components**. Each component is 
     </File>
   </TabItem>
   <TabItem value="atmos" label="After (Atmos)">
-    Atmos defines backend settings in a shared defaults file. All stacks import this file and automatically get consistent backend configuration. State keys are generated from stack and component names, with optional per-component overrides.
+    Atmos can define backend settings in a shared defaults file. When migrating, preserve the full existing backend state location and Terraform workspace; do not substitute newly generated keys for existing state. Use per-component backend overrides and `metadata.terraform_workspace` to match the current deployment. The following example illustrates shared configuration; adapt it to your actual state locations.
 
     <File title="stacks/_defaults/globals.yaml">
     ```yaml
@@ -1022,12 +1022,12 @@ In Atmos terminology, root modules are called **components**. Each component is 
 <TaskList>
 - [ ] Install Atmos CLI ([Installation Guide](/install))
 - [ ] Create `atmos.yaml` configuration
-- [ ] Move Terraform root modules to `components/terraform/`
+- [ ] Point `components.terraform.base_path` at the existing root modules, or optionally reorganize them
 - [ ] Convert `terragrunt.hcl` files to stack YAML
 - [ ] Extract common config to `_defaults/`
-- [ ] Convert `dependency` blocks to remote state
+- [ ] Map dependency ordering to `dependencies.components` and output lookups to `!terraform.output` or `!terraform.state`
 - [ ] Convert `mock_outputs` to component `mocks` and `--use-mocks`
-- [ ] Update backend configuration
+- [ ] Preserve existing backend state locations and workspace names
 - [ ] Test with `atmos terraform plan`
 - [ ] Update CI/CD pipelines
 - [ ] Train team on new commands
@@ -1035,9 +1035,9 @@ In Atmos terminology, root modules are called **components**. Each component is 
 
 ## Stack Naming for Migrations
 
-Every Atmos command requires a stack name—whether you're running `atmos terraform plan -s <stack>`, listing stacks with `atmos list stacks`, or referencing dependencies. You need to define how Atmos determines these names.
+Commands that target a component in a particular environment use a stack name, such as `atmos terraform plan vpc -s <stack>`. Define how Atmos determines these names; commands such as `atmos list stacks` can list stacks without selecting one.
 
-Additionally, if you want Atmos to automatically determine Terraform workspaces, those workspace names should follow a consistent convention that Atmos can compute.
+Stack names and Terraform workspace names are distinct. During migration, use `metadata.terraform_workspace` to preserve an existing workspace explicitly, even if it does not match the stack name. For new deployments, Atmos can compute workspace names using a consistent convention.
 
 You have two options:
 
@@ -1092,7 +1092,7 @@ For complete documentation on stack naming, see [Stack Names](/stacks/name).
 - **Clear separation of code and config** - YAML for configuration, native Terraform for code. Components (code) and stacks (config) live in different directories—no "Terraform-like but not Terraform" confusion
 - **Components are pure Terraform** - Your modules work with or without Atmos, no vendor lock-in
 - **YAML is universal** - Every language and tool can parse it; no HCL knowledge needed for configuration
-- **Deep merge semantics** - More powerful than `include` blocks
+- **Deep merge semantics** - Compose configuration through imports and component inheritance
 - **Schema validation** - JSON Schema + OPA policies for configuration validation
 - **Multi-tool orchestration** - Not just Terraform (Helmfile, Packer, etc.)
 - **Active development** - Regular releases, responsive community
@@ -1101,7 +1101,7 @@ For complete documentation on stack naming, see [Stack Names](/stacks/name).
 
 - **It's working for you** - If your team knows Terragrunt well and has no pain points, there's no reason to change
 - **Strong HCL preference** - If your team prefers HCL over YAML and wants configuration in the same language as Terraform code
-- **Heavy dynamic generation** - If you rely extensively on `generate` blocks to create arbitrary Terraform files dynamically, Terragrunt's full templating power may be necessary
+- **Migration cost outweighs the benefit** - Compare your current workflows with Atmos equivalents before switching. Atmos supports dynamic [file generation](/stacks/generate), but its templates and configuration need translation; the general-purpose generation feature is experimental.
 
 ## Get Help
 

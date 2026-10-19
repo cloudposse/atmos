@@ -56,7 +56,7 @@ atmos terraform plan vpc -s dev -out=my-custom.planfile
 
 ### Skip Planfile Generation
 
-When using Terraform Cloud (which doesn't support the `-out` flag), skip planfile generation:
+For remote execution configurations that reject saved plans, skip planfile generation. Modern HCP Terraform supports [saved remote plans](/components/terraform/planfiles#terraform-cloud-integration):
 
 ```shell
 atmos terraform plan vpc -s dev --skip-planfile
@@ -170,7 +170,7 @@ atmos terraform plan vpc -s dev -out=plans/vpc.tfplan
 
 ### Skipping Planfile Generation
 
-To run a plan without generating a planfile (useful for quick checks or when using Terraform Cloud):
+To run a plan without generating a planfile (useful for quick checks or remote configurations that reject saved plans):
 
 ```shell
 atmos terraform plan vpc -s dev --skip-planfile
@@ -231,7 +231,7 @@ components:
         Skip writing the plan to a file. When set, Atmos will not pass the `-out` flag to Terraform.
 
         This is useful when:
-        - Using Terraform Cloud (which doesn't support `-out`)
+        - Using a remote execution configuration that rejects saved plans
         - Running quick plan checks without saving the output
         - Running in CI/CD environments where planfiles aren't needed
 
@@ -591,7 +591,7 @@ Configure default behavior for `terraform plan` in your `atmos.yaml`:
 components:
   terraform:
     plan:
-      # Skip generating planfiles by default (useful for Terraform Cloud)
+      # Skip generating planfiles for remote configurations that reject them
       skip_planfile: false
 ```
 
