@@ -38,7 +38,7 @@ included file is still data. With `| eval`, the YAML functions inside it are eva
 
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     app:
       template: !include ../../components/cloudformation/app/template.yaml | eval
 ```

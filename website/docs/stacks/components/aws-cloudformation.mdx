@@ -173,7 +173,7 @@ dependencies, and be included in affected runs.
 <File title="stacks/catalog/vpc.yaml">
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     vpc:
       path: template.yaml
       stack_name: "{{ .vars.stage }}-vpc"
@@ -201,7 +201,7 @@ literal string body, or a structured map:
 <File title="stacks/catalog/bucket.yaml">
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     bucket-inline-string:
       stack_name: "{{ .vars.stage }}-bucket"
       template: |
@@ -318,7 +318,7 @@ so you can write either spelling:
 <File title="stacks/catalog/marker.yaml">
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     marker:
       stack_name: "{{ .vars.stage }}-marker"
       template:
@@ -353,7 +353,7 @@ evaluated as if it were written in the manifest:
 <File title="stacks/catalog/app.yaml">
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     app:
       stack_name: "{{ .vars.stage }}-app"
       template: !include ../../components/cloudformation/app/template.yaml | eval
@@ -489,7 +489,7 @@ source: github.com/acme/cfn-templates.git//vpc?ref=1.2.0
 <File title="stacks/catalog/vpc.yaml">
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     vpc:
       stack_name: vpc-dev
       source:
@@ -507,7 +507,7 @@ A single-file source can omit `path`:
 <File title="stacks/catalog/dns.yaml">
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     dns:
       stack_name: dns-dev
       source:
@@ -581,7 +581,7 @@ default in `components."aws/cloudformation".source.ttl`:
 <File title="atmos.yaml">
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     source:
       ttl: 1h
 ```

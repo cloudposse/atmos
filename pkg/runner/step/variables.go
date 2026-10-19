@@ -439,7 +439,7 @@ func (v *Variables) ResolveWith(input string, envOverlay map[string]string) (str
 	}
 	data := v.templateData()
 	if len(envOverlay) > 0 {
-		merged := make(map[string]string, len(v.templateEnv)+len(envOverlay))
+		merged := make(map[string]string, len(v.templateEnv))
 		for key, value := range v.templateEnv {
 			merged[key] = value
 		}
@@ -467,7 +467,7 @@ func (v *Variables) ResolveWithFallback(input string, envFallback map[string]str
 	}
 	data := v.templateData()
 	if len(envFallback) > 0 {
-		merged := make(map[string]string, len(v.templateEnv)+len(envFallback))
+		merged := make(map[string]string, len(v.templateEnv))
 		for key, value := range v.templateEnv {
 			merged[key] = value
 		}

@@ -88,7 +88,7 @@ Before/after examples for `Env`/`Constant` (parameters) and `Include`/`Embed` (`
 
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     fn:
       path: template.yaml          # Code.S3Bucket: !Ref ArtifactBucket, Code.S3Key: !Ref ArtifactKey
       vars:
@@ -222,7 +222,7 @@ to a flat one-stack-per-file copy (verified end to end against the Floci emulato
   ```yaml
   # stacks/dev.yaml
   components:
-    "aws/cloudformation":
+    aws/cloudformation:
       vpc:
         path: template.yaml
         stack_name: acme-plat-dev-vpc
@@ -284,7 +284,7 @@ to a flat one-stack-per-file copy (verified end to end against the Floci emulato
 
 Under `components:`, `aws/cloudformation` is one literal component-type key. The slash
 does not create a nested mapping. Both `aws/cloudformation:` and `"aws/cloudformation":`
-are valid YAML; quoting this key is optional.
+are valid YAML; prefer the unquoted form in examples.
 
 ### Secrets go into `parameters:`, not `env:`
 
