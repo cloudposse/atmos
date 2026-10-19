@@ -362,6 +362,44 @@ Use `atmos describe component` for a single component:
 atmos describe component vpc -s plat-ue2-prod
 ```
 
+## Stack Lifecycle Commands
+
+Three commands manage whole stacks. Use `--dry-run` first to preview selection, commands, and hooks.
+
+```bash
+# Create a manifest from a scaffold (never overwrites an existing file).
+atmos stack create --file=stacks/deploy/dev.yaml --name=dev --import=catalog/defaults --component=terraform:network --dry-run
+
+# Deploy or destroy components across component types in dependency order.
+atmos stack deploy --all --stack=dev --dry-run
+atmos stack deploy --affected --base=origin/main --include-dependencies=2
+atmos stack destroy --all --stack=dev --max-concurrency=2 --auto-approve
+```
+
+Rules for `stack deploy` and `stack destroy`:
+
+- Pass exactly one of `--all` or `--affected`. Positional component arguments are rejected; for one component use `atmos <kind> deploy <component> --stack=<stack>`.
+- Comparison flags (`--base`, `--ref`, `--sha`, `--repo-path`, `--ssh-key`, `--ssh-key-password`, `--clone-target-ref`) require `--affected`.
+- A `--stack` that names no existing stack is an error.
+- `--include-dependencies` and `--include-dependents` expand without a limit when bare; use the `=N` form to limit depth.
+- Supported kinds: Terraform, Helmfile (deploy runs `helmfile apply`, which needs the helm-diff plugin), Helm, Kubernetes, AWS CloudFormation, and custom kinds whose custom commands define `deploy`/`destroy` with `component.type`. `--affected` does not select custom kinds yet. Packer and kinds without a handler are excluded with a notice.
+- Locked components (`metadata.locked`) are excluded. A selected component whose required dependency has no handler fails before execution. Cycles are reported as readable paths.
+- `destroy` runs in reverse dependency order and fails before execution when a component outside the selection still requires a destroyed one. Add `--include-dependents` or widen `--stack`.
+- `--auto-approve` passes each handler's approval arguments. Terraform and CloudFormation destroy prompt otherwise; Helm, Kubernetes, and Helmfile deletes do not. Concurrent destroys that would prompt are rejected unless `--auto-approve` is set.
+- `--log-order=grouped` applies when `--max-concurrency` is above 1.
+- Only `ATMOS_STACK`, `ATMOS_IDENTITY`, `ATMOS_DRY_RUN`, and `ATMOS_SKIP_HOOKS` apply; variables such as `ATMOS_TERRAFORM_*_ALL` do not change selection.
+- Output is one success, failure, or skipped line per component and a tally such as `3 succeeded, 0 failed, 0 skipped, 1 excluded`.
+
+Rules for `stack create`:
+
+- `--file` is required and resolves from the project base path. `--import` and `--component=kind:name` are repeatable; `--set key=value` supplies scaffold answers; `--ref` applies only to Git template sources.
+- The template must consume `--name`, `--import`, and `--component` (`stack_name`, `stack_imports`, `stack_components`) or creation fails.
+- Before any hook or write, Atmos processes the existing manifests with every generated file. It fails on an unresolvable stack name (pass `--name` or set the variables `stacks.name_template` uses), a missing import, a duplicate stack name, or an invalid generated file.
+- Existing files are never overwritten; edit with `atmos stack config set` or delete the file first.
+- `--dry-run` prints each file as `# <path>` followed by its content, separated by `---`, and lists scaffold hooks. Scaffold hooks receive `ATMOS_HOOK_STATUS`, `ATMOS_HOOK_EXIT_CODE`, and `ATMOS_HOOK_ERROR`.
+
+Component hooks fire as usual during `stack deploy` and `stack destroy`; for example, Helmfile deploy fires `before.helmfile.apply` and `after.helmfile.apply`.
+
 ## YAML Functions
 
 Atmos provides YAML functions for dynamic value resolution at runtime:

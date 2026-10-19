@@ -18,26 +18,40 @@ Dependencies determine readiness; independent components can run concurrently.
 ## Usage
 
 ```shell
-atmos stack deploy --all [--stack dev]
-atmos stack deploy --affected [--stack dev] [--base origin/main]
+atmos stack deploy --all [--stack=dev]
+atmos stack deploy --affected [--stack=dev] [--base=origin/main]
 atmos stack deploy --affected --include-dependencies=2 --dry-run
 ```
 
-Specify exactly one of `--all` or `--affected`. No positional component argument is
-accepted. A stack filter narrows the initial selection. Dependency expansion is
-explicit and can cross stack boundaries. An unchanged prerequisite is not executed
-unless selected or included by expansion. Ordering is preserved through unchanged
-intermediate components.
+Specify exactly one of `--all` or `--affected`. Positional component arguments are
+rejected; to deploy one component, run `atmos <kind> deploy <component> --stack=<stack>`.
+A `--stack` filter narrows the initial selection, and a `--stack` value that names no
+existing stack is an error. Dependency expansion is explicit and can cross stack
+boundaries. An unchanged prerequisite is not executed unless selected or included by
+expansion. Ordering is preserved through unchanged intermediate components.
 
-Component packages register handlers for a fixed set of lifecycle events:
-`build`, `test`, `deploy`, `destroy`, and `validate`. This command invokes only
-registered `deploy` handlers. Built-in deployment handlers cover Terraform,
-Helmfile, Helm, Kubernetes, and CloudFormation. A configured custom command named
-`deploy` with an explicit component-type binding can supply a handler, including
-nested command paths. Semantic `provides: component` and `provides: stack` inputs
-receive the selected component and stack. Ambiguous handlers and required inputs
-without defaults fail before execution. Packer `build` and Ansible `playbook` are
-not implicitly treated as deployment handlers.
+## Supported component kinds
+
+Component packages register handlers for a fixed set of lifecycle events: `build`,
+`test`, `deploy`, `destroy`, and `validate`. This command invokes only registered
+`deploy` handlers:
+
+- Terraform runs `atmos terraform deploy`.
+- Helmfile runs `atmos helmfile apply`, because Helmfile has no `deploy` command.
+  `helmfile apply` requires the `helm-diff` plugin and only upgrades releases that
+  have changes.
+- Helm runs `atmos helm deploy`.
+- Kubernetes runs `atmos kubernetes deploy`.
+- AWS CloudFormation runs `atmos aws cloudformation deploy`.
+- Custom component kinds are supported when a custom command named `deploy` declares
+  `component.type`. The `--all` flag and dependency expansion select these
+  components; `--affected` does not select custom kinds yet. Semantic
+  `provides: component` and `provides: stack` inputs receive the selected component
+  and stack. Ambiguous handlers and required inputs without defaults fail before
+  execution.
+
+Packer and other kinds without a `deploy` handler are excluded with a notice. Packer
+`build` and Ansible `playbook` are never treated as deployment handlers.
 
 Each handler invokes the existing component command in a separate Atmos process,
 preserving its authentication, hooks, plan verification, and approval behavior.
@@ -45,10 +59,34 @@ For example, Terraform's existing `deploy` command uses automatic approval.
 Runtime values are resolved when each component starts, so consumers see newly
 produced outputs. Shared Terraform source directories remain serialized.
 
+## Checks before execution
+
+Atmos builds the full plan before it starts any component:
+
+- A selected component whose required dependency has no `deploy` handler fails the
+  command. Optional dependencies on unsupported kinds are omitted.
+- Components with `metadata.locked` are excluded with a notice.
+- Dependency cycles are reported as readable paths, such as
+  `terraform/dev/a -> terraform/dev/b -> terraform/dev/a`.
+- An unresolved dependency selector or a required dependency on a missing component
+  fails the command.
+
+## Output
+
+Each excluded component produces a notice with its kind, stack, component, and the
+reason. During execution, every component reports a success, failure, or skipped
+line. The command finishes with a tally:
+
+```text
+3 succeeded, 0 failed, 0 skipped, 1 excluded
+```
+
+With `fail-fast`, components still pending after a failure are skipped. With `keep-going`, only dependents of the failed component are skipped. An empty selection succeeds and prints `No components matched`.
+
 ## Preview lifecycle hooks
 
 ```shell
-atmos stack deploy --all --stack dev --dry-run
+atmos stack deploy --all --stack=dev --dry-run
 ```
 
 The preview lists each selected kind/stack/component, its resolved command,
@@ -65,39 +103,59 @@ conditional Docker build hook. Component types have no fixed priority.
 ## Flags
 
 <dl>
-  <dt>`--all` / `--affected`</dt>
-  <dd>Required, mutually exclusive selection modes. Default: Neither.</dd>
+  <dt>`--all`</dt>
+  <dd>Select every component that defines a `deploy` operation. Exactly one of `--all` or `--affected` is required. Default: `false`.</dd>
+  <dt>`--affected`</dt>
+  <dd>Select components affected by the Git comparison. Exactly one of `--all` or `--affected` is required. Default: `false`.</dd>
   <dt>`--stack`, `-s`</dt>
-  <dd>Intersect the initial selection with a canonical stack name. Default: All stacks.</dd>
+  <dd>Intersect the initial selection with a canonical stack name. A name that matches no stack is an error. Environment variable: `ATMOS_STACK`. Default: All stacks.</dd>
   <dt>`--base`</dt>
-  <dd>Git ref or SHA; also supports `--ref`, `--sha`, `--repo-path`, and clone/SSH options from affected detection. Default: Existing affected baseline rules.</dd>
+  <dd>Base Git ref or SHA for the comparison. Atmos detects it automatically in supported CI environments. Requires `--affected`. Default: Existing affected baseline rules.</dd>
+  <dt>`--ref`</dt>
+  <dd>Git reference to compare against. Requires `--affected`.</dd>
+  <dt>`--sha`</dt>
+  <dd>Git SHA to compare against. Requires `--affected`.</dd>
+  <dt>`--repo-path`</dt>
+  <dd>Existing repository to use as the comparison baseline. Requires `--affected`; cannot be combined with `--base`, `--ref`, `--sha`, `--ssh-key`, `--ssh-key-password`, or `--clone-target-ref`.</dd>
+  <dt>`--ssh-key`</dt>
+  <dd>SSH key for cloning the comparison baseline. Requires `--affected`.</dd>
+  <dt>`--ssh-key-password`</dt>
+  <dd>Password for the SSH key. Requires `--affected`.</dd>
+  <dt>`--clone-target-ref`</dt>
+  <dd>Clone the comparison baseline. Requires `--affected`. Default: `false`.</dd>
   <dt>`--include-dependencies[=N]`</dt>
-  <dd>Include prerequisites, optionally bounded by depth. Default: Disabled.</dd>
+  <dd>Include prerequisites of the selected components. The bare flag expands without a depth limit; use the `=N` form, such as `--include-dependencies=2`, to limit the depth. Default: Disabled.</dd>
   <dt>`--include-dependents[=N]`</dt>
-  <dd>Include consumers, optionally bounded by depth. Default: Disabled.</dd>
+  <dd>Include consumers of the selected components. The bare flag expands without a depth limit; use the `=N` form to limit the depth. Default: Disabled.</dd>
   <dt>`--max-concurrency`</dt>
-  <dd>Limit active component operations. Default: `1`.</dd>
+  <dd>Maximum number of active component operations. One worker permits interactive prompts. Default: `1`.</dd>
   <dt>`--failure-mode`</dt>
-  <dd>`keep-going` finishes independent branches; dependents of failures are skipped. Default: `fail-fast`.</dd>
+  <dd>`fail-fast` stops at the first failure. `keep-going` finishes independent branches while dependents of failures are skipped. Default: `fail-fast`.</dd>
   <dt>`--log-order`</dt>
-  <dd>`grouped` emits complete component logs in stable dependency order. Default: `stream`.</dd>
+  <dd>`stream` prints component output as it arrives. `grouped` emits complete component logs in stable dependency order and applies when `--max-concurrency` is greater than `1`. Grouped mode sends each component's stdout to stdout and its headers and stderr to stderr. Default: `stream`.</dd>
   <dt>`--dry-run`</dt>
-  <dd>Preview selection, commands, relationships, and lifecycle hooks. Default: `false`.</dd>
+  <dd>Preview selection, commands, relationships, and lifecycle hooks. Environment variable: `ATMOS_DRY_RUN`. Default: `false`.</dd>
   <dt>`--identity`, `-i`</dt>
-  <dd>Forward the identity to each child. Default: Component command behavior.</dd>
+  <dd>Forward the identity to each child. Use `--identity` without a value to select interactively, which requires `--max-concurrency=1`. Environment variable: `ATMOS_IDENTITY`. Default: Component command behavior.</dd>
   <dt>`--auto-approve`</dt>
-  <dd>Supply the registered handler's approval arguments, where supported. Default: `false`.</dd>
+  <dd>Append each handler's registered approval arguments, where a handler defines them. No built-in `deploy` handler currently defines any. Default: `false`.</dd>
   <dt>`--allow-destroy`</dt>
   <dd>Request deleted-component teardown with `--affected`; see the limitation below. Default: `false`.</dd>
   <dt>`--skip-hooks[=names]`</dt>
-  <dd>Skip all hooks or the comma-separated names; previews identify skipped hooks.</dd>
+  <dd>Skip all hooks, or the comma-separated hook names; previews identify skipped hooks. Environment variable: `ATMOS_SKIP_HOOKS`.</dd>
 </dl>
+
+Comparison flags (`--base`, `--ref`, `--sha`, `--repo-path`, `--ssh-key`,
+`--ssh-key-password`, and `--clone-target-ref`) require `--affected` and are rejected
+otherwise. Only the environment variables listed above apply to this command. Variables
+that other commands bind to similar settings, such as the `ATMOS_TERRAFORM_*_ALL` variables, do
+not change the selection.
 
 One worker preserves live input and output for native confirmation prompts, even
 with grouped logging. Concurrent workers receive no stdin; configure each
-component's noninteractive behavior. Empty selections succeed. Unsupported kinds
-and deleted definitions are reported. Required unsupported prerequisites fail
-explicit dependency expansion; optional unsupported prerequisites are omitted.
+component's noninteractive behavior. Unsupported kinds and deleted definitions are
+reported. Required unsupported prerequisites fail explicit dependency expansion;
+optional unsupported prerequisites are omitted.
 
 ## Removed definitions
 

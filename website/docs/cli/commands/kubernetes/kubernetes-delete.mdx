@@ -34,6 +34,10 @@ atmos kubernetes delete <component> --stack <stack>
 atmos kubernetes delete --all --stack <stack>
 ```
 
+:::info Alias
+The `destroy` alias runs the same command, so `atmos kubernetes destroy <component> --stack <stack>` is equivalent to `atmos kubernetes delete <component> --stack <stack>`. [`atmos stack destroy`](/cli/commands/stack/stack-destroy) uses this alias for Kubernetes components.
+:::
+
 `delete` renders the final manifests, resolves each object from GVK to GVR using
 discovery and a RESTMapper, and deletes each object by name and namespace
 through the Kubernetes dynamic client.

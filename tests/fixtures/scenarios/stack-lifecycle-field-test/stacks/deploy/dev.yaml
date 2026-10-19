@@ -1,0 +1,63 @@
+import:
+  - catalog/hooks
+
+vars:
+  stage: dev
+
+components:
+  terraform:
+    marker-base:
+      metadata:
+        type: abstract
+        component: marker
+
+    network:
+      metadata:
+        component: marker
+        inherits: [marker-base]
+      vars:
+        name: dev-network
+
+    database:
+      metadata:
+        component: marker
+      vars:
+        name: dev-database
+      dependencies:
+        components:
+          - component: network
+
+    cache:
+      metadata:
+        component: marker
+      vars:
+        name: dev-cache
+      dependencies:
+        components:
+          - component: network
+
+    app:
+      metadata:
+        component: marker
+      vars:
+        name: dev-app
+      dependencies:
+        components:
+          - component: database
+          - component: cache
+
+    retired:
+      metadata:
+        component: marker
+        enabled: false
+      vars:
+        name: dev-retired
+
+  script:
+    smoke:
+      metadata:
+        component: smoke
+      dependencies:
+        components:
+          - kind: terraform
+            component: app

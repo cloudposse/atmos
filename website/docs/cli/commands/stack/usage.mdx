@@ -8,8 +8,8 @@ description: "Create stack manifests, edit configuration, and deploy or destroy 
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Create stack manifests, edit configuration, and deploy or destroy components across component types. Atmos finds the manifest that defines a value and edits it while preserving comments,
-anchors, and templates.
+Create stack manifests, edit configuration, and deploy or destroy components across component types.
+Atmos finds the manifest that defines a value and edits it while preserving comments, anchors, and templates.
 </Intro>
 
 :::note Editing shared configuration
@@ -45,12 +45,11 @@ Paths are component-relative (e.g. `vars.region`, `settings.spacelift.workspace_
 - [`atmos stack create`](/cli/commands/stack/stack-create) — create a new manifest.
 - [`atmos stack deploy`](/cli/commands/stack/stack-deploy) — deploy registered component handlers in dependency order.
 - [`atmos stack destroy`](/cli/commands/stack/stack-destroy) — destroy current components in reverse dependency order.
-
-- [`atmos stack get`](/cli/commands/stack/stack-get) — read a value and show where it resolves from. Alias of [`atmos stack config get`](/cli/commands/stack/config/get).
-- [`atmos stack set`](/cli/commands/stack/stack-set) — set a value in the manifest that defines it. Alias of [`atmos stack config set`](/cli/commands/stack/config/set).
-- [`atmos stack delete`](/cli/commands/stack/stack-delete) — delete a value from the manifest that defines it. Alias of [`atmos stack config delete`](/cli/commands/stack/config/delete).
-- [`atmos stack format`](/cli/commands/stack/stack-format) — format the manifest files that define a component. Alias of [`atmos stack config format`](/cli/commands/stack/config/format).
 - [`atmos stack config`](/cli/commands/stack/config) — the canonical `get`/`set`/`delete`/`format`/`list` command set.
+- [`atmos stack get`](/cli/commands/stack/stack-get) — deprecated alias of [`atmos stack config get`](/cli/commands/stack/config/get): read a value and show where it resolves from.
+- [`atmos stack set`](/cli/commands/stack/stack-set) — deprecated alias of [`atmos stack config set`](/cli/commands/stack/config/set): set a value in the manifest that defines it.
+- [`atmos stack delete`](/cli/commands/stack/stack-delete) — deprecated alias of [`atmos stack config delete`](/cli/commands/stack/config/delete): delete a value from the manifest that defines it.
+- [`atmos stack format`](/cli/commands/stack/stack-format) — deprecated alias of [`atmos stack config format`](/cli/commands/stack/config/format): format the manifest files that define a component.
 - [`atmos stack schema`](/cli/commands/stack/stack-schema) — print the stack-manifest JSON Schema.
 - [`atmos stack validate`](/cli/commands/stack/stack-validate) — validate stack manifests. Alias of [`atmos validate stacks`](/cli/commands/validate/stacks).
 

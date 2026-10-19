@@ -18,11 +18,11 @@ Preview the rendered files and generation hooks before writing. Existing files a
 ## Usage
 
 ```shell
-atmos stack create --file stacks/deploy/dev.yaml --name dev
-atmos stack create --file stacks/deploy/dev.yaml \
-  --import catalog/defaults \
-  --component terraform:network \
-  --component helmfile:services \
+atmos stack create --file=stacks/deploy/dev.yaml --name=dev
+atmos stack create --file=stacks/deploy/dev.yaml \
+  --import=catalog/defaults \
+  --component=terraform:network \
+  --component=helmfile:services \
   --dry-run
 ```
 
@@ -34,10 +34,63 @@ current directory, and output files are rooted there too. Relative `source` path
 the generated manifest leaves naming to the project's conventions; provide the
 variables required by your `stacks.name_template`, directly or through imports.
 
-Repeat `--import` to add imports and `--component kind:name` to add component
+Repeat `--import` to add imports and `--component=kind:name` to add component
 stubs. These stubs have `metadata.enabled: false` and empty `vars`. Configure them
 and enable them when ready. The command does not generate component sources unless
 your selected scaffold includes them. Component order does not imply dependencies.
+
+## Flags
+
+<dl>
+  <dt>`--file`</dt>
+  <dd>Path of the new stack manifest. Required. Must end in `.yaml` or `.yml` and fall under the project's stack discovery paths. Existing files are never overwritten.</dd>
+  <dt>`--template`</dt>
+  <dd>Scaffold name or source: a name from `scaffold.templates`, an embedded catalog template, or a direct local or remote source. Default: `stack`.</dd>
+  <dt>`--name`</dt>
+  <dd>Explicit stack name. When omitted, the generated manifest follows the project's naming convention. Default: Empty.</dd>
+  <dt>`--import`</dt>
+  <dd>Stack import to add. Repeatable. Each occurrence is one value, so commas and braces such as `catalog/{a,b}` are kept as written. Default: None.</dd>
+  <dt>`--component`</dt>
+  <dd>Disabled component stub to add, in the form `kind:name`. Repeatable. The kind must be a supported component kind, including custom kinds declared by custom commands, and the name cannot contain whitespace. Duplicates are rejected. Default: None.</dd>
+  <dt>`--set`</dt>
+  <dd>Scaffold answer in the form `key=value`. Repeatable. An entry without `=` is an error. The reserved inputs `stack_file`, `stack_name`, `stack_imports`, and `stack_components` cannot be set. Default: None.</dd>
+  <dt>`--ref`</dt>
+  <dd>Git revision to use for a scaffold fetched from a Git source. Using it with an embedded or local scaffold is an error. Default: The source's default revision.</dd>
+  <dt>`--interactive`, `-i`</dt>
+  <dd>Prompt for scaffold answers when connected to a terminal. Without a terminal, Atmos uses defaults. Default: `true`.</dd>
+  <dt>`--defaults`</dt>
+  <dd>Use scaffold defaults and `--set` values without prompting. `--interactive=false` has the same effect. Default: `false`.</dd>
+  <dt>`--skip-hooks[=names]`</dt>
+  <dd>Skip all scaffold hooks, or the comma-separated hook names. Environment variable: `ATMOS_SKIP_HOOKS`. Default: No hooks skipped.</dd>
+  <dt>`--dry-run`</dt>
+  <dd>Print the files and scaffold hooks without writing or running anything. Environment variable: `ATMOS_DRY_RUN`. Default: `false`.</dd>
+</dl>
+
+The template must consume the flags you pass. If `--name`, `--import`, or `--component`
+is given and the rendered manifest does not contain the value, creation fails and
+names the flag, so no input is dropped silently. A custom template reads these flags
+through `stack_name`, `stack_imports`, and `stack_components`.
+
+## Checks before writing
+
+Before any hook runs or any file is written, Atmos processes the existing stack
+manifests together with every generated stack file, using the same pipeline as
+`atmos describe stacks`. Creation fails, and nothing is written, when the result has:
+
+- A stack name that cannot be resolved. Pass `--name`, or set the variables that
+  `stacks.name_template` uses.
+- A missing import. Import paths are relative to `stacks.base_path`; create the
+  imported manifest or correct the `--import` value.
+- A stack name that another manifest already defines. Choose values or `--name` that
+  give the new stack a unique name, or edit the existing stack with
+  [`atmos stack config set`](/cli/commands/stack/config/set).
+- An invalid generated stack file.
+
+If the project's existing stacks already fail to process, the error says so and points
+to `atmos validate stacks`, rather than blaming the new files.
+
+Existing files are never overwritten. When the manifest exists, edit it with
+`atmos stack config set` or delete it first and run the command again.
 
 ## Use an existing scaffold
 
@@ -110,14 +163,22 @@ and `--ref` to select a Git source revision. Required answers are validated befo
 
 ## Preview, hooks, and generation records
 
-`--dry-run` prints the complete rendered contents and the scaffold hooks that would
-be evaluated, including their actions and conditions. It creates no output files or
-directories and runs no hooks. Resolving a remote template can still download it.
+A dry run prints each file that would be created as a YAML stream: a `# <path>` comment
+followed by the file content, with `---` between files. The stream goes to stdout so
+it can be piped. It creates no output files or directories and runs no hooks. Resolving
+a remote template can still download it.
+
+The preview also lists each scaffold hook in the order it would run, with `before`
+hooks ahead of `after` hooks, including its actions and conditions. A hook whose events
+are not scaffold events is listed as ignored, along with the events it declares, and
+a hook skipped by `--skip-hooks` is identified as skipped.
 
 Scaffold hooks run around file creation using the normal `before.scaffold.generate`
 and `after.scaffold.generate` events. Use `--skip-hooks` to skip all, or
 `--skip-hooks=name1,name2` for specific hooks. These are separate from component
-hooks that run during deployment.
+hooks that run during deployment. Step-backed scaffold hooks receive the outcome of the
+creation as `ATMOS_HOOK_STATUS` (`success` or `failure`), `ATMOS_HOOK_EXIT_CODE`, and
+`ATMOS_HOOK_ERROR`. Hooks on `before` events always run with a `success` status.
 
 Every destination is checked before hooks or writes. Files are created exclusively,
 so existing stack manifests, component sources, and project files are never overwritten.
@@ -127,8 +188,10 @@ failures are reported; external hook effects are not rolled back automatically.
 Each stack has an independent generation record under `.atmos/stack-generations/`,
 keyed by its project-relative manifest path. It records the template, answers,
 source revision when available, and generated file hashes. Creating another stack
-does not replace project-level init/scaffold records. Updating an existing stack
-from this record is not yet supported by `stack create`.
+does not replace project-level init/scaffold records. If you delete a created manifest
+and run `stack create` for the same path again, the new run replaces that manifest's
+generation record. Updating an existing stack from this record is not yet supported
+by `stack create`.
 
 [`init`](/cli/commands/init) bootstraps a project; `scaffold generate` runs general
 recipes; `stack create` requires and validates a stack output. Creation changes

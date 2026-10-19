@@ -1,0 +1,27 @@
+# Step hooks that append the event name to $ORDER_LOG so hook firing is observable.
+# The built-in shell step runs without a system shell, so this works on every OS.
+hooks:
+  mark-before-deploy:
+    events: [before.terraform.deploy, before.helmfile.apply]
+    kind: step
+    type: shell
+    with:
+      command: 'echo "hook before.deploy $ATMOS_STACK/$ATMOS_COMPONENT" >> "$ORDER_LOG"'
+  mark-after-deploy:
+    events: [after.terraform.deploy, after.helmfile.apply]
+    kind: step
+    type: shell
+    with:
+      command: 'echo "hook after.deploy $ATMOS_STACK/$ATMOS_COMPONENT status=$ATMOS_HOOK_STATUS" >> "$ORDER_LOG"'
+  mark-before-destroy:
+    events: [before.terraform.destroy, before.helmfile.destroy]
+    kind: step
+    type: shell
+    with:
+      command: 'echo "hook before.destroy $ATMOS_STACK/$ATMOS_COMPONENT" >> "$ORDER_LOG"'
+  mark-after-destroy:
+    events: [after.terraform.destroy, after.helmfile.destroy]
+    kind: step
+    type: shell
+    with:
+      command: 'echo "hook after.destroy $ATMOS_STACK/$ATMOS_COMPONENT" >> "$ORDER_LOG"'
