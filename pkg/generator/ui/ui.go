@@ -568,6 +568,10 @@ func (m spinnerModel) View() string {
 // InitUI handles the user interface for the init command.
 type InitUI struct {
 	creationPlan *CreationPlan
+	// quietPlan suppresses the per-file preview lines, the "Would generate N files." summary, and
+	// the README that a creation plan would otherwise print, so the caller can report its own
+	// result. It only has an effect while creationPlan is set (see PlanCreationQuiet).
+	quietPlan bool
 
 	checkmark          string
 	xMark              string
@@ -674,6 +678,16 @@ func (ui *InitUI) colorSource(source string) string {
 	default:
 		return styles.Muted.Render("default")
 	}
+}
+
+// flushGenerationOutput flushes the file-generation phase's buffered output (per-file status lines
+// and the summary line). A quiet creation plan discards it instead.
+func (ui *InitUI) flushGenerationOutput() {
+	if ui.quietPlan && ui.creationPlan != nil {
+		ui.output.Reset()
+		return
+	}
+	ui.flushOutput()
 }
 
 // flushOutput writes the accumulated output to stderr (UI channel) and clears the buffer.
@@ -1063,6 +1077,14 @@ func (ui *InitUI) generateSuggestedDirectoryWithValues(config *tmpl.Configuratio
 	return currentDirPrefix + filepath.Base(config.Name)
 }
 
+// fileCount renders a count with the correctly pluralized noun ("1 file", "2 files").
+func fileCount(n int) string {
+	if n == 1 {
+		return "1 file"
+	}
+	return fmt.Sprintf("%d files", n)
+}
+
 // initializationSummaryLine formats executeWithCommandValues's post-run
 // summary line. When dryRun is true nothing was actually written to disk, so
 // the line is worded as a preview ("Would initialize") instead of a
@@ -1072,13 +1094,13 @@ func (ui *InitUI) generateSuggestedDirectoryWithValues(config *tmpl.Configuratio
 func initializationSummaryLine(dryRun bool, successCount, errorCount int) string {
 	switch {
 	case errorCount > 0 && dryRun:
-		return fmt.Sprintf("Would initialize %d files. %d would fail.\n", successCount, errorCount)
+		return fmt.Sprintf("Would initialize %s. %d would fail.\n", fileCount(successCount), errorCount)
 	case errorCount > 0:
-		return fmt.Sprintf("Initialized %d files. Failed to initialize %d files.\n", successCount, errorCount)
+		return fmt.Sprintf("Initialized %s. Failed to initialize %s.\n", fileCount(successCount), fileCount(errorCount))
 	case dryRun:
-		return fmt.Sprintf("Would initialize %d files.\n", successCount)
+		return fmt.Sprintf("Would initialize %s.\n", fileCount(successCount))
 	default:
-		return fmt.Sprintf("Initialized %d files.\n", successCount)
+		return fmt.Sprintf("Initialized %s.\n", fileCount(successCount))
 	}
 }
 
@@ -1676,13 +1698,13 @@ func (ui *InitUI) writeOneOutput(
 func generationSummaryLine(dryRun bool, successCount, errorCount int) string {
 	switch {
 	case errorCount > 0 && dryRun:
-		return fmt.Sprintf("Would generate %d files. %d would fail.\n", successCount, errorCount)
+		return fmt.Sprintf("Would generate %s. %d would fail.\n", fileCount(successCount), errorCount)
 	case errorCount > 0:
-		return fmt.Sprintf("Generated %d files. Failed to generate %d files.\n", successCount, errorCount)
+		return fmt.Sprintf("Generated %s. Failed to generate %s.\n", fileCount(successCount), fileCount(errorCount))
 	case dryRun:
-		return fmt.Sprintf("Would generate %d files.\n", successCount)
+		return fmt.Sprintf("Would generate %s.\n", fileCount(successCount))
 	default:
-		return fmt.Sprintf("Generated %d files.\n", successCount)
+		return fmt.Sprintf("Generated %s.\n", fileCount(successCount))
 	}
 }
 
@@ -1890,7 +1912,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	ui.writeOutput("%s", generationSummaryLine(ui.processor.DryRun, successCount, errorCount))
 	if errorCount > 0 {
 		// Don't render README if there were errors - flush output and return error immediately.
-		ui.flushOutput()
+		ui.flushGenerationOutput()
 		// Post-generate hooks still get a chance to run on failure (e.g. a
 		// cleanup step declaring when: always/failure); the implicit-success
 		// default on an unconditioned hook skips it here, matching hooks
@@ -1902,6 +1924,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 				Event:      hooks.AfterScaffoldGenerate,
 				Answers:    mergedValues,
 				Status:     "failure",
+				Err:        errors.Join(failureErrs...),
 				SkipHooks:  ui.skipHooks,
 				TargetPath: targetPath,
 			}); hookErr != nil {
@@ -1971,10 +1994,11 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	}
 
 	// Flush all output before rendering README.
-	ui.flushOutput()
+	ui.flushGenerationOutput()
 
-	// Only render README if all files were successful.
-	if embedsConfig.README != "" {
+	// Only render README if all files were successful. A quiet creation plan leaves the README to
+	// the caller, like the rest of the output.
+	if embedsConfig.README != "" && (!ui.quietPlan || ui.creationPlan == nil) {
 		// Resolve delimiters: use passed-in, or scaffold config, or defaults.
 		delimiters = ResolveDelimiters(delimiters, scaffoldConfig)
 

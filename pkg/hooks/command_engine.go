@@ -412,6 +412,25 @@ func BuildAtmosEnv(ctx *ExecContext, outputFile, outputDir string) map[string]st
 	return buildAtmosEnv(ctx, outputFile, outputDir)
 }
 
+// OutcomeEnv returns the ATMOS_HOOK_STATUS, ATMOS_HOOK_EXIT_CODE, and ATMOS_HOOK_ERROR variables
+// that describe a lifecycle outcome. It is the single builder every hook kind uses (stack
+// lifecycle hooks and scaffold hooks alike), so the documented variables are identical
+// everywhere. An outcome with no status yields no status/exit-code variables, and ATMOS_HOOK_ERROR
+// is only set when the outcome carries an error.
+func OutcomeEnv(outcome Outcome) map[string]string {
+	defer perf.Track(nil, "hooks.OutcomeEnv")()
+
+	env := map[string]string{}
+	if outcome.Status != "" {
+		env["ATMOS_HOOK_STATUS"] = string(outcome.Status)
+		env["ATMOS_HOOK_EXIT_CODE"] = strconv.Itoa(outcome.ExitCode)
+	}
+	if outcome.Err != nil {
+		env["ATMOS_HOOK_ERROR"] = outcome.Err.Error()
+	}
+	return env
+}
+
 // renderCISummary appends the hook's markdown summary to the active CI
 // provider's job step summary (e.g. GitHub Actions' $GITHUB_STEP_SUMMARY) so
 // scanner findings are visible in the pipeline run, not just the log stream.
@@ -682,12 +701,8 @@ func buildAtmosEnv(ctx *ExecContext, outputFile, outputDir string) map[string]st
 	// Lifecycle outcome so hooks can report what happened (e.g. a `say` or
 	// `http` step on `when: failure`). Status mirrors the `{{ .status }}`
 	// template key; component/stack are already exported above.
-	if ctx.Outcome.Status != "" {
-		env["ATMOS_HOOK_STATUS"] = string(ctx.Outcome.Status)
-		env["ATMOS_HOOK_EXIT_CODE"] = strconv.Itoa(ctx.Outcome.ExitCode)
-	}
-	if ctx.Outcome.Err != nil {
-		env["ATMOS_HOOK_ERROR"] = ctx.Outcome.Err.Error()
+	for k, v := range OutcomeEnv(ctx.Outcome) {
+		env[k] = v
 	}
 	if ctx.HookDepth > 0 {
 		env[HookDepthEnvVar] = strconv.Itoa(ctx.HookDepth)
