@@ -1801,8 +1801,13 @@ var newCustomCommandAuthManagerFn = auth.NewAuthManager
 // identity-dependent operation that runs after authentication, e.g. PrepareShellEnvironment or
 // ExecuteCustomCommandControlStep.
 func prepareCustomCommandAuth(atmosConfig *schema.AtmosConfiguration, commandIdentity, commandName string, hasRunnableStep bool) (auth.AuthManager, string) {
-	if commandIdentity == "" || cfg.NormalizeIdentityValue(commandIdentity) == cfg.IdentityFlagDisabledValue || !hasRunnableStep {
+	if commandIdentity == "" || !hasRunnableStep {
 		return nil, commandIdentity
+	}
+	// A disabled identity must not reach control-step children: a non-empty
+	// identity with a nil AuthManager fails step environment preparation.
+	if cfg.NormalizeIdentityValue(commandIdentity) == cfg.IdentityFlagDisabledValue {
+		return nil, ""
 	}
 
 	authStackInfo := &schema.ConfigAndStacksInfo{

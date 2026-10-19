@@ -1,6 +1,8 @@
 package catalog
 
 import (
+	"path/filepath"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -11,6 +13,12 @@ import (
 func FromConfig(name string, templateData interface{}, excludeTargetDir string) (templates.Configuration, error) {
 	defer perf.Track(nil, "catalog.FromConfig")()
 
+	return fromConfigAt(name, templateData, "", excludeTargetDir)
+}
+
+// fromConfigAt loads a scaffold.templates entry, resolving a relative local
+// source from configDir. An empty configDir keeps current-directory resolution.
+func fromConfigAt(name string, templateData interface{}, configDir, excludeTargetDir string) (templates.Configuration, error) {
 	templateMap, ok := templateData.(map[string]interface{})
 	if !ok {
 		return templates.Configuration{}, errUtils.Build(errUtils.ErrInvalidTemplateData).
@@ -43,13 +51,16 @@ func FromConfig(name string, templateData interface{}, excludeTargetDir string) 
 	}
 
 	// Load the template files from the local source directory. The path is
-	// resolved relative to the current directory (where atmos.yaml lives).
+	// resolved relative to the directory containing atmos.yaml (configDir), or
+	// the current directory when configDir is empty.
 	// WithExcludePath is a no-op when excludeTargetDir is "" or doesn't
 	// resolve inside source.
-	cfg, err := templates.LoadConfigurationFromDir(name, source, templates.WithExcludePath(excludeTargetDir))
+	cfg, err := templates.LoadConfigurationFromDir(name, localSourceDir(configDir, source), templates.WithExcludePath(excludeTargetDir))
 	if err != nil {
 		return templates.Configuration{}, err
 	}
+	// Keep the source as declared in atmos.yaml; the files are already loaded.
+	cfg.Source = source
 
 	// An explicit description in atmos.yaml overrides the template's own metadata.
 	desc, _ := templateMap["description"].(string)
@@ -63,4 +74,12 @@ func FromConfig(name string, templateData interface{}, excludeTargetDir string) 
 	}
 
 	return *cfg, nil
+}
+
+// localSourceDir resolves a relative local template source from configDir.
+func localSourceDir(configDir, source string) string {
+	if configDir == "" || !vendor.IsLocalPath(source) || filepath.IsAbs(source) {
+		return source
+	}
+	return filepath.Join(configDir, source)
 }

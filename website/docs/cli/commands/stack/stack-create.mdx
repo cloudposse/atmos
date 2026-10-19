@@ -27,7 +27,9 @@ atmos stack create --file stacks/deploy/dev.yaml \
 ```
 
 `--file` is required, must end in `.yaml` or `.yml`, and must match the project's
-stack discovery paths. Output files are rooted at the project base path.
+stack discovery paths. A relative `--file` resolves from the project base path, not the
+current directory, and output files are rooted there too. Relative `source` paths in
+`scaffold.templates` resolve from the directory containing `atmos.yaml`.
 `--name` explicitly sets the stack name in the built-in scaffold. When omitted,
 the generated manifest leaves naming to the project's conventions; provide the
 variables required by your `stacks.name_template`, directly or through imports.

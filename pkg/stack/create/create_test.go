@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/setup"
 	runnerstep "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -259,4 +260,34 @@ func TestExtensionlessDiscoveryPattern(t *testing.T) {
 	cfg.Stacks.IncludedPaths = []string{"deploy/dev"}
 	_, err := Prepare(cfg, &Options{File: "stacks/deploy/dev.yaml", Defaults: true}, renderer)
 	require.NoError(t, err)
+}
+
+func TestCreationResolvesFromProjectRootOutsideCWD(t *testing.T) {
+	for name, configPath := range map[string]func(root string) string{
+		"loaded config directory":       func(root string) string { return root },
+		"multiple config files":         func(root string) string { return root + ";" + t.TempDir() },
+		"no recorded config path":       func(string) string { return "" },
+		"config directory lacks a file": func(string) string { return t.TempDir() },
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg, renderer := fixture(t)
+			customFixture(t, customDefinition)
+			cfg.CliConfigPath = configPath(cfg.BasePathAbsolute)
+			// Run from an unrelated directory: --file and the configured template
+			// source must resolve from the project, not from the CWD.
+			t.Chdir(t.TempDir())
+			opts := &Options{File: filepath.Join("stacks", "deploy", "dev.yaml"), Template: "application-stack", Defaults: true, Values: map[string]any{"environment": "dev"}}
+			plan, err := Prepare(cfg, opts, renderer)
+			require.NoError(t, err)
+			assert.Equal(t, filepath.Join("stacks", "deploy", "dev.yaml"), plan.Manifest)
+			assert.Contains(t, plan.Generation.Files[0].Content, `stage: "dev"`)
+		})
+	}
+}
+
+func TestAbsoluteFileOutsideProjectIsRejected(t *testing.T) {
+	cfg, renderer := fixture(t)
+	outside := filepath.Join(t.TempDir(), "stacks", "deploy", "dev.yaml")
+	_, err := Prepare(cfg, &Options{File: outside, Defaults: true}, renderer)
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
 }

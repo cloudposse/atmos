@@ -62,7 +62,7 @@ func Prepare(config *schema.AtmosConfiguration, opts *Options, renderer Renderer
 	if name == "" {
 		name = "stack"
 	}
-	template, cleanup, err := catalog.Resolve(name, opts.Ref, filepath.Join(root, file))
+	template, cleanup, err := catalog.Resolve(name, opts.Ref, scaffoldConfigDir(config, root), filepath.Join(root, file))
 	if err != nil {
 		return nil, err
 	}

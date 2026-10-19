@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -17,6 +18,23 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// scaffoldConfigDir returns the directory of the loaded atmos.yaml, which owns
+// scaffold.templates. It falls back to the project root when the configuration
+// came from several files or the directory has no atmos.yaml.
+func scaffoldConfigDir(config *schema.AtmosConfiguration, root string) string {
+	dir := config.CliConfigPath
+	if dir == "" || strings.Contains(dir, ";") {
+		return root
+	}
+	if info, err := os.Stat(dir); err == nil && !info.IsDir() {
+		dir = filepath.Dir(dir)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "atmos.yaml")); err != nil {
+		return root
+	}
+	return dir
+}
+
 func resolveManifest(config *schema.AtmosConfiguration, file string) (string, string, error) {
 	if file == "" {
 		return "", "", fmt.Errorf("%w: --file is required", errUtils.ErrInvalidFlag)
@@ -29,10 +47,12 @@ func resolveManifest(config *schema.AtmosConfiguration, file string) (string, st
 	if err != nil {
 		return "", "", err
 	}
-	absolute, err := filepath.Abs(file)
-	if err != nil {
-		return "", "", err
+	// --file is project-relative, so relative paths resolve from the base path, not the CWD.
+	absolute := file
+	if !filepath.IsAbs(absolute) {
+		absolute = filepath.Join(root, absolute)
 	}
+	absolute = filepath.Clean(absolute)
 	relative, err := filepath.Rel(root, absolute)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return "", "", fmt.Errorf("%w: stack manifest must be inside project base path %s", errUtils.ErrInvalidFlag, root)

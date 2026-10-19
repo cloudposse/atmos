@@ -87,5 +87,5 @@ func TestPrepareCustomCommandAuth_DisabledIdentity(t *testing.T) {
 	t.Cleanup(func() { newCustomCommandAuthManagerFn = previous })
 	manager, identity := prepareCustomCommandAuth(&schema.AtmosConfiguration{}, cfg.IdentityFlagDisabledValue, "deploy", true)
 	assert.Nil(t, manager)
-	assert.Equal(t, cfg.IdentityFlagDisabledValue, identity)
+	assert.Empty(t, identity, "a disabled identity must not be forwarded to control-step children")
 }

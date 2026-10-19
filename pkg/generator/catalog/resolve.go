@@ -11,16 +11,18 @@ import (
 )
 
 // Resolve selects a scaffold with configured names overriding embedded/catalog
-// names. Only the selected source is hydrated. The caller must call cleanup.
-func Resolve(name, ref, exclude string) (*templates.Configuration, func(), error) {
+// names. The configDir argument is the directory containing the atmos.yaml that
+// declares scaffold.templates, and relative local template sources resolve from
+// it. Only the selected source is hydrated. The caller must call cleanup.
+func Resolve(name, ref, configDir, exclude string) (*templates.Configuration, func(), error) {
 	defer perf.Track(nil, "catalog.Resolve")()
 
 	noop := func() {}
-	section, err := config.ReadAtmosScaffoldSection(".")
+	section, err := config.ReadAtmosScaffoldSection(configDir)
 	if err != nil {
 		return nil, noop, err
 	}
-	selected, err := resolveConfigured(name, section, exclude)
+	selected, err := resolveConfigured(name, section, configDir, exclude)
 	if err != nil {
 		return nil, noop, err
 	}
@@ -35,7 +37,7 @@ func Resolve(name, ref, exclude string) (*templates.Configuration, func(), error
 	return &selected, cleanup, err
 }
 
-func resolveConfigured(name string, section map[string]any, exclude string) (templates.Configuration, error) {
+func resolveConfigured(name string, section map[string]any, configDir, exclude string) (templates.Configuration, error) {
 	raw, exists := section["templates"]
 	if !exists {
 		return templates.Configuration{}, nil
@@ -48,7 +50,7 @@ func resolveConfigured(name string, section map[string]any, exclude string) (tem
 	if !found {
 		return templates.Configuration{}, nil
 	}
-	return FromConfig(name, entry, exclude)
+	return fromConfigAt(name, entry, configDir, exclude)
 }
 
 func resolveDefault(name string) (templates.Configuration, error) {
