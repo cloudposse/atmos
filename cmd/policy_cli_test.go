@@ -269,3 +269,36 @@ func TestExecuteAnnotatesPolicyDenialInCI(t *testing.T) {
 		require.NotContains(t, output, "::error")
 	})
 }
+
+// Commands that end the process through CheckErrorPrintAndExit never return to main, so the
+// registered failure reporter annotates them once before the process exits.
+func TestCheckErrorPrintAndExitAnnotatesInCI(t *testing.T) {
+	_ = NewTestKit(t)
+	restore := ci.SwapRegistryForTest()
+	t.Cleanup(restore)
+	ci.Register(githubci.NewProvider())
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("NO_COLOR", "1")
+
+	stderr := &bytes.Buffer{}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(&annotationStreams{stderr: stderr}))
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+
+	var exitCodes []int
+	previousExit := errUtils.OsExit
+	errUtils.OsExit = func(code int) { exitCodes = append(exitCodes, code) }
+	t.Cleanup(func() { errUtils.OsExit = previousExit })
+
+	errUtils.CheckErrorPrintAndExit(errUtils.ErrPolicyDenied, "", "")
+
+	var annotations []string
+	for _, line := range strings.Split(stderr.String(), "\n") {
+		if strings.HasPrefix(line, "::") {
+			annotations = append(annotations, line)
+		}
+	}
+	require.Len(t, annotations, 1, stderr.String())
+	require.True(t, strings.HasPrefix(annotations[0], "::error"), annotations[0])
+	require.Len(t, exitCodes, 1)
+}

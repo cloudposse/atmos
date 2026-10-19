@@ -362,6 +362,7 @@ func CheckErrorPrintAndExit(err error, title string, suggestion string) {
 		}
 		// Non-zero exit codes: print error and exit with that code
 		CheckErrorAndPrint(err, title, suggestion)
+		reportFailure(err)
 
 		Exit(exitCodeErr.Code)
 		return
@@ -369,6 +370,7 @@ func CheckErrorPrintAndExit(err error, title string, suggestion string) {
 
 	// Print error message for all other error types
 	CheckErrorAndPrint(err, title, suggestion)
+	reportFailure(err)
 
 	// Get exit code from error (supports custom codes and exec.ExitError).
 	exitCode := GetExitCode(err)

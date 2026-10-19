@@ -2255,6 +2255,10 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 // init initializes CLI wiring for the package: it registers built-in commands, adds template helpers, registers and binds global persistent flags and related environment variables, adjusts the version flag default, sets the custom usage template, and configures Cobra behavior for the root command.
 // This prepares global flag precedence, environment bindings (color, mask, verbose, GitHub token), and other root-level CLI integrations before command execution.
 func init() {
+	// Commands that end the process through CheckErrorPrintAndExit never return to main, so their
+	// failures are reported to the CI provider through this reporter instead.
+	errUtils.SetFailureReporter(AnnotateFailure)
+
 	// Register all global flags as persistent flags using builder pattern.
 	// IMPORTANT: This MUST happen BEFORE registering commands, so commands inherit the persistent flags.
 	// Global flags are registered as persistent so they're inherited by all subcommands.
