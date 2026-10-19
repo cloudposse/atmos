@@ -78,52 +78,70 @@ func runScreenshotAction(action *SessionAction) error {
 	return nil
 }
 
-// runTypedWrite types a write action's text. A newline inside the text submits
-// the line exactly as an Enter key does, so each submitted line is recorded for
-// echo tracking at the moment its newline is typed.
-func runTypedWrite(ctx context.Context, input *syncWriter, state *sessionState, action *SessionAction, fallback time.Duration) error {
-	text := action.Text
-	if text == "" {
-		return runWriteAction(ctx, input, action, fallback)
-	}
-	write := func(part string) error {
-		segment := *action
-		segment.Text = part
-		return runWriteAction(ctx, input, &segment, fallback)
-	}
+// typedSegment is one piece of a write action's text: typed line text, or the
+// newline that submits the pending line.
+type typedSegment struct {
+	text      string
+	submitted bool
+}
+
+// planTypedSegments splits written text at \r, \n, and \r\n (one terminator),
+// keeping the original byte order.
+func planTypedSegments(text string) []typedSegment {
+	var segments []typedSegment
 	for text != "" {
 		end := strings.IndexAny(text, "\r\n")
 		if end < 0 {
-			state.noteTypedWrite(text)
-			return write(text)
+			return append(segments, typedSegment{text: text})
 		}
 		if end > 0 {
-			state.noteTypedWrite(text[:end])
-			if err := write(text[:end]); err != nil {
-				return err
-			}
+			segments = append(segments, typedSegment{text: text[:end]})
 		}
 		terminator := text[end : end+1]
 		if terminator == "\r" && strings.HasPrefix(text[end+1:], "\n") {
 			terminator = "\r\n"
 		}
-		state.noteSubmittedLine()
-		if err := write(terminator); err != nil {
-			return err
-		}
+		segments = append(segments, typedSegment{text: terminator, submitted: true})
 		text = text[end+len(terminator):]
 	}
-	return nil
+	return segments
+}
+
+// runTypedWrite types a write action's text. A newline inside the text submits
+// the line exactly as an Enter key does, so each submitted line is recorded for
+// echo tracking at the moment its newline is typed. The whole text is still sent
+// under one input lock, like any other write (see runWriteAction).
+func runTypedWrite(ctx context.Context, input *syncWriter, state *sessionState, action *SessionAction, fallback time.Duration) error {
+	if action.Text == "" {
+		return runWriteAction(ctx, input, action, fallback)
+	}
+	rate, err := writeRate(action, fallback)
+	if err != nil {
+		return err
+	}
+	segments := planTypedSegments(action.Text)
+	var writeErr error
+	// Echo bookkeeping takes the state lock briefly inside the input lock. That
+	// order is safe: nothing that holds the state lock waits on the input lock.
+	input.Locked(func(w io.Writer) {
+		for _, segment := range segments {
+			if segment.submitted {
+				state.noteSubmittedLine()
+			} else {
+				state.noteTypedWrite(segment.text)
+			}
+			if writeErr = typeRunes(ctx, w, segment.text, rate); writeErr != nil {
+				return
+			}
+		}
+	})
+	return writeErr
 }
 
 func runWriteAction(ctx context.Context, input *syncWriter, action *SessionAction, fallback time.Duration) error {
-	rate := fallback
-	if action.Rate != "" {
-		parsed, err := durationpkg.ParseNonNegative(action.Rate)
-		if err != nil {
-			return fmt.Errorf("invalid write rate %q: %w", action.Rate, err)
-		}
-		rate = parsed
+	rate, err := writeRate(action, fallback)
+	if err != nil {
+		return err
 	}
 	// The whole typed string is one atomic unit: holding the lock only
 	// per-rune still lets a concurrent terminal-query response land between
@@ -133,24 +151,39 @@ func runWriteAction(ctx context.Context, input *syncWriter, action *SessionActio
 	// syncWriter.Locked.
 	var writeErr error
 	input.Locked(func(w io.Writer) {
-		for _, r := range action.Text {
-			if err := ctx.Err(); err != nil {
-				writeErr = err
-				return
-			}
-			if _, err := w.Write([]byte(string(r))); err != nil {
-				writeErr = err
-				return
-			}
-			if rate > 0 {
-				if err := sleepSessionAction(ctx, rate); err != nil {
-					writeErr = err
-					return
-				}
-			}
-		}
+		writeErr = typeRunes(ctx, w, action.Text, rate)
 	})
 	return writeErr
+}
+
+// writeRate returns the action's per-rune typing delay, or fallback when unset.
+func writeRate(action *SessionAction, fallback time.Duration) (time.Duration, error) {
+	if action.Rate == "" {
+		return fallback, nil
+	}
+	rate, err := durationpkg.ParseNonNegative(action.Rate)
+	if err != nil {
+		return 0, fmt.Errorf("invalid write rate %q: %w", action.Rate, err)
+	}
+	return rate, nil
+}
+
+// typeRunes writes text one rune at a time with the given pacing; the caller holds the input lock.
+func typeRunes(ctx context.Context, w io.Writer, text string, rate time.Duration) error {
+	for _, r := range text {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if _, err := w.Write([]byte(string(r))); err != nil {
+			return err
+		}
+		if rate > 0 {
+			if err := sleepSessionAction(ctx, rate); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func runKeyAction(ctx context.Context, input *syncWriter, action *SessionAction, fallback time.Duration) error {
