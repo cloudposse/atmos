@@ -125,20 +125,33 @@ runs:
           return "$status"
         }
 
-        # Resolvers for the VM: the runner's IPv4 nameservers in service
-        # order, deduplicated, loopback excluded (inside the VM a loopback
-        # address would point at the VM itself). Read before Colima starts so
-        # a resolver that the VM bring-up adds to the host is never picked
-        # up. Empty when scutil reports nothing; Colima then falls back to
-        # the Lima gateway. The `${arr[@]+...}` expansion at the call site
-        # keeps `set -u` happy with an empty array on the runner's bash 3.2.
+        # Resolvers for the VM: the IPv4 nameservers of the runner's default
+        # resolver blocks, in order, deduplicated. Only the unscoped "DNS
+        # configuration" section counts, and a block with a "domain :" line
+        # is supplemental (the host uses it for that domain only, e.g. mdns
+        # for .local or a VPN split zone), so its servers are skipped: as a
+        # dnsmasq upstream they would get general queries they cannot
+        # answer. Loopback is excluded too, since inside the VM it would
+        # point at the VM itself. Read before Colima starts so a resolver
+        # the VM bring-up adds to the host is never picked up. Empty when
+        # nothing qualifies; Colima then falls back to the Lima gateway. The
+        # `${arr[@]+...}` expansion at the call site keeps `set -u` happy
+        # with an empty array on the runner's bash 3.2.
         host_dns_args=()
         while read -r ns; do
           host_dns_args+=(--dns "$ns")
         done < <(
-          scutil --dns \
-            | awk '/nameserver\[[0-9]+\]/ && $3 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ && $3 !~ /^127\./ {print $3}' \
-            | awk '!seen[$0]++'
+          scutil --dns | awk '
+            /^DNS configuration \(for scoped queries\)/ { exit }
+            /^resolver #/ { flush(); next }
+            /^[[:space:]]*domain[[:space:]]*:/ { supplemental = 1; next }
+            /nameserver\[[0-9]+\]/ && $3 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ && $3 !~ /^127\./ { ns[n++] = $3; next }
+            END { flush() }
+            function flush(i) {
+              if (!supplemental) for (i = 0; i < n; i++) print ns[i]
+              n = 0; supplemental = 0
+            }
+          ' | awk '!seen[$0]++'
         )
         if [ "${#host_dns_args[@]}" -eq 0 ]; then
           echo "No IPv4 resolver found via scutil --dns; the VM will use the Lima gateway resolver"
