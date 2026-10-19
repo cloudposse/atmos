@@ -2,8 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 import Layout from "@theme/Layout";
 import Head from "@docusaurus/Head";
 import Link from "@docusaurus/Link";
-import { useLocation } from "@docusaurus/router";
+import { useHistory, useLocation } from "@docusaurus/router";
 import useIsBrowser from "@docusaurus/useIsBrowser";
+import useIsomorphicLayoutEffect from "@docusaurus/useIsomorphicLayoutEffect";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -24,6 +25,14 @@ const layouts = [
   { id: "gallery", label: "02 Gallery" },
   { id: "explorer", label: "03 Explorer" },
 ] as const;
+
+/** Return the shareable fragment for a chapter, omitting the default view. */
+function categoryHash(category: string) {
+  return category === "All"
+    ? ""
+    : `#${category.toLowerCase().replace(/\s+/g, "-")}`;
+}
+
 const markdownComponents = {
   a: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
   p: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
@@ -192,6 +201,7 @@ function ExampleCard({
   );
 }
 
+/** Render searchable examples with shareable chapters and browser history support. */
 export default function ExampleCatalogPage({
   tree,
   options,
@@ -207,6 +217,7 @@ export default function ExampleCatalogPage({
     ...tree.examples.filter((example) => !featuredNames.has(example.name)),
   ];
   const location = useLocation();
+  const history = useHistory();
   const isBrowser = useIsBrowser();
   // Match the static catalog markup during hydration before applying URL state.
   const requestedLayout =
@@ -215,7 +226,65 @@ export default function ExampleCatalogPage({
       : null;
   const layout =
     layouts.find(({ id }) => id === requestedLayout)?.id || "catalog";
-  const [category, setCategory] = useState("All");
+  const categories = ["All", "Featured", ...tree.tags];
+  const category =
+    (isBrowser &&
+      categories.find((tag) => categoryHash(tag) === location.hash)) ||
+    "All";
+  const scroll = useRef<{
+    positions: Map<string, { x: number; y: number }>;
+    pending: { x: number; y: number } | null;
+  }>({ positions: new Map(), pending: null });
+  const scrollKey = location.key || "initial";
+  // Cancel Docusaurus's smooth scroll to the top when clearing a chapter hash.
+  useIsomorphicLayoutEffect(() => {
+    const position =
+      scroll.current.pending || scroll.current.positions.get(scrollKey);
+    scroll.current.pending = null;
+    let frame: number | null = null;
+    /** Save this history entry without recording transient router scrolling. */
+    const recordPosition = () => {
+      if (frame === null) {
+        scroll.current.positions.set(scrollKey, {
+          x: window.scrollX,
+          y: window.scrollY,
+        });
+      }
+    };
+    if (position) {
+      // Wait for the router's scroll to begin before cancelling its animation.
+      frame = requestAnimationFrame(() => {
+        frame = requestAnimationFrame(() => {
+          window.scrollTo({
+            left: position.x,
+            top: position.y,
+            behavior: "instant",
+          });
+          frame = null;
+          recordPosition();
+        });
+      });
+    } else {
+      recordPosition();
+    }
+    window.addEventListener("scroll", recordPosition, { passive: true });
+    // Capture the outgoing entry before the router handles Back/Forward.
+    window.addEventListener("popstate", recordPosition, true);
+    return () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", recordPosition);
+      window.removeEventListener("popstate", recordPosition, true);
+    };
+  }, [scrollKey, location.hash]);
+  /** Capture the outgoing view before navigation can shrink the results grid. */
+  const setCategory = (tag: string) => {
+    const hash = categoryHash(tag);
+    if (hash === location.hash) return;
+    const position = { x: window.scrollX, y: window.scrollY };
+    scroll.current.positions.set(scrollKey, position);
+    scroll.current.pending = position;
+    history.push({ ...location, hash });
+  };
   const [query, setQuery] = useState("");
   const [paused, setPaused] = useState(false);
   const { reducedMotion, hidden } = usePlaybackPreference();
@@ -234,7 +303,6 @@ export default function ExampleCatalogPage({
   const filtered = searchMatches.filter((example) =>
     matchesCategory(example, category),
   );
-  const categories = ["All", "Featured", ...tree.tags];
   const filtering = category !== "All" || normalizedQuery !== "";
   const showFeatured = layout === "gallery" && !filtering;
   const featured = showFeatured ? tree.featured.slice(0, 2) : [];
