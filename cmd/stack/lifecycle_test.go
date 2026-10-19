@@ -281,7 +281,7 @@ func TestLifecycleRejectsPositionalArguments(t *testing.T) {
 	err := cmd.Args(cmd, []string{"network"})
 	require.ErrorIs(t, err, errUtils.ErrInvalidPositionalArgs)
 	assert.Contains(t, err.Error(), `"network"`)
-	assert.Contains(t, strings.Join(errUtils.AllHints(err), "\n"), "--all or --affected")
+	assert.Contains(t, strings.Join(errUtils.AllHints(err), "\n"), "--all, --affected, --tags, or --labels")
 }
 
 func TestLifecycleShortDescriptions(t *testing.T) {

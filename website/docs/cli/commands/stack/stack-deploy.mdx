@@ -21,9 +21,13 @@ Dependencies determine readiness; independent components can run concurrently.
 atmos stack deploy --all [--stack=dev]
 atmos stack deploy --affected [--stack=dev] [--base=origin/main]
 atmos stack deploy --affected --include-dependencies=2 --dry-run
+atmos stack deploy --tags=networking --stack=dev
+atmos stack deploy --affected --labels=team=platform,tier=1
 ```
 
-Specify exactly one of `--all` or `--affected`. Positional component arguments are
+Select components with `--all` or `--affected` (not both), or with `--tags` or
+`--labels`. A tag or label filter used alone selects every matching component;
+combined with `--all` or `--affected`, it narrows that selection. Positional component arguments are
 rejected; to deploy one component, run `atmos <kind> deploy <component> --stack=<stack>`.
 A `--stack` filter narrows the initial selection, and a `--stack` value that names no
 existing stack is an error. Dependency expansion is explicit and can cross stack
@@ -151,9 +155,13 @@ conditional Docker build hook. Component types have no fixed priority.
 
 <dl>
   <dt>`--all`</dt>
-  <dd>Select every component that defines a `deploy` operation. Exactly one of `--all` or `--affected` is required. Default: `false`.</dd>
+  <dd>Select every component that defines a `deploy` operation. Use `--all` or `--affected` (not both), or select with `--tags` or `--labels` alone. Default: `false`.</dd>
   <dt>`--affected`</dt>
-  <dd>Select components affected by the Git comparison. Exactly one of `--all` or `--affected` is required. Default: `false`.</dd>
+  <dd>Select components affected by the Git comparison. Use `--all` or `--affected` (not both), or select with `--tags` or `--labels` alone. Default: `false`.</dd>
+  <dt>`--tags`</dt>
+  <dd>Select components whose `metadata.tags` include any of the given tags (comma-separated). Used alone, it selects every matching component; with `--all` or `--affected`, it narrows that selection. Dependency expansion still follows declared dependencies regardless of tags. Environment variable: `ATMOS_TAGS`. Default: No tag filter.</dd>
+  <dt>`--labels`</dt>
+  <dd>Select components whose `metadata.labels` contain every given `key=value` (or `key:value`) pair. Repeat the flag or separate pairs with commas. Used alone or combined like `--tags`; when both are given, a component must match both. Environment variable: `ATMOS_LABELS`. Default: No label filter.</dd>
   <dt>`--stack`, `-s`</dt>
   <dd>Intersect the initial selection with a canonical stack name. A name that matches no stack is an error. Environment variable: `ATMOS_STACK`. Default: All stacks.</dd>
   <dt>`--base`</dt>

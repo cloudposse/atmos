@@ -382,7 +382,7 @@ atmos stack destroy --all --stack=dev --max-concurrency=2 --auto-approve
 
 Rules for `stack deploy` and `stack destroy`:
 
-- Pass exactly one of `--all` or `--affected`. Positional component arguments are rejected; for one component use `atmos <kind> deploy <component> --stack=<stack>`.
+- Select with `--all` or `--affected` (not both), or with `--tags` (any match on `metadata.tags`) or `--labels` (all `key=value` pairs match `metadata.labels`). A tag or label filter alone selects every matching component; with `--all`/`--affected` it narrows the selection, and dependency expansion ignores it. Positional component arguments are rejected; for one component use `atmos <kind> deploy <component> --stack=<stack>`.
 - Comparison flags (`--base`, `--ref`, `--sha`, `--repo-path`, `--ssh-key`, `--ssh-key-password`, `--clone-target-ref`) require `--affected`.
 - A `--stack` that names no existing stack is an error.
 - `--include-dependencies` and `--include-dependents` expand without a limit when bare; use the `=N` form to limit depth.
@@ -391,7 +391,7 @@ Rules for `stack deploy` and `stack destroy`:
 - `destroy` runs in reverse dependency order and fails before execution when a component outside the selection still requires a destroyed one. Add `--include-dependents` or widen `--stack`. Consumers of kinds without a `destroy` operation (such as Packer) do not block; they are reported in a notice.
 - `--auto-approve` passes each handler's approval arguments. Terraform and CloudFormation destroy prompt otherwise; Helm, Kubernetes, and Helmfile deletes do not. Concurrent destroys that would prompt are rejected unless `--auto-approve` is set.
 - `--log-order=grouped` applies when `--max-concurrency` is above 1.
-- Only `ATMOS_STACK`, `ATMOS_IDENTITY`, `ATMOS_DRY_RUN`, and `ATMOS_SKIP_HOOKS` apply; variables such as `ATMOS_TERRAFORM_*_ALL` do not change selection.
+- Only `ATMOS_STACK`, `ATMOS_IDENTITY`, `ATMOS_DRY_RUN`, `ATMOS_SKIP_HOOKS`, `ATMOS_TAGS`, `ATMOS_LABELS`, and `ATMOS_CI`/`CI` apply; variables such as `ATMOS_TERRAFORM_*_ALL` do not change selection.
 - Output is one success, failure, or skipped line per component and a tally such as `3 succeeded, 0 failed, 0 skipped, 1 excluded`.
 
 Rules for `stack create`:

@@ -33,6 +33,8 @@ type lifecycleOptions struct {
 	verb, stack, identity, failureMode, logOrder         string
 	all, affected, dryRun, allowDestroy, autoApprove, ci bool
 	concurrency, dependencies, dependents                int
+	tags                                                 []string
+	labels                                               map[string]string
 }
 
 func init() {
@@ -67,6 +69,10 @@ func buildLifecycleParser(verb string) *flags.StandardParser {
 		flags.WithBoolFlag("auto-approve", "", false, "Pass the registered handler's automatic approval arguments where supported"),
 		flags.WithBoolFlag(flagCI, "", false, "Enable CI mode for automated pipelines (writes job summary, outputs)"),
 		flags.WithEnvVars(flagCI, "ATMOS_CI", "CI"),
+		flags.WithStringSliceFlag("tags", "", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
+		flags.WithEnvVars("tags", "ATMOS_TAGS"),
+		flags.WithStringArrayFlag("labels", "", nil, "Filter by labels (comma-separated key=value or key:value pairs within an occurrence, and/or repeated, matches all): --labels=cost-center=platform,compliance=sox"),
+		flags.WithEnvVars("labels", "ATMOS_LABELS"),
 	)
 	if verb == "deploy" {
 		parser = flags.NewStandardParser(flags.WithFlagRegistry(parser.Registry()), flags.WithBoolFlag("allow-destroy", "", false, "Request deleted-component teardown (blocked until isolated recovery is available)"))
@@ -82,13 +88,13 @@ func lifecycleShort(verb string) string {
 }
 
 // lifecycleArgs rejects positional arguments: the command selects components
-// with --all or --affected, never by name.
+// with --all, --affected, --tags, or --labels, never by name.
 func lifecycleArgs(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return nil
 	}
-	return errUtils.Build(fmt.Errorf("%w: unexpected argument %q; atmos stack %s selects components with --all or --affected (narrow with --stack), not by name; for one component use `atmos KIND %s COMPONENT --stack=STACK`", errUtils.ErrInvalidPositionalArgs, args[0], cmd.Name(), cmd.Name())).
-		WithHintf("Select components with --all or --affected, optionally narrowed with --stack. To act on a single component, use `atmos <kind> %s <component> --stack=<stack>`.", cmd.Name()).
+	return errUtils.Build(fmt.Errorf("%w: unexpected argument %q; atmos stack %s selects components with --all, --affected, --tags, or --labels (narrow with --stack), not by name; for one component use `atmos KIND %s COMPONENT --stack=STACK`", errUtils.ErrInvalidPositionalArgs, args[0], cmd.Name(), cmd.Name())).
+		WithHintf("Select components with --all, --affected, --tags, or --labels, optionally narrowed with --stack. To act on a single component, use `atmos <kind> %s <component> --stack=<stack>`.", cmd.Name()).
 		Err()
 }
 
@@ -127,6 +133,28 @@ func resolveLifecycleOptions(cmd *cobra.Command, parser *flags.StandardParser, v
 	return opts, checkAffectedOnlyFlags(cmd, &opts)
 }
 
+// parseLifecycleSelectors reads the --tags and --labels filters with the same
+// grammar bulk Terraform commands use.
+func parseLifecycleSelectors(v *viper.Viper) ([]string, map[string]string, error) {
+	selectedTags := tags.ParseTagsFlag(strings.Join(v.GetStringSlice("tags"), ","))
+	labels, err := tags.ParseLabelsFlag(tags.ReadLabelsFlag(v))
+	return selectedTags, labels, err
+}
+
+// checkLifecycleSelection requires a selection: --all or --affected (never both),
+// or a --tags/--labels filter on its own, which selects every matching component.
+func checkLifecycleSelection(o *lifecycleOptions) error {
+	if o.all && o.affected {
+		return fmt.Errorf("%w: specify exactly one of --all or --affected", errUtils.ErrInvalidFlag)
+	}
+	if o.all || o.affected || len(o.tags) > 0 || len(o.labels) > 0 {
+		return nil
+	}
+	return errUtils.Build(fmt.Errorf("%w: specify exactly one of --all or --affected, or select components with --tags or --labels", errUtils.ErrInvalidFlag)).
+		WithHint("Use --all to select every component, or --tags/--labels to select matching components").
+		Err()
+}
+
 // checkAffectedOnlyFlags rejects comparison flags that would be silently ignored.
 func checkAffectedOnlyFlags(cmd *cobra.Command, opts *lifecycleOptions) error {
 	if opts.affected {
@@ -142,8 +170,12 @@ func checkAffectedOnlyFlags(cmd *cobra.Command, opts *lifecycleOptions) error {
 
 func parseLifecycleOptions(verb string, v *viper.Viper) (lifecycleOptions, error) {
 	o := lifecycleOptions{verb: verb, stack: v.GetString("stack"), identity: cfg.NormalizeIdentityValue(v.GetString("identity")), all: v.GetBool("all"), affected: v.GetBool("affected"), dryRun: v.GetBool("dry-run"), allowDestroy: verb == "deploy" && v.GetBool("allow-destroy"), autoApprove: v.GetBool("auto-approve"), concurrency: v.GetInt("max-concurrency"), failureMode: v.GetString("failure-mode"), logOrder: v.GetString("log-order")}
-	if o.all == o.affected {
-		return o, fmt.Errorf("%w: specify exactly one of --all or --affected", errUtils.ErrInvalidFlag)
+	var err error
+	if o.tags, o.labels, err = parseLifecycleSelectors(v); err != nil {
+		return o, err
+	}
+	if err := checkLifecycleSelection(&o); err != nil {
+		return o, err
 	}
 	if o.allowDestroy && !o.affected {
 		return o, fmt.Errorf("%w: --allow-destroy requires --affected", errUtils.ErrInvalidFlag)
@@ -151,7 +183,6 @@ func parseLifecycleOptions(verb string, v *viper.Viper) (lifecycleOptions, error
 	if err := validateLifecycleChoices(&o); err != nil {
 		return o, err
 	}
-	var err error
 	o.dependencies, err = flags.ParseClosureDepth(flags.FlagIncludeDependencies, v.GetString(flags.FlagIncludeDependencies))
 	if err != nil {
 		return o, err
@@ -233,6 +264,9 @@ func loadLifecycleConfig(cmd *cobra.Command) (schema.AtmosConfiguration, error) 
 // resolveLifecycleSelection builds the selection, including the affected comparison when requested.
 func resolveLifecycleSelection(cmd *cobra.Command, config *schema.AtmosConfiguration, opts *lifecycleOptions, stacks map[string]any) (lifecycle.Selection, []schema.Affected, error) {
 	selection := lifecycle.Selection{Stack: opts.stack, Dependencies: opts.dependencies, Dependents: opts.dependents, Reverse: opts.verb == "destroy"}
+	if len(opts.tags) > 0 || len(opts.labels) > 0 {
+		selection.Filter = &lifecycle.Filter{Tags: opts.tags, Labels: opts.labels}
+	}
 	var affected []schema.Affected
 	if opts.affected {
 		var err error

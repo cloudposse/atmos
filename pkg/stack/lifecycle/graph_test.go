@@ -265,3 +265,53 @@ func TestDependentExpansionTraversesUnsupportedKinds(t *testing.T) {
 	assert.ElementsMatch(t, []string{"terraform/dev/network", "terraform/dev/app"}, planLabels(t, plan))
 	assert.Contains(t, plan.Notices, Notice{"packer", "dev", "image", "expanded component does not define this operation"})
 }
+
+// selectorMetadata sets a component's metadata tags and labels.
+func selectorMetadata(stacks map[string]any, node []string, componentTags []any, labels map[string]any) {
+	section(stacks, node[0], node[1], node[2])["metadata"] = map[string]any{"tags": componentTags, "labels": labels}
+}
+
+// plannedLabels returns the selected components in execution order.
+func plannedLabels(t *testing.T, plan *Plan) []string {
+	t.Helper()
+	order, err := plan.Graph.TopologicalSort()
+	require.NoError(t, err)
+	labels := make([]string, 0, len(order))
+	for i := range order {
+		labels = append(labels, Label(&order[i]))
+	}
+	return labels
+}
+
+func TestTagAndLabelSelectors(t *testing.T) {
+	network := []string{"terraform", "dev", "network"}
+	database := []string{"terraform", "dev", "database"}
+	cache := []string{"terraform", "dev", "cache"}
+	app := []string{"terraform", "dev", "app"}
+	stacks := inventory(network, database, cache, app)
+	selectorMetadata(stacks, database, []any{"data", "stateful"}, map[string]any{"team": "platform", "tier": "1"})
+	selectorMetadata(stacks, cache, []any{"data"}, map[string]any{"team": "platform", "tier": "2"})
+	selectorMetadata(stacks, app, []any{"web"}, map[string]any{"team": "product"})
+	depends(stacks, database, network, true)
+	commands := capabilities("terraform")
+
+	plan := func(s Selection) []string {
+		p, err := BuildPlan(stacks, commands, s, "{{")
+		require.NoError(t, err)
+		return plannedLabels(t, p)
+	}
+
+	// Tags match any; labels must all match; both together must both match.
+	assert.ElementsMatch(t, []string{"terraform/dev/database", "terraform/dev/cache"}, plan(Selection{Filter: &Filter{Tags: []string{"data"}}}))
+	assert.ElementsMatch(t, []string{"terraform/dev/database", "terraform/dev/app"}, plan(Selection{Filter: &Filter{Tags: []string{"stateful", "web"}}}))
+	assert.Equal(t, []string{"terraform/dev/database"}, plan(Selection{Filter: &Filter{Labels: map[string]string{"team": "platform", "tier": "1"}}}))
+	assert.Equal(t, []string{"terraform/dev/cache"}, plan(Selection{Filter: &Filter{Tags: []string{"data"}, Labels: map[string]string{"tier": "2"}}}))
+	assert.Empty(t, plan(Selection{Filter: &Filter{Tags: []string{"missing"}}}))
+
+	// Filters narrow the initial selection only; dependency expansion still adds
+	// the untagged prerequisite, ahead of the tagged component.
+	assert.Equal(t, []string{"terraform/dev/network", "terraform/dev/database"}, plan(Selection{Filter: &Filter{Tags: []string{"stateful"}}, Dependencies: -1}))
+
+	// Combined with an affected selection, the filter narrows the affected set.
+	assert.Equal(t, []string{"terraform/dev/cache"}, plan(Selection{Filter: &Filter{Tags: []string{"data"}}, Affected: affected(cache, app)}))
+}

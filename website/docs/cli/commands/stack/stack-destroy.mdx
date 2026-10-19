@@ -21,9 +21,11 @@ Consumers run before their prerequisites, using each component type's registered
 atmos stack destroy --all --stack=dev --dry-run
 atmos stack destroy --affected --base=origin/main --stack=dev
 atmos stack destroy --all --stack=dev --max-concurrency=2 --auto-approve
+atmos stack destroy --tags=ephemeral --stack=dev --dry-run
 ```
 
-Use exactly one of `--all` and `--affected`. Positional component arguments are
+Select components with `--all` or `--affected` (not both), or with `--tags` or
+`--labels`, as for [`stack deploy`](/cli/commands/stack/stack-deploy). Positional component arguments are
 rejected; to destroy one component, run `atmos <kind> destroy <component> --stack=<stack>`.
 A `--stack` value that names no existing stack is an error. Selection, dependency
 expansion, concurrency, logging, and dry-run behavior match
@@ -150,9 +152,13 @@ preview.
 
 <dl>
   <dt>`--all`</dt>
-  <dd>Select every component that defines a `destroy` operation. Exactly one of `--all` or `--affected` is required. Default: `false`.</dd>
+  <dd>Select every component that defines a `destroy` operation. Use `--all` or `--affected` (not both), or select with `--tags` or `--labels` alone. Default: `false`.</dd>
   <dt>`--affected`</dt>
-  <dd>Select components affected by the Git comparison. Exactly one of `--all` or `--affected` is required. Default: `false`.</dd>
+  <dd>Select components affected by the Git comparison. Use `--all` or `--affected` (not both), or select with `--tags` or `--labels` alone. Default: `false`.</dd>
+  <dt>`--tags`</dt>
+  <dd>Select components whose `metadata.tags` include any of the given tags (comma-separated). Used alone, it selects every matching component; with `--all` or `--affected`, it narrows that selection. Dependency expansion still follows declared dependencies regardless of tags. Environment variable: `ATMOS_TAGS`. Default: No tag filter.</dd>
+  <dt>`--labels`</dt>
+  <dd>Select components whose `metadata.labels` contain every given `key=value` (or `key:value`) pair. Repeat the flag or separate pairs with commas. Used alone or combined like `--tags`; when both are given, a component must match both. Environment variable: `ATMOS_LABELS`. Default: No label filter.</dd>
   <dt>`--stack`, `-s`</dt>
   <dd>Intersect the initial selection with a canonical stack name. A name that matches no stack is an error. Environment variable: `ATMOS_STACK`. Default: All stacks.</dd>
   <dt>`--base`</dt>

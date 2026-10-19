@@ -46,12 +46,35 @@ atmos stack deploy --affected --allow-destroy --stack dev
 
 atmos stack destroy --affected --stack dev
 atmos stack destroy --all --stack dev
+
+atmos stack deploy --tags=networking --stack dev
+atmos stack deploy --affected --labels=team=platform,tier=1
 ```
 
-Require exactly one of `--affected` and `--all`. Initially, these commands accept
+Select components with `--all`, `--affected`, `--tags`, or `--labels`. `--all` and
+`--affected` are mutually exclusive. Initially, these commands accept
 no positional component argument. `--stack` narrows the initial selection; omitting
 it selects across stacks. Reuse existing affected detection and baseline options,
 including `--base`, rather than introducing another Git comparison algorithm.
+
+### Tag and label filters
+
+Reuse the component selectors that bulk Terraform commands already support, with
+the same flags, environment variables, and matching rules:
+
+- `--tags` (also `ATMOS_TAGS`) matches components whose `metadata.tags` include
+  any of the given tags.
+- `--labels` (also `ATMOS_LABELS`) matches components whose `metadata.labels`
+  contain every given `key=value` (or `key:value`) pair. The flag repeats, and
+  each occurrence accepts comma-separated pairs.
+
+Used alone, either filter selects every matching component, as `--all` would.
+Combined with `--all` or `--affected`, it narrows that selection. When both are
+given, a component must match both. Filters apply to the initial selection like
+`--stack`. Dependency expansion follows declared dependencies regardless of tags
+or labels, so `--include-dependencies` can add prerequisites that the filter
+would not have selected. Child operations never inherit the selectors, so each
+child runs exactly one component.
 
 Support `--include-dependencies[=N]` and `--include-dependents[=N]`, disabled by
 default. Preserve the existing optional-depth syntax. Explicit expansion can cross
@@ -320,7 +343,8 @@ Acceptance tests must cover:
 
 - Mixed-type and cross-stack chains, duplicate names across kinds, forward and
   reverse ordering, independent-node concurrency, and resource serialization.
-- `--affected`/`--all` exclusivity, stack filters, bounded expansion, empty
+- `--affected`/`--all` exclusivity, stack, tag, and label filters (alone and
+  combined with `--all` or `--affected`), bounded expansion, empty
   selections, unsupported operations, optional targets, and relevant cycles.
 - Custom nested lifecycle commands, argument bindings, ambiguous commands,
   missing required inputs, authentication, hooks, and fresh dependency outputs.

@@ -21,6 +21,10 @@ components:
     database:
       metadata:
         component: marker
+        tags: [data, stateful]
+        labels:
+          team: platform
+          tier: "1"
       vars:
         name: dev-database
       dependencies:
@@ -30,6 +34,10 @@ components:
     cache:
       metadata:
         component: marker
+        tags: [data]
+        labels:
+          team: platform
+          tier: "2"
       vars:
         name: dev-cache
       dependencies:

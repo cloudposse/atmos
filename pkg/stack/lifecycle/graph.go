@@ -24,6 +24,16 @@ type Selection struct {
 	Dependencies int
 	Dependents   int
 	Reverse      bool
+	// Filter narrows the initial selection by component tags and labels.
+	Filter *Filter
+}
+
+// Filter selects components by their metadata. A component matches when its
+// metadata.tags include any of Tags and its metadata.labels contain every pair
+// in Labels. An empty filter matches every component.
+type Filter struct {
+	Tags   []string
+	Labels map[string]string
 }
 
 // Notice explains a component excluded from execution.
@@ -179,6 +189,9 @@ func selectSeeds(g *dependency.Graph, commands map[string]*Handler, s Selection,
 		if s.Stack != "" && s.Stack != n.Stack {
 			continue
 		}
+		if !matchesSelectors(n, s.Filter) {
+			continue
+		}
 		if s.Affected != nil && !eligible[id] {
 			continue
 		}
@@ -193,6 +206,19 @@ func selectSeeds(g *dependency.Graph, commands map[string]*Handler, s Selection,
 		seeds = append(seeds, id)
 	}
 	return seeds
+}
+
+// matchesSelectors reports whether a component's metadata matches the requested
+// tags (any) and labels (all). With neither requested, every component matches.
+func matchesSelectors(n *dependency.Node, f *Filter) bool {
+	if f == nil || (len(f.Tags) == 0 && len(f.Labels) == 0) {
+		return true
+	}
+	metadata, _ := n.Metadata["metadata"].(map[string]any)
+	if len(f.Tags) > 0 && !tags.MatchesTags(tags.ToStringSlice(metadata["tags"]), f.Tags, tags.TagModeAny) {
+		return false
+	}
+	return len(f.Labels) == 0 || tags.MatchesLabels(tags.ToStringMap(metadata["labels"]), f.Labels)
 }
 
 func affectedEligibility(s Selection, p *Plan) map[string]bool {

@@ -203,6 +203,57 @@ func TestLifecycleDryRunHonorsStackSelectionAndSkipHooks(t *testing.T) {
 	assert.NotContains(t, text, "terraform/dev/", "other stacks are not selected")
 }
 
+func TestLifecycleDryRunSelectsByTagsAndLabels(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		args     []string
+		env      map[string]string
+		want     []string
+		excluded []string
+	}{
+		{name: "tags alone", args: []string{"--tags=data"}, want: []string{"terraform/dev/database", "terraform/dev/cache"}, excluded: []string{"terraform/dev/network", "terraform/dev/app", "terraform/prod/app"}},
+		{name: "labels must all match", args: []string{"--labels=team=platform,tier=1"}, want: []string{"terraform/dev/database"}, excluded: []string{"terraform/dev/cache"}},
+		{name: "tags narrow --all", args: []string{"--all", "--tags=stateful"}, want: []string{"terraform/dev/database"}, excluded: []string{"terraform/dev/cache"}},
+		{name: "expansion adds untagged prerequisites", args: []string{"--tags=stateful", "--include-dependencies"}, want: []string{"terraform/dev/network", "terraform/dev/database"}, excluded: []string{"terraform/dev/cache"}},
+		{name: "ATMOS_TAGS selects too", env: map[string]string{"ATMOS_TAGS": "data"}, want: []string{"terraform/dev/database", "terraform/dev/cache"}, excluded: []string{"terraform/dev/app"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for key, value := range tc.env {
+				t.Setenv(key, value)
+			}
+			cmd, _ := lifecycleFixtureCommand(t, "deploy", append(tc.args, "--dry-run")...)
+			output := captureLifecycle(t)
+			require.NoError(t, cmd.RunE(cmd, nil))
+			text := output.String()
+			for _, label := range tc.want {
+				assert.Contains(t, text, "Would deploy "+label)
+			}
+			for _, label := range tc.excluded {
+				assert.NotContains(t, text, "Would deploy "+label)
+			}
+		})
+	}
+}
+
+func TestLifecycleSelectorValidation(t *testing.T) {
+	_, err := lifecycleTestCommand(t, "deploy", "--all", "--affected")
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	assert.Contains(t, err.Error(), "exactly one of --all or --affected")
+
+	_, err = lifecycleTestCommand(t, "deploy")
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	assert.Contains(t, err.Error(), "or select components with --tags or --labels")
+
+	_, err = lifecycleTestCommand(t, "deploy", "--labels=missing-separator")
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+
+	opts, err := lifecycleTestCommand(t, "destroy", "--tags=a,b", "--labels=team=platform", "--labels=tier:1")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a", "b"}, opts.tags)
+	assert.Equal(t, map[string]string{"team": "platform", "tier": "1"}, opts.labels)
+	assert.False(t, opts.all)
+}
+
 func TestLifecycleCommandSurfacesSelectionErrors(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
