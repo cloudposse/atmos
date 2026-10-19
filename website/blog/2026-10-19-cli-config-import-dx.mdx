@@ -3,7 +3,11 @@ slug: cli-config-import-dx
 title: "CLI-config imports you can require, scope, and trust"
 authors: [aknysh]
 tags: [feature, dx]
+cast: "/casts/examples/cli-config-imports/describe-imports.cast"
+castTitle: "atmos describe config imports"
 ---
+
+import CastEmbed from '@site/src/components/CastEmbed'
 
 Sharing one team's CLI configuration across many repositories is a common setup: keep developer-tooling
 config (AI assistants, MCP servers, toolchain pins) in a single source-of-truth repo, and have every other
@@ -14,6 +18,8 @@ way to say "this one must load." A tooling fragment meant for your laptop gets r
 edits on every run.
 
 <!--truncate-->
+
+<CastEmbed src="/casts/examples/cli-config-imports/describe-imports.cast" title="atmos describe config imports" chrome controls scrubber />
 
 ## The Problem
 

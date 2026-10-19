@@ -115,6 +115,9 @@ commands:
         name: config-profiles-list-and-show
         command: atmos casts generate examples config-profiles list-and-show
       - type: shell
+        name: cli-config-imports-describe-imports
+        command: atmos casts generate examples cli-config-imports describe-imports
+      - type: shell
         name: terraform-tests-stack-discovery
         command: atmos casts generate examples terraform-tests stack-discovery
       - type: shell
@@ -309,6 +312,9 @@ commands:
       - type: shell
         name: config-profiles-list-and-show
         command: atmos casts validate examples config-profiles list-and-show
+      - type: shell
+        name: cli-config-imports-describe-imports
+        command: atmos casts validate examples cli-config-imports describe-imports
       - type: shell
         name: terraform-tests-stack-discovery
         command: atmos casts validate examples terraform-tests stack-discovery

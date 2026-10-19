@@ -1,6 +1,9 @@
 ---
 title: CLI-Config Imports
 tags: [Configuration]
+cast:
+  file: /casts/examples/cli-config-imports/describe-imports.cast
+  title: atmos describe config imports
 related_docs:
   - label: "CLI-config imports"
     url: /cli/configuration/imports
@@ -46,10 +49,12 @@ examples/cli-config-imports/
 
 ## Try it
 
+Run these from this example's directory (`examples/cli-config-imports`).
+
 Show the merged configuration (the imported settings are deep-merged in order):
 
 ```shell
-atmos --chdir examples/cli-config-imports describe config --format yaml
+atmos describe config --format yaml
 ```
 
 See conditional loading in action - `settings.terminal.syntax_highlighting.enabled` is `true` on a
@@ -57,26 +62,26 @@ workstation (the `when: local` import loads) and `false` in CI (it is skipped):
 
 ```shell
 # Workstation
-atmos --chdir examples/cli-config-imports describe config --format yaml | grep -A1 syntax_highlighting
+atmos describe config --format yaml | grep -A1 syntax_highlighting
 
 # CI (simulated)
-GITHUB_ACTIONS=true GITHUB_RUN_ID=1 atmos --chdir examples/cli-config-imports describe config --format yaml | grep -A1 syntax_highlighting
+GITHUB_ACTIONS=true GITHUB_RUN_ID=1 atmos describe config --format yaml | grep -A1 syntax_highlighting
 ```
 
 See the dynamic CEL condition - `settings.terminal.max_width` is `120` by default and `160` only
 when `DEPLOY_ENV=prod` (the `when: '!cel env.DEPLOY_ENV == "prod"'` import loads):
 
 ```shell
-atmos --chdir examples/cli-config-imports describe config --format yaml | grep max_width
-DEPLOY_ENV=prod atmos --chdir examples/cli-config-imports describe config --format yaml | grep max_width
+atmos describe config --format yaml | grep max_width
+DEPLOY_ENV=prod atmos describe config --format yaml | grep max_width
 ```
 
 See the fail-closed behavior - remove the required import's target and the load aborts:
 
 ```shell
 # temporarily remove a required import target
-mv examples/cli-config-imports/configs.d/required-logging.yaml /tmp/
-atmos --chdir examples/cli-config-imports describe config   # aborts: "required config import failed to load"
+mv configs.d/required-logging.yaml /tmp/
+atmos describe config   # aborts: "required config import failed to load"
 # restore
-mv /tmp/required-logging.yaml examples/cli-config-imports/configs.d/
+mv /tmp/required-logging.yaml configs.d/
 ```

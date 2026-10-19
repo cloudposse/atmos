@@ -43,10 +43,6 @@ mcp:
       identity: "central-logging" # defined only in some consumer repos
       optional: true              # skip with a warning where the identity is unavailable
 
-logs:
-  level: Info
-  file: "/dev/stderr"
-
 commands:
   - name: "test"
     description: "Show the merged configuration for the cli-config-imports example"
