@@ -13,18 +13,18 @@ A common pattern of sharing developer-tooling CLI config (`ai`, `mcp`, `toolchai
 source-of-truth repo into many consumer repos via remote imports surfaced several rough edges:
 
 1. **Every CLI-config import was implicitly optional (fail open).** A failed resolve or merge was a
-   `log.Warn` + `continue`, so a security-bearing fragment (for example a read-only tool allowlist
-   constraining the Atmos MCP server) could silently fail to load, leaving the tool running without
-   its guardrail. There was no way to express "this import MUST load."
+  `log.Warn` + `continue`, so a security-bearing fragment (for example a read-only tool allowlist
+  constraining the Atmos MCP server) could silently fail to load, leaving the tool running without
+  its guardrail. There was no way to express "this import MUST load."
 2. **Shared `mcp.servers` config could not degrade gracefully.** A server bound to an `identity`
-   not defined in a given consumer's profiles failed hard, with no per-server opt-out.
+  not defined in a given consumer's profiles failed hard, with no per-server opt-out.
 3. **Unpinned remote imports were silent.** A `git::` import on a mutable ref (`?ref=main`, a
-   branch, or no `?ref=`) silently absorbed upstream edits on every cache refresh, with no integrity
-   check — the config-import analogue of an unpinned GitHub Action.
+  branch, or no `?ref=`) silently absorbed upstream edits on every cache refresh, with no integrity
+  check — the config-import analogue of an unpinned GitHub Action.
 4. **No way to scope a fragment to interactive-only vs automation.** Developer-tooling config has no
-   purpose in an automated `apply`, yet `.atmos.d` auto-discovery was all-or-nothing, and config
-   loads before the subcommand is known. The workaround was to keep the fragment out of the
-   committed config entirely (gitignored `*.yaml.example`).
+  purpose in an automated `apply`, yet `.atmos.d` auto-discovery was all-or-nothing, and config
+  loads before the subcommand is known. The workaround was to keep the fragment out of the
+  committed config entirely (gitignored `*.yaml.example`).
 
 ## Goals
 
