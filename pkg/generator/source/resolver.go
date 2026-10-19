@@ -226,7 +226,7 @@ func fetchOCI(atmosConfig *schema.AtmosConfiguration, src string, timeout time.D
 		}
 	}
 
-	if err := downloader.FetchOCIContext(ctx, atmosConfig, fetchRef, tempDir, timeout); err != nil {
+	if err := downloader.FetchOCIContext(ctx, atmosConfig, fetchRef, tempDir, downloader.WithOCITimeout(timeout)); err != nil {
 		cleanup()
 		return nil, noop, errUtils.Build(errUtils.ErrScaffoldFetchSource).
 			WithCause(err).

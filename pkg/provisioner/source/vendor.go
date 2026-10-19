@@ -241,7 +241,7 @@ func downloadSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 // The pull is bounded to DefaultVendorTimeout, matching the go-getter path's explicit timeout.
 func downloadOCISource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri, tempDir string) error {
 	imageRef := strings.TrimPrefix(uri, "oci://")
-	if err := downloader.FetchOCIContext(ctx, atmosConfig, imageRef, tempDir, DefaultVendorTimeout); err != nil {
+	if err := downloader.FetchOCIContext(ctx, atmosConfig, imageRef, tempDir, downloader.WithOCITimeout(DefaultVendorTimeout)); err != nil {
 		return errUtils.Build(errUtils.ErrSourceProvision).
 			WithCause(err).
 			WithExplanation("Failed to download OCI source").

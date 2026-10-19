@@ -83,13 +83,13 @@ func TestFetchOCIContext_ThroughSharedDownloader(t *testing.T) {
 	})
 
 	dst := t.TempDir()
-	require.NoError(t, FetchOCIContext(context.Background(), &schema.AtmosConfiguration{}, ref, dst, time.Minute))
+	require.NoError(t, FetchOCIContext(context.Background(), &schema.AtmosConfiguration{}, ref, dst, WithOCITimeout(time.Minute)))
 	assert.FileExists(t, filepath.Join(dst, "vars.yaml"))
 	assert.FileExists(t, filepath.Join(dst, "sub", "inner.txt"))
 }
 
 func TestFetchOCIContext_InvalidReference(t *testing.T) {
-	err := FetchOCIContext(context.Background(), &schema.AtmosConfiguration{}, "not a ref!!", t.TempDir(), time.Minute)
+	err := FetchOCIContext(context.Background(), &schema.AtmosConfiguration{}, "not a ref!!", t.TempDir(), WithOCITimeout(time.Minute))
 	require.ErrorIs(t, err, errUtils.ErrInvalidImageReference)
 }
 
@@ -97,7 +97,7 @@ func TestFetchOCIContext_PullFailureKeepsSentinel(t *testing.T) {
 	ref := ocitest.NewRegistry(t, "exists:v1", map[string]string{"a.txt": "a"})
 	missing := ref[:len(ref)-len("exists:v1")] + "missing:v1"
 
-	err := FetchOCIContext(context.Background(), &schema.AtmosConfiguration{}, missing, t.TempDir(), time.Minute)
+	err := FetchOCIContext(context.Background(), &schema.AtmosConfiguration{}, missing, t.TempDir(), WithOCITimeout(time.Minute))
 	require.ErrorIs(t, err, errUtils.ErrPullImage)
 }
 

@@ -480,7 +480,7 @@ func processOCIIncludeFile(atmosConfig *schema.AtmosConfiguration, includeFile s
 		_ = os.RemoveAll(tempDir)
 	}()
 
-	if err := downloader.FetchOCIContext(context.Background(), atmosConfig, strings.TrimPrefix(imageRef, "oci://"), tempDir, ociIncludeTimeout); err != nil {
+	if err := downloader.FetchOCIContext(context.Background(), atmosConfig, strings.TrimPrefix(imageRef, "oci://"), tempDir, downloader.WithOCITimeout(ociIncludeTimeout)); err != nil {
 		return nil, err
 	}
 
