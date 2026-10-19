@@ -57,7 +57,7 @@ var (
 	castStepFields = stepYAMLFields(
 		"Mode", "Shell", "ShellInit", "WriteRate", "KeyInterval", "Jitter", "Cursor", "Text", "Regex", "Key",
 		"Duration", "Interval", "Repeat", "Defaults", "Steps", "Title", "Width", "Height", "Rate",
-		"Command", "Tape", "TapeFile", contentField,
+		"Command", "Tape", "Source", "Tools", contentField,
 	)
 
 	// The cross-cutting container fields. The action's own parameters
@@ -90,7 +90,7 @@ var (
 	pagerFields    = stepYAMLFields(contentField, "Markdown", "Path", "Title")
 	requireFields  = stepYAMLFields("Tools", "Files", "Dirs", "Hint")
 	sayFields      = stepYAMLFields(contentField, "Voice", "Rate", "Print")
-	scriptFields   = stepYAMLFields("Script", "Interpreter", "Viewport")
+	scriptFields   = stepYAMLFields("Script", "Source", "Interpreter", "Viewport")
 	shellFields    = stepYAMLFields("Command", "Interactive", "Tty", "Viewport")
 	spinFields     = stepYAMLFields("Command", "Title")
 	storeFields    = stepYAMLFields("Action", "Component", "Stack")

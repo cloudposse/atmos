@@ -1569,11 +1569,15 @@ func executeCustomCommand(
 				// of wrapping the display command in `sh -lc`.
 				workflowStep := step.ToWorkflowStep()
 				if workflowPkg.StepContainerOverride(&workflowStep) {
+					// A script that runs a source file becomes an inline body for the container.
+					if sourceErr := stepPkg.MaterializeScriptSource(&workflowStep, stepWorkDir, executor.Variables().Resolve); sourceErr != nil {
+						return sourceErr
+					}
 					// Render a templated interpreter first so the container checks see the effective one.
 					if renderErr := workflowPkg.RenderScriptInterpreter(&workflowStep, executor.Variables().Resolve, workflowPkg.WithEmbeddedDelimiters(stepDelims)); renderErr != nil {
 						return renderErr
 					}
-					return runContainerOverrideStep(stepCtx, &workflowStep, process.FormatScriptDisplay(workflowStep.Interpreter, step.Script))
+					return runContainerOverrideStep(stepCtx, &workflowStep, process.FormatScriptDisplay(workflowStep.Interpreter, workflowStep.Script))
 				}
 				return runExtendedStep(stepCtx, workflowStep)
 			case schema.TaskTypeExec:

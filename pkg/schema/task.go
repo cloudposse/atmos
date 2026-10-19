@@ -109,9 +109,9 @@ type Task struct {
 	Name string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
 	// Command is the command to execute.
 	Command string `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`
-	// Script is the inline script body for TaskTypeScript.
+	// Script is the inline script body for TaskTypeScript. Mutually exclusive with Source.
 	Script string `yaml:"script,omitempty" json:"script,omitempty" mapstructure:"script"`
-	// Interpreter is the executable used to run Script for TaskTypeScript.
+	// Interpreter is the executable used to run Script for TaskTypeScript. It is inferred from the extension of Source when omitted.
 	Interpreter string `yaml:"interpreter,omitempty" json:"interpreter,omitempty" mapstructure:"interpreter"`
 	// ScriptSource is the absolute path of the file Script was read from (a local !include or
 	// !include.raw in a custom command). Loaders set it; it has no YAML or JSON key.
@@ -172,7 +172,7 @@ type Task struct {
 
 	// File picker fields.
 	Path       string   `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`                   // Starting path for file picker, or target path for workdir.
-	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source: workdir provisioning (string or source map), or a local directory/file for archive and publish steps (string only).
+	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source: workdir provisioning (string or source map), or a local path (string only): a directory/file for archive and publish steps, a script file for script steps, or a VHS tape file for cast steps.
 	Reset      bool     `yaml:"reset,omitempty" json:"reset,omitempty" mapstructure:"reset"`                // Reset the target path before provisioning.
 	Extensions []string `yaml:"extensions,omitempty" json:"extensions,omitempty" mapstructure:"extensions"` // File extensions filter.
 

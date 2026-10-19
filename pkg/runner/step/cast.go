@@ -748,9 +748,9 @@ func castSessionActions(ctx context.Context, castStep *schema.WorkflowStep, vars
 }
 
 // isCastSessionPTYAction reports whether a session action type drives the
-// real interactive PTY directly (or, for hide and show, is handled by the
-// session itself by toggling recording), as opposed to running through the step
-// executor (simulate, and any registered step type).
+// real interactive PTY directly, as opposed to running through the step
+// executor (simulate, and any registered step type). The hide and show types
+// toggle recording of the PTY output, so they belong to the PTY session too.
 func isCastSessionPTYAction(actionType string) bool {
 	switch actionType {
 	case "write", "key", "pause", "wait", "hide", "show":

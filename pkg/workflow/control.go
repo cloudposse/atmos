@@ -416,6 +416,15 @@ func resolveControlStep(step *schema.WorkflowStep, matrix map[string]string, tem
 		}
 		*field.value = rendered
 	}
+	// A script step's source path is rendered like the other path fields. Other step types
+	// keep their existing source handling.
+	if source, ok := step.Source.(string); ok && source != "" && step.Type == schema.TaskTypeScript {
+		rendered, err := templates.resolve(source, step.Name, matrix)
+		if err != nil {
+			return resolved, stepPkg.TemplateFieldError(step, "source", err)
+		}
+		resolved.Source = rendered
+	}
 	if len(step.Env) > 0 {
 		envMap := make(map[string]string, len(step.Env))
 		for key, value := range step.Env {

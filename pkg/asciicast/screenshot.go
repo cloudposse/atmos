@@ -6,8 +6,10 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/castplan"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -25,12 +27,19 @@ const screenshotRenderErrorFormat = "%w: %s: %w"
 func RenderMarkerScreenshots(castPath string) error {
 	defer perf.Track(nil, "asciicast.RenderMarkerScreenshots")()
 
+	return RenderMarkerScreenshotsAt(castPath, "")
+}
+
+// RenderMarkerScreenshotsAt resolves relative screenshot paths against the invocation directory.
+func RenderMarkerScreenshotsAt(castPath, basePath string) error {
+	defer perf.Track(nil, "asciicast.RenderMarkerScreenshotsAt")()
+
 	header, events, err := ReadEvents(castPath)
 	if err != nil {
 		return err
 	}
 	for _, event := range events {
-		if event.Stream != "m" || event.Data == "" {
+		if event.Stream != "m" || event.Data == "" || strings.HasPrefix(event.Data, castplan.MarkerPrefix) {
 			continue
 		}
 		grid := buildGridUpTo(&header, events, event.Time)
@@ -38,7 +47,11 @@ func RenderMarkerScreenshots(castPath string) error {
 		if err != nil {
 			return err
 		}
-		if err := writeScreenshotPNG(event.Data, img); err != nil {
+		path := event.Data
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(basePath, path)
+		}
+		if err := writeScreenshotPNG(path, img); err != nil {
 			return err
 		}
 	}

@@ -100,7 +100,7 @@ func init() {
 	)
 }
 
-func runRecordCommand(cmd *cobra.Command, tapeFile string) error {
+func runRecordCommand(cmd *cobra.Command, input string) error {
 	output := viper.GetString(recordViperPrefix + "." + recordFlagOutput)
 	if output == "" {
 		return errUtils.ErrMissingRenderOutput
@@ -116,7 +116,7 @@ func runRecordCommand(cmd *cobra.Command, tapeFile string) error {
 	}
 	defer plan.Cleanup()
 
-	step := buildRecordStep(tapeFile, mode, recordShellOptions{Shell: shell, ShellInit: shellInit}, &plan)
+	step := buildRecordStep(input, mode, recordShellOptions{Shell: shell, ShellInit: shellInit}, &plan)
 	if _, err := runnerstep.NewStepExecutorWithVars(runnerstep.NewVariables()).Execute(cmd.Context(), step); err != nil {
 		return err
 	}
@@ -149,7 +149,7 @@ func buildRecordStep(tapeFile, mode string, shell recordShellOptions, plan *reco
 		Name:      "record",
 		Type:      schema.TaskTypeCast,
 		Mode:      mode,
-		TapeFile:  tapeFile,
+		Source:    tapeFile,
 		Shell:     shell.Shell,
 		ShellInit: shell.ShellInit,
 		CastOutput: &schema.CastOutput{

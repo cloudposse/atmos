@@ -3815,11 +3815,7 @@
         },
         "tape": {
           "type": "string",
-          "description": "Inline VHS-dialect tape script interpreted into steps/session actions at execution time. Mutually exclusive with tape_file and with an explicit steps list."
-        },
-        "tape_file": {
-          "type": "string",
-          "description": "Path to an external VHS .tape file, interpreted the same way as tape. Mutually exclusive with tape and with an explicit steps list."
+          "description": "Inline VHS-dialect tape script interpreted into steps/session actions at execution time. Mutually exclusive with source and with an explicit steps list."
         },
         "rate": {
           "type": "string",
@@ -4043,11 +4039,11 @@
         },
         "script": {
           "type": "string",
-          "description": "Inline script body for the script step type."
+          "description": "Inline script body for the script step type. Mutually exclusive with source."
         },
         "interpreter": {
           "type": "string",
-          "description": "Script interpreter for the script step type (e.g. bash, python3)."
+          "description": "Script interpreter for the script step type (e.g. bash, python3). Inferred from the extension of source when omitted."
         },
         "interactive": {
           "type": "boolean",
@@ -4116,7 +4112,7 @@
           "description": "Starting path for the file picker step type, or target path for the workdir step type."
         },
         "source": {
-          "description": "Source for workdir provisioning; a string or a source map.",
+          "description": "Source for workdir provisioning (a string or a source map), or a local path string: a script file for script steps (mutually exclusive with script; the interpreter is inferred from .star, .py, .sh, .bash), or a VHS tape file for cast steps (mutually exclusive with tape).",
           "oneOf": [
             {
               "type": "string"

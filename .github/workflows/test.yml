@@ -303,6 +303,39 @@ jobs:
         # formatting isn't ours to enforce.
         run: atmos validate --affected --exclude 'tests/fixtures/**' --exclude '**/*.go' --exclude 'specs/**' --exclude 'README.md' --format rich
 
+  # Committed website casts and screengrabs are generated artifacts, but a
+  # change can also edit or hand-record them directly, bypassing the pipeline
+  # that validates them (#3278 committed three dumb-terminal help casts this
+  # way). Run every read-only cast validator on each change; nothing here
+  # records or regenerates a cast.
+  validate-casts:
+    name: Validation (casts)
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            us.i.posthog.com:443
+
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Atmos (install build artifact)
+        uses: ./.github/actions/setup-atmos-install
+        with:
+          target: linux
+
+      - name: Validate committed casts
+        run: atmos --chdir=demo/casts casts validate all
+
   # TestTerraformRegistryCache installs/removes a real cert in the OS trust
   # store (the macOS System keychain via `sudo security`, or the Windows Root
   # store) and takes ~8-9 minutes on its own. It used to run once per OS

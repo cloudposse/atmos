@@ -175,9 +175,9 @@ func TestCastTapeRepeatedValidationAndAutomation(t *testing.T) {
 			if file {
 				path := filepath.Join(dir, "input.tape")
 				require.NoError(t, os.WriteFile(path, []byte(step.Tape), 0o600))
-				step.Tape, step.TapeFile = "", path
+				step.Tape, step.Source = "", path
 				delete(config, "tape")
-				config["tape_file"] = path
+				config["source"] = path
 			}
 			handler := &CastHandler{}
 			require.NoError(t, handler.Validate(step))
@@ -212,7 +212,7 @@ func TestFailedTapeExpansionDoesNotSkipLaterValidation(t *testing.T) {
 	conflict := &schema.WorkflowStep{Tape: step.Tape, Steps: []schema.WorkflowStep{{Type: "clear"}}}
 	require.ErrorIs(t, (&CastHandler{}).Validate(conflict), ErrCastTapeStepsConflict)
 	conflict.Steps = nil
-	conflict.TapeFile = "other.tape"
+	conflict.Source = "other.tape"
 	require.ErrorIs(t, (&CastHandler{}).Validate(conflict), ErrCastTapeSourceConflict)
 }
 

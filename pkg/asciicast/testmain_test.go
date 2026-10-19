@@ -18,6 +18,9 @@ const (
 	// Env var that makes the session helper print sessionHelperBanner once it starts reading input.
 	asciicastSessionBannerEnv = "_ATMOS_ASCIICAST_SESSION_BANNER"
 	sessionHelperBanner       = "helper-up"
+
+	// Delay the session helper "shell" takes to run a delay-print command.
+	sessionHelperDelay = 1500 * time.Millisecond
 )
 
 func TestMain(m *testing.M) {
@@ -101,7 +104,19 @@ func runAsciicastSessionHelper() {
 		case 4:
 			return
 		case '\r', '\n':
-			switch strings.TrimSpace(line.String()) {
+			command := strings.TrimSpace(line.String())
+			// "delay-print <word>..." prints "out:<word>" per word after a delay,
+			// so tests can tell a command's output apart from the terminal's
+			// echo of the typed command (which contains the bare words).
+			if rest, ok := strings.CutPrefix(command, "delay-print "); ok {
+				time.Sleep(sessionHelperDelay)
+				for _, word := range strings.Fields(rest) {
+					_, _ = os.Stdout.WriteString("out:" + word + "\n")
+				}
+				line.Reset()
+				continue
+			}
+			switch command {
 			case "printf ready":
 				_, _ = os.Stdout.WriteString("ready\n")
 			case "print shellinit":

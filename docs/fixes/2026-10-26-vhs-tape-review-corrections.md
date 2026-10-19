@@ -40,7 +40,7 @@ pass.
   platform-specific test binaries.
 - Mixed HTML/ASCII output tests verify that a protected existing artifact prevents replacement of
   either target; tape-owned targets can still be regenerated. Repeated-validation tests exercise
-  inline tape, `tape_file`, and actual automation-library generation.
+  inline tape, `source`, and actual automation-library generation.
 - `go build ./pkg/runner/step ./pkg/asciicast ./cmd/cast` passed.
 - JPEG-alias rendering and JSON/YAML nonserialization tests passed under the race detector.
 - `go test ./cmd/cast -run TestRender -count=1` and `go build ./cmd/cast` passed.

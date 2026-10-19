@@ -177,7 +177,7 @@ func TestRecordCmdRunEExecutesTapeAndRecordsCast(t *testing.T) {
 	}
 }
 
-func TestRecordCmdRunEReturnsErrorForMissingTapeFile(t *testing.T) {
+func TestRecordCmdRunEReturnsErrorForMissingInput(t *testing.T) {
 	resetRecordCommand(t)
 	clearRecordViperOverrides(t)
 	output := filepath.Join(t.TempDir(), "out.cast")
