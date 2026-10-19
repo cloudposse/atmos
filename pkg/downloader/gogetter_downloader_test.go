@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -216,6 +217,57 @@ func TestNewClient_CustomHTTPClientTakesPrecedenceOverToken(t *testing.T) {
 	capture, ok := httpGetter.Client.Transport.(*metadataCapturingTransport)
 	require.True(t, ok, "Transport should wrap a metadataCapturingTransport, got %T", httpGetter.Client.Transport)
 	assert.Same(t, baseTransport, capture.base, "the capturing transport must wrap the caller's original transport")
+}
+
+// TestNewClient_InjectsTokenForForcedGitSource proves applyForcedGitDetection closes the gap
+// TestNewClient_AttachesGitHubTokenToHTTPGetter only closed for the http(s) getter: a
+// "git::"-forced source whose inner URL already carries an explicit scheme must still get
+// CustomGitDetector's token injection, even though go-getter's own Detect() would otherwise skip
+// every Detector for an already-schemed source (see applyForcedGitDetection's doc comment).
+func TestNewClient_InjectsTokenForForcedGitSource(t *testing.T) {
+	t.Setenv("ATMOS_GITHUB_CLI", "")
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			GithubToken:       "ghp_test_token",
+			InjectGithubToken: true,
+		},
+	}
+	factory := &goGetterClientFactory{atmosConfig: atmosConfig}
+
+	src := "git::https://github.com/test-org/test-repo.git?ref=main"
+	dc, err := factory.NewClient(context.Background(), src, t.TempDir(), ClientModeAny)
+	require.NoError(t, err)
+
+	ggc, ok := dc.(*goGetterClient)
+	require.True(t, ok)
+
+	assert.True(t, strings.HasPrefix(ggc.client.Src, "git::"), "forced git source must keep its git:: prefix")
+	assert.Contains(t, ggc.client.Src, "x-access-token:ghp_test_token@github.com",
+		"token must be injected into a forced git:: source, not just scheme-less shorthand")
+	assert.NotEqual(t, src, ggc.client.Src, "the source must be rewritten with injected credentials")
+}
+
+// TestNewClient_DoesNotForceGitDetectionForPlainHTTPSource proves a plain (non "git::"-forced)
+// https:// source -- e.g. a GitHub archive/release download -- is left untouched by
+// applyForcedGitDetection, since reinterpreting it as a git clone target would break that use
+// case (see isGitHubHTTPURL's archive/release handling in file_downloader.go).
+func TestNewClient_DoesNotForceGitDetectionForPlainHTTPSource(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			GithubToken:       "ghp_test_token",
+			InjectGithubToken: true,
+		},
+	}
+	factory := &goGetterClientFactory{atmosConfig: atmosConfig}
+
+	src := "https://github.com/test-org/test-repo/archive/refs/heads/main.tar.gz"
+	dc, err := factory.NewClient(context.Background(), src, t.TempDir(), ClientModeFile)
+	require.NoError(t, err)
+
+	ggc, ok := dc.(*goGetterClient)
+	require.True(t, ok)
+	assert.Equal(t, src, ggc.client.Src, "a plain https source without git:: forcing must not be rewritten into a git clone target")
 }
 
 // TestFetchWithMetadata_CapturesHTTPHeaders proves an HTTP(S) fetch through FetchWithMetadata
