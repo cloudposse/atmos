@@ -121,7 +121,7 @@ instance still receive CLI admission, not fabricated component metadata. An inte
 shared stack resolution must add instance admission before advertising that capability.
 
 Metadata used by selectors must be literal: unresolved templates/functions or malformed metadata
-produce an error, not a non-match. `capabilities` always includes `component.command` and `function`;
+produce an error, not a non-match. `capabilities` always includes `component.command`, `function`, and `source`;
 Terraform also supplies `terraform.plan` and `operation`, while Helmfile, Helm, and Kubernetes supply
 `operation`. A capability name does not manufacture its input at other gates.
 

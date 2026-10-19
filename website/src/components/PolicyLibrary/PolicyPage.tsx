@@ -358,9 +358,9 @@ export default function PolicyPage({
                     of each policy.
                   </p>
                   <p>
-                    Atmos discovers <code>policy.d/</code> in the invocation
-                    directory. Set <code>ATMOS_POLICY_DIR</code> to use another
-                    directory.
+                    Atmos discovers <code>policy.d/</code> at the project root
+                    selected by <code>atmos.yaml</code> discovery. Set{" "}
+                    <code>ATMOS_POLICY_DIR</code> to use another directory.
                   </p>
                 </section>
                 <section id="run">

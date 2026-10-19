@@ -14,7 +14,7 @@ or ordinary lifecycle-hook configuration. Use `atmos-hooks` for non-policy hook 
 Check the installed Atmos version/help and the matching source/docs. Do not infer a command exists
 from the PRD: `atmos policy check/test/explain` is proposed, not implemented in this branch.
 
-The current opt-in is `policy.d/` in the invocation directory, overridden by `ATMOS_POLICY_DIR`, containing strict `atmos/v1`
+The current opt-in is `policy.d/` at the project root that `atmos.yaml` discovery selects (the working directory, then the Git root, then the nearest ancestor with `atmos.yaml`), overridden by `ATMOS_POLICY_DIR`, containing strict `atmos/v1`
 `kind: Policy` documents. Inline CEL and restricted Starlark run. A Starlark predicate is a
 function body over detached, read-only JSON data that must return a strict boolean; it has no
 automation host, module loader, filesystem, network, or logging API. Rego is not available

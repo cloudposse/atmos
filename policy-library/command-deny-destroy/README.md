@@ -1,6 +1,6 @@
 ---
-title: Block Terraform destroy
-description: Deny Terraform destroy, including the destroy flag on plan, apply, and deploy.
+title: Block Terraform and Helmfile destroy
+description: Deny Terraform and Helmfile destroy, including the Terraform destroy flag on plan, apply, and deploy.
 command: atmos terraform destroy vpc -s prod
 tags:
   - Admission
@@ -11,9 +11,9 @@ related_docs:
     url: /policies/admission
 ---
 
-# Block Terraform destroy
+# Block Terraform and Helmfile destroy
 
-Deny Terraform destroy, including the destroy flag on plan, apply, and deploy.
+Deny Terraform and Helmfile destroy, including the Terraform destroy flag on plan, apply, and deploy.
 
 ## Contract
 
