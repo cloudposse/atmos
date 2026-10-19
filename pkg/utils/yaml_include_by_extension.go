@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	neturl "net/url"
@@ -479,8 +480,12 @@ func processOCIIncludeFile(atmosConfig *schema.AtmosConfiguration, includeFile s
 		_ = os.RemoveAll(tempDir)
 	}()
 
-	if err := downloader.NewGoGetterDownloader(atmosConfig).Fetch(imageRef, tempDir, downloader.ClientModeDir, ociIncludeTimeout); err != nil {
-		return nil, err
+	// FetchWithMetadataContext (unlike plain Fetch, which formats the cause with %v) keeps the
+	// error chain intact, so the pull's sentinel errors and structured authentication hints
+	// survive. It applies ociIncludeTimeout itself, so no extra deadline is set here.
+	dl := downloader.NewGoGetterDownloader(atmosConfig).(downloader.ContextFileDownloader)
+	if _, err := dl.FetchWithMetadataContext(context.Background(), imageRef, tempDir, downloader.ClientModeDir, ociIncludeTimeout); err != nil {
+		return nil, fmt.Errorf("%w: '%s': %w", ErrIncludeYamlFunctionFailedStackManifest, includeFile, err)
 	}
 
 	localFile, err := filesystem.SafeJoin(tempDir, subdir)

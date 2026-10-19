@@ -7,8 +7,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/oci/ocitest"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -220,6 +222,19 @@ func TestIncludeOCISourceFileNotFound(t *testing.T) {
 	err = processCustomTags(atmosConfig, &node, catalogFile)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrIncludeYamlFunctionInvalidFile)
+}
+
+// TestIncludeOCISourcePullFailureKeepsErrorChain tests that a failed pull surfaces both the include
+// error and the underlying pull sentinel, so callers and hint rendering can still see the cause.
+func TestIncludeOCISourcePullFailureKeepsErrorChain(t *testing.T) {
+	imageRef := ocitest.NewRegistry(t, "sample-exists:v1", map[string]string{"vars.yaml": "a: 1\n"})
+	missing := imageRef[:len(imageRef)-len("sample-exists:v1")] + "sample-missing:v1"
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	_, err := processOCIIncludeFile(atmosConfig, fmt.Sprintf("oci://%s//vars.yaml", missing), false)
+	require.ErrorIs(t, err, ErrIncludeYamlFunctionFailedStackManifest)
+	require.ErrorIs(t, err, errUtils.ErrPullImage)
+	assert.Contains(t, err.Error(), missing)
 }
 
 // TestIncludeOCISourceSubdirEscapingImageIsRejected tests that a subdir climbing out of the

@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestFetchToTempDir_OCI_PullsThroughSharedDownloader proves the PkgTypeOci path fetches an image straight into the temp directory.
 func TestFetchToTempDir_OCI_PullsThroughSharedDownloader(t *testing.T) {
 	ref := ocitest.NewRegistry(t, "vendor:v1", map[string]string{"main.tf": "# tf\n"})
 
@@ -21,6 +22,7 @@ func TestFetchToTempDir_OCI_PullsThroughSharedDownloader(t *testing.T) {
 	assert.FileExists(t, filepath.Join(dir, "main.tf"))
 }
 
+// TestFetchToTempDir_OCI_FailureWrapsSentinels proves a failed OCI pull wraps both ErrProcessOCIImage and ErrPullImage.
 func TestFetchToTempDir_OCI_FailureWrapsSentinels(t *testing.T) {
 	ref := ocitest.NewRegistry(t, "vendor-exists:v1", map[string]string{"main.tf": "# tf\n"})
 	missing := ref[:len(ref)-len("vendor-exists:v1")] + "vendor-missing:v1"

@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestOCIGetter_GetExtractsImage proves Get pulls an image from an in-process registry and extracts every layer into the destination.
 func TestOCIGetter_GetExtractsImage(t *testing.T) {
 	ref := ocitest.NewRegistry(t, "getter:v1", map[string]string{
 		"vars.yaml":      "region: us-east-1\n",
@@ -39,6 +40,7 @@ func TestOCIGetter_GetExtractsImage(t *testing.T) {
 	assert.Equal(t, "two", string(data))
 }
 
+// TestOCIGetter_GetWithoutClientUsesBackgroundContext proves Get still works when no go-getter client was attached via SetClient.
 func TestOCIGetter_GetWithoutClientUsesBackgroundContext(t *testing.T) {
 	ref := ocitest.NewRegistry(t, "noclient:v1", map[string]string{"a.txt": "a"})
 	u, err := url.Parse("oci://" + ref)
@@ -49,6 +51,7 @@ func TestOCIGetter_GetWithoutClientUsesBackgroundContext(t *testing.T) {
 	assert.FileExists(t, filepath.Join(dst, "a.txt"))
 }
 
+// TestOCIGetter_GetHonorsCancelledContext proves Get fails when the attached client context is already cancelled.
 func TestOCIGetter_GetHonorsCancelledContext(t *testing.T) {
 	ref := ocitest.NewRegistry(t, "cancel:v1", map[string]string{"a.txt": "a"})
 	u, err := url.Parse("oci://" + ref)
@@ -62,6 +65,7 @@ func TestOCIGetter_GetHonorsCancelledContext(t *testing.T) {
 	assert.Error(t, g.Get(t.TempDir(), u))
 }
 
+// TestOCIGetter_GetFailsWhenDestinationCannotBeCreated proves Get reports a directory-creation error when the destination sits under a regular file.
 func TestOCIGetter_GetFailsWhenDestinationCannotBeCreated(t *testing.T) {
 	ref := ocitest.NewRegistry(t, "baddst:v1", map[string]string{"a.txt": "a"})
 	u, err := url.Parse("oci://" + ref)
@@ -74,6 +78,7 @@ func TestOCIGetter_GetFailsWhenDestinationCannotBeCreated(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrCreateTempDirectory)
 }
 
+// TestOCIGetter_GetFileUnsupported proves single-file mode is rejected with ErrOCIGetFileUnsupported.
 func TestOCIGetter_GetFileUnsupported(t *testing.T) {
 	u, err := url.Parse("oci://ghcr.io/org/image:v1")
 	require.NoError(t, err)
@@ -82,12 +87,14 @@ func TestOCIGetter_GetFileUnsupported(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrOCIGetFileUnsupported)
 }
 
+// TestOCIGetter_ClientModeIsDir proves the getter always asks go-getter for directory mode.
 func TestOCIGetter_ClientModeIsDir(t *testing.T) {
 	mode, err := (&OCIGetter{}).ClientMode(&url.URL{})
 	require.NoError(t, err)
 	assert.Equal(t, getter.ClientModeDir, mode)
 }
 
+// TestFetch_OCISourceThroughSharedDownloader proves an oci:// source fetched with the ordinary Fetch method reaches the registered OCI getter.
 func TestFetch_OCISourceThroughSharedDownloader(t *testing.T) {
 	ref := ocitest.NewRegistry(t, "shared:v1", map[string]string{
 		"vars.yaml":     "a: 1\n",
@@ -101,6 +108,7 @@ func TestFetch_OCISourceThroughSharedDownloader(t *testing.T) {
 	assert.FileExists(t, filepath.Join(dst, "sub", "inner.txt"))
 }
 
+// TestFetch_OCISourceSubdirSelectsDirectory proves go-getter's //subdir handling selects a directory out of a pulled image.
 func TestFetch_OCISourceSubdirSelectsDirectory(t *testing.T) {
 	ref := ocitest.NewRegistry(t, "subdir:v1", map[string]string{
 		"vars.yaml":     "a: 1\n",
@@ -114,11 +122,13 @@ func TestFetch_OCISourceSubdirSelectsDirectory(t *testing.T) {
 	assert.NoFileExists(t, filepath.Join(dst, "vars.yaml"))
 }
 
+// TestFetch_OCISourceInvalidReference proves a malformed oci:// reference fails with ErrInvalidImageReference.
 func TestFetch_OCISourceInvalidReference(t *testing.T) {
 	err := NewGoGetterDownloader(&schema.AtmosConfiguration{}).Fetch("oci://not a ref!!", t.TempDir(), ClientModeDir, time.Minute)
 	require.ErrorIs(t, err, errUtils.ErrInvalidImageReference)
 }
 
+// TestFetch_OCISourcePullFailureKeepsSentinel proves a failed pull keeps ErrPullImage in the error chain.
 func TestFetch_OCISourcePullFailureKeepsSentinel(t *testing.T) {
 	ref := ocitest.NewRegistry(t, "exists:v1", map[string]string{"a.txt": "a"})
 	missing := ref[:len(ref)-len("exists:v1")] + "missing:v1"
@@ -130,6 +140,7 @@ func TestFetch_OCISourcePullFailureKeepsSentinel(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrPullImage)
 }
 
+// TestPrepareOCISource covers normalization of oci:// sources before go-getter parses them.
 func TestPrepareOCISource(t *testing.T) {
 	tests := []struct {
 		name string
@@ -155,6 +166,7 @@ func TestPrepareOCISource(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrInvalidImageReference)
 }
 
+// TestIsRemoteSource_OCIDoesNotTriggerBrokers proves oci:// sources skip the git credential-broker gating.
 func TestIsRemoteSource_OCIDoesNotTriggerBrokers(t *testing.T) {
 	assert.False(t, isRemoteSource("oci://ghcr.io/org/image:v1"))
 	assert.False(t, isRemoteSource("git::oci://ghcr.io/org/image:v1"))
