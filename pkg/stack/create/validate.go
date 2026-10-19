@@ -1,7 +1,9 @@
 package create
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,19 +15,30 @@ import (
 
 // scaffoldConfigDir returns the directory of the loaded atmos.yaml, which owns
 // scaffold.templates. It falls back to the project root when the configuration
-// came from several files or the directory has no atmos.yaml.
-func scaffoldConfigDir(config *schema.AtmosConfiguration, root string) string {
+// came from several files or the directory has no atmos.yaml. Errors other than
+// a missing path are returned, so an unreadable configuration never silently
+// selects a different scaffold catalog.
+func scaffoldConfigDir(config *schema.AtmosConfiguration, root string) (string, error) {
 	dir := config.CliConfigPath
 	if dir == "" || strings.Contains(dir, ";") {
-		return root
+		return root, nil
 	}
-	if info, err := os.Stat(dir); err == nil && !info.IsDir() {
+	info, err := os.Stat(dir)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return root, nil
+	case err != nil:
+		return "", fmt.Errorf("%w: %w", errUtils.ErrInvalidConfig, err)
+	case !info.IsDir():
 		dir = filepath.Dir(dir)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "atmos.yaml")); err != nil {
-		return root
+		if errors.Is(err, fs.ErrNotExist) {
+			return root, nil
+		}
+		return "", fmt.Errorf("%w: %w", errUtils.ErrInvalidConfig, err)
 	}
-	return dir
+	return dir, nil
 }
 
 func resolveManifest(config *schema.AtmosConfiguration, file string) (string, string, error) {

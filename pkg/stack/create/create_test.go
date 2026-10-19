@@ -332,3 +332,16 @@ spec:
 		})
 	}
 }
+
+func TestScaffoldConfigDirFallbackAndErrors(t *testing.T) {
+	root := t.TempDir()
+	missing := filepath.Join(t.TempDir(), "missing")
+
+	dir, err := scaffoldConfigDir(&schema.AtmosConfiguration{CliConfigPath: missing}, root)
+	require.NoError(t, err)
+	assert.Equal(t, root, dir, "a missing config directory falls back to the project root")
+
+	// Errors other than a missing path must not silently select another catalog.
+	_, err = scaffoldConfigDir(&schema.AtmosConfiguration{CliConfigPath: "bad\x00path"}, root)
+	require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}

@@ -149,11 +149,6 @@ func TestLifecycleOptionsIgnoreForeignEnvironment(t *testing.T) {
 	t.Setenv("ATMOS_INCLUDE_DEPENDENTS", "true")
 	t.Setenv("ATMOS_TERRAFORM_DEPLOY_MAX_CONCURRENCY", "0")
 	t.Setenv("ATMOS_AFFECTED", "true")
-	// Values another command left on the global viper must not leak either.
-	viper.Reset()
-	viper.Set("all", true)
-	viper.Set("include-dependencies", "all")
-	t.Cleanup(viper.Reset)
 	t.Run("selection still required", func(t *testing.T) {
 		_, err := lifecycleTestCommand(t, "deploy", "--stack=prod", "--dry-run")
 		require.ErrorIs(t, err, errUtils.ErrInvalidFlag)

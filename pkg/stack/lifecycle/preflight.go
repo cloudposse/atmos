@@ -75,7 +75,7 @@ func checkSurvivingConsumers(g *dependency.Graph, commands map[string]*Handler, 
 			}
 			t := g.Nodes[target]
 			if commands[consumer.Type] == nil {
-				p.exclude(consumer, "not destroyed (component kind does not define this operation) but requires "+Label(t))
+				p.replaceNotice(consumer, "not destroyed (component kind does not define this operation) but requires "+Label(t))
 				continue
 			}
 			pairs = append(pairs, Label(consumer)+" -> "+Label(t))

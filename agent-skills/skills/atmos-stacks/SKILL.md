@@ -366,6 +366,8 @@ atmos describe component vpc -s plat-ue2-prod
 
 Three commands manage whole stacks. Use `--dry-run` first to preview selection, commands, and hooks.
 
+**Safety rule for agents:** always run `atmos stack destroy ... --dry-run` first and show the user the plan. Never run `stack destroy` without `--dry-run`, and never add `--auto-approve`, unless the user has explicitly confirmed that exact destroy in this conversation.
+
 ```bash
 # Create a manifest from a scaffold (never overwrites an existing file).
 atmos stack create --file=stacks/deploy/dev.yaml --name=dev --import=catalog/defaults --component=terraform:network --dry-run
@@ -373,6 +375,8 @@ atmos stack create --file=stacks/deploy/dev.yaml --name=dev --import=catalog/def
 # Deploy or destroy components across component types in dependency order.
 atmos stack deploy --all --stack=dev --dry-run
 atmos stack deploy --affected --base=origin/main --include-dependencies=2
+atmos stack destroy --all --stack=dev --dry-run
+# Only after the user explicitly confirms the destroy:
 atmos stack destroy --all --stack=dev --max-concurrency=2 --auto-approve
 ```
 
@@ -384,7 +388,7 @@ Rules for `stack deploy` and `stack destroy`:
 - `--include-dependencies` and `--include-dependents` expand without a limit when bare; use the `=N` form to limit depth.
 - Supported kinds: Terraform, Helmfile (deploy runs `helmfile apply`, which needs the helm-diff plugin), Helm, Kubernetes, AWS CloudFormation, and custom kinds whose custom commands define `deploy`/`destroy` with `component.type`. `--affected` does not select custom kinds yet. Packer and kinds without a handler are excluded with a notice.
 - Locked components (`metadata.locked`) are excluded. A selected component whose required dependency has no handler fails before execution. Cycles are reported as readable paths.
-- `destroy` runs in reverse dependency order and fails before execution when a component outside the selection still requires a destroyed one. Add `--include-dependents` or widen `--stack`.
+- `destroy` runs in reverse dependency order and fails before execution when a component outside the selection still requires a destroyed one. Add `--include-dependents` or widen `--stack`. Consumers of kinds without a `destroy` operation (such as Packer) do not block; they are reported in a notice.
 - `--auto-approve` passes each handler's approval arguments. Terraform and CloudFormation destroy prompt otherwise; Helm, Kubernetes, and Helmfile deletes do not. Concurrent destroys that would prompt are rejected unless `--auto-approve` is set.
 - `--log-order=grouped` applies when `--max-concurrency` is above 1.
 - Only `ATMOS_STACK`, `ATMOS_IDENTITY`, `ATMOS_DRY_RUN`, and `ATMOS_SKIP_HOOKS` apply; variables such as `ATMOS_TERRAFORM_*_ALL` do not change selection.

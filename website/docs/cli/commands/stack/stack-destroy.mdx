@@ -55,7 +55,9 @@ Atmos builds the full plan before it starts any component:
 - The command fails when a component outside the selection still requires a
   component that would be destroyed. The error lists each `consumer -> target` pair.
   Add `--include-dependents` to destroy the consumers first, or widen `--stack` to
-  cover them. Optional dependencies do not block a destroy.
+  cover them. Optional dependencies do not block a destroy, and neither do
+  consumers of kinds without a `destroy` operation, such as Packer. Those are
+  reported in a notice that names the component they still require.
 - Dependency cycles are reported as readable paths, such as
   `terraform/dev/a -> terraform/dev/b -> terraform/dev/a`.
 

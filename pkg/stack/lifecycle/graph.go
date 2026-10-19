@@ -220,6 +220,19 @@ func (p *Plan) exclude(n *dependency.Node, reason string) {
 	p.Notices = append(p.Notices, Notice{n.Type, n.Stack, n.Component, reason})
 }
 
+// replaceNotice records a more specific reason for a component, replacing a generic
+// notice recorded earlier, such as the unsupported-kind notice from seed selection.
+func (p *Plan) replaceNotice(n *dependency.Node, reason string) {
+	for i := range p.Notices {
+		notice := &p.Notices[i]
+		if notice.Kind == n.Type && notice.Stack == n.Stack && notice.Component == n.Component {
+			notice.Reason = reason
+			return
+		}
+	}
+	p.Notices = append(p.Notices, Notice{n.Type, n.Stack, n.Component, reason})
+}
+
 func expandSelection(g *dependency.Graph, commands map[string]*Handler, seeds []string, s Selection, p *Plan) map[string]bool {
 	selected := make(map[string]bool)
 	for _, id := range seeds {

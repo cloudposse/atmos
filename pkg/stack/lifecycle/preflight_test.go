@@ -145,6 +145,14 @@ func TestDestroySurvivingConsumerRules(t *testing.T) {
 	require.Len(t, plan.Notices, 1)
 	assert.Equal(t, "packer", plan.Notices[0].Kind)
 	assert.Contains(t, plan.Notices[0].Reason, "requires terraform/dev/network")
+
+	// Selecting every stack seeds the Packer consumer first with the generic
+	// unsupported-kind notice; the surviving-consumer reason must replace it.
+	plan, err = BuildPlan(stacks, commands, Selection{Reverse: true}, "{{")
+	require.NoError(t, err)
+	require.Len(t, plan.Notices, 1)
+	assert.Equal(t, "image", plan.Notices[0].Component)
+	assert.Contains(t, plan.Notices[0].Reason, "requires terraform/dev/network")
 }
 
 func TestCycleErrorUsesComponentLabels(t *testing.T) {

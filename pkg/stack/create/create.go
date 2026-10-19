@@ -56,6 +56,34 @@ type Plan struct {
 	staleRecord string
 }
 
+// resolveTemplate selects the scaffold for --template and rejects incompatible
+// recipes before any questions are asked or files are rendered. The caller must
+// call the returned cleanup.
+func resolveTemplate(config *schema.AtmosConfiguration, opts *Options, root, file string) (*templates.Configuration, func(), error) {
+	noop := func() {}
+	name := opts.Template
+	if name == "" {
+		name = "stack"
+	}
+	configDir, err := scaffoldConfigDir(config, root)
+	if err != nil {
+		return nil, noop, err
+	}
+	template, cleanup, err := catalog.Resolve(name, opts.Ref, configDir, filepath.Join(root, file))
+	if err != nil {
+		return nil, noop, err
+	}
+	if err := rejectRefForNonGit(template, opts.Ref); err != nil {
+		cleanup()
+		return nil, noop, err
+	}
+	if _, err := stackDefinition(template); err != nil {
+		cleanup()
+		return nil, noop, err
+	}
+	return template, cleanup, nil
+}
+
 // Prepare renders and validates a new stack before any generation hook or write.
 func Prepare(config *schema.AtmosConfiguration, opts *Options, renderer Renderer) (*Plan, error) {
 	defer perf.Track(config, "create.Prepare")()
@@ -76,23 +104,11 @@ func Prepare(config *schema.AtmosConfiguration, opts *Options, renderer Renderer
 	if err != nil {
 		return nil, err
 	}
-	name := opts.Template
-	if name == "" {
-		name = "stack"
-	}
-	template, cleanup, err := catalog.Resolve(name, opts.Ref, scaffoldConfigDir(config, root), filepath.Join(root, file))
+	template, cleanup, err := resolveTemplate(config, opts, root, file)
 	if err != nil {
 		return nil, err
 	}
 	defer cleanup()
-	if err := rejectRefForNonGit(template, opts.Ref); err != nil {
-		return nil, err
-	}
-	// Reject incompatible recipes before asking questions or rendering files.
-	_, err = stackDefinition(template)
-	if err != nil {
-		return nil, err
-	}
 	renderer.SetEdition(config.Edition)
 	generated, err := renderer.PlanCreationQuiet(template, root, opts.Defaults, values)
 	if err != nil {
