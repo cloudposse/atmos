@@ -1,6 +1,8 @@
 package lifecycle
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 
 	cockroach "github.com/cockroachdb/errors"
@@ -208,4 +210,45 @@ func TestDeletedDefinitionNoticeNamesTheVerb(t *testing.T) {
 	require.Len(t, plan.Notices, 1)
 	assert.Contains(t, plan.Notices[0].Reason, "removed from configuration")
 	assert.NotContains(t, plan.Notices[0].Reason, "--allow-destroy")
+}
+
+func TestNoticesAreSortedByComponentThenReason(t *testing.T) {
+	app := []string{"terraform", "dev", "app"}
+	bravo := []string{"packer", "dev", "bravo"}
+	alpha := []string{"packer", "dev", "alpha"}
+	stacks := inventory(app, bravo, alpha)
+
+	plan, err := BuildPlan(stacks, capabilities("terraform"), Selection{}, "{{")
+	require.NoError(t, err)
+	reason := "component kind does not define this operation"
+	// Map iteration order must not leak into the output.
+	assert.Equal(t, []Notice{{"packer", "dev", "alpha", reason}, {"packer", "dev", "bravo", reason}}, plan.Notices)
+}
+
+func TestReadableCycleKeepsOriginalErrorWhenNoCycleIsLocated(t *testing.T) {
+	g := dependency.NewGraph()
+	require.NoError(t, g.AddNode(&dependency.Node{ID: "a", Type: "terraform", Stack: "dev", Component: "a"}))
+	require.NoError(t, g.AddNode(&dependency.Node{ID: "b", Type: "terraform", Stack: "dev", Component: "b"}))
+	require.NoError(t, g.AddDependency("a", "b"))
+
+	// Negative path: an acyclic graph yields no cycle, so the sorter's error is returned unchanged.
+	assert.Empty(t, findCycle(g))
+	original := fmt.Errorf("%w: reported elsewhere", dependency.ErrCircularDependency)
+	assert.Same(t, original, readableCycle(g, original))
+
+	// Errors that are not cycles are never rewritten.
+	other := errors.New("unrelated")
+	assert.Same(t, other, readableCycle(g, other))
+}
+
+func TestFindCycleIgnoresDanglingDependencies(t *testing.T) {
+	g := dependency.NewGraph()
+	require.NoError(t, g.AddNode(&dependency.Node{ID: "a", Type: "terraform", Stack: "dev", Component: "a"}))
+	require.NoError(t, g.AddNode(&dependency.Node{ID: "b", Type: "terraform", Stack: "dev", Component: "b"}))
+	// A dependency edge whose target is not in the graph is skipped rather than followed.
+	g.Nodes["a"].Dependencies = []string{"0ghost", "b"}
+	g.Nodes["b"].Dependencies = []string{"a"}
+
+	cycle := findCycle(g)
+	assert.Equal(t, []string{"a", "b", "a"}, cycle)
 }

@@ -3,6 +3,7 @@ package stack
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/scheduler"
@@ -314,4 +316,151 @@ func TestLifecycleCIPublishSucceedsWhenNothingFailed(t *testing.T) {
 	require.NoError(t, state.publish(nil, 0))
 	assert.Equal(t, "[]", reporter.outputMap()["results"])
 	assert.Equal(t, "0", reporter.outputMap()["components_total"])
+}
+
+func TestNewLifecycleCIReportsUnusableTemporaryDirectory(t *testing.T) {
+	vpc, _ := ciTestNodes()
+	missing := filepath.Join(t.TempDir(), "missing")
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, missing)
+	}
+	state, err := newLifecycleCI(&schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}, &lifecycleOptions{verb: "deploy", ci: true}, ciTestPlan(t, vpc), nil, &fakeCIReporter{})
+	require.Error(t, err)
+	assert.Nil(t, state)
+}
+
+func TestReadCIFileToleratesMissingFiles(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "output")
+	require.NoError(t, os.WriteFile(path, []byte("a=1\n"), ciFilePermissions))
+	assert.Equal(t, "a=1\n", readCIFile(path))
+	assert.Empty(t, readCIFile(""), "a child without capture files has no content")
+	assert.Empty(t, readCIFile(filepath.Join(dir, "never-written")))
+}
+
+func TestLifecycleCIPublishIgnoresResultsWithoutCaptureFiles(t *testing.T) {
+	vpc, app := ciTestNodes()
+	reporter := &fakeCIReporter{}
+	state, err := newLifecycleCI(&schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}, &lifecycleOptions{verb: "deploy", ci: true}, ciTestPlan(t, vpc), nil, reporter)
+	require.NoError(t, err)
+	t.Cleanup(state.cleanup)
+
+	// The second result was never part of the plan, so it has no capture files.
+	require.NoError(t, state.publish([]scheduler.Result{
+		{NodeID: vpc.ID, Node: *vpc, Status: scheduler.StatusSucceeded},
+		{NodeID: app.ID, Node: *app, Status: scheduler.StatusFailed},
+	}, 0))
+	var decoded []ciResult
+	require.NoError(t, json.Unmarshal([]byte(reporter.outputMap()["results"]), &decoded))
+	require.Len(t, decoded, 2)
+	assert.Equal(t, map[string]string{}, decoded[1].Outputs)
+	assert.NotContains(t, reporter.summaries[0], "<details>")
+	assert.Equal(t, "false", reporter.outputMap()["success"])
+}
+
+func TestLifecycleReporterFallsBackToTheGenericProvider(t *testing.T) {
+	clearCIEnvironment(t)
+	dir := t.TempDir()
+	output, summary := filepath.Join(dir, "output"), filepath.Join(dir, "summary")
+	t.Setenv("ATMOS_CI_OUTPUT", output)
+	t.Setenv("ATMOS_CI_SUMMARY", summary)
+	reporter := newLifecycleReporter(&schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}})
+	require.NotNil(t, reporter)
+
+	// Without a detected provider, forced CI mode still writes to the files the generic provider names.
+	_, err := reporter.Output("components_total", "2")
+	require.NoError(t, err)
+	_, err = reporter.Summary("### atmos stack deploy\n")
+	require.NoError(t, err)
+	written, err := os.ReadFile(output)
+	require.NoError(t, err)
+	assert.Equal(t, "components_total=2\n", string(written))
+	rendered, err := os.ReadFile(summary)
+	require.NoError(t, err)
+	assert.Equal(t, "### atmos stack deploy\n", string(rendered))
+}
+
+// ciRun returns a run over the platform stack's two components with CI mode on and the parent's
+// output and summary files redirected into a temporary directory.
+func ciRun(t *testing.T) (run *lifecycleRun, outputFile, summaryFile string) {
+	t.Helper()
+	clearCIEnvironment(t)
+	run, _ = lifecycleChildRun(t, "deploy", 0, func(o *lifecycleOptions) { o.ci = true })
+	run.config.CI = schema.CIConfig{Enabled: true}
+	dir := t.TempDir()
+	outputFile, summaryFile = filepath.Join(dir, "parent-output"), filepath.Join(dir, "parent-summary")
+	t.Setenv("ATMOS_CI_OUTPUT", outputFile)
+	t.Setenv("ATMOS_CI_SUMMARY", summaryFile)
+	t.Setenv("ATMOS_CI", "true")
+	return run, outputFile, summaryFile
+}
+
+func TestExecuteLifecycleChildrenPublishesCombinedCIResults(t *testing.T) {
+	run, outputFile, summaryFile := ciRun(t)
+	t.Setenv(childCaptureEnv, "1")
+	captureLifecycle(t)
+
+	require.NoError(t, executeLifecycleChildren(lifecycleTestCommandWithContext(), run))
+
+	outputs, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+	parsed := parseCIOutputs(string(outputs))
+	assert.Equal(t, "2", parsed["components_total"])
+	assert.Equal(t, "2", parsed["components_succeeded"])
+	assert.Equal(t, "0", parsed["components_failed"])
+	assert.Equal(t, "1", parsed["components_excluded"], "the packer component without a handler is counted")
+	assert.Equal(t, "true", parsed["success"])
+	// Each child wrote to its own private files, and the parent collected them per component.
+	var results []ciResult
+	require.NoError(t, json.Unmarshal([]byte(parsed["results"]), &results))
+	require.Len(t, results, 2)
+	for _, result := range results {
+		assert.Equal(t, "succeeded", result.Status)
+		assert.Equal(t, map[string]string{"child_key": "child_value"}, result.Outputs, "the duplicated summary output is dropped")
+	}
+
+	summary, err := os.ReadFile(summaryFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(summary), "### atmos stack deploy")
+	assert.Contains(t, string(summary), "| registry | terraform | platform | succeeded |")
+	assert.Contains(t, string(summary), "<details><summary>helmfile/platform/ingress</summary>\n\n## child summary\n\n</details>")
+	assert.Contains(t, string(summary), "2 succeeded, 0 failed, 0 skipped, 1 excluded")
+}
+
+func TestExecuteLifecycleChildrenPublishesFailuresToo(t *testing.T) {
+	run, outputFile, _ := ciRun(t)
+	t.Setenv(childExitEnv, "4")
+	captureLifecycle(t)
+
+	err := executeLifecycleChildren(lifecycleTestCommandWithContext(), run)
+	require.ErrorIs(t, err, errUtils.ErrComponentExecutionFailed)
+	outputs, readErr := os.ReadFile(outputFile)
+	require.NoError(t, readErr)
+	parsed := parseCIOutputs(string(outputs))
+	assert.Equal(t, "false", parsed["success"])
+	assert.Equal(t, "1", parsed["components_failed"])
+	assert.Equal(t, "1", parsed["components_skipped"])
+}
+
+func TestExecuteLifecycleChildrenKeepsGoingWhenPublishingFails(t *testing.T) {
+	run, _, _ := ciRun(t)
+	// The parent's output file lives in a directory that does not exist.
+	t.Setenv("ATMOS_CI_OUTPUT", filepath.Join(t.TempDir(), "missing", "output"))
+	output := captureLifecycle(t)
+
+	require.NoError(t, executeLifecycleChildren(lifecycleTestCommandWithContext(), run), "a reporting failure does not fail the operation")
+	assert.Contains(t, output.String(), "Failed to publish the CI summary and outputs")
+	assert.Contains(t, output.String(), "2 succeeded, 0 failed, 0 skipped, 1 excluded")
+}
+
+func TestExecuteLifecycleChildrenStopsWhenCICaptureCannotBePrepared(t *testing.T) {
+	run, _, _ := ciRun(t)
+	log := os.Getenv(childLogEnv)
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, filepath.Join(t.TempDir(), "missing"))
+	}
+	captureLifecycle(t)
+
+	require.Error(t, executeLifecycleChildren(lifecycleTestCommandWithContext(), run))
+	assert.NoFileExists(t, log, "no child starts without somewhere to capture its CI output")
 }

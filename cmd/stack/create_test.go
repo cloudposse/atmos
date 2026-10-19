@@ -177,3 +177,97 @@ func TestCreateRefusesRefForBuiltInScaffold(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
 	assert.NoFileExists(t, "stacks/dev.yaml")
 }
+
+const createRecipeWithExtraFile = `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: extra
+spec:
+  stack:
+    manifest: '{{ .Config.stack_file }}'
+  files:
+    - path: stack.yaml
+      target: '{{ .Config.stack_file }}'
+    - path: main.tf
+      target: components/terraform/network/main.tf
+`
+
+func writeCreateRecipe(t *testing.T, definition string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll("recipe", 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join("recipe", "scaffold.yaml"), []byte(definition), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join("recipe", "stack.yaml"), []byte("vars:\n  stage: dev\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join("recipe", "main.tf"), []byte("# network\n"), 0o644))
+}
+
+func TestCreateRequiresFile(t *testing.T) {
+	createProject(t)
+	err := runCreate(t, "--defaults")
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	assert.Contains(t, err.Error(), "--file is required")
+	assert.NoDirExists(t, ".atmos")
+}
+
+func TestCreateReportsScaffoldFilesOtherThanManifestAndRecord(t *testing.T) {
+	output := createProject(t)
+	writeCreateRecipe(t, createRecipeWithExtraFile)
+	require.NoError(t, runCreate(t, "--file", "stacks/dev.yaml", "--template", "./recipe", "--defaults"))
+	text := output.String()
+	assert.Contains(t, text, "Created stack manifest stacks/dev.yaml")
+	assert.Contains(t, text, "Created components/terraform/network/main.tf")
+	assert.Contains(t, text, "Recorded the generation in .atmos/stack-generations/")
+	assert.FileExists(t, filepath.Join("components", "terraform", "network", "main.tf"))
+}
+
+func TestCreateFailingScaffoldHookPreventsCreation(t *testing.T) {
+	output := createProject(t)
+	definition := createRecipeWithExtraFile + `  hooks:
+    gate:
+      events: [before.scaffold.generate]
+      kind: step
+      type: stack-create-cmd-unregistered-hook
+      with:
+        message: gate
+`
+	writeCreateRecipe(t, definition)
+	require.Error(t, runCreate(t, "--file", "stacks/dev.yaml", "--template", "./recipe", "--defaults"))
+	assert.NoFileExists(t, "stacks/dev.yaml")
+	assert.NoDirExists(t, ".atmos")
+	assert.NotContains(t, output.String(), "Created stack manifest")
+
+	// Negative path: skipping every hook lets the same creation through.
+	require.NoError(t, runCreate(t, "--file", "stacks/dev.yaml", "--template", "./recipe", "--defaults", "--skip-hooks"))
+	assert.FileExists(t, "stacks/dev.yaml")
+}
+
+func TestCreateLoadsProjectConfigurationWhenNoneIsPreloaded(t *testing.T) {
+	output := createProject(t)
+	root, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile("atmos.yaml", []byte("base_path: .\nstacks:\n  base_path: stacks\n  included_paths: [\"**/*\"]\n"), 0o644))
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", root)
+	t.Setenv("ATMOS_BASE_PATH", root)
+	SetAtmosConfig(nil)
+
+	config, err := stackCreationConfig()
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(root, "stacks"), config.StacksBaseAbsolutePath)
+
+	require.NoError(t, runCreate(t, "--file", "stacks/dev.yaml", "--name", "dev", "--defaults"))
+	assert.FileExists(t, filepath.Join(root, "stacks", "dev.yaml"))
+	assert.Contains(t, output.String(), "Created stack manifest stacks/dev.yaml")
+}
+
+func TestCreateReportsUnloadableProjectConfiguration(t *testing.T) {
+	createProject(t)
+	root, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile("atmos.yaml", []byte("base_path: [unclosed\n"), 0o644))
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", root)
+	SetAtmosConfig(nil)
+
+	err = runCreate(t, "--file", "stacks/dev.yaml", "--defaults")
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, errUtils.ErrInvalidFlag, "the configuration failure is reported, not a flag problem")
+	assert.NoFileExists(t, filepath.Join(root, "stacks", "dev.yaml"))
+}

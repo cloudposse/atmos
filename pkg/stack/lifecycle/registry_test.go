@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestRegistryFixedEventsAndIsolation(t *testing.T) {
@@ -31,4 +33,27 @@ func TestRegistryFixedEventsAndIsolation(t *testing.T) {
 	assert.Equal(t, "before.widgets.deploy", handler.HookEvents[0])
 	_, ok = r.Lookup("other", Deploy)
 	assert.False(t, ok)
+}
+
+func TestZeroValueRegistryRegistersLazily(t *testing.T) {
+	// A zero-value Registry has no handler maps until the first registration.
+	var r Registry
+	require.NoError(t, r.Register("widgets", Deploy, NativeHandler("widgets", "deploy")))
+	handler, ok := r.Lookup("widgets", Deploy)
+	require.True(t, ok)
+	assert.Equal(t, []string{"widgets", "deploy"}, handler.Path)
+	require.ErrorIs(t, r.Register("widgets", Deploy, NativeHandler("widgets", "deploy")), errUtils.ErrInvalidConfig)
+}
+
+func TestMustRegisterPanicsOnInvalidRegistration(t *testing.T) {
+	before := len(DefaultRegistry.Handlers(Deploy))
+	var recovered any
+	func() {
+		defer func() { recovered = recover() }()
+		MustRegister("", Deploy, NativeHandler("deploy"))
+	}()
+	err, ok := recovered.(error)
+	require.True(t, ok, "MustRegister panics with the registration error, got %v", recovered)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+	assert.Len(t, DefaultRegistry.Handlers(Deploy), before, "a rejected registration leaves the default registry unchanged")
 }

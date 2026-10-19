@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -242,7 +243,11 @@ func preflightError(cause error, rendered []renderedStack, overlay, real string)
 }
 
 func collisionError(match []string, files string) error {
-	component, stack, manifests := match[1], match[2], match[3]
+	component, stack := match[1], match[2]
+	// Stack validation lists the manifests in map order; sort them so the message is stable.
+	listed := strings.Split(match[3], ", ")
+	sort.Strings(listed)
+	manifests := strings.Join(listed, ", ")
 	return errUtils.Build(fmt.Errorf("%w: creating %s would define stack %q again: component %q is declared in more than one top-level manifest (%s)",
 		errUtils.ErrInvalidStackManifest, files, stack, component, manifests)).
 		WithHint(fmt.Sprintf("Existing manifests already define stack `%s`; pick values (or `--name`) that give the new stack a unique name", stack)).

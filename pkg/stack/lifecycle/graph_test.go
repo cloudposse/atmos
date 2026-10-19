@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -147,4 +148,120 @@ func TestRelevantCycleThroughUnselectedNodes(t *testing.T) {
 	_, err = BuildPlan(stacks, commands, Selection{Affected: affected(a)}, "{{")
 	require.Error(t, err)
 	assert.NotEqual(t, NodeID("a", "b|c", "d"), NodeID("a|b", "c", "d"))
+}
+
+// setDependencies replaces a component's dependency declaration with raw entries.
+func setDependencies(stacks map[string]any, node []string, entries ...any) {
+	section(stacks, node[0], node[1], node[2])["dependencies"] = map[string]any{"components": entries}
+}
+
+func TestDependencyDefaultsToOwnKindAndStack(t *testing.T) {
+	network := []string{"terraform", "dev", "network"}
+	app := []string{"terraform", "dev", "app"}
+	other := []string{"terraform", "prod", "network"}
+	stacks := inventory(network, app, other)
+	// Only the component is named: the kind and stack come from the declaring component.
+	setDependencies(stacks, app, map[string]any{"component": "network"})
+
+	plan, err := BuildPlan(stacks, capabilities("terraform"), Selection{Stack: "dev"}, "{{")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"terraform/dev/network", "terraform/dev/app"}, planLabels(t, plan))
+	assert.Equal(t, []string{NodeID("terraform", "dev", "network")}, plan.Graph.Nodes[NodeID("terraform", "dev", "app")].Dependencies)
+}
+
+func TestUnresolvedDependencySelectorFailsThePlan(t *testing.T) {
+	app := []string{"terraform", "dev", "app"}
+	stacks := inventory(app)
+	setDependencies(stacks, app, map[string]any{"component": "{{ .vars.target }}"})
+
+	_, err := BuildPlan(stacks, capabilities("terraform"), Selection{}, "{{")
+	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+	assert.Contains(t, err.Error(), "terraform/dev/app")
+}
+
+func TestMalformedDependenciesSectionFailsThePlan(t *testing.T) {
+	app := []string{"terraform", "dev", "app"}
+	stacks := inventory(app)
+	section(stacks, app[0], app[1], app[2])["dependencies"] = "not-a-map"
+
+	_, err := BuildPlan(stacks, capabilities("terraform"), Selection{}, "{{")
+	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+	assert.Contains(t, err.Error(), "terraform/dev/app")
+}
+
+func TestOptionalMissingTargetIsIgnored(t *testing.T) {
+	app := []string{"terraform", "dev", "app"}
+	stacks := inventory(app)
+	depends(stacks, app, []string{"terraform", "dev", "missing"}, false)
+
+	plan, err := BuildPlan(stacks, capabilities("terraform"), Selection{}, "{{")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"terraform/dev/app"}, planLabels(t, plan))
+	assert.Empty(t, plan.Graph.Nodes[NodeID("terraform", "dev", "app")].Dependencies)
+
+	// Negative path: the same missing target is fatal when required.
+	depends(stacks, app, []string{"terraform", "dev", "missing"}, true)
+	_, err = BuildPlan(stacks, capabilities("terraform"), Selection{}, "{{")
+	require.ErrorIs(t, err, errUtils.ErrDependencyTargetNotFound)
+}
+
+func TestHandlerErrorFailsOnlyPlansThatSelectItsKind(t *testing.T) {
+	app := []string{"terraform", "dev", "app"}
+	widget := []string{"widget", "dev", "w"}
+	stacks := inventory(app, widget)
+	broken := errors.New("broken declaration")
+	commands := capabilities("terraform")
+	commands["widget"] = &Handler{Path: []string{"widget", "deploy"}, Err: broken}
+
+	_, err := BuildPlan(stacks, commands, Selection{}, "{{")
+	require.ErrorIs(t, err, broken)
+
+	// An unrelated kind never trips over the broken handler.
+	plan, err := BuildPlan(stacks, commands, Selection{Affected: affected(app)}, "{{")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"terraform/dev/app"}, planLabels(t, plan))
+}
+
+func TestAffectedOutsideSelectedStackIsNotEligible(t *testing.T) {
+	devApp := []string{"terraform", "dev", "app"}
+	prodApp := []string{"terraform", "prod", "app"}
+	stacks := inventory(devApp, prodApp)
+
+	plan, err := BuildPlan(stacks, capabilities("terraform"), Selection{Stack: "dev", Affected: affected(prodApp)}, "{{")
+	require.NoError(t, err)
+	assert.Zero(t, plan.Graph.Size())
+	assert.Empty(t, plan.Notices)
+}
+
+func TestExpansionVisitsSharedPrerequisiteOnce(t *testing.T) {
+	app := []string{"terraform", "dev", "app"}
+	left := []string{"terraform", "dev", "left"}
+	right := []string{"terraform", "dev", "right"}
+	base := []string{"terraform", "dev", "base"}
+	stacks := inventory(app, left, right, base)
+	setDependencies(stacks, app, map[string]any{"component": "left"}, map[string]any{"component": "right"})
+	depends(stacks, left, base, true)
+	depends(stacks, right, base, true)
+
+	plan, err := BuildPlan(stacks, capabilities("terraform"), Selection{Affected: affected(app), Dependencies: -1}, "{{")
+	require.NoError(t, err)
+	labels := planLabels(t, plan)
+	assert.Len(t, labels, 4)
+	assert.Equal(t, "terraform/dev/base", labels[0])
+	assert.Equal(t, "terraform/dev/app", labels[3])
+}
+
+func TestDependentExpansionTraversesUnsupportedKinds(t *testing.T) {
+	network := []string{"terraform", "dev", "network"}
+	image := []string{"packer", "dev", "image"}
+	app := []string{"terraform", "dev", "app"}
+	stacks := inventory(network, image, app)
+	depends(stacks, image, network, false)
+	depends(stacks, app, image, false)
+
+	plan, err := BuildPlan(stacks, capabilities("terraform"), Selection{Affected: affected(network), Dependents: -1}, "{{")
+	require.NoError(t, err)
+	// The unsupported consumer is reported and skipped, yet its own consumer is still reached.
+	assert.ElementsMatch(t, []string{"terraform/dev/network", "terraform/dev/app"}, planLabels(t, plan))
+	assert.Contains(t, plan.Notices, Notice{"packer", "dev", "image", "expanded component does not define this operation"})
 }

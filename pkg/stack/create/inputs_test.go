@@ -2,6 +2,8 @@ package create
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -212,4 +214,41 @@ func TestUnmarkedTemplateInManifestIsExplained(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrUnprocessedTemplate)
 	assert.Contains(t, strings.Join(cockroach.GetAllDetails(err), "\n"), "not marked as a template")
 	assertNothingWritten(t, cfg, opts.File)
+}
+
+func TestTranslateRenderErrorKeepsUnrelatedErrorsAndGeneralizesUnnamedConflicts(t *testing.T) {
+	unrelated := errors.New("renderer exploded")
+	assert.Same(t, unrelated, translateRenderError(unrelated))
+
+	// A conflict whose destination the renderer did not name still loses the --force/--update guidance.
+	err := translateRenderError(fmt.Errorf("%w: something is in the way", errUtils.ErrFileExists))
+	require.ErrorIs(t, err, errUtils.ErrFileExists)
+	assert.Contains(t, err.Error(), "a file the scaffold writes already exists; stack create never overwrites files")
+	assert.Contains(t, hints(err), "choose a scaffold that writes elsewhere")
+	assert.NotContains(t, err.Error()+hints(err), "--force")
+
+	// A destination that is itself an unrendered template is not echoed back as a path.
+	templated := cockroach.WithDetail(fmt.Errorf("%w: conflict", errUtils.ErrFileExists), "File already exists: `{{ .Config.stack_file }}`")
+	err = translateRenderError(templated)
+	assert.NotContains(t, err.Error(), "{{")
+	assert.Contains(t, err.Error(), "a file the scaffold writes already exists")
+
+	// A named destination is reported as such.
+	named := cockroach.WithDetail(fmt.Errorf("%w: conflict", errUtils.ErrFileExists), "File already exists: `components/vpc/main.tf`")
+	assert.Contains(t, translateRenderError(named).Error(), "components/vpc/main.tf already exists; stack create never overwrites files")
+}
+
+func TestImportedPathsAcceptPlainAndMappedEntries(t *testing.T) {
+	document := map[string]any{"import": []any{
+		"catalog/plain",
+		map[string]any{"path": " catalog/mapped ", "context": map[string]any{"region": "us-east-1"}},
+		map[string]any{"context": map[string]any{}}, // No path: ignored.
+		42, // Unsupported entry: ignored.
+	}}
+	require.NoError(t, verifyReservedInputs("stack", &Options{Imports: []string{"catalog/plain", "catalog/mapped"}}, nil, document))
+
+	err := verifyReservedInputs("stack", &Options{Imports: []string{"catalog/other"}}, nil, document)
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	assert.Contains(t, err.Error(), `--import "catalog/other" was not written`)
+	assert.Equal(t, map[string]bool{"catalog/plain": true, "catalog/mapped": true}, importedPaths(document["import"]))
 }
