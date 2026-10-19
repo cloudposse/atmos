@@ -372,7 +372,7 @@ func TestLifecycleGlobalArgsForwardExplicitlySetFlags(t *testing.T) {
 		cmd.Flags().Bool("mask", true, "")
 		return cmd
 	}
-	config := &schema.AtmosConfiguration{BasePathAbsolute: filepath.Join(string(filepath.Separator), "project")}
+	config := &schema.AtmosConfiguration{BasePathAbsolute: filepath.Join(t.TempDir(), "project")}
 	base := "--base-path=" + config.BasePathAbsolute
 
 	// Negative path: flags the user did not set are never forwarded.

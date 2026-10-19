@@ -135,8 +135,10 @@ func TestFromConfigReportsUnloadableLocalSource(t *testing.T) {
 }
 
 func TestLocalSourceDirResolution(t *testing.T) {
-	configDir := filepath.Join(string(filepath.Separator), "project")
-	absolute := filepath.Join(string(filepath.Separator), "elsewhere", "recipe")
+	// Build real absolute paths: a rooted path without a drive letter is not absolute on Windows.
+	configDir := filepath.Join(t.TempDir(), "project")
+	absolute := filepath.Join(t.TempDir(), "elsewhere", "recipe")
+	require.True(t, filepath.IsAbs(absolute))
 	for name, tc := range map[string]struct {
 		configDir, source, want string
 	}{

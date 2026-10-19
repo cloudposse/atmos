@@ -260,9 +260,9 @@ func TestPreflightReportsUnreadableStacksDirectory(t *testing.T) {
 }
 
 func TestStacksBasePathFallsBackToConfiguredBasePath(t *testing.T) {
-	cfg := &schema.AtmosConfiguration{BasePathAbsolute: filepath.Join(string(filepath.Separator), "project"), Stacks: schema.Stacks{BasePath: "stacks"}}
+	cfg := &schema.AtmosConfiguration{BasePathAbsolute: filepath.Join(t.TempDir(), "project"), Stacks: schema.Stacks{BasePath: "stacks"}}
 	assert.Equal(t, filepath.Join(cfg.BasePathAbsolute, "stacks"), stacksBasePath(cfg))
-	cfg.StacksBaseAbsolutePath = filepath.Join(string(filepath.Separator), "elsewhere", "stacks")
+	cfg.StacksBaseAbsolutePath = filepath.Join(t.TempDir(), "elsewhere", "stacks")
 	assert.Equal(t, cfg.StacksBaseAbsolutePath, stacksBasePath(cfg))
 }
 

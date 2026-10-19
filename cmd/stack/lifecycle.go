@@ -45,7 +45,7 @@ func init() {
 var affectedOnlyFlags = []string{"base", "ref", "sha", "repo-path", "ssh-key", "ssh-key-password", "clone-target-ref"}
 
 func buildLifecycleParser(verb string) *flags.StandardParser {
-	parser := flags.NewStandardParser(
+	options := []flags.Option{
 		flags.WithStackFlag(), flags.WithDryRunFlag(), flags.WithIdentityFlag(),
 		flags.WithBoolFlag("all", "", false, "Select all components defining this operation"),
 		flags.WithBoolFlag("affected", "", false, "Select components affected by the Git comparison"),
@@ -71,13 +71,15 @@ func buildLifecycleParser(verb string) *flags.StandardParser {
 		flags.WithEnvVars(flagCI, "ATMOS_CI", "CI"),
 		flags.WithStringSliceFlag("tags", "", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
 		flags.WithEnvVars("tags", "ATMOS_TAGS"),
+		flags.WithViperKey("tags", lifecycleTagsKey),
 		flags.WithStringArrayFlag("labels", "", nil, "Filter by labels (comma-separated key=value or key:value pairs within an occurrence, and/or repeated, matches all): --labels=cost-center=platform,compliance=sox"),
 		flags.WithEnvVars("labels", "ATMOS_LABELS"),
-	)
-	if verb == "deploy" {
-		parser = flags.NewStandardParser(flags.WithFlagRegistry(parser.Registry()), flags.WithBoolFlag("allow-destroy", "", false, "Request deleted-component teardown (blocked until isolated recovery is available)"))
+		flags.WithViperKey("labels", lifecycleLabelsKey),
 	}
-	return parser
+	if verb == "deploy" {
+		options = append(options, flags.WithBoolFlag("allow-destroy", "", false, "Request deleted-component teardown (blocked until isolated recovery is available)"))
+	}
+	return flags.NewStandardParser(options...)
 }
 
 func lifecycleShort(verb string) string {
@@ -133,11 +135,20 @@ func resolveLifecycleOptions(cmd *cobra.Command, parser *flags.StandardParser, v
 	return opts, checkAffectedOnlyFlags(cmd, &opts)
 }
 
+// Namespaced Viper keys for the selector flags keep a job-level ATMOS_TAGS or
+// ATMOS_LABELS from reaching this command through AutomaticEnv; the variables
+// still apply through their explicit bindings. The namespace must not match a
+// flag name: "stack" is the --stack value, so "stack.*" keys could not nest.
+const (
+	lifecycleTagsKey   = "lifecycle.tags"
+	lifecycleLabelsKey = "lifecycle.labels"
+)
+
 // parseLifecycleSelectors reads the --tags and --labels filters with the same
 // grammar bulk Terraform commands use.
 func parseLifecycleSelectors(v *viper.Viper) ([]string, map[string]string, error) {
-	selectedTags := tags.ParseTagsFlag(strings.Join(v.GetStringSlice("tags"), ","))
-	labels, err := tags.ParseLabelsFlag(tags.ReadLabelsFlag(v))
+	selectedTags := tags.ParseTagsFlag(strings.Join(v.GetStringSlice(lifecycleTagsKey), ","))
+	labels, err := tags.ParseLabelsFlag(tags.ReadLabelsFlagKey(v, lifecycleLabelsKey))
 	return selectedTags, labels, err
 }
 
