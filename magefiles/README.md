@@ -283,7 +283,8 @@ measurements and full reports before attributing a change to code.
 `Benchmarks` measures the event's immutable PR merge revision, main pushes, and manual dispatches
 on `ubuntu-24.04` using repository-pinned Go and existing cache restoration.
 For PRs, `SHA` identifies the measured merge revision, `PRHeadSHA` separately
-identifies the PR head, and `BaseSHA` records `github.event.pull_request.base.sha`.
+identifies the PR head, and `BaseSHA` records the merge revision's first parent
+(the main commit actually measured; `github.event.pull_request.base.sha` can lag it).
 The trusted reporter verifies the merge's two parents against the recorded base
 and workflow's PR head, then selects snapshots reachable from that base.
 Older snapshots can also reflect intervening main changes. Stale-head and fork
