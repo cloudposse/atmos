@@ -85,7 +85,7 @@ components:
     app:
       vars:
         # Read from SSM Parameter Store
-        api_key: !store ssm/prod app api_key
+        api_endpoint: !store ssm/prod app api_endpoint
 
         # Read from Redis
         cached_config: !store redis/cache app config
@@ -93,6 +93,10 @@ components:
 </File>
 
 ## Syntax
+
+:::tip Sensitive values
+The examples here use non-sensitive configuration. For API keys and passwords, configure a supported encrypted store with `secret: true`, declare the value under `secrets.vars`, and read it with [`!secret`](/functions/yaml/secret). Ordinary `!store` values can appear in configuration output; `!store` cannot read stores marked `secret: true`. See [secrets configuration](/cli/configuration/secrets) for a complete example.
+:::
 
 ```yaml
 # Get key from store for component in current stack
@@ -150,7 +154,7 @@ db_host: !store ssm/prod database config | query .host
 primary_endpoint: !store ssm/prod cluster endpoints | query .[0]
 
 # Navigate nested structures
-api_key: !store ssm/prod app credentials | query .api.production.key
+api_endpoint: !store ssm/prod app config | query .api.production.endpoint
 ```
 
 ## Supported Store Backends

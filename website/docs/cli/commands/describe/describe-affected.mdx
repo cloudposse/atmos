@@ -1452,6 +1452,8 @@ trigger `component-1` and then `component-2` and `component-3` in the order of d
 The `atmos describe affected` command automatically detects components and stacks that exist in the BASE branch
 but have been deleted in HEAD. This enables CI/CD pipelines to trigger `terraform destroy` for removed infrastructure.
 
+This command reports changes; it does not execute teardown. `atmos terraform destroy --affected` currently filters out deleted components and destroys affected Terraform components still present in the current configuration. It is not a deletion-only selector. Use the deletion records to build a separate, reviewed teardown workflow, or destroy components before removing their configuration.
+
 ### How it Works
 
 When comparing HEAD (current branch) with BASE (target branch), Atmos not only detects modifications but also:
@@ -1466,7 +1468,7 @@ Deleted components are marked with:
 
 ### Filtering Deleted vs. Modified Components
 
-Use `--query` or `jq` to separate deleted components from modified ones:
+Use the built-in `--query` option to separate deleted components from modified ones:
 
 ```shell
 # Get only deleted components (for destruction)
@@ -1481,72 +1483,50 @@ atmos describe affected --query '[.[] | select(.deleted == true and .stack == "p
 
 ### CI/CD Pipeline Example
 
-Here's a GitHub Actions workflow that separates apply and destroy operations:
+Enable native CI integration in `atmos.yaml`:
 
 ```yaml
-jobs:
-  detect-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      modified: ${{ steps.affected.outputs.modified }}
-      deleted: ${{ steps.affected.outputs.deleted }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - uses: cloudposse/github-action-setup-atmos@v2
-
-      - name: Detect affected
-        id: affected
-        run: |
-          # Get all affected components
-          atmos describe affected --format json > affected.json
-
-          # Filter modified components (for apply)
-          jq '[.[] | select(.deleted != true)]' affected.json > modified.json
-          echo "modified=$(cat modified.json | jq -c)" >> $GITHUB_OUTPUT
-
-          # Filter deleted components (for destroy)
-          jq '[.[] | select(.deleted == true)]' affected.json > deleted.json
-          echo "deleted=$(cat deleted.json | jq -c)" >> $GITHUB_OUTPUT
-
-  apply:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.modified != '[]'
-    strategy:
-      matrix:
-        include: ${{ fromJson(needs.detect-changes.outputs.modified) }}
-    steps:
-      - uses: actions/checkout@v6
-      - uses: cloudposse/github-action-setup-atmos@v2
-      - run: atmos terraform apply ${{ matrix.component }} -s ${{ matrix.stack }}
-
-  destroy:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.deleted != '[]'
-    environment: production  # Requires manual approval via GitHub Environment protection rules
-    strategy:
-      matrix:
-        include: ${{ fromJson(needs.detect-changes.outputs.deleted) }}
-    steps:
-      # IMPORTANT: Check out the BASE branch (target branch), not HEAD.
-      # The deleted component's configuration only exists in BASE.
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.base_ref }}
-      - uses: cloudposse/github-action-setup-atmos@v2
-      - run: atmos terraform destroy ${{ matrix.component }} -s ${{ matrix.stack }} --auto-approve
+ci:
+  enabled: true
 ```
 
-:::warning Destroy Operations
-Destruction of cloud resources is irreversible. The example above uses `--auto-approve` for automation but
-includes `environment: production` to require manual approval via
-[GitHub Environment protection rules](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#environment-protection-rules).
-Always review the list of deleted components before running `terraform destroy`.
+Then run `atmos describe affected` without extra arguments. Atmos detects the comparison base from the CI event and returns JSON by default. You do not need to calculate the merge base, pass `--base`, or process the result with `jq` just to discover affected components.
 
-**Important:** The destroy job must check out the **BASE branch** (target branch, e.g., `main`) rather than HEAD.
-This is because `terraform destroy` needs access to the component's stack configuration and Terraform files,
-which only exist in BASE — they've been deleted in HEAD.
+```yaml
+steps:
+  - uses: actions/checkout@v6
+  - uses: cloudposse/github-action-setup-atmos@v2
+  - name: Describe affected components
+    run: atmos describe affected
+```
+
+For changes that do not remove component definitions, select the matrix output format to build a GitHub Actions job matrix:
+
+```yaml
+- id: affected
+  run: atmos describe affected --format=matrix
+```
+
+Atmos writes `matrix` and `count` to `$GITHUB_OUTPUT` automatically when CI integration is enabled. See [Deploy Affected Components](/integrations/github-actions/deploy-affected) for the native CI workflow once you have verified that the selection contains no deleted components.
+
+:::warning Matrix output currently includes deleted components
+Matrix conversion includes deleted entries but does not retain their `deleted` marker. Feeding these rows directly to plan, apply, or deploy jobs can therefore attempt to execute definitions that are absent from the checkout. The Terraform `--affected` filter does not protect a job that invokes an explicitly named component without that flag.
+
+Review the default JSON output or use the built-in deletion queries above before choosing a deployment matrix. `--query` does not filter `--format=matrix` output. If the change includes deletions, keep them separate from deployment jobs; the matrix example above does not perform that separation or provide a teardown plan.
+:::
+
+Removing configuration does not destroy infrastructure, and `terraform destroy --affected` filters out deleted definitions. Teardown needs their previous configuration as described below.
+
+:::warning Recover and verify configuration before teardown
+Retain the comparison head and resolved base commit SHAs with the deletion list. The `Auto-detected CI base` log identifies the selected comparison base; see [CI Auto-Detection](#ci-auto-detection) for event-specific resolution. An explicit `--base` is useful when replaying a recorded comparison, rather than a requirement for normal CI detection.
+
+Recover the deleted definition from the **exact BASE commit used for detection**, not HEAD or a moving branch name. For an open PR, BASE is normally the fork point and may differ from the configuration that was actually deployed. For example, the target branch could have migrated a backend or workspace after the PR branched.
+
+Before teardown, verify the resolved backend, workspace, account, and component sources against deployment records and the deployed state. If they differ from the base snapshot, recover the configuration and sources from the immutable revision used by that deployment. Do not automatically destroy using an unverified fork-point snapshot.
+
+After verifying identity and reviewing the destruction plan, run an explicit [Terraform destroy](/cli/commands/terraform/destroy) from the recovered deployment configuration. Configure credentials and any required [GitHub Environment protection rules](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#environment-protection-rules) for a separate teardown workflow. Keep recovered configuration private; it can contain sensitive values.
+
+For a post-merge workflow, retain the original comparison SHAs and deletion list; checking out the latest `main` after the merge will not recover the removed configuration. Restore any externally provisioned component sources at their required versions as well. For related deletions, arrange teardown explicitly with dependents before prerequisites using the previous configuration. Review surviving dependents and potential renames before treating a deletion record as approval to destroy.
 :::
 
 [Abstract components](/design-patterns/inheritance-patterns/abstract-component) (`metadata.type: abstract`)

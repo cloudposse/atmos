@@ -14,6 +14,16 @@ The `atmos.Component` template function allows reading any Atmos section or any 
 Atmos component in a stack, and use it in `Go` templates in Atmos component configurations.
 </Intro>
 
+:::caution Terraform lookups can make configuration processing very slow
+For Terraform/OpenTofu components, `atmos.Component` resolves the component configuration and **eagerly retrieves its outputs before your template selects a field**. Reading only `.vars` or `.settings` does not avoid that work. An uncached lookup of a component without a static remote-state backend uses the same execution path as [`!terraform.output`](/functions/yaml/terraform.output): it prepares the component, checks initialization, selects the workspace, and runs `terraform output`. When initialization is required, it can download modules and providers.
+
+Across many components and stacks, these subprocesses, initialization steps, and backend requests can dominate the time spent processing configuration, including during describe, plan, and apply commands. In-memory caching avoids repeated equivalent lookups within one Atmos command; a new command starts a new output cache. [Automatic initialization](/cli/commands/terraform/init#automatic-initialization) can skip an unchanged init, but it does not eliminate the output subprocess and backend read.
+
+For **Terraform/OpenTofu outputs**, prefer [`!terraform.state`](/functions/yaml/terraform.state) when your backend supports direct reads, or publish values to an [external store](/stacks/sharing-state/stores). For shared configuration, prefer [imports](/stacks/imports) and [component inheritance](/design-patterns/inheritance-patterns/component-inheritance) over fetching another Terraform component just to read its settings. `atmos.Component` remains available when you need its resolved component data, but account for the output retrieval cost. YAML functions also avoid interpolating complex values into YAML text.
+
+This Terraform execution cost does not apply to every component type. Native CloudFormation `.outputs` uses the CloudFormation integration; [`!aws.cloudformation.output`](/functions/yaml/aws.cloudformation.output) is its direct YAML equivalent. See [sharing data and outputs](/stacks/sharing-state) for the comparison.
+:::
+
 ## Usage
 
 ```yaml
