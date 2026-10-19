@@ -1065,6 +1065,10 @@ var (
 	ErrDownloadRemoteConfig = errors.New("failed to download remote config")
 	ErrMockImportFailure    = errors.New("mock error: simulated import failure")
 	ErrProcessNestedImports = errors.New("failed to process nested imports")
+	// ErrRequiredImportFailed is returned when a required (non-optional) CLI-config import
+	// cannot be resolved or merged. Object-form imports are required by default (fail closed);
+	// set `skip_if_missing: true` to opt back into warn-and-skip.
+	ErrRequiredImportFailed = errors.New("required config import failed to load")
 
 	// Profiler-related errors.
 	ErrProfilerStart           = errors.New("profiler start failed")

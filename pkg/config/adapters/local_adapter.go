@@ -97,7 +97,9 @@ type nestedImportParams struct {
 
 // processNestedImports handles nested import statements in a config file.
 func (l *LocalAdapter) processNestedImports(v *viper.Viper, p nestedImportParams) ([]config.ResolvedPaths, error) {
-	imports := v.GetStringSlice("import")
+	// Read the raw `import:` value (not GetStringSlice) so object-form nested entries
+	// (skip_if_missing, when) survive; NormalizeConfigImports accepts both forms.
+	imports := config.NormalizeConfigImports(v.Get("import"))
 	if len(imports) == 0 {
 		return nil, nil
 	}

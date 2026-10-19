@@ -444,7 +444,8 @@ settings:
 
 	paths, err := adapter.Resolve(ctx, "main.yaml", tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
-	assert.Contains(t, paths, config.ResolvedPaths{FilePath: nestedPath, ImportPaths: "nested.yaml", ImportType: config.LOCAL})
+	// A nested string import is optional (fail-open): SkipIfMissing is stamped true.
+	assert.Contains(t, paths, config.ResolvedPaths{FilePath: nestedPath, ImportPaths: "nested.yaml", ImportType: config.LOCAL, SkipIfMissing: true})
 }
 
 // TestLocalAdapter_NoNestedImports tests file without nested imports.

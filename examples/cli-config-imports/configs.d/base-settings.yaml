@@ -1,0 +1,5 @@
+# Imported as a string entry (optional / fail open) from atmos.yaml.
+settings:
+  terminal:
+    max_width: 120
+    color: true

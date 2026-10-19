@@ -9,9 +9,12 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/condition"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
@@ -71,6 +74,10 @@ type ResolvedPaths struct {
 	FilePath    string      // Absolute path to the resolved file.
 	ImportPaths string      // Original import path from atmos config.
 	ImportType  importTypes // Type of import (LOCAL, REMOTE, or ADAPTER).
+	// SkipIfMissing carries the originating import's failure intent so that a merge/re-read
+	// failure fails closed for a required import and warn-and-skips for an optional one,
+	// matching how resolve failures are handled in processImports.
+	SkipIfMissing bool
 }
 
 // processConfigImports It reads the import paths from the source configuration.
@@ -121,8 +128,9 @@ func processConfigImportsWithFSAndBasePathSource(source *schema.AtmosConfigurati
 
 // mergeResolvedImports merges each resolved import file into dst and returns the
 // directory of the last imported file that declares a base_path (empty if none).
-// Files that fail to merge or re-read are skipped so a single bad import does not
-// abort the whole configuration load.
+// An optional import (SkipIfMissing) that fails to merge or re-read is skipped so a single
+// bad import does not abort the whole configuration load; a required import that fails to
+// merge returns errUtils.ErrRequiredImportFailed (fail closed).
 func mergeResolvedImports(resolvedPaths []ResolvedPaths, dst *viper.Viper, fs filesystem.FileSystem) (string, error) {
 	basePathSourceDir := ""
 	for _, resolvedPath := range resolvedPaths {
@@ -132,6 +140,9 @@ func mergeResolvedImports(resolvedPaths []ResolvedPaths, dst *viper.Viper, fs fi
 		if err != nil {
 			if isPolicyError(err) {
 				return "", err
+			}
+			if !resolvedPath.SkipIfMissing {
+				return "", fmt.Errorf("%w: %s: %w", errUtils.ErrRequiredImportFailed, SanitizeImport(resolvedPath.ImportPaths), err)
 			}
 			log.Warn("error loading config file", "import", SanitizeImport(resolvedPath.ImportPaths), keyFilePath, resolvedPath.FilePath, "error", err)
 			continue
@@ -155,13 +166,17 @@ func mergeResolvedImports(resolvedPaths []ResolvedPaths, dst *viper.Viper, fs fi
 // The atmosConfig parameter is threaded through so nested remote imports honor auth settings
 // (GitHub token injection and the Atmos Pro credential broker); it may be nil.
 //
+// Each entry is a schema.ConfigImport, so nested imports honor the same per-import controls
+// (skip_if_missing, when) as top-level CLI-config imports. Adapters that read a raw string
+// list from Viper should convert it with NormalizeConfigImports first.
+//
 //nolint:revive // argument-limit: atmosConfig threaded through for remote-import auth.
-func ProcessImportsFromAdapter(atmosConfig *schema.AtmosConfiguration, basePath string, importPaths []string, tempDir string, currentDepth, maxDepth int) ([]ResolvedPaths, error) {
-	return processImports(atmosConfig, basePath, importPaths, tempDir, currentDepth, maxDepth)
+func ProcessImportsFromAdapter(atmosConfig *schema.AtmosConfiguration, basePath string, imports []schema.ConfigImport, tempDir string, currentDepth, maxDepth int) ([]ResolvedPaths, error) {
+	return processImports(atmosConfig, basePath, imports, tempDir, currentDepth, maxDepth)
 }
 
 //nolint:revive // argument-limit: atmosConfig threaded through for remote-import auth.
-func processImports(atmosConfig *schema.AtmosConfiguration, basePath string, importPaths []string, tempDir string, currentDepth, maxDepth int) (resolvedPaths []ResolvedPaths, err error) {
+func processImports(atmosConfig *schema.AtmosConfiguration, basePath string, imports []schema.ConfigImport, tempDir string, currentDepth, maxDepth int) (resolvedPaths []ResolvedPaths, err error) {
 	if basePath == "" {
 		return nil, errUtils.ErrBasePath
 	}
@@ -178,35 +193,147 @@ func processImports(atmosConfig *schema.AtmosConfiguration, basePath string, imp
 	}
 
 	ctx := context.Background()
+	// Facts for evaluating each import's optional `when` condition. At config-load time the
+	// subcommand is not yet known, so the available facts are CI detection (the `ci`/`local`
+	// predicates) and the process environment (exposed to CEL as the `env` map, e.g.
+	// `when: !cel 'env.DEPLOY_ENV == "prod"'`); see pkg/condition.
+	whenCtx := condition.Context{CI: ci.IsCI(), Env: osEnvMap()}
 
-	for _, importPath := range importPaths {
-		if importPath == "" {
+	for _, imp := range imports {
+		if imp.Path == "" {
 			continue
 		}
 
-		var paths []ResolvedPaths
-		var resolveErr error
-
-		// Use the adapter registry to find the appropriate adapter.
-		adapter := FindImportAdapter(importPath)
-		if len(adapter.Schemes()) > 0 {
-			if gateErr := guard.Source(ctx, "import", importPath, basePath); gateErr != nil {
-				return nil, gateErr
-			}
+		// Conditional loading: skip an import whose `when` condition does not match the current
+		// context (e.g. `when: local` on a CI runner). An unset condition always imports.
+		if !imp.When.IsZero() && !imp.When.Evaluate(whenCtx) {
+			log.Debug("skipping config import (when condition not met)", "path", SanitizeImport(imp.Path))
+			continue
 		}
-		paths, resolveErr = adapter.Resolve(ctx, importPath, basePath, tempDir, currentDepth, maxDepth, atmosConfig)
 
+		paths, resolveErr := resolveSingleImport(ctx, atmosConfig, imp, basePath, tempDir, currentDepth, maxDepth)
 		if resolveErr != nil {
 			if guard.IsPolicyError(resolveErr) {
 				return nil, resolveErr
 			}
-			log.Warn("failed to resolve import", "path", SanitizeImport(importPath), "error", resolveErr)
+			// Required (non-optional) imports fail closed; optional imports warn and skip.
+			if !imp.SkipIfMissing {
+				return nil, fmt.Errorf("%w: %s: %w", errUtils.ErrRequiredImportFailed, SanitizeImport(imp.Path), resolveErr)
+			}
+			log.Warn("failed to resolve import", "path", SanitizeImport(imp.Path), "error", resolveErr)
 			continue
+		}
+
+		// Stamp this import's failure intent onto the files it produced, so a merge failure later
+		// fails closed for a required import and warn-and-skips for an optional one. A nested
+		// import's own resolve-time intent is already applied in its deeper processImports pass;
+		// at merge time the importing entry's intent governs its resolved subtree.
+		for i := range paths {
+			paths[i].SkipIfMissing = imp.SkipIfMissing
 		}
 		resolvedPaths = append(resolvedPaths, paths...)
 	}
 
 	return resolvedPaths, nil
+}
+
+// osEnvMap returns the process environment as a map, for exposing environment variables to an
+// import's `when` CEL expression as the `env` map (e.g. `when: !cel 'env.DEPLOY_ENV == "prod"'`).
+func osEnvMap() map[string]string {
+	environ := os.Environ()
+	env := make(map[string]string, len(environ))
+	for _, kv := range environ {
+		if i := strings.IndexByte(kv, '='); i >= 0 {
+			env[kv[:i]] = kv[i+1:]
+		}
+	}
+	return env
+}
+
+// resolveSingleImport applies the source-admission policy gate (for scheme-based adapters) and
+// resolves one import via its registered adapter.
+//
+//nolint:revive // argument-limit: mirrors the adapter Resolve signature this delegates to.
+func resolveSingleImport(ctx context.Context, atmosConfig *schema.AtmosConfiguration, imp schema.ConfigImport, basePath, tempDir string, currentDepth, maxDepth int) ([]ResolvedPaths, error) {
+	// Use the adapter registry to find the appropriate adapter.
+	adapter := FindImportAdapter(imp.Path)
+	if len(adapter.Schemes()) > 0 {
+		if gateErr := guard.Source(ctx, "import", imp.Path, basePath); gateErr != nil {
+			return nil, gateErr
+		}
+	}
+	return adapter.Resolve(ctx, imp.Path, basePath, tempDir, currentDepth, maxDepth, atmosConfig)
+}
+
+// NormalizeConfigImports converts a raw decoded `import:` value (as returned by viper.Get) into
+// ConfigImports, accepting both the legacy string-list form and the new object form. This is the
+// counterpart to schema.ConfigImportsDecodeHook for code paths that read the `import:` key as a
+// raw Viper value (adapters processing nested imports, profile loading) rather than unmarshaling
+// into a typed struct. A bare string becomes an optional (fail-open) import, preserving the
+// historical warn-and-skip behavior for backward compatibility.
+func NormalizeConfigImports(raw any) schema.ConfigImports {
+	if raw == nil {
+		return nil
+	}
+	if typed, ok := raw.(schema.ConfigImports); ok {
+		return typed
+	}
+
+	items := rawImportItems(raw)
+	result := make(schema.ConfigImports, 0, len(items))
+	for _, item := range items {
+		if imp, ok := configImportFromItem(item); ok {
+			result = append(result, imp)
+		}
+	}
+	return result
+}
+
+// rawImportItems coerces a raw decoded `import:` value into a slice of entries to normalize,
+// accepting a []any (mixed strings/objects), a []string (legacy form), or a single scalar.
+func rawImportItems(raw any) []any {
+	switch v := raw.(type) {
+	case []any:
+		return v
+	case []string:
+		items := make([]any, 0, len(v))
+		for _, s := range v {
+			items = append(items, s)
+		}
+		return items
+	default:
+		return []any{v}
+	}
+}
+
+// configImportFromItem converts one raw import entry (a bare string or a decoded object map) into
+// a ConfigImport. A bare string becomes an optional (fail-open) import. It returns false when the
+// entry is empty or cannot be decoded.
+func configImportFromItem(item any) (schema.ConfigImport, bool) {
+	if s, ok := item.(string); ok {
+		if s == "" {
+			return schema.ConfigImport{}, false
+		}
+		return schema.ConfigImport{Path: s, SkipIfMissing: true}, true
+	}
+
+	var imp schema.ConfigImport
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		DecodeHook: getAtmosDecodeHookFunc(),
+		Result:     &imp,
+	})
+	if err != nil {
+		log.Warn("failed to build decoder for config import", "error", err)
+		return schema.ConfigImport{}, false
+	}
+	if err := decoder.Decode(item); err != nil {
+		log.Warn("failed to decode config import entry", "error", err)
+		return schema.ConfigImport{}, false
+	}
+	if imp.Path == "" {
+		return schema.ConfigImport{}, false
+	}
+	return imp, true
 }
 
 // SearchAtmosConfig searches for a config file in path. The path is directory, file or a pattern.
