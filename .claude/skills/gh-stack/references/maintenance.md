@@ -170,7 +170,8 @@ Record three independent outcomes:
 - **CodeRabbit:** record the bot's actual review state, reviewed commit, and unresolved threads. Check
   repository, invocation, and user requirements before treating a retained review as sufficient.
   Atmos's `qualityClient.review` in `magefiles/qualitygate/quality_checks.go` currently filters out
-  reviews whose commit differs from the PR head; `fix-all` uses that exact-head gate. Read the live
+  reviews whose commit differs from the PR head; `fix-all` uses that exact-head gate for non-bot PRs
+  (bot-authored PRs are exempt, per the same file). Read the live
   review's commit ID rather than inferring it from its submission time: retained approvals on #2997
   and #2998 were associated with their new heads while keeping their earlier timestamps. Such an
   approval can satisfy the exact-head criterion without another review. If its commit still differs,
@@ -261,7 +262,7 @@ Read the live native stack order and applicable approval evidence before choosin
 split boundary. The approved bottom prefix ends immediately before the first PR lacking an
 applicable approval or having unresolved findings. Verify retained native-rebase approvals as described
 above, and keep exact-head bot approval separate when repository, invocation, or user rules require it.
-Atmos's Quality Gate currently does, so report that contiguous prefix separately from retained approvals.
+Atmos's Quality Gate currently does for non-bot PRs, so report that contiguous prefix separately from retained approvals.
 For example, approvals at positions 1, 3, and 5 mean three total approvals but a bottom prefix of
 only one. Recompute after head, parent, order,
 or review changes; a historical approval count does not identify the first N approved PRs.

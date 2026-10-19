@@ -60,7 +60,7 @@ The installed command help is authoritative. Current command roles are:
 | `gh stack link` | Register/update native membership. Branch-name arguments also push branches and create missing PRs; use PR numbers/URLs when only linking existing PRs. |
 | `gh stack submit` | Push branches, create/update PRs and bases, then register/update the native stack. These phases are not one atomic transaction. |
 | `gh stack rebase` | Cascade a local rebase onto updated parents; does not publish the result. |
-| `gh stack push` | Publish active stack branches using explicit per-branch leases. Updates are not atomic; reconcile partial success. Requires authorization for any history replacement and a compatible publication cadence. |
+| `gh stack push` | Publish branches after a justified, authorized history rewrite using per-branch leases. Updates are not atomic; reconcile partial success. Use ordinary fast-forward pushes for routine updates. |
 | `gh stack sync` | Fetch, reconcile, cascade-rebase, and push branches atomically with leases, then synchronize PR/stack state. **Not a read-only probe.** |
 | `gh stack merge` | Atomically merge a contiguous bottom portion, through the chosen PR, or the whole stack. Requires merge authorization. |
 
@@ -98,8 +98,9 @@ first; do not unlink a native stack to avoid its requirements without user autho
 GitHub documents retained approvals after a native stack rebase when the PR diff is unchanged,
 even with stale-approval dismissal enabled. Do not assume every rebase loses every approval, or
 that every approval will survive a conflict resolution. Check GitHub review applicability, CodeRabbit
-review evidence, and CI separately; a retained review can refer to an earlier commit. Atmos's Quality
-Gate currently requires exact-head CodeRabbit approval. Read the live review's commit ID: GitHub may
+review evidence, and CI separately; a retained review can refer to an earlier commit. For non-bot
+PRs, Atmos's Quality Gate currently requires exact-head CodeRabbit approval; bot-authored PRs are
+exempt. Read the live review's commit ID: GitHub may
 associate a retained approval with the new head, satisfying that requirement without another review.
 Unchanged diffs or patch IDs do not guarantee retention. Before publication, report the affected
 approved PRs and contiguous prefix at risk. Verify the gate implementation and use incremental review for a confirmed gap; changed
