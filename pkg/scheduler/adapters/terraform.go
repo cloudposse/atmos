@@ -23,6 +23,7 @@ import (
 	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -1068,15 +1069,20 @@ func (d *TerraformDispatcher) runBeforeNodeHooks(ctx context.Context, nodeInfo *
 		return nil
 	}
 	if nodeHooks, ok := d.info.NodeHooks.(schema.ComponentNodeHooksWithOutput); ok {
-		if err := nodeHooks.BeforeWithWriters(ctx, nodeInfo, writers); err != nil {
-			return fmt.Errorf("%w: %w", errUtils.ErrPerComponentHookFailed, err)
-		}
-		return nil
+		return wrapBeforeHookError(nodeHooks.BeforeWithWriters(ctx, nodeInfo, writers))
 	}
-	if err := d.info.NodeHooks.Before(ctx, nodeInfo); err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrPerComponentHookFailed, err)
+	return wrapBeforeHookError(d.info.NodeHooks.Before(ctx, nodeInfo))
+}
+
+// wrapBeforeHookError labels a before-hook failure with ErrPerComponentHookFailed.
+// A policy admission error is returned unchanged: it is not a hook failure, and
+// the multi-%w wrap would hide the rule id and reason explanation the denial
+// carries from the error formatter.
+func wrapBeforeHookError(err error) error {
+	if err == nil || policy.IsAdmissionError(err) {
+		return err
 	}
-	return nil
+	return fmt.Errorf("%w: %w", errUtils.ErrPerComponentHookFailed, err)
 }
 
 // runAfterNodeHooks runs this node's after-event hooks, if wired, and returns
@@ -1107,6 +1113,14 @@ func (d *TerraformDispatcher) runAfterNodeHooks(ctx context.Context, nodeInfo *s
 }
 
 func terraformExecutionError(node *dependency.Node, result TerraformExecutionResult, err error) error {
+	if policy.IsAdmissionError(err) {
+		// Surface the denial as-is (sentinel, explanation, and exit code intact),
+		// adding only which component and stack it applies to.
+		return errUtils.Build(err).
+			WithContext("component", node.Component).
+			WithContext("stack", node.Stack).
+			Err()
+	}
 	cause := fmt.Errorf("component=%s stack=%s: %w", node.Component, node.Stack, err)
 	detail := terraformFailureOutputDetail(result)
 	if detail != "" {

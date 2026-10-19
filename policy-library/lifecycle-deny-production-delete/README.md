@@ -20,7 +20,7 @@ Deny direct deletion of Helm releases in production stacks.
 | Field | Value |
 |---|---|
 | Input | `operation` |
-| Engine | `cel` |
+| Engines | `cel`, `starlark` |
 | Action | `deny` |
 | Selects when | `before.helm.delete` with a stack name starting with `prod-`. |
 | Required data | Component lifecycle metadata. Tool and HTTP hooks use their normal execution credentials. |
@@ -32,6 +32,10 @@ None. Adjust the `prod-` prefix in the rule to your stack naming convention.
 Other Helm operations and non-production stacks do not match. This is an operation rule, not a rendered Kubernetes resource check.
 
 ## Policy
+
+Choose CEL or Starlark on the [policy page](https://atmos.tools/policies/library/lifecycle-deny-production-delete).
+The default manifest below uses CEL; the [Starlark variant](https://atmos.tools/policies/library/lifecycle-deny-production-delete/variants/starlark/policy.yaml)
+uses the same configuration and test cases. Install only one implementation.
 
 [View and copy policy.yaml](https://atmos.tools/policies/library/lifecycle-deny-production-delete/policy.yaml).
 

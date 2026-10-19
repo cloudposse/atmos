@@ -11,7 +11,14 @@ This is background analysis, not a product spec. The remediation is designed in 
 [Policies PRD](./prd/policies.md); each finding below maps to a control
 there.
 
-Two structural gaps frame the analysis:
+This analysis predates YAML function admission. `on: function` policies now gate YAML handlers,
+including early `!exec`; see [Execution Admission](https://atmos.tools/policies/admission).
+Go-template admission and opt-in source/filesystem gates have since been added; see
+[source policies](https://atmos.tools/policies/sources) for coverage and transport limitations.
+The historical findings below remain background analysis; trusted-source distribution and
+secure-by-default rollout remain future work.
+
+Two original structural gaps frame the analysis:
 
 1. **No policy controls over function usage.** There is no mechanism to allow, deny, or gate which
     YAML functions or template functions may run — only a per-invocation `--skip` and coarse
@@ -135,7 +142,7 @@ The one URI validator is inconsistent and not a universal gate.
 |---|---|---|
 | `--skip=<fn>` | stack processing path only, per-invocation | does not protect the `atmos.yaml` load path; not a persistent policy |
 | `--process-functions=false` | describe-family commands only, all-or-nothing | not available for `plan`/`apply`; no granularity |
-| `settings.templates.settings.enabled\|sprig.enabled\|gomplate.enabled` | template engine | coarse on/off; enabling an engine enables its dangerous funcs; doesn't affect `!exec`/`!include` |
+| `settings.templates.settings.enabled` / `sprig.enabled` / `gomplate.enabled` | template engine | coarse on/off; enabling an engine enables its dangerous funcs; doesn't affect `!exec`/`!include` |
 | `gomplate.timeout` | datasource/exec calls | bounds duration, not capability |
 | `pkg/ci/forktrust.go` | CI fork-PR gate | governs *who triggers CI*, not the integrity/trust of imported/vendored content |
 

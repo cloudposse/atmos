@@ -20,7 +20,7 @@ Require TFLint to run and succeed after each successful Terraform plan.
 | Field | Value |
 |---|---|
 | Input | `operation` |
-| Engine | `cel` |
+| Engines | `cel`, `starlark` |
 | Action | `hooks` |
 | Selects when | `after.terraform.plan` with `input.status == 'success'`. |
 | Required data | Component lifecycle metadata. Tool and HTTP hooks use their normal execution credentials. |
@@ -34,6 +34,10 @@ Install TFLint on the runner or add approved pins to `spec.tools`. Protect its c
 The selected hook must execute and succeed: both `required` and `require_success` are `true`. Dry-run previews it without execution.
 
 ## Policy
+
+Choose CEL or Starlark on the [policy page](https://atmos.tools/policies/library/lifecycle-lint-successful-plan).
+The default manifest below uses CEL; the [Starlark variant](https://atmos.tools/policies/library/lifecycle-lint-successful-plan/variants/starlark/policy.yaml)
+uses the same configuration and test cases. Install only one implementation.
 
 [View and copy policy.yaml](https://atmos.tools/policies/library/lifecycle-lint-successful-plan/policy.yaml).
 

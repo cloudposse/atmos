@@ -19,11 +19,31 @@ export ATMOS_POLICY_DIR=/trusted/policy.d
 
 <dl>
   <dt><code>ATMOS_POLICY_DIR</code></dt>
-  <dd>Overrides the default <code>policy.d/</code> directory relative to the invocation's working
-  directory (after <code>--chdir</code>). An unset or empty value uses the default. A missing default
-  directory means no directory policies; a missing explicit override is an error. Use an absolute
-  protected path in CI.</dd>
+  <dd>Overrides the default <code>policy.d/</code> directory. An unset or empty value uses the default.
+  A missing default directory means no directory policies; a missing explicit override is an error.
+  Use an absolute protected path in CI.</dd>
 </dl>
+
+### Default discovery
+
+The default `policy.d/` is found next to the configuration that Atmos selects for `atmos.yaml`, so
+running Atmos from a repository subdirectory loads the same project root's policies. Atmos checks
+these directories in order and uses the first one that contains a `policy.d/`:
+
+1. The directories of `--config` files and `--config-path` directories. Without those flags, the
+   `ATMOS_CONFIG` and `ATMOS_CONFIG_PATH` environment variables. A flag takes precedence over the
+   environment variable.
+2. The directory named by `ATMOS_CLI_CONFIG_PATH`. A path to a file resolves to the file's directory.
+3. The working directory (after `--chdir`).
+4. When none of the above selected a location and the working directory has no Atmos configuration
+   (`atmos.yaml`, `.atmos.yaml`, `.atmos/`, `atmos.d/`, `.atmos.d/`), the Git repository root, unless
+   `ATMOS_GIT_ROOT_BASEPATH=false`. Outside a repository, the nearest parent directory containing
+   `atmos.yaml` or `.atmos.yaml`.
+
+A working directory with its own Atmos configuration is its own project root, so a `policy.d/` in a
+parent directory or at the Git root does not apply to it.
+
+`ATMOS_POLICY_DIR` has no flag equivalent and always overrides this discovery.
 
 | Loading rule | Behavior |
 |---|---|
@@ -82,8 +102,8 @@ spec:
 
 <dl>
   <dt><code>on</code></dt>
-  <dd>Required string: <code>terraform.plan</code>, <code>operation</code>, or
-  <code>atmos.affected</code>. Selects the input kind.</dd>
+  <dd>Required string: <code>terraform.plan</code>, <code>operation</code>, <code>atmos.affected</code>,
+  <code>function</code>, <code>source</code>, <code>command</code>, or <code>component.command</code>. Selects the input kind.</dd>
   <dt><code>engine</code></dt>
   <dd>Optional string: <code>cel</code> (default) or <code>starlark</code>.</dd>
   <dt><code>rule</code></dt>
@@ -91,9 +111,19 @@ spec:
   a boolean. True selects the action; false makes the rule not applicable. Maximum source size: 64 KiB.</dd>
   <dt><code>action</code></dt>
   <dd>Required string. <code>deny</code> blocks the operation when selected.
-  <code>hooks</code> selects hook requirements and is valid only with <code>on: operation</code>.</dd>
+  <code>hooks</code> selects hook requirements and is valid only with <code>on: operation</code>.
+  <code>require_approval</code> selects <a href="/policies/approvals">GitHub review requirements</a>.</dd>
+  <dt><code>approvals</code></dt>
+  <dd>Required nonempty list for <code>action: require_approval</code>; forbidden for other actions.
+  Each entry specifies <code>id</code>, <code>provider: github-actions</code>, and a provider-owned
+  <code>spec</code> with <code>reviewers</code> and <code>minimum</code>.</dd>
   <dt><code>reason</code></dt>
-  <dd>Optional static string. CLI denial errors identify blocking rule IDs, not resource values.</dd>
+  <dd>Optional static Markdown string explaining why the rule blocks an operation and, if useful,
+  what to do instead. When a rule denies an operation, the CLI displays its reason with
+  the blocking rule ID. Use Markdown for paragraphs, emphasis, inline code, lists, and links;
+  use a YAML literal block (<code>|-</code>) to preserve paragraph and list breaks.
+  Omit it to keep the default denial message. Atmos does not evaluate expressions, expand templates, or insert
+  input values into them. JSON decisions retain the text in <code>findings[].effects.reason</code>.</dd>
   <dt><code>with</code></dt>
   <dd>Optional JSON-compatible object exposed as <code>params</code> in CEL or <code>ctx.params</code>
   in Starlark. Default: an empty object.</dd>
@@ -146,12 +176,22 @@ lifecycle events read the component section before any template runs, so a label
   <dt><code>match.labels</code></dt>
   <dd>Map of string label keys and values. Every entry must match.</dd>
   <dt><code>match.tags</code></dt>
-  <dd>List of tags. By default at least one must match.</dd>
-  <dt><code>match.tag_mode</code></dt>
-  <dd><code>any</code> (default) or <code>all</code>. Controls how multiple tags combine.</dd>
+  <dd>List of tags. Use <code>!any [pci, sensitive]</code> to match at least one or
+  <code>!all [pci, sensitive]</code> to require every tag. A plain list defaults to any.</dd>
   <dt><code>match.components</code>, <code>match.stacks</code>, <code>match.component_types</code></dt>
   <dd>Lists of exact names. At least one value in each supplied list must match; no glob expansion.</dd>
 </dl>
+
+```yaml
+match:
+  labels:
+    stage: prod
+  tags: !any [pci, sensitive]
+```
+
+Use `tags: !all [pci, sensitive]` to require both tags. These annotations are literal policy
+selector syntax, not executable YAML functions. Labels still all match and combine with tags using AND.
+The separate `tag_mode` field is not accepted in policy documents.
 
 Selector fields combine with AND. An empty selector matches every available instance. Selectors
 apply at the documented plan and lifecycle gates; they do not introduce new command interception
@@ -168,6 +208,18 @@ For a mandatory CI gate:
 4. Protect policy files, workflow definitions, tool binaries, hook dependencies, and their configuration
    with required review. Protect `CODEOWNERS` itself when it supplies ownership rules.
 
-Discovery does not establish trust. A caller who can redirect the policy directory, delete or modify
+Discovery does not establish trust. A caller who can redirect the policy directory (including through
+the config flags and variables above, or the working directory), delete or modify
 its contents, alter instance metadata, modify the workflow, or run the underlying tool directly can
 bypass this gate.
+
+:::info Policies inherit the trust of their runtime
+A policy engine governs the process it runs in. Whoever shapes that process (its environment variables,
+working directory, binaries, and the files it reads) also shapes which policies load and how they apply.
+The same is true of any policy engine. Treat the runtime as part of the policy: point `ATMOS_POLICY_DIR`
+at an absolute, protected path, and enforce mandatory gates from a trusted CI job.
+:::
+
+Source rules can declare `allowed_roots` for canonical filesystem containment. See
+[source policies](/policies/sources). Validate the bundle with `atmos policy check`;
+[policy commands](/cli/commands/policy) also provide listing, schemas, and offline fixture tests.

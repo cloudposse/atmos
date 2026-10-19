@@ -197,8 +197,21 @@ func (h *AtmosHandler) runAtmosCommand(ctx context.Context, stepName string, opt
 		})
 		return atmosProcessError(ctx, &result)
 	})
+	err = describeAtmosFailure(args, err)
 
 	return h.buildAtmosResult(stdout, stderr, err), err
+}
+
+// describeAtmosFailure names the command and exit code of a nested command that exited non-zero,
+// and says so when a policy denied it. Without it the failure reads as a bare "exit status 1". The
+// underlying *exec.ExitError stays reachable, so exit-code lookups behave as before; every other
+// error (cancellation, a command that never started) is returned unchanged.
+func describeAtmosFailure(args []string, err error) error {
+	var exitErr *exec.ExitError
+	if err == nil || !errors.As(err, &exitErr) || exitErr.ExitCode() <= 0 {
+		return err
+	}
+	return script.NestedAtmosFailure(args, exitErr.ExitCode(), err)
 }
 
 // atmosProcessError returns the error of a finished nested command. A non-zero exit is reported as

@@ -2,6 +2,7 @@ package policy
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -55,7 +56,8 @@ func validatePlanFlags(object map[string]any) error {
 
 // EnforceDecision converts a pure decision into a local gate. This executor has no
 // approval verifier or hook executor: outstanding obligations must not become success.
-// Only static rule identifiers are included in errors, never evaluated values.
+// Denial explanations include only static rule identifiers and author-supplied
+// reasons, never evaluated values.
 func EnforceDecision(decision Decision) error {
 	defer perf.Track(nil, "policy.EnforceDecision")()
 
@@ -63,7 +65,7 @@ func EnforceDecision(decision Decision) error {
 		return errUtils.ErrPolicyEvaluation
 	}
 	if decision.Status == Deny {
-		return errUtils.ErrPolicyDenied
+		return denialError(decision.Findings)
 	}
 	if decision.Status != Allow && decision.Status != NotApplicable {
 		return errUtils.ErrPolicyRequirements
@@ -77,4 +79,53 @@ func EnforceDecision(decision Decision) error {
 		}
 	}
 	return nil
+}
+
+// denialError names every blocking rule and retains optional author guidance.
+// Rule identifiers are static, so they are safe to print even when a rule has no
+// reason; reasons are static Markdown and never evaluate templates or interpolate
+// inputs. Every denial carries ExitCodePolicyDenied so callers can tell a policy
+// decision apart from usage and runtime failures.
+func denialError(findings []Finding) error {
+	var blocks []string
+	for _, finding := range findings {
+		if finding.Status != Deny {
+			continue
+		}
+		if reason := strings.TrimSpace(finding.Effects.Reason); reason != "" {
+			blocks = append(blocks, finding.RuleID+":\n\n"+reason)
+			continue
+		}
+		blocks = append(blocks, "Denied by "+finding.RuleID+".")
+	}
+	builder := errUtils.Build(errUtils.ErrPolicyDenied).WithExitCode(errUtils.ExitCodePolicyDenied)
+	if len(blocks) > 0 {
+		builder = builder.WithExplanation(strings.Join(blocks, "\n\n"))
+	}
+	return builder.Err()
+}
+
+// IsAdmissionError reports whether err is a policy admission failure: a denial,
+// an unmet requirement, or a policy that could not be loaded or evaluated.
+// Admission fails closed, so callers must surface these errors unchanged rather
+// than relabeling them as hook or execution failures.
+func IsAdmissionError(err error) bool {
+	defer perf.Track(nil, "policy.IsAdmissionError")()
+
+	if err == nil {
+		return false
+	}
+	for _, sentinel := range []error{
+		errUtils.ErrPolicyDenied,
+		errUtils.ErrPolicyRequirements,
+		errUtils.ErrPolicyEvaluation,
+		errUtils.ErrPolicyInputInvalid,
+		errUtils.ErrPolicyInputUnavailable,
+		errUtils.ErrPolicyInvalid,
+	} {
+		if errors.Is(err, sentinel) {
+			return true
+		}
+	}
+	return false
 }

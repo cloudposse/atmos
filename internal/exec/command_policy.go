@@ -3,6 +3,7 @@ package exec
 import (
 	"context"
 	"encoding/json"
+	"slices"
 
 	"github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/policy/admission"
@@ -22,8 +23,12 @@ func enforceComponentAdmission(config *schema.AtmosConfiguration, info *schema.C
 	if err != nil {
 		return err
 	}
+	// Terraform pass-through flags (for example -destroy) are already folded into the info.
+	args := slices.Concat(info.CliArgs, info.AdditionalArgsAndFlags)
 	data, err := json.Marshal(policy.ComponentCommandInput{
-		Command: info.SubCommand, ComponentType: info.ComponentType, Component: info.ComponentFromArg, Stack: info.Stack, DryRun: info.DryRun, Capabilities: componentPolicyCapabilities(info.ComponentType),
+		Command: info.SubCommand, ComponentType: info.ComponentType, Component: info.ComponentFromArg, Stack: info.Stack, DryRun: info.DryRun,
+		Destroy:      policy.IsDestroyInvocation([]string{info.ComponentType, info.SubCommand}, args),
+		Capabilities: componentPolicyCapabilities(info.ComponentType),
 	})
 	if err != nil {
 		return err

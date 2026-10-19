@@ -8,6 +8,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/script"
 	atmosmodule "github.com/cloudposse/atmos/pkg/script/starlark/stdlib/atmos"
 )
 
@@ -48,5 +49,6 @@ func (s *session) runAtmos(thread *starlark.Thread, argv []string, opts atmosmod
 	return s.runProcess(thread, &processCall{
 		argv: append([]string{binary}, argv...), dir: dir, env: env,
 		check: opts.Check, stream: stream, viewport: runOpts.viewport(), allowPlanChanges: allowPlanChanges, dataHint: atmosDataHint,
+		atmos: true, label: script.AtmosLabel(argv),
 	})
 }

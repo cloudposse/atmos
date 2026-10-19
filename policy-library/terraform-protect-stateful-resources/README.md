@@ -20,7 +20,7 @@ Reject deletion or replacement of selected stateful resource types.
 | Field | Value |
 |---|---|
 | Input | `terraform.plan` |
-| Engine | `cel` |
+| Engines | `cel`, `starlark` |
 | Action | `deny` |
 | Selects when | Any managed resource in `params.types` has a `delete` action, including replacement. |
 | Required data | Native saved-plan JSON from Terraform/OpenTofu. No CI token required. |
@@ -32,6 +32,10 @@ Reject deletion or replacement of selected stateful resource types.
 Updates and unrelated types pass. Both replacement orders are denied.
 
 ## Policy
+
+Choose CEL or Starlark on the [policy page](https://atmos.tools/policies/library/terraform-protect-stateful-resources).
+The default manifest below uses CEL; the [Starlark variant](https://atmos.tools/policies/library/terraform-protect-stateful-resources/variants/starlark/policy.yaml)
+uses the same configuration and test cases. Install only one implementation.
 
 [View and copy policy.yaml](https://atmos.tools/policies/library/terraform-protect-stateful-resources/policy.yaml).
 

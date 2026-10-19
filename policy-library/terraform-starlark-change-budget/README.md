@@ -1,6 +1,6 @@
 ---
 title: Weighted plan change budget
-description: Use Starlark to limit changes, charging more for deletions and replacements.
+description: Limit changes, charging more for deletions and replacements.
 command: atmos terraform plan <component> -s <stack>
 tags:
   - Terraform
@@ -20,9 +20,9 @@ Count managed resource changes against a configurable budget.
 | Field | Value |
 |---|---|
 | Input | `terraform.plan` |
-| Engine | `starlark` |
+| Engines | `cel`, `starlark` |
 | Action | `deny` |
-| Selects when | Weighted changes exceed `ctx.params["maximum"]`. |
+| Selects when | Weighted changes exceed the `maximum` parameter. |
 | Required data | Native saved-plan JSON. No CI token required. |
 
 ## Configuration
@@ -35,6 +35,10 @@ data reads cost zero. A plan passes while its total is at most `maximum`. The bu
 plan, not multiple component runs.
 
 ## Policy
+
+Choose CEL or Starlark on the [policy page](https://atmos.tools/policies/library/terraform-starlark-change-budget).
+The default manifest below uses Starlark; the [CEL variant](https://atmos.tools/policies/library/terraform-starlark-change-budget/variants/cel/policy.yaml)
+uses the same configuration and test cases. Install only one implementation.
 
 [View and copy policy.yaml](https://atmos.tools/policies/library/terraform-starlark-change-budget/policy.yaml).
 

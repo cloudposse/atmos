@@ -56,7 +56,7 @@ func TestProcessResultData(t *testing.T) {
 
 func TestResultDataConcurrentAccess(t *testing.T) {
 	t.Parallel()
-	r := newProcessResult(script.ProcessOutput{Stdout: `{"items":[1,2]}`})
+	r := newProcessResult(script.ProcessOutput{Stdout: `{"items":[1,2]}`}, false)
 	r.Freeze()
 	var wg sync.WaitGroup
 	for range 8 {
@@ -76,7 +76,7 @@ func TestResultDataConcurrentAccess(t *testing.T) {
 	assert.Equal(t, starlark.True, r.Truth())
 	_, err = r.Hash()
 	require.NoError(t, err)
-	equal, err := starlark.Equal(r, newProcessResult(script.ProcessOutput{Stdout: r.payload}))
+	equal, err := starlark.Equal(r, newProcessResult(script.ProcessOutput{Stdout: r.payload}, false))
 	require.NoError(t, err)
 	assert.True(t, equal)
 }

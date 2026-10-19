@@ -3,10 +3,12 @@ package internal
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/policy/admission"
@@ -29,7 +31,7 @@ func CheckEarlyCommandAdmission(root *cobra.Command, args []string) error {
 	if err != nil || !command.Runnable() {
 		return nil
 	}
-	return checkCommandAdmission(root, command)
+	return checkCommandAdmission(root, command, args)
 }
 
 // installCommandAdmission gates argument validation, before any pre-run hooks.
@@ -69,7 +71,7 @@ func installRootAdmission(root *cobra.Command) func() {
 	originalE, original := root.PersistentPreRunE, root.PersistentPreRun
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if cmd == root {
-			if err := checkCommandAdmission(root, cmd); err != nil {
+			if err := checkCommandAdmission(root, cmd, args); err != nil {
 				return err
 			}
 		}
@@ -86,7 +88,9 @@ func installRootAdmission(root *cobra.Command) func() {
 
 func admittedCommandArgs(root *cobra.Command, original cobra.PositionalArgs) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
-		if err := checkCommandAdmission(root, cmd); err != nil {
+		// Cobra drops the pass-through flags it does not own (for example -destroy), and
+		// the compatibility translator keeps them aside, so rejoin them for admission.
+		if err := checkCommandAdmission(root, cmd, append(slices.Clone(args), compat.GetSeparated()...)); err != nil {
 			return err
 		}
 		if original != nil {
@@ -96,12 +100,15 @@ func admittedCommandArgs(root *cobra.Command, original cobra.PositionalArgs) cob
 	}
 }
 
-func checkCommandAdmission(root, cmd *cobra.Command) error {
+// checkCommandAdmission evaluates command policies. The args are only used to derive
+// the normalized destroy boolean; their values are never part of the policy input.
+func checkCommandAdmission(root, cmd *cobra.Command, args []string) error {
 	path := strings.TrimPrefix(cmd.CommandPath(), root.Name()+" ")
 	if canonical := cmd.Annotations["policy-command"]; canonical != "" {
 		path = canonical
 	}
-	data, err := json.Marshal(policy.CommandInput{Path: strings.Fields(path), Command: path})
+	fields := strings.Fields(path)
+	data, err := json.Marshal(policy.CommandInput{Path: fields, Command: path, Destroy: policy.IsDestroyInvocation(fields, args)})
 	if err != nil {
 		return err
 	}

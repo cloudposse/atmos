@@ -20,7 +20,7 @@ Require a cleanup command after a failed Kubernetes apply.
 | Field | Value |
 |---|---|
 | Input | `operation` |
-| Engine | `cel` |
+| Engines | `cel`, `starlark` |
 | Action | `hooks` |
 | Selects when | `after.kubernetes.apply` with `input.status == 'failure'`. |
 | Required data | Component lifecycle metadata. Tool and HTTP hooks use their normal execution credentials. |
@@ -34,6 +34,10 @@ Replace `/opt/platform/bin/cleanup-component` before use. Cleanup does not turn 
 The selected hook must execute and succeed: both `required` and `require_success` are `true`. Dry-run previews it without execution.
 
 ## Policy
+
+Choose CEL or Starlark on the [policy page](https://atmos.tools/policies/library/lifecycle-cleanup-failed-apply).
+The default manifest below uses CEL; the [Starlark variant](https://atmos.tools/policies/library/lifecycle-cleanup-failed-apply/variants/starlark/policy.yaml)
+uses the same configuration and test cases. Install only one implementation.
 
 [View and copy policy.yaml](https://atmos.tools/policies/library/lifecycle-cleanup-failed-apply/policy.yaml).
 

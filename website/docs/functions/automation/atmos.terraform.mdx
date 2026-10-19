@@ -74,7 +74,13 @@ The values of `command`, `component`, and `stack` must be non-empty and must not
 
 ## Returns
 
-A result with `stdout`, `stderr`, and `exit_code`. See [`exec.run`](/functions/automation/exec.run#returns).
+A result with `stdout`, `stderr`, `exit_code`, and `policy_denied`. `policy_denied` is `True` when a
+[policy](/policies) denied the command (exit code `77`), so a script run with `check = False` can tell a denial from an
+ordinary failure. See [`exec.run`](/functions/automation/exec.run#returns) and
+[policy denials](/functions/automation/atmos.run#policy-denials).
+
+The nested command also inherits `--explain`: with `atmos <command> --explain`, its `policy: ...` diagnostics appear
+in the output (or in `result.stderr` with `output = "capture"`).
 
 ## Flag translation
 

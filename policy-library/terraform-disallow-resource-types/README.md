@@ -20,7 +20,7 @@ Prevent selected resource types from being created or retained by a change.
 | Field | Value |
 |---|---|
 | Input | `terraform.plan` |
-| Engine | `cel` |
+| Engines | `cel`, `starlark` |
 | Action | `deny` |
 | Selects when | A managed resource in `params.types` has a non-null planned `after` value. |
 | Required data | Native saved-plan JSON from Terraform/OpenTofu. No CI token required. |
@@ -32,6 +32,10 @@ Prevent selected resource types from being created or retained by a change.
 Deletion is permitted as remediation. This checks the plan's resource changes, not an independent inventory of existing resources.
 
 ## Policy
+
+Choose CEL or Starlark on the [policy page](https://atmos.tools/policies/library/terraform-disallow-resource-types).
+The default manifest below uses CEL; the [Starlark variant](https://atmos.tools/policies/library/terraform-disallow-resource-types/variants/starlark/policy.yaml)
+uses the same configuration and test cases. Install only one implementation.
 
 [View and copy policy.yaml](https://atmos.tools/policies/library/terraform-disallow-resource-types/policy.yaml).
 

@@ -165,7 +165,7 @@ Rules targeting another input kind are omitted from the findings.
 |---|---|
 | `error` | Required evaluation could not complete; the Go error explains the failure |
 | `deny` | At least one matching rule explicitly denies the operation |
-| `awaiting_approval` | A matching rule requires approval; verification is not implemented |
+| `awaiting_approval` | A matching rule requires approval; Native CI must verify it before enforcement |
 | `allow` | A rule matched without denial or outstanding approval; hooks may still be required |
 | `not_applicable` | No rule matched; this is not affirmative authorization |
 
@@ -184,8 +184,11 @@ validates their basic shape but does not interpret users, count reviews, establi
 or check review freshness. A matched approval requirement always remains `awaiting_approval` unless
 a denial or error takes precedence—even if review data is present in the snapshot.
 
-The directory loader has no approval action. The supplied-event collector does not fetch live
-reviews or verify approvals. See [CI Context](https://atmos.tools/policies/ci) for its data and permission contract.
+The directory loader accepts `action: require_approval`. `ci.ResolvePolicyApprovals` dispatches to
+the active provider's optional approval capability. GitHub fetches current paginated reviews and
+binds them to the PR head and checkout before calling the pure `policy.ResolveGitHubApprovals`
+verifier. Satisfied obligations are removed from a detached decision copy; hooks and denials remain.
+See [Approvals](https://atmos.tools/policies/approvals) for reviewer semantics and token permissions.
 
 ### Hooks
 
