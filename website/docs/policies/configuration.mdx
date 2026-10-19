@@ -137,7 +137,10 @@ spec:
 An instance with `metadata.labels.stage: prod` receives this policy regardless of its stack name.
 The selector runs before the predicate. Missing instance context or unresolved selector metadata
 blocks evaluation rather than silently detaching the policy. Selector collection does not execute
-YAML functions or templates to obtain missing data; use materialized tags and labels.
+YAML functions or templates to obtain missing data; use materialized tags and labels. This holds at
+every gate. The saved-plan gate reads the instance after Atmos resolves inherited metadata, but
+lifecycle events read the component section before any template runs, so a label such as
+`stage: "{{ .vars.stage }}"` selects nothing and blocks the lifecycle gate until it is a literal value.
 
 <dl>
   <dt><code>match.labels</code></dt>

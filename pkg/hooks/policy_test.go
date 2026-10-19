@@ -238,3 +238,20 @@ func TestPolicyHookSubjectToleratesNilConfiguration(t *testing.T) {
 		})
 	}
 }
+
+// Lifecycle discovery reads the component section without rendering templates, so a templated label
+// stays unresolved. The selector fails closed instead of treating the label as absent or as its raw text.
+func TestPolicyHookAttachmentsRejectUnresolvedTemplatedMetadata(t *testing.T) {
+	h := &Hooks{policyBundle: &policy.Bundle{Rules: []policy.Rule{{
+		ID: "platform/deny", On: policy.Operation, Engine: policy.CELEngine, Expression: "true",
+		Match: &policy.Selector{Labels: map[string]string{"stage": "prod"}}, Effects: policy.Effects{Deny: true},
+	}}}, sections: map[string]any{"metadata": map[string]any{"labels": map[string]any{"stage": "{{ .vars.stage }}"}}}}
+	info := &schema.ConfigAndStacksInfo{Stack: "test", ComponentFromArg: "app"}
+	err := h.RunAll(BeforeTerraformPlan, &schema.AtmosConfiguration{}, info, nil, nil)
+	require.ErrorIs(t, err, errUtils.ErrPolicyEvaluation, "unresolved metadata blocks the gate")
+	require.NotErrorIs(t, err, errUtils.ErrPolicyDenied)
+
+	h.sections["metadata"] = map[string]any{"labels": map[string]any{"stage": "prod"}}
+	require.ErrorIs(t, h.RunAll(BeforeTerraformPlan, &schema.AtmosConfiguration{}, info, nil, nil), errUtils.ErrPolicyDenied,
+		"a materialized label selects the instance")
+}
