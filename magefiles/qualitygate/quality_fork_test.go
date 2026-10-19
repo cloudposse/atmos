@@ -44,7 +44,8 @@ func forkWorkflowRunEvent() string {
 func TestQualityForkPREventResolution(t *testing.T) {
 	moved := func(pr *githubapi.PR) { pr.Head.SHA = githubtest.Base }
 	closed := func(pr *githubapi.PR) { pr.State = "closed" }
-	release := func(pr *githubapi.PR) { pr.Base.Ref = "release" }
+	foreign := func(pr *githubapi.PR) { pr.Base.Repo.FullName = "another/repository" }
+	stacked := func(pr *githubapi.PR) { pr.Base.Ref = "feature/prerequisite" }
 	cases := []struct {
 		name      string
 		eventName string
@@ -59,6 +60,24 @@ func TestQualityForkPREventResolution(t *testing.T) {
 		wantKinds []string
 		wantHead  string
 	}{
+		{
+			name:      "workflow resolves a stacked fork PR through its head branch",
+			eventName: "workflow_run",
+			event:     forkWorkflowRunEvent(),
+			head:      []githubapi.PR{forkPR(stacked)},
+			want:      []int{forkNumber},
+			wantKinds: []string{"commits", "head"},
+			wantHead:  forkOwner + ":" + forkBranch,
+		},
+		{
+			name:      "check resolves a stacked fork PR through SHA search",
+			eventName: "check_run",
+			event:     `{"check_run":{"head_sha":"` + forkSHA + `"}}`,
+			search:    []int{forkNumber},
+			pulls:     map[int]githubapi.PR{forkNumber: forkPR(stacked)},
+			want:      []int{forkNumber},
+			wantKinds: []string{"commits", "search", "pull"},
+		},
 		{
 			name:      "workflow_run resolves a fork PR through its head branch",
 			eventName: "workflow_run",
@@ -126,10 +145,10 @@ func TestQualityForkPREventResolution(t *testing.T) {
 			wantKinds: []string{"commits", "search", "pull"},
 		},
 		{
-			name:      "closed and non-main PRs are not reconciled",
+			name:      "closed and foreign-repository PRs are not reconciled",
 			eventName: "workflow_run",
 			event:     forkWorkflowRunEvent(),
-			head:      []githubapi.PR{forkPR(closed), forkPR(release)},
+			head:      []githubapi.PR{forkPR(closed), forkPR(foreign)},
 			search:    []int{forkNumber, 3382},
 			pulls: map[int]githubapi.PR{
 				forkNumber: forkPR(closed),
@@ -165,6 +184,7 @@ func TestQualityForkPREventResolution(t *testing.T) {
 					kinds = append(kinds, "head")
 					parsed, err := url.Parse(path)
 					require.NoError(t, err)
+					require.Empty(t, parsed.Query().Get("base"))
 					head = parsed.Query().Get("head")
 					return githubtest.Respond(tc.head, response)
 				case strings.HasPrefix(path, "search/issues?"):

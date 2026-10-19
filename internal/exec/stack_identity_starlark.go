@@ -92,7 +92,7 @@ func processStackNameTemplate(config *schema.AtmosConfiguration, name, source st
 	guardArgument := func(value any) (any, error) {
 		return value, checkIdentityArgument(name, value, section)
 	}
-	return processTmpl(config, name, source, data, templateProcessOptions{ignoreMissing: ignoreMissing, prepare: func(t *template.Template) {
+	return processTmpl(config, &tmplInput{name: name, value: source, data: data, ignoreMissing: ignoreMissing, prepare: func(t *template.Template) {
 		t.Funcs(template.FuncMap{identityValueGuard: guard, identityArgumentGuard: guardArgument})
 		for _, defined := range t.Templates() {
 			guardIdentityNodes(defined.Root)
@@ -185,6 +185,11 @@ func guardIdentityPipe(pipe *parse.PipeNode) {
 			commands = append(commands, identityGuardCommand(guard))
 		}
 		for j, arg := range command.Args {
+			// Numeric literals cannot contain computed source. Keep them untyped so
+			// template functions can accept ideal constants such as 2.0 as integers.
+			if _, literal := arg.(*parse.NumberNode); literal {
+				continue
+			}
 			if nested, ok := arg.(*parse.PipeNode); ok {
 				guardIdentityPipe(nested)
 			}

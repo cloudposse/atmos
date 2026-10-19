@@ -69,8 +69,15 @@ type AIToolSettings struct {
 	// Enabled gates whether atmos ai chat/ask/exec initialize the tool subsystem at all.
 	// It does NOT gate the MCP server (`atmos mcp start`) — mcp.enabled is that command's
 	// own, sufficient opt-in, and tools are always registered for MCP regardless of this flag.
-	Enabled             bool  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-	RequireConfirmation *bool `yaml:"require_confirmation,omitempty" json:"require_confirmation,omitempty" mapstructure:"require_confirmation"`
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	// Mode selects how tool execution is approved: `require_confirmation` (default) prompts
+	// for tools that need approval, `allow` never prompts but still honors `blocked`, and
+	// `yolo` bypasses every check including `blocked`. When set, it takes precedence over the
+	// deprecated `require_confirmation` and `yolo_mode` settings.
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode" jsonschema:"enum=,enum=require_confirmation,enum=allow,enum=yolo"`
+	// Deprecated: use `mode` instead (`mode: allow` replaces `require_confirmation: false`).
+	// Ignored when `mode` is set.
+	RequireConfirmation *bool `yaml:"require_confirmation,omitempty" json:"require_confirmation,omitempty" mapstructure:"require_confirmation" jsonschema_extras:"deprecated=true,x-atmos-replacement=ai.tools.mode"`
 	// Allowed, when non-empty, restricts which tools are registered/exposed at all (by name
 	// pattern) AND auto-approves them (no confirmation prompt). Empty/unset means all tools
 	// are registered, subject to normal confirmation rules.
@@ -78,8 +85,9 @@ type AIToolSettings struct {
 	// Restricted lists tools (already in the allowed set) that always require confirmation.
 	Restricted []string `yaml:"restricted,omitempty" json:"restricted,omitempty" mapstructure:"restricted"`
 	// Blocked lists tools that are always denied outright.
-	Blocked  []string `yaml:"blocked,omitempty" json:"blocked,omitempty" mapstructure:"blocked"`
-	YOLOMode bool     `yaml:"yolo_mode,omitempty" json:"yolo_mode,omitempty" mapstructure:"yolo_mode"`
+	Blocked []string `yaml:"blocked,omitempty" json:"blocked,omitempty" mapstructure:"blocked"`
+	// Deprecated: use `mode: yolo` instead. Ignored when `mode` is set.
+	YOLOMode bool `yaml:"yolo_mode,omitempty" json:"yolo_mode,omitempty" mapstructure:"yolo_mode" jsonschema_extras:"deprecated=true,x-atmos-replacement=ai.tools.mode"`
 }
 
 // AIInstructionsSettings contains project instructions configuration.
@@ -112,6 +120,15 @@ type AIContextSettings struct {
 // AISkillConfig contains configuration for a custom AI skill.
 // Skills follow the Agent Skills open standard (https://agentskills.io).
 type AISkillConfig struct {
+	Source          string   `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+	Ref             SkillRef `yaml:"ref,omitempty" json:"ref,omitempty,omitzero" mapstructure:"ref"`
+	Kind            string   `yaml:"kind,omitempty" json:"kind,omitempty" mapstructure:"kind"`
+	Subpath         string   `yaml:"subpath,omitempty" json:"subpath,omitempty" mapstructure:"subpath"`
+	Plugins         []string `yaml:"plugins,omitempty" json:"plugins,omitempty" mapstructure:"plugins"`
+	Include         []string `yaml:"include,omitempty" json:"include,omitempty" mapstructure:"include"`
+	Exclude         []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`
+	Clients         []string `yaml:"clients,omitempty" json:"clients,omitempty" mapstructure:"clients"`
+	Scope           string   `yaml:"scope,omitempty" json:"scope,omitempty" mapstructure:"scope"`
 	DisplayName     string   `yaml:"display_name,omitempty" json:"display_name,omitempty" mapstructure:"display_name"`             // User-facing name
 	Description     string   `yaml:"description,omitempty" json:"description,omitempty" mapstructure:"description"`                // What this skill does
 	SystemPrompt    string   `yaml:"system_prompt,omitempty" json:"system_prompt,omitempty" mapstructure:"system_prompt"`          // Specialized instructions

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -82,6 +83,9 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	defer perf.Track(atmosConfig, "exec.mergeComponentConfigurations")()
 
 	deferredContexts := make(ComponentDeferredContexts)
+
+	// Drop the layers below each section set to `!unset` before merging.
+	opts, result = dropUnsetSectionLayers(opts, result)
 
 	// Resolve the effective list_merge_strategy for this component before any merge.
 	// Component-level settings (at any inheritance level) override the global atmos.yaml
@@ -165,14 +169,16 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	deferredContexts[cfg.EnvSectionName] = envCtx
 
 	// Merge auth using deferred merge to handle YAML functions.
+	// A more specific layer that marks a default identity supersedes less specific defaults, so a
+	// stack-level default and a component-level default never both survive the merge.
 	finalComponentAuth, authCtx, err := m.MergeWithDeferred(
 		mergeConfig,
-		[]map[string]any{
+		auth.ClearSupersededAuthDefaults([]map[string]any{
 			opts.GlobalAuth,
 			result.BaseComponentAuth,
 			result.ComponentAuth,
 			result.ComponentOverridesAuth,
-		},
+		}),
 	)
 	if err != nil {
 		return nil, nil, err
@@ -716,6 +722,22 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		comp[cfg.GenerateSectionName] = finalComponentGenerate
 	}
 
+	if opts.ComponentType == cfg.CloudFormationComponentType {
+		finalComponentCloudFormation, err := m.Merge(
+			mergeConfig,
+			[]map[string]any{
+				result.BaseComponentCloudFormation,
+				result.ComponentCloudFormation,
+			},
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+		for key, value := range finalComponentCloudFormation {
+			comp[key] = value
+		}
+	}
+
 	// Merge the Helm CLI plugins list (helm and helmfile components).
 	// Component-type defaults, base-component plugins, and concrete component plugins
 	// are merged in increasing precedence; the configured list_merge_strategy
@@ -809,10 +831,10 @@ func processAuthConfig(atmosConfig *schema.AtmosConfiguration, globalAuthConfig 
 	// The globalAuthConfig parameter is pre-converted from atmosConfig.Auth before parallel processing starts.
 	mergedAuthConfig, mergeCtx, err := m.MergeWithDeferred(
 		atmosConfig,
-		[]map[string]any{
+		auth.ClearSupersededAuthDefaults([]map[string]any{
 			globalAuthConfig,
 			authConfig,
-		},
+		}),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: merge auth config: %w", errUtils.ErrInvalidAuthConfig, err)

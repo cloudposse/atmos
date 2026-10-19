@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	perf "github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 const (
@@ -52,6 +53,9 @@ func Components(stacksMap map[string]any) ([]map[string]any, error) {
 		components = append(components, extractComponentType(stackName, "ansible", componentsMap)...)
 		components = append(components, extractComponentType(stackName, "container", componentsMap)...)
 		components = append(components, extractComponentType(stackName, "emulator", componentsMap)...)
+		components = append(components, extractComponentType(stackName, "kubernetes", componentsMap)...)
+		components = append(components, extractComponentType(stackName, "helm", componentsMap)...)
+		components = append(components, extractComponentType(stackName, "aws/cloudformation", componentsMap)...)
 
 		// TODO: Add support for plugin component types from schema.Components.Plugins
 	}
@@ -218,25 +222,16 @@ func getStringSliceFromMetadata(m map[string]any, key string) []string {
 	return result
 }
 
-// getStringMapFromMetadata safely extracts a map[string]string from a metadata
-// field that was YAML-decoded as map[string]any. Returns an empty (non-nil)
-// map if the key is absent or not an object, so callers always get a
-// rangeable value.
+// getStringMapFromMetadata extracts a map[string]string from a metadata field
+// that was YAML-decoded as map[string]any. It delegates to tags.ToStringMap so
+// list filtering, describe affected, and the terraform bulk paths agree on how
+// values (including booleans) are normalized for --labels selectors. Returns an
+// empty (non-nil) map if the key is absent or not an object, so callers always
+// get a rangeable value.
 func getStringMapFromMetadata(m map[string]any, key string) map[string]string {
 	defer perf.Track(nil, "list.extract.getStringMapFromMetadata")()
 
-	raw, ok := m[key].(map[string]any)
-	if !ok {
-		return map[string]string{}
-	}
-
-	result := make(map[string]string, len(raw))
-	for k, v := range raw {
-		if s, ok := v.(string); ok {
-			result[k] = s
-		}
-	}
-	return result
+	return tags.ToStringMap(m[key])
 }
 
 // GetTagsFromMetadata extracts metadata.tags as a []string for callers
@@ -310,6 +305,9 @@ func UniqueComponents(stacksMap map[string]any, stackPattern string) ([]map[stri
 		extractUniqueComponentType("ansible", componentsMap, seen)
 		extractUniqueComponentType("container", componentsMap, seen)
 		extractUniqueComponentType("emulator", componentsMap, seen)
+		extractUniqueComponentType("kubernetes", componentsMap, seen)
+		extractUniqueComponentType("helm", componentsMap, seen)
+		extractUniqueComponentType("aws/cloudformation", componentsMap, seen)
 	}
 
 	// Convert map to slice in deterministic order, sorted by the
@@ -455,6 +453,9 @@ func ComponentsForStack(stackName string, stacksMap map[string]any) ([]map[strin
 	components = append(components, extractComponentType(stackName, "ansible", componentsMap)...)
 	components = append(components, extractComponentType(stackName, "container", componentsMap)...)
 	components = append(components, extractComponentType(stackName, "emulator", componentsMap)...)
+	components = append(components, extractComponentType(stackName, "kubernetes", componentsMap)...)
+	components = append(components, extractComponentType(stackName, "helm", componentsMap)...)
+	components = append(components, extractComponentType(stackName, "aws/cloudformation", componentsMap)...)
 
 	if len(components) == 0 {
 		return nil, errUtils.ErrNoComponentsFound

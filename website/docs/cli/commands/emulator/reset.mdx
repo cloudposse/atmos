@@ -7,13 +7,10 @@ description: Stop an emulator and wipe its persisted state
 ---
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
-import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 Use this command to stop and remove the emulator's container and then delete its persisted state directory under the XDG cache. The next [`atmos emulator up`](/cli/commands/emulator/up) starts a fresh instance. This is the deliberate counterpart to [`atmos emulator down`](/cli/commands/emulator/down), which keeps persisted state.
 </Intro>
-
-<Experimental />
 
 <CastPlayer title="atmos emulator reset --help" src="/casts/screengrabs/atmos-emulator-reset--help.cast" static chrome />
 

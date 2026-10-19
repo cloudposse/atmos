@@ -139,7 +139,7 @@ func TestDeferredAuthExplicitAndFatalErrors(t *testing.T) {
 	t.Cleanup(ClearResolutionContext)
 	ctx := GetOrCreateResolutionContext()
 	require.NoError(t, ctx.Push(ac, DependencyNode{Component: "example", Stack: "dev", FunctionType: "atmos.Component"}))
-	_, err := componentFunc(ac, &schema.ConfigAndStacksInfo{}, "example", "dev")
+	_, err := componentFunc(t.Context(), ac, &schema.ConfigAndStacksInfo{}, "example", "dev")
 	require.ErrorIs(t, err, errUtils.ErrCircularDependency)
 }
 

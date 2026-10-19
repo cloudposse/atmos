@@ -1,0 +1,104 @@
+---
+title: atmos aws cloudformation changeset create
+sidebar_label: create
+sidebar_class_name: command
+id: create
+description: Create a changeset and leave it for later review or execution.
+---
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
+import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
+import SkipHooksFlag from '@site/docs/cli/commands/aws/cloudformation/_partials/_skip-hooks-flag.mdx'
+
+<Intro>
+Create a changeset for later review and execution. Use
+[`changeset execute`](/cli/commands/aws/cloudformation/changeset/execute) to
+deploy the reviewed changes.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
+
+<CastPlayer title="atmos aws cloudformation changeset create --help" src="/casts/screengrabs/atmos-aws-cloudformation-changeset-create--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation changeset create <component> --stack <stack> [options]
+```
+
+## Examples
+
+```shell
+atmos aws cloudformation changeset create vpc -s plat-ue2-dev
+```
+
+Create changesets for all or affected components in dependency order:
+
+```shell
+atmos aws cloudformation changeset create --all -s plat-ue2-dev
+atmos aws cloudformation changeset create --affected --base origin/main
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
+
+<SelectionFlags />
+
+<GitFlags />
+<SkipHooksFlag />
+</dl>
+
+## Behavior
+
+Unlike a named changeset, the temporary preview created by
+[`diff`](/cli/commands/aws/cloudformation/diff) or [`plan`](/cli/commands/aws/cloudformation/plan)
+is deleted after rendering, along with any preview-created stack placeholder still
+in `REVIEW_IN_PROGRESS`. Cleanup failures are returned as errors.
+
+- A changeset that would change nothing is not kept. CloudFormation reports it as a `FAILED` changeset ("didn't contain changes"), so Atmos deletes it and prints `No changes; changeset not kept`.
+- A changeset that fails to compute is deleted, together with the empty `REVIEW_IN_PROGRESS` stack it registered when Atmos created that stack for a never-deployed component.
+- A successful changeset is kept, and so is the `REVIEW_IN_PROGRESS` stack of a never-deployed component: that is the reusable artifact you asked for, and [`changeset execute`](/cli/commands/aws/cloudformation/changeset/execute) needs it.
+- A stack in `ROLLBACK_COMPLETE` cannot be updated, so `changeset create` fails with a hint to [`delete`](/cli/commands/aws/cloudformation/delete) the stack first.
+
+## Output
+
+On success, the summary includes the changeset's ID and name, whether it was a
+no-op (no changes to apply), and the predicted changes — the same diff summary
+[`diff`](/cli/commands/aws/cloudformation/diff) renders. Execute the named
+changeset later with
+[`changeset execute`](/cli/commands/aws/cloudformation/changeset/execute).
+
+This command fires the `before.aws/cloudformation.changeset-create` and
+`after.aws/cloudformation.changeset-create` [lifecycle hooks](/stacks/components/aws-cloudformation#lifecycle-hooks).
+These events are separate from `apply`, so a hook listed only for
+`before.aws/cloudformation.apply` does not run here.
+
+To run an existing asset packaging hook before the changeset is created, add the
+event to the hook's `events` list:
+
+```yaml
+hooks:
+  package-lambda:
+    events:
+      - before.aws/cloudformation.apply
+      - before.aws/cloudformation.changeset-create
+```

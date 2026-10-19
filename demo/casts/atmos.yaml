@@ -15,6 +15,11 @@ commands:
       GOBIN: '{{ env "PWD" }}/../../.context/bin'
     steps:
       - type: workdir
+        name: doctor-fixture
+        source: fixtures/doctor
+        path: "../../.context/cast-fixtures/doctor"
+        reset: true
+      - type: workdir
         name: starlark-fixture
         source: fixtures/starlark
         path: "../../.context/cast-fixtures/starlark"
@@ -45,9 +50,24 @@ commands:
         path: "../../.context/cast-fixtures/basic"
         reset: true
       - type: workdir
+        name: ai-ask-fixture
+        source: fixtures/ai-ask
+        path: "../../.context/cast-fixtures/ai-ask"
+        reset: true
+      - type: workdir
         name: emulator-aws-fixture
         source: "../../examples/emulator-aws"
         path: "../../.context/cast-fixtures/emulator-aws"
+        reset: true
+      - type: workdir
+        name: cloudformation-fixture
+        source: "../../examples/cloudformation"
+        path: "../../.context/cast-fixtures/cloudformation"
+        reset: true
+      - type: workdir
+        name: cloudformation-advanced-fixture
+        source: fixtures/cloudformation-advanced
+        path: "../../.context/cast-fixtures/cloudformation-advanced"
         reset: true
       - type: workdir
         name: backend-provisioning-fixture

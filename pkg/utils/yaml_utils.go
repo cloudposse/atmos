@@ -17,10 +17,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/yaml/expand"
+	"github.com/cloudposse/atmos/pkg/yaml/scalar"
 )
 
 const (
 	// Atmos YAML functions.
+	AtmosYamlFuncCILabels                = "!ci.labels"
 	AtmosYamlFuncStarlark                = "!starlark"
 	AtmosYamlFuncExec                    = "!exec"
 	AtmosYamlFuncSecret                  = "!secret"
@@ -53,6 +55,7 @@ const (
 	AtmosYamlFuncAwsCallerIdentityUserID = "!aws.caller_identity_user_id"
 	AtmosYamlFuncAwsRegion               = "!aws.region"
 	AtmosYamlFuncAwsOrganizationID       = "!aws.organization_id"
+	AtmosYamlFuncAwsCloudFormationOutput = "!aws.cloudformation.output"
 	AtmosYamlFuncEmulator                = "!emulator"
 	AtmosYamlFuncVersion                 = "!version"
 	AtmosYamlFuncTags                    = "!tags"
@@ -67,6 +70,7 @@ const (
 
 var (
 	AtmosYamlTags = []string{
+		AtmosYamlFuncCILabels,
 		AtmosYamlFuncStarlark,
 		AtmosYamlFuncExec,
 		AtmosYamlFuncSecret,
@@ -97,6 +101,7 @@ var (
 		AtmosYamlFuncAwsCallerIdentityUserID,
 		AtmosYamlFuncAwsRegion,
 		AtmosYamlFuncAwsOrganizationID,
+		AtmosYamlFuncAwsCloudFormationOutput,
 		AtmosYamlFuncEmulator,
 		AtmosYamlFuncVersion,
 		AtmosYamlFuncTags,
@@ -109,6 +114,7 @@ var (
 	// This optimization replaces the O(n) SliceContainsString calls that were previously
 	// called 75M+ times, causing significant performance overhead.
 	atmosYamlTagsMap = map[string]bool{
+		AtmosYamlFuncCILabels:                true,
 		AtmosYamlFuncStarlark:                true,
 		AtmosYamlFuncExec:                    true,
 		AtmosYamlFuncSecret:                  true,
@@ -139,6 +145,7 @@ var (
 		AtmosYamlFuncAwsCallerIdentityUserID: true,
 		AtmosYamlFuncAwsRegion:               true,
 		AtmosYamlFuncAwsOrganizationID:       true,
+		AtmosYamlFuncAwsCloudFormationOutput: true,
 		AtmosYamlFuncEmulator:                true,
 		AtmosYamlFuncVersion:                 true,
 		AtmosYamlFuncTags:                    true,
@@ -497,6 +504,9 @@ func parseAndCacheYAML(atmosConfig *schema.AtmosConfiguration, input string, fil
 		expand.KeyDelimiters(&parsedNode, keyDelimiter)
 	}
 
+	// Keep unquoted digit-only scalars the decoder would turn into lossy floats (e.g. 068007702576) as strings.
+	scalar.PreserveDigitStrings(&parsedNode)
+
 	// Process custom tags.
 	if err := processCustomTags(atmosConfig, &parsedNode, file); err != nil {
 		return nil, nil, err
@@ -571,11 +581,34 @@ func PrintAsYAMLSimple(atmosConfig *schema.AtmosConfiguration, data any) error {
 	}
 
 	indent := getIndentFromConfig(atmosConfig)
-	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
+	y, err := convertToYAMLOutput(data, YAMLOptions{Indent: indent})
 	if err != nil {
 		return err
 	}
 	return pkgdata.Writeln(y)
+}
+
+// rawScalarOutput reports whether data is a top-level string scalar that must be printed verbatim
+// (without YAML quoting) and returns its text. This mirrors how yq prints a scalar result, so
+// `acct=$(atmos describe component ... --query .vars.acct)` captures the bare value. Maps and lists,
+// as well as non-string scalars (integers, floats, booleans, null), keep their regular YAML encoding,
+// which already prints them as plain scalars. Strings nested inside maps and lists are still quoted
+// when the quoting is required to preserve their type.
+func rawScalarOutput(data any) (string, bool) {
+	str, ok := data.(string)
+	if !ok {
+		return "", false
+	}
+	return str + "\n", true
+}
+
+// convertToYAMLOutput converts data to display text for a describe-style result.
+// It differs from ConvertToYAML only in that a top-level string scalar is emitted verbatim.
+func convertToYAMLOutput(data any, opts YAMLOptions) (string, error) {
+	if raw, ok := rawScalarOutput(data); ok {
+		return raw, nil
+	}
+	return ConvertToYAML(data, opts)
 }
 
 func getIndentFromConfig(atmosConfig *schema.AtmosConfiguration) int {
@@ -587,6 +620,11 @@ func getIndentFromConfig(atmosConfig *schema.AtmosConfiguration) int {
 
 func GetHighlightedYAML(atmosConfig *schema.AtmosConfiguration, data any) (string, error) {
 	defer perf.Track(atmosConfig, "utils.GetHighlightedYAML")()
+
+	// A top-level string scalar is printed verbatim; it is a value, not a YAML document to highlight.
+	if raw, ok := rawScalarOutput(data); ok {
+		return raw, nil
+	}
 
 	y, err := ConvertToYAML(data, YAMLOptions{Indent: getIndentFromConfig(atmosConfig)})
 	if err != nil {
@@ -901,6 +939,9 @@ func UnmarshalYAMLFromNode[T any](atmosConfig *schema.AtmosConfiguration, node *
 // decodeYAMLNode processes the custom tags of a parsed node and decodes it into T.
 func decodeYAMLNode[T any](atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) (T, error) {
 	var zeroValue T
+	// Keep digit-only scalars that YAML would decode as lossy floats as strings.
+	scalar.PreserveDigitStrings(node)
+
 	if err := processCustomTags(atmosConfig, node, file); err != nil {
 		return zeroValue, err
 	}

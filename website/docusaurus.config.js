@@ -61,6 +61,8 @@ const config = {
                         from: '/changelog/starlark-yaml-values',
                         to: '/changelog/starlark-custom-commands'
                     },
+                    // Preserve the original Rain migration guide URL.
+                    {from: '/migration/from-rain', to: '/migration/rain'},
                     // Advanced Quick Start: "Configure Repository" + "Configure CLI"
                     // were merged into a single "Configure the Project" step.
                     {

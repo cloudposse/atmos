@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cli/go-gh/v2/pkg/api"
@@ -380,9 +381,34 @@ func benchReportable(run *githubapi.Run, id int64) bool {
 }
 
 func benchAssociatedPRs(ctx context.Context, client githubapi.API, repo string, run *githubapi.Run) ([]githubapi.PR, error) {
+	prs, err := benchCommitPRs(ctx, client, repo, run)
+	if err != nil {
+		return nil, err
+	}
+	for i := range prs {
+		if PRMatches(&prs[i], run, repo) {
+			return prs, nil
+		}
+	}
+	// A commit that exists only in a fork is not listed by the commit
+	// association endpoint, and workflow_run.pull_requests is empty for it too.
+	// Resolve the PR through the fork's head branch instead.
+	owner, _, _ := strings.Cut(run.HeadRepository.FullName, "/")
+	if owner == "" || run.Branch == "" {
+		return prs, nil
+	}
+	forkPRs, err := githubapi.OpenPRsForHead(ctx, client, repo, githubapi.HeadRef{Owner: owner, Branch: run.Branch, SHA: run.HeadSHA})
+	if err != nil {
+		return nil, err
+	}
+	return append(prs, forkPRs...), nil
+}
+
+func benchCommitPRs(ctx context.Context, client githubapi.API, repo string, run *githubapi.Run) ([]githubapi.PR, error) {
 	var prs []githubapi.PR
 	// The commit association endpoint also works when workflow_run.pull_requests
-	// is empty for a fork. Validate every association against the current PR.
+	// is empty for a same-repository branch. Validate every association against
+	// the current PR.
 	for page := 1; page <= githubapi.PageLimit; page++ {
 		var batch []githubapi.PR
 		if err := githubapi.Get(ctx, client, fmt.Sprintf("repos/%s/commits/%s/pulls?per_page=100&page=%d", repo, run.HeadSHA, page), &batch); err != nil {

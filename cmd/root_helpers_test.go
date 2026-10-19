@@ -27,6 +27,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/startup"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 	pkgversion "github.com/cloudposse/atmos/pkg/version"
@@ -1212,7 +1213,7 @@ func TestConvertToTermenvProfile(t *testing.T) {
 
 // TestFindExperimentalParent tests finding experimental parent commands.
 // This function uses a two-pass approach:
-// - First pass: Look for registry-based experimental commands (top-level like devcontainer, toolchain)
+// - First pass: Look for registry-based experimental commands (top-level like devcontainer, scaffold)
 // - Second pass: Look for annotation-based experimental subcommands (terraform backend, etc.)
 // This ensures that when running "devcontainer list", it returns "devcontainer" not "list".
 func TestFindExperimentalParent(t *testing.T) {
@@ -1838,7 +1839,7 @@ func TestSyncGlobalFlagsToViper(t *testing.T) {
 			cmd := &cobra.Command{Use: "test"}
 			tt.setupCmd(cmd)
 
-			syncGlobalFlagsToViper(cmd)
+			startup.SyncGlobalFlagsToViper(cmd)
 			tt.checkViper(t)
 		})
 	}
@@ -1894,7 +1895,7 @@ func TestConfigureEarlyColorProfile(t *testing.T) {
 
 			// Should not panic.
 			assert.NotPanics(t, func() {
-				configureEarlyColorProfile(cmd)
+				startup.ConfigureEarlyColorProfile(cmd)
 			})
 		})
 	}

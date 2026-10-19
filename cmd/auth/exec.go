@@ -167,7 +167,7 @@ func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) (*authExecConte
 			if errors.Is(err, errUtils.ErrUserAborted) {
 				return nil, errUtils.ErrUserAborted
 			}
-			return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthenticationFailed, err)
+			return nil, errUtils.EnsureAuthenticationFailed(err)
 		}
 	}
 

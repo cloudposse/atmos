@@ -11,6 +11,9 @@ import (
 // These are the canonical function names used across all formats.
 // In YAML they appear as !tag, in HCL as tag(), etc.
 const (
+	// CILabels returns current CI review labels or matches a requested list.
+	CILabels = "ci.labels"
+
 	// Starlark evaluates a configuration function body after merging.
 	Starlark = "starlark"
 	// Exec executes a shell command and returns the output.
@@ -106,6 +109,9 @@ const (
 	// AwsOrganizationID returns the AWS Organization ID.
 	AwsOrganizationID = "aws.organization_id"
 
+	// AwsCloudFormationOutput retrieves an aws/cloudformation stack Output value.
+	AwsCloudFormationOutput = "aws.cloudformation.output"
+
 	// Emulator resolves a value from a local emulator.
 	Emulator = "emulator"
 
@@ -133,6 +139,7 @@ func All() []string {
 	defer perf.Track(nil, "tag.All")()
 
 	return []string{
+		CILabels,
 		Starlark,
 		Exec,
 		Secret,
@@ -165,6 +172,7 @@ func All() []string {
 		AwsCallerIdentityUserID,
 		AwsRegion,
 		AwsOrganizationID,
+		AwsCloudFormationOutput,
 		Emulator,
 		Version,
 		Tags,
@@ -176,6 +184,7 @@ func All() []string {
 
 // tagsMap provides O(1) lookup for tag names.
 var tagsMap = map[string]bool{
+	CILabels:                true,
 	Starlark:                true,
 	Exec:                    true,
 	Secret:                  true,
@@ -208,6 +217,7 @@ var tagsMap = map[string]bool{
 	AwsCallerIdentityUserID: true,
 	AwsRegion:               true,
 	AwsOrganizationID:       true,
+	AwsCloudFormationOutput: true,
 	Emulator:                true,
 	Version:                 true,
 	Tags:                    true,

@@ -2,6 +2,7 @@ package exec
 
 import (
 	"os"
+	"slices"
 	"sync"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
@@ -164,6 +165,11 @@ func deepCopyBaseComponentConfigMaps(dst, src *schema.BaseComponentConfig) error
 			return err
 		}
 	}
+	if src.BaseComponentCloudFormation != nil {
+		if dst.BaseComponentCloudFormation, err = m.DeepCopyMap(src.BaseComponentCloudFormation); err != nil {
+			return err
+		}
+	}
 	if src.BaseComponentBackendSection != nil {
 		if dst.BaseComponentBackendSection, err = m.DeepCopyMap(src.BaseComponentBackendSection); err != nil {
 			return err
@@ -187,6 +193,7 @@ func deepCopyBaseComponentConfigMaps(dst, src *schema.BaseComponentConfig) error
 	if dst.BaseComponentRetry, err = m.DeepCopyMap(src.BaseComponentRetry); err != nil {
 		return err
 	}
+	dst.BaseComponentUnsetSections = slices.Clone(src.BaseComponentUnsetSections)
 	return nil
 }
 

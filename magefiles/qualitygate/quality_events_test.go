@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestQualityEventSelection checks event precedence and includes eligible stacked PRs in fallback selection.
 func TestQualityEventSelection(t *testing.T) {
 	t.Setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
 	cases := []struct {
@@ -31,8 +32,8 @@ func TestQualityEventSelection(t *testing.T) {
 		{"status", `{"sha":"` + githubtest.SHA + `"}`, "commits/" + githubtest.SHA + "/pulls?state=open", false},
 		{"check", `{"check_run":{"head_sha":"` + githubtest.SHA + `"}}`, "commits/" + githubtest.SHA + "/pulls?state=open", false},
 		{"workflow", `{"workflow_run":{"head_sha":"` + githubtest.SHA + `"}}`, "commits/" + githubtest.SHA + "/pulls?state=open", false},
-		{"manual", `{}`, "pulls?state=open&base=main", false},
-		{"plain issue", `{"issue":{"number":999}}`, "pulls?state=open&base=main", false},
+		{"manual", `{}`, "pulls?state=open", false},
+		{"plain issue", `{"issue":{"number":999}}`, "pulls?state=open", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -50,15 +51,18 @@ func TestQualityEventSelection(t *testing.T) {
 				closed := pr
 				closed.State = "closed"
 				other := pr
-				other.Base.Ref = "release"
-				return githubtest.Respond([]githubapi.PR{pr, closed, other}, response)
+				other.Base.Repo.FullName = "another/repository"
+				stacked := pr
+				stacked.Number, stacked.Base.Ref = 43, "feature/prerequisite"
+				return githubtest.Respond([]githubapi.PR{pr, closed, other, stacked}, response)
 			})
 			prs, err := q.eventPRs(time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC))
 			require.NoError(t, err)
-			require.Equal(t, []int{42}, prs)
 			if tc.direct {
+				require.Equal(t, []int{42}, prs)
 				require.Zero(t, calls)
 			} else {
+				require.Equal(t, []int{42, 43}, prs)
 				require.Equal(t, 1, calls)
 			}
 		})

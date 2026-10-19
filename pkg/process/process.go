@@ -21,6 +21,9 @@ type Runner interface {
 // TaskSpec describes a subprocess invocation.
 type TaskSpec struct {
 	Command string
+	// Path optionally supplies an already-resolved executable. Command remains argv[0], and
+	// Env remains the child's exported environment rather than the shell's lookup environment.
+	Path    string
 	Args    []string
 	Dir     string
 	Env     []string
@@ -158,6 +161,9 @@ func recordWaitOutcome(ctx context.Context, cmd *exec.Cmd, result *Result, err e
 // resolveCommand searches the invocation environment relative to its working
 // directory. Absolute lookup results prevent exec.Cmd from applying Dir twice.
 func resolveCommand(spec *TaskSpec) (string, error) {
+	if spec.Path != "" {
+		return spec.Path, nil
+	}
 	if spec.Env == nil {
 		return spec.Command, nil
 	}

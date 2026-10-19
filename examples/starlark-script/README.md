@@ -1,4 +1,5 @@
 ---
+tags: [Automation]
 related_docs:
   - label: Script steps
     url: /steps/type/script

@@ -7,6 +7,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -56,6 +57,12 @@ func autoDetectDefaultIdentity(authConfig *schema.AuthConfig, cliConfigPath stri
 		// Special case: If user explicitly aborted (Ctrl+C), propagate the error immediately.
 		// This allows the caller to exit cleanly without continuing execution.
 		if errors.Is(err, errUtils.ErrUserAborted) {
+			return "", err
+		}
+
+		// Several defaults cannot be resolved without a prompt. Falling back to no identity would
+		// silently use the SDK default credential chain, so surface the conflict instead.
+		if errors.Is(err, errUtils.ErrMultipleDefaultIdentities) {
 			return "", err
 		}
 
@@ -332,6 +339,10 @@ func CreateAndAuthenticateManagerWithReExecContext(
 	}
 
 	// Authenticate with the resolved identity.
+	// Keep the original request distinct from an automatically selected default.
+	// Describe/list consumers reconstruct stack info from this manager, so the
+	// provenance must travel with it to nested delivery-target output lookups.
+	authManager.GetStackInfo().RequestedIdentity = &identityName
 	if err := authenticateWithIdentity(authManager, resolvedIdentity, selectValue); err != nil {
 		return nil, NormalizeAuthenticationError(err)
 	}
@@ -467,4 +478,33 @@ func copyAuthConfigForScan(src *schema.AuthConfig) *schema.AuthConfig {
 		}
 	}
 	return &dup
+}
+
+// identityPersistsCredentials reports whether credentials of the named identity may be written to
+// the keyring. It asks the identity through the types.CredentialPersistence interface instead of
+// special-casing identity kinds; unknown identities and identities without the interface persist.
+func (m *manager) identityPersistsCredentials(identityName string) bool {
+	identity, ok := m.identities[identityName]
+	if !ok {
+		return true
+	}
+	return types.PersistsCredentialsInKeyring(identity)
+}
+
+// validateChainIdentities validates the configuration of every identity in the current chain
+// before any step is authenticated. Validate is a pure configuration check, so running it up
+// front never has side effects, whereas discovering the same problem mid-chain would come after
+// the earlier steps already authenticated (prompted, opened a browser, or run a helper command).
+// The chain root may be a provider rather than an identity; those entries are skipped.
+func (m *manager) validateChainIdentities() error {
+	for _, name := range m.chain {
+		identity, ok := m.identities[name]
+		if !ok || identity == nil {
+			continue
+		}
+		if err := identity.Validate(); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -966,16 +966,17 @@ func TestMain(m *testing.M) {
 	}
 
 	// Keep toolchain info snapshots independent of upstream releases and API quotas.
+	// Register each release once, alongside its Aqua metadata, to avoid duplicate rows.
 	for _, tool := range []struct{ owner, repo, tag, prefix string }{
 		{"replicatedhq", "replicated", "v0.124.1", "v"},
 		{"junegunn", "fzf", "v0.67.0", "v"},
-		{"jqlang", "jq", "jq-1.7.1", "jq-"},
+		{"jqlang", "jq", "jq-1.8.1", "jq-"},
 	} {
 		githubMock.RegisterAquaTool(&httpmock.AquaTool{
 			Owner: tool.owner, Repo: tool.repo, VersionPrefix: tool.prefix,
 		})
 		githubMock.RegisterRelease(tool.owner, tool.repo, httpmock.ReleaseSpec{
-			TagName: tool.tag, PublishedAt: "2025-12-17T00:00:00Z",
+			TagName: tool.tag,
 		})
 	}
 

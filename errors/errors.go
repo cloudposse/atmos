@@ -43,6 +43,10 @@ const (
 )
 
 var (
+	ErrAISkillSourceInvalid                  = errors.New("invalid skill source")
+	ErrAISkillSourceDrift                    = errors.New("skill installation is not current")
+	ErrAISkillSourceOwnership                = errors.New("skill destination is not owned by this source")
+	ErrAISkillSourceRecovery                 = errors.New("skill transaction requires recovery")
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrDownloadFile                          = errors.New("failed to download file")
 	ErrInvalidClientMode                     = errors.New("invalid client mode for operation")
@@ -127,6 +131,7 @@ var (
 	ErrStacksDirectoryDoesNotExist           = errors.New("directory for Atmos stacks does not exist")
 	ErrMissingAtmosConfig                    = errors.New("atmos configuration not found or invalid")
 	ErrNotInGitRepository                    = errors.New("not inside a git repository")
+	ErrAffectedBaseUnresolved                = errors.New("cannot resolve the base for --affected")
 	ErrCommandNil                            = errors.New("command cannot be nil")
 	ErrProcessStartFailed                    = errors.New("process start failed")
 	ErrProcessWaitFailed                     = errors.New("process wait failed")
@@ -226,6 +231,7 @@ var (
 	ErrLabelNotFound                    = errors.New("component label not found")
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
 	ErrYamlFuncMaxResolutionDepth       = errors.New("Atmos YAML function resolution exceeded the maximum dependency depth (likely an undetected circular dependency)")
+	ErrComponentFuncDuringManifestLoad  = errors.New("atmos.Component cannot be evaluated while stack manifests are being loaded")
 	ErrDeferredTemplateContextMissing   = errors.New("cannot resolve deferred !template value: template context is unavailable because template processing was disabled for this invocation")
 	ErrAwsGetCallerIdentity             = errors.New("failed to get AWS caller identity")
 	ErrUnsupportedYamlTag               = errors.New("unsupported YAML tag")
@@ -1090,11 +1096,22 @@ var (
 	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
 	ErrPlaywrightDriverSeed         = errors.New("failed to pre-seed the Playwright driver")
 	ErrAwsMissingEnvVars            = errors.New("missing required AWS environment variables")
+	ErrIdentityNotAWS               = errors.New("identity does not produce AWS credentials")
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")
 	ErrChromeNotFound               = errors.New("chrome/chromium not found for isolated browser sessions")
 	ErrSayNotFound                  = errors.New("text-to-speech command not found")
 	ErrVoiceListUnsupported         = errors.New("voice enumeration not supported for backend")
 	ErrUserAborted                  = errors.New("user aborted")
+
+	// AWS credential_process errors (consuming and producing the AWS process-credential format).
+	ErrCredentialProcessFailed        = errors.New("credential_process command failed")
+	ErrCredentialProcessInvalidOutput = errors.New("credential_process returned invalid output")
+	ErrCredentialProcessRecursion     = errors.New("credential_process recursion detected")
+	// ErrCredentialProcessIdentityRequired is returned when the credential-process producer is not
+	// given a concrete identity (it never opens the interactive selector, which the AWS CLI hides).
+	ErrCredentialProcessIdentityRequired = errors.New("credential_process requires a specific identity")
+	// ErrAWSCredentialsIncomplete is returned when AWS credentials lack an access key ID or secret access key.
+	ErrAWSCredentialsIncomplete = errors.New("AWS credentials are missing an access key ID or secret access key")
 
 	// AWS SSO specific errors.
 	ErrSSOSessionExpired      = errors.New("aws sso session expired")
@@ -1152,6 +1169,7 @@ var (
 	ErrNoDefaultProvider             = errors.New("no default provider configured and multiple providers exist")
 	ErrIdentitySelectionRequiresTTY  = fmt.Errorf("interactive identity selection: %w", ErrTTYRequired)
 	ErrProviderSelectionRequiresTTY  = fmt.Errorf("interactive provider selection: %w", ErrTTYRequired)
+	ErrAuthPromptUnavailable         = fmt.Errorf("interactive authentication prompt unavailable: %w", ErrTTYRequired)
 	ErrAuthenticationChainNotBuilt   = errors.New("authentication chain not built")
 	ErrInvalidStackConfig            = errors.New("invalid stack config")
 	ErrNoCommandSpecified            = errors.New("no command specified")
@@ -1230,7 +1248,9 @@ var (
 	ErrProvisionTargetKindUnknown = errors.New("provision target kind is not registered")
 	ErrProvisionTargetKindMissing = errors.New("provision target is missing a kind")
 	ErrProvisionTargetNoFetch     = errors.New("provision target kind does not support reading current state")
-	ErrGitPullRequestNotSupported = errors.New("git pull request publishing is not supported by the cli provider")
+
+	// Git target pull-request publishing errors.
+	ErrGitTargetPullRequestConfig = errors.New("invalid git target pull_request configuration")
 
 	// Backend provisioning errors.
 	ErrBucketRequired             = errors.New("backend.bucket is required")
@@ -1492,6 +1512,7 @@ var (
 	ErrCICheckRunMissingComponent = errors.New("check run requires a resolved component and stack")
 	ErrCIStatusContextIncomplete  = errors.New("status context requires all parts to be non-empty")
 	ErrCIStatusFetchFailed        = errors.New("failed to fetch CI status")
+	ErrCILabelsFetchFailed        = errors.New("failed to fetch CI review labels")
 	ErrCIOutputWriteFailed        = errors.New("failed to write CI output")
 	ErrCISummaryWriteFailed       = errors.New("failed to write CI summary")
 	ErrCIAnnotationFailed         = errors.New("failed to emit CI annotations")
@@ -1662,6 +1683,11 @@ var (
 	ErrCLIProviderExecFailed        = errors.New("CLI provider execution failed")
 	ErrCLIProviderParseResponse     = errors.New("failed to parse CLI provider response")
 	ErrCLIProviderToolsNotSupported = errors.New("tool execution not supported for CLI providers; use MCP pass-through instead")
+	ErrCLIProviderEmptyResponse     = errors.New("CLI provider returned an empty response")
+	ErrCLIProviderMaxTurns          = errors.New("CLI provider reached its maximum number of turns before answering")
+	ErrCLIProviderToolDenied        = errors.New("CLI provider tool use was not approved")
+	ErrAIEmptyResponse              = errors.New("AI returned an empty response")
+	ErrAIToolsInvalidMode           = errors.New("invalid ai.tools.mode")
 
 	// Web search errors.
 	ErrWebSearchFailed      = errors.New("web search request failed")
@@ -1751,6 +1777,62 @@ var (
 	ErrHelmReleaseUninstall          = errors.New("failed to uninstall helm release")
 	ErrHelmReleaseRollback           = errors.New("failed to roll back helm release")
 	ErrHelmReleaseOperation          = errors.New("failed to perform helm release operation")
+
+	// Native aws/cloudformation component errors.
+	ErrMissingAwsCloudFormationTemplate                         = errors.New("aws/cloudformation component is missing a template: set 'template' (inline body) or 'path' (file reference)")
+	ErrMissingAwsCloudFormationStackName                        = errors.New("aws/cloudformation component is missing a 'stack_name'")
+	ErrInvalidAwsCloudFormationCapabilities                     = errors.New("invalid aws/cloudformation capabilities")
+	ErrInvalidAwsCloudFormationSettings                         = errors.New("invalid aws/cloudformation settings")
+	ErrAwsCloudFormationGenerateUnsupported                     = errors.New("aws/cloudformation components do not support a 'generate' section")
+	ErrAwsCloudFormationStackPolicyFileAndBodyMutuallyExclusive = errors.New("'stack_policy.file' and 'stack_policy.body' are mutually exclusive: 'file' is a file reference, 'body' is an inline policy")
+	ErrInvalidComponentsAwsCloudFormation                       = errors.New("invalid 'components.aws/cloudformation' section")
+	ErrInvalidSpecificAwsCloudFormationComponent                = errors.New("invalid aws/cloudformation component configuration")
+	ErrAwsCloudFormationChangeSetFailed                         = errors.New("aws/cloudformation changeset failed")
+	ErrAwsCloudFormationChangeSetNotFound                       = errors.New("aws/cloudformation changeset not found")
+	ErrAwsCloudFormationDriftDetected                           = errors.New("aws/cloudformation stack has drifted")
+	ErrAwsCloudFormationFlagsMutuallyExclusive                  = errors.New("--all and --affected are mutually exclusive")
+	ErrAwsCloudFormationComponentArgWithSelection               = errors.New("component argument cannot be used with --all, --affected, --tags, or --labels")
+	ErrAwsCloudFormationComponentArgRequired                    = errors.New("requires exactly one component argument unless --all, --affected, --tags, or --labels is set")
+	ErrAwsCloudFormationIdentityResolutionFailed                = errors.New("aws/cloudformation component requested an identity, but the auth manager could not resolve it")
+	ErrAwsCloudFormationAPICallFailed                           = errors.New("aws/cloudformation API call failed")
+	ErrAwsCloudFormationFmtNotClean                             = errors.New("aws/cloudformation template is not formatted")
+	ErrAwsCloudFormationFmtWriteFailed                          = errors.New("aws/cloudformation failed to write formatted template")
+	ErrAwsCloudFormationStackNotFound                           = errors.New("aws/cloudformation stack not found")
+	ErrAwsCloudFormationStackSetFailed                          = errors.New("aws/cloudformation stackset operation failed")
+	ErrAwsCloudFormationLogsFollowChartExclusive                = errors.New("--follow and --chart are mutually exclusive")
+	ErrAwsCloudFormationOperationFailed                         = errors.New("aws/cloudformation operation did not complete successfully")
+	ErrAwsCloudFormationBackendMissing                          = errors.New("aws/cloudformation packaging bucket does not exist")
+	ErrAwsCloudFormationIncludeDependentsRequiresAffected       = errors.New("--include-dependents requires --affected")
+	ErrAwsCloudFormationTemplateAndPathMutuallyExclusive        = errors.New("'template' and 'path' are mutually exclusive: 'template' is an inline template body, 'path' is a file reference")
+	ErrAwsCloudFormationFmtRequiresPath                         = errors.New("aws/cloudformation fmt only applies to file-based templates ('path:'); inline 'template:' bodies have no file to format in place")
+	ErrAwsCloudFormationTemplateMissingResources                = errors.New("aws/cloudformation inline template is missing a top-level 'Resources' section")
+	ErrInvalidAwsCloudFormationParameters                       = errors.New("invalid aws/cloudformation parameters")
+	ErrAwsCloudFormationStackNotDeployed                        = errors.New("aws/cloudformation stack is not deployed")
+	ErrAwsCloudFormationOutputNotFound                          = errors.New("aws/cloudformation output not found")
+	ErrAwsCloudFormationInvalidFlagCombination                  = errors.New("invalid flag combination")
+	ErrAwsCloudFormationConfirmationRequired                    = errors.New("aws/cloudformation operation requires confirmation; pass --auto-approve in a non-interactive session")
+	ErrAwsCloudFormationStackRollbackComplete                   = errors.New("aws/cloudformation stack is in ROLLBACK_COMPLETE and cannot be updated")
+	ErrAwsCloudFormationStackSetTargetNotApplicable             = errors.New("aws/cloudformation apply cannot deliver to a `kind: aws/stackset` provision target")
+	ErrAwsCloudFormationTerminationProtectionEnabled            = errors.New("aws/cloudformation stack has termination protection enabled")
+	ErrAwsCloudFormationRetainResourcesNotApplicable            = errors.New("--retain-resources is only valid for a stack in DELETE_FAILED status")
+	ErrAwsCloudFormationBackendTargetsFailed                    = errors.New("aws/cloudformation backend targets could not be inspected")
+	ErrAwsCloudFormationRainDirective                           = errors.New("aws/cloudformation template contains Rain directives, which Atmos does not preprocess")
+)
+
+// Provision-target authentication errors.
+var (
+	// ErrProvisionTargetAuthInvalid indicates a provision target's auth block is malformed.
+	ErrProvisionTargetAuthInvalid = errors.New("provision target auth is invalid")
+	// ErrProvisionTargetAuthUnknownKey indicates a provision target's auth block has an unsupported key.
+	ErrProvisionTargetAuthUnknownKey = errors.New("provision target auth has an unsupported key")
+	// ErrProvisionTargetAuthNoIdentity indicates a provision target's auth block selects no identity.
+	ErrProvisionTargetAuthNoIdentity = errors.New("provision target auth did not select an identity")
+	// ErrProvisionTargetAuthFailed indicates the identity a provision target selected could not be used.
+	ErrProvisionTargetAuthFailed = errors.New("provision target authentication failed")
+	// ErrAwsCloudFormationTargetAuthFailed indicates a CloudFormation delivery target's own authentication failed.
+	ErrAwsCloudFormationTargetAuthFailed = errors.New("aws/cloudformation provision target could not authenticate")
+	// ErrAwsCloudFormationTargetKeyUnsupported indicates a `kind: aws/cloudformation` target has an unsupported key.
+	ErrAwsCloudFormationTargetKeyUnsupported = errors.New("aws/cloudformation provision target has an unsupported key")
 )
 
 // Stack dependency (`depends_on`) resolution errors.
@@ -1859,6 +1941,26 @@ var (
 	ErrReleaseTagMissing = errors.New("release tag is missing")
 	// ErrReleaseTagMismatch indicates GitHub did not preserve the tag during a notes update.
 	ErrReleaseTagMismatch = errors.New("release tag changed during notes update")
+)
+
+// Source provisioning, S3 source, and stack-manifest hardening errors (field-test findings, PR #3251).
+var (
+	// ErrSourceComponentNameInvalid indicates a component name (metadata.component) that cannot be
+	// used as a source provisioning destination: absolute, volume-qualified, or escaping the
+	// components directory.
+	ErrSourceComponentNameInvalid = errors.New("invalid component name for source provisioning")
+	// ErrSourceDeleteRefused indicates `source delete` declined to remove a directory it cannot
+	// prove the source provisioner created, or that another component owns.
+	ErrSourceDeleteRefused = errors.New("refusing to delete source directory")
+	// ErrS3SourceRegionMismatch indicates an S3 source bucket lives in a different region than the
+	// one used for the request.
+	ErrS3SourceRegionMismatch = errors.New("S3 source bucket is in a different region than the request")
+	// ErrS3SourceForbidden indicates S3 answered 403 for an object probe: either access is denied
+	// or the key does not exist and the principal lacks s3:ListBucket.
+	ErrS3SourceForbidden = errors.New("S3 source access was forbidden")
+	// ErrS3SourceUnsupportedParam indicates an S3 source URL carries credential query parameters
+	// that the Atmos S3 getter never honors.
+	ErrS3SourceUnsupportedParam = errors.New("unsupported S3 source authentication parameter")
 )
 
 // GitHub mock test-helper errors (tests/testhelpers/httpmock).

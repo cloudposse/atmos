@@ -1902,7 +1902,7 @@ func TestDistributeToClients_SkipsPreExistingSymlink(t *testing.T) {
 	assert.NoError(t, err, "vscode wasn't a symlink and should still be distributed to")
 }
 
-func TestInstallThenUninstall_RemovesCanonicalAndClientCopies(t *testing.T) {
+func TestLegacyUninstall_RemovesCanonicalAndRetainsUnownedClients(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 	homedir.Reset()
@@ -1943,7 +1943,7 @@ func TestInstallThenUninstall_RemovesCanonicalAndClientCopies(t *testing.T) {
 	_, err = os.Stat(skill.Path)
 	assert.True(t, os.IsNotExist(err), "canonical install path should be removed")
 	_, err = os.Stat(clientCopyPath)
-	assert.True(t, os.IsNotExist(err), "distributed client copy should be removed")
+	assert.NoError(t, err, "legacy client copies have no ownership evidence and must remain")
 }
 
 func TestUninstallAll_RemovesEveryInstalledSkill(t *testing.T) {
@@ -1978,7 +1978,7 @@ func TestUninstallAll_RemovesEveryInstalledSkill(t *testing.T) {
 
 	assert.Empty(t, installer.List())
 	_, err = os.Stat(clientCopyPath)
-	assert.True(t, os.IsNotExist(err), "distributed client copy should be removed")
+	assert.NoError(t, err, "legacy client copies have no ownership evidence and must remain")
 }
 
 func TestUninstallAll_NoneInstalled_NoError(t *testing.T) {
@@ -2101,11 +2101,11 @@ func TestDistributeToClients_UserScope(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "user scope must not write into the project path")
 }
 
-// TestUninstall_UserScope_RemovesHomeDirClientCopy is the uninstall-side
+// TestUninstall_UserScope_RetainsUnownedHomeDirClientCopy is the uninstall-side
 // mirror of TestDistributeToClients_UserScope: a skill installed with
 // Scope: ScopeUser must have its client copy removed from the home-dir-rooted
 // path, not the project path.
-func TestUninstall_UserScope_RemovesHomeDirClientCopy(t *testing.T) {
+func TestUninstall_UserScope_RetainsUnownedHomeDirClientCopy(t *testing.T) {
 	tempHome := t.TempDir()
 	t.Setenv("HOME", tempHome)
 	t.Setenv("USERPROFILE", tempHome)
@@ -2135,7 +2135,7 @@ func TestUninstall_UserScope_RemovesHomeDirClientCopy(t *testing.T) {
 	require.NoError(t, installer.Uninstall("test-skill", true, basePath, []string{ClientClaudeCode}, []string{ScopeUser}))
 
 	_, err = os.Stat(homeCopyPath)
-	assert.True(t, os.IsNotExist(err), "user-scope client copy should be removed")
+	assert.NoError(t, err, "legacy user-scope client copies must remain unowned")
 
 	// The project path must never have been touched.
 	_, err = os.Stat(filepath.Join(basePath, ".claude", "skills", "test-skill"))

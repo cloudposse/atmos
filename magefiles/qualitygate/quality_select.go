@@ -24,32 +24,29 @@ const qualitySearchLimit = 10
 const (
 	qualityReasonNone        = ""
 	qualityReasonUnpublished = "no report for current head"
+	qualityReasonBaseChanged = "no report for current base"
 	qualityReasonUnavailable = "report has unavailable evidence"
 	qualityReasonRecent      = "recent head commit"
 	qualityReasonUnknown     = "selection check failed"
 )
 
-// prNumbers lists open main PRs from a paginated pulls endpoint. When headSHA is
+// prNumbers lists eligible open PRs from a paginated pulls endpoint. When headSHA is
 // set, only PRs whose head is exactly that commit qualify, so a PR whose head
 // moved after the event is never reconciled for the stale commit.
 func (q *qualityClient) prNumbers(path, headSHA string) ([]int, error) {
-	var numbers []int
-	for page := 1; page <= githubapi.PageLimit; page++ {
-		var prs []githubapi.PR
-		if err := q.get(fmt.Sprintf("%s&per_page=100&page=%d", path, page), &prs); err != nil {
-			return nil, err
-		}
-		for i := range prs {
-			pr := &prs[i]
-			if pr.State == "open" && pr.Base.Ref == "main" && (headSHA == "" || pr.Head.SHA == headSHA) {
-				numbers = append(numbers, pr.Number)
-			}
-		}
-		if len(prs) < githubapi.PageSize {
-			return numbers, nil
-		}
+	prs, err := q.openPRs(path, headSHA)
+	if err != nil {
+		return nil, err
 	}
-	return nil, bench.Error("PR pagination limit exceeded")
+	return prNumbersOf(prs), nil
+}
+
+func prNumbersOf(prs []githubapi.PR) []int {
+	var numbers []int
+	for i := range prs {
+		numbers = append(numbers, prs[i].Number)
+	}
+	return numbers
 }
 
 // unlistedPRNumbers resolves PRs that the commit association endpoint does not
@@ -58,8 +55,8 @@ func (q *qualityClient) prNumbers(path, headSHA string) ([]int, error) {
 // events that do not carry the fork owner and branch. Both verify the head SHA.
 func (q *qualityClient) unlistedPRNumbers(sha, owner, branch string) ([]int, error) {
 	if owner != "" && branch != "" {
-		head := url.QueryEscape(owner + ":" + branch)
-		numbers, err := q.prNumbers("pulls?state=open&base=main&head="+head, sha)
+		path := "pulls?state=open&head=" + url.QueryEscape(owner+":"+branch)
+		numbers, err := q.prNumbers(path, sha)
 		if err != nil || len(numbers) > 0 {
 			return numbers, err
 		}
@@ -67,6 +64,7 @@ func (q *qualityClient) unlistedPRNumbers(sha, owner, branch string) ([]int, err
 	return q.searchPRNumbers(sha)
 }
 
+// searchPRNumbers verifies SHA search results against each eligible PR's current head.
 func (q *qualityClient) searchPRNumbers(sha string) ([]int, error) {
 	query := url.Values{
 		"q":        {fmt.Sprintf("repo:%s type:pr state:open sha:%s", q.repo, sha)},
@@ -88,15 +86,15 @@ func (q *qualityClient) searchPRNumbers(sha string) ([]int, error) {
 		if err := q.get(fmt.Sprintf("pulls/%d", item.Number), &pr); err != nil {
 			return nil, err
 		}
-		if pr.State == "open" && pr.Base.Ref == "main" && pr.Head.SHA == sha {
+		if qualityEligible(&pr, q.repo) && pr.Head.SHA == sha {
 			numbers = append(numbers, item.Number)
 		}
 	}
 	return numbers, nil
 }
 
-// recentPRNumbers selects open main PRs that need a scheduled reconcile: those
-// with no gate report for their current head or a report with unavailable
+// recentPRNumbers selects open PRs that need a scheduled reconcile: those
+// with no gate report for their current head and base or a report with unavailable
 // evidence (any age) and those whose head commit is newer than the cutoff.
 //
 // GitHub's updated_at is not an activity signal: the gate's own labels and
@@ -105,11 +103,11 @@ func (q *qualityClient) searchPRNumbers(sha string) ([]int, error) {
 // always advances updated_at, so a PR last updated before the cutoff cannot
 // have a newer head commit, and its commit date is never fetched.
 //
-// A PR that is stale, labeled, and has a report for its current head is
+// A PR that is stale, labeled, and has a report for its current head and base is
 // skipped even if review threads resolved since; those need the head-change or
 // review events to reach the gate, since the schedule no longer sees them.
 func (q *qualityClient) recentPRNumbers(cutoff time.Time) ([]int, error) {
-	prs, err := q.openMainPRs()
+	prs, err := q.openPRs("pulls?state=open&sort=updated&direction=desc", "")
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +128,7 @@ func (q *qualityClient) recentPRNumbers(cutoff time.Time) ([]int, error) {
 			unpublished = append(unpublished, pr.Number)
 		}
 	}
-	fmt.Printf("Scheduled quality recovery: %d open main PRs, %d needing a report, %d with a recent head commit\n", len(prs), len(unpublished), len(recent))
+	fmt.Printf("Scheduled quality recovery: %d open PRs, %d needing a report, %d with a recent head commit\n", len(prs), len(unpublished), len(recent))
 	unpublished = rotatePRNumbers(unpublished, int(cutoff.Unix()/int64(qualityScheduleInterval/time.Second)))
 	return append(unpublished, recent...), nil
 }
@@ -149,16 +147,18 @@ func rotatePRNumbers(numbers []int, slot int) []int {
 	return append(append(make([]int, 0, len(numbers)), numbers[offset:]...), numbers[:offset]...)
 }
 
-func (q *qualityClient) openMainPRs() ([]githubapi.PR, error) {
+// openPRs accepts an API path with a query string, retaining repository and
+// optional current-head checks for every page regardless of the target branch.
+func (q *qualityClient) openPRs(path, headSHA string) ([]githubapi.PR, error) {
 	var all []githubapi.PR
 	for page := 1; page <= githubapi.PageLimit; page++ {
 		var prs []githubapi.PR
-		path := fmt.Sprintf("pulls?state=open&base=main&sort=updated&direction=desc&per_page=100&page=%d", page)
-		if err := q.get(path, &prs); err != nil {
+		pagePath := fmt.Sprintf("%s&per_page=%d&page=%d", path, githubapi.PageSize, page)
+		if err := q.get(pagePath, &prs); err != nil {
 			return nil, err
 		}
 		for i := range prs {
-			if prs[i].State == "open" && prs[i].Base.Ref == "main" {
+			if qualityEligible(&prs[i], q.repo) && (headSHA == "" || prs[i].Head.SHA == headSHA) {
 				all = append(all, prs[i])
 			}
 		}
@@ -181,6 +181,11 @@ func (q *qualityClient) scheduledReason(pr *githubapi.PR, cutoff time.Time) (str
 	}
 	if existing == nil || !strings.Contains(existing.Body, qualityHeadMarker(pr.Head.SHA)) {
 		return qualityReasonUnpublished, nil
+	}
+	// A prerequisite can advance or the PR can be retargeted without a new head.
+	// Legacy reports without a base marker also need one fresh evaluation.
+	if !strings.Contains(existing.Body, qualityBaseMarker(pr)) {
+		return qualityReasonBaseChanged, nil
 	}
 	// A report that could not read some evidence is not final: retry it at any
 	// age so it is replaced once the evidence recovers.

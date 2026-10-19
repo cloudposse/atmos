@@ -21,6 +21,7 @@ Valid subcommands are:
   • describe
   • devcontainer
   • docs
+  • doctor
   • emulator
   • env
   • gcp

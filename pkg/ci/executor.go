@@ -1,6 +1,7 @@
 package ci
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -189,20 +190,11 @@ func createPlanfileStore(opts ExecuteOptions) (planfile.Store, error) {
 		AtmosConfig: opts.AtmosConfig,
 	}
 
-	// Use the default store from configuration if available.
+	// Explicit configuration takes precedence over environment-based detection.
 	if opts.AtmosConfig != nil {
 		planfilesConfig := opts.AtmosConfig.Components.Terraform.Planfiles
-		if planfilesConfig.Default != "" {
-			if storeSpec, ok := planfilesConfig.Stores[planfilesConfig.Default]; ok {
-				artOpts.Type = storeSpec.Type
-				artOpts.Options = storeSpec.Options
-				attachIdentity(&artOpts, opts.Info)
-				backend, err := artifact.NewStore(artOpts)
-				if err != nil {
-					return nil, err
-				}
-				return adapter.NewStore(backend), nil
-			}
+		if planfilesConfig.Default != "" || len(planfilesConfig.Priority) > 0 {
+			return configuredPlanfileStore(&opts, &planfilesConfig)
 		}
 	}
 
@@ -229,6 +221,30 @@ func createPlanfileStore(opts ExecuteOptions) (planfile.Store, error) {
 	return adapter.NewStore(backend), nil
 }
 
+// configuredPlanfileStore uses the artifact selector's default/priority contract.
+// Selection errors must not silently redirect plans to an environment-derived store.
+func configuredPlanfileStore(opts *ExecuteOptions, config *schema.PlanfilesConfig) (planfile.Store, error) {
+	stores := make(map[string]artifact.StoreOptions, len(config.Stores))
+	checkers := make(map[string]artifact.EnvironmentChecker, len(config.Stores))
+	for name, spec := range config.Stores {
+		if err := validateStoreIdentity(opts.AtmosConfig, name, spec.Identity); err != nil {
+			return nil, err
+		}
+		storeOpts := artifact.StoreOptions{Type: spec.Type, Options: spec.Options}
+		attachStoreIdentity(&storeOpts, opts.Info, spec.Identity)
+		stores[name] = storeOpts
+		checkers[name] = planfileEnvironmentChecker{
+			options:       storeOpts,
+			requireUpload: extractEventPrefix(opts.Event) == "after" && extractCommand(opts.Event) == "plan",
+		}
+	}
+	backend, err := artifact.SelectStore(context.Background(), config.Priority, stores, checkers, config.Default, opts.AtmosConfig)
+	if err != nil {
+		return nil, err
+	}
+	return adapter.NewStore(backend), nil
+}
+
 // defaultResolverFactory builds the resolver that bridges Atmos auth into
 // identity-aware artifact backends. Indirection via a var lets tests swap in
 // a fake without an import cycle through authbridge.
@@ -238,15 +254,68 @@ var defaultResolverFactory = func(authManager authtypes.AuthManager, info *schem
 
 // attachIdentity propagates the active command identity (info.Identity) to
 // the planfile store so identity-aware backends can authenticate the
-// parent-process upload via the same chain as the terraform subprocess.
+// parent-process upload via the same chain as the terraform subprocess. Used
+// for env-detected stores, which carry no store-level identity override.
 func attachIdentity(artOpts *artifact.StoreOptions, info *schema.ConfigAndStacksInfo) {
 	defer perf.Track(nil, "ci.attachIdentity")()
 
-	if info == nil || info.Identity == "" {
+	if info == nil {
+		return
+	}
+	attachIdentityFor(artOpts, info, info.Identity)
+}
+
+// validateStoreIdentity rejects a store-level identity that names no entry in
+// auth.identities. Without this, a typo'd identity would still create the store
+// and only fail during a later upload or download - after the plan work has run.
+// Validating at store creation surfaces the mistake immediately with a message
+// that names the store and the identity. No-op when no store identity is set.
+func validateStoreIdentity(atmosConfig *schema.AtmosConfiguration, storeName, identity string) error {
+	defer perf.Track(atmosConfig, "ci.validateStoreIdentity")()
+
+	if identity == "" || atmosConfig == nil {
+		return nil
+	}
+	if _, ok := atmosConfig.Auth.Identities[identity]; !ok {
+		return fmt.Errorf("%w: planfile store %q references identity %q, which is not defined in auth.identities",
+			errUtils.ErrIdentityNotInConfig, storeName, identity)
+	}
+	return nil
+}
+
+// attachStoreIdentity selects the identity the planfile store should
+// authenticate with. A store-level identity (from spec.cluster-less planfile
+// store config, `components.terraform.planfiles.stores.<name>.identity`) takes
+// precedence over the component's active identity, so a store can use a
+// different cloud's identity than the component (e.g. an AWS identity for the
+// S3 planfile bucket while the component runs under a non-AWS identity).
+// When no store-level identity is set, it falls back to the component identity,
+// preserving the prior behavior.
+func attachStoreIdentity(artOpts *artifact.StoreOptions, info *schema.ConfigAndStacksInfo, storeIdentity string) {
+	defer perf.Track(nil, "ci.attachStoreIdentity")()
+
+	identity := storeIdentity
+	if identity == "" && info != nil {
+		identity = info.Identity
+	}
+	attachIdentityFor(artOpts, info, identity)
+}
+
+// attachIdentityFor records the given identity name on artOpts and attaches the
+// auth resolver built from info.AuthManager. No-op when identity is empty.
+//
+// The resolver is required for non-default identities: the artifact registry
+// only injects it into identity-aware backends when it is set, and those
+// backends fall back to the default credential chain when no resolver is
+// present - silently ignoring the named identity. We therefore always attach
+// the resolver whenever an identity is in scope, independent of whether the
+// component itself declared one.
+func attachIdentityFor(artOpts *artifact.StoreOptions, info *schema.ConfigAndStacksInfo, identity string) {
+	if info == nil || identity == "" {
 		return
 	}
 
-	artOpts.Identity = info.Identity
+	artOpts.Identity = identity
 
 	// info.AuthManager is typed as `any` in pkg/schema to avoid a circular
 	// import with pkg/auth. The type assertion recovers type safety. When
@@ -258,7 +327,7 @@ func attachIdentity(artOpts *artifact.StoreOptions, info *schema.ConfigAndStacks
 	authManager, ok := info.AuthManager.(authtypes.AuthManager)
 	if !ok {
 		log.Debug("Planfile store auth manager has unexpected type, falling back to default credential chain",
-			"identity", info.Identity, "type", fmt.Sprintf("%T", info.AuthManager))
+			"identity", identity, "type", fmt.Sprintf("%T", info.AuthManager))
 		return
 	}
 	artOpts.Resolver = defaultResolverFactory(authManager, info)

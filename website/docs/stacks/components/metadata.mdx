@@ -329,6 +329,19 @@ The `--labels` flag is available on the same commands as `--tags`:
 
 Label keys and values are case-sensitive; components without `metadata.labels` do not match. Both `key=value` and `key:value` syntax are accepted. Use shared defaults and overrides to express exclusions, as in [CI component selection](/ci#keeping-privileged-components-out-of-ci).
 
+Label values may also be booleans. A boolean `true` matches `--labels preview:true` (or
+`preview=true`), and `false` matches `preview:false`. For example, select preview components
+using live CI review labels:
+
+```yaml
+metadata:
+  labels:
+    preview: !ci.labels [preview]
+```
+
+Then run `atmos describe affected --labels preview:true`. See [`!ci.labels`](/functions/yaml/ci.labels)
+for credentials, supported providers, and local behavior.
+
 `labels` can also be set as a [global default](#global-stack-wide-metadata).
 
 Read one label with [`!labels key [default]`](/functions/yaml/labels#single-label-lookup),
@@ -349,13 +362,15 @@ for using labels in Atmos Pro workflow inputs.
 
 ### Selector Purity
 
-Labels and tags are selectors: Atmos evaluates them **before** authentication, template processing, and YAML function execution to decide which components a command operates on. By design, their values must be resolvable without authenticating or executing external processes — this keeps selection fast, deterministic, and credential-free.
+Labels and tags are selectors: Atmos inspects them **before** authentication, template processing, and YAML function execution to decide which components a command operates on. Unresolved allowed values proceed through normal evaluation. Most selector inputs are local; `!ci.labels` is an explicit exception that reads CI review labels using CI credentials and shares one snapshot per invocation.
 
 Allowed in `metadata.tags` and `metadata.labels`:
 
 - Plain strings
+- Boolean label values
 - Simple Go templates over the stack context (for example, `{{ .vars.stage }}`)
 - Local YAML functions: `!env`, `!git.*`, `!include`
+- [`!ci.labels`](/functions/yaml/ci.labels) for live CI review labels
 
 Rejected with a hard error on any command that enumerates stacks (`describe stacks`, `describe affected`, the `list` commands, and multi-component `terraform` selections such as `--all` and `--affected`):
 

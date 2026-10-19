@@ -1,0 +1,9 @@
+name: a
+on: push
+jobs:
+  x:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: cloudposse/github-action-atmos-affected-stacks@v6
+---
+name: b

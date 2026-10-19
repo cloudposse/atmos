@@ -111,7 +111,9 @@ func Writeln(content string) error {
 //
 // Still resolves through the same dynamic stdout accessor as Write() (test output-capture
 // via os.Stdout redirection keeps working) and still feeds --cast/session recording via
-// io.RecordMaskedOutput — it only skips the masker.
+// io.RecordMaskedOutput. Only the stream skips the masker: recordings are persisted artifacts
+// that outlive the consumer the user explicitly handed the secrets to, so the recorder always
+// receives the masked form.
 //
 // Only use this when BOTH are true: (1) content is exactly what the user explicitly asked
 // to receive unmasked, and (2) masking it would make the output unusable for its stated
@@ -119,13 +121,15 @@ func Writeln(content string) error {
 func WriteUnmasked(content string) error {
 	defer perf.Track(nil, "data.WriteUnmasked")()
 
-	w := getIOContext().RawData()
+	ioCtx := getIOContext()
+	w := ioCtx.RawData()
 	n, err := stdio.WriteString(w, content)
 	if n > 0 {
 		if n > len(content) {
 			n = len(content)
 		}
-		io.RecordMaskedOutput(io.DataStream, content[:n])
+		// The stream receives the raw content, but --cast/session recordings must never capture secrets.
+		io.RecordMaskedOutput(io.DataStream, ioCtx.Masker().Mask(content[:n]))
 	}
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrWriteToStream, err)

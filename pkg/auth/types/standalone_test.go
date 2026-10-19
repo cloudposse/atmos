@@ -10,6 +10,7 @@ func TestIsStandaloneIdentityKind(t *testing.T) {
 	}{
 		{"aws user", IdentityKindAWSUser, true},
 		{"aws ambient", IdentityKindAWSAmbient, true},
+		{"aws credential-process", IdentityKindAWSCredentialProcess, true},
 		{"generic ambient", IdentityKindAmbient, true},
 		{"aws emulator", IdentityKindAWSEmulator, true},
 		{"gcp emulator", IdentityKindGCPEmulator, true},
@@ -38,6 +39,7 @@ func TestStandaloneProviderName(t *testing.T) {
 		wantOK   bool
 	}{
 		{"aws user maps to synthetic provider", IdentityKindAWSUser, ProviderNameAWSUser, true},
+		{"aws credential-process maps to synthetic provider", IdentityKindAWSCredentialProcess, ProviderNameAWSCredentialProcess, true},
 		{"aws ambient reports its own name", IdentityKindAWSAmbient, "", false},
 		{"generic ambient reports its own name", IdentityKindAmbient, "", false},
 		{"emulator reports its own name", IdentityKindAWSEmulator, "", false},
@@ -52,5 +54,14 @@ func TestStandaloneProviderName(t *testing.T) {
 					tt.kind, name, ok, tt.wantName, tt.wantOK)
 			}
 		})
+	}
+}
+
+func TestAWSCredentialProcessConstants(t *testing.T) {
+	if IdentityKindAWSCredentialProcess != "aws/credential-process" {
+		t.Errorf("IdentityKindAWSCredentialProcess = %q", IdentityKindAWSCredentialProcess)
+	}
+	if ProviderNameAWSCredentialProcess != "aws-credential-process" {
+		t.Errorf("ProviderNameAWSCredentialProcess = %q", ProviderNameAWSCredentialProcess)
 	}
 }

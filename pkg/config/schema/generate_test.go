@@ -95,6 +95,7 @@ func TestGenerateMarksDeprecatedConfigurationFields(t *testing.T) {
 		{"VersionProvider", "type", "kind"},
 		{"CommandArgument", "type", "provides"},
 		{"CommandFlag", "semantic_type", "provides"},
+		{"Terraform", "init_run_reconfigure", "components.terraform.init.reconfigure (false maps to never; true maps to auto)"},
 	} {
 		t.Run(test.definition+"/"+test.property, func(t *testing.T) {
 			definition := defs[test.definition].(map[string]any)

@@ -3,13 +3,13 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	stackimports "github.com/cloudposse/atmos/pkg/stack/imports"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -347,90 +347,43 @@ func applyCurrentFileAuthDefaults(parsed stackAuthFileWithImports, result map[st
 //
 //  1. Plain string: "orgs/acme/_defaults" — resolved against `stacksBasePath`.
 //  2. Glob string:  "mixins/region/*"    — resolved against `stacksBasePath`,
-//     then glob-expanded via `GetGlobMatches` (supports doublestar `**`).
+//     then glob-expanded (supports doublestar `**`).
 //  3. Map form with `path:` field:
 //     `- path: orgs/acme/_defaults` — the `path` value is treated as a string.
 //
 // Relative paths (`./foo`, `../bar`) are resolved against the importing file's
-// directory instead of `stacksBasePath`.
+// directory instead of `stacksBasePath`. Resolution itself is delegated to the
+// shared resolver in pkg/stack/imports so it matches the stack processor.
 //
 // Returns nil for import forms that cannot be resolved without running Go
-// templates (e.g., `path: "{{ .something }}"`), for paths that do not exist
-// on disk, or for any other error. This is intentional graceful degradation —
-// the scanner is best-effort and never blocks the auth flow on a malformed or
-// templated import.
+// templates (e.g., `path: "{{ .something }}"`), for remote imports, for Go
+// template files (`*.yaml.tmpl`), for paths that do not exist on disk, or for
+// any other error. This is intentional graceful degradation — the scanner is
+// best-effort and never blocks the auth flow on a malformed or templated import.
 func resolveAuthImportPaths(imp any, importingFile, stacksBasePath string) []string {
 	defer perf.Track(nil, "config.resolveAuthImportPaths")()
 
-	importPath := normalizeImportPath(extractImportPathString(imp))
-	if importPath == "" {
+	importPath := extractImportPathString(imp)
+	if importPath == "" || stackimports.IsTemplatedPath(importPath) || stackimports.IsRemote(importPath) {
 		return nil
 	}
 
-	candidate, ok := buildImportCandidatePath(importPath, importingFile, stacksBasePath)
-	if !ok {
+	matches, err := stackimports.ResolveLocal(importPath, importingFile, stacksBasePath)
+	if err != nil {
 		return nil
 	}
 
-	return matchImportCandidate(candidate)
-}
-
-// normalizeImportPath returns the raw import path with a `.yaml` extension
-// appended if missing, or empty string if the input is empty or contains a Go
-// template expression (which cannot be resolved without template context).
-func normalizeImportPath(rawPath string) string {
-	if rawPath == "" {
-		return ""
-	}
-	if strings.Contains(rawPath, "{{") {
-		return ""
-	}
-	if filepath.Ext(rawPath) == "" {
-		rawPath += yamlExt
-	}
-	return rawPath
-}
-
-// buildImportCandidatePath joins the normalized import path against either the
-// importing file's directory (for `./` / `../` relative imports) or the stacks
-// base path (for everything else). Returns the candidate path and true, or
-// empty/false if the base path required for resolution is missing.
-func buildImportCandidatePath(importPath, importingFile, stacksBasePath string) (string, bool) {
-	normalized := filepath.FromSlash(importPath)
-	if strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") {
-		return filepath.Join(filepath.Dir(importingFile), normalized), true
-	}
-	if stacksBasePath == "" {
-		return "", false
-	}
-	return filepath.Join(stacksBasePath, normalized), true
-}
-
-// matchImportCandidate returns matching file paths for a candidate. For glob
-// patterns it uses doublestar; for plain paths it uses a direct stat, with a
-// `.yml` fallback when the original `.yaml` candidate does not exist.
-func matchImportCandidate(candidate string) []string {
-	if strings.ContainsAny(candidate, "*?[") {
-		matches, err := u.GetGlobMatches(candidate)
-		if err != nil || len(matches) == 0 {
-			return nil
-		}
-		return matches
-	}
-
-	if _, err := os.Stat(candidate); err == nil {
-		return []string{candidate}
-	}
-
-	// Fall back to .yml if .yaml did not exist.
-	if strings.HasSuffix(candidate, yamlExt) {
-		alt := strings.TrimSuffix(candidate, yamlExt) + ymlExt
-		if _, err := os.Stat(alt); err == nil {
-			return []string{alt}
+	// Template files cannot be parsed as plain YAML.
+	result := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if !stackimports.IsTemplateFile(match) {
+			result = append(result, match)
 		}
 	}
-
-	return nil
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 // extractImportPathString extracts the path string from an import list entry.

@@ -1,0 +1,21 @@
+# Dev stack
+vars:
+    stage: dev
+    tags: {team: platform, cost_center: "1234"}
+
+hooks:
+    store-outputs:
+        events:
+            - after-terraform-apply   # legacy
+        command: store
+
+components:
+    terraform:
+        app:
+            vars:
+                name: 'app'
+                enabled: true
+            hooks:
+                notify:
+                    events: [before-terraform-plan, after.terraform.plan]
+                    command: store

@@ -141,6 +141,10 @@ components:
   <dd>
     Deprecated in favor of `init.reconfigure` (see [Configuration Reference](#configuration-reference) below). When `init.reconfigure` is not explicitly set (at any precedence level), Atmos maps this legacy boolean: `false` behaves as `init.reconfigure: never`, and the default `true` behaves as `init.reconfigure: auto` — **not** `always`. This is the one behavior change existing projects relying on the old default will see: Atmos no longer adds `-reconfigure` to every init by default. Set `init.reconfigure: always` explicitly to keep the previous unconditional behavior.
 
+    The legacy environment variable and flag below still override configuration, including an explicit `init.reconfigure` (command-line flag over environment variable over configuration): `false` selects `never` and `true` selects `auto`. When both a legacy and a newer setting are given at the same level, the newer `init.reconfigure` environment variable or `--init-reconfigure` flag wins.
+
+    Use [`atmos doctor --fix --dry-run`](/cli/commands/doctor#verification-and-recovery) to verify whether an explicit legacy value can be migrated safely. Layered or dynamic inputs require manual review.
+
     **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE`
     **Command-line flag:** `--init-run-reconfigure`
     **Default:** `true`
@@ -239,7 +243,14 @@ components:
 
     <dl>
       <dt>`planfiles.stores`</dt>
-      <dd>Named store definitions. Each store has a `type` (`github/artifacts`, `aws/s3`, or `local/dir`) and backend-specific `options`.</dd>
+      <dd>
+        Named store definitions. Each store has a `type` (`github/artifacts`, `aws/s3`, or `local/dir`),
+        backend-specific `options`, and an optional `identity` - an [Atmos Auth identity](/cli/configuration/auth)
+        (from `auth.identities`) the store authenticates with, independent of the component's identity. This
+        is useful for multi-cloud setups (e.g. storing planfiles in an `aws/s3` bucket while the component
+        authenticates with a non-AWS identity). When omitted, the store inherits the component's identity
+        (the prior behavior). See [Store Identity](/ci/planfile-storage).
+      </dd>
 
       <dt>`planfiles.default`</dt>
       <dd>Name of the store to use when no priority list is set.</dd>

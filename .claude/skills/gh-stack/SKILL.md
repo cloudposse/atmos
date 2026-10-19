@@ -179,3 +179,15 @@ merge-one/rebase/review cycle. GitHub still enforces protection rules and native
 atomic merge is not a bypass. Approval to repair history is also separate from approval to land PRs.
 Verify the selected PRs, current heads, and merge method before invoking it. Do not treat approval
 to fix CI or request reviews as approval to merge or close PRs.
+
+## Label each PR separately
+
+Per the `pull-request` skill's semver-label rule, **the label is per-PR, not per-feature.** If a
+five-layer stack adds one user-visible feature, only the final layer that wires it up gets
+`minor`/`major`; the foundation and plumbing layers underneath it get `no-release`. Do not give
+every layer the same label because they belong to one larger effort.
+
+`no-release` classifies non-user-visible work for the PR policy and release-documentation checks;
+it does not suppress a version bump. The release-drafter resolver in `.github/auto-release.yml`
+currently maps this label to `patch`. Keep using the policy's label for foundation PRs; changing
+release publication or version resolution is a separate policy change.

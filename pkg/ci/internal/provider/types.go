@@ -78,6 +78,12 @@ type Provider interface {
 	ResolveBase() (*BaseResolution, error)
 }
 
+// LabelReader is an optional capability for reading live labels on a CI review (PR/MR).
+// Context identifies the review; implementations must not discover unrelated branch reviews.
+type LabelReader interface {
+	Labels(ctx context.Context, run *Context) ([]string, error)
+}
+
 // DebugModeDetector is an optional capability for providers that expose a
 // "debug mode" signal set at the runner / step / job level (for example,
 // GitHub Actions' ACTIONS_RUNNER_DEBUG and ACTIONS_STEP_DEBUG). Providers
@@ -268,6 +274,18 @@ type Context struct {
 
 	// PullRequest contains PR info if this is a pull request event.
 	PullRequest *PRInfo
+
+	// MergeQueue identifies the review associated with a merge-queue check run.
+	// It is separate from PullRequest: the checkout and status target are still
+	// the synthetic queue commit, not the pull request's head commit.
+	MergeQueue *MergeQueueInfo
+}
+
+// MergeQueueInfo identifies the individual review whose queue checks are running.
+// Earlier reviews may contribute code to the checkout, but do not supply its labels.
+type MergeQueueInfo struct {
+	PullRequestNumber int
+	HeadRef           string
 }
 
 // PRInfo contains pull request metadata.

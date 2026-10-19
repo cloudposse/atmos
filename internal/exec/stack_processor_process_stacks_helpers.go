@@ -1,6 +1,8 @@
 package exec
 
 import (
+	cfnmanifest "github.com/cloudposse/atmos/pkg/component/aws/cloudformation/manifest"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -89,7 +91,12 @@ type ComponentProcessorResult struct {
 	// ComponentHelm holds native Helm chart and release-lifecycle fields as a single bag.
 	ComponentHelm map[string]any
 	// ComponentOverridesHelm holds native Helm fields from the component overrides block.
-	ComponentOverridesHelm     map[string]any
+	ComponentOverridesHelm map[string]any
+	// ComponentCloudFormation holds native aws/cloudformation component fields
+	// (template, parameters, capabilities, tags, stack_policy, role_arn,
+	// notification_arns, disable_rollback, termination_protection,
+	// timeout_in_minutes, stack_name) as a single bag.
+	ComponentCloudFormation    map[string]any
 	ComponentOverrides         map[string]any
 	ComponentOverridesVars     map[string]any
 	ComponentOverridesSettings map[string]any
@@ -113,9 +120,12 @@ type ComponentProcessorResult struct {
 	BaseComponentPlugins any
 	BaseComponentRender  map[string]any
 	// BaseComponentHelm holds the inherited native Helm fields from base components.
-	BaseComponentHelm         map[string]any
-	ComponentInheritanceChain []string
-	BaseComponents            []string
+	BaseComponentHelm map[string]any
+	// BaseComponentCloudFormation holds the inherited native aws/cloudformation
+	// fields from base components.
+	BaseComponentCloudFormation map[string]any
+	ComponentInheritanceChain   []string
+	BaseComponents              []string
 
 	// Terraform-specific fields.
 	ComponentProviders         map[string]any
@@ -170,6 +180,11 @@ type ComponentProcessorResult struct {
 	// BaseComponentRetry holds the retry configuration inherited from base components
 	// (deep-merged across the full inheritance chain by ProcessBaseComponentConfig).
 	BaseComponentRetry map[string]any
+	// ComponentUnsetSections, ComponentOverridesUnsetSections and BaseComponentUnsetSections
+	// name the sections set to `!unset` at the component, overrides and base component layers.
+	ComponentUnsetSections          []string
+	ComponentOverridesUnsetSections []string
+	BaseComponentUnsetSections      []string
 }
 
 // processComponent processes a component extracting common configuration sections.
@@ -182,6 +197,13 @@ func processComponent(opts *ComponentProcessorOptions) (*ComponentProcessorResul
 		ComponentEnv:      make(map[string]any, componentSmallMapCapacity),
 		ComponentMetadata: make(map[string]any, componentSettingsCapacity),
 		BaseComponents:    []string{},
+	}
+
+	// CloudFormation components render inline templates instead of generating files.
+	if opts.ComponentType == cfg.CloudFormationComponentType {
+		if err := cfnmanifest.RejectComponentGenerate(opts.StackName, opts.Component, opts.ComponentMap); err != nil {
+			return nil, err
+		}
 	}
 
 	// Extract component sections.

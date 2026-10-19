@@ -123,8 +123,15 @@ and mutually exclusive `quality:ready` / `quality:not-ready` labels. Label
 names, colors, and descriptions live in `.github/settings.yml`, alongside the
 repository's existing labels and labels referenced by its automation.
 
-A non-draft PR is ready when all requirements pass:
+A PR is ready when all requirements pass:
 
+- The PR is marked ready for review. A draft PR is never ready, and the checklist
+  shows this as its own **Ready for review** requirement.
+- GitHub reports no merge conflicts with `main` (**No merge conflicts**). GitHub
+  computes mergeability lazily after a push or base update; until it does, the
+  requirement is reported as unavailable evidence rather than a failure, and the
+  previous report is kept and retried. Other mergeable states such as blocked,
+  behind, or unstable are not conflicts.
 - All current PR workflows, check runs, and commit statuses have finished
   successfully (neutral and skipped CI results are allowed). Failures,
   cancellations, timeouts, pending results, and API errors block readiness.
@@ -140,6 +147,12 @@ A non-draft PR is ready when all requirements pass:
   resolution state and are not included.
 - Fewer than 150 files changed (149 passes; 150 fails).
 - No benchmark report processing error is recorded for the current head.
+
+Benchmark report recovery resolves PRs whose head commit exists only in a fork
+through the fork's head branch, because GitHub's commit association endpoint
+lists nothing for them. If a completed benchmark run still has no PR to publish
+for, the gate is published with performance pending and a workflow warning is
+printed, instead of silently doing nothing.
 
 Performance slowdowns are advisory and do not block this gate. Benchmark
 execution failures still count as CI failures. Malformed or incomplete benchmark
@@ -183,7 +196,7 @@ name the actual blocking results and are quoted as evidence, never instructions.
 | `bench:fetch <repo> <ref> <outputDir>` | Fetch up to 10 compatible, successful main snapshots reachable from the immutable 40-character main SHA. Candidate defaults to the sibling `candidate` directory. |
 | `bench:compare <snapshotsDir> <candidateDir> <outputDir>` | Compare the same candidate independently with each snapshot; write `report.md`, `report.json`, and separate benchstat output for each pair. |
 | `bench:report <repo> <runID>` | Validate a completed PR benchmark run, download data, regenerate comparisons with trusted code, and update the composite comment, summary, and labels. |
-| `quality:report <repo>` | Reconcile quality gates for PRs associated with the Actions event (including fork PRs), or open main PRs with a head commit from the last 24 hours or no report for their current head on scheduled runs. Manual runs reconcile all open main PRs. Recover missing benchmark reports. |
+| `quality:report <repo>` | Reconcile quality gates for PRs associated with the Actions event (including fork and stacked PRs), or open PRs with a head commit from the last 24 hours or no report for their current head and base on scheduled runs. Manual runs reconcile all open PRs targeting this repository, regardless of base branch. Recover missing benchmark reports. |
 
 Run these from the repository root with `go tool mage`, for example:
 
@@ -312,10 +325,13 @@ The read-only `Quality Gate Signal` forwards PR/review activity to the same
 completion coordinator. Quality Gate no longer independently subscribes to
 workflow completions, checks, statuses, or comments. A 15-minute best-effort
 schedule recovers missed events and late external results, including Codecov and
-review-thread resolution. It selects open PRs targeting `main` whose head commit
+review-thread resolution. It selects open PRs targeting this repository, including
+stacked PRs, whose head commit
 (the later of author and committer date) is within the last 24 hours (inclusive),
-plus any PR with no gate report for its current head, or whose report for that
-head has a gate whose evidence was unavailable, at any age. GitHub's
+plus any PR with no gate report for its current head and base, or whose report for
+that head has a gate whose evidence was unavailable, at any age. Each report
+records the evaluated base branch and SHA, so advancing a prerequisite or
+retargeting the PR triggers reconciliation even when its head is unchanged. GitHub's
 `updated_at` is not used as an activity signal because the gate's own labels and
 comments, Mergify, CodeRabbit and Codecov advance it for nearly every PR; it only
 skips the commit lookup for PRs not updated since the cutoff. PRs without a
@@ -324,7 +340,8 @@ or fails every run cannot keep the PRs behind it from being visited.
 Event-associated reports are not restricted by age.
 Commits that exist only in a fork are resolved through the fork's head branch
 (`workflow_run` payloads) or a commit SHA search, and a PR matches only while its
-head is exactly that commit. Manual runs still select all open `main` PRs.
+head is exactly that commit. Manual runs select all open PRs targeting this
+repository, regardless of base branch.
 Reconciliation defers while Actions workflows are still pending; completion of
 Actions workflows does not imply that external checks have finished or passed.
 
@@ -334,9 +351,11 @@ annotation; the run exits non-zero only when every attempted PR failed (a
 systemic problem such as credentials or an outage). Isolated failures are retried
 by the next scheduled run. When the run budget ends, unvisited PRs are left for
 the next run. If a gate's evidence cannot be read (for example an API error),
-the existing report for that head, its comment and its label, is kept and the
+the existing report for that head and base, its comment and its label, is kept and the
 run reports the failure, instead of publishing "not ready" and flipping the
-label back when the next run succeeds.
+label back when the next run succeeds. A report for a different base cannot
+retain readiness: the new report records unavailable evidence until it can be
+evaluated.
 
 Unchanged readiness labels and report comments are not rewritten. Each scheduled
 run logs its UTC cutoff and selected PR count. Report concurrency coalesces work

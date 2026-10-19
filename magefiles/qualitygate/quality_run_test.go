@@ -223,9 +223,10 @@ func TestQualityUnchangedStatePerformsNoWrites(t *testing.T) {
 	}
 }
 
+// TestQualityUnavailableEvidenceKeepsPublishedReport preserves transient failures only for an already reported revision.
 func TestQualityUnavailableEvidenceKeepsPublishedReport(t *testing.T) {
 	pr := (&stateFixture{}).pr()
-	current := qualityMarker + "\n" + qualityHeadMarker(pr.Head.SHA) + "\nPassed report\n"
+	current := qualityMarker + "\n" + qualityHeadMarker(pr.Head.SHA) + "\n" + qualityBaseMarker(&pr) + "\nPassed report\n"
 	previous := qualityMarker + "\n" + qualityHeadMarker(githubtest.Base) + "\nOld report\n"
 	cases := []struct {
 		name       string
@@ -237,7 +238,7 @@ func TestQualityUnavailableEvidenceKeepsPublishedReport(t *testing.T) {
 		wantBody   string
 	}{
 		{
-			name: "same head keeps the last report and labels", comment: current, labels: []string{qualityReady}, reviewFail: true,
+			name: "same head and base keeps the last report and labels", comment: current, labels: []string{qualityReady}, reviewFail: true,
 			wantErr: "evidence unavailable for CodeRabbit approval (current head)",
 		},
 		{

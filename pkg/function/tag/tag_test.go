@@ -12,6 +12,7 @@ func TestCatalog(t *testing.T) {
 	require.NotEmpty(t, tags)
 
 	expectedTags := []string{
+		CILabels,
 		Starlark,
 		Exec,
 		Secret,
@@ -44,6 +45,7 @@ func TestCatalog(t *testing.T) {
 		AwsCallerIdentityUserID,
 		AwsRegion,
 		AwsOrganizationID,
+		AwsCloudFormationOutput,
 		Emulator,
 		Version,
 		Tags,

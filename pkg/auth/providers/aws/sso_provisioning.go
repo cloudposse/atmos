@@ -70,7 +70,7 @@ func (p *ssoProvider) provisionIdentitiesWithClient(ctx context.Context, ssoClie
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrSSOAccountListFailed).
 			WithExplanation("Failed to list AWS SSO accounts for identity provisioning").
-			WithHint("Verify your AWS SSO session is still active with 'aws sso login'").
+			WithHintf("Re-authenticate with `atmos auth login --provider=%s`; Atmos keeps its own SSO token cache, so `aws sso login` does not help", p.name).
 			WithHint("Ensure your SSO user has permissions to list accounts").
 			WithHintf("Check that the SSO start URL '%s' is correct", p.startURL).
 			WithContext("provider", p.name).

@@ -30,6 +30,8 @@ func newStandaloneChainManager(t *testing.T, roleCount int) (*manager, *mockStan
 		MockIdentity:           types.NewMockIdentity(ctrl),
 		MockStandaloneIdentity: types.NewMockStandaloneIdentity(ctrl),
 	}
+	// Chain identities are validated up front, before any step authenticates.
+	root.MockIdentity.EXPECT().Validate().Return(nil).AnyTimes()
 	store := types.NewMockCredentialStore(ctrl)
 	m := &manager{
 		config: &schema.AuthConfig{Identities: map[string]schema.Identity{
@@ -46,6 +48,7 @@ func newStandaloneChainManager(t *testing.T, roleCount int) (*manager, *mockStan
 		}
 		role := types.NewMockIdentity(ctrl)
 		role.EXPECT().Kind().Return("aws/assume-role").AnyTimes()
+		role.EXPECT().Validate().Return(nil).AnyTimes()
 		m.identities[name] = role
 		target = name
 	}
