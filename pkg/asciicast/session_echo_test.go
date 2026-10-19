@@ -6,8 +6,11 @@ import (
 	"errors"
 	"io"
 	"os"
+	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -454,5 +457,72 @@ func TestRunTypedWriteRejectsInvalidRate(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "invalid write rate") {
 			t.Fatalf("text %q: expected invalid write rate error, got %v", text, err)
 		}
+	}
+}
+
+func TestPlanTypedSegments(t *testing.T) {
+	tests := []struct {
+		text string
+		want []typedSegment
+	}{
+		{text: "echo hi", want: []typedSegment{{text: "echo hi"}}},
+		{text: "echo hi\n", want: []typedSegment{{text: "echo hi"}, {text: "\n", submitted: true}}},
+		{text: "echo hi\r\n", want: []typedSegment{{text: "echo hi"}, {text: "\r\n", submitted: true}}},
+		{text: "a\rb", want: []typedSegment{{text: "a"}, {text: "\r", submitted: true}, {text: "b"}}},
+		{text: "\n\n", want: []typedSegment{{text: "\n", submitted: true}, {text: "\n", submitted: true}}},
+	}
+	for _, tt := range tests {
+		t.Run(strconv.Quote(tt.text), func(t *testing.T) {
+			got := planTypedSegments(tt.text)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("planTypedSegments(%q) = %+v, want %+v", tt.text, got, tt.want)
+			}
+		})
+	}
+}
+
+// firstWriteSignal records writes and closes started on the first one.
+type firstWriteSignal struct {
+	mu      sync.Mutex
+	buf     bytes.Buffer
+	started chan struct{}
+	once    sync.Once
+}
+
+func (w *firstWriteSignal) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.once.Do(func() { close(w.started) })
+	return w.buf.Write(p)
+}
+
+// TestRunTypedWriteIsAtomic guards against a terminal-query response landing
+// between a command's text and its newline: a concurrent writer that starts
+// mid-write must wait until the whole multi-line text has been sent.
+func TestRunTypedWriteIsAtomic(t *testing.T) {
+	sink := &firstWriteSignal{started: make(chan struct{})}
+	input := &syncWriter{w: sink}
+	state := newEchoTestState(false)
+	text := "echo ONE\necho TWO\n"
+
+	done := make(chan error, 1)
+	go func() {
+		done <- runTypedWrite(t.Context(), input, state, &SessionAction{Type: "write", Text: text, Rate: "2ms"}, 0)
+	}()
+	<-sink.started
+	if _, err := input.Write([]byte("QUERY-RESPONSE")); err != nil {
+		t.Fatalf("concurrent write: %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("runTypedWrite error: %v", err)
+	}
+	sink.mu.Lock()
+	got := sink.buf.String()
+	sink.mu.Unlock()
+	if want := text + "QUERY-RESPONSE"; got != want {
+		t.Fatalf("written = %q, want %q (the concurrent write must not interleave)", got, want)
+	}
+	if len(state.echo.spans) != 2 {
+		t.Fatalf("spans = %+v, want two submitted lines", state.echo.spans)
 	}
 }
