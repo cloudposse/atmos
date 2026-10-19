@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"al.essio.dev/pkg/shellescape"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -74,7 +75,8 @@ func TestHookPreviewShowsActionsConditionsAndSkips(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, previews, 2)
 	text := strings.Join(previews, "\n")
-	assert.Contains(t, text, "touch "+marker)
+	// Previews shell-quote arguments, so Windows paths with backslashes are quoted.
+	assert.Contains(t, text, shellescape.QuoteCommand([]string{"touch", marker}))
 	assert.Contains(t, text, "when=always")
 	assert.NotContains(t, text, "unrelated")
 	assert.Contains(t, text, "condition evaluated at execution")
