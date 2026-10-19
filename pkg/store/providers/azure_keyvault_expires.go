@@ -9,6 +9,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 
+	"github.com/cloudposse/atmos/pkg/duration"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/store"
 )
@@ -80,7 +81,7 @@ func parseAzureDuration(value string) (time.Duration, bool) {
 		return time.Duration(n) * hoursPerDay * time.Hour, true
 	}
 
-	d, err := time.ParseDuration(value)
+	d, err := duration.ParseDuration(value)
 	if err != nil {
 		return 0, false
 	}

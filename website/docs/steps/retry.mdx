@@ -55,7 +55,7 @@ Atmos rejects unknown `retry` keys instead of ignoring them. The key for the wai
 
 ## Duration values
 
-Every duration in Atmos configuration uses one format, whether it is a step `timeout`, a retry delay, a cache TTL, the version-check frequency, or an authentication session length:
+Atmos uses one duration syntax for step `timeout`, retry delays, cache TTLs, the version-check frequency, and authentication session lengths. Each setting still applies its own minimum and error handling:
 
 - Go durations: `500ms`, `30s`, `5m`, `1h30m`, `1.5s`
 - A bare number is seconds: `timeout: 10` and `timeout: "10"` both mean ten seconds
@@ -63,7 +63,7 @@ Every duration in Atmos configuration uses one format, whether it is a step `tim
 - Keywords: `minute`, `hourly`, `daily`, `weekly`, `monthly`, `yearly`
 - ISO-8601 durations where a cloud API expects them: `PT8H`
 
-Negative values are rejected. A value that is not a duration fails configuration loading with an error that names the field.
+Negative values are rejected wherever a setting is validated. Cache TTLs and step timeouts accept sub-second values such as `500ms`; the version-check frequency and AWS user session durations require at least one second. An invalid step `timeout` or retry delay fails when the step or stack is processed with an error that names the field. An invalid cache TTL falls back to its default after a debug log, an invalid version-check frequency falls back to daily after a warning, and an invalid AWS session duration falls back to its default after a warning.
 
 ## Retry conditions
 

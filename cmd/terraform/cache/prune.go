@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
@@ -36,7 +37,7 @@ artifacts (provider zips, module archives) are kept unless --all is given.`,
 			return err
 		}
 
-		olderThan, err := time.ParseDuration(v.GetString("older-than"))
+		olderThan, err := duration.ParseNonNegative(v.GetString("older-than"))
 		if err != nil {
 			return fmt.Errorf("%w: invalid --older-than value %q: %w", errUtils.ErrInvalidConfig, v.GetString("older-than"), err)
 		}

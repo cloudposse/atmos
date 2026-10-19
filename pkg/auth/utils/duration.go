@@ -21,7 +21,7 @@ func ParseDurationFlexible(durationStr string) (int64, error) {
 	}
 	seconds, err := duration.Parse(durationStr)
 	if err != nil {
-		return 0, fmt.Errorf("invalid duration format: %s (expected: integer seconds, Go duration like '1h30m', or days like '2d'): %w", durationStr, err)
+		return 0, fmt.Errorf("parse duration %q: %w (%s)", durationStr, err, duration.Hint)
 	}
 	return seconds, nil
 }

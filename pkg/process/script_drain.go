@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"reflect"
 	"sync"
+	"sync/atomic"
 )
 
 // scriptPipe owns a stream independently of exec.Cmd.Wait. Inherited write handles may remain
@@ -16,6 +17,15 @@ type scriptPipe struct {
 	reader *os.File
 	writer *os.File
 	sink   io.Writer
+	// readerClosedByCancel is set before cancellation cleanup closes reader, so drain can tell
+	// our own close apart from a sink that fails with os.ErrClosed.
+	readerClosedByCancel atomic.Bool
+}
+
+// closeReaderForCancel closes the read handle as part of cancellation cleanup.
+func (p *scriptPipe) closeReaderForCancel() {
+	p.readerClosedByCancel.Store(true)
+	_ = p.reader.Close()
 }
 
 // newScriptPipe creates an OS pipe whose read side is drained into sink.
@@ -34,12 +44,12 @@ func (p *scriptPipe) close() {
 }
 
 // drain copies the stream to its sink until EOF or until cancellation cleanup closes the
-// read handle. Only the cancellation callback closes the reader early, so os.ErrClosed is
-// our own cleanup rather than a destination failure; the caller reports the cause through
-// ctx.Err() instead.
+// read handle. When the cancellation callback closed the reader, os.ErrClosed is our own
+// cleanup rather than a destination failure and the caller reports the cause through
+// ctx.Err(); an os.ErrClosed from the sink itself is still a real write failure.
 func (p *scriptPipe) drain(cancel context.CancelFunc, done chan<- error) {
 	_, err := io.Copy(p.sink, p.reader)
-	if errors.Is(err, os.ErrClosed) {
+	if errors.Is(err, os.ErrClosed) && p.readerClosedByCancel.Load() {
 		err = nil
 	}
 	if err != nil {
@@ -100,8 +110,8 @@ func runScriptAndDrain(ctx context.Context, cancel context.CancelFunc, cmd *exec
 		_ = cmd.Cancel()
 		// A descendant outside the process group can still hold a pipe. After cancellation's
 		// termination grace, stop waiting for EOF and return the cancellation as an error.
-		_ = out.reader.Close()
-		_ = diagnostic.reader.Close()
+		out.closeReaderForCancel()
+		diagnostic.closeReaderForCancel()
 	})
 	defer func() {
 		if !stopCancellation() {
