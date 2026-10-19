@@ -19,12 +19,6 @@ import (
 // role-assignment-schedule operations (per the Microsoft docs referenced in the PRD).
 const pimAPIVersion = "2020-10-01"
 
-// secondsPerHour and secondsPerMinute convert a duration to ISO-8601 components.
-const (
-	secondsPerHour   = 3600
-	secondsPerMinute = 60
-)
-
 // defaultARMRequestTimeout bounds a single ARM request when the caller injects no HTTP
 // client, so a stalled endpoint cannot hang authentication indefinitely.
 const defaultARMRequestTimeout = 30 * time.Second
@@ -100,6 +94,11 @@ type PIMClient interface {
 
 	// GetRequestStatus returns the current provisioning status of a request by resource name.
 	GetRequestStatus(ctx context.Context, requestName string) (string, error)
+
+	// PolicyMaxDuration returns the maximum activation duration allowed by the role's
+	// PIM policy at the client's scope. found is false when no policy assignment or
+	// activation expiration rule is configured for the role.
+	PolicyMaxDuration(ctx context.Context, roleDefinitionID string) (maxDuration time.Duration, found bool, err error)
 }
 
 // httpDoer is the minimal HTTP surface the ARM client depends on, so tests can inject a
@@ -286,7 +285,11 @@ func (c *armPIMClient) do(ctx context.Context, method, path, filter string, body
 	if err != nil {
 		return nil, err
 	}
+	return c.doRequest(req, path)
+}
 
+// doRequest performs a prepared HTTP request and returns the response body on 2xx.
+func (c *armPIMClient) doRequest(req *http.Request, displayPath string) ([]byte, error) {
 	resp, err := c.doer.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrAzurePIMRequestFailed, err)
@@ -299,9 +302,25 @@ func (c *armPIMClient) do(ctx context.Context, method, path, filter string, body
 	}
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("%w: %s %s returned %d: %s", errUtils.ErrAzurePIMRequestFailed, method, path, resp.StatusCode, snippet(raw))
+		return nil, fmt.Errorf("%w: %s %s returned %d: %s", errUtils.ErrAzurePIMRequestFailed, req.Method, displayPath, resp.StatusCode, snippet(raw))
 	}
 	return raw, nil
+}
+
+// authorizeRequest enforces that the request targets the expected ARM origin and attaches credentials.
+func (c *armPIMClient) authorizeRequest(req *http.Request) error {
+	// Fail closed before attaching the bearer token: the scope or continuation URL can
+	// redirect the request to an attacker-controlled host (URL user-information injection).
+	// Refuse to send credentials anywhere other than the intended ARM origin.
+	if req.URL.Scheme != c.expectedScheme || req.URL.Host != c.expectedHost || req.URL.User != nil {
+		return fmt.Errorf("%w: refusing to send credentials to %q://%q (expected %q://%q)",
+			errUtils.ErrAzurePIMInvalidScope, req.URL.Scheme, req.URL.Host, c.expectedScheme, c.expectedHost)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	return nil
 }
 
 // newRequest builds the ARM request, enforces the credential-bearing request stays on the
@@ -328,19 +347,55 @@ func (c *armPIMClient) newRequest(ctx context.Context, method, path, filter stri
 		return nil, fmt.Errorf("%w: building request: %w", errUtils.ErrAzurePIMRequestFailed, err)
 	}
 
-	// Fail closed before attaching the bearer token: the scope is interpolated into the URL,
-	// so a crafted value (for example `@attacker.example/...`) can demote the ARM host to URL
-	// user-information and redirect the request to an attacker-controlled host. Refuse to send
-	// credentials anywhere other than the intended ARM origin.
-	if req.URL.Scheme != c.expectedScheme || req.URL.Host != c.expectedHost || req.URL.User != nil {
-		return nil, fmt.Errorf("%w: refusing to send credentials to %q://%q (expected %q://%q)",
-			errUtils.ErrAzurePIMInvalidScope, req.URL.Scheme, req.URL.Host, c.expectedScheme, c.expectedHost)
+	if err := c.authorizeRequest(req); err != nil {
+		return nil, err
+	}
+	return req, nil
+}
+
+// newContinuationRequest builds an ARM request for a pagination continuation link (nextLink).
+// It preserves continuation query parameters, resolves relative URLs against baseURL,
+// ensures api-version is present, and enforces the same-origin check before attaching credentials.
+func (c *armPIMClient) newContinuationRequest(ctx context.Context, continuationURL string) (*http.Request, error) {
+	parsedURL, err := url.Parse(continuationURL)
+	if err != nil {
+		return nil, fmt.Errorf("%w: parsing continuation URL %q: %w", errUtils.ErrAzurePIMRequestFailed, continuationURL, err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+c.token)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	if !parsedURL.IsAbs() {
+		baseURL, err := url.Parse(c.baseURL)
+		if err != nil {
+			return nil, fmt.Errorf("%w: parsing base URL %q: %w", errUtils.ErrAzurePIMRequestFailed, c.baseURL, err)
+		}
+		parsedURL = baseURL.ResolveReference(parsedURL)
+	}
+
+	if parsedURL.Query().Get("api-version") == "" && c.apiVersion != "" {
+		if parsedURL.RawQuery == "" {
+			parsedURL.RawQuery = "api-version=" + url.QueryEscape(c.apiVersion)
+		} else {
+			parsedURL.RawQuery += "&api-version=" + url.QueryEscape(c.apiVersion)
+		}
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsedURL.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("%w: building continuation request: %w", errUtils.ErrAzurePIMRequestFailed, err)
+	}
+
+	if err := c.authorizeRequest(req); err != nil {
+		return nil, err
+	}
 	return req, nil
+}
+
+// doContinuation performs a GET request against an ARM pagination continuation link.
+func (c *armPIMClient) doContinuation(ctx context.Context, continuationURL string) ([]byte, error) {
+	req, err := c.newContinuationRequest(ctx, continuationURL)
+	if err != nil {
+		return nil, err
+	}
+	return c.doRequest(req, continuationURL)
 }
 
 // snippet trims an ARM error body to a short, log-safe excerpt.
@@ -373,27 +428,134 @@ func normalizeRoleDefinitionID(id string) string {
 	return id
 }
 
-// goDurationToISO8601 converts a Go time.Duration to the ISO-8601 duration ARM expects
-// for scheduleInfo.expiration (for example 8h -> "PT8H", 90m -> "PT1H30M").
-func goDurationToISO8601(d time.Duration) string {
-	totalSeconds := int64(d.Seconds())
-	if totalSeconds <= 0 {
-		return ""
-	}
-	hours := totalSeconds / secondsPerHour
-	minutes := (totalSeconds % secondsPerHour) / secondsPerMinute
-	seconds := totalSeconds % secondsPerMinute
+// armPolicyAssignmentEnvelope is the ARM list response shape for roleManagementPolicyAssignments.
+type armPolicyAssignmentEnvelope struct {
+	Value    []armPolicyAssignmentItem `json:"value"`
+	NextLink string                    `json:"nextLink"`
+}
 
-	var sb strings.Builder
-	sb.WriteString("PT")
-	if hours > 0 {
-		fmt.Fprintf(&sb, "%dH", hours)
+// armPolicyAssignmentItem captures a roleManagementPolicyAssignment resource.
+type armPolicyAssignmentItem struct {
+	Name       string                        `json:"name"`
+	Properties armPolicyAssignmentProperties `json:"properties"`
+}
+
+// armPolicyAssignmentProperties captures the assignment's role definition and rules.
+type armPolicyAssignmentProperties struct {
+	RoleDefinitionID string                    `json:"roleDefinitionId"`
+	EffectiveRules   []armPolicyAssignmentRule `json:"effectiveRules"`
+	Rules            []armPolicyAssignmentRule `json:"rules"`
+}
+
+// armPolicyAssignmentRule captures rule properties across policy rule types.
+type armPolicyAssignmentRule struct {
+	ID              string                        `json:"id"`
+	RuleType        string                        `json:"ruleType"`
+	MaximumDuration string                        `json:"maximumDuration"`
+	Target          armPolicyAssignmentRuleTarget `json:"target"`
+}
+
+// armPolicyAssignmentRuleTarget captures target metadata (e.g. caller: EndUser, level: Assignment).
+type armPolicyAssignmentRuleTarget struct {
+	Caller string `json:"caller"`
+	Level  string `json:"level"`
+}
+
+// isActivationExpirationRule reports whether a policy rule governs the maximum duration
+// of an EndUser self-activation assignment.
+func isActivationExpirationRule(r *armPolicyAssignmentRule) bool {
+	if !strings.EqualFold(r.RuleType, "RoleManagementPolicyExpirationRule") {
+		return false
 	}
-	if minutes > 0 {
-		fmt.Fprintf(&sb, "%dM", minutes)
+	if r.MaximumDuration == "" {
+		return false
 	}
-	if seconds > 0 {
-		fmt.Fprintf(&sb, "%dS", seconds)
+
+	caller := strings.TrimSpace(r.Target.Caller)
+	level := strings.TrimSpace(r.Target.Level)
+	hasCaller := caller != ""
+	hasLevel := level != ""
+
+	if hasCaller && hasLevel {
+		return strings.EqualFold(caller, "EndUser") && strings.EqualFold(level, "Assignment")
 	}
-	return sb.String()
+	if hasCaller {
+		return strings.EqualFold(caller, "EndUser")
+	}
+	if hasLevel {
+		return strings.EqualFold(level, "Assignment")
+	}
+
+	// Target is absent; fallback to ID matching.
+	if strings.EqualFold(r.ID, "Expiration_EndUser_Assignment") || strings.Contains(strings.ToLower(r.ID), "enduser") {
+		return true
+	}
+	return false
+}
+
+// PolicyMaxDuration implements PIMClient.
+func (c *armPIMClient) PolicyMaxDuration(ctx context.Context, roleDefinitionID string) (time.Duration, bool, error) {
+	defer perf.Track(nil, "azure.armPIMClient.PolicyMaxDuration")()
+
+	assignments, err := c.listPolicyAssignments(ctx)
+	if err != nil {
+		return 0, false, err
+	}
+	for i := range assignments {
+		if !sameRoleDefinition(assignments[i].Properties.RoleDefinitionID, roleDefinitionID) {
+			continue
+		}
+		rules := assignments[i].Properties.EffectiveRules
+		if len(rules) == 0 {
+			rules = assignments[i].Properties.Rules
+		}
+		for j := range rules {
+			if isActivationExpirationRule(&rules[j]) {
+				d, err := parseISO8601Duration(rules[j].MaximumDuration)
+				if err != nil {
+					return 0, false, fmt.Errorf("%w: parsing policy maximumDuration %q: %w", errUtils.ErrAzurePIMRequestFailed, rules[j].MaximumDuration, err)
+				}
+				return d, true, nil
+			}
+		}
+	}
+	return 0, false, nil
+}
+
+// listPolicyAssignments retrieves role management policy assignments for the client's scope,
+// following ARM continuation links to combine assignment values from every page before returning.
+func (c *armPIMClient) listPolicyAssignments(ctx context.Context) ([]armPolicyAssignmentItem, error) {
+	path := fmt.Sprintf("%s/providers/Microsoft.Authorization/roleManagementPolicyAssignments", c.scope)
+	raw, err := c.do(ctx, http.MethodGet, path, "", nil)
+	if err != nil {
+		return nil, err
+	}
+	var env armPolicyAssignmentEnvelope
+	if err := json.Unmarshal(raw, &env); err != nil {
+		return nil, fmt.Errorf("%w: decoding roleManagementPolicyAssignments: %w", errUtils.ErrAzurePIMRequestFailed, err)
+	}
+
+	items := env.Value
+	nextLink := strings.TrimSpace(env.NextLink)
+	visited := map[string]bool{}
+
+	for nextLink != "" {
+		if visited[nextLink] {
+			return nil, fmt.Errorf("%w: cyclic continuation link %q in roleManagementPolicyAssignments", errUtils.ErrAzurePIMRequestFailed, nextLink)
+		}
+		visited[nextLink] = true
+
+		rawPage, err := c.doContinuation(ctx, nextLink)
+		if err != nil {
+			return nil, err
+		}
+		var pageEnv armPolicyAssignmentEnvelope
+		if err := json.Unmarshal(rawPage, &pageEnv); err != nil {
+			return nil, fmt.Errorf("%w: decoding roleManagementPolicyAssignments page: %w", errUtils.ErrAzurePIMRequestFailed, err)
+		}
+		items = append(items, pageEnv.Value...)
+		nextLink = strings.TrimSpace(pageEnv.NextLink)
+	}
+
+	return items, nil
 }
