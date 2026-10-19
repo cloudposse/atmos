@@ -82,6 +82,7 @@ templates:
     Defaults to `false`.
 
     Set globally in `atmos.yaml` or override per stack with `settings.templates.settings.gomplate.experimental`.
+    Stacks inherit the global value when omitted; an explicit `false` disables experimental functions for that stack.
     Import templates use the global value. Does not apply to document generation or scaffold templates.
   </dd>
 

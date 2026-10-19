@@ -67,6 +67,14 @@ Templating in Atmos stack manifests is configured in the `atmos.yaml` [CLI confi
   <dt>`templates.settings.gomplate.enabled`</dt>
   <dd>A boolean flag to enable/disable the [Gomplate Functions](https://docs.gomplate.ca/functions/) and [Gomplate Datasources](https://docs.gomplate.ca/datasources) in Atmos stack manifests. Defaults to `true`.</dd>
 
+  <dt>`templates.settings.gomplate.experimental`</dt>
+  <dd>
+    Enables experimental Gomplate functions in stack templates. Defaults to `false`.
+    Set globally in `atmos.yaml` or override per stack with `settings.templates.settings.gomplate.experimental`.
+    Stacks inherit the global value when omitted; an explicit `false` disables experimental functions for that stack.
+    Import templates use the global value. Does not apply to document generation or scaffold templates.
+  </dd>
+
   <dt>`templates.settings.gomplate.timeout`</dt>
   <dd>Timeout in seconds to execute [Gomplate Datasources](https://docs.gomplate.ca/datasources).</dd>
 
@@ -123,6 +131,8 @@ templates:
     gomplate:
       # Enable Gomplate functions and data sources in `Go` templates in Atmos stack manifests
       enabled: true
+      # Enable experimental Gomplate functions (disabled by default)
+      experimental: false
       # Timeout in seconds to execute the data sources
       timeout: 5
       datasources: {}
