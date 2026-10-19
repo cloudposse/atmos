@@ -50,9 +50,17 @@ to use, rather than a reproducible bug.
   - Sources without a `"git::"` prefix (scheme-less shorthand already reaches the detector through
     go-getter's normal dispatch; nothing to fix there).
   - A `"git::"`-forced source whose inner URL has no explicit scheme (same reason).
-  - Hosts `CustomGitDetector` itself doesn't recognize (non-GitHub/GitLab/Bitbucket hosts), or
-    where injection is disabled/no token is configured -- `CustomGitDetector.Detect()`'s own
-    existing logic governs all of that unchanged.
+  - Hosts `CustomGitDetector` doesn't recognize (anything other than GitHub, a configured GitHub
+    Enterprise Server host, GitLab, or Bitbucket): `Detect()` reports no match and the source is
+    left unchanged.
+
+  For a supported host it is not a no-op even when no token is injected (injection disabled in
+  settings, no token configured, credentials already present in the URL, or a non-https scheme).
+  `Detect()` still matches, so the source is rewritten the same way a scheme-less source already is:
+  it keeps its `git::` prefix, has its path normalized, and gets `depth=1` added when no `depth` is
+  set. Only the credential step is skipped in those cases. The token-injection decision itself
+  (`shouldInjectTokenForHost`, `injectToken`) is `CustomGitDetector`'s existing logic and is
+  unchanged.
 - `pkg/downloader/gogetter_downloader_test.go`: added
   `TestNewClient_InjectsTokenForForcedGitSource` (proves a `git::https://github.com/...` source
   now gets a token injected into `ggc.client.Src`) and

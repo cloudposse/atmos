@@ -248,6 +248,49 @@ func TestNewClient_InjectsTokenForForcedGitSource(t *testing.T) {
 	assert.NotEqual(t, src, ggc.client.Src, "the source must be rewritten with injected credentials")
 }
 
+// TestNewClient_ForcedGitSourceWithoutTokenIsNormalizedNotInjected documents that for a supported
+// host, applyForcedGitDetection still rewrites the source when no token is injected (injection
+// disabled or no token configured): the detector matches, so the source keeps its git:: prefix and
+// gets depth=1, but no credentials are added.
+func TestNewClient_ForcedGitSourceWithoutTokenIsNormalizedNotInjected(t *testing.T) {
+	t.Setenv("ATMOS_GITHUB_CLI", "")
+
+	tests := []struct {
+		name     string
+		settings schema.AtmosSettings
+	}{
+		{"injection disabled", schema.AtmosSettings{GithubToken: "ghp_test_token", InjectGithubToken: false}},
+		{"no token configured", schema.AtmosSettings{InjectGithubToken: true}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			factory := &goGetterClientFactory{atmosConfig: &schema.AtmosConfiguration{Settings: tt.settings}}
+			dc, err := factory.NewClient(context.Background(), "git::https://github.com/test-org/test-repo.git?ref=main", t.TempDir(), ClientModeAny)
+			require.NoError(t, err)
+
+			ggc, ok := dc.(*goGetterClient)
+			require.True(t, ok)
+			assert.Equal(t, "git::https://github.com/test-org/test-repo.git?depth=1&ref=main", ggc.client.Src)
+			assert.NotContains(t, ggc.client.Src, "@", "no credentials may be injected")
+		})
+	}
+}
+
+// TestNewClient_ForcedGitSourceOnUnsupportedHostIsUnchanged proves a forced git:: source on a host
+// CustomGitDetector does not recognize is passed through untouched.
+func TestNewClient_ForcedGitSourceOnUnsupportedHostIsUnchanged(t *testing.T) {
+	factory := &goGetterClientFactory{atmosConfig: &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{GithubToken: "ghp_test_token", InjectGithubToken: true},
+	}}
+	src := "git::https://git.example.com/org/repo.git?ref=main"
+	dc, err := factory.NewClient(context.Background(), src, t.TempDir(), ClientModeAny)
+	require.NoError(t, err)
+
+	ggc, ok := dc.(*goGetterClient)
+	require.True(t, ok)
+	assert.Equal(t, src, ggc.client.Src)
+}
+
 // TestNewClient_DoesNotForceGitDetectionForPlainHTTPSource proves a plain (non "git::"-forced)
 // https:// source -- e.g. a GitHub archive/release download -- is left untouched by
 // applyForcedGitDetection, since reinterpreting it as a git clone target would break that use
