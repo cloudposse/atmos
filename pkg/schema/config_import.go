@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"encoding/json"
 	"reflect"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -31,6 +32,48 @@ type ConfigImport struct {
 	// config-load time against runtime facts (currently CI detection), letting a fragment stay
 	// committed and active on workstations while auto-skipping in CI (and vice versa).
 	When Condition `yaml:"when,omitempty" json:"when,omitempty" mapstructure:"when"`
+}
+
+// configImportObject is the object serialization form of ConfigImport. It carries no custom
+// marshalers (avoiding infinite recursion) and uses a pointer for `when` so an unset condition is
+// omitted in both YAML and JSON.
+type configImportObject struct {
+	Path          string     `yaml:"path" json:"path"`
+	SkipIfMissing bool       `yaml:"skip_if_missing,omitempty" json:"skip_if_missing,omitempty"`
+	When          *Condition `yaml:"when,omitempty" json:"when,omitempty"`
+}
+
+// isStringEquivalent reports whether the entry is equivalent to a legacy bare-string import: an
+// optional import (SkipIfMissing) with no `when` condition. Such an entry serializes back to a
+// plain string so `atmos describe config` output is unchanged from the string form.
+func (c ConfigImport) isStringEquivalent() bool {
+	return c.SkipIfMissing && c.When.IsZero()
+}
+
+func (c ConfigImport) marshalObject() configImportObject {
+	obj := configImportObject{Path: c.Path, SkipIfMissing: c.SkipIfMissing}
+	if !c.When.IsZero() {
+		when := c.When
+		obj.When = &when
+	}
+	return obj
+}
+
+// MarshalYAML renders a string-equivalent entry as a bare string (so existing string imports are
+// unchanged in `atmos describe config` output) and any other entry as an object.
+func (c ConfigImport) MarshalYAML() (any, error) {
+	if c.isStringEquivalent() {
+		return c.Path, nil
+	}
+	return c.marshalObject(), nil
+}
+
+// MarshalJSON mirrors MarshalYAML for `--format json` output.
+func (c ConfigImport) MarshalJSON() ([]byte, error) {
+	if c.isStringEquivalent() {
+		return json.Marshal(c.Path)
+	}
+	return json.Marshal(c.marshalObject())
 }
 
 // ConfigImports is the top-level CLI-config `import:` list. Each entry is a string or an object;

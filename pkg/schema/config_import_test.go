@@ -100,3 +100,42 @@ func TestConfigImportsDecodeHook(t *testing.T) {
 		assert.False(t, out[1].SkipIfMissing)
 	})
 }
+
+func TestConfigImportMarshal(t *testing.T) {
+	// A string-equivalent entry (optional, no condition) marshals back to a bare string so
+	// `atmos describe config` output is unchanged from the legacy string form.
+	t.Run("string-equivalent entry marshals as a bare string", func(t *testing.T) {
+		c := ConfigImport{Path: "configs.d/**/*", SkipIfMissing: true}
+
+		y, err := c.MarshalYAML()
+		require.NoError(t, err)
+		assert.Equal(t, "configs.d/**/*", y)
+
+		j, err := c.MarshalJSON()
+		require.NoError(t, err)
+		assert.JSONEq(t, `"configs.d/**/*"`, string(j))
+	})
+
+	// A required entry (fail closed) marshals as an object; omitempty drops skip_if_missing:false.
+	t.Run("required entry marshals as an object", func(t *testing.T) {
+		c := ConfigImport{Path: "required.yaml"}
+
+		y, err := c.MarshalYAML()
+		require.NoError(t, err)
+		assert.Equal(t, configImportObject{Path: "required.yaml"}, y)
+
+		j, err := c.MarshalJSON()
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"path":"required.yaml"}`, string(j))
+	})
+
+	// A conditional entry keeps its `when` in the object form.
+	t.Run("conditional entry keeps when", func(t *testing.T) {
+		c := ConfigImport{Path: "local.yaml", SkipIfMissing: true, When: MustCondition("local")}
+
+		j, err := c.MarshalJSON()
+		require.NoError(t, err)
+		assert.Contains(t, string(j), `"path":"local.yaml"`)
+		assert.Contains(t, string(j), `"when"`)
+	})
+}
