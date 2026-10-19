@@ -66,10 +66,25 @@ func validTestStatus(status DecisionStatus) bool {
 	return false
 }
 
+// sameJSON compares two values by content. Object key order never affects equality: an approval spec
+// built from a map sorts its keys, while a fixture keeps the order its author wrote.
 func sameJSON(a, b any) bool {
-	x, _ := json.Marshal(a)
-	y, _ := json.Marshal(b)
-	return bytes.Equal(x, y)
+	x, errX := canonicalJSON(a)
+	y, errY := canonicalJSON(b)
+	return errX == nil && errY == nil && bytes.Equal(x, y)
+}
+
+// canonicalJSON re-encodes a value through any, which sorts object keys.
+func canonicalJSON(value any) ([]byte, error) {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var decoded any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return nil, err
+	}
+	return json.Marshal(decoded)
 }
 
 func testErrorMatches(expected string, err error) bool {

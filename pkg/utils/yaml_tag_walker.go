@@ -297,7 +297,7 @@ func handleAppendTag(ctx TagContext, node *yaml.Node, _ string) (bool, error) {
 // by delegating straight to the existing leaf functions -- shared verbatim
 // between the stack-manifest and scaffold-manifest policies.
 func handleIncludeTag(ctx TagContext, node *yaml.Node, val string) (bool, error) {
-	return ProcessIncludeTagWalkedFrom(ctx.AtmosConfig, node, val, ctx.File, IncludeWalkers{Local: ctx.WalkIn, Remote: ctx.WalkInRemote})
+	return ProcessIncludeTagWalkedFrom(ctx.AtmosConfig, node, val, ctx.File, IncludeWalk{Local: ctx.WalkIn, Remote: ctx.WalkInRemote, Source: ctx.source})
 }
 
 func handleIncludeRawTag(ctx TagContext, node *yaml.Node, val string) (bool, error) {

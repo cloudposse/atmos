@@ -459,3 +459,22 @@ func TestSaveHooksRestoresTheWiringItFound(t *testing.T) {
 	SetEnabled(nil)
 	SetEvaluator(nil)
 }
+
+func TestDescribeSourceEnvDatasources(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, raw := range []string{"env:POLICY_VAR", "env:///POLICY_VAR", "ENV:POLICY_VAR"} {
+		t.Run(raw, func(t *testing.T) {
+			input, err := DescribeSource(OperationTemplateDatasource, raw, "")
+			require.NoError(t, err)
+			require.Equal(t, "env", input.Scheme)
+			require.False(t, input.Remote)
+			require.Equal(t, "POLICY_VAR", input.Path)
+		})
+	}
+
+	// Outside a datasource the same text is an ordinary relative path, so a file include cannot hide behind it.
+	input, err := DescribeSource("include", "env:POLICY_VAR", "")
+	require.NoError(t, err)
+	require.Equal(t, "file", input.Scheme)
+	require.Contains(t, filepath.ToSlash(input.Path), "env:POLICY_VAR")
+}

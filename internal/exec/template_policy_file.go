@@ -2,9 +2,9 @@ package exec
 
 import (
 	"context"
-	"fmt"
 	"os"
 
+	"github.com/hairyhenderson/gomplate/v3/conv"
 	"github.com/hairyhenderson/gomplate/v3/funcs" //nolint:staticcheck // Gomplate v3 exposes namespace types through this embedding API.
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -17,72 +17,86 @@ type policyFileFuncs struct {
 	file   string
 }
 
-func (f *policyFileFuncs) check(method string, path any) error {
+// check admits the function and the path it names, and returns that path. Gomplate converts the path
+// argument with conv.ToString, so a []byte or other value names the file it converts to; the same
+// string is checked and then handed to the native method, so admission and the read cannot disagree.
+func (f *policyFileFuncs) check(method string, path any) (string, error) {
 	if err := guard.Function(context.Background(), "file."+method, policyTemplateEngine, guard.FileOrigin(f.file)); err != nil {
-		return err
+		return "", err
 	}
-	return guard.Source(context.Background(), "template.file", fmt.Sprint(path), f.file)
+	name := conv.ToString(path)
+	if err := guard.Source(context.Background(), "template.file", name, f.file); err != nil {
+		return "", err
+	}
+	return name, nil
 }
 
 func (f *policyFileFuncs) Read(path any) (string, error) {
 	defer perf.Track(nil, "exec.Read")()
 
-	if err := f.check("Read", path); err != nil {
+	name, err := f.check("Read", path)
+	if err != nil {
 		return "", err
 	}
-	return f.native.Read(path)
+	return f.native.Read(name)
 }
 
 func (f *policyFileFuncs) Stat(path any) (os.FileInfo, error) {
 	defer perf.Track(nil, "exec.Stat")()
 
-	if err := f.check("Stat", path); err != nil {
+	name, err := f.check("Stat", path)
+	if err != nil {
 		return nil, err
 	}
-	return f.native.Stat(path)
+	return f.native.Stat(name)
 }
 
 func (f *policyFileFuncs) Exists(path any) (bool, error) {
 	defer perf.Track(nil, "exec.Exists")()
 
-	if err := f.check("Exists", path); err != nil {
+	name, err := f.check("Exists", path)
+	if err != nil {
 		return false, err
 	}
-	return f.native.Exists(path), nil
+	return f.native.Exists(name), nil
 }
 
 func (f *policyFileFuncs) IsDir(path any) (bool, error) {
 	defer perf.Track(nil, "exec.IsDir")()
 
-	if err := f.check("IsDir", path); err != nil {
+	name, err := f.check("IsDir", path)
+	if err != nil {
 		return false, err
 	}
-	return f.native.IsDir(path), nil
+	return f.native.IsDir(name), nil
 }
 
 func (f *policyFileFuncs) ReadDir(path any) ([]string, error) {
 	defer perf.Track(nil, "exec.ReadDir")()
 
-	if err := f.check("ReadDir", path); err != nil {
+	name, err := f.check("ReadDir", path)
+	if err != nil {
 		return nil, err
 	}
-	return f.native.ReadDir(path)
+	return f.native.ReadDir(name)
 }
 
 func (f *policyFileFuncs) Walk(path any) ([]string, error) {
 	defer perf.Track(nil, "exec.Walk")()
 
-	if err := f.check("Walk", path); err != nil {
+	name, err := f.check("Walk", path)
+	if err != nil {
 		return nil, err
 	}
-	return f.native.Walk(path)
+	return f.native.Walk(name)
 }
 
 func (f *policyFileFuncs) Write(path, content any) (string, error) {
 	defer perf.Track(nil, "exec.Write")()
 
-	if err := f.check("Write", path); err != nil {
+	name, err := f.check("Write", path)
+	if err != nil {
 		return "", err
 	}
-	return f.native.Write(path, content)
+	return f.native.Write(name, content)
 }

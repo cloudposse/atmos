@@ -376,3 +376,28 @@ func TestPolicyEnvFuncs(t *testing.T) {
 		assert.Empty(t, value)
 	})
 }
+
+// Gomplate converts the path argument with conv.ToString, so a []byte names the file its bytes spell.
+// Admission checks that same file, not the printed form of the byte slice.
+func TestPolicyFileFuncsCheckTheConvertedPath(t *testing.T) {
+	root := retryingTempDir(t)
+	allowed := filepath.Join(root, "allowed")
+	require.NoError(t, os.Mkdir(allowed, 0o700))
+	inside := filepath.Join(allowed, "public.txt")
+	outside := filepath.Join(root, "secret.txt")
+	require.NoError(t, os.WriteFile(inside, []byte("public"), 0o600))
+	require.NoError(t, os.WriteFile(outside, []byte("secret"), 0o600))
+	templatePolicy(t, "source", fileConfinementRule, []string{allowed})
+	namespace := guardedFileNamespace(t)
+
+	got, err := namespace.Read([]byte(inside))
+	require.NoError(t, err)
+	assert.Equal(t, "public", got)
+
+	denied, err := namespace.Read([]byte(outside))
+	require.ErrorIs(t, err, errUtils.ErrPolicyDenied, "a byte path outside the roots is denied")
+	assert.Empty(t, denied)
+
+	_, err = namespace.Exists([]byte(outside))
+	require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+}

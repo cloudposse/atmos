@@ -671,6 +671,17 @@ func TestPolicyDatasourceEnvironment(t *testing.T) {
 	require.Equal(t, "from-environment", result)
 }
 
+// An env datasource reads a variable, not a file, so a rule that denies files outside the allowed roots
+// must admit it instead of describing the variable as a path in the working directory.
+func TestPolicyDatasourceEnvironmentIsNotAFile(t *testing.T) {
+	templatePolicy(t, "source", fileConfinementRule, []string{t.TempDir()})
+	t.Setenv("POLICY_DS_ENV", "from-environment")
+	d := newTemplateData(t, []string{"envvar=env:POLICY_DS_ENV"}, nil)
+	result, err := policyDatasource(d, "test", "envvar", false)
+	require.NoError(t, err)
+	require.Equal(t, "from-environment", result)
+}
+
 func TestPolicyDatasourceHTTP(t *testing.T) {
 	var hits atomic.Int32
 	var gotAuth atomic.Value

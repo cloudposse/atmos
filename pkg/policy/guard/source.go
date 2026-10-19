@@ -15,6 +15,12 @@ import (
 
 const schemeSeparator = "://"
 
+// OperationTemplateDatasource names a source read through a template datasource.
+const OperationTemplateDatasource = "template.datasource"
+
+// envScheme is the gomplate datasource scheme that reads an environment variable.
+const envScheme = "env"
+
 // Source checks a destination before credentials, cache reuse, or I/O.
 func Source(ctx context.Context, operation, raw, sourceFile string) error {
 	defer perf.Track(nil, "guard.Source")()
@@ -39,6 +45,10 @@ func DescribeSource(operation, raw, sourceFile string) (SourceInput, error) {
 	parsed, err := url.Parse(transport)
 	if err != nil {
 		return input, fmt.Errorf("%w: invalid source URI (details withheld)", errUtils.ErrPolicyInputInvalid)
+	}
+	if operation == OperationTemplateDatasource && strings.EqualFold(parsed.Scheme, envScheme) {
+		describeEnvDatasource(&input, parsed)
+		return input, nil
 	}
 	if hasTransportScheme(raw, transport, parsed) {
 		input.Scheme = strings.ToLower(parsed.Scheme)
@@ -65,6 +75,14 @@ func DescribeSource(operation, raw, sourceFile string) (SourceInput, error) {
 		input.PathResolved = true
 	}
 	return input, nil
+}
+
+// describeEnvDatasource describes a gomplate env datasource, which reads a variable rather than a file
+// or a remote. It is neither remote nor a file, so rules that confine file reads do not see it, and the
+// variable name is the path a rule can match.
+func describeEnvDatasource(input *SourceInput, parsed *url.URL) {
+	input.Scheme = envScheme
+	input.Path = strings.TrimPrefix(parsed.Opaque+parsed.Path, "/")
 }
 
 // hasTransportScheme reports whether the reader treats the source as a URL rather than a local path.

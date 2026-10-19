@@ -33,7 +33,7 @@ func policyDatasource(d *data.Data, file, alias string, raw bool, args ...string
 	if err != nil {
 		return nil, err
 	}
-	if err := guard.Source(context.Background(), "template.datasource", target.String(), file); err != nil {
+	if err := guard.Source(context.Background(), guard.OperationTemplateDatasource, target.String(), file); err != nil {
 		return nil, err
 	}
 	switch target.Scheme {
@@ -59,7 +59,7 @@ func readPolicyHTTPDatasource(d *data.Data, file string, target *url.URL, header
 		if len(via) >= policyDatasourceRedirects {
 			return fmt.Errorf("%w: too many datasource redirects", errUtils.ErrPolicyInputUnavailable)
 		}
-		return guard.Source(req.Context(), "template.datasource", req.URL.String(), file)
+		return guard.Source(req.Context(), guard.OperationTemplateDatasource, req.URL.String(), file)
 	}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 	if err != nil {
