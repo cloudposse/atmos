@@ -243,9 +243,11 @@ import:
 Atmos warns when a `git::` import is pinned to a **mutable** ref - a branch (for example
 `?ref=main`), or no `?ref=` at all. An unpinned import silently absorbs the upstream repo's edits on
 every cache refresh, with no integrity check - the config-import analogue of using an unpinned
-GitHub Action. Pin to a commit SHA or a version tag (for example `?ref=v1.2.3`) to silence the
-warning and get reproducible, tamper-evident imports. The import still resolves either way; the
-warning is advisory.
+GitHub Action. Pin to a commit SHA (for example `?ref=<40-hex-sha>`) for an immutable,
+tamper-evident import - a SHA always resolves to the same content. A version tag (for example
+`?ref=v1.2.3`) also silences the warning and is a reasonable, conventional version reference, but a
+tag can be moved to a different commit, so it does not carry the same immutability guarantee as a
+SHA. The import still resolves either way; the warning is advisory.
 
 ### Caching Remote Imports
 
@@ -267,7 +269,7 @@ imports:
 
 This is a single global default applied to CLI-config imports; the object entry form does not add a
 per-import `ttl` override (unlike stack manifest imports). `ttl` accepts durations like `0s` (always re-fetch),
-`5m`, `1h`, `7d`, or keywords like `daily`. Pin to an immutable `?ref=<tag>` (or commit SHA) with a longer
+`5m`, `1h`, `7d`, or keywords like `daily`. Pin to a commit SHA (immutable) or a version tag with a longer
 `ttl` for maximum reuse; keep `ttl` short for mutable refs like `main` so the config stays fresh. Leave
 `ttl` unset to keep each import form's own default behavior described above.
 
