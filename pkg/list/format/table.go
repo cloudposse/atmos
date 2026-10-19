@@ -13,13 +13,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/pkg/errors"
+
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/pkg/errors"
 )
 
 // Constants for table formatting.
@@ -479,27 +479,10 @@ func renderInlineMarkdown(content string) string {
 		return ""
 	}
 
-	// Create a terminal instance to detect color support.
-	term := terminal.New()
-
-	// Build glamour options for inline rendering.
-	var opts []glamour.TermRendererOption
-
-	// Use theme-aware glamour styles if color is supported.
-	if term.ColorProfile() != terminal.ColorNone {
-		// Get the configured theme name from atmos config if available.
-		// Default to "dark" theme for better terminal compatibility.
-		themeName := "dark"
-		glamourStyle, err := theme.GetGlamourStyleForTheme(themeName)
-		if err == nil {
-			opts = append(opts, glamour.WithStylesFromJSONBytes(glamourStyle))
-		} else {
-			// Fallback to auto style if theme conversion fails.
-			opts = append(opts, glamour.WithAutoStyle())
-		}
-	} else {
-		// Use plain notty style for terminals without color.
-		opts = append(opts, glamour.WithStylePath("notty"))
+	// Use the globally configured color profile and active theme for table cells.
+	opts := []glamour.TermRendererOption{glamour.WithColorProfile(lipgloss.ColorProfile())}
+	if style, err := theme.GetCurrentGlamourStyle(); err == nil {
+		opts = append(opts, glamour.WithStylesFromJSONBytes(style))
 	}
 
 	// No word wrap - we'll handle line breaks manually.
@@ -943,14 +926,14 @@ func CreateStyledTableWithOptions(header []string, rows [][]string, options Tabl
 	t := table.New().
 		Headers(paddedHeaders...).
 		Rows(constrainedRows...).
-		BorderHeader(true).                                               // Show border under header.
-		BorderTop(false).                                                 // No top border.
-		BorderBottom(false).                                              // No bottom border.
-		BorderLeft(false).                                                // No left border.
-		BorderRight(false).                                               // No right border.
-		BorderRow(false).                                                 // No row separators.
-		BorderColumn(false).                                              // No column separators.
-		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))). // Gray border.
+		BorderHeader(true).                                                                                   // Show border under header.
+		BorderTop(false).                                                                                     // No top border.
+		BorderBottom(false).                                                                                  // No bottom border.
+		BorderLeft(false).                                                                                    // No left border.
+		BorderRight(false).                                                                                   // No right border.
+		BorderRow(false).                                                                                     // No row separators.
+		BorderColumn(false).                                                                                  // No column separators.
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))). // Gray border.
 		StyleFunc(buildTableStyleFunc(constrainedRows, options))
 
 	// Add blank lines before and after the table for visual separation.

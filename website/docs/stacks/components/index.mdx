@@ -23,7 +23,17 @@ import DocCardList from "@theme/DocCardList";
 
 ## Supported Component Types
 
-<DocCardList />
+<DocCardList items={[
+  {type: 'link', href: '/stacks/components/ansible', label: 'ansible', description: 'Configure Ansible playbooks.'},
+  {type: 'link', href: '/stacks/components/aws-cloudformation', label: 'aws/cloudformation', description: 'Deploy native CloudFormation stacks.'},
+  {type: 'link', href: '/stacks/components/container', label: 'container', description: 'Build and run container services.'},
+  {type: 'link', href: '/stacks/components/emulator', label: 'emulator', description: 'Run local cloud API emulators.'},
+  {type: 'link', href: '/stacks/components/helm', label: 'helm', description: 'Manage Helm chart releases.'},
+  {type: 'link', href: '/stacks/components/helmfile', label: 'helmfile', description: 'Configure Helmfile deployments.'},
+  {type: 'link', href: '/stacks/components/kubernetes', label: 'kubernetes', description: 'Deploy Kubernetes manifests.'},
+  {type: 'link', href: '/stacks/components/packer', label: 'packer', description: 'Build machine images.'},
+  {type: 'link', href: '/stacks/components/terraform', label: 'terraform', description: 'Configure Terraform infrastructure.'},
+]} />
 
 ## Component Schema
 
@@ -40,9 +50,16 @@ A component consists of infrastructure-as-code business logic (e.g., a Terraform
 
 :::
 
+## Component Names
+
+Each `<name>` in the sidebar represents a component instance key you choose,
+such as `vpc-primary` in `components.terraform.vpc-primary`. See
+[Component names](/stacks/components/name) for naming recommendations, scope,
+and the relationship between instance names and implementation paths.
+
 ## Common Configuration Sections
 
-All component types support these configuration sections:
+Common configuration sections are listed below. Support varies by component type; the sidebar lists supported fields beneath each type’s `<name>` entry.
 
 <dl>
   <dt>[`vars`](/stacks/vars)</dt>

@@ -55,16 +55,12 @@ func executeMCPRemove(cmd *cobra.Command, args []string) error {
 	}
 
 	name := args[0]
-	file, err := mcpconfig.ResolveFile(cmd, &atmosConfig)
+	file, declared, err := mcpconfig.ResolveServerFile(cmd, &atmosConfig, name)
 	if err != nil {
 		return err
 	}
 
-	exists, err := mcpconfig.Exists(file, name)
-	if err != nil {
-		return err
-	}
-	if !exists {
+	if !declared {
 		return errUtils.Build(errUtils.ErrMCPServerNotFound).
 			WithExplanation(fmt.Sprintf("%q is not configured under mcp.servers in %s", name, file)).
 			WithHint("Run `atmos mcp list` to see configured servers.").

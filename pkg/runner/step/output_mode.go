@@ -11,10 +11,8 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
-	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -25,6 +23,7 @@ type OutputModeWriter struct {
 	stepName string
 	viewport *schema.ViewportConfig
 	show     *schema.ShowConfig
+	writers  OutputWriters
 }
 
 // NewOutputModeWriter creates a new OutputModeWriter.
@@ -47,6 +46,9 @@ func NewOutputModeWriter(mode OutputMode, stepName string, viewport *schema.View
 func (w *OutputModeWriter) Execute(cmd *exec.Cmd) (string, string, error) {
 	defer perf.Track(nil, "step.OutputModeWriter.Execute")()
 
+	if w.writers.Stdout != nil || w.writers.Stderr != nil {
+		return w.executeScoped(func(stdout, stderr io.Writer) error { cmd.Stdout, cmd.Stderr = stdout, stderr; return cmd.Run() })
+	}
 	switch w.mode {
 	case OutputModeViewport:
 		return w.executeViewport(cmd)
@@ -67,6 +69,9 @@ func (w *OutputModeWriter) Execute(cmd *exec.Cmd) (string, string, error) {
 func (w *OutputModeWriter) ExecuteWithIO(runner func(stdout, stderr io.Writer) error) (string, string, error) {
 	defer perf.Track(nil, "step.OutputModeWriter.ExecuteWithIO")()
 
+	if w.writers.Stdout != nil || w.writers.Stderr != nil {
+		return w.executeScoped(runner)
+	}
 	switch w.mode {
 	case OutputModeViewport:
 		return w.executeViewportWithIO(runner)
@@ -81,132 +86,81 @@ func (w *OutputModeWriter) ExecuteWithIO(runner func(stdout, stderr io.Writer) e
 	}
 }
 
-// executeViewport captures output and displays in pager.
+// executeViewport runs a subprocess with the shared live output window.
 func (w *OutputModeWriter) executeViewport(cmd *exec.Cmd) (string, string, error) {
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
-	if err != nil {
-		// Fall back to log mode on error to ensure output is visible.
-		return w.fallbackToLog(stdout.String(), stderr.String(), err)
-	}
-
-	// Check if terminal is available for viewport.
-	term := terminal.New()
-	if !term.IsTTY(terminal.Stdout) {
-		// Fall back to log mode.
-		return w.fallbackToLog(stdout.String(), stderr.String(), nil)
-	}
-
-	// Display in pager.
-	content := stdout.String()
-	if stderr.Len() > 0 {
-		content += "\n--- stderr ---\n" + stderr.String()
-	}
-
-	// Use viewport config if available, otherwise use terminal dimensions.
-	height, width := 0, 0
-	if w.viewport != nil {
-		height = w.viewport.Height
-		width = w.viewport.Width
-	}
-
-	p := pager.NewWithViewport(true, height, width)
-	if pagerErr := p.Run(w.stepName, content); pagerErr != nil {
-		// Pager failed, fall back to raw output.
-		if writeErr := data.Write(content); writeErr != nil {
-			return stdout.String(), stderr.String(), writeErr
-		}
-	}
-
-	return stdout.String(), stderr.String(), nil
-}
-
-func (w *OutputModeWriter) executeViewportWithIO(runner func(stdout, stderr io.Writer) error) (string, string, error) {
-	var stdout, stderr bytes.Buffer
-
-	err := runner(&stdout, &stderr)
-	if err != nil {
-		return w.fallbackToLog(stdout.String(), stderr.String(), err)
-	}
-
-	term := terminal.New()
-	if !term.IsTTY(terminal.Stdout) {
-		return w.fallbackToLog(stdout.String(), stderr.String(), nil)
-	}
-
-	content := stdout.String()
-	if stderr.Len() > 0 {
-		content += "\n--- stderr ---\n" + stderr.String()
-	}
-
-	height, width := 0, 0
-	if w.viewport != nil {
-		height = w.viewport.Height
-		width = w.viewport.Width
-	}
-
-	p := pager.NewWithViewport(true, height, width)
-	if pagerErr := p.Run(w.stepName, content); pagerErr != nil {
-		if writeErr := data.Write(content); writeErr != nil {
-			return stdout.String(), stderr.String(), writeErr
-		}
-	}
-
-	return stdout.String(), stderr.String(), nil
+	return w.executeViewportWithIO(func(stdout, stderr io.Writer) error {
+		cmd.Stdout, cmd.Stderr = stdout, stderr
+		return cmd.Run()
+	})
 }
 
 // executeRaw passes output directly to stdout/stderr.
 func (w *OutputModeWriter) executeRaw(cmd *exec.Cmd) (string, string, error) {
-	// Create writers that capture and forward output.
-	var stdout, stderr bytes.Buffer
-
-	// Get I/O context for stream access.
-	ioCtx := iolib.GetContext()
-
-	w.writeStepHeader()
-
-	// Use MultiWriter to both capture and forward output.
-	// Data() returns stdout for pipeable output, UI() returns stderr for human messages.
-	cmd.Stdout = io.MultiWriter(&stdout, ioCtx.Data())
-	cmd.Stderr = io.MultiWriter(&stderr, ioCtx.UI())
-
-	err := cmd.Run()
-	w.writeStepFooter(err)
-	return stdout.String(), stderr.String(), err
+	return w.executeRawWithIO(func(stdout, stderr io.Writer) error {
+		cmd.Stdout, cmd.Stderr = stdout, stderr
+		return cmd.Run()
+	})
 }
 
+// executeRawWithIO forwards output to the data and UI streams while capturing it.
+// Captured output stays raw; only the displayed streams are masked. Each displayed stream goes
+// through a streaming masker so a secret split across two reads is still masked.
 func (w *OutputModeWriter) executeRawWithIO(runner func(stdout, stderr io.Writer) error) (string, string, error) {
 	var stdout, stderr bytes.Buffer
 	ioCtx := iolib.GetContext()
 
+	// Data() returns stdout for pipeable output, UI() returns stderr for human messages.
+	dataOut := iolib.NewStreamingMaskWriter(ioCtx.Data())
+	uiOut := iolib.NewStreamingMaskWriter(ioCtx.UI())
+
 	w.writeStepHeader()
-	err := runner(io.MultiWriter(&stdout, ioCtx.Data()), io.MultiWriter(&stderr, ioCtx.UI()))
+	err := runner(io.MultiWriter(&stdout, dataOut), io.MultiWriter(&stderr, uiOut))
+
+	// Release any held tail before the footer so output stays in order.
+	flushDisplay(dataOut, uiOut)
 	w.writeStepFooter(err)
 	return stdout.String(), stderr.String(), err
 }
 
-// executeLog collects output and prints with step boundaries.
+// flushDisplay flushes streaming maskers. Display errors are not actionable at this point,
+// matching how forwarded output errors are handled elsewhere in this file.
+func flushDisplay(writers ...*iolib.StreamingMaskWriter) {
+	for _, sw := range writers {
+		_ = sw.Flush()
+	}
+}
+
+// executeLog streams output with step boundaries.
+// Complete lines are forwarded as they are produced; only a trailing partial line is held back until the command exits.
 func (w *OutputModeWriter) executeLog(cmd *exec.Cmd) (string, string, error) {
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	w.writeStepHeader()
-
-	err := cmd.Run()
-
-	return w.fallbackToLog(stdout.String(), stderr.String(), err)
+	return w.executeLogWithIO(func(stdout, stderr io.Writer) error {
+		cmd.Stdout, cmd.Stderr = stdout, stderr
+		return cmd.Run()
+	})
 }
 
 func (w *OutputModeWriter) executeLogWithIO(runner func(stdout, stderr io.Writer) error) (string, string, error) {
-	var stdout, stderr bytes.Buffer
+	// One mutex is shared by both streams so forwarded chunks never tear, even when
+	// stdout and stderr are written concurrently from different goroutines.
+	var forwardMu sync.Mutex
+
+	// Forwarded batches go through one streaming masker per stream so a multiline secret that
+	// spans several batches is masked as a whole, exactly like the non-streaming path.
+	dataMask := iolib.NewStreamingMaskWriter(sinkWriter(func(s string) { _ = data.Write(s) }))
+	uiMask := iolib.NewStreamingMaskWriter(sinkWriter(ui.Write))
+	stdout := newLineForwarder(&forwardMu, func(s string) { _, _ = dataMask.Write([]byte(s)) })
+	stderr := newLineForwarder(&forwardMu, func(s string) { _, _ = uiMask.Write([]byte(s)) })
 
 	w.writeStepHeader()
-	err := runner(&stdout, &stderr)
-	return w.fallbackToLog(stdout.String(), stderr.String(), err)
+	err := runner(stdout, stderr)
+
+	// Flush trailing partial lines (no newline) before the footer.
+	stdout.Flush()
+	stderr.Flush()
+	flushDisplay(dataMask, uiMask)
+	w.writeStepFooter(err)
+
+	return stdout.String(), stderr.String(), err
 }
 
 func (w *OutputModeWriter) writeStepHeader() {
@@ -286,6 +240,85 @@ func (w *OutputModeWriter) executeNoneWithIO(runner func(stdout, stderr io.Write
 
 	err := runner(&stdout, &stderr)
 	return stdout.String(), stderr.String(), err
+}
+
+// NewCommandOutputWriter honors step/workflow output settings while retaining
+// the unadorned streaming default of legacy command execution.
+func NewCommandOutputWriter(step *schema.WorkflowStep, workflow *schema.WorkflowDefinition) *OutputModeWriter {
+	defer perf.Track(nil, "step.NewCommandOutputWriter")()
+	mode := GetOutputMode(step, workflow)
+	if step.Output == "" && (workflow == nil || workflow.Output == "") && !envPagerEnabled() {
+		mode = OutputModeRaw
+	}
+	show := GetShowConfig(step, workflow)
+	if show.Labels == nil {
+		show.Labels = BoolPtr(false)
+	}
+	return NewOutputModeWriter(mode, step.Name, GetViewportConfig(step, workflow), show)
+}
+
+// ResolveStepOutputMode renders the step's `output:` against vars and validates the result, so a
+// templated mode such as `{{ .Flags.mode }}` takes effect. A step marked literal keeps the value as
+// written. It returns "" when the step sets no output, and fails with schema.ErrStepInvalidOutputMode
+// (listing the valid modes) when the rendered value is not a known mode, instead of falling back to
+// the default.
+func ResolveStepOutputMode(step *schema.WorkflowStep, vars *Variables) (string, error) {
+	defer perf.Track(nil, "step.ResolveStepOutputMode")()
+
+	raw := strings.TrimSpace(step.Output)
+	if raw == "" {
+		return "", nil
+	}
+	rendered := raw
+	if vars != nil && strings.Contains(raw, "{{") {
+		var err error
+		rendered, err = vars.ResolveStepField(step, "output", raw)
+		if err != nil {
+			return "", TemplateFieldError(step, "output", err)
+		}
+		rendered = strings.TrimSpace(rendered)
+	}
+	owner := "a step"
+	if step.Name != "" {
+		owner = fmt.Sprintf("step %q", step.Name)
+	}
+	if err := schema.ValidateRenderedOutputMode(owner, rendered); err != nil {
+		return "", err
+	}
+	return rendered, nil
+}
+
+// resolveOutputStep returns step with its templated `output:` rendered. The step itself is returned
+// when its output needs no rendering, and a copy otherwise, so the shared step definition keeps the
+// template for later runs.
+func resolveOutputStep(step *schema.WorkflowStep, vars *Variables) (*schema.WorkflowStep, error) {
+	if !schema.StepAcceptsOutputMode(step.Type) && step.Type != "" {
+		return step, nil
+	}
+	mode, err := ResolveStepOutputMode(step, vars)
+	if err != nil {
+		return nil, err
+	}
+	if mode == step.Output {
+		return step, nil
+	}
+	resolved := *step
+	resolved.Output = mode
+	return &resolved, nil
+}
+
+// ApplyStepOutputMode renders the step's templated `output:` in place, so the writers the step's
+// runner builds later read the rendered mode. Use it on a step the caller owns (for example a
+// per-run copy); handlers resolve on a copy themselves.
+func ApplyStepOutputMode(step *schema.WorkflowStep, vars *Variables) error {
+	defer perf.Track(nil, "step.ApplyStepOutputMode")()
+
+	resolved, err := resolveOutputStep(step, vars)
+	if err != nil {
+		return err
+	}
+	step.Output = resolved.Output
+	return nil
 }
 
 // GetOutputMode returns the effective output mode for a step.
@@ -477,4 +510,73 @@ func (w *StreamingOutputWriter) String() string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.output.String()
+}
+
+// sinkWriter adapts a string sink to io.Writer.
+type sinkWriter func(string)
+
+// Write implements io.Writer.
+func (f sinkWriter) Write(p []byte) (int, error) {
+	defer perf.Track(nil, "step.sinkWriter.Write")()
+
+	f(string(p))
+	return len(p), nil
+}
+
+// lineForwarder captures everything written to it and forwards complete lines to a sink immediately.
+// A trailing partial line is held back until Flush is called. The forward mutex may be shared between
+// several forwarders so that writes to different sinks are serialized and never interleave mid-chunk.
+type lineForwarder struct {
+	forwardMu *sync.Mutex
+	forward   func(string)
+	captured  bytes.Buffer
+	partial   []byte
+}
+
+// newLineForwarder creates a lineForwarder that calls forward (under forwardMu) for each batch of complete lines.
+func newLineForwarder(forwardMu *sync.Mutex, forward func(string)) *lineForwarder {
+	return &lineForwarder{forwardMu: forwardMu, forward: forward}
+}
+
+// Write implements io.Writer. It captures p and forwards any newly completed lines.
+func (f *lineForwarder) Write(p []byte) (int, error) {
+	defer perf.Track(nil, "step.lineForwarder.Write")()
+
+	f.forwardMu.Lock()
+	defer f.forwardMu.Unlock()
+
+	f.captured.Write(p)
+	f.partial = append(f.partial, p...)
+
+	idx := bytes.LastIndexByte(f.partial, '\n')
+	if idx < 0 {
+		return len(p), nil
+	}
+	f.forward(string(f.partial[:idx+1]))
+	f.partial = append(f.partial[:0], f.partial[idx+1:]...)
+	return len(p), nil
+}
+
+// Flush forwards any buffered partial line.
+func (f *lineForwarder) Flush() {
+	defer perf.Track(nil, "step.lineForwarder.Flush")()
+
+	f.forwardMu.Lock()
+	defer f.forwardMu.Unlock()
+
+	if len(f.partial) == 0 {
+		return
+	}
+	f.forward(string(f.partial))
+	f.partial = nil
+}
+
+// String returns everything written so far, byte-for-byte.
+func (f *lineForwarder) String() string {
+	defer perf.Track(nil, "step.lineForwarder.String")()
+
+	f.forwardMu.Lock()
+	defer f.forwardMu.Unlock()
+
+	return f.captured.String()
 }

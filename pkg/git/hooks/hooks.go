@@ -4,6 +4,7 @@
 package hooks
 
 import (
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -24,9 +25,45 @@ const (
 	hooksDirPerm = 0o755
 )
 
-// ShimContent returns the generated shim content for a given hook name.
+// ShimContent returns the generated shim content for a given hook name. The shim finds atmos on
+// PATH.
 func ShimContent(hookName string) string {
-	return "#!/bin/sh\n" + ShimMarker + "\nexec atmos git hooks run " + hookName + " \"$@\"\n"
+	return ShimContentFor(hookName, "")
+}
+
+// ShimContentFor returns the generated shim content for a hook, pinned to the atmos binary that
+// installed it. The shim runs that absolute path when it is still executable, so a hook keeps
+// working from an IDE, a GUI Git client, or a cron job whose PATH does not include atmos, and it
+// falls back to PATH when the binary has moved or been removed. An empty atmosPath yields the
+// PATH-only shim.
+func ShimContentFor(hookName, atmosPath string) string {
+	if atmosPath == "" {
+		return "#!/bin/sh\n" + ShimMarker + "\nexec atmos git hooks run " + hookName + " \"$@\"\n"
+	}
+	return "#!/bin/sh\n" + ShimMarker + "\n" +
+		"atmos_bin=" + shellSingleQuote(atmosPath) + "\n" +
+		"[ -x \"$atmos_bin\" ] || atmos_bin=atmos\n" +
+		"exec \"$atmos_bin\" git hooks run " + hookName + " \"$@\"\n"
+}
+
+// shellSingleQuote quotes value for a POSIX shell.
+func shellSingleQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
+}
+
+// installedAtmosPath returns the absolute path of the running atmos binary for the shim, or "" when
+// it cannot be determined (the shim then relies on PATH). It is a variable so tests can fix it.
+var installedAtmosPath = func() string {
+	path, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return ""
+	}
+	// Forward slashes keep a Windows path valid for the POSIX shell that runs the shim.
+	return filepath.ToSlash(abs)
 }
 
 // NotConfiguredError builds an ErrGitHookNotConfigured error with a hint

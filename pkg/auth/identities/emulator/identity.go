@@ -14,6 +14,7 @@ package emulator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -225,6 +226,12 @@ func (i *Identity) resolveEmulatorEnvForContext(ctx context.Context, params *typ
 // structured details and hints. In particular, the component emulator resolver
 // provides the command needed to start a stopped emulator.
 func wrapResolverError(i *Identity, cause error) error {
+	if errors.Is(cause, errUtils.ErrEmulatorNotRunning) {
+		cause = errUtils.JoinPreservingHints(errUtils.ErrAuthenticationUnavailable, cause)
+	} else {
+		// Resolver/configuration failures are not unavailable credentials.
+		cause = errUtils.JoinPreservingHints(errUtils.ErrInvalidIdentityConfig, cause)
+	}
 	return errUtils.Build(errUtils.ErrEmulatorResolutionFailed).
 		WithCause(cause).
 		WithExplanationf("Could not resolve emulator %q for identity %q.", i.config.Emulator, i.Name()).

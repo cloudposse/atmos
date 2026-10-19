@@ -40,6 +40,9 @@ exclude_path = [
   # Go template files (badge URLs contain unrendered `{{ }}` placeholders,
   # e.g. pkg/ci/plugins/terraform/templates/test.md) — not real documentation.
   "pkg/ci",
+  # Golden Markdown fixtures for the container image summary renderer; they carry
+  # placeholder repository URLs (github.com/example/app) by design.
+  "pkg/container/testdata",
 ]
 
 # URL patterns to exclude (regex)
@@ -49,6 +52,10 @@ exclude = [
   "example\\.com",
   "cpco\\.io",
   "cloudposse\\.com.*utm_",
+  # These URLs repeatedly reset/refuse CI connections despite working outside CI.
+  # Keep other Cloud Posse pages and assets covered by link checks.
+  "^https?://cloudposse\\.com/?$",
+  "^https?://cloudposse\\.com/(support|office-hours|slack|readme/footer/img)/?$",
   # Private GitHub org (not accessible to CI)
   "github\\.com/cloudposse-corp",
   "slack\\.cloudposse\\.com",

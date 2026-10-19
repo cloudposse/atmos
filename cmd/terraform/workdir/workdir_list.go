@@ -89,6 +89,7 @@ func printListYAML(workdirs []WorkdirInfo) error {
 	return nil
 }
 
+// printListTable displays workdir sources and access times, or a message when none exist.
 func printListTable(workdirs []WorkdirInfo) {
 	if len(workdirs) == 0 {
 		ui.Writeln("No workdirs found")
@@ -143,7 +144,7 @@ func printListTable(workdirs []WorkdirInfo) {
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == table.HeaderRow {
 				return lipgloss.NewStyle().
-					Foreground(lipgloss.Color(theme.ColorCyan)).
+					Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 					Bold(true).
 					Padding(0, 2, 0, 0)
 			}

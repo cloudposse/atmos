@@ -10,6 +10,9 @@
 #   --auto-generate-backend-file - Override auto_generate_backend_file setting
 #   --init-run-reconfigure       - Override init_run_reconfigure setting
 #   --init-pass-vars             - Pass the generated varfile to terraform init
+#   --init-mode                  - Override components.terraform.init.mode (auto, always, never)
+#   --init-reconfigure           - Override components.terraform.init.reconfigure (auto, always, never)
+#   --init-upgrade               - Override components.terraform.init.upgrade (auto, always, never)
 #   --planfile                   - Path to a terraform plan file to use
 #   --skip-planfile              - Skip writing the plan to a planfile
 #   --deploy-run-init            - Override deploy_run_init setting
@@ -367,6 +370,79 @@ tests:
       - "--auto-generate-backend-file=true"
       - "--init-run-reconfigure=false"
       - "--planfile=/tmp/test.tfplan"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  # Test --init-mode/--init-reconfigure/--init-upgrade flags are recognized
+  - name: "terraform plan with --init-mode flag is recognized"
+    enabled: true
+    description: "Verify --init-mode flag is recognized on plan command"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--init-mode=never"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  - name: "terraform plan with --init-reconfigure flag is recognized"
+    enabled: true
+    description: "Verify --init-reconfigure flag is recognized on plan command"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--init-reconfigure=always"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  - name: "terraform plan with --init-upgrade flag is recognized"
+    enabled: true
+    description: "Verify --init-upgrade flag is recognized on plan command"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--init-upgrade=always"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  - name: "terraform output with --init-mode flag is recognized"
+    enabled: true
+    description: "Verify --init-mode flag is recognized on output command (registered separately since output doesn't pull in BackendExecutionFlags)"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "output"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--init-mode=never"
       - "--dry-run"
     expect:
       exit_code: 0

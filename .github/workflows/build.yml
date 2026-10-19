@@ -26,7 +26,7 @@ jobs:
       id-token: write
       contents: write
       pull-requests: write
-    uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@3911c663309ecdda30d8b8fcbec7bde19d1d6ddb # main
+    uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@281621d6f2e63a883ea884559ffdbb4895c1bd98 # main
     # `secrets: inherit`, not an explicit map: shared-release-branches.yml doesn't declare a
     # `workflow_call.secrets:` schema, so GitHub rejects a named-secret map against it outright
     # (this job only triggers on `release`/`workflow_dispatch`, not `pull_request`, so the
@@ -47,7 +47,7 @@ jobs:
       contents: read
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           # No StepSecurity telemetry found across 3 sampled release runs despite
           # this job succeeding on GitHub — a data gap (rare release-only trigger),
@@ -61,16 +61,44 @@ jobs:
       # their Homebrew-5 fix, so bumping the pin to v8 does not help (identical
       # code). Call the wrapped command directly instead - it is unaffected by the
       # wrapper bug. atmos lives in Homebrew/homebrew-core; bump-formula-pr forks it
-      # under the bot and opens the version-bump PR. HOMEBREW_NO_INSTALL_FROM_API
-      # forces brew to use the cloned core tap so the formula file is editable.
+      # under the bot and opens the version-bump PR.
+      #
+      # bump-formula-pr is a developer command that edits the formula's `.rb` file,
+      # so it needs homebrew/core checked out as a local tap. A fresh runner uses
+      # the formulae API with no tap, so bump-formula-pr fails with "No available
+      # formula with the name atmos" (verified across
+      # v1.228.0/v1.229.0/v1.230.0/v1.230.1/v1.231.0 release runs). Dropping
+      # HOMEBREW_NO_INSTALL_FROM_API never fixed this because the tap was still
+      # absent either way. The step below taps homebrew/core explicitly so the
+      # formula file exists; once tapped, bump-formula-pr resolves and edits atmos
+      # and opens the version-bump PR. Leave HOMEBREW_NO_INSTALL_FROM_API unset - it
+      # is unnecessary once the tap is present.
       - name: "Bump Homebrew formula"
         env:
           HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
           HOMEBREW_NO_AUTO_UPDATE: "1"
-          HOMEBREW_NO_INSTALL_FROM_API: "1"
           TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
+          # An unspecified-`shell` Linux `run:` step runs under `bash -e {0}` - a
+          # non-login, non-interactive shell that does not source /etc/profile.d/*,
+          # so the runner-preinstalled Homebrew's PATH entry
+          # (/home/linuxbrew/.linuxbrew/bin) is never loaded and `brew` resolves to
+          # "command not found" (exit 127) - the bump silently failed on every
+          # release. Load Homebrew explicitly here instead of relying on a login
+          # shell (see docs/fixes).
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          # bump-formula-pr edits the formula `.rb`, so homebrew/core must be tapped
+          # (see the comment above). Without this the bump fails "No available
+          # formula with the name atmos" on every release.
+          #
+          # `--force` is required: Homebrew 7.x on the runner now refuses a plain
+          # `brew tap homebrew/core` with "Tapping homebrew/core is no longer
+          # typically necessary. Add --force if you are sure you need it for
+          # contributing to Homebrew." (exit 1), which killed the v1.232.0 bump
+          # before bump-formula-pr even ran. We DO need the tap for contributing
+          # (bump-formula-pr edits the formula), so --force is the sanctioned path.
+          brew tap homebrew/core --force
           brew bump-formula-pr --no-browse --no-audit --version="${TAG#v}" atmos
 
   docker:
@@ -78,6 +106,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: release
     if: ${{ github.event_name == 'release' }}
+    # The pushed image reference, for jobs that run inside it (plugin-version).
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+      tag: ${{ steps.build.outputs.tag }}
     # Job-level permissions REPLACE (not extend) the workflow-level block above,
     # so everything this job needs must be re-listed here: contents/packages for
     # the checkout+push, id-token for cosign keyless signing, security-events for
@@ -89,7 +121,7 @@ jobs:
       security-events: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           # No StepSecurity telemetry found across sampled release runs despite
           # this job succeeding on GitHub — a data gap (rare release-only trigger),
@@ -151,7 +183,7 @@ jobs:
 
       - name: "Upload Trivy scan results to code-scanning"
         if: always()
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           sarif_file: trivy-results.sarif
 
@@ -164,6 +196,73 @@ jobs:
           echo '```json' >> $GITHUB_STEP_SUMMARY
           docker inspect "$DOCKER_IMAGE:$DOCKER_TAG" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # Keeps the Claude Code plugin manifests (agent-skills/.claude-plugin/plugin.json
+  # and .claude-plugin/marketplace.json) in step with each stable release, so
+  # `claude plugin update` can see new skills (#2895). Runs inside the image the
+  # `docker` job just pushed: `atmos version track update` resolves the latest
+  # release (version.dependencies.atmos in atmos.yaml) and `apply` rewrites both
+  # manifests (version.files, json manager), then a PR carries the change.
+  #
+  # A sibling job rather than a workflow triggered by the image's
+  # `registry_package` event: the image is pushed with the default GITHUB_TOKEN,
+  # and GitHub does not start workflow runs from events that token causes, so
+  # that trigger would likely never fire. `needs: docker` also guarantees the
+  # image exists before `container:` pulls it.
+  plugin-version:
+    name: "Update Claude Code plugin version"
+    runs-on: ubuntu-latest
+    needs: docker
+    if: ${{ github.event.release.prerelease == false }}
+    # Same environment as the other release jobs that mint a token from the
+    # GitHub App (see release-major-tag.yml).
+    environment: release
+    # The default GITHUB_TOKEN only reads (release lookups); every write goes
+    # through the GitHub App token below.
+    permissions:
+      contents: read
+    container:
+      image: ${{ needs.docker.outputs.image }}:${{ needs.docker.outputs.tag }}
+    steps:
+      - name: "Checkout the default branch"
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: "Update plugin manifests from the resolved atmos version"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          atmos version track update
+          atmos version track apply
+          echo "PLUGIN_VERSION=$(atmos version track get atmos)" >> "$GITHUB_ENV"
+
+      - name: "Generate a token"
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: github-app
+        with:
+          app-id: ${{ vars.BOT_GITHUB_APP_ID }}
+          private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: "Create or update PR"
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ steps.github-app.outputs.token }}
+          branch: "chore/update-plugin-version"
+          title: "chore: bump Claude Code plugin version to ${{ env.PLUGIN_VERSION }}"
+          delete-branch: true
+          sign-commits: true
+          add-paths: |
+            agent-skills/.claude-plugin/plugin.json
+            .claude-plugin/marketplace.json
+            versions.lock.yaml
+          commit-message: |
+            chore: bump Claude Code plugin version to ${{ env.PLUGIN_VERSION }}
+          base: ${{ github.event.repository.default_branch }}
+          labels: "no-release"
 
   # Rebuilds the release binaries from source at the published tag and
   # replaces GoReleaser's already-published assets with natively signed/SBOM'd
@@ -191,7 +290,7 @@ jobs:
       attestations: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           # No StepSecurity telemetry found across sampled release runs despite
           # this job succeeding on GitHub — a data gap (rare release-only trigger),

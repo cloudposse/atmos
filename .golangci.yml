@@ -20,12 +20,7 @@
 version: "2"
 run:
   tests: true
-  # magefiles/*.go carry `//go:build mage` so `go tool mage` only compiles
-  # them under that tag. Without this, golangci-lint's default build set
-  # excludes them entirely (either silently skipping this repo's own build
-  # tooling, or, for invocations that explicitly scope to ./magefiles,
-  # failing typechecking with "build constraints exclude all Go files in
-  # .../magefiles" instead of linting the package).
+  # Include the tagged Mage entrypoint along with its imported target packages.
   build-tags:
     - mage
   # golangci-lint takes a machine-global single-instance lock. Parallel
@@ -90,12 +85,33 @@ linters:
             - "!**/pkg/aws/identity/**"
             - "!**/pkg/aws/organization/**"
             - "!**/pkg/aws/security/**"
+            - "!**/pkg/aws/cloudformation/**"
+            # S3 uploads are an AWS-specific leaf used by the generic step engine.
+            - "!**/pkg/aws/s3upload/**"
             - "!**/pkg/provisioner/backend/**"
+            # pkg/component/aws/cloudformation is the SDK-native aws/cloudformation
+            # component type; it deploys directly through the CloudFormation API and
+            # deliberately depends on the AWS SDK (docs/prd/aws-cloudformation-component.md).
+            - "!**/pkg/component/aws/cloudformation/**"
+            # cmd/aws/cloudformation/backend's tests construct a fake S3ClientAPI (the
+            # same pattern pkg/provisioner/backend/s3_test.go and
+            # pkg/component/aws/cloudformation/backend_test.go use) to exercise
+            # backend describe/list without a real AWS call.
+            - "!**/cmd/aws/cloudformation/backend/**"
             - "!**/pkg/ci/github/**"
             - "!**/pkg/ci/providers/github/**"
             - "!**/pkg/ci/planfile/github/**"
             - "!**/pkg/ci/planfile/s3/**"
+            # pkg/ci/artifact/s3 is the S3-backed CI artifact store; it legitimately
+            # depends on the AWS SDK, same rationale as pkg/ci/planfile/s3 above.
+            - "!**/pkg/ci/artifact/s3/**"
+            # The S3 downloader signs source requests with request-scoped AWS credentials.
+            # Only this cloud-specific leaf imports the SDK; the parent downloader stays generic.
+            - "!**/pkg/downloader/s3/**"
             - "!**/pkg/github/**"
+            # The S3 deployment Mage target is an AWS-specific build tool and
+            # intentionally uses the AWS SDK instead of shelling out to a CLI.
+            - "!**/magefiles/s3/**"
             - "$test"
           deny:
             # AWS: Identity and auth-related SDKs
@@ -320,7 +336,8 @@ linters:
           - gocognit
           - gosec
           - revive
-        path: _test\.go$
+        # Shared Mage test fixtures are imported by tagged tests only.
+        path: _test\.go$|^magefiles/internal/(testutil|githubtest)/
       - linters:
           - cyclop
         path: (.+)_test\.go
@@ -335,7 +352,7 @@ linters:
       # packages from regressing to serial execution.
       - linters:
           - paralleltest
-        path-except: ^pkg/describe/[^/]+_test\.go$|^cmd/terraform/(flags|init|log_order|missing_plan|options|terraform|utils_exit_wrapping|varfile)_test\.go$|^cmd/toolchain/(du|provider|which)_test\.go$|^internal/exec/(atlantis_utils|ci_exit_codes|cli_utils_helpers|cli_utils_identity|component_resolver|component_utils|dependency_parser|describe_affected_authdisabled|describe_affected_components|describe_affected_deleted|describe_affected_optimizations|describe_affected_utils_2|describe_config|describe_dependents_authdisabled|describe_dependents_index|describe_locals|file_utils|filter_utils|helmfile_utils|metadata_inheritance|packer_utils|path_utils|pro|shell_utils_exec_metadata|spacelift_utils|stack_loader|stack_metadata_component_path|stack_processor_backend|stack_processor_component_finder|stack_processor_custom_inheritance|stack_processor_locals|stack_processor_merge_errors|stack_processor_merge_secrets|stack_processor_source_normalize|stack_processor_template|stack_utils|stacks_processor|template_processing|template_utils|template_utils_unix|terraform_all_simple|terraform_component_path_utils|terraform_declared_var_type|terraform_execute_exit_wrapping|terraform_exitcode|terraform_generate_backend|terraform_generate_required_providers|terraform_generate_varfile_unix|terraform_managed_cache|terraform_mirror_targets|terraform_nested_auth_helper|terraform_output_authcontext_wrapper|terraform_output_utils|terraform_plan_diff_args|terraform_plan_diff_comparison|terraform_plan_diff_formatting|terraform_plan_diff_main|terraform_plan_diff_preparation|terraform_rc_merge|terraform_remote_state_backend_utils|terraform_verify_plan|utils_auth_merge_deepmerge|utils_authmanager_propagation|validate_utils|vendor_exclude|vendor|vendor_uri_helpers|yaml_func_process_custom_tags|yaml_func_resolution_context|yaml_func_return_types|yaml_func_tags|yaml_func|yaml_func_unset|yaml_func_unsupported_tags|yaml_func_yq_expressions|yaml_processor)_test\.go$|^pkg/ai/tools/atmos/(auth_list|auth_whoami|config_delete|config_format|config_get|config_list|config_set|describe_affected|describe_component|describe_workflows|edit_file|execute_bash|execute_command|get_template_context|list_component_files|list_workflows|read_component_file|read_file|read_stack_file|search_files|setup|terraform_hcl_edit|terraform_hcl_get|validate_file_lsp|version_track_status|version_track_update|web_search|write_component_file|write_stack_file)_test\.go$|^pkg/config/(atmos_decode_hook|config_merge|config_path_absolute|const|default_snapshot|dotenv_include_load|edition_invariants|identity|interface|load_command_env|load_config|load_yaml_path|log_level|process_yaml_decode_branches|process_yaml_random|process_yaml_unset|profiles_public|schema_type|stack_auth_helpers|stack_auth_loader|utils_additional|version_files_decode)_test\.go$|^pkg/pro/(api_client_commit|api_client_exchange_oidc_token|api_client_exec|api_client_instance_status|api_client_instances|api_client_lock|api_client_pro_sts|api_client_unlock|api_client_upload_affected_stacks|api_error|chunked_upload|consumer_pact|envelope|retry|wrap)_test\.go$|^pkg/runner/step/(atmos|background_steps|choose|command_handlers|command_result|container_actions_extra|container_env|container_inspect|container_push|control_handlers|control_seam|documentation|env|exec|filter|hint|http_e2e|http|input|interactive_handlers|join|log|pager|registry|require|sleep|store|title|ui_handlers)_test\.go$|^pkg/terraform/ui/(confirm|init_model|parser|resource|tree|tree_utils|types)_test\.go$|^pkg/toolchain/installer/(asset|download_retry|download|extract|lock_tool|override|override_verification|platform|verification_integration|verifier_trust_darwin)_test\.go$|^pkg/toolchain/registry/aqua/(resolve|version_constraint)_test\.go$
+        path-except: ^pkg/describe/[^/]+_test\.go$|^cmd/terraform/(flags|init|log_order|missing_plan|options|terraform|utils_exit_wrapping|varfile)_test\.go$|^cmd/toolchain/(du|provider|which)_test\.go$|^internal/exec/(atlantis_utils|ci_exit_codes|cli_utils_helpers|cli_utils_identity|component_resolver|component_utils|dependency_parser|describe_affected_authdisabled|describe_affected_components|describe_affected_deleted|describe_affected_optimizations|describe_affected_utils_2|describe_config|describe_dependents_authdisabled|describe_dependents_index|describe_locals|file_utils|filter_utils|helmfile_utils|metadata_inheritance|packer_utils|path_utils|pro|shell_utils_exec_metadata|spacelift_utils|stack_loader|stack_metadata_component_path|stack_processor_backend|stack_processor_component_finder|stack_processor_custom_inheritance|stack_processor_locals|stack_processor_merge_errors|stack_processor_merge_secrets|stack_processor_source_normalize|stack_processor_template|stack_utils|stacks_processor|template_processing|template_utils|template_utils_unix|terraform_all_simple|terraform_component_path_utils|terraform_declared_var_type|terraform_execute_exit_wrapping|terraform_exitcode|terraform_generate_backend|terraform_generate_required_providers|terraform_generate_varfile_unix|terraform_managed_cache|terraform_mirror_targets|terraform_nested_auth_helper|terraform_output_authcontext_wrapper|terraform_output_utils|terraform_plan_diff_args|terraform_plan_diff_main|terraform_plan_diff_preparation|terraform_rc_merge|terraform_remote_state_backend_utils|terraform_verify_plan|utils_auth_merge_deepmerge|utils_authmanager_propagation|validate_utils|vendor_exclude|vendor|vendor_uri_helpers|yaml_func_process_custom_tags|yaml_func_resolution_context|yaml_func_return_types|yaml_func_tags|yaml_func|yaml_func_unset|yaml_func_unsupported_tags|yaml_func_yq_expressions|yaml_processor)_test\.go$|^pkg/ai/tools/atmos/(auth_list|auth_whoami|config_delete|config_format|config_get|config_list|config_set|describe_affected|describe_component|describe_workflows|edit_file|execute_bash|execute_command|get_template_context|list_component_files|list_workflows|read_component_file|read_file|read_stack_file|search_files|setup|terraform_hcl_edit|terraform_hcl_get|validate_file_lsp|version_track_status|version_track_update|web_search|write_component_file|write_stack_file)_test\.go$|^pkg/config/(atmos_decode_hook|config_merge|config_path_absolute|const|default_snapshot|dotenv_include_load|edition_invariants|identity|interface|load_command_env|load_config|load_yaml_path|log_level|process_yaml_decode_branches|process_yaml_random|process_yaml_unset|profiles_public|schema_type|stack_auth_helpers|stack_auth_loader|utils_additional|version_files_decode)_test\.go$|^pkg/pro/(api_client_commit|api_client_exchange_oidc_token|api_client_exec|api_client_instance_status|api_client_instances|api_client_lock|api_client_pro_sts|api_client_unlock|api_client_upload_affected_stacks|api_error|chunked_upload|consumer_pact|envelope|retry|wrap)_test\.go$|^pkg/runner/step/(atmos|background_steps|choose|command_handlers|command_result|container_actions_extra|container_env|container_inspect|container_push|control_handlers|control_seam|documentation|env|exec|filter|hint|http_e2e|http|input|interactive_handlers|join|log|pager|registry|require|sleep|store|title|ui_handlers)_test\.go$|^pkg/terraform/ui/(confirm|init_model|parser|resource|tree|tree_utils|types)_test\.go$|^pkg/toolchain/installer/(asset|download_retry|download|extract|lock_tool|override|override_verification|platform|verification_integration|verifier_trust_darwin)_test\.go$|^pkg/toolchain/registry/aqua/(resolve|version_constraint)_test\.go$
       # Allow fmt.Errorf when wrapping static errors from errUtils package
       - linters:
           - err113
@@ -356,7 +373,8 @@ linters:
         text: "viper\\.BindEnv|viper\\.BindPFlag"
       - linters:
           - forbidigo
-        path: _test\.go$
+        # Shared Mage test fixtures are imported by tagged tests only.
+        path: _test\.go$|^magefiles/internal/(testutil|githubtest)/
         text: "viper\\.BindEnv|viper\\.BindPFlag"
       # Legacy direct process output. New production code should use the Atmos
       # I/O layer so stdout/stderr routing and masking stay consistent.
@@ -414,8 +432,7 @@ linters:
           - forbidigo
         path: ^cmd/terraform/planfile/
         text: "os\\.Getenv"
-      # Mage build tooling (magefiles/ — only compiled via the `mage` build
-      # tag, invoked through `go tool mage`). It's a standalone dev-tooling
+      # Mage build tooling (magefiles/, invoked through `go tool mage`). It's a standalone dev-tooling
       # entrypoint outside the Atmos CLI/UI runtime and config pipeline, so
       # the Atmos I/O-layer, env-binding, and perf.Track conventions (written
       # for shipped product code) don't apply here.

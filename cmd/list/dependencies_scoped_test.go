@@ -37,6 +37,7 @@ func TestExecuteListDependenciesCmd_ScopedEvaluationAvoidsUnrelatedStack(t *test
 	chdirToDependenciesScopedFixture(t)
 
 	cmd := newCmdWithListParser("dependencies", dependenciesParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
 	opts := &DependenciesOptions{
 		Format:           "json",
 		Direction:        "both",
@@ -44,7 +45,6 @@ func TestExecuteListDependenciesCmd_ScopedEvaluationAvoidsUnrelatedStack(t *test
 		Component:        "child",
 		ProcessTemplates: true,
 		ProcessFunctions: true,
-		AuthDisabled:     true,
 	}
 
 	err := executeListDependenciesCmd(cmd, []string{"child"}, opts)
@@ -52,50 +52,48 @@ func TestExecuteListDependenciesCmd_ScopedEvaluationAvoidsUnrelatedStack(t *test
 		"bounded --stack app-a must never evaluate app-b's always-erroring component")
 }
 
-// TestExecuteListDependenciesCmd_ScopedEvaluationPropagatesError proves that a
-// bounded request whose own seed stack fails evaluation surfaces the error
-// through buildScopedDependencyGraph rather than being swallowed: unlike
-// TestExecuteListDependenciesCmd_ScopedEvaluationAvoidsUnrelatedStack (which
-// bounds to the healthy app-a), this bounds directly to app-b, whose `broken`
-// component always fails template rendering once evaluated.
-func TestExecuteListDependenciesCmd_ScopedEvaluationPropagatesError(t *testing.T) {
+// Even a selected component's unused values must not be evaluated for a graph.
+func TestExecuteListDependenciesCmd_ScopedEvaluationSkipsUnusedValue(t *testing.T) {
 	initExecutorTestIO(t)
 	chdirToDependenciesScopedFixture(t)
 
 	cmd := newCmdWithListParser("dependencies", dependenciesParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
 	opts := &DependenciesOptions{
 		Format:           "json",
 		Direction:        "both",
 		Stack:            "app-b",
 		ProcessTemplates: true,
 		ProcessFunctions: true,
-		AuthDisabled:     true,
 	}
 
 	err := executeListDependenciesCmd(cmd, []string{}, opts)
-	require.Error(t, err, "a bounded request whose own seed stack fails evaluation must surface the error")
+	require.NoError(t, err, "the graph does not consume the broken vars value")
+
+	// A failure in a value required by evaluation must still propagate through
+	// the scoped closure engine. This explicitly adds that value to its inputs.
+	describe, err := newDependenciesDescribeContext(cmd, nil, opts)
+	require.NoError(t, err)
+	describe.atmosConfig.ListEvaluationPaths = append(describe.atmosConfig.ListEvaluationPaths, []string{"vars", "upstream_value"})
+	_, err = buildScopedDependencyGraph(describe, opts)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "app-b must never be evaluated")
 }
 
-// TestExecuteListDependenciesCmd_UnboundedStillEvaluatesEverything documents the
-// known, unchanged boundary of the fix: with no --stack/--component filter,
-// there is no closure to scope evaluation to, so every stack (including
-// app-b's always-erroring component) is still evaluated — matching historical
-// behavior exactly, not a regression introduced by this fix.
-func TestExecuteListDependenciesCmd_UnboundedStillEvaluatesEverything(t *testing.T) {
+// An unbounded graph needs every stack's edges, not every stack's values.
+func TestExecuteListDependenciesCmd_UnboundedSkipsUnusedValues(t *testing.T) {
 	initExecutorTestIO(t)
 	chdirToDependenciesScopedFixture(t)
 
 	cmd := newCmdWithListParser("dependencies", dependenciesParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
 	opts := &DependenciesOptions{
 		Format:           "json",
 		Direction:        "both",
 		ProcessTemplates: true,
 		ProcessFunctions: true,
-		AuthDisabled:     true,
 	}
 
 	err := executeListDependenciesCmd(cmd, []string{}, opts)
-	require.Error(t, err, "an unbounded request has no closure to scope to, so app-b's error still surfaces")
-	assert.Contains(t, err.Error(), "app-b must never be evaluated")
+	require.NoError(t, err, "unused values remain unevaluated even without a stack filter")
 }

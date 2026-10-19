@@ -649,11 +649,7 @@ func ciEnabled(ctx *ExecContext) bool {
 // ciSummaryEnabled reports whether the job step summary should be written.
 // Defaults to true (nil) when ci.enabled, matching ci.summary's default.
 func ciSummaryEnabled(ctx *ExecContext) bool {
-	if !ciEnabled(ctx) {
-		return false
-	}
-	e := ctx.AtmosConfig.CI.Summary.Enabled
-	return e == nil || *e
+	return ctx != nil && ci.SummaryEnabled(ctx.AtmosConfig)
 }
 
 // ciAnnotationsEnabled reports whether inline annotations should be emitted.
@@ -693,6 +689,9 @@ func buildAtmosEnv(ctx *ExecContext, outputFile, outputDir string) map[string]st
 	}
 	if ctx.Outcome.Err != nil {
 		env["ATMOS_HOOK_ERROR"] = ctx.Outcome.Err.Error()
+	}
+	if ctx.HookDepth > 0 {
+		env[HookDepthEnvVar] = strconv.Itoa(ctx.HookDepth)
 	}
 	return env
 }
@@ -782,6 +781,8 @@ func componentBasePath(atmosConfig *schema.AtmosConfiguration, componentType str
 		return atmosConfig.KubernetesDirAbsolutePath
 	case cfg.HelmComponentType:
 		return atmosConfig.HelmDirAbsolutePath
+	case cfg.CloudFormationComponentType:
+		return atmosConfig.CloudFormationDirAbsolutePath
 	default:
 		return ""
 	}

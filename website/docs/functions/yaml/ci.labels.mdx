@@ -1,0 +1,135 @@
+---
+title: "!ci.labels"
+sidebar_position: 95
+sidebar_label: "!ci.labels"
+sidebar_class_name: command
+description: Read live CI review labels or test whether all requested labels are present
+---
+
+The `!ci.labels` YAML function reads labels on the current CI pull request or merge request.
+GitHub Actions is the initial supported provider.
+
+## Usage
+
+```yaml
+components:
+  terraform:
+    preview:
+      vars:
+        review_labels: !ci.labels
+      metadata:
+        labels:
+          preview: !ci.labels [preview]
+      settings:
+        pro:
+          enabled: !ci.labels [preview]
+```
+
+Bare `!ci.labels` returns a sorted list of label names. Supplying a list returns a boolean:
+
+```yaml
+settings:
+  pro:
+    enabled: !ci.labels [preview, deploy]
+```
+
+This is true only when **all** requested labels exist. Names are case-sensitive and matched
+literally. Quote names containing spaces or names YAML would interpret as another type:
+
+```yaml
+vars:
+  ready: !ci.labels ["needs review", "true"]
+```
+
+Arguments must be a nonempty list of nonempty strings. Empty lists, empty names, quoted or bare
+scalars such as `"[preview]"`, mappings, non-string elements, aliases, and nested function calls are
+errors. Block sequences are also supported. Write the bare form on its own line (`key: !ci.labels`);
+inside a one-line flow mapping such as `{ labels: !ci.labels }` YAML reads the closing brace as part of the tag.
+
+Because the expression is evaluated after merging, `atmos validate stacks` and `atmos describe stacks`
+accept it in boolean fields such as `settings.pro.enabled` and `metadata.enabled`.
+
+## Selecting affected components
+
+With `metadata.labels.preview` defined as above:
+
+```shell
+atmos describe affected --labels preview:true
+```
+
+The result contains affected components whose `preview` label resolves to true. The selector
+also accepts `preview=true`. It filters the affected set; a matching label alone does not make
+a component affected.
+
+Boolean Atmos labels compare as `"true"` and `"false"` for selection, while resolved stack output
+retains the boolean value. The expression works in inherited component metadata and global
+`metadata.labels` defaults. `!ci.labels` is permitted in metadata selectors as an explicit CI read.
+
+## Live lookup and credentials
+
+Atmos fetches current labels from the provider API on first use, then shares that snapshot
+across components for the rest of the invocation. A subsequent invocation fetches again.
+Labels come from the live review, rather than the event payload's snapshot.
+
+GitHub Actions uses the current CI review identity. Provide a token through the first available
+variable in this order: `ATMOS_CI_GITHUB_TOKEN`, `ATMOS_PRO_GITHUB_TOKEN`, `GITHUB_TOKEN`, `GH_TOKEN`.
+For GitHub Actions, pass the workflow token to the Atmos step:
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: read
+
+steps:
+  - uses: actions/checkout@v4
+  - run: atmos describe affected --labels preview:true
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+```
+
+This assumes Atmos is already installed. The label endpoint accepts pull-request read permission;
+see [GitHub's label API documentation](https://docs.github.com/en/rest/issues/labels#list-labels-for-an-issue).
+Existing `ATMOS_CI_GITHUB_API_URL` / `GITHUB_API_URL` configuration supports GitHub Enterprise.
+CI reporting and Atmos Pro do not need to be enabled to read labels.
+
+## Merge queues
+
+On GitHub Actions `merge_group` events, `!ci.labels` reads labels from the individual PR
+associated with that queue run. A queue checkout may include changes from earlier PRs, but
+those PRs do not contribute labels. For example, a `preview` label on PR #41 does not enable
+preview behavior for PR #42's queue run.
+
+Enable the merge-queue trigger alongside your pull-request trigger:
+
+```yaml
+on:
+  pull_request:
+  merge_group:
+    types: [checks_requested]
+```
+
+Atmos identifies the PR from GitHub's queue ref, such as
+`refs/heads/gh-readonly-queue/main/pr-42-<sha>`. It uses `merge_group.head_ref` from the event
+payload, falling back to `GITHUB_REF` or `GITHUB_REF_NAME` when the head ref is absent.
+Labels use the same credentials, live lookup, and invocation snapshot as ordinary PR runs.
+An unrecognized queue ref produces an error when labels are evaluated.
+
+See [GitHub's merge-queue documentation](https://docs.github.com/en/enterprise-cloud@latest/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue)
+for how each queued PR is tested with preceding changes.
+
+## Local runs, errors, and skipping
+
+Outside a review context, including local execution and push events, the function returns `[]`
+or `false` without an API request. It does not discover a PR from the current branch.
+
+If a review exists, missing credentials, incomplete review identity, unsupported provider
+capabilities, and API failures are errors. Atmos does not convert those failures into false or
+fall back to event labels. API reads have a 30-second timeout.
+
+Use `--skip=ci.labels` or `--process-functions=false` on commands supporting those options to
+preserve the expression without fetching labels.
+
+## Related functions
+
+- [`!labels`](/functions/yaml/labels) reads Atmos component metadata labels, a key-value map.
+- [`!tags`](/functions/yaml/tags) reads Atmos component metadata tags.

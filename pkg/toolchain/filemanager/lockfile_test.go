@@ -610,3 +610,16 @@ func TestLockFileManager_AddTool_WithPlatform(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "linux_amd64")
 }
+
+func TestLockFileManagerFrozenRejectsWrites(t *testing.T) {
+	root := t.TempDir()
+	m := NewLockFileManager(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{
+		FrozenLockFile: true, LockFile: filepath.Join(root, "toolchain.lock.yaml"),
+	}})
+	require.True(t, m.Enabled())
+	require.ErrorIs(t, m.AddTool(context.Background(), "owner/tool", "1.0.0"), errUtils.ErrFrozenLockfile)
+	require.ErrorIs(t, m.RemoveTool(context.Background(), "owner/tool", "1.0.0"), errUtils.ErrFrozenLockfile)
+	files, err := os.ReadDir(root)
+	require.NoError(t, err)
+	require.Empty(t, files)
+}

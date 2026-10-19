@@ -15,7 +15,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/vendoring"
 )
@@ -210,13 +210,9 @@ func runUpdateWithSpinner(doWork vendorUpdateWork) (*vendoring.UpdateReport, err
 		return doWork(nil)
 	}
 
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
-	fps.Apply(&s)
+	s := ui.NewSpinner()
 
-	bar := progress.New(
-		progress.WithDefaultGradient(),
+	bar := ui.NewProgress(
 		progress.WithWidth(progressBarWidth),
 		progress.WithoutPercentage(),
 	)

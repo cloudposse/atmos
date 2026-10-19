@@ -5,7 +5,7 @@ authors: [osterman]
 tags: [enhancement, breaking-change]
 ---
 
-Reading `!terraform.state` and `!terraform.output` can fail to resolve for a dozen
+Reading [`!terraform.state`](/functions/yaml/terraform.state) and [`!terraform.output`](/functions/yaml/terraform.output) can fail to resolve for a dozen
 different reasons — the backend hasn't been applied yet, your credentials aren't
 configured, you don't have access to the bucket, or the state you're reading just isn't
 the latest. Any one of those, on any one component, used to abort the *entire*
@@ -100,7 +100,9 @@ that intentionally wanted `list stacks` to fail when a backend wasn't ready — 
 `--error-mode=strict` (or `list.error_mode: strict` / `describe.error_mode: strict` in
 `atmos.yaml`, matching the command family you rely on) to restore it explicitly.
 
+For usage and configuration, see [List Command Configuration](/cli/configuration/list).
+
 ## Get Involved
 
-Try `atmos list stacks` against a stack you haven't fully provisioned yet, and let us know
+Try [`atmos list stacks`](/cli/commands/list/stacks) against a stack you haven't fully provisioned yet, and let us know
 what you think in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

@@ -10,6 +10,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -91,12 +93,11 @@ func getRunnableDescribeStacksCmd(
 			return err
 		}
 
-		// Go templates (notably atmos.Component()) and YAML functions can both require
-		// credentials. Resolve the default identity whenever either processing path is
-		// enabled, or when the caller explicitly selected an identity.
+		// Only explicit identity selection authenticates at the command boundary.
+		// Default identities are resolved when a requested value needs credentials.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
 		identityExplicit := cmd.Flags().Changed(cfg.IdentityFlagName)
-		if shouldCreateDescribeStacksAuthManager(describe.ProcessTemplates, describe.ProcessYamlFunctions, identityExplicit) {
+		if !authdeferred.ConfigureAuth(&atmosConfig, identityName) && shouldCreateDescribeStacksAuthManager(describe.ProcessTemplates, describe.ProcessYamlFunctions, identityExplicit || identityName != "") {
 			// Category B: describe stacks operates on multiple stacks/components with no single
 			// target (component, stack) pair. Use the SCAN wrapper so stack-level default identities
 			// (including those declared in imported _defaults.yaml files) are discovered. See
@@ -107,6 +108,10 @@ func getRunnableDescribeStacksCmd(
 			}
 			describe.AuthManager = authManager
 		}
+		if describe.AuthManager == nil {
+			describe.AuthManager, _ = atmosConfig.AuthManager.(auth.AuthManager)
+		}
+		atmosConfig.AuthManager = describe.AuthManager
 
 		// Global --pager flag is now handled in cfg.InitCliConfig
 

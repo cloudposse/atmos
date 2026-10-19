@@ -23,7 +23,10 @@ func ResolveRef(ctx context.Context, ref string) (string, error) {
 
 	log.Debug("Resolving git ref to SHA", "ref", ref)
 
-	sha, err := github.GetRefSHA(ctx, atmosOwner, atmosRepo, ref)
+	// Atmos self-install is a toolchain concern: the atmos binary's own build artifacts live
+	// on public github.com by default even for GHES users (see ToolchainEndpoints), so this
+	// uses the toolchain-scoped fetcher rather than the RepoEndpoints-scoped free function.
+	sha, err := github.NewToolchainArtifactFetcher(ctx).GetRefSHA(ctx, atmosOwner, atmosRepo, ref)
 	if err != nil {
 		return "", handleRefResolveError(err, ref)
 	}
@@ -33,7 +36,7 @@ func ResolveRef(ctx context.Context, ref string) (string, error) {
 
 // handleRefResolveError converts ref-resolution errors into user-friendly errors.
 func handleRefResolveError(err error, ref string) error {
-	refURL := fmt.Sprintf("https://github.com/%s/%s/tree/%s", atmosOwner, atmosRepo, ref)
+	refURL := fmt.Sprintf("%s/%s/%s/tree/%s", github.ToolchainEndpoints().ServerURL, atmosOwner, atmosRepo, ref)
 
 	if errors.Is(err, github.ErrRefNotFound) {
 		return errUtils.Build(errUtils.ErrToolNotFound).

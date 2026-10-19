@@ -1,0 +1,90 @@
+---
+slug: scaffold-directory-glob
+title: "Skip or duplicate a whole directory with glob spec.files[].path"
+date: 2026-09-18T12:00:00.000Z
+authors: [jorrite]
+tags: [feature]
+---
+
+A scaffold template's `spec.files[]` entries have always matched one discovered file at a time —
+every file that needed gating or duplicating got its own entry, one `path:` per file. That's fine
+for a handful of files. It breaks down the moment the thing you want to skip or duplicate is a
+whole directory: a legacy docs tree gated behind an opt-in answer, or a `components/` tree that
+needs to exist once per environment, region, or tenant. Either case meant repeating the same
+`when:` or the same `matrix:` on every file inside the directory, one entry per file, kept in sync
+by hand as the directory grew.
+
+<!--truncate-->
+
+## The Problem
+
+The `matrix:` field already expands a single declared file into one generated file per selected value —
+pick three environments, get three files, from one template file. But real templates aren't
+single files; they're whole directories. A `components/` tree with a dozen resources that needs
+to exist under every environment couldn't be matrixed as a unit — only file by file, one
+`spec.files[]` entry per file, each with its own repeated `matrix:` and `target:`. Skipping a
+directory recursively (docs that only ship when an answer opts in, a cloud-specific subtree that
+only applies to one provider) had the same problem in miniature: one `when:`-gated entry per file,
+duplicated across every file the directory contained.
+
+## The Fix
+
+The [`spec.files[].path`](/cli/commands/scaffold/generate#glob-paths-and-directory-level-matrix)
+field can now be a glob pattern instead of a literal path — `*`, `?`, `[...]`, `**` for any depth, and
+`{a,b}` brace expansion — matched against every file the template discovers. One entry now covers
+an entire directory:
+
+```yaml
+spec:
+  files:
+    - path: "docs/legacy/**"
+      when: "answers.include_legacy_docs"
+```
+
+The `when:` field still evaluates exactly as it does for a single file — it just now applies to every file
+the glob matches, at any depth, recursively, with no per-file repetition. When more than one
+entry's `path:` matches the same file, the *last* one declared wins, the same precedence
+`.gitignore`/`CODEOWNERS` use: write broad patterns first, specific overrides after.
+
+Combine a glob `path:` with [`matrix:`](/cli/commands/scaffold/generate#dynamic-file-generation)
+and `target:` to duplicate an entire directory once per combination, the same way a single file
+already could:
+
+```yaml
+spec:
+  files:
+    - path: "components/**"
+      target: "environments/{{ .matrix.env }}/{{ .file.RelPath }}"
+      matrix:
+        env: [dev, staging, production]
+```
+
+Since a glob can match many files, `target:` needs to know *which* matched file an output came
+from — `.file.RelPath` is that file's own path with the glob's literal prefix stripped (so
+`components/vpc/main.tf` becomes `vpc/main.tf`), available in `target:` and the file's own content
+alongside `.matrix.<axis>`. A `components/` directory with `vpc/main.tf` and `eks/main.tf`
+produces six files across three environments — each preserving its own relative position under
+every environment.
+
+## How to Use It
+
+The [scaffolding-directory-matrix example](/examples/scaffolding-directory-matrix) is a minimal,
+runnable template — a two-resource `components/` directory duplicated once per selected
+environment:
+
+```shell
+cd examples/scaffolding-directory-matrix
+atmos scaffold generate example ./my-project --set environments=dev,staging
+```
+
+This generates four files: `environments/dev/vpc/main.tf`, `environments/dev/eks/main.tf`, and
+the same pair under `staging/` — two full copies of `components/`, one per selected environment,
+without listing `vpc/main.tf` and `eks/main.tf` individually in `scaffold.yaml`. Add a glob
+`path:` to any `spec.files[]` entry in your own templates — with `when:` alone to skip a
+directory, or with `matrix:` and `.file.RelPath` in `target:` to duplicate one.
+
+## Get Involved
+
+See the [`atmos scaffold generate`](/cli/commands/scaffold/generate#glob-paths-and-directory-level-matrix)
+docs for the full reference, or [open an issue](https://github.com/cloudposse/atmos/issues) with
+feedback.

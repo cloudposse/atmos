@@ -41,6 +41,12 @@ var ErrGitHubTokenRequired = errors.New("GitHub token required")
 // Use GetGitHubTokenOrError if you need to require authentication.
 func GetGitHubToken() string {
 	defer perf.Track(nil, "github.GetGitHubToken")()
+	return GetGitHubTokenContext(context.Background())
+}
+
+// GetGitHubTokenContext resolves an optional token while honoring caller cancellation.
+func GetGitHubTokenContext(ctx context.Context) string {
+	defer perf.Track(nil, "github.GetGitHubTokenContext")()
 
 	// First, try the standard Atmos token detection (CLI flag + env vars).
 	if token := httpClient.GetGitHubTokenFromEnv(); token != "" {
@@ -48,7 +54,7 @@ func GetGitHubToken() string {
 	}
 
 	// Fall back to GitHub CLI if installed.
-	if token := GetGitHubTokenFromCLI(); token != "" {
+	if token := GetGitHubTokenFromCLIContext(ctx); token != "" {
 		log.Debug("Using GitHub token from gh CLI")
 		return token
 	}
@@ -82,6 +88,28 @@ func GetGitHubTokenOrError() (string, error) {
 // token injection in pkg/downloader) can call the same fallback without duplicating it.
 func GetGitHubTokenFromCLI() string {
 	defer perf.Track(nil, "github.GetGitHubTokenFromCLI")()
+	return GetGitHubTokenFromCLIContext(context.Background())
+}
+
+// GetGitHubTokenFromCLIContext bounds the CLI lookup by both caller cancellation
+// and the existing five-second CLI timeout. Cancellation leaves the token empty.
+func GetGitHubTokenFromCLIContext(parent context.Context) string {
+	defer perf.Track(nil, "github.GetGitHubTokenFromCLIContext")()
+	return gitHubTokenFromCLIForHost(parent, "")
+}
+
+// gitHubTokenForHost resolves explicitly configured credentials before a host-specific CLI lookup.
+func gitHubTokenForHost(ctx context.Context, host string) string {
+	if token := httpClient.GetGitHubTokenFromEnv(); token != "" {
+		return token
+	}
+	return gitHubTokenFromCLIForHost(ctx, host)
+}
+
+func gitHubTokenFromCLIForHost(parent context.Context, host string) string {
+	if parent.Err() != nil {
+		return ""
+	}
 
 	cli := gitHubCLIBinary()
 	if cli == "" {
@@ -90,9 +118,13 @@ func GetGitHubTokenFromCLI() string {
 	}
 
 	// Try to get token from the GitHub CLI with timeout to prevent hanging.
-	ctx, cancel := context.WithTimeout(context.Background(), ghCLITimeout)
+	ctx, cancel := context.WithTimeout(parent, ghCLITimeout)
 	defer cancel()
-	cmd := commander.CommandContext(ctx, cli, "auth", "token")
+	args := []string{"auth", "token"}
+	if host != "" {
+		args = append(args, "--hostname", host)
+	}
+	cmd := commander.CommandContext(ctx, cli, args...)
 	output, err := cmd.Output()
 	if err != nil {
 		// CLI not installed, not authenticated, or redirected to a missing binary - this is expected.

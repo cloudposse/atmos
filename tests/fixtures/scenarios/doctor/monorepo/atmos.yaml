@@ -1,0 +1,10 @@
+# Monorepo doctor fixture: sources that still point at the archived terraform-aws-components
+# monorepo, in every location doctor repairs, plus the ones it can only report.
+base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths: ["**/*"]
+  name_template: "{{ .vars.stage }}"

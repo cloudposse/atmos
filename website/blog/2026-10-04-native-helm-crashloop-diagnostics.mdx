@@ -1,0 +1,55 @@
+---
+slug: native-helm-crashloop-diagnostics
+title: "See why a Helm release failed, right in the Atmos error"
+authors: [aknysh]
+tags: [feature, experimental]
+---
+
+A controller rollout times out. The deploy fails with "release did not become ready within 5m0s" and nothing else. So you switch to the cluster, run `kubectl get pods`, then `describe`, then `logs` on whichever pod looks wrong - and in CI you often can't do any of that. Worse, if the release is set to roll back on failure, the rollback has already deleted the crashing pods by the time you look, taking the evidence with it.
+
+Native Helm releases in Atmos now capture that evidence at the moment of failure and fold it straight into the error: which pod is failing, what the container is reporting, and - at debug level - the crash log and recent events.
+
+<!--truncate-->
+
+## The Problem
+
+A failed readiness wait tells you *that* a release did not come up, but not *why*. The error names the release and namespace, yet the actual cause - a `CrashLoopBackOff`, an `ImagePullBackOff` from a bad registry mirror, a container exiting non-zero on a bad config value - lives on the pods, not in the release record.
+
+So the cause is one `kubectl` session away. Except:
+
+- In CI there is usually no interactive cluster access, so the run just fails with a timeout and no cause.
+- When a release is configured to roll back or uninstall on failure, that recovery deletes the failing pods first. By the time anyone looks, the pod - and its logs - are gone.
+
+The result is a dependency-ordered rollout that stops at a release nobody can diagnose from the output alone.
+
+## The Fix
+
+On a release failure, and **before** any rollback or uninstall runs, Atmos now enumerates the release's pods, finds the not-ready containers, and appends their diagnostics to the same error:
+
+```
+Error: failed to perform helm release operation
+  workload diagnostics:
+    pod keda-operator-7d9f  keda-operator CrashLoopBackOff (exit 1, 5 restarts)
+      last log (keda-operator):
+        panic: failed to load config: invalid duration "5x"
+      events:
+        BackOff  Back-off restarting failed container
+```
+
+The container-status summary (reason, exit code, restart count) is always included on failure. The log tail and the pod's recent events are added when you run at debug or trace level, so normal output stays concise.
+
+To guarantee the evidence survives, Atmos now performs the configured [`on_failure` rollback or uninstall](/stacks/components/helm#release-lifecycle) itself, after collecting the diagnostics rather than before - the rollback and history-retention behavior you configure is unchanged, it just no longer races the diagnostics.
+
+## How to Use It
+
+There is nothing to enable. Any native Helm [`apply`](/cli/commands/helm/apply) or `deploy` that fails readiness surfaces the diagnostics automatically. To include the log tail and events, raise the log level:
+
+```shell
+atmos helm apply keda -s plat-ue2-prod --logs-level=Debug
+```
+
+Diagnostics are best-effort: if the cluster cannot be reached, Atmos reports the original failure unchanged rather than masking it.
+
+## Get Involved
+
+This pairs with the native Helm [release lifecycle](/stacks/components/helm#release-lifecycle) controls. If there is a failure signal you want surfaced that Atmos does not yet capture, open an issue or discussion on [GitHub](https://github.com/cloudposse/atmos).

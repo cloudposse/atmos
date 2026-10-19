@@ -26,10 +26,6 @@ var updateReportHeadersWithReason = []string{"", "COMPONENT", "STATUS", "CURRENT
 // split needs, so it's dropped rather than rendered blank.
 var updateReportHeadersNoReason = []string{"", "COMPONENT", "STATUS", "CURRENT", "LATEST"}
 
-// updateReportBorderColor matches the thin gray header-separator border used by
-// `atmos version list` (cmd/version/formatters.go's createVersionTable).
-const updateReportBorderColor = "8"
-
 // updateReportHeaderStyle renders the table header exactly like `atmos version list`'s
 // headerStyle: plain bold text with no theme color lookup. This is a deliberate, local
 // rendering choice for this table only (not a change to any shared/theme-wide default) so
@@ -67,14 +63,14 @@ func createUpdateReportTable(headers []string, rows [][]string) string {
 	t := table.New().
 		Headers(headers...).
 		Rows(rows...).
-		BorderHeader(true).                                                                   // Show border under header.
-		BorderTop(false).                                                                     // No top border.
-		BorderBottom(false).                                                                  // No bottom border.
-		BorderLeft(false).                                                                    // No left border.
-		BorderRight(false).                                                                   // No right border.
-		BorderRow(false).                                                                     // No row separators.
-		BorderColumn(false).                                                                  // No column separators.
-		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(updateReportBorderColor))). // Gray border.
+		BorderHeader(true).                          // Show border under header.
+		BorderTop(false).                            // No top border.
+		BorderBottom(false).                         // No bottom border.
+		BorderLeft(false).                           // No left border.
+		BorderRight(false).                          // No right border.
+		BorderRow(false).                            // No row separators.
+		BorderColumn(false).                         // No column separators.
+		BorderStyle(theme.GetCurrentStyles().Muted). // Gray border.
 		StyleFunc(func(row, col int) lipgloss.Style {
 			switch {
 			case col == 0: // Dot column: pin the width so lipgloss/table's expand step doesn't stretch this 1-char column.

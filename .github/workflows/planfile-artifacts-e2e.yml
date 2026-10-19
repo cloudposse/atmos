@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -71,6 +71,9 @@ jobs:
             tuf-repo-cdn.sigstore.dev:443
             rekor.sigstore.dev:443
             registry.opentofu.org:443
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -83,7 +86,7 @@ jobs:
           go-version-file: "go.mod"
 
       - name: Set up Atmos
-        uses: cloudposse/github-action-setup-atmos@60878d48037763f759aedee74e9cc0c2dc88e9ec # v3.5.0
+        uses: cloudposse/github-action-setup-atmos@9e8d1e2db56fe851a85871d5993d63e182b66536 # v3.6.0
         with:
           atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
           install-wrapper: false
@@ -110,7 +113,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -125,6 +128,9 @@ jobs:
             tuf-repo-cdn.sigstore.dev:443
             rekor.sigstore.dev:443
             registry.opentofu.org:443
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -137,7 +143,7 @@ jobs:
           go-version-file: "go.mod"
 
       - name: Set up Atmos
-        uses: cloudposse/github-action-setup-atmos@60878d48037763f759aedee74e9cc0c2dc88e9ec # v3.5.0
+        uses: cloudposse/github-action-setup-atmos@9e8d1e2db56fe851a85871d5993d63e182b66536 # v3.6.0
         with:
           atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
           install-wrapper: false

@@ -61,18 +61,17 @@ func instanceClosureMembership(t *testing.T, opts *InstancesCommandOptions, labe
 
 	graph, err := dependencies.BuildGraph(stacksMap)
 	require.NoError(t, err)
-	roots := dependencies.Roots(graph, &dependencies.Selector{
+	direction, depths := dependencies.ClosureScope(opts.IncludeDependencies, opts.IncludeDependents)
+	return dependencies.Membership(dependencies.SelectedClosure(graph, &dependencies.Selector{
 		Stack:  opts.Stack,
 		Tags:   opts.Tags,
 		Labels: labels,
-	})
-	direction, depths := dependencies.ClosureScope(opts.IncludeDependencies, opts.IncludeDependents)
-	return dependencies.Membership(dependencies.ReachableClosure(graph, roots, direction, depths))
+	}, direction, depths))
 }
 
 // TestClosureMembershipFilter verifies the closure membership filter keeps
-// prerequisites that do not match the seeding selectors, and drops everything
-// outside the closure.
+// prerequisites that do not match the seeding selectors, applies the selectors
+// to dependents the closure adds, and drops everything outside the closure.
 func TestClosureMembershipFilter(t *testing.T) {
 	t.Parallel()
 
@@ -105,9 +104,35 @@ func TestClosureMembershipFilter(t *testing.T) {
 			wantComponents: []string{"app", "db"},
 		},
 		{
-			name: "dependents direction from the network seed",
+			name: "dependents direction from the network seed keeps only matching nodes",
 			opts: &InstancesCommandOptions{
 				Tags:              []string{"network"},
+				IncludeDependents: -1,
+			},
+			wantComponents: []string{"vpc"},
+		},
+		{
+			name: "dependents of a stack seed honour the tags selector",
+			opts: &InstancesCommandOptions{
+				Stack:             "dev",
+				Tags:              []string{"app"},
+				IncludeDependents: -1,
+			},
+			wantComponents: []string{"app"},
+		},
+		{
+			name: "non-matching seed still reaches its matching transitive dependent",
+			opts: &InstancesCommandOptions{
+				Stack:             "core",
+				Tags:              []string{"app"},
+				IncludeDependents: -1,
+			},
+			wantComponents: []string{"app"},
+		},
+		{
+			name: "dependents without selectors keep the whole reverse closure",
+			opts: &InstancesCommandOptions{
+				Stack:             "core",
 				IncludeDependents: -1,
 			},
 			wantComponents: []string{"app", "db", "vpc"},
@@ -162,9 +187,8 @@ func TestClosureMembershipAgreesWithComponentNames(t *testing.T) {
 	}
 	graph, err := dependencies.BuildGraph(stacksMap)
 	require.NoError(t, err)
-	roots := dependencies.Roots(graph, &dependencies.Selector{Tags: opts.Tags})
 	direction, depths := dependencies.ClosureScope(opts.IncludeDependencies, opts.IncludeDependents)
-	closure := dependencies.ReachableClosure(graph, roots, direction, depths)
+	closure := dependencies.SelectedClosure(graph, &dependencies.Selector{Tags: opts.Tags}, direction, depths)
 
 	// The templated seed and its full prerequisite chain are in the closure.
 	members := dependencies.Membership(closure)
@@ -196,7 +220,7 @@ func TestExecuteDescribeStacksForInstances_ScopedDispatch(t *testing.T) {
 		fake := &scopedFakeProcessor{}
 		_, err := executeDescribeStacksForInstances(
 			&schema.AtmosConfiguration{}, fake, nil, true, true, nil, false,
-			[]string{"app"}, nil,
+			[]string{"app"}, nil, nil,
 		)
 		require.NoError(t, err)
 		assert.True(t, fake.scopedCalled, "a tags filter must dispatch to ExecuteDescribeStacksScoped")
@@ -210,7 +234,7 @@ func TestExecuteDescribeStacksForInstances_ScopedDispatch(t *testing.T) {
 		labels := map[string]string{"env": "dev"}
 		_, err := executeDescribeStacksForInstances(
 			&schema.AtmosConfiguration{}, fake, nil, true, true, nil, false,
-			nil, labels,
+			nil, labels, nil,
 		)
 		require.NoError(t, err)
 		assert.True(t, fake.scopedCalled, "a labels filter must dispatch to ExecuteDescribeStacksScoped")
@@ -223,7 +247,7 @@ func TestExecuteDescribeStacksForInstances_ScopedDispatch(t *testing.T) {
 		fake := &scopedFakeProcessor{}
 		_, err := executeDescribeStacksForInstances(
 			&schema.AtmosConfiguration{}, fake, nil, true, true, nil, false,
-			nil, nil,
+			nil, nil, nil,
 		)
 		require.NoError(t, err)
 		assert.False(t, fake.scopedCalled)
@@ -269,7 +293,6 @@ func (f *scopedFakeProcessor) ExecuteDescribeStacksScoped(
 	includeEmptyStacks bool,
 	skip []string,
 	authManager auth.AuthManager,
-	authDisabled bool,
 	tagsFilter []string,
 	labelsFilter map[string]string,
 ) (map[string]any, error) {

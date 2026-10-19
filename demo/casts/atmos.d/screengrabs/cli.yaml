@@ -92,10 +92,52 @@ commands:
           atmos aws --help
           atmos aws compliance --help
           atmos aws compliance report --help
+          atmos aws credential-process --help
           atmos aws eks --help
           atmos aws eks update-kubeconfig --help
           atmos aws security --help
           atmos aws security analyze --help
+          atmos aws cloudformation --help
+          atmos aws cloudformation render --help
+          atmos aws cloudformation plan --help
+          atmos aws cloudformation diff --help
+          atmos aws cloudformation apply --help
+          atmos aws cloudformation deploy --help
+          atmos aws cloudformation delete --help
+          atmos aws cloudformation validate --help
+          atmos aws cloudformation output --help
+          atmos aws cloudformation backend --help
+          atmos aws cloudformation backend create --help
+          atmos aws cloudformation backend delete --help
+          atmos aws cloudformation backend describe --help
+          atmos aws cloudformation backend list --help
+          atmos aws cloudformation backend update --help
+          atmos aws cloudformation changeset --help
+          atmos aws cloudformation changeset create --help
+          atmos aws cloudformation changeset delete --help
+          atmos aws cloudformation changeset execute --help
+          atmos aws cloudformation changeset list --help
+          atmos aws cloudformation drift --help
+          atmos aws cloudformation drift describe --help
+          atmos aws cloudformation drift detect --help
+          atmos aws cloudformation fmt --help
+          atmos aws cloudformation get --help
+          atmos aws cloudformation get policy --help
+          atmos aws cloudformation get template --help
+          atmos aws cloudformation list --help
+          atmos aws cloudformation logs --help
+          atmos aws cloudformation source --help
+          atmos aws cloudformation source delete --help
+          atmos aws cloudformation source describe --help
+          atmos aws cloudformation source list --help
+          atmos aws cloudformation source pull --help
+          atmos aws cloudformation stackset --help
+          atmos aws cloudformation stackset create --help
+          atmos aws cloudformation stackset delete --help
+          atmos aws cloudformation stackset instances --help
+          atmos aws cloudformation stackset update --help
+          atmos aws cloudformation tree --help
+          atmos aws cloudformation watch --help
           atmos completion --help
           atmos describe --help
           atmos describe affected --help
@@ -387,7 +429,15 @@ commands:
               for index, command in enumerate(commands, 1):
                   slug = command_slug(command)
                   tmp_cast = Path(tmpdir) / f"{slug}.cast"
-                  argv = command.split() + [f"--cast={tmp_cast}"]
+                  argv = command.split()
+                  # These source commands inherit --dry-run. Record full help
+                  # so the docs show that flag, keeping the existing asset slug.
+                  if command in (
+                      "atmos aws cloudformation source delete --help",
+                      "atmos aws cloudformation source pull --help",
+                  ):
+                      argv[-1] = "--help=all"
+                  argv.append(f"--cast={tmp_cast}")
                   proc = subprocess.run(
                       argv, cwd=FIXTURE, env=env, capture_output=True, text=True
                   )
@@ -495,10 +545,52 @@ commands:
           atmos aws --help
           atmos aws compliance --help
           atmos aws compliance report --help
+          atmos aws credential-process --help
           atmos aws eks --help
           atmos aws eks update-kubeconfig --help
           atmos aws security --help
           atmos aws security analyze --help
+          atmos aws cloudformation --help
+          atmos aws cloudformation render --help
+          atmos aws cloudformation plan --help
+          atmos aws cloudformation diff --help
+          atmos aws cloudformation apply --help
+          atmos aws cloudformation deploy --help
+          atmos aws cloudformation delete --help
+          atmos aws cloudformation validate --help
+          atmos aws cloudformation output --help
+          atmos aws cloudformation backend --help
+          atmos aws cloudformation backend create --help
+          atmos aws cloudformation backend delete --help
+          atmos aws cloudformation backend describe --help
+          atmos aws cloudformation backend list --help
+          atmos aws cloudformation backend update --help
+          atmos aws cloudformation changeset --help
+          atmos aws cloudformation changeset create --help
+          atmos aws cloudformation changeset delete --help
+          atmos aws cloudformation changeset execute --help
+          atmos aws cloudformation changeset list --help
+          atmos aws cloudformation drift --help
+          atmos aws cloudformation drift describe --help
+          atmos aws cloudformation drift detect --help
+          atmos aws cloudformation fmt --help
+          atmos aws cloudformation get --help
+          atmos aws cloudformation get policy --help
+          atmos aws cloudformation get template --help
+          atmos aws cloudformation list --help
+          atmos aws cloudformation logs --help
+          atmos aws cloudformation source --help
+          atmos aws cloudformation source delete --help
+          atmos aws cloudformation source describe --help
+          atmos aws cloudformation source list --help
+          atmos aws cloudformation source pull --help
+          atmos aws cloudformation stackset --help
+          atmos aws cloudformation stackset create --help
+          atmos aws cloudformation stackset delete --help
+          atmos aws cloudformation stackset instances --help
+          atmos aws cloudformation stackset update --help
+          atmos aws cloudformation tree --help
+          atmos aws cloudformation watch --help
           atmos completion --help
           atmos describe --help
           atmos describe affected --help
@@ -778,6 +870,11 @@ commands:
               assert_no_error_output(text)
               assert_no_local_paths(text)
               assert_body_color(text)
+              if command in (
+                  "atmos aws cloudformation source delete --help",
+                  "atmos aws cloudformation source pull --help",
+              ) and "--dry-run" not in strip_ansi(text):
+                  raise SystemExit(f"source help cast must show --dry-run: {path.name}")
               if command.endswith(" --help") and len(re.findall(r"(?m)^USAGE$", strip_ansi(text))) != 1:
                   raise SystemExit(
                       f"help cast must contain exactly one USAGE heading: {path.name}"

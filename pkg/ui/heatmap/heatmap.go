@@ -201,20 +201,7 @@ type model struct {
 // Messages.
 type tickMsg time.Time
 
-// Styles.
-var (
-	headerStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color(theme.ColorWhite)).
-			Background(lipgloss.Color(theme.ColorBlue)).
-			Padding(0, 1)
-
-	heatMapStyle = theme.Styles.Border.
-			Padding(1, 2)
-
-	tableStyle = theme.Styles.Border
-)
-
+// newModel initializes performance views from a frozen snapshot in the requested visualization mode.
 func newModel(heatModel *HeatModel, mode string, ctx context.Context) *model {
 	// Initialize table.
 	columns := []table.Column{
@@ -235,12 +222,12 @@ func newModel(heatModel *HeatModel, mode string, ctx context.Context) *model {
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
+		BorderForeground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 		BorderBottom(true).
 		Bold(false)
 	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
+		Foreground(theme.GetCurrentStyles().TableActive.GetForeground()).
+		Background(theme.GetCurrentStyles().TableActive.GetBackground()).
 		Bold(false)
 	t.SetStyles(s)
 
@@ -413,9 +400,10 @@ func (m *model) updatePerformanceData() {
 	m.table.SetRows(rows)
 }
 
+// renderLegend summarizes elapsed time, accumulated CPU time, and parallelism from the frozen snapshot.
 func (m *model) renderLegend() string {
 	legendStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("243")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 		Padding(0, 2)
 
 	// Calculate total CPU time and parallelism from frozen snapshot (all tracked functions).
@@ -438,11 +426,13 @@ func (m *model) renderLegend() string {
 			elapsed.Truncate(time.Microsecond),
 			totalCPUTime.Truncate(time.Microsecond)) +
 			"Count: # calls (incl. recursion) | CPU Time: sum of self-time (excludes children)\n" +
-			"Avg: avg self-time | Max: max self-time | P95: 95th percentile self-time")
+			"Avg: avg self-time | Max: max self-time | P95: 95th percentile self-time",
+	)
 
 	return legend
 }
 
+// View combines the performance header, legend, selected visualization, and keyboard help.
 func (m *model) View() string {
 	if m.width == 0 {
 		return "Initializing..."
@@ -451,9 +441,10 @@ func (m *model) View() string {
 	var sections []string
 
 	// Header.
-	header := headerStyle.Width(m.width - 2).Render(
+	header := theme.GetCurrentStyles().TableHeader.Width(m.width - 2).Render(
 		fmt.Sprintf("Atmos Performance Results - %s Mode (Press 1-3 to switch modes, q/esc to quit)",
-			toTitle(m.visualMode)))
+			toTitle(m.visualMode)),
+	)
 	sections = append(sections, header)
 
 	// Legend.
@@ -465,12 +456,12 @@ func (m *model) View() string {
 	sections = append(sections, visualization)
 
 	// Performance table.
-	tableSection := tableStyle.Render(m.table.View())
+	tableSection := theme.GetCurrentStyles().Border.Render(m.table.View())
 	sections = append(sections, tableSection)
 
 	// Status bar with frozen performance data from TUI start.
 	status := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("241")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 		Render(fmt.Sprintf("📊 Command completed | Functions: %d | Total Calls: %d | Elapsed: %s | Press q/esc to quit",
 			m.initialSnap.TotalFuncs, m.initialSnap.TotalCalls, m.initialSnap.Elapsed.Truncate(time.Microsecond)))
 	sections = append(sections, status)

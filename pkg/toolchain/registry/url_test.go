@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestURLRegistry_SingleIndexFile tests fetching from a single registry.yaml index file.
@@ -272,6 +274,15 @@ func TestApplyGitHubRef(t *testing.T) {
 			ref:      "v1.0.0",
 			expected: "https://github.com/short",
 		},
+		{
+			// A control character makes url.Parse fail outright, exercising the unparseable-URL
+			// branch: the original baseURL must be returned unchanged rather than panicking or
+			// propagating the parse error.
+			name:     "unparseable URL returns original unchanged",
+			baseURL:  "https://github.com/\x7fowner/repo",
+			ref:      "v1.0.0",
+			expected: "https://github.com/\x7fowner/repo",
+		},
 	}
 
 	for _, tt := range tests {
@@ -282,6 +293,85 @@ func TestApplyGitHubRef(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestApplyGitHubRef_GHESHost verifies that a custom registry source URL on a GitHub
+// Enterprise Server host (configured via GITHUB_SERVER_URL) is converted to that host's own
+// /raw/ path, not raw.githubusercontent.com, while a github.com URL is still converted to
+// raw.githubusercontent.com even when GHES is configured.
+func TestApplyGitHubRef_GHESHost(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+	tests := []struct {
+		name     string
+		baseURL  string
+		ref      string
+		expected string
+	}{
+		{
+			name:     "GHES owner/repo URL",
+			baseURL:  "https://ghes.example.com/owner/repo",
+			ref:      "v1.2.3",
+			expected: "https://ghes.example.com/raw/owner/repo/v1.2.3/registry.yaml",
+		},
+		{
+			name:     "GHES owner/repo URL with nested path",
+			baseURL:  "https://ghes.example.com/org/repo/path/to/registry.yaml",
+			ref:      "v2.0.0",
+			expected: "https://ghes.example.com/raw/org/repo/v2.0.0/path/to/registry.yaml",
+		},
+		{
+			// A github.com URL is still recognized and converted to raw.githubusercontent.com,
+			// even though RepoEndpoints resolves to the GHES host in this environment.
+			name:     "github.com URL still converted to raw.githubusercontent.com",
+			baseURL:  "https://github.com/owner/repo",
+			ref:      "v1.2.3",
+			expected: "https://raw.githubusercontent.com/owner/repo/v1.2.3/registry.yaml",
+		},
+		{
+			// A host that isn't github.com or the configured GHES host is left unchanged.
+			name:     "unrelated host left unchanged",
+			baseURL:  "https://unrelated.example.com/registry.yaml",
+			ref:      "v1.2.3",
+			expected: "https://unrelated.example.com/registry.yaml",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, applyGitHubRef(tt.baseURL, tt.ref))
+		})
+	}
+}
+
+// TestApplyGitHubRef_GHESRawURLUnchanged pins that a configured registry source that is
+// already a GHES raw URL (host's own /raw/owner/repo/ref/path route, as produced by
+// github.Endpoints.RawURL) is returned unchanged rather than being re-parsed as an
+// owner/repo web URL -- which would misread the leading "raw" path segment as the owner,
+// producing a doubled ".../raw/raw/..." URL.
+func TestApplyGitHubRef_GHESRawURLUnchanged(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+	assert.Equal(t,
+		"https://ghes.example.com/raw/owner/repo/main/registry.yaml",
+		applyGitHubRef("https://ghes.example.com/raw/owner/repo/main/registry.yaml", "v1.2.3"),
+		"an already-GHES-raw URL must not be re-parsed with a non-empty ref")
+}
+
+// TestApplyGitHubRef_HostNormalization verifies that matchGitHubEndpoints (used by
+// applyGitHubRef) normalizes case and strips the default HTTPS port before comparing hosts, so
+// a case variant or an explicit ":443" still resolves to the public github.com shape instead of
+// silently leaving ref unapplied.
+func TestApplyGitHubRef_HostNormalization(t *testing.T) {
+	assert.Equal(t,
+		"https://raw.githubusercontent.com/owner/repo/v1.2.3/registry.yaml",
+		applyGitHubRef("https://GitHub.Com/owner/repo", "v1.2.3"),
+		"a case-variant github.com host must still resolve to raw.githubusercontent.com")
+
+	assert.Equal(t,
+		"https://raw.githubusercontent.com/owner/repo/v1.2.3/registry.yaml",
+		applyGitHubRef("https://github.com:443/owner/repo", "v1.2.3"),
+		"an explicit default HTTPS port must not prevent host matching")
 }
 
 // TestURLRegistry_WithRef tests that ref is properly applied when creating a URLRegistry.

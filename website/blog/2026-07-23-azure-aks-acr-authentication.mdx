@@ -16,7 +16,7 @@ logged into `az`, which may not match the identity you just authenticated with i
 
 ## The Problem
 
-Atmos already solves this for AWS: authenticate once with `atmos auth login`, and linked EKS
+Atmos already solves this for AWS: authenticate once with [`atmos auth login`](/cli/commands/auth/login), and linked EKS
 clusters and ECR registries are configured automatically. Azure had no equivalent — every AKS or
 ACR session meant switching tools and re-authenticating outside of Atmos, and every extra tool is
 another thing to install and keep in sync with the credentials you're actually using.
@@ -65,7 +65,7 @@ $ kubectl get pods
 $ docker pull myregistry.azurecr.io/myimage:latest
 ```
 
-No `az` CLI, no `kubelogin` binary — kubectl calls `atmos azure aks token` for a fresh token the
+No `az` CLI, no `kubelogin` binary — kubectl calls [`atmos azure aks token`](/cli/commands/azure/azure-aks-token) for a fresh token the
 same way it would call `kubelogin`, and ACR credentials land in the standard Docker config
 location.
 

@@ -12,14 +12,14 @@ This guide covers the development workflow for contributing to Atmos.
 
 1. Clone the repository
 2. Run the development setup:
-   ```bash
-   atmos dev setup
-   ```
-   This will:
-   - Install Go dependencies
-   - Install pre-commit and golangci-lint (using brew, apt, or pip)
-   - Set up pre-commit hooks
-   - Install required Go tools
+    ```bash
+    atmos dev setup
+    ```
+    This will:
+    - Install Go dependencies
+    - Install pre-commit and golangci-lint (using brew, apt, or pip)
+    - Set up pre-commit hooks
+    - Install required Go tools
 
 ## Development Workflow
 
@@ -60,6 +60,15 @@ atmos lint changed     # Run golangci-lint on changed files
 # Regenerate focused CLI golden snapshots
 atmos dev generate snapshots --filter 'TestCLICommands/check_atmos_--help_in_empty-dir'
 ```
+
+Use `atmos build --no-cache` (or `atmos build binary --no-cache`) to force
+recompilation of all Go packages, including dependencies. This passes `-a` to
+`go build`; it preserves the shared build cache and downloaded modules. Normal
+builds reuse cached packages, and `--no-cache=false` keeps that default.
+
+Build output appears in a live four-line viewport (three recent log lines and a
+status row), which collapses when the build succeeds and reveals full logs on
+failure. CI and redirected output stream normally.
 
 ## Pre-commit Hooks
 
@@ -165,10 +174,10 @@ The `scripts/test-geodesic-prebuilt.sh` script allows you to quickly test Atmos 
 **What it does:**
 1. Builds Atmos for Linux (cross-compiles if needed for your architecture)
 2. Launches a Geodesic container with:
-   - The pre-built Atmos binary mounted to `/usr/local/bin/atmos`
-   - Your infrastructure directory mounted to `/workspace`
-   - Atmos-managed AWS credentials from `$XDG_CONFIG_HOME/atmos` (defaults to `~/.config/atmos`)
-   - Standard XDG environment variables configured
+    - The pre-built Atmos binary mounted to `/usr/local/bin/atmos`
+    - Your infrastructure directory mounted to `/workspace`
+    - Atmos-managed AWS credentials from `$XDG_CONFIG_HOME/atmos` (defaults to `~/.config/atmos`)
+    - Standard XDG environment variables configured
 
 This workflow is much faster than rebuilding Geodesic images during development and allows you to iterate quickly on Atmos changes while testing in a realistic containerized environment.
 

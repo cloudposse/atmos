@@ -136,7 +136,8 @@ func planRecordOutput(output, format string) (recordOutputPlan, error) {
 	}
 	tmpPath := tmp.Name()
 	_ = tmp.Close()
-	_ = os.Remove(tmpPath) //nolint:gosec // Removes our own just-created temp placeholder; asciicast.Start recreates it.
+	// Remove our own just-created temp placeholder; asciicast.Start recreates it.
+	_ = os.Remove(tmpPath)
 	cleanup := func() { _ = os.Remove(tmpPath) }
 
 	opts, err := renderOptionsForOutput(output, format, format != "")

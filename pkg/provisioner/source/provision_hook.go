@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/duration"
+	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -110,10 +112,12 @@ func AutoProvisionSource(
 
 	stack, _ := componentConfig["atmos_stack"].(string)
 
-	targetDir, isWorkdir, err := determineSourceTargetDirectory(atmosConfig, componentType, component, componentConfig)
+	// ResolveTarget is the single destination resolver shared with `source pull` / `source delete`.
+	target, err := ResolveTarget(atmosConfig, componentType, component, componentConfig)
 	if err != nil {
 		return wrapProvisionError(err, "Failed to determine target directory", component)
 	}
+	targetDir, isWorkdir := target.Dir, target.IsWorkdir
 
 	// Check if provisioning is needed (version change, URI change, or fresh workdir).
 	needs, reason := needsProvisioning(targetDir, sourceSpec, isWorkdir)
@@ -138,17 +142,21 @@ func AutoProvisionSource(
 		}
 	}
 
+	if authContext != nil {
+		ctx = downloader.WithAWSAuthContext(ctx, authContext.AWS)
+	}
+
 	// Vendor the source to target directory.
 	if err := vendorToTarget(ctx, atmosConfig, sourceSpec, vendorTarget{path: targetDir, component: component, writers: writers}); err != nil {
 		return err
 	}
 
-	// Write workdir metadata (when workdir is enabled).
+	// Record provenance: workdir metadata for workdir targets, the `.atmos/source.json` marker for
+	// shared component directories. Non-critical: a failure only limits `source delete`.
+	if err := recordProvenance(target, stack, sourceSpec); err != nil {
+		out.Warningf("Failed to record source provenance: %s", err)
+	}
 	if isWorkdir {
-		if err := writeWorkdirMetadata(targetDir, component, stack, sourceSpec); err != nil {
-			// Non-critical error - log and continue.
-			out.Warningf("Failed to write workdir metadata: %s", err)
-		}
 		componentConfig[workdir.WorkdirPathKey] = targetDir
 		// Signal that the workdir was wiped and re-provisioned this invocation.
 		// buildInitArgs checks this to decide whether -reconfigure is needed:
@@ -178,6 +186,10 @@ func applyGlobalTTLDefault(sourceSpec *schema.VendorComponentSource, atmosConfig
 		if atmosConfig.Components.Packer.Source != nil {
 			sourceSpec.TTL = atmosConfig.Components.Packer.Source.TTL
 		}
+	case cfg.CloudFormationComponentType:
+		if atmosConfig.Components.CloudFormation.Source != nil {
+			sourceSpec.TTL = atmosConfig.Components.CloudFormation.Source.TTL
+		}
 	}
 }
 
@@ -203,13 +215,14 @@ func extractSourceAndComponent(componentConfig map[string]any) (*schema.VendorCo
 	return sourceSpec, component, nil
 }
 
-// vendorToTarget creates the target directory and vendors the source.
+// vendorTarget identifies the provisioning destination and progress output streams.
 type vendorTarget struct {
 	path      string
 	component string
 	writers   provisioner.OutputWriters
 }
 
+// vendorToTarget provisions with progress reporting and removes a newly created target when downloading fails.
 func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, target vendorTarget) error {
 	progressMsg := fmt.Sprintf("Auto-provisioning source for '%s'", target.component)
 	completedMsg := fmt.Sprintf("Auto-provisioned source to %s", target.path)
@@ -239,14 +252,11 @@ func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 					out.Warningf("Failed to clean up target directory after failed provisioning: %s", rmErr)
 				}
 			}
-			return errUtils.Build(errUtils.ErrSourceProvision).
-				WithCause(err).
-				WithExplanation("Failed to auto-provision component source").
-				WithContext("component", target.component).
-				WithContext("source", sourceSpec.Uri).
-				WithContext("target", target.path).
-				WithHint("Verify source URI is accessible and credentials are valid").
-				Err()
+			return provisionFailure(err, "Failed to auto-provision component source", map[string]string{
+				"component": target.component,
+				"source":    sourceSpec.Uri,
+				"target":    target.path,
+			}, "Verify source URI is accessible and credentials are valid")
 		}
 
 		return nil
@@ -265,11 +275,7 @@ func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 
 // wrapProvisionError wraps an error with provision context.
 func wrapProvisionError(err error, explanation, component string) error {
-	return errUtils.Build(errUtils.ErrSourceProvision).
-		WithCause(err).
-		WithExplanation(explanation).
-		WithContext("component", component).
-		Err()
+	return provisionFailure(err, explanation, map[string]string{"component": component}, "")
 }
 
 // determineSourceTargetDirectory determines where to download the source.
@@ -321,17 +327,18 @@ func determineSourceTargetDirectory(
 //   - Version has changed from what's in metadata.
 //   - URI has changed from what's in metadata.
 //   - No metadata exists (fresh workdir).
+//   - A remote source TTL expires (workdir or a shared directory with provenance).
 //
-// Returns (false, "") if the existing workdir is up-to-date.
+// Returns (false, "") if the cached source can be reused.
 func needsProvisioning(targetDir string, sourceSpec *schema.VendorComponentSource, isWorkdir bool) (bool, string) {
 	// Check if directory exists and has content.
 	if !isNonEmptyDir(targetDir) {
 		return true, ""
 	}
 
-	// For non-workdir targets, existence is sufficient - no metadata tracking.
+	// Shared directories retain their contents unless an owned remote source expires.
 	if !isWorkdir {
-		return false, ""
+		return sharedSourceExpired(targetDir, sourceSpec)
 	}
 
 	// Directory exists and has content - check metadata for version/URI changes.
@@ -395,8 +402,14 @@ func checkMetadataChanges(metadata *workdir.WorkdirMetadata, sourceSpec *schema.
 		return true, fmt.Sprintf("Source version changed (%s → %s)", oldVer, newVer)
 	}
 
-	if sourceSpec.Uri != metadata.SourceURI {
-		return true, fmt.Sprintf("Source URI changed (%s → %s)", metadata.SourceURI, sourceSpec.Uri)
+	// SourceURI is a redacted provenance label; query strings may select a
+	// different artifact. Compare the original cache source when it is available.
+	previous := metadata.Source
+	if previous == "" {
+		previous = metadata.SourceURI
+	}
+	if sourceSpec.Uri != previous {
+		return true, fmt.Sprintf("Source URI changed (%s → %s)", downloader.RedactSource(previous), downloader.RedactSource(sourceSpec.Uri))
 	}
 
 	return false, ""
@@ -429,6 +442,42 @@ func isZeroTTL(ttl string) bool {
 	return duration.IsZeroTTL(ttl)
 }
 
+// scpStyleHostPattern extracts an optional user and the host from an SCP-style Git URI, e.g.
+// "git@ghe.example.com:org/repo.git", the userless "ghe.example.com:org/repo.git" for a dotted
+// GHES host, or, for a single-label GHES host, "git@ghe:org/repo.git" (still requiring
+// "user@" -- see isSCPStyleGHESRemote). Matches pkg/vendor's scpURLPattern and
+// CustomGitDetector.rewriteSCPURL's SCP detection in pkg/downloader/.
+var scpStyleHostPattern = regexp.MustCompile(`^(?:([\w.-]+)@)?([\w.-]+):`)
+
+// isConfiguredGHESHost reports whether host matches the GitHub Enterprise Server host
+// configured via RepoEndpoints (GITHUB_SERVER_URL). SCP-style Git URIs carry no port of their
+// own -- the colon already separates host from path -- so this compares against the portless
+// hostname (Endpoints.Hostname()) rather than IsHost, which would otherwise reject a match
+// against a GHES host configured with a non-default port (RepoEndpoints().Host keeps that
+// port; see its doc comment).
+func isConfiguredGHESHost(host string) bool {
+	return strings.EqualFold(host, github.RepoEndpoints().Hostname())
+}
+
+// isSCPStyleGHESRemote reports whether uri is an SCP-style Git URI ("[user@]host:path") naming
+// the configured GitHub Enterprise Server host. A dotted host (e.g.
+// "ghe.example.com:org/repo.git") is recognized as remote even without a "user@" prefix,
+// matching pkg/vendor's scpURLPattern and rewriteSCPURL. A single-label host is genuinely
+// ambiguous with a local relative path plus a colon-separated suffix (e.g. "dir:file"), so it
+// still requires the "user@" prefix to be treated as remote -- the pattern this replaces already
+// required it unconditionally, so this only loosens the dotted-host case.
+func isSCPStyleGHESRemote(uri string) bool {
+	m := scpStyleHostPattern.FindStringSubmatch(uri)
+	if m == nil {
+		return false
+	}
+	user, host := m[1], m[2]
+	if user == "" && !strings.Contains(host, ".") {
+		return false
+	}
+	return isConfiguredGHESHost(host)
+}
+
 // isLocalSource determines if a source URI refers to a local path.
 // Local sources start with ".", absolute paths (OS-specific), or are relative paths without remote indicators.
 func isLocalSource(uri string) bool {
@@ -444,7 +493,16 @@ func isLocalSource(uri string) bool {
 	if strings.HasPrefix(uri, "file://") {
 		return true
 	}
-	// Remote indicators - if any of these are present, it's remote.
+	// SCP-style Git URI ([user@]host:org/repo.git) naming the configured GitHub Enterprise
+	// Server host. Checked before the remoteIndicators loop below because SCP syntax has no
+	// "://" separator, and the GHES host itself isn't in that literal list.
+	if isSCPStyleGHESRemote(uri) {
+		return false
+	}
+	// Remote indicators - if any of these are present, it's remote. Deliberately
+	// github.com-only (see the equivalent knownHosts comment in pkg/stack/imports/uri.go): a
+	// bare hostname can't guess a GitHub Enterprise Server host, and any URI naming one already
+	// matches the "://" scheme indicator above.
 	remoteIndicators := []string{
 		"://",        // Any URL scheme (https://, git://, s3://, etc.).
 		"github.com", // GitHub.

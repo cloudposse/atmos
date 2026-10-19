@@ -347,6 +347,12 @@ func (g *CustomGitGetter) getRunCommandWithRetry(ctx context.Context, cmd *exec.
 		}
 	}
 
+	if g.OnRetry != nil {
+		shouldRetry = func(err error) bool {
+			return matchesRetryableGitError(err) || (g.RetryAuthErrors && matchesAuthFailure(err))
+		}
+	}
+
 	// Skip retry if no config, or if MaxAttempts is explicitly set to 1 (single attempt).
 	// nil MaxAttempts means unlimited retries, so we should proceed with retry logic.
 	if cfg == nil || (cfg.MaxAttempts != nil && *cfg.MaxAttempts == 1) {
@@ -358,12 +364,17 @@ func (g *CustomGitGetter) getRunCommandWithRetry(ctx context.Context, cmd *exec.
 		attempt++
 		// exec.Cmd can only run once, so we need to recreate it for retries.
 		if attempt > 1 {
+			if g.OnRetry != nil {
+				g.OnRetry(attempt)
+			}
 			// Recreate the command for retry - cmd.Path and cmd.Args are from the original git command.
 			//nolint:gosec // G204: cmd.Path is the git binary path, cmd.Args are git arguments - both from trusted sources
 			newCmd := exec.CommandContext(ctx, cmd.Path, cmd.Args[1:]...)
 			newCmd.Dir = cmd.Dir
 			newCmd.Env = cmd.Env
-			log.Info("Retrying git command", "attempt", attempt, "command", cmd.Path)
+			if g.OnRetry == nil {
+				log.Info("Retrying git command", "attempt", attempt, "command", cmd.Path)
+			}
 			return getRunCommand(newCmd)
 		}
 		return getRunCommand(cmd)
@@ -373,6 +384,9 @@ func (g *CustomGitGetter) getRunCommandWithRetry(ctx context.Context, cmd *exec.
 		// We brokered the token and still got rejected after the bounded window: this is no
 		// longer "not propagated yet" — most likely the STS trust policy does not grant this
 		// repo, or the token was revoked. Surface it instead of leaving a bare git error.
+		if g.OnRetry != nil {
+			return fmt.Errorf("GitHub token still rejected after the brokered-auth retry window; verify the STS trust policy grants this repository and that the token was not revoked: %w", err)
+		}
 		log.Error("GitHub token still rejected after the brokered-auth retry window; verify the STS trust policy grants this repository and that the token was not revoked", "error", err)
 	}
 	return err
@@ -381,6 +395,15 @@ func (g *CustomGitGetter) getRunCommandWithRetry(ctx context.Context, cmd *exec.
 // isRetryableGitError determines if a git error should trigger a retry.
 // It checks for transient network errors, rate limiting, and other recoverable failures.
 func isRetryableGitError(err error) bool {
+	if matchesRetryableGitError(err) {
+		log.Warn("Retryable git error detected", "error", err)
+		return true
+	}
+	return false
+}
+
+// matchesRetryableGitError classifies without writing into a caller-owned progress region.
+func matchesRetryableGitError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -417,7 +440,6 @@ func isRetryableGitError(err error) bool {
 
 	for _, pattern := range transientPatterns {
 		if strings.Contains(errStr, pattern) {
-			log.Warn("Retryable git error detected", "error", err)
 			return true
 		}
 	}

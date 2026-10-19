@@ -63,7 +63,7 @@ type SourcesOptions struct {
 	ProcessFunctions bool
 	Skip             []string
 	Tags             []string
-	LabelsRaw        string
+	LabelsRaw        []string
 }
 
 // sourcesCmd lists components with source configuration.
@@ -132,8 +132,8 @@ func parseSourcesOptions(cmd *cobra.Command, v *viper.Viper, args []string) *Sou
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
-		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
-		LabelsRaw:        v.GetString("labels"),
+		Tags:             tags.ParseTagsFlag(v.GetString(tagsViperKey)),
+		LabelsRaw:        tags.ReadLabelsFlagKey(v, labelsViperKey),
 	}
 	if len(args) > 0 {
 		opts.Component = args[0]
@@ -209,6 +209,7 @@ func fetchAndFilterSources(opts *SourcesOptions) ([]map[string]any, error) {
 	// --tags/--labels also scope the describe pass (early-skip): components
 	// excluded by the selectors never reach auth/template/YAML-function
 	// evaluation.
+	opts.AtmosConfig.ListEvaluationPaths = [][]string{{"source"}, {"metadata"}}
 	stacksMap, err := executeDescribeStacksForSources(
 		opts.AtmosConfig,
 		opts.Stack,
@@ -219,7 +220,6 @@ func fetchAndFilterSources(opts *SourcesOptions) ([]map[string]any, error) {
 		false, // includeEmptyStacks
 		opts.Skip,
 		opts.AuthManager,
-		opts.AuthManager == nil,
 		opts.Tags,
 		labels,
 		e.DescribeStacksErrorOptions{},

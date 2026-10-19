@@ -45,11 +45,11 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@da6de3218cc965251e38d84f6addd37e7ddde2e6 # main
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@281621d6f2e63a883ea884559ffdbb4895c1bd98 # main
     with:
       publish: false
       format: binary
-      runs-on: '["runs-on=${{github.run_id}}", "runner=large", "tag=atmos","extras=s3-cache", "private=false"]'
+      runs-on: '["ubuntu-latest"]'
     # `secrets: inherit`, not an explicit map: shared-go-auto-release.yml doesn't declare a
     # `workflow_call.secrets:` schema, so GitHub rejects a named-secret map against it outright
     # (observed as a startup_failure -- "likely failed because of a workflow file issue" -- with
@@ -73,13 +73,13 @@ jobs:
     # OPENAI_API_KEY secret is configured, otherwise CodeRabbit's summary or
     # a truncated description - and rewrites the release (contents: write)
     # as collapsible per-PR notes. It never fails the release: any error is
-    # logged and the skeleton stays (see magefiles/ci_release_notes.go).
+    # logged and the skeleton stays (see magefiles/release/release_notes.go).
     permissions:
       contents: write
       pull-requests: read
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           # api.github.com: read/update the release. api.openai.com: the

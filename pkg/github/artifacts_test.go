@@ -16,6 +16,22 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
+// TestNewToolchainArtifactFetcher pins that NewToolchainArtifactFetcher returns a fully wired
+// ArtifactFetcher (all three GitHub service fields populated), scoped to ToolchainEndpoints
+// rather than RepoEndpoints. Construction alone never makes a network call, so this stays a
+// pure unit test regardless of GITHUB_SERVER_URL.
+func TestNewToolchainArtifactFetcher(t *testing.T) {
+	clearGitHubEndpointEnv(t)
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+	fetcher := NewToolchainArtifactFetcher(t.Context())
+
+	assert.NotNil(t, fetcher)
+	assert.NotNil(t, fetcher.pullRequests)
+	assert.NotNil(t, fetcher.actions)
+	assert.NotNil(t, fetcher.repositories)
+}
+
 func TestGetArtifactNameForPlatform(t *testing.T) {
 	// This test verifies the platform mapping logic.
 	// The actual result depends on the runtime platform.

@@ -4818,5 +4818,184 @@ func TestManifestSchemaErrorMessage(t *testing.T) {
 		"file references must use the !include YAML tag",
 		manifestSchemaErrorMessage("does not match pattern '^!include'"),
 	)
+	assert.Equal(
+		t,
+		"file references must use the !include YAML tag, or !unset to remove the section",
+		manifestSchemaErrorMessage("does not match pattern '^!(include|unset)'"),
+	)
 	assert.Equal(t, "does not match pattern '^component'", manifestSchemaErrorMessage("does not match pattern '^component'"))
+}
+
+func BenchmarkLocalsRepeated(b *testing.B) {
+	ac := &schema.AtmosConfiguration{}
+	content := "locals:\n  namespace: acme\n  prefix: '{{ .locals.namespace }}-dev'\nvars:\n  stage: dev\n"
+	b.Cleanup(ClearLocalsExtractionCache)
+	b.ResetTimer()
+	for range b.N {
+		ClearLocalsExtractionCache()
+		for range 200 {
+			result, err := extractLocalsFromRawYAML(ac, content, "benchmark/catalog/shared.yaml")
+			if err != nil || result == nil {
+				b.Fatalf("locals: %v", err)
+			}
+		}
+	}
+}
+
+// overlayStackReader serves selected files from memory and records every read it is asked for.
+type overlayStackReader struct {
+	files map[string]string
+	reads []string
+}
+
+func (r *overlayStackReader) ReadFile(path string) ([]byte, error) {
+	r.reads = append(r.reads, filepath.Base(path))
+	if content, ok := r.files[path]; ok {
+		return []byte(content), nil
+	}
+	return os.ReadFile(path)
+}
+
+func writeStackFixture(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, content := range files {
+		path := filepath.Join(dir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+	return dir
+}
+
+func TestProcessYAMLConfigFileWithOptionsReadsThroughTheInjectedReader(t *testing.T) {
+	ClearFileContentCache()
+	dir := writeStackFixture(t, map[string]string{
+		"catalog/base.yaml": "vars:\n  size: small\n",
+		"dev.yaml":          "import:\n  - catalog/base\nvars:\n  stage: dev\n",
+	})
+	reader := &overlayStackReader{files: map[string]string{
+		filepath.Join(dir, "catalog", "base.yaml"): "vars:\n  size: large\n",
+	}}
+
+	result, err := ProcessYAMLConfigFileWithOptions(&schema.AtmosConfiguration{}, dir, filepath.Join(dir, "dev.yaml"), StackLoadOptions{Reader: reader, SkipTemplates: true})
+
+	require.NoError(t, err)
+	vars, _ := result.DeepMergedConfig["vars"].(map[string]any)
+	assert.Equal(t, map[string]any{"size": "large", "stage": "dev"}, vars, "the import must come from the reader, not the disk")
+	assert.ElementsMatch(t, []string{"dev.yaml", "base.yaml"}, reader.reads)
+	assert.Contains(t, result.ImportsConfig, "catalog/base")
+}
+
+// The injected reader bypasses the process-wide content cache in both directions.
+func TestProcessYAMLConfigFileWithOptionsBypassesTheContentCache(t *testing.T) {
+	ClearFileContentCache()
+	t.Cleanup(ClearFileContentCache)
+	dir := writeStackFixture(t, map[string]string{"dev.yaml": "vars:\n  stage: dev\n"})
+	path := filepath.Join(dir, "dev.yaml")
+	cached, err := GetFileContent(path)
+	require.NoError(t, err)
+	require.Contains(t, cached, "dev")
+	reader := &overlayStackReader{files: map[string]string{path: "vars:\n  stage: prod\n"}}
+
+	result, err := ProcessYAMLConfigFileWithOptions(&schema.AtmosConfiguration{}, dir, path, StackLoadOptions{Reader: reader})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"stage": "prod"}, result.DeepMergedConfig["vars"])
+
+	after, err := GetFileContent(path)
+	require.NoError(t, err)
+	assert.Equal(t, cached, after, "an injected read must not poison the cache")
+}
+
+func TestProcessYAMLConfigFileWithOptionsDefaultsToCachedDiskReads(t *testing.T) {
+	ClearFileContentCache()
+	t.Cleanup(ClearFileContentCache)
+	dir := writeStackFixture(t, map[string]string{"dev.yaml": "vars:\n  stage: dev\n"})
+
+	result, err := ProcessYAMLConfigFileWithOptions(&schema.AtmosConfiguration{}, dir, filepath.Join(dir, "dev.yaml"), StackLoadOptions{})
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"stage": "dev"}, result.DeepMergedConfig["vars"])
+}
+
+func TestProcessYAMLConfigFileWithOptionsReportsReaderFailures(t *testing.T) {
+	dir := writeStackFixture(t, map[string]string{"dev.yaml": "vars: {}\n"})
+	missing := filepath.Join(dir, "missing.yaml")
+
+	_, err := ProcessYAMLConfigFileWithOptions(&schema.AtmosConfiguration{}, dir, missing, StackLoadOptions{Reader: &overlayStackReader{}})
+	require.ErrorIs(t, err, errUtils.ErrReadFile)
+
+	result, err := ProcessYAMLConfigFileWithOptions(&schema.AtmosConfiguration{}, dir, missing, StackLoadOptions{Reader: &overlayStackReader{}, IgnoreMissingFiles: true})
+	require.NoError(t, err)
+	assert.Empty(t, result.DeepMergedConfig)
+}
+
+// SkipTemplates keeps Go templates unevaluated through the whole import closure, even where an import asks for them.
+func TestProcessYAMLConfigFileWithOptionsSkipsTemplatesInImports(t *testing.T) {
+	ClearFileContentCache()
+	dir := writeStackFixture(t, map[string]string{
+		"catalog/base.yaml": "vars:\n  name: \"{{ .settings.prefix }}-base\"\nsettings:\n  prefix: acme\n",
+		"dev.yaml":          "import:\n  - path: catalog/base\n    context:\n      unused: 1\nvars:\n  stage: dev\n",
+	})
+
+	result, err := ProcessYAMLConfigFileWithOptions(&schema.AtmosConfiguration{}, dir, filepath.Join(dir, "dev.yaml"), StackLoadOptions{SkipTemplates: true})
+
+	require.NoError(t, err)
+	vars, _ := result.DeepMergedConfig["vars"].(map[string]any)
+	assert.Equal(t, "{{ .settings.prefix }}-base", vars["name"])
+}
+
+// A bad YAML function argument is not a Go-template problem, so the ".yaml.tmpl" rename hint
+// must not be attached to it (it sent users looking in the wrong place), while genuine
+// template syntax errors keep the hint.
+func TestExtractLocalsFromRawYAML_FunctionArgumentErrorHasNoTemplateHint(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	const templateHint = "rename it to .yaml.tmpl"
+
+	_, err := extractLocalsFromRawYAML(atmosConfig, "vars:\n  v: !ci.labels []\n", "bad-function-argument.yaml")
+	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrInvalidArguments)
+	require.ErrorIs(t, err, errUtils.ErrInvalidStackManifest)
+	assert.NotContains(t, err.Error(), templateHint)
+	assert.Contains(t, err.Error(), "!ci.labels")
+
+	_, err = extractLocalsFromRawYAML(atmosConfig, "vars:\n  v: {{ .x }}\n", "bad-template-syntax.yaml")
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, errUtils.ErrInvalidArguments)
+	assert.Contains(t, err.Error(), templateHint)
+}
+
+// TestExtractLocalsFromRawYAML_UnsupportedTagHints verifies the parse-failure hint: a CloudFormation
+// short-form intrinsic gets CloudFormation-specific advice instead of the unrelated suggestion to
+// rename the file to .yaml.tmpl, while any other unsupported tag keeps the generic advice.
+func TestExtractLocalsFromRawYAML_UnsupportedTagHints(t *testing.T) {
+	t.Cleanup(ClearLocalsExtractionCache)
+
+	t.Run("CloudFormation short-form intrinsics are accepted", func(t *testing.T) {
+		// The aws/cloudformation manifest package registers !Ref/!Sub/... as foreign tags that
+		// rewrite to their long form, so a stack manifest carrying them parses cleanly.
+		for name, content := range map[string]string{
+			"Ref": "components:\n  aws/cloudformation:\n    web:\n      template:\n        Outputs:\n          Id: !Ref Bucket\n",
+			"Sub": "components:\n  aws/cloudformation:\n    web:\n      template:\n        Value: !Sub \"${AWS::Region}\"\n",
+		} {
+			_, err := extractLocalsFromRawYAML(&schema.AtmosConfiguration{}, content, "stack-"+name+".yaml")
+			require.NoError(t, err, name)
+		}
+	})
+
+	t.Run("Rain directive gets the migration hint", func(t *testing.T) {
+		content := "components:\n  aws/cloudformation:\n    web:\n      template:\n        Value: !Rain::Env OWNER\n"
+		_, err := extractLocalsFromRawYAML(&schema.AtmosConfiguration{}, content, "stack-rain.yaml")
+		require.ErrorIs(t, err, errUtils.ErrInvalidStackManifest)
+		require.ErrorIs(t, err, errUtils.ErrUnsupportedYamlTag)
+		assert.True(t, errUtils.HasHint(err, "Replace !Rain::Env with"))
+		assert.NotContains(t, err.Error(), "rename it to .yaml.tmpl")
+	})
+
+	t.Run("other unsupported tag keeps the generic hint", func(t *testing.T) {
+		_, err := extractLocalsFromRawYAML(&schema.AtmosConfiguration{}, "vars:\n  stage: !envv HOME\n", "stack-other.yaml")
+		require.ErrorIs(t, err, errUtils.ErrInvalidStackManifest)
+		require.ErrorIs(t, err, errUtils.ErrUnsupportedYamlTag)
+		assert.Contains(t, err.Error(), "rename it to .yaml.tmpl")
+		assert.NotContains(t, err.Error(), "CloudFormation short-form")
+	})
 }

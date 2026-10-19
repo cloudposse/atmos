@@ -51,6 +51,15 @@ type Annotator interface {
 type SARIFReport struct {
 	Body     []byte
 	Category string
+
+	// Path is the file the report was read from, when it came from one. It is informational: providers
+	// that render a report locally name it so the user can tell which file was not uploaded.
+	Path string
+
+	// SkipReason is set by the reporter when it routes the report to local rendering because a switch
+	// is off (for example "ci.results.enabled is off"). Providers that render locally state it instead
+	// of claiming no CI provider was detected.
+	SkipReason string
 }
 
 // SARIFReporter is an optional capability for providers that ingest SARIF into

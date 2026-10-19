@@ -3,7 +3,6 @@ package acceptance
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -61,9 +60,10 @@ func buildFixtureTestBinary(t *testing.T, testNames []string) string {
 	}
 
 	binary := filepath.Join(t.TempDir(), "fixture.test")
-	cmd := exec.Command("go", "test", "-c", "-covermode=atomic", "-o", binary, ".")
-	cmd.Dir = src
-	if output, err := cmd.CombinedOutput(); err != nil {
+	// Routed through commandRunner.output (rather than a bare exec.Command) so this
+	// shares its subprocessSlots cap with every other subprocess this package's tests
+	// launch -- see maxConcurrentSubprocesses.
+	if output, err := newCommandRunner().output(t.Context(), src, nil, "go", "test", "-c", "-covermode=atomic", "-o", binary, "."); err != nil {
 		t.Fatalf("build fixture test binary: %v\n%s", err, output)
 	}
 	return binary

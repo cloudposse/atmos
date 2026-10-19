@@ -62,7 +62,18 @@ ai:
       max_turns: 10
   tools:
     enabled: true
+    mode: require_confirmation   # require_confirmation (default) | allow | yolo
 ```
+
+`ai.tools.mode` controls tool approval. `require_confirmation` prompts, `allow` never prompts
+(`ai.tools.blocked` still applies), and `yolo` bypasses blocked/restricted checks. The older
+`yolo_mode` and `require_confirmation` booleans are deprecated aliases; `mode` wins when set.
+With `claude-code`, `atmos ai chat`, `ask`, and `exec` show an approval prompt in the terminal and continue in the
+same run. Claude-native and provider-preapproved requests follow Claude’s own policy and do
+not reach Atmos’s checker. `--no-tools` and `ai.tools.enabled` only control Atmos tools.
+Always choices display the command/path/tool scope being cached; a bare MCP tool name covers
+all arguments. In CI without a terminal, set `ai.tools.mode: allow` or add the tool to
+`ai.providers.claude-code.allowed_tools`.
 
 ## AI Uses Atmos: MCP and Skills
 
@@ -128,6 +139,23 @@ install into each client's user-level directory instead of the project one, or `
 full manual control of the install location (this skips auto-distribution to clients). See
 [`atmos ai skill`](https://atmos.tools/cli/commands/ai/skill) for the full flag reference.
 
+### Declarative skill sources and version tracks
+
+Declare external skill sources under `ai.skills.<label>` with `source`, `ref`, `kind`, `subpath`,
+`plugins`, `include`, `exclude`, `clients`, and `scope`. Keep source declarations separate from inline
+prompt/tool entries. Use `ref: !version dependency` to select a locked version track dependency.
+
+- `atmos ai skill add <source> --name <label>`, `set`, and `remove` edit configuration only.
+- `atmos ai skill sync` reconciles declarations with `skills.lock.yaml` and installed copies.
+- `sync --frozen` requires matching locks; `sync --check` is an offline, read-only drift check.
+- Ordinary sync retains obsolete copies. Use `sync --prune` for explicit removal.
+- Use `--source <label>` to disambiguate installation/update/uninstall targets.
+- Advance managed refs with `atmos version track update`, then synchronize skills. Skill updates do
+  not advance managed dependencies independently.
+- Commit resolution locks; ignore `.atmos/skills/`, which stores project content and ownership.
+- Modified owned files require `--force`; unowned destinations and symlink escapes are refused.
+- Recover interrupted transactions with `atmos ai skill sync --recover` from the owning project.
+
 ### Installing Skills: Claude Code Plugin (Claude Code only)
 
 For Claude Code specifically, the skills plugin is a lighter-weight alternative that also
@@ -160,6 +188,10 @@ questions need Atmos Pro.
 ## External MCP Server Configuration
 
 Configure servers once in `atmos.yaml`. `atmos mcp export` writes them to per-CLI config files.
+
+`@latest` below is for brevity -- pin every `uvx` package to a reviewed version before treating
+this as a production setup (unpinned `@latest` on an MCP server is a supply-chain risk; see
+Guardrails below).
 
 ```yaml
 toolchain:
@@ -208,8 +240,6 @@ need AWS credentials; `aws-docs` is commonly no-auth):
 | aws-cloudtrail | Event history and API call auditing    |
 | aws-security   | Well-Architected security assessment   |
 | aws-api        | Direct AWS CLI (read-only by default)  |
-
-See `examples/mcp-for-ai-coding-assistants/atmos.yaml` for a working full configuration.
 
 ## Atmos Pro MCP Server (HTTP transport)
 
@@ -318,24 +348,29 @@ atmos mcp export
 `atmos mcp restart <name>` validates that the server can stop and start during the command; do
 not describe it as creating a long-running background service for stdio servers.
 
-## Gemini Trusted Folders Gotcha
+## Gemini CLI Gotchas
 
-Gemini's Trusted Folders feature blocks MCP servers in untrusted directories. After
-`atmos mcp export --output .gemini/settings.json`, the user must trust the folder once via
-the Gemini UI/settings before the MCP servers will start. Symptom: servers configured
-correctly but no tools available in Gemini.
+- **Personal Google accounts lost access on 2026-06-18.** Gemini CLI stopped serving requests
+  authenticated via "Login with Google" for free-tier and Google One individual accounts, which
+  were redirected to Antigravity CLI instead. Before recommending a Gemini CLI export, confirm
+  the user authenticates with an API key (billing enabled) or an enterprise Code Assist license --
+  personal-account users need a different client (Claude Code, Codex, Cursor) or Antigravity CLI,
+  which `atmos mcp export` does not target.
+- **Trusted Folders blocks MCP servers in untrusted directories.** After
+  `atmos mcp export --output .gemini/settings.json`, the user must trust the folder once via
+  the Gemini UI/settings before the MCP servers will start. Symptom: servers configured
+  correctly but no tools available in Gemini.
 
-## Related Examples
+## Related Patterns
 
-- `examples/mcp-for-ai-coding-assistants/` -- canonical full setup: Atmos MCP server + AWS
-  server suite + Atmos Pro, exported to Claude Code / Codex / Gemini, AWS credentials via
-  Atmos Auth.
-- `examples/mcp/` -- external MCP server config when Atmos itself drives the AI loop
+- **Full external-CLI setup**: Atmos MCP server + AWS server suite + Atmos Pro, exported to
+  Claude Code / Codex / Gemini, with AWS credentials injected via Atmos Auth.
+- **Atmos-driven AI loop**: external MCP server config when Atmos itself drives the AI loop
   (`atmos ai ask`) instead of an external CLI.
-- `examples/ai-claude-code/` -- use a Claude Pro/Max subscription as Atmos's AI provider (no
-  Anthropic API key). Atmos hosts the conversation; Claude Code provides the model.
-- `examples/ai/` -- multi-provider Atmos AI setup (Anthropic API, OpenAI API, Ollama). No
-  external CLI; chat with infrastructure from `atmos ai ask`.
+- **Claude Pro/Max as the AI provider**: use an existing Claude Pro/Max subscription instead of
+  an Anthropic API key. Atmos hosts the conversation; Claude Code provides the model.
+- **Multi-provider setup**: Anthropic API, OpenAI API, and Ollama configured side by side, no
+  external CLI -- chat with infrastructure directly from `atmos ai ask`.
 
 ## Guardrails
 

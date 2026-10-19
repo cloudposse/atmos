@@ -58,7 +58,7 @@ auth:
   identities:
     local-k8s:
       kind: kubernetes/emulator
-      emulator: kubernetes
+      emulator: local/kubernetes
       default: true
 
 commands:

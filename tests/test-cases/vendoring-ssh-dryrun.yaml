@@ -12,12 +12,19 @@ tests:
     args:
       - "vendor"
       - "pull"
+      # Keep diagnostic log ordering deterministic for these exact snapshots.
+      - "--max-concurrency=1"
       - "--logs-level=Debug"
       - "--dry-run"
     env:
       ATMOS_GITHUB_TOKEN: "supersecret"
     expect:
-      diff: []
+      # Renderer results can arrive between debug logs; assert each result separately.
+      diff:
+        - '(?m)^✓ .* \(checked\)$'
+      stderr:
+        - '(?m)^✓ terraform-null-label-cred \(0.25.0\) \(checked\)$'
+        - '(?m)^✓ terraform-null-label-basic \(0.25.0\) \(checked\)$'
       exit_code: 0
 
   - name: atmos vendor pull component using SSH
@@ -32,12 +39,18 @@ tests:
       - "vendor"
       - "pull"
       - "--component=ipinfo"
+      # Keep diagnostic log ordering deterministic for these exact snapshots.
+      - "--max-concurrency=1"
       - "--logs-level=Debug"
       - "--dry-run"
     env:
       ATMOS_GITHUB_TOKEN: "supersecret"
     expect:
-      diff: []
+      # Renderer results can arrive between debug logs; assert each result separately.
+      diff:
+        - '(?m)^✓ .* \(checked\)$'
+      stderr:
+        - '(?m)^✓ ipinfo \(main\) \(checked\)$'
       exit_code: 0
 
   - name: atmos vendor pull with custom detector and handling credentials leakage
@@ -51,6 +64,8 @@ tests:
     args:
       - "vendor"
       - "pull"
+      # Keep diagnostic log ordering deterministic for these exact snapshots.
+      - "--max-concurrency=1"
       - "--logs-level=Debug"
       - "--dry-run"
     env:
@@ -61,7 +76,15 @@ tests:
       ATMOS_BITBUCKET_USERNAME: "bitbucketusername"
       ATMOS_INJECT_BITBUCKET_TOKEN: "true"
     expect:
-      diff: []
+      # Renderer results can arrive between debug logs; assert each result separately.
+      diff:
+        - '(?m)^✓ .* \(checked\)$'
+      stderr:
+        - '(?m)^✓ terraform-null-label-basic \(0.25.0\) \(checked\)$'
+        - '(?m)^✓ terraform-null-label-direct \(0.25.0\) \(checked\)$'
+        - '(?m)^✓ terraform-null-label-cred \(0.25.0\) \(checked\)$'
+        - '(?m)^✓ terraform-gitlab-vpc \(master\) \(checked\)$'
+        - '(?m)^✓ terraform-bitbucket-deploy-jenkins \(master\) \(checked\)$'
       stdout:
         # GitHub case
         - !not 'supersecret'

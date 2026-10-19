@@ -12,17 +12,82 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/types"
 	"github.com/cloudposse/atmos/pkg/manifest"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// scaffoldLoadOptions holds the options a ScaffoldLoadOption can set.
+// Unexported: callers only ever construct one via a ScaffoldLoadOption
+// function.
+type scaffoldLoadOptions struct {
+	sourceDir     string
+	includedPaths *[]string
+}
+
+// ScaffoldLoadOption configures an optional LoadScaffoldConfigFromContent
+// behavior.
+type ScaffoldLoadOption func(*scaffoldLoadOptions)
+
+// WithSourceDir enables !include/!include.raw resolution (in options:,
+// computed value:, and matrix: axis lists alike -- resolution happens once,
+// generically, on the raw document) for a scaffold.yaml whose real or
+// nominal source directory is sourceDir. A local relative !include target
+// resolves against sourceDir; a remote target (git::, oci://, https://) is
+// unaffected either way. Omitted entirely, !include/!include.raw tags are
+// left unresolved -- e.g. in-memory content with no meaningful directory of
+// its own, such as most existing unit tests.
+func WithSourceDir(sourceDir string) ScaffoldLoadOption {
+	defer perf.Track(nil, "config.WithSourceDir")()
+
+	return func(o *scaffoldLoadOptions) {
+		o.sourceDir = sourceDir
+	}
+}
+
+// WithIncludedPaths, alongside WithSourceDir, appends included's raw path
+// argument for every !include/!include.raw tag resolved by this call --
+// e.g. "./lib/regions.yaml". A caller that also enumerates the template's
+// own local files by the same relative-path convention can intersect the
+// two sets to find which local files exist solely to be included, never
+// meant to be copied into generated output. Has no effect without
+// WithSourceDir (nothing to resolve, nothing to collect).
+func WithIncludedPaths(included *[]string) ScaffoldLoadOption {
+	defer perf.Track(nil, "config.WithIncludedPaths")()
+
+	return func(o *scaffoldLoadOptions) {
+		o.includedPaths = included
+	}
+}
+
 // LoadScaffoldConfigFromContent loads and validates an AtmosScaffoldConfig manifest from YAML content.
-func LoadScaffoldConfigFromContent(content string) (*ScaffoldConfig, error) {
+func LoadScaffoldConfigFromContent(content string, opts ...ScaffoldLoadOption) (*ScaffoldConfig, error) {
 	defer perf.Track(nil, "config.LoadScaffoldConfigFromContent")()
 
-	scaffoldConfig, err := manifest.Load[ScaffoldSpec](ScaffoldKind, []byte(content))
+	var options scaffoldLoadOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+
+	var loadOpts []manifest.LoadOption
+	if options.sourceDir != "" {
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath:         options.sourceDir,
+			BasePathAbsolute: options.sourceDir,
+		}
+		file := filepath.Join(options.sourceDir, ScaffoldConfigFileName)
+		loadOpts = append(loadOpts, manifest.WithIncludeResolution(atmosConfig, file, options.includedPaths))
+	}
+
+	scaffoldConfig, err := manifest.Load[ScaffoldSpec](ScaffoldKind, []byte(content), loadOpts...)
 	if err != nil {
 		return nil, err
 	}
 	if err := validateFieldDefinitions(scaffoldConfig); err != nil {
+		return nil, err
+	}
+	if err := validateFilePathPatterns(scaffoldConfig); err != nil {
+		return nil, err
+	}
+	if err := validateFileDelimiters(scaffoldConfig); err != nil {
 		return nil, err
 	}
 	if err := validateFileMatrix(scaffoldConfig); err != nil {
@@ -39,7 +104,7 @@ func LoadScaffoldConfigFromFile(configPath string) (*ScaffoldConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read scaffold config: %w", err)
 	}
-	return LoadScaffoldConfigFromContent(string(data))
+	return LoadScaffoldConfigFromContent(string(data), WithSourceDir(filepath.Dir(configPath)))
 }
 
 // projectRecordPath returns the path of the project record within targetPath.
@@ -95,11 +160,25 @@ func LoadUserValues(targetPath string) (map[string]interface{}, error) {
 //   - metadata identifies the template (name, version) at generation time
 //   - spec.fields snapshots the questionnaire so the project is self-describing
 //   - spec.values holds the answers
-//   - spec.source and spec.baseRef record provenance for future updates
+//   - spec.source and spec.baseRef/spec.renderedRef record provenance for
+//     future updates (whichever of the latter two matches the active
+//     --update-strategy; see ScaffoldSpec.RenderedRef)
 //
+// ProjectRecordProvenance groups SaveProjectRecord's update-provenance
+// fields (grouped into a struct, rather than three separate parameters, to
+// stay under revive's argument-limit). BaseRef and RenderedRef are mutually
+// exclusive in practice -- see ScaffoldSpec.RenderedRef's doc comment --
+// callers should only ever populate the one matching the active
+// --update-strategy.
+type ProjectRecordProvenance struct {
+	Source      string
+	BaseRef     string
+	RenderedRef string
+}
+
 // The record is marshaled directly to YAML (never through viper) so field
 // name casing is preserved exactly.
-func SaveProjectRecord(targetPath string, templateConfig *ScaffoldConfig, source, baseRef string, values map[string]interface{}) error {
+func SaveProjectRecord(targetPath string, templateConfig *ScaffoldConfig, provenance ProjectRecordProvenance, values map[string]interface{}) error {
 	defer perf.Track(nil, "config.SaveProjectRecord")()
 
 	// Reject nil configs and configs without a name: LoadProjectRecord will
@@ -118,11 +197,14 @@ func SaveProjectRecord(targetPath string, templateConfig *ScaffoldConfig, source
 		record.Spec.Fields = templateConfig.Spec.Fields
 		record.Spec.Delimiters = templateConfig.Spec.Delimiters
 	}
-	if source != "" {
-		record.Spec.Source = source
+	if provenance.Source != "" {
+		record.Spec.Source = provenance.Source
 	}
-	if baseRef != "" {
-		record.Spec.BaseRef = baseRef
+	if provenance.BaseRef != "" {
+		record.Spec.BaseRef = provenance.BaseRef
+	}
+	if provenance.RenderedRef != "" {
+		record.Spec.RenderedRef = provenance.RenderedRef
 	}
 	record.Spec.Values = values
 

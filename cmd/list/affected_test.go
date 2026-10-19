@@ -665,7 +665,7 @@ func TestAffectedCommandLong(t *testing.T) {
 func TestAffectedFlagTypes(t *testing.T) {
 	stringFlags := []string{
 		"format", "delimiter", "sort", "ref", "sha",
-		"repo-path", "ssh-key", "ssh-key-password", "stack",
+		"repo-path", "ssh-key", "ssh-key-password", "stack", "tags",
 	}
 
 	boolFlags := []string{
@@ -692,6 +692,12 @@ func TestAffectedFlagTypes(t *testing.T) {
 			assert.Equal(t, "bool", flag.Value.Type())
 		})
 	}
+
+	t.Run("labels is stringArray type", func(t *testing.T) {
+		flag := affectedCmd.Flags().Lookup("labels")
+		require.NotNil(t, flag)
+		assert.Equal(t, "stringArray", flag.Value.Type())
+	})
 
 	for _, flagName := range stringSliceFlags {
 		t.Run(flagName+" is stringSlice type", func(t *testing.T) {
@@ -778,6 +784,7 @@ func TestAffectedFlagUsageStrings(t *testing.T) {
 		"format", "columns", "delimiter", "sort", "ref", "sha",
 		"repo-path", "ssh-key", "clone-target-ref", "include-dependents",
 		"stack", "exclude-locked", "process-templates", "process-functions", "skip",
+		"tags", "labels",
 	}
 
 	for _, flagName := range flagsToCheck {

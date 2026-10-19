@@ -29,10 +29,10 @@ import (
 type Kind string
 
 const (
-	// KindValue marks a change to a config default value (the only kind used today).
+	// KindValue marks a change to a config default value.
 	KindValue Kind = "value"
-	// KindBehavior is reserved for future entries that gate code paths rather than
-	// config values (Rust-edition-style behavior changes). No entries use it yet.
+	// KindBehavior marks a dated transition between code paths. Each behavior key
+	// identifies one transition; Old and New describe those paths for inspection.
 	KindBehavior Kind = "behavior"
 )
 
@@ -40,14 +40,14 @@ const (
 type Entry struct {
 	// Date is the day the change shipped, in "YYYY-MM-DD" form (typically the PR merge date).
 	Date string `json:"date" yaml:"date"`
-	// Key is the Viper config key whose default changed, e.g. "components.helmfile.use_eks".
+	// Key is a Viper config key for KindValue or a unique transition name for KindBehavior.
 	Key string `json:"key" yaml:"key"`
 	// Kind classifies the entry; only KindValue entries participate in default resolution today.
 	Kind Kind `json:"kind" yaml:"kind"`
-	// Old is the default value before the change (what an earlier-anchored project gets).
+	// Old is the previous default value, or a description of the old behavior.
 	Old any `json:"old" yaml:"old"`
-	// New is the default value after the change; for the latest entry per key this must
-	// match the live default in setDefaultConfiguration (enforced by tests).
+	// New is the current default value, or a description of the new behavior. For
+	// the latest KindValue entry per key it must match setDefaultConfiguration.
 	New any `json:"new" yaml:"new"`
 	// Description explains the change in user-facing terms.
 	Description string `json:"description" yaml:"description"`
@@ -64,6 +64,29 @@ type Entry struct {
 // pager default is the string "true", not a bool), because Old is re-injected
 // via viper.SetDefault when a project pins an earlier edition.
 var journal = []Entry{
+	{
+		Date:        "2026-10-13",
+		Key:         "terraform.plan_diff.show_computed_attributes",
+		Kind:        KindBehavior,
+		Old:         "hide seven computed attributes from resource diffs; still compare them",
+		New:         "show all non-excluded resource attributes; still compare them",
+		Description: "Plan comparisons display content hashes and encoded response bodies unless explicitly excluded; earlier editions retain display-only suppression.",
+		Ref:         "https://atmos.tools/changelog/plan-diff-ignore-changes",
+	},
+	{
+		Date: "2026-09-15", Key: "vendor.max_concurrency", Kind: KindValue, Old: 1, New: 4,
+		Description: "Vendor downloads and upstream version checks run with four workers; destination writes remain ordered.",
+		Ref:         "https://github.com/cloudposse/atmos/pull/3169",
+	},
+	{
+		Date:        "2026-09-14",
+		Key:         "settings.experimental",
+		Kind:        KindValue,
+		Old:         "warn",
+		New:         "warn-daily",
+		Description: "Experimental warnings are shown once per feature every 24 hours using the shared local cache.",
+		Ref:         "https://github.com/cloudposse/atmos/pull/3164",
+	},
 	{
 		Date:        "2025-02-11",
 		Key:         "logs.file",
@@ -162,6 +185,71 @@ var journal = []Entry{
 		New:         true,
 		Description: "The toolchain writes toolchain.lock.yaml by default, pinning resolved tool versions and checksums for reproducible installs across platforms and CI.",
 		Ref:         "https://atmos.tools/changelog/toolchain-lockfile-default",
+	},
+	{
+		// components.terraform.init.mode is a brand-new key (PR #3127), which would normally
+		// need no entry at all -- new keys are never journal-gated. It gets one anyway because,
+		// unlike a truly new key, it governs behavior (whether init runs at all) that Atmos
+		// always had a fixed answer for (always, unconditionally), just not a configurable one;
+		// treating its ship-day default as journaled means a project pinned before this date
+		// observes byte-for-byte the same unconditional-init behavior it always had, with no
+		// explicit init.mode: always needed. init.upgrade below gets the identical treatment;
+		// init.reconfigure does NOT (see its comment at the SetDefault call site in
+		// pkg/config/load.go) because its legacy-boolean interaction makes the same mechanism
+		// unsafe -- it remains a documented KindBehavior gap instead.
+		Date:        "2026-09-12",
+		Key:         "components.terraform.init.mode",
+		Kind:        KindValue,
+		Old:         "always",
+		New:         "auto",
+		Description: "terraform init only runs when something that affects it changed, instead of unconditionally before every command.",
+		Ref:         "https://github.com/cloudposse/atmos/pull/3127",
+	},
+	{
+		Date:        "2026-09-12",
+		Key:         "components.terraform.init.upgrade",
+		Kind:        KindValue,
+		Old:         "never",
+		New:         "auto",
+		Description: "Atmos adds -upgrade to terraform init automatically when Terraform/OpenTofu reports one is required, instead of requiring it to be typed by hand.",
+		Ref:         "https://github.com/cloudposse/atmos/pull/3127",
+	},
+	{
+		// components.terraform.mocks.mode is a brand-new key, journaled the same way as
+		// components.terraform.init.mode above: it governs behavior --use-mocks already had a
+		// fixed answer for (always: mocks short-circuited every lookup and real state was never
+		// read), just not a configurable one. A project pinned before this date keeps that
+		// hermetic behavior with no explicit mocks.mode: always needed.
+		Date:        "2026-10-01",
+		Key:         "components.terraform.mocks.mode",
+		Kind:        KindValue,
+		Old:         "always",
+		New:         "fallback",
+		Description: "With --use-mocks, Terraform lookups use real state when it exists and fall back to component mocks only when the state isn't provisioned or the output is missing.",
+		Ref:         "https://atmos.tools/changelog/terraform-component-mocks-fallback",
+	},
+	{
+		// toolchain.install is a brand-new key (PR #3346), journaled the same way as
+		// components.terraform.init.mode above: it governs behavior Atmos already had a fixed
+		// answer for (only explicit dependencies.tools were installed for component runs),
+		// just not a configurable one. A project pinned before this date keeps that download
+		// policy. Installed project selections remain the baseline under every policy.
+		Date:        "2026-10-09",
+		Key:         "toolchain.install",
+		Kind:        KindValue,
+		Old:         "declared",
+		New:         "auto",
+		Description: "Component runs install their own pinned command from .tool-versions; pinned projects install only explicit dependencies. Every command inherits installed project selections under every policy.",
+		Ref:         "https://github.com/cloudposse/atmos/pull/3346",
+	},
+	{
+		Date:        "2026-10-17",
+		Key:         "docs.terraform.formatter_settings",
+		Kind:        KindBehavior,
+		Old:         "terraform-docs formatter defaults",
+		New:         "configured Terraform documentation formatting",
+		Description: "README generation honors explicit section visibility, hide_empty, and indent_level; earlier pins retain the legacy formatter output.",
+		Ref:         "https://github.com/cloudposse/atmos/pull/3404",
 	},
 }
 

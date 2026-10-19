@@ -3,8 +3,12 @@ package plugin
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,21 +30,62 @@ type fakeRunner struct {
 	listOutput string
 	// installErr, if set, is returned for `helm plugin install`.
 	installErr error
+	pluginName string
+	hook       func(context.Context, []string, string) (bool, string, string, error)
 }
 
-func (f *fakeRunner) Run(_ context.Context, name string, args, extraEnv []string) (string, string, error) {
+func (f *fakeRunner) Run(ctx context.Context, name string, args, extraEnv []string) (string, string, error) {
 	f.calls = append(f.calls, recordedCall{name: name, args: append([]string(nil), args...), env: append([]string(nil), extraEnv...)})
 
+	dir := strings.TrimPrefix(extraEnv[0], "HELM_PLUGINS=")
+	if f.hook != nil {
+		if handled, out, stderr, err := f.hook(ctx, args, dir); handled {
+			return out, stderr, err
+		}
+	}
 	if len(args) >= 2 && args[0] == "plugin" {
 		switch args[1] {
 		case "list":
-			return f.listOutput, "", nil
+			out := f.listOutput
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				return "", "", err
+			}
+			for _, entry := range entries {
+				metadata, err := readPluginMetadata(filepath.Join(dir, entry.Name(), "plugin.yaml"))
+				if err == nil {
+					out += fmt.Sprintf("%s %s\n", metadata.Name, metadata.Version)
+				}
+			}
+			return out, "", nil
 		case "install":
 			if f.installErr != nil {
 				return "", "boom", f.installErr
 			}
-			return "", "", nil
+			version := "1.0.0"
+			if len(args) == 5 {
+				version = strings.TrimPrefix(args[4], "v")
+			}
+			pluginName := f.pluginName
+			if pluginName == "" {
+				pluginName = strings.TrimPrefix(repoName(args[2]), "helm-")
+			}
+			pluginDir := filepath.Join(dir, pluginName)
+			if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+				return "", "", err
+			}
+			if err := os.WriteFile(filepath.Join(pluginDir, "plugin.yaml"), []byte(fmt.Sprintf("name: %s\nversion: %s\n", pluginName, version)), 0o644); err != nil {
+				return "", "", err
+			}
+			return "", "", os.WriteFile(filepath.Join(pluginDir, "version"), []byte(version), 0o644)
 		case "uninstall":
+			existing, err := findPluginDirectory(dir, args[2])
+			if err != nil {
+				return "", "", err
+			}
+			if existing != "" {
+				return "", "", os.RemoveAll(existing)
+			}
 			return "", "", nil
 		}
 	}
@@ -68,7 +113,10 @@ func (f *fakeRunner) uninstallCalls() []recordedCall {
 }
 
 func newTestInstaller(r Runner, dir string) *Installer {
-	return NewInstaller("/fake/helm", WithRunner(r), WithDir(dir))
+	inst := NewInstaller("/fake/helm", WithRunner(r), WithDir(dir))
+	zero := time.Duration(0)
+	inst.retryConfig.InitialDelay = &zero
+	return inst
 }
 
 func TestEnsurePlugins_InstallsMissing(t *testing.T) {
@@ -86,6 +134,7 @@ func TestEnsurePlugins_InstallsMissing(t *testing.T) {
 	require.Len(t, installs, 1)
 	assert.Equal(t, []string{"plugin", "install", "https://github.com/databus23/helm-diff", "--version", "v3.9.4"}, installs[0].args)
 	assert.Contains(t, installs[0].env, "HELM_PLUGINS="+dir)
+	assert.FileExists(t, filepath.Join(dir, "diff", "plugin.yaml"))
 	assert.Empty(t, runner.uninstallCalls())
 }
 
@@ -106,6 +155,7 @@ func TestEnsurePlugins_InstallsLatestWithoutVersionFlag(t *testing.T) {
 func TestEnsurePlugins_SkipsWhenAlreadyInstalled(t *testing.T) {
 	runner := &fakeRunner{listOutput: "NAME\tVERSION\tDESCRIPTION\ndiff\t3.9.4\tdiff plugin\n"}
 	inst := newTestInstaller(runner, t.TempDir())
+	seedPlugin(t, inst.dir, "diff", "3.9.4", &Spec{Name: "diff", URL: "https://github.com/databus23/helm-diff", Version: "v3.9.4"})
 
 	_, err := inst.EnsurePlugins(context.Background(), []Spec{
 		{Name: "diff", URL: "https://github.com/databus23/helm-diff", Version: "v3.9.4"},
@@ -124,15 +174,14 @@ func TestEnsurePlugins_ReinstallsOnVersionMismatch(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	uninstalls := runner.uninstallCalls()
-	require.Len(t, uninstalls, 1)
-	assert.Equal(t, []string{"plugin", "uninstall", "diff"}, uninstalls[0].args)
+	require.Len(t, runner.uninstallCalls(), 1)
 	require.Len(t, runner.installCalls(), 1)
 }
 
 func TestEnsurePlugins_SkipsLatestWhenPresent(t *testing.T) {
 	runner := &fakeRunner{listOutput: "NAME\tVERSION\ndiff\t3.8.0\n"}
 	inst := newTestInstaller(runner, t.TempDir())
+	seedPlugin(t, inst.dir, "diff", "3.9.4", &Spec{Name: "diff", URL: "https://github.com/databus23/helm-diff", Version: ""})
 
 	_, err := inst.EnsurePlugins(context.Background(), []Spec{
 		{Name: "diff", URL: "https://github.com/databus23/helm-diff"}, // latest

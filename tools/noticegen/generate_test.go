@@ -137,3 +137,72 @@ func TestGeneratePropagatesWriteFileError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), outPath)
 }
+
+// TestGenerateKeepsCommittedDescriptionWhenFetchFails covers the CI case: the unauthenticated
+// GitHub API returns 403, and the tagline already committed in NOTICE is reused instead of failing.
+func TestGenerateKeepsCommittedDescriptionWhenFetchFails(t *testing.T) {
+	stubDir := buildStubGoLicenses(t, "example.com/dep,https://example.com/dep/LICENSE,MIT\n")
+	t.Setenv("PATH", stubDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	root := t.TempDir()
+	writeTestModule(t, root)
+	outPath := filepath.Join(root, "NOTICE")
+	require.NoError(t, os.WriteFile(outPath, []byte(Render(nil, "The committed tagline.")), 0o644))
+
+	failingDescription := func() (string, error) { return "", assert.AnError }
+
+	summary, err := generate(root, outPath, failingDescription)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, summary.Total)
+	content, err := os.ReadFile(outPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "NOTICE\n\nThe committed tagline.\nCopyright 2021-")
+	assert.Contains(t, string(content), "example.com/dep")
+}
+
+func TestGenerateFetchErrorWithUnrecognizedNotice(t *testing.T) {
+	stubDir := buildStubGoLicenses(t, "example.com/dep,https://example.com/dep/LICENSE,MIT\n")
+	t.Setenv("PATH", stubDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	root := t.TempDir()
+	writeTestModule(t, root)
+	outPath := filepath.Join(root, "NOTICE")
+	require.NoError(t, os.WriteFile(outPath, []byte("not a generated NOTICE\n"), 0o644))
+
+	_, err := generate(root, outPath, func() (string, error) { return "", assert.AnError })
+
+	require.ErrorIs(t, err, assert.AnError)
+	assert.Contains(t, err.Error(), "fetch repo description")
+}
+
+func TestExistingDescription(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    string
+		wantOK  bool
+	}{
+		{name: "rendered header", content: Render(nil, "A tagline."), want: "A tagline.", wantOK: true},
+		{name: "CRLF line endings", content: "NOTICE\r\n\r\nA tagline.\r\nCopyright 2021-2026 Cloud Posse, LLC\r\n", want: "A tagline.", wantOK: true},
+		{name: "missing title", content: "\n\nA tagline.\nCopyright 2021-2026 Cloud Posse, LLC\n"},
+		{name: "empty tagline", content: "NOTICE\n\n\nCopyright 2021-2026 Cloud Posse, LLC\n"},
+		{name: "no copyright line", content: "NOTICE\n\nA tagline.\nSomething else\n"},
+		{name: "too short", content: "NOTICE\n"},
+		{name: "control character", content: "NOTICE\n\nA\ttagline.\nCopyright 2021-2026 Cloud Posse, LLC\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "NOTICE")
+			require.NoError(t, os.WriteFile(path, []byte(tt.content), 0o644))
+
+			got, ok := existingDescription(path)
+
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+
+	_, ok := existingDescription(filepath.Join(t.TempDir(), "missing"))
+	assert.False(t, ok)
+}

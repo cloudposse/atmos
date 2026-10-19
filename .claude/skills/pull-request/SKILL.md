@@ -92,25 +92,25 @@ Get this right the first time:
 
 1. Verify your local git is configured to sign automatically before your first commit:
 
-   ```bash
-   git config --get commit.gpgsign       # should print: true
-   git config --get gpg.format            # "openpgp" or "ssh"
-   git config --get user.signingkey       # your signing key
-   ```
+    ```bash
+    git config --get commit.gpgsign       # should print: true
+    git config --get gpg.format            # "openpgp" or "ssh"
+    git config --get user.signingkey       # your signing key
+    ```
 
-   If `commit.gpgsign` is not `true`, set it for the repo:
+    If `commit.gpgsign` is not `true`, set it for the repo:
 
-   ```bash
-   git config commit.gpgsign true
-   ```
+    ```bash
+    git config commit.gpgsign true
+    ```
 
 2. After your first commit, verify it's signed:
 
-   ```bash
-   git log --show-signature -1
-   ```
+    ```bash
+    git log --show-signature -1
+    ```
 
-   Look for `gpg: Good signature from ...` or `Good "git" signature for ...`. If you see "no signature found", **stop and fix your git config before pushing**.
+    Look for `gpg: Good signature from ...` or `Good "git" signature for ...`. If you see "no signature found", **stop and fix your git config before pushing**.
 
 3. **Never bypass signing with `--no-gpg-sign` or `-c commit.gpgsign=false`** even temporarily. The CLAUDE.md rules forbid this, and the resulting commit cannot be merged.
 
@@ -131,11 +131,11 @@ Run through these in order before `git push`. Every item has burned someone befo
 1. **Identify the smallest accurate label.** Use the decision tree above. Default to `no-release` for plumbing.
 2. **Confirm commit signing is on** (see above). One unsigned commit blocks the entire PR from merging.
 3. **If `minor` or `major`:**
-   - Create a blog post at `website/blog/YYYY-MM-DD-<slug>.mdx`.
-   - Read `website/blog/tags.yml` and pick a defined tag.
-   - Check `website/blog/authors.yml` for your handle; add yourself if missing.
-   - Embed the feature's cast (`CastPlayer`) if one exists or was recorded for this PR.
-   - Delegate the roadmap update to the `roadmap` skill (do not touch `featured[]`).
+    - Create a blog post at `website/blog/YYYY-MM-DD-<slug>.mdx`.
+    - Read `website/blog/tags.yml` and pick a defined tag.
+    - Check `website/blog/authors.yml` for your handle; add yourself if missing.
+    - Embed the feature's cast (`CastEmbed`) if one exists or was recorded for this PR.
+    - Delegate the roadmap update to the `roadmap` skill (do not touch `featured[]`).
 4. **Build the website** to verify MDX renders: `cd website && npm run build`.
 5. **Commit and push.**
 
@@ -173,6 +173,37 @@ gh pr create --body-file /tmp/pr-body.md
 
 (Alternatively, the single-quoted heredoc already disables shell expansion, so plain unescaped backticks work — but `--body-file` is more robust because file content survives shell quoting unchanged.)
 
+## Stacked PRs (GitHub stacks, not just base-branch chains)
+
+A PR whose base is another feature branch is only a **chain**. GitHub's native stacked pull
+requests are a separate, first-class object (`PullRequestStack`, with a stack number and ordered
+entries), and tools such as Conductor read that object, not the base branches. A chained PR shows
+the banner "This pull request can be stacked with other pull requests" and `stack: null` in the
+API until it is linked.
+
+Register or grow a stack with the `gh stack` extension (`gh extension install github/gh-stack`);
+there is no GraphQL mutation for it:
+
+```bash
+# Create or update a stack from existing PRs or branches, listed bottom to top.
+gh stack link 3263 3264 3266 3261 3274
+
+# Append a new PR or branch to the top of an existing stack (first argument is the stack number).
+gh stack link 3267 3312
+
+# Confirm what GitHub recorded (position 1 is closest to main).
+gh api graphql -f query='{ repository(owner:"cloudposse", name:"atmos") { pullRequest(number:3307) {
+  stack { number size entries(first:30) { nodes { position pullRequest { number } } } } } } }'
+```
+
+`gh stack link` never removes PRs from a stack and keeps draft status unless you pass `--open`.
+After `link`, `gh stack view` still reports "not part of a stack" because `link` deliberately skips
+local tracking; that is expected. Never claim a set of PRs is a stack from branch ancestry alone.
+
+When a PR in the middle of a stack changes, rebase every PR above it (verify replayed commits
+with `git patch-id --stable`) and push each with `--force-with-lease`; the stack object itself
+needs no update.
+
 ## Updating an existing PR
 
 If a PR has already been opened without a label, or with the wrong one:
@@ -181,15 +212,15 @@ If a PR has already been opened without a label, or with the wrong one:
 2. Apply the decision tree to pick the correct label.
 3. **If the PR has no semver label yet:** add it.
 
-   ```bash
-   gh pr edit <num> --add-label <label>
-   ```
+    ```bash
+    gh pr edit <num> --add-label <label>
+    ```
 
 4. **If the PR has a different semver label already:** remove the old one and add the new one in a single invocation, so you never have two semver labels at once (which fails CI):
 
-   ```bash
-   gh pr edit <num> --remove-label <old-label> --add-label <new-label>
-   ```
+    ```bash
+    gh pr edit <num> --remove-label <old-label> --add-label <new-label>
+    ```
 
 5. If you changed from `no-release`/`patch` to `minor`/`major`, you now owe a blog post and roadmap update — add them in a new commit on the same branch.
 6. If you changed from `minor`/`major` to a lower label, you can (optionally) remove the blog post and roadmap update in a new commit, but it's also fine to leave them.
@@ -200,6 +231,7 @@ This skill orchestrates the PR workflow but delegates the deep domain work to de
 
 - **[`changelog` skill](../changelog/SKILL.md)** — invoke when writing or editing a `website/blog/*.mdx` post. Owns the template, tags, authors, and style rules. Invoke via `Skill` with `skill: "changelog"`.
 - **[`roadmap` skill](../roadmap/SKILL.md)** — invoke when you need to edit `website/src/data/roadmap.js`. Owns the milestone schema, `featured[]` curation rule, no-changelog-for-internal-refactors invariant, and progress-percentage math. Invoke via `Skill` with `skill: "roadmap"`.
+- **[`editions` skill](../editions/SKILL.md)** — invoke when a PR changes what a config key defaults to, or changes what an existing stored value effectively means (even via a brand-new key). Decides whether `pkg/edition/journal.go` needs a `KindValue` entry, whether a new automatic-behavior default should preserve prior behavior instead, and when to add a `KindBehavior` Roadmap candidate note in `docs/prd/editions.md` for a reinterpretation the journal can't gate yet. Invoke via `Skill` with `skill: "editions"`.
 - **[`coderabbit-review` agent](../../agents/coderabbit-review.md)** — invoke when a CodeRabbit review lands with substantial feedback. Knows how to parse CR threads, verify findings against current code, apply valid suggestions, and skip stale/wrong ones with explanation. Invoke via `Agent` with `subagent_type: "coderabbit-review"`.
 
 If your PR also touches a specific Atmos subsystem, the matching domain agent is the right collaborator for the implementation work (separate from this PR-workflow skill):

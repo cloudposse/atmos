@@ -3,6 +3,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Resvg } from "@resvg/resvg-js";
 import jpeg from "jpeg-js";
+import buildTimestamp from "../plugins/build-timestamp.js";
+
+const { getBuildDate } = buildTimestamp;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -114,14 +117,14 @@ function crc32(buffer) {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-function dosDateTime(date = new Date()) {
-  const year = Math.max(date.getFullYear(), 1980);
+function dosDateTime(date = getBuildDate()) {
+  const year = Math.max(date.getUTCFullYear(), 1980);
   const dosTime =
-    (date.getHours() << 11) |
-    (date.getMinutes() << 5) |
-    (date.getSeconds() >> 1);
+    (date.getUTCHours() << 11) |
+    (date.getUTCMinutes() << 5) |
+    (date.getUTCSeconds() >> 1);
   const dosDate =
-    ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+    ((year - 1980) << 9) | ((date.getUTCMonth() + 1) << 5) | date.getUTCDate();
   return { dosDate, dosTime };
 }
 

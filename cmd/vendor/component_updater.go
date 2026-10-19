@@ -1,6 +1,9 @@
 package vendor
 
 import (
+	"context"
+	"os"
+	"os/signal"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -9,7 +12,9 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/batch"
 	"github.com/cloudposse/atmos/pkg/vendoring"
 	"github.com/cloudposse/atmos/pkg/vendoring/updater"
 )
@@ -17,13 +22,17 @@ import (
 // vendorUpdateParams bundles runVendorUpdate's inputs (an Options-pattern struct, mirroring
 // repoWideUpdateParams/vendorPullParams in update.go).
 type vendorUpdateParams struct {
-	viper         *viper.Viper
-	componentType string
-	tags          []string
-	typeChanged   bool
-	components    []string
-	group         string
-	check         bool
+	ctx            context.Context
+	config         *schema.AtmosConfiguration
+	maxConcurrency int
+	onEvent        batch.Observer
+	viper          *viper.Viper
+	componentType  string
+	tags           []string
+	typeChanged    bool
+	components     []string
+	group          string
+	check          bool
 }
 
 // runWithProgressAdapter bridges cmd/vendor's own bubbletea-spinner runUpdateWithSpinner (named
@@ -37,24 +46,44 @@ func runWithProgressAdapter(doWork func(onProgress func(component string, index,
 }
 
 // selectionParams builds updater.SelectionParams from p, binding RepoWideUpdate to this package's
-// own runRepoWideUpdate (which pkg/vendoring/updater cannot call directly -- it depends on
-// cmd/vendor's viper-bound flag reads) and RunWithProgress to the bubbletea spinner adapter above.
+// own runRepoWideUpdate and the shared operation observer.
 func (p *vendorUpdateParams) selectionParams() *updater.SelectionParams {
 	return &updater.SelectionParams{
+		Context: p.ctx, AtmosConfig: p.config, MaxConcurrency: p.maxConcurrency, OnEvent: p.onEvent,
 		Viper:           p.viper,
 		ComponentType:   p.componentType,
 		Tags:            p.tags,
 		Group:           p.group,
 		Check:           p.check,
 		VendorFile:      p.viper.GetString("file"),
-		RunWithProgress: runWithProgressAdapter,
+		RunWithProgress: nil,
 		RepoWideUpdate: func(check bool) (*vendoring.UpdateReport, error) {
-			return runRepoWideUpdate(p.viper, repoWideUpdateParams{typeChanged: p.typeChanged, componentType: p.componentType, tags: p.tags, check: check})
+			return runRepoWideUpdate(p.viper, repoWideUpdateParams{ctx: p.ctx, config: p.config, maxConcurrency: p.maxConcurrency, onEvent: p.onEvent, typeChanged: p.typeChanged, componentType: p.componentType, tags: p.tags, check: check})
 		},
 	}
 }
 
 func runVendorUpdate(p *vendorUpdateParams) (*vendoring.UpdateReport, error) {
+	if p.onEvent == nil {
+		ctx := p.ctx
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
+		defer cancel()
+		copy := *p
+		copy.ctx = ctx
+		ui.Info("Checking vendored component versions")
+		var report *vendoring.UpdateReport
+		err := batch.Run(0, func(emit batch.Observer) error {
+			copy.onEvent = emit
+			var err error
+			report, err = runVendorUpdate(&copy)
+			return err
+		})
+		return report, err
+	}
+
 	v := p.viper
 	// A nil selection means a direct --group invocation needs discovery. A
 	// non-nil selection was already narrowed by the --pull-request discovery
@@ -74,9 +103,7 @@ func runVendorUpdate(p *vendorUpdateParams) (*vendoring.UpdateReport, error) {
 		return &vendoring.UpdateReport{}, nil
 	}
 	if len(p.components) == 0 {
-		return runUpdateWithSpinner(func(onProgress vendorProgressFunc) (*vendoring.UpdateReport, error) {
-			return runRepoWideUpdate(v, repoWideUpdateParams{typeChanged: p.typeChanged, componentType: p.componentType, tags: p.tags, check: p.check, onProgress: onProgress})
-		})
+		return runRepoWideUpdate(v, repoWideUpdateParams{ctx: p.ctx, config: p.config, maxConcurrency: p.maxConcurrency, onEvent: p.onEvent, typeChanged: p.typeChanged, componentType: p.componentType, tags: p.tags, check: p.check})
 	}
 	return updater.UpdateSelectedComponents(p.selectionParams(), p.components)
 }

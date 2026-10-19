@@ -70,7 +70,7 @@ Start with the default provenance mode to inspect the evidence and coverage for 
 atmos sbom generate --format cyclonedx-json --output infra.sbom.json
 ```
 
-Add `--include-files` when the exact `vendor.lock.yaml` file inventory belongs in the document:
+Add [`--include-files`](/cli/commands/sbom/usage) when the exact `vendor.lock.yaml` file inventory belongs in the document:
 
 ```shell
 atmos sbom generate --include-files --output infra.sbom.json

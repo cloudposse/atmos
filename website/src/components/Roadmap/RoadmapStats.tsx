@@ -23,6 +23,7 @@ interface Stats {
   percentComplete: number;
 }
 
+/** Count milestones by delivery status and calculate their aggregate completion percentage. */
 function computeStats(initiatives: Initiative[]): Stats {
   let shipped = 0;
   let inProgress = 0;
@@ -46,6 +47,7 @@ function computeStats(initiatives: Initiative[]): Stats {
   return { shipped, inProgress, planned, total, percentComplete };
 }
 
+/** Summarize roadmap delivery with shipped, in-progress, and planned milestone totals. */
 export default function RoadmapStats({ initiatives }: RoadmapStatsProps): JSX.Element {
   const stats = computeStats(initiatives);
 
@@ -59,13 +61,13 @@ export default function RoadmapStats({ initiatives }: RoadmapStatsProps): JSX.El
       <div className={styles.statsProgressBar}>
         <motion.div
           className={styles.statsProgressShipped}
-          initial={{ width: 0 }}
+          initial={false}
           animate={{ width: `${stats.total > 0 ? (stats.shipped / stats.total) * 100 : 0}%` }}
           transition={{ duration: 0.8, ease: 'easeOut' }}
         />
         <motion.div
           className={styles.statsProgressInProgress}
-          initial={{ width: 0 }}
+          initial={false}
           animate={{ width: `${stats.total > 0 ? (stats.inProgress / stats.total) * 100 : 0}%` }}
           transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
         />

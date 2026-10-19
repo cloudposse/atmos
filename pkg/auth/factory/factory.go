@@ -163,10 +163,14 @@ func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
 		return awsIdentities.NewAWSAmbientIdentity(name, config)
 	case "aws/user":
 		return awsIdentities.NewUserIdentity(name, config)
+	case types.IdentityKindAWSCredentialProcess:
+		return awsIdentities.NewCredentialProcessIdentity(name, config)
 	case "atmos/pro":
 		return atmosproIdentities.NewIdentity(name, config)
-	case "azure/subscription":
+	case types.IdentityKindAzureSubscription:
 		return azureIdentities.NewSubscriptionIdentity(name, config)
+	case types.IdentityKindAzurePIMRole:
+		return azureIdentities.NewPIMRoleIdentity(name, config)
 	case "mock":
 		return mockProviders.NewIdentity(name, config), nil
 	case "mock/aws":

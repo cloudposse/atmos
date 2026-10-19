@@ -41,4 +41,27 @@ func TestAtmosCacheActionValidatesMetadataBeforeActionsCache(t *testing.T) {
 
 	assert.Less(t, metaIdx, cacheIdx, "cache metadata must be derived before the cache step runs")
 	assert.Less(t, metaIdx, cacheRestoreIdx, "cache metadata must be derived before the cache-restore step runs")
+	// The released bootstrap CLI can predate the GITHUB_ENV protocol and write
+	// cache metadata only to this composite step's outputs. Keep each cache
+	// action compatible with both it and the current CLI, which additionally
+	// exports ATMOS_CACHE_* for nested composite post steps.
+	fallbacks := []string{
+		"env.ATMOS_CACHE_KEY || steps.meta.outputs.key",
+		"env.ATMOS_CACHE_PATH || steps.meta.outputs.path",
+		"env.ATMOS_CACHE_RESTORE_KEYS || steps.meta.outputs.restore-keys",
+	}
+	blocks := []struct {
+		name    string
+		content string
+	}{
+		{name: "cache", content: action[cacheIdx:cacheRestoreIdx]},
+		{name: "cache-restore", content: action[cacheRestoreIdx:]},
+	}
+	for _, block := range blocks {
+		t.Run(block.name, func(t *testing.T) {
+			for _, fallback := range fallbacks {
+				assert.Contains(t, block.content, fallback)
+			}
+		})
+	}
 }

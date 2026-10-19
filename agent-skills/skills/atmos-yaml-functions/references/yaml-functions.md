@@ -7,6 +7,26 @@ type-safe, predictable, and unable to break YAML syntax.
 All YAML functions support Go template expressions in their arguments. Atmos processes
 templates first, then executes the YAML functions.
 
+## `!labels` — Component metadata lookup
+
+```yaml
+vars:
+  labels: !labels                       # Complete metadata.labels map
+  runner: !labels runner                # One literal, case-sensitive key
+  owner: !labels owner "Platform Team"  # Fallback only when the key is absent
+  optional: !labels missing ""          # Explicit empty fallback
+```
+
+The lookup uses resolved metadata after defaults and inheritance. Bare `!labels` returns `{}`
+when labels are absent; a missing key without a fallback is an error. An existing empty string
+counts as present. Keys with dots, slashes, and hyphens are literal, not nested paths.
+The function accepts at most two arguments; quote defaults containing spaces.
+
+For templates, use `{{ .metadata.labels.runner }}` or
+`{{ index .metadata.labels "cost-center" }}`. There is no built-in `.labels` shortcut.
+Functions also work in `settings.pro` workflow inputs; use `!labels runner ubuntu-latest`
+for per-component runner selection with a fallback. This does not provision GitHub runners.
+
 ## `!terraform.state` (Recommended)
 
 Read Terraform outputs directly from the state backend without initialization. This is the
@@ -438,6 +458,34 @@ users: [!literal "{{external.email}}", !literal "{{external.admin}}"]
 # Regex patterns
 pattern: !literal "^[a-z]+\\d{3}$"
 ```
+
+### Step fields
+
+In `atmos.yaml` custom commands, workflows, and hooks, `!literal` also works on the step fields `script`, `command`,
+`interpreter`, `working_directory`, `timeout`, and individual `env` values (plain-string steps, command-level `env`, and
+`env` on `parallel`/`matrix` parents included). On any other step field it fails config load, naming the field and
+step (checked for custom-command steps). `script: !include.raw file.star` is used exactly as written; `!include` is
+still rendered as a template.
+
+## `!starlark`
+
+Compute typed values with the Atmos Automation Language (Starlark) from the component's effective configuration.
+
+```yaml
+vars:
+  label: !starlark |
+    return "%s/%s" % (ctx.vars["stage"], ctx.settings.get("owner", "platform"))
+```
+
+- Works in stack manifests only. Atmos rejects it in `atmos.yaml`, profiles, and imported config, naming the file and key.
+- `ctx` sections: `vars`, `metadata`, `settings`, `env`, `locals`; plus `ctx.stack`, `ctx.component`,
+  `ctx.component_type`. Attribute access works on `ctx` itself; inside a section use `["key"]` or `.get("key")`.
+- Selective commands (`list ... --columns`, `describe stacks --sections/--query`, `describe component --query`)
+  evaluate only the fields a value reads through bounded forms: `ctx.<section>["key"]`, `.get("literal"[, default])`,
+  nested chains, and the identity fields. A bare section (`dict(ctx.vars)`, `json.encode(ctx.vars)`, iteration,
+  aliasing), a computed key, `get` with a non-literal key, `items()/keys()/values()`, `ctx` passed to a function,
+  unknown fields, or unparsable source falls back to full evaluation. A full `describe component` evaluates everything.
+- `describe stacks` rejects a computed stack identity; `terraform generate varfiles` and `generate backends` accept it.
 
 ## `!random`
 

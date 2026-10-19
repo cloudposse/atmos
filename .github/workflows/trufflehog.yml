@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -41,7 +41,7 @@ jobs:
       # are still live against the provider's API, not just pattern matches —
       # keeps this a real blocking gate without pattern-only noise.
       - name: TruffleHog
-        uses: trufflesecurity/trufflehog@bcfcf73aaf4759d4dadc2783177c245a02792318 # v3.97.0
+        uses: trufflesecurity/trufflehog@f714bf454f350590f4a24c3ddb1aef02c35bf5b6 # v3.97.5
         with:
           # The action's own docker invocation defaults to the mutable
           # ghcr.io/trufflesecurity/trufflehog:latest tag; pin image+version to

@@ -6,9 +6,11 @@ authors:
 tags:
   - enhancement
 date: 2026-01-20T12:00:00.000Z
+cast: "/casts/examples/locals/structured-values.cast"
+castTitle: "atmos locals structured values"
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
 Locals can access `{{ .settings }}`, `{{ .vars }}`, and `{{ .env }}` from the same file during template resolution.
 
@@ -44,7 +46,7 @@ components:
 
 See it resolve with structured values:
 
-<CastPlayer src="/casts/examples/locals/structured-values.cast" title="atmos locals structured values" chrome controls scrubber />
+<CastEmbed src="/casts/examples/locals/structured-values.cast" title="atmos locals structured values" chrome controls scrubber />
 
 [View the full example](/examples/locals)
 

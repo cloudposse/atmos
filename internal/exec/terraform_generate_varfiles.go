@@ -30,7 +30,7 @@ func ExecuteTerraformGenerateVarfiles(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateVarfiles")()
 
-	stacksMap, _, deferredContexts, err := FindStacksMap(atmosConfig, false)
+	stacksMap, rawStackConfigs, deferredContexts, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
 	}
@@ -128,6 +128,7 @@ func ExecuteTerraformGenerateVarfiles(
 
 				configAndStacksInfo := schema.ConfigAndStacksInfo{
 					ComponentFromArg:          componentName,
+					ComponentType:             cfg.TerraformComponentType,
 					ComponentMetadataSection:  metadataSection,
 					ComponentVarsSection:      varsSection,
 					ComponentSettingsSection:  settingsSection,
@@ -185,6 +186,12 @@ func ExecuteTerraformGenerateVarfiles(
 					}
 				}
 
+				// A computed name is not final yet. Keep derived metadata from being
+				// interpreted as another Starlark program during value evaluation.
+				if containsStarlark(stackName) {
+					stackName = stackFileName
+				}
+
 				configAndStacksInfo.Context = context
 				configAndStacksInfo.Stack = stackName
 				configAndStacksInfo.ComponentSection["atmos_component"] = componentName
@@ -193,10 +200,15 @@ func ExecuteTerraformGenerateVarfiles(
 				configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
 				configAndStacksInfo.ComponentSection["atmos_manifest"] = stackFileName
 
-				// Terraform workspace
+				// Terraform workspace. Batch generation starts from a physical manifest before
+				// evaluating computed vars. Keep its provisional workspace physical as well;
+				// BuildTerraformWorkspace runs again after finishValues with the resolved context.
 				workspace, err := BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
-				if err != nil {
+				if err != nil && !errors.Is(err, errUtils.ErrStarlarkStackIdentity) {
 					return err
+				}
+				if errors.Is(err, errUtils.ErrStarlarkStackIdentity) || containsStarlark(workspace) {
+					workspace = strings.ReplaceAll(stackFileName, "/", "-")
 				}
 				componentSection["workspace"] = workspace
 				configAndStacksInfo.ComponentSection["workspace"] = workspace
@@ -254,7 +266,10 @@ func ExecuteTerraformGenerateVarfiles(
 					errUtils.CheckErrorPrintAndExit(err, "", "")
 				}
 
-				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, nil, &configAndStacksInfo)
+				configAndStacksInfo.ComponentSection = componentSectionConverted
+				configAndStacksInfo.StackLocalsSection = stackLocalsForComponent(rawStackConfigs, stackFileName, cfg.TerraformComponentType)
+				yamlSkip, finishValues := prepareConfigurationValues(atmosConfig, &configAndStacksInfo, nil, nil)
+				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, yamlSkip, &configAndStacksInfo)
 				if err != nil {
 					return err
 				}
@@ -268,9 +283,22 @@ func ExecuteTerraformGenerateVarfiles(
 				// unresolved function string (or a placeholder) would silently lose the function's
 				// contribution here, the same #2888 data-loss bug the main describe/plan path fixes
 				// via this same call (see internal/exec/utils.go).
-				if err := resolveDeferredYamlFunctions(atmosConfig, &configAndStacksInfo, &settingsSectionStruct, componentTemplateContext, nil); err != nil {
+				if err := resolveDeferredYamlFunctions(atmosConfig, &configAndStacksInfo, &settingsSectionStruct, componentTemplateContext, nil, nil); err != nil {
 					return err
 				}
+				if err := finishValues(); err != nil {
+					return err
+				}
+				if err := refreshTerraformGeneratorContext(atmosConfig, &configAndStacksInfo, stackFileName); err != nil {
+					return err
+				}
+				context = configAndStacksInfo.Context
+				stackName = configAndStacksInfo.Stack
+				workspace, err = BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
+				if err != nil {
+					return err
+				}
+				configAndStacksInfo.ComponentSection["workspace"] = workspace
 				componentSection = configAndStacksInfo.ComponentSection
 
 				if i, ok := componentSection[cfg.VarsSectionName].(map[string]any); ok {

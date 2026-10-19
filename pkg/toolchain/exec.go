@@ -95,8 +95,8 @@ func ensureToolInstalled(_ ToolRunner, tool string) (string, error) {
 	}
 
 	ui.Toastf("🔧", "Tool %s is not installed. Installing automatically...", tool)
-	// Show hint and progress bar for manual exec installs (user requested specific tool execution).
-	if installErr := RunInstall(tool, false, true, true, true); installErr != nil {
+	// Installing an execution dependency must not change project declarations.
+	if installErr := RunAutomaticInstall(tool); installErr != nil {
 		return "", fmt.Errorf("failed to auto-install %s: %w",
 			tool, installErr)
 	}

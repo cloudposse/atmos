@@ -6,7 +6,7 @@ authors: [osterman]
 tags: [feature]
 ---
 
-The `--all` flag now executes Terraform components in dependency order. Run `atmos terraform apply --all -s ue2-dev` and components are automatically processed from their `dependencies.components` relationships.
+The [`--all`](/cli/commands/terraform/plan#plan-all-components) flag now executes Terraform components in dependency order. Run [`atmos terraform apply --all -s ue2-dev`](/cli/commands/terraform/apply) and components are automatically processed from their `dependencies.components` relationships.
 
 <!--truncate-->
 
@@ -129,7 +129,7 @@ atmos terraform destroy --all -s ue2-staging
 
 ### Combining with Queries
 
-Filter which components to include using the `--query` flag:
+Filter which components to include using the [`--query`](/cli/commands/terraform/plan#plan-components-by-query) flag:
 
 ```bash
 # Apply only components matching a query

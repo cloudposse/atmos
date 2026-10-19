@@ -462,6 +462,83 @@ func (o *Output) Infof(format string, a ...interface{}) {
 	writeStatus(f, o.writer, f.Infof(format, a...)+newline, "Output.Infof")
 }
 
+// Markdown renders content as terminal markdown and writes it to the configured
+// destination (the UI channel when nil). Rendered text is masked like every other
+// Output write. If the formatter is not initialized, the plain content is written
+// masked to an explicit writer (and dropped when there is none), so embedded hosts
+// and tests still receive the payload.
+func (o *Output) Markdown(content string) {
+	defer perf.Track(nil, "ui.Output.Markdown")()
+
+	f, err := getFormatter()
+	if err != nil {
+		if o.writer == nil {
+			log.Debug("ui.Output.Markdown called before InitFormatter")
+			return
+		}
+		o.writePlain(content, "Output.Markdown")
+		return
+	}
+
+	rendered, renderErr := f.Markdown(content)
+	if renderErr != nil {
+		// Degrade gracefully - write plain content if rendering fails.
+		rendered = content
+	}
+	if !strings.HasSuffix(rendered, newline) {
+		rendered += newline
+	}
+	writeStatus(f, o.writer, rendered, "Output.Markdown")
+}
+
+// Error writes an error status line to the configured destination.
+func (o *Output) Error(text string) {
+	defer perf.Track(nil, "ui.Output.Error")()
+
+	f, err := getFormatter()
+	if err != nil {
+		log.Debug("ui.Output.Error called before InitFormatter")
+		return
+	}
+	writeStatus(f, o.writer, f.Error(text)+newline, "Output.Error")
+}
+
+// Errorf writes a formatted error status line to the configured destination.
+func (o *Output) Errorf(format string, a ...interface{}) {
+	defer perf.Track(nil, "ui.Output.Errorf")()
+
+	f, err := getFormatter()
+	if err != nil {
+		log.Debug("ui.Output.Errorf called before InitFormatter")
+		return
+	}
+	writeStatus(f, o.writer, f.Errorf(format, a...)+newline, "Output.Errorf")
+}
+
+// Writef writes formatted text without icon or styling to the configured destination (masked).
+func (o *Output) Writef(format string, a ...interface{}) {
+	defer perf.Track(nil, "ui.Output.Writef")()
+
+	text := fmt.Sprintf(format, a...)
+	f, err := getFormatter()
+	if err != nil {
+		if o.writer == nil {
+			log.Debug("ui.Output.Writef called before InitFormatter")
+			return
+		}
+		o.writePlain(text, "Output.Writef")
+		return
+	}
+	writeStatus(f, o.writer, text, "Output.Writef")
+}
+
+// writePlain writes masked plain text to the explicit writer when the formatter is unavailable.
+func (o *Output) writePlain(text, operation string) {
+	if _, err := fmt.Fprint(o.writer, io.MaskString(text)); err != nil {
+		log.Debug("ui."+operation+" write failed", "error", err)
+	}
+}
+
 func writeStatus(f *formatter, writer stdio.Writer, formatted, operation string) {
 	if writer != nil {
 		if _, err := fmt.Fprint(writer, f.ioCtx.Masker().Mask(formatted)); err != nil {
@@ -1177,7 +1254,10 @@ func (f *formatter) buildMarkdownRenderOptions(preserveNewlines, noWrap bool) []
 		}
 		// Fallback to notty style if theme conversion fails.
 	} else {
-		opts = append(opts, glamour.WithStylePath("notty"))
+		style, err := markdown.GetPlainTextStyle()
+		if err == nil {
+			opts = append(opts, glamour.WithStylesFromJSONBytes(style))
+		}
 	}
 
 	return opts
@@ -1185,6 +1265,7 @@ func (f *formatter) buildMarkdownRenderOptions(preserveNewlines, noWrap bool) []
 
 // renderMarkdown is the internal markdown rendering implementation.
 func (f *formatter) renderMarkdown(content string, preserveNewlines, noWrap bool) (string, error) {
+	content = markdown.StripFrontmatter(content)
 	opts := f.buildMarkdownRenderOptions(preserveNewlines, noWrap)
 
 	renderer, err := glamour.NewTermRenderer(opts...)
@@ -1205,6 +1286,11 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines, noWrap bool
 		return content, err
 	}
 
-	// Remove trailing whitespace that glamour adds for padding.
-	return atmosansi.TrimLinesRight(rendered), nil
+	// Fix glamour's missing hanging indent on wrapped list continuation
+	// lines (see markdown.FixListHangingIndent for why this is a
+	// post-process rather than a renderer/style option).
+	rendered = markdown.FixListHangingIndent(rendered)
+
+	// Remove padding without deleting foreground-styled text that ends in a space.
+	return atmosansi.TrimLinesRightSpaces(rendered), nil
 }

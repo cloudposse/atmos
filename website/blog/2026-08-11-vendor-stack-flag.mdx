@@ -8,8 +8,8 @@ tags: [feature]
 A CI job deploying the dev stack shouldn't need to vendor every component in the repository --
 just the ones dev actually uses. Production deploys have the same problem in reverse: pulling in
 components that belong to other environments wastes time and widens what that job can touch.
-Selecting the right subset meant either hand-listing every component with repeated `--component`
-flags or reaching for `--everything` and pulling in components the job has nothing to do with.
+Selecting the right subset meant either hand-listing every component with repeated [`--component`](/cli/commands/vendor/pull#flags)
+flags or reaching for [`--everything`](/cli/commands/vendor/pull#flags) and pulling in components the job has nothing to do with.
 
 <!--truncate-->
 
@@ -23,13 +23,13 @@ exclusive modes rather than filters that could work together.
 
 ## The Fix
 
-`atmos vendor pull` now accepts `--stack` and `--labels` selectors, and `--tags` composes with
+[`atmos vendor pull`](/cli/commands/vendor/pull) now accepts [`--stack`](/cli/commands/vendor/pull#flags) and [`--labels`](/cli/commands/vendor/pull#flags) selectors, and [`--tags`](/cli/commands/vendor/pull#flags) composes with
 either of them (or with `--component`) as an independent, narrowing filter -- across `pull`,
 `diff`, `clean`, `update`, and `verify` alike:
 
 - `--stack` vendors every component declared in that stack that has its own `component.yaml`.
 - `--labels` filters that eligible stack component set by each component's stack
-  `metadata.labels`.
+  [`metadata.labels`](/stacks/components/component-metadata#labels).
 - `--tags` narrows whichever set `--stack`/`--labels` (or `--component`) resolved, down to
   components whose declared source tags match.
 

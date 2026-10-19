@@ -201,6 +201,15 @@ func (f *BoolFlag) GetNoOptDefValConsumesNextArg() bool {
 	return false
 }
 
+// IsBool reports that this flag is boolean. It satisfies the optional
+// preprocess.BoolFlagInfo interface so "--flag true|false" can be rewritten to
+// "--flag=true|false" before Cobra parses the arguments.
+func (f *BoolFlag) IsBool() bool {
+	defer perf.Track(nil, "flags.BoolFlag.IsBool")()
+
+	return true
+}
+
 // GetEnvVars implements Flag.
 func (f *BoolFlag) GetEnvVars() []string {
 	defer perf.Track(nil, "flags.BoolFlag.GetEnvVars")()
@@ -307,6 +316,14 @@ type StringSliceFlag struct {
 	EnvVars                 []string // Environment variables to bind.
 	ValidValues             []string // Valid values for each element of this flag (enforced during validation).
 	CompletionFunc          func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective)
+}
+
+// StringArrayFlag represents a repeatable string flag whose individual values
+// must remain untouched. Unlike StringSliceFlag, values containing commas are
+// not split by pflag. This is required by consumers such as Helm's --set,
+// where commas are part of the flag grammar.
+type StringArrayFlag struct {
+	StringSliceFlag
 }
 
 // GetName implements Flag.

@@ -95,6 +95,7 @@ func TestGenerateMarksDeprecatedConfigurationFields(t *testing.T) {
 		{"VersionProvider", "type", "kind"},
 		{"CommandArgument", "type", "provides"},
 		{"CommandFlag", "semantic_type", "provides"},
+		{"Terraform", "init_run_reconfigure", "components.terraform.init.reconfigure (false maps to never; true maps to auto)"},
 	} {
 		t.Run(test.definition+"/"+test.property, func(t *testing.T) {
 			definition := defs[test.definition].(map[string]any)
@@ -169,6 +170,22 @@ func TestGenerateAllowsYamlFunctions(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(raw), "#/$defs/"+yamlFunctionDef,
 		"object-typed sections must carry a yamlFunction anyOf alternative")
+}
+
+func TestGenerateAllowsUnrestrictedComponentDependencyRequiredStrings(t *testing.T) {
+	defs := definitions(t)
+	componentDependency, ok := defs["ComponentDependency"].(map[string]any)
+	require.True(t, ok, "ComponentDependency definition must exist")
+	properties, ok := componentDependency["properties"].(map[string]any)
+	require.True(t, ok, "ComponentDependency definition must have properties")
+	required, ok := properties["required"].(map[string]any)
+	require.True(t, ok, "ComponentDependency.required property must exist")
+	variants, ok := required["anyOf"].([]any)
+	require.True(t, ok, "ComponentDependency.required must allow multiple authored forms")
+
+	// A template is rendered before required is parsed as a boolean, so any
+	// string is a valid authored value rather than only a YAML function.
+	assert.Contains(t, variants, map[string]any{"type": "string"})
 }
 
 func TestGenerateHasNoRequiredFields(t *testing.T) {

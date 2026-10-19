@@ -42,7 +42,7 @@ func TestAuthDisabledPropagatesWrapperToOutputGetter(t *testing.T) {
 			var gotAuthManager any
 			mockOutputGetter.EXPECT().
 				GetOutput(atmosConfig, "test-stack", "vpc", "bucket_name", false, gomock.Nil(), gomock.Any()).
-				DoAndReturn(func(_ *schema.AtmosConfiguration, _, _, _ string, _ bool, _ *schema.AuthContext, authManager any) (any, bool, error) {
+				DoAndReturn(func(_ *schema.AtmosConfiguration, _, _, _ string, _ bool, _ *schema.AuthContext, authManager any, _ ...TerraformLookupOptions) (any, bool, error) {
 					gotAuthManager = authManager
 					return "test-bucket-name", true, nil
 				}).

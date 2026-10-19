@@ -14,7 +14,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -200,9 +199,9 @@ func handleToolNotFound(owner, repo, version string, err error, showProgressBar 
 
 // showUninstallProgress displays progress indicators during uninstall.
 func showUninstallProgress() {
-	spinner := bspinner.New()
-	fps.Apply(&spinner)
-	progressBar := progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()))
+	spinner := ui.NewSpinner()
+
+	progressBar := ui.NewProgress()
 
 	// Show progress for finding tool
 	bar := progressBar.ViewAs(progressFindingTool)
@@ -234,9 +233,9 @@ func handleUninstallError(owner, repo, version string, err error, showProgressBa
 
 // showUninstallCompletion displays completion message after successful uninstall.
 func showUninstallCompletion(owner, repo, version string) {
-	progressBar := progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()))
-	spinner := bspinner.New()
-	fps.Apply(&spinner)
+	progressBar := ui.NewProgress()
+	spinner := ui.NewSpinner()
+
 	bar := progressBar.ViewAs(1.0)
 	printProgressBar(fmt.Sprintf(progressBarFormat, spinner.View(), bar))
 	time.Sleep(100 * time.Millisecond)
@@ -345,11 +344,11 @@ func collectInstalledTools(toolVersions *ToolVersions, installer *Installer) []u
 
 // processToolUninstalls uninstalls each tool and returns the results.
 func processToolUninstalls(installedTools []uninstallToolInfo, installer *Installer) uninstallResult {
-	spinner := bspinner.New()
-	spinner.Spinner = bspinner.Dot
+	spinner := ui.NewSpinner()
+
 	styles := theme.GetCurrentStyles()
 	spinner.Style = styles.Spinner
-	progressBar := progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()))
+	progressBar := ui.NewProgress()
 
 	var result uninstallResult
 	for i, tool := range installedTools {

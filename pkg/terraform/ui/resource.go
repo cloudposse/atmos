@@ -344,3 +344,35 @@ func (rt *ResourceTracker) GetOutputs() *OutputsMessage {
 	defer rt.mu.RUnlock()
 	return rt.outputs
 }
+
+// HasOutputChanges reports whether any captured output value represents a real change (create,
+// update, or delete), as opposed to no-op/read/absent. Terraform's streamed `outputs` JSON
+// message carries this per-output via OutputValue.Action; it's otherwise parsed and stored (see
+// GetOutputs) but never consulted, so a plan/apply whose only diff is an output value was
+// wrongly reported as having no changes (issue #3114).
+func (rt *ResourceTracker) HasOutputChanges() bool {
+	rt.mu.RLock()
+	defer rt.mu.RUnlock()
+
+	if rt.outputs == nil {
+		return false
+	}
+	for _, ov := range rt.outputs.Outputs {
+		if isOutputChangeAction(ov.Action) {
+			return true
+		}
+	}
+	return false
+}
+
+// isOutputChangeAction reports whether action represents a real output change. Terraform emits
+// "create", "update", and "delete"; "" (older Terraform versions that omit the field), "no-op",
+// and "read" are not changes.
+func isOutputChangeAction(action string) bool {
+	switch action {
+	case actionCreate, actionUpdate, actionDelete:
+		return true
+	default:
+		return false
+	}
+}

@@ -39,7 +39,7 @@ func TestResolveToken_GitHubPrecedence(t *testing.T) {
 			// Clear the live broker-set env so this test exercises struct-field precedence only.
 			t.Setenv("ATMOS_PRO_GITHUB_TOKEN", "")
 			d := NewCustomGitDetector(&schema.AtmosConfiguration{Settings: tc.settings}, "")
-			token, source := d.resolveToken(hostGitHub)
+			token, source := d.resolveToken(hostGitHub, hostGitHub)
 			assert.Equal(t, tc.wantToken, token)
 			assert.Equal(t, tc.wantSource, source)
 		})

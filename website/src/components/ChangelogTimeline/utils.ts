@@ -5,6 +5,10 @@
 
 export interface BlogPostFrontMatter {
   release?: string;
+  /** Path to a committed .cast recording, shown as a small preview on the timeline card. */
+  cast?: string;
+  /** Title shown in the timeline cast preview's chrome bar (falls back to the post title). */
+  castTitle?: string;
   [key: string]: unknown;
 }
 

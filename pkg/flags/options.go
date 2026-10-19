@@ -20,9 +20,9 @@ type Option func(*parserConfig)
 // parserConfig holds the configuration for a FlagParser.
 // This is an internal type used by the Options pattern.
 type parserConfig struct {
-	registry          *FlagRegistry
-	viperPrefix       string            // Prefix for Viper keys (optional)
-	viperKeyOverrides map[string]string // Flag name -> explicit Viper key, bypassing viperPrefix.
+	registry    *FlagRegistry
+	viperPrefix string            // Prefix for Viper keys (optional)
+	viperKeys   map[string]string // Flag name -> explicit Viper key override (optional).
 
 	// Interactive prompt configuration.
 	flagPrompts          map[string]*flagPromptConfig // Flag name -> prompt config for required flags
@@ -109,6 +109,23 @@ func WithStringSliceFlag(name, shorthand string, defaultValue []string, descript
 			Shorthand:   shorthand,
 			Default:     defaultValue,
 			Description: description,
+		})
+	}
+}
+
+// WithStringArrayFlag adds a repeatable string flag whose values are preserved
+// verbatim. Use it for flag grammars that handle commas themselves.
+func WithStringArrayFlag(name, shorthand string, defaultValue []string, description string) Option {
+	defer perf.Track(nil, "flags.WithStringArrayFlag")()
+
+	return func(cfg *parserConfig) {
+		cfg.registry.Register(&StringArrayFlag{
+			StringSliceFlag: StringSliceFlag{
+				Name:        name,
+				Shorthand:   shorthand,
+				Default:     defaultValue,
+				Description: description,
+			},
 		})
 	}
 }
@@ -272,6 +289,8 @@ func WithEnvVars(flagName string, envVars ...string) Option {
 			f.EnvVars = envVars
 		case *StringSliceFlag:
 			f.EnvVars = envVars
+		case *StringArrayFlag:
+			f.EnvVars = envVars
 		case *StringMapFlag:
 			f.EnvVars = envVars
 		}
@@ -297,6 +316,8 @@ func WithNoOptDefVal(flagName, value string) Option {
 		case *StringSliceFlag:
 			f.NoOptDefVal = value
 			// Note: No need to re-register - we're just updating the field in place.
+		case *StringArrayFlag:
+			f.NoOptDefVal = value
 		}
 	}
 }
@@ -314,6 +335,9 @@ func WithNoOptDefValNoSpaceValue(flagName, value string) Option {
 			f.NoOptDefVal = value
 			f.NoOptDefValNoSpaceValue = true
 		case *StringSliceFlag:
+			f.NoOptDefVal = value
+			f.NoOptDefValNoSpaceValue = true
+		case *StringArrayFlag:
 			f.NoOptDefVal = value
 			f.NoOptDefValNoSpaceValue = true
 		}
@@ -343,6 +367,8 @@ func WithValidValues(flagName string, validValues ...string) Option {
 		case *StringSliceFlag:
 			f.ValidValues = validValues
 			// Note: No need to re-register - we're just updating the field in place.
+		case *StringArrayFlag:
+			f.ValidValues = validValues
 		}
 	}
 }
@@ -361,31 +387,31 @@ func WithViperPrefix(prefix string) Option {
 	}
 }
 
-// WithViperKey pins a single flag's Viper storage key, overriding both the
-// parser's WithViperPrefix and the default "prefix.flagName" derivation.
+// WithViperKey overrides the Viper key used for a single flag.
 //
-// Use this when a flag's CLI name must stay bound to a bare root key that
-// would otherwise collide with an unrelated dotted namespace: Viper treats
-// any registered flag as shadowing every nested key under its own key (see
-// isPathShadowedInFlatMap in spf13/viper), so a bare-key flag like the
-// global --cast flag (key "cast") silently zeroes out any unrelated nested
-// key such as "cast.record.mode" whenever the bare flag itself is left
-// unset. Moving the bare flag's storage to a nested leaf of its own (e.g.
-// "cast.target") removes the collision without renaming the CLI flag or any
-// unrelated schema-backed key.
+// By default a flag is stored under its own name (or under "<prefix>.<name>" when
+// WithViperPrefix is used). A bare key such as "tags" or "labels" is exposed to
+// Viper's AutomaticEnv() lookup, which resolves ATMOS_<KEY> before explicitly bound
+// environment variables. A job-level ATMOS_TAGS or ATMOS_LABELS would therefore leak into
+// every command that reads those keys. Namespacing the key (for example "list.tags")
+// keeps the flag isolated and lets WithEnvVars bind the command-specific variable.
+//
+// The override applies to every bind and read path (environment binding, pflag binding,
+// defaults, IsSet, and Parse()). Parse() results are still keyed by the flag name.
 //
 // Example:
 //
-//	WithStringFlag("cast", "", "", "..."),
-//	WithViperKey("cast", "cast.target"),
-func WithViperKey(flagName, key string) Option {
+//	WithStringFlag("tags", "", "", "Filter by tags"),
+//	WithEnvVars("tags", "ATMOS_COMPONENT_TAGS"),
+//	WithViperKey("tags", "list.tags"),
+func WithViperKey(flagName, viperKey string) Option {
 	defer perf.Track(nil, "flags.WithViperKey")()
 
 	return func(cfg *parserConfig) {
-		if cfg.viperKeyOverrides == nil {
-			cfg.viperKeyOverrides = make(map[string]string)
+		if cfg.viperKeys == nil {
+			cfg.viperKeys = make(map[string]string)
 		}
-		cfg.viperKeyOverrides[flagName] = key
+		cfg.viperKeys[flagName] = viperKey
 	}
 }
 
@@ -436,6 +462,28 @@ func WithFlagRegistry(registry *FlagRegistry) Option {
 func WithCompletionPrompt(flagName, promptTitle string, completionFunc CompletionFunc) Option {
 	defer perf.Track(nil, "flags.WithCompletionPrompt")()
 
+	return WithConditionalCompletionPrompt(flagName, promptTitle, completionFunc, nil)
+}
+
+// WithConditionalCompletionPrompt enables interactive prompting for a missing required
+// flag (Use Case 1) only when shouldPrompt returns true. This is the flag-prompt analogue
+// of WithConditionalPositionalArgPrompt: some commands support a bulk/selection mode (e.g.
+// --all, --affected, --tags, --labels) where a single required value like --stack
+// legitimately has no one answer to prompt for, and the prompt must be suppressed for that
+// mode while still firing for a single-target invocation.
+//
+// Example:
+//
+//	WithStackFlag(),
+//	WithConditionalCompletionPrompt("stack", "Choose a stack", stackFlagCompletion,
+//	    func(_ *ParsedConfig) bool { return !hasSelectionFlags(cmd) }),
+func WithConditionalCompletionPrompt(
+	flagName, promptTitle string,
+	completionFunc CompletionFunc,
+	shouldPrompt func(*ParsedConfig) bool,
+) Option {
+	defer perf.Track(nil, "flags.WithConditionalCompletionPrompt")()
+
 	return func(cfg *parserConfig) {
 		if cfg.flagPrompts == nil {
 			cfg.flagPrompts = make(map[string]*flagPromptConfig)
@@ -443,6 +491,7 @@ func WithCompletionPrompt(flagName, promptTitle string, completionFunc Completio
 		cfg.flagPrompts[flagName] = &flagPromptConfig{
 			PromptTitle:    promptTitle,
 			CompletionFunc: completionFunc,
+			ShouldPrompt:   shouldPrompt,
 		}
 	}
 }

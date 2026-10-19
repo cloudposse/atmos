@@ -24,13 +24,13 @@ Atmos now ships a complete JSON Schema for `atmos.yaml` — and it's generated f
 
 The schema understands how real Atmos configurations are written:
 
-- **YAML functions are first-class.** Where a section expects a map, the schema also accepts `!include shared.yaml`, `!env`, `!exec`, and every other function `atmos.yaml` supports — so dynamic configs validate cleanly.
+- **YAML functions are first-class.** Where a section expects a map, the schema also accepts [`!include shared.yaml`](/functions/yaml/include), [`!env`](/functions/yaml/env), [`!exec`](/functions/yaml/exec), and every other function `atmos.yaml` supports — so dynamic configs validate cleanly.
 - **Fragments validate standalone.** No field is required, so `atmos.d/` files and profile fragments — which each carry only a slice of the configuration — pass on their own.
 - **Descriptions come from the source.** Hover documentation in your editor is sourced from the same documentation the code carries.
 
 ## How to Use It
 
-Validation now happens out of the box. With no configuration at all, `atmos validate schema` checks `atmos.yaml`, `atmos.d/` fragments, and project-local profiles:
+Validation now happens out of the box. With no configuration at all, [`atmos validate schema`](/cli/commands/validate/schema) checks `atmos.yaml`, `atmos.d/` fragments, and project-local profiles:
 
 ```shell
 atmos validate schema
@@ -43,9 +43,9 @@ atmos validate schema
 ✓ All schemas validated successfully
 ```
 
-To validate just the CLI configuration, `atmos config validate` is a shorthand alias for `atmos validate schema config`, and exits non-zero on violations — handy for CI and pre-commit hooks. Symmetrically, `atmos stack validate` now aliases `atmos validate stacks`. Validation is also fast in large repositories: file matching no longer walks the whole tree for plain file names, so results stream immediately.
+To validate just the CLI configuration, [`atmos config validate`](/cli/commands/config/config-validate) is a shorthand alias for `atmos validate schema config`, and exits non-zero on violations — handy for CI and pre-commit hooks. Symmetrically, [`atmos stack validate`](/cli/commands/stack/stack-validate) now aliases [`atmos validate stacks`](/cli/commands/validate/stacks). Validation is also fast in large repositories: file matching no longer walks the whole tree for plain file names, so results stream immediately.
 
-Print the schema for the exact Atmos version you're running with the new [`atmos config schema`](/cli/commands/config/config-schema) command — a sibling of `atmos stack schema`:
+Print the schema for the exact Atmos version you're running with the new [`atmos config schema`](/cli/commands/config/config-schema) command — a sibling of [`atmos stack schema`](/cli/commands/stack/stack-schema):
 
 ```shell
 atmos config schema                     # print to stdout
@@ -59,7 +59,7 @@ For editor auto-completion and inline validation, add one comment to the top of 
 base_path: "./"
 ```
 
-The schema reaches every surface where you touch `atmos.yaml`: the experimental Atmos LSP server (`atmos lsp start`) now reports schema violations as inline diagnostics with line positions, and AI assistants connected through the Atmos MCP server get a new `atmos_validate_schema` tool alongside `atmos_validate_stacks`.
+The schema reaches every surface where you touch `atmos.yaml`: the experimental Atmos LSP server ([`atmos lsp start`](/cli/commands/lsp/start)) now reports schema violations as inline diagnostics with line positions, and AI assistants connected through the Atmos MCP server get a new `atmos_validate_schema` tool alongside `atmos_validate_stacks`.
 
 The floating URL above always tracks the latest release. Every release also publishes an immutable, version-pinned snapshot at `https://atmos.tools/schemas/atmos/atmos-config/<atmos-version>/atmos-config.json`, and a `schemas.config` entry in `atmos.yaml` lets you pin validation to a reviewed schema version or point it at your own:
 

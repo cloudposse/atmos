@@ -154,6 +154,31 @@ func ComponentVersionPath(vendorFile, component string) (path, declaringFile str
 func SetComponentVersion(vendorFile, component, version string) error {
 	defer perf.Track(nil, "vendoring.SetComponentVersion")()
 
+	_, declaringFile, err := ComponentVersionPath(vendorFile, component)
+	if err != nil {
+		return err
+	}
+	return withVersionFileLock(declaringFile, func() error {
+		// Re-resolve the component's index in the locked physical file. Following
+		// imports again could edit a different file without holding its lock.
+		sources, err := readVendorSources(declaringFile)
+		if err != nil {
+			return err
+		}
+		for i := range sources {
+			if sources[i].Component == component {
+				path := fmt.Sprintf("spec.sources[%d].version", i)
+				_, err = atmosyaml.SetFileWithType(declaringFile, path, version, atmosyaml.TypeString)
+				return err
+			}
+		}
+		return fmt.Errorf("%w: component %q no longer declared in %s", atmosyaml.ErrYAMLPathNotFound, component, declaringFile)
+	})
+}
+
+func setComponentVersionUnlocked(vendorFile, component, version string) error {
+	defer perf.Track(nil, "vendoring.SetComponentVersion")()
+
 	path, declaringFile, err := ComponentVersionPath(vendorFile, component)
 	if err != nil {
 		return err

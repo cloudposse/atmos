@@ -18,6 +18,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/terminal/query"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -36,6 +37,10 @@ const (
 	// cleanly on its own, discarding an otherwise-successful recording.
 	defaultSessionExitMaxWait = 5 * time.Second
 	sessionReadBufferSize     = 4096
+	// The capacity of the channel feeding terminal-query scanning (queryChunkBuffer)
+	// is sized so output recording does not block while a paced action briefly
+	// holds the PTY input lock.
+	queryChunkBuffer = 1024
 )
 
 var (
@@ -101,7 +106,7 @@ func RunSession(ctx context.Context, opts *SessionOptions) error {
 	}
 	defer func() { _ = proc.close() }()
 	// The PTY input is written from two independent goroutines: the
-	// background output-reader (answerTerminalQueries, whenever the shell
+	// background output-reader (the query.Responder, whenever the shell
 	// emits a terminal capability query) and this function's own action
 	// loop/teardown EOT write below. Neither pty writes nor Go's io.Writer
 	// contract guarantee atomicity across concurrent, unsynchronized
@@ -202,6 +207,11 @@ type sessionState struct {
 	mu     sync.Mutex
 	output bytes.Buffer
 	input  *syncWriter
+	// responder answers terminal capability queries (OSC 10/11, CSI 6n) emitted by the recorded shell.
+	responder *query.Responder
+	// queryChunks feeds output chunks to the single goroutine that runs
+	// responder.Scan (see answerQueries). Nil when there is no input to answer on.
+	queryChunks chan []byte
 	// discardRecording suppresses the live recording stream only (toggled
 	// mid-session by scripted "hide"/"show" actions); the wait-matching
 	// buffer keeps updating regardless, mirroring VHS's own Hide, which only
@@ -214,16 +224,6 @@ type sessionState struct {
 	changed           chan struct{}
 	done              chan error
 	cancel            context.CancelFunc
-	// pendingQueryTail holds a trailing fragment of the previous output
-	// chunk that looks like the start of a terminal-capability query
-	// (e.g. "\x1b]10;?") but was cut off before its terminator by a PTY
-	// read boundary. answerTerminalQueries only scans one chunk at a time
-	// via bytes.Contains, so without carrying this forward and prepending
-	// it to the next chunk, a query split across two reads is silently
-	// never answered -- observed with real bash (whose query writes seem
-	// more likely to land in separate reads than zsh/sh's), which then
-	// retries the same query indefinitely, corrupting/hanging the session.
-	pendingQueryTail []byte
 }
 
 func normalizeSessionOptions(opts *SessionOptions) {
@@ -319,6 +319,13 @@ func newSessionState(ctx context.Context, output io.Reader, input *syncWriter, c
 		done:    make(chan error, 1),
 		cancel:  cancel,
 	}
+	// A nil input would become a typed-nil io.Writer inside the Responder, so
+	// only wire query-answering when there is a real input to answer on.
+	if input != nil {
+		state.responder = query.NewResponder(input)
+		state.queryChunks = make(chan []byte, queryChunkBuffer)
+		go state.answerQueries()
+	}
 	go state.readOutput(output)
 	go func() {
 		<-watchCtx.Done()
@@ -329,7 +336,19 @@ func newSessionState(ctx context.Context, output io.Reader, input *syncWriter, c
 	return state
 }
 
+// answerQueries scans output chunks, in arrival order, for terminal
+// capability queries and answers them. It exits once readOutput closes
+// queryChunks.
+func (s *sessionState) answerQueries() {
+	for chunk := range s.queryChunks {
+		s.responder.Scan(chunk)
+	}
+}
+
 func (s *sessionState) readOutput(output io.Reader) {
+	if s.queryChunks != nil {
+		defer close(s.queryChunks)
+	}
 	buf := make([]byte, sessionReadBufferSize)
 	for {
 		n, readErr := output.Read(buf)
@@ -345,42 +364,22 @@ func (s *sessionState) readOutput(output io.Reader) {
 
 func (s *sessionState) recordOutputChunk(chunk []byte) {
 	copied := append([]byte(nil), chunk...)
-	// Query detection scans pendingQueryTail (carried over from the previous
-	// chunk) plus this chunk together, so a query split across a PTY read
-	// boundary is still recognized -- see the pendingQueryTail field comment.
-	// The recorded/wait-matching streams below still only ever see `copied`
-	// (the carried-over prefix was already recorded when it first arrived).
-	scan := copied
-	if len(s.pendingQueryTail) > 0 {
-		scan = append(append([]byte(nil), s.pendingQueryTail...), copied...)
-	}
-	// The whole query-response burst (background color, cursor position,
-	// etc. -- answerTerminalQueries can issue several Write calls for one
-	// chunk) must land as one atomic unit, or a concurrent scripted action
-	// could interleave between two of its individual writes -- so answering
-	// still goes through the writer's lock (see syncWriter). But a paced
-	// "write"/"key" action can hold that same lock for its entire
-	// multi-character duration (see runWriteAction/runKeyAction), and this
-	// function runs synchronously on the sole output-reading goroutine:
-	// blocking here would stall recording of every later chunk (and the
-	// next PTY Read) until that action finishes, bunching recorded
+	// Answering a terminal query writes to the PTY input through the
+	// syncWriter lock, which a paced "write"/"key" action holds for its
+	// entire multi-character duration (see runWriteAction/runKeyAction).
+	// This function runs synchronously on the sole output-reading goroutine,
+	// so answering inline would stall recording of every later chunk (and
+	// the next PTY Read) until that action finishes, bunching recorded
 	// timestamps at the end of the action and starving `wait` of output it
-	// should have already seen. Recognizing and answering a query is
-	// independent of recording output below, so it's dispatched in the
-	// background instead of blocking this goroutine on it. Each of the
-	// three known responses (background/foreground color, cursor position)
-	// is a fixed, self-contained reply with no ordering dependency on any
-	// other query's answer, so answering two queries from different chunks
-	// slightly out of arrival order -- the only thing an unordered
-	// goroutine risks -- is harmless; answerTerminalQueries is also a no-op
-	// unless scan actually contains a recognized query, so this goroutine
-	// is nearly always cheap. input is nil in tests that only care about
-	// output capture, not query-answering.
-	if s.input != nil {
-		input := s.input
-		go input.Locked(func(w io.Writer) { answerTerminalQueries(scan, w) })
+	// should have already seen. Chunks are therefore handed to a single
+	// background goroutine (see answerQueries); a single one, not one per
+	// chunk, because the Responder carries a tail between Scan calls to
+	// recognize queries split across PTY reads, which requires chunks to be
+	// scanned in arrival order. queryChunks is nil in tests that only care
+	// about output capture, not query-answering.
+	if s.queryChunks != nil {
+		s.queryChunks <- copied
 	}
-	s.pendingQueryTail = terminalQueryTail(scan)
 	s.mu.Lock()
 	discardWaitBuffer := s.discardWaitBuffer
 	if !discardWaitBuffer {
@@ -398,64 +397,6 @@ func (s *sessionState) recordOutputChunk(chunk []byte) {
 		return
 	}
 	_, _ = iolib.GetContext().Data().Write(copied)
-}
-
-// terminalQueryPatterns lists every exact terminal-capability query byte
-// sequence answerTerminalQueries recognizes and answers.
-var terminalQueryPatterns = [][]byte{
-	[]byte("\x1b]11;?\x07"),
-	[]byte("\x1b]11;?\x1b\\"),
-	[]byte("\x1b]10;?\x07"),
-	[]byte("\x1b]10;?\x1b\\"),
-	[]byte("\x1b[6n"),
-}
-
-// maxTerminalQueryPatternLen is the length of the longest entry in
-// terminalQueryPatterns.
-var maxTerminalQueryPatternLen = func() int {
-	max := 0
-	for _, p := range terminalQueryPatterns {
-		if len(p) > max {
-			max = len(p)
-		}
-	}
-	return max
-}()
-
-// terminalQueryTail returns the longest suffix of chunk that is a proper
-// (strictly shorter) prefix of one of terminalQueryPatterns -- i.e. bytes
-// that could be the start of a terminal-capability query cut off by a PTY
-// read boundary, worth carrying into the next chunk. Returns nil if chunk's
-// tail doesn't look like the start of any recognized query.
-func terminalQueryTail(chunk []byte) []byte {
-	limit := maxTerminalQueryPatternLen - 1
-	if limit > len(chunk) {
-		limit = len(chunk)
-	}
-	for length := limit; length > 0; length-- {
-		tail := chunk[len(chunk)-length:]
-		for _, pattern := range terminalQueryPatterns {
-			if len(tail) < len(pattern) && bytes.Equal(pattern[:len(tail)], tail) {
-				return append([]byte(nil), tail...)
-			}
-		}
-	}
-	return nil
-}
-
-func answerTerminalQueries(chunk []byte, input io.Writer) {
-	if input == nil || len(chunk) == 0 {
-		return
-	}
-	if bytes.Contains(chunk, []byte("\x1b]11;?\x07")) || bytes.Contains(chunk, []byte("\x1b]11;?\x1b\\")) {
-		_, _ = input.Write([]byte("\x1b]11;rgb:0000/0000/0000\x1b\\"))
-	}
-	if bytes.Contains(chunk, []byte("\x1b]10;?\x07")) || bytes.Contains(chunk, []byte("\x1b]10;?\x1b\\")) {
-		_, _ = input.Write([]byte("\x1b]10;rgb:ffff/ffff/ffff\x1b\\"))
-	}
-	for i := 0; i < bytes.Count(chunk, []byte("\x1b[6n")); i++ {
-		_, _ = input.Write([]byte("\x1b[1;1R"))
-	}
 }
 
 func (s *sessionState) finishRead(err error) {

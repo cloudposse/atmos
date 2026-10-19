@@ -14,7 +14,7 @@ type versionLookupResult struct {
 
 // resolveVersionFromToolVersions resolves a version from .tool-versions file or uses "latest".
 func resolveVersionFromToolVersions(tool, toolSpec string) (versionLookupResult, error) {
-	toolVersions, err := LoadToolVersions(DefaultToolVersionsFilePath)
+	toolVersions, err := LoadToolVersions(GetToolVersionsFilePath())
 	if err != nil {
 		return versionLookupResult{}, errUtils.Build(errUtils.ErrInvalidToolSpec).
 			WithExplanationf("Invalid tool specification: `%s`", toolSpec).
@@ -22,7 +22,7 @@ func resolveVersionFromToolVersions(tool, toolSpec string) (versionLookupResult,
 			WithHint("Or use alias: `terraform@1.5.0` (requires `.tool-versions` or registry alias)").
 			WithHint("File `.tool-versions` could not be loaded").
 			WithContext("tool_spec", toolSpec).
-			WithContext("tool_versions_file", DefaultToolVersionsFilePath).
+			WithContext("tool_versions_file", GetToolVersionsFilePath()).
 			WithContext("error", err.Error()).
 			WithExitCode(2).
 			Err()

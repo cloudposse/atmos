@@ -13,6 +13,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
 
+// Captured from the Windows acceptance job while cosign contacted an allowlisted Rekor endpoint.
+const windowsRekorSocketFailure = "cosign [verify-blob ...]: exit status 1\n" +
+	"Error: searching log query: Post \"https://rekor.sigstore.dev/api/v1/log/entries/retrieve\": " +
+	"dial tcp 34.36.47.134:443: connectex: An attempt was made to access a socket in a way forbidden by its access permissions."
+
 func TestClassifySignatureVerificationError(t *testing.T) {
 	t.Parallel()
 
@@ -121,6 +126,9 @@ func TestClassifySignatureVerificationError(t *testing.T) {
 		{name: "TLS handshake timeout is retryable", err: transportErr("net/http: TLS handshake timeout"), wantWrapped: true},
 		{name: "i/o timeout is retryable", err: transportErr("dial tcp 10.0.0.1:443: i/o timeout"), wantWrapped: true},
 		{name: "unexpected EOF is retryable", err: transportErr("unexpected EOF"), wantWrapped: true},
+		{name: "Windows socket access failure is retryable", err: errors.New(windowsRekorSocketFailure), wantWrapped: true},
+		{name: "local certificate access denied is NOT retryable", err: errors.New("loading cert: open certificate.pem: Access is denied."), wantWrapped: false},
+		{name: "verifier execution permission denied is NOT retryable", err: errors.New("fork/exec cosign: permission denied"), wantWrapped: false},
 		{name: "tampered artifact is NOT retryable", err: errors.New(tampered), wantWrapped: false},
 		{name: "identity mismatch is NOT retryable", err: errors.New(identityMismatch), wantWrapped: false},
 		{name: "generic cosign failure is NOT retryable", err: errors.New("cosign: exit status 1"), wantWrapped: false},
@@ -263,6 +271,40 @@ func TestRunCosignWithRetry_RecoversFromTransportFlake(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 3, runner.calls, "expected 2 retried failures + 1 success")
 	assert.Equal(t, []string{"verify-blob", "asset.tar.gz"}, runner.finalCallArgs)
+}
+
+func TestRunCosignWithRetry_WindowsSocketAccessFailure(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name         string
+		failAttempts int
+		wantCalls    int
+		wantError    bool
+	}{
+		{name: "recovers", failAttempts: 1, wantCalls: 2},
+		{name: "persistent denial fails closed", failAttempts: cosignRetryMaxAttempts, wantCalls: cosignRetryMaxAttempts, wantError: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			socketErr := fmt.Errorf("%w: %s", ErrSignatureFailed, windowsRekorSocketFailure)
+			runner := &flakyRunner{retryableErr: socketErr, failAttempts: tc.failAttempts}
+			req := &Request{Runner: runner}
+			args := []string{"verify-blob", "--certificate-identity", "https://github.com/charmbracelet/meta/.github/workflows/goreleaser.yml@refs/heads/main", "checksums.txt"}
+
+			err := runCosignWithRetry(context.Background(), req, args)
+			if tc.wantError {
+				require.ErrorIs(t, err, ErrSignatureFailed)
+				assert.ErrorContains(t, err, windowsRekorSocketFailure)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tc.wantCalls, runner.calls)
+			assert.Equal(t, args, runner.finalCallArgs, "retries must preserve verification arguments")
+		})
+	}
 }
 
 // TestRunGitHubAttestationWithRetry_RecoversFromAPITimeout reproduces the

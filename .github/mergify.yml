@@ -18,23 +18,7 @@ shared:
         - -merged
         - -closed
 
-  # Authored by Dependabot or Renovate
-  is_dependency_bot: &is_dependency_bot
-    - or:
-        - "author=dependabot[bot]"
-        - "author=renovate[bot]"
-
 pull_request_rules:
-  - name: Keep Dependabot/Renovate PRs up to date with main
-    conditions:
-      - and: *is_open
-      - and: *is_default_branch
-      - and: *is_dependency_bot
-      - "-conflict"
-      - "#commits-behind>0"
-    actions:
-      update:
-
   - name: Trigger workflow dispatch on PR synchronized by github-actions[bot]
     conditions:
       - and: *is_a_bot
@@ -52,6 +36,20 @@ pull_request_rules:
               ref: "{{ head }}"
             - workflow: test.yml
               ref: "{{ head }}"
+
+  - name: Warn when a PR exceeds the CodeRabbit file limit
+    conditions:
+      - and: *is_open
+      - "#files>150"
+    actions:
+      comment:
+        message: |
+          > [!WARNING]
+          > #### This PR exceeds the 150-file CodeRabbit review limit.
+          >
+          > CodeRabbit cannot review this PR at its current size.
+          > Refactor it into a PR stack with fewer than 150 changed files per PR.
+          > Each PR should target the preceding branch so its diff includes only its own changes.
 
   - name: Comment when size/xxl label is added
     conditions:

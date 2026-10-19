@@ -164,10 +164,10 @@ This ensures **all code** in Atmos (even code that directly imports `github.com/
 If you encounter issues:
 
 1. Check your current credentials location:
-   ```bash
-   ls -la ~/Library/Application\ Support/atmos
-   ls -la ~/.config/atmos
-   ```
+    ```bash
+    ls -la ~/Library/Application\ Support/atmos
+    ls -la ~/.config/atmos
+    ```
 
 2. Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues) if you need help
 
@@ -180,3 +180,5 @@ If you encounter issues:
 ---
 
 This change aligns Atmos with CLI tool best practices and ensures seamless integration with containerized development environments. macOS users now enjoy the same consistent experience as Linux users!
+
+For usage and configuration, see [CLI Configuration](/cli/configuration).

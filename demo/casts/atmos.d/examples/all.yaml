@@ -4,8 +4,17 @@ commands:
     env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
+        name: starlark-focused-examples
+        command: atmos casts generate examples starlark
+      - type: shell
         name: emulator-aws-lifecycle
         command: atmos casts generate examples emulator-aws lifecycle
+      - type: shell
+        name: cloudformation-lifecycle
+        command: atmos casts generate examples cloudformation lifecycle
+      - type: shell
+        name: cloudformation-advanced-lifecycle
+        command: atmos casts generate examples cloudformation-advanced lifecycle
       - type: shell
         name: quick-start-simple-list-and-plan
         command: atmos casts generate examples quick-start-simple list-and-plan
@@ -184,6 +193,9 @@ commands:
     description: Validate every example-sourced cast
     env: !include cast-defaults.yaml .env.command
     steps:
+      - type: shell
+        name: starlark-focused-examples
+        command: atmos casts validate examples starlark
       - type: script
         name: terminal-modes
         interpreter: python3
@@ -195,6 +207,12 @@ commands:
       - type: shell
         name: emulator-aws-lifecycle
         command: atmos casts validate examples emulator-aws lifecycle
+      - type: shell
+        name: cloudformation-lifecycle
+        command: atmos casts validate examples cloudformation lifecycle
+      - type: shell
+        name: cloudformation-advanced-lifecycle
+        command: atmos casts validate examples cloudformation-advanced lifecycle
       - type: shell
         name: quick-start-simple-list-and-plan
         command: atmos casts validate examples quick-start-simple list-and-plan

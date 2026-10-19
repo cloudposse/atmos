@@ -2,7 +2,6 @@ package exec
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/progress"
@@ -13,13 +12,10 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
-	iolib "github.com/cloudposse/atmos/pkg/io"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/vendoring/install"
 )
@@ -85,13 +81,7 @@ func progressBarWidthFor(width int) int {
 	}
 }
 
-var (
-	currentPkgNameStyle = theme.Styles.PackageName
-	doneStyle           = lipgloss.NewStyle().Margin(1, 2)
-	checkMark           = theme.Styles.Checkmark
-	xMark               = theme.Styles.XMark
-	grayColor           = theme.Styles.GrayText
-)
+var doneStyle = lipgloss.NewStyle().Margin(1, 2)
 
 // installedPkgMsg is this package's own tea.Msg shape, translated from install.Result by
 // ExecuteInstall.
@@ -124,33 +114,11 @@ func executeVendorModel(
 	opts install.InstallOptions,
 	atmosConfig *schema.AtmosConfiguration,
 ) error {
-	if len(packages) == 0 {
+	if opts.Collect != nil {
+		*opts.Collect = append(*opts.Collect, packages...)
 		return nil
 	}
-
-	model, err := newModelVendor(packages, opts.DryRun, atmosConfig)
-	if err != nil {
-		return fmt.Errorf("%w: %v (verify terminal capabilities and permissions)", errUtils.ErrTUIModel, err)
-	}
-
-	progOpts := []tea.ProgramOption{tea.WithOutput(iolib.MaskWriter(os.Stdout))}
-	if !term.IsTTYSupportForStdout() {
-		progOpts = append(progOpts, tea.WithoutRenderer(), tea.WithInput(nil))
-		log.Debug("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
-	} else if !terminal.HasRealTTYInput() {
-		// TTY mode is forced (screenshots, cast recordings): keep the renderer,
-		// but don't let bubbletea open /dev/tty for input — there isn't one.
-		progOpts = append(progOpts, tea.WithInput(nil))
-	}
-
-	if _, err := tea.NewProgram(&model, progOpts...).Run(); err != nil {
-		return fmt.Errorf("execution failed: %w", err)
-	}
-
-	if model.failedPkg > 0 {
-		return vendorFailureError(model.failedPkg, len(model.packages), model.failedPkgNames)
-	}
-	return nil
+	return ExecuteVendorPackages(opts.Context, atmosConfig, packages, opts)
 }
 
 // vendorFailureError builds a descriptive error listing the names of the
@@ -173,14 +141,11 @@ func newModelVendor(
 	atmosConfig *schema.AtmosConfiguration,
 ) (modelVendor, error) {
 	width := initialModelWidth()
-	p := progress.New(
-		progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()),
+	p := ui.NewProgress(
 		progress.WithWidth(progressBarWidthFor(width)),
 		progress.WithoutPercentage(),
 	)
-	s := spinner.New()
-	s.Style = theme.GetCurrentStyles().Spinner
-	fps.Apply(&s)
+	s := ui.NewSpinner()
 
 	if len(packages) == 0 {
 		return modelVendor{done: true}, nil
@@ -281,6 +246,7 @@ func (m *modelVendor) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
+// handleInstalledPkgMsg records a package result and starts the next install or finishes the vendor UI.
 func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, tea.Cmd) {
 	// ensure index is within bounds
 	if m.index >= len(m.packages) {
@@ -288,14 +254,14 @@ func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, te
 	}
 	pkg := m.packages[m.index]
 
-	mark := checkMark
+	mark := theme.GetCurrentStyles().Checkmark
 	errMsg := ""
 	if msg.err != nil {
 		errMsg = fmt.Sprintf("Failed to vendor %s: error : %s", pkg.Name, msg.err)
 		if !m.isTTY {
 			ui.Error(errMsg)
 		}
-		mark = xMark
+		mark = theme.GetCurrentStyles().XMark
 		m.failedPkg++
 		if pkg.IsMixin() {
 			m.failedMixins++
@@ -310,7 +276,7 @@ func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, te
 		// Everything's been installed. We're done!
 		m.done = true
 		m.logNonNTYFinalStatus(pkg, msg.err != nil)
-		version := grayColor.Render(version)
+		version := theme.GetCurrentStyles().Muted.Render(version)
 		return m, tea.Sequence(
 			tea.Printf("%s %s %s %s", mark, pkg.Name, version, errMsg),
 			tea.Quit,
@@ -335,7 +301,7 @@ func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, te
 	// Model state, no tea.Cmd), which sidesteps the race entirely.
 	m.percent = float64(m.index) / float64(len(m.packages))
 
-	version = grayColor.Render(version)
+	version = theme.GetCurrentStyles().Muted.Render(version)
 	return m, tea.Batch(
 		tea.Printf("%s %s %s %s", mark, pkg.Name, version, errMsg),                                   // print message above our program
 		ExecuteInstall(m.packages[m.index], install.InstallOptions{DryRun: m.dryRun}, m.atmosConfig), // download the next package
@@ -428,6 +394,7 @@ func (m *modelVendor) logComponentSummary() {
 	}
 }
 
+// View renders the active package and progress or the final vendoring summary.
 func (m *modelVendor) View() string {
 	defer perf.Track(nil, "exec.View")()
 
@@ -468,7 +435,7 @@ func (m *modelVendor) View() string {
 	if m.index >= len(m.packages) {
 		return ""
 	}
-	pkgName := currentPkgNameStyle.Render(m.packages[m.index].Name)
+	pkgName := theme.GetCurrentStyles().PackageName.Render(m.packages[m.index].Name)
 
 	// Truncate (never wrap) the "Pulling <name>" segment to cellsAvail. A
 	// mixin's name is its full source URL (100+ chars, one unbroken token with

@@ -25,6 +25,17 @@ import (
 func HashFiles(paths []string) (string, error) {
 	defer perf.Track(nil, "hashfile.HashFiles")()
 
+	return HashFilesAndRecords(paths, nil)
+}
+
+// HashFilesAndRecords extends HashFiles with an additional set of opaque string records (e.g.
+// "key=value" facts that should invalidate the digest when they change but have no file backing
+// them); records are sorted before hashing, so callers never need to pre-sort them and the result
+// is stable regardless of the order records are supplied in. Passing a nil or empty records slice
+// produces a digest byte-identical to HashFiles(paths).
+func HashFilesAndRecords(paths []string, records []string) (string, error) {
+	defer perf.Track(nil, "hashfile.HashFilesAndRecords")()
+
 	sorted := make([]string, len(paths))
 	copy(sorted, paths)
 	sort.Strings(sorted)
@@ -38,7 +49,56 @@ func HashFiles(paths []string) (string, error) {
 			return "", err
 		}
 	}
+	if err := writeSortedRecords(h, records); err != nil {
+		return "", err
+	}
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// HashNamedFiles computes a deterministic hash over a set of files keyed by a caller-supplied
+// name rather than their filesystem path, so the resulting digest is independent of where the
+// files physically live (e.g. two checkouts of the same component at different absolute paths
+// produce identical digests); named maps each logical name to the path whose content should be
+// read for it; names are sorted before hashing so map iteration order never affects the result.
+// The records parameter behaves exactly as in HashFilesAndRecords.
+func HashNamedFiles(named map[string]string, records []string) (string, error) {
+	defer perf.Track(nil, "hashfile.HashNamedFiles")()
+
+	names := make([]string, 0, len(named))
+	for name := range named {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	h := sha256.New()
+	for _, name := range names {
+		if err := writeRecord(h, []byte(name)); err != nil {
+			return "", err
+		}
+		if err := hashFileContent(h, named[name]); err != nil {
+			return "", err
+		}
+	}
+	if err := writeSortedRecords(h, records); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// writeSortedRecords writes each of records into h as a length-prefixed record (see
+// writeRecord), after sorting them so the result never depends on the order records were
+// supplied in.
+func writeSortedRecords(h io.Writer, records []string) error {
+	sorted := make([]string, len(records))
+	copy(sorted, records)
+	sort.Strings(sorted)
+
+	for _, r := range sorted {
+		if err := writeRecord(h, []byte(r)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // errWrapFormat wraps a sentinel and the underlying cause around the file path they concern.

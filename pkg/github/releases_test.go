@@ -52,8 +52,16 @@ func isGitHubTransientError(err error) bool {
 		return true
 	}
 
-	// Fallback for API calls that don't use handleGitHubAPIError.
+	// net/http can return its unexported HTTP/2 stream error while decoding a
+	// response body, after the request succeeded. Match only remote cancellation;
+	// protocol errors and application decoding failures must still fail the test.
 	errMsg := err.Error()
+	if strings.HasPrefix(errMsg, "stream error: stream ID ") &&
+		strings.HasSuffix(errMsg, "; CANCEL; received from peer") {
+		return true
+	}
+
+	// Fallback for API calls that don't use handleGitHubAPIError.
 	return strings.Contains(errMsg, "rate limit exceeded") ||
 		strings.Contains(errMsg, "API rate limit")
 }
@@ -97,6 +105,27 @@ func TestIsGitHubTransientError_TransportFailure(t *testing.T) {
 	}))
 }
 
+// HTTP/2 response-body cancellations escape net/http without a *url.Error.
+func TestIsGitHubTransientError_ResponseStreamCancellation(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"peer cancelled response", errors.New("stream error: stream ID 25; CANCEL; received from peer"), true},
+		{"different stream", errors.New("stream error: stream ID 1; CANCEL; received from peer"), true},
+		{"protocol failure", errors.New("stream error: stream ID 25; PROTOCOL_ERROR; received from peer"), false},
+		{"local cancellation", context.Canceled, false},
+		{"application cancellation", errors.New("request CANCEL; received from peer"), false},
+		{"decoding failure", errors.New("invalid character 'x' looking for beginning of value"), false},
+		{"no error", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, isGitHubTransientError(tc.err))
+		})
+	}
+}
+
 // TestNewGitHubClientUnauthenticated tests creating an unauthenticated GitHub client.
 func TestNewGitHubClientUnauthenticated(t *testing.T) {
 	t.Run("creates unauthenticated client when no token present", func(t *testing.T) {
@@ -104,7 +133,7 @@ func TestNewGitHubClientUnauthenticated(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", "")
 
 		ctx := context.Background()
-		client := newGitHubClient(ctx)
+		client, _ := newGitHubClient(ctx)
 
 		assert.NotNil(t, client)
 	})
@@ -118,7 +147,7 @@ func TestNewGitHubClientAuthenticated(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", testToken)
 
 		ctx := context.Background()
-		client := newGitHubClient(ctx)
+		client, _ := newGitHubClient(ctx)
 
 		assert.NotNil(t, client)
 	})
@@ -230,7 +259,7 @@ func TestGitHubClientCreationWithContext(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", "")
 
 		ctx := context.Background()
-		client := newGitHubClient(ctx)
+		client, _ := newGitHubClient(ctx)
 
 		assert.NotNil(t, client)
 	})
@@ -241,7 +270,7 @@ func TestGitHubClientCreationWithContext(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		client := newGitHubClient(ctx)
+		client, _ := newGitHubClient(ctx)
 
 		assert.NotNil(t, client)
 	})
@@ -341,7 +370,7 @@ func TestGitHubAPIRateLimit(t *testing.T) {
 func TestGitHubClientConfiguration(t *testing.T) {
 	t.Run("client is properly configured", func(t *testing.T) {
 		ctx := context.Background()
-		client := newGitHubClient(ctx)
+		client, _ := newGitHubClient(ctx)
 
 		assert.NotNil(t, client)
 		assert.NotNil(t, client.Repositories, "Repositories service should be initialized")
@@ -557,7 +586,7 @@ func TestNewGitHubClientWithAtmosToken(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", "test-github-token")
 
 		ctx := context.Background()
-		client := newGitHubClient(ctx)
+		client, _ := newGitHubClient(ctx)
 		assert.NotNil(t, client)
 	})
 }
@@ -1006,6 +1035,69 @@ func TestFetchAllReleases_MockServer(t *testing.T) {
 		assert.GreaterOrEqual(t, len(releases), 3)
 		// Should have stopped after first page since 5 >= 0+3.
 		assert.Equal(t, 1, requestCount, "Should stop after first page when limit is satisfied")
+	})
+}
+
+// rateLimitExhaustedServer returns an httptest server whose "/rate_limit" endpoint reports a
+// core rate limit below githubAPIMinRateLimitThreshold, so checkRateLimitBeforeFetch always
+// returns an error against it.
+func rateLimitExhaustedServer(t *testing.T) *httptest.Server {
+	t.Helper()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rate_limit", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]*github.RateLimits{
+			"resources": {
+				Core: &github.Rate{
+					Remaining: 0,
+					Limit:     5000,
+					Reset:     github.Timestamp{Time: time.Now().Add(30 * time.Minute)},
+				},
+			},
+		})
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	return server
+}
+
+// TestCheckRateLimitBeforeFetch_HintsFollowEffectiveAuth pins that checkRateLimitBeforeFetch
+// selects its hints from the authenticated parameter -- the client's effective auth state --
+// rather than re-deriving it from whatever token happens to be resolvable from the
+// environment. This matters because effective auth can diverge from environment presence: a
+// repo-scoped token withheld from a cross-host toolchain client (tokenForToolchainHost), or a
+// `gh auth token` fallback that resolves a token this specific client was never built with.
+func TestCheckRateLimitBeforeFetch_HintsFollowEffectiveAuth(t *testing.T) {
+	server := rateLimitExhaustedServer(t)
+	client := newTestClient(t, server.URL)
+
+	t.Run("authenticated true selects token-invalid hints regardless of env token presence", func(t *testing.T) {
+		// No token in the environment at all -- if the function fell back to an env lookup
+		// (as it did before threading the effective authenticated bool through), it would
+		// wrongly select the "no token" hints here.
+		t.Setenv("GITHUB_TOKEN", "")
+		t.Setenv("ATMOS_GITHUB_TOKEN", "")
+
+		err := checkRateLimitBeforeFetch(context.Background(), client, true)
+		require.Error(t, err)
+		formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+		assert.Contains(t, formatted, "Your GitHub token may be invalid or expired")
+		assert.NotContains(t, formatted, "Authenticate with GitHub CLI")
+	})
+
+	t.Run("authenticated false selects unauthenticated hints even with an env token present", func(t *testing.T) {
+		// A token IS present in the environment -- if the function fell back to an env
+		// lookup, it would wrongly select the "token may be invalid" hints here instead of
+		// reflecting that this particular client was built without it (e.g. a repo-scoped
+		// token withheld from a cross-host toolchain client).
+		t.Setenv("GITHUB_TOKEN", "ghp_env_token_not_used_by_this_client")
+
+		err := checkRateLimitBeforeFetch(context.Background(), client, false)
+		require.Error(t, err)
+		formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+		assert.Contains(t, formatted, "Authenticate with GitHub CLI")
+		assert.NotContains(t, formatted, "Your GitHub token may be invalid or expired")
 	})
 }
 

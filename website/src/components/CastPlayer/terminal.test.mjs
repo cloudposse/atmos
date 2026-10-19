@@ -222,3 +222,19 @@ test('regression: the recorded interactive-menu cast is not blank at the reporte
 function stripAnsi(input) {
   return input.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
 }
+
+// Keep the original recording as a regression even when demo casts are regenerated.
+test('Terraform completion erases resource rows before drawing the final prompt', () => {
+  const content = readFileSync(
+    path.join(dirname, 'fixtures/terraform-ui-ending.cast'),
+    'utf8',
+  );
+  const { events } = parseCast(content);
+  const result = replayTerminal(
+    events.map((event) => event[2].replace(/\r\n/g, '\n')).join(''),
+  );
+  const plain = result.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
+  assert.match(plain, /Destroy dev\/vpc completed/);
+  assert.doesNotMatch(plain, /Destroyed null_resource|Destroyed time_sleep/);
+  assert.match(plain, /> \uE000$/u);
+});

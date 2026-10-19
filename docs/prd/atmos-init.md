@@ -32,7 +32,11 @@ source of truth on current behavior.
 **What exists today**:
 - `atmos init` command with embedded templates (`simple`, `atmos`)
 - Interactive and non-interactive (`--interactive=false`) project setup
-- `--force`, `--update`, `--base-ref`, `--merge-strategy`, `--skip-hooks` flags
+- `--force`, `--update`, `--base-ref`, `--update-strategy`, `--merge-strategy`,
+  `--merge-driver`, `--skip-hooks` flags. `--update-strategy=rendered` re-renders
+  the template at the ref recorded in `.atmos/scaffold.yaml` instead of reading
+  `--base-ref` from the project's own Git history — see `docs/prd/atmos-scaffold.md`'s
+  "Also implemented" section for the full design
 - `pkg/generator` package (shared with `atmos scaffold`)
 - Because `atmos init` shares `atmos scaffold`'s `pkg/generator/ui.InitUI` code
   path, it also inherits `spec.fields[].when:`, `spec.files[].when:`, and
@@ -162,10 +166,12 @@ $ atmos init simple ./test-project --force
 atmos init [template] [target]
   --force, -f              Overwrite existing files
   --interactive, -i        Interactive mode (default: true)
-  --update                 Update an existing project via a 3-way merge (requires a git base; see --base-ref)
-  --base-ref               Git ref to use as the 3-way merge base with --update (defaults to HEAD)
+  --update                 Update an existing project via a 3-way merge
+  --base-ref               Git ref to use as the 3-way merge base with --update (defaults to HEAD; tracked-only -- rejected when combined with --update-strategy=rendered, see --update-strategy)
+  --update-strategy        Where --update's merge base comes from (tracked|rendered; default: tracked)
   --set key=value          Set template variables
   --merge-strategy         Conflict resolution strategy for --update (manual|ours|theirs; default: manual)
+  --merge-driver           Merge algorithm for --update (auto|text; default: auto)
   --max-changes            Maximum change threshold percentage (NOT IMPLEMENTED as a flag — internal default is hardcoded)
   --dry-run                NOT IMPLEMENTED — atmos init has no --dry-run flag today (unlike atmos scaffold generate)
 ```
@@ -246,24 +252,31 @@ components:
 ### Update Flow (with 3-Way Merge)
 
 **Key concept**: The merge base is read directly from git — there is no
-on-disk base snapshot or metadata file.
+on-disk base snapshot or metadata file. This describes the default
+`--update-strategy=tracked`; `--update-strategy=rendered` instead re-renders
+the template at the ref recorded in `.atmos/scaffold.yaml` (without requiring
+the target repository's git history) — which additionally requires the
+template itself to carry a
+`scaffold.yaml` (a separate file from `.atmos/scaffold.yaml`, needed to
+resolve the old ref's fields when re-rendering). See
+`docs/prd/atmos-scaffold.md`'s "Also implemented" section.
 
-```
+```text
 Initial generation:
 1. Render template files
 2. Write files to target directory
 
-Update (atmos init --update):
+Update (atmos init --update, --update-strategy=tracked default):
 1. Resolve --base-ref (defaults to HEAD) in the target directory's git repository
 2. Load each file's base content directly from that git ref
-   (pkg/generator/storage.GitBaseStorage.LoadBase reads the blob straight out
-   of git — no `.atmos/init/base/` snapshot is written or read)
+    (pkg/generator/storage.GitBaseStorage.LoadBase reads the blob straight out
+    of git — no `.atmos/init/base/` snapshot is written or read)
 3. Load current files (ours - with user changes)
 4. Render new template version (theirs)
 5. Perform 3-way merge (base, ours, theirs), honoring --merge-strategy
-   (manual/ours/theirs) for any genuine conflict
+    (manual/ours/theirs) for any genuine conflict
 6. Write merged content (skipped in a hypothetical --dry-run; note `atmos init`
-   has no --dry-run flag today, unlike `atmos scaffold generate --update --dry-run`)
+    has no --dry-run flag today, unlike `atmos scaffold generate --update --dry-run`)
 ```
 
 **Note**: this shipped as a git-ref-based design, not the `.atmos/init/base/` +
@@ -333,25 +346,25 @@ For each template file:
 
 **Tasks**:
 1. Create `cmd/init/` package
-   - `init.go` - Command definition
-   - `init_test.go` - Command tests
+    - `init.go` - Command definition
+    - `init_test.go` - Command tests
 2. Create init-specific embedded templates
-   - `simple` template (full project structure)
-   - `atmos` template (atmos.yaml only)
+    - `simple` template (full project structure)
+    - `atmos` template (atmos.yaml only)
 3. Implement `atmos init` command
-   - Interactive mode (default)
-   - Non-interactive mode with arguments
-   - Template selection from embedded templates
-   - Variable substitution via `--set` flags
-   - Force overwrite mode (`--force`)
+    - Interactive mode (default)
+    - Non-interactive mode with arguments
+    - Template selection from embedded templates
+    - Variable substitution via `--set` flags
+    - Force overwrite mode (`--force`)
 4. Reuse `pkg/generator` infrastructure
-   - Template rendering engine (from scaffold)
-   - File processing (from scaffold)
-   - Interactive UI/prompts (from scaffold)
+    - Template rendering engine (from scaffold)
+    - File processing (from scaffold)
+    - Interactive UI/prompts (from scaffold)
 5. Write comprehensive tests
-   - Unit tests for command
-   - Integration tests for init flows
-   - Template rendering tests
+    - Unit tests for command
+    - Integration tests for init flows
+    - Template rendering tests
 
 **Deliverables**:
 - Fully functional `atmos init` command
@@ -371,9 +384,9 @@ file.
 **What shipped**:
 1. `--update` (and `--base-ref`) flags on the command
 2. 3-way merge integrated into file handling (`pkg/generator/merge`), with
-   `--merge-strategy=manual|ours|theirs` for conflict resolution
+    `--merge-strategy=manual|ours|theirs` for conflict resolution
 3. Path-traversal and symlink-write protection (`validateWriteTarget` in
-   `pkg/generator/engine/templating.go`)
+    `pkg/generator/engine/templating.go`)
 4. Test coverage for update scenarios
 
 **Not shipped from the original plan**: the `.atmos/init/base/` +

@@ -1,9 +1,10 @@
 package exec
 
 import (
+	"fmt"
+
 	"github.com/go-viper/mapstructure/v2"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -28,6 +29,15 @@ type dependencyIndex map[string][]dependencyIndexEntry
 // dependency index: for each component name X, the index contains all entries where some
 // component in some stack declares a dependency on X.
 func buildDependencyIndex(stacks map[string]any) dependencyIndex {
+	idx, _ := buildDependencyIndexWithError(stacks)
+	return idx
+}
+
+func buildDependencyIndexWithError(stacks map[string]any, leftDelims ...string) (dependencyIndex, error) {
+	leftDelim := ""
+	if len(leftDelims) > 0 {
+		leftDelim = leftDelims[0]
+	}
 	idx := make(dependencyIndex)
 
 	for stackName, stackSection := range stacks {
@@ -47,14 +57,16 @@ func buildDependencyIndex(stacks map[string]any) dependencyIndex {
 			}
 
 			for stackComponentName, stackComponent := range stackComponentTypeSectionMap {
-				indexComponentDependencies(
-					idx, stackName, stackComponentType, stackComponentName, stackComponent,
-				)
+				if err := indexComponentDependencies(
+					idx, stackName, stackComponentType, stackComponentName, stackComponent, leftDelim,
+				); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
 
-	return idx
+	return idx, nil
 }
 
 // indexComponentDependencies parses a single component and adds its dependencies to the index.
@@ -62,33 +74,37 @@ func indexComponentDependencies(
 	idx dependencyIndex,
 	stackName, stackComponentType, stackComponentName string,
 	stackComponent any,
-) {
+	leftDelim string,
+) error {
 	stackComponentMap, ok := stackComponent.(map[string]any)
 	if !ok {
-		return
+		return nil
 	}
 
 	if isAbstractOrDisabled(stackComponentMap, stackComponentName) {
-		return
+		return nil
 	}
 
 	stackComponentVarsSection, ok := stackComponentMap["vars"].(map[string]any)
 	if !ok {
-		return
+		return nil
 	}
 
 	var stackComponentVars schema.Context
 	if err := mapstructure.Decode(stackComponentVarsSection, &stackComponentVars); err != nil {
-		log.Debug("Failed to decode component vars during index build",
-			"component", stackComponentName, "stack", stackName, "error", err)
-		return
+		return fmt.Errorf(
+			"decode vars for component %q in stack %q: %w",
+			stackComponentName,
+			stackName,
+			err,
+		)
 	}
 
-	componentDeps, settingsSection, depSource := getComponentDependencies(stackComponentMap)
-	if len(componentDeps) == 0 {
-		return
+	result, err := getComponentDependenciesWithError(stackComponentMap, leftDelim)
+	if err != nil {
+		return fmt.Errorf("parse dependencies for component %q in stack %q: %w", stackComponentName, stackName, err)
 	}
-
+	componentDeps, settingsSection, depSource := result.dependencies, result.settingsSection, result.source
 	for i := range componentDeps {
 		dep := &componentDeps[i]
 		if dep.Component == "" {
@@ -107,6 +123,7 @@ func indexComponentDependencies(
 		}
 		idx[dep.Component] = append(idx[dep.Component], entry)
 	}
+	return nil
 }
 
 // isAbstractOrDisabled checks if a component should be skipped during indexing.

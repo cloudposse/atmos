@@ -26,14 +26,14 @@ func RenderTree(
 
 	// Create h1 header style with solid background.
 	h1Style := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorWhite)).
-		Background(lipgloss.Color(theme.ColorBlue)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextPrimary)).
+		Background(lipgloss.Color(theme.GetCurrentColorScheme().Primary)).
 		Bold(true).
 		Padding(0, 1)
 
 	// Handle empty result.
 	if len(providers) == 0 && len(identities) == 0 {
-		warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorOrange))
+		warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Warning))
 		output.WriteString(warningStyle.Render("No providers or identities configured."))
 		output.WriteString(newline)
 		return output.String(), nil
@@ -59,7 +59,7 @@ func buildUnifiedTree(
 ) string {
 	defer perf.Track(nil, "list.buildUnifiedTree")()
 
-	branchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(treeBranchColor))
+	branchStyle := theme.GetCurrentStyles().Muted
 	root := tree.New().EnumeratorStyle(branchStyle)
 
 	// Group identities by provider or standalone.
@@ -183,15 +183,15 @@ func renderStandaloneIdentities(
 
 // formatKeyValue formats a key-value pair with styled key and value.
 func formatKeyValue(key, value string) string {
-	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(treeKeyColor))
-	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(treeValueColor))
+	keyStyle := theme.GetCurrentStyles().Muted
+	valueStyle := theme.GetCurrentStyles().Body
 	return fmt.Sprintf("%s: %s", keyStyle.Render(key), valueStyle.Render(value))
 }
 
 // formatKeyValueURL formats a key-value pair with a URL value using link color.
 func formatKeyValueURL(key, value string) string {
-	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(treeKeyColor))
-	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
+	keyStyle := theme.GetCurrentStyles().Muted
+	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link))
 	return fmt.Sprintf("%s: %s", keyStyle.Render(key), valueStyle.Render(value))
 }
 
@@ -206,7 +206,7 @@ func buildProviderNodeWithIdentities(
 	defer perf.Track(nil, "list.buildProviderNodeWithIdentities")()
 
 	// Create branch style.
-	branchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(treeBranchColor))
+	branchStyle := theme.GetCurrentStyles().Muted
 
 	// Build provider title.
 	title := buildProviderTitle(provider, name)
@@ -264,7 +264,7 @@ func buildIdentityNodeForProvider(
 	defer delete(visited, name) // Unmark when backtracking to allow shared nodes.
 
 	// Create branch style.
-	branchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(treeBranchColor))
+	branchStyle := theme.GetCurrentStyles().Muted
 
 	// Build identity title.
 	title := buildIdentityTitle(authManager, identity, name)

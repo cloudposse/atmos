@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
+	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -46,6 +47,18 @@ const (
 	explanationForeground = "#F7FAFC"
 	hexColorLength        = 6
 	hexColorBase          = 16
+
+	// ExplanationGradientMinSteps is a floor on the number of gradient steps used
+	// by gradientRatio. Without it, a short callout (2-3 wrapped lines, the most
+	// common case for real error explanations/hints) samples the gradient at
+	// i/(total-1), which for total<=3 always includes both pure endpoint colors
+	// with zero blending in between -- visually a jarring two-tone seam rather
+	// than a gradient. Flooring the step count treats short callouts as a narrow
+	// slice near the start of a longer virtual gradient, so adjacent lines get
+	// close, blended shades instead of the extremes. Callouts with more lines
+	// than this floor already sample the full gradient smoothly and are
+	// unaffected (their total-1 exceeds the floor, so the formula is unchanged).
+	explanationGradientMinSteps = 3
 )
 
 type markdownSections struct {
@@ -262,7 +275,7 @@ func buildExplanationMarkdown(err error, wrappedMsg string, maxLineLength int) s
 	// maxLineLength is unused here because the markdown renderer handles wrapping.
 	_ = maxLineLength
 
-	details := errors.GetAllDetails(err)
+	details := AllDetails(err)
 	hasContent := len(details) > 0 || wrappedMsg != ""
 
 	if !hasContent {
@@ -292,7 +305,7 @@ func buildExplanationMarkdown(err error, wrappedMsg string, maxLineLength int) s
 
 // extractCustomTitle extracts the custom title from error hints.
 func extractCustomTitle(err error) string {
-	allHints := errors.GetAllHints(err)
+	allHints := AllHints(err)
 	for _, hint := range allHints {
 		if strings.HasPrefix(hint, "TITLE:") {
 			return strings.TrimPrefix(hint, "TITLE:")
@@ -322,7 +335,7 @@ func categorizeHints(allHints []string) (examples []string, hints []string) {
 
 // addExampleAndHintsSection separates hints into examples and regular hints, then adds both sections.
 func addExampleAndHintsSection(md *strings.Builder, err error, maxLineLength int) {
-	allHints := errors.GetAllHints(err)
+	allHints := AllHints(err)
 	examples, hints := categorizeHints(allHints)
 
 	// Add Example section.
@@ -559,7 +572,14 @@ func gradientRatio(index int, total int) float64 {
 	if total <= 1 {
 		return 0
 	}
-	return float64(index) / float64(total-1)
+	// Floor the step count so short callouts sample a narrow, blended slice of
+	// the gradient near its start instead of jumping straight to the pure
+	// start/end colors. See explanationGradientMinSteps for the full rationale.
+	steps := total - 1
+	if steps < explanationGradientMinSteps {
+		steps = explanationGradientMinSteps
+	}
+	return float64(index) / float64(steps)
 }
 
 func interpolateHexColor(start string, end string, ratio float64) string {
@@ -722,7 +742,7 @@ func formatContextForMarkdown(err error) string {
 func shouldUseColor() bool {
 	// Build terminal config from all sources (flags, env vars, atmos.yaml).
 	termConfig := &terminal.Config{
-		NoColor:    viper.GetBool("no-color"),
+		NoColor:    terminalenv.ResolveNoColor(os.Args[1:], viper.GetBool("no-color")),
 		Color:      viper.GetBool("color"),
 		ForceColor: viper.GetBool("force-color"),
 

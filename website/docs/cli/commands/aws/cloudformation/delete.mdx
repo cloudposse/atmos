@@ -1,0 +1,113 @@
+---
+title: atmos aws cloudformation delete
+sidebar_label: delete
+sidebar_class_name: command
+id: delete
+description: Delete a CloudFormation stack.
+---
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
+import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
+import SkipHooksFlag from '@site/docs/cli/commands/aws/cloudformation/_partials/_skip-hooks-flag.mdx'
+
+<Intro>
+Delete a CloudFormation stack and stream its events until deletion finishes.
+Deleting a protected stack requires `--disable-termination-protection`.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
+
+<CastPlayer title="atmos aws cloudformation delete --help" src="/casts/screengrabs/atmos-aws-cloudformation-delete--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation delete <component> --stack <stack> [options]
+```
+
+## Examples
+
+```shell
+atmos aws cloudformation delete vpc -s plat-ue2-dev
+```
+
+Skip the interactive confirmation prompt:
+
+```shell
+atmos aws cloudformation delete vpc -s plat-ue2-dev --auto-approve
+```
+
+Retry a `DELETE_FAILED` stack, retaining resources that could not be deleted:
+
+```shell
+atmos aws cloudformation delete vpc -s plat-ue2-dev --retain-resources=SecurityGroup,ManualDbSnapshot
+```
+
+Delete a stack protected by `termination_protection: true`:
+
+```shell
+atmos aws cloudformation delete vpc -s plat-ue2-dev --disable-termination-protection
+```
+
+Delete components selected by tags or labels:
+
+```shell
+atmos aws cloudformation delete --all --tags production,tier-1
+atmos aws cloudformation delete --affected --labels cost-center=platform
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless selecting multiple components)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
+  <dd>Atmos stack. With bulk selection flags, limits the selected components to this stack.</dd>
+
+  <dt>`--auto-approve` <em>(optional)</em></dt>
+  <dd>Skip the interactive confirmation prompt. Without it, `delete` prompts for confirmation on a TTY before deleting the stack.</dd>
+
+  <dt>`--retain-resources` <em>(optional)</em></dt>
+  <dd>Comma-separated logical IDs of resources to retain. Only valid when the stack is in `DELETE_FAILED` status — CloudFormation rejects it otherwise.</dd>
+
+  <dt>`--disable-termination-protection` <em>(optional)</em></dt>
+  <dd>
+    Disable termination protection before deleting. If the component's
+    `termination_protection` is `true`, `delete` fails with an actionable hint
+    instead of silently disabling protection — pass this flag as an explicit
+    escape hatch. Setting `termination_protection: false` in the stack
+    configuration and re-applying does not disable protection: apply only
+    ever turns protection on, never off.
+  </dd>
+
+<SelectionFlags />
+
+<GitFlags />
+
+<SkipHooksFlag />
+</dl>
+
+:::note
+`delete` fires the `before.aws/cloudformation.delete`/`after.aws/cloudformation.delete` hook events.
+:::
+
+## Behavior
+
+- A stack that does not exist is not an error. `delete` prints `<stack> does not exist; nothing to delete` and exits 0, the same way with or without a terminal, and also with `--retain-resources` or `--disable-termination-protection`.
+- A stack protected by termination protection is refused with a "termination protection enabled" error and a hint to pass `--disable-termination-protection`.
+- `--retain-resources` on a stack that is not in `DELETE_FAILED` is refused with its own error before anything is deleted.
+- A delete that ends in `DELETE_FAILED` fails with a hint that names the resources CloudFormation could not delete and shows the retry: `delete <component> -s <stack> --retain-resources=<ids>`.

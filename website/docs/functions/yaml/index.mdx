@@ -43,6 +43,9 @@ YAML supports three types of data: core, defined, and user-defined.
 
 ## Use-cases
 
+ - The [__`!starlark`__](/functions/yaml/starlark) YAML function computes typed configuration values
+   using functions, conditions, and the merged component context.
+
  - The [__`!append`__](/functions/yaml/append) YAML function concatenates lists during stack inheritance instead of replacing them,
    providing fine-grained control over list merging behavior on a per-field basis
 
@@ -108,6 +111,7 @@ YAML supports three types of data: core, defined, and user-defined.
  - The [__`!literal`__](/functions/yaml/literal) YAML function preserves values exactly as written,
    bypassing all template processing. Use it to pass template-like syntax (e.g., `{{...}}` or `${...}`)
    to downstream tools like Terraform, Helm, or ArgoCD without Atmos attempting to evaluate them.
+   It also works in `atmos.yaml` and on the `script` and `command` of custom command, workflow, and hook steps.
 
  - The [__`!version`__](/functions/yaml/version) YAML function resolves a value from the active
    Atmos-managed version track lock file. Use it for locked toolchain versions, image tags,
@@ -125,12 +129,23 @@ YAML supports three types of data: core, defined, and user-defined.
  - The [__`!aws.region`__](/functions/yaml/aws.region) YAML function retrieves the AWS region
    from the current SDK configuration.
 
+ - The [__`!aws.cloudformation.output`__](/functions/yaml/aws.cloudformation.output) YAML function allows you to
+   read the deployed Outputs of a native `aws/cloudformation` component directly within Atmos stack manifests —
+   the Terraform&harr;CloudFormation interop bridge, sibling to `!terraform.output`.
+
  - The [__`!tags`__](/functions/yaml/tags) and [__`!labels`__](/functions/yaml/labels) YAML functions
    return the current component's own `metadata.tags` (list) and `metadata.labels` (map), typed
    correctly with no `!template`/`toJson` boilerplate — commonly used to bridge `metadata.labels`
    into the `vars.tags`/`vars.labels` a `terraform-null-label`-style module expects.
    [__`!labels.keys`__](/functions/yaml/labels.keys) and [__`!labels.values`__](/functions/yaml/labels.values)
    return just the keys or values of `metadata.labels` as a flat list.
+   Use [`!labels key [default]`](/functions/yaml/labels#single-label-lookup) to read one label,
+   with an optional fallback when the key is absent.
+
+ - The [__`!ci.labels`__](/functions/yaml/ci.labels) YAML function reads the live labels on the current CI
+   pull request (or, for merge queue runs, the queued pull request) and returns either the sorted label list or a
+   boolean for `!ci.labels [preview]`. Use it to drive `settings.pro.enabled`, `metadata.enabled`, or
+   `metadata.labels` from the review, then select with `--labels preview:true`.
 
 :::tip
 You can combine [Atmos Stack Manifest Templating](/templates) with Atmos YAML functions within the same stack configuration.
@@ -227,6 +242,9 @@ components:
 
         # Get the current AWS region
         aws_region: !aws.region
+
+        # Read the `VpcId` Output of a native aws/cloudformation component in the current stack
+        vpc_id: !aws.cloudformation.output vpc VpcId
 
         # Preserve template syntax for downstream tools (Terraform, Helm, ArgoCD)
         helm_annotation: !literal "{{ .Values.ingress.class }}"

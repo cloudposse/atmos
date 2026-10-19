@@ -4,14 +4,16 @@ title: "Container Components and Compositions"
 authors: [osterman]
 tags: [feature, experimental]
 date: 2026-06-23
+cast: "/casts/examples/compositions/validate.cast"
+castTitle: "atmos composition validation"
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
 Atmos now has a first-class **container component kind**. Where a `type: container` workflow step is a
 procedural `docker run --rm`, a `components.container` entry is declarative, stack-scoped
 infrastructure: one component is one service, with an image artifact Atmos builds/pushes/pulls and an
-optional long-running named container you operate with `atmos container up/ps/logs/exec/restart/stop/rm/down`.
+optional long-running named container you operate with [`atmos container up/ps/logs/exec/restart/stop/rm/down`](/cli/commands/container/usage).
 A new `compositions` section groups the components that make up a system.
 
 <!--truncate-->
@@ -49,7 +51,7 @@ components:
 ```
 
 `build`, `run.command`, `mounts`, `ports`, `user`, `restart`, and `healthcheck` all map onto the Docker
-Compose shapes you already know. Inheritance (`metadata.inherits`), abstract base components, catalogs,
+Compose shapes you already know. Inheritance ([`metadata.inherits`](/stacks/components/component-metadata#inherits)), abstract base components, catalogs,
 and deep-merge work exactly like every other component kind, so shared `run`/`build` defaults live in
 one place.
 
@@ -79,10 +81,10 @@ compositions:
     services: [api, worker, database]
 ```
 
-Run `atmos composition validate storefront -s dev` to see which declared services are fulfilled vs. not
+Run [`atmos composition validate storefront -s dev`](/cli/commands/composition/usage) to see which declared services are fulfilled vs. not
 yet provided in a given stack — a closed contract for membership, open for fulfillment.
 
-<CastPlayer src="/casts/examples/compositions/validate.cast" title="atmos composition validation" chrome controls scrubber />
+<CastEmbed src="/casts/examples/compositions/validate.cast" title="atmos composition validation" chrome controls scrubber />
 
 [View the full example](/examples/compositions)
 
@@ -97,9 +99,11 @@ atmos container up api -s local
 atmos container list
 ```
 
-<CastPlayer src="/casts/examples/container-component/lifecycle.cast" title="atmos container component lifecycle" chrome controls scrubber />
+<CastEmbed src="/casts/examples/container-component/lifecycle.cast" title="atmos container component lifecycle" chrome controls scrubber />
 
 [View the full example](/examples/container-component)
 
 Container components are experimental while the surface settles. The goal is unchanged: run the same
 declared system locally, in CI, and against real environments — without one-off shell scripts.
+
+For usage and configuration, see [Using Containers](/components/container).

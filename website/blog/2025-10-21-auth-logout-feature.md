@@ -11,7 +11,7 @@ tags:
 release: v1.196.0
 ---
 
-We're excited to announce a new authentication command: **`atmos auth logout`**. This command provides secure, comprehensive cleanup of locally cached credentials, making it easy to switch between identities, end work sessions, and maintain proper security hygiene.
+We're excited to announce a new authentication command: **[`atmos auth logout`](/cli/commands/auth/logout)**. This command provides secure, comprehensive cleanup of locally cached credentials, making it easy to switch between identities, end work sessions, and maintain proper security hygiene.
 
 <!--truncate-->
 
@@ -62,8 +62,8 @@ Removing credentials...
 Successfully logged out from 3 identities
 
 ⚠️  Note: This only removes local credentials. Your browser session
-   may still be active. Visit your identity provider to end your
-   browser session.
+    may still be active. Visit your identity provider to end your
+    browser session.
 ```
 
 ### Interactive Mode
@@ -137,7 +137,7 @@ Atmos intelligently resolves the complete authentication chain for your identity
 
 ```shell
 aws-sso → dev-org-admin → dev-admin
-   ↓           ↓              ↓
+    ↓           ↓              ↓
 Removed     Removed        Removed
 ```
 

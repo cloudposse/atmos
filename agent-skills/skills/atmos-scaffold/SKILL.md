@@ -166,6 +166,24 @@ already created — one file stays one file. For generating a variable number of
 (one per selected value, or one per resolved combination of several axes), see
 `spec.files[].matrix` below.
 
+`path:` can also be a glob (doublestar syntax: `*`, `?`, `[...]`, `**` for any depth,
+`{a,b}`), matching every discovered file under it, so one entry gates or skips an
+entire directory recursively instead of listing every file it contains:
+
+```yaml
+spec:
+  files:
+    - path: "docs/legacy/**"
+      when: "answers.include_legacy_docs == true"   # gates the whole directory at once
+```
+
+Always use forward slashes in the pattern — a backslash is normalized to `/`
+regardless of authoring OS. A malformed pattern (unclosed `[`/`{`) fails scaffold
+load and `atmos scaffold validate` immediately, not silently at generation time.
+When more than one entry's `path:` matches the same file, the **last** declared
+entry wins (`.gitignore`/`CODEOWNERS` precedence — write broad patterns first,
+specific overrides after).
+
 This is distinct from the older path-templating trick: if a file's *path itself* is a
 Go template that renders to `""`, `"false"`, `"null"`, or `"<no value>"`, the engine
 skips it too (`ShouldSkipFile`). Prefer declarative `when:` for new templates — it's
@@ -196,6 +214,27 @@ nested/structured or free-text answer data (e.g. `'{{ collectKeys answers.enviro
 }}'` for a free-text one — see `atmos-templates` for `collectKeys`). The resolved
 combination is available as `.matrix.<axis>` in `target:`, in `when:` (pruning
 combinations that don't apply), and in the file's own rendered content.
+
+**Directory-level matrix**: a glob `path:` (see above) plus `matrix:` duplicates
+every file it matches once per combination, not just one file:
+
+```yaml
+spec:
+  files:
+    - path: "components/**"
+      target: "environments/{{ .matrix.env }}/{{ .file.RelPath }}"
+      matrix:
+        env: [dev, staging, production]
+```
+
+`.file.Path` (the matched file's own discovered path) and `.file.RelPath` (that path
+with the glob's literal prefix stripped, e.g. `vpc/main.tf` for `components/**`
+matching `components/vpc/main.tf`) are available in `target:` and content alongside
+`.matrix.<axis>` — required here since every matched file otherwise shares the same
+`.matrix.<axis>` values and would render to the same path. A `target:` that omits
+`.file.Path`/`.file.RelPath` when its `path:` matches more than one file fails before
+any file is written, not mid-run. `.file.*` is Go-template-only — it is not exposed to
+CEL `when:`.
 
 Full schema: [references/scaffold-yaml-schema.md](references/scaffold-yaml-schema.md#specfilesmatrix--dynamic-file-generation).
 

@@ -7,11 +7,16 @@ description: >-
 cast:
   file: /casts/examples/stack-names/explicit-names.cast
   title: atmos stack names
+related_docs:
+  - label: "Stack names"
+    url: /stacks/name
+  - label: "List stacks"
+    url: /cli/commands/list/stacks
 ---
 
 # Stack Names Example
 
-This example demonstrates imperative stack naming using the `name` field in stack manifests.
+This example demonstrates imperative stack naming using the [`name` field](https://atmos.tools/stacks/name) in stack manifests.
 
 ## Overview
 

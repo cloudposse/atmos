@@ -3,9 +3,7 @@ package exec
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"sync"
 	"text/template"
@@ -20,10 +18,14 @@ import (
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfgpkg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	atmostmpl "github.com/cloudposse/atmos/pkg/template"
+	"github.com/cloudposse/atmos/pkg/template/datasource"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -57,22 +59,79 @@ func ProcessTmpl(
 	tmplValue string,
 	tmplData any,
 	ignoreMissingTemplateValues bool,
-) (string, error) {
+) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmpl")()
 
-	d := data.Data{}
-	ctx := context.TODO()
+	return processTmpl(atmosConfig, &tmplInput{name: tmplName, value: tmplValue, data: tmplData, ignoreMissing: ignoreMissingTemplateValues})
+}
+
+// tmplInput describes a template to render with processTmpl.
+type tmplInput struct {
+	prepare func(*template.Template)
+	name    string
+	value   string
+	data    any
+	// manifestLoadFile is set while a stack manifest (or a section of it) is rendered during stack
+	// loading. atmos.Component then must not describe the target component: that loads every stack
+	// manifest again, including the one being rendered, and recursed without limit. Plain
+	// atmos.Component actions are left as template text for the later per-component render; other
+	// forms fail with ErrComponentFuncDuringManifestLoad.
+	manifestLoadFile string
+	ignoreMissing    bool
+	// skipComponentDeferral keeps the manifest-load guard active but evaluates Component calls
+	// immediately so import paths, which have no later render pass, reject them.
+	skipComponentDeferral bool
+}
+
+// manifestLoadOnlyContextKeys returns the top-level keys of the manifest-load template context that
+// the later per-component render does not have: file-scoped `locals` and import `context` values.
+// The `vars`, `settings` and `env` sections are excluded because the component sections provide them.
+func manifestLoadOnlyContextKeys(tmplData any) []string {
+	ctxMap, ok := tmplData.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	keys := make([]string, 0, len(ctxMap))
+	for key := range ctxMap {
+		switch key {
+		case cfgpkg.VarsSectionName, cfgpkg.SettingsSectionName, cfgpkg.EnvSectionName:
+			continue
+		}
+		keys = append(keys, key)
+	}
+
+	return keys
+}
+
+// processTmpl parses and executes Go templates. A non-empty in.manifestLoadFile selects the
+// manifest-load behavior.
+func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendered string, renderErr error) {
+	protectedSource, restoreSource, protectErr := starlarksource.Protect(in.value, in.name)
+	if protectErr != nil {
+		return "", protectErr
+	}
+	defer func() {
+		if renderErr == nil {
+			rendered = restoreSource(rendered)
+		}
+	}()
 
 	// Add Gomplate, Sprig and Atmos template functions.
-	cfg := atmosConfig
-	if cfg == nil {
-		cfg = &schema.AtmosConfiguration{}
-	}
-	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), getSprigFuncMap(), FuncMap(cfg, &schema.ConfigAndStacksInfo{}, ctx, &d))
+	funcs := buildTemplateFuncMap(atmosConfig, in.manifestLoadFile)
 
-	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
+	t, err := template.New(in.name).Funcs(funcs).Parse(protectedSource)
 	if err != nil {
 		return "", err
+	}
+
+	// While stack manifests are loading, leave atmos.Component actions as template text for the
+	// later per-component render (which runs after all manifests are loaded) and render the rest
+	// of the manifest now. `locals` and import context values exist only in this pass, so
+	// they are resolved inside the deferred actions. Actions that cannot be deferred fail with
+	// ErrComponentFuncDuringManifestLoad.
+	if in.manifestLoadFile != "" && !in.skipComponentDeferral {
+		atmostmpl.DeferCalls(t.Tree, "atmos", "Component", in.data, manifestLoadOnlyContextKeys(in.data)...)
 	}
 
 	// Control the behavior during execution if a map is indexed with a key that is not present in the map.
@@ -82,19 +141,39 @@ func ProcessTmpl(
 
 	option := "missingkey=error"
 
-	if ignoreMissingTemplateValues {
+	if in.ignoreMissing {
 		option = "missingkey=default"
 	}
 
 	t.Option(option)
+	if in.prepare != nil {
+		in.prepare(t)
+	}
 
 	var res bytes.Buffer
-	err = t.Execute(&res, tmplData)
+	err = t.Execute(&res, in.data)
 	if err != nil {
 		return "", err
 	}
 
 	return res.String(), nil
+}
+
+// buildTemplateFuncMap combines template functions with the appropriate manifest-load guard.
+func buildTemplateFuncMap(atmosConfig *schema.AtmosConfiguration, manifestLoadFile string) template.FuncMap {
+	d := data.Data{}
+	ctx := context.TODO()
+	tmplConfig := atmosConfig
+	if tmplConfig == nil {
+		tmplConfig = &schema.AtmosConfiguration{}
+	}
+	var atmosFuncMap template.FuncMap
+	if manifestLoadFile != "" {
+		atmosFuncMap = manifestLoadFuncMap(tmplConfig, &schema.ConfigAndStacksInfo{}, ctx, &d, manifestLoadFile)
+	} else {
+		atmosFuncMap = FuncMap(tmplConfig, &schema.ConfigAndStacksInfo{}, ctx, &d)
+	}
+	return lo.Assign(gomplate.CreateFuncs(ctx, &d), getSprigFuncMap(), atmosFuncMap)
 }
 
 // convertRawEnvToStringMap converts a raw env value (any) to map[string]string.
@@ -232,8 +311,19 @@ func ProcessTmplWithDatasources(
 	tmplValue string,
 	tmplData any,
 	ignoreMissingTemplateValues bool,
-) (string, error) {
+) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmplWithDatasources")()
+
+	protectedSource, restoreSource, protectErr := starlarksource.Protect(tmplValue, tmplName)
+	if protectErr != nil {
+		return "", protectErr
+	}
+	tmplValue = protectedSource
+	defer func() {
+		if renderErr == nil {
+			rendered = restoreSource(rendered)
+		}
+	}()
 
 	if !atmosConfig.Templates.Settings.Enabled {
 		log.Debug("ProcessTmplWithDatasources: not processing templates since templating is disabled in 'atmos.yaml'", logKeyTemplate, tmplName)
@@ -525,96 +615,6 @@ func IsGolangTemplate(atmosConfig *schema.AtmosConfiguration, str string) (bool,
 	return isGoTemplate, nil
 }
 
-// Create temporary directory.
-func createTempDirectory() (string, error) {
-	// Create a temporary directory for the temporary files.
-	tempDir, err := os.MkdirTemp("", "atmos-templates-*")
-	if err != nil {
-		return "", fmt.Errorf("failed to create temp directory: %w", err)
-	}
-	// Ensure directory permissions are restricted.
-	if err := os.Chmod(tempDir, defaultDirPermissions); err != nil {
-		return "", fmt.Errorf("failed to set temp directory permissions: %w", err)
-	}
-	return tempDir, nil
-}
-
-// Write merged JSON data to a temporary file and return its final file URL.
-func writeMergedDataToFile(tempDir string, mergedData map[string]interface{}) (*url.URL, error) {
-	// Write the merged JSON data to a file.
-	rawJSON, err := json.Marshal(mergedData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal merged data to JSON: %w", err)
-	}
-
-	// Create a temporary file inside the temp directory.
-	tmpfile, err := os.CreateTemp(tempDir, "gomplate-data-*.json")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temp data file for gomplate: %w", err)
-	}
-	tmpName := tmpfile.Name()
-	if _, err := tmpfile.Write(rawJSON); err != nil {
-		tmpfile.Close()
-		return nil, fmt.Errorf("failed to write JSON to temp file: %w", err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close temp data file: %w", err)
-	}
-
-	fileURL := toFileScheme(tmpName)
-
-	finalFileUrl, err := fixWindowsFileScheme(fileURL)
-	if err != nil {
-		return nil, err
-	}
-	return finalFileUrl, nil
-}
-
-// Write the 'outer' top-level file and return its final file URL.
-func writeOuterTopLevelFile(tempDir string, fileURL string, mergedData map[string]interface{}) (*url.URL, error) {
-	// Keep merged data at the template root for templates that use `.name`,
-	// while preserving the historical Env.README_YAML helper.
-	topLevel := make(map[string]interface{}, len(mergedData))
-	for k, v := range mergedData {
-		topLevel[k] = v
-	}
-
-	envData := map[string]interface{}{}
-	if existingEnv, ok := topLevel["Env"].(map[string]interface{}); ok {
-		for k, v := range existingEnv {
-			envData[k] = v
-		}
-	}
-	envData["README_YAML"] = fileURL
-	topLevel["Env"] = envData
-
-	outerJSON, err := json.Marshal(topLevel)
-	if err != nil {
-		return nil, err
-	}
-
-	tmpfile2, err := os.CreateTemp(tempDir, "gomplate-top-level-*.json")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temp data file for top-level: %w", err)
-	}
-	tmpName2 := tmpfile2.Name()
-	if _, err = tmpfile2.Write(outerJSON); err != nil {
-		tmpfile2.Close()
-		return nil, fmt.Errorf("failed to write top-level JSON: %w", err)
-	}
-	if err = tmpfile2.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close top-level JSON: %w", err)
-	}
-
-	topLevelFileURL := toFileScheme(tmpName2)
-
-	finalTopLevelFileURL, err := fixWindowsFileScheme(topLevelFileURL)
-	if err != nil {
-		return nil, err
-	}
-	return finalTopLevelFileURL, nil
-}
-
 // ProcessTmplWithDatasourcesGomplate parses and executes Go templates with datasources using Gomplate.
 func ProcessTmplWithDatasourcesGomplate(
 	atmosConfig *schema.AtmosConfiguration,
@@ -625,47 +625,5 @@ func ProcessTmplWithDatasourcesGomplate(
 ) (string, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmplWithDatasourcesGomplate")()
 
-	tempDir, err := createTempDirectory()
-	if err != nil {
-		return "", err
-	}
-	defer os.RemoveAll(tempDir)
-
-	finalFileUrl, err := writeMergedDataToFile(tempDir, mergedData)
-	if err != nil {
-		return "", err
-	}
-
-	finalTopLevelFileURL, err := writeOuterTopLevelFile(tempDir, finalFileUrl.String(), mergedData)
-	if err != nil {
-		return "", err
-	}
-
-	// Construct Gomplate Options.
-	opts := gomplate.Options{
-		Context: map[string]gomplate.Datasource{
-			".": {
-				URL: finalTopLevelFileURL,
-			},
-			"config": {
-				URL: finalFileUrl,
-			},
-		},
-		Funcs: template.FuncMap{},
-	}
-
-	// Render the template.
-	renderer := gomplate.NewRenderer(opts)
-	var buf bytes.Buffer
-	tpl := gomplate.Template{
-		Name:   tmplName,
-		Text:   tmplValue,
-		Writer: &buf,
-	}
-
-	if err := renderer.RenderTemplates(context.Background(), []gomplate.Template{tpl}); err != nil {
-		return "", fmt.Errorf("failed to render template: %w", err)
-	}
-
-	return buf.String(), nil
+	return datasource.Render(atmosConfig, tmplName, tmplValue, mergedData, nil)
 }

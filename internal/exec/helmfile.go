@@ -36,8 +36,11 @@ const (
 )
 
 // ExecuteHelmfile executes helmfile commands.
-func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
+//
+//nolint:gocognit,revive,cyclop,funlen,gocritic // Existing execution pipeline; reporting adds only a deferred snapshot.
+func ExecuteHelmfile(info schema.ConfigAndStacksInfo) (resultErr error) {
 	defer perf.Track(nil, "exec.ExecuteHelmfile")()
+	defer attachComponentReporting(&resultErr, &info, "helmfile", info.SubCommand)
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {

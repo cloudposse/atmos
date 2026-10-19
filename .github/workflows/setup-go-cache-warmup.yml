@@ -67,7 +67,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           # Operating-system background services on the hosted Windows and
@@ -126,6 +126,9 @@ jobs:
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
             *.pool.ntp.org:123
+            raw.githubusercontent.com:443
+            go.dev:443
+            golang.org:443
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -146,7 +149,7 @@ jobs:
         id: go
 
       - name: Set up Atmos
-        uses: cloudposse/github-action-setup-atmos@60878d48037763f759aedee74e9cc0c2dc88e9ec # v3.5.0
+        uses: cloudposse/github-action-setup-atmos@9e8d1e2db56fe851a85871d5993d63e182b66536 # v3.6.0
         with:
           atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
           install-wrapper: false
@@ -154,10 +157,22 @@ jobs:
       - name: Get deps
         uses: ./.github/actions/go-mod-download-retry
 
+      # Keep the race planner's small GOCACHE namespace separate from the
+      # full build/race cache below. Consumers restore this before running
+      # `test:racematrix`, avoiding both a cold Mage compile and the full
+      # multi-gigabyte race cache download on the suite's startup path.
+      - name: Warm the race planner cache
+        if: matrix.target == 'linux'
+        env:
+          GOCACHE: ${{ runner.temp }}/race-plan-go-build
+          RACE_SHARD_COUNT: "4"
+          ATMOS_TEST_RACE_SHARD_SEED: ${{ github.run_id }}
+        run: go tool mage test:racematrix
+
       # Warm the same cache namespaces the real jobs compile in. Flags must
       # match the real invocations or Go's action IDs differ and the warm
       # entries go unused: atmos builds with CGO_ENABLED=0 + GOFIPS140=latest
-      # (see .goreleaser.yml, magefiles/build.go, docs/prd/fips-140-mode.md).
+      # (see .goreleaser.yml, magefiles/build/build.go, docs/prd/fips-140-mode.md).
       - name: Warm the build cache (go build ./...)
         env:
           CGO_ENABLED: "0"
@@ -188,6 +203,10 @@ jobs:
           # (ESM, motd) spawn their own apt runs that would not inherit a -o.
           echo 'Acquire::EnableSrvRecords "false";' | sudo tee /etc/apt/apt.conf.d/99-atmos-no-srv >/dev/null
           sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          # Chrome is preinstalled on the runner but is irrelevant to this
+          # libudev-only step. Do not refresh its occasionally inconsistent
+          # third-party apt index along with Ubuntu's package lists.
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
 
@@ -203,9 +222,18 @@ jobs:
       # immutable); consumers pick the newest via restore-keys. Old entries
       # age out through GitHub's 7-day-unused eviction.
       - name: Save the Go build and module caches
-        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
             ${{ env.GOCACHE }}
             ${{ env.GOMODCACHE }}
           key: ${{ steps.go.outputs.cache-primary-key }}-${{ github.run_id }}
+
+      - name: Save the race planner build and module caches
+        if: matrix.target == 'linux'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/race-plan-go-build
+            ${{ env.GOMODCACHE }}
+          key: race-plan-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}

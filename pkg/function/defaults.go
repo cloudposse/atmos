@@ -32,6 +32,8 @@ func RegisterDefaults() {
 		mustRegister(registry, NewLiteralFunction())
 
 		// PostMerge functions.
+		mustRegister(registry, NewCILabelsFunction())
+		mustRegister(registry, NewStarlarkFunction())
 		mustRegister(registry, NewSecretFunction())
 		mustRegister(registry, NewStoreFunction())
 		mustRegister(registry, NewStoreGetFunction())

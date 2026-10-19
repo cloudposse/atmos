@@ -27,7 +27,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -179,7 +178,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	if !isInteractive() {
 		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
 			WithExplanation("AWS SSO device flow requires an interactive terminal (TTY) for user authorization").
-			WithHint("Use 'aws sso login' to authenticate before running Atmos in headless environments").
+			WithHintf("Run `atmos auth login --provider=%s` (or `atmos auth login --identity=<identity>`) in a terminal first; Atmos keeps its own SSO token cache, so `aws sso login` does not help", p.name).
 			WithHint("For CI/CD pipelines, use AWS environment credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)").
 			WithHint("For GitHub Actions, use OIDC authentication with aws/assume-role identity").
 			WithContext("provider", p.name).
@@ -278,7 +277,7 @@ func (p *ssoProvider) runDeviceAuthFlow(ctx context.Context, oidcClient *ssooidc
 	if err != nil {
 		return ssoTokenCache{}, errUtils.Build(errUtils.ErrSSODeviceAuthFailed).
 			WithExplanation("Failed to initiate AWS SSO device authorization flow").
-			WithHint("Verify your AWS SSO session is active with 'aws sso login'").
+			WithHintf("Re-authenticate with `atmos auth login --provider=%s`; Atmos keeps its own SSO token cache, so `aws sso login` does not help", p.name).
 			WithHintf("Check that the SSO start URL '%s' is correct in your atmos.yaml", p.startURL).
 			WithHint("Ensure your AWS account has SSO enabled and configured").
 			WithContext("provider", p.name).
@@ -370,26 +369,26 @@ func displayVerificationDialog(code, url string) {
 	// Styles using Atmos theme colors.
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorCyan)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 		PaddingLeft(1).
 		PaddingRight(1)
 
 	codeStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorGreen)).
-		Background(lipgloss.Color("#1a1a1a")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success)).
+		Background(lipgloss.Color(theme.GetCurrentColorScheme().Surface)).
 		Padding(0, 1)
 
 	urlStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorBorder)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Border)).
 		Italic(true)
 
 	instructionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorDarkGray))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(theme.ColorBorder)).
+		BorderForeground(lipgloss.Color(theme.GetCurrentColorScheme().Border)).
 		Padding(1, 2).
 		MarginTop(1).
 		MarginBottom(1)
@@ -568,10 +567,7 @@ func (p *ssoProvider) pollForAccessTokenWithSpinner(ctx context.Context, oidcCli
 	}()
 
 	// Create and run the spinner.
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
-	fps.Apply(&s)
+	s := ui.NewSpinner()
 
 	model := spinnerModel{
 		spinner:    s,
@@ -664,7 +660,7 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m spinnerModel) View() string {
 	if m.done {
 		if m.result != nil && m.result.err != nil {
-			return fmt.Sprintf("%s Authentication failed\n", theme.Styles.XMark)
+			return fmt.Sprintf("%s Authentication failed\n", theme.GetCurrentStyles().XMark)
 		}
 		// Success - don't print message here, auth login will display detailed table.
 		return ""
@@ -743,7 +739,7 @@ func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient *ssooid
 			WithExplanation("AWS SSO authentication timed out waiting for browser confirmation").
 			WithHint("Complete the device authorization in your browser within the time limit").
 			WithHint("Visit the verification URL and enter the code displayed earlier").
-			WithHint("Try running 'aws sso login' to verify your SSO configuration").
+			WithHintf("Try again with `atmos auth login --provider=%s`; Atmos keeps its own SSO token cache, so `aws sso login` does not help", p.name).
 			WithContext("provider", p.name).
 			WithContext("start_url", p.startURL).
 			WithContext("region", p.region).

@@ -29,7 +29,7 @@ components:
 ```
 
 That's the whole config. No scanner binary on PATH, no custom command
-wrapper, no GitHub Actions glue — `atmos terraform plan vpc -s prod`
+wrapper, no GitHub Actions glue — [`atmos terraform plan vpc -s prod`](/cli/commands/terraform/plan)
 auto-installs checkov via the toolchain, runs it against the component,
 parses the SARIF, renders the findings as a markdown table in your
 terminal, and (when Atmos Pro is connected) ships the same body to the
@@ -135,7 +135,7 @@ components:
         security: { events: [after.terraform.plan], kind: trivy }
 ```
 
-A **pre-flight check** runs once per `atmos terraform …` invocation —
+A **pre-flight check** runs once per [`atmos terraform …`](/cli/commands/terraform/usage) invocation —
 it resolves and installs every component dependency, then verifies each
 hook's binary is on the resulting PATH. If something is missing or the
 declared tool can't be found, you find out **before terraform runs**,

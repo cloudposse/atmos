@@ -13,15 +13,14 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/interactive"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/tags"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 // loginParser handles flags for the login command.
@@ -38,13 +37,16 @@ var authLoginCmd = &cobra.Command{
 	RunE:               executeAuthLoginCommand,
 }
 
+// init registers the auth login flags and the namespaced --tags Viper key, then attaches the command to the auth parent.
 func init() {
 	defer perf.Track(nil, "auth.login.init")()
 
 	// Create parser with login-specific flags.
 	loginParser = flags.NewStandardParser(
 		flags.WithStringFlag("provider", "p", "", "Provider name to authenticate with (for SSO auto-provisioning)"),
-		flags.WithStringFlag("tags", "", "", "Select an identity by tags (comma-separated, matches any): --tags=production,admin"),
+		flags.WithStringFlag(tagsFlagName, "", "", "Select an identity by tags (comma-separated, matches any): --tags=production,admin"),
+		flags.WithEnvVars(tagsFlagName, envAuthTags),
+		flags.WithViperKey(tagsFlagName, authTagsViperKey),
 		flags.WithBoolFlag("webflow", "", false, "Force a fresh browser login for an aws/user identity"),
 	)
 
@@ -103,7 +105,7 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 		// Provider-level authentication (e.g., for SSO auto-provisioning).
 		whoami, err = authManager.AuthenticateProvider(ctx, providerName)
 		if err != nil {
-			return fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, providerName, err)
+			return errUtils.EnsureAuthenticationFailed(err)
 		}
 	} else {
 		// Try identity-level authentication first.
@@ -119,7 +121,7 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 			}
 			whoami, err = authManager.AuthenticateProvider(ctx, providerName)
 			if err != nil {
-				return fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, providerName, err)
+				return errUtils.EnsureAuthenticationFailed(err)
 			}
 		} else if err != nil {
 			return maybeOfferProfileFallbackOnAuthConfigError(ctx, authManager, err)
@@ -162,7 +164,7 @@ func authenticateIdentity(ctx context.Context, cmd *cobra.Command, authManager a
 	// If --tags was provided (and no explicit --identity), select by tag match instead
 	// of falling through to the default-identity resolution below.
 	if identityName == "" {
-		if filterTags := parseCommaSeparatedNames(viper.GetString(tagsKey)); len(filterTags) > 0 {
+		if filterTags := parseCommaSeparatedNames(viper.GetString(authTagsViperKey)); len(filterTags) > 0 {
 			selected, err := selectIdentityByTags(authManager, filterTags)
 			if err != nil {
 				return nil, false, err
@@ -208,7 +210,7 @@ func authenticateIdentity(ctx context.Context, cmd *cobra.Command, authManager a
 		if errors.Is(err, errUtils.ErrUserAborted) {
 			return nil, false, errUtils.ErrUserAborted
 		}
-		return nil, false, fmt.Errorf("%w: identity=%s: %w", errUtils.ErrAuthenticationFailed, identityName, err)
+		return nil, false, errUtils.EnsureAuthenticationFailed(err)
 	}
 
 	return whoami, false, nil
@@ -220,9 +222,10 @@ type providerLister interface {
 }
 
 // isInteractive checks if we're running in an interactive terminal.
-// Interactive mode requires stdin to be a TTY (for user input) and must not be in CI.
+// Interactive mode requires stdin AND stderr to be TTYs (prompts read stdin and draw on stderr)
+// and must not be in CI. It delegates to the shared predicate used by every auth prompt gate.
 func isInteractive() bool {
-	return term.IsTTYSupportForStdin() && !telemetry.IsCI()
+	return interactive.Available()
 }
 
 // isInteractiveFn indirects through isInteractive so tests can force the

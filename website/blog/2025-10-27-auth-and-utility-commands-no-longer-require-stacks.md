@@ -19,14 +19,14 @@ Atmos auth, documentation, and workflow management commands now work independent
 Six Atmos commands that don't operate on stacks have been updated to no longer require stack configurations:
 
 **Auth Commands:**
-- `atmos auth env` - Export cloud credentials as environment variables
-- `atmos auth exec` - Execute commands with authenticated credentials
-- `atmos auth shell` - Launch an authenticated shell session
+- [`atmos auth env`](/cli/commands/auth/env) - Export cloud credentials as environment variables
+- [`atmos auth exec`](/cli/commands/auth/exec) - Execute commands with authenticated credentials
+- [`atmos auth shell`](/cli/commands/auth/shell) - Launch an authenticated shell session
 
 **Utility Commands:**
-- `atmos list workflows` - List available workflows
-- `atmos list vendor` - List vendor configurations
-- `atmos docs <component>` - Display component documentation
+- [`atmos list workflows`](/cli/commands/list/list-workflows) - List available workflows
+- [`atmos list vendor`](/cli/commands/list/list-vendor) - List vendor configurations
+- [`atmos docs <component>`](/cli/commands/docs/usage) - Display component documentation
 
 ## Why This Matters
 
@@ -109,10 +109,10 @@ Start with authentication and vendor management, then gradually adopt stack-base
 
 Commands that actually work with stacks still require stack configuration:
 
-- `atmos list stacks`
-- `atmos list components`
-- `atmos describe component`
-- `atmos terraform plan/apply`
+- [`atmos list stacks`](/cli/commands/list/stacks)
+- [`atmos list components`](/cli/commands/list/components)
+- [`atmos describe component`](/cli/commands/describe/component)
+- [`atmos terraform plan/apply`](/cli/commands/terraform/usage)
 
 This ensures that stack-dependent operations have the context they need while allowing utility commands to work independently.
 

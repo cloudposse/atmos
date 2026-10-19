@@ -26,7 +26,7 @@ None of this requires you to think about cache keys, paths, or eviction. You fli
 
 ## What Changed
 
-Atmos installs a toolchain (via `atmos toolchain`) and downloads other regenerable artifacts — vendored components, remote stack-import clones, provider and plugin caches — into a well-known cache root (`~/.cache/atmos`, honoring `XDG_CACHE_HOME`). In CI, every job re-fetches all of it from scratch.
+Atmos installs a toolchain (via [`atmos toolchain`](/cli/commands/toolchain/usage)) and downloads other regenerable artifacts — vendored components, remote stack-import clones, provider and plugin caches — into a well-known cache root (`~/.cache/atmos`, honoring `XDG_CACHE_HOME`). In CI, every job re-fetches all of it from scratch.
 
 The new `ci.cache` configuration lets Atmos compute *what* to cache — a stable key derived from `toolchain.lock.yaml` plus the runner's OS/arch, the cache root, and restore-key fallbacks — so a native cache can persist it across jobs and runs. Define it once:
 
@@ -48,7 +48,7 @@ The recommended way to use it is the Atmos-provided composite action — Atmos s
 - run: atmos toolchain install --default helm/helm@v3.16.0
 ```
 
-Prefer to wire it yourself? `atmos ci cache paths --format=github` emits the `key`, `path`, and `restore-keys` as step outputs for a plain `actions/cache` step.
+Prefer to wire it yourself? [`atmos ci cache paths --format=github`](/cli/commands/ci/cache/paths) emits the `key`, `path`, and `restore-keys` as step outputs for a plain `actions/cache` step.
 
 ## Atmos-Managed Restore/Save
 
@@ -71,6 +71,6 @@ atmos ci cache delete    # delete a cache entry by exact key
 
 - **Recommended:** add `cloudposse/atmos/actions/cache@v1` (one step) — no runtime token, native `actions/cache` storage.
 - **Explicit:** `atmos ci cache paths --format=github` → your own `actions/cache` step.
-- **Atmos-managed:** `cloudposse/atmos/actions/github-runtime@v1` + `atmos ci cache restore`/`save` (or `auto: both`).
+- **Atmos-managed:** `cloudposse/atmos/actions/github-runtime@v1` + [`atmos ci cache restore`](/cli/commands/ci/cache/restore)/`save` (or `auto: both`).
 - The cache is **off by default** — opt in per repository with `ci.cache.enabled: true`.
 - The live backend is **GitHub Actions** today. Outside a cache-capable CI provider, the automatic cache lifecycle (`auto`) is a graceful no-op (with a debug log), so the same config is safe to run locally — but explicit commands like `save` and `restore` return a cache-unavailable error when not running in a supported CI runner. A generic backend for other providers is planned.

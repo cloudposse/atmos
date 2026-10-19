@@ -22,7 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
-	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -69,11 +69,9 @@ type mirrorModel struct {
 // newMirrorModel constructs the model; platforms is the configured platform count
 // used to shape the (total-unknown) progress curve.
 func newMirrorModel(platforms int, isTTY bool) *mirrorModel {
-	s := spinner.New()
-	s.Style = theme.GetCurrentStyles().Spinner
-	fps.Apply(&s)
-	p := progress.New(
-		progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()),
+	s := ui.NewSpinner()
+
+	p := ui.NewProgress(
 		progress.WithWidth(mirrorProgressBarWidth),
 		progress.WithoutPercentage(),
 	)

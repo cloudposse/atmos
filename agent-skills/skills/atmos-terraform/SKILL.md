@@ -125,8 +125,9 @@ When you run any `atmos terraform` command, Atmos performs the following sequenc
     component in the stack.
 4. **Provisions backend infrastructure** -- If `provision.backend.enabled: true`, creates the backend storage
     (e.g., S3 bucket) before Terraform init.
-5. **Runs `terraform init`** -- Initializes the working directory with the generated backend config. Cleans
-    `.terraform/environment` first and optionally adds `-reconfigure`.
+5. **Runs `terraform init`** -- Initializes the working directory with the generated backend config, skipping
+    it automatically when nothing relevant changed (`init.mode`), and adding `-reconfigure`/`-upgrade` only
+    when required (`init.reconfigure`/`init.upgrade`). Cleans `.terraform/environment` first.
 6. **Selects or creates workspace** -- Calculates the Terraform workspace name from context variables and
     selects it (or creates it if it does not exist).
 7. **Executes the requested command** -- Runs `terraform plan`, `apply`, `destroy`, etc. with the generated
@@ -217,9 +218,10 @@ just like upstream Terraform: `atmos terraform destroy vpc -s dev`.
 
 ### init
 
-Atmos runs `terraform init` automatically before plan, apply, and deploy, so manual invocation is
-rarely needed. When required, all upstream init flags pass through (`-reconfigure`, `-upgrade`,
-`-migrate-state`): `atmos terraform init vpc -s dev -reconfigure`.
+Atmos runs `terraform init` automatically before plan, apply, and deploy, but only when needed (`init.mode`),
+adding `-reconfigure`/`-upgrade` only when required (`init.reconfigure`/`init.upgrade`); `--skip-init`
+disables auto-init for one invocation. Upstream init flags pass through when invoked directly
+(`-reconfigure`, `-upgrade`, `-migrate-state`): `atmos terraform init vpc -s dev -reconfigure`.
 
 ### Streaming UI (`--ui`)
 
@@ -271,14 +273,16 @@ atmos terraform deploy --all --dry-run
 ## Workspace Management
 
 Atmos computes the Terraform workspace name from stack context (namespace, tenant, environment,
-stage, component), runs `terraform init -reconfigure`, and selects (or creates) the workspace
-on every invocation. Explicit management is also available: `atmos terraform workspace vpc -s plat-ue2-dev`.
+stage, component), runs `terraform init -reconfigure` (always, regardless of `init.reconfigure`), and
+selects (or creates) the workspace on every invocation. Explicit management is also available:
+`atmos terraform workspace vpc -s plat-ue2-dev`.
 
 For stable workspace keys across component implementations, use `metadata.name` on an abstract
 base component (`name: vpc`, `component: vpc/v2`); for dynamic naming, `workspace_key_prefix`
 under `backend:` accepts Go templates. Toggle the runtime behavior via
-`components.terraform.init_run_reconfigure` and `workspaces_enabled` in `atmos.yaml`. Full
-examples are in [references/backend-configuration.md](references/backend-configuration.md).
+`components.terraform.init.reconfigure` (supersedes `init_run_reconfigure`) and
+`workspaces_enabled` in `atmos.yaml`. Full examples are in
+[references/backend-configuration.md](references/backend-configuration.md).
 
 ## Backend Configuration and Auto-Generation
 
@@ -437,9 +441,10 @@ If a path matches multiple components, Atmos prompts for selection in interactiv
 
 ## Configuration in atmos.yaml
 
-Key settings under `components.terraform` include `auto_generate_backend_file`, `init_run_reconfigure`,
-`workspaces_enabled`, `deploy_run_init`, `apply_auto_approve`, and `plan.skip_planfile`. Each has a
-corresponding `ATMOS_COMPONENTS_TERRAFORM_*` environment variable override. See
+Key settings under `components.terraform` include `auto_generate_backend_file`, `init.mode`,
+`init.reconfigure`, `init.upgrade` (see `init` above), `workspaces_enabled`, `deploy_run_init`,
+`apply_auto_approve`, and `plan.skip_planfile`. Each has a matching `ATMOS_COMPONENTS_TERRAFORM_*`
+environment variable override. See
 [references/backend-configuration.md](references/backend-configuration.md) for complete configuration details.
 
 `components.terraform.flags` sets fleet-wide defaults for terraform CLI execution flags

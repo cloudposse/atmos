@@ -1,13 +1,25 @@
 package tests
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+// authHeaderObservation carries what an httptest handler goroutine observed about a request's
+// Authorization header (or, via saw alone, some other one-shot event) back to the test goroutine
+// through a buffered channel, so tests never read a plain variable the handler wrote concurrently.
+type authHeaderObservation struct {
+	values []string
+	value  string
+	saw    bool
+}
 
 func enablePreconditionChecks(t *testing.T) {
 	t.Helper()
@@ -613,4 +625,288 @@ func TestRequireAzureCredentials(t *testing.T) {
 	// Just call it to ensure it doesn't panic
 	// Will skip if Azure credentials not available
 	RequireAzureCredentials(t)
+}
+
+// TestOffline is a table-driven test for the ATMOS_TEST_OFFLINE switch. It follows the same
+// "== true" exact-match convention as ShouldCheckPreconditions (see TestShouldCheckPreconditions)
+// rather than a general truthy parse.
+func TestOffline(t *testing.T) {
+	tests := []struct {
+		name     string
+		envValue string
+		unset    bool
+		want     bool
+	}{
+		{name: "unset", unset: true, want: false},
+		{name: "true", envValue: "true", want: true},
+		{name: "TRUE (case sensitive)", envValue: "TRUE", want: false},
+		{name: "numeric 1 is not truthy", envValue: "1", want: false},
+		{name: "false", envValue: "false", want: false},
+		{name: "random value", envValue: "random", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.unset {
+				orig := os.Getenv("ATMOS_TEST_OFFLINE")
+				os.Unsetenv("ATMOS_TEST_OFFLINE")
+				t.Cleanup(func() {
+					if orig != "" {
+						os.Setenv("ATMOS_TEST_OFFLINE", orig)
+					}
+				})
+			} else {
+				t.Setenv("ATMOS_TEST_OFFLINE", tt.envValue)
+			}
+
+			assert.Equal(t, tt.want, Offline())
+		})
+	}
+}
+
+// TestRequireGitHubAccess_OfflineNotOverridableByPreconditionChecks regression-tests that
+// ATMOS_TEST_OFFLINE always skips RequireGitHubAccess even when
+// ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true (the flag CI sets to bypass the connectivity *probe* --
+// it must never be read as "run live network calls anyway").
+func TestRequireGitHubAccess_OfflineNotOverridableByPreconditionChecks(t *testing.T) {
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
+	t.Setenv("ATMOS_TEST_OFFLINE", "true")
+
+	RequireGitHubAccess(t)
+
+	t.Fatal("expected RequireGitHubAccess to skip under ATMOS_TEST_OFFLINE even with precondition checks disabled")
+}
+
+// TestRequireNetworkAccess_OfflineNotOverridableByPreconditionChecks mirrors
+// TestRequireGitHubAccess_OfflineNotOverridableByPreconditionChecks for RequireNetworkAccess.
+func TestRequireNetworkAccess_OfflineNotOverridableByPreconditionChecks(t *testing.T) {
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
+	t.Setenv("ATMOS_TEST_OFFLINE", "true")
+
+	RequireNetworkAccess(t, "https://github.com")
+
+	t.Fatal("expected RequireNetworkAccess to skip under ATMOS_TEST_OFFLINE even with precondition checks disabled")
+}
+
+// TestRequireLiveGitHub_Offline verifies RequireLiveGitHub delegates to RequireGitHubAccess's
+// offline gate.
+func TestRequireLiveGitHub_Offline(t *testing.T) {
+	t.Setenv("ATMOS_TEST_OFFLINE", "true")
+
+	RequireLiveGitHub(t)
+
+	t.Fatal("expected RequireLiveGitHub to skip under ATMOS_TEST_OFFLINE")
+}
+
+// TestRequireLiveGitHubAuthenticated_Offline verifies the offline gate is checked before the
+// GITHUB_TOKEN requirement.
+func TestRequireLiveGitHubAuthenticated_Offline(t *testing.T) {
+	t.Setenv("ATMOS_TEST_OFFLINE", "true")
+	t.Setenv("GITHUB_TOKEN", "")
+
+	RequireLiveGitHubAuthenticated(t)
+
+	t.Fatal("expected RequireLiveGitHubAuthenticated to skip under ATMOS_TEST_OFFLINE")
+}
+
+// TestRequireLiveGitHubAuthenticated_NoToken verifies RequireLiveGitHubAuthenticated skips when
+// GITHUB_TOKEN is unset, independent of live GitHub reachability. Precondition checks are
+// disabled (ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true) so RequireGitHubAccess's connectivity/rate
+// limit probe never runs: without that, an unreachable github.com would make this test pass for
+// the wrong reason (an earlier skip) even if the no-token gate itself were broken.
+// ATMOS_TEST_OFFLINE is explicitly set to false so the same is true regardless of the ambient
+// environment.
+func TestRequireLiveGitHubAuthenticated_NoToken(t *testing.T) {
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
+	t.Setenv("ATMOS_TEST_OFFLINE", "false")
+	t.Setenv("GITHUB_TOKEN", "")
+
+	RequireLiveGitHubAuthenticated(t)
+
+	t.Fatal("expected RequireLiveGitHubAuthenticated to skip without GITHUB_TOKEN")
+}
+
+// TestProbeGitHubRateLimit_SendsAuthorizationHeaderWhenTokenSet verifies probeGitHubRateLimit
+// attaches "Authorization: Bearer <token>" when a token is given, and omits it entirely for an
+// unauthenticated probe -- the fix for RequireLiveGitHubAuthenticated gating on the anonymous
+// rate limit depends on this header actually reaching the request.
+func TestProbeGitHubRateLimit_SendsAuthorizationHeaderWhenTokenSet(t *testing.T) {
+	tests := []struct {
+		name      string
+		token     string
+		wantAuth  string
+		wantEmpty bool
+	}{
+		{name: "authenticated", token: "test-token-value", wantAuth: "Bearer test-token-value"},
+		{name: "unauthenticated", token: "", wantEmpty: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// The handler runs on its own goroutine; send its observation through a buffered
+			// channel instead of writing to a shared variable the test goroutine reads after
+			// client.Do returns, which go test -race would otherwise flag as a data race.
+			authCh := make(chan authHeaderObservation, 1)
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				authCh <- authHeaderObservation{values: r.Header["Authorization"], saw: r.Header.Get("Authorization") != ""}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"rate":{"limit":60,"remaining":42,"reset":1893456000}}`))
+			}))
+			defer server.Close()
+
+			client := server.Client()
+			info, err := probeGitHubRateLimit(client, server.URL, tt.token)
+			require.NoError(t, err)
+			require.NotNil(t, info)
+			assert.Equal(t, 42, info.Remaining)
+
+			observed := <-authCh
+			gotAuth, sawAuthHeader := observed.values, observed.saw
+
+			if tt.wantEmpty {
+				assert.False(t, sawAuthHeader, "expected no Authorization header, got %v", gotAuth)
+				return
+			}
+			assert.True(t, sawAuthHeader, "expected an Authorization header")
+			require.Len(t, gotAuth, 1)
+			assert.Equal(t, tt.wantAuth, gotAuth[0])
+		})
+	}
+}
+
+// TestCheckGitHubRateLimit_SkipsWhenRemainingIsZero verifies checkGitHubRateLimit itself (not
+// just probeGitHubRateLimit) skips the test when the quota is exhausted, by pointing it at an
+// httptest server instead of the real api.github.com.
+func TestCheckGitHubRateLimit_SkipsWhenRemainingIsZero(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"rate":{"limit":60,"remaining":0,"reset":9999999999}}`))
+	}))
+	defer server.Close()
+
+	client := server.Client()
+
+	var ranPastSkip bool
+	t.Run("sub", func(t *testing.T) {
+		checkGitHubRateLimit(t, client, server.URL, "")
+		ranPastSkip = true
+	})
+	assert.False(t, ranPastSkip, "expected checkGitHubRateLimit to skip the subtest on an exhausted quota")
+}
+
+// TestCheckGitHubRateLimit_ReturnsInfoWhenRemaining verifies checkGitHubRateLimit returns the
+// decoded rate-limit info (rather than skipping or nil) when quota remains, for both an
+// unauthenticated and an authenticated probe, and that the Authorization header is only ever
+// sent on the authenticated path.
+func TestCheckGitHubRateLimit_ReturnsInfoWhenRemaining(t *testing.T) {
+	tests := []struct {
+		name      string
+		token     string
+		wantAuth  string
+		wantEmpty bool
+	}{
+		{
+			name:      "anonymous",
+			token:     "",
+			wantEmpty: true,
+		},
+		{
+			name:     "authenticated",
+			token:    "authed-token",
+			wantAuth: "Bearer authed-token",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// See the buffered-channel comment on TestProbeGitHubRateLimit_SendsAuthorizationHeaderWhenTokenSet
+			// above: the handler runs on its own goroutine, so its observation must not be written
+			// to a plain variable the test goroutine reads after the probe returns.
+			authCh := make(chan authHeaderObservation, 1)
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, saw := r.Header["Authorization"]
+				authCh <- authHeaderObservation{value: r.Header.Get("Authorization"), saw: saw}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"rate":{"limit":5000,"remaining":4999,"reset":9999999999}}`))
+			}))
+			defer server.Close()
+
+			client := server.Client()
+
+			info := checkGitHubRateLimit(t, client, server.URL, tt.token)
+			require.NotNil(t, info)
+			assert.Equal(t, 4999, info.Remaining)
+
+			observed := <-authCh
+			gotAuth, sawAuthHeader := observed.value, observed.saw
+
+			if tt.wantEmpty {
+				assert.False(t, sawAuthHeader, "anonymous probe must not send an Authorization header")
+			} else {
+				assert.Equal(t, tt.wantAuth, gotAuth)
+			}
+		})
+	}
+}
+
+// TestProbeGitHubRateLimit_DoesNotFollowRedirectWhenAuthenticated verifies that an authenticated
+// probe (token != "") never follows a redirect: Go's http.Client would otherwise carry the
+// Authorization header across a same-host redirect, including an HTTPS->HTTP downgrade. The
+// redirect target's handler fails the test if it is ever hit, and probeGitHubRateLimit must
+// return (nil, nil) for the 302 response instead, matching its non-200 -> (nil, nil) contract.
+func TestProbeGitHubRateLimit_DoesNotFollowRedirectWhenAuthenticated(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/redirect-target", func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("redirect target must never be hit by an authenticated probe, got request: %s %s", r.Method, r.URL)
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("/rate_limit", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/redirect-target", http.StatusFound)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := server.Client()
+
+	info, err := probeGitHubRateLimit(client, server.URL+"/rate_limit", "test-token-value")
+	require.NoError(t, err)
+	assert.Nil(t, info, "expected a redirected authenticated probe to return nil info, not follow the redirect")
+}
+
+// TestProbeGitHubRateLimit_UnauthenticatedFollowsRedirectAsBefore verifies the unauthenticated
+// path (token == "") is unaffected by the redirect fix: it still follows the redirect exactly as
+// http.Client's default behavior did before this change.
+func TestProbeGitHubRateLimit_UnauthenticatedFollowsRedirectAsBefore(t *testing.T) {
+	// The redirect-target handler runs on its own goroutine; signal the hit through a buffered
+	// channel instead of a shared bool the test goroutine reads after the probe returns.
+	redirectHitCh := make(chan struct{}, 1)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/redirect-target", func(w http.ResponseWriter, r *http.Request) {
+		redirectHitCh <- struct{}{}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"rate":{"limit":60,"remaining":42,"reset":1893456000}}`))
+	})
+	mux.HandleFunc("/rate_limit", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/redirect-target", http.StatusFound)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := server.Client()
+
+	info, err := probeGitHubRateLimit(client, server.URL+"/rate_limit", "")
+	require.NoError(t, err)
+	require.NotNil(t, info)
+
+	var redirectTargetHit bool
+	select {
+	case <-redirectHitCh:
+		redirectTargetHit = true
+	default:
+	}
+	assert.True(t, redirectTargetHit, "expected the unauthenticated probe to follow the redirect as before")
+	assert.Equal(t, 42, info.Remaining)
 }

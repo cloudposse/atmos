@@ -158,6 +158,22 @@ func (s *GSMStore) SetAuthContext(resolver store.AuthContextResolver, identityNa
 	}
 }
 
+// ResetAuthContext clears all runtime authentication and cached client state.
+func (s *GSMStore) ResetAuthContext() {
+	defer perf.Track(nil, "providers.GSMStore.ResetAuthContext")()
+
+	if s.client != nil {
+		if err := s.client.Close(); err != nil {
+			log.Trace("Failed to close Google Secret Manager client during auth reset", "error", err)
+		}
+	}
+	s.authResolver = nil
+	s.identityName = ""
+	s.client = nil
+	s.initOnce = sync.Once{}
+	s.initErr = nil
+}
+
 // IdentityName returns the configured identity name, if any.
 func (s *GSMStore) IdentityName() string {
 	return s.identityName

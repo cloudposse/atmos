@@ -120,7 +120,7 @@ var multiComponentFlagNames = []string{"all", "affected", "components", "query",
 // before.terraform.test) operate on the chosen target instead of an empty one. With
 // explicit args or in non-interactive contexts it is a no-op beyond the normal hook run.
 func runBeforeHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
-	if err := validateTerraformMockFlags(cmd_); err != nil {
+	if err := validateTerraformMockFlags(cmd_, args); err != nil {
 		return err
 	}
 	if err := preResolveInteractiveSelection(cmd_, args); err != nil {
@@ -131,14 +131,22 @@ func runBeforeHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error
 
 // validateTerraformMockFlags rejects an invalid mock invocation before hook or
 // stack resolution. RunE repeats this validation for commands without hooks and
-// for values supplied through environment variables.
-func validateTerraformMockFlags(cmd_ *cobra.Command) error {
+// for values supplied through environment variables. The positional arguments
+// (the component first) are used to catch `--use-mocks always`.
+func validateTerraformMockFlags(cmd_ *cobra.Command, args []string) error {
 	if cmd_ == nil || cmd_.Flags().Lookup("use-mocks") == nil {
 		return nil
 	}
 
-	useMocks, err := cmd_.Flags().GetBool("use-mocks")
+	rawUseMocks, err := cmd_.Flags().GetString("use-mocks")
+	if err != nil {
+		return err
+	}
+	useMocks, mocksMode, err := cfg.ParseUseMocksFlag(rawUseMocks)
 	if err != nil || !useMocks {
+		return err
+	}
+	if err := cfg.CheckUseMocksSeparatedMode(useMocks, mocksMode, argsAfterComponent(args)); err != nil {
 		return err
 	}
 	processFunctions, err := cmd_.Flags().GetBool("process-functions")
@@ -157,7 +165,7 @@ func preResolveInteractiveSelection(cmd_ *cobra.Command, args []string) error {
 
 	// Multi-component invocations (--all/--affected/--components/--query) have no single
 	// component/stack to select; leave them to the normal flow.
-	if isMultiComponentInvocation(cmd_) {
+	if isMultiComponentInvocation(cmd_, args) {
 		return nil
 	}
 
@@ -180,19 +188,64 @@ func preResolveInteractiveSelection(cmd_ *cobra.Command, args []string) error {
 // isMultiComponentInvocation reports whether any multi-component flag is set.
 // It checks explicit Cobra flags first, then Viper for env/config-driven values,
 // because this runs in PreRunE before applyOptionsToInfo has populated info.
-func isMultiComponentInvocation(cmd_ *cobra.Command) bool {
+//
+// Selectors that arrive only through the environment (ATMOS_TAGS / ATMOS_LABELS) never turn a
+// command that names a component into a multi-component invocation: a job-level export must not
+// override an explicit component argument. An explicit --tags/--labels on the command line still
+// does, so the conflict with the component argument is reported to the user.
+func isMultiComponentInvocation(cmd_ *cobra.Command, args []string) bool {
 	for _, name := range multiComponentFlagNames {
 		if f := cmd_.Flags().Lookup(name); f != nil && f.Changed {
 			return true
 		}
 	}
 	v := viper.GetViper()
-	return v.GetBool("all") ||
+	if v.GetBool("all") ||
 		v.GetBool("affected") ||
 		len(v.GetStringSlice("components")) > 0 ||
-		v.GetString("query") != "" ||
-		len(v.GetStringSlice("tags")) > 0 ||
-		v.GetString("labels") != ""
+		v.GetString("query") != "" {
+		return true
+	}
+	if hasComponentArgument(cmd_.Name(), args) {
+		return false
+	}
+	return len(v.GetStringSlice("tags")) > 0 || len(v.GetStringSlice("labels")) > 0
+}
+
+// hasComponentArgument reports whether the terraform subcommand and its positional args name a
+// component. Compound commands (providers, state, workspace) take a sub-subcommand first, so
+// "providers lock" has no component while "providers lock vpc" does.
+func hasComponentArgument(subCommand string, args []string) bool {
+	withSubCommand := append([]string{subCommand}, args...)
+	if isCompoundTerraformCommandWithoutComponent(withSubCommand) {
+		return false
+	}
+	return len(withSubCommand) >= 2
+}
+
+// dropEnvOnlySelectorsForComponent ignores --tags/--labels selectors that came only from the
+// environment (ATMOS_TAGS / ATMOS_LABELS) when a component argument was given. Those variables are
+// commonly exported for a whole CI job and would otherwise turn `atmos terraform plan vpc -s dev`
+// into a conflicting multi-component invocation. A selector set explicitly on the command line is
+// kept, so combining it with a component argument still fails in shared.CheckTerraformFlags.
+func dropEnvOnlySelectorsForComponent(cmd_ *cobra.Command, info *schema.ConfigAndStacksInfo, opts *TerraformRunOptions) {
+	if info.ComponentFromArg == "" {
+		return
+	}
+	if len(opts.Tags) > 0 && !flagChanged(cmd_, "tags") {
+		log.Debug("Ignoring ATMOS_TAGS because a component argument was given", "component", info.ComponentFromArg, "tags", opts.Tags)
+		opts.Tags = nil
+	}
+	if len(opts.Labels) > 0 && !flagChanged(cmd_, "labels") {
+		log.Debug("Ignoring ATMOS_LABELS because a component argument was given", "component", info.ComponentFromArg, "labels", opts.Labels)
+		opts.Labels = nil
+	}
+}
+
+// flagChanged reports whether the named flag was set explicitly on the command line.
+func flagChanged(cmd_ *cobra.Command, name string) bool {
+	f := cmd_.Flags().Lookup(name)
+	return f != nil && f.Changed
 }
 
 // applyPreResolvedComponent injects the interactively-selected component into info
@@ -441,8 +494,12 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 		Output:      output,
 		ForceCIMode: forceCIMode,
 	}); err != nil {
+		// A misconfigured provider (invalid API URL) fails the command; every other
+		// CI hook error is reported and the command result stands.
+		if errors.Is(err, errUtils.ErrInvalidURL) {
+			return err
+		}
 		log.Warn(ciHookFailedMsg, "error", err)
-		// Don't fail the command on CI hook errors.
 	}
 
 	return nil
@@ -578,7 +635,7 @@ func (n *terraformNodeHooks) recordExecResult(info *schema.ConfigAndStacksInfo, 
 		}
 	}
 
-	data := buildTerraformExecData(n.subCommand, ansi.Strip(output), info.Component, info.Stack, exitCode)
+	data := buildTerraformExecData(n.subCommand, ansi.Strip(output), info.ComponentFromArg, info.Stack, exitCode)
 	if data == nil {
 		return
 	}
@@ -998,6 +1055,8 @@ func (n *terraformNodeHooks) Before(ctx context.Context, info *schema.ConfigAndS
 func (n *terraformNodeHooks) BeforeWithWriters(_ context.Context, info *schema.ConfigAndStacksInfo, writers schema.ComponentNodeHookWriters) error {
 	defer perf.Track(nil, "terraform.terraformNodeHooks.Before")()
 
+	// Keep the node's own credentials for the deploy verification below.
+	nodeAuthContext, nodeAuthManager := info.AuthContext, info.AuthManager
 	injectLastAuthContext(info)
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
@@ -1015,6 +1074,21 @@ func (n *terraformNodeHooks) BeforeWithWriters(_ context.Context, info *schema.C
 	if !n.skipPerNodeCI {
 		n.runCIHooksForNodeBefore(&atmosConfig, info)
 	}
+	// Bulk deploys never reach the RunE verify gate, so verify per node here.
+	return verifyStoredPlanForNode(n.subCommand, info, nodeAuthContext, nodeAuthManager)
+}
+
+// verifyStoredPlanForNode verifies one graph node's stored plan on a copy of info
+// that carries the node's own auth, not the aggregate context injected for hooks.
+func verifyStoredPlanForNode(subCommand string, info *schema.ConfigAndStacksInfo, authContext *schema.AuthContext, authManager any) error {
+	verifyInfo := *info
+	verifyInfo.AuthContext = authContext
+	verifyInfo.AuthManager = authManager
+	if err := verifyStoredPlanForDeploy(subCommand, &verifyInfo); err != nil {
+		return err
+	}
+	info.PlanFile = verifyInfo.PlanFile
+	info.UseTerraformPlan = verifyInfo.UseTerraformPlan
 	return nil
 }
 
@@ -1450,6 +1524,10 @@ func executeAffectedCommand(ctx context.Context, parentCmd *cobra.Command, args 
 	a.IncludeSettings = false
 	a.Upload = false
 	a.OutputFile = ""
+	// `terraform --affected` applies --tags/--labels itself, after the affected set (and any
+	// dependents) is computed, so the describe-affected selectors must not pre-filter it.
+	a.Tags = nil
+	a.Labels = nil
 
 	return e.ExecuteTerraformAffectedWithContext(ctx, &a, info)
 }
@@ -1562,6 +1640,9 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	if err := validateTerraformMockOptions(subCommand, opts.UseMocks, opts.ProcessFunctions); err != nil {
 		return err
 	}
+	if err := cfg.CheckUseMocksSeparatedMode(opts.UseMocks, opts.MocksMode, argsAfterComponent(args)); err != nil {
+		return err
+	}
 
 	// Validate Atmos config first to provide specific error messages.
 	if err := internal.ValidateAtmosConfig(); err != nil {
@@ -1588,6 +1669,9 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	if insertedMultiComponentPlaceholder {
 		info.ComponentFromArg = ""
 	}
+
+	// A component argument wins over selectors that came only from ATMOS_TAGS / ATMOS_LABELS.
+	dropEnvOnlySelectorsForComponent(actualCmd, &info, opts)
 
 	// Apply parsed options to info BEFORE prompting, so hasMultiComponentFlags() works correctly.
 	// This fixes issue #1945: --all flag must be set before resolveAndPromptForArgs checks it.
@@ -1700,10 +1784,24 @@ func validateTerraformMockOptions(subCommand string, useMocks, processFunctions 
 		return fmt.Errorf("%w: --use-mocks requires --process-functions=true", errUtils.ErrInvalidFlagValue)
 	}
 	if subCommand != "plan" {
-		return fmt.Errorf("%w: --use-mocks is supported only by `atmos terraform plan`", errUtils.ErrInvalidFlagValue)
+		return errUtils.Build(fmt.Errorf("%w: %s is supported only by `atmos terraform plan`", errUtils.ErrInvalidFlagValue, cfg.UseMocksFlagAndEnvSource)).
+			WithHintf("If `ATMOS_USE_MOCKS` is set in your shell or CI environment, unset it for `atmos terraform %s`.", subCommand).
+			Err()
 	}
 	return nil
 }
+
+// argsAfterComponent returns the positional arguments that follow the component (the first
+// positional argument), or nil when there are none.
+func argsAfterComponent(args []string) []string {
+	if len(args) < 2 {
+		return nil
+	}
+	return args[1:]
+}
+
+// verifyPlanfile is a var so tests can stub the plan comparison.
+var verifyPlanfile = e.VerifyPlanfile
 
 // verifyStoredPlanForDeploy runs planfile drift verification before a deploy
 // apply. It is a no-op for non-deploy commands, when planfile storage is not
@@ -1753,7 +1851,7 @@ func verifyStoredPlanForDeploy(subCommand string, info *schema.ConfigAndStacksIn
 		return nil
 	}
 
-	return e.VerifyPlanfile(info, storedPlanPath, mode)
+	return verifyPlanfile(info, storedPlanPath, mode)
 }
 
 // handleUnconfiguredPlanfileStorage resolves a verification request that cannot be

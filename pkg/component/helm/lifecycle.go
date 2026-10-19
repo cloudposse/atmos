@@ -35,6 +35,8 @@ var lifecycleFlagKeys = []string{
 	cfg.HelmHistoryMaxSectionName,
 	cfg.HelmChartHooksSectionName,
 	cfg.HelmCRDsSectionName,
+	cfg.HelmServerSideApplySectionName,
+	cfg.HelmForceConflictsSectionName,
 }
 
 type failurePolicy string
@@ -52,6 +54,19 @@ const (
 	crdPolicySkip   crdPolicy = "skip"
 )
 
+// serverSideApplyPolicy is the apply method for a release action. The empty
+// value means "unset": Atmos sets nothing on the Helm action so the Helm 4
+// default applies (true for install, "auto" for upgrade), keeping behavior
+// byte-for-byte unchanged when the setting is omitted.
+type serverSideApplyPolicy string
+
+const (
+	serverSideApplyUnset serverSideApplyPolicy = ""
+	serverSideApplyAuto  serverSideApplyPolicy = "auto"
+	serverSideApplyTrue  serverSideApplyPolicy = "true"
+	serverSideApplyFalse serverSideApplyPolicy = "false"
+)
+
 type waitPolicyInput struct {
 	Strategy *string
 	Jobs     *bool
@@ -62,11 +77,13 @@ type historyPolicyInput struct {
 }
 
 type installPolicyInput struct {
-	Timeout    *string
-	ChartHooks *bool
-	Wait       waitPolicyInput
-	CRDs       *string
-	OnFailure  *string
+	Timeout         *string
+	ChartHooks      *bool
+	Wait            waitPolicyInput
+	CRDs            *string
+	OnFailure       *string
+	ServerSideApply *string
+	ForceConflicts  *bool
 }
 
 type upgradePolicyInput struct {
@@ -75,6 +92,8 @@ type upgradePolicyInput struct {
 	Wait             waitPolicyInput
 	OnFailure        *string
 	CleanupOnFailure *bool
+	ServerSideApply  *string
+	ForceConflicts   *bool
 }
 
 type deletePolicyInput struct {
@@ -86,13 +105,15 @@ type deletePolicyInput struct {
 // releasePolicyInput is the presence-aware release tree after normal Atmos
 // stack merging but before an install, upgrade, or delete action is selected.
 type releasePolicyInput struct {
-	Timeout    *string
-	ChartHooks *bool
-	Wait       waitPolicyInput
-	History    historyPolicyInput
-	Install    installPolicyInput
-	Upgrade    upgradePolicyInput
-	Delete     deletePolicyInput
+	Timeout         *string
+	ChartHooks      *bool
+	Wait            waitPolicyInput
+	History         historyPolicyInput
+	ServerSideApply *string
+	ForceConflicts  *bool
+	Install         installPolicyInput
+	Upgrade         upgradePolicyInput
+	Delete          deletePolicyInput
 }
 
 // effectiveReleasePolicy is the flat policy for one selected Helm action.
@@ -106,6 +127,8 @@ type effectiveReleasePolicy struct {
 	OnFailure        failurePolicy
 	CleanupOnFailure bool
 	CRDs             crdPolicy
+	ServerSideApply  serverSideApplyPolicy
+	ForceConflicts   bool
 }
 
 // releaseLifecycleResolution retains presence-derived metadata that must not
@@ -153,6 +176,11 @@ func resolveReleaseLifecycleBase(input releasePolicyInput, operation string, emi
 	}
 	if input.History.Max != nil && operation == releaseOperationUpgrade {
 		if err := applyMaxHistory(&resolution, *input.History.Max, "release.history.max"); err != nil {
+			return releaseLifecycleResolution{}, err
+		}
+	}
+	if operation == releaseOperationInstall || operation == releaseOperationUpgrade {
+		if err := applyApplyMethodPolicy(&resolution, input.ServerSideApply, input.ForceConflicts, "release"); err != nil {
 			return releaseLifecycleResolution{}, err
 		}
 	}
@@ -221,7 +249,7 @@ func applyInstallPolicy(resolution *releaseLifecycleResolution, input installPol
 		}
 		resolution.Policy.OnFailure = policy
 	}
-	return nil
+	return applyApplyMethodPolicy(resolution, input.ServerSideApply, input.ForceConflicts, "release.install")
 }
 
 func applyUpgradePolicy(resolution *releaseLifecycleResolution, input upgradePolicyInput) error {
@@ -237,6 +265,23 @@ func applyUpgradePolicy(resolution *releaseLifecycleResolution, input upgradePol
 	}
 	if input.CleanupOnFailure != nil {
 		resolution.Policy.CleanupOnFailure = *input.CleanupOnFailure
+	}
+	return applyApplyMethodPolicy(resolution, input.ServerSideApply, input.ForceConflicts, "release.upgrade")
+}
+
+// applyApplyMethodPolicy overlays the server-side apply method and force-conflicts
+// opt-in onto the resolution. Both apply only to install and upgrade; a nil
+// pointer leaves the current value untouched, preserving precedence.
+func applyApplyMethodPolicy(resolution *releaseLifecycleResolution, serverSideApply *string, forceConflicts *bool, path string) error {
+	if serverSideApply != nil {
+		policy, err := parseServerSideApply(*serverSideApply)
+		if err != nil {
+			return fmt.Errorf("%w: %s.server_side_apply", err, path)
+		}
+		resolution.Policy.ServerSideApply = policy
+	}
+	if forceConflicts != nil {
+		resolution.Policy.ForceConflicts = *forceConflicts
 	}
 	return nil
 }
@@ -257,6 +302,15 @@ func validateAndDeriveLifecycle(resolution *releaseLifecycleResolution) error {
 	}
 	if resolution.Policy.WaitForJobs && resolution.Policy.WaitStrategy == kube.HookOnlyStrategy {
 		return errUtils.ErrHelmWaitForJobsRequiresWait
+	}
+	// Helm rejects force_conflicts when server-side apply is disabled
+	// ("forceConflicts enabled when serverSideApply disabled"). Catch the
+	// statically-determinable case - an explicit server_side_apply: false with
+	// force_conflicts enabled - before chart download instead of failing mid-apply.
+	// The upgrade "auto" method resolves against the previous release's apply
+	// method at apply time, so that case can only surface at runtime.
+	if resolution.Policy.ForceConflicts && resolution.Policy.ServerSideApply == serverSideApplyFalse {
+		return errUtils.ErrHelmForceConflictsRequiresSSA
 	}
 	return nil
 }
@@ -317,6 +371,16 @@ func resolveReleaseLifecycleWithFlags(input releasePolicyInput, operation string
 	if value, ok := flags[cfg.HelmCleanupOnFailureSectionName].(bool); ok {
 		resolution.Policy.CleanupOnFailure = value
 	}
+	if value, ok := flags[cfg.HelmServerSideApplySectionName].(string); ok {
+		policy, parseErr := parseServerSideApply(value)
+		if parseErr != nil {
+			return releaseLifecycleResolution{}, parseErr
+		}
+		resolution.Policy.ServerSideApply = policy
+	}
+	if value, ok := flags[cfg.HelmForceConflictsSectionName].(bool); ok {
+		resolution.Policy.ForceConflicts = value
+	}
 
 	if err := validateAndDeriveLifecycle(&resolution); err != nil {
 		return releaseLifecycleResolution{}, err
@@ -340,7 +404,7 @@ func validateLifecycleFlagApplicability(operation string, flags map[string]any) 
 	case releaseOperationUpgrade:
 		return inapplicable(cfg.HelmCRDsSectionName, "an install operation")
 	case releaseOperationDelete:
-		for _, key := range []string{cfg.HelmOnFailureSectionName, cfg.HelmCleanupOnFailureSectionName, cfg.HelmWaitJobsSectionName, cfg.HelmHistoryMaxSectionName, cfg.HelmCRDsSectionName} {
+		for _, key := range []string{cfg.HelmOnFailureSectionName, cfg.HelmCleanupOnFailureSectionName, cfg.HelmWaitJobsSectionName, cfg.HelmHistoryMaxSectionName, cfg.HelmCRDsSectionName, cfg.HelmServerSideApplySectionName, cfg.HelmForceConflictsSectionName} {
 			if err := inapplicable(key, "an install or upgrade operation"); err != nil {
 				return err
 			}
@@ -417,6 +481,15 @@ func parseCRDPolicy(value string) (crdPolicy, error) {
 		return policy, nil
 	}
 	return "", fmt.Errorf("%w: release.install.crds=%q (want create or skip)", errUtils.ErrHelmLifecycleDecode, value)
+}
+
+func parseServerSideApply(value string) (serverSideApplyPolicy, error) {
+	switch serverSideApplyPolicy(value) {
+	case serverSideApplyAuto, serverSideApplyTrue, serverSideApplyFalse:
+		return serverSideApplyPolicy(value), nil
+	default:
+		return "", fmt.Errorf("%w: %q (want auto, true, or false)", errUtils.ErrHelmServerSideApplyInvalid, value)
+	}
 }
 
 func parseWaitStrategy(value string) (kube.WaitStrategy, error) {

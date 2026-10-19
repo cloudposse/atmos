@@ -7,7 +7,7 @@ on:
       - completed
 
 # Serialize deploys per PR. Each preview deploys to its own s3://.../pr-<N>/ prefix with
-# `aws s3 sync --delete`, so two builds of the same PR finishing close together can race
+# a shared deployment manifest, so two builds of the same PR finishing close together can race
 # (see the matching comment in website-deploy-prod.yml). Never cancel the in-flight run.
 # A workflow_run with no associated PR (manual dispatch of the build, or a fork PR) has
 # no pull_requests[0]; fall back to the run id so those never share one group. The job
@@ -21,6 +21,8 @@ env:
   IAM_ROLE_ARN: arn:aws:iam::068007702576:role/cplive-plat-ue2-dev-atmos-docs-gha
   IAM_ROLE_SESSION_NAME: cloudposse-atmos-ci-deploy-pr-${{ github.event.workflow_run.pull_requests[0].number }}
   S3_BUCKET_NAME: cplive-plat-ue2-dev-atmos-docs-origin
+  # atmos-docs-site-spa (plat-ue2-dev) in cloudposse/infra-live.
+  CLOUDFRONT_DISTRIBUTION_ID: E1U29O8X09M5UR
   PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
   DEPLOYMENT_HOST: pr-${{ github.event.workflow_run.pull_requests[0].number }}.atmos-docs.ue2.dev.plat.cloudposse.org
 
@@ -49,15 +51,23 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
             github.com:443
+            release-assets.githubusercontent.com:443
             sts.us-east-2.amazonaws.com:443
             *.actions.githubusercontent.com:443
+            proxy.golang.org:443
+            storage.googleapis.com:443
             cplive-plat-ue2-dev-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
+            cloudfront.amazonaws.com:443
+            raw.githubusercontent.com:443
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       - name: Start deployment
         uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8 # v1
@@ -74,9 +84,12 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-cache
+
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ env.IAM_ROLE_ARN }}
@@ -97,11 +110,16 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ steps.github-app.outputs.token }}
 
+      # Invalidation is scoped to this PR's own prefix so one preview deploy never
+      # invalidates every other open PR's cached preview -- see the matching
+      # comment in website-deploy-prod.yml for why an invalidation is needed at all.
       - name: Copy Website to S3 Bucket PR Folder
-        run: |
-          ./.github/scripts/s3-deploy-with-charset.sh \
-            website/build \
-            s3://${{ env.S3_BUCKET_NAME }}/pr-${{ env.PR_NUMBER }}/
+        uses: ./.github/actions/s3-deploy
+        with:
+          local-dir: website/build
+          s3-uri: s3://${{ env.S3_BUCKET_NAME }}/pr-${{ env.PR_NUMBER }}/
+          cloudfront-distribution-id: ${{ env.CLOUDFRONT_DISTRIBUTION_ID }}
+          cloudfront-invalidation-paths: /pr-${{ env.PR_NUMBER }}/*
 
       - name: Update deployment status
         uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8 # v1

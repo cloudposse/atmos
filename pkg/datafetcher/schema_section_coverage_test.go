@@ -48,6 +48,7 @@ var manifestSections = map[string]sectionScope{
 	"ansible":                   {topLevel: true},
 	"kubernetes":                {topLevel: true},
 	"helm":                      {topLevel: true},
+	"aws/cloudformation":        {topLevel: true},
 	"components":                {topLevel: true},
 	"overrides":                 {topLevel: true},
 	"workflows":                 {topLevel: true},
@@ -111,7 +112,10 @@ var nonManifestSections = map[string]struct{}{
 	"max":                {}, // Native Helm history maximum.
 	"chart_hooks":        {}, // Native Helm chart-hook policy.
 	"crds":               {}, // Native Helm CRD policy.
+	"server_side_apply":  {}, // Native Helm server-side apply method.
+	"force_conflicts":    {}, // Native Helm server-side apply force-conflicts opt-in.
 	"dependency_update":  {}, // Native Helm invocation summary field; not stack-authored.
+	"create_namespace":   {}, // Native Helm component sub-field (modeled in helm_component_manifest); not a standalone section.
 	"workspace":          {}, // Terraform workspace (derived/metadata).
 	"inheritance":        {}, // Describe output.
 	"integrations":       {}, // atmos.yaml / describe output.
@@ -129,6 +133,21 @@ var nonManifestSections = map[string]struct{}{
 	"abstract":           {}, // metadata sub-field, not a top-level section.
 	"container":          {}, // Component-type key; container components are authored under `components.container.<name>` and modeled via the components schema, not as a standalone top-level section.
 	"emulator":           {}, // Component-type key; emulator components are authored under `components.emulator.<name>` and modeled via the components schema, not as a standalone top-level section.
+
+	// aws/cloudformation component sub-fields (modeled in aws_cloudformation_component_manifest,
+	// not as standalone top-level/component-generic sections — same treatment as Helm's chart/
+	// values/values_files/repositories above).
+	"path":                   {}, // aws/cloudformation component sub-field (file-based template reference).
+	"stack_name":             {},
+	"parameters":             {},
+	"capabilities":           {},
+	"tags":                   {},
+	"stack_policy":           {},
+	"role_arn":               {},
+	"notification_arns":      {},
+	"disable_rollback":       {},
+	"termination_protection": {},
+	"timeout_in_minutes":     {},
 }
 
 // knownSchemaGaps tracks sections that SHOULD be in the manifest schema but currently are not.

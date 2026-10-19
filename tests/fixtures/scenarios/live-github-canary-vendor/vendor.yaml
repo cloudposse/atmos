@@ -1,0 +1,23 @@
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: live-github-canary-vendor
+  description: >
+    Fixture for tests/live_github_canary_test.go: a small, unauthenticated `atmos vendor pull` of
+    a real, external cloudposse repo (never the local git mirror at
+    tests/testhelpers/gitmirror, which only contains cloudposse/atmos) so the acceptance suite
+    keeps exercising a genuinely live, unauthenticated GitHub clone path. included_paths keeps the
+    pull to a single, tiny file so the canary stays fast.
+spec:
+  imports: []
+
+  sources:
+    - component: "live-github-canary"
+      source: "github.com/cloudposse/terraform-null-label.git?ref={{.Version}}"
+      version: "0.25.0"
+      included_paths:
+        - "**/exports/context.tf"
+      targets:
+        - "components/terraform/live-github-canary/"
+      tags:
+        - live-github-canary

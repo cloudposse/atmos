@@ -9,7 +9,7 @@ tags:
 release: v1.197.0
 ---
 
-The `atmos describe` family of commands now supports the `--identity` flag, enabling runtime authentication when processing YAML template functions that access remote resources. This ensures that `!terraform.state` and `!terraform.output` functions work seamlessly without relying on ambient credentials.
+The [`atmos describe`](/cli/commands/describe/usage) family of commands now supports the [`--identity`](/cli/commands/describe/component#flags) flag, enabling runtime authentication when processing YAML template functions that access remote resources. This ensures that [`!terraform.state`](/functions/yaml/terraform.state) and [`!terraform.output`](/functions/yaml/terraform.output) functions work seamlessly without relying on ambient credentials.
 
 <!--truncate-->
 
@@ -17,19 +17,19 @@ The `atmos describe` family of commands now supports the `--identity` flag, enab
 
 All `atmos describe` subcommands now accept the `--identity` flag for runtime authentication:
 
-- `atmos describe stacks --identity <name>`
-- `atmos describe component <component> -s <stack> --identity <name>`
-- `atmos describe affected --identity <name>`
-- `atmos describe dependents <component> -s <stack> --identity <name>`
+- [`atmos describe stacks --identity <name>`](/cli/commands/describe/stacks)
+- [`atmos describe component <component> -s <stack> --identity <name>`](/cli/commands/describe/component)
+- [`atmos describe affected --identity <name>`](/cli/commands/describe/affected)
+- [`atmos describe dependents <component> -s <stack> --identity <name>`](/cli/commands/describe/dependents)
 
-This brings feature parity with `atmos terraform` and `atmos workflow` commands, which already support identity-based authentication.
+This brings feature parity with [`atmos terraform`](/cli/commands/terraform/usage) and [`atmos workflow`](/cli/commands/workflow) commands, which already support identity-based authentication.
 
 ## The Problem We Solved
 
 By default, all `atmos describe` commands execute YAML template functions (`!terraform.state`, `!terraform.output`) and Go templates during stack processing. When these functions access remote Terraform state backends (S3, Azure Blob, GCS), they require authenticated cloud provider credentials.
 
 **Before this change**, users had to:
-1. Manually run `atmos auth login --identity <identity>` before describe commands
+1. Manually run [`atmos auth login --identity <identity>`](/cli/commands/auth/login) before describe commands
 2. Rely on ambient AWS credentials (environment variables, `~/.aws/credentials`)
 3. Use EC2 instance profiles (not applicable for local development)
 

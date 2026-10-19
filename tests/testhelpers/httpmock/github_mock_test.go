@@ -72,6 +72,21 @@ func TestGitHubMockServer_Transport_PassesThroughNonGitHub(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
+func TestGitHubMockServer_RejectsNonGetMethods(t *testing.T) {
+	mock := NewGitHubMockServer(t)
+	mock.RegisterFile("existing.yaml", "content")
+
+	req, err := http.NewRequest(http.MethodPost, mock.URL()+"/existing.yaml", nil)
+	require.NoError(t, err)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
+	assert.Equal(t, http.MethodGet, resp.Header.Get("Allow"))
+}
+
 func TestGitHubMockServer_PathSuffixMatching(t *testing.T) {
 	mock := NewGitHubMockServer(t)
 

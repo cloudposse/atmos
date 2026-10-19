@@ -51,7 +51,6 @@ env:
   # already read from), not duplicated here -- see docs/fixes for the
   # incident where a stale OPEN_TOFU_VERSION here (1.12.2) drifted behind
   # .tool-versions's actual pin (1.12.5) undetected.
-  HELM_DIFF_VERSION: "v3.15.10"
   # helmfile's own `version` subcommand makes an outbound network call to GitHub to check
   # for a newer release. On CI runners that call is a source of flakiness (e.g. "context
   # deadline exceeded" on Windows runners) unrelated to anything this repo controls, and
@@ -63,6 +62,12 @@ env:
   # OS (see tests/cli_test.go's testShard/testCaseShard and the `test` job's
   # matrix.shard list below, which must stay in sync with this count).
   TEST_SHARD_COUNT: "10"
+  # Number of parallel shards the `race` job's package list is split into
+  # (see magefiles/test/race_matrix.go's Test.RaceMatrix and the `race` job's
+  # hardcoded "shard N/4" name below, which must stay in sync with this
+  # count -- the job `name:` context can't read workflow `env`, same reason
+  # TEST_SHARD_COUNT above needs its own comment).
+  RACE_SHARD_COUNT: "4"
   # No `|direct` fallback: every job here runs under harden-runner's block
   # mode, where a direct fetch fans out to ~25 vanity-import hosts (k8s.io,
   # go.uber.org, gopkg.in, helm.sh, ...) that are not allowlisted, so the
@@ -78,7 +83,7 @@ jobs:
   # ensure the code builds...
   build:
     name: Build (${{ matrix.target }})
-    # windows-latest is the slowest target: it compiles this large dependency
+    # Windows is the slowest target: it compiles this large dependency
     # tree far slower than the Linux (self-hosted) and macOS runners. A cold
     # Go cache after dependency changes used to push the job past a tight
     # limit and get the run cancelled mid-save (see #2713's windows build
@@ -92,20 +97,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # No extras=s3-cache: this leg's ci-toolchain save and Go cache
-          # restore must use the same GitHub Actions cache backend as the 10
-          # ubuntu-latest acceptance shards and the other hosted Linux jobs.
-          # With the s3-cache extra, its caches went to RunsOn's S3 where no
-          # hosted job could ever see them.
-          #
-          # "large" (4 cores/~32GB), not "terraform": the latter resolves to
-          # a 2-core i4i.large, and this leg is the critical path every
-          # acceptance shard waits on. Measured cold (run 34228937998): the
-          # `atmos build binary` step took 721s on "terraform" against ~350s
-          # on the 4-core hosted macOS/Windows legs compiling the same tree.
-          - os: "runs-on=${{github.run_id}}/runner=large/tag=atmos/private=false"
+          # Public repositories receive standard GitHub-hosted Linux runners
+          # without billed Actions minutes. Keeping Linux on the hosted cache
+          # backend also lets the acceptance shards reuse its artifacts.
+          - os: "ubuntu-latest"
             target: linux
-          - os: "windows-latest"
+          # Go 1.26 can corrupt the heap on AMX runners, including Server
+          # 2022. The version-checked exception-reserve action below addresses
+          # golang/go#81238 while retaining the existing runner image.
+          - os: "windows-2022"
             target: windows
           - os: "macos-15"
             target: macos
@@ -116,18 +116,15 @@ jobs:
             target: macos-intel
     runs-on: ${{ matrix.os }}
     steps:
-      # Only applies to GitHub-hosted legs (windows/macos); the linux leg runs
-      # on the RunsOn self-hosted runner. Harden Runner's free/community tier
-      # (what this repo uses) only covers GitHub-hosted runners — self-hosted
-      # runners including RunsOn need a StepSecurity Enterprise license plus
-      # RunsOn-side config we're not doing here.
+      # All matrix legs use GitHub-hosted runners, which are covered by Harden
+      # Runner's free/community tier for public repositories.
       # Draft PRs skip every Windows step below (no checkout, nothing to
       # protect), so skip Harden Runner there too: its post step would still
       # race the agent's DNS restore, and the DNS guard (a local action) needs
       # the checkout.
       - name: Harden Runner
-        if: matrix.target != 'linux' && ! ( matrix.target == 'windows' && github.event.pull_request.draft )
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           # Operating-system background services on the hosted Windows and
@@ -183,9 +180,9 @@ jobs:
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
             *.pool.ntp.org:123
-
-      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d # v2.3.1
-        if: matrix.target == 'linux'
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       - name: Announce build target
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
@@ -215,6 +212,13 @@ jobs:
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: ./.github/actions/setup-go-cache
         id: go
+
+      # Hosted Intel AMX CPUs can overrun Go 1.26.9's exception reserve.
+      # Compile every Windows CI artifact with the same guarded workaround,
+      # including binaries later consumed by a different runner CPU model.
+      - name: Reserve Windows exception-stack space
+        if: matrix.target == 'windows' && ! github.event.pull_request.draft
+        uses: ./.github/actions/windows-exception-reserve
 
       - name: Set up Atmos bootstrap
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -278,6 +282,14 @@ jobs:
           cache: restore-and-save
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Resolve plugins from the stack into the existing Atmos toolchain cache.
+      # This producer saves the cache; downstream jobs restore private copies.
+      - name: Install the stack-declared Helm plugins
+        if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
+        working-directory: tests/fixtures/scenarios/helm-plugin-install
+        shell: bash
+        run: atmos helm plugin install --component ci-plugins --stack dev
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -293,7 +305,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -341,9 +353,9 @@ jobs:
       matrix:
         flavor:
           - { os: "ubuntu-latest", target: linux }
-          - { os: "windows-latest", target: windows }
+          - { os: "windows-2022", target: windows }
           - { os: "macos-15", target: macos }
-    # windows-latest is the slowest target here too: the actual test finishes
+    # Windows is the slowest target here too: the actual test finishes
     # within its own 15m sub-step timeout, but the post-job Go module/build
     # cache save (tar + zstd) runs after that and is much slower on Windows,
     # so a flat 20m job budget can expire mid-save even though the test
@@ -368,7 +380,7 @@ jobs:
       # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           # Operating-system background services on the hosted Windows and
@@ -426,6 +438,9 @@ jobs:
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
             *.pool.ntp.org:123
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -472,9 +487,11 @@ jobs:
           helm version --short
           helmfile version
 
-      - name: Install helm-diff plugin
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        run: helm plugin install https://github.com/databus23/helm-diff --version ${{ env.HELM_DIFF_VERSION }}
+      - name: Verify the stack-declared Helm plugins
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft ) }}
+        working-directory: tests/fixtures/scenarios/helm-plugin-install
+        shell: bash
+        run: atmos helm plugin install --component ci-plugins --stack dev
 
       - name: Check atmos.exe integrity
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -490,6 +507,10 @@ jobs:
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: ./.github/actions/setup-go-cache
         id: go
+
+      - name: Reserve Windows exception-stack space
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        uses: ./.github/actions/windows-exception-reserve
 
       - name: Get dependencies
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -560,7 +581,7 @@ jobs:
         # Windows here (see this matrix's own history).
         flavor:
           - { os: "ubuntu-latest", target: linux, jobTimeout: 50, stepTimeout: 30, coverageStepTimeout: 40 }
-          - { os: "windows-latest", target: windows, jobTimeout: 50, stepTimeout: 40 }
+          - { os: "windows-2022", target: windows, jobTimeout: 50, stepTimeout: 40 }
           - { os: "macos-15", target: macos, jobTimeout: 40, stepTimeout: 30 }
         # tests/cli_test.go's TestCLICommands splits its ~388 CLI-driven subtests
         # across these shards by bin-packing each test case's workdir
@@ -579,7 +600,7 @@ jobs:
       # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           # Union of core, tool-driven endpoints across the linux/windows/macos
           # acceptance-test legs — bounded by which providers/registries the test
@@ -658,6 +679,9 @@ jobs:
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
             *.pool.ntp.org:123
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -711,14 +735,18 @@ jobs:
           helm version --short
           helmfile version
 
-      - name: Install helm-diff plugin
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        run: helm plugin install https://github.com/databus23/helm-diff --version ${{ env.HELM_DIFF_VERSION }}
+      - name: Verify the stack-declared Helm plugins
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft ) }}
+        working-directory: tests/fixtures/scenarios/helm-plugin-install
+        shell: bash
+        run: atmos helm plugin install --component ci-plugins --stack dev
 
       - name: Check atmos.exe integrity
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         shell: pwsh
         run: |
+          # Preserve the host model when investigating Windows runtime heap corruption.
+          Get-CimInstance Win32_Processor | Select-Object Name, Manufacturer, NumberOfCores, NumberOfLogicalProcessors
           Write-Output "PATH=$Env:PATH"
           Write-Output "PATHEXT=$Env:PATHEXT"
           Get-ChildItem "${{ github.workspace }}"
@@ -729,6 +757,10 @@ jobs:
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: ./.github/actions/setup-go-cache
         id: go
+
+      - name: Reserve Windows exception-stack space
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        uses: ./.github/actions/windows-exception-reserve
 
       - name: Get dependencies
         # Windows runs precompiled acceptance binaries and lets its small source
@@ -753,6 +785,28 @@ jobs:
       # dogfoods Atmos's own schema validator (the engine behind `atmos validate schema`).
       # That runs in the unit/acceptance test jobs, so no separate CI step is needed here.
 
+      # A Windows runtime heap-corruption failure in this package is not an
+      # assertion failure. Exercise its subprocess paths with pointer checking
+      # on one shard, retaining the full ordinary suite below.
+      # Compile separately so a cold instrumented build does not consume the
+      # test execution budget. Successful combined runs already approach five minutes.
+      - name: Compile Windows acceptance orchestration check
+        if: matrix.flavor.target == 'windows' && matrix.shard == 1 && ! github.event.pull_request.draft
+        timeout-minutes: 5
+        shell: bash
+        run: go test -c -gcflags=all=-d=checkptr=2 -o "$RUNNER_TEMP/acceptance-checkptr.test.exe" ./internal/ci/acceptance
+
+      - name: Check Windows acceptance orchestration
+        if: matrix.flavor.target == 'windows' && matrix.shard == 1 && ! github.event.pull_request.draft
+        timeout-minutes: 6
+        shell: bash
+        working-directory: internal/ci/acceptance
+        env:
+          GOTRACEBACK: system
+        # Let Go print goroutine stacks on a test timeout before the runner kills
+        # the step. Verbose output identifies the last test if a subprocess stalls.
+        run: '"$(cygpath -u "$RUNNER_TEMP")/acceptance-checkptr.test.exe" -test.v -test.count=3 -test.timeout=5m'
+
       # The Mage target owns package/test allocation, precompiled suites, and
       # native coverage collection so both workflow paths stay identical.
       - name: Acceptance tests with coverage
@@ -772,7 +826,7 @@ jobs:
         run: go tool mage acceptance:run coverage linux
 
       - name: Acceptance tests
-        # windows-latest is the slowest target for this suite too (see the
+        # Windows is the slowest target for this suite too (see the
         # Build job's timeout comment above): before sharding, runs of the
         # unsharded step were observed between 37m43s and 60m17s. Per-platform
         # budgets (stepTimeout) live on the matrix above, alongside the measured
@@ -781,6 +835,7 @@ jobs:
         if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
         shell: bash
         env:
+          GOTRACEBACK: system
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Use the GitHub token for downloading the Packer plugins
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -802,12 +857,39 @@ jobs:
           retention-days: 1
           compression-level: 0
 
-  # magefiles/ carries the `mage` build tag (invoked only via `go tool mage`),
-  # so it's silently excluded from the default `go build ./...`/`go test
-  # ./...` scope every other job here uses. Run it as its own lightweight job
-  # (parallel to `build`, needing only the Go toolchain, not the built
-  # `atmos` binary) so it gets real CI + Codecov signal instead of running
-  # only locally.
+  pact:
+    name: "[pro] consumer contracts"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CGO_ENABLED: "1"
+    steps:
+      - name: Check out code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-cache
+      - name: Install native Pact library using the pinned Go dependency
+        run: go run github.com/pact-foundation/pact-go/v2 install --libDir "$RUNNER_TEMP/pact"
+      - name: Verify consumer contracts
+        env:
+          CGO_LDFLAGS: -L${{ runner.temp }}/pact
+          LD_LIBRARY_PATH: ${{ runner.temp }}/pact
+        run: go test -tags pact ./pkg/pro/... -run TestPact -count=1 -timeout 2m
+      - name: Check committed contracts
+        # Pact omits the final newline required by the repository hygiene hooks.
+        run: git diff --exit-code --ignore-space-at-eol -- pacts/
+      - name: Upload contracts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: atmos-pro-pacts
+          path: pacts/*.json
+          if-no-files-found: error
+
+  # Mage's entrypoint and tooling tests carry the `mage` build tag. Imported
+  # target implementations are ordinary Go packages. Run all tooling tests in
+  # this dedicated job with coverage and race instrumentation.
   magefiles:
     name: "[magefiles] unit tests"
     runs-on: ubuntu-latest
@@ -822,7 +904,9 @@ jobs:
         uses: ./.github/actions/setup-go-cache
 
       - name: Run magefiles unit tests with coverage
-        run: go test -tags=mage -race -coverprofile=magefiles-coverage.out ./magefiles/...
+        # Shared Mage packages are exercised by their callers' tests. Instrument
+        # those imports too, so their executed lines reach the uploaded profile.
+        run: go test -tags=mage -race -coverpkg=./magefiles/... -coverprofile=magefiles-coverage.out ./magefiles/...
 
       - name: Upload magefiles coverage report artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -850,6 +934,44 @@ jobs:
           retention-days: 1
           compression-level: 0
 
+  # Computes the `race` job's shard matrix once, upstream of the matrix
+  # itself: `go list ./...` order is stable (sorted by import path), so a
+  # naive round-robin split-per-shard-job would pin the same cluster of
+  # packages to the same shard on every run. Doing the split in one place
+  # lets it shuffle the full list first (magefiles/test/race_matrix.go's
+  # Test.RaceMatrix, seeded from github.run_id so the assignment still
+  # varies run to run) and hand each shard its own package list directly,
+  # rather than trusting N independent jobs to recompute an identical split.
+  # Emits the same GitHub Actions matrix JSON convention `atmos describe
+  # affected`/`atmos list instances --format=matrix` use (see pkg/matrix).
+  race-plan:
+    name: "[race] plan shards"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-cache
+        with:
+          # Planning only needs Mage and `go list`; restore its dedicated
+          # nightly-warmed cache instead of the multi-gigabyte race archive.
+          # The race shards below still restore the full warmed cache.
+          cache: race-plan
+
+      - name: Plan race shards
+        id: plan
+        env:
+          ATMOS_TEST_RACE_SHARD_SEED: ${{ github.run_id }}
+        run: |
+          echo "::notice title=Race shard seed::Reproduce locally with GITHUB_OUTPUT=/dev/stdout ATMOS_TEST_RACE_SHARD_SEED=${ATMOS_TEST_RACE_SHARD_SEED} RACE_SHARD_COUNT=${RACE_SHARD_COUNT} go tool mage test:racematrix"
+          go tool mage test:racematrix
+
   # `-race` requires CGO_ENABLED=1 (the detector's runtime is itself a cgo
   # library), unlike every other Go build/test path in this repo (CGO_ENABLED=0).
   # Enabling cgo pulls in the cgo half of github.com/bearsh/hid (transitive, via
@@ -864,41 +986,29 @@ jobs:
   # GOFIPS140=latest (set inside the `race` command itself, .atmos.d/test.yaml)
   # is unaffected by CGO_ENABLED: Go's FIPS 140-3 module is pure Go, no cgo.
   race:
-    name: "[race] non-acceptance test suite"
-    # `go test`'s package-level concurrency scales with available cores, and
-    # this job compiles+runs ~400 race-instrumented packages -- the standard
-    # ubuntu-latest runner's ~4 cores were the bottleneck (this job became
-    # the slowest check once every other job's own timeout issues were
-    # fixed). The RunsOn "terraform" family used elsewhere in this file for
-    # Go work (the build job's linux leg) turned out to be an i4i.large: 2
-    # cores, 15.7GB RAM -- fewer cores than ubuntu-latest, a downgrade for
-    # this CPU/memory-bound workload. "large" (4 cores/~32GB) was a real
-    # upgrade, but this job stayed the workflow's longest pole at ~27 minutes
-    # of pure test execution, so it now gets "xlarge" (8+ cores/~64GB, per
-    # .github's runs-on.yml): `go test` runs packages concurrently up to
-    # GOMAXPROCS, and -race's per-test memory overhead is what the extra RAM
-    # absorbs.
-    #
-    # No extras=s3-cache: the Go cache restore (setup-go-cache below) must
-    # read the GitHub Actions cache backend, where the warmup workflow saves
-    # a race-instrumented (-race, CGO_ENABLED=1) build cache on main's scope.
-    runs-on: "runs-on=${{github.run_id}}/runner=xlarge/tag=atmos/private=false"
-    # Race-instrumented binaries run several times slower and use substantially
-    # more memory than normal test binaries; this runs the entire `./...` suite
-    # unsharded (unlike the `test` job's acceptance+unit sweep), so budget
-    # generously. `./cmd/...` alone -- one subtree out of the full package set
-    # this job actually runs -- took ~45 minutes locally in isolation (see
-    # docs/fixes/2026-09-01-race-detector-ci-job-timeouts.md); real runs on
-    # this runner have finished within a few minutes of the previous 45-minute
-    # budget, leaving too little slack for checkout/setup/apt overhead plus
-    # natural runner variance.
-    timeout-minutes: 75
+    # RACE_SHARD_COUNT (workflow env) is the source of truth for the shard
+    # count; the "/4" here is hardcoded because the job `name:` context
+    # can't read workflow `env` (same reason the acceptance job's name below
+    # hardcodes "/10").
+    name: "[race] non-acceptance test suite (shard ${{ matrix.shard }}/4)"
+    needs: [race-plan]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.race-plan.outputs.matrix) }}
+    # Plain hosted ubuntu-latest, not RunsOn: this is the same image lineage
+    # setup-go-cache-warmup.yml's linux leg writes the race-instrumented
+    # (-race, CGO_ENABLED=1) Go build cache on, and the same runner the 10
+    # hosted acceptance shards already use -- so this job reads that cache
+    # directly instead of relying on the ImageOS-excluded-from-key workaround
+    # RunsOn legs needed. Splitting the suite across RACE_SHARD_COUNT shards
+    # (above) gives more total cores across the matrix than one big runner
+    # would, without paying for oversized single instances.
+    runs-on: ubuntu-latest
+    # Cache misses can spend most of 30 minutes compiling before these shards
+    # finish testing. Keep the Go test timeouts, but allow compilation, setup,
+    # and the race tests to complete within the job's overall budget.
+    timeout-minutes: 60
     steps:
-      # Harden Runner doesn't cover RunsOn self-hosted runners (see the build
-      # job's linux leg, which skips it the same way); runs-on/action sets up
-      # this job's runner metadata/labels instead.
-      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d # v2.3.1
-
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -928,15 +1038,17 @@ jobs:
       - name: Install Linux build dependencies (libudev-dev for CGO_ENABLED=1 -- see comment above)
         run: |
           # The DEB822 /etc/apt/sources.list.d/ubuntu.sources file (and the
-          # Azure mirror it points at) is a GitHub-hosted-runner-image thing
-          # (Ubuntu 24.04+); this job now runs on the RunsOn "terraform"
-          # runner (Ubuntu 22.04, no DEB822 sources file at all -- see
-          # docs/fixes for the incident where this sed failed outright with
-          # "No such file or directory"). Only rewrite the mirror if that
-          # file actually exists, so this step works on either runner image.
+          # Azure mirror it points at) is a GitHub-hosted-runner-image thing;
+          # only rewrite the mirror if that file actually exists, so this
+          # step works across runner image variations.
           if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
             sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
           fi
+          # Chrome is preinstalled on some runner images but is not needed by
+          # this libudev-only step. Its mutable apt index intermittently
+          # returns a hash mismatch, failing the entire race suite before it
+          # reaches the tests.
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
 
@@ -944,10 +1056,10 @@ jobs:
         # Unlike the `test`/`build` jobs, this job never ran this step, so
         # tests needing these binaries (e.g. cmd/terraform/migrate,
         # TestPackerValidateCmd) fell back to Atmos's own lazy/auto-install
-        # path -- unreliable here since `go test ./...` runs ~400 packages as
-        # separate concurrent processes, and nothing serializes a shared
-        # install across them. Pre-installing once, before any test process
-        # starts, removes that race entirely (see docs/fixes for the
+        # path -- unreliable here since `go test ./...` runs each shard's
+        # packages as separate concurrent processes, and nothing serializes a
+        # shared install across them. Pre-installing once, before any test
+        # process starts, removes that race entirely (see docs/fixes for the
         # incident this closes).
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -967,6 +1079,10 @@ jobs:
           # job's acceptance steps, which already set this for the same
           # reason (see their own "Use the GitHub token" comment).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # This shard's package list, precomputed by race-plan above.
+          # racePackagesFromEnv (magefiles/test/race.go) treats a non-empty
+          # TEST the same as every other manual TEST override in this repo.
+          TEST: ${{ matrix.packages }}
         run: atmos test race
 
   # Sharding the `test` job fans it out into TEST_SHARD_COUNT x 3 per-leg checks.
@@ -995,12 +1111,15 @@ jobs:
         check: ["Acceptance Tests (linux)", "Acceptance Tests (macos)", "Acceptance Tests (windows)"]
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
+            dl.google.com:443
             github.com:443
+            go.dev:443
+            raw.githubusercontent.com:443
             release-assets.githubusercontent.com:443
             golang.org:443
             proxy.golang.org:443
@@ -1008,6 +1127,9 @@ jobs:
             storage.googleapis.com:443
             google.golang.org:443
             modernc.org:443
+            raw.githubusercontent.com:443
+            go.dev:443
+            dl.google.com:443
 
       # A whole-run cancellation (e.g. superseded by a newer push to the same
       # PR) skips the `test` matrix before it ever dispatches shard jobs, so
@@ -1082,7 +1204,7 @@ jobs:
       contents: read
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           # This job was skipped in the only sampled run (upstream test matrix
           # had a failed shard), so there's no observed egress data to build an
@@ -1134,7 +1256,7 @@ jobs:
       - name: Upload coverage report to Codecov
         timeout-minutes: 10
         continue-on-error: true
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: ${{ github.repository }}
@@ -1176,7 +1298,7 @@ jobs:
       security-events: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -1191,7 +1313,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: hadolint/hadolint-action@2a66e89f53d0771bb131a7fa31f3136336094aa6 # v3.4.0
+      - uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         id: hadolint
         with:
           dockerfile: Dockerfile
@@ -1209,7 +1331,7 @@ jobs:
       # file -- evicting the PR from the queue for a result nobody consumes.
       # The same commit was already scanned on the PR run.
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         if: always() && github.event_name != 'merge_group'
         with:
           # Path to SARIF file relative to the root of the repository
@@ -1232,7 +1354,7 @@ jobs:
 
       - name: Upload Trivy config scan results
         if: always() && github.event_name != 'merge_group'
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           sarif_file: trivy-config.sarif
           category: trivy-config
@@ -1253,18 +1375,22 @@ jobs:
           - emulator-aws
           - terraform-tests
           - backend-provisioning
+          - cloudformation-advanced
 
     timeout-minutes: 30
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
             checkpoint-api.hashicorp.com:443
+            d2glxqk2uabbnd.cloudfront.net:443
+            d5l0dvt14r5h8.cloudfront.net:443
             github.com:443
             mirror.gcr.io:443
+            public.ecr.aws:443
             raw.githubusercontent.com:443
             registry.terraform.io:443
             rekor.sigstore.dev:443
@@ -1322,17 +1448,23 @@ jobs:
     services:
       floci:
         # Pin by immutable digest for reproducibility/supply-chain safety (matches our SHA-pinned actions). Comment tracks the human-readable tag.
-        image: floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2 # 1.5.23
+        image: floci/floci@sha256:4e451c39c7bb88e3cd4f87e8fc0c25d5b47695a51185d521e2241fa00486e8eb # 1.5.23
+        # Harden Runner can restart Docker after GitHub starts services.
+        options: --restart always
         ports:
           - 4566:4566
       floci-gcp:
         # Pin by immutable digest for reproducibility/supply-chain safety. Comment tracks the human-readable tag.
-        image: floci/floci-gcp@sha256:a6420f308ad721fa4a203b70658563eab9c8fbc8d091feca2d95016239f5854a # latest
+        image: floci/floci-gcp@sha256:102db655af6facdcd1ec621e108558aafc46c817eaada63236d3acf3c5e92aaa # latest
+        # Harden Runner can restart Docker after GitHub starts services.
+        options: --restart always
         ports:
           - 4588:4588
       floci-az:
         # Pin by immutable digest for reproducibility/supply-chain safety. Comment tracks the human-readable tag.
-        image: floci/floci-az@sha256:1e514c57db14dc41938f7925bbc1aca0293aa4da272c7014d98f1fba378cedb2 # latest
+        image: floci/floci-az@sha256:5e403a7d788c24ab2d1dc03d4803ef2d3962ca01522abba65ed86f221ae87ac0 # latest
+        # Harden Runner can restart Docker after GitHub starts services.
+        options: --restart always
         env:
           FLOCI_AZ_TLS_ENABLED: "true"
         ports:
@@ -1341,7 +1473,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -1368,11 +1500,22 @@ jobs:
             storage.googleapis.com:443
             tuf-repo-cdn.sigstore.dev:443
             us.i.posthog.com:443
+            go.dev:443
+            golang.org:443
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      - name: Test service recovery
+        run: python3 -m unittest discover -s .github/actions/restore-services
+
+      # Harden Runner can restart Docker after Actions starts service containers.
+      - name: Restore job services
+        uses: ./.github/actions/restore-services
+        with:
+          services: ${{ toJSON(job.services) }}
 
       - name: Set up Atmos (install build artifact)
         uses: ./.github/actions/setup-atmos-install
@@ -1417,7 +1560,7 @@ jobs:
           FLOCI_GCP_ENDPOINT: "http://localhost:4588"
           FLOCI_AZURE_ENDPOINT: "http://localhost:4577"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: go test ./tests -run 'Test((AWS(StoreHooks|Secrets)|GCPSecrets|AzureSecrets)FlociE2E|LocalGitOpsPushE2E|Scaffold(AWSLandingZone|GCPLandingZone|AzureLandingZone|AWSApp)FlociE2E|InitFromTemplateRepoGiteaE2E|TerraformFlociTfmigrateS3History)' -count=1 -timeout 25m -v
+        run: go test ./tests -run 'Test((AWS(StoreHooks|Secrets)|GCPSecrets|AzureSecrets)FlociE2E|AWSCredentialProcessFlociE2E|LocalGitOpsPushE2E|Scaffold(AWSLandingZone|GCPLandingZone|AzureLandingZone|AWSApp)FlociE2E|InitFromTemplateRepoGiteaE2E|TerraformFlociTfmigrateS3History|TerraformComponentMocksFallbackFlociS3)' -count=1 -timeout 25m -v
 
   # Run the approachable k3s demos plus the focused native Helm lifecycle
   # scenario. Keep failure-path coverage under tests/fixtures so public examples
@@ -1451,13 +1594,13 @@ jobs:
           - flavor: { os: "macos-15-intel", target: macos, artifact: macos-intel }
             fixture: { name: helm-lifecycle, path: tests/fixtures/scenarios/helm-lifecycle }
 
-    # The macOS matrix may spend up to 45 minutes starting Colima, followed by
+    # The macOS matrix may spend up to 55 minutes starting Colima, followed by
     # two bounded 45-minute test attempts. Keep the job ceiling above those
     # nested budgets so the second retry can finish and emit diagnostics.
     timeout-minutes: 180
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           # Operating-system background services on the hosted macOS image
@@ -1523,18 +1666,13 @@ jobs:
 
       - name: Start Docker-compatible runtime on macOS
         if: matrix.flavor.target == 'macos'
-        # setup-colima is vz-only: qemu never came up on this Intel runner
-        # (usernet failure, docs/fixes/2026-07-01-macos-k3s-runner-research.md),
-        # and a green run shows vz starting on the first attempt with the whole
-        # step under 6 minutes. Caps: brew 7m + initial cleanup 1.5m + two vz
-        # start/info attempts 10m each + bounded diagnostics and intermediate
-        # cleanup ~3m + verify 1m + two 5m pull attempts with backoff. Every
-        # cap hit simultaneously sums to ~43m; 40 deliberately undercuts that.
-        # The recovery path fits when the final image pull completes normally;
-        # anything past 40 is treated as pathological. The job-level 180m cap
-        # leaves room for a roughly 45-minute Colima startup plus both bounded
-        # 45-minute test attempts and diagnostics.
-        timeout-minutes: 40
+        # setup-colima is vz-only; qemu failed on this Intel runner (see
+        # docs/fixes/2026-07-01-macos-k3s-runner-research.md). Budget for brew
+        # (7m), cleanup (1.5m), two start/info attempts (14m each), diagnostics
+        # and intermediate cleanup (~4m), verification (1m), and two image
+        # pulls with backoff (10.5m). The 55m step cap covers these ~52m of
+        # nested budgets; the 180m job cap also covers both 45m test attempts.
+        timeout-minutes: 55
         uses: ./.github/actions/setup-colima
 
       - name: Configure Docker Hub mirror on Linux
@@ -1550,8 +1688,17 @@ jobs:
           else
             printf '%s\n' '{"registry-mirrors":["https://mirror.gcr.io"]}' | sudo tee /etc/docker/daemon.json >/dev/null
           fi
-          sudo systemctl restart docker
-          docker info --format '{{json .RegistryConfig.Mirrors}}' | grep -F 'https://mirror.gcr.io'
+          # Registry mirrors support live reload; restarting Docker can fail
+          # after runner hardening and interrupt existing containers.
+          sudo systemctl reload docker
+          for _ in {1..10}; do
+            if docker info --format '{{json .RegistryConfig.Mirrors}}' | grep -F 'https://mirror.gcr.io'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo '::error::Docker did not activate the registry mirror after reload'
+          exit 1
 
       - name: Write a default AWS profile to the AWS config file
         run: |
@@ -1628,7 +1775,7 @@ jobs:
     if: ${{ always() }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           # Pure bash conditional on needs.k3s.result; no external calls at all.
           egress-policy: block
@@ -1672,16 +1819,23 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           # Operating-system background services on the hosted macOS image
           # (software update, CDN, certificate revocation, time sync) are
           # listed below the job-specific endpoints; see the `test` job's
           # allowed-endpoints comment for the rationale.
+          # Allow setup-go's version manifest and official fallback download
+          # chain, plus module checksum verification on runners with cold caches.
           allowed-endpoints: >
             api.github.com:443
             github.com:443
+            raw.githubusercontent.com:443
+            golang.org:443
+            go.dev:443
+            dl.google.com:443
+            sum.golang.org:443
             proxy.golang.org:443
             release-assets.githubusercontent.com:443
             storage.googleapis.com:443
@@ -1693,6 +1847,10 @@ jobs:
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
             *.pool.ntp.org:123
+            raw.githubusercontent.com:443
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1752,7 +1910,7 @@ jobs:
       matrix:
         flavor:
           - { os: ubuntu-latest, target: linux }
-          - { os: windows-latest, target: windows }
+          - { os: windows-2022, target: windows }
           - { os: "macos-15", target: macos }
         demo-folder:
           - examples/demo-atlantis
@@ -1782,7 +1940,7 @@ jobs:
       # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           # Operating-system background services on the hosted Windows and
@@ -1951,15 +2109,17 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
+            get.helm.sh:443
             github.com:443
             raw.githubusercontent.com:443
             rekor.sigstore.dev:443
             release-assets.githubusercontent.com:443
+            releases.hashicorp.com:443
             tuf-repo-cdn.sigstore.dev:443
             tuf-repo.github.com:443
             us.i.posthog.com:443
@@ -1974,22 +2134,13 @@ jobs:
         with:
           target: linux
 
-      # Restore the toolchain directory first so the installs below skip
-      # tools already on disk instead of downloading them on every run
-      # (restore-only: the build job's linux leg is this key's writer).
-      - name: Restore the Atmos toolchain cache
-        continue-on-error: true
-        uses: ./actions/cache
+      # The build job already installed and verified the pinned tools. The
+      # shared action skips cached binaries and retries installs on a miss.
+      - name: Set up the CI toolchain
+        uses: ./.github/actions/ci-toolchain
         with:
-          mode: restore-only
-
-      - name: Install OpenTofu and TFLint with Atmos toolchain
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          atmos toolchain install opentofu/opentofu
-          atmos toolchain install terraform-linters/tflint
-          atmos toolchain env --format=github
+          cache: restore-only
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify OpenTofu and TFLint
         run: |
@@ -2009,15 +2160,17 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
+            get.helm.sh:443
             github.com:443
             raw.githubusercontent.com:443
             rekor.sigstore.dev:443
             release-assets.githubusercontent.com:443
+            releases.hashicorp.com:443
             tuf-repo-cdn.sigstore.dev:443
             tuf-repo.github.com:443
             us.i.posthog.com:443
@@ -2032,22 +2185,13 @@ jobs:
         with:
           target: linux
 
-      # Restore the toolchain directory first so the installs below skip
-      # tools already on disk instead of downloading them on every run
-      # (restore-only: the build job's linux leg is this key's writer).
-      - name: Restore the Atmos toolchain cache
-        continue-on-error: true
-        uses: ./actions/cache
+      # The build job already installed and verified the pinned tools. The
+      # shared action skips cached binaries and retries installs on a miss.
+      - name: Set up the CI toolchain
+        uses: ./.github/actions/ci-toolchain
         with:
-          mode: restore-only
-
-      - name: Install OpenTofu and TFLint with Atmos toolchain
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          atmos toolchain install opentofu/opentofu
-          atmos toolchain install terraform-linters/tflint
-          atmos toolchain env --format=github
+          cache: restore-only
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run the TFLint hook example
         working-directory: examples/hooks-tflint
@@ -2087,7 +2231,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -2133,13 +2277,20 @@ jobs:
     services:
       registry:
         image: registry:2
+        # Harden Runner can restart Docker after GitHub starts services.
+        options: >-
+          --restart always
+          --health-cmd "wget -q --spider http://127.0.0.1:5000/v2/"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 60
         ports:
           - 5000:5000
 
     timeout-minutes: 15
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -2153,11 +2304,21 @@ jobs:
             release-assets.githubusercontent.com:443
             storage.googleapis.com:443
             us.i.posthog.com:443
+            raw.githubusercontent.com:443
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      # Harden Runner can restart Docker after Actions starts service containers.
+      - name: Restore job services
+        uses: ./.github/actions/restore-services
+        with:
+          services: ${{ toJSON(job.services) }}
 
       - name: Set up Atmos (install build artifact)
         uses: ./.github/actions/setup-atmos-install

@@ -22,7 +22,9 @@ import (
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/ci"
 	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/reexec"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
@@ -1494,6 +1496,86 @@ func TestCloneCommand(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCloneCommandKeepsScriptSource verifies the JSON round trip does not lose the loader-set
+// provenance of included scripts, including those of nested group steps and subcommands.
+func TestCloneCommandKeepsScriptSource(t *testing.T) {
+	orig := &schema.Command{
+		Name: "outer",
+		Steps: schema.Tasks{
+			{Name: "main", Type: schema.TaskTypeScript, Script: "x", ScriptSource: "/p/main.star"},
+			{Name: "group", Type: schema.TaskTypeParallel, Steps: []schema.WorkflowStep{
+				{Name: "child", Type: schema.TaskTypeScript, Script: "y", ScriptSource: "/p/child.star"},
+			}},
+		},
+		Commands: []schema.Command{{Name: "inner", Steps: schema.Tasks{{Name: "sub", ScriptSource: "/p/sub.star"}}}},
+	}
+
+	clone, err := cloneCommand(orig)
+
+	require.NoError(t, err)
+	assert.Equal(t, "/p/main.star", clone.Steps[0].ScriptSource)
+	assert.Equal(t, "/p/child.star", clone.Steps[1].Steps[0].ScriptSource)
+	assert.Equal(t, "/p/sub.star", clone.Commands[0].Steps[0].ScriptSource)
+	assert.Equal(t, "/p/main.star", clone.Steps[0].ToWorkflowStep().ScriptSource)
+}
+
+// TestCloneCommandKeepsLiteralFields verifies the JSON round trip does not lose the loader-set
+// !literal markers of steps, nested group steps, and subcommands.
+func TestCloneCommandKeepsLiteralFields(t *testing.T) {
+	orig := &schema.Command{
+		Name: "outer",
+		Steps: schema.Tasks{
+			{Name: "main", Type: schema.TaskTypeScript, Script: "x", LiteralFields: []string{"script", "env.GREETING"}},
+			{Name: "group", Type: schema.TaskTypeParallel, Steps: []schema.WorkflowStep{
+				{Name: "child", Type: schema.TaskTypeScript, Script: "y", LiteralFields: []string{"script"}},
+			}},
+		},
+		Commands: []schema.Command{{Name: "inner", Steps: schema.Tasks{{Name: "sub", LiteralFields: []string{"command"}}}}},
+	}
+
+	clone, err := cloneCommand(orig)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"script", "env.GREETING"}, clone.Steps[0].LiteralFields)
+	assert.Equal(t, []string{"script"}, clone.Steps[1].Steps[0].LiteralFields)
+	assert.Equal(t, []string{"command"}, clone.Commands[0].Steps[0].LiteralFields)
+	assert.Equal(t, []string{"script", "env.GREETING"}, clone.Steps[0].ToWorkflowStep().LiteralFields)
+}
+
+// TestExecuteCustomCommandShellStepKeepsLiteralFields verifies a custom command step written with
+// !literal uses its command and env values exactly as written, while its other values still render.
+func TestExecuteCustomCommandShellStepKeepsLiteralFields(t *testing.T) {
+	_ = NewTestKit(t)
+	ensureIOInitialized(t)
+
+	workDir := t.TempDir()
+	atmosConfig := schema.AtmosConfiguration{BasePath: workDir}
+	parentCmd := &cobra.Command{Use: "atmos"}
+	commands := []schema.Command{{
+		Name:             "cover-literal-shell",
+		Description:      "exercise literal fields on a shell step",
+		WorkingDirectory: workDir,
+		Steps: []schema.Task{{
+			Name:          "write",
+			Type:          schema.TaskTypeShell,
+			Command:       `printf %s "{{ y }}|$LIT|$TPL" > out.txt`,
+			Env:           map[string]string{"LIT": "{{ keep }}", "TPL": `{{ "rendered" }}`},
+			LiteralFields: []string{"command", "env.LIT"},
+		}},
+	}}
+
+	require.NoError(t, processCustomCommands(atmosConfig, commands, parentCmd))
+	customCmd := findSubcommand(parentCmd, "cover-literal-shell")
+	require.NotNil(t, customCmd)
+
+	customCmd.PreRun(customCmd, nil)
+	customCmd.Run(customCmd, nil)
+
+	got, err := os.ReadFile(filepath.Join(workDir, "out.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "{{ y }}|{{ keep }}|rendered", string(got))
 }
 
 // TestHandleHelpRequest tests the handleHelpRequest function.
@@ -3126,6 +3208,7 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			assert.Equal(t, "deploy-app", gotParams.Component)
 			assert.Equal(t, "dev", gotParams.Stack)
 			assert.Equal(t, tt.commandConfig.Component.Type, gotParams.ComponentType)
+			assert.True(t, gotParams.ResolveSecrets, "custom command execution needs real secrets")
 			assert.True(t, gotParams.ProcessTemplates)
 			assert.True(t, gotParams.ProcessYamlFunctions)
 		})
@@ -3276,6 +3359,95 @@ func TestStepFreshnessName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := stepFreshnessName(tt.stepName, tt.index)
 			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+// TestExecuteCustomCommandShellStepMasksSecretSplitAcrossWrites proves a registered secret that a
+// shell step emits across two writes never reaches stdout, in whole or in halves.
+func TestExecuteCustomCommandShellStepMasksSecretSplitAcrossWrites(t *testing.T) {
+	_ = NewTestKit(t)
+	ensureIOInitialized(t)
+
+	const secret = "custom-cmd-split-secret"
+	iolib.Reset()
+	t.Cleanup(iolib.Reset)
+	require.NoError(t, iolib.Initialize())
+	iolib.RegisterSecret(secret)
+
+	workDir := t.TempDir()
+	atmosConfig := schema.AtmosConfiguration{BasePath: workDir}
+	parentCmd := &cobra.Command{Use: "atmos"}
+	commands := []schema.Command{{
+		Name:             "cover-split-secret",
+		Description:      "exercise masking of a secret split across writes",
+		WorkingDirectory: workDir,
+		Steps: []schema.Task{{
+			Name:    "emit",
+			Type:    schema.TaskTypeShell,
+			Command: `printf 'value=custom-cmd-split-'; printf 'secret done\n'`,
+		}},
+	}}
+
+	require.NoError(t, processCustomCommands(atmosConfig, commands, parentCmd))
+	customCmd := findSubcommand(parentCmd, "cover-split-secret")
+	require.NotNil(t, customCmd)
+
+	out, err := os.CreateTemp(t.TempDir(), "stdout")
+	require.NoError(t, err)
+	origStdout := os.Stdout
+	os.Stdout = out
+	t.Cleanup(func() { os.Stdout = origStdout })
+
+	customCmd.PreRun(customCmd, nil)
+	customCmd.Run(customCmd, nil)
+	os.Stdout = origStdout
+	require.NoError(t, out.Close())
+
+	got, err := os.ReadFile(out.Name())
+	require.NoError(t, err)
+	assert.NotContains(t, string(got), secret)
+	assert.NotContains(t, string(got), "custom-cmd-split-")
+	assert.Contains(t, string(got), iolib.MaskReplacement)
+}
+
+func TestCustomCommandScriptComponentReceivesResolvedStepEnv(t *testing.T) {
+	for _, parallel := range []bool{false, true} {
+		t.Run(fmt.Sprintf("parallel=%v", parallel), func(t *testing.T) {
+			NewTestKit(t)
+			t.Setenv("ATMOS_CLI_CONFIG_PATH", "../examples/custom-components")
+			t.Setenv("ATMOS_BASE_PATH", "../examples/custom-components")
+			t.Setenv("ATMOS_TEST_STEP_SOURCE", "resolved-step")
+			t.Setenv("ATMOS_TEST_STEP_VALUE", "ambient-default")
+			t.Setenv("APP_VERSION", "ambient-version")
+			config, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+			require.NoError(t, err)
+			executable, err := os.Executable()
+			require.NoError(t, err)
+			output := filepath.Join(t.TempDir(), "env.txt")
+			step := schema.Task{
+				Name: "capture", Type: "script", Interpreter: "starlark",
+				Env: map[string]string{"ATMOS_TEST_STEP_VALUE": "{{ .Env.ATMOS_TEST_STEP_SOURCE }}"},
+				Script: fmt.Sprintf(`if env["ATMOS_TEST_STEP_VALUE"] != "resolved-step":
+    fail("script env was not resolved")
+component = components.get("deploy-app", "dev", "script")
+component.exec([%q], env = {"_ATMOS_TEST_DUMP_ENV": %q})`, executable, output),
+			}
+			if parallel {
+				step = schema.Task{Type: schema.TaskTypeParallel, Steps: []schema.WorkflowStep{step.ToWorkflowStep()}}
+			}
+			command := &schema.Command{
+				Name:  "step-env-component-child",
+				Env:   []schema.CommandEnv{{Key: "ATMOS_TEST_STEP_VALUE", Value: "command-default"}},
+				Steps: schema.Tasks{step},
+			}
+			exited := registerAndRunCustomCommand(t, &config, command)
+			require.False(t, exited)
+			result, err := os.ReadFile(output)
+			require.NoError(t, err)
+			childEnv := envpkg.SliceToMap(strings.Split(string(result), "\n"))
+			assert.Equal(t, "resolved-step", childEnv["ATMOS_TEST_STEP_VALUE"])
+			assert.Equal(t, "1.0.0", childEnv["APP_VERSION"], "the child runs with the resolved component environment")
 		})
 	}
 }

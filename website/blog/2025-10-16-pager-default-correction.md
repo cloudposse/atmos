@@ -11,7 +11,7 @@ date: 2025-10-16T12:00:00.000Z
 release: v1.195.0
 ---
 
-We've identified and corrected a regression in Atmos where the pager was incorrectly enabled by default, contrary to the intended behavior documented in a previous release.
+We've identified and corrected a regression in Atmos where the [pager](/cli/global-flags#pager-control-examples) was incorrectly enabled by default, contrary to the intended behavior documented in a previous release.
 
 <!--truncate-->
 
@@ -23,7 +23,7 @@ The pager is now correctly **disabled by default** in Atmos. This aligns with th
 
 In May 2025, pager support was added to Atmos with the default set to `true` (enabled). Later, in September 2025, PR #1430 was merged with the intention of changing this default to improve the scripting and automation experience. The PR included:
 
-- A global `--pager` flag
+- A global [`--pager`](/cli/global-flags#pager-control-examples) flag
 - Support for the `NO_PAGER` environment variable
 - Documentation stating: "**BREAKING CHANGE**: Pager is now disabled by default"
 

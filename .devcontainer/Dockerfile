@@ -1,4 +1,4 @@
-FROM golang:1.27.1@sha256:512690a5660563b57d37ecc31129e7f136e831db2aed24a1dbeb8ad7380dc0fa AS confetty
+FROM golang:1.27.1@sha256:f44f6e88636cfb311f9ebace870ded69d943f227bb3cb27d32ffd84ea18c43ea AS confetty
 
 # Set the working directory
 WORKDIR /app
@@ -6,7 +6,7 @@ WORKDIR /app
 # Install the confetty application
 RUN go install github.com/maaslalani/confetty@6c6f1b5b605f78c3ed3bab2d2a1357c0dd794221
 
-FROM mcr.microsoft.com/vscode/devcontainers/base:debian@sha256:b8c3669fb4cc652621b3386517c40ab3e151e827de958d6fe75528798ffb5727
+FROM mcr.microsoft.com/vscode/devcontainers/base:debian@sha256:1f851004adcd3dff3776b4a1da86727cf52280b0fdc9d5b0568c9c7d74274286
 
 # Copy the binary from the builder stage
 COPY --from=confetty /go/bin/confetty /usr/local/bin/confetty

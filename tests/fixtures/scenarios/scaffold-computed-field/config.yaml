@@ -1,0 +1,2 @@
+# atmos:template
+primary_region: "{{ .Config.primary_region }}"

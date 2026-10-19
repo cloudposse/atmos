@@ -193,6 +193,7 @@ func FindAllStackConfigsInPaths(
 	return absolutePaths, relativePaths, nil
 }
 
+// processEnvVars applies the ATMOS_* environment variable overrides to the Atmos configuration.
 func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "config.processEnvVars")()
 
@@ -280,7 +281,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		if err != nil {
 			return err
 		}
-		atmosConfig.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
+		atmosConfig.Components.Terraform.OverrideInitRunReconfigure(initRunReconfigureBool)
 	}
 
 	componentsInitPassVars := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS")
@@ -291,6 +292,34 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 			return err
 		}
 		atmosConfig.Components.Terraform.Init.PassVars = initPassVarsBool
+	}
+
+	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_INIT_MODE", foundEnvVarMessage,
+		schema.TerraformInitMode.IsValid, errUtils.ErrInvalidInitMode, &atmosConfig.Components.Terraform.Init.Mode); err != nil {
+		return err
+	}
+
+	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE", foundEnvVarMessage,
+		schema.TerraformMocksMode.IsValid, errUtils.ErrInvalidMocksMode, &atmosConfig.Components.Terraform.Mocks.Mode); err != nil {
+		return fmt.Errorf("%w (from ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE)", err)
+	}
+
+	if err := normalizeConfiguredMocksMode(atmosConfig); err != nil {
+		return err
+	}
+
+	if err := normalizeConfiguredToolchainInstall(atmosConfig); err != nil {
+		return err
+	}
+
+	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE", foundEnvVarMessage,
+		schema.TerraformInitReconfigure.IsValid, errUtils.ErrInvalidInitReconfigure, &atmosConfig.Components.Terraform.Init.Reconfigure); err != nil {
+		return err
+	}
+
+	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE", foundEnvVarMessage,
+		schema.TerraformInitUpgrade.IsValid, errUtils.ErrInvalidInitUpgrade, &atmosConfig.Components.Terraform.Init.Upgrade); err != nil {
+		return err
 	}
 
 	componentsPlanSkipPlanfile := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE")
@@ -431,33 +460,25 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	jsonschemaBasePath := os.Getenv("ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH")
 	if len(jsonschemaBasePath) > 0 {
 		log.Debug("Set atmosConfig.Schemas[\"jsonschema\"] using ENV variable", "ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH", jsonschemaBasePath)
-		atmosConfig.Schemas["jsonschema"] = schema.ResourcePath{
-			BasePath: jsonschemaBasePath,
-		}
+		atmosConfig.SetResourcePath("jsonschema", schema.ResourcePath{BasePath: jsonschemaBasePath})
 	}
 
 	opaBasePath := os.Getenv("ATMOS_SCHEMAS_OPA_BASE_PATH")
 	if len(opaBasePath) > 0 {
 		log.Debug("Set atmosConfig.Schemas[\"opa\"] using ENV variable", "ATMOS_SCHEMAS_OPA_BASE_PATH", opaBasePath)
-		atmosConfig.Schemas["opa"] = schema.ResourcePath{
-			BasePath: opaBasePath,
-		}
+		atmosConfig.SetResourcePath("opa", schema.ResourcePath{BasePath: opaBasePath})
 	}
 
 	cueBasePath := os.Getenv("ATMOS_SCHEMAS_CUE_BASE_PATH")
 	if len(cueBasePath) > 0 {
 		log.Debug("Set atmosConfig.Schemas[\"cue\"] using ENV variable", "ATMOS_SCHEMAS_CUE_BASE_PATH", cueBasePath)
-		atmosConfig.Schemas["cue"] = schema.ResourcePath{
-			BasePath: cueBasePath,
-		}
+		atmosConfig.SetResourcePath("cue", schema.ResourcePath{BasePath: cueBasePath})
 	}
 
 	atmosManifestJsonSchemaPath := os.Getenv("ATMOS_SCHEMAS_ATMOS_MANIFEST")
 	if len(atmosManifestJsonSchemaPath) > 0 {
 		log.Debug("Set atmosConfig.Schemas[\"atmos\"] using ENV variable", "ATMOS_SCHEMAS_ATMOS_MANIFEST", atmosManifestJsonSchemaPath)
-		atmosConfig.Schemas["atmos"] = schema.SchemaRegistry{
-			Manifest: atmosManifestJsonSchemaPath,
-		}
+		atmosConfig.SetSchemaRegistry("atmos", schema.SchemaRegistry{Manifest: atmosManifestJsonSchemaPath})
 	}
 
 	tfAppendUserAgent := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT")
@@ -498,6 +519,71 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	}
 
 	return nil
+}
+
+// setInitEnumEnvVar reads envVar, normalizes it (trim + lowercase), validates it with isValid,
+// and stores it in dest. Shared by the init.mode/init.reconfigure/init.upgrade ENV variables so
+// each one stays a single call in processEnvVars instead of a repeated read/validate/assign block.
+func setInitEnumEnvVar[T ~string](envVar, foundEnvVarMessage string, isValid func(T) bool, sentinel error, dest *T) error {
+	value := os.Getenv(envVar) //nolint:forbidigo // matches the established os.Getenv pattern used throughout processEnvVars; see comment above ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK_TIMEOUT.
+	if len(value) == 0 {
+		return nil
+	}
+	log.Debug(foundEnvVarMessage, envVar, value)
+	normalized, err := normalizeInitEnumValue(value, isValid, sentinel)
+	if err != nil {
+		return err
+	}
+	*dest = normalized
+	return nil
+}
+
+// normalizeConfiguredMocksMode lower-cases and validates components.terraform.mocks.mode as loaded
+// from atmos.yaml, so a typo fails at config load (as an invalid ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE
+// does) instead of being accepted silently until a --use-mocks lookup runs.
+func normalizeConfiguredMocksMode(atmosConfig *schema.AtmosConfiguration) error {
+	mode, err := normalizeInitEnumValue(string(atmosConfig.Components.Terraform.Mocks.Mode),
+		schema.TerraformMocksMode.IsValid, errUtils.ErrInvalidMocksMode)
+	if err != nil {
+		return fmt.Errorf("%w (from components.terraform.mocks.mode in atmos.yaml)", err)
+	}
+	atmosConfig.Components.Terraform.Mocks.Mode = mode
+	return nil
+}
+
+// normalizeConfiguredToolchainInstall lower-cases and validates toolchain.install as loaded from
+// atmos.yaml or ATMOS_TOOLCHAIN_INSTALL (bound through Viper), so a typo fails at config load
+// instead of being accepted silently until a tool is needed.
+func normalizeConfiguredToolchainInstall(atmosConfig *schema.AtmosConfiguration) error {
+	policy, err := normalizeInitEnumValue(string(atmosConfig.Toolchain.Install),
+		schema.ToolchainInstall.IsValid, errUtils.ErrInvalidToolchainInstall)
+	if err != nil {
+		return errUtils.Build(err).
+			WithHintf("Set `toolchain.install` (or `ATMOS_TOOLCHAIN_INSTALL`) to one of: %s", toolchainInstallValuesList()).
+			WithContext("value", string(atmosConfig.Toolchain.Install)).
+			Err()
+	}
+	atmosConfig.Toolchain.Install = policy
+	return nil
+}
+
+// toolchainInstallValuesList renders the valid toolchain.install values for hints.
+func toolchainInstallValuesList() string {
+	values := make([]string, 0, len(schema.ToolchainInstallValues))
+	for _, value := range schema.ToolchainInstallValues {
+		values = append(values, string(value))
+	}
+	return strings.Join(values, ", ")
+}
+
+// normalizeInitEnumValue trims and lower-cases value, then validates it with isValid, returning
+// a wrapped sentinel error (with the original, un-normalized value for readability) when invalid.
+func normalizeInitEnumValue[T ~string](value string, isValid func(T) bool, sentinel error) (T, error) {
+	normalized := T(strings.ToLower(strings.TrimSpace(value)))
+	if !isValid(normalized) {
+		return "", fmt.Errorf("%w: %q", sentinel, value)
+	}
+	return normalized, nil
 }
 
 func checkConfig(atmosConfig schema.AtmosConfiguration, isProcessStack bool) error {
@@ -764,7 +850,7 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 		if err != nil {
 			return err
 		}
-		atmosConfig.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
+		atmosConfig.Components.Terraform.OverrideInitRunReconfigure(initRunReconfigureBool)
 		log.Debug(cmdLineArg, InitRunReconfigure, configAndStacksInfo.InitRunReconfigure)
 	}
 	if len(configAndStacksInfo.InitPassVars) > 0 {
@@ -774,6 +860,22 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 		}
 		atmosConfig.Components.Terraform.Init.PassVars = initPassVarsBool
 		log.Debug(cmdLineArg, InitPassVars, configAndStacksInfo.InitPassVars)
+	}
+	if err := applyInitEnumFlag(configAndStacksInfo.InitMode, InitModeFlag,
+		schema.TerraformInitMode.IsValid, errUtils.ErrInvalidInitMode, &atmosConfig.Components.Terraform.Init.Mode); err != nil {
+		return err
+	}
+	if err := applyInitEnumFlag(configAndStacksInfo.InitReconfigure, InitReconfigureFlag,
+		schema.TerraformInitReconfigure.IsValid, errUtils.ErrInvalidInitReconfigure, &atmosConfig.Components.Terraform.Init.Reconfigure); err != nil {
+		return err
+	}
+	if err := applyInitEnumFlag(configAndStacksInfo.InitUpgrade, InitUpgradeFlag,
+		schema.TerraformInitUpgrade.IsValid, errUtils.ErrInvalidInitUpgrade, &atmosConfig.Components.Terraform.Init.Upgrade); err != nil {
+		return err
+	}
+	if err := applyInitEnumFlag(configAndStacksInfo.MocksMode, UseMocksFlag,
+		schema.TerraformMocksMode.IsValid, errUtils.ErrInvalidMocksMode, &atmosConfig.Components.Terraform.Mocks.Mode); err != nil {
+		return err
 	}
 	if len(configAndStacksInfo.PlanSkipPlanfile) > 0 {
 		planSkipPlanfileBool, err := strconv.ParseBool(configAndStacksInfo.PlanSkipPlanfile)
@@ -786,29 +888,49 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 	return nil
 }
 
+// applyInitEnumFlag normalizes and validates a CLI-flag override (raw, possibly empty) for one of
+// the init.mode/init.reconfigure/init.upgrade tri-state settings, storing the result in dest when
+// raw is non-empty. Shared by setFeatureFlags so each of the three flags stays a single call.
+func applyInitEnumFlag[T ~string](raw, flagName string, isValid func(T) bool, sentinel error, dest *T) error {
+	if len(raw) == 0 {
+		return nil
+	}
+	normalized, err := normalizeInitEnumValue(raw, isValid, sentinel)
+	if err != nil {
+		return err
+	}
+	*dest = normalized
+	log.Debug(cmdLineArg, flagName, raw)
+	return nil
+}
+
+// setSchemaDirs applies the schema directory and manifest overrides from the command line to the Atmos configuration.
 func setSchemaDirs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.JsonSchemaDir) > 0 {
-		atmosConfig.Schemas["jsonschema"] = schema.ResourcePath{BasePath: configAndStacksInfo.JsonSchemaDir}
+		atmosConfig.SetResourcePath("jsonschema", schema.ResourcePath{BasePath: configAndStacksInfo.JsonSchemaDir})
 		log.Debug(cmdLineArg, JsonSchemaDirFlag, configAndStacksInfo.JsonSchemaDir)
 	}
 	if len(configAndStacksInfo.OpaDir) > 0 {
-		atmosConfig.Schemas["opa"] = schema.ResourcePath{BasePath: configAndStacksInfo.OpaDir}
+		atmosConfig.SetResourcePath("opa", schema.ResourcePath{BasePath: configAndStacksInfo.OpaDir})
 		log.Debug(cmdLineArg, OpaDirFlag, configAndStacksInfo.OpaDir)
 	}
 	if len(configAndStacksInfo.CueDir) > 0 {
-		atmosConfig.Schemas["cue"] = schema.ResourcePath{BasePath: configAndStacksInfo.CueDir}
+		atmosConfig.SetResourcePath("cue", schema.ResourcePath{BasePath: configAndStacksInfo.CueDir})
 		log.Debug(cmdLineArg, CueDirFlag, configAndStacksInfo.CueDir)
 	}
 	if len(configAndStacksInfo.AtmosManifestJsonSchema) > 0 {
-		atmosConfig.Schemas["atmos"] = schema.SchemaRegistry{
-			Manifest: configAndStacksInfo.AtmosManifestJsonSchema,
-		}
+		atmosConfig.SetSchemaRegistry("atmos", schema.SchemaRegistry{Manifest: configAndStacksInfo.AtmosManifestJsonSchema})
 		log.Debug(cmdLineArg, AtmosManifestJsonSchemaFlag, configAndStacksInfo.AtmosManifestJsonSchema)
 	}
 	return nil
 }
 
+// setLoggingConfig resolves log color and applies explicit command-line level and file overrides.
+// Invalid color or level values return an error instead of silently choosing a default.
 func setLoggingConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
+	if err := setLoggingColor(atmosConfig, configAndStacksInfo.LogsColor); err != nil {
+		return err
+	}
 	if len(configAndStacksInfo.LogsLevel) > 0 {
 		normalizedLevel, err := log.ParseLogLevel(configAndStacksInfo.LogsLevel)
 		if err != nil {

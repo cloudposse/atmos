@@ -90,8 +90,11 @@ func (b *GlobalOptionsBuilder) registerLoggingFlags(defaults *global.Flags) {
 	b.options = append(b.options, WithStringFlag("logs-file", "", defaults.LogsFile, "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'"))
 	b.options = append(b.options, WithEnvVars("logs-file", "ATMOS_LOGS_FILE"))
 
+	b.options = append(b.options, WithBoolFlag("logs-color", "", defaults.LogsColor, "Enable log color when available; --no-color and NO_COLOR always override"))
+	b.options = append(b.options, WithEnvVars("logs-color", "ATMOS_LOGS_COLOR"))
+
 	b.options = append(b.options, WithBoolFlag("no-color", "", defaults.NoColor, "Disable color output"))
-	b.options = append(b.options, WithEnvVars("no-color", "ATMOS_NO_COLOR", "NO_COLOR", "CLICOLOR"))
+	b.options = append(b.options, WithEnvVars("no-color", "ATMOS_NO_COLOR", "NO_COLOR"))
 }
 
 // registerTerminalFlags registers terminal and I/O configuration flags.
@@ -133,6 +136,11 @@ func (b *GlobalOptionsBuilder) registerAuthenticationFlags(defaults *global.Flag
 	b.options = append(b.options, WithStringFlag("identity", "", defaults.Identity.Value(), "Identity to use for authentication. Use --identity to select interactively, --identity=NAME to specify"))
 	b.options = append(b.options, WithEnvVars("identity", "ATMOS_IDENTITY"))
 	b.options = append(b.options, WithNoOptDefVal("identity", "__SELECT__"))
+
+	// Authentication - justification recorded for privileged actions (e.g. PIM role
+	// activation). Auth-level (not kind-specific) so it is portable across implementations.
+	b.options = append(b.options, WithStringFlag("justification", "", defaults.Justification, "Reason recorded for privileged auth actions such as PIM role activation (--justification=REASON)"))
+	b.options = append(b.options, WithEnvVars("justification", "ATMOS_AUTH_JUSTIFICATION"))
 
 	// Note: --github-token is NOT a global flag. It's only used by toolchain commands
 	// and is registered as a persistent flag on the toolchain command in cmd/toolchain/toolchain.go.

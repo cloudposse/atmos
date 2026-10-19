@@ -4,9 +4,10 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	mouseZone "github.com/lrstanley/bubblezone"
+
 	codeview "github.com/cloudposse/atmos/internal/tui/components/code_view"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-	mouseZone "github.com/lrstanley/bubblezone"
 )
 
 const (
@@ -138,11 +139,12 @@ func (c *columnView) setSize(width, height int) {
 	}
 }
 
+// getStyle sizes the workflow column and adds a themed border when it has focus.
 func (c *columnView) getStyle() lipgloss.Style {
 	s := lipgloss.NewStyle().Padding(0).Margin(2).Height(c.height).Width(c.width)
 
 	if c.Focused() {
-		s = s.Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(theme.ColorBorder))
+		s = s.Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(theme.GetCurrentColorScheme().Border))
 	} else {
 		s = s.Border(lipgloss.HiddenBorder())
 	}

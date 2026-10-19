@@ -10,9 +10,11 @@ import (
 	"testing"
 	"time"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 )
 
 const processHelperEnv = "GO_WANT_ATMOS_PROCESS_HELPER"
@@ -33,9 +35,12 @@ func TestHelperProcess(t *testing.T) {
 	case "stdout-stderr":
 		fmt.Fprint(os.Stdout, "stdout")
 		fmt.Fprint(os.Stderr, "stderr")
+	case "argv-env":
+		fmt.Fprintf(os.Stdout, "argv0=%s path-is-shell-local=%t", os.Args[0], os.Getenv("PATH") == os.Getenv("HELPER_DIR"))
 	case "exit":
 		os.Exit(7)
 	case "sleep":
+		_, _ = os.Stdout.WriteString("started")
 		time.Sleep(2 * time.Second)
 	default:
 		os.Exit(2)
@@ -79,8 +84,20 @@ func TestDefaultRunnerPreservesExitCode(t *testing.T) {
 	assert.True(t, errors.As(result.Err, &exitErr))
 }
 
+// cancelOnProcessOutput cancels only after the child has actually started.
+type cancelOnProcessOutput struct {
+	cancel context.CancelFunc
+}
+
+func (w cancelOnProcessOutput) Write(p []byte) (int, error) {
+	w.cancel()
+	return len(p), nil
+}
+
 func TestDefaultRunnerCancelsWithContext(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	deadline, stop := context.WithTimeout(t.Context(), 10*time.Second)
+	defer stop()
+	ctx, cancel := context.WithCancel(deadline)
 	defer cancel()
 
 	command, args, env := processHelperCommand(t, "sleep")
@@ -88,13 +105,15 @@ func TestDefaultRunnerCancelsWithContext(t *testing.T) {
 		Command: command,
 		Args:    args,
 		Env:     env,
+		Streams: Streams{Stdout: cancelOnProcessOutput{cancel: cancel}},
 	})
 
 	require.Error(t, result.Err)
+	assert.True(t, result.Started)
 	assert.True(t, result.Canceled)
 	assert.NotEqual(t, 0, result.ExitCode)
 	assert.ErrorIs(t, result.Err, errUtils.ErrProcessWaitFailed)
-	assert.ErrorIs(t, result.Err, context.DeadlineExceeded)
+	assert.ErrorIs(t, result.Err, context.Canceled)
 }
 
 func TestDefaultRunnerDryRunDoesNotStartProcess(t *testing.T) {
@@ -121,6 +140,50 @@ func TestDefaultRunnerReportsStartFailureWithoutStartedAt(t *testing.T) {
 	assert.Equal(t, -1, result.ExitCode)
 	assert.True(t, result.StartedAt.IsZero())
 	assert.False(t, result.FinishedAt.IsZero())
+}
+
+func TestDefaultRunnerPopulatesMetricsOnSuccess(t *testing.T) {
+	before := metricsprocess.AccumulatedTotal()
+
+	command, args, env := processHelperCommand(t, "stdout-stderr")
+	result := DefaultRunner{}.Run(context.Background(), TaskSpec{
+		Command: command,
+		Args:    args,
+		Env:     env,
+	})
+
+	require.NoError(t, result.Err)
+	require.NotNil(t, result.Metrics)
+	assert.GreaterOrEqual(t, result.Metrics.WallTime, time.Duration(0))
+	assert.GreaterOrEqual(t, result.Metrics.UserCPUTime, time.Duration(0))
+
+	// Accumulate must have been invoked for this run. Global accumulator
+	// state can be shared with other tests in this (or other) packages, so
+	// assert the total is non-decreasing rather than an exact value.
+	after := metricsprocess.AccumulatedTotal()
+	assert.GreaterOrEqual(t, after.UserCPUTime, before.UserCPUTime)
+}
+
+func TestDefaultRunnerPopulatesMetricsOnFailure(t *testing.T) {
+	command, args, env := processHelperCommand(t, "exit")
+	result := DefaultRunner{}.Run(context.Background(), TaskSpec{
+		Command: command,
+		Args:    args,
+		Env:     env,
+	})
+
+	require.Error(t, result.Err)
+	require.NotNil(t, result.Metrics, "metrics must be collected even when the subprocess exits non-zero")
+	assert.GreaterOrEqual(t, result.Metrics.WallTime, time.Duration(0))
+}
+
+func TestDefaultRunnerMetricsNilWhenStartFails(t *testing.T) {
+	result := DefaultRunner{}.Run(context.Background(), TaskSpec{
+		Command: "command-that-should-not-exist",
+	})
+
+	require.Error(t, result.Err)
+	assert.Nil(t, result.Metrics)
 }
 
 func processHelperCommand(t *testing.T, command string) (string, []string, []string) {

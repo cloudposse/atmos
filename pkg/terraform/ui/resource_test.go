@@ -465,6 +465,59 @@ func TestResourceTracker_HandleOutputs(t *testing.T) {
 	assert.True(t, result.Outputs["db_password"].Sensitive)
 }
 
+// TestResourceTracker_HasOutputChanges_TrueWhenOutputChanged is a regression test for issue
+// #3114: the tracker must be able to report a real (non-no-op) output value change, since
+// OutputsMessage.Outputs[name].Action is otherwise parsed and stored but never consulted.
+// TestResourceTracker_HasOutputChanges_TrueWhenOutputChanged is table-driven across every real
+// output action so a create/delete regression in isOutputChangeAction (which would make
+// HasOutputChanges wrongly report false, and the streaming summary claim "no changes") can't
+// slip through covered only by the update case.
+func TestResourceTracker_HasOutputChanges_TrueWhenOutputChanged(t *testing.T) {
+	t.Parallel()
+
+	for _, action := range []string{"create", "update", "delete"} {
+		t.Run(action, func(t *testing.T) {
+			t.Parallel()
+
+			rt := NewResourceTracker()
+			rt.HandleMessage(&OutputsMessage{
+				Outputs: map[string]OutputValue{
+					"vpc_id": {Value: "vpc-123abc", Action: action},
+				},
+			})
+
+			assert.True(t, rt.HasOutputChanges())
+		})
+	}
+}
+
+// TestResourceTracker_HasOutputChanges_FalseWhenNoOpOrRead verifies no-op/read/absent output
+// actions (present on every apply, changed or not) don't spuriously report a change.
+func TestResourceTracker_HasOutputChanges_FalseWhenNoOpOrRead(t *testing.T) {
+	t.Parallel()
+
+	rt := NewResourceTracker()
+	rt.HandleMessage(&OutputsMessage{
+		Outputs: map[string]OutputValue{
+			"vpc_id": {Value: "vpc-123abc", Action: "no-op"},
+			"region": {Value: "us-east-2", Action: "read"},
+			"unset":  {Value: "x"}, // Action omitted entirely (e.g. an older Terraform version).
+		},
+	})
+
+	assert.False(t, rt.HasOutputChanges())
+}
+
+// TestResourceTracker_HasOutputChanges_FalseWhenNoOutputs verifies the zero-value/no-outputs
+// case (e.g. a plan phase, before any OutputsMessage has arrived) reports no change.
+func TestResourceTracker_HasOutputChanges_FalseWhenNoOutputs(t *testing.T) {
+	t.Parallel()
+
+	rt := NewResourceTracker()
+
+	assert.False(t, rt.HasOutputChanges())
+}
+
 func TestResourceTracker_GetCurrentActivity_NoActive(t *testing.T) {
 	t.Parallel()
 

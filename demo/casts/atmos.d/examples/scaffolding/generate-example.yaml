@@ -40,8 +40,9 @@ commands:
           mode: raw
           cast: "../../website/static/casts/examples/scaffolding/generate-example.cast"
         steps:
-          - type: pause
-            duration: 500ms
+          - type: wait
+            regex: '\$ $'
+            timeout: 10s
           - type: write
             text: "# atmos.yaml-registered scaffold templates show up in the catalog"
           - type: key
@@ -51,7 +52,8 @@ commands:
           - type: key
             key: enter
           - type: wait
-            text: "Available Scaffold Templates"
+            # Wait for the shell to regain the terminal before typing narration.
+            regex: '(?s)Available Scaffold Templates.*\r?\n\$ $'
             timeout: 10s
           - type: pause
             duration: 500ms
@@ -64,7 +66,7 @@ commands:
           - type: key
             key: enter
           - type: wait
-            text: "Generated 3 files."
+            regex: '(?s)Generated 3 files\..*\r?\n\$ $'
             timeout: 10s
           - type: pause
             duration: 500ms
@@ -179,5 +181,11 @@ commands:
           for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
               if bad in plain:
                   raise SystemExit(f"scaffolding generate-example cast contains {bad!r}")
+          for narration in [
+              "# generate a new project from the template, overriding one prompt",
+              "# or run it interactively and answer the prompts",
+          ]:
+              if f"$ {narration}" not in plain.splitlines():
+                  raise SystemExit(f"scaffolding narration is not on its own prompt: {narration!r}")
           assert_no_error_output(text)
           assert_no_local_paths(text)

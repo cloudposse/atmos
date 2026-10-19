@@ -239,9 +239,11 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 	result.BaseComponentValidate = baseComponentConfig.BaseComponentValidate
 	result.BaseComponentRender = baseComponentConfig.BaseComponentRender
 	result.BaseComponentHelm = baseComponentConfig.BaseComponentHelm
+	result.BaseComponentCloudFormation = baseComponentConfig.BaseComponentCloudFormation
 	// BaseComponentRetry flows from the inheritance chain through to merge — see
 	// mergeComponentConfigurations for the final deep-merge with concrete + overrides.
 	result.BaseComponentRetry = baseComponentConfig.BaseComponentRetry
+	result.BaseComponentUnsetSections = baseComponentConfig.BaseComponentUnsetSections
 	*componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
 
 	// Terraform-specific: extract base component providers and backend sections.

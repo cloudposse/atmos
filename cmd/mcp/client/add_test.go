@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -23,6 +24,55 @@ func TestAddCmd_Registration(t *testing.T) {
 	for _, name := range []string{"name", "transport", "env", "header", "description", "identity", "timeout", "auto-start", "install", "yes", "force"} {
 		assert.NotNil(t, addCmd.Flags().Lookup(name), "expected %s flag", name)
 	}
+}
+
+// TestResolveAddInputs covers the add pipeline's input resolution: parsing a URL
+// target into a server config and resolving the file to edit via ResolveServerFile.
+func TestResolveAddInputs(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(root, []byte("base_path: \"./\"\n"), 0o600))
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(wd) })
+	require.NoError(t, os.Chdir(dir))
+
+	cmd := &cobra.Command{}
+	cmd.Flags().StringSlice("config", nil, "")
+
+	inputs, err := resolveAddInputs(cmd, []string{"https://mcp.example.com/demo"}, viper.New(), &schema.AtmosConfiguration{})
+	require.NoError(t, err)
+	assert.Equal(t, "https://mcp.example.com/demo", inputs.Target)
+	assert.Equal(t, "demo", inputs.Name)
+	assert.Equal(t, schema.MCPTransportHTTP, inputs.ServerCfg.Type)
+	assert.Equal(t, "https://mcp.example.com/demo", inputs.ServerCfg.URL)
+
+	wantRoot, err := filepath.EvalSymlinks(root)
+	require.NoError(t, err)
+	gotFile, err := filepath.EvalSymlinks(inputs.File)
+	require.NoError(t, err)
+	assert.Equal(t, wantRoot, gotFile, "a new server with no fragment resolves to the root atmos.yaml")
+}
+
+// TestResolveAddInputs_DefaultsToSelf covers the no-argument path, which defaults
+// to the built-in self preset and emits the one-line note.
+func TestResolveAddInputs_DefaultsToSelf(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte("base_path: \"./\"\n"), 0o600))
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(wd) })
+	require.NoError(t, os.Chdir(dir))
+
+	cmd := &cobra.Command{}
+	cmd.Flags().StringSlice("config", nil, "")
+
+	inputs, err := resolveAddInputs(cmd, nil, viper.New(), &schema.AtmosConfiguration{})
+	require.NoError(t, err)
+	assert.Equal(t, mcpconfig.PresetSelf, inputs.Target)
+	assert.NotEmpty(t, inputs.Name)
 }
 
 func TestResolveAddTarget(t *testing.T) {

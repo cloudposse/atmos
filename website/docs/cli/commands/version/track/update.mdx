@@ -3,10 +3,15 @@ title: atmos version track update
 sidebar_position: 80
 sidebar_label: update
 sidebar_class_name: command
-description: Update locked versions within the update policy.
+description: "Advance dependency versions to the newest releases allowed by your update policies and record them in the lock file."
 ---
+import Intro from '@site/src/components/Intro'
 
-Advance locked versions to the newest candidates allowed by each entry's effective update policy, then write the lock file.
+<Intro>
+Advance dependency versions to the newest releases allowed by your update policies and record them
+in the lock file. Use it to keep dependencies current while respecting version limits, cooldown
+windows, exclusions, and prerelease rules.
+</Intro>
 
 Unlike [`lock`](/cli/commands/version/track/lock), `update` starts from the locked state and respects strategy caps, cooldown windows, include/exclude rules, and prerelease policy. Newer candidates held back by policy are reported with a reason.
 

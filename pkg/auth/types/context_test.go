@@ -3,6 +3,7 @@ package types
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -91,17 +92,40 @@ func TestAllowPrompts_UseCaseNonInteractiveWhoami(t *testing.T) {
 		"Whoami should use non-interactive context to prevent credential prompts")
 }
 
-// TestSuppressAuthErrors_DefaultFalse verifies default behavior for suppress flag.
-func TestSuppressAuthErrors_DefaultFalse(t *testing.T) {
-	ctx := context.Background()
-	assert.False(t, SuppressAuthErrors(ctx), "SuppressAuthErrors should return false by default")
-}
+func TestMinCredentialValidity(t *testing.T) {
+	t.Run("unset", func(t *testing.T) {
+		d, ok := MinCredentialValidity(context.Background())
+		assert.False(t, ok)
+		assert.Zero(t, d)
+		assert.Equal(t, DefaultMinCredentialValidity, MinCredentialValidityOr(context.Background(), DefaultMinCredentialValidity))
+	})
 
-// TestSuppressAuthErrors_Explicit verifies explicit settings.
-func TestSuppressAuthErrors_Explicit(t *testing.T) {
-	ctx := WithSuppressAuthErrors(context.Background(), true)
-	assert.True(t, SuppressAuthErrors(ctx), "SuppressAuthErrors should return true when explicitly set to true")
+	t.Run("set", func(t *testing.T) {
+		ctx := WithMinCredentialValidity(context.Background(), 30*time.Minute)
+		d, ok := MinCredentialValidity(ctx)
+		assert.True(t, ok)
+		assert.Equal(t, 30*time.Minute, d)
+		assert.Equal(t, 30*time.Minute, MinCredentialValidityOr(ctx, time.Hour))
+	})
 
-	childCtx := WithSuppressAuthErrors(ctx, false)
-	assert.False(t, SuppressAuthErrors(childCtx), "SuppressAuthErrors should return false when explicitly set to false")
+	t.Run("an explicit zero is distinct from unset", func(t *testing.T) {
+		ctx := WithMinCredentialValidity(context.Background(), 0)
+		d, ok := MinCredentialValidity(ctx)
+		assert.True(t, ok)
+		assert.Zero(t, d)
+		assert.Zero(t, MinCredentialValidityOr(ctx, time.Hour))
+	})
+
+	t.Run("negative is treated as zero", func(t *testing.T) {
+		ctx := WithMinCredentialValidity(context.Background(), -time.Minute)
+		d, ok := MinCredentialValidity(ctx)
+		assert.True(t, ok)
+		assert.Zero(t, d)
+	})
+
+	t.Run("wrong value type is treated as unset", func(t *testing.T) {
+		ctx := context.WithValue(context.Background(), ContextKeyMinCredentialValidity, "15m")
+		_, ok := MinCredentialValidity(ctx)
+		assert.False(t, ok)
+	})
 }

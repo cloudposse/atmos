@@ -3,6 +3,7 @@ package helm
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -137,4 +138,45 @@ func TestLoadValuesFile(t *testing.T) {
 			assert.Empty(t, out)
 		})
 	}
+}
+
+func TestApplyValueOverridesUsesHelmPrecedence(t *testing.T) {
+	dir := t.TempDir()
+	valuesFile := filepath.Join(dir, "override.yaml")
+	setFile := filepath.Join(dir, "payload.txt")
+	require.NoError(t, os.WriteFile(valuesFile, []byte("priority: from-values-file\nnested:\n  file: true\n"), 0o600))
+	require.NoError(t, os.WriteFile(setFile, []byte("file payload"), 0o600))
+
+	merged, err := applyValueOverrides(map[string]any{
+		"priority": "from-component",
+		"nested":   map[string]any{"component": true},
+	}, map[string]any{
+		flagValues:    []string{valuesFile},
+		flagSetJSON:   []string{`json={"enabled":true}`},
+		flagSet:       []string{"priority=from-set", "typed=42"},
+		flagSetString: []string{"priority=from-string", "asString=42"},
+		// Helm's --set-file expression parser reserves backslashes as escapes,
+		// while Windows accepts this portable slash-delimited path form.
+		flagSetFile:    []string{"payload=" + filepath.ToSlash(setFile)},
+		flagSetLiteral: []string{"priority=from-literal", "literal=a,b"},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "from-literal", merged["priority"])
+	assert.Equal(t, int64(42), merged["typed"])
+	assert.Equal(t, "42", merged["asString"])
+	assert.Equal(t, "file payload", merged["payload"])
+	assert.Equal(t, "a,b", merged["literal"])
+	assert.Equal(t, map[string]any{"enabled": true}, merged["json"])
+	assert.Equal(t, map[string]any{"component": true, "file": true}, merged["nested"])
+}
+
+func TestApplyValueOverridesReportsInvalidInputs(t *testing.T) {
+	_, err := applyValueOverrides(map[string]any{}, map[string]any{flagSet: []string{"not-an-assignment"}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--set")
+
+	_, err = applyValueOverrides(map[string]any{}, map[string]any{flagValues: []string{filepath.Join(t.TempDir(), "missing.yaml")}})
+	require.Error(t, err)
+	assert.True(t, strings.Contains(err.Error(), "missing.yaml"))
 }

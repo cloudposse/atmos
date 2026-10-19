@@ -18,7 +18,7 @@ func ListTags(ctx context.Context, owner, repo string) ([]*github.RepositoryTag,
 
 	log.Debug("Fetching tags from GitHub API", logFieldOwner, owner, logFieldRepo, repo)
 
-	client := newGitHubClient(ctx)
+	client, _ := newGitHubClient(ctx)
 	var allTags []*github.RepositoryTag
 	page := 1
 	for {

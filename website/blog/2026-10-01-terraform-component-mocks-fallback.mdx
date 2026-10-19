@@ -1,0 +1,76 @@
+---
+slug: terraform-component-mocks-fallback
+title: "Component Mocks Now Fill Gaps Instead of Replacing Real State"
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+A local plan rarely depends on infrastructure that is entirely missing or entirely deployed. For example, the VPC exists, the database has not been created yet, and the cluster is somewhere in between. Until now, [component mocks](/stacks/components/mocks) forced an all-or-nothing choice: with `--use-mocks`, every Terraform lookup returned its mock, even for components whose real state was sitting in the backend.
+
+By default, `--use-mocks` now treats mocks as fallbacks. Real state wins whenever it exists, and a mock fills in only for a component that has not been provisioned or an output that is missing.
+
+<!--truncate-->
+
+## The Problem
+
+Mocks were designed to let a plan or `describe component` run before its dependencies exist. In practice, a stack is usually partly deployed. Turning mocks on replaced every [`!terraform.state`](/functions/yaml/terraform.state) and [`!terraform.output`](/functions/yaml/terraform.output) lookup with literal values, so a plan against a half-built environment showed fake IDs for resources that already had real ones. The only alternative was to turn mocks off and fail on the components that were not there yet.
+
+## The Fix
+
+The behavior is configurable. In the new default `fallback` mode, each lookup resolves in this order:
+
+1. The real value, when the referenced component's state exists and declares the output.
+2. The component's mock, when the state is not provisioned or the output is missing.
+3. A YQ `//` default in the expression, if one is present.
+4. The same result as without mocks: the not-provisioned error for a component that was never applied, or `null` for an output missing from applied state.
+
+Mocks never hide real problems. Credential, network, and backend failures still fail the command instead of quietly returning a mock value. As before, only `atmos terraform plan` and `atmos describe component` accept `--use-mocks`; every other Terraform subcommand, such as apply, deploy, and destroy, rejects it. Map outputs are merged: a mock fills keys that are missing from a real map output, while every value present in real state wins.
+
+The other mode, `always`, keeps the previous behavior for lookups that must not depend on what is deployed, such as describing a component on a machine without cloud credentials. In `always` mode, `!terraform.state` and `!terraform.output` lookups resolve from mocks only and never initialize Terraform, authenticate, or read a backend for the components they reference. A plan still runs Terraform against the component being planned, with that component's own backend and provider credentials. Choose the mode per run with the flag, or set a project default with [`mocks.mode`](/cli/configuration/components/terraform), as shown below.
+
+## How to Use It
+
+Declare mocks on the producer component as before:
+
+```yaml title="stacks/dev.yaml"
+components:
+  terraform:
+    vpc:
+      mocks:
+        vpc_id: vpc-local
+        private_subnet_ids: [subnet-a, subnet-b]
+
+    app:
+      vars:
+        vpc_id: !terraform.state vpc vpc_id
+```
+
+Then pick the mode per run, or set a project default:
+
+```shell
+# Real state where it exists, mocks for the gaps.
+atmos terraform plan app -s dev --use-mocks
+
+# Lookups use mocks only, with no backend reads or credentials for them.
+# The plan itself still uses app's own backend and provider credentials.
+atmos terraform plan app -s dev --use-mocks=always
+```
+
+```yaml title="atmos.yaml"
+components:
+  terraform:
+    mocks:
+      mode: always   # fallback (default) | always
+```
+
+The `mocks.mode` setting can also be set with `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`. Attach a mode to the flag with `=`, because `--use-mocks always` does not select one. An explicit mode passed with the flag, such as `--use-mocks=fallback` or `--use-mocks=always`, wins over the environment variable, which wins over `atmos.yaml`. A bare `--use-mocks` turns mocks on and keeps the configured mode.
+
+### Upgrading
+
+This changes what a bare `--use-mocks` does, so the new default is tied to [config editions](/cli/configuration/edition). Projects pinned to an edition before `2026-10-01` keep the previous mocks-only behavior with no changes. Unpinned projects, and projects that move their edition forward, get the fallback behavior. To keep mocks-only regardless of edition, set `mocks.mode: always` or pass `--use-mocks=always`.
+
+See [resolution modes](/stacks/components/mocks#resolution-modes) for the full details.
+
+## Get Involved
+
+Try the provider-free [component mocks example](/examples/terraform-component-mocks), which walks through both the fallback and `always` flows. Questions and feedback are welcome in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions) or the [SweetOps Slack](https://cloudposse.com/slack).

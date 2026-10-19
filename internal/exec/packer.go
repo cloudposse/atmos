@@ -50,8 +50,9 @@ type PackerFlags struct {
 func ExecutePacker(
 	info *schema.ConfigAndStacksInfo,
 	packerFlags *PackerFlags,
-) error {
+) (resultErr error) {
 	defer perf.Track(nil, "exec.ExecutePacker")()
+	defer attachComponentReporting(&resultErr, info, "packer", info.SubCommand)
 
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
@@ -226,8 +227,11 @@ func ExecutePacker(
 	log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack, "variables", info.ComponentVarsSection)
 
 	// Write variables to a file.
-	varFile := constructPackerComponentVarfileName(info)
 	varFilePath := constructPackerComponentVarfilePath(&atmosConfig, info)
+	varFilePath, err = filepath.Abs(varFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve Packer variable file path: %w", err)
+	}
 
 	log.Debug("Writing the variables to file", "file", varFilePath)
 
@@ -269,7 +273,7 @@ func ExecutePacker(
 	// Prepare arguments and flags.
 	allArgsAndFlags := []string{}
 	allArgsAndFlags = append(allArgsAndFlags, info.SubCommand)
-	allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
+	allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFilePath}...)
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 	allArgsAndFlags = append(allArgsAndFlags, template)
 

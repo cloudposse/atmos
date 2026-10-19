@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cloudposse/atmos/pkg/ci"
 	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
@@ -37,6 +39,8 @@ const (
 //	                                   regression guard in terraform_execute_single_invocation_test.go).
 //	_ATMOS_TEST_ARGS_FILE=<path>     — if set, write subprocess arguments and exit
 //	                                   successfully (for command argument assertions).
+//	_ATMOS_TEST_SLEEP_MS=<N>         — if set, sleep N milliseconds and exit 0 (for step
+//	                                   timeout tests).
 //	_ATMOS_TEST_STDOUT=<text>         — if set, write text to stdout.
 //	_ATMOS_TEST_STDERR=<text>         — if set, write text to stderr.
 //	_ATMOS_TEST_EXIT_ONE=1           — if set, exit 1 (writing _ATMOS_TEST_STDOUT/
@@ -48,6 +52,11 @@ const (
 //	_ATMOS_TEST_EXIT_CODE=<N>        — if set to a valid integer, exit N immediately
 //	                                   (for exit-code-neutralization tests needing a
 //	                                   code other than 0/1, e.g. -detailed-exitcode's 2).
+//	_ATMOS_TEST_REQUIRE_ARG=<flag>   — if set, exit 0 only when <flag> is present in argv;
+//	                                   otherwise write _ATMOS_TEST_STDOUT (if set) and exit 1
+//	                                   (for smart-init recovery tests simulating terraform/tofu's
+//	                                   own "init is required" diagnostics until a retry adds the
+//	                                   missing flag).
 func TestMain(m *testing.M) {
 	// Initialize the I/O writer and ui formatter so data.Write*/ui.Write* calls
 	// (used throughout internal/exec and its pkg/ci dependency, e.g. CI log
@@ -59,6 +68,12 @@ func TestMain(m *testing.M) {
 		ui.InitFormatter(ioCtx)
 	}
 
+	if os.Getenv("_ATMOS_TEST_SECRET_PLAN") == "1" {
+		os.Exit(runSecretPlanForTest())
+	}
+	if os.Getenv("_ATMOS_TEST_PLAN_DIFF_TERRAFORM") == "1" {
+		os.Exit(runPlanDiffTerraformForTest())
+	}
 	if os.Getenv(testEnvFakeTerraform) == "1" {
 		os.Exit(runFakeTerraformForTest())
 	}
@@ -90,6 +105,15 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	}
 
+	// _ATMOS_TEST_SLEEP_MS=<N> makes the test binary sleep N milliseconds and exit 0, so tests can
+	// exercise step timeouts with the test binary itself as a long-running command.
+	if sleepMS := os.Getenv("_ATMOS_TEST_SLEEP_MS"); sleepMS != "" {
+		if ms, err := strconv.Atoi(sleepMS); err == nil {
+			time.Sleep(time.Duration(ms) * time.Millisecond)
+		}
+		os.Exit(0)
+	}
+
 	// Subprocess helper: when the test binary is invoked as the "terraform" command,
 	// this env var causes it to exit 1, simulating a failed command without requiring
 	// the POSIX "false" command. Combined with _ATMOS_TEST_STDOUT/_ATMOS_TEST_STDERR,
@@ -101,6 +125,22 @@ func TestMain(m *testing.M) {
 		}
 		if stderr := os.Getenv("_ATMOS_TEST_STDERR"); stderr != "" {
 			_, _ = os.Stderr.WriteString(stderr)
+		}
+		os.Exit(1)
+	}
+
+	// Subprocess helper: when _ATMOS_TEST_REQUIRE_ARG=<flag> is set, the subprocess inspects its
+	// own argv: if <flag> is present, it exits 0; otherwise it writes _ATMOS_TEST_STDOUT (if set)
+	// to stdout and exits 1. Used to simulate terraform/tofu's own "init is required" diagnostics
+	// for smart-init recovery tests: the fake subprocess "fails" (asking for -upgrade /
+	// -reconfigure) until the caller's retry actually adds the missing flag, at which point it
+	// succeeds -- without needing a real terraform/tofu binary.
+	if requireArg := os.Getenv("_ATMOS_TEST_REQUIRE_ARG"); requireArg != "" {
+		if slices.Contains(os.Args[1:], requireArg) {
+			os.Exit(0)
+		}
+		if stdout := os.Getenv("_ATMOS_TEST_STDOUT"); stdout != "" {
+			_, _ = os.Stdout.WriteString(stdout)
 		}
 		os.Exit(1)
 	}
@@ -225,4 +265,56 @@ func runLogGroupPipelineForTest() int {
 		return 1
 	}
 	return 0
+}
+
+// runPlanDiffTerraformForTest implements show/plan using JSON plan fixtures, without a provider or network.
+func runPlanDiffTerraformForTest() int {
+	args := os.Args[1:]
+	if len(args) == 0 {
+		return 1
+	}
+	switch args[0] {
+	case "show":
+		contents, err := os.ReadFile(args[len(args)-1])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fmt.Println(string(contents))
+	case "plan":
+		for _, arg := range args[1:] {
+			if path, found := strings.CutPrefix(arg, "-out="); found {
+				if err := os.WriteFile(path, []byte(os.Getenv("_ATMOS_TEST_PLAN_DIFF_FRESH_JSON")), 0o600); err != nil {
+					fmt.Fprintln(os.Stderr, err)
+					return 1
+				}
+				return 0
+			}
+		}
+		return 1
+	case "version":
+		fmt.Println(`{"terraform_version":"1.11.0","platform":"test","provider_selections":{}}`)
+	case "workspace":
+		if len(args) > 1 && args[1] == "show" {
+			fmt.Println("test")
+		}
+	}
+	return 0
+}
+
+// planDiffPolicyPlan builds a decoded Terraform JSON plan holding one unchanged aws_db_instance
+// resource change. A real change adds an attribute that the configured exclusions do not cover.
+func planDiffPolicyPlan(attribute, value string, realChange bool) map[string]interface{} {
+	values := map[string]interface{}{"id": "example", attribute: value}
+	if realChange {
+		values["instance_class"] = "db.t3.small"
+	}
+	return map[string]interface{}{"resource_changes": []interface{}{map[string]interface{}{
+		"address": "module.example.aws_db_instance.default[0]",
+		"mode":    "managed",
+		"type":    "aws_db_instance",
+		"change": map[string]interface{}{
+			"actions": []interface{}{"no-op"}, "before": values, "after": values,
+		},
+	}}}
 }

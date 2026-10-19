@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	pkgtags "github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/vendoring/lockfile"
 )
@@ -66,9 +67,9 @@ Exits non-zero when any drift is found. This never checks for a newer upstream v
 		}
 
 		component := v.GetString("component")
-		filterTags := splitTags(v.GetString("tags"))
+		filterTags := splitTags(v.GetString(vendorTagsViperKey))
 		stack := v.GetString("stack")
-		labels, err := pkgtags.ParseLabelsFlag(v.GetString("labels"))
+		labels, err := pkgtags.ParseLabelsFlag(pkgtags.ReadLabelsFlagKey(v, vendorLabelsViperKey))
 		if err != nil {
 			return err
 		}
@@ -176,6 +177,7 @@ func renderVerifyResult(rows []verifyRow, format string) error {
 	return nil
 }
 
+// createVerifyTable formats verification failures with their component paths and reasons.
 func createVerifyTable(rows []verifyRow) string {
 	headers := []string{"COMPONENT", "PATH", "REASON"}
 	cells := make([][]string, 0, len(rows))
@@ -192,7 +194,7 @@ func createVerifyTable(rows []verifyRow) string {
 		BorderRight(false).
 		BorderRow(false).
 		BorderColumn(false).
-		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(updateReportBorderColor))).
+		BorderStyle(theme.GetCurrentStyles().Muted).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == table.HeaderRow {
 				return updateReportHeaderStyle.Padding(0, 1)
@@ -204,14 +206,19 @@ func createVerifyTable(rows []verifyRow) string {
 	return lineEnding + t.String() + lineEnding + lineEnding
 }
 
+// init registers the vendor verify flags with their namespaced selector Viper keys, then attaches the command to vendor.
 func init() {
 	vendorVerifyParser = flags.NewStandardParser(
 		flags.WithStringFlag("component", "c", "", "Verify only this component"),
 		flags.WithStringFlag("type", "t", "terraform", componentTypeFlagHelp),
 		flags.WithStringFlag("file", "", "", "Vendor manifest file (default: ./vendor.yaml)"),
 		flags.WithStringFlag("tags", "", "", "Verify only components whose vendor.yaml source declares any of these tags (comma-separated, matches any)"),
+		flags.WithEnvVars(vendorTagsFlagName, envVendorTags),
+		flags.WithViperKey(vendorTagsFlagName, vendorTagsViperKey),
 		flags.WithStringFlag("stack", "s", "", "Verify only components belonging to the specified stack"),
-		flags.WithStringFlag("labels", "", "", vendorLabelsFlagHelp),
+		flags.WithStringArrayFlag(vendorLabelsFlagName, "", nil, vendorLabelsFlagHelp),
+		flags.WithEnvVars(vendorLabelsFlagName, envVendorLabels),
+		flags.WithViperKey(vendorLabelsFlagName, vendorLabelsViperKey),
 		flags.WithStringFlag("format", "", "table", "Output format: table or json"),
 	)
 	vendorVerifyParser.RegisterFlags(vendorVerifyCmd)

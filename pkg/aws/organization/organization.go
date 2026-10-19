@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/organizations/types"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/cloud/aws/autherrors"
 	awsIdentity "github.com/cloudposse/atmos/pkg/aws/identity"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -87,7 +88,7 @@ func (d *defaultGetter) GetOrganization(
 		if errors.As(err, &notInUseErr) {
 			return nil, fmt.Errorf("%w: the AWS account is not a member of an organization", errUtils.ErrAwsDescribeOrganization)
 		}
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsDescribeOrganization, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsDescribeOrganization, autherrors.Normalize(err))
 	}
 
 	if output == nil {
@@ -115,7 +116,8 @@ func (d *defaultGetter) GetOrganization(
 		info.MasterAccountEmail = *org.MasterAccountEmail
 	}
 
-	log.Debug("Retrieved AWS organization info",
+	log.Debug(
+		"Retrieved AWS organization info",
 		"id", info.ID,
 		"arn", info.Arn,
 		"master_account_id", info.MasterAccountID,

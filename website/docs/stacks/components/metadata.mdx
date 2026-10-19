@@ -1,7 +1,7 @@
 ---
 title: Configure Component Metadata
 sidebar_position: 5
-sidebar_label: "*.metadata"
+sidebar_label: metadata
 sidebar_class_name: command
 description: Use the metadata section to control component behavior, inheritance, and deployment settings.
 id: component-metadata
@@ -287,7 +287,7 @@ The `custom` section is inherited from base components when `stacks.inherit.meta
 
 ### `tags`
 
-A list of tags used to select this component with the `--tags` flag on commands like [`atmos list components`](/cli/commands/list/components), `atmos terraform plan/apply/deploy`, and the native Kubernetes/Helm/container commands:
+A list of tags used to select this component with the `--tags` flag on commands like [`atmos list components`](/cli/commands/list/components), [`atmos list affected`](/cli/commands/list/affected), [`atmos describe affected`](/cli/commands/describe/affected#filtering-by-tags-and-labels), `atmos terraform plan/apply/deploy`, and the native Kubernetes/Helm/container commands:
 
 ```yaml
 components:
@@ -300,6 +300,8 @@ components:
 ```
 
 `--tags` matches **any** of the given tags (OR semantics). For example, `atmos terraform apply --tags production,tier-1` applies components tagged `production` **or** `tier-1`.
+
+Matching is case-sensitive. Components without `metadata.tags` do not match a tag selector.
 
 `tags` can also be set as a [global default](#global-stack-wide-metadata).
 
@@ -319,17 +321,56 @@ components:
 
 `--labels` matches **all** of the given `key=value` pairs (AND semantics). For example, `atmos terraform apply --labels cost-center=platform,compliance=sox` only applies components whose `metadata.labels` contain both `cost-center: platform` **and** `compliance: sox`.
 
+The `--labels` flag is available on the same commands as `--tags`:
+
+- [`atmos list components`](/cli/commands/list/components) and [`atmos list affected`](/cli/commands/list/affected)
+- [`atmos describe affected`](/cli/commands/describe/affected#filtering-by-tags-and-labels), including `--format=matrix` for CI job matrices
+- `atmos terraform plan/apply/deploy` and the native Kubernetes/Helm/container commands
+
+Label keys and values are case-sensitive; components without `metadata.labels` do not match. Both `key=value` and `key:value` syntax are accepted. Use shared defaults and overrides to express exclusions, as in [CI component selection](/ci#keeping-privileged-components-out-of-ci).
+
+Label values may also be booleans. A boolean `true` matches `--labels preview:true` (or
+`preview=true`), and `false` matches `preview:false`. For example, select preview components
+using live CI review labels:
+
+```yaml
+metadata:
+  labels:
+    preview: !ci.labels [preview]
+```
+
+Then run `atmos describe affected --labels preview:true`. See [`!ci.labels`](/functions/yaml/ci.labels)
+for credentials, supported providers, and local behavior.
+
 `labels` can also be set as a [global default](#global-stack-wide-metadata).
+
+Read one label with [`!labels key [default]`](/functions/yaml/labels#single-label-lookup),
+or read the whole map with bare `!labels`:
+
+```yaml
+vars:
+  compliance: !labels compliance
+  owner: !labels owner "Platform Team"
+  tags: !labels
+```
+
+Templates can read the same values with `{{ .metadata.labels.compliance }}` or
+`{{ index .metadata.labels "cost-center" }}`. See
+[runner selection](/cli/configuration/settings/pro#choose-a-runner-per-component-or-stack)
+for using labels in Atmos Pro workflow inputs.
+
 
 ### Selector Purity
 
-Labels and tags are selectors: Atmos evaluates them **before** authentication, template processing, and YAML function execution to decide which components a command operates on. By design, their values must be resolvable without authenticating or executing external processes — this keeps selection fast, deterministic, and credential-free.
+Labels and tags are selectors: Atmos inspects them **before** authentication, template processing, and YAML function execution to decide which components a command operates on. Unresolved allowed values proceed through normal evaluation. Most selector inputs are local; `!ci.labels` is an explicit exception that reads CI review labels using CI credentials and shares one snapshot per invocation.
 
 Allowed in `metadata.tags` and `metadata.labels`:
 
 - Plain strings
+- Boolean label values
 - Simple Go templates over the stack context (for example, `{{ .vars.stage }}`)
 - Local YAML functions: `!env`, `!git.*`, `!include`
+- [`!ci.labels`](/functions/yaml/ci.labels) for live CI review labels
 
 Rejected with a hard error on any command that enumerates stacks (`describe stacks`, `describe affected`, the `list` commands, and multi-component `terraform` selections such as `--all` and `--affected`):
 

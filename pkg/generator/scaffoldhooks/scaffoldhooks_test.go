@@ -62,7 +62,14 @@ func TestRun_MatchesEventAndWhen(t *testing.T) {
 		},
 	}
 
-	err := Run(hooksMap, hooks.AfterScaffoldGenerate, map[string]any{}, "success", nil)
+	err := Run(RunInput{
+		HooksMap:   hooksMap,
+		Event:      hooks.AfterScaffoldGenerate,
+		Answers:    map[string]any{},
+		Status:     "success",
+		SkipHooks:  nil,
+		TargetPath: "/target",
+	})
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"post ran"}, *calls)
@@ -81,12 +88,26 @@ func TestRun_WhenGatesExecution(t *testing.T) {
 	}
 
 	// Answer doesn't include "dev": hook must not run.
-	err := Run(hooksMap, hooks.AfterScaffoldGenerate, map[string]any{"environments": []string{"staging"}}, "success", nil)
+	err := Run(RunInput{
+		HooksMap:   hooksMap,
+		Event:      hooks.AfterScaffoldGenerate,
+		Answers:    map[string]any{"environments": []string{"staging"}},
+		Status:     "success",
+		SkipHooks:  nil,
+		TargetPath: "/target",
+	})
 	require.NoError(t, err)
 	assert.Empty(t, *calls)
 
 	// Answer includes "dev": hook must run.
-	err = Run(hooksMap, hooks.AfterScaffoldGenerate, map[string]any{"environments": []string{"dev"}}, "success", nil)
+	err = Run(RunInput{
+		HooksMap:   hooksMap,
+		Event:      hooks.AfterScaffoldGenerate,
+		Answers:    map[string]any{"environments": []string{"dev"}},
+		Status:     "success",
+		SkipHooks:  nil,
+		TargetPath: "/target",
+	})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"ran"}, *calls)
 }
@@ -108,7 +129,14 @@ func TestRun_SkipHooksBypassesNamedHook(t *testing.T) {
 	}
 
 	skip := func(name string) bool { return name == "git-add" }
-	err := Run(hooksMap, hooks.AfterScaffoldGenerate, map[string]any{}, "success", skip)
+	err := Run(RunInput{
+		HooksMap:   hooksMap,
+		Event:      hooks.AfterScaffoldGenerate,
+		Answers:    map[string]any{},
+		Status:     "success",
+		SkipHooks:  skip,
+		TargetPath: "/target",
+	})
 	require.NoError(t, err)
 
 	assert.ElementsMatch(t, []string{"other ran"}, *calls)
@@ -123,7 +151,14 @@ func TestRun_SkipHooksAllBypassesEverything(t *testing.T) {
 	}
 
 	skipAll := func(string) bool { return true }
-	err := Run(hooksMap, hooks.AfterScaffoldGenerate, map[string]any{}, "success", skipAll)
+	err := Run(RunInput{
+		HooksMap:   hooksMap,
+		Event:      hooks.AfterScaffoldGenerate,
+		Answers:    map[string]any{},
+		Status:     "success",
+		SkipHooks:  skipAll,
+		TargetPath: "/target",
+	})
 	require.NoError(t, err)
 
 	assert.Empty(t, *calls)
@@ -140,11 +175,43 @@ func TestRun_AnswersReachStepTemplateData(t *testing.T) {
 		},
 	}
 
-	err := Run(hooksMap, hooks.AfterScaffoldGenerate, map[string]any{"environments": []string{"dev", "staging"}}, "success", nil)
+	err := Run(RunInput{
+		HooksMap:   hooksMap,
+		Event:      hooks.AfterScaffoldGenerate,
+		Answers:    map[string]any{"environments": []string{"dev", "staging"}},
+		Status:     "success",
+		SkipHooks:  nil,
+		TargetPath: "/target",
+	})
 	require.NoError(t, err)
 
 	require.Len(t, *calls, 1)
 	assert.Equal(t, "environments: [dev staging]", (*calls)[0])
+}
+
+func TestRun_TargetPathReachesStepTemplateData(t *testing.T) {
+	calls := registerCapture(t)
+
+	hooksMap := map[string]hooks.Hook{
+		"templated": {
+			Kind: "step",
+			Type: t.Name(),
+			With: map[string]any{"content": "target: {{ .TargetPath }}"},
+		},
+	}
+
+	err := Run(RunInput{
+		HooksMap:   hooksMap,
+		Event:      hooks.AfterScaffoldGenerate,
+		Answers:    map[string]any{},
+		Status:     "success",
+		SkipHooks:  nil,
+		TargetPath: "/scaffold/out",
+	})
+	require.NoError(t, err)
+
+	require.Len(t, *calls, 1)
+	assert.Equal(t, "target: /scaffold/out", (*calls)[0])
 }
 
 func TestRun_StepsKind(t *testing.T) {
@@ -160,7 +227,14 @@ func TestRun_StepsKind(t *testing.T) {
 		},
 	}
 
-	err := Run(hooksMap, hooks.AfterScaffoldGenerate, map[string]any{}, "success", nil)
+	err := Run(RunInput{
+		HooksMap:   hooksMap,
+		Event:      hooks.AfterScaffoldGenerate,
+		Answers:    map[string]any{},
+		Status:     "success",
+		SkipHooks:  nil,
+		TargetPath: "/target",
+	})
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"first", "second"}, *calls)
@@ -194,8 +268,22 @@ func TestRun_DocumentationFixtureUsesEventsConditionsAndOrderedSteps(t *testing.
 		},
 	}
 
-	require.NoError(t, Run(hooksMap, hooks.BeforeScaffoldGenerate, answers, "success", nil))
-	require.NoError(t, Run(hooksMap, hooks.AfterScaffoldGenerate, answers, "success", nil))
+	require.NoError(t, Run(RunInput{
+		HooksMap:   hooksMap,
+		Event:      hooks.BeforeScaffoldGenerate,
+		Answers:    answers,
+		Status:     "success",
+		SkipHooks:  nil,
+		TargetPath: "/target",
+	}))
+	require.NoError(t, Run(RunInput{
+		HooksMap:   hooksMap,
+		Event:      hooks.AfterScaffoldGenerate,
+		Answers:    answers,
+		Status:     "success",
+		SkipHooks:  nil,
+		TargetPath: "/target",
+	}))
 	assert.Equal(t, []string{"prepare vpc", "format vpc", "validate vpc", "finish vpc"}, *calls)
 }
 
@@ -204,7 +292,14 @@ func TestRun_UnsupportedKindReturnsError(t *testing.T) {
 		"legacy": {Kind: "command", Command: "echo hi"},
 	}
 
-	err := Run(hooksMap, hooks.AfterScaffoldGenerate, map[string]any{}, "success", nil)
+	err := Run(RunInput{
+		HooksMap:   hooksMap,
+		Event:      hooks.AfterScaffoldGenerate,
+		Answers:    map[string]any{},
+		Status:     "success",
+		SkipHooks:  nil,
+		TargetPath: "/target",
+	})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrScaffoldHookKindUnsupported)
 }

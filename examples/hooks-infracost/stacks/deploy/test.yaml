@@ -8,12 +8,11 @@ components:
     nat-gateway:
       vars:
         environment: test
+      dependencies:
+        tools:
+          infracost: "0.10.44"
       hooks:
         cost:
           events:
             - after.terraform.plan
           kind: infracost
-          # The example uses a local Infracost-compatible emulator so docs and
-          # tests are deterministic. Real usage can omit `command` and declare
-          # `dependencies.tools.infracost` plus INFRACOST_API_KEY instead.
-          command: ./bin/infracost-emulator

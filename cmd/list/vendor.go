@@ -67,7 +67,7 @@ var vendorCmd = &cobra.Command{
 			Stack:   v.GetString("stack"),
 			Columns: v.GetStringSlice("columns"),
 			Sort:    v.GetString("sort"),
-			Tags:    tags.ParseTagsFlag(v.GetString("tags")),
+			Tags:    tags.ParseTagsFlag(v.GetString(vendorTagsViperKey)),
 		}
 
 		return listVendorWithOptions(opts)

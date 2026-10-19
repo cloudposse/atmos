@@ -7,12 +7,22 @@ import (
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/downloader"
 )
 
 // PullRequestOptions is forge-neutral data used to create or reconcile a pull request.
 // Head is the branch name without an owner qualifier.
+//
+// Owner is the single top-level account every forge has (GitHub owner, GitLab top-level
+// namespace, Bitbucket workspace, Azure DevOps organization). Namespace carries any additional
+// path segments a forge requires between Owner and Repository -- nil/empty for two-segment
+// forges like GitHub, a single project name (len == 1) for Azure DevOps' three-segment
+// organization/project/repository addressing, or an arbitrary depth of subgroups for GitLab.
+// Providers that don't need it should reject a non-empty Namespace rather than silently
+// ignoring it, so misconfiguration surfaces instead of resolving to the wrong repository.
 type PullRequestOptions struct {
 	Owner      string
+	Namespace  []string
 	Repository string
 	Base       string
 	Head       string
@@ -35,6 +45,35 @@ type PullRequestResult struct {
 // contract. GitLab and Bitbucket implementations can register independently.
 type PullRequestPublisher interface {
 	Reconcile(ctx context.Context, options *PullRequestOptions) (*PullRequestResult, error)
+}
+
+// PullRequestBodyBadger is an optional interface a PullRequestPublisher can implement to supply
+// its own branding for the default `vendor.ci.pull_request.body` template (see
+// updater.RenderPRTemplates). It's optional, not part of PullRequestPublisher itself, because a
+// forge's pull request markdown has its own quirks and capabilities -- raw HTML support, external
+// image hosting requirements, light/dark switching, and so on -- that only the provider that
+// speaks to it can know; a publisher that doesn't implement this gets a static, dependency-free
+// default instead of being forced to declare one.
+type PullRequestBodyBadger interface {
+	PullRequestBodyBadge() string
+}
+
+// PullRequestRepository addresses a repository the way a publisher's Reconcile expects it, with
+// the same Owner/Namespace/Repository semantics as PullRequestOptions.
+type PullRequestRepository struct {
+	Owner      string
+	Namespace  []string
+	Repository string
+}
+
+// PullRequestRepositoryResolver is an optional interface a PullRequestPublisher can implement to
+// recognize its own forge's Git remote URLs (HTTPS or SSH) and return the repository address
+// they name. It lets callers pick a publisher from a repository URI without knowing which forges
+// exist: only the provider that speaks to a forge knows its URL conventions (hosts, SSH path
+// prefixes, enterprise-server hostnames).
+type PullRequestRepositoryResolver interface {
+	// RepositoryFromURL reports ok=false for any URL that is not this forge's.
+	RepositoryFromURL(uri string) (PullRequestRepository, bool)
 }
 
 // PullRequestPublisherFactory creates a pull request publisher.
@@ -73,4 +112,26 @@ func RegisteredPullRequestPublishers() []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// NewPullRequestPublisherForURL returns the registered publisher whose forge owns the Git remote
+// URL uri, together with the repository address it resolved from it. Publishers are consulted in
+// sorted name order and those that do not implement PullRequestRepositoryResolver are skipped.
+// It returns ErrPullRequestPublisherUnavailable when no registered publisher recognizes uri.
+func NewPullRequestPublisherForURL(uri string) (PullRequestPublisher, PullRequestRepository, error) {
+	for _, name := range RegisteredPullRequestPublishers() {
+		publisher, err := NewPullRequestPublisher(name)
+		if err != nil {
+			return nil, PullRequestRepository{}, err
+		}
+		resolver, ok := publisher.(PullRequestRepositoryResolver)
+		if !ok {
+			continue
+		}
+		if repository, ok := resolver.RepositoryFromURL(uri); ok {
+			return publisher, repository, nil
+		}
+	}
+	return nil, PullRequestRepository{}, fmt.Errorf("%w: no registered forge recognizes repository %q (registered: %v)",
+		errUtils.ErrPullRequestPublisherUnavailable, downloader.RedactSource(uri), RegisteredPullRequestPublishers())
 }

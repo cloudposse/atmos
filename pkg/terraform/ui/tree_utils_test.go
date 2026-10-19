@@ -57,28 +57,6 @@ func TestValuesEqual_MarshalError(t *testing.T) {
 	assert.False(t, valuesEqual(a, b))
 }
 
-// TestSafeFdToInt covers both the normal conversion path and the defensive overflow guard.
-func TestSafeFdToInt(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		fd       uintptr
-		expected int
-	}{
-		{"typical stdout fd", 1, 1},
-		{"zero fd", 0, 0},
-		{"overflow beyond MaxInt returns -1", uintptr(math.MaxInt) + 1, -1},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tt.expected, safeFdToInt(tt.fd))
-		})
-	}
-}
-
 // TestGetContrastTextColor_LowercaseHex verifies lowercase hex digits (a-f) parse identically
 // to uppercase - parseHexComponent has separate switch branches for each case.
 func TestGetContrastTextColor_LowercaseHex(t *testing.T) {

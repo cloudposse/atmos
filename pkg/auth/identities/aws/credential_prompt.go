@@ -7,6 +7,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
+	"github.com/cloudposse/atmos/pkg/auth/interactive"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	authUtils "github.com/cloudposse/atmos/pkg/auth/utils"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -39,7 +40,13 @@ func init() {
 }
 
 // promptCredentialsGeneric is the generic implementation that builds a form from the spec.
+// It fails fast with ErrAuthPromptUnavailable when stdin or stderr is not a terminal,
+// because the form would otherwise be invisible and hang.
 func promptCredentialsGeneric(spec types.CredentialPromptSpec) (map[string]string, error) {
+	if !interactive.Available() {
+		return nil, errUtils.ErrAuthPromptUnavailable
+	}
+
 	ui.Writeln("")
 	ui.Warning(fmt.Sprintf("%s credentials are required for identity: %s", spec.CloudType, spec.IdentityName))
 	ui.Writeln("")

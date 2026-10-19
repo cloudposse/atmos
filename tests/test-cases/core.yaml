@@ -39,17 +39,23 @@ tests:
   - name: "atmos"
     enabled: true
     snapshot: true
-    description: "Verify atmos CLI reports missing stacks directory."
+    description: "Verify atmos CLI displays help without requiring stacks."
     workdir: "../"
     command: "atmos"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     expect:
+      ignore_trailing_whitespace: true
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       diff: []
       stdout:
-        - "^\\s*$"
+        - "USAGE"
+        - "BUILT-IN COMMANDS"
       stderr:
-        - "atmos.yaml CLI config file specifies the directory for Atmos stacks as\\s+stacks, but the directory does not exist."
+        - !not "Incorrect Usage|stacks, but the directory does not exist"
         - "Telemetry Enabled"
-      exit_code: 1
+      exit_code: 0
 
   - name: atmos docs
     enabled: true

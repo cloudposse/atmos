@@ -13,8 +13,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 var spinnerSuppression struct {
@@ -87,9 +85,7 @@ func (m modelSpinner) View() string {
 func NewSpinner(message string) *tea.Program {
 	defer perf.Track(nil, "output.NewSpinner")()
 
-	s := spinner.New()
-	s.Style = theme.GetCurrentStyles().Spinner
-	fps.Apply(&s)
+	s := ui.NewSpinner()
 
 	// Always output to UI (stderr) to avoid blocking /dev/tty.
 	// Without this, bubbletea defaults to /dev/tty which can block credential resolution

@@ -4,10 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"os"
 	"strings"
-
-	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -16,13 +13,6 @@ import (
 )
 
 const (
-	// DefaultTerminalWidth is the fallback width when terminal size cannot be determined.
-	defaultTerminalWidth = 120
-	// TreeIndentWidth is the approximate width of tree prefix and symbols.
-	treeIndentWidth = 20
-	// MinReasonableWidth is the minimum width for text truncation.
-	minReasonableWidth = 40
-
 	// Hex color parsing constants.
 	hexColorLength = 6
 	hexBase        = 16
@@ -129,31 +119,6 @@ func valuesEqual(a, b interface{}) bool {
 		return false
 	}
 	return string(aJSON) == string(bJSON)
-}
-
-// safeFdToInt converts a file descriptor (uintptr) to int, guarding against the
-// theoretical overflow on platforms where uintptr is wider than int. File
-// descriptors are always small, non-negative values in practice, but term.GetSize
-// requires an int, so we bounds-check rather than convert unchecked.
-func safeFdToInt(fd uintptr) int {
-	if fd > math.MaxInt {
-		return -1
-	}
-	return int(fd)
-}
-
-// getMaxLineWidth returns the maximum width for content lines based on terminal width.
-func getMaxLineWidth() int {
-	width, _, err := term.GetSize(safeFdToInt(os.Stdout.Fd()))
-	if err != nil || width <= 0 {
-		width = defaultTerminalWidth
-	}
-	// Subtract space for tree indent, symbols, and some margin.
-	maxWidth := width - treeIndentWidth
-	if maxWidth < minReasonableWidth {
-		maxWidth = minReasonableWidth // Minimum reasonable width.
-	}
-	return maxWidth
 }
 
 // getContrastTextColor returns black or white text color based on background luminance.

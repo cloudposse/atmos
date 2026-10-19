@@ -196,10 +196,10 @@ but Atmos needs a `toolchain:` block in `atmos.yaml`.
 Settings such as `experimental`, `idiomatic_version_file_enable_tools`, and `jobs` are specific to
 mise. Do not try to find an Atmos setting for each one. Drop them during the migration.
 
-### `atmos toolchain` is an experimental command
+### Toolchain stability
 
-Tell the user this before the migration starts. Do not let the user find this out partway
-through the work.
+Atmos Toolchain is stable in releases containing the October 2026 graduation. For older
+versions, check `atmos toolchain --help` for experimental status before migrating.
 
 ### Shims vs. `dependencies.tools`
 

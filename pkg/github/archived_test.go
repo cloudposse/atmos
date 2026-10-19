@@ -146,3 +146,21 @@ func TestParseOwnerRepo(t *testing.T) {
 		})
 	}
 }
+
+// TestParseOwnerRepo_GHESWithPort pins that a GITHUB_SERVER_URL carrying a non-default port
+// (e.g. a corporate GHES mirror behind a custom port, or a test's httptest.NewServer) is
+// recognized: u.Host (the full authority, including port) must be compared via IsHost, not
+// u.Hostname() (which always drops the port and would never match a ported Endpoints.Host).
+func TestParseOwnerRepo_GHESWithPort(t *testing.T) {
+	clearGitHubEndpointEnv(t)
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com:8443")
+
+	owner, repo, ok := ParseOwnerRepo("https://ghes.example.com:8443/cloudposse/terraform-aws-vpc.git")
+	require.True(t, ok)
+	assert.Equal(t, "cloudposse", owner)
+	assert.Equal(t, "terraform-aws-vpc", repo)
+
+	// A different port on the same host must not match.
+	_, _, ok = ParseOwnerRepo("https://ghes.example.com:9999/cloudposse/terraform-aws-vpc.git")
+	assert.False(t, ok)
+}

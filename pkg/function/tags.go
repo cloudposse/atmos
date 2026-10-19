@@ -8,6 +8,11 @@ import (
 // Tag constants for Atmos configuration functions.
 // These are compatibility aliases; pkg/function/tag is the central tag catalog.
 const (
+	// TagCILabels returns current CI review labels or matches a requested list.
+	TagCILabels = fntag.CILabels
+
+	// TagStarlark evaluates a Starlark configuration function body.
+	TagStarlark = fntag.Starlark
 	// TagExec executes a shell command and returns the output.
 	TagExec = fntag.Exec
 
@@ -101,6 +106,9 @@ const (
 	// TagAwsOrganizationID returns the AWS Organization ID.
 	TagAwsOrganizationID = fntag.AwsOrganizationID
 
+	// TagAwsCloudFormationOutput retrieves an aws/cloudformation stack Output value.
+	TagAwsCloudFormationOutput = fntag.AwsCloudFormationOutput
+
 	// TagEmulator resolves a value from a local emulator.
 	TagEmulator = fntag.Emulator
 
@@ -110,7 +118,7 @@ const (
 	// TagTags returns the current component's own metadata.tags as a list.
 	TagTags = fntag.Tags
 
-	// TagLabels returns the current component's own metadata.labels as a map.
+	// TagLabels returns the current component's own metadata.labels as a map, or a single label with an optional fallback.
 	TagLabels = fntag.Labels
 
 	// TagLabelsKeys returns the current component's own metadata.labels keys as a sorted list.

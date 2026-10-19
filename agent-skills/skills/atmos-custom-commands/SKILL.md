@@ -89,6 +89,14 @@ commands:
         command: terraform deploy {{ .Arguments.component }} -s {{ .Flags.stack }}
 ```
 
+Flag `type` is `string` (default), `bool`, or `int`. An `int` flag registers as an integer flag
+(`--count int` in help), its `default` must be a whole number, and it reaches templates and
+`ctx.flags` as an integer. Any other type fails when Atmos loads the command, with an error that
+lists the supported types. An `int` flag reads base-10 only (`010` is 10, `0x10` is rejected). A `default` that does
+not match the flag type makes the command a stub with a warning that names the flag. An argument with neither `required:` nor `default:` is required; set `required: false` to make it optional, and an
+omitted optional argument with no `default` is an empty string in `{{ .Arguments.<name> }}` and `ctx.arguments`. Argument values keep
+commas, empty strings, and non-ASCII text intact.
+
 ### Tool Dependencies
 
 ```yaml
@@ -118,25 +126,96 @@ commands:
 
 ### Custom Component Types
 
-Use `component_config` when a custom command should resolve a component and stack before running:
+Use `component.type` and semantic `provides` bindings when a custom command should
+resolve a custom component and stack. `component_config` is legacy Terraform syntax.
 
 ```yaml
 commands:
   - name: render-app
     arguments:
       - name: component
+        provides: component
         required: true
     flags:
       - name: stack
         shorthand: s
+        provides: stack
         required: true
-    component_config:
-      component: "{{ .Arguments.component }}"
-      stack: "{{ .Flags.stack }}"
+    component:
+      type: application
     steps:
       - type: shell
         command: ./scripts/render-app.sh
 ```
+
+An embedded Starlark script step in such a command reads the selected component as
+`ctx.component` (resolved on first access). Workflows have no component in scope, so
+`ctx.component` is `None` there; see `atmos-starlark`.
+
+## Starlark Script Steps
+
+Use a `type: script` step with `interpreter: starlark` when a command needs loops,
+conditionals, data shaping, or concurrency that native steps cannot express. Inputs
+reach the script as values, not as text:
+
+```yaml
+commands:
+  - name: deploy-one
+    description: Deploy one component
+    arguments:
+      - name: group
+        required: true
+    flags:
+      - name: dry-run
+        type: bool
+      - name: stack
+        shorthand: s
+        required: true
+    steps:
+      - name: deploy
+        type: script
+        interpreter: starlark
+        script: |
+          if ctx.flags["dry-run"]:
+              ui.info("dry run for " + ctx.arguments["group"])
+          else:
+              atmos.terraform("deploy", ctx.arguments["group"], ctx.flags["stack"])
+```
+
+- Read declared flags and arguments from `ctx.flags` (string, bool, and `int` types preserved)
+  and `ctx.arguments` (an omitted optional argument is `""`). `ctx.args` is empty, and trailing
+  arguments after `--` are not exposed to scripts.
+- Read flag values from `ctx.flags` and `ctx.arguments` instead of templating them into script source.
+  Atmos renders valid `{{ ... }}` template actions before running the script; malformed or
+  unresolved actions can fail. A lone `}}` is ordinary text. Use `script: !literal |` or
+  `!include.raw` when the source must remain unchanged.
+- `cli.command`, `cli.arg`, and `cli.flag` are only for standalone scripts
+  (`atmos ./tool.star`); declare the command interface in YAML here.
+- Script steps default to raw output with no step labels; `show: {labels: true}` restores them.
+  `output:` must be `raw`, `log`, `viewport`, or `none`; any other value (such as `capture`) fails
+  before the step runs (`capture`/`stream` errors point to `exec.run`, which takes `stream|capture|viewport`).
+- A `timeout:` on a script, shell, or atmos step cancels the step and fails with `step timed out`
+  (`Step '<name>' (type <t>) did not finish within its timeout of <d>`). On Unix, commands
+  without terminal input also terminate their process group. Commands with terminal input
+  and Windows commands terminate only the direct child; descendants may remain running.
+  To time an individual task, run `steps.parallel(tasks=[steps.task(name="work", function=work, timeout="30s")])`.
+  This task timeout covers `work`, not the surrounding script.
+- Atmos renders only the values declared under the step's `env:` as templates. The ambient process
+  environment reaches the script and its child processes verbatim, so an inherited
+  `FOO='{{ bad'` is harmless. In `ctx`-side Starlark, `env` holds only the step's own `env:`
+  entries, not command-level `env:` entries.
+- Sprig and Gomplate functions work the same in sequential steps and in `parallel`/`matrix`
+  children.
+- A script step's dict or list `output` reaches later steps as JSON text
+  (`{{ .steps.<name>.value }}` is `{"n":3}`), never Go map syntax. Single-quote it in shell
+  commands (`echo '{{ .steps.x.value }}'`) because JSON contains double quotes.
+- A template error names the step and field, and the source file for an `!include`d script, with
+  a hint to tag the field `!literal` when the body contains `{{` (for an `!include`d script, the hint says to move the
+  text into a `load()`ed module or use `!include.raw`, which is used as written). `!literal` also works on `command`,
+  `interpreter`, `working_directory`, `timeout`, and single `env` values, including command-level `env`; any other step
+  field fails config load. `retry.conditions` works for shell and atmos steps too.
+- `--profile` and `--identity` reach nested `atmos.*` calls from script steps. Ctrl-C runs `defer` calls (30 s grace)
+  and exits 130 silently.
 
 ## Routing
 
@@ -145,6 +224,8 @@ commands:
 | Complete command schema and examples | [references/command-syntax.md](references/command-syntax.md) |
 | Reusable multi-step orchestration | `atmos-workflows` |
 | Shared step fields and step types | `atmos-steps` |
+| Embedded Starlark, parallel function calls, and standalone `atmos ./tool.star` CLI apps | `atmos-starlark` |
+| Smoke tests, integration tests, and test groups | `atmos-tests` |
 | Tool versions and PATH behavior | `atmos-toolchain` |
 | Auth providers, identities, assume role/root, OIDC | `atmos-auth` |
 | Components and component inheritance | `atmos-components` |

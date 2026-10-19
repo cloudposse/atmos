@@ -188,9 +188,9 @@ func (m *ChatModel) handleSendMessage(msg sendMessageMsg) (bool, tea.Cmd) {
 	m.isCancelling = false
 
 	// Create cancellable context for this AI request.
-	// Use 5-minute timeout to allow for complex operations with multiple tool executions.
+	// Providers managing their own timeout exclude approval waits from the deadline.
 	// User can still cancel manually with Esc key if needed.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := m.requestContext()
 	m.cancelFunc = cancel
 
 	m.updateViewportContent()
@@ -320,6 +320,9 @@ func (m *ChatModel) handleSpinnerTick(msg spinner.TickMsg, cmds *[]tea.Cmd) bool
 
 // handleProviderSwitched handles the result of an async provider switch.
 func (m *ChatModel) handleProviderSwitched(msg providerSwitchedMsg) {
+	if msg.err == nil {
+		msg.err = m.configureProviderApproval(msg.newClient)
+	}
 	if msg.err != nil {
 		m.addMessage(roleSystem, fmt.Sprintf("Error switching provider: %v", msg.err))
 		m.updateViewportContent()
@@ -465,21 +468,22 @@ func (m *ChatModel) View() string {
 	}
 }
 
+// headerView renders the assistant title, guidance, and current session details.
 func (m *ChatModel) headerView() string {
 	title := "Atmos AI Assistant"
 	subtitle := "Ask questions about your infrastructure, components, and stacks"
 
 	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorCyan)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 		Bold(true).
 		Padding(0, 1)
 
 	subtitleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 		Padding(0, 1)
 
 	sessionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("245")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 		Italic(true).
 		Padding(0, 1)
 
@@ -519,7 +523,7 @@ func (m *ChatModel) footerView() string {
 // loadingFooterContent renders the footer when AI is processing.
 func (m *ChatModel) loadingFooterContent() string {
 	cancelHint := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 		Italic(true).
 		Render("(Press Esc to cancel)")
 
@@ -542,7 +546,7 @@ func (m *ChatModel) loadingFooterContent() string {
 // inputFooterContent renders the footer with the input area.
 func (m *ChatModel) inputFooterContent() string {
 	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 		Italic(true)
 
 	help := helpStyle.Render("Enter: Send | Ctrl+J: Newline | Ctrl+L: Sessions | Ctrl+N: New | Ctrl+P: Provider | Ctrl+A: Skill | Alt+Drag: Select Text | Ctrl+C: Quit")

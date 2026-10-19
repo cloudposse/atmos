@@ -1,0 +1,36 @@
+# Eligible doctor fixture: one config layer, no imports, no templates.
+base_path: "./"
+
+components:
+    terraform:
+        base_path: "components/terraform"
+        apply_auto_approve: false
+        # Legacy reconfigure policy; doctor should migrate this.
+        init_run_reconfigure: false
+        auto_generate_backend_file: false
+
+stacks:
+    base_path: 'stacks'
+    included_paths: ["deploy/**/*"]
+    excluded_paths: ["**/_defaults.yaml"]
+    name_pattern: "{stage}"
+
+commands:
+    - name: inspect
+      description: 'Inspect a component in a stack using a deliberately long description string that exceeds eighty characters'
+      arguments:
+          - name: target
+            type: component  # legacy semantic argument
+      flags:
+          - name: stack
+            shorthand: s
+            semantic_type: stack
+      steps:
+          - echo "inspect"
+    - name: group
+      commands:
+          - name: child
+            flags:
+                - name: stack
+                  semantic_type: "stack"
+            steps: ["echo child"]

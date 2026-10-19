@@ -37,7 +37,7 @@ type rateLimitChecker struct {
 
 // defaultRateLimitChecker returns a checker using the real GitHub client.
 func defaultRateLimitChecker(ctx context.Context) *rateLimitChecker {
-	client := newGitHubClient(ctx)
+	client, _ := newGitHubClient(ctx)
 	return &rateLimitChecker{service: client.RateLimit}
 }
 

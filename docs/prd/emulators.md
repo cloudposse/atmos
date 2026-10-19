@@ -335,7 +335,7 @@ alongside `!store`/`!terraform.output`; resolves through `Manager.Resolve`.
 - **`emulator-aws`** — migrated from its bespoke `atmos floci up/down` custom commands + docker-compose
   to the `components.emulator.aws` + `atmos emulator up/down` model. Minimal reference.
 - **CI tests** — runtime-gated (reuse `tests/floci_containers_test.go` autostart; skip gracefully via
-  `tests/test_preconditions.go`): `atmos emulator up` → `atmos terraform apply`/`destroy` across the
+  `tests/preconditions.go`): `atmos emulator up` → `atmos terraform apply`/`destroy` across the
   redesigned advanced components against Floci; assert outputs and cross-component flow; tear down.
 - **Docs** — website quick-start pages + `website/docs/cli/commands/emulator/*.mdx` (Intro +
   Screengrab + `<dl>` flags) for the `up → apply → inspect → down` workflow; `cd website && npm run build`.

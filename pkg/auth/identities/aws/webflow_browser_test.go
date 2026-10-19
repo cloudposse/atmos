@@ -1895,6 +1895,73 @@ func TestWaitForCallbackWithSpinner_SpinnerFallback(t *testing.T) {
 	assert.Equal(t, "AKID_FB", resp.AccessToken.AccessKeyID)
 }
 
+// TestWaitForCallbackWithSpinner_FallbackKeepsInFlightExchange is a
+// regression test for a race in which the spinner fallback canceled the same
+// context the token exchange used. When the callback arrived just before
+// tea.NewProgram.Run failed, handleSpinnerFallback's cancel aborted the
+// in-flight exchange and authentication failed with "context canceled".
+// The exchange below observes its request context for a while after the
+// spinner fails; it must not be canceled.
+func TestWaitForCallbackWithSpinner_FallbackKeepsInFlightExchange(t *testing.T) {
+	origInteractive := webflowIsTTYFunc
+	webflowIsTTYFunc = func() bool { return true }
+	defer func() { webflowIsTTYFunc = origInteractive }()
+	// Spinner (and therefore the fallback) only runs outside CI.
+	unsetCIEnvVars(t)
+
+	identity := &userIdentity{name: "test-spinner-inflight", realm: "realm", config: &schema.Identity{Kind: "aws/user"}}
+
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"access_token": map[string]string{"access_key_id": "AKID_INFLIGHT", "secret_access_key": "SECRET", "session_token": "TOKEN"},
+			"expires_in":   900,
+		})
+	}))
+	defer tokenServer.Close()
+
+	exchangeStarted := make(chan struct{})
+	origClient := defaultHTTPClient
+	defaultHTTPClient = &mockHTTPClient{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			close(exchangeStarted)
+			// Hold the exchange open past the spinner failure. A canceled request
+			// context here is exactly the bug.
+			select {
+			case <-req.Context().Done():
+				return nil, req.Context().Err()
+			case <-time.After(200 * time.Millisecond):
+			}
+			req.URL, _ = url.Parse(tokenServer.URL + req.URL.Path)
+			return http.DefaultClient.Do(req)
+		},
+	}
+	defer func() { defaultHTTPClient = origClient }()
+
+	// The spinner fails only once the exchange is in flight.
+	origRun := runSpinnerProgramFunc
+	runSpinnerProgramFunc = func(model webflowSpinnerModel) (tea.Model, error) {
+		select {
+		case <-exchangeStarted:
+		case <-time.After(2 * time.Second):
+		}
+		return model, fmt.Errorf("simulated tea run failure")
+	}
+	defer func() { runSpinnerProgramFunc = origRun }()
+
+	resultCh := make(chan webflowResult, 1)
+	resultCh <- webflowResult{code: "inflight-code", state: "state"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := identity.waitForCallbackWithSpinner(ctx, resultCh, webflowExchange{region: "us-east-2", verifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback", dpopKey: mustGenerateDPoPKey(t)})
+
+	require.NoError(t, err, "the spinner fallback must not cancel an in-flight token exchange")
+	require.NotNil(t, resp)
+	assert.Equal(t, "AKID_INFLIGHT", resp.AccessToken.AccessKeyID)
+}
+
 // TestStartSpinnerExchangeGoroutine_CallbackError verifies that a callback
 // error is wrapped with ErrWebflowAuthFailed and delivered on the token
 // channel (no token exchange attempted).
@@ -1905,7 +1972,7 @@ func TestStartSpinnerExchangeGoroutine_CallbackError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	tokenCh := startSpinnerExchangeGoroutine(ctx, resultCh, webflowExchange{region: "us-east-2", verifier: "verifier", redirectURI: "http://127.0.0.1:0/oauth/callback", dpopKey: mustGenerateDPoPKey(t)})
+	tokenCh := startSpinnerExchangeGoroutine(ctx, ctx, resultCh, webflowExchange{region: "us-east-2", verifier: "verifier", redirectURI: "http://127.0.0.1:0/oauth/callback", dpopKey: mustGenerateDPoPKey(t)})
 	res := <-tokenCh
 	require.Error(t, res.err)
 	assert.Nil(t, res.resp)
@@ -1921,7 +1988,7 @@ func TestStartSpinnerExchangeGoroutine_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	tokenCh := startSpinnerExchangeGoroutine(ctx, resultCh, webflowExchange{region: "us-east-2", verifier: "verifier", redirectURI: "http://127.0.0.1:0/oauth/callback", dpopKey: mustGenerateDPoPKey(t)})
+	tokenCh := startSpinnerExchangeGoroutine(ctx, ctx, resultCh, webflowExchange{region: "us-east-2", verifier: "verifier", redirectURI: "http://127.0.0.1:0/oauth/callback", dpopKey: mustGenerateDPoPKey(t)})
 	res := <-tokenCh
 	require.Error(t, res.err)
 	assert.Nil(t, res.resp)
@@ -1975,11 +2042,12 @@ func TestBrowserWebflowInteractive_OpenURLFailure(t *testing.T) {
 	}
 	defer func() { defaultHTTPClient = origClient }()
 
-	// Mock TTY call count so browserWebflow dispatches to interactive but
-	// waitForCallbackWithSpinner falls through to simple (avoids bubbletea).
-	ttyCall := 0
+	// The test calls browserWebflowInteractive directly (no TTY dispatch), so
+	// report no TTY: waitForCallbackWithSpinner then takes the simple wait
+	// instead of the spinner branch, whose TestMain stub fails immediately and
+	// would make the outcome depend on scheduling.
 	origTTY := webflowIsTTYFunc
-	webflowIsTTYFunc = func() bool { ttyCall++; return ttyCall == 1 }
+	webflowIsTTYFunc = func() bool { return false }
 	defer func() { webflowIsTTYFunc = origTTY }()
 
 	// Mock openURLFunc to return an error (browser cannot open).

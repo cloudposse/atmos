@@ -1,9 +1,10 @@
 package acceptance
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -216,7 +217,9 @@ func TestMergeCoveragePropagatesWriteCoverageTextError(t *testing.T) {
 		t.Fatalf("find repo root: %v", err)
 	}
 	shard := t.TempDir()
-	generateCoverageFixture(t, shard)
+	if err := generateCoverageFixture(t.Context(), shard); err != nil {
+		t.Fatalf("generate coverage fixture: %v", err)
+	}
 
 	dataOut := filepath.Join(t.TempDir(), "merged")
 	// A directory sitting at the destination path makes filterCoverageProfile's
@@ -395,7 +398,9 @@ func TestMergeCoverageShardsSkipsEmptyShardsAndNormalizesRelativePaths(t *testin
 	if err := os.MkdirAll(shard1, directoryPermissions); err != nil {
 		t.Fatal(err)
 	}
-	generateCoverageFixture(t, shard1)
+	if err := generateCoverageFixture(t.Context(), shard1); err != nil {
+		t.Fatalf("generate coverage fixture: %v", err)
+	}
 
 	// shard-2's directory is intentionally never created (missing entirely).
 	shard3 := filepath.Join(repoRoot, shardsDir, "shard-3")
@@ -424,21 +429,32 @@ func TestMergeCoverageShardsSkipsEmptyShardsAndNormalizesRelativePaths(t *testin
 	}
 }
 
+// TestGenerateCoverageFixturePropagatesSubprocessSlotError guards the Windows-only
+// concurrency cap: its nested go test must use commandRunner rather than launching
+// a bare exec.Command outside the shared semaphore.
+func TestGenerateCoverageFixturePropagatesSubprocessSlotError(t *testing.T) {
+	stubAcquireSubprocessSlotError(t)
+
+	err := generateCoverageFixture(t.Context(), t.TempDir())
+	if !errors.Is(err, errStubSubprocessSlot) {
+		t.Fatalf("generate coverage fixture error = %v, want it to wrap %v", err, errStubSubprocessSlot)
+	}
+}
+
 // generateCoverageFixture produces one real covmeta.* fixture by running `go test`
 // against this package's own (fast, side-effect-free) tests, matching this
 // package's existing convention of exercising real `go` tooling in tests instead
 // of mocking it (see plan_test.go's TestGoCommandEnvironmentDisablesCGO).
-func generateCoverageFixture(t *testing.T, gocoverdir string) {
-	t.Helper()
+func generateCoverageFixture(ctx context.Context, gocoverdir string) error {
 	repoRoot, err := FindRepoRoot(".")
 	if err != nil {
-		t.Fatalf("find repo root: %v", err)
+		return fmt.Errorf("find repo root: %w", err)
 	}
-	cmd := exec.Command("go", "test", "-covermode=atomic", "-coverpkg=./internal/ci/acceptance",
+	_, err = newCommandRunner().output(ctx, repoRoot, nil, "go", "test", "-covermode=atomic", "-coverpkg=./internal/ci/acceptance",
 		"-run", "TestSplitCommandLinePreservesQuoting", "./internal/ci/acceptance",
 		"-args", "-test.gocoverdir="+gocoverdir)
-	cmd.Dir = repoRoot
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("generate coverage fixture: %v\n%s", err, output)
+	if err != nil {
+		return fmt.Errorf("run coverage fixture: %w", err)
 	}
+	return nil
 }

@@ -3,7 +3,7 @@ title: atmos describe dependents
 sidebar_label: dependents
 sidebar_class_name: command
 id: dependents
-description: This command produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component.
+description: "Find the components that declare a dependency on a selected component."
 ---
 
 import Terminal from '@site/src/components/Terminal'
@@ -11,7 +11,8 @@ import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Use this command to show a list of Atmos components in Atmos stacks that depend on the provided Atmos component.
+Find the components that declare a dependency on a selected component. Use this view to assess
+downstream impact before changing shared infrastructure.
 </Intro>
 
 <CastPlayer title="atmos describe dependents --help" src="/casts/screengrabs/atmos-describe-dependents--help.cast" static chrome />

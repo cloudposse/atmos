@@ -25,73 +25,73 @@ func setupMockStateGetter(t *testing.T, ctrl *gomock.Controller) func() {
 
 	// Level 3 components have no dependencies.
 	mockStateGetter.EXPECT().
-		GetState(gomock.Any(), gomock.Any(), "test", "level3-component", "subnet_id", gomock.Any(), gomock.Any(), gomock.Any()).
+		GetState(gomock.Any(), gomock.Any(), "test", "level3-component", "subnet_id", gomock.Any(), gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return("subnet-level3-12345", nil).
 		AnyTimes()
 	mockStateGetter.EXPECT().
-		GetState(gomock.Any(), gomock.Any(), "test", "level3-component", "cidr_block", gomock.Any(), gomock.Any(), gomock.Any()).
+		GetState(gomock.Any(), gomock.Any(), "test", "level3-component", "cidr_block", gomock.Any(), gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return("10.0.3.0/24", nil).
 		AnyTimes()
 
 	// Level 2 components depend on level 3.
 	mockStateGetter.EXPECT().
-		GetState(gomock.Any(), gomock.Any(), "test", "level2-component", "vpc_id", gomock.Any(), gomock.Any(), gomock.Any()).
+		GetState(gomock.Any(), gomock.Any(), "test", "level2-component", "vpc_id", gomock.Any(), gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return("vpc-level2-67890", nil).
 		AnyTimes()
 	mockStateGetter.EXPECT().
-		GetState(gomock.Any(), gomock.Any(), "test", "level2-component", "level3_subnet_id", gomock.Any(), gomock.Any(), gomock.Any()).
+		GetState(gomock.Any(), gomock.Any(), "test", "level2-component", "level3_subnet_id", gomock.Any(), gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return("subnet-level3-12345", nil).
 		AnyTimes()
 
 	// Auth override scenario components test middle-level auth override.
 	mockStateGetter.EXPECT().
-		GetState(gomock.Any(), gomock.Any(), "test", "auth-override-level3", "database_host", gomock.Any(), gomock.Any(), gomock.Any()).
+		GetState(gomock.Any(), gomock.Any(), "test", "auth-override-level3", "database_host", gomock.Any(), gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return("db.example.com", nil).
 		AnyTimes()
 	mockStateGetter.EXPECT().
-		GetState(gomock.Any(), gomock.Any(), "test", "auth-override-level2", "service_name", gomock.Any(), gomock.Any(), gomock.Any()).
+		GetState(gomock.Any(), gomock.Any(), "test", "auth-override-level2", "service_name", gomock.Any(), gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return("api-service", nil).
 		AnyTimes()
 	mockStateGetter.EXPECT().
-		GetState(gomock.Any(), gomock.Any(), "test", "auth-override-level2", "database_config", gomock.Any(), gomock.Any(), gomock.Any()).
+		GetState(gomock.Any(), gomock.Any(), "test", "auth-override-level2", "database_config", gomock.Any(), gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return("db.example.com", nil).
 		AnyTimes()
 
 	// Multi-auth scenario components test multiple auth overrides in chain.
 	mockStateGetter.EXPECT().
-		GetState(gomock.Any(), gomock.Any(), "test", "multi-auth-level3", "shared_resource_id", gomock.Any(), gomock.Any(), gomock.Any()).
+		GetState(gomock.Any(), gomock.Any(), "test", "multi-auth-level3", "shared_resource_id", gomock.Any(), gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return("shared-12345", nil).
 		AnyTimes()
 	mockStateGetter.EXPECT().
-		GetState(gomock.Any(), gomock.Any(), "test", "multi-auth-level2", "vpc_id", gomock.Any(), gomock.Any(), gomock.Any()).
+		GetState(gomock.Any(), gomock.Any(), "test", "multi-auth-level2", "vpc_id", gomock.Any(), gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return("vpc-account-b", nil).
 		AnyTimes()
 	mockStateGetter.EXPECT().
-		GetState(gomock.Any(), gomock.Any(), "test", "multi-auth-level2", "shared_resource", gomock.Any(), gomock.Any(), gomock.Any()).
+		GetState(gomock.Any(), gomock.Any(), "test", "multi-auth-level2", "shared_resource", gomock.Any(), gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return("shared-12345", nil).
 		AnyTimes()
 
 	// Mixed inheritance scenario components test selective auth override.
 	mockStateGetter.EXPECT().
-		GetState(gomock.Any(), gomock.Any(), "test", "mixed-inherit-component", "config_value", gomock.Any(), gomock.Any(), gomock.Any()).
+		GetState(gomock.Any(), gomock.Any(), "test", "mixed-inherit-component", "config_value", gomock.Any(), gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return("inherited-auth-config", nil).
 		AnyTimes()
 	mockStateGetter.EXPECT().
-		GetState(gomock.Any(), gomock.Any(), "test", "mixed-override-component", "override_value", gomock.Any(), gomock.Any(), gomock.Any()).
+		GetState(gomock.Any(), gomock.Any(), "test", "mixed-override-component", "override_value", gomock.Any(), gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return("override-specific-value", nil).
 		AnyTimes()
 
 	// Deep nesting scenario components test 4-level deep auth override.
 	mockStateGetter.EXPECT().
-		GetState(gomock.Any(), gomock.Any(), "test", "deep-level4", "data_source", gomock.Any(), gomock.Any(), gomock.Any()).
+		GetState(gomock.Any(), gomock.Any(), "test", "deep-level4", "data_source", gomock.Any(), gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return("primary-db", nil).
 		AnyTimes()
 	mockStateGetter.EXPECT().
-		GetState(gomock.Any(), gomock.Any(), "test", "deep-level3", "data_ref", gomock.Any(), gomock.Any(), gomock.Any()).
+		GetState(gomock.Any(), gomock.Any(), "test", "deep-level3", "data_ref", gomock.Any(), gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return("primary-db", nil).
 		AnyTimes()
 	mockStateGetter.EXPECT().
-		GetState(gomock.Any(), gomock.Any(), "test", "deep-level2", "nested_data", gomock.Any(), gomock.Any(), gomock.Any()).
+		GetState(gomock.Any(), gomock.Any(), "test", "deep-level2", "nested_data", gomock.Any(), gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return("primary-db", nil).
 		AnyTimes()
 

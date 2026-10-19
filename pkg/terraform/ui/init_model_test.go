@@ -320,6 +320,24 @@ func TestInitModel_View_Done_Error(t *testing.T) {
 	assert.Contains(t, view, "2.0s")
 }
 
+func TestInitModel_View_Done_ProvidersLock(t *testing.T) {
+	t.Parallel()
+
+	clock := newTestClock()
+	reader := strings.NewReader("")
+	m := NewInitModel("myapp", "dev", "providers-lock", reader, WithInitClock(clock))
+	m.done = true
+
+	clock.advance(2 * time.Second)
+
+	view := m.View()
+
+	assert.Contains(t, view, "Provider lock")
+	assert.Contains(t, view, "dev/myapp")
+	assert.Contains(t, view, "completed")
+	assert.Contains(t, view, "2.0s")
+}
+
 func TestInitModel_View_Done_Workspace(t *testing.T) {
 	t.Parallel()
 
@@ -350,6 +368,7 @@ func TestInitModel_FormatAction(t *testing.T) {
 		expected   string
 	}{
 		{"init command", "init", "", "Init"},
+		{"providers-lock command", "providers-lock", "", "Provider lock"},
 		{"workspace with name", "workspace", "dev", "Selected `dev` workspace for"},
 		{"workspace without name", "workspace", "", "Selected workspace for"},
 		{"custom command", "custom", "", "Custom"},

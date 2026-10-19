@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 )
 
 // Sentinel errors for exec step validation.
@@ -57,7 +56,7 @@ func ValidateExecTasks(tasks Tasks) error {
 			tty:         task.Tty,
 			interactive: task.Interactive,
 			hasRetry:    task.Retry != nil,
-			hasTimeout:  task.Timeout != time.Duration(0),
+			hasTimeout:  strings.TrimSpace(task.Timeout) != "",
 			output:      task.Output,
 		})
 		scriptViews = append(scriptViews, scriptStepView{
@@ -109,6 +108,9 @@ const containerStepType = "container"
 
 // ValidateWorkflowSteps validates top-level workflow steps and any control-step children.
 func ValidateWorkflowSteps(steps []WorkflowStep) error {
+	if err := validateStepOutputModes(steps); err != nil {
+		return err
+	}
 	if err := ValidateExecWorkflowSteps(steps); err != nil {
 		return err
 	}
@@ -291,6 +293,12 @@ func validateControlStepList(steps []WorkflowStep, inConcurrentGroup bool, paren
 		}
 		if len(step.Needs) > 0 {
 			return fmt.Errorf("%w: %s sets needs outside a concurrent control step", ErrWorkflowControlStepInvalid, workflowStepLabel(step, i))
+		}
+		if stepType == TaskTypeTest {
+			if err := ValidateTestStep(step); err != nil {
+				return err
+			}
+			continue
 		}
 		if !isWorkflowControlStep(stepType) {
 			continue

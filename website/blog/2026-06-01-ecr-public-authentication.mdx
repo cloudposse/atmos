@@ -57,7 +57,7 @@ $ atmos aws ecr login --public --identity plat-dev/terraform
 ✓ ECR Public login: public.ecr.aws (expires in 12h)
 ```
 
-Once you're logged in, pull images directly — no `atmos auth exec` wrapper needed:
+Once you're logged in, pull images directly — no [`atmos auth exec`](/cli/commands/auth/exec) wrapper needed:
 
 ```bash
 $ docker pull public.ecr.aws/docker/library/alpine:latest

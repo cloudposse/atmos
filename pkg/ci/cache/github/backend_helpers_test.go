@@ -7,7 +7,66 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/ci/cache"
+	"github.com/cloudposse/atmos/pkg/git"
+	ghtoken "github.com/cloudposse/atmos/pkg/github"
 )
+
+// TestRepoHostMatchesConfiguredGitHub pins CodeRabbit thread PRRT_kwDOEW4XoM6h7p3C: a
+// GHES host configured on a non-default port (e.g. "ghe.example.com:8443") must still be
+// recognized for an SCP-style remote ("[user@]host:path"), even though SCP syntax can never
+// carry a port and so info.RepoHost is always portless for it. URL-style remotes keep matching
+// via the port-aware ghtoken.Endpoints.IsHost.
+func TestRepoHostMatchesConfiguredGitHub(t *testing.T) {
+	tests := []struct {
+		name       string
+		serverURL  string
+		info       git.RepoInfo
+		wantResult bool
+	}{
+		{
+			name:      "SCP-style remote matches GHES host on non-default port",
+			serverURL: "https://ghe.example.com:8443",
+			info: git.RepoInfo{
+				RepoUrl:  "git@ghe.example.com:org/repo.git",
+				RepoHost: "ghe.example.com",
+			},
+			wantResult: true,
+		},
+		{
+			name:      "SCP-style remote for an unrelated host is rejected",
+			serverURL: "https://ghe.example.com:8443",
+			info: git.RepoInfo{
+				RepoUrl:  "git@some-other-host.com:org/repo.git",
+				RepoHost: "some-other-host.com",
+			},
+			wantResult: false,
+		},
+		{
+			name:      "URL-style remote matches GHES host on its configured port",
+			serverURL: "https://ghe.example.com:8443",
+			info: git.RepoInfo{
+				RepoUrl:  "https://ghe.example.com:8443/org/repo.git",
+				RepoHost: "ghe.example.com:8443",
+			},
+			wantResult: true,
+		},
+		{
+			name:      "URL-style remote on a mismatched port is rejected",
+			serverURL: "https://ghe.example.com:8443",
+			info: git.RepoInfo{
+				RepoUrl:  "https://ghe.example.com:9999/org/repo.git",
+				RepoHost: "ghe.example.com:9999",
+			},
+			wantResult: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GITHUB_SERVER_URL", tt.serverURL)
+			assert.Equal(t, tt.wantResult, repoHostMatchesConfiguredGitHub(&tt.info))
+		})
+	}
+}
 
 func TestParseNextPage(t *testing.T) {
 	tests := []struct {
@@ -131,13 +190,20 @@ func TestResolveOwnerRepo(t *testing.T) {
 }
 
 func TestNewRESTClient(t *testing.T) {
-	// Empty token returns a plain client.
-	plain := newRESTClient("")
+	endpoints := ghtoken.Endpoints{
+		ServerURL: "https://github.example.com",
+		APIURL:    "https://github.example.com",
+		Host:      "github.example.com",
+	}
+
+	// Empty token still returns a usable client, scoped to endpoints.
+	plain := newRESTClient("", endpoints)
 	require.NotNil(t, plain)
 	assert.Equal(t, httpTimeout, plain.Timeout)
+	assert.NotNil(t, plain.Transport)
 
-	// A token returns an oauth2-wrapped client (non-nil transport).
-	withToken := newRESTClient("tok")
+	// A token returns a scoped-token client (non-nil transport).
+	withToken := newRESTClient("tok", endpoints)
 	require.NotNil(t, withToken)
 	assert.Equal(t, httpTimeout, withToken.Timeout)
 	assert.NotNil(t, withToken.Transport)

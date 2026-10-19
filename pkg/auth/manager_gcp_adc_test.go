@@ -9,7 +9,6 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/realm"
-	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -550,7 +549,7 @@ func TestManager_GCP_ADC_WhoamiIdentityResolution(t *testing.T) {
 	require.NoError(t, err)
 
 	// Whoami with non-existent identity should fail.
-	ctx := types.WithSuppressAuthErrors(context.Background(), true)
+	ctx := context.Background()
 	_, err = m.Whoami(ctx, "non-existent")
 	require.Error(t, err)
 }

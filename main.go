@@ -31,6 +31,7 @@ func main() {
 			signals.RunExitCleanups()
 			// Clean up resources before exit.
 			cmd.Cleanup()
+			errUtils.CloseSentry()
 			// Exit with correct POSIX exit code (128 + signal number).
 			// Use errUtils.OsExit to allow test interception (Go 1.25+ panics on os.Exit in tests).
 			if s, ok := sig.(syscall.Signal); ok {
@@ -58,6 +59,8 @@ func run() (exitCode int) {
 	// panic handler must be deferred BEFORE cmd.Cleanup so Go unwinds
 	// defers in LIFO order — Cleanup runs first, then Recover catches
 	// anything that escapes either Cleanup or the main call chain.
+	// Flush after recovery so the panic event is included.
+	defer errUtils.CloseSentry()
 	defer panics.Recover(&exitCode)
 
 	// Ensure cleanup happens on normal exit.

@@ -4,12 +4,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/bubbles/progress"
-	bspinner "github.com/charmbracelet/bubbles/spinner"
-
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/ui/batch"
 )
 
 // batchLineStyle selects which themed ui.* function renders a completed batch item's line.
@@ -43,79 +40,42 @@ func (s batchLineStyle) print(line string) {
 // live concurrent progress), generalized to a plain string label instead of toolInfo since
 // callers here don't need per-byte download progress.
 type liveBatchRenderer struct {
-	spinner       bspinner.Model
-	progressBar   progress.Model
-	active        []string
-	completed     int
-	total         int
-	renderedLines int
+	display   *batch.Renderer
+	active    []string
+	ids       []int
+	completed int
 }
 
+// newLiveBatchRenderer creates a themed progress display for a batch of tool operations.
 func newLiveBatchRenderer(total int) *liveBatchRenderer {
-	spinner := bspinner.New()
-	spinner.Spinner = bspinner.Dot
-	spinner.Style = theme.GetCurrentStyles().Spinner
-	return &liveBatchRenderer{
-		spinner:     spinner,
-		progressBar: progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor())),
-		total:       total,
-	}
+	return &liveBatchRenderer{display: batch.New(total, true, batch.WithToolchainStyle())}
 }
 
 func (r *liveBatchRenderer) start(label string) {
-	r.clear()
+	id := r.completed + len(r.active)
 	r.active = append(r.active, label)
-	r.render()
+	r.ids = append(r.ids, id)
+	r.display.Update(&batch.Event{ID: id, Label: label})
 }
 
 func (r *liveBatchRenderer) complete(label, line string, style batchLineStyle) {
-	r.clear()
 	for i, active := range r.active {
 		if active == label {
+			id := r.ids[i]
 			r.active = append(r.active[:i], r.active[i+1:]...)
-			break
+			r.ids = append(r.ids[:i], r.ids[i+1:]...)
+			r.completed++
+			r.display.Complete(id, func() { style.print(line) })
+			return
 		}
 	}
 	r.completed++
-	style.print(line)
-	r.render()
+	r.display.Complete(r.completed+len(r.active)-1, func() { style.print(line) })
 }
 
-func (r *liveBatchRenderer) tick() {
-	r.clear()
-	updated, _ := r.spinner.Update(bspinner.TickMsg{})
-	r.spinner = updated
-	r.render()
-}
-
-func (r *liveBatchRenderer) clear() {
-	if r.renderedLines == 0 {
-		return
-	}
-	ui.Writef("\033[%dA", r.renderedLines)
-	for i := 0; i < r.renderedLines; i++ {
-		ui.Write("\r\033[K")
-		if i < r.renderedLines-1 {
-			ui.Write("\n")
-		}
-	}
-	if r.renderedLines > 1 {
-		ui.Writef("\033[%dA", r.renderedLines-1)
-	}
-	r.renderedLines = 0
-}
-
-func (r *liveBatchRenderer) render() {
-	for _, label := range r.active {
-		ui.Writef("%s %s\n", r.spinner.View(), label)
-		r.renderedLines++
-	}
-	if len(r.active) > 0 {
-		percent := float64(r.completed) / float64(r.total)
-		ui.Writef("%s %d/%d complete, %d running\n", r.progressBar.ViewAs(percent), r.completed, r.total, len(r.active))
-		r.renderedLines++
-	}
-}
+func (r *liveBatchRenderer) tick()   { r.display.Tick() }
+func (r *liveBatchRenderer) clear()  { r.display.Clear() }
+func (r *liveBatchRenderer) render() { r.display.Tick() }
 
 // liveBatchDisplay wraps liveBatchRenderer with a non-TTY/debug-log fallback, matching
 // install.go's batchDisplay: outside a real terminal (or with debug logging enabled, which would

@@ -32,7 +32,7 @@ func BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndSt
 	case configAndStacksInfo.StackManifestName != "":
 		contextPrefix = configAndStacksInfo.StackManifestName
 	case atmosConfig.Stacks.NameTemplate != "":
-		tmpl, err = ProcessTmpl(atmosConfig, "terraform-workspace-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
+		tmpl, err = processStackNameTemplate(atmosConfig, configAndStacksInfo.Stack, atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 		if err != nil {
 			return "", err
 		}
@@ -205,7 +205,13 @@ func BuildComponentPath(
 		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, componentFolder)
 	case cfg.PackerComponentType:
 		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, componentFolder)
+	case cfg.AnsibleComponentType:
+		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Ansible.BasePath, componentFolder)
+	case cfg.ContainerComponentType:
+		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Container.BasePath, componentFolder)
 	default:
+		// Emulator components (and any type with no filesystem source tree) have no component
+		// path. See getComponentBasePath in describe_stacks.go.
 		return ""
 	}
 }

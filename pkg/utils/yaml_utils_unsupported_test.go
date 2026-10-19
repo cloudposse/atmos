@@ -248,6 +248,8 @@ func TestAllSupportedYamlTagsList(t *testing.T) {
 	// Note: The registry has more tags than originally supported in yaml_utils.go.
 	// This test verifies all the originally expected tags are present.
 	expectedTags := []string{
+		"!ci.labels",
+		"!starlark",
 		"!exec",
 		"!secret",
 		"!store",
@@ -279,6 +281,7 @@ func TestAllSupportedYamlTagsList(t *testing.T) {
 		"!aws.caller_identity_user_id",
 		"!aws.region",
 		"!aws.organization_id",
+		"!aws.cloudformation.output",
 		"!emulator",
 		"!version",
 		"!tags",

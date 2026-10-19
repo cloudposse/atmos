@@ -366,6 +366,46 @@ func TestResolveComponentAuthManager_ResolverErrorDegradesInWarnMode(t *testing.
 	assert.Contains(t, warnings[0].Reason, assert.AnError.Error())
 }
 
+// TestResolveComponentAuthManager_ResolverErrorFatalUnderStrictAuth is the regression guard
+// for the Terraform --all/--query preflight: withDegradation alone (used by list/describe
+// --error-mode=warn) falls back to the parent AuthManager on a resolver error, but chaining
+// withStrictAuth (DescribeStacksErrorOptions.StrictAuth) must keep that same error fatal even
+// though YAML-function values still degrade -- otherwise the preflight silently proceeds with
+// the wrong (inherited) credentials instead of reporting the real "can't resolve this
+// component's own identity" failure (e.g. its local emulator isn't running).
+func TestResolveComponentAuthManager_ResolverErrorFatalUnderStrictAuth(t *testing.T) {
+	t.Parallel()
+
+	parentMgr := auth.AuthManager(nil)
+	spy := &componentAuthResolverSpy{
+		returnMgr: nil,
+		returnErr: assert.AnError,
+	}
+
+	var warnings []DegradationWarning
+	p := &describeStacksProcessor{
+		atmosConfig:           &schema.AtmosConfiguration{},
+		processTemplates:      true,
+		processYamlFunctions:  false,
+		authManager:           parentMgr,
+		componentAuthResolver: spy.resolver(),
+		finalStacksMap:        make(map[string]any),
+	}
+	p.withDegradation(func(w DegradationWarning) { warnings = append(warnings, w) })
+	p.withStrictAuth()
+
+	got, err := p.resolveComponentAuthManager(
+		componentSectionWithAuth(authSectionWithDefault()),
+		"test-component",
+		"test-stack",
+	)
+
+	require.Error(t, err, "StrictAuth must keep a component's own auth-manager failure fatal")
+	assert.ErrorIs(t, err, errUtils.ErrAuthManager)
+	assert.Nil(t, got)
+	assert.Empty(t, warnings, "a fatal error must not also report a degradation warning")
+}
+
 func TestProcessComponentEntry_ComponentAuthResolverErrorIsFatal(t *testing.T) {
 	t.Parallel()
 

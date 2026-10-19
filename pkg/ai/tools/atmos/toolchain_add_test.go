@@ -57,10 +57,23 @@ func setupToolchainTestFile(t *testing.T) string {
 	t.Helper()
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, toolchain.DefaultToolVersionsFilePath)
+	previousConfig := toolchain.GetAtmosConfig()
 	toolchain.SetAtmosConfig(&schema.AtmosConfiguration{
-		Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
+		Toolchain: schema.Toolchain{
+			VersionsFile: toolVersionsFile,
+			// These tests exercise version-file writes, not public registry discovery.
+			Aliases: map[string]string{"terraform": "hashicorp/terraform"},
+			Registries: []schema.ToolchainRegistry{{
+				Name: "test", Type: "atmos",
+				Tools: map[string]any{
+					"hashicorp/terraform": map[string]any{
+						"type": "http", "url": "https://example.invalid/terraform", "format": "raw",
+					},
+				},
+			}},
+		},
 	})
-	t.Cleanup(func() { toolchain.SetAtmosConfig(nil) })
+	t.Cleanup(func() { toolchain.SetAtmosConfig(previousConfig) })
 	return toolVersionsFile
 }
 

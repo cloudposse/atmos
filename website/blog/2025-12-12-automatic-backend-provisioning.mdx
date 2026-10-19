@@ -4,9 +4,11 @@ title: "Solving the Terraform Bootstrap Problem with Automatic Backend Provision
 date: 2025-12-12T12:00:00.000Z
 authors: [osterman]
 tags: [feature, dx]
+cast: "/casts/examples/backend-provisioning/lifecycle.cast"
+castTitle: "atmos terraform backend lifecycle"
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
 We're excited to introduce **automatic backend provisioning** in Atmos, a feature that solves the Terraform bootstrap problem. No more manual S3 bucket creation, no more chicken-and-egg workarounds—Atmos provisions your state backend automatically with secure defaults, making it fully compatible with Terraform-managed infrastructure.
 
@@ -43,7 +45,7 @@ components:
           enabled: true  # That's it!
 ```
 
-When you run `atmos terraform plan vpc -s dev`, Atmos:
+When you run [`atmos terraform plan vpc -s dev`](/cli/commands/terraform/plan), Atmos:
 
 1. **Checks** if the backend exists
 2. **Provisions** it if needed (with secure defaults)
@@ -141,7 +143,7 @@ The provisioner automatically assumes the role to create the bucket in the targe
 
 ## CLI Command
 
-For manual provisioning or CI/CD pipelines, use the `atmos terraform backend` command:
+For manual provisioning or CI/CD pipelines, use the [`atmos terraform backend`](/cli/commands/terraform/terraform-backend) command:
 
 ```bash
 # Provision backend explicitly
@@ -157,7 +159,7 @@ Provisioning failures return non-zero exit codes, ensuring CI/CD pipelines fail 
 
 Here's the full `create` / `update` / `delete` lifecycle running end-to-end against a local sandbox — no AWS account required:
 
-<CastPlayer src="/casts/examples/backend-provisioning/lifecycle.cast" title="atmos terraform backend lifecycle" chrome controls scrubber />
+<CastEmbed src="/casts/examples/backend-provisioning/lifecycle.cast" title="atmos terraform backend lifecycle" chrome controls scrubber />
 
 [View the full example](/examples/backend-provisioning)
 
@@ -215,3 +217,5 @@ We'd love to hear how you're using automatic backend provisioning! Share your ex
 ---
 
 **Try it today** and simplify your Terraform state management workflow!
+
+For usage and configuration, see [Backend Provisioning](/stacks/components/provision/backend).

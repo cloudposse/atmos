@@ -7,7 +7,7 @@ date: 2026-07-04T12:00:00.000Z
 ---
 
 Atmos container builds and pushes now write rich image summaries directly to the CI job summary when
-native CI is enabled. Use `type: container` workflow steps or `atmos container build/push` component
+native CI is enabled. Use `type: container` workflow steps or [`atmos container build/push`](/cli/commands/container/usage) component
 commands and GitHub Actions gets a readable image report without adding a separate Docker summary
 action.
 
@@ -31,3 +31,5 @@ summary entirely.
 
 This keeps native Atmos container pipelines self-contained: build, push, and review the image metadata
 from the same workflow or component command you already run locally.
+
+For usage and configuration, see [CI Job Summaries](/cli/configuration/ci/summary).

@@ -76,3 +76,5 @@ For the complete list of changes, see the [GitHub release notes](https://github.
 ---
 
 Have questions or feedback? Join us on [Slack](https://slack.cloudposse.com/) or open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).
+
+For usage and configuration, see [Terminal Settings](/cli/configuration/settings/terminal).

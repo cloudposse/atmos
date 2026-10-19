@@ -1,38 +1,52 @@
-import React from 'react';
-import OriginalDocSidebarItem from '@theme-original/DocSidebarItem';
-import type DocSidebarItemType from '@theme/DocSidebarItem';
-import type { WrapperProps } from '@docusaurus/types';
-import { isExperimentalRoute } from '@site/src/data/experimentalRoutes';
-import ExperimentalDot from '@site/src/components/ExperimentalDot';
+import React from "react";
+import OriginalDocSidebarItem from "@theme-original/DocSidebarItem";
+import type DocSidebarItemType from "@theme/DocSidebarItem";
+import type { WrapperProps } from "@docusaurus/types";
+import { experimentalRoutes } from "@site/src/data/experimentalRoutes";
+import { getFeatureStatus } from "@site/src/data/featureStatus.mjs";
+import RouteStatusDot from "@site/src/components/FeatureStatusDot/RouteStatusDot";
+
+import { useNavigationContext } from "@site/src/components/SidebarNavigator/context";
+import {
+  activeEntryPath,
+  entryId,
+} from "@site/src/components/SidebarNavigator/state.mjs";
+import Category from "@site/src/components/SidebarNavigator/Category";
+import { sidebarActivePath } from "@site/src/components/SidebarNavigator/canonical.mjs";
 
 type Props = WrapperProps<typeof DocSidebarItemType>;
 
-/**
- * Wraps the default sidebar item to mark experimental features with a discrete
- * yellow dot trailing the label. Experimental status is derived from the roadmap
- * (the single source of truth), so no per-doc frontmatter is required.
- *
- * The dot is injected into the item label (rather than via CSS) so it can carry a
- * fast, styled React tooltip that reads "experimental" on hover. Injecting via the
- * label works for both `link` items and doc-linked categories without ejecting the
- * upstream components.
- */
+/** Decorate both doc links and linked categories without changing their text labels. */
 export default function DocSidebarItemWrapper(props: Props): JSX.Element {
+  const navigation = useNavigationContext();
+  const activePath = navigation
+    ? activeEntryPath(props.item, props.activePath, navigation.entry)
+    : sidebarActivePath(props.item, props.activePath);
   const item = props.item as { href?: string; label?: React.ReactNode };
   // `href` is the permalink for `link` items and for categories linked to a doc.
   const href = item?.href;
 
-  if (isExperimentalRoute(href) && item.label != null) {
-    const label = (
-      <>
-        {item.label}
-        <ExperimentalDot />
-      </>
-    );
-    return (
-      <OriginalDocSidebarItem {...props} item={{ ...props.item, label } as Props['item']} />
-    );
+  const decorated =
+    getFeatureStatus(href, experimentalRoutes) && item.label != null
+      ? ({
+          ...props.item,
+          label: (
+            <>
+              {item.label}
+              <RouteStatusDot href={href} />
+            </>
+          ),
+        } as Props["item"])
+      : props.item;
+  if (navigation && decorated.type === "category") {
+    return <Category {...props} item={decorated} activePath={activePath} />;
   }
-
-  return <OriginalDocSidebarItem {...props} />;
+  return (
+    <OriginalDocSidebarItem
+      {...props}
+      item={decorated}
+      activePath={activePath}
+      data-navigation-id={entryId(props.item)}
+    />
+  );
 }

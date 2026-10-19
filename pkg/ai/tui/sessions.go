@@ -209,23 +209,23 @@ func (m *ChatModel) renderSessionListContent(content *strings.Builder, styles *s
 func (m *ChatModel) sessionListStyles() sessionListStyles {
 	return sessionListStyles{
 		title: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(theme.ColorCyan)).
+			Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 			Bold(true).
 			Padding(1, 2),
 		help: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
+			Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 			Padding(0, 2),
 		session: lipgloss.NewStyle().
 			Padding(0, 2),
 		selected: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(theme.ColorGreen)).
+			Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success)).
 			Bold(true).
 			Padding(0, 2),
 		error: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(theme.ColorRed)).
+			Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Error)).
 			Padding(0, 2),
 		warning: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(theme.ColorYellow)).
+			Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Warning)).
 			Bold(true).
 			Padding(0, 2),
 	}
@@ -306,6 +306,7 @@ func (m *ChatModel) renderFilteredSessionList(content *strings.Builder, styles *
 }
 
 // getProviderBadge returns the badge and color for a provider.
+// Provider identity colors are a stable palette, independent of semantic status colors.
 func (m *ChatModel) getProviderBadge(provider string) (string, string) {
 	switch provider {
 	case "anthropic":

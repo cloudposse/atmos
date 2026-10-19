@@ -113,7 +113,7 @@ func renderListTable(configs map[string]*Config, runningNames map[string]bool, r
 		// Determine status indicator.
 		indicator := " "
 		if runningNames[name] {
-			indicator = theme.Styles.NewVersion.Render("●") // Green dot for running.
+			indicator = theme.GetCurrentStyles().NewVersion.Render("●") // Green dot for running.
 		}
 
 		// Get image name.

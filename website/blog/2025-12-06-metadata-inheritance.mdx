@@ -81,7 +81,7 @@ vpc/secondary:
 Want to upgrade to `vpc/v3`? Change it once in `vpc/defaults`, and all instances inherit the new version automatically.
 
 Two fields are excluded from inheritance:
-- `metadata.inherits` - defines the inheritance relationship itself
+- [`metadata.inherits`](/stacks/components/component-metadata#inherits) - defines the inheritance relationship itself
 - `metadata.type` - component type is per-component (e.g., `abstract` shouldn't propagate to derived components)
 
 ## Configuration

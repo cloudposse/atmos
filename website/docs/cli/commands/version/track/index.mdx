@@ -5,13 +5,15 @@ sidebar_label: usage
 sidebar_class_name: command
 id: index
 slug: /cli/commands/version/track
-description: Manage tracked software versions with the Atmos Version Tracker.
+description: "Keep dependency versions consistent across GitHub Actions workflows, container references, and other project files."
 ---
 
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Use `atmos version track` (alias: `tracks`) to manage software versions declared under `version:` in `atmos.yaml`, resolved into `versions.lock.yaml`, and applied to project files by the file managers.
+Keep dependency versions consistent across GitHub Actions workflows, container references, and other
+project files. Declare the versions and update policies centrally, then lock, review, and apply
+updates through Atmos.
 </Intro>
 
 The top-level `atmos version` command reports and manages the Atmos CLI itself. `atmos version track` manages software versions whether Atmos installs and runs the software locally through Toolchain, or only tracks, locks, and renders the version into files such as GitHub Actions workflows, container image references, templates, and configuration.

@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 func (m *model) renderVisualization() string {
@@ -23,13 +24,14 @@ func (m *model) renderVisualization() string {
 	}
 }
 
+// renderBarChart displays the highest-cost functions as bars using the frozen performance snapshot.
 func (m *model) renderBarChart() string {
 	// Use the frozen snapshot captured at TUI start, limited to top functions for visual display.
 	snap := m.getLimitedSnapshot()
 
 	if len(snap.Rows) == 0 {
-		return heatMapStyle.Render(lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
+		return theme.GetCurrentStyles().Border.Padding(1, 2).Render(lipgloss.NewStyle().
+			Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 			Render("No performance data available"))
 	}
 
@@ -37,11 +39,11 @@ func (m *model) renderBarChart() string {
 
 	title := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("205")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Primary)).
 		Render("🔥 Performance Heatmap - Bar Chart")
 
 	content := lipgloss.JoinVertical(lipgloss.Left, append([]string{title, ""}, bars...)...)
-	return heatMapStyle.Render(content)
+	return theme.GetCurrentStyles().Border.Padding(1, 2).Render(content)
 }
 
 // getBarColorGradient returns a color gradient from red (slowest/top) to green (fastest/bottom).
@@ -67,6 +69,7 @@ func getColorForPosition(position, totalItems int, colors []lipgloss.Color) lipg
 	return colors[colorIndex]
 }
 
+// renderBarsFromPerf scales function bars against the largest total duration in the snapshot.
 func (m *model) renderBarsFromPerf(snap perf.Snapshot) []string {
 	var bars []string
 
@@ -107,7 +110,7 @@ func (m *model) renderBarsFromPerf(snap perf.Snapshot) []string {
 
 		// Show average per call (more intuitive) with call count.
 		value := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241")).
+			Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 			Render(fmt.Sprintf(horizontalSpace+"avg: %s | calls: %d", FormatDuration(r.Avg), r.Count))
 
 		bars = append(bars, lipgloss.JoinHorizontal(lipgloss.Left, label, horizontalSpace, coloredBar, value))
@@ -126,42 +129,45 @@ func (m *model) findMaxTotal(rows []perf.Row) time.Duration {
 	return maxTotal
 }
 
+// renderTableHeatMap wraps the performance table in the current theme's title and border styles.
 func (m *model) renderTableHeatMap() string {
 	// Return the actual performance table view instead of mock data.
 	title := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("205")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Primary)).
 		Render("🔥 Performance Heatmap - Table View")
 
 	// Use the table that's already configured with real perf data.
 	tableView := m.table.View()
 
 	content := lipgloss.JoinVertical(lipgloss.Left, title, "", tableView)
-	return heatMapStyle.Render(content)
+	return theme.GetCurrentStyles().Border.Padding(1, 2).Render(content)
 }
 
+// renderSparklines displays compact function timings from the frozen performance snapshot.
 func (m *model) renderSparklines() string {
 	// Use the frozen snapshot captured at TUI start, limited to top functions for visual display.
 	snap := m.getLimitedSnapshot()
 
 	if len(snap.Rows) == 0 {
-		return heatMapStyle.Render(lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
+		return theme.GetCurrentStyles().Border.Padding(1, 2).Render(lipgloss.NewStyle().
+			Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 			Render("No performance data available"))
 	}
 
 	title := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("205")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Primary)).
 		Render("🔥 Performance Heatmap - Sparklines")
 
 	sparklines := m.renderSparklinesFromPerf(snap)
 
 	lines := append([]string{title, ""}, sparklines...)
 	content := strings.Join(lines, "\n")
-	return heatMapStyle.Render(content)
+	return theme.GetCurrentStyles().Border.Padding(1, 2).Render(content)
 }
 
+// renderSparklinesFromPerf scales function sparklines against the largest average duration in the snapshot.
 func (m *model) renderSparklinesFromPerf(snap perf.Snapshot) []string {
 	var lines []string
 
@@ -208,12 +214,12 @@ func (m *model) renderSparklinesFromPerf(snap perf.Snapshot) []string {
 			Render(funcName)
 
 		spark := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("39")).
+			Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 			Render(sparkLine)
 
 		// Show average per call with call count for consistency with bar chart.
 		stats := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241")).
+			Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 			Render(fmt.Sprintf(horizontalSpace+"avg: %s | calls: %d", FormatDuration(r.Avg), r.Count))
 
 		lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, label, horizontalSpace, spark, stats))

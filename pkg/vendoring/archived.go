@@ -66,11 +66,15 @@ func (c *githubArchivedChecker) IsArchived(ctx context.Context, gitURI string) (
 // result for the component. This is intentionally additive-only — it must never turn into a
 // StatusFailed for the source.
 func checkArchived(src *schema.AtmosVendorSource, checker ArchivedChecker) bool {
+	return checkArchivedContext(context.Background(), src, checker)
+}
+
+func checkArchivedContext(parent context.Context, src *schema.AtmosVendorSource, checker ArchivedChecker) bool {
 	if checker == nil {
 		checker = DefaultArchivedChecker
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), archivedCheckTimeout)
+	ctx, cancel := context.WithTimeout(parent, archivedCheckTimeout)
 	defer cancel()
 
 	gitURI := version.ExtractGitURI(src.Source)

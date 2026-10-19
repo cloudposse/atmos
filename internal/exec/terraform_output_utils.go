@@ -149,7 +149,7 @@ func (a *authContextWrapper) EnsureIdentityEnvironment(ctx context.Context, iden
 	panic("authContextWrapper.EnsureIdentityEnvironment should not be called")
 }
 
-func (a *authContextWrapper) ExecuteIntegration(ctx context.Context, integrationName string) error {
+func (a *authContextWrapper) ExecuteIntegration(ctx context.Context, integrationName string, opts ...auth_types.IntegrationOption) error {
 	defer perf.Track(nil, "exec.authContextWrapper.ExecuteIntegration")()
 
 	panic("authContextWrapper.ExecuteIntegration should not be called")
@@ -219,4 +219,20 @@ func newAuthContextWrapper(authContext *schema.AuthContext) *authContextWrapper 
 			AuthContext: authContext,
 		},
 	}
+}
+
+// propagateAuthDisabledManager returns authManager unchanged unless it is nil and
+// stackInfo.AuthDisabled is set, in which case it wraps stackInfo so downstream nested-auth
+// resolution (resolveNestedOutputAuth, used by both !terraform.output and
+// !aws.cloudformation.output) can see AuthDisabled via GetStackInfo() and skip resolving the
+// target component's own default identity. Without this, a nil authManager combined with
+// AuthDisabled would silently let the target component's own auth section override the
+// enclosing component's explicit opt-out.
+func propagateAuthDisabledManager(authManager any, stackInfo *schema.ConfigAndStacksInfo) any {
+	defer perf.Track(nil, "exec.propagateAuthDisabledManager")()
+
+	if authManager == nil && stackInfo != nil && stackInfo.AuthDisabled {
+		return &authContextWrapper{stackInfo: stackInfo}
+	}
+	return authManager
 }

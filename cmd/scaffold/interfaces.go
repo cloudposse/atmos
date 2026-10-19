@@ -3,6 +3,7 @@ package scaffold
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 
 import (
+	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	generatorUI "github.com/cloudposse/atmos/pkg/generator/ui"
@@ -12,12 +13,31 @@ import (
 // command depends on, extracted so tests can substitute a mock instead of
 // driving the real interactive TUI (prompts, huh forms) end to end.
 type ScaffoldUI interface {
+	// SetMaxChanges sets the maximum percentage of changed lines allowed in a
+	// 3-way merge before --update fails instead of applying it. Note:
+	// engine.Processor.SetMaxChanges replaces the processor's merger wholesale,
+	// so callers must call SetMaxChanges before SetConflictStrategy/SetMergeDriver
+	// or those settings would be discarded.
+	SetMaxChanges(thresholdPercent int)
 	SetConflictStrategy(strategy merge.ConflictStrategy)
 	// SetMergeDriver selects the merger used by scaffold updates (YAML-aware
 	// auto-detection vs. forcing the line-oriented text merger).
 	SetMergeDriver(driver merge.Driver)
+	// SetRecreateDeleted controls whether --update recreates a file the user
+	// deleted but the template still generates (default false: the deletion
+	// is left in place).
+	SetRecreateDeleted(recreate bool)
 	SetDryRun(dryRun bool)
 	SetSkipHooks(skip func(string) bool)
+	// SetUpdateStrategy selects where --update's 3-way merge base comes from
+	// (engine.UpdateStrategyTracked, the default: the target's own git
+	// history; engine.UpdateStrategyRendered: a pristine template
+	// re-render, see SetRenderedBaseSource).
+	SetUpdateStrategy(strategy engine.UpdateStrategy)
+	// SetRenderedBaseSource supplies the pristine "old ref" template
+	// configuration and its originally-recorded answers that
+	// engine.UpdateStrategyRendered re-renders as the merge base.
+	SetRenderedBaseSource(cfg *templates.Configuration, values map[string]interface{})
 	PromptForTemplate(templateType string, templates interface{}) (string, error)
 	DisplayTemplateTable(header []string, rows [][]string)
 	ExecuteWithBaseRef(embedsConfig *templates.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}) error

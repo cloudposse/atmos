@@ -8,12 +8,16 @@ import {
   resolvePlaybackSpeed,
 } from "./playback.mjs";
 import { CURSOR_MARKER, replayTerminal } from "./terminal.mjs";
+import renderTerminalText from "./terminal-text";
+import useTerminalSize from "./use-terminal-size";
 
 type CastEvent = [number, string, string];
 
 type CastHeader = {
   command?: string;
   title?: string;
+  width?: number;
+  term?: { cols?: number };
 };
 
 type Props = {
@@ -42,6 +46,10 @@ type Props = {
    * instead of clipping to a 16:9 viewport. Used for docs screengrabs.
    */
   static?: boolean;
+  /** Suspend playback while preserving the loaded cast and current position. */
+  paused?: boolean;
+  /** Extra class name(s) merged onto the root element, e.g. to override the `thumbnail` width cap. */
+  className?: string;
 };
 
 export default function CastPlayer({
@@ -65,7 +73,10 @@ export default function CastPlayer({
   enterDelay = 0.5,
   exitDelay = 0.6,
   static: staticFrame = false,
+  paused = false,
+  className,
 }: Props) {
+  const [columns, setColumns] = useState(80);
   const [events, setEvents] = useState<CastEvent[]>([]);
   const [content, setContent] = useState("");
   const [playing, setPlaying] = useState(autoplay);
@@ -78,6 +89,7 @@ export default function CastPlayer({
   const screenRef = useRef<HTMLPreElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [shouldLoad, setShouldLoad] = useState(false);
+  useTerminalSize(screenRef, columns);
 
   // Defer fetching the cast until the player is near the viewport. Pages
   // like the examples gallery mount dozens of players at once; fetching
@@ -119,6 +131,14 @@ export default function CastPlayer({
           header: CastHeader;
           events: CastEvent[];
         };
+        const recordedColumns = header.term?.cols ?? header.width;
+        setColumns(
+          typeof recordedColumns === "number" &&
+            Number.isFinite(recordedColumns) &&
+            recordedColumns > 0
+            ? recordedColumns
+            : 80,
+        );
         const parsed = events.map<CastEvent>((event) => [
           event[0],
           event[1],
@@ -193,7 +213,7 @@ export default function CastPlayer({
   useEffect(() => {
     window.cancelAnimationFrame(animationFrame.current ?? 0);
     window.clearTimeout(loopTimer.current);
-    if (staticFrame || !playing || events.length === 0) return;
+    if (staticFrame || paused || !playing || events.length === 0) return;
 
     if (duration <= 0 || position >= duration) {
       handlePlaybackEnd(
@@ -210,8 +230,7 @@ export default function CastPlayer({
       return;
     }
 
-    const startedAt =
-      performance.now() - (position * 1000) / effectiveSpeed;
+    const startedAt = performance.now() - (position * 1000) / effectiveSpeed;
     const tick = (now: number) => {
       const nextPosition = Math.min(
         duration,
@@ -256,6 +275,7 @@ export default function CastPlayer({
     loop,
     loopDelay,
     staticFrame,
+    paused,
   ]);
 
   const togglePlayback = () => {
@@ -289,6 +309,7 @@ export default function CastPlayer({
     chrome ? styles.window : styles.plain,
     thumbnail ? styles.thumbnail : "",
     staticFrame ? styles.staticFrame : "",
+    className || "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -415,9 +436,22 @@ function renderAnsi(input: string) {
     segment.cursor ? (
       <span key={index} className={styles.cursor} aria-hidden="true" />
     ) : (
-      <span key={index} style={segment.style}>
-        {segment.text}
-      </span>
+      // Keep line breaks outside the background boxes so each box fills one row.
+      segment.text.split(/(\n)/).map((line, lineIndex) =>
+        line === "\n" ? line : line && (
+          <span
+            key={`${index}-${lineIndex}`}
+            className={
+              segment.style.backgroundColor
+                ? styles.terminalBackground
+                : undefined
+            }
+            style={segment.style}
+          >
+            {renderTerminalText(line)}
+          </span>
+        ),
+      )
     ),
   );
 }

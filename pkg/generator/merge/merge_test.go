@@ -1,8 +1,11 @@
 package merge
 
 import (
+	"errors"
 	"strings"
 	"testing"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestThreeWayMerger_AutoDetection(t *testing.T) {
@@ -291,6 +294,61 @@ func TestParseConflictStrategy(t *testing.T) {
 				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestResolveConflictStrategy covers --force's interaction with
+// --merge-strategy under --update: an unset strategy defaults to theirs
+// under --force+--update (instead of manual), an explicit theirs is allowed
+// through unchanged, but an explicit manual/ours together with --force and
+// --update is a hard error rather than force silently winning or losing.
+func TestResolveConflictStrategy(t *testing.T) {
+	tests := []struct {
+		name          string
+		mergeStrategy string
+		force         bool
+		update        bool
+		want          ConflictStrategy
+		wantErr       bool
+	}{
+		{name: "no force, no update: unset defaults to manual", mergeStrategy: "", force: false, update: false, want: ConflictStrategyManual},
+		{name: "no force, with update: unset defaults to manual", mergeStrategy: "", force: false, update: true, want: ConflictStrategyManual},
+		{name: "force without update: unset stays manual (force has no update-context meaning)", mergeStrategy: "", force: true, update: false, want: ConflictStrategyManual},
+		{name: "force with update: unset defaults to theirs", mergeStrategy: "", force: true, update: true, want: ConflictStrategyTheirs},
+		{name: "force with update: explicit theirs allowed", mergeStrategy: "theirs", force: true, update: true, want: ConflictStrategyTheirs},
+		{name: "force with update: explicit manual is a contradiction", mergeStrategy: "manual", force: true, update: true, wantErr: true},
+		{name: "force with update: explicit ours is a contradiction", mergeStrategy: "ours", force: true, update: true, wantErr: true},
+		{name: "force without update: explicit manual is fine (force is a no-op there)", mergeStrategy: "manual", force: true, update: false, want: ConflictStrategyManual},
+		{name: "no force: explicit ours passes through", mergeStrategy: "ours", force: false, update: true, want: ConflictStrategyOurs},
+		{name: "invalid value still errors", mergeStrategy: "bogus", force: false, update: true, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ResolveConflictStrategy(tt.mergeStrategy, tt.force, tt.update)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected an error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestResolveConflictStrategy_ErrorIsMutuallyExclusiveFlags pins the specific
+// sentinel error for the force+update+explicit-manual/ours contradiction, so
+// callers can reliably distinguish it from an ordinary invalid-value error.
+func TestResolveConflictStrategy_ErrorIsMutuallyExclusiveFlags(t *testing.T) {
+	_, err := ResolveConflictStrategy("manual", true, true)
+	if !errors.Is(err, errUtils.ErrMutuallyExclusiveFlags) {
+		t.Fatalf("expected errUtils.ErrMutuallyExclusiveFlags, got: %v", err)
 	}
 }
 

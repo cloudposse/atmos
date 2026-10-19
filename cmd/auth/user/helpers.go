@@ -2,6 +2,7 @@ package user
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/charmbracelet/huh"
 
@@ -40,6 +41,9 @@ func selectAWSUserIdentities(identities map[string]schema.Identity) ([]string, s
 			}
 		}
 	}
+
+	// Sort so the selector, hints, and tests see a stable order (map iteration is random).
+	sort.Strings(selectable)
 
 	if len(selectable) == 0 {
 		return nil, "", fmt.Errorf("%w: no identities configured for provider type 'aws/user'. Define one under auth.identities in atmos.yaml", errUtils.ErrInvalidAuthConfig)

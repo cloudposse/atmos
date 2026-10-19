@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"os"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
@@ -17,6 +19,15 @@ func TestMain(m *testing.M) {
 	// This lets tests use the test binary itself as a cross-platform "exit 1" command.
 	if os.Getenv("_ATMOS_TEST_EXIT_ONE") == "1" {
 		os.Exit(1)
+	}
+
+	// Cross-platform subprocess helper: sleep for the given milliseconds, then exit 0. This lets
+	// tests exercise step timeouts with the test binary itself as a long-running command.
+	if sleepMS := os.Getenv("_ATMOS_TEST_SLEEP_MS"); sleepMS != "" {
+		if ms, err := strconv.Atoi(sleepMS); err == nil {
+			time.Sleep(time.Duration(ms) * time.Millisecond)
+		}
+		os.Exit(0)
 	}
 
 	// Cross-platform subprocess helper: when _ATMOS_TEST_DUMP_ENV names a file, write this

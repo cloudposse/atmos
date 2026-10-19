@@ -20,6 +20,14 @@ func init() {
 	})
 }
 
+// KnownFields lists the fields beyond the common step fields that sleep reads: the pause length is
+// the `timeout` field.
+func (h *SleepHandler) KnownFields() []string {
+	defer perf.Track(nil, "step.SleepHandler.KnownFields")()
+
+	return []string{"timeout"}
+}
+
 // Validate checks that the step has valid fields.
 func (h *SleepHandler) Validate(step *schema.WorkflowStep) error {
 	defer perf.Track(nil, "step.SleepHandler.Validate")()

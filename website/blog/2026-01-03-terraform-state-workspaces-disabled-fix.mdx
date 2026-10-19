@@ -8,7 +8,7 @@ tags:
 date: 2026-01-03T12:00:00.000Z
 ---
 
-The `!terraform.state` YAML function now correctly reads Terraform state when workspaces are disabled
+The [`!terraform.state`](/functions/yaml/terraform.state) YAML function now correctly reads Terraform state when workspaces are disabled
 (`components.terraform.workspaces_enabled: false` in `atmos.yaml`).
 Previously, Atmos looked for state files in the wrong location, causing the function to fail.
 
@@ -94,3 +94,5 @@ The `!terraform.state` function will automatically use the correct state file pa
 - [Terraform Local Backend Documentation](https://developer.hashicorp.com/terraform/language/backend/local)
 - [Terraform Azure Backend Documentation](https://developer.hashicorp.com/terraform/language/backend/azurerm)
 - [Terraform GCS Backend Documentation](https://developer.hashicorp.com/terraform/language/backend/gcs)
+
+For usage and configuration, see [Workspaces](/components/terraform/workspaces).

@@ -290,6 +290,61 @@ func TestComponentDependency_IsComponentDependency(t *testing.T) {
 	}
 }
 
+func TestComponentDependency_IsRequiredDefaultsToTrue(t *testing.T) {
+	defaultDependency := ComponentDependency{}
+	assert.True(t, defaultDependency.IsRequired())
+
+	required := true
+	requiredDependency := ComponentDependency{Required: &required}
+	assert.True(t, requiredDependency.IsRequired())
+
+	optional := false
+	optionalDependency := ComponentDependency{Required: &optional}
+	assert.False(t, optionalDependency.IsRequired())
+}
+
+func TestDeferUnresolvedRequiredHonorsConfiguredDelimiter(t *testing.T) {
+	section := map[string]any{
+		"components": []any{
+			map[string]any{"name": "monitoring", "required": "[[ .vars.monitoring_required ]]"},
+		},
+	}
+
+	deferred := DeferUnresolvedRequired(section, "[[")
+	entry := deferred["components"].([]any)[0].(map[string]any)
+
+	assert.NotContains(t, entry, "required")
+	assert.Equal(t, "[[ .vars.monitoring_required ]]", section["components"].([]any)[0].(map[string]any)["required"])
+}
+
+func TestParseComponentDependenciesRejectsInvalidRenderedRequiredValue(t *testing.T) {
+	_, err := ParseComponentDependencies(map[string]any{
+		"components": []any{
+			map[string]any{"name": "monitoring", "required": "sometimes"},
+		},
+	}, "terraform", "dev")
+
+	require.ErrorIs(t, err, ErrComponentDependencyInvalidRequired)
+}
+
+func TestParseComponentDependenciesNormalizesOptionalEdges(t *testing.T) {
+	required := true
+	optional := false
+	dependencies, err := ParseComponentDependencies(map[string]any{
+		"components": []any{
+			map[string]any{"name": "vpc", "required": "false"},
+			map[string]any{"component": "vpc", "required": true},
+			map[string]any{"name": "database", "required": "false", "stack": "shared"},
+			map[string]any{"kind": "file", "path": "config.yaml"},
+		},
+	}, "terraform", "dev")
+
+	require.NoError(t, err)
+	require.Len(t, dependencies, 2)
+	assert.Equal(t, ComponentDependency{Component: "vpc", Required: &required}, dependencies[0])
+	assert.Equal(t, ComponentDependency{Component: "database", Stack: "shared", Required: &optional}, dependencies[1])
+}
+
 func TestDependencies_Normalize_NameAlias(t *testing.T) {
 	t.Run("name alone is promoted to component", func(t *testing.T) {
 		d := &Dependencies{
@@ -457,6 +512,20 @@ func TestDependencies_Normalize_FilesFoldersSiblings(t *testing.T) {
 	})
 }
 
+func TestDependencies_Normalize_RejectsMissingComponent(t *testing.T) {
+	tests := []ComponentDependency{
+		{},
+		{Name: ""},
+		{Component: ""},
+		{Stack: "prod"},
+		{Kind: "terraform"},
+	}
+	for _, entry := range tests {
+		err := (&Dependencies{Components: []ComponentDependency{entry}}).Normalize()
+		require.ErrorIs(t, err, ErrComponentDependencyMissingComponent)
+	}
+}
+
 // Helpers for the equivalence assertion.
 
 func assertHasComponentEntry(t *testing.T, entries []ComponentDependency, name string) {
@@ -487,4 +556,42 @@ func assertHasFolderEntry(t *testing.T, entries []ComponentDependency, path stri
 		}
 	}
 	t.Errorf("expected Components to contain a folder entry %q, got %#v", path, entries)
+}
+
+func TestParseLegacyDependsOn(t *testing.T) {
+	t.Run("list form is honored", func(t *testing.T) {
+		deps := ParseLegacyDependsOn([]any{
+			"vpc",
+			map[string]any{"component": "db", "stack": "prod"},
+			map[any]any{"component": "cache"},
+		})
+		require.Len(t, deps, 3)
+		assert.Equal(t, ComponentDependency{Component: "vpc"}, deps[0])
+		assert.Equal(t, ComponentDependency{Component: "db", Stack: "prod"}, deps[1])
+		assert.Equal(t, ComponentDependency{Component: "cache"}, deps[2])
+	})
+
+	t.Run("map form keeps context fields and is ordered by key", func(t *testing.T) {
+		deps := ParseLegacyDependsOn(map[string]any{
+			"2": map[string]any{"component": "db", "stage": "prod", "namespace": "cp", "tenant": "t", "environment": "ue1"},
+			"1": map[string]any{"component": "vpc", "stack": "dev"},
+		})
+		require.Len(t, deps, 2)
+		assert.Equal(t, ComponentDependency{Component: "vpc", Stack: "dev"}, deps[0])
+		assert.Equal(t, ComponentDependency{Component: "db", Namespace: "cp", Tenant: "t", Environment: "ue1", Stage: "prod"}, deps[1])
+	})
+
+	t.Run("map with non-string keys", func(t *testing.T) {
+		deps := ParseLegacyDependsOn(map[any]any{1: map[string]any{"component": "vpc"}})
+		require.Equal(t, []ComponentDependency{{Component: "vpc"}}, deps)
+	})
+
+	t.Run("entries without a component are dropped", func(t *testing.T) {
+		assert.Empty(t, ParseLegacyDependsOn([]any{"", map[string]any{"stack": "dev"}, map[string]any{"file": "a.txt"}, 123}))
+	})
+
+	t.Run("unsupported shapes yield nothing", func(t *testing.T) {
+		assert.Nil(t, ParseLegacyDependsOn("vpc"))
+		assert.Nil(t, ParseLegacyDependsOn(nil))
+	})
 }

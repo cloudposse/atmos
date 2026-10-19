@@ -8,13 +8,11 @@ variable "random" {
   default = "random"
 }
 
-resource "null_resource" "this" {
-  # Changes to any instance of the cluster requires re-provisioning
-  triggers = {
-    random = var.random
-  }
+# Use Terraform's built-in provider so the hook test needs no registry downloads.
+resource "terraform_data" "this" {
+  input = var.random
 }
 
 output "random" {
-  value = null_resource.this.triggers.random
+  value = terraform_data.this.output
 }

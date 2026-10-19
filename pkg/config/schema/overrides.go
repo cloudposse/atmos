@@ -89,6 +89,8 @@ var atmosConfigYamlFunctions = []string{
 // reflector annotates the returned instance with field doc comments.
 func typeMapper(t reflect.Type) *jsonschema.Schema {
 	switch t {
+	case reflect.TypeOf(schema.SkillRef{}):
+		return &jsonschema.Schema{Type: typeString, Description: "Git ref or deferred !version dependency."}
 	case reflect.TypeOf(time.Duration(0)):
 		// Durations are authored as Go duration strings; the decode hook also
 		// accepts bare integers (nanoseconds).
@@ -178,6 +180,19 @@ func applyPolymorphicOverrides(root *jsonschema.Schema) {
 			// pager is a string flag ("less", "on", "false"); booleans are
 			// accepted and coerced (Terminal.IsPagerEnabled).
 			"pager": {{Type: typeBoolean}},
+		},
+		"Logs": {
+			// color accepts every strconv.ParseBool spelling (validateLogsColorConfig),
+			// including quoted strings and the integers 0 and 1.
+			"color": {
+				{Type: typeString, Pattern: `^(?:1|0|t|f|T|F|TRUE|True|true|FALSE|False|false)$`},
+				{Type: typeInteger, Enum: []any{0, 1}},
+			},
+		},
+		"ComponentDependency": {
+			// required values are rendered before they are parsed as booleans, so
+			// templates and their resulting strings must be accepted.
+			"required": {{Type: typeString}},
 		},
 	}
 	for defName, alternativesByProperty := range propertyAlternatives {

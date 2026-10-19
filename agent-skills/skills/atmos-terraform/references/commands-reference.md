@@ -22,15 +22,24 @@ Initialize the Terraform working directory for a component in a stack.
 atmos terraform init <component> -s <stack> [flags]
 ```
 
-Atmos enhancements: cleans `.terraform/environment`, automatically adds `-reconfigure` when
-`init_run_reconfigure: true` is set in `atmos.yaml`, supports `--init-pass-vars` for OpenTofu.
-Runs automatically before plan/apply/deploy unless `--skip-init` is used.
+Atmos enhancements: cleans `.terraform/environment`; runs automatically before plan/apply/deploy/shell/destroy
+only when needed (`init.mode: auto` skips it when nothing relevant changed since the last init); adds
+`-reconfigure`/`-upgrade` only when required (`init.reconfigure`, `auto` by default; `init.upgrade`, `never`
+by default since Atmos never passed `-upgrade` automatically before this setting existed); supports
+`--init-pass-vars` for OpenTofu. `init_run_reconfigure` is deprecated in favor of `init.reconfigure`.
 
 Key flags:
-- `--skip-init` -- Skips the auto-init that runs before other commands (not applicable to `init` itself)
+- `--skip-init` -- Disables auto-init entirely for this invocation (same as `--init-mode=never`)
+- `--init-mode` -- Override `init.mode` for this invocation: `auto` (default), `always`, `never`
+- `--init-reconfigure` -- Override `init.reconfigure` for this invocation: `auto` (default), `always`, `never`
+- `--init-upgrade` -- Override `init.upgrade` for this invocation: `never` (default), `auto`, `always`
 - `--init-pass-vars` -- Pass generated varfile to init (OpenTofu feature)
 - Native: `-reconfigure`, `-upgrade`, `-migrate-state`, `-backend=false`, `-backend-config=PATH`,
   `-force-copy`, `-get=false`, `-input=false`, `-lock=false`, `-lock-timeout=DURATION`, `-plugin-dir=PATH`
+
+If a skipped init turns out to have been necessary, Atmos recognizes the resulting Terraform/OpenTofu
+diagnostic (e.g. "Backend initialization required") before any state is touched, re-runs init, and retries
+the command once. No `-migrate-state` is ever run implicitly.
 
 ### plan
 

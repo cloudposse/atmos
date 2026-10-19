@@ -86,6 +86,19 @@ real CI job container that doesn't explicitly join a custom Docker network.
   already in use"), bounded the `host.docker.internal` DNS lookup with a timeout, and tightened
   the corresponding test's timing assertion against the actual configured constant instead of a
   loose bound.
+- Re-verified 2026-09-07: `git merge-base --is-ancestor` confirms both this PR (#2960) and its
+  prerequisite (#2942) are ancestors of `HEAD` and of the published `v1.228.0` tag, and no commit
+  since has touched the network-join/endpoint-selection code. Reran the exact `bugs.md` item 8
+  reproduction against the published `ghcr.io/cloudposse/atmos:1.228.0` image (a socket-mounted
+  container, no `--network` flag, against this repo's own `examples/terraform-tests` `fixtures`
+  stack): `atmos emulator up aws -s fixtures --ephemeral` reported
+  `emulator aws is up at http://fixtures-aws:4566`, and `curl http://fixtures-aws:4566/` from
+  inside that same container returned `HTTP 200`. No loopback/gateway fallback, no regression.
+  (The `--ephemeral` flag was needed only to skip an unrelated host-bind-mount requirement for
+  persistence when running Atmos itself inside a container with a mounted Docker socket -- not a
+  factor in the endpoint-selection logic this doc covers.) The original caveat still stands: this
+  confirms Docker Desktop's local VM networking, not an actual GitHub-hosted Actions job
+  container's networking.
 
 ## Follow-ups
 

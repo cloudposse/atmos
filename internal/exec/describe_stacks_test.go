@@ -405,11 +405,12 @@ func TestNewDescribeStacksExec(t *testing.T) {
 func TestGetComponentBasePath_AllCases(t *testing.T) {
 	ac := &schema.AtmosConfiguration{
 		Components: schema.Components{
-			Terraform: schema.Terraform{BasePath: "components/terraform"},
-			Helmfile:  schema.Helmfile{BasePath: "components/helmfile"},
-			Packer:    schema.Packer{BasePath: "components/packer"},
-			Ansible:   schema.Ansible{BasePath: "components/ansible"},
-			Container: schema.ContainerComponentsConfig{BasePath: "components/container"},
+			Terraform:      schema.Terraform{BasePath: "components/terraform"},
+			Helmfile:       schema.Helmfile{BasePath: "components/helmfile"},
+			Packer:         schema.Packer{BasePath: "components/packer"},
+			Ansible:        schema.Ansible{BasePath: "components/ansible"},
+			Container:      schema.ContainerComponentsConfig{BasePath: "components/container"},
+			CloudFormation: schema.AwsCloudFormation{BasePath: "components/cloudformation"},
 		},
 	}
 
@@ -422,6 +423,8 @@ func TestGetComponentBasePath_AllCases(t *testing.T) {
 		{cfg.PackerSectionName, "components/packer"},
 		{cfg.AnsibleSectionName, "components/ansible"},
 		{cfg.ContainerSectionName, "components/container"},
+		{cfg.CloudFormationSectionName, "components/cloudformation"},
+		{cfg.EmulatorSectionName, ""},
 		{"unknown", ""},
 	}
 
@@ -754,7 +757,7 @@ func TestExecuteDescribeStacks_OnErrorWarn_DegradesRecoverableError(t *testing.T
 
 	recoverableErr := fmt.Errorf("%w for component `vpc` in stack `dev`", errUtils.ErrTerraformStateNotProvisioned)
 	mockStateGetter.EXPECT().
-		GetState(gomock.Any(), gomock.Any(), "dev", "vpc", "bucket_name", false, gomock.Any(), gomock.Any()).
+		GetState(gomock.Any(), gomock.Any(), "dev", "vpc", "bucket_name", false, gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return(nil, recoverableErr).
 		Times(1)
 
@@ -801,7 +804,7 @@ func TestExecuteDescribeStacks_OnErrorWarn_DegradesRecoverableError_Strict(t *te
 
 	recoverableErr := fmt.Errorf("%w for component `vpc` in stack `dev`", errUtils.ErrTerraformStateNotProvisioned)
 	mockStateGetter.EXPECT().
-		GetState(gomock.Any(), gomock.Any(), "dev", "vpc", "bucket_name", false, gomock.Any(), gomock.Any()).
+		GetState(gomock.Any(), gomock.Any(), "dev", "vpc", "bucket_name", false, gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return(nil, recoverableErr).
 		Times(1)
 

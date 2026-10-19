@@ -117,15 +117,19 @@ runs:
       if: inputs.mode != 'restore-only' && inputs.restore-only != 'true'
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
-        key: ${{ env.ATMOS_CACHE_KEY }}
-        path: ${{ env.ATMOS_CACHE_PATH }}
-        restore-keys: ${{ env.ATMOS_CACHE_RESTORE_KEYS }}
+        # Current Atmos writes these job-level variables so nested composite
+        # post steps can use them. The bootstrap CLI can be older, though;
+        # it writes the same values only as this step's outputs. Keep the
+        # published action compatible with both protocols.
+        key: ${{ env.ATMOS_CACHE_KEY || steps.meta.outputs.key }}
+        path: ${{ env.ATMOS_CACHE_PATH || steps.meta.outputs.path }}
+        restore-keys: ${{ env.ATMOS_CACHE_RESTORE_KEYS || steps.meta.outputs.restore-keys }}
     # actions/cache/restore ships in the same repository and tag as
     # actions/cache, so the same SHA pins both.
     - id: cache-restore
       if: inputs.mode == 'restore-only' || inputs.restore-only == 'true'
       uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
-        key: ${{ env.ATMOS_CACHE_KEY }}
-        path: ${{ env.ATMOS_CACHE_PATH }}
-        restore-keys: ${{ env.ATMOS_CACHE_RESTORE_KEYS }}
+        key: ${{ env.ATMOS_CACHE_KEY || steps.meta.outputs.key }}
+        path: ${{ env.ATMOS_CACHE_PATH || steps.meta.outputs.path }}
+        restore-keys: ${{ env.ATMOS_CACHE_RESTORE_KEYS || steps.meta.outputs.restore-keys }}

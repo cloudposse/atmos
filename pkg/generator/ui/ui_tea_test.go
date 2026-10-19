@@ -211,6 +211,11 @@ func TestInitUI_ColorSource(t *testing.T) {
 			expectedText: "flag",
 		},
 		{
+			name:         "computed source",
+			source:       "computed",
+			expectedText: "computed",
+		},
+		{
 			name:         "default source",
 			source:       "unknown",
 			expectedText: "default",
@@ -249,6 +254,7 @@ func TestInitUI_ColorSourceUsesActiveThemeStyles(t *testing.T) {
 	require.NotNil(t, styles)
 	assert.Equal(t, styles.Command.Render("scaffold"), ui.colorSource("scaffold"))
 	assert.Equal(t, styles.PackageName.Render("flag"), ui.colorSource("flag"))
+	assert.Equal(t, styles.PackageName.Render("computed"), ui.colorSource("computed"))
 	assert.Equal(t, styles.Muted.Render("default"), ui.colorSource("default"))
 }
 
@@ -277,18 +283,18 @@ func TestInitUI_WriteOutput(t *testing.T) {
 	}
 }
 
-// TestInitUI_SetThreshold tests the threshold setter.
-func TestInitUI_SetThreshold(t *testing.T) {
+// TestInitUI_SetMaxChanges tests the threshold setter.
+func TestInitUI_SetMaxChanges(t *testing.T) {
 	ui := createTestUI(t)
 
 	// Test setting threshold
-	ui.SetThreshold(75)
+	ui.SetMaxChanges(75)
 
 	// We can't directly verify the processor's internal state,
 	// but we can verify the method doesn't panic
-	ui.SetThreshold(50)
-	ui.SetThreshold(100)
-	ui.SetThreshold(0)
+	ui.SetMaxChanges(50)
+	ui.SetMaxChanges(100)
+	ui.SetMaxChanges(0)
 }
 
 // TestInitUI_GetTerminalWidth tests terminal width detection.

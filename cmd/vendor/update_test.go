@@ -6,11 +6,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/vendoring/updater"
 	"github.com/cloudposse/atmos/pkg/vendoring/version"
 )
@@ -89,6 +91,44 @@ func TestVendorUpdateCommand_StackSelectorDescribeStacksErrorPropagates(t *testi
 	require.Error(t, err)
 }
 
+// TestVendorPullRequestConfig proves vendorPullRequestConfig maps every vendor.ci.pull_request.*
+// viper key onto the matching schema.VendorPullRequestConfig field -- including Organization,
+// Project, and Repository, which only the azuredevops provider consumes (see
+// pkg/vendoring/updater.resolveRepositoryAddress) -- so a key/field typo or spelling drift is
+// caught by a failing assertion rather than silently reading as an empty string at runtime.
+func TestVendorPullRequestConfig(t *testing.T) {
+	v := viper.New()
+	v.Set("vendor.ci.pull_request.provider", "azuredevops")
+	v.Set("vendor.ci.pull_request.base_branch", "main")
+	v.Set("vendor.ci.pull_request.branch_prefix", "atmos-update/")
+	v.Set("vendor.ci.pull_request.title", "chore: update components")
+	v.Set("vendor.ci.pull_request.body", "automated component update")
+	v.Set("vendor.ci.pull_request.labels", []string{"component-update", "automated"})
+	v.Set("vendor.ci.pull_request.draft", true)
+	v.Set("vendor.ci.pull_request.reviewers", []string{"reviewer-guid"})
+	v.Set("vendor.ci.pull_request.assignees", []string{"assignee-guid"})
+	v.Set("vendor.ci.pull_request.organization", "acme-org")
+	v.Set("vendor.ci.pull_request.project", "platform")
+	v.Set("vendor.ci.pull_request.repository", "infra")
+
+	got := vendorPullRequestConfig(v)
+
+	assert.Equal(t, schema.VendorPullRequestConfig{
+		Provider:     "azuredevops",
+		BaseBranch:   "main",
+		BranchPrefix: "atmos-update/",
+		Title:        "chore: update components",
+		Body:         "automated component update",
+		Labels:       []string{"component-update", "automated"},
+		Draft:        true,
+		Reviewers:    []string{"reviewer-guid"},
+		Assignees:    []string{"assignee-guid"},
+		Organization: "acme-org",
+		Project:      "platform",
+		Repository:   "infra",
+	}, got)
+}
+
 // TestVendorUpdateCommand_LabelsSelector proves --labels alone (no --stack) resolves through
 // RunE's stack-resolution branch and scopes the update to just the matching component, leaving a
 // differently-labeled sibling untouched -- mirrors clean_test.go's
@@ -138,4 +178,90 @@ spec:
 	require.Len(t, result.Updates, 1, "only the tier=1-labeled component must be selected")
 	assert.Equal(t, "first", result.Updates[0].Component)
 	assert.Equal(t, "updated", result.Status)
+}
+
+func TestVendorUpdateCommand_LabelsPull(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	cmd := &cobra.Command{Use: "update", RunE: vendorUpdateCmd.RunE}
+	vendorUpdateParser.RegisterFlags(cmd)
+	cmd.Flags().String("base-path", "", "")
+	cmd.Flags().StringSlice("config", nil, "")
+	cmd.Flags().StringSlice("config-path", nil, "")
+	cmd.Flags().StringSlice("profile", nil, "")
+	root := t.TempDir()
+	source := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(source, "main.tf"), []byte("# selected source\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte(`base_path: "."
+stacks:
+  base_path: stacks
+  included_paths: ["**/*.yaml"]
+  excluded_paths: []
+components:
+  terraform:
+    base_path: components/terraform
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "stacks", "dev.yaml"), []byte(`vars:
+  stage: dev
+components:
+  terraform:
+    first:
+      metadata:
+        labels:
+          team: platform
+    second:
+      metadata:
+        labels:
+          team: other
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, DefaultVendorManifest), []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: first
+      source: '`+filepath.ToSlash(source)+`'
+      targets: ["components/terraform/first"]
+    - component: second
+      source: '`+filepath.ToSlash(source)+`'
+      targets: ["components/terraform/second"]
+`), 0o644))
+	chdirTest(t, root)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+	captureVendorStdout(t)
+	require.NoError(t, cmd.Flags().Set("labels", "team=platform"))
+	require.NoError(t, cmd.Flags().Set("pull", "true"))
+	require.NoError(t, cmd.RunE(cmd, nil))
+	got, err := os.ReadFile(filepath.Join(root, "components", "terraform", "first", "main.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "# selected source\n", string(got))
+	assert.NoDirExists(t, filepath.Join(root, "components", "terraform", "second"))
+}
+
+func TestVendorCommands_ScalarLabelsPreserveSpaces(t *testing.T) {
+	for _, command := range []*cobra.Command{vendorUpdateCmd, vendorVerifyCmd, vendorDiffCmd} {
+		t.Run(command.Name(), func(t *testing.T) {
+			viper.Reset()
+			t.Cleanup(viper.Reset)
+			cmd := &cobra.Command{Use: command.Use, RunE: command.RunE}
+			switch command {
+			case vendorUpdateCmd:
+				vendorUpdateParser.RegisterFlags(cmd)
+			case vendorVerifyCmd:
+				vendorVerifyParser.RegisterFlags(cmd)
+			case vendorDiffCmd:
+				vendorDiffParser.RegisterFlags(cmd)
+			}
+			cmd.Flags().String("base-path", "", "")
+			cmd.Flags().StringSlice("config", nil, "")
+			cmd.Flags().StringSlice("config-path", nil, "")
+			cmd.Flags().StringSlice("profile", nil, "")
+			viper.Set(vendorLabelsViperKey, "team = platform,owner=platform engineering")
+			require.NoError(t, cmd.Flags().Set("component", "vpc"))
+			err := cmd.RunE(cmd, nil)
+			// Valid labels reach selector conflict validation instead of failing to parse.
+			require.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+			assert.NotErrorIs(t, err, errUtils.ErrInvalidFlag)
+		})
+	}
 }

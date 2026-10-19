@@ -1,0 +1,5 @@
+components:
+  terraform:
+    plan_diff:
+      ignore_changes:
+        - terraform_data.output

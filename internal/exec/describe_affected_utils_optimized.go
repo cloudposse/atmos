@@ -24,6 +24,12 @@ func isComponentFolderChangedIndexed(
 		return false, err
 	}
 
+	// An empty pattern means the component type has no filesystem source tree (e.g. emulator),
+	// so no changed file can match it.
+	if componentPathPattern == "" {
+		return false, nil
+	}
+
 	// Only check files relevant to this component type.
 	relevantFiles := filesIndex.getRelevantFiles(componentType, atmosConfig)
 

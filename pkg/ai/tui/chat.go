@@ -23,7 +23,7 @@ import (
 	aiTypes "github.com/cloudposse/atmos/pkg/ai/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -218,6 +218,9 @@ func NewChatModel(p ChatModelParams) (*ChatModel, error) {
 	}
 
 	registerCompactionCallback(model, manager)
+	if err := model.configureProviderApproval(client); err != nil {
+		return nil, fmt.Errorf("failed to configure provider approvals: %w", err)
+	}
 
 	// Load existing messages from session if available.
 	if manager != nil && sess != nil {
@@ -250,7 +253,7 @@ func initTextarea() textarea.Model {
 	ta.Prompt = ""
 
 	borderColor := lipgloss.Color(theme.GetBorderColor())
-	mutedColor := lipgloss.Color("240")
+	mutedColor := lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)
 	muted := theme.GetCurrentStyles().Muted
 
 	// Base wraps the whole rendered textarea (not per-line), so a border here renders as
@@ -270,10 +273,8 @@ func initTextarea() textarea.Model {
 
 // initSpinner creates a new spinner with default styling.
 func initSpinner() spinner.Model {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
-	fps.Apply(&s)
+	s := ui.NewSpinner()
+
 	return s
 }
 

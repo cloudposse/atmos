@@ -9,7 +9,7 @@ components:
     apply_auto_approve: false
     append_user_agent: Atmos/test (Cloud Posse; +https://atmos.tools)
     deploy_run_init: false
-    init_run_reconfigure: false
+    init_run_reconfigure: true
     auto_generate_backend_file: false
     auto_generate_files: false
     command: tofu
@@ -17,6 +17,10 @@ components:
       prompt: ""
     init:
       pass_vars: false
+      mode: auto
+      upgrade: auto
+    mocks:
+      mode: fallback
     plan:
       skip_planfile: false
     plugin_cache: true
@@ -53,6 +57,8 @@ components:
     auto_generate_files: false
   container:
     base_path: components/container
+  aws/cloudformation:
+    base_path: components/cloudformation
 stacks:
   base_path: chdir-isolation-stacks
   included_paths:
@@ -63,6 +69,7 @@ stacks:
   inherit:
     metadata: true
 logs:
+  color: true
   file: /dev/stderr
   level: Warning
 diagnostics:
@@ -104,6 +111,7 @@ describe:
   component:
     filter: schema
 vendor:
+  max_concurrency: 4
   base_path: chdir-isolation-vendor
 initialized: true
 basePathAbsolute: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation
@@ -117,6 +125,7 @@ ansibleDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-is
 kubernetesDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation
 helmDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation
 containerDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation/components/container
+cloudFormationDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation/components/cloudformation
 vendorDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation/chdir-isolation-vendor
 workflowsDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation
 default: false
@@ -142,5 +151,11 @@ toolchain:
   versions_file: ""
   use_tool_versions: false
   use_lock_file: true
+  frozen_lock_file: false
+  install: auto
+init:
+  repository: github.com/cloudposse/atmos
+  depth: 1
+  git: true
 list:
   error_mode: warn

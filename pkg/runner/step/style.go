@@ -72,21 +72,21 @@ func (h *StyleHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 	// Render the styled content.
 	output := style.Render(content)
 
-	ui.Writeln(output)
+	vars.UI().Writeln(output)
 
 	return NewStepResult(content), nil
 }
 
 // renderMarkdown renders markdown content with optional width constraint.
 func (h *StyleHandler) renderMarkdown(content string, width int) (string, error) {
-	var opts []glamour.TermRendererOption
+	opts := []glamour.TermRendererOption{glamour.WithColorProfile(ui.GetColorProfile())}
 
 	if width > 0 {
 		opts = append(opts, glamour.WithWordWrap(width))
 	}
 
 	// Use theme-aware styles.
-	if glamourStyle, err := theme.GetGlamourStyleForTheme(theme.DefaultThemeName); err == nil {
+	if glamourStyle, err := theme.GetCurrentGlamourStyle(); err == nil {
 		opts = append(opts, glamour.WithStylesFromJSONBytes(glamourStyle))
 	}
 

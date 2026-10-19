@@ -230,7 +230,7 @@ If you're familiar with Terragrunt, the concepts below will help you translate w
     </File>
   </TabItem>
   <TabItem value="atmos" label="Atmos">
-    Atmos has a direct equivalent: a component declares literal output values under `mocks`, and any command resolves them only when you explicitly pass `--use-mocks`. `!terraform.state` and `!terraform.output` read from the `mocks` map instead of real state when the flag is set, with no Terraform init, authentication, or backend access at all.
+    Atmos has a close equivalent: a component declares literal output values under `mocks`, and `atmos terraform plan` and `atmos describe component` use them when you explicitly pass `--use-mocks`. Like Terragrunt's `mock_outputs`, the mocks are fallbacks: `!terraform.state` and `!terraform.output` return the real value when the dependency has been applied, and the `mocks` value only when the dependency has no state or the requested output is missing. Credential, network, and backend errors still fail rather than being replaced by mock values.
 
     <File title="stacks/prod.yaml">
     ```yaml
@@ -248,7 +248,9 @@ If you're familiar with Terragrunt, the concepts below will help you translate w
     atmos describe component eks -s prod --use-mocks
     ```
 
-    `--use-mocks` is rejected on `apply`, `deploy`, and `destroy` before stack resolution even happens, so a mock value can never reach a mutating Terraform operation — a stronger guarantee than opting individual commands in through `mock_outputs_allowed_terraform_commands`. An undeclared `mocks` entry is also a hard error rather than a silent fallback, unless the expression supplies a YQ `//` default — which is honored the same way it is for real state, whether or not the referenced component declares `mocks` at all. See the provider-free `examples/terraform-component-mocks` example in the Atmos repository for a complete walkthrough.
+    Only `atmos terraform plan` and `atmos describe component` accept `--use-mocks`. It is rejected on `apply`, `deploy`, and `destroy` before stack resolution even happens, so a mock value can never reach a mutating Terraform operation — a stronger guarantee than opting individual commands in through `mock_outputs_allowed_terraform_commands`.
+
+    If you want the previous hermetic behavior, where lookups resolve from `mocks` only and never read state, use `--use-mocks=always` or set `components.terraform.mocks.mode: always`. In `always` mode an undeclared `mocks` entry is a hard error unless the expression supplies a YQ `//` default. In the default `fallback` mode the order is real value, then mock, then YQ `//` default, then the original error. See the provider-free `examples/terraform-component-mocks` example in the Atmos repository for a complete walkthrough.
   </TabItem>
 </Tabs>
 

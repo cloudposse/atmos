@@ -4,8 +4,9 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	mouseZone "github.com/lrstanley/bubblezone"
+
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 type columnView struct {
@@ -69,11 +70,12 @@ func (c *columnView) setSize(width, height int) {
 	c.width = width / 4
 }
 
+// getStyle sizes the column and adds a themed border when it has focus.
 func (c *columnView) getStyle() lipgloss.Style {
 	s := lipgloss.NewStyle().Padding(1, 2).Height(c.height).Width(c.width)
 
 	if c.Focused() {
-		s = s.Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(theme.ColorBorder))
+		s = s.Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(theme.GetCurrentColorScheme().Border))
 	} else {
 		s = s.Border(lipgloss.HiddenBorder())
 	}

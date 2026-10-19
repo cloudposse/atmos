@@ -1,6 +1,7 @@
 package provenance
 
 import (
+	"reflect"
 	"testing"
 
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -151,5 +152,189 @@ func TestFilterEmptySectionsNilContextKeepsEverything(t *testing.T) {
 
 	if len(filteredMap) != len(data) {
 		t.Errorf("expected all %d keys to survive with a nil context, got %d: %v", len(data), len(filteredMap), filteredMap)
+	}
+}
+
+// TestFilterEmptySectionsKeepsNonEmptyUnprovenancedSections is a regression
+// test for the bug where `describe component --provenance` (the default
+// output mode) silently dropped real, non-empty top-level sections that never
+// got a per-key provenance entry recorded -- notably aws/cloudformation's
+// path/stack_name/parameters/hooks/settings/provision, which are populated as
+// plain copied values rather than merged key-by-key through the
+// provenance-tracked merge path. See
+// docs/fixes/2026-09-09-cfn-describe-component-missing-fields.md.
+//
+// A section must survive filtering if it has recorded provenance OR its
+// value is genuinely non-empty; only sections that are both unprovenanced
+// AND empty (Atmos-generated placeholders like "backend: {}") should be
+// dropped.
+func TestFilterEmptySectionsKeepsNonEmptyUnprovenancedSections(t *testing.T) {
+	ctx := m.NewMergeContext()
+	ctx.EnableProvenance()
+	// Only "vars" has recorded provenance; everything else below is real,
+	// non-empty aws/cloudformation component data with no provenance at all.
+	ctx.RecordProvenance("components.aws/cloudformation.demo.vars.stage", m.ProvenanceEntry{
+		File: "deploy/local.yaml", Line: 8, Type: m.ProvenanceTypeInline, Depth: 1,
+	})
+
+	data := map[string]any{
+		"vars":                   map[string]any{"stage": "local"},
+		"path":                   "template.yaml",
+		"stack_name":             "atmos-cfn-demo-local",
+		"parameters":             map[string]any{"Stage": "local"},
+		"termination_protection": true,
+		"capabilities":           []any{"CAPABILITY_NAMED_IAM"},
+		"settings":               map[string]any{"aws_cloudformation": map[string]any{"region": "us-east-1"}},
+		"hooks":                  map[string]any{"mark-after-apply": map[string]any{"kind": "command"}},
+		"backend":                map[string]any{}, // genuinely empty placeholder, no provenance.
+		"overrides":              map[string]any{}, // genuinely empty placeholder, no provenance.
+	}
+
+	filtered := filterEmptySections(data, ctx)
+	filteredMap, ok := filtered.(map[string]any)
+	if !ok {
+		t.Fatalf("expected filterEmptySections to return a map, got %T", filtered)
+	}
+
+	for _, key := range []string{"vars", "path", "stack_name", "parameters", "termination_protection", "capabilities", "settings", "hooks"} {
+		value, ok := filteredMap[key]
+		if !ok {
+			t.Errorf("expected non-empty section %q to survive filtering even without provenance, but it was dropped: %v", key, filteredMap)
+			continue
+		}
+		if !reflect.DeepEqual(value, data[key]) {
+			t.Errorf("expected section %q to keep its original value %v, got %v", key, data[key], value)
+		}
+	}
+
+	for _, key := range []string{"backend", "overrides"} {
+		if _, ok := filteredMap[key]; ok {
+			t.Errorf("expected empty, unprovenanced section %q to be filtered out, but it survived: %v", key, filteredMap)
+		}
+	}
+}
+
+// TestFilterEmptySectionsDropsSyntheticComponentKey is a regression test for
+// the "component" key leaking into every `describe component` output.
+// The stack_processor_process_stacks.go file unconditionally sets
+// componentMap["component"] = componentName on every component for the
+// template system's own consumption, regardless of whether the user ever
+// wrote a `component:` attribute. Unlike aws/cloudformation's plain-value
+// sections, it must stay gated on provenance alone -- otherwise the "OR
+// non-empty" escape hatch (TestFilterEmptySectionsKeepsNonEmptyUnprovenancedSections)
+// resurrects it for every component, since it is a non-empty string with no
+// provenance by construction.
+func TestFilterEmptySectionsDropsSyntheticComponentKey(t *testing.T) {
+	ctx := m.NewMergeContext()
+	ctx.EnableProvenance()
+	// No provenance recorded for "component" -- this mirrors the synthetic,
+	// Go-injected value that was never written by a user.
+
+	data := map[string]any{
+		"component": "test-component",
+		"path":      "template.yaml", // unrelated plain-value section, no provenance.
+	}
+
+	filtered := filterEmptySections(data, ctx)
+	filteredMap, ok := filtered.(map[string]any)
+	if !ok {
+		t.Fatalf("expected filterEmptySections to return a map, got %T", filtered)
+	}
+
+	if _, ok := filteredMap["component"]; ok {
+		t.Errorf("expected synthetic, unprovenanced 'component' key to be filtered out, but it survived: %v", filteredMap)
+	}
+	if _, ok := filteredMap["path"]; !ok {
+		t.Errorf("expected unrelated non-empty unprovenanced section 'path' to still survive via the non-empty escape hatch, but it was dropped: %v", filteredMap)
+	}
+}
+
+// TestFilterEmptySectionsKeepsUserSetComponentKey verifies that a
+// user-authored `component:` attribute (real provenance recorded) still
+// survives filtering, distinguishing it from the synthetic, Go-injected
+// default value covered by TestFilterEmptySectionsDropsSyntheticComponentKey.
+func TestFilterEmptySectionsKeepsUserSetComponentKey(t *testing.T) {
+	ctx := m.NewMergeContext()
+	ctx.EnableProvenance()
+	ctx.RecordProvenance("components.terraform.app.component", m.ProvenanceEntry{
+		File: "dev.yaml", Line: 3, Type: m.ProvenanceTypeInline, Depth: 1,
+	})
+
+	data := map[string]any{
+		"component": "base-component",
+	}
+
+	filtered := filterEmptySections(data, ctx)
+	filteredMap, ok := filtered.(map[string]any)
+	if !ok {
+		t.Fatalf("expected filterEmptySections to return a map, got %T", filtered)
+	}
+
+	if value, ok := filteredMap["component"]; !ok || value != "base-component" {
+		t.Errorf("expected user-set 'component' key (has recorded provenance) to survive filtering, got %v", filteredMap)
+	}
+}
+
+// TestFilterEmptySectionsDropsTypedEmptySlice is a regression test for a typed
+// nil/empty slice (e.g. ComponentImportsSection, always assigned into the
+// component map as []string) being treated as non-empty by isEmptyValue's
+// former type switch on map[string]any/[]any, which fell through to the
+// default case for any other concrete slice type. That resurrected an
+// unprovenanced, genuinely-empty "import: []" section for components with no
+// stack imports at all.
+func TestFilterEmptySectionsDropsTypedEmptySlice(t *testing.T) {
+	ctx := m.NewMergeContext()
+	ctx.EnableProvenance()
+	// No provenance recorded for "import" -- mirrors a component with no
+	// stack imports, where ComponentImportsSection is a nil or empty []string.
+
+	data := map[string]any{
+		"import":       []string(nil),
+		"dependencies": []string{},
+	}
+
+	filtered := filterEmptySections(data, ctx)
+	filteredMap, ok := filtered.(map[string]any)
+	if !ok {
+		t.Fatalf("expected filterEmptySections to return a map, got %T", filtered)
+	}
+
+	for _, key := range []string{"import", "dependencies"} {
+		if _, ok := filteredMap[key]; ok {
+			t.Errorf("expected typed nil/empty slice section %q (no provenance) to be filtered out, but it survived: %v", key, filteredMap)
+		}
+	}
+}
+
+// TestIsEmptyValue exercises isEmptyValue directly across the shapes it must
+// distinguish: nil, empty/nil maps and slices of any concrete type, non-empty
+// maps/slices, and scalars (including the empty string, which is real data).
+func TestIsEmptyValue(t *testing.T) {
+	cases := []struct {
+		name  string
+		value any
+		want  bool
+	}{
+		{"nil", nil, true},
+		{"nil []any", []any(nil), true},
+		{"empty []any", []any{}, true},
+		{"nil []string", []string(nil), true},
+		{"empty []string", []string{}, true},
+		{"non-empty []string", []string{"a"}, false},
+		{"nil map[string]any", map[string]any(nil), true},
+		{"empty map[string]any", map[string]any{}, true},
+		{"non-empty map[string]any", map[string]any{"a": 1}, false},
+		{"empty string", "", false},
+		{"non-empty string", "x", false},
+		{"zero int", 0, false},
+		{"bool false", false, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isEmptyValue(tc.value); got != tc.want {
+				t.Errorf("isEmptyValue(%#v) = %v, want %v", tc.value, got, tc.want)
+			}
+		})
 	}
 }

@@ -11,7 +11,6 @@ import (
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -47,7 +46,7 @@ func (h *ContainerHandler) executeInspect(ctx context.Context, step *schema.Work
 	}
 
 	if step.DryRun {
-		ui.Writeln(fmt.Sprintf("inspect image %s", image))
+		vars.UI().Writeln(fmt.Sprintf("inspect image %s", image))
 		return NewStepResult(image).WithMetadata(exitCodeMetadata, 0).WithMetadata("image", image), nil
 	}
 
@@ -64,8 +63,8 @@ func (h *ContainerHandler) executeInspect(ctx context.Context, step *schema.Work
 
 	// Title as a Markdown heading (bold "Image" + the image name as inline code),
 	// then the borderless key/value body.
-	ui.Markdown(fmt.Sprintf("## Image `%s`", image))
-	ui.Writeln(renderImageInspect(info))
+	vars.UI().Markdown(fmt.Sprintf("## Image `%s`", image))
+	vars.UI().Writeln(renderImageInspect(info))
 
 	return NewStepResult(image).
 		WithMetadata(exitCodeMetadata, 0).

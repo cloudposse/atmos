@@ -1,0 +1,3 @@
+# Imported by atmos.yaml; any imported configuration layers over the repaired file.
+logs:
+    level: Info

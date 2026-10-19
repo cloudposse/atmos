@@ -10,6 +10,15 @@ on:
       - reopened
     paths:
       - "website/**"
+      - "examples/**"
+      - ".github/workflows/website-preview-build.yml"
+
+  # Build and run the website prebuild tests against the synthetic merge-queue commit,
+  # so a PR that is green alone can't break the production deploy once combined with
+  # another PR already in the queue. Note: `paths` filters do not apply to merge_group.
+  # The "Website Preview Deploy" workflow ignores these runs (no associated PR number).
+  merge_group:
+    types: [checks_requested]
 
 # These permissions are needed to interact with the GitHub's OIDC Token endpoint
 permissions:
@@ -25,7 +34,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -39,6 +48,10 @@ jobs:
             us.i.posthog.com:443
             api.scorecard.dev:443
             www.bestpractices.dev:443
+            raw.githubusercontent.com:443
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       - name: Checkout Repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -63,8 +76,7 @@ jobs:
           cache-dependency-path: website/pnpm-lock.yaml
 
       - name: Set up Go
-        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: "go.mod"
 
@@ -82,7 +94,7 @@ jobs:
         # CGO_ENABLED=0: `go run .` builds the whole atmos binary graph, which pulls in
         # cgo-linked hardware-security-key deps (e.g. github.com/bearsh/hid) that need
         # system libudev headers this runner doesn't have. atmos itself always builds with
-        # CGO disabled (see .goreleaser.yml, magefiles/build.go); match that here too.
+        # CGO disabled (see .goreleaser.yml, magefiles/build/build.go); match that here too.
         # GOFIPS140=latest: match every other Go-toolchain build invocation in the repo
         # (see docs/prd/fips-140-mode.md) so this throwaway schema-generation process
         # behaves identically to a real atmos build/test binary.
@@ -104,8 +116,12 @@ jobs:
       - name: Install Dependencies and Build Website
         run: |
           node --version
+          # Match production's reproducible build so unchanged previews are no-ops.
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          export SOURCE_DATE_EPOCH
           cd website
           pnpm install --frozen-lockfile
+          pnpm run test:build-timestamp
           pnpm run build:site
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

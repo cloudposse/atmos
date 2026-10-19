@@ -16,11 +16,16 @@ import (
 const defaultFilePermissions = 0o644
 
 // Output represents the GitHub Actions matrix strategy format.
-type Output struct {
-	Include []Entry `json:"include"`
+// Generic over the entry type so any caller with its own include-row shape
+// (e.g. stack/component below, or a CI job's own shard/packages row) can
+// reuse the same JSON/$GITHUB_OUTPUT plumbing instead of reimplementing it.
+type Output[T any] struct {
+	Include []T `json:"include"`
 }
 
-// Entry represents a single entry in the matrix include array.
+// Entry represents a single entry in the matrix include array for
+// stack/component-shaped matrices (`atmos describe affected`/`atmos list
+// instances --format=matrix`).
 type Entry struct {
 	Stack         string `json:"stack"`
 	Component     string `json:"component"`
@@ -30,14 +35,14 @@ type Entry struct {
 
 // Marshal serializes matrix entries to compact JSON.
 // Nil entries are normalized to an empty slice to produce {"include":[]} instead of {"include":null}.
-func Marshal(entries []Entry) ([]byte, error) {
+func Marshal[T any](entries []T) ([]byte, error) {
 	defer perf.Track(nil, "matrix.Marshal")()
 
 	include := entries
 	if include == nil {
-		include = []Entry{}
+		include = []T{}
 	}
-	output := Output{
+	output := Output[T]{
 		Include: include,
 	}
 	return json.Marshal(output)
@@ -46,7 +51,7 @@ func Marshal(entries []Entry) ([]byte, error) {
 // WriteOutput writes the matrix output to stdout or a file.
 // If outputFile is specified (for $GITHUB_OUTPUT), writes in key=value format.
 // Otherwise, writes JSON to stdout.
-func WriteOutput(entries []Entry, outputFile string) error {
+func WriteOutput[T any](entries []T, outputFile string) error {
 	defer perf.Track(nil, "matrix.WriteOutput")()
 
 	matrixJSON, err := Marshal(entries)

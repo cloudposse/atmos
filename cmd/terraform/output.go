@@ -8,8 +8,10 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	errUtils "github.com/cloudposse/atmos/errors"
 	exec "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	envfmt "github.com/cloudposse/atmos/pkg/env"
@@ -137,6 +139,12 @@ func prepareOutputContext(cmd *cobra.Command, args []string) (*schema.ConfigAndS
 		ProfilesFromArg:         globalFlags.Profile,
 		ComponentFromArg:        info.ComponentFromArg,
 		Stack:                   info.Stack,
+		// Init override flags (--init-mode/--init-reconfigure/--init-upgrade), registered via
+		// outputParser since `output` doesn't pull in the full BackendExecutionFlags set. These
+		// flow into atmosConfig.Components.Terraform.Init via setFeatureFlags.
+		InitMode:        v.GetString("init-mode"),
+		InitReconfigure: v.GetString("init-reconfigure"),
+		InitUpgrade:     v.GetString("init-upgrade"),
 	}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
@@ -146,7 +154,29 @@ func prepareOutputContext(cmd *cobra.Command, args []string) (*schema.ConfigAndS
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	// setupTerraformAuth only sets info.AuthManager; copy the resolved credentials onto
+	// info.AuthContext so tfoutput.GetComponentOutputs can export them to the subprocess.
+	populateAuthContextFromManager(&info, authManager)
 	return &info, &atmosConfig, authManager, nil
+}
+
+// populateAuthContextFromManager copies the AuthContext resolved by the auth manager (from --identity)
+// onto info, mirroring how the main terraform execution path populates it. It is a no-op when
+// info.AuthContext is already set, the manager is nil or not an auth.AuthManager, or the manager
+// has no stack info or auth context.
+func populateAuthContextFromManager(info *schema.ConfigAndStacksInfo, authManager any) {
+	if info.AuthContext != nil {
+		return
+	}
+	manager, ok := authManager.(auth.AuthManager)
+	if !ok || manager == nil {
+		return
+	}
+	stackInfo := manager.GetStackInfo()
+	if stackInfo == nil || stackInfo.AuthContext == nil {
+		return
+	}
+	info.AuthContext = stackInfo.AuthContext
 }
 
 // executeOutputWithFormat retrieves and formats terraform outputs.
@@ -273,6 +303,10 @@ func init() {
 		flags.WithStringFlag("output-file", "o", "", "Write output to file instead of stdout"),
 		flags.WithBoolFlag("uppercase", "u", false, "Convert keys to uppercase (useful for env vars)"),
 		flags.WithBoolFlag("flatten", "", false, "Flatten nested maps into key_subkey format"),
+		// `output` doesn't pull in shared.WithBackendExecutionFlags(), so the tri-state init
+		// override flags are registered directly here (shared.WithInitOverrideFlags()) to
+		// support `atmos terraform output --init-mode=never`.
+		shared.WithInitOverrideFlags(),
 		flags.WithEnvVars("format", "ATMOS_TERRAFORM_OUTPUT_FORMAT"),
 		flags.WithEnvVars("output-file", "ATMOS_TERRAFORM_OUTPUT_FILE"),
 		flags.WithEnvVars("uppercase", "ATMOS_TERRAFORM_OUTPUT_UPPERCASE"),

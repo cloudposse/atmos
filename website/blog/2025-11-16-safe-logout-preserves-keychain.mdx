@@ -10,7 +10,7 @@ tags:
 release: v1.199.0
 ---
 
-`atmos auth logout` now preserves keychain credentials by default for faster re-authentication. Only session data is cleared. Use `--keychain` to permanently delete credentials.
+`atmos auth logout` now preserves keychain credentials by default for faster re-authentication. Only session data is cleared. Use [`--keychain`](/cli/commands/auth/logout#flags) to permanently delete credentials.
 
 <!--truncate-->
 
@@ -46,7 +46,7 @@ Use `--keychain` when you need to remove credentials permanently:
 atmos auth logout dev-admin --keychain
 ```
 
-Interactive confirmation prevents accidents. Use `--force` for CI/CD:
+Interactive confirmation prevents accidents. Use [`--force`](/cli/commands/auth/logout#flags) for CI/CD:
 
 ```shell
 atmos auth logout dev-admin --keychain --force

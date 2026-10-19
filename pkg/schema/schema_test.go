@@ -36,6 +36,29 @@ func TestConfigSourcesStackDependencyYAMLOrder(t *testing.T) {
 	assert.Equal(t, "dependency_type: import\nstack_file: catalog/mock/defaults\nstack_file_section: components.terraform.vars\nvariable_value: true\n", string(output))
 }
 
+// TestAwsCloudFormation_SourceField guards the AwsCloudFormation.Source field
+// added for parity with Terraform/Helmfile/Packer/Kubernetes/Helm's identical
+// `components.<type>.source` global JIT-vendoring defaults — a struct that
+// omits it would silently drop `components."aws/cloudformation".source.ttl`
+// during YAML unmarshal instead of surfacing it as a config error.
+func TestAwsCloudFormation_SourceField(t *testing.T) {
+	// Compile-time sentinel: fail the build immediately if AwsCloudFormation.Source
+	// is renamed or removed.
+	_ = AwsCloudFormation{Source: &SourceSettings{TTL: "1h"}}
+
+	yamlString := `
+aws/cloudformation:
+  base_path: components/cloudformation
+  source:
+    ttl: 1h
+`
+	components := &Components{}
+	err := yaml.Unmarshal([]byte(yamlString), components)
+	require.NoError(t, err)
+	require.NotNil(t, components.CloudFormation.Source)
+	assert.Equal(t, "1h", components.CloudFormation.Source.TTL)
+}
+
 func TestAtmosConfigurationWithSchemas(t *testing.T) {
 	yamlString := `
 schemas:
@@ -78,6 +101,34 @@ func TestSetSchemaRegistry_ExistingMapPreservesOtherKeys(t *testing.T) {
 
 	assert.Equal(t, "manifest/path", atmosConfig.GetSchemaRegistry("atmos").Manifest)
 	assert.Equal(t, "opa/path", atmosConfig.GetResourcePath("opa").BasePath)
+}
+
+// TestSetResourcePath_NilMap verifies that SetResourcePath does not panic when Schemas is nil.
+func TestSetResourcePath_NilMap(t *testing.T) {
+	// A config loaded without a `schemas:` section leaves Schemas nil; applying a
+	// `--schemas-opa-dir` or ATMOS_SCHEMAS_OPA_BASE_PATH override must not panic.
+	atmosConfig := &AtmosConfiguration{}
+	require.Nil(t, atmosConfig.Schemas, "precondition: Schemas must start nil")
+
+	assert.NotPanics(t, func() {
+		atmosConfig.SetResourcePath("opa", ResourcePath{BasePath: "opa/path"})
+	})
+
+	assert.Equal(t, "opa/path", atmosConfig.GetResourcePath("opa").BasePath)
+}
+
+// TestSetResourcePath_ExistingMapPreservesOtherKeys verifies that SetResourcePath replaces only the given key.
+func TestSetResourcePath_ExistingMapPreservesOtherKeys(t *testing.T) {
+	// Setting one key must not clobber unrelated entries, and it replaces the same key.
+	atmosConfig := &AtmosConfiguration{Schemas: map[string]any{
+		"jsonschema": ResourcePath{BasePath: "json/path"},
+		"opa":        ResourcePath{BasePath: "old/opa"},
+	}}
+
+	atmosConfig.SetResourcePath("opa", ResourcePath{BasePath: "new/opa"})
+
+	assert.Equal(t, "new/opa", atmosConfig.GetResourcePath("opa").BasePath)
+	assert.Equal(t, "json/path", atmosConfig.GetResourcePath("jsonschema").BasePath)
 }
 
 func TestIsColorEnabled(t *testing.T) {
@@ -277,13 +328,14 @@ func TestGetCaseSensitiveMap(t *testing.T) {
 
 func TestComponents_GetComponentConfig(t *testing.T) {
 	components := Components{
-		Terraform:  Terraform{BasePath: "components/terraform"},
-		Helmfile:   Helmfile{BasePath: "components/helmfile"},
-		Packer:     Packer{BasePath: "components/packer"},
-		Ansible:    Ansible{BasePath: "components/ansible"},
-		Kubernetes: Kubernetes{BasePath: "components/kubernetes"},
-		Helm:       Helm{BasePath: "components/helm"},
-		Container:  ContainerComponentsConfig{BasePath: "components/container"},
+		Terraform:      Terraform{BasePath: "components/terraform"},
+		Helmfile:       Helmfile{BasePath: "components/helmfile"},
+		Packer:         Packer{BasePath: "components/packer"},
+		Ansible:        Ansible{BasePath: "components/ansible"},
+		Kubernetes:     Kubernetes{BasePath: "components/kubernetes"},
+		Helm:           Helm{BasePath: "components/helm"},
+		Container:      ContainerComponentsConfig{BasePath: "components/container"},
+		CloudFormation: AwsCloudFormation{BasePath: "components/cloudformation"},
 		Plugins: map[string]any{
 			"custom-plugin": map[string]any{"base_path": "components/custom-plugin"},
 		},
@@ -302,6 +354,7 @@ func TestComponents_GetComponentConfig(t *testing.T) {
 		{"kubernetes", "kubernetes", components.Kubernetes, true},
 		{"helm", "helm", components.Helm, true},
 		{"container", "container", components.Container, true},
+		{"aws/cloudformation", "aws/cloudformation", components.CloudFormation, true},
 		{"plugin type", "custom-plugin", components.Plugins["custom-plugin"], true},
 		{"unknown type", "does-not-exist", nil, false},
 	}

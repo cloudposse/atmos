@@ -16,7 +16,7 @@ with a cloud CLI.
 ## The Problem
 
 A `kind: store` hook reads a Terraform output and writes it to a configured store, so other
-components can read it back later with `!store` or `!store.get`. Before this change, the
+components can read it back later with [`!store`](/functions/yaml/store) or [`!store.get`](/functions/yaml/store.get). Before this change, the
 supported lifecycle events did not include `output` or `refresh`. Nothing fired when you just
 wanted to *read* a value from infrastructure that already exists.
 
@@ -28,7 +28,7 @@ value into the store yourself, outside Atmos.
 
 ## The Fix
 
-Atmos now fires lifecycle hooks around `atmos terraform output` and `atmos terraform
+Atmos now fires lifecycle hooks around [`atmos terraform output`](/cli/commands/terraform/output) and `atmos terraform
 refresh`, the same way it already does for `plan`, `apply`, and `test`. A `kind: store` hook
 (or a `type: store` step run through the `kind: step` bridge) can bind to
 `after.terraform.output` instead of, or alongside, `after.terraform.apply`:
@@ -45,7 +45,7 @@ hooks:
 
 Running `atmos terraform output vpc -s prod` now reads the current state and writes `vpc_id`
 into the store — no `apply` required. `before`/`after.terraform.refresh` events fire the same
-way around `atmos terraform refresh`, for hooks that care about reconciling state with the
+way around [`atmos terraform refresh`](/cli/commands/terraform/refresh), for hooks that care about reconciling state with the
 real infrastructure rather than just reading it.
 
 ## How to Use It

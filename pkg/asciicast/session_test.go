@@ -1,7 +1,6 @@
 package asciicast
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -480,6 +479,75 @@ func TestRecordOutputChunkDoesNotStallRecordingBehindWriterLock(t *testing.T) {
 	}
 }
 
+// TestRecordOutputChunkAnswersQueriesOnceWriterLockReleased verifies that a
+// terminal query seen while a paced action holds the writer lock is not
+// dropped, even when split across two reads: the reply is delivered as soon
+// as the lock is released, and output containing no query produces no reply.
+func TestRecordOutputChunkAnswersQueriesOnceWriterLockReleased(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reader.Close() }()
+
+	replies := &lockedBuilder{}
+	input := &syncWriter{w: replies}
+
+	held := make(chan struct{})
+	release := make(chan struct{})
+	go input.Locked(func(io.Writer) {
+		close(held)
+		<-release
+	})
+	<-held
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	_ = newSessionState(ctx, reader, input, reader.Close)
+
+	for _, chunk := range []string{"plain output", "\x1b[", "6n"} {
+		if _, err := writer.WriteString(chunk); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if got := replies.String(); got != "" {
+		t.Fatalf("reply written while writer lock was held: %q", got)
+	}
+
+	close(release)
+	const want = "\x1b[1;1R"
+	deadline := time.After(2 * time.Second)
+	for replies.String() != want {
+		select {
+		case <-deadline:
+			t.Fatalf("query reply = %q, want %q", replies.String(), want)
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+}
+
+// lockedBuilder is a strings.Builder safe for concurrent Write and String calls.
+type lockedBuilder struct {
+	mu  sync.Mutex
+	buf strings.Builder
+}
+
+func (b *lockedBuilder) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuilder) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
 func TestSessionStateDiscardOutputKeepsTeardownNoiseOutOfCapture(t *testing.T) {
 	if err := iolib.Initialize(); err != nil {
 		t.Fatal(err)
@@ -828,24 +896,6 @@ func TestResetTimerStopsRunningTimer(t *testing.T) {
 	timer.Stop()
 }
 
-func TestAnswerTerminalQueries(t *testing.T) {
-	var input bytes.Buffer
-	answerTerminalQueries([]byte("\x1b]11;?\x1b\\\x1b[6n\x1b]10;?\x1b\\\x1b[6n"), &input)
-
-	got := input.String()
-	for _, want := range []string{
-		"\x1b]11;rgb:0000/0000/0000\x1b\\",
-		"\x1b]10;rgb:ffff/ffff/ffff\x1b\\",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("terminal query response missing %q in %q", want, got)
-		}
-	}
-	if count := strings.Count(got, "\x1b[1;1R"); count != 2 {
-		t.Fatalf("cursor position replies = %d, want 2 in %q", count, got)
-	}
-}
-
 func TestRunSessionExecutesScriptedShellActions(t *testing.T) {
 	if err := iolib.Initialize(); err != nil {
 		t.Fatal(err)
@@ -915,7 +965,7 @@ func TestRunSessionAppliesDirectoryAndEnvironment(t *testing.T) {
 			// The freshly spawned PTY shell answers an initial burst of
 			// terminal capability queries asynchronously right after start;
 			// a short pause lets that settle before the scripted "write"
-			// races it (see TestAnswerTerminalQueries for the query/response
+			// races it (see pkg/terminal/query for the query/response
 			// exchange this waits out).
 			{Type: "pause", Duration: "300ms"},
 			{Type: "write", Text: "print context", Rate: "0"},

@@ -42,6 +42,7 @@ func (p PkgType) String() string {
 // branch stays inside these two implementations; callers of VendorPackage/Install/FilterPending
 // never switch on which one they hold.
 type pkgInstaller interface {
+	prepare(ctx context.Context, tempDir string, config *schema.AtmosConfiguration, progress preparationProgress) (*PreparedPackage, error)
 	// install fetches the package into tempDir (a caller-owned, already-created scratch
 	// directory removed after this call returns), copies it to its declared target, and
 	// records a vendor.lock.yaml receipt for it.

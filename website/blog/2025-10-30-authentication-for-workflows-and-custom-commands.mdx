@@ -27,7 +27,7 @@ This approach ensures that credentials are isolated and never serialized in logs
 
 ## Bug Fix: Auth Shell Environment Variables
 
-We fixed a regression in `atmos auth shell` where it wasn't setting the required environment variables for credential file resolution. Previously, when you ran:
+We fixed a regression in [`atmos auth shell`](/cli/commands/auth/shell) where it wasn't setting the required environment variables for credential file resolution. Previously, when you ran:
 
 ```bash
 atmos auth shell my-identity
@@ -155,7 +155,7 @@ atmos plan-all vpc prod --identity production
 ## Documentation
 
 For complete details, see:
-- [Workflow Authentication](/workflows/steps/identity)
+- [Workflow Authentication](/steps/identity)
 - [Custom Command Authentication](/cli/configuration/commands/identity#using-authentication-with-custom-commands)
 - [Auth Commands](/cli/commands/auth/usage)
 

@@ -48,8 +48,7 @@ func NewProgressRenderer(workflow *schema.WorkflowDefinition, totalSteps int) *P
 		return nil
 	}
 
-	p := progress.New(
-		progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()),
+	p := ui.NewProgress(
 		progress.WithWidth(progressBarWidth),
 		progress.WithoutPercentage(),
 	)

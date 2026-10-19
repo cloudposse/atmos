@@ -214,3 +214,31 @@ def assert_colored(text, needle):
         if needle in strip_ansi(line) and _SGR.search(line):
             return
     raise SystemExit(f"cast does not render {needle!r} with color")
+
+
+def assert_progress_color(text):
+    """Progress cells must carry a foreground, independent of nearby status text."""
+    foreground = None
+    cells = 0
+    for match in re.finditer(r"\x1b\[([0-9;]*)m|([█░])", text):
+        if match.group(2):
+            cells += 1
+            if foreground is None:
+                raise SystemExit("cast progress cell is missing ANSI foreground color")
+            continue
+        codes = [int(code) if code else 0 for code in match.group(1).split(";")]
+        i = 0
+        while i < len(codes):
+            code = codes[i]
+            if code in (0, 39):
+                foreground = None
+            elif 30 <= code <= 37 or 90 <= code <= 97:
+                foreground = code
+            elif code in (38, 48) and i + 1 < len(codes):
+                count = 4 if codes[i + 1] == 2 else 2
+                if code == 38:
+                    foreground = codes[i + 1:i + count + 1]
+                i += count
+            i += 1
+    if not cells:
+        raise SystemExit("cast is missing progress cells")

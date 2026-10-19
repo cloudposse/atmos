@@ -118,15 +118,15 @@ func formatProvenanceCommentWithStackFile(entry *m.ProvenanceEntry, useColor boo
 	var depthColor lipgloss.Color
 	switch entry.Depth {
 	case 1, 2:
-		depthColor = lipgloss.Color(theme.ColorGreen)
+		depthColor = lipgloss.Color(theme.GetCurrentColorScheme().Success)
 	case 3:
-		depthColor = lipgloss.Color(theme.ColorOrange)
+		depthColor = lipgloss.Color(theme.GetCurrentColorScheme().Warning)
 	default: // 4+
-		depthColor = lipgloss.Color(theme.ColorRed)
+		depthColor = lipgloss.Color(theme.GetCurrentColorScheme().Error)
 	}
 
 	// Format comment parts.
-	grayStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray))
+	grayStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 	depthStyle := lipgloss.NewStyle().Foreground(depthColor)
 
 	// Build: "# symbol [depth] file:line" with colored depth.
@@ -256,7 +256,7 @@ func renderProvenanceLegend(result *strings.Builder, stackFile string, useColor 
 		"#   ∴ Computed/templated" + newlineChar
 
 	if useColor {
-		legendStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray))
+		legendStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 		result.WriteString(legendStyle.Render(legend))
 	} else {
 		result.WriteString(legend)
@@ -267,7 +267,7 @@ func renderProvenanceLegend(result *strings.Builder, stackFile string, useColor 
 	if stackFile != "" {
 		stackComment := fmt.Sprintf("# Stack: %s%s", stackFile, newlineChar)
 		if useColor {
-			legendStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray))
+			legendStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 			result.WriteString(legendStyle.Render(stackComment))
 		} else {
 			result.WriteString(stackComment)

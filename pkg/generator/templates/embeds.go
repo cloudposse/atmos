@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -41,6 +42,58 @@ type Configuration struct {
 	TargetDir   string `yaml:"target_dir"`
 	Files       []File `yaml:"files"`
 	README      string `yaml:"readme"`
+	// ResolvedRef is the immutable reference fetched for Source: a Git commit
+	// SHA for Git sources (set by pkg/generator/source's resolveRemote) or a
+	// manifest digest for OCI sources (set by resolveOCI). It is empty for
+	// S3, HTTP, and local sources, which have no equivalent concept.
+	// Runtime-only -- never part of a template's own manifest -- so it's
+	// excluded from serialization. --update-strategy=rendered uses this to
+	// pin a reproducible "before" state instead of relying on a ref string
+	// that may name a mutable branch.
+	ResolvedRef string `yaml:"-"`
+	// LocalDir is the real, on-disk directory a remote source (oci://,
+	// git::, https://, s3://) was fetched into (set by resolveOCI/
+	// resolveRemote), valid for the lifetime of the generation run that
+	// fetched it. Source itself gets overwritten with the original remote
+	// reference string right after fetching, for display/provenance
+	// purposes -- see resolveOCI's own comment on that overwrite -- so it
+	// is no longer a real, resolvable path by the time a scaffold.yaml is
+	// re-parsed later in the same run (e.g. by RunSetupForm). LocalDir
+	// preserves the one that still is. Empty for a local-directory or
+	// embedded template, neither of which has a separate fetch directory
+	// distinct from Source. Runtime-only, like ResolvedRef -- excluded
+	// from serialization, and never copied into a persisted project
+	// record. Use IncludeSourceDir, not this field directly, to decide
+	// what a template's own local !include targets resolve against.
+	LocalDir string `yaml:"-"`
+}
+
+// IncludeSourceDir returns the directory a template's own local !include
+// targets should resolve against -- which is deliberately not always
+// Source (see LocalDir's own doc comment for why Source alone can't be
+// trusted for this once a remote template has been fully hydrated, and
+// SourceEmbedded's own doc comment for why the literal "embedded" string
+// must never be treated as a real directory either):
+//   - LocalDir when set (a remote source: Source itself now holds the
+//     original remote reference string, not a real path).
+//   - A fixed, syntactically valid absolute directory that can never
+//     coincidentally exist, for an embedded template (Source holds the
+//     config.SourceEmbedded sentinel, not a real directory) -- so a local
+//     !include target fails cleanly instead of resolving against the
+//     process's CWD.
+//   - Source unchanged otherwise -- a local-directory template, where
+//     Source already is a real, resolvable directory.
+func (c *Configuration) IncludeSourceDir() string {
+	defer perf.Track(nil, "templates.Configuration.IncludeSourceDir")()
+
+	switch {
+	case c.LocalDir != "":
+		return c.LocalDir
+	case c.Source == config.SourceEmbedded:
+		return filepath.Join(os.TempDir(), "atmos-embedded-template-has-no-local-source-dir")
+	default:
+		return c.Source
+	}
 }
 
 // File represents an embedded template file used by the generator.
@@ -102,7 +155,7 @@ func GetAvailableConfigurations() (map[string]Configuration, error) {
 		if entry.IsDir() {
 			// Use path.Join (forward slashes) not filepath.Join for embed.FS.
 			templatePath := path.Join(templatesDir, entry.Name()) //nolint:forbidigo // embed.FS always uses forward slashes
-			config, err := loadConfiguration(generator.Templates, templatePath, entry.Name(), config.SourceEmbedded)
+			config, err := loadConfiguration(generator.Templates, templatePath, entry.Name(), config.SourceEmbedded, "")
 			if err != nil {
 				// Skip templates that can't be loaded
 				continue
@@ -114,13 +167,43 @@ func GetAvailableConfigurations() (map[string]Configuration, error) {
 	return configs, nil
 }
 
+// LoadOption customizes how LoadConfigurationFromDir reads a template
+// source directory.
+type LoadOption func(*loadOptions)
+
+type loadOptions struct {
+	excludeTarget string
+}
+
+// WithExcludePath excludes the top-level entry under dir that contains
+// absPath from the template source walk, when absPath resolves inside dir.
+// Used to keep a scaffold run's own resolved target directory -- when it
+// lands inside a `source: "."` template's own tree -- from being re-copied
+// into itself as template content on the next run. The whole shared
+// top-level container is excluded, not just the literal target path: a
+// template that nests multiple named outputs under one container directory
+// (e.g. `generated/<name>`) would otherwise still leak OTHER, previously
+// generated sibling directories back in as verbatim content, since only an
+// exact-target-path exclusion wouldn't cover them. See
+// tests/fixtures/scenarios/scaffold-matrix-freetext for the fixture that
+// exposed this: repeated local `atmos test` runs compounded its own
+// `generated/` output into itself, reaching 47,000+ self-nested
+// directories before this fix.
+func WithExcludePath(absPath string) LoadOption {
+	defer perf.Track(nil, "templates.WithExcludePath")()
+
+	return func(o *loadOptions) {
+		o.excludeTarget = absPath
+	}
+}
+
 // LoadConfigurationFromDir loads a template configuration from a local
 // directory on disk (e.g. a template referenced by `source:` in the
 // `scaffold.templates` section of atmos.yaml). The directory is read with
 // the same rules as embedded templates: scaffold.yaml provides metadata and
 // the questionnaire, .tmpl files and atmos:template magic comments mark
 // templates.
-func LoadConfigurationFromDir(name, dir string) (*Configuration, error) {
+func LoadConfigurationFromDir(name, dir string, opts ...LoadOption) (*Configuration, error) {
 	defer perf.Track(nil, "templates.LoadConfigurationFromDir")()
 
 	info, err := os.Stat(dir)
@@ -135,16 +218,57 @@ func LoadConfigurationFromDir(name, dir string) (*Configuration, error) {
 			Err()
 	}
 
-	return loadConfiguration(os.DirFS(dir), ".", name, dir)
+	var o loadOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+
+	excludeRootEntry := resolveExcludeRootEntry(dir, o.excludeTarget)
+
+	return loadConfiguration(os.DirFS(dir), ".", name, dir, excludeRootEntry)
+}
+
+// resolveExcludeRootEntry computes the single top-level entry name under
+// dir that must be excluded from the source walk so that absPath -- a
+// resolved scaffold generation target -- can never leak its own or its
+// siblings' historical output back into a future run as verbatim template
+// content. Returns "" when absPath is empty or doesn't resolve inside dir.
+func resolveExcludeRootEntry(dir, absPath string) string {
+	if absPath == "" {
+		return ""
+	}
+
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return ""
+	}
+	absTarget, err := filepath.Abs(absPath)
+	if err != nil {
+		return ""
+	}
+
+	rel, err := filepath.Rel(absDir, absTarget)
+	if err != nil || rel == "." || rel == ".." ||
+		strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return ""
+	}
+
+	rel = filepath.ToSlash(rel)
+	if idx := strings.Index(rel, "/"); idx >= 0 {
+		return rel[:idx]
+	}
+	return rel
 }
 
 // loadConfiguration loads a template configuration from any filesystem,
 // covering both the embedded templates and local directories. The
 // defaultName seeds the metadata when the template has no scaffold.yaml;
-// source records where the template came from.
-func loadConfiguration(fsys fs.FS, templatePath, defaultName, source string) (*Configuration, error) {
+// source records where the template came from. The excludeRootEntry
+// parameter, when non-empty, is a single top-level entry name to skip --
+// see WithExcludePath.
+func loadConfiguration(fsys fs.FS, templatePath, defaultName, source, excludeRootEntry string) (*Configuration, error) {
 	// Read all files in the template directory
-	files, err := readTemplateFiles(fsys, templatePath)
+	files, err := readTemplateFiles(fsys, templatePath, excludeRootEntry)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrReadTemplateFiles).
 			WithExplanationf("Cannot read template directory: `%s`", templatePath).
@@ -176,7 +300,12 @@ func loadConfiguration(fsys fs.FS, templatePath, defaultName, source string) (*C
 	// Use path.Join (forward slashes) not filepath.Join for fs.FS paths.
 	scaffoldPath := path.Join(templatePath, "scaffold.yaml") //nolint:forbidigo // fs.FS always uses forward slashes
 	if data, err := fs.ReadFile(fsys, scaffoldPath); err == nil {
-		scaffoldConfig, err := config.LoadScaffoldConfigFromContent(string(data))
+		// configuration.IncludeSourceDir(), not source directly -- source is
+		// the config.SourceEmbedded sentinel ("embedded") for Atmos's own
+		// built-in templates, not a real directory; passing it as-is would
+		// let a local !include target resolve relative to the process's CWD
+		// instead of failing loudly. See IncludeSourceDir's own doc comment.
+		scaffoldConfig, err := config.LoadScaffoldConfigFromContent(string(data), config.WithSourceDir(configuration.IncludeSourceDir()))
 		if err != nil {
 			return nil, errUtils.Build(errUtils.ErrScaffoldLoadConfig).
 				WithCause(err).
@@ -286,7 +415,11 @@ var excludedTemplateEntryNames = map[string]bool{
 }
 
 // readTemplateFiles recursively reads all files from a template directory.
-func readTemplateFiles(fsys fs.FS, templatePath string) ([]File, error) {
+// The excludeRootEntry parameter, when non-empty, names a single entry
+// directly under templatePath to skip entirely. It is only ever passed by
+// the initial call from loadConfiguration -- processDirectoryEntry's recursive descent below
+// always passes "", since exclusion only ever applies to the source root.
+func readTemplateFiles(fsys fs.FS, templatePath, excludeRootEntry string) ([]File, error) {
 	var files []File
 
 	entries, err := fs.ReadDir(fsys, templatePath)
@@ -296,6 +429,9 @@ func readTemplateFiles(fsys fs.FS, templatePath string) ([]File, error) {
 
 	for _, entry := range entries {
 		if excludedTemplateEntryNames[entry.Name()] {
+			continue
+		}
+		if excludeRootEntry != "" && entry.Name() == excludeRootEntry {
 			continue
 		}
 
@@ -334,8 +470,9 @@ func processDirectoryEntry(fsys fs.FS, templatePath, filePath, entryName string)
 		Permissions: 0o755,
 	})
 
-	// Recursively read directory contents
-	subFiles, err := readTemplateFiles(fsys, filePath)
+	// Recursively read directory contents. "" -- root-only exclusion never
+	// applies below the source root.
+	subFiles, err := readTemplateFiles(fsys, filePath, "")
 	if err != nil {
 		return nil, err
 	}

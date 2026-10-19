@@ -12,11 +12,26 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	githubci "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	ghendpoints "github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // ProviderName identifies the GitHub pull request publisher.
 const ProviderName = "github"
+
+// prBodyBadge is the responsive light/dark "Atmos CI" badge used in native CI plan/apply summary
+// comments (pkg/ci/plugins/terraform), reused here (via PullRequestBodyBadge) so an automated
+// component-update pull request is recognizable as Atmos-generated at a glance, not just a bare,
+// unexplained diff. GitHub renders raw HTML (<picture>/<source>/srcset) inline, letting it switch
+// images based on the viewer's OS/browser color scheme -- a capability with no plain-markdown
+// equivalent, and not guaranteed to render on every forge's own pull request markdown (see
+// atmosgit.PullRequestBodyBadger).
+const prBodyBadge = `<a href="https://atmos.tools/ci"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://atmos.tools/img/atmos-ci-gradient.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://atmos.tools/img/atmos-ci-gradient-on-light.svg">
+  <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg" alt="Atmos CI" height="32" align="right">
+</picture></a>
+`
 
 type client interface {
 	GitHub() *gh.Client
@@ -27,6 +42,8 @@ type Provider struct {
 	newClient func() (client, error)
 }
 
+var _ atmosgit.PullRequestRepositoryResolver = (*Provider)(nil)
+
 func init() {
 	atmosgit.RegisterPullRequestPublisher(ProviderName, func() (atmosgit.PullRequestPublisher, error) {
 		return New(), nil
@@ -35,8 +52,43 @@ func init() {
 
 // New creates a GitHub pull request provider using the configured CI token.
 func New() *Provider {
-	return &Provider{newClient: func() (client, error) { return githubci.NewClient() }}
+	return &Provider{newClient: newRepoEndpointsClient}
 }
+
+// publicAPIURL is the REST API base of public GitHub.com.
+const publicAPIURL = "https://api.github.com"
+
+// newRepoEndpointsClient builds the CI-token client and, when GITHUB_SERVER_URL / GITHUB_API_URL
+// name a GitHub Enterprise Server instance, points it at that instance's API instead of public
+// GitHub.com. This keeps the API host consistent with RepositoryFromURL, which only claims the
+// host those variables name.
+func newRepoEndpointsClient() (client, error) {
+	c, err := githubci.NewClient()
+	if err != nil {
+		return nil, err
+	}
+	return clientForEndpoints(c, ghendpoints.RepoEndpoints())
+}
+
+// clientForEndpoints returns c unchanged for public GitHub.com, or a copy pointed at the
+// Enterprise Server API that endpoints names.
+func clientForEndpoints(c client, endpoints ghendpoints.Endpoints) (client, error) {
+	if endpoints.APIURL == publicAPIURL {
+		return c, nil
+	}
+	// WithEnterpriseURLs returns a new client rather than reconfiguring c.
+	enterprise, err := c.GitHub().WithEnterpriseURLs(endpoints.APIURL, endpoints.UploadURL)
+	if err != nil {
+		return nil, fmt.Errorf("%w: configuring GitHub Enterprise Server API %q: %w", errUtils.ErrGitHubAuthorization, endpoints.APIURL, err)
+	}
+	return enterpriseClient{api: enterprise}, nil
+}
+
+// enterpriseClient adapts a go-github client pointed at a GitHub Enterprise Server instance.
+type enterpriseClient struct{ api *gh.Client }
+
+// GitHub returns the Enterprise-configured go-github client.
+func (e enterpriseClient) GitHub() *gh.Client { return e.api }
 
 // NewWithClientFactory exists for fake HTTP client tests without exposing the
 // go-github dependency to caller packages.
@@ -55,6 +107,13 @@ func (p *Provider) Reconcile(ctx context.Context, options *atmosgit.PullRequestO
 	}
 	if options.Owner == "" || options.Repository == "" || options.Base == "" || options.Head == "" {
 		return nil, fmt.Errorf("%w: owner, repository, base, and head are required", errUtils.ErrComponentUpdaterConfig)
+	}
+	if len(options.Namespace) > 0 {
+		// GitHub addresses repositories with exactly two segments (owner/repository); a non-empty
+		// Namespace means the caller built options for a forge that needs a third segment (e.g.
+		// Azure DevOps' project) and pointed it at the wrong provider. Reject outright rather than
+		// silently ignoring Namespace and resolving to the wrong repository.
+		return nil, fmt.Errorf("%w: github does not support a pull request namespace (got %v); GitHub repositories are addressed as owner/repository", errUtils.ErrComponentUpdaterConfig, options.Namespace)
 	}
 	c, err := p.newClient()
 	if err != nil {
@@ -113,6 +172,11 @@ func (p *Provider) Reconcile(ctx context.Context, options *atmosgit.PullRequestO
 	return result, nil
 }
 
+// PullRequestBodyBadge implements atmosgit.PullRequestBodyBadger.
+func (p *Provider) PullRequestBodyBadge() string {
+	return prBodyBadge
+}
+
 func githubError(err error, response *gh.Response) error {
 	if response != nil && (response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden) {
 		return fmt.Errorf("%w: GitHub returned HTTP %d; grant contents: write, pull-requests: write, and issues: write as needed: %w", errUtils.ErrGitHubAuthorization, response.StatusCode, err)
@@ -121,4 +185,17 @@ func githubError(err error, response *gh.Response) error {
 		return fmt.Errorf("%w: %w", errUtils.ErrGitHubAuthorization, err)
 	}
 	return fmt.Errorf("%w: %w", errUtils.ErrPullRequestReconciliation, err)
+}
+
+// RepositoryFromURL recognizes remotes on the GitHub host this provider's API client talks to
+// over HTTPS or SSH and returns their owner/repository: github.com by default, or the Enterprise
+// Server host named by GITHUB_SERVER_URL. Only that one host is claimed, so a resolved repository
+// is always one the client can reach. Ports are ignored, matching atmosgit.GitHubRepository,
+// since scp-style SSH remotes carry none.
+func (p *Provider) RepositoryFromURL(uri string) (atmosgit.PullRequestRepository, bool) {
+	parts, ok := atmosgit.ParseGenericGitURL(uri)
+	if !ok || strings.Contains(parts.Name, "/") || !strings.EqualFold(parts.Host, ghendpoints.RepoEndpoints().Hostname()) {
+		return atmosgit.PullRequestRepository{}, false
+	}
+	return atmosgit.PullRequestRepository{Owner: parts.Owner, Repository: parts.Name}, true
 }

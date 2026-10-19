@@ -1,6 +1,7 @@
 package dependencies
 
 import (
+	"fmt"
 	"maps"
 	"path"
 	"path/filepath"
@@ -49,6 +50,16 @@ type ScopeRequest struct {
 	// selectors in the lightweight graph.
 	LeftDelim  string
 	RightDelim string
+	// SkipTargetValidation preserves direct dependent lookup's historical
+	// tolerance for unavailable targets after resolved closure evaluation.
+	SkipTargetValidation bool
+	// IncludeLegacyReverseSources evaluates legacy settings.depends_on sources
+	// while resolving reverse closures whose context-based targets are not
+	// represented by the structural graph.
+	IncludeLegacyReverseSources bool
+	// IncludeRequiredReverseSources evaluates modern required dependency sources
+	// whose unavailable targets are omitted from the structural graph.
+	IncludeRequiredReverseSources bool
 }
 
 // selector builds the seed selector for this request. Both the lightweight
@@ -91,6 +102,18 @@ type Selector struct {
 	Labels     map[string]string
 	LeftDelim  string
 	RightDelim string
+}
+
+// withoutSelectors returns a copy of the selector with the tags/labels filters
+// cleared, leaving only the components/stack primary selection. Dependents
+// expand from this unfiltered selection.
+func (s *Selector) withoutSelectors() *Selector {
+	return &Selector{
+		Components: s.Components,
+		Stack:      s.Stack,
+		LeftDelim:  s.LeftDelim,
+		RightDelim: s.RightDelim,
+	}
 }
 
 // Roots returns the sorted IDs of nodes matching the selector, for use as
@@ -145,7 +168,12 @@ func stackMatches(pattern, stack string) bool {
 //     dependencies.components/settings.depends_on edges, which are static in
 //     practice; see the fix doc's grep of examples/tests).
 //   - Phase B: seed roots from the request's selection filters, then compute
-//     the reachable closure in the requested direction(s) and depth(s).
+//     the reachable closure in the requested direction(s) and depth(s) via
+//     SelectedClosure semantics: tags/labels narrow the seed and the dependents
+//     the closure adds, never the prerequisites. Dependents that the selectors
+//     drop (and the primary-selection nodes anchoring them) are still
+//     evaluated, since the survivors' ordering and required targets depend on
+//     them, but they are not part of the reported closure.
 //   - Phase C: fully evaluate ONLY the stacks the closure touches, then
 //     recompute the closure against the resolved graph. If the resolved edges
 //     reveal additional stacks the lightweight pass could not see (e.g. a
@@ -176,7 +204,9 @@ func ResolveScopedClosure(describe DescribeFunc, req *ScopeRequest) (*ScopeResul
 	if err != nil {
 		return nil, err
 	}
-	graph, err := BuildGraph(lightweightStacks)
+	// Phase A only discovers candidate nodes and edges. Required targets are
+	// validated after their declaring components have entered the closure.
+	graph, err := buildGraph(lightweightStacks, map[string]bool{}, req.LeftDelim)
 	if err != nil {
 		return nil, err
 	}
@@ -184,13 +214,43 @@ func ResolveScopedClosure(describe DescribeFunc, req *ScopeRequest) (*ScopeResul
 		return &ScopeResult{Stacks: lightweightStacks, Closure: graph}, nil
 	}
 
-	roots := Roots(graph, req.selector())
-	closure := ReachableClosure(graph, roots, req.Direction, req.Depths)
+	sel := req.selector()
+	roots := Roots(graph, sel)
+	dependentRoots := Roots(graph, sel.withoutSelectors())
+	rootSet := closureRoots{seeds: roots, dependentSeeds: dependentRoots}
+	closure := selectedClosureFromRoots(graph, rootSet, sel, req.Direction, req.Depths)
 	if closure.Size() == 0 {
 		return &ScopeResult{Stacks: map[string]any{}, Closure: closure}, nil
 	}
 
-	return resolveClosureStacks(describe, req, roots, closure, lightweightStacks)
+	return resolveClosureStacks(describe, req, closureResolutionParams{
+		roots:          roots,
+		dependentRoots: dependentRoots,
+		graph:          graph,
+		// Reverse sources are looked up against the unfiltered roots: dependents
+		// expand from every candidate, not only the tags/labels-matching ones.
+		targets:           rootTargets(graph, dependentRoots),
+		closure:           closure,
+		scope:             evaluationScope(graph, rootSet, sel, req.Direction, req.Depths),
+		lightweightStacks: lightweightStacks,
+	})
+}
+
+type rootTarget struct {
+	component     string
+	componentType string
+	stack         string
+}
+
+func rootTargets(graph *dependency.Graph, roots []string) []rootTarget {
+	targets := make([]rootTarget, 0, len(roots))
+	for _, id := range roots {
+		node, ok := graph.GetNode(id)
+		if ok {
+			targets = append(targets, rootTarget{component: node.Component, componentType: node.Type, stack: node.Stack})
+		}
+	}
+	return targets
 }
 
 // resolveClosureStacks is Phase C: re-describe (templates/YAML functions/auth
@@ -200,61 +260,188 @@ func ResolveScopedClosure(describe DescribeFunc, req *ScopeRequest) (*ScopeResul
 // from the lightweight pass), so a same-stack templated dependency target
 // (e.g. `stack: "{{ .vars.stage }}"` resolving to its own stack) still
 // produces the correct closure.
-func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, roots []string, closure *dependency.Graph, lightweightStacks map[string]any) (*ScopeResult, error) {
+type closureResolutionParams struct {
+	roots          []string
+	dependentRoots []string
+	// graph is the lightweight structural graph the closure was first computed on.
+	graph   *dependency.Graph
+	targets []rootTarget
+	closure *dependency.Graph
+	// scope is the closure before dependents are filtered by tags/labels. It
+	// decides which components are evaluated: dependents dropped by the
+	// selectors still carry the edges that order the ones that survive, and
+	// the graph-backed executor needs them described to validate those edges.
+	scope             *dependency.Graph
+	lightweightStacks map[string]any
+}
+
+// resolveClosureStacks describes pending components until the closure is fully resolved and returns the resolved stacks with the final closure.
+func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, p closureResolutionParams) (*ScopeResult, error) {
 	resolvedStacks := make(map[string]any)
 	evaluatedComponents := make(map[string]map[string]bool)
 	var resolvedGraph *dependency.Graph
+	currentGraph := p.graph
 
-	// Reverse/both directions conservatively evaluate components whose
-	// dependency declarations were unresolved in the lightweight pass — see
-	// UnresolvedDependencySources and the ResolveScopedClosure doc comment.
-	extraEval := map[string][]string{}
-	if req.Direction != DirectionForward {
-		extraEval = UnresolvedDependencySources(lightweightStacks, req.LeftDelim)
-	}
+	extraEval := reverseExtraEvaluationTargets(p.lightweightStacks, req, p.targets)
 
 	for {
-		stackNames, componentsByStack := evaluationTargets(closure, extraEval)
+		stackNames, componentsByStack := evaluationTargets(p.scope, withDroppedSeedDependencies(extraEval, currentGraph, &p))
 		pending := pendingComponentsByStack(stackNames, componentsByStack, evaluatedComponents)
 		if len(pending) == 0 {
-			finalRoots := refineRoots(resolvedGraph, roots, req)
+			finalRoots := refineRoots(resolvedGraph, p.roots, req)
 			return &ScopeResult{
 				Stacks:  resolvedStacks,
-				Closure: ReachableClosure(resolvedGraph, finalRoots, req.Direction, req.Depths),
+				Closure: selectedClosureFromRoots(resolvedGraph, closureRoots{seeds: finalRoots, dependentSeeds: p.dependentRoots}, req.selector(), req.Direction, req.Depths),
 			}, nil
 		}
 
-		// Evaluate only the closure's own components within each stack:
-		// unrelated components that merely share a stack file with a closure
-		// member must not have their templates/YAML functions (and thus their
-		// auth/backend requirements) evaluated. Stacks with nothing left to
-		// evaluate this round (all closure components already evaluated) are
-		// skipped.
-		for _, stackName := range stackNames {
-			components, ok := pending[stackName]
-			if !ok {
-				continue
-			}
-			partial, err := describe(stackName, components, req.ProcessTemplates, req.ProcessFunctions)
-			if err != nil {
-				return nil, err
-			}
-			resolvedStacks = mergeResolvedClosureStacks(resolvedStacks, partial)
-			if evaluatedComponents[stackName] == nil {
-				evaluatedComponents[stackName] = make(map[string]bool, len(components))
-			}
-			for _, component := range components {
-				evaluatedComponents[stackName][component] = true
-			}
-		}
-
 		var err error
-		resolvedGraph, err = BuildGraph(mergeResolvedClosureStacks(lightweightStacks, resolvedStacks))
+		resolvedStacks, err = evaluatePendingClosureComponents(describe, req, pendingClosureEvaluationParams{
+			stackNames:          stackNames,
+			pending:             pending,
+			resolvedStacks:      resolvedStacks,
+			evaluatedComponents: evaluatedComponents,
+		})
 		if err != nil {
 			return nil, err
 		}
-		closure = ReachableClosure(resolvedGraph, roots, req.Direction, req.Depths)
+
+		resolvedGraph, err = buildGraph(
+			mergeResolvedClosureStacks(p.lightweightStacks, resolvedStacks),
+			map[string]bool{},
+			req.LeftDelim,
+		)
+		if err != nil {
+			return nil, err
+		}
+		rootSet := closureRoots{seeds: p.roots, dependentSeeds: p.dependentRoots}
+		currentGraph = resolvedGraph
+		p.closure = selectedClosureFromRoots(resolvedGraph, rootSet, req.selector(), req.Direction, req.Depths)
+		p.scope = evaluationScope(resolvedGraph, rootSet, req.selector(), req.Direction, req.Depths)
+		if !req.SkipTargetValidation {
+			if _, err = buildGraph(
+				mergeResolvedClosureStacks(p.lightweightStacks, resolvedStacks),
+				evaluatedClosureNodeIDs(p.closure, evaluatedComponents),
+				req.LeftDelim,
+			); err != nil {
+				return nil, err
+			}
+		}
 	}
+}
+
+// withDroppedSeedDependencies adds, to the extra evaluation targets, the
+// primary-selection nodes that the tags/labels selectors dropped from the seed
+// but that still anchor part of the scope: at least one scope member depends on
+// them. They are the origin of the dependents traversal, so the graph-backed
+// executor must see them to select the surviving dependents, and it validates
+// those dependents' required targets against the described components.
+// Dropped seeds with no dependent in scope contribute nothing and stay unevaluated.
+func withDroppedSeedDependencies(extraEval map[string][]string, graph *dependency.Graph, p *closureResolutionParams) map[string][]string {
+	if graph == nil || p.scope == nil {
+		return extraEval
+	}
+
+	combined := make(map[string][]string, len(extraEval))
+	mergeEvaluationTargets(combined, extraEval)
+	for _, id := range p.dependentRoots {
+		if p.scope.Nodes[id] != nil {
+			continue
+		}
+		seed, ok := graph.GetNode(id)
+		if !ok || !anyInGraph(p.scope, seed.Dependents) {
+			continue
+		}
+		mergeEvaluationTargets(combined, map[string][]string{seed.Stack: {seed.Component}})
+	}
+	return combined
+}
+
+// anyInGraph reports whether any of the node IDs is present in graph.
+func anyInGraph(graph *dependency.Graph, ids []string) bool {
+	for _, id := range ids {
+		if graph.Nodes[id] != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// evaluationScope returns the closure computed without the tags/labels
+// selectors, so dependents that the selectors later drop are still evaluated.
+func evaluationScope(graph *dependency.Graph, roots closureRoots, sel *Selector, direction Direction, depths Depths) *dependency.Graph {
+	return selectedClosureFromRoots(graph, roots, sel.withoutSelectors(), direction, depths)
+}
+
+// evaluatePendingClosureComponents evaluates only closure members, avoiding
+// templates and YAML functions for unrelated components in shared stack files.
+type pendingClosureEvaluationParams struct {
+	stackNames          []string
+	pending             map[string][]string
+	resolvedStacks      map[string]any
+	evaluatedComponents map[string]map[string]bool
+}
+
+func evaluatePendingClosureComponents(describe DescribeFunc, req *ScopeRequest, p pendingClosureEvaluationParams) (map[string]any, error) {
+	for _, stackName := range p.stackNames {
+		components, ok := p.pending[stackName]
+		if !ok {
+			continue
+		}
+		partial, err := describe(stackName, components, req.ProcessTemplates, req.ProcessFunctions)
+		if err != nil {
+			return nil, fmt.Errorf("evaluating stack %q components %v: %w", stackName, components, err)
+		}
+		p.resolvedStacks = mergeResolvedClosureStacks(p.resolvedStacks, partial)
+		if p.evaluatedComponents[stackName] == nil {
+			p.evaluatedComponents[stackName] = make(map[string]bool, len(components))
+		}
+		for _, component := range components {
+			p.evaluatedComponents[stackName][component] = true
+		}
+	}
+	return p.resolvedStacks, nil
+}
+
+// reverseExtraEvaluationTargets collects sources whose dependencies cannot form
+// structural reverse edges until the sources have been fully evaluated.
+func reverseExtraEvaluationTargets(stacks map[string]any, req *ScopeRequest, targets []rootTarget) map[string][]string {
+	if req.Direction == DirectionForward {
+		return map[string][]string{}
+	}
+
+	extraEval := UnresolvedDependencySources(stacks, req.LeftDelim)
+	if req.IncludeLegacyReverseSources {
+		mergeEvaluationTargets(extraEval, LegacyDependencySources(stacks))
+	}
+	if req.IncludeRequiredReverseSources {
+		mergeEvaluationTargets(extraEval, RequiredDependencySources(stacks, targets, req.LeftDelim))
+	}
+	return extraEval
+}
+
+func mergeEvaluationTargets(targets, additional map[string][]string) {
+	for stackName, components := range additional {
+		targets[stackName] = append(targets[stackName], components...)
+		sort.Strings(targets[stackName])
+		targets[stackName] = slices.Compact(targets[stackName])
+	}
+}
+
+// evaluatedClosureNodeIDs returns the source node IDs whose required targets
+// are in scope for strict validation after Phase C evaluation.
+func evaluatedClosureNodeIDs(closure *dependency.Graph, evaluated map[string]map[string]bool) map[string]bool {
+	nodeIDs := make(map[string]bool)
+	for stackName, components := range evaluated {
+		for componentName := range components {
+			for _, node := range closure.Nodes {
+				if node.Stack == stackName && node.Component == componentName {
+					nodeIDs[node.ID] = true
+				}
+			}
+		}
+	}
+	return nodeIDs
 }
 
 // refineRoots re-tests the seed roots against the RESOLVED graph so the final

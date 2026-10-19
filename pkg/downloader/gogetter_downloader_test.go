@@ -107,11 +107,12 @@ func TestRegisterCustomDetectors(t *testing.T) {
 	getter.Detectors = []getter.Detector{}
 
 	config := &schema.AtmosConfiguration{}
-	registerCustomDetectors(config, "")
+	detectors := customDetectors(context.Background(), config, "")
 
-	assert.Equal(t, 1, len(getter.Detectors))
+	assert.Equal(t, 1, len(detectors))
+	assert.Empty(t, getter.Detectors)
 	// Can't assert type precisely without NewCustomGitHubDetector implementation
-	assert.NotNil(t, getter.Detectors[0])
+	assert.NotNil(t, detectors[0])
 }
 
 func TestDownloadDetectFormatAndParseFile(t *testing.T) {

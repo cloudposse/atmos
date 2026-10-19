@@ -116,16 +116,31 @@ func TestScaffoldGenerateCmd_FlagDefinitions(t *testing.T) {
 			defaultValue: "false",
 		},
 		{
-			name:         "merge-strategy flag",
-			flagName:     "merge-strategy",
-			shorthand:    "",
-			defaultValue: "manual",
+			// Registered default is "" (see ResolveConflictStrategy: an unset
+			// value defaults to "manual", or "theirs" when --force is also set
+			// with --update), so no defaultValue check here -- same pattern as
+			// base-ref flag above.
+			name:      "merge-strategy flag",
+			flagName:  "merge-strategy",
+			shorthand: "",
 		},
 		{
 			name:         "merge-driver flag",
 			flagName:     "merge-driver",
 			shorthand:    "",
 			defaultValue: "auto",
+		},
+		{
+			name:         "max-changes flag",
+			flagName:     "max-changes",
+			shorthand:    "",
+			defaultValue: "50",
+		},
+		{
+			name:         "recreate-deleted flag",
+			flagName:     "recreate-deleted",
+			shorthand:    "",
+			defaultValue: "false",
 		},
 	}
 
@@ -524,7 +539,7 @@ func TestConvertScaffoldTemplateToConfiguration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config, err := convertScaffoldTemplateToConfiguration(tt.templateName, tt.templateData)
+			config, err := convertScaffoldTemplateToConfiguration(tt.templateName, tt.templateData, "")
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -831,8 +846,9 @@ func TestMergeConfiguredTemplates_NoTemplatesKey(t *testing.T) {
 	}
 
 	// No atmos.yaml → no templates section → should not error.
-	err := mergeConfiguredTemplates(configs, origins)
+	failed, err := mergeConfiguredTemplates(configs, origins, "")
 	assert.NoError(t, err)
+	assert.Empty(t, failed)
 	assert.Len(t, configs, 1) // Original template still there.
 }
 
@@ -849,7 +865,7 @@ func TestMergeConfiguredTemplates_InvalidTemplatesFormat(t *testing.T) {
 	configs := map[string]templates.Configuration{}
 	origins := map[string]string{}
 
-	err := mergeConfiguredTemplates(configs, origins)
+	_, err := mergeConfiguredTemplates(configs, origins, "")
 	// Scalar templates value is rejected with ErrInvalidScaffoldConfig.
 	require.Error(t, err)
 	assert.NotNil(t, configs) // Configs map is untouched on error.
@@ -861,7 +877,7 @@ func TestSelectTemplateByName_NotFound(t *testing.T) {
 		"stack":     {Name: "stack", Description: "Stack template"},
 	}
 
-	_, err := selectTemplateByName("nonexistent", configs)
+	_, err := selectTemplateByName("nonexistent", configs, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "scaffold template")
 	assert.Contains(t, err.Error(), "not found")
@@ -873,10 +889,29 @@ func TestSelectTemplateByName_Found(t *testing.T) {
 		"stack":     {Name: "stack", Description: "Stack template"},
 	}
 
-	result, err := selectTemplateByName("component", configs)
+	result, err := selectTemplateByName("component", configs, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "component", result.Name)
 	assert.Equal(t, "Component template", result.Description)
+}
+
+// TestSelectTemplateByName_SurfacesFailedTemplateLoadError proves the fix for a template
+// configured in atmos.yaml that failed to load (e.g. an invalid scaffold.yaml): the caller must
+// see the real, specific load error, not a generic "not found" that sends them checking spelling
+// or `scaffold list` instead of the actual problem.
+func TestSelectTemplateByName_SurfacesFailedTemplateLoadError(t *testing.T) {
+	configs := map[string]templates.Configuration{
+		"component": {Name: "component", Description: "Component template"},
+	}
+	loadErr := errUtils.Build(errUtils.ErrScaffoldComputedFieldInvalid).
+		WithExplanation("Field \"derived\" has type: computed but no value: expression").
+		Err()
+	failedTemplates := map[string]error{"broken": loadErr}
+
+	_, err := selectTemplateByName("broken", configs, failedTemplates)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldComputedFieldInvalid)
+	assert.NotContains(t, err.Error(), "not found")
 }
 
 func TestValidateAllScaffoldFiles_WithErrors(t *testing.T) {
@@ -1050,7 +1085,7 @@ func TestMergeConfiguredTemplates_AllBranches(t *testing.T) {
 				origins[name] = "embedded"
 			}
 
-			err := mergeConfiguredTemplates(configs, origins)
+			_, err := mergeConfiguredTemplates(configs, origins, "")
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
@@ -1078,7 +1113,7 @@ func TestResolveTargetDirectory_ErrorPath(t *testing.T) {
 
 func TestLoadScaffoldTemplates_Coverage(t *testing.T) {
 	// Test the function executes without errors
-	configs, origins, ui, err := loadScaffoldTemplates("")
+	configs, origins, _, ui, err := loadScaffoldTemplates("", "")
 	require.NoError(t, err)
 	assert.NotNil(t, configs)
 	assert.NotNil(t, origins)

@@ -33,6 +33,12 @@ func TestComponentPathPatternCache_GetComponentPathPattern(t *testing.T) {
 			Packer: schema.Packer{
 				BasePath: "components/packer",
 			},
+			Ansible: schema.Ansible{
+				BasePath: "components/ansible",
+			},
+			Container: schema.ContainerComponentsConfig{
+				BasePath: "components/container",
+			},
 		},
 	}
 
@@ -60,6 +66,31 @@ func TestComponentPathPatternCache_GetComponentPathPattern(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, filepath.ToSlash(pattern), "components/packer/image")
 		assert.Contains(t, pattern, "/**")
+	})
+
+	t.Run("ansible component pattern", func(t *testing.T) {
+		t.Parallel()
+		pattern, err := cache.getComponentPathPattern("webserver", cfg.AnsibleComponentType, atmosConfig)
+		require.NoError(t, err)
+		assert.Contains(t, filepath.ToSlash(pattern), "components/ansible/webserver")
+		assert.Contains(t, pattern, "/**")
+	})
+
+	t.Run("container component pattern", func(t *testing.T) {
+		t.Parallel()
+		pattern, err := cache.getComponentPathPattern("app", cfg.ContainerComponentType, atmosConfig)
+		require.NoError(t, err)
+		assert.Contains(t, filepath.ToSlash(pattern), "components/container/app")
+		assert.Contains(t, pattern, "/**")
+	})
+
+	t.Run("emulator component has no source pattern", func(t *testing.T) {
+		t.Parallel()
+		// Emulator components are stack-defined services with no filesystem source tree, so the
+		// pattern is empty (isComponentFolderChangedIndexed treats an empty pattern as no match).
+		pattern, err := cache.getComponentPathPattern("gcs", cfg.EmulatorComponentType, atmosConfig)
+		require.NoError(t, err)
+		assert.Empty(t, pattern)
 	})
 
 	t.Run("unsupported component type", func(t *testing.T) {
@@ -1717,6 +1748,7 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 	})
 }
 
+// TestProcessHelmfileComponentsIndexed verifies indexed processing of helmfile components when detecting affected components.
 func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 	t.Parallel()
 
@@ -1784,7 +1816,8 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 
 		helmfileSection := (*currentStacks)["dev-stack"].(map[string]any)["components"].(map[string]any)[cfg.HelmfileComponentType].(map[string]any)
 
-		affected, err := processHelmfileComponentsIndexed(
+		affected, err := processSimpleComponentsIndexed(
+			cfg.HelmfileComponentType,
 			"dev-stack",
 			helmfileSection,
 			remoteStacks,
@@ -1792,9 +1825,9 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 			atmosConfig,
 			filesIndex,
 			patternCache,
-			false, // includeSpaceliftAdminStacks
-			false, // includeSettings
-			false, // excludeLocked
+			false,                                // includeSpaceliftAdminStacks
+			false,                                // includeSettings
+			AffectedFilter{ExcludeLocked: false}, // excludeLocked
 		)
 
 		require.NoError(t, err)
@@ -1849,7 +1882,8 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 
 		helmfileSection := (*currentStacks)["dev-stack"].(map[string]any)["components"].(map[string]any)[cfg.HelmfileComponentType].(map[string]any)
 
-		affected, err := processHelmfileComponentsIndexed(
+		affected, err := processSimpleComponentsIndexed(
+			cfg.HelmfileComponentType,
 			"dev-stack",
 			helmfileSection,
 			remoteStacks,
@@ -1859,7 +1893,7 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -1907,7 +1941,8 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 
 		helmfileSection := (*currentStacks)["dev-stack"].(map[string]any)["components"].(map[string]any)[cfg.HelmfileComponentType].(map[string]any)
 
-		affected, err := processHelmfileComponentsIndexed(
+		affected, err := processSimpleComponentsIndexed(
+			cfg.HelmfileComponentType,
 			"dev-stack",
 			helmfileSection,
 			remoteStacks,
@@ -1917,7 +1952,7 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -1927,6 +1962,7 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 	})
 }
 
+// TestProcessPackerComponentsIndexed verifies indexed processing of packer components when detecting affected components.
 func TestProcessPackerComponentsIndexed(t *testing.T) {
 	t.Parallel()
 
@@ -1992,7 +2028,8 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 
 		packerSection := (*currentStacks)["dev-stack"].(map[string]any)["components"].(map[string]any)[cfg.PackerComponentType].(map[string]any)
 
-		affected, err := processPackerComponentsIndexed(
+		affected, err := processSimpleComponentsIndexed(
+			cfg.PackerComponentType,
 			"dev-stack",
 			packerSection,
 			remoteStacks,
@@ -2002,7 +2039,7 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2051,7 +2088,8 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 
 		packerSection := (*currentStacks)["dev-stack"].(map[string]any)["components"].(map[string]any)[cfg.PackerComponentType].(map[string]any)
 
-		affected, err := processPackerComponentsIndexed(
+		affected, err := processSimpleComponentsIndexed(
+			cfg.PackerComponentType,
 			"dev-stack",
 			packerSection,
 			remoteStacks,
@@ -2061,7 +2099,7 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2095,7 +2133,8 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 
 		packerSection := (*currentStacks)["dev-stack"].(map[string]any)["components"].(map[string]any)[cfg.PackerComponentType].(map[string]any)
 
-		affected, err := processPackerComponentsIndexed(
+		affected, err := processSimpleComponentsIndexed(
+			cfg.PackerComponentType,
 			"dev-stack",
 			packerSection,
 			remoteStacks,
@@ -2105,7 +2144,7 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2136,6 +2175,9 @@ func TestIsComponentFolderChangedCoverage(t *testing.T) {
 			},
 			Packer: schema.Packer{
 				BasePath: "components/packer",
+			},
+			Helm: schema.Helm{
+				BasePath: "components/helm",
 			},
 		},
 	}
@@ -2190,6 +2232,22 @@ func TestIsComponentFolderChangedCoverage(t *testing.T) {
 		changedFiles := []string{packerFile}
 
 		changed, err := isComponentFolderChanged("image", cfg.PackerComponentType, atmosConfig, changedFiles)
+		require.NoError(t, err)
+		assert.True(t, changed)
+	})
+
+	t.Run("helm component changed", func(t *testing.T) {
+		t.Parallel()
+		helmPath := filepath.Join(tempDir, "components/helm/nginx-ingress")
+		err := os.MkdirAll(helmPath, 0o755)
+		require.NoError(t, err)
+		helmFile := filepath.Join(helmPath, "values.yaml")
+		err = os.WriteFile(helmFile, []byte("replicas: 3"), 0o644)
+		require.NoError(t, err)
+
+		changedFiles := []string{helmFile}
+
+		changed, err := isComponentFolderChanged("nginx-ingress", cfg.HelmComponentType, atmosConfig, changedFiles)
 		require.NoError(t, err)
 		assert.True(t, changed)
 	})
@@ -2596,6 +2654,7 @@ module "storage" {
 	})
 }
 
+// TestProcessStackAffected_EdgeCases verifies that invalid or missing stack and components sections yield no affected components.
 func TestProcessStackAffected_EdgeCases(t *testing.T) {
 	t.Parallel()
 
@@ -2628,7 +2687,7 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2652,7 +2711,7 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2676,7 +2735,7 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2708,7 +2767,7 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)

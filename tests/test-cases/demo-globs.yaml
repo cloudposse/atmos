@@ -8,8 +8,6 @@ tests:
     args:
       - "vendor"
       - "pull"
-    preconditions:
-      - "github_token"
     expect:
       file_exists:
         - "./components/library/examples/demo-library/github/stargazers/README.md"

@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/downloader"
@@ -220,7 +222,7 @@ func TestInventoryAndCleanProtectsModifiedFiles(t *testing.T) {
 	require.NoFileExists(t, filepath.Join(target, "owned.txt"))
 	loaded, err := Load(config)
 	require.NoError(t, err)
-	require.Empty(t, loaded.Artifacts)
+	require.Equal(t, lock.Artifacts, loaded.Artifacts, "forced cleanup must preserve the original receipts")
 }
 
 func TestCleanRetainsPathsOwnedByUnselectedArtifact(t *testing.T) {
@@ -244,8 +246,96 @@ func TestCleanRetainsPathsOwnedByUnselectedArtifact(t *testing.T) {
 	require.FileExists(t, filepath.Join(target, "shared.txt"))
 	loaded, err := Load(config)
 	require.NoError(t, err)
-	require.NotContains(t, loaded.Artifacts, "first")
-	require.Contains(t, loaded.Artifacts, "second")
+	require.Equal(t, lock.Artifacts, loaded.Artifacts, "selective cleanup must preserve both receipts")
+}
+
+// twoArtifactLock writes a lock with two independently-targeted artifacts ("first", "second") and
+// their materialized files, returning the config plus each target dir. Used by the prune-lock tests.
+func twoArtifactLock(t *testing.T) (*schema.AtmosConfiguration, string, string) {
+	t.Helper()
+	base := t.TempDir()
+	first := filepath.Join(base, "vendor-first")
+	second := filepath.Join(base, "vendor-second")
+	require.NoError(t, os.MkdirAll(first, 0o755))
+	require.NoError(t, os.MkdirAll(second, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(first, "a.txt"), []byte("a"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(second, "b.txt"), []byte("b"), 0o644))
+
+	firstFiles, err := Inventory(first)
+	require.NoError(t, err)
+	secondFiles, err := Inventory(second)
+	require.NoError(t, err)
+
+	config := &schema.AtmosConfiguration{BasePath: base}
+	lock := New()
+	lock.Artifacts["id-first"] = Artifact{Name: "first", Kind: "source", Target: first, Files: firstFiles, Order: 1}
+	lock.Artifacts["id-second"] = Artifact{Name: "second", Kind: "source", Target: second, Files: secondFiles, Order: 2}
+	require.NoError(t, Save(config, lock))
+	return config, first, second
+}
+
+// TestCleanSelected_PreservesEntryWithoutPruneLock guards the #3169 default: a plain clean removes
+// files but keeps the lock entry (for future reinstalls).
+func TestCleanSelected_PreservesEntryWithoutPruneLock(t *testing.T) {
+	config, _, second := twoArtifactLock(t)
+
+	report, err := CleanSelected(config, []string{"second"}, false, false)
+	require.NoError(t, err)
+	assert.NoFileExists(t, filepath.Join(second, "b.txt"), "selected files must be removed")
+	assert.Empty(t, report.Forgotten, "without PruneLock, no entries are forgotten")
+
+	loaded, err := Load(config)
+	require.NoError(t, err)
+	assert.Contains(t, loaded.Artifacts, "id-second", "lock entry must be preserved by default")
+	assert.Contains(t, loaded.Artifacts, "id-first")
+}
+
+// TestCleanSelected_PruneLockRemovesSelectedEntry is the #3196 fix: with PruneLock, cleaning a
+// component also forgets its lock entry, so a source removed from vendor.yaml leaves no orphan.
+// Only the selected component's entry is removed — unselected entries are preserved.
+func TestCleanSelected_PruneLockRemovesSelectedEntry(t *testing.T) {
+	config, first, second := twoArtifactLock(t)
+
+	report, err := CleanSelectedContext(context.Background(), config, []string{"second"}, CleanOptions{PruneLock: true})
+	require.NoError(t, err)
+	assert.NoFileExists(t, filepath.Join(second, "b.txt"))
+	assert.Equal(t, []string{"second"}, report.Forgotten)
+
+	loaded, err := Load(config)
+	require.NoError(t, err)
+	assert.NotContains(t, loaded.Artifacts, "id-second", "PruneLock must forget the cleaned entry")
+	assert.Contains(t, loaded.Artifacts, "id-first", "PruneLock must not touch unselected entries")
+	assert.FileExists(t, filepath.Join(first, "a.txt"), "unselected component's files must remain")
+}
+
+// TestCleanSelected_PruneLockDryRunKeepsEntry verifies a dry run reports the would-be-forgotten
+// entry without writing the lock or removing files.
+func TestCleanSelected_PruneLockDryRunKeepsEntry(t *testing.T) {
+	config, _, second := twoArtifactLock(t)
+
+	report, err := CleanSelectedContext(context.Background(), config, []string{"second"}, CleanOptions{PruneLock: true, DryRun: true})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"second"}, report.Forgotten, "dry run still reports what would be forgotten")
+	assert.FileExists(t, filepath.Join(second, "b.txt"), "dry run must not remove files")
+
+	loaded, err := Load(config)
+	require.NoError(t, err)
+	assert.Contains(t, loaded.Artifacts, "id-second", "dry run must not write the lock")
+}
+
+// TestCleanSelected_PruneLockNoMatchIsNoop verifies PruneLock with a selector matching no artifact
+// forgets nothing and leaves every entry intact (covers the empty-selection guard).
+func TestCleanSelected_PruneLockNoMatchIsNoop(t *testing.T) {
+	config, _, _ := twoArtifactLock(t)
+
+	report, err := CleanSelectedContext(context.Background(), config, []string{"does-not-exist"}, CleanOptions{PruneLock: true})
+	require.NoError(t, err)
+	assert.Empty(t, report.Forgotten)
+
+	loaded, err := Load(config)
+	require.NoError(t, err)
+	assert.Contains(t, loaded.Artifacts, "id-first")
+	assert.Contains(t, loaded.Artifacts, "id-second")
 }
 
 func TestCleanRejectsLockTargetOutsideProject(t *testing.T) {
@@ -287,6 +377,49 @@ artifacts:
 			_, err := Clean(config, "", true, false)
 			require.Error(t, err)
 			require.FileExists(t, outsideFile)
+		})
+	}
+}
+
+func TestIsMaterializedDistinguishesUninstalledFromPartialDrift(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		missing     []string
+		uninstalled bool
+	}{
+		{"all owned files missing", []string{"README.md", "main.tf"}, true},
+		{"only first file missing", []string{"README.md"}, false},
+		{"only last file missing", []string{"main.tf"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			config := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+			target := filepath.Join(config.BasePath, "vendor")
+			require.NoError(t, os.MkdirAll(target, 0o755))
+			for _, file := range []string{"README.md", "main.tf"} {
+				require.NoError(t, os.WriteFile(filepath.Join(target, file), []byte(file), 0o644))
+			}
+			files, err := Inventory(target)
+			require.NoError(t, err)
+			artifact := Artifact{Kind: "local", Target: target, Source: Source{Declared: "file:///source"}, Files: files}
+			id := mustArtifactID(t, config, artifact.Kind, target)
+			require.NoError(t, Replace(config, id, artifact))
+			for _, file := range tc.missing {
+				require.NoError(t, os.Remove(filepath.Join(target, file)))
+			}
+			// Unowned files must not turn a fully cleaned installation into partial drift.
+			require.NoError(t, os.WriteFile(filepath.Join(target, "unowned.txt"), []byte("keep"), 0o644))
+			params := MaterializationParams{ID: id, Declared: "file:///source", Target: target}
+			check, err := IsMaterialized(config, params)
+			require.NoError(t, err)
+			require.False(t, check.Materialized)
+			require.Equal(t, tc.uninstalled, check.Uninstalled)
+			require.Equal(t, fmt.Sprintf("file %q missing", tc.missing[0]), check.Reason)
+
+			params.ExcludedPaths = []string{"**/*.md"}
+			check, err = IsMaterialized(config, params)
+			require.NoError(t, err)
+			require.False(t, check.Uninstalled, "changed excludes must still be treated as declaration drift")
+			require.Equal(t, "included/excluded paths changed", check.Reason)
 		})
 	}
 }
@@ -1079,7 +1212,7 @@ func TestCleanHandlesMissingFilesDryRunAndCraftedPaths(t *testing.T) {
 
 		loaded, err := Load(config)
 		require.NoError(t, err)
-		require.Empty(t, loaded.Artifacts)
+		require.Equal(t, lock.Artifacts, loaded.Artifacts, "already-missing files must retain their lock entries")
 	})
 
 	t.Run("an unselected artifact with an invalid lock-owned path is rejected", func(t *testing.T) {
@@ -1485,7 +1618,7 @@ func TestVerifyReportsStatErrorForNonDirectoryPathComponent(t *testing.T) {
 	require.NotEmpty(t, drifts[0].Reason)
 }
 
-func TestCleanRejectsCorruptLockAndSurfacesRemovalAndSaveFailures(t *testing.T) {
+func TestCleanRejectsCorruptLockAndSurfacesRemovalFailures(t *testing.T) {
 	t.Run("corrupt lock on disk surfaces a load error", func(t *testing.T) {
 		base := t.TempDir()
 		config := &schema.AtmosConfiguration{BasePath: base}
@@ -1510,7 +1643,7 @@ func TestCleanRejectsCorruptLockAndSurfacesRemovalAndSaveFailures(t *testing.T) 
 		require.ErrorIs(t, err, ErrInspectLockOwnedFile)
 	})
 
-	t.Run("file removal failure and lock save failure are both surfaced, not silently swallowed", func(t *testing.T) {
+	t.Run("file removal failure is surfaced", func(t *testing.T) {
 		skipUnlessWritablePermissionsWork(t)
 		base := t.TempDir()
 		target := filepath.Join(base, "vendor")
@@ -1532,7 +1665,7 @@ func TestCleanRejectsCorruptLockAndSurfacesRemovalAndSaveFailures(t *testing.T) 
 		require.ErrorIs(t, err, ErrRemoveLockOwnedFile)
 	})
 
-	t.Run("lock save failure after successful removal is surfaced, not silently dropped", func(t *testing.T) {
+	t.Run("unwritable mutation lock prevents removal", func(t *testing.T) {
 		skipUnlessWritablePermissionsWork(t)
 		base := t.TempDir()
 		target := filepath.Join(base, "vendor")
@@ -1546,13 +1679,16 @@ func TestCleanRejectsCorruptLockAndSurfacesRemovalAndSaveFailures(t *testing.T) 
 		lock.Artifacts["component"] = Artifact{Name: "component", Kind: "source", Target: target, Files: files}
 		require.NoError(t, Save(config, lock))
 
-		// Only the base (lock) directory is read-only; the target directory
-		// stays writable, so file removal succeeds but the final lock write fails.
+		// The writable target must remain intact when acquiring the project mutation
+		// lock fails in the read-only base directory.
 		require.NoError(t, os.Chmod(base, 0o555))
 		defer func() { _ = os.Chmod(base, 0o755) }()
 
 		_, err = Clean(config, "", true, false)
 		require.Error(t, err)
-		require.NoFileExists(t, filepath.Join(target, "owned.txt"))
+		require.FileExists(t, filepath.Join(target, "owned.txt"))
+		contents, readErr := os.ReadFile(filepath.Join(target, "owned.txt"))
+		require.NoError(t, readErr)
+		require.Equal(t, "original", string(contents))
 	})
 }

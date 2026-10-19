@@ -32,6 +32,11 @@ const (
 // same-typed parameters, which DryRun/RefreshLock were before this refactor (see
 // ExecuteComponentVendorInternal's pre-refactor `dryRun bool, refreshLock bool` signature).
 type InstallOptions struct {
+	// Context carries cancellation through planning for compatibility entrypoints.
+	Context        context.Context
+	MaxConcurrency int
+	// Collect accumulates packages during command planning; no installation runs when set.
+	Collect *[]VendorPackage
 	// DryRun performs only the side effects a real fetch would also trigger for
 	// go-getter-unsupported URI schemes (custom Git detection), without writing anything.
 	DryRun bool
@@ -45,8 +50,9 @@ type InstallOptions struct {
 
 // Result reports the outcome of installing a single VendorPackage.
 type Result struct {
-	Name string
-	Err  error
+	Outcome string
+	Name    string
+	Err     error
 }
 
 // Install installs pkg into its declared target, or -- when opts.DryRun is set -- performs only
@@ -57,7 +63,12 @@ type Result struct {
 func Install(atmosConfig *schema.AtmosConfiguration, pkg VendorPackage, opts InstallOptions) (Result, error) {
 	defer perf.Track(atmosConfig, "install.Install")()
 
-	ctx := context.Background()
+	return InstallContext(context.Background(), atmosConfig, pkg, opts)
+}
+
+// InstallContext installs one package with caller cancellation.
+func InstallContext(ctx context.Context, atmosConfig *schema.AtmosConfiguration, pkg VendorPackage, opts InstallOptions) (Result, error) {
+	defer perf.Track(atmosConfig, "install.InstallContext")()
 
 	if opts.DryRun {
 		if err := pkg.installer.dryRunCheck(ctx, atmosConfig); err != nil {
@@ -84,7 +95,8 @@ func Install(atmosConfig *schema.AtmosConfiguration, pkg VendorPackage, opts Ins
 // returned as-is (matching the pre-unification "if !dryRun && !refreshLock { filter... }" guard
 // duplicated at all three call sites this replaces).
 //
-// For every drifted (non-materialized) package, opts.LockEnforcement governs what happens next:
+// A matching receipt with every owned file absent is a normal pending installation, including
+// after clean. For every drifted package, opts.LockEnforcement governs what happens next:
 //   - LockEnforcementSilent: the package is added to pending with no reporting -- the only level
 //     whose observable behavior matches this function before enforcement levels existed.
 //   - LockEnforcementWarn (the default, including "" and any unrecognized value): the package is
@@ -94,6 +106,10 @@ func Install(atmosConfig *schema.AtmosConfiguration, pkg VendorPackage, opts Ins
 //     collected package+reason) instead of a partial pending list, so a strict caller never fetches
 //     anything on a run it's about to fail.
 func FilterPending(atmosConfig *schema.AtmosConfiguration, packages []VendorPackage, opts InstallOptions) ([]VendorPackage, error) {
+	return filterPending(atmosConfig, packages, opts, func(message string) { ui.Warning(message) })
+}
+
+func filterPending(atmosConfig *schema.AtmosConfiguration, packages []VendorPackage, opts InstallOptions, warning func(string)) ([]VendorPackage, error) {
 	defer perf.Track(atmosConfig, "install.FilterPending")()
 
 	if opts.DryRun || opts.RefreshLock {
@@ -116,7 +132,11 @@ func FilterPending(atmosConfig *schema.AtmosConfiguration, packages []VendorPack
 			log.Debug("Vendor target matches immutable lock receipt; skipping download", "package", pkg.Name, "target", pkg.Target())
 			continue
 		}
-		if blocked := applyLockEnforcement(enforcement, pkg, check, &pending); blocked != "" {
+		if check.Uninstalled {
+			pending = append(pending, pkg)
+			continue
+		}
+		if blocked := applyLockEnforcementWithWarning(enforcement, pkg, check, &pending, warning); blocked != "" {
 			drifted = append(drifted, blocked)
 		}
 	}
@@ -132,14 +152,14 @@ func FilterPending(atmosConfig *schema.AtmosConfiguration, packages []VendorPack
 // pending for LockEnforcementSilent/Warn (warning printed for the latter), or returned as a
 // "name (reason)" description for LockEnforcementStrict, so the caller can collect every blocked
 // package before failing the whole run at once. Returns "" for every level except strict.
-func applyLockEnforcement(enforcement string, pkg VendorPackage, check lockfile.MaterializationCheck, pending *[]VendorPackage) string {
+func applyLockEnforcementWithWarning(enforcement string, pkg VendorPackage, check lockfile.MaterializationCheck, pending *[]VendorPackage, warning func(string)) string {
 	switch enforcement {
 	case LockEnforcementStrict:
 		return fmt.Sprintf("%s (%s)", pkg.Name, check.Reason)
 	case LockEnforcementSilent:
 		*pending = append(*pending, pkg)
 	default: // LockEnforcementWarn, and any unrecognized value.
-		ui.Warningf("Vendor lock drift detected for %s: %s", pkg.Name, check.Reason)
+		warning(fmt.Sprintf("Vendor lock drift detected for %s: %s", pkg.Name, check.Reason))
 		*pending = append(*pending, pkg)
 	}
 	return ""
@@ -151,6 +171,7 @@ func createTempDir() (string, error) {
 		return "", err
 	}
 	if err := os.Chmod(tempDir, tempDirPermissions); err != nil {
+		os.RemoveAll(tempDir)
 		return "", err
 	}
 	return tempDir, nil
