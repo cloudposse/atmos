@@ -26,6 +26,7 @@ const layouts = [
   { id: "explorer", label: "03 Explorer" },
 ] as const;
 
+/** Return the shareable fragment for a chapter, omitting the default view. */
 function categoryHash(category: string) {
   return category === "All"
     ? ""
@@ -200,6 +201,7 @@ function ExampleCard({
   );
 }
 
+/** Render searchable examples with shareable chapters and browser history support. */
 export default function ExampleCatalogPage({
   tree,
   options,
@@ -229,31 +231,59 @@ export default function ExampleCatalogPage({
     (isBrowser &&
       categories.find((tag) => categoryHash(tag) === location.hash)) ||
     "All";
-  const scrollPosition = useRef<{ x: number; y: number } | null>(null);
+  const scroll = useRef<{
+    positions: Map<string, { x: number; y: number }>;
+    pending: { x: number; y: number } | null;
+  }>({ positions: new Map(), pending: null });
+  const scrollKey = location.key || "initial";
   // Cancel Docusaurus's smooth scroll to the top when clearing a chapter hash.
   useIsomorphicLayoutEffect(() => {
-    const position = scrollPosition.current;
+    const position =
+      scroll.current.pending || scroll.current.positions.get(scrollKey);
+    scroll.current.pending = null;
     let frame: number | null = null;
+    /** Save this history entry without recording transient router scrolling. */
+    const recordPosition = () => {
+      if (frame === null) {
+        scroll.current.positions.set(scrollKey, {
+          x: window.scrollX,
+          y: window.scrollY,
+        });
+      }
+    };
     if (position) {
       // Wait for the router's scroll to begin before cancelling its animation.
       frame = requestAnimationFrame(() => {
-        frame = requestAnimationFrame(() =>
+        frame = requestAnimationFrame(() => {
           window.scrollTo({
             left: position.x,
             top: position.y,
             behavior: "instant",
-          }),
-        );
+          });
+          frame = null;
+          recordPosition();
+        });
       });
+    } else {
+      recordPosition();
     }
+    window.addEventListener("scroll", recordPosition, { passive: true });
+    // Capture the outgoing entry before the router handles Back/Forward.
+    window.addEventListener("popstate", recordPosition, true);
     return () => {
       if (frame !== null) cancelAnimationFrame(frame);
-      scrollPosition.current = { x: window.scrollX, y: window.scrollY };
+      window.removeEventListener("scroll", recordPosition);
+      window.removeEventListener("popstate", recordPosition, true);
     };
-  }, [location.hash]);
+  }, [scrollKey, location.hash]);
+  /** Capture the outgoing view before navigation can shrink the results grid. */
   const setCategory = (tag: string) => {
     const hash = categoryHash(tag);
-    if (hash !== location.hash) history.push({ ...location, hash });
+    if (hash === location.hash) return;
+    const position = { x: window.scrollX, y: window.scrollY };
+    scroll.current.positions.set(scrollKey, position);
+    scroll.current.pending = position;
+    history.push({ ...location, hash });
   };
   const [query, setQuery] = useState("");
   const [paused, setPaused] = useState(false);

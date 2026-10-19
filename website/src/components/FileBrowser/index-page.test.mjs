@@ -99,6 +99,7 @@ test('search results appear once even when the match carries a secondary tag', (
 });
 
 
+/** Load the catalog with isolated React, router, and browser dependencies. */
 function loadCatalog(react, router, isBrowser = true, playerType = () => null, runtime = {}) {
   const catalogFilename = fileURLToPath(new URL('./ExampleCatalogPage.tsx', import.meta.url));
   const { code: catalogCode } = transformSync(readFileSync(catalogFilename, 'utf8'), {
@@ -130,6 +131,7 @@ function loadCatalog(react, router, isBrowser = true, playerType = () => null, r
   return catalogModule.exports.default;
 }
 
+/** Render a preview player with the requested playback preferences. */
 function catalogPlayer({ paused = false, hidden = false, reducedMotion = false, inViewport = true } = {}) {
   // Model a loaded, visible preview and the user's current page preferences.
   const states = ['', paused, reducedMotion, hidden, inViewport, true];
@@ -151,6 +153,7 @@ function catalogPlayer({ paused = false, hidden = false, reducedMotion = false, 
     tree: { featured: [], examples: [example], tags: [] },
     options: { title: 'Examples', description: 'Demos' },
   });
+  /** Find the player through the catalog's rendered component tree. */
   function findPlayer(element) {
     if (!React.isValidElement(element)) return null;
     if (element.type === playerType) return element;
@@ -182,6 +185,7 @@ test('pausing or hiding a catalog preview preserves its player identity and play
   assert.notEqual(reduced.key, playing.key);
 });
 
+/** Exercise category controls against an in-memory browser history. */
 function catalogNavigation({ hash = '', search = '', isBrowser = true } = {}) {
   const locations = [{ pathname: '/examples', search, hash }];
   let cursor = 0;
@@ -193,7 +197,7 @@ function catalogNavigation({ hash = '', search = '', isBrowser = true } = {}) {
         ? [query, (next) => { query = next; }]
         : [initial, () => {}];
     },
-    useRef: () => ({ current: null }),
+    useRef: (initial) => ({ current: initial }),
     useEffect: () => {},
   }, {
     useLocation: () => locations[cursor],
@@ -201,19 +205,21 @@ function catalogNavigation({ hash = '', search = '', isBrowser = true } = {}) {
       locations.splice(cursor + 1, Infinity, next);
       cursor++;
     } }),
-  }, isBrowser);
+  }, isBrowser, () => null, { window: { scrollX: 0, scrollY: 0 } });
   const examples = [
     ['aws', ['Emulators']],
     ['backend', ['Terraform', 'Emulators']],
     ['functions', ['YAML Functions']],
     ['quickstart', ['Quickstart']],
   ].map(([name, tags]) => ({ name, title: name, tags, root: { children: [] } }));
+  /** Expose the rendered selection, results, and filter controls. */
   function render() {
     const page = Catalog({
       tree: { featured: [examples[0]], examples, tags: ['Emulators', 'Terraform', 'YAML Functions', 'Quickstart'] },
       options: { routeBasePath: '/examples', title: 'Examples' },
     });
     const elements = [];
+    /** Collect elements without rendering unrelated preview components. */
     function visit(element) {
       if (!React.isValidElement(element)) return;
       elements.push(element);
@@ -288,40 +294,114 @@ test('clear filters removes the chapter fragment and resets search', () => {
   assert.deepEqual(catalog.render().cards, ['aws', 'backend', 'functions', 'quickstart']);
 });
 
-test('chapter navigation restores scroll immediately after the router scrolls to the top', () => {
+test('scroll restoration keeps each history entry even when a shorter chapter clamps the viewport', () => {
   let effect;
+  let effectDependencies;
+  let cleanup;
   let frame;
   let restored;
-  const scrollRef = { current: null };
-  const location = { pathname: '/examples', search: '', hash: '#emulators' };
-  const window = { scrollX: 0, scrollY: 250, scrollTo: (options) => { restored = options; } };
+  let scrollRef;
+  let maxScroll = 10000;
+  let location = { pathname: '/examples', search: '', hash: '', key: 'all' };
+  const listeners = new Map();
+  const window = {
+    scrollX: 0,
+    scrollY: 4000,
+    scrollTo(options) {
+      restored = options;
+      this.scrollY = Math.min(options.top, maxScroll);
+    },
+    addEventListener: (name, callback) => listeners.set(name, callback),
+    removeEventListener: (name) => listeners.delete(name),
+  };
+  const history = {
+    action: 'POP',
+    push(next) {
+      location = { ...next, key: 'emulators' };
+      history.action = 'PUSH';
+      // Descendant reconciliation can clamp the viewport before effect cleanup.
+      maxScroll = 100;
+      window.scrollY = 100;
+    },
+  };
   const Catalog = loadCatalog({
     ...React,
     useState: (initial) => [initial, () => {}],
-    useRef: () => scrollRef,
+    useRef: (initial) => scrollRef ||= { current: initial },
     useEffect: () => {},
   }, {
     useLocation: () => location,
-    useHistory: () => ({ push() {} }),
+    useHistory: () => history,
   }, true, () => null, {
     window,
-    useLayoutEffect: (callback) => { effect = callback; },
+    useLayoutEffect: (callback, dependencies) => {
+      effect = callback;
+      effectDependencies = dependencies;
+    },
     requestAnimationFrame: (callback) => { frame = callback; return 1; },
-    cancelAnimationFrame: () => {},
+    cancelAnimationFrame: () => { frame = undefined; },
   });
   const props = { tree: { featured: [], examples: [], tags: ['Emulators'] }, options: {} };
-  Catalog(props);
-  const cleanup = effect();
+  const page = Catalog(props);
+  cleanup = effect();
   assert.equal(frame, undefined, 'initial navigation must keep native scroll behavior');
+
+  /** Find a native control without invoking nested media components. */
+  function findSelect(element) {
+    if (!React.isValidElement(element)) return undefined;
+    if (element.type === 'select') return element;
+    return React.Children.toArray(element.props.children).map(findSelect).find(Boolean);
+  }
+  findSelect(page).props.onChange({ target: { value: 'Emulators' } });
   cleanup();
-  location.hash = '';
+  // The mutable history action can change between render and effect setup.
+  history.action = 'POP';
   Catalog(props);
-  effect();
-  window.scrollY = 0;
+  const navigationDependencies = effectDependencies;
+  history.action = 'PUSH';
+  cleanup = effect();
+  Catalog(props);
+  if (effectDependencies.some((value, index) => value !== navigationDependencies[index])) {
+    cleanup();
+    cleanup = effect();
+  }
+  assert.equal(typeof frame, 'function', 'an action update must not cancel pending restoration');
+  listeners.get('scroll')();
   frame();
   assert.equal(restored, undefined, 'wait until the router scroll has started');
   frame();
-  assert.equal(restored.top, 250);
+  assert.equal(restored.top, 4000, 'capture before the shorter grid clamps the viewport');
   assert.equal(restored.left, 0);
-  assert.equal(restored.behavior, 'instant', 'restoration must cancel the router smooth scroll');
+  assert.equal(restored.behavior, 'instant');
+  assert.equal(window.scrollY, 100, 'short chapters clamp to their available height');
+
+  // User scrolling is saved, and popstate captures any last scroll before routing.
+  window.scrollY = 60;
+  listeners.get('scroll')();
+  window.scrollY = 70;
+  listeners.get('popstate')();
+  history.action = 'POP';
+  location = { ...location, key: 'all', hash: '' };
+  maxScroll = 10000;
+  window.scrollY = 0;
+  cleanup();
+  Catalog(props);
+  cleanup = effect();
+  listeners.get('scroll')();
+  frame();
+  frame();
+  assert.equal(window.scrollY, 4000, 'Back restores the original long-list position');
+
+  listeners.get('popstate')();
+  location = { ...location, key: 'emulators', hash: '#emulators' };
+  maxScroll = 100;
+  window.scrollY = 0;
+  cleanup();
+  Catalog(props);
+  cleanup = effect();
+  frame();
+  frame();
+  assert.equal(window.scrollY, 70, 'Forward restores the short chapter position');
+  cleanup();
+  assert.equal(listeners.size, 0, 'unmount removes scroll and popstate listeners');
 });
