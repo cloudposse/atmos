@@ -1387,9 +1387,11 @@ func executeCustomCommand(
 			return
 		}
 
-		// Render a templated `output:` (for example `{{ .Flags.mode }}`) so the mode takes effect, and
-		// fail the command when it renders to an unknown mode instead of running with the default.
-		if stepDelims.Contains(step.Output) {
+		// Validate `output:` whenever it is set, and fail the command when it is an unknown mode
+		// instead of running with the default. A templated value (for example `{{ .Flags.mode }}`)
+		// is rendered first so the mode takes effect; only a value holding the configured opening
+		// delimiter is rendered.
+		if strings.TrimSpace(step.Output) != "" {
 			outputStep := step.ToWorkflowStep()
 			if outputErr := stepPkg.ApplyStepOutputMode(&outputStep, stepVars); outputErr != nil {
 				exitOrRecordDependencyErr(cmd, outputErr, "", "")
