@@ -45,6 +45,7 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		ConfigPath: stringSliceFromViperOrEnv(v, "config-path", "ATMOS_CONFIG_PATH"),
 
 		// Logging configuration.
+		Explain:   v.GetBool("explain"),
 		LogsLevel: v.GetString("logs-level"),
 		LogsFile:  v.GetString("logs-file"),
 		LogsColor: v.GetBool("logs-color"),
@@ -312,6 +313,8 @@ func registerWorkingDirectoryFlags(registry *FlagRegistry) {
 // registerLoggingFlags registers logging configuration flags.
 func registerLoggingFlags(registry *FlagRegistry) {
 	defer perf.Track(nil, "flags.registerLoggingFlags")()
+
+	registry.Register(&BoolFlag{Name: "explain", Default: false, Description: "Explain policy decisions on stderr without changing execution"})
 
 	registry.Register(&StringFlag{
 		Name:        "logs-level",

@@ -22,7 +22,7 @@ func TestPlanManifestSchema(t *testing.T) {
 	require.NoError(t, yaml.Unmarshal([]byte(testPlanManifest), &document))
 	require.NoError(t, schema.Validate(document))
 	rule := document["spec"].(map[string]any)["policies"].(map[string]any)["no-deletes"].(map[string]any)
-	rule["match"] = map[string]any{"labels": map[string]any{"stage": "prod"}, "tag_mode": "all"}
+	rule["match"] = map[string]any{"labels": map[string]any{"stage": "prod"}, "tags": []any{"pci"}}
 	require.NoError(t, schema.Validate(document))
 	rule["match"] = map[string]any{"tag_mode": "invalid"}
 	require.Error(t, schema.Validate(document))

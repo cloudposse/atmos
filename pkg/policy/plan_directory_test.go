@@ -92,7 +92,6 @@ func TestPlanDirectoryRejectsUnsupportedDeclarations(t *testing.T) {
 		"unknown field":    testPlanManifest + "      enforced: false\n",
 		"unknown input":    strings.ReplaceAll(testPlanManifest, "terraform.plan", "operation"),
 		"unknown action":   strings.ReplaceAll(testPlanManifest, "action: deny", "action: warn"),
-		"unknown engine":   testPlanManifest + "      engine: unknown\n",
 		"invalid CEL":      strings.ReplaceAll(testPlanManifest, "has(input.resource_changes)", "badfunction()"),
 		"missing name":     strings.ReplaceAll(testPlanManifest, "name: platform", "name: ''"),
 		"blank rule name":  strings.ReplaceAll(testPlanManifest, "no-deletes:", "'':"),
@@ -181,4 +180,130 @@ spec:
 	directory, err := DirectoryFromEnvironment()
 	require.NoError(t, err)
 	require.Equal(t, "/protected/policies", directory)
+}
+
+func TestPlanDirectoryApprovalDeclarations(t *testing.T) {
+	const approvals = "      approvals:\n        - id: platform\n          provider: github-actions\n          spec: {reviewers: [alice], minimum: 1}\n"
+	manifest := func(action, extra string) string {
+		return "apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: platform}\nspec:\n  policies:\n    review:\n      on: terraform.plan\n      rule: \"true\"\n      action: " + action + "\n" + extra
+	}
+	for name, tc := range map[string]struct {
+		document string
+		wantErr  bool
+	}{
+		"approval requirement":          {document: manifest("require_approval", approvals)},
+		"require_approval without spec": {document: manifest("require_approval", ""), wantErr: true},
+		"approvals on deny":             {document: manifest("deny", approvals), wantErr: true},
+		"empty reviewer spec":           {document: manifest("require_approval", "      approvals:\n        - id: platform\n          provider: github-actions\n          spec: {}\n"), wantErr: true},
+		"team reviewer":                 {document: manifest("require_approval", "      approvals:\n        - id: platform\n          provider: github-actions\n          spec: {reviewers: [org/team], minimum: 1}\n"), wantErr: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			directory := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(directory, "policy.yaml"), []byte(tc.document), 0o600))
+			rules, err := LoadPlanDirectory(directory)
+			if tc.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, rules, 1)
+			require.Len(t, rules[0].Effects.Approvals, 1)
+			require.Equal(t, "platform", rules[0].Effects.Approvals[0].ID)
+			require.Equal(t, "github-actions", rules[0].Effects.Approvals[0].Provider)
+		})
+	}
+}
+
+func TestPlanDirectoryRejectsInvalidDeclarations(t *testing.T) {
+	policy := func(item string) string {
+		return "apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: platform}\nspec:\n  policies:\n    p:\n" + item
+	}
+	for name, document := range map[string]string{
+		"allowed_roots outside source":      policy("      on: operation\n      action: deny\n      rule: 'true'\n      allowed_roots: [.]\n"),
+		"allowed_roots must exist":          policy("      on: source\n      action: deny\n      rule: 'true'\n      allowed_roots: [does-not-exist]\n"),
+		"allowed_roots must not be blank":   policy("      on: source\n      action: deny\n      rule: 'true'\n      allowed_roots: ['']\n"),
+		"required_ci without provider":      policy("      on: operation\n      action: deny\n      rule: 'true'\n      required_ci: [{schema: s, dataset: metadata}]\n"),
+		"required_ci without schema":        policy("      on: operation\n      action: deny\n      rule: 'true'\n      required_ci: [{provider: github, dataset: metadata}]\n"),
+		"required_ci unknown dataset":       policy("      on: operation\n      action: deny\n      rule: 'true'\n      required_ci: [{provider: github, schema: s, dataset: nope}]\n"),
+		"required_ci fact outside facts":    policy("      on: operation\n      action: deny\n      rule: 'true'\n      required_ci: [{provider: github, schema: s, dataset: event, fact: f}]\n"),
+		"tool with blank version":           "apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: platform}\nspec:\n  tools: {opa: ' '}\n  policies:\n    p: {on: operation, action: deny, rule: 'true'}\n",
+		"tool with blank name":              "apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: platform}\nspec:\n  tools: {' ': '1.0'}\n  policies:\n    p: {on: operation, action: deny, rule: 'true'}\n",
+		"unknown input kind":                policy("      on: bogus\n      action: deny\n      rule: 'true'\n"),
+		"selector on an input without any":  policy("      on: source\n      action: deny\n      rule: 'true'\n      match: {stacks: [prod]}\n"),
+		"policy document is not a document": "- not\n- a\n- mapping\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			directory := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(directory, "policy.yaml"), []byte(document), 0o600))
+			_, err := LoadDirectory(directory)
+			require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+		})
+	}
+
+	t.Run("unknown engine", func(t *testing.T) {
+		directory := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(directory, "policy.yaml"), []byte(policy("      on: operation\n      action: deny\n      engine: nope\n      rule: 'true'\n")), 0o600))
+		_, err := LoadDirectory(directory)
+		require.ErrorIs(t, err, errUtils.ErrPolicyEngineUnknown)
+	})
+}
+
+func TestPlanDirectoryAllowedRootsResolveRelativeToDocument(t *testing.T) {
+	directory := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(directory, "data"), 0o700))
+	document := "apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: fs}\nspec:\n  policies:\n    confine: {on: source, action: deny, rule: 'true', allowed_roots: [data]}\n"
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "policy.yaml"), []byte(document), 0o600))
+	bundle, err := LoadDirectory(directory)
+	require.NoError(t, err)
+	require.Len(t, bundle.Rules, 1)
+	canonical, err := filepath.EvalSymlinks(filepath.Join(directory, "data"))
+	require.NoError(t, err)
+	require.Equal(t, []string{canonical}, bundle.Rules[0].AllowedRoots)
+}
+
+func TestPlanPolicyItemRejectsUnserializableApprovalSpec(t *testing.T) {
+	item := planPolicyItem{
+		On: TerraformPlan, Rule: "false", Action: "require_approval",
+		Approvals: []approvalItem{{ID: "review", Provider: "github-actions", Spec: map[string]any{"bad": make(chan int)}}},
+	}
+	_, err := item.resolve("platform", "review")
+	require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+}
+
+func TestLoadDirectoryWithoutPolicies(t *testing.T) {
+	directory := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "notes.txt"), []byte("ignored"), 0o600))
+	_, err := LoadDirectory(directory)
+	require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+	require.Contains(t, err.Error(), "no policies")
+}
+
+func TestDirectoryFromEnvironmentDefaults(t *testing.T) {
+	t.Setenv("ATMOS_POLICY_DIR", "")
+
+	t.Run("absent default is allowed", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		directory, err := DirectoryFromEnvironment()
+		require.NoError(t, err)
+		require.Empty(t, directory)
+	})
+
+	t.Run("default directory is resolved", func(t *testing.T) {
+		root := t.TempDir()
+		t.Chdir(root)
+		require.NoError(t, os.Mkdir("policy.d", 0o700))
+		directory, err := DirectoryFromEnvironment()
+		require.NoError(t, err)
+		require.Equal(t, "policy.d", filepath.Base(directory))
+		info, err := os.Stat(directory)
+		require.NoError(t, err)
+		require.True(t, info.IsDir())
+	})
+
+	t.Run("default that is a file is rejected", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		require.NoError(t, os.WriteFile("policy.d", []byte("x"), 0o600))
+		_, err := DirectoryFromEnvironment()
+		require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+	})
 }

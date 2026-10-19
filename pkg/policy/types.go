@@ -10,16 +10,18 @@ type InputKind string
 
 // Well-known input kind names. Collectors and command integration are separate.
 const (
-	Validation     InputKind = "validation"
-	Plan           InputKind = "plan"
-	TerraformPlan  InputKind = "terraform.plan"
-	Operation      InputKind = "operation"
-	Function       InputKind = "function"
-	Source         InputKind = "source"
-	GitChange      InputKind = "git.change"
-	AtmosAffected  InputKind = "atmos.affected"
-	GitHubEvent    InputKind = "github.event"
-	GitHubApproval InputKind = "github.approval"
+	Validation       InputKind = "validation"
+	Plan             InputKind = "plan"
+	TerraformPlan    InputKind = "terraform.plan"
+	Operation        InputKind = "operation"
+	Command          InputKind = "command"
+	ComponentCommand InputKind = "component.command"
+	Function         InputKind = "function"
+	Source           InputKind = "source"
+	GitChange        InputKind = "git.change"
+	AtmosAffected    InputKind = "atmos.affected"
+	GitHubEvent      InputKind = "github.event"
+	GitHubApproval   InputKind = "github.approval"
 )
 
 // DecisionStatus distinguishes authorization from missing evidence and errors.
@@ -54,15 +56,16 @@ type Request struct {
 // Rule is an already resolved definition, not a policy manifest or trust assertion.
 // A true predicate selects its effects; false means not applicable, never denial.
 type Rule struct {
-	Match       *Selector       `json:"match,omitempty"`
-	ID          string          `json:"id"`
-	Description string          `json:"description,omitempty"`
-	On          InputKind       `json:"on"`
-	Engine      string          `json:"engine"`
-	Expression  string          `json:"expression"`
-	Parameters  json.RawMessage `json:"parameters,omitempty"`
-	RequiredCI  []CIRequirement `json:"required_ci,omitempty"`
-	Effects     Effects         `json:"effects"`
+	AllowedRoots []string        `json:"allowed_roots,omitempty"`
+	Match        *Selector       `json:"match,omitempty"`
+	ID           string          `json:"id"`
+	Description  string          `json:"description,omitempty"`
+	On           InputKind       `json:"on"`
+	Engine       string          `json:"engine"`
+	Expression   string          `json:"expression"`
+	Parameters   json.RawMessage `json:"parameters,omitempty"`
+	RequiredCI   []CIRequirement `json:"required_ci,omitempty"`
+	Effects      Effects         `json:"effects"`
 }
 
 // Effects are obligations selected by a predicate. They cannot perform side effects.
@@ -73,7 +76,7 @@ type Effects struct {
 	Hooks     []HookRequirement     `json:"hooks,omitempty"`
 }
 
-// ApprovalRequirement remains outstanding until a future trusted resolver verifies it.
+// ApprovalRequirement remains outstanding until a trusted CI resolver verifies it.
 // Spec is provider-owned data, not a universal team/review vocabulary.
 type ApprovalRequirement struct {
 	ID       string          `json:"id"`

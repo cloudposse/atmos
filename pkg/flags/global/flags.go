@@ -35,6 +35,7 @@ type Flags struct {
 	ConfigPath []string // Config directory paths.
 
 	// Logging configuration.
+	Explain   bool // Explain policy decisions on stderr.
 	LogsLevel string
 	LogsFile  string
 	LogsColor bool

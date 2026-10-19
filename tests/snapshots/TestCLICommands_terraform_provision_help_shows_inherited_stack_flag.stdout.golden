@@ -51,6 +51,8 @@ GLOBAL FLAGS
 
       --edition string                       Pin defaults to a date-anchored edition (YYYY, YYYY-MM, or YYYY-MM-DD)
 
+      --explain                              Explain policy decisions on stderr without changing execution
+
       --force-color                          Force color output even when not a TTY (useful for screenshots)
 
       --force-tty                            Force TTY mode with sane defaults when terminal detection fails (useful

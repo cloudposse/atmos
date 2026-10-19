@@ -1,6 +1,7 @@
 package imports
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -13,13 +14,15 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/hashicorp/go-getter"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/cache"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/hashicorp/go-getter"
 )
 
 const (
@@ -162,7 +165,20 @@ func (r *RemoteImporter) writeDownloadMeta(uri string) {
 // this cache directory (no expiry) until the cache is cleared. A non-empty ttl instead
 // expires the cached content after ttl, matching the freshness semantics ensureSourceDir
 // uses for git-subdir imports, so the same setting governs both caching mechanisms.
-func (r *RemoteImporter) Download(uri string) (string, error) {
+func (r *RemoteImporter) Download(uri string) (result string, resultErr error) {
+	defer perf.Track(nil, "imports.RemoteImporter.Download")()
+	if err := guard.Source(context.Background(), "import", uri, ""); err != nil {
+		return "", err
+	}
+	defer func() {
+		if resultErr == nil {
+			guard.RegisterRemote(result, uri)
+		}
+	}()
+	return r.downloadUnguarded(uri)
+}
+
+func (r *RemoteImporter) downloadUnguarded(uri string) (result string, resultErr error) {
 	defer perf.Track(nil, "imports.RemoteImporter.Download")()
 
 	if !IsRemote(uri) {
@@ -177,21 +193,8 @@ func (r *RemoteImporter) Download(uri string) (string, error) {
 		ttl = r.atmosConfig.Imports.TTL
 	}
 
-	// Check in-memory cache first (session-level cache) -- always wins within one atmos
-	// invocation regardless of ttl, matching ensureSourceDir's within-run dedup.
-	r.memMu.RLock()
-	if cachedPath, ok := r.memCache[uri]; ok {
-		r.memMu.RUnlock()
-		// Verify the file still exists.
-		if _, err := os.Stat(cachedPath); err == nil {
-			return cachedPath, nil
-		}
-		// File was deleted, remove from memory cache and re-download.
-		r.memMu.Lock()
-		delete(r.memCache, uri)
-		r.memMu.Unlock()
-	} else {
-		r.memMu.RUnlock()
+	if cachedPath := r.cachedDownload(uri); cachedPath != "" {
+		return cachedPath, nil
 	}
 
 	// A ttl is configured but the cached content (if any) is stale: evict it so
@@ -205,16 +208,7 @@ func (r *RemoteImporter) Download(uri string) (string, error) {
 	fetched := false
 	_, err := r.cache.GetOrFetch(uri, func() ([]byte, error) {
 		fetched = true
-		// Download to a temporary location first, then read the content.
-		// The cache will handle atomic writes and file locking.
-		tempPath := filepath.Join(r.cache.BaseDir(), uriToTempName(uri))
-		defer os.Remove(tempPath)
-
-		if fetchErr := r.downloader.Fetch(uri, tempPath, downloader.ClientModeFile, defaultDownloadTimeout); fetchErr != nil {
-			return nil, fetchErr
-		}
-
-		return os.ReadFile(tempPath)
+		return r.fetchDownloadBytes(uri)
 	})
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrDownloadRemoteImport).
@@ -260,7 +254,24 @@ func (r *RemoteImporter) Resolve(uri string) ([]RemoteImportMatch, error) {
 // resolve fetches a remote import and returns all local stack files it resolves to.
 // The ttl controls cross-run reuse of the cloned source repo for git subdir imports
 // (see ensureSourceDir); an empty ttl refreshes the clone once per invocation.
-func (r *RemoteImporter) resolve(uri, ttl string) ([]RemoteImportMatch, error) {
+func (r *RemoteImporter) resolve(uri, ttl string) (result []RemoteImportMatch, resultErr error) {
+	if err := guard.Source(context.Background(), "import", uri, ""); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if resultErr == nil {
+			for _, match := range result {
+				guard.RegisterRemote(match.Path, uri)
+				if match.BasePath != "" {
+					guard.RegisterRemote(match.BasePath, uri)
+				}
+			}
+		}
+	}()
+	return r.resolveUnguarded(uri, ttl)
+}
+
+func (r *RemoteImporter) resolveUnguarded(uri, ttl string) (result []RemoteImportMatch, resultErr error) {
 	defer perf.Track(nil, "imports.RemoteImporter.resolve")()
 
 	if !IsRemote(uri) {
@@ -585,4 +596,35 @@ func ResolveRemoteImport(atmosConfig *schema.AtmosConfiguration, uri string) ([]
 		return nil, err
 	}
 	return importer.Resolve(uri)
+}
+
+func (r *RemoteImporter) cachedDownload(uri string) string {
+	// Check in-memory cache first (session-level cache) -- always wins within one atmos
+	// invocation regardless of ttl, matching ensureSourceDir's within-run dedup.
+	r.memMu.RLock()
+	if cachedPath, ok := r.memCache[uri]; ok {
+		r.memMu.RUnlock()
+		// Verify the file still exists.
+		if _, err := os.Stat(cachedPath); err == nil {
+			return cachedPath
+		}
+		// File was deleted, remove from memory cache and re-download.
+		r.memMu.Lock()
+		delete(r.memCache, uri)
+		r.memMu.Unlock()
+	} else {
+		r.memMu.RUnlock()
+	}
+
+	return ""
+}
+
+func (r *RemoteImporter) fetchDownloadBytes(uri string) ([]byte, error) {
+	// The cache owns locking and the final atomic write.
+	tempPath := filepath.Join(r.cache.BaseDir(), uriToTempName(uri))
+	defer os.Remove(tempPath)
+	if err := r.downloader.Fetch(uri, tempPath, downloader.ClientModeFile, defaultDownloadTimeout); err != nil {
+		return nil, err
+	}
+	return os.ReadFile(tempPath)
 }

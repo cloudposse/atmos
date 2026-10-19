@@ -12,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/github"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -33,7 +34,11 @@ func (c *goGetterClient) Metadata() FetchMetadata {
 		metadata = c.metadata.captured
 	}
 	if c.client != nil {
-		if gitGetter, ok := c.client.Getters["git"].(*CustomGitGetter); ok {
+		native := c.client.Getters["git"]
+		if wrapped, ok := native.(*policyGetter); ok {
+			native = wrapped.Getter
+		}
+		if gitGetter, ok := native.(*CustomGitGetter); ok {
 			metadata.GitCommit = gitGetter.ResolvedCommit
 		}
 	}
@@ -50,7 +55,13 @@ type goGetterClientFactory struct {
 
 // NewClient creates a new `go-getter` client.
 func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string, mode ClientMode) (DownloadClient, error) {
-	clientMode := getter.ClientModeAny
+	if err := guard.Source(ctx, "download", src, ""); err != nil {
+		return nil, err
+	}
+	guarded, err := guard.Enabled("source")
+	if err != nil {
+		return nil, err
+	}
 
 	// Lazily provision ambient credential brokers (e.g., Atmos Pro github/sts) before the first
 	// remote read so private repositories are reachable. Brokers export GIT_CONFIG_*/tokens into
@@ -67,15 +78,6 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 	// fail fast.
 	retryAuthErrors := remote && broker.HasBrokeredCredentials()
 
-	switch mode {
-	case ClientModeAny:
-		clientMode = getter.ClientModeAny
-	case ClientModeDir:
-		clientMode = getter.ClientModeDir
-	case ClientModeFile:
-		clientMode = getter.ClientModeFile
-	}
-
 	// Create HTTP getter with optional custom client, always wrapped in a metadataCapturingTransport
 	// so a caller can retrieve ETag/Last-Modified after Get() runs (see goGetterClient.Metadata).
 	// Header capture must happen during the fetch itself -- there is no way to recover response
@@ -84,34 +86,7 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 	// scheme (e.g. https://raw.githubusercontent.com/...) get authenticated requests too —
 	// go-getter's Detect() only runs CustomGitDetector (which already handles token injection) for
 	// scheme-less shorthand sources, never for URLs with a scheme.
-	capture := &metadataCapturingTransport{}
-	httpGetter := &getter.HttpGetter{}
-	switch {
-	case f.httpClient != nil:
-		// Shallow-copy so the caller-owned client (used for testing) is never mutated in place;
-		// wrap its existing transport rather than replace it.
-		cloned := *f.httpClient
-		capture.base = cloned.Transport
-		cloned.Transport = capture
-		httpGetter.Client = &cloned
-	default:
-		if token := github.GetGitHubTokenContext(ctx); token != "" {
-			// Shallow-copy to preserve CheckRedirect (and any other fields set by
-			// NewGitHubAuthenticatedHTTPClient) while wrapping its transport, so header capture
-			// still observes the final response.
-			cloned := *httpClient.NewGitHubAuthenticatedHTTPClient(token)
-			capture.base = cloned.Transport
-			cloned.Transport = capture
-			httpGetter.Client = &cloned
-		} else {
-			// Neither a caller-supplied client nor a GitHub token: attach an explicit client
-			// wrapping the capturing transport around Go's default transport, so ETag/Last-Modified
-			// capture still works instead of falling back to go-getter's own internal default
-			// client, which this wrapper could never observe.
-			capture.base = http.DefaultTransport
-			httpGetter.Client = &http.Client{Transport: capture}
-		}
-	}
+	httpGetter, capture := f.metadataHTTPGetter(ctx)
 
 	client := &getter.Client{
 		Ctx:              ctx,
@@ -119,8 +94,8 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		ProgressListener: f.progress,
 		Src:              src,
 		Dst:              dest,
-		Mode:             clientMode,
-		DisableSymlinks:  false,
+		Mode:             getterMode(mode),
+		DisableSymlinks:  guarded,
 		// Warn when an archive carries link entries, which go-getter extracts as empty files.
 		Decompressors: linkAuditedDecompressors(),
 		Getters: map[string]getter.Getter{
@@ -135,6 +110,11 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		},
 	}
 
+	if guarded {
+		for scheme, native := range client.Getters {
+			client.Getters[scheme] = &policyGetter{Getter: native, ctx: ctx, scheme: scheme}
+		}
+	}
 	return &goGetterClient{client: client, metadata: capture}, nil
 }
 
@@ -213,4 +193,51 @@ func NewGoGetterDownloader(atmosConfig *schema.AtmosConfiguration, opts ...GoGet
 // WithRetryObserver reports actual git retries without owning terminal output.
 func WithRetryObserver(fn func(int)) GoGetterOption {
 	return func(f *goGetterClientFactory) { f.onRetry = fn }
+}
+
+func getterMode(mode ClientMode) getter.ClientMode {
+	clientMode := getter.ClientModeAny
+	switch mode {
+	case ClientModeAny:
+		clientMode = getter.ClientModeAny
+	case ClientModeDir:
+		clientMode = getter.ClientModeDir
+	case ClientModeFile:
+		clientMode = getter.ClientModeFile
+	}
+
+	return clientMode
+}
+
+func (f *goGetterClientFactory) metadataHTTPGetter(ctx context.Context) (*getter.HttpGetter, *metadataCapturingTransport) {
+	capture := &metadataCapturingTransport{}
+	httpGetter := &getter.HttpGetter{}
+	switch {
+	case f.httpClient != nil:
+		// Shallow-copy so the caller-owned client (used for testing) is never mutated in place;
+		// wrap its existing transport rather than replace it.
+		cloned := *f.httpClient
+		capture.base = cloned.Transport
+		cloned.Transport = capture
+		httpGetter.Client = &cloned
+	default:
+		if token := github.GetGitHubTokenContext(ctx); token != "" {
+			// Shallow-copy to preserve CheckRedirect (and any other fields set by
+			// NewGitHubAuthenticatedHTTPClient) while wrapping its transport, so header capture
+			// still observes the final response.
+			cloned := *httpClient.NewGitHubAuthenticatedHTTPClient(token)
+			capture.base = cloned.Transport
+			cloned.Transport = capture
+			httpGetter.Client = &cloned
+		} else {
+			// Neither a caller-supplied client nor a GitHub token: attach an explicit client
+			// wrapping the capturing transport around Go's default transport, so ETag/Last-Modified
+			// capture still works instead of falling back to go-getter's own internal default
+			// client, which this wrapper could never observe.
+			capture.base = http.DefaultTransport
+			httpGetter.Client = &http.Client{Transport: capture}
+		}
+	}
+
+	return httpGetter, capture
 }
