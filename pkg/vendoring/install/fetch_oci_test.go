@@ -13,19 +13,19 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestFetchOCI_PullsThroughSharedDownloader(t *testing.T) {
+func TestFetchToTempDir_OCI_PullsThroughSharedDownloader(t *testing.T) {
 	ref := ocitest.NewRegistry(t, "vendor:v1", map[string]string{"main.tf": "# tf\n"})
 
-	dir, err := fetchOCI(context.Background(), &schema.AtmosConfiguration{}, ref, t.TempDir())
+	dir, _, err := fetchToTempDir(context.Background(), &schema.AtmosConfiguration{}, ref, PkgTypeOci, t.TempDir(), fetchOptions{})
 	require.NoError(t, err)
 	assert.FileExists(t, filepath.Join(dir, "main.tf"))
 }
 
-func TestFetchOCI_FailureWrapsSentinels(t *testing.T) {
+func TestFetchToTempDir_OCI_FailureWrapsSentinels(t *testing.T) {
 	ref := ocitest.NewRegistry(t, "vendor-exists:v1", map[string]string{"main.tf": "# tf\n"})
 	missing := ref[:len(ref)-len("vendor-exists:v1")] + "vendor-missing:v1"
 
-	_, err := fetchOCI(context.Background(), &schema.AtmosConfiguration{}, missing, t.TempDir())
+	_, _, err := fetchToTempDir(context.Background(), &schema.AtmosConfiguration{}, missing, PkgTypeOci, t.TempDir(), fetchOptions{})
 	require.ErrorIs(t, err, ErrProcessOCIImage)
 	require.ErrorIs(t, err, errUtils.ErrPullImage)
 }

@@ -58,6 +58,11 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 	// silently skip it, leaving token injection inconsistently applied depending on source shape.
 	src = applyForcedGitDetection(ctx, f.atmosConfig, src)
 
+	src, err := prepareOCISource(src)
+	if err != nil {
+		return nil, err
+	}
+
 	// Lazily provision ambient credential brokers (e.g., Atmos Pro github/sts) before the first
 	// remote read so private repositories are reachable. Brokers export GIT_CONFIG_*/tokens into
 	// the process env, which the git subprocess this client spawns inherits. Process-once and

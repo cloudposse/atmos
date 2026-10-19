@@ -227,33 +227,10 @@ func VendorSource(
 	return nil
 }
 
-// downloadSource populates tempDir from uri, branching between the OCI-native
-// path (downloader.FetchOCIContext) and go-getter for everything else.
+// downloadSource populates tempDir from uri through the shared go-getter downloader. OCI sources
+// (oci://) need no special handling: the downloader registers an OCI getter alongside the other
+// protocols.
 func downloadSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, uri, tempDir string) error {
-	if vendor.IsOCIURI(uri) {
-		return downloadOCISource(ctx, atmosConfig, uri, tempDir)
-	}
-	return downloadGoGetterSource(ctx, atmosConfig, sourceSpec, uri, tempDir)
-}
-
-// downloadOCISource pulls an oci:// source through the shared downloader's OCI getter. The
-// "oci://" scheme prefix is trimmed first, since FetchOCIContext takes a bare image reference.
-// The pull is bounded to DefaultVendorTimeout, matching the go-getter path's explicit timeout.
-func downloadOCISource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri, tempDir string) error {
-	imageRef := strings.TrimPrefix(uri, "oci://")
-	if err := downloader.FetchOCIContext(ctx, atmosConfig, imageRef, tempDir, downloader.WithOCITimeout(DefaultVendorTimeout)); err != nil {
-		return errUtils.Build(errUtils.ErrSourceProvision).
-			WithCause(err).
-			WithExplanation("Failed to download OCI source").
-			WithContext("uri", uri).
-			WithHint("Verify the source URI is accessible and credentials are configured").
-			Err()
-	}
-	return nil
-}
-
-// downloadGoGetterSource fetches a non-OCI source via the go-getter downloader.
-func downloadGoGetterSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, uri, tempDir string) error {
 	downloadOpts := []downloader.GoGetterOption{downloader.WithRetryConfig(effectiveRetryConfig(sourceSpec))}
 	dl := downloader.NewGoGetterDownloader(atmosConfig, downloadOpts...)
 	_, err := dl.(downloader.ContextFileDownloader).FetchWithMetadataContext(ctx, uri, tempDir, downloader.ClientModeAny, DefaultVendorTimeout)

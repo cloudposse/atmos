@@ -222,6 +222,19 @@ func TestIncludeOCISourceFileNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, ErrIncludeYamlFunctionInvalidFile)
 }
 
+// TestIncludeOCISourceSubdirEscapingImageIsRejected tests that a subdir climbing out of the
+// extracted image is rejected instead of reading a file outside the temp directory.
+func TestIncludeOCISourceSubdirEscapingImageIsRejected(t *testing.T) {
+	imageRef := ocitest.NewRegistry(t, "sample-escape:v1", map[string]string{
+		"vars.yaml": "region: us-east-1\n",
+	})
+
+	tmpDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+	_, err := processOCIIncludeFile(atmosConfig, fmt.Sprintf("oci://%s//../escape.yaml", imageRef), false)
+	assert.ErrorIs(t, err, ErrIncludeYamlFunctionInvalidFile)
+}
+
 // TestIncludeGoGetterShorthand tests that go-getter shorthand paths like
 // "github.com/org/repo" are recognized as remote and processed correctly.
 func TestIncludeGoGetterShorthand(t *testing.T) {

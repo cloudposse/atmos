@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	neturl "net/url"
@@ -455,9 +454,9 @@ func processRemoteFile(atmosConfig *schema.AtmosConfiguration, includeFile strin
 
 // processOCIIncludeFile pulls a single file out of an OCI artifact for !include/!include.raw.
 // An OCI registry has no API to fetch one layer-internal path on its own -- the whole image is
-// pulled and its layers extracted (downloader.FetchOCIContext, the shared OCI getter component
-// vendoring and scaffold template sourcing also use), then the requested file is read back out of the
-// extracted tree.
+// pulled and its layers extracted (through the shared downloader's OCI getter, which component
+// vendoring and scaffold template sourcing also use), then the requested file is read back out of
+// the extracted tree.
 //
 // The file to include is named with go-getter's own "//" subdirectory convention (already used
 // for git/S3 sources, see pkg/vendor/uri.go), e.g. "oci://ghcr.io/org/image:tag//path/to/file.yaml".
@@ -480,7 +479,7 @@ func processOCIIncludeFile(atmosConfig *schema.AtmosConfiguration, includeFile s
 		_ = os.RemoveAll(tempDir)
 	}()
 
-	if err := downloader.FetchOCIContext(context.Background(), atmosConfig, strings.TrimPrefix(imageRef, "oci://"), tempDir, downloader.WithOCITimeout(ociIncludeTimeout)); err != nil {
+	if err := downloader.NewGoGetterDownloader(atmosConfig).Fetch(imageRef, tempDir, downloader.ClientModeDir, ociIncludeTimeout); err != nil {
 		return nil, err
 	}
 

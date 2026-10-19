@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"time"
+	"strings"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/hashicorp/go-getter"
@@ -66,43 +66,24 @@ func (g *OCIGetter) SetClient(c *getter.Client) {
 	g.client = c
 }
 
-// DefaultOCIFetchTimeout bounds an OCI pull when the caller does not set one with WithOCITimeout.
-const DefaultOCIFetchTimeout = 10 * time.Minute
-
-type ociFetchConfig struct {
-	timeout time.Duration
-}
-
-// OCIFetchOption configures FetchOCIContext.
-type OCIFetchOption func(*ociFetchConfig)
-
-// WithOCITimeout bounds the pull (registry auth, manifest, and layer download/extract).
-func WithOCITimeout(timeout time.Duration) OCIFetchOption {
-	return func(c *ociFetchConfig) { c.timeout = timeout }
-}
-
-// FetchOCIContext pulls the OCI image imageRef (no "oci://" prefix) into dst through the shared
-// go-getter downloader, so every OCI consumer shares one fetch path. The reference is normalized
-// first (host-less refs such as "ubuntu:latest" would otherwise fail URL parsing), and
+// prepareOCISource normalizes an "oci://" source before go-getter parses it, so callers can hand
+// an OCI reference to the generic Fetch methods like any other protocol. The reference is
+// normalized with name.ParseReference (host-less refs such as "ubuntu:latest" would otherwise
+// fail URL parsing, with "latest" read as a port), any "//subdir" suffix is preserved, and
 // "?archive=false" stops go-getter from treating a ref that ends in an archive suffix as an
-// archive to decompress.
-func FetchOCIContext(ctx context.Context, atmosConfig *schema.AtmosConfiguration, imageRef, dst string, opts ...OCIFetchOption) error {
-	defer perf.Track(atmosConfig, "downloader.FetchOCIContext")()
-
-	cfg := &ociFetchConfig{timeout: DefaultOCIFetchTimeout}
-	for _, opt := range opts {
-		opt(cfg)
+// archive to decompress. Sources that are not oci:// are returned unchanged.
+func prepareOCISource(src string) (string, error) {
+	if !strings.HasPrefix(src, ociScheme) {
+		return src, nil
 	}
-
-	ref, err := name.ParseReference(imageRef)
+	base, subdir := getter.SourceDirSubdir(src)
+	ref, err := name.ParseReference(strings.TrimPrefix(base, ociScheme))
 	if err != nil {
-		return errors.Join(errUtils.ErrInvalidImageReference, err)
+		return "", errors.Join(errUtils.ErrInvalidImageReference, err)
 	}
-	src := ociScheme + ref.Name() + noArchiveQuery
-	dl, ok := NewGoGetterDownloader(atmosConfig).(ContextFileDownloader)
-	if !ok {
-		return fmt.Errorf("%w: downloader does not support contexts", errUtils.ErrCreateDownloadClient)
+	prepared := ociScheme + ref.Name()
+	if subdir != "" {
+		prepared += "//" + subdir
 	}
-	_, err = dl.FetchWithMetadataContext(ctx, src, dst, ClientModeDir, cfg.timeout)
-	return err
+	return prepared + noArchiveQuery, nil
 }
