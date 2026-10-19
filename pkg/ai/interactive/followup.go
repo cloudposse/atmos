@@ -2,6 +2,7 @@ package interactive
 
 import (
 	"errors"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/huh"
@@ -17,7 +18,14 @@ import (
 // isTTY reports whether a standard stream is a terminal. It is a seam: tests replace it to simulate
 // terminals and pipes.
 var isTTY = func(stream terminal.Stream) bool {
-	return terminal.New().IsTTY(stream)
+	switch stream {
+	case terminal.Stdin:
+		return terminal.HasRealTTYInput()
+	case terminal.Stdout:
+		return terminal.IsTTYWriter(os.Stdout)
+	default:
+		return terminal.New().IsTTY(stream)
+	}
 }
 
 // isCI reports whether the process runs in a CI environment. It is a seam: tests replace it to simulate CI.

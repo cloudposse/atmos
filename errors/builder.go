@@ -15,6 +15,7 @@ type ErrorBuilder struct {
 	hints     []string
 	context   map[string]interface{}
 	exitCode  *int
+	location  *Location
 	sentinels []error // Sentinel errors to mark with errors.Mark()
 }
 
@@ -101,6 +102,18 @@ func (b *ErrorBuilder) WithExitCode(code int) *ErrorBuilder {
 	return b
 }
 
+// WithLocation records the file, and optionally the 1-based line, where the error's
+// cause is defined, such as the stack manifest line of an invalid value. A line of 0
+// means only the file is known. Reporters read it with GetLocation; CI providers use
+// it to anchor annotations. Formatting the error does not print it.
+func (b *ErrorBuilder) WithLocation(file string, line int) *ErrorBuilder {
+	if file == "" {
+		return b
+	}
+	b.location = &Location{File: file, Line: max(line, 0)}
+	return b
+}
+
 // WithCause wraps the builder's error with an underlying cause error.
 // This preserves the original error message while allowing errors.Is() to match the sentinel.
 // The resulting error will match both the sentinel (passed to Build) and the cause.
@@ -127,10 +140,10 @@ func (b *ErrorBuilder) WithCause(cause error) *ErrorBuilder {
 		} else {
 			// Extract hints from cause before wrapping, since fmt.Errorf
 			// doesn't preserve cockroachdb hint metadata.
-			if causeHints := errors.GetAllHints(cause); len(causeHints) > 0 {
+			if causeHints := AllHints(cause); len(causeHints) > 0 {
 				b.hints = append(b.hints, causeHints...)
 			}
-			causeDetails := errors.GetAllDetails(cause)
+			causeDetails := AllDetails(cause)
 			// Extract context from cause before wrapping, since fmt.Errorf
 			// doesn't preserve cockroachdb safe details metadata.
 			b.extractContextFromCause(cause)
@@ -320,6 +333,11 @@ func (b *ErrorBuilder) Err() error {
 		err = errors.WithSafeDetails(err, strings.Join(formatParts, " "), safeValues...)
 	}
 
+	// Add the source location if specified.
+	if b.location != nil {
+		err = &locatedError{cause: err, location: *b.location}
+	}
+
 	// Mark with sentinel errors for errors.Is() checks.
 	// This must be done AFTER all other wrapping to ensure sentinels are at the top level.
 	for _, sentinel := range b.sentinels {
@@ -332,4 +350,39 @@ func (b *ErrorBuilder) Err() error {
 	}
 
 	return err
+}
+
+// Location identifies where an error's cause is defined. Line is 1-based; 0 means
+// only the file is known.
+type Location struct {
+	File string
+	Line int
+}
+
+// locatedError attaches a Location without changing the error's message or chain.
+type locatedError struct {
+	cause    error
+	location Location
+}
+
+// Error returns the wrapped message unchanged.
+func (e *locatedError) Error() string { return e.cause.Error() }
+
+// Unwrap keeps sentinels, hints, details, and exit codes reachable.
+func (e *locatedError) Unwrap() error { return e.cause }
+
+// GetLocation returns the outermost location recorded with ErrorBuilder.WithLocation,
+// if any. Wrapping the error does not hide it.
+func GetLocation(err error) (Location, bool) {
+	var located *locatedError
+	if errors.As(err, &located) {
+		return located.location, true
+	}
+	return Location{}, false
+}
+
+// GetTitle returns the custom title recorded with ErrorBuilder.WithTitle, or "" when
+// the error uses the default title.
+func GetTitle(err error) string {
+	return extractCustomTitle(err)
 }

@@ -21,9 +21,10 @@ func (g *gitProvisioner) ValidatePublish(in *target.PublishInput) error {
 	defer perf.Track(in.AtmosConfig, "target.git.ValidatePublish")()
 	cfg, err := parseConfig(in.TargetConfig)
 	if err != nil {
-		return err
+		// Keep parse sentinels (e.g. a malformed pull_request) while marking them publish errors.
+		return fmt.Errorf("%w: %w", errUtils.ErrPublishTarget, err)
 	}
-	if cfg.Split != nil || cfg.PullRequest {
+	if cfg.Split != nil || cfg.PullRequest.Enabled {
 		return fmt.Errorf("%w: publish does not support split or pull_request", errUtils.ErrPublishTarget)
 	}
 	if err := validatePublishSettings(in.TargetConfig); err != nil {

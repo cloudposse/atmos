@@ -8,13 +8,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/go-getter"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/broker"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/hashicorp/go-getter"
 )
 
 const sourceReadyFilePerm = 0o600
@@ -46,7 +48,24 @@ func (r *RemoteImporter) ResolveNested(uri, nestedImports string) ([]RemoteImpor
 
 // resolveNested is the ttl-aware implementation behind ResolveNested. The ttl controls
 // cross-run reuse of the cloned source repo (see ensureSourceDir).
-func (r *RemoteImporter) resolveNested(uri, nestedImports, ttl string) ([]RemoteImportMatch, error) {
+func (r *RemoteImporter) resolveNested(uri, nestedImports, ttl string) (result []RemoteImportMatch, resultErr error) {
+	if err := guard.Source(context.Background(), "import", uri, ""); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if resultErr == nil {
+			for _, match := range result {
+				guard.RegisterRemote(match.Path, uri)
+				if match.BasePath != "" {
+					guard.RegisterRemote(match.BasePath, uri)
+				}
+			}
+		}
+	}()
+	return r.resolveNestedUnguarded(uri, nestedImports, ttl)
+}
+
+func (r *RemoteImporter) resolveNestedUnguarded(uri, nestedImports, ttl string) (result []RemoteImportMatch, resultErr error) {
 	defer perf.Track(nil, "imports.RemoteImporter.resolveNested")()
 
 	if nestedImports == "" || nestedImports == schema.StackImportNestedImportsLocal {

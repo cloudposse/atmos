@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 )
 
 // FetchMetadata records provenance from the download itself.
@@ -26,6 +27,9 @@ type metadataCapturingTransport struct {
 func (t *metadataCapturingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	defer perf.Track(nil, "downloader.metadataCapturingTransport.RoundTrip")()
 
+	if err := guard.Source(req.Context(), "download", req.URL.String(), ""); err != nil {
+		return nil, err
+	}
 	base := t.base
 	if base == nil {
 		base = http.DefaultTransport

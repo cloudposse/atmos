@@ -1,0 +1,31 @@
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: doctor-monorepo
+spec:
+  imports:
+    - vendor/networking
+  sources:
+    # Literal ref in a git-forced getter URL with another query parameter.
+    - component: dns-primary
+      source: "git::https://github.com/cloudposse/terraform-aws-components.git//modules/dns-primary?depth=1&ref=1.495.0"
+      targets: ["components/terraform/dns-primary"] # keep this target note
+    # Split into subcomponents: no single successor repository.
+    - component: tgw
+      source: "github.com/cloudposse/terraform-aws-components.git//modules/tgw?ref={{.Version}}"
+      version: "1.495.0"
+      targets: ["components/terraform/tgw"]
+    # Removed before the migration: no successor repository.
+    - component: efs
+      source: "github.com/cloudposse/terraform-aws-components.git//modules/eks/efs?ref={{.Version}}"
+      version: "1.495.0"
+      targets: ["components/terraform/eks/efs"]
+    # A placeholder instead of a tag: the move cannot be verified.
+    - component: s3-bucket
+      source: "github.com/cloudposse/terraform-aws-components.git//modules/s3-bucket?ref={{.Version}}"
+      version: "CUSTOM, > 1.422"
+      targets: ["components/terraform/s3-bucket"]
+    # Not part of the monorepo: untouched.
+    - component: label
+      source: "github.com/cloudposse/terraform-null-label.git?ref=0.25.0"
+      targets: ["components/terraform/label"]

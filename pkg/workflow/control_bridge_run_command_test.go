@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
+	cockroach "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -82,6 +85,44 @@ func TestPlainControlRunCommand_PropagatesFailureAndTeesStderr(t *testing.T) {
 
 	assert.Contains(t, captureStderr.String(), "fake-child-stderr")
 	assert.Equal(t, liveStderr.String(), captureStderr.String(), "controlWriter must tee stderr identically on failure too")
+}
+
+// A failed nested Atmos command already reported its own failure, so the exit is marked to keep the
+// parent from reporting it again. Other programs and successful runs are returned untouched.
+func TestPlainControlRunCommand_MarksNestedAtmosFailures(t *testing.T) {
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	t.Run("a failed atmos child is marked and keeps its exit code", func(t *testing.T) {
+		request, _, _, _, captureStderr := newFakeControlChildRequest(t, schema.TaskTypeAtmos, t.TempDir(), "atmos-fail", true)
+		request.Args = []string{"terraform", "plan", "vpc"}
+
+		err := plainControlRunCommand(request)
+
+		require.Error(t, err)
+		assert.True(t, cockroach.Is(err, errUtils.ErrNestedAtmosFailed), "the nested failure marker is set")
+		assert.ErrorIs(t, err, errUtils.ErrScriptProcessFailed)
+		assert.Contains(t, err.Error(), "atmos terraform plan vpc exited with code 3")
+		var exitErr *exec.ExitError
+		require.ErrorAs(t, err, &exitErr, "the original exit error stays reachable")
+		assert.Equal(t, 3, exitErr.ExitCode())
+		assert.Contains(t, captureStderr.String(), "fake-child-stderr", "output is still captured")
+	})
+
+	t.Run("a failed non-atmos child is returned unmarked", func(t *testing.T) {
+		request, _, _, _, _ := newFakeControlChildRequest(t, exe, t.TempDir(), "other-fail", true)
+
+		err := plainControlRunCommand(request)
+
+		require.Error(t, err)
+		assert.False(t, cockroach.Is(err, errUtils.ErrNestedAtmosFailed))
+	})
+
+	t.Run("a successful atmos child returns no error", func(t *testing.T) {
+		request, _, _, _, _ := newFakeControlChildRequest(t, schema.TaskTypeAtmos, t.TempDir(), "atmos-ok", false)
+
+		require.NoError(t, plainControlRunCommand(request))
+	})
 }
 
 func TestPlainControlRunCommand_FallsBackToOSEnvironWhenRequestEnvEmpty(t *testing.T) {

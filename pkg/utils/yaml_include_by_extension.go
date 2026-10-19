@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	neturl "net/url"
@@ -14,9 +15,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/function/parser"
-	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -57,6 +58,34 @@ func ProcessIncludeTagWalked(
 	return processIncludeTagInternal(atmosConfig, node, val, file, includeMode{walkIn: walkIn})
 }
 
+// IncludeWalk describes how a tag walker walks the evaluated YAML an include produces.
+type IncludeWalk struct {
+	// Local walks a local include with the included file as its context.
+	Local func(node *yaml.Node, file string) error
+	// Remote walks a remote include with the outer manifest as its resolution context and the
+	// remote include target as the source it is attributed to.
+	Remote func(node *yaml.Node, file, source string) error
+	// Source is the origin of the content being walked when it differs from the file used to resolve
+	// relative paths, as inside remote content. Nested includes confine and attribute against it.
+	Source string
+}
+
+// ProcessIncludeTagWalkedFrom is ProcessIncludeTagWalked for callers that attribute walked content
+// to its origin. A remote YAML include is walked through walk.Remote, so a function inside remote
+// content is admitted as remote rather than as the local manifest that included it, and an include
+// nested in remote content is confined and attributed as remote.
+func ProcessIncludeTagWalkedFrom(
+	atmosConfig *schema.AtmosConfiguration,
+	node *yaml.Node,
+	val string,
+	file string,
+	walk IncludeWalk,
+) (bool, error) {
+	defer perf.Track(atmosConfig, "utils.ProcessIncludeTagWalkedFrom")()
+
+	return processIncludeTagInternal(atmosConfig, node, val, file, includeMode{walkIn: walk.Local, walkRemote: walk.Remote, source: walk.Source})
+}
+
 // includeMode carries the caller-selected include behavior.
 type includeMode struct {
 	// forceRaw returns the file text verbatim (!include.raw).
@@ -64,6 +93,11 @@ type includeMode struct {
 	// walkIn, when set, walks an evaluated YAML include with its local file
 	// or the outer manifest as the tag-resolution context.
 	walkIn func(node *yaml.Node, file string) error
+	// walkRemote, when set, walks an evaluated remote YAML include with the outer manifest as its
+	// resolution context and the remote include target as its attribution.
+	walkRemote func(node *yaml.Node, file, source string) error
+	// source, when set, is the origin the including content is attributed to instead of the file.
+	source string
 }
 
 // ProcessIncludeRawTag processes the !include.raw tag.
@@ -106,11 +140,19 @@ func processIncludeTagInternal(
 	includeQuery = parsed.Query
 	evalFunctions := parsed.Eval
 
-	// Try to find the file locally
+	// Try to find the file locally. Relative paths resolve against file, while confinement and
+	// provenance use the origin of the including content, which differs inside remote content.
 	localFile = findLocalFile(includeFile, file, atmosConfig)
+	origin := file
+	if mode.source != "" {
+		origin = mode.source
+	}
 
 	// Process the file
 	if localFile != "" {
+		if err := guard.Source(context.Background(), "include", localFile, origin); err != nil {
+			return false, err
+		}
 		if isYAMLInclude(localFile, forceRaw) {
 			data, err := os.ReadFile(localFile)
 			if err != nil {
@@ -120,6 +162,7 @@ func processIncludeTagInternal(
 			if err := spliceYAMLText(atmosConfig, node, string(data), includeSplice{query: includeQuery, eval: evalFunctions, val: val, file: file}); err != nil {
 				return false, err
 			}
+			guard.RememberNode(node, includeOrigin(localFile, includeFile, origin))
 			if evalFunctions && mode.walkIn != nil {
 				// Resolve tags nested in the included file relative to that file.
 				return true, mode.walkIn(node, localFile)
@@ -132,6 +175,9 @@ func processIncludeTagInternal(
 			return false, err
 		}
 	} else if shouldFetchRemote(includeFile) {
+		if err := guard.Source(context.Background(), "include", includeFile, origin); err != nil {
+			return false, err
+		}
 		if isYAMLInclude(includeFile, forceRaw) {
 			raw, err := processRemoteFile(atmosConfig, includeFile, true)
 			if err != nil {
@@ -151,6 +197,10 @@ func processIncludeTagInternal(
 			// their context; there is no local directory to resolve against.
 			if err := spliceYAMLText(atmosConfig, node, text, includeSplice{query: includeQuery, eval: evalFunctions, val: val, file: file}); err != nil {
 				return false, err
+			}
+			guard.RememberNode(node, includeOrigin(localFile, includeFile, origin))
+			if evalFunctions && mode.walkRemote != nil {
+				return true, mode.walkRemote(node, file, includeFile)
 			}
 			if evalFunctions && mode.walkIn != nil {
 				return true, mode.walkIn(node, file)
@@ -181,8 +231,22 @@ func processIncludeTagInternal(
 		}
 	}
 
+	guard.RememberTree(res, includeOrigin(localFile, includeFile, origin))
 	// Update the YAML node with the result
 	return false, updateYamlNode(node, res, val, file)
+}
+
+// includeOrigin attributes included content to its source: the local file when one was found,
+// otherwise the remote include target, and always the parent manifest when that is remote.
+func includeOrigin(localFile, includeFile, parentFile string) guard.Origin {
+	origin := guard.FileOrigin(localFile)
+	if localFile == "" {
+		origin = guard.FileOrigin(includeFile)
+	}
+	if parent := guard.FileOrigin(parentFile); parent.Provenance == "remote" {
+		origin = parent
+	}
+	return origin
 }
 
 // includeSplice carries the per-include inputs spliceYAMLText needs: the yq
@@ -224,7 +288,7 @@ func spliceYAMLText(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, yam
 
 	query, val, file := opts.query, opts.val, opts.file
 	if query != "" {
-		evaluated, err := evaluateYqToYAML(atmosConfig, yamlText, query)
+		evaluated, err := evaluateIncludeQuery(atmosConfig, yamlText, query)
 		if err != nil {
 			return fmt.Errorf("%w: %s, stack manifest: %s, error: %w",
 				ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
@@ -254,6 +318,12 @@ func spliceYAMLText(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, yam
 		setStringScalar(node, trimmed)
 		return nil
 	}
+	// Match EvaluateYqExpression's empty-string query contract. An empty
+	// value nested in a returned map, or included without a query, stays empty.
+	if query != "" && contentNode.Kind == yaml.ScalarNode && contentNode.Tag == "!!str" && contentNode.Value == "" {
+		*node = yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}
+		return nil
+	}
 
 	if !opts.eval {
 		literalizeAtmosTags(contentNode)
@@ -262,18 +332,21 @@ func spliceYAMLText(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, yam
 	return nil
 }
 
-// literalizeAtmosTags drops every Atmos YAML function tag in the subtree,
-// keeping the tagged value as plain data (`!env HOME` -> "HOME"). Foreign
-// tags are left alone for their rewriters.
+// literalizeAtmosTags keeps included values as plain data (`!env HOME` -> "HOME"),
+// including unregistered tags from other formats. Registered foreign rewriters
+// and migration diagnostics retain their tags for the walker.
 func literalizeAtmosTags(node *yaml.Node) {
 	if node == nil {
 		return
 	}
 	tag := strings.TrimSpace(node.Tag)
-	if strings.HasPrefix(tag, "!") && !strings.HasPrefix(tag, "!!") && fntag.IsValidYAML(tag) {
-		node.Tag = ""
-		if node.Kind == yaml.ScalarNode {
-			node.Tag = "!!str"
+	if strings.HasPrefix(tag, "!") && !strings.HasPrefix(tag, "!!") {
+		_, registered := lookupForeignTagRewriter(tag)
+		if !registered && len(lookupForeignTagHint(tag)) == 0 {
+			node.Tag = ""
+			if node.Kind == yaml.ScalarNode {
+				node.Tag = "!!str"
+			}
 		}
 	}
 	for _, child := range node.Content {

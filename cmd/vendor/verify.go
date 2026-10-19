@@ -216,7 +216,7 @@ func init() {
 		flags.WithEnvVars(vendorTagsFlagName, envVendorTags),
 		flags.WithViperKey(vendorTagsFlagName, vendorTagsViperKey),
 		flags.WithStringFlag("stack", "s", "", "Verify only components belonging to the specified stack"),
-		flags.WithStringSliceFlag(vendorLabelsFlagName, "", nil, vendorLabelsFlagHelp),
+		flags.WithStringArrayFlag(vendorLabelsFlagName, "", nil, vendorLabelsFlagHelp),
 		flags.WithEnvVars(vendorLabelsFlagName, envVendorLabels),
 		flags.WithViperKey(vendorLabelsFlagName, vendorLabelsViperKey),
 		flags.WithStringFlag("format", "", "table", "Output format: table or json"),

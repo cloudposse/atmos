@@ -1581,7 +1581,7 @@ func executeCustomCommand(
 							e.WithProcessStreams(process.Streams{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr}),
 						)
 					})
-					return runErr
+					return writer.MarkNestedAtmosFailure(runErr)
 				})
 			case schema.TaskTypeParallel, schema.TaskTypeMatrix:
 				// Route through the same control-step engine workflows use, so `needs:`,
@@ -1828,8 +1828,9 @@ func prepareCustomCommandAuth(atmosConfig *schema.AtmosConfiguration, commandIde
 	if errors.Is(err, errUtils.ErrUserAborted) {
 		errUtils.CheckErrorPrintAndExit(errUtils.ErrUserAborted, "", "")
 	}
-	errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w for identity %q in custom command %q: %w",
-		errUtils.ErrAuthenticationFailed, commandIdentity, commandName, err), "", "")
+	// Scope with the identity first so it is never lost (the manager's own scope is deduplicated).
+	err = errUtils.WrapAuthenticationFailed(err, "identity %q", commandIdentity)
+	errUtils.CheckErrorPrintAndExit(errUtils.WrapAuthenticationFailed(err, "custom command %q", commandName), "", "")
 	return authManager, commandIdentity
 }
 

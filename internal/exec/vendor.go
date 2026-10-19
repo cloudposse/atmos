@@ -140,7 +140,7 @@ func PlanVendorPull(cmd *cobra.Command, args []string) (*VendorPullPlan, error) 
 	// need processStacks=true. A cheap presence check (not the authoritative parse, which
 	// parseVendorFlags still does below) is enough to decide.
 	stackFlagVal, _ := flags.GetString("stack")
-	labelsFlagVal, _ := flags.GetStringSlice("labels")
+	labelsFlagVal, _ := flags.GetStringArray("labels")
 	needsStackProcessing := stackFlagVal != "" || len(labelsFlagVal) > 0
 
 	atmosConfig, err := cfg.InitCliConfig(info, needsStackProcessing)
@@ -266,7 +266,7 @@ func parseOptionalLabelsFlag(flags *pflag.FlagSet) (map[string]string, error) {
 	if flags.Lookup("labels") == nil {
 		return nil, nil
 	}
-	labelsSlice, err := flags.GetStringSlice("labels")
+	labelsSlice, err := flags.GetStringArray("labels")
 	if err != nil {
 		return nil, err
 	}

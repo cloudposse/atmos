@@ -131,6 +131,7 @@ actions instead of running typed steps. Each child step's `type:` is the session
 | `write` | `text`, `rate` | Type literal text into the session |
 | `key` | `key`, `interval` | Send a single keypress (e.g. `enter`, `tab`, `ctrl+c`) |
 | `pause` | `duration` | Wait a fixed duration before the next action |
+| `playback` | `duration`, `steps` | Fit nested actions into an exact playback duration without changing execution time |
 | `wait` | `text` or `regex` (exactly one), `timeout` | Block until the session output matches |
 
 ```yaml
@@ -148,6 +149,11 @@ steps:
       - type: key
         key: enter
 ```
+
+Group Enter and its completion wait in `type: playback` with `duration: 4s` to accelerate
+a long operation while preserving all recorded frames. Typing and reading pauses outside
+the group keep their timing. Playback groups also support ordinary steps in `mode: steps`;
+they require a positive duration and cannot nest or overlap. Short groups stretch to fit.
 
 Cast-level fields: `width`/`height` (recording dimensions), `rate` (default output pacing),
 `title`, `command`, `env`, and `output` (a `CastOutput`: `cast`, `gif`, `mp4`, `html`, `ascii`,

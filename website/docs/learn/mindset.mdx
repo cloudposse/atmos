@@ -16,8 +16,10 @@ import PrimaryCTA from '@site/src/components/PrimaryCTA'
 <Intro>
     Atmos can change how you think about the Terraform code you write to build your infrastructure.
 
-    When you design cloud architectures with Atmos, you will first break them apart into pieces called components. Then, you will implement Terraform "root modules" for each of those components. Finally, compose your components in any way you like using stacks, without the need to write any code or messy templates for code generation.
+    You can start with your existing Terraform root modules—no rewrite required. To get the most from Atmos over time, we recommend organizing infrastructure into reusable components and composing their configuration with stacks.
 </Intro>
+
+These are architectural recommendations, not prerequisites for using Atmos. Follow the [native Terraform migration guide](/migration/native-terraform) to adopt Atmos first, then improve your architecture incrementally. Atmos also supports [file generation](/stacks/generate) when templates fit your workflow.
 
 In this tutorial, we'll guide you through the thought process of building Terraform "root modules" that are suitable for use as components. To ensure your components are highly reusable, parameterize them with variables.
 Design them to serve a single purpose, making them the smallest possible unit of infrastructure in a typical

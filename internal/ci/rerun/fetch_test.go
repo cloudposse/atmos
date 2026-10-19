@@ -90,6 +90,84 @@ func TestFetchJobs(t *testing.T) {
 	})
 }
 
+func TestFetchJobsFallsBackToSmallerPagesOnServerErrors(t *testing.T) {
+	t.Parallel()
+
+	const base = "repos/cloudposse/atmos/actions/runs/1/attempts/2/jobs?per_page="
+	badGateway := &api.HTTPError{StatusCode: http.StatusBadGateway}
+
+	t.Run("a 502 at 30 per page retries at 15", func(t *testing.T) {
+		t.Parallel()
+		client := NewMockRESTClient(gomock.NewController(t))
+		gomock.InOrder(
+			client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, base+"30", nil).Return(nil, badGateway),
+			client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, base+"15", nil).
+				Return(jsonResponse(200, `{"jobs":[{"name":"Build","status":"completed","conclusion":"success"}]}`, nil), nil), //nolint:bodyclose // closed by the code under test, not this fixture.
+		)
+
+		jobs, err := FetchJobs(context.Background(), client, "cloudposse/atmos", "1", "2")
+		require.NoError(t, err)
+		require.Len(t, jobs, 1)
+		assert.Equal(t, "Build", jobs[0].Name)
+	})
+
+	t.Run("a 502 on a later page restarts from the first page", func(t *testing.T) {
+		t.Parallel()
+		client := NewMockRESTClient(gomock.NewController(t))
+		page2 := "https://api.github.com/" + base + "30&page=2"
+		gomock.InOrder(
+			client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, base+"30", nil).
+				Return(jsonResponse(200, `{"jobs":[{"name":"Build (linux)","status":"completed","conclusion":"success"}]}`, //nolint:bodyclose // closed by the code under test, not this fixture.
+					http.Header{"Link": {`<` + page2 + `>; rel="next"`}}), nil),
+			client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, page2, nil).Return(nil, badGateway),
+			client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, base+"15", nil).
+				Return(jsonResponse(200, `{"jobs":[{"name":"Build (linux)","status":"completed","conclusion":"success"},{"name":"Build (windows)","status":"completed","conclusion":"success"}]}`, nil), nil), //nolint:bodyclose // closed by the code under test, not this fixture.
+		)
+
+		jobs, err := FetchJobs(context.Background(), client, "cloudposse/atmos", "1", "2")
+		require.NoError(t, err)
+		require.Len(t, jobs, 2, "the first page fetched at 30 must not be kept alongside the restart")
+		assert.Equal(t, "Build (linux)", jobs[0].Name)
+		assert.Equal(t, "Build (windows)", jobs[1].Name)
+	})
+
+	t.Run("a server error at every size returns the last error", func(t *testing.T) {
+		t.Parallel()
+		client := NewMockRESTClient(gomock.NewController(t))
+		gomock.InOrder(
+			client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, base+"30", nil).Return(nil, badGateway),
+			client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, base+"15", nil).Return(nil, badGateway),
+			client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, base+"10", nil).Return(nil, &api.HTTPError{StatusCode: http.StatusServiceUnavailable}),
+		)
+
+		_, err := FetchJobs(context.Background(), client, "cloudposse/atmos", "1", "2")
+		var httpErr *api.HTTPError
+		require.ErrorAs(t, err, &httpErr)
+		assert.Equal(t, http.StatusServiceUnavailable, httpErr.StatusCode)
+		assert.True(t, IsTransient(err), "the caller's poll loop must still treat it as retryable")
+	})
+
+	t.Run("a 4xx is not retried at a smaller size", func(t *testing.T) {
+		t.Parallel()
+		client := NewMockRESTClient(gomock.NewController(t))
+		client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, base+"30", nil).Return(nil, &api.HTTPError{StatusCode: http.StatusNotFound})
+
+		_, err := FetchJobs(context.Background(), client, "cloudposse/atmos", "1", "2")
+		var httpErr *api.HTTPError
+		require.ErrorAs(t, err, &httpErr)
+		assert.Equal(t, http.StatusNotFound, httpErr.StatusCode)
+	})
+
+	t.Run("a cancelled context is not retried at a smaller size", func(t *testing.T) {
+		t.Parallel()
+		client := NewMockRESTClient(gomock.NewController(t))
+		client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, base+"30", nil).Return(nil, context.Canceled)
+
+		_, err := FetchJobs(context.Background(), client, "cloudposse/atmos", "1", "2")
+		require.ErrorIs(t, err, context.Canceled)
+	})
+}
+
 func TestIsTransient(t *testing.T) {
 	t.Parallel()
 

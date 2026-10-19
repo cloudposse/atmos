@@ -36,8 +36,9 @@ type session struct {
 	approver approval.Approver
 	tracker  *progressTracker
 	// stdin is nil when the prompt was passed as plain text and no control protocol is in use.
-	stdin io.Writer
-	timer *pausableTimer
+	stdin  io.Writer
+	timer  *pausableTimer
+	cancel context.CancelFunc
 
 	result      []byte      // Raw final result line.
 	interrupted bool        // The approver asked to stop the whole run.
@@ -59,10 +60,15 @@ func (c *Client) execClaude(ctx context.Context, prompt, systemPrompt string) (s
 
 	cmd := exec.CommandContext(runCtx, c.binaryPath, args...) //nolint:gosec // Binary path is from user config or exec.LookPath.
 	cmd.WaitDelay = waitDelay
+	tree, err := prepareProcessTree(cmd)
+	if err != nil {
+		return "", execFailed(err, "")
+	}
+	defer tree.close()
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
-	sess := &session{approver: c.approver, tracker: newProgressTracker(c.progress), timer: timer}
+	sess := &session{approver: c.approver, tracker: newProgressTracker(c.progress), timer: timer, cancel: cancel}
 	if c.approver != nil {
 		stdin, err := cmd.StdinPipe()
 		if err != nil {
@@ -77,6 +83,11 @@ func (c *Client) execClaude(ctx context.Context, prompt, systemPrompt string) (s
 		return "", execFailed(err, "")
 	}
 	if err := cmd.Start(); err != nil {
+		return "", execFailed(err, "")
+	}
+	if err := tree.started(); err != nil {
+		_ = cmd.Cancel()
+		_ = cmd.Wait()
 		return "", execFailed(err, "")
 	}
 
@@ -169,10 +180,9 @@ func (s *session) handleControlRequest(ctx context.Context, msg *streamMessage) 
 	s.timer.resume()
 
 	if err != nil {
-		// Deny with interrupt and stop reading. The caller then closes stdin, which lets Claude
-		// receive the denial and exit; the grace timer kills it if it does not.
 		s.write(encodeDeny(msg.RequestID, "Tool approval failed.", true))
 		s.fatal = err
+		s.cancel()
 		return
 	}
 	s.applyDecision(msg.RequestID, req, decision)
@@ -222,8 +232,7 @@ func denialKey(toolUseID, toolName string) string {
 func (s *session) evaluateResult() (string, error) {
 	var resp claudeResponse
 	if err := json.Unmarshal(s.result, &resp); err != nil {
-		// The line was already decoded as a JSON object, so this is a field type mismatch.
-		// Falling back to the plain-text path would return the raw JSON as the answer.
+		// A field type mismatch must not return raw JSON as a successful answer.
 		return "", fmt.Errorf("%w: %s: %w", errUtils.ErrCLIProviderParseResponse, ProviderName, err)
 	}
 	remaining := resp.PermissionDenials[:0:0]

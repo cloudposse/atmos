@@ -43,6 +43,10 @@ const (
 )
 
 var (
+	ErrAISkillSourceInvalid                  = errors.New("invalid skill source")
+	ErrAISkillSourceDrift                    = errors.New("skill installation is not current")
+	ErrAISkillSourceOwnership                = errors.New("skill destination is not owned by this source")
+	ErrAISkillSourceRecovery                 = errors.New("skill transaction requires recovery")
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrDownloadFile                          = errors.New("failed to download file")
 	ErrInvalidClientMode                     = errors.New("invalid client mode for operation")
@@ -99,6 +103,7 @@ var (
 	ErrTemplateEvaluation                    = errors.New("template evaluation failed")
 	ErrCommandEnvDecodeFailed                = schemaPkg.ErrCommandEnvDecodeFailed
 	ErrComponentDependencyMissingComponent   = schemaPkg.ErrComponentDependencyMissingComponent
+	ErrInvalidCastPlayback                   = errors.New("invalid cast playback group")
 	ErrCastStepRequiresSteps                 = errors.New("cast step requires nested steps")
 	ErrCastSessionRequiresActions            = errors.New("cast session step requires session actions")
 	ErrInvalidCastMode                       = errors.New("cast step has invalid mode")
@@ -127,6 +132,7 @@ var (
 	ErrStacksDirectoryDoesNotExist           = errors.New("directory for Atmos stacks does not exist")
 	ErrMissingAtmosConfig                    = errors.New("atmos configuration not found or invalid")
 	ErrNotInGitRepository                    = errors.New("not inside a git repository")
+	ErrAffectedBaseUnresolved                = errors.New("cannot resolve the base for --affected")
 	ErrCommandNil                            = errors.New("command cannot be nil")
 	ErrProcessStartFailed                    = errors.New("process start failed")
 	ErrProcessWaitFailed                     = errors.New("process wait failed")
@@ -1091,11 +1097,22 @@ var (
 	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
 	ErrPlaywrightDriverSeed         = errors.New("failed to pre-seed the Playwright driver")
 	ErrAwsMissingEnvVars            = errors.New("missing required AWS environment variables")
+	ErrIdentityNotAWS               = errors.New("identity does not produce AWS credentials")
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")
 	ErrChromeNotFound               = errors.New("chrome/chromium not found for isolated browser sessions")
 	ErrSayNotFound                  = errors.New("text-to-speech command not found")
 	ErrVoiceListUnsupported         = errors.New("voice enumeration not supported for backend")
 	ErrUserAborted                  = errors.New("user aborted")
+
+	// AWS credential_process errors (consuming and producing the AWS process-credential format).
+	ErrCredentialProcessFailed        = errors.New("credential_process command failed")
+	ErrCredentialProcessInvalidOutput = errors.New("credential_process returned invalid output")
+	ErrCredentialProcessRecursion     = errors.New("credential_process recursion detected")
+	// ErrCredentialProcessIdentityRequired is returned when the credential-process producer is not
+	// given a concrete identity (it never opens the interactive selector, which the AWS CLI hides).
+	ErrCredentialProcessIdentityRequired = errors.New("credential_process requires a specific identity")
+	// ErrAWSCredentialsIncomplete is returned when AWS credentials lack an access key ID or secret access key.
+	ErrAWSCredentialsIncomplete = errors.New("AWS credentials are missing an access key ID or secret access key")
 
 	// AWS SSO specific errors.
 	ErrSSOSessionExpired      = errors.New("aws sso session expired")
@@ -1153,6 +1170,7 @@ var (
 	ErrNoDefaultProvider             = errors.New("no default provider configured and multiple providers exist")
 	ErrIdentitySelectionRequiresTTY  = fmt.Errorf("interactive identity selection: %w", ErrTTYRequired)
 	ErrProviderSelectionRequiresTTY  = fmt.Errorf("interactive provider selection: %w", ErrTTYRequired)
+	ErrAuthPromptUnavailable         = fmt.Errorf("interactive authentication prompt unavailable: %w", ErrTTYRequired)
 	ErrAuthenticationChainNotBuilt   = errors.New("authentication chain not built")
 	ErrInvalidStackConfig            = errors.New("invalid stack config")
 	ErrNoCommandSpecified            = errors.New("no command specified")
@@ -1231,7 +1249,9 @@ var (
 	ErrProvisionTargetKindUnknown = errors.New("provision target kind is not registered")
 	ErrProvisionTargetKindMissing = errors.New("provision target is missing a kind")
 	ErrProvisionTargetNoFetch     = errors.New("provision target kind does not support reading current state")
-	ErrGitPullRequestNotSupported = errors.New("git pull request publishing is not supported by the cli provider")
+
+	// Git target pull-request publishing errors.
+	ErrGitTargetPullRequestConfig = errors.New("invalid git target pull_request configuration")
 
 	// Backend provisioning errors.
 	ErrBucketRequired             = errors.New("backend.bucket is required")
@@ -1493,6 +1513,7 @@ var (
 	ErrCICheckRunMissingComponent = errors.New("check run requires a resolved component and stack")
 	ErrCIStatusContextIncomplete  = errors.New("status context requires all parts to be non-empty")
 	ErrCIStatusFetchFailed        = errors.New("failed to fetch CI status")
+	ErrCILabelsFetchFailed        = errors.New("failed to fetch CI review labels")
 	ErrCIOutputWriteFailed        = errors.New("failed to write CI output")
 	ErrCISummaryWriteFailed       = errors.New("failed to write CI summary")
 	ErrCIAnnotationFailed         = errors.New("failed to emit CI annotations")
@@ -1992,6 +2013,19 @@ var (
 
 // Test step (`type: test`) failure sentinel.
 var ErrTestsFailed = errors.New("tests failed")
+
+// Policy evaluation errors.
+var (
+	ErrPolicyInvalid          = errors.New("invalid policy")
+	ErrPolicyInputInvalid     = errors.New("invalid policy input")
+	ErrPolicyEngineUnknown    = errors.New("policy engine is not registered")
+	ErrPolicyEngineRegistered = errors.New("policy engine is already registered")
+	ErrPolicyEvaluation       = errors.New("policy evaluation failed")
+	ErrPolicyInputUnavailable = errors.New("required policy input is unavailable or incomplete")
+	ErrPolicyDenied           = errors.New("policy denied execution")
+	ErrPolicyRequirements     = errors.New("policy requirements are not satisfied")
+	ErrPolicyPlan             = errors.New("saved plan policy enforcement failed")
+)
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
 // This allows the root command to exit with the same code as the subcommand.

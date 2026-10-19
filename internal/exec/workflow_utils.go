@@ -236,7 +236,8 @@ func prepareStepEnvironment(
 			if errors.Is(err, errUtils.ErrUserAborted) {
 				return nil, errUtils.ErrUserAborted
 			}
-			return nil, fmt.Errorf("%w for identity %q in step %q: %w", errUtils.ErrAuthenticationFailed, stepIdentity, stepName, err)
+			// Scope with the identity first so it is never lost (the manager's own scope is deduplicated).
+			return nil, errUtils.WrapAuthenticationFailed(errUtils.WrapAuthenticationFailed(err, "identity %q", stepIdentity), "step %q", stepName)
 		}
 	}
 
@@ -781,7 +782,7 @@ func ExecuteWorkflow(
 		runCommandStep := func(run func(stdout, stderr io.Writer) error) error {
 			var runErr error
 			commandResult, runErr = stepPkg.ExecuteCommandResult(step.Name, run)
-			return runErr
+			return stepPkg.WithStepOutput(runErr, commandResult)
 		}
 		// One option set for every extended-step call below so toolchain PATH and the
 		// auth manager are never dropped on any dispatch path.
@@ -996,7 +997,7 @@ func ExecuteWorkflow(
 									WithProcessStreams(process.Streams{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr}),
 								)
 							})
-							return runErr
+							return writer.MarkNestedAtmosFailure(runErr)
 						})
 					})
 				})

@@ -1,0 +1,9 @@
+commands:
+- name: casts setup landing
+  description: Build Atmos for the landing demos without provisioning example fixtures.
+  env:
+    GOBIN: '{{ env "PWD" }}/../../.context/bin'
+    CGO_ENABLED: '0'
+  steps:
+  - type: shell
+    command: go install ../..

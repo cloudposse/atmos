@@ -1904,7 +1904,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -2177,7 +2177,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -2238,7 +2238,38 @@
                     "properties": {
                       "enabled": {
                         "type": "boolean",
-                        "description": "Publish via pull request (not yet supported by the cli git provider)"
+                        "description": "Commit to a head branch and open/update a pull request into the repository branch (else the remote default) instead of pushing to it; GitHub or Azure DevOps is detected from the repository URI"
+                      },
+                      "branch": {
+                        "type": "string",
+                        "description": "Head branch name (default: atmos/<target>/<stack>/<component>)"
+                      },
+                      "title": {
+                        "type": "string",
+                        "description": "Pull request title"
+                      },
+                      "body": {
+                        "type": "string",
+                        "description": "Pull request body (markdown)"
+                      },
+                      "labels": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Labels to apply to the pull request"
+                      },
+                      "draft": {
+                        "type": "boolean",
+                        "description": "Open the pull request as a draft"
+                      },
+                      "reviewers": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Reviewers to request"
+                      },
+                      "assignees": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Assignees (not supported by azuredevops)"
                       }
                     },
                     "additionalProperties": false
@@ -2277,7 +2308,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -2534,8 +2565,11 @@
               ]
             },
             "enabled": {
-              "type": "boolean",
-              "description": "Flag to enable or disable the component"
+              "anyOf": [
+                {"type": "boolean"},
+                {"type": "string", "pattern": "^!"}
+              ],
+              "description": "Flag to enable or disable the component. A YAML function (for example !ci.labels) is evaluated before use."
             },
             "component": {
               "type": "string",
@@ -2597,9 +2631,9 @@
             "labels": {
               "type": "object",
               "additionalProperties": {
-                "type": "string"
+                "type": ["string", "boolean"]
               },
-              "description": "User-defined key-value labels for categorizing and filtering components (atmos list components --labels)."
+              "description": "User-defined string or boolean labels for categorizing and filtering components. Boolean values match --labels key:true or key:false."
             }
           },
           "required": []
@@ -2621,9 +2655,9 @@
             "labels": {
               "type": "object",
               "additionalProperties": {
-                "type": "string"
+                "type": ["string", "boolean"]
               },
-              "description": "User-defined key-value labels for categorizing and filtering components (atmos list components --labels)."
+              "description": "User-defined string or boolean labels for categorizing and filtering components. Boolean values match --labels key:true or key:false."
             },
             "tags": {
               "type": "array",
@@ -2647,8 +2681,11 @@
               ]
             },
             "enabled": {
-              "type": "boolean",
-              "description": "Flag to enable or disable components stack-wide by default"
+              "anyOf": [
+                {"type": "boolean"},
+                {"type": "string", "pattern": "^!"}
+              ],
+              "description": "Flag to enable or disable components stack-wide by default. A YAML function (for example !ci.labels) is evaluated before use."
             },
             "locked": {
               "type": "boolean",
@@ -2669,7 +2706,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -2681,8 +2718,11 @@
               "additionalProperties": true,
               "properties": {
                 "enabled": {
-                  "type": "boolean",
-                  "description": "Enable Atmos Pro for this stack or component, including automatic exception reporting in GitHub Actions."
+                  "anyOf": [
+                    {"type": "boolean"},
+                    {"type": "string", "pattern": "^!"}
+                  ],
+                  "description": "Enable Atmos Pro for this stack or component, including automatic exception reporting in GitHub Actions. A YAML function (for example !ci.labels) is evaluated before use."
                 },
                 "errors": {
                   "type": "object",
@@ -2801,7 +2841,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -2815,7 +2855,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -2829,7 +2869,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -3199,6 +3239,38 @@
               "$ref": "#/definitions/depends_on_manifest"
             }
           },
+          "additionalProperties": false
+        },
+        {
+          "type": "array",
+          "description": "Deprecated list form, executed the same way as the map form. Use dependencies.components instead.",
+          "items": {
+            "$ref": "#/definitions/depends_on_list_item"
+          }
+        }
+      ]
+    },
+    "depends_on_list_item": {
+      "title": "depends_on_list_item",
+      "description": "Deprecated entry of the list form of depends_on: a component name, or an object that names the component and optionally its stack",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "type": "string"
+            },
+            "stack": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "component"
+          ],
           "additionalProperties": false
         }
       ]
@@ -4474,7 +4546,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -4502,7 +4574,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -4684,7 +4756,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -4843,7 +4915,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -5145,7 +5217,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -5185,7 +5257,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -5246,7 +5318,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",

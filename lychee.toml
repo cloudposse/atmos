@@ -228,4 +228,7 @@ exclude = [
   # k3s.io (GitHub Pages-fronted) intermittently resets connections from CI
   # runners; verified to return 200 outside CI via curl.
   "k3s\\.io",
+  # This flag-parsing article timed out from CI after retries; verified to return
+  # 200 outside CI. Preserve the reference and exclude only this exact URL.
+  "^https://eli\\.thegreenplace\\.net/2020/testing-flag-parsing-in-go-programs/$",
 ]

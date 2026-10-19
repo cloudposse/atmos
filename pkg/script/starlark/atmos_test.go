@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	cockroach "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -191,4 +192,106 @@ func TestAtmosCancellation(t *testing.T) {
 	_, err := New(WithAtmosCommands(testAtmosCatalog()), WithProcessRunner(runner)).Execute(ctx, script.Spec{Source: `atmos.run(["custom"], check=False)`})
 	require.ErrorIs(t, err, context.Canceled)
 	assert.False(t, strings.Contains(err.Error(), "code 1"))
+}
+
+const deniedStderr = "# Error\n\n**Error:** policy denied execution\n"
+
+// nestedAtmosRunner fakes a nested atmos call that writes denied stderr and exits with code.
+func nestedAtmosRunner(t *testing.T, code int) *MockRunner {
+	t.Helper()
+	runner := NewMockRunner(gomock.NewController(t))
+	runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, spec process.TaskSpec) process.Result {
+		_, _ = io.WriteString(spec.Streams.Stderr, deniedStderr)
+		return process.Result{Started: true, ExitCode: code, Err: errUtils.ErrProcessWaitFailed}
+	})
+	return runner
+}
+
+func TestAtmosFailureTailOnlyWhenOutputWasNotShown(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, output string
+		wantTail     bool
+	}{
+		{"stream already showed stderr", "stream", false},
+		{"viewport without a host viewport streams", "viewport", false},
+		{"capture showed nothing", "capture", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			source := `atmos.terraform("destroy", component="vpc", stack="dev", output="` + tc.output + `")`
+			_, err := runSource(t, source, WithProcessRunner(nestedAtmosRunner(t, 1)), WithAtmosExecutable(func() (string, error) { return "/bin/atmos", nil }))
+			require.ErrorIs(t, err, errUtils.ErrStarlarkProcessFailed)
+			assert.Contains(t, err.Error(), "atmos terraform destroy vpc --stack=dev exited with code 1")
+			joined := strings.Join(cockroach.GetAllDetails(err), "\n")
+			if tc.wantTail {
+				assert.Contains(t, joined, "Last lines of stderr from `atmos terraform destroy vpc --stack=dev`")
+				assert.Contains(t, joined, "policy denied execution")
+				return
+			}
+			assert.NotContains(t, joined, "policy denied execution")
+			assert.NotContains(t, joined, "Last lines of stderr")
+		})
+	}
+}
+
+func TestAtmosPolicyDeniedResultAttribute(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		code   int
+		source string
+		want   string
+	}{
+		{"denied", errUtils.ExitCodePolicyDenied, `r = atmos.run(["terraform", "destroy"], check=False, output="capture")`, `[77,true]`},
+		{"ordinary failure", 1, `r = atmos.run(["terraform", "destroy"], check=False, output="capture")`, `[1,false]`},
+		{"typed builtin", errUtils.ExitCodePolicyDenied, `r = atmos.terraform("destroy", component="vpc", stack="dev", check=False, output="capture")`, `[77,true]`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := runSource(t, tc.source+"\noutput = [r.exit_code, r.policy_denied]",
+				WithProcessRunner(nestedAtmosRunner(t, tc.code)), WithAtmosExecutable(func() (string, error) { return "/bin/atmos", nil }))
+			require.NoError(t, err)
+			assert.JSONEq(t, tc.want, result.Value)
+		})
+	}
+}
+
+func TestAtmosPolicyDeniedAttributeIsAbsentOnOtherCommands(t *testing.T) {
+	t.Parallel()
+	result, err := runSource(t, `r = exec.run(["tool"], check=False, output="capture")
+output = [r.exit_code, hasattr(r, "policy_denied")]`, WithProcessRunner(nestedAtmosRunner(t, errUtils.ExitCodePolicyDenied)))
+	require.NoError(t, err)
+	assert.JSONEq(t, `[77,false]`, result.Value)
+}
+
+func TestAtmosPolicyDenialFailsWithPolicyMessageAndExitCode(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		code        int
+		wantMessage string
+		wantExit    int
+	}{
+		{"denied", errUtils.ExitCodePolicyDenied, "a policy denied atmos terraform destroy vpc --stack=dev (exit code 77)", errUtils.ExitCodePolicyDenied},
+		{"other failure is not a denial", 3, "atmos terraform destroy vpc --stack=dev exited with code 3", 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := runSource(t, `atmos.terraform("destroy", component="vpc", stack="dev")`,
+				WithProcessRunner(nestedAtmosRunner(t, tc.code)), WithAtmosExecutable(func() (string, error) { return "/bin/atmos", nil }))
+			require.ErrorIs(t, err, errUtils.ErrStarlarkProcessFailed)
+			assert.Contains(t, err.Error(), tc.wantMessage)
+			assert.Equal(t, tc.wantExit, errUtils.GetExitCode(err))
+		})
+	}
+}
+
+func TestExecRunExitCodeSeventySevenIsNotAPolicyDenial(t *testing.T) {
+	t.Parallel()
+	_, err := runSource(t, `exec.run(["tool"], output="capture")`, WithProcessRunner(nestedAtmosRunner(t, errUtils.ExitCodePolicyDenied)))
+	require.ErrorIs(t, err, errUtils.ErrStarlarkProcessFailed)
+	assert.Contains(t, err.Error(), "tool exited with code 77")
+	assert.NotContains(t, err.Error(), "policy")
+	assert.Equal(t, 1, errUtils.GetExitCode(err))
 }

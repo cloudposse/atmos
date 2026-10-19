@@ -19,6 +19,10 @@ const (
 
 	// PagerFlagName is the flag name for the pager selector.
 	pagerFlagName = "pager"
+
+	// ExplainEnvVar is the environment binding of the global --explain flag. A nested Atmos
+	// process reads it, so a parent started with --explain makes its children explain too.
+	ExplainEnvVar = "ATMOS_EXPLAIN"
 )
 
 // ParseGlobalFlags extracts all global flags from Viper with proper precedence.
@@ -45,6 +49,7 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		ConfigPath: stringSliceFromViperOrEnv(v, "config-path", "ATMOS_CONFIG_PATH"),
 
 		// Logging configuration.
+		Explain:   v.GetBool("explain"),
 		LogsLevel: v.GetString("logs-level"),
 		LogsFile:  v.GetString("logs-file"),
 		LogsColor: v.GetBool("logs-color"),
@@ -312,6 +317,8 @@ func registerWorkingDirectoryFlags(registry *FlagRegistry) {
 // registerLoggingFlags registers logging configuration flags.
 func registerLoggingFlags(registry *FlagRegistry) {
 	defer perf.Track(nil, "flags.registerLoggingFlags")()
+
+	registry.Register(&BoolFlag{Name: "explain", Default: false, Description: "Explain policy decisions on stderr without changing execution", EnvVars: []string{ExplainEnvVar}})
 
 	registry.Register(&StringFlag{
 		Name:        "logs-level",

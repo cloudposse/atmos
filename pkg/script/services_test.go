@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	cockroach "github.com/cockroachdb/errors"
@@ -198,4 +201,124 @@ func TestInvocationDefaultsAndWorkingDirectory(t *testing.T) {
 	require.ErrorIs(t, ValidateWorkingDirectory(filepath.Join(dir, "missing")), os.ErrNotExist)
 	require.NoError(t, os.WriteFile(spec.SourcePath, []byte("output=1"), 0o600))
 	require.ErrorIs(t, ValidateWorkingDirectory(spec.SourcePath), errUtils.ErrScript)
+}
+
+func runFailing(t *testing.T, call *ProcessCall, code int) (ProcessOutput, error) {
+	t.Helper()
+	runner := NewMockRunner(gomock.NewController(t))
+	runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, spec process.TaskSpec) process.Result {
+		_, _ = io.WriteString(spec.Streams.Stderr, "boom: nested failure\n")
+		return process.Result{Started: true, ExitCode: code, Err: errUtils.ErrProcessWaitFailed}
+	})
+	return RunProcess(context.Background(), runner, call)
+}
+
+func TestProcessFailureStderrTail(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		stream   bool
+		stderr   io.Writer
+		wantTail bool
+	}{
+		{"captured output is repeated", false, nil, true},
+		{"streamed output reached the user", true, &bytes.Buffer{}, false},
+		{"streaming without a writer reached nobody", true, nil, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := runFailing(t, &ProcessCall{Argv: []string{"tool"}, Check: true, Stream: tc.stream, Stderr: tc.stderr}, 1)
+			require.ErrorIs(t, err, errUtils.ErrScriptProcessFailed)
+			joined := strings.Join(cockroach.GetAllDetails(err), "\n")
+			if tc.wantTail {
+				assert.Contains(t, joined, "boom: nested failure")
+				return
+			}
+			assert.NotContains(t, joined, "boom: nested failure")
+		})
+	}
+}
+
+func TestProcessPolicyDenial(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		call        ProcessCall
+		code        int
+		wantDenied  bool
+		wantMessage string
+		wantExit    int
+	}{
+		{"nested atmos denied", ProcessCall{Argv: []string{"/bin/atmos", "terraform", "destroy"}, Label: "atmos terraform destroy", NestedAtmos: true, Check: true}, 77, true, "a policy denied atmos terraform destroy (exit code 77)", 77},
+		{"nested atmos ordinary failure", ProcessCall{Argv: []string{"/bin/atmos", "version"}, Label: "atmos version", NestedAtmos: true, Check: true}, 1, false, "atmos version exited with code 1", 1},
+		{"other program with the same code", ProcessCall{Argv: []string{"tool"}, Check: true}, 77, false, "tool exited with code 77", 1},
+		{"unchecked denial is reported on the output", ProcessCall{Argv: []string{"/bin/atmos"}, NestedAtmos: true}, 77, true, "", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			output, err := runFailing(t, &tc.call, tc.code)
+			assert.Equal(t, tc.wantDenied, output.PolicyDenied)
+			assert.Equal(t, tc.code, output.ExitCode)
+			if tc.wantMessage == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Equal(t, tc.wantMessage, err.Error())
+			assert.Equal(t, tc.wantExit, errUtils.GetExitCode(err))
+		})
+	}
+}
+
+func TestNestedAtmosFailure(t *testing.T) {
+	t.Parallel()
+	cause := &exec.ExitError{}
+	denied := NestedAtmosFailure([]string{"terraform", "destroy", "vpc", "-s", "dev"}, errUtils.ExitCodePolicyDenied, cause)
+	assert.Equal(t, "a policy denied atmos terraform destroy vpc -s dev (exit code 77)", denied.Error())
+	assert.Equal(t, errUtils.ExitCodePolicyDenied, errUtils.GetExitCode(denied))
+	assert.ErrorIs(t, denied, errUtils.ErrScriptProcessFailed)
+	var found *exec.ExitError
+	assert.True(t, errors.As(denied, &found), "the cause stays reachable")
+
+	ordinary := NestedAtmosFailure([]string{"terraform", "plan"}, 2, cause)
+	assert.Equal(t, "atmos terraform plan exited with code 2", ordinary.Error())
+	assert.Empty(t, cockroach.GetAllDetails(ordinary), "streamed output is not repeated")
+
+	// Both are marked as nested Atmos failures, so CI reporting skips what the child reported.
+	assert.True(t, cockroach.Is(denied, errUtils.ErrNestedAtmosFailed))
+	assert.True(t, cockroach.Is(ordinary, errUtils.ErrNestedAtmosFailed))
+	assert.ErrorIs(t, ordinary, errUtils.ErrScriptProcessFailed, "the process-failure sentinel still matches")
+}
+
+func TestMarkNestedAtmosFailure(t *testing.T) {
+	t.Parallel()
+
+	failed := errUtils.ExitCodeError{Code: 3}
+	tests := []struct {
+		name       string
+		err        error
+		wantMarked bool
+	}{
+		{name: "child exited non-zero", err: failed, wantMarked: true},
+		{name: "child denied by policy", err: errUtils.ExitCodeError{Code: errUtils.ExitCodePolicyDenied}, wantMarked: true},
+		{name: "wrapped exit code", err: fmt.Errorf("step failed: %w", failed), wantMarked: true},
+		{name: "silent exit", err: errUtils.ExitCodeError{Code: 3, Silent: true}},
+		{name: "zero exit code", err: errUtils.ExitCodeError{}},
+		{name: "launch failure", err: errUtils.ErrScriptProcessFailed},
+		{name: "cancellation", err: context.Canceled},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := MarkNestedAtmosFailure(tc.err)
+			require.Error(t, got)
+			assert.Equal(t, tc.wantMarked, cockroach.Is(got, errUtils.ErrNestedAtmosFailed))
+			// Marking never changes what callers already see.
+			assert.Equal(t, tc.err.Error(), got.Error())
+			assert.Equal(t, errUtils.GetExitCode(tc.err), errUtils.GetExitCode(got))
+			assert.ErrorIs(t, got, tc.err)
+		})
+	}
+
+	assert.NoError(t, MarkNestedAtmosFailure(nil))
 }

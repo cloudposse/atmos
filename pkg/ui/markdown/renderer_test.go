@@ -397,3 +397,24 @@ func TestPlainTextRenderingIsIndependent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, string(presetBefore), string(presetAfter))
 }
+
+func TestRenderReadable(t *testing.T) {
+	r, err := NewRenderer(schema.AtmosConfiguration{}, WithWidth(200))
+	require.NoError(t, err)
+
+	t.Run("bold around inline code keeps balanced readable text", func(t *testing.T) {
+		out, err := r.RenderReadable("**`!exec` is disabled** because shells are off.\n\n**Instead:** read values with `!env`.")
+		require.NoError(t, err)
+		assert.Equal(t, "!exec is disabled because shells are off.\n\nInstead: read values with !env.", out)
+	})
+
+	t.Run("lists and emphasis stay readable", func(t *testing.T) {
+		out, err := r.RenderReadable("*Note:* try one of:\n\n- `a`\n- ~~b~~ c")
+		require.NoError(t, err)
+		assert.Contains(t, out, "Note: try one of:")
+		assert.Contains(t, out, "• a")
+		assert.Contains(t, out, "• b c")
+		assert.NotContains(t, out, "*")
+		assert.NotContains(t, out, "~~")
+	})
+}

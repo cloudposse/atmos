@@ -39,6 +39,8 @@ func Test_setFeatureFlags(t *testing.T) {
 						InitRunReconfigure:      true,
 						Init: schema.TerraformInit{
 							PassVars: true,
+							// The legacy --init-run-reconfigure flag also sets the effective policy.
+							Reconfigure: schema.TerraformInitReconfigureAuto,
 						},
 						Plan: schema.TerraformPlan{
 							SkipPlanfile: true,
@@ -66,6 +68,8 @@ func Test_setFeatureFlags(t *testing.T) {
 						AutoGenerateBackendFile: false,
 						Init: schema.TerraformInit{
 							PassVars: false,
+							// The legacy --init-run-reconfigure flag also sets the effective policy.
+							Reconfigure: schema.TerraformInitReconfigureAuto,
 						},
 						Plan: schema.TerraformPlan{
 							SkipPlanfile: false,

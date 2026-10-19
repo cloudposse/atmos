@@ -35,6 +35,8 @@ func TestHelperProcess(t *testing.T) {
 	case "stdout-stderr":
 		fmt.Fprint(os.Stdout, "stdout")
 		fmt.Fprint(os.Stderr, "stderr")
+	case "argv-env":
+		fmt.Fprintf(os.Stdout, "argv0=%s path-is-shell-local=%t", os.Args[0], os.Getenv("PATH") == os.Getenv("HELPER_DIR"))
 	case "exit":
 		os.Exit(7)
 	case "sleep":

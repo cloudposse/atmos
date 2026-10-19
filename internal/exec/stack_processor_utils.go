@@ -24,6 +24,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	stackimports "github.com/cloudposse/atmos/pkg/stack/imports"
 	atmostmpl "github.com/cloudposse/atmos/pkg/template"
@@ -183,8 +184,9 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 			}
 			return nil, wrapped
 		}
+		// A bad YAML function argument is not a template problem, so it gets no hint.
 		hint := ""
-		if !strings.HasSuffix(filePath, u.TemplateExtension) {
+		if !strings.HasSuffix(filePath, u.TemplateExtension) && !stderrors.Is(err, errUtils.ErrInvalidArguments) {
 			hint = " (hint: if this file contains Go template directives, rename it to .yaml.tmpl)"
 		}
 		return nil, fmt.Errorf("%w: failed to parse YAML for locals extraction%s: %w", errUtils.ErrInvalidStackManifest, hint, err)
@@ -406,7 +408,8 @@ func processStructuredTemplateRefs(value any, context map[string]any) any {
 // YAML parse error of the raw template. A regular manifest defers atmos.Component to the component
 // sections, where it is evaluated after all manifests are loaded.
 func canDeferManifestTemplateError(originalContextProvided bool, filePath string, err error) bool {
-	if originalContextProvided {
+	// A policy decision is final: deferring would run the template again without the guard.
+	if originalContextProvided || guard.IsPolicyError(err) {
 		return false
 	}
 	return !stderrors.Is(err, errUtils.ErrComponentFuncDuringManifestLoad) || !u.IsTemplateFile(filePath)
@@ -814,6 +817,59 @@ func ProcessYAMLConfigFile(
 	return result, err
 }
 
+// StackSourceReader reads the content of a stack manifest.
+type StackSourceReader interface {
+	ReadFile(path string) ([]byte, error)
+}
+
+// StackLoadOptions tunes how ProcessYAMLConfigFileWithOptions loads a manifest and its imports.
+// The zero value matches ProcessYAMLConfigFile with empty parent context.
+type StackLoadOptions struct {
+	// Reader supplies the content of the manifest and of every manifest it imports, in place of the
+	// cached read from disk. Import resolution, such as glob expansion, still looks at the file system.
+	Reader StackSourceReader
+	// IgnoreMissingFiles treats a manifest that cannot be read as empty.
+	IgnoreMissingFiles bool
+	// SkipTemplates keeps Go templates unevaluated in the manifest and in everything it imports,
+	// whatever each import declares.
+	SkipTemplates bool
+}
+
+// ProcessYAMLConfigFileWithOptions is ProcessYAMLConfigFile for callers that only need to choose where
+// manifests are read from and whether templates are evaluated. It recursively processes and deep-merges
+// all the imports of the manifest and returns the final stack config.
+func ProcessYAMLConfigFileWithOptions(
+	atmosConfig *schema.AtmosConfiguration,
+	basePath string,
+	filePath string,
+	options StackLoadOptions,
+) (*schema.StackManifestProcessingResult, error) {
+	defer perf.Track(atmosConfig, "exec.ProcessYAMLConfigFileWithOptions")()
+
+	result, _, err := processYAMLConfigFileWithContextInternal(
+		atmosConfig,
+		basePath,
+		filePath,
+		basePath,
+		schema.StackImportNestedImportsLocal,
+		map[string]map[string]any{},
+		nil,
+		nil,
+		options.IgnoreMissingFiles,
+		options.SkipTemplates,
+		atmosConfig != nil && atmosConfig.Templates.Settings.IgnoreMissingTemplateValues,
+		false,
+		map[string]any{},
+		map[string]any{},
+		map[string]any{},
+		map[string]any{},
+		"",
+		nil,
+		&options,
+	)
+	return result, err
+}
+
 // ProcessYAMLConfigFileWithContext takes a path to a YAML stack manifest,
 // recursively processes and deep-merges all the imports with context tracking,
 // and returns the final stack config.
@@ -857,6 +913,7 @@ func ProcessYAMLConfigFileWithContext(
 		parentHelmfileOverridesImports,
 		atmosManifestJsonSchemaFilePath,
 		mergeContext,
+		nil,
 	)
 }
 
@@ -1072,8 +1129,11 @@ func renderManifestSchemaErrorItems(relativeFilePath string, items []manifestSch
 // manifestSchemaErrorMessage replaces implementation-detail regex failures
 // with guidance that matches the stack manifest's YAML syntax.
 func manifestSchemaErrorMessage(message string) string {
-	if message == "does not match pattern '^!include'" {
+	switch message {
+	case "does not match pattern '^!include'":
 		return "file references must use the !include YAML tag"
+	case "does not match pattern '^!(include|unset)'":
+		return "file references must use the !include YAML tag, or !unset to remove the section"
 	}
 	return message
 }
@@ -1118,6 +1178,7 @@ func processYAMLConfigFileWithContextInternal(
 	parentHelmfileOverridesImports map[string]any,
 	atmosManifestJsonSchemaFilePath string,
 	mergeContext *m.MergeContext,
+	loadOptions *StackLoadOptions,
 ) (*schema.StackManifestProcessingResult, *m.MergeContext, error) {
 	var stackConfigs []map[string]any
 	inheritedNestedImports = normalizeNestedImports(inheritedNestedImports)
@@ -1150,9 +1211,12 @@ func processYAMLConfigFileWithContextInternal(
 	// Use uncached file reads when provenance tracking is enabled to ensure YAML position tracking works correctly.
 	var stackYamlConfig string
 	var err error
-	if atmosConfig != nil && atmosConfig.TrackProvenance {
+	switch {
+	case loadOptions != nil && loadOptions.Reader != nil:
+		stackYamlConfig, err = readStackSource(loadOptions.Reader, filePath)
+	case atmosConfig != nil && atmosConfig.TrackProvenance:
 		stackYamlConfig, err = GetFileContentWithoutCache(filePath)
-	} else {
+	default:
 		stackYamlConfig, err = GetFileContent(filePath)
 	}
 	// If the file does not exist (`err != nil`), and `ignoreMissingFiles = true`, don't return the error.
@@ -1165,7 +1229,7 @@ func processYAMLConfigFileWithContextInternal(
 	// Set it to `true` to ignore the imported manifest if it does not exist, and don't throw an error.
 	// This is useful when generating Atmos manifests using other tools, but the imported files are not present yet at the generation time.
 	if err != nil {
-		if ignoreMissingFiles || skipIfMissing {
+		if !guard.IsPolicyError(err) && (ignoreMissingFiles || skipIfMissing) {
 			return emptyStackManifestProcessingResult(), nil, nil
 		} else {
 			return nil, nil, err
@@ -1200,9 +1264,9 @@ func processYAMLConfigFileWithContextInternal(
 		context, localsErr = extractAndAddLocalsToContext(atmosConfig, stackYamlConfig, filePath, relativeFilePath, context)
 		if localsErr != nil {
 			if mergeContext != nil {
-				return nil, nil, mergeContext.FormatError(localsErr, fmt.Sprintf("stack manifest '%s'", relativeFilePath))
+				return nil, nil, mergeContext.FormatError(localsErr, fmt.Sprintf("stack manifest %q", relativeFilePath))
 			}
-			return nil, nil, fmt.Errorf("stack manifest '%s': %w", relativeFilePath, localsErr)
+			return nil, nil, fmt.Errorf("stack manifest %q: %w", relativeFilePath, localsErr)
 		}
 	}
 
@@ -1229,7 +1293,7 @@ func processYAMLConfigFileWithContextInternal(
 		}
 
 		var tmplErr error
-		stackManifestTemplatesProcessed, tmplErr = processTmpl(atmosConfig, &tmplInput{name: relativeFilePath, value: stackManifestTemplateInput, data: context, ignoreMissing: ignoreMissingTemplateValues, manifestLoadFile: relativeFilePath})
+		stackManifestTemplatesProcessed, tmplErr = processTmpl(atmosConfig, &tmplInput{name: relativeFilePath, value: stackManifestTemplateInput, data: context, ignoreMissing: ignoreMissingTemplateValues, manifestLoadFile: relativeFilePath, sourceFile: filePath})
 		if tmplErr != nil {
 			// If template processing failed and the only context is from file extraction
 			// (locals/settings/vars/env, not from an explicit import context), this is likely
@@ -1246,9 +1310,9 @@ func processYAMLConfigFileWithContextInternal(
 				}
 				wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrInvalidStackManifest, tmplErr)
 				if mergeContext != nil {
-					return nil, nil, mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
+					return nil, nil, mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest %q%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 				}
-				return nil, nil, fmt.Errorf("%w: stack manifest '%s'\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
+				return nil, nil, fmt.Errorf("%w: stack manifest %q\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
 			}
 		}
 	}
@@ -1263,10 +1327,10 @@ func processYAMLConfigFileWithContextInternal(
 			// Wrap the error with the sentinel first to preserve it
 			wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, err)
 			// Then format it with context information
-			e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
+			e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest %q%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 			return nil, nil, e
 		} else {
-			e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
+			e := fmt.Errorf("%w: stack manifest %q\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
 			return nil, nil, e
 		}
 	}
@@ -1486,7 +1550,7 @@ func processYAMLConfigFileWithContextInternal(
 		// (`settings`/`vars`/`env`) defined by earlier imports in this manifest, plus
 		// this import's own `context`. Only the path string is rendered here; the
 		// imported file's content templating (and its deferral logic) is left untouched.
-		renderedImp, impErr := renderImportPath(atmosConfig, relativeFilePath, imp, accumulatedImportContext, importStruct)
+		renderedImp, impErr := renderImportPath(atmosConfig, relativeFilePath, filePath, imp, accumulatedImportContext, importStruct)
 		if impErr != nil {
 			return nil, nil, impErr
 		}
@@ -1654,7 +1718,7 @@ func processYAMLConfigFileWithContextInternal(
 					mergedContext,
 					childImportContext,
 					ignoreMissingFiles,
-					importStruct.SkipTemplatesProcessing,
+					importStruct.SkipTemplatesProcessing || (loadOptions != nil && loadOptions.SkipTemplates),
 					importStruct.IgnoreMissingTemplateValues || (atmosConfig != nil && atmosConfig.Templates.Settings.IgnoreMissingTemplateValues),
 					importStruct.SkipIfMissing,
 					parentTerraformOverridesInline,
@@ -1670,6 +1734,7 @@ func processYAMLConfigFileWithContextInternal(
 					// (here) to catch them — which it couldn't while this was hardcoded to "".
 					atmosManifestJsonSchemaFilePath,
 					mergeContext,
+					loadOptions,
 				)
 				if processErr != nil {
 					results[index] = importFileResult{index: index, err: processErr}
@@ -1869,6 +1934,18 @@ func processYAMLConfigFileWithContextInternal(
 	}, mergeContext, nil
 }
 
+// readStackSource reads a manifest through an injected reader, reporting failures like GetFileContent does.
+func readStackSource(reader StackSourceReader, filePath string) (string, error) {
+	content, err := reader.ReadFile(filePath)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrReadFile).
+			WithCause(err).
+			WithContext("path", filePath).
+			Err()
+	}
+	return string(content), nil
+}
+
 // applyHelmTypeOverrides applies the effective stack-level helm.overrides block
 // after imports have been deep-merged. Applying it here makes the override cover
 // native Helm components declared by the current manifest and by any import,
@@ -1958,6 +2035,7 @@ func emptyStackManifestProcessingResult() *schema.StackManifestProcessingResult 
 func renderImportPath(
 	atmosConfig *schema.AtmosConfiguration,
 	relativeFilePath string,
+	filePath string,
 	imp string,
 	accumulatedImportContext map[string]any,
 	importStruct schema.StackImport,
@@ -1986,6 +2064,8 @@ func renderImportPath(
 		tmplData = merged
 	}
 
+	// Pass the manifest's real path as the policy source so function and source rules see its
+	// provenance (local/remote) instead of the synthetic template name resolving to "unknown".
 	rendered, err := processTmpl(atmosConfig, &tmplInput{
 		name:                  fmt.Sprintf("import-path(%s)", relativeFilePath),
 		value:                 imp,
@@ -1993,6 +2073,7 @@ func renderImportPath(
 		ignoreMissing:         ignoreMissing,
 		manifestLoadFile:      relativeFilePath,
 		skipComponentDeferral: true,
+		sourceFile:            filePath,
 	})
 	if err != nil {
 		wrapped := fmt.Errorf("%w: import path '%s' in file '%s': %w",
@@ -2455,6 +2536,11 @@ func processBaseComponentConfigInternal(
 			baseComponentMap = baseComponentMapOfStrings
 		}
 
+		// Sections set to `!unset` are treated as absent at this level, and the values
+		// accumulated from lower levels are dropped after the ancestors are processed below.
+		var unsetSections []string
+		baseComponentMap, unsetSections = splitUnsetSections(baseComponentMap)
+
 		// First, process the base component(s) of this base component.
 		// Skip component chain resolution for abstract components — their metadata.component
 		// is a pointer to the Terraform directory but should not trigger inheritance traversal.
@@ -2764,6 +2850,8 @@ func processBaseComponentConfigInternal(
 		// merged value that may have been overwritten.
 		levelMergeConfig := effectiveAtmosConfig(initialMergeConfig, baseComponentSettings)
 
+		clearUnsetBaseComponentSections(baseComponentConfig, unsetSections)
+
 		// Base component `vars`
 		merged, err := m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentVars, baseComponentVars})
 		if err != nil {
@@ -3005,8 +3093,8 @@ func processBaseComponentConfigInternal(
 			componentPath := filepath.Join(componentBasePath, baseComponent)
 			componentPathExists, err := u.IsDirectory(componentPath)
 			if err != nil || !componentPathExists {
-				return errors.New("The component '" + component + "' inherits from the base component '" +
-					baseComponent + "' (using 'component:' attribute), " + "but `" + baseComponent + "' is not defined in any of the YAML config files for the stack '" + stack + "'")
+				return fmt.Errorf("%w: the component %q inherits from the base component %q (using 'component:' attribute), but %q is not defined in any of the YAML config files for the stack %q",
+					errUtils.ErrInvalidBaseComponentConfig, component, baseComponent, baseComponent, stack)
 			}
 		}
 	}

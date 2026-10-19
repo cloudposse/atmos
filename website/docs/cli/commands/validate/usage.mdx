@@ -23,6 +23,9 @@ Component JSON Schema and OPA policy validation remains explicit because it need
 
 `atmos validate ci` validates GitHub Actions workflow files with the native CI actionlint integration. It is an alias for [`atmos ci validate`](/cli/commands/ci/validate).
 
+For deprecation guidance, upstream repository health, and verified configuration repairs,
+use [`atmos doctor`](/cli/commands/doctor).
+
 ## Affected validation
 
 Add `--affected` to validate only inputs changed since the Git merge-base. In GitHub Actions, Atmos reads the pull request base SHA from the event payload; locally, pass `--base <ref-or-sha>` when the default `origin/HEAD` baseline is not appropriate. Uncommitted and untracked files are included for local feedback.

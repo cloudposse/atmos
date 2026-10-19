@@ -281,7 +281,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		if err != nil {
 			return err
 		}
-		atmosConfig.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
+		atmosConfig.Components.Terraform.OverrideInitRunReconfigure(initRunReconfigureBool)
 	}
 
 	componentsInitPassVars := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS")
@@ -850,7 +850,7 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 		if err != nil {
 			return err
 		}
-		atmosConfig.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
+		atmosConfig.Components.Terraform.OverrideInitRunReconfigure(initRunReconfigureBool)
 		log.Debug(cmdLineArg, InitRunReconfigure, configAndStacksInfo.InitRunReconfigure)
 	}
 	if len(configAndStacksInfo.InitPassVars) > 0 {

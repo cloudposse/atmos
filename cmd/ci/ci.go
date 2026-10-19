@@ -22,6 +22,7 @@ func init() {
 	// Add subcommands.
 	ciCmd.AddCommand(statusCmd)
 	ciCmd.AddCommand(validateCmd)
+	ciCmd.AddCommand(newContextCommand())
 
 	// Cache subcommand group: atmos ci cache {restore,save,list,delete}.
 	ciCmd.AddCommand(cache.Command())

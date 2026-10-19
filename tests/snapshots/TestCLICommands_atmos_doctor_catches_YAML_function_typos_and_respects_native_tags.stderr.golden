@@ -1,0 +1,18 @@
+Atmos Doctor · Diagnose
+
+Discover · 1 completed
+Check · 2 completed · 1 failed
+
+error[yaml-functions]: Unknown YAML function !terraform.staet
+  --> stacks/dev.yaml:3:9
+  |
+2 |   stage: dev
+3 |   typo: !terraform.staet app dev output
+  |         ^
+4 |   typed: !!str '!terraform.staet is data'
+  |
+   = repair: Manual action required
+   = help: Did you mean !terraform.state?
+
+Summary
+1 finding (none fixable).

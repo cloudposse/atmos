@@ -13,8 +13,14 @@ type Option func(*options)
 
 type options struct {
 	prompter Prompter
+	wrap     func(Prompter) Prompter
 	before   func()
 	after    func()
+}
+
+// WithPromptWrapper decorates the configured prompter while retaining its decision cache.
+func WithPromptWrapper(wrap func(Prompter) Prompter) Option {
+	return func(o *options) { o.wrap = wrap }
 }
 
 // WithPrompter replaces the default CLI prompter. The permission cache is not
@@ -61,6 +67,9 @@ func NewFromConfig(atmosConfig *schema.AtmosConfiguration, opts ...Option) (*Che
 	prompter := o.prompter
 	if prompter == nil {
 		prompter = newDefaultPrompter(atmosConfig)
+	}
+	if o.wrap != nil {
+		prompter = o.wrap(prompter)
 	}
 	if o.before != nil || o.after != nil {
 		prompter = &hookedPrompter{inner: prompter, before: o.before, after: o.after}

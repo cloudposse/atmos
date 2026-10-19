@@ -1,0 +1,18 @@
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: doctor-monorepo-shapes
+spec:
+  sources:
+    # Mixed-case host and owner.
+    - component: acm-upper
+      source: "GitHub.com/CloudPosse/terraform-aws-components.git//modules/acm?ref=1.495.0"
+      targets: ["components/terraform/acm-upper"]
+    # Query before the subdirectory.
+    - component: alb-refbefore
+      source: "git::https://github.com/cloudposse/terraform-aws-components.git?ref=1.495.0//modules/alb"
+      targets: ["components/terraform/alb-refbefore"]
+    # Deep path inside a module.
+    - component: eks-deep
+      source: "github.com/cloudposse/terraform-aws-components.git//modules/eks/cluster/modules/foo?ref=1.495.0"
+      targets: ["components/terraform/eks-deep"]

@@ -60,7 +60,7 @@ Within this deployment strategy, you can organize your component folders in diff
 All these approaches share the same deployment philosophy: environments converge to the component path they reference through progressive automated rollout.
 
 :::tip Component Sourcing
-These folder organization approaches work seamlessly with [Vendoring Component Versions](/design-patterns/version-management/vendoring-components). Atmos makes explicit what other tools do implicitly—instead of just-in-time cloning to temp folders, we vendor components locally for visibility, searchability, and operational control. See the [Component Sourcing Philosophy](/design-patterns/version-management#component-sourcing-philosophy) for why this approach emerged from countless projects.
+These folder organization approaches work seamlessly with [Vendoring Component Versions](/design-patterns/version-management/vendoring-components). Vendoring components locally provides visibility, searchability, and operational control. Atmos also supports [just-in-time source provisioning](/design-patterns/version-management/source-based-versioning) when you prefer remote version references. See the [Component Sourcing Philosophy](/design-patterns/version-management#component-sourcing-philosophy) for the tradeoffs.
 :::
 
 ## How It Works

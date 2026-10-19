@@ -1394,7 +1394,7 @@ func TestRunCastStepModeRunsFailureConditionAfterSimulateError(t *testing.T) {
 	}
 	t.Cleanup(restore)
 
-	err = runCastStepMode(context.Background(), &schema.WorkflowStep{
+	err = runCastStepMode(context.Background(), nil, &schema.WorkflowStep{
 		Name: "demo",
 		Type: schema.TaskTypeCast,
 		Steps: []schema.WorkflowStep{
@@ -1816,18 +1816,18 @@ func TestRunCastSessionModeInterleavesSimulateNarration(t *testing.T) {
 }
 
 func TestRunCastBodyRejectsInvalidMode(t *testing.T) {
-	err := runCastBody(context.Background(), &schema.WorkflowStep{Name: "demo", Mode: "bogus"}, NewVariables(), nil)
+	err := runCastBody(context.Background(), nil, &schema.WorkflowStep{Name: "demo", Mode: "bogus"}, NewVariables(), nil)
 	if !errors.Is(err, ErrInvalidCastMode) {
 		t.Fatalf("expected invalid cast mode, got %v", err)
 	}
 }
 
 func TestRunCastSessionModeRejectsInvalidDurationsBeforeStartingSession(t *testing.T) {
-	err := runCastSessionMode(context.Background(), &schema.WorkflowStep{WriteRate: "fast"}, NewVariables(), nil)
+	err := runCastSessionMode(context.Background(), nil, &schema.WorkflowStep{WriteRate: "fast"}, NewVariables(), nil)
 	if err == nil || !strings.Contains(err.Error(), "invalid duration") {
 		t.Fatalf("expected invalid write rate, got %v", err)
 	}
-	err = runCastSessionMode(context.Background(), &schema.WorkflowStep{KeyInterval: "soon"}, NewVariables(), nil)
+	err = runCastSessionMode(context.Background(), nil, &schema.WorkflowStep{KeyInterval: "soon"}, NewVariables(), nil)
 	if err == nil || !strings.Contains(err.Error(), "invalid duration") {
 		t.Fatalf("expected invalid key interval, got %v", err)
 	}
@@ -1951,7 +1951,7 @@ func TestApplyCastStepEnvReturnsResolutionError(t *testing.T) {
 }
 
 func TestRunCastStepModeReturnsEnvResolutionError(t *testing.T) {
-	err := runCastStepMode(context.Background(), &schema.WorkflowStep{
+	err := runCastStepMode(context.Background(), nil, &schema.WorkflowStep{
 		Name: "demo",
 		Env: map[string]string{
 			"BAD": "{{ .Bad ",
@@ -1983,7 +1983,7 @@ func TestRunCastChildStepReturnsPauseDelayError(t *testing.T) {
 }
 
 func TestRunCastBodyDispatchesSessionMode(t *testing.T) {
-	err := runCastBody(context.Background(), &schema.WorkflowStep{
+	err := runCastBody(context.Background(), nil, &schema.WorkflowStep{
 		Name:        "demo",
 		Mode:        "session",
 		WriteRate:   "bad-duration",
@@ -1995,7 +1995,7 @@ func TestRunCastBodyDispatchesSessionMode(t *testing.T) {
 }
 
 func TestRunCastSessionModeReturnsEnvResolutionError(t *testing.T) {
-	err := runCastSessionMode(context.Background(), &schema.WorkflowStep{
+	err := runCastSessionMode(context.Background(), nil, &schema.WorkflowStep{
 		Env: map[string]string{
 			"BAD": "{{ .Bad ",
 		},
@@ -2164,7 +2164,7 @@ func TestRunCastSessionModeExecutesScriptedActions(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), sessionReadyWaitTimeoutDuration+2*time.Second)
 	defer cancel()
 
-	err = runCastSessionMode(ctx, &schema.WorkflowStep{
+	err = runCastSessionMode(ctx, nil, &schema.WorkflowStep{
 		Mode:  "session",
 		Shell: shell,
 		Steps: []schema.WorkflowStep{

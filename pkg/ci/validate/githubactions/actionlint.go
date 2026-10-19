@@ -45,6 +45,7 @@ func (Validator) Validate(_ context.Context, request civalidate.Request) (valida
 		Shellcheck: "",
 		Pyflakes:   "",
 		WorkingDir: request.Root,
+		ConfigFile: request.ConfigFile,
 	})
 	if err != nil {
 		return validation.Report{}, err

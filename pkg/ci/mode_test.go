@@ -42,6 +42,20 @@ func TestModeEnabledFromFlag(t *testing.T) {
 	assert.True(t, ModeEnabled(cmd))
 }
 
+func TestModeEnabledFromProvider(t *testing.T) {
+	t.Cleanup(SwapRegistryForTest())
+	p := &mockProvider{name: "mode", detected: false}
+	Register(p)
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("ci", false, "")
+
+	assert.False(t, ModeEnabled(cmd))
+	assert.False(t, ModeEnabled(nil))
+	p.detected = true
+	assert.True(t, ModeEnabled(cmd))
+	assert.True(t, ModeEnabled(nil))
+}
+
 func TestFeatureGates(t *testing.T) {
 	boolPtr := func(value bool) *bool { return &value }
 

@@ -37,10 +37,17 @@ const (
 	atmosDataHint   = "Read result.stdout, or request JSON output with the command's --format=json flag."
 )
 
-func newProcessResult(output script.ProcessOutput) *decodedResult {
-	attrs := starlarkstruct.FromStringDict(starlark.String("process_result"), starlark.StringDict{
+// newProcessResult wraps a finished process. A nested Atmos call also reports policy_denied,
+// whether a policy denied the command (exit code errUtils.ExitCodePolicyDenied); the attribute
+// does not exist on results of other commands, whose exit code has no such meaning.
+func newProcessResult(output script.ProcessOutput, atmos bool) *decodedResult {
+	members := starlark.StringDict{
 		"stdout": starlark.String(output.Stdout), "stderr": starlark.String(output.Stderr), "exit_code": starlark.MakeInt(output.ExitCode),
-	})
+	}
+	if atmos {
+		members["policy_denied"] = starlark.Bool(output.PolicyDenied)
+	}
+	attrs := starlarkstruct.FromStringDict(starlark.String("process_result"), members)
 	return &decodedResult{attrs: attrs, payload: output.Stdout, source: "stdout", kind: "process_result", hint: processDataHint}
 }
 

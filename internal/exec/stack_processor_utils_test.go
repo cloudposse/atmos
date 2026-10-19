@@ -16,9 +16,23 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+func TestMissingBaseComponentQuotedIdentifiers(t *testing.T) {
+	config := &schema.AtmosConfiguration{TrackProvenance: true}
+	baseConfig := &schema.BaseComponentConfig{}
+	var chain []string
+	err := ProcessBaseComponentConfig(config, nil, baseConfig, map[string]any{},
+		"app'\"\\\n", "prod\r\nforged", "missing'base", t.TempDir(), true, &chain)
+	require.ErrorIs(t, err, errUtils.ErrInvalidBaseComponentConfig)
+	assert.Contains(t, err.Error(), `component "app'\"\\\n"`)
+	assert.Contains(t, err.Error(), `base component "missing'base"`)
+	assert.Contains(t, err.Error(), `stack "prod\r\nforged"`)
+	assert.NotContains(t, err.Error(), "\n")
+}
 
 func TestProcessBaseComponentConfig(t *testing.T) {
 	// Clear cache before tests to ensure fresh processing.
@@ -4775,14 +4789,48 @@ func TestProcessYAMLConfigFile_TemplatedImportPath_TemplatesDisabled(t *testing.
 func TestRenderImportPath_NoTemplateIsNoOp(t *testing.T) {
 	atmosConfig := templatedImportContextConfig()
 
-	out, err := renderImportPath(atmosConfig, "file.yaml", "catalog/plain/service", map[string]any{}, schema.StackImport{})
+	out, err := renderImportPath(atmosConfig, "file.yaml", "file.yaml", "catalog/plain/service", map[string]any{}, schema.StackImport{})
 	require.NoError(t, err)
 	assert.Equal(t, "catalog/plain/service", out)
 
 	literal := "catalog/{{ .x }}/service"
-	out, err = renderImportPath(atmosConfig, "file.yaml", literal, map[string]any{}, schema.StackImport{SkipTemplatesProcessing: true})
+	out, err = renderImportPath(atmosConfig, "file.yaml", "file.yaml", literal, map[string]any{}, schema.StackImport{SkipTemplatesProcessing: true})
 	require.NoError(t, err)
 	assert.Equal(t, literal, out)
+}
+
+// TestRenderImportPath_PolicySeesManifestProvenance verifies import-path templates are guarded
+// against the importing manifest's real file, so a provenance-based rule sees local/remote
+// instead of "unknown" (the synthetic template name does not exist on disk).
+func TestRenderImportPath_PolicySeesManifestProvenance(t *testing.T) {
+	guard.ResetOrigins()
+	t.Cleanup(guard.ResetOrigins)
+	manifest := filepath.Join(t.TempDir(), "stack.yaml")
+	require.NoError(t, os.WriteFile(manifest, []byte("import: []\n"), 0o600))
+	t.Setenv("IMPORT_PATH_ENV", "catalog")
+	atmosConfig := templatedImportContextConfig()
+	const importPath = `{{ env "IMPORT_PATH_ENV" }}/service`
+
+	// Deny the env function unless the manifest is local; unknown or remote provenance is denied.
+	templatePolicy(t, "function", "input.engine == 'go-template' && input.name == 'env' && input.provenance != 'local'", nil)
+
+	t.Run("local manifest is admitted", func(t *testing.T) {
+		out, err := renderImportPath(atmosConfig, "stack.yaml", manifest, importPath, map[string]any{}, schema.StackImport{})
+		require.NoError(t, err)
+		assert.Equal(t, "catalog/service", out)
+	})
+
+	t.Run("remote manifest is denied", func(t *testing.T) {
+		guard.RegisterRemote(manifest, "https://example.com/stack.yaml")
+		t.Cleanup(guard.ResetOrigins)
+		_, err := renderImportPath(atmosConfig, "stack.yaml", manifest, importPath, map[string]any{}, schema.StackImport{})
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	})
+
+	t.Run("missing source file yields unknown provenance and is denied", func(t *testing.T) {
+		_, err := renderImportPath(atmosConfig, "stack.yaml", "", importPath, map[string]any{}, schema.StackImport{})
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	})
 }
 
 // TestExtractImportPathSections verifies only settings/vars/env are extracted.
@@ -4818,6 +4866,11 @@ func TestManifestSchemaErrorMessage(t *testing.T) {
 		"file references must use the !include YAML tag",
 		manifestSchemaErrorMessage("does not match pattern '^!include'"),
 	)
+	assert.Equal(
+		t,
+		"file references must use the !include YAML tag, or !unset to remove the section",
+		manifestSchemaErrorMessage("does not match pattern '^!(include|unset)'"),
+	)
 	assert.Equal(t, "does not match pattern '^component'", manifestSchemaErrorMessage("does not match pattern '^component'"))
 }
 
@@ -4835,6 +4888,128 @@ func BenchmarkLocalsRepeated(b *testing.B) {
 			}
 		}
 	}
+}
+
+// overlayStackReader serves selected files from memory and records every read it is asked for.
+type overlayStackReader struct {
+	files map[string]string
+	reads []string
+}
+
+func (r *overlayStackReader) ReadFile(path string) ([]byte, error) {
+	r.reads = append(r.reads, filepath.Base(path))
+	if content, ok := r.files[path]; ok {
+		return []byte(content), nil
+	}
+	return os.ReadFile(path)
+}
+
+func writeStackFixture(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, content := range files {
+		path := filepath.Join(dir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+	return dir
+}
+
+func TestProcessYAMLConfigFileWithOptionsReadsThroughTheInjectedReader(t *testing.T) {
+	ClearFileContentCache()
+	dir := writeStackFixture(t, map[string]string{
+		"catalog/base.yaml": "vars:\n  size: small\n",
+		"dev.yaml":          "import:\n  - catalog/base\nvars:\n  stage: dev\n",
+	})
+	reader := &overlayStackReader{files: map[string]string{
+		filepath.Join(dir, "catalog", "base.yaml"): "vars:\n  size: large\n",
+	}}
+
+	result, err := ProcessYAMLConfigFileWithOptions(&schema.AtmosConfiguration{}, dir, filepath.Join(dir, "dev.yaml"), StackLoadOptions{Reader: reader, SkipTemplates: true})
+
+	require.NoError(t, err)
+	vars, _ := result.DeepMergedConfig["vars"].(map[string]any)
+	assert.Equal(t, map[string]any{"size": "large", "stage": "dev"}, vars, "the import must come from the reader, not the disk")
+	assert.ElementsMatch(t, []string{"dev.yaml", "base.yaml"}, reader.reads)
+	assert.Contains(t, result.ImportsConfig, "catalog/base")
+}
+
+// The injected reader bypasses the process-wide content cache in both directions.
+func TestProcessYAMLConfigFileWithOptionsBypassesTheContentCache(t *testing.T) {
+	ClearFileContentCache()
+	t.Cleanup(ClearFileContentCache)
+	dir := writeStackFixture(t, map[string]string{"dev.yaml": "vars:\n  stage: dev\n"})
+	path := filepath.Join(dir, "dev.yaml")
+	cached, err := GetFileContent(path)
+	require.NoError(t, err)
+	require.Contains(t, cached, "dev")
+	reader := &overlayStackReader{files: map[string]string{path: "vars:\n  stage: prod\n"}}
+
+	result, err := ProcessYAMLConfigFileWithOptions(&schema.AtmosConfiguration{}, dir, path, StackLoadOptions{Reader: reader})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"stage": "prod"}, result.DeepMergedConfig["vars"])
+
+	after, err := GetFileContent(path)
+	require.NoError(t, err)
+	assert.Equal(t, cached, after, "an injected read must not poison the cache")
+}
+
+func TestProcessYAMLConfigFileWithOptionsDefaultsToCachedDiskReads(t *testing.T) {
+	ClearFileContentCache()
+	t.Cleanup(ClearFileContentCache)
+	dir := writeStackFixture(t, map[string]string{"dev.yaml": "vars:\n  stage: dev\n"})
+
+	result, err := ProcessYAMLConfigFileWithOptions(&schema.AtmosConfiguration{}, dir, filepath.Join(dir, "dev.yaml"), StackLoadOptions{})
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"stage": "dev"}, result.DeepMergedConfig["vars"])
+}
+
+func TestProcessYAMLConfigFileWithOptionsReportsReaderFailures(t *testing.T) {
+	dir := writeStackFixture(t, map[string]string{"dev.yaml": "vars: {}\n"})
+	missing := filepath.Join(dir, "missing.yaml")
+
+	_, err := ProcessYAMLConfigFileWithOptions(&schema.AtmosConfiguration{}, dir, missing, StackLoadOptions{Reader: &overlayStackReader{}})
+	require.ErrorIs(t, err, errUtils.ErrReadFile)
+
+	result, err := ProcessYAMLConfigFileWithOptions(&schema.AtmosConfiguration{}, dir, missing, StackLoadOptions{Reader: &overlayStackReader{}, IgnoreMissingFiles: true})
+	require.NoError(t, err)
+	assert.Empty(t, result.DeepMergedConfig)
+}
+
+// SkipTemplates keeps Go templates unevaluated through the whole import closure, even where an import asks for them.
+func TestProcessYAMLConfigFileWithOptionsSkipsTemplatesInImports(t *testing.T) {
+	ClearFileContentCache()
+	dir := writeStackFixture(t, map[string]string{
+		"catalog/base.yaml": "vars:\n  name: \"{{ .settings.prefix }}-base\"\nsettings:\n  prefix: acme\n",
+		"dev.yaml":          "import:\n  - path: catalog/base\n    context:\n      unused: 1\nvars:\n  stage: dev\n",
+	})
+
+	result, err := ProcessYAMLConfigFileWithOptions(&schema.AtmosConfiguration{}, dir, filepath.Join(dir, "dev.yaml"), StackLoadOptions{SkipTemplates: true})
+
+	require.NoError(t, err)
+	vars, _ := result.DeepMergedConfig["vars"].(map[string]any)
+	assert.Equal(t, "{{ .settings.prefix }}-base", vars["name"])
+}
+
+// A bad YAML function argument is not a Go-template problem, so the ".yaml.tmpl" rename hint
+// must not be attached to it (it sent users looking in the wrong place), while genuine
+// template syntax errors keep the hint.
+func TestExtractLocalsFromRawYAML_FunctionArgumentErrorHasNoTemplateHint(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	const templateHint = "rename it to .yaml.tmpl"
+
+	_, err := extractLocalsFromRawYAML(atmosConfig, "vars:\n  v: !ci.labels []\n", "bad-function-argument.yaml")
+	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrInvalidArguments)
+	require.ErrorIs(t, err, errUtils.ErrInvalidStackManifest)
+	assert.NotContains(t, err.Error(), templateHint)
+	assert.Contains(t, err.Error(), "!ci.labels")
+
+	_, err = extractLocalsFromRawYAML(atmosConfig, "vars:\n  v: {{ .x }}\n", "bad-template-syntax.yaml")
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, errUtils.ErrInvalidArguments)
+	assert.Contains(t, err.Error(), templateHint)
 }
 
 // TestExtractLocalsFromRawYAML_UnsupportedTagHints verifies the parse-failure hint: a CloudFormation

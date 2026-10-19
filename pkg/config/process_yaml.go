@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -14,6 +15,8 @@ import (
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/policy/admission"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -21,7 +24,7 @@ import (
 const (
 	functionKey       = "function"
 	tagValueFormat    = "%s %s"
-	errorFormat       = "%w: %v %v error %v"
+	errorFormat       = "%w: %v %v error %w"
 	failedToProcess   = "failed to process"
 	emptyValueWarning = "execute returned empty value"
 )
@@ -152,6 +155,9 @@ func processNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	if node == nil {
 		return nil
 	}
+	if node.Tag == "!version" && node.Kind != yaml.ScalarNode {
+		return unsupportedAtmosYamlTagError(node.Tag, currentPath)
+	}
 
 	switch node.Kind {
 	case yaml.DocumentNode:
@@ -239,6 +245,12 @@ func sequenceNeedsProcessing(node *yaml.Node) bool {
 }
 
 func processSequenceNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
+	// Sequence decoding and !append resolution can bypass processNode, so validate
+	// version tags throughout the subtree before taking either path.
+	if err := rejectSequenceVersionTags(node, currentPath); err != nil {
+		return err
+	}
+
 	// Handle !append tag for list concatenation during merging.
 	if node.Tag == u.AtmosYamlFuncAppend {
 		return handleAppend(node, v, currentPath)
@@ -435,6 +447,11 @@ func processRandomTag(strFunc, nodeValue string) (any, error) {
 // during evaluation return an error wrapped with ErrExecuteYamlFunctions, and
 // unknown/unsupported custom tags return ErrUnsupportedYamlTag.
 func processScalarNodeValue(node *yaml.Node) (any, error) {
+	if strings.HasPrefix(node.Tag, "!") && !isStandardYAMLTag(node.Tag) {
+		if err := admission.FunctionValue(context.Background(), node.Tag, node.Tag+" "+node.Value); err != nil {
+			return nil, err
+		}
+	}
 	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
 
 	if isStandardYAMLTag(node.Tag) {
@@ -571,6 +588,7 @@ func decodePlainYamlNode(node *yaml.Node) (any, error) {
 // processScalarNodeValueForFile resolves includes against the source file when
 // available and delegates other scalar tags to the common config evaluator.
 func (d *configYamlDecoder) processScalarNodeValueForFile(node *yaml.Node, sourceFile string) (any, error) {
+	guard.RememberValue(node.Tag+" "+node.Value, guard.FileOrigin(sourceFile))
 	if sourceFile == "" || !isIncludeTag(node.Tag) {
 		return processScalarNodeValue(node)
 	}
@@ -585,6 +603,9 @@ func isIncludeTag(tag string) bool {
 // processIncludeNodeValueForFile loads an include and evaluates opted-in YAML
 // before decoding, rejecting repeated or excessively deep active include chains.
 func (d *configYamlDecoder) processIncludeNodeValueForFile(node *yaml.Node, sourceFile string) (any, error) {
+	if err := admission.FunctionValue(context.Background(), node.Tag, node.Tag+" "+node.Value); err != nil {
+		return nil, err
+	}
 	// Resolve the path against the config file and the project base path, never the working
 	// directory, so the result is the same wherever Atmos runs from.
 	scope := commandIncludeScope(sourceFile)
@@ -640,6 +661,11 @@ func includeBasePathForSourceFile(sourceFile string) string {
 // If the node has no tag or a native YAML tag, the function is a no-op.
 // It returns any error produced by the invoked handler.
 func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
+	if strings.HasPrefix(node.Tag, "!") && !isStandardYAMLTag(node.Tag) {
+		if err := admission.FunctionValue(context.Background(), node.Tag, node.Tag+" "+node.Value); err != nil {
+			return err
+		}
+	}
 	if node.Tag == "" {
 		return nil
 	}
@@ -649,6 +675,15 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 	}
 
 	switch node.Tag {
+	case "!version":
+		parts := strings.Split(currentPath, ".")
+		if len(parts) != 4 || parts[0] != "ai" || parts[1] != "skills" || parts[3] != "ref" || strings.TrimSpace(node.Value) == "" {
+			return unsupportedAtmosYamlTagError(node.Tag, currentPath)
+		}
+		node.Value = schema.SkillVersionMarker + node.Value
+		node.Tag = "!!str"
+		v.Set(currentPath, node.Value)
+		return nil
 	case u.AtmosYamlFuncUnset:
 		// The !unset tag is handled in processMappingNode by skipping the key.
 		// If we reach here, it means !unset was used in a context where it can't

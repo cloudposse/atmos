@@ -235,13 +235,17 @@ func (r *Renderer) Render(content string) (string, error) {
 
 // newASCIIRenderer uses an independent style so renderer creation order cannot affect output.
 func newASCIIRenderer(width uint) (*glamour.TermRenderer, error) {
-	maxInt := ^uint(0) >> 1
-	if width > maxInt {
-		width = maxInt
-	}
 	style, err := GetASCIIStyle()
 	if err != nil {
 		return nil, err
+	}
+	return newUnstyledRenderer(width, style)
+}
+
+func newUnstyledRenderer(width uint, style []byte) (*glamour.TermRenderer, error) {
+	maxInt := ^uint(0) >> 1
+	if width > maxInt {
+		width = maxInt
 	}
 	return glamour.NewTermRenderer(
 		glamour.WithStylesFromJSONBytes(style),
@@ -281,6 +285,29 @@ func (r *Renderer) RenderAscii(content string) (string, error) {
 		result = trimTrailingSpaces(result)
 	}
 	return result, err
+}
+
+// RenderReadable renders Markdown as plain text for non-styled output such as piped
+// stderr and CI logs. Unlike RenderAscii it never leaves dangling emphasis markers,
+// so author-supplied Markdown (for example policy denial reasons) stays readable
+// when styling is unavailable. Inline code renders as its plain text.
+func (r *Renderer) RenderReadable(content string) (string, error) {
+	defer perf.Track(nil, "markdown.Renderer.RenderReadable")()
+
+	style, err := GetASCIIReadableStyle()
+	if err != nil {
+		return "", err
+	}
+	renderer, err := newUnstyledRenderer(r.width, style)
+	if err != nil {
+		return "", err
+	}
+	result, err := renderer.Render(StripFrontmatter(content))
+	if err != nil {
+		return "", err
+	}
+	// Glamour adds leading/trailing newlines; trim them like RenderAscii does.
+	return trimTrailingSpaces(strings.Trim(result, newline)), nil
 }
 
 // RenderWorkflow renders workflow documentation with specific styling.

@@ -303,7 +303,8 @@ func TestMergeResolvedImports_MergeFailureLogsWarnAndContinues(t *testing.T) {
 
 	v := viper.New()
 	v.SetConfigType("yaml")
-	basePathSourceDir := mergeResolvedImports(resolvedPaths, v, defaultFileSystem)
+	basePathSourceDir, mergeErr := mergeResolvedImports(resolvedPaths, v, defaultFileSystem)
+	require.NoError(t, mergeErr)
 
 	assert.Empty(t, basePathSourceDir, "neither file declares base_path")
 	assert.Equal(t, "value2", v.Get("key2"), "the good file after the bad one must still merge")

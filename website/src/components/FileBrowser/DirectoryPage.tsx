@@ -2,7 +2,7 @@
  * DirectoryPage - Directory listing view with file tree sidebar.
  */
 import React from 'react';
-import Layout from '@theme/Layout';
+import Layout from './Layout';
 import BreadcrumbNav from './BreadcrumbNav';
 import FileTree from './FileTree';
 import ExampleDetailPage from './ExampleDetailPage';
@@ -31,12 +31,13 @@ export default function DirectoryPage({
   dirData,
 }: DirectoryPageProps): JSX.Element {
   const { routeBasePath } = optionsData;
+  const Content = optionsData.docsSidebar ? 'div' : 'main';
   const exampleName = getExampleNameFromPath(dirData.path);
   const example = findExampleByName(treeData.examples, exampleName);
 
   if (!example) {
     return (
-      <Layout title="Not Found">
+      <Layout options={optionsData} title="Not Found">
         <div className={styles.emptyState}>
           <h1 className={styles.emptyStateTitle}>Example not found</h1>
           <p className={styles.emptyStateDescription}>
@@ -76,15 +77,15 @@ export default function DirectoryPage({
     : null;
 
   return (
-    <Layout title={pageTitle}>
-      <div className={styles.pageLayout}>
-        <FileTree
+    <Layout options={optionsData} title={pageTitle}>
+      <div className={optionsData.docsSidebar ? styles.documentLayout : styles.pageLayout}>
+        {!optionsData.docsSidebar && <FileTree
           example={example}
           routeBasePath={routeBasePath}
           currentPath={dirData.path}
           titleAsCode={optionsData.titleAsCode}
-        />
-        <main className={styles.mainContent}>
+        />}
+        <Content className={styles.mainContent}>
           <div className={styles.pageToolbar}>
             <BreadcrumbNav path={dirData.path} routeBasePath={routeBasePath} rootLabel={sectionName.toLowerCase()} />
             {showCopyMarkdown && (
@@ -148,7 +149,7 @@ export default function DirectoryPage({
           {example.docs && example.docs.length > 0 && (
             <RelatedDocs docs={example.docs} />
           )}
-        </main>
+        </Content>
       </div>
     </Layout>
   );

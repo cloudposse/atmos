@@ -170,7 +170,7 @@ func prepareShellEnvironment(authManager auth.AuthManager, identityName string, 
 			if errors.Is(err, errUtils.ErrUserAborted) {
 				return nil, "", errUtils.ErrUserAborted
 			}
-			return nil, "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthenticationFailed, err)
+			return nil, "", errUtils.EnsureAuthenticationFailed(err)
 		}
 	}
 

@@ -84,7 +84,7 @@ func executeEKSUpdateKubeconfigDirect(clusterName, region, kubeconfigPath, alias
 	ctx := context.Background()
 	whoami, err := mgr.Authenticate(ctx, identityName)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrIdentityAuthFailed, err)
+		return errUtils.WrapIdentityAuthFailed(identityName, err)
 	}
 
 	// mgr is an AuthManager interface; guard against a nil whoami (a (nil, nil)

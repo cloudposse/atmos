@@ -91,13 +91,11 @@ var askCmd = &cobra.Command{
 		}
 
 		// Gather context if explicitly configured (skip interactive prompt since tools handle introspection).
-		finalQuestion := question
+		var stackContext string
 		if atmosConfig.AI.SendContext {
-			stackContext, err := ai.GatherStackContext(&atmosConfig)
+			stackContext, err = ai.GatherStackContext(&atmosConfig)
 			if err != nil {
 				log.Debug("Could not gather stack context", "error", err)
-			} else {
-				finalQuestion = fmt.Sprintf("%s\n\n%s", stackContext, question)
 			}
 		}
 
@@ -152,17 +150,17 @@ var askCmd = &cobra.Command{
 			sessionID:    sessionID,
 			timeout:      timeout,
 			toolsEnabled: !noTools && toolExecutor != nil,
+			stackContext: stackContext,
 		}
 
 		history := append([]types.Message(nil), sess.History()...)
-		answer, err := turn.run(finalQuestion, question, history)
+		answer, err := turn.run(question, question, history)
 		if err != nil {
 			return err
 		}
 
 		// In a terminal, keep the conversation going: the answer often ends with an offer to dig deeper.
-		// The history carries the full prompt (including any stack context), not just the plain question.
-		history = appendTurn(history, finalQuestion, answer)
+		history = appendTurn(history, question, answer)
 		return interactive.Continue(history, func(followUp string, earlier []types.Message) (string, error) {
 			return turn.run(followUp, followUp, earlier)
 		})

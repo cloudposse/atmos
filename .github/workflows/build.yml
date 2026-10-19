@@ -135,7 +135,7 @@ jobs:
 
       - name: "Docker Build"
         id: build
-        uses: cloudposse/github-action-docker-build-push@ff59bd5b5c0c953aef60f5eb9b80178fff407597 # v3.2.1
+        uses: cloudposse/github-action-docker-build-push@03997104add13375854c688f0d50c7dc16b3deac # v3.2.2
         with:
           registry: ghcr.io
           organization: "${{ github.event.repository.owner.login }}"
@@ -314,7 +314,7 @@ jobs:
 
       # syft binary that .goreleaser.yml's sboms: block shells out to.
       - name: "Install syft"
-        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
 
       - name: "Run goreleaser release"
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
@@ -374,7 +374,7 @@ jobs:
       # from .goreleaser.yml's per-archive sboms: block (bound to individual
       # archives, uploaded to the release directly by GoReleaser itself).
       - name: "Generate and attest source-tree SBOM"
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           path: .
           format: spdx-json

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
@@ -55,6 +56,7 @@ type SessionAction struct {
 	Rate     string
 	Interval string
 	Repeat   int
+	Actions  []SessionAction
 	// Fn runs a caller-supplied action (Type == "simulate") in place, letting
 	// a session mix in the same styled, non-interactive narration steps
 	// mode: steps uses (see pkg/runner/step's simulate rendering) instead of
@@ -75,6 +77,7 @@ type SessionOptions struct {
 	WriteRate   time.Duration
 	KeyInterval time.Duration
 	Actions     []SessionAction
+	Recorder    *Recorder
 }
 
 // RunSession executes scripted session actions against an interactive shell.
@@ -247,13 +250,20 @@ func newSessionState(ctx context.Context, output io.Reader, input io.Writer, clo
 }
 
 func (s *sessionState) readOutput(output io.Reader) {
-	buf := make([]byte, sessionReadBufferSize)
+	buf := make([]byte, sessionReadBufferSize+utf8.UTFMax)
+	pending := 0
 	for {
-		n, readErr := output.Read(buf)
-		if n > 0 {
-			s.recordOutputChunk(buf[:n])
+		n, readErr := output.Read(buf[pending:])
+		n += pending
+		end := completeUTF8Prefix(buf[:n])
+		if end > 0 {
+			s.recordOutputChunk(buf[:end])
 		}
+		pending = copy(buf, buf[end:n])
 		if readErr != nil {
+			if pending > 0 {
+				s.recordOutputChunk(buf[:pending])
+			}
 			s.finishRead(readErr)
 			return
 		}
@@ -266,6 +276,9 @@ func (s *sessionState) recordOutputChunk(chunk []byte) {
 	s.mu.Lock()
 	discard := s.discard
 	if !discard {
+		// Publish matching output only after the recorder has captured it. A wait
+		// ending a playback group must not race the final frame into the next group.
+		_, _ = iolib.GetContext().Data().Write(copied)
 		_, _ = s.output.Write(copied)
 	}
 	s.mu.Unlock()
@@ -276,7 +289,6 @@ func (s *sessionState) recordOutputChunk(chunk []byte) {
 	case s.changed <- struct{}{}:
 	default:
 	}
-	_, _ = iolib.GetContext().Data().Write(copied)
 }
 
 func (s *sessionState) finishRead(err error) {
@@ -352,6 +364,8 @@ func waitForSessionProcess(proc *sessionProcess, timeout time.Duration) error {
 
 func runAction(ctx context.Context, input io.Writer, state *sessionState, action *SessionAction, opts *SessionOptions) error {
 	switch action.Type {
+	case "playback":
+		return runPlaybackAction(ctx, input, state, action, opts)
 	case "write":
 		return runWriteAction(input, action, opts.WriteRate)
 	case "key":

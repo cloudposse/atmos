@@ -203,15 +203,15 @@ func TestBuildConfigAndStacksInfoPopulatesTagsAndLabels(t *testing.T) {
 
 // TestBuildConfigAndStacksInfoLabelsRepeatAccumulates proves --labels is repeatable end-to-end
 // through real cobra flag parsing: `--labels a=1 --labels b=2` must accumulate both pairs, not
-// have the second occurrence silently overwrite the first (the bug this flag's StringSlice type
+// have the second occurrence silently overwrite the first (the bug this flag's repeatable type
 // fixes -- it used to be a plain string flag where repeating it just kept the last value).
 func TestBuildConfigAndStacksInfoLabelsRepeatAccumulates(t *testing.T) {
 	cmd := newOperationCommand("apply", "Apply")
-	require.NoError(t, cmd.ParseFlags([]string{"--labels", "cost-center=platform", "--labels", "compliance=sox"}))
+	require.NoError(t, cmd.ParseFlags([]string{"--labels", `owner=O"Reilly,cost-center=platform`, "--labels", "compliance=sox"}))
 
 	info := buildConfigAndStacksInfo(cmd)
 
-	assert.Equal(t, map[string]string{"cost-center": "platform", "compliance": "sox"}, info.Labels,
+	assert.Equal(t, map[string]string{"owner": `O"Reilly`, "cost-center": "platform", "compliance": "sox"}, info.Labels,
 		"both --labels occurrences must be present, not just the last one")
 }
 

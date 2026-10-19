@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -46,6 +47,9 @@ func (l *LocalAdapter) Resolve(
 
 	resolvedPaths := make([]config.ResolvedPaths, 0)
 	for _, path := range paths {
+		if err := guard.Source(context.Background(), "import", path, basePath); err != nil {
+			return nil, err
+		}
 		v := viper.New()
 		v.SetConfigFile(path)
 		v.SetConfigType("yaml")
@@ -59,9 +63,12 @@ func (l *LocalAdapter) Resolve(
 			FilePath: path, ImportPaths: importPath, ImportType: config.LOCAL,
 		})
 
-		nestedPaths := l.processNestedImports(v, nestedImportParams{
+		nestedPaths, nestedErr := l.processNestedImports(v, nestedImportParams{
 			basePath: basePath, tempDir: tempDir, currentDepth: currentDepth, maxDepth: maxDepth, path: path, atmosConfig: atmosConfig,
 		})
+		if nestedErr != nil {
+			return nil, nestedErr
+		}
 		resolvedPaths = append(resolvedPaths, nestedPaths...)
 	}
 
@@ -89,20 +96,23 @@ type nestedImportParams struct {
 }
 
 // processNestedImports handles nested import statements in a config file.
-func (l *LocalAdapter) processNestedImports(v *viper.Viper, p nestedImportParams) []config.ResolvedPaths {
+func (l *LocalAdapter) processNestedImports(v *viper.Viper, p nestedImportParams) ([]config.ResolvedPaths, error) {
 	imports := v.GetStringSlice("import")
 	if len(imports) == 0 {
-		return nil
+		return nil, nil
 	}
 	importBasePath, err := config.ResolveConfigImportBasePath(v.GetString("base_path"), p.path, p.basePath)
 	if err != nil {
 		log.Debug("failed to resolve nested import base path", "path", p.path, "error", err)
-		return nil
+		return nil, nil
 	}
 	nestedPaths, err := config.ProcessImportsFromAdapter(p.atmosConfig, importBasePath, imports, p.tempDir, p.currentDepth+1, p.maxDepth)
 	if err != nil {
+		if guard.IsPolicyError(err) {
+			return nil, err
+		}
 		log.Debug("failed to process nested imports from", "path", p.path, "error", err)
-		return nil
+		return nil, nil
 	}
-	return nestedPaths
+	return nestedPaths, nil
 }

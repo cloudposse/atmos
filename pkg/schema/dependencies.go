@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -532,4 +533,77 @@ func normalizeNameAlias(entry *ComponentDependency, index int) error {
 			entry.Component,
 		)
 	}
+}
+
+// ParseLegacyDependsOn normalizes the deprecated `depends_on` declaration into component dependencies.
+// Both shapes the runtime accepts are honored: the list form (`[vpc, {component: db, stack: prod}]`)
+// and the map form (`{1: {component: vpc}}`). Map entries are ordered by key so that results are
+// stable, and entries without a component, such as file or folder entries, are dropped.
+func ParseLegacyDependsOn(dependsOn any) []ComponentDependency {
+	switch deps := dependsOn.(type) {
+	case []any:
+		return parseLegacyDependsOnList(deps)
+	case map[string]any:
+		keys := make([]string, 0, len(deps))
+		for key := range deps {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		values := make([]any, 0, len(deps))
+		for _, key := range keys {
+			values = append(values, deps[key])
+		}
+		return parseLegacyDependsOnList(values)
+	case map[any]any:
+		keys := make([]string, 0, len(deps))
+		byKey := make(map[string]any, len(deps))
+		for key, value := range deps {
+			name := fmt.Sprint(key)
+			keys = append(keys, name)
+			byKey[name] = value
+		}
+		sort.Strings(keys)
+		values := make([]any, 0, len(deps))
+		for _, key := range keys {
+			values = append(values, byKey[key])
+		}
+		return parseLegacyDependsOnList(values)
+	default:
+		return nil
+	}
+}
+
+func parseLegacyDependsOnList(values []any) []ComponentDependency {
+	var deps []ComponentDependency
+	for _, value := range values {
+		if dep, ok := parseLegacyDependsOnEntry(value); ok {
+			deps = append(deps, dep)
+		}
+	}
+	return deps
+}
+
+func parseLegacyDependsOnEntry(value any) (ComponentDependency, bool) {
+	switch entry := value.(type) {
+	case string:
+		return ComponentDependency{Component: entry}, entry != ""
+	case map[string]any:
+		return legacyDependsOnFields(func(key string) string { s, _ := entry[key].(string); return s })
+	case map[any]any:
+		return legacyDependsOnFields(func(key string) string { s, _ := entry[key].(string); return s })
+	default:
+		return ComponentDependency{}, false
+	}
+}
+
+func legacyDependsOnFields(field func(string) string) (ComponentDependency, bool) {
+	dep := ComponentDependency{
+		Component:   field("component"),
+		Stack:       field("stack"),
+		Namespace:   field("namespace"),
+		Tenant:      field("tenant"),
+		Environment: field("environment"),
+		Stage:       field("stage"),
+	}
+	return dep, dep.Component != ""
 }

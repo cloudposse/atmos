@@ -298,6 +298,15 @@ func TestGetConsoleProvider(t *testing.T) {
 			expectedError:    nil,
 		},
 		{
+			name: "AWS credential-process identity",
+			setupMock: func(m *authTypes.MockAuthManager) {
+				m.EXPECT().GetProviderKindForIdentity("corp-base").Return(authTypes.IdentityKindAWSCredentialProcess, nil)
+			},
+			identityName:     "corp-base",
+			expectedProvider: &awsAuth.ConsoleURLGenerator{},
+			expectedError:    nil,
+		},
+		{
 			name: "Azure OIDC provider",
 			setupMock: func(m *authTypes.MockAuthManager) {
 				m.EXPECT().GetProviderKindForIdentity("azure-prod").Return(authTypes.ProviderKindAzureOIDC, nil)

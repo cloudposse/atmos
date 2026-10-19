@@ -10,6 +10,7 @@ import (
 	"testing/iotest"
 
 	"github.com/charmbracelet/huh"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -305,4 +306,11 @@ func TestContinue_UsesTerminalDetectionAndThePrompt(t *testing.T) {
 
 		require.NoError(t, err)
 	})
+}
+
+func TestTerminalAvailable_ForcedOutputDoesNotEnableInput(t *testing.T) {
+	previous := viper.Get("force-tty")
+	viper.Set("force-tty", true)
+	t.Cleanup(func() { viper.Set("force-tty", previous) })
+	assert.False(t, terminalAvailable())
 }

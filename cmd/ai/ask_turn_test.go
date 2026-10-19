@@ -85,7 +85,34 @@ func newAskTurnFor(t *testing.T, client aiclient.Client) *askTurn {
 	}
 }
 
+func assertAskPrompt(t *testing.T, prompts []string, question string) {
+	t.Helper()
+
+	require.Len(t, prompts, 1)
+	// Plain provider messages include response guidance before the unchanged question.
+	guidance, prompt, found := strings.Cut(prompts[0], "\n\n---\n\n")
+	require.True(t, found, "response guidance must be separated from the question")
+	assert.Contains(t, guidance, "GitHub-flavored Markdown")
+	assert.Equal(t, question, prompt)
+}
+
 func TestAskTurn_Run(t *testing.T) {
+	t.Run("stack context reaches every turn without changing plain history", func(t *testing.T) {
+		client := &scriptedAskClient{response: "I have the context."}
+		turn := newTestAskTurn(t, client)
+		turn.stackContext = "field_test_token: unique-stack-value-731"
+		_, err := turn.run("Read my context", "Read my context", nil)
+		require.NoError(t, err)
+		history := []types.Message{{Role: types.RoleUser, Content: "Read my context"}, {Role: types.RoleAssistant, Content: client.response}}
+		_, err = turn.run("What is the token?", "What is the token?", history)
+		require.NoError(t, err)
+		require.Len(t, client.sentPrompts, 2)
+		for _, prompt := range client.sentPrompts {
+			assert.Contains(t, prompt, turn.stackContext)
+		}
+		assert.Equal(t, history, client.sentHistory[1])
+	})
+
 	t.Run("returns the answer text", func(t *testing.T) {
 		client := &scriptedAskClient{response: "You have 289 stacks."}
 
@@ -93,8 +120,7 @@ func TestAskTurn_Run(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, "You have 289 stacks.", answer)
-		require.Len(t, client.sentPrompts, 1)
-		assert.True(t, strings.HasSuffix(client.sentPrompts[0], "how many stacks?"), "the question is sent last")
+		assertAskPrompt(t, client.sentPrompts, "how many stacks?")
 	})
 
 	t.Run("sends earlier turns as history so a follow-up has context", func(t *testing.T) {
@@ -108,11 +134,8 @@ func TestAskTurn_Run(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Len(t, client.sentHistory, 1)
-		require.Len(t, client.sentHistory[0], 2)
-		assert.Equal(t, "how many stacks?", client.sentHistory[0][0].Content)
-		assert.Equal(t, "289", client.sentHistory[0][1].Content)
-		require.Len(t, client.sentPrompts, 1)
-		assert.True(t, strings.HasSuffix(client.sentPrompts[0], "and in core?"), "the follow-up is sent last")
+		assert.Equal(t, history, client.sentHistory[0])
+		assertAskPrompt(t, client.sentPrompts, "and in core?")
 	})
 
 	t.Run("an empty answer is an error, not a blank line", func(t *testing.T) {

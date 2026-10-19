@@ -621,7 +621,7 @@ type ProvisionTarget struct {
 	Auth ProvisionTargetAuth `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
 	// Commit controls the commit message and signing for the delivery (git kind).
 	Commit ProvisionTargetCommit `yaml:"commit,omitempty" json:"commit,omitempty" mapstructure:"commit"`
-	// PullRequest configures pull-request publishing (git kind; not yet supported by the cli provider).
+	// PullRequest publishes the delivery on a feature branch and opens/updates a pull request (git kind).
 	PullRequest ProvisionTargetPullRequest `yaml:"pull_request,omitempty" json:"pull_request,omitempty" mapstructure:"pull_request"`
 	// Bucket is the destination S3 bucket for packaged template/asset uploads (aws/s3 kind).
 	Bucket string `yaml:"bucket,omitempty" json:"bucket,omitempty" mapstructure:"bucket"`
@@ -658,9 +658,25 @@ type ProvisionTargetCommit struct {
 }
 
 // ProvisionTargetPullRequest configures pull-request publishing for a git delivery.
+// The base is the repository's branch (else the remote default branch) and the forge
+// (GitHub or Azure DevOps) is detected from the repository URI.
 type ProvisionTargetPullRequest struct {
-	// Enabled requests pull-request publishing (not yet supported by the cli provider).
+	// Enabled commits to a head branch and opens/updates a pull request instead of pushing to the base branch.
 	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	// Branch is the head branch name. Default: atmos/<target>/<stack>/<component>.
+	Branch string `yaml:"branch,omitempty" json:"branch,omitempty" mapstructure:"branch"`
+	// Title is the pull request title (supports templates).
+	Title string `yaml:"title,omitempty" json:"title,omitempty" mapstructure:"title"`
+	// Body is the pull request markdown body (supports templates).
+	Body string `yaml:"body,omitempty" json:"body,omitempty" mapstructure:"body"`
+	// Labels are applied to the pull request.
+	Labels []string `yaml:"labels,omitempty" json:"labels,omitempty" mapstructure:"labels"`
+	// Draft opens the pull request as a draft.
+	Draft bool `yaml:"draft,omitempty" json:"draft,omitempty" mapstructure:"draft"`
+	// Reviewers are requested on the pull request.
+	Reviewers []string `yaml:"reviewers,omitempty" json:"reviewers,omitempty" mapstructure:"reviewers"`
+	// Assignees are assigned to the pull request (not supported by Azure DevOps).
+	Assignees []string `yaml:"assignees,omitempty" json:"assignees,omitempty" mapstructure:"assignees"`
 }
 
 type Docs struct {
@@ -717,7 +733,7 @@ type Terraform struct {
 	ApplyAutoApprove        bool   `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
 	AppendUserAgent         string `yaml:"append_user_agent" json:"append_user_agent" mapstructure:"append_user_agent"`
 	DeployRunInit           bool   `yaml:"deploy_run_init" json:"deploy_run_init" mapstructure:"deploy_run_init"`
-	InitRunReconfigure      bool   `yaml:"init_run_reconfigure" json:"init_run_reconfigure" mapstructure:"init_run_reconfigure"`
+	InitRunReconfigure      bool   `yaml:"init_run_reconfigure" json:"init_run_reconfigure" mapstructure:"init_run_reconfigure" jsonschema_extras:"deprecated=true,x-atmos-replacement=components.terraform.init.reconfigure (false maps to never; true maps to auto)"`
 	AutoGenerateBackendFile bool   `yaml:"auto_generate_backend_file" json:"auto_generate_backend_file" mapstructure:"auto_generate_backend_file"`
 	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
 	// (e.g., .tf, .json, .yaml) during Terraform operations when set to true.
@@ -1086,6 +1102,23 @@ func (t *Terraform) EffectiveInitReconfigure() TerraformInitReconfigure {
 		return TerraformInitReconfigureNever
 	}
 	return TerraformInitReconfigureAuto
+}
+
+// OverrideInitRunReconfigure applies the deprecated boolean `init_run_reconfigure` from a source
+// that outranks configuration -- the ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE environment
+// variable or the --init-run-reconfigure flag (CLI > ENV > config). It records the legacy field and
+// also sets the effective policy (false maps to never, true to auto, the same mapping as
+// EffectiveInitReconfigure) so the override beats an explicit `init.reconfigure` from configuration.
+//
+// Callers must apply the newer init.reconfigure env var / flag AFTER this one at the same
+// precedence level so the newer, explicit setting wins when both are given.
+func (t *Terraform) OverrideInitRunReconfigure(value bool) {
+	t.InitRunReconfigure = value
+	if value {
+		t.Init.Reconfigure = TerraformInitReconfigureAuto
+		return
+	}
+	t.Init.Reconfigure = TerraformInitReconfigureNever
 }
 
 // EffectiveInitUpgrade returns the configured upgrade policy, defaulting to auto when unset.
@@ -2465,6 +2498,9 @@ type BaseComponentConfig struct {
 	// It is deep-merged with the child component's retry block by mergeComponentConfigurations.
 	BaseComponentRetry        AtmosSectionMapType
 	ComponentInheritanceChain []string
+	// BaseComponentUnsetSections names the sections a base component sets to `!unset`.
+	// The stack-level (global) layer of these sections is dropped in the final merge.
+	BaseComponentUnsetSections []string
 }
 
 // Stack imports (`import` section)

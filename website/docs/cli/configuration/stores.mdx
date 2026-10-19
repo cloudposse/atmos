@@ -68,9 +68,11 @@ You can reference stores in stack configuration using the `!store` function:
 
 ```yaml
 vars:
-  database_password: !store prod/secrets::database/password
-  api_key: !store prod/ssm::/app/api-key
+  database_host: !store prod/ssm::/app/database-host
+  api_endpoint: !store prod/ssm::/app/api-endpoint
 ```
+
+Use ordinary `!store` for non-sensitive configuration. For passwords and API keys, mark a supported encrypted store `secret: true`, declare the secrets, and use [`!secret`](/functions/yaml/secret). See [Secret Stores](#secret-stores) below.
 
 ## Supported Store Kinds
 

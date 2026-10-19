@@ -59,6 +59,11 @@ type mockPIMClient struct {
 	statuses    []string
 	statusErr   error
 	statusCalls int
+
+	policyMaxDuration time.Duration
+	policyMaxFound    bool
+	policyMaxErr      error
+	policyMaxCalls    int
 }
 
 func (m *mockPIMClient) ActiveAssignmentExists(_ context.Context, _ string) (bool, error) {
@@ -93,6 +98,11 @@ func (m *mockPIMClient) GetRequestStatus(_ context.Context, _ string) (string, e
 		return m.statuses[len(m.statuses)-1], nil
 	}
 	return "", nil
+}
+
+func (m *mockPIMClient) PolicyMaxDuration(_ context.Context, _ string) (time.Duration, bool, error) {
+	m.policyMaxCalls++
+	return m.policyMaxDuration, m.policyMaxFound, m.policyMaxErr
 }
 
 // makeJWT builds a header.payload.signature token whose payload carries the given claims.
@@ -826,6 +836,144 @@ func TestPIMRole_WarnsWhenResumingWithSuppliedJustification(t *testing.T) {
 			} else {
 				assert.Empty(t, warnings)
 			}
+		})
+	}
+}
+
+func TestPIMRole_DurationClampedAtPolicyMax(t *testing.T) {
+	mock := &mockPIMClient{
+		eligFound:         true,
+		eligScheduleID:    testEligID,
+		policyMaxFound:    true,
+		policyMaxDuration: 4 * time.Hour,
+		statuses:          []string{pimStatusProvisioned},
+		createResult:      ActivationResult{RequestName: "test-req", Status: pimStatusProvisioned},
+	}
+	// defaultPrincipal has duration "8h", which exceeds the 4h policy max.
+	id := newTestIdentity(t, defaultPrincipal(), mock)
+	var warnings []string
+	id.warn = func(msg string) { warnings = append(warnings, msg) }
+
+	_, err := id.Authenticate(context.Background(), testAzureCreds())
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, mock.policyMaxCalls)
+	assert.Equal(t, 1, mock.createCalls)
+	assert.Equal(t, "PT4H", mock.createdReq.Duration, "duration must be clamped to policy maximum PT4H")
+	require.Len(t, warnings, 1)
+	assert.Contains(t, warnings[0], "exceeds the role's policy maximum")
+	assert.Contains(t, warnings[0], "capping activation to PT4H")
+}
+
+func TestPIMRole_DurationWithinPolicyMax_NotClamped(t *testing.T) {
+	mock := &mockPIMClient{
+		eligFound:         true,
+		eligScheduleID:    testEligID,
+		policyMaxFound:    true,
+		policyMaxDuration: 4 * time.Hour,
+		statuses:          []string{pimStatusProvisioned},
+		createResult:      ActivationResult{RequestName: "test-req", Status: pimStatusProvisioned},
+	}
+	principal := defaultPrincipal()
+	principal["duration"] = "2h" // 2h is within 4h max.
+	id := newTestIdentity(t, principal, mock)
+	var warnings []string
+	id.warn = func(msg string) { warnings = append(warnings, msg) }
+
+	_, err := id.Authenticate(context.Background(), testAzureCreds())
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, mock.policyMaxCalls)
+	assert.Equal(t, 1, mock.createCalls)
+	assert.Equal(t, "PT2H", mock.createdReq.Duration, "duration within policy max must not be clamped")
+	assert.Empty(t, warnings)
+}
+
+func TestPIMRole_PolicyMaxNotFound_UsesConfiguredDuration(t *testing.T) {
+	mock := &mockPIMClient{
+		eligFound:      true,
+		eligScheduleID: testEligID,
+		policyMaxFound: false,
+		statuses:       []string{pimStatusProvisioned},
+		createResult:   ActivationResult{RequestName: "test-req", Status: pimStatusProvisioned},
+	}
+	id := newTestIdentity(t, defaultPrincipal(), mock)
+	var warnings []string
+	id.warn = func(msg string) { warnings = append(warnings, msg) }
+
+	_, err := id.Authenticate(context.Background(), testAzureCreds())
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, mock.policyMaxCalls)
+	assert.Equal(t, 1, mock.createCalls)
+	assert.Equal(t, "PT8H", mock.createdReq.Duration)
+	assert.Empty(t, warnings)
+}
+
+func TestPIMRole_PolicyMaxQueryError(t *testing.T) {
+	sentinel := errors.New("policy lookup failed")
+	mock := &mockPIMClient{
+		eligFound:      true,
+		eligScheduleID: testEligID,
+		policyMaxErr:   sentinel,
+		statuses:       []string{pimStatusProvisioned},
+		createResult:   ActivationResult{RequestName: "test-req", Status: pimStatusProvisioned},
+	}
+	id := newTestIdentity(t, defaultPrincipal(), mock)
+	var warnings []string
+	id.warn = func(msg string) { warnings = append(warnings, msg) }
+
+	_, err := id.Authenticate(context.Background(), testAzureCreds())
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, mock.policyMaxCalls)
+	assert.Equal(t, 1, mock.createCalls, "activation must proceed when policy query fails")
+	assert.Equal(t, "PT8H", mock.createdReq.Duration)
+	assert.Empty(t, warnings)
+}
+
+func TestPIMRole_EmptyDuration_SkipsPolicyMaxQuery(t *testing.T) {
+	mock := &mockPIMClient{
+		eligFound:         true,
+		eligScheduleID:    testEligID,
+		policyMaxFound:    true,
+		policyMaxDuration: 4 * time.Hour,
+		statuses:          []string{pimStatusProvisioned},
+		createResult:      ActivationResult{RequestName: "test-req", Status: pimStatusProvisioned},
+	}
+	principal := defaultPrincipal()
+	principal["duration"] = ""
+	id := newTestIdentity(t, principal, mock)
+
+	_, err := id.Authenticate(context.Background(), testAzureCreds())
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, mock.policyMaxCalls, "empty duration must omit policy max query")
+	assert.Equal(t, 1, mock.createCalls)
+	assert.Equal(t, "", mock.createdReq.Duration)
+}
+
+func TestPIMRole_ZeroOrNegativeDuration_SkipsPolicyMaxQuery(t *testing.T) {
+	for _, d := range []string{"0s", "0h", "-1h"} {
+		t.Run("duration_"+d, func(t *testing.T) {
+			mock := &mockPIMClient{
+				eligFound:         true,
+				eligScheduleID:    testEligID,
+				policyMaxFound:    true,
+				policyMaxDuration: 4 * time.Hour,
+				statuses:          []string{pimStatusProvisioned},
+				createResult:      ActivationResult{RequestName: "test-req", Status: pimStatusProvisioned},
+			}
+			principal := defaultPrincipal()
+			principal["duration"] = d
+			id := newTestIdentity(t, principal, mock)
+
+			_, err := id.Authenticate(context.Background(), testAzureCreds())
+			require.NoError(t, err)
+
+			assert.Equal(t, 0, mock.policyMaxCalls, "non-positive duration must omit policy max query")
+			assert.Equal(t, 1, mock.createCalls)
+			assert.Equal(t, "", mock.createdReq.Duration)
 		})
 	}
 }

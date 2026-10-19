@@ -57,6 +57,8 @@ const config = {
         [
             '@docusaurus/plugin-client-redirects', {
                 redirects: [
+                    // Policy guides belong in Reference, not the command list.
+                    {from: '/cli/commands/terraform/plan-policies', to: '/policies/terraform-plan'},
                     {
                         from: '/changelog/starlark-yaml-values',
                         to: '/changelog/starlark-custom-commands'
@@ -534,6 +536,25 @@ const config = {
         [
             path.resolve(__dirname, 'plugins', 'file-browser'),
             {
+                id: 'policies',
+                sourceDir: '../policy-library',
+                routeBasePath: '/policies/library',
+                title: 'Policy Library',
+                docsSidebar: 'cli',
+                presentation: 'policies',
+                description: 'Browse individual policies for Terraform plans, GitHub Actions context, and component lifecycle hooks.',
+                githubRepo: 'cloudposse/atmos',
+                githubBranch: 'main',
+                githubPath: 'policy-library',
+                tagOrder: ['Terraform', 'GitHub Actions', 'Lifecycle Hooks'],
+                searchable: true,
+                cardCtaLabel: 'View policy',
+                enablePerPageMarkdown: true,
+            },
+        ],
+        [
+            path.resolve(__dirname, 'plugins', 'file-browser'),
+            {
                 id: 'skills',
                 sourceDir: '../agent-skills/skills',
                 routeBasePath: '/ai/skills',
@@ -791,12 +812,6 @@ const config = {
         buildYear: getBuildDate().getUTCFullYear(),
         // Render downloads from the same revision as the deployed site, including PR casts.
         castGitRef: process.env.GITHUB_SHA || 'main',
-        // Optional base URL (no trailing slash) for landing-page demo recordings.
-        // The videos are published by `atmos demo publish` to the same docs-origin
-        // bucket under /img/demos/, so DemoVideo serves them same-origin from that
-        // path when this is empty. Set ATMOS_DEMOS_BASE_URL only to point at a
-        // separate CDN/host. See DemoVideo + demo/landing/ + .github/workflows/landing-demos.yaml.
-        demosBaseUrl: process.env.ATMOS_DEMOS_BASE_URL || '',
         },
 
     markdown: {

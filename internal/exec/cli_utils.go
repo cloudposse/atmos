@@ -41,6 +41,7 @@ const (
 // `commonFlags` are a list of flags that Atmos understands, but the underlying tools do not (e.g., Terraform/OpenTofu, Helmfile, Packer, etc.).
 // These flags get removed from the arg list after Atmos uses them, so the underlying tool does not get passed a flag it doesn't accept.
 var commonFlags = []string{
+	"--explain",
 	"--stack",
 	"-s",
 	cfg.DryRunFlag,
@@ -565,6 +566,7 @@ var valueTakingCommonFlags = func() map[string]bool {
 // boolOnlyCommonFlags is the subset of commonFlags that are boolean. In space form they
 // consume the next argument only when it is exactly "true" or "false" (case-insensitive).
 var boolOnlyCommonFlags = map[string]bool{
+	"--explain":              true,
 	cfg.DryRunFlag:           true,
 	cfg.SkipInitFlag:         true,
 	cfg.LogsColorFlag:        true,

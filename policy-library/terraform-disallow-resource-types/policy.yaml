@@ -1,0 +1,18 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: terraform-disallow-resource-types
+  description: "Prevent selected resource types from being created or retained by a change."
+spec:
+  policies:
+    disallow-resource-types:
+      on: terraform.plan
+      action: deny
+      reason: Long-lived IAM users and access keys are not permitted
+      with:
+        types:
+          - aws_iam_user
+          - aws_iam_access_key
+      rule: >-
+        has(input.resource_changes) && input.resource_changes.exists(r,
+          r.mode == 'managed' && r.type in params.types && r.change.after != null)
