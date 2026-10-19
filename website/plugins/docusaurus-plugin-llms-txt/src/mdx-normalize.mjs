@@ -193,6 +193,7 @@ const POST_HANDLERS = {
   ]),
   Step: (n) => listItem(n.children && n.children.length ? n.children : [paragraph([text('')])]),
   StepNumber: (n) => listItem(n.children && n.children.length ? n.children : [paragraph([text('')])]),
+  FAQSection: (n) => [heading(2, [text(attr(n, 'title'))]), ...(n.children || [])],
   FAQItem: (n) => {
     const q = attr(n, 'question') || attr(n, 'title') || '';
     const out = [];

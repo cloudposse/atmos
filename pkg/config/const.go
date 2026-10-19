@@ -238,6 +238,7 @@ const (
 
 	// Cast recording flag.
 	CastFlagName      = "cast"
+	CastFlagViperKey  = "cast.target" // Viper key for --cast; nested so the bare "cast" key cannot shadow cast.* config.
 	CastFlag          = "--cast"
 	CastFlagAutoValue = "__AUTO__"
 	CastEnvVarName    = "ATMOS_CAST"

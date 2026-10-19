@@ -73,22 +73,9 @@ updates:
   cooldown:
     default-days: 14  # 2 weeks minimum age for all dependencies
 
-# Tracks the digest-pinned base images in the devcontainer and screenshot
-# tooling Dockerfiles.
+# Tracks the digest-pinned base image in the devcontainer Dockerfile.
 - package-ecosystem: docker
   directory: /.devcontainer
-  labels:
-    - dependencies
-    - docker
-    - no-release
-  schedule:
-    interval: weekly
-    day: sunday
-  cooldown:
-    default-days: 14  # 2 weeks minimum age for all dependencies
-
-- package-ecosystem: docker
-  directory: /demo/screenshots
   labels:
     - dependencies
     - docker

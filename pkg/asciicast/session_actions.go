@@ -18,6 +18,8 @@ import (
 
 func runAction(ctx context.Context, input *syncWriter, state *sessionState, action *SessionAction, opts *SessionOptions) error {
 	switch action.Type {
+	case "playback":
+		return runPlaybackAction(ctx, input, state, action, opts)
 	case "write":
 		return runWriteAction(input, action, opts.WriteRate)
 	case "key":

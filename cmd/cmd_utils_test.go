@@ -3430,7 +3430,7 @@ func TestCustomCommandScriptComponentReceivesResolvedStepEnv(t *testing.T) {
 				Env: map[string]string{"ATMOS_TEST_STEP_VALUE": "{{ .Env.ATMOS_TEST_STEP_SOURCE }}"},
 				Script: fmt.Sprintf(`if env["ATMOS_TEST_STEP_VALUE"] != "resolved-step":
     fail("script env was not resolved")
-component = components.get("deploy-app", "dev", "script")
+component = components.get("deploy-app", "dev", "example")
 component.exec([%q], env = {"_ATMOS_TEST_DUMP_ENV": %q})`, executable, output),
 			}
 			if parallel {

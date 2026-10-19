@@ -139,3 +139,42 @@ atmos cast record demo/hero.tape --output=hero.mp4
 ```
 
 `record` builds an ephemeral `type: cast` step from the tape and runs it through the same interpreter — see [`atmos cast record`](/cli/commands/cast/record) for the full flag reference. For the complete supported/ignored/error directive matrix and worked migration examples, see the `atmos-vhs` skill.
+
+## Set a segment's playback duration
+
+Use a `type: playback` group inside a cast to fit its nested steps into a fixed
+recorded duration. Grouping the Enter key with the completion wait includes output
+from the moment the command starts:
+
+```yaml
+- type: write
+  text: atmos terraform deploy --stack dev --all
+- type: playback
+  duration: 4s
+  steps:
+    - type: key
+      key: enter
+    - type: wait
+      regex: '(?s)Apply .*completed.*> '
+      timeout: 90s
+- type: pause
+  duration: 3s
+```
+
+Place these actions inside `mode: session` or a nested `type: session` block.
+The group's clock starts before its first child and stops after its last child
+finishes. A deployment that takes 24 seconds therefore plays in 4 seconds, while
+the preceding typing and following 3-second reading pause keep their normal timing.
+All captured events, including terminal redraws, retain their content and order;
+the recorder scales their timestamps proportionally. Elapsed times printed by the
+command still show its actual execution time.
+
+The duration must be positive. It is an exact playback duration, so a shorter
+recording is stretched to fit too. Execution, wait timeouts, and cancellation still
+use real time. Output remains live while recording; only the active group's events
+are buffered for timing adjustment. Silent groups retain their requested duration.
+Failed recordings are discarded as usual.
+
+Playback groups also work in `mode: steps`, wrapping ordinary steps such as `shell`
+or `atmos`. They require an enclosing cast and cannot nest or overlap. Keep typing
+and reading pauses outside a group when they should retain their original timing.

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
@@ -70,6 +71,7 @@ type SessionAction struct {
 	Interval string
 	Repeat   int
 	Path     string // Output path for a "screenshot" action.
+	Actions  []SessionAction
 	// Fn runs a caller-supplied action (Type == "simulate") in place, letting
 	// a session mix in the same styled, non-interactive narration steps
 	// mode: steps uses (see pkg/runner/step's simulate rendering) instead of
@@ -90,6 +92,7 @@ type SessionOptions struct {
 	WriteRate   time.Duration
 	KeyInterval time.Duration
 	Actions     []SessionAction
+	Recorder    *Recorder
 }
 
 // RunSession executes scripted session actions against an interactive shell.
@@ -349,13 +352,20 @@ func (s *sessionState) readOutput(output io.Reader) {
 	if s.queryChunks != nil {
 		defer close(s.queryChunks)
 	}
-	buf := make([]byte, sessionReadBufferSize)
+	buf := make([]byte, sessionReadBufferSize+utf8.UTFMax)
+	pending := 0
 	for {
-		n, readErr := output.Read(buf)
-		if n > 0 {
-			s.recordOutputChunk(buf[:n])
+		n, readErr := output.Read(buf[pending:])
+		n += pending
+		end := completeUTF8Prefix(buf[:n])
+		if end > 0 {
+			s.recordOutputChunk(buf[:end])
 		}
+		pending = copy(buf, buf[end:n])
 		if readErr != nil {
+			if pending > 0 {
+				s.recordOutputChunk(buf[:pending])
+			}
 			s.finishRead(readErr)
 			return
 		}
@@ -382,10 +392,15 @@ func (s *sessionState) recordOutputChunk(chunk []byte) {
 	}
 	s.mu.Lock()
 	discardWaitBuffer := s.discardWaitBuffer
+	discardRecording := s.discardRecording
+	// Publish matching output only after the recorder has captured it. A wait
+	// ending a playback group must not race the final frame into the next group.
+	if !discardRecording {
+		_, _ = iolib.GetContext().Data().Write(copied)
+	}
 	if !discardWaitBuffer {
 		_, _ = s.output.Write(copied)
 	}
-	discardRecording := s.discardRecording
 	s.mu.Unlock()
 	if !discardWaitBuffer {
 		select {
@@ -393,10 +408,6 @@ func (s *sessionState) recordOutputChunk(chunk []byte) {
 		default:
 		}
 	}
-	if discardRecording {
-		return
-	}
-	_, _ = iolib.GetContext().Data().Write(copied)
 }
 
 func (s *sessionState) finishRead(err error) {

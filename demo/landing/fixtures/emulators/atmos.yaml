@@ -1,4 +1,4 @@
-# Landing-page fixture for the "Containers & Emulators" demo (demo/landing/emulators.tape).
+# Landing-page fixture for the "Containers & Emulators" demo (casts generate demo landing emulators).
 #
 # It declares four local cloud emulators — AWS, GCP, Azure (all Floci) and
 # Kubernetes (k3s) — so `atmos emulator list` shows the whole local cloud at once,
@@ -36,5 +36,5 @@ auth:
   identities:
     local-aws:
       kind: aws/emulator
-      emulator: aws
+      emulator: landing-aws
       default: true

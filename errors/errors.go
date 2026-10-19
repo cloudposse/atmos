@@ -103,6 +103,7 @@ var (
 	ErrTemplateEvaluation                    = errors.New("template evaluation failed")
 	ErrCommandEnvDecodeFailed                = schemaPkg.ErrCommandEnvDecodeFailed
 	ErrComponentDependencyMissingComponent   = schemaPkg.ErrComponentDependencyMissingComponent
+	ErrInvalidCastPlayback                   = errors.New("invalid cast playback group")
 	ErrCastStepRequiresSteps                 = errors.New("cast step requires nested steps")
 	ErrCastSessionRequiresActions            = errors.New("cast session step requires session actions")
 	ErrInvalidCastMode                       = errors.New("cast step has invalid mode")

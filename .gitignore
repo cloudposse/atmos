@@ -38,11 +38,6 @@ demos/audio/
 # gomodcheck compiled binary
 tools/gomodcheck/.gomodcheck
 
-# Generated landing-page demo recordings (VHS output).
-# NEVER commit these — they bloat the repo. The build pipeline renders them and
-# syncs to S3/CDN (`atmos demo publish`); the site references the remote URL.
-/website/static/img/demos/
-
 # Generated atmos-manifest JSON Schema (served at atmos.tools). Generated from the embedded
 # schema (pkg/datafetcher/schema/atmos/manifest/1.0.json) by `atmos dev generate schema` /
 # `go run ./tools/gen-schema` — never hand-edit or commit this file.

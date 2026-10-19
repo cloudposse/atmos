@@ -157,7 +157,9 @@ export default function CastPlayer({
         // never starts, so seek straight to the end.
         const initialPosition = staticFrame
           ? (playbackEvents.at(-1)?.[0] ?? 0)
-          : 0;
+          : autoplay
+            ? 0
+            : (playbackEvents[0]?.[0] ?? 0);
         setEvents(playbackEvents);
         setCastTitle(title ?? header.title ?? header.command ?? "Atmos");
         setContent(renderAt(playbackEvents, initialPosition));
@@ -329,7 +331,7 @@ export default function CastPlayer({
       )}
       {terminal}
       {showControls && (
-        <div className={styles.controls}>
+        <div className={styles.controls} data-cast-controls>
           <button
             type="button"
             className={styles.playButton}
@@ -359,7 +361,7 @@ export default function CastPlayer({
               }}
             />
           )}
-          <span>
+          <span className={styles.time}>
             {formatTime(position)} / {formatTime(duration)}
           </span>
         </div>

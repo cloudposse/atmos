@@ -1,0 +1,60 @@
+---
+slug: cast-playback-duration
+title: "Control How Long a Cast Segment Plays"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+A deployment can take thirty seconds to finish even when a demo only needs four
+seconds to show its progress. Speeding up the entire recording also rushes the
+commands and the pauses that help viewers follow along. Atmos now supports
+[playback groups](/steps/type/cast#set-a-segments-playback-duration) to set the
+recorded duration of just the steps you choose.
+
+<!--truncate-->
+
+## The Problem
+
+Real infrastructure demos include time spent waiting for providers and services.
+Those waits belong in the execution, but they can dominate a short recording.
+Removing frames loses the progress that explains what happened.
+
+## The Fix
+
+A playback group preserves every captured event and scales its timestamps to fit
+an exact duration. Typing and reading pauses outside the group retain their
+original timing. The command still runs normally, with real timeouts and live
+output during recording.
+
+## How to Use It
+
+Inside a cast session, wrap Enter and the completion wait in a group:
+
+```yaml
+- type: write
+  text: atmos terraform deploy --stack dev --all
+- type: playback
+  duration: 4s
+  steps:
+    - type: key
+      key: enter
+    - type: wait
+      regex: '(?s)Apply .*completed.*> '
+      timeout: 90s
+- type: pause
+  duration: 3s
+```
+
+The four seconds begin before Enter and end when the completion wait matches.
+The following three-second pause gives viewers time to read the result at the
+returned prompt. Elapsed times printed by the command still show the actual
+execution time; they are part of the preserved output.
+
+The duration must be positive. Shorter segments stretch to fit, and playback
+groups cannot nest. Groups also work around ordinary steps in a
+[steps-mode cast](/steps/type/cast).
+
+## Get Involved
+
+See the [cast documentation](/steps/type/cast) for recording options, and share
+feedback in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

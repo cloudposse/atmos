@@ -347,6 +347,9 @@ func castStepHasVisibleCursor(step *schema.WorkflowStep) bool {
 		if child.Type == schema.TaskTypeSimulate && child.Cursor {
 			return true
 		}
+		if child.Type == castPlaybackStepType && castStepHasVisibleCursor(child) {
+			return true
+		}
 	}
 	return false
 }
