@@ -181,6 +181,11 @@ func buildTemplateFuncMap(atmosConfig *schema.AtmosConfiguration, manifestLoadFi
 	if tmplConfig == nil {
 		tmplConfig = &schema.AtmosConfiguration{}
 	}
+
+	if lo.FromPtr(tmplConfig.Templates.Settings.Gomplate.Experimental) {
+		ctx = gomplate.SetExperimental(ctx)
+	}
+
 	var atmosFuncMap template.FuncMap
 	if manifestLoadFile != "" {
 		atmosFuncMap = manifestLoadFuncMap(tmplConfig, &schema.ConfigAndStacksInfo{}, ctx, &d, manifestLoadFile)
@@ -442,6 +447,10 @@ func ProcessTmplWithDatasources(
 
 			ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
 			defer cancelFunc()
+
+			if lo.FromPtr(templateSettings.Gomplate.Experimental) {
+				ctx = gomplate.SetExperimental(ctx)
+			}
 
 			d = data.Data{}
 			d.Ctx = ctx
