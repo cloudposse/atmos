@@ -184,6 +184,36 @@ func Function(ctx context.Context, name, engine string, origin Origin) error {
 	return evaluate(ctx, "function", FunctionInput{Name: name, Engine: engine, Origin: origin})
 }
 
+// FunctionAt checks a YAML function with its parser-provided source file. It lives in guard rather than
+// admission so that low-level packages such as pkg/utils can admit functions without importing the CI
+// reporting that admission pulls in, which would form an import cycle.
+func FunctionAt(ctx context.Context, name, file string) error {
+	defer perf.Track(nil, "guard.FunctionAt")()
+
+	return Function(ctx, CanonicalFunction(name), "yaml", FileOrigin(file))
+}
+
+// FunctionValue checks lazy YAML functions using conservative parse-time attribution.
+func FunctionValue(ctx context.Context, name, value string) error {
+	defer perf.Track(nil, "guard.FunctionValue")()
+
+	return Function(ctx, CanonicalFunction(name), "yaml", ValueOrigin(value))
+}
+
+// CanonicalFunction returns the name a policy rule sees for a YAML function.
+func CanonicalFunction(name string) string {
+	defer perf.Track(nil, "guard.CanonicalFunction")()
+
+	name = strings.TrimPrefix(strings.ToLower(name), "!")
+	switch name {
+	case "repo-root":
+		return "git.root"
+	case "git.ref":
+		return "git.sha"
+	}
+	return name
+}
+
 func within(root, path string) bool {
 	rel, err := filepath.Rel(root, path)
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)

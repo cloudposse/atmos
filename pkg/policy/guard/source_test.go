@@ -503,3 +503,37 @@ func TestDescribeSourceS3AndGCSShorthandAreRemote(t *testing.T) {
 	require.False(t, input.Remote)
 	require.Equal(t, "file", input.Scheme)
 }
+
+func TestCanonicalFunctionNamesMatchWhatRulesSee(t *testing.T) {
+	for raw, want := range map[string]string{
+		"!exec":      "exec",
+		"!EXEC":      "exec",
+		"!repo-root": "git.root",
+		"!git.ref":   "git.sha",
+		"!literal":   "literal",
+		"env":        "env",
+	} {
+		require.Equal(t, want, CanonicalFunction(raw), raw)
+	}
+}
+
+func TestFunctionAtAdmitsWithTheFileOrigin(t *testing.T) {
+	restore := SaveHooks()
+	t.Cleanup(restore)
+	SetEnabled(func(kind string) (bool, error) { return kind == "function", nil })
+	var seen []FunctionInput
+	SetEvaluator(func(_ context.Context, _ string, input json.RawMessage) error {
+		var decoded FunctionInput
+		require.NoError(t, json.Unmarshal(input, &decoded))
+		seen = append(seen, decoded)
+		return nil
+	})
+
+	require.NoError(t, FunctionAt(context.Background(), "!repo-root", "https://example.com/stack.yaml"))
+	require.NoError(t, FunctionValue(context.Background(), "!exec", "echo hi"))
+
+	require.Len(t, seen, 2)
+	require.Equal(t, "git.root", seen[0].Name)
+	require.Equal(t, "remote", seen[0].Provenance)
+	require.Equal(t, "exec", seen[1].Name)
+}

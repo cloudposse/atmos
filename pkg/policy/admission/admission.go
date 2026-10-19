@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -108,7 +107,7 @@ func Check(ctx context.Context, request *policy.Request) error {
 // No subject is fabricated before component metadata is available.
 func Function(ctx context.Context, name string) error {
 	defer perf.Track(nil, "admission.Function")()
-	return guard.Function(ctx, canonicalFunction(name), "yaml", guard.Origin{Provenance: "unknown"})
+	return guard.Function(ctx, guard.CanonicalFunction(name), "yaml", guard.Origin{Provenance: "unknown"})
 }
 
 func init() {
@@ -122,23 +121,12 @@ func init() {
 func FunctionAt(ctx context.Context, name, file string) error {
 	defer perf.Track(nil, "admission.FunctionAt")()
 
-	return guard.Function(ctx, canonicalFunction(name), "yaml", guard.FileOrigin(file))
+	return guard.FunctionAt(ctx, name, file)
 }
 
 // FunctionValue checks lazy YAML functions using conservative parse-time attribution.
 func FunctionValue(ctx context.Context, name, value string) error {
 	defer perf.Track(nil, "admission.FunctionValue")()
 
-	return guard.Function(ctx, canonicalFunction(name), "yaml", guard.ValueOrigin(value))
-}
-
-func canonicalFunction(name string) string {
-	name = strings.TrimPrefix(strings.ToLower(name), "!")
-	switch name {
-	case "repo-root":
-		return "git.root"
-	case "git.ref":
-		return "git.sha"
-	}
-	return name
+	return guard.FunctionValue(ctx, name, value)
 }

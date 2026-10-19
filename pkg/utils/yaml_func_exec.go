@@ -8,14 +8,14 @@ import (
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/policy/admission"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 )
 
 func ProcessTagExec(
 	input string,
 ) (any, error) {
 	defer perf.Track(nil, "utils.ProcessTagExec")()
-	if err := admission.FunctionValue(context.Background(), "exec", input); err != nil {
+	if err := guard.FunctionValue(context.Background(), "exec", input); err != nil {
 		return nil, err
 	}
 
