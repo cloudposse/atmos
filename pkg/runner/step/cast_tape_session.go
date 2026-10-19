@@ -126,7 +126,7 @@ func (t *tapeSessionTranslator) dispatchSimple(d *asciicast.TapeDirective, i int
 	case asciicast.TapeKey:
 		t.emit(&schema.WorkflowStep{Type: "key", Key: d.Key, Repeat: d.Repeat})
 	case asciicast.TapeCopy, asciicast.TapePaste, asciicast.TapeEnv:
-		return 0, tapeDirectiveError(d, fmt.Errorf("%w: rewrite the tape before using tape or tape_file", ErrUnsupportedTapeDirective))
+		return 0, tapeDirectiveError(d, fmt.Errorf("%w: rewrite the tape before using tape or source", ErrUnsupportedTapeDirective))
 	}
 	return i + 1, nil
 }

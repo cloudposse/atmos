@@ -81,7 +81,7 @@ func init() {
 	castCmd.AddCommand(recordCmd)
 }
 
-func runRecordCommand(cmd *cobra.Command, tapeFile string) error {
+func runRecordCommand(cmd *cobra.Command, input string) error {
 	output := viper.GetString(recordViperPrefix + "." + recordFlagOutput)
 	if output == "" {
 		return errUtils.ErrMissingRenderOutput
@@ -96,10 +96,10 @@ func runRecordCommand(cmd *cobra.Command, tapeFile string) error {
 	defer plan.Cleanup()
 
 	step := &schema.WorkflowStep{
-		Name:     "record",
-		Type:     schema.TaskTypeCast,
-		Mode:     mode,
-		TapeFile: tapeFile,
+		Name:   "record",
+		Type:   schema.TaskTypeCast,
+		Mode:   mode,
+		Source: input,
 		CastOutput: &schema.CastOutput{
 			Cast: plan.CastPath,
 		},

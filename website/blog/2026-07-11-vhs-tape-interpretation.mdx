@@ -15,14 +15,14 @@ A `.tape` script and an Atmos `type: cast` step describe the same kind of thing 
 
 ## The Change
 
-A `type: cast` step can now interpret VHS-dialect tape scripts directly, in memory — no `vhs` binary, no separate toolchain, and nothing written to disk. Point `tape_file:` at an existing `.tape` file, or write one inline with `tape:`:
+A `type: cast` step can now interpret VHS-dialect tape scripts directly, in memory — no `vhs` binary, no separate toolchain, and nothing written to disk. Point `source:` at an existing `.tape` file, or write one inline with `tape:`:
 
 ```yaml
 steps:
   - name: hero-demo
     type: cast
     mode: session
-    tape_file: demo/hero.tape
+    source: demo/hero.tape
     output:
       mp4: hero.mp4
 ```

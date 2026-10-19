@@ -28,7 +28,9 @@ Reach for it, instead of Bash or Python glue, when a task needs Atmos capabiliti
 Keep simple one-command automation in YAML (`atmos-workflows`, `atmos-custom-commands`,
 `atmos-steps`). Use a script when the logic needs loops, conditionals, data shaping,
 or concurrency. Declarations of project commands and component bindings stay in YAML.
-The script step configuration is `type: script` with `interpreter: starlark`.
+The script step configuration is `type: script` with `interpreter: starlark`. To run a script file,
+set `source: scripts/check.star` instead of `script:`; Atmos infers `starlark` from the `.star`
+extension, and `load()` resolves relative to that file.
 
 Documentation: [Language reference](https://atmos.tools/automation/language),
 [Custom CLI apps](https://atmos.tools/automation/standalone-cli-apps),
@@ -275,6 +277,16 @@ For Kubernetes absence checks, use a checked `kubectl get --ignore-not-found -o 
 and assert empty stdout. Do not treat every nonzero exit as absence. For expected
 Helm failures, use `check=False`, require a nonzero code, and check the specific
 lifecycle diagnostic.
+
+## Terminal recordings
+
+Use the predeclared `cast` module for recording scripts: `cast.recorder(...)`,
+`rec.comment`, `rec.run(..., expect=..., reject=...)`, and `rec.terminal` for PTY
+input. These calls declare actions; `rec.generate()` executes and validates them,
+while `rec.validate()` checks saved evidence. Keep source comments and spacing
+between story sections; a comment and its related commands stay together.
+See `atmos-cast` for lifecycle, cleanup, and validation details. Existing
+`steps.cast(...)` remains available for YAML-shaped configurations and tapes.
 
 ## Related skills
 

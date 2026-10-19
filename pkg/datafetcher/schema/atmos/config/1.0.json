@@ -10488,7 +10488,7 @@
               "type": "null"
             }
           ],
-          "description": "Script is the inline script body for TaskTypeScript."
+          "description": "Script is the inline script body for TaskTypeScript. Mutually exclusive with Source."
         },
         "interpreter": {
           "anyOf": [
@@ -10499,7 +10499,7 @@
               "type": "null"
             }
           ],
-          "description": "Interpreter is the executable used to run Script for TaskTypeScript."
+          "description": "Interpreter is the executable used to run Script for TaskTypeScript. It is inferred from the extension of Source when omitted."
         },
         "type": {
           "anyOf": [
@@ -10881,7 +10881,7 @@
           "description": "File picker fields."
         },
         "source": {
-          "description": "Source: workdir provisioning (string or source map), or a local directory/file for archive and publish steps (string only)."
+          "description": "Source: workdir provisioning (string or source map), or a local path (string only): a directory/file for archive and publish steps, a script file for script steps, or a VHS tape file for cast steps."
         },
         "reset": {
           "anyOf": [
@@ -15969,7 +15969,7 @@
               "type": "null"
             }
           ],
-          "description": "Inline script body for type: script."
+          "description": "Inline script body for type: script. Mutually exclusive with source."
         },
         "interpreter": {
           "anyOf": [
@@ -15980,7 +15980,7 @@
               "type": "null"
             }
           ],
-          "description": "Script interpreter for type: script."
+          "description": "Script interpreter for type: script. Inferred from the extension of source when omitted."
         },
         "stack": {
           "anyOf": [
@@ -16335,7 +16335,7 @@
           "description": "File picker fields."
         },
         "source": {
-          "description": "Source: workdir provisioning (string or source map), or a local directory/file for archive and publish steps (string only)."
+          "description": "Source: workdir provisioning (string or source map), or a local path (string only): a directory/file for archive and publish steps, a script file for script steps, or a VHS tape file for cast steps."
         },
         "reset": {
           "anyOf": [
@@ -16943,18 +16943,7 @@
               "type": "null"
             }
           ],
-          "description": "Inline VHS-dialect tape script interpreted at Execute time. Mutually exclusive with tape_file and with steps."
-        },
-        "tape_file": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Path to an external VHS .tape file, interpreted the same way as tape."
+          "description": "Inline VHS-dialect tape script interpreted at Execute time. Mutually exclusive with source and with steps."
         },
         "shell": {
           "anyOf": [

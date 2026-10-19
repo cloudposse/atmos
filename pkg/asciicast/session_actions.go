@@ -8,8 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	durationpkg "github.com/cloudposse/atmos/pkg/duration"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // This file implements execution of one scripted SessionAction at a time
@@ -22,9 +25,11 @@ func runAction(ctx context.Context, input *syncWriter, state *sessionState, acti
 	case "playback":
 		return runPlaybackAction(ctx, input, state, action, opts)
 	case "write":
-		return runWriteAction(input, action, opts.WriteRate)
+		state.noteTypedWrite(action.Text)
+		return runWriteAction(ctx, input, action, opts.WriteRate)
 	case "key":
-		return runKeyAction(input, action, opts.KeyInterval)
+		state.noteKeyPress(action.Key)
+		return runKeyAction(ctx, input, action, opts.KeyInterval)
 	case "pause":
 		return runPauseAction(ctx, action)
 	case "wait":
@@ -34,6 +39,11 @@ func runAction(ctx context.Context, input *syncWriter, state *sessionState, acti
 		return nil
 	case "show":
 		state.setDiscard(false)
+		state.mu.Lock()
+		if state.scopedWaits {
+			state.waitOffset = state.output.Len()
+		}
+		state.mu.Unlock()
 		return nil
 	default:
 		return runCallbackAction(action)
@@ -69,7 +79,7 @@ func runScreenshotAction(action *SessionAction) error {
 	return nil
 }
 
-func runWriteAction(input *syncWriter, action *SessionAction, fallback time.Duration) error {
+func runWriteAction(ctx context.Context, input *syncWriter, action *SessionAction, fallback time.Duration) error {
 	rate := fallback
 	if action.Rate != "" {
 		parsed, err := durationpkg.ParseNonNegative(action.Rate)
@@ -87,19 +97,26 @@ func runWriteAction(input *syncWriter, action *SessionAction, fallback time.Dura
 	var writeErr error
 	input.Locked(func(w io.Writer) {
 		for _, r := range action.Text {
+			if err := ctx.Err(); err != nil {
+				writeErr = err
+				return
+			}
 			if _, err := w.Write([]byte(string(r))); err != nil {
 				writeErr = err
 				return
 			}
 			if rate > 0 {
-				time.Sleep(rate)
+				if err := sleepSessionAction(ctx, rate); err != nil {
+					writeErr = err
+					return
+				}
 			}
 		}
 	})
 	return writeErr
 }
 
-func runKeyAction(input *syncWriter, action *SessionAction, fallback time.Duration) error {
+func runKeyAction(ctx context.Context, input *syncWriter, action *SessionAction, fallback time.Duration) error {
 	repeat := action.Repeat
 	if repeat <= 0 {
 		repeat = 1
@@ -116,12 +133,19 @@ func runKeyAction(input *syncWriter, action *SessionAction, fallback time.Durati
 	var writeErr error
 	input.Locked(func(w io.Writer) {
 		for i := 0; i < repeat; i++ {
+			if err := ctx.Err(); err != nil {
+				writeErr = err
+				return
+			}
 			if _, err := w.Write([]byte(seq)); err != nil {
 				writeErr = err
 				return
 			}
 			if interval > 0 && i < repeat-1 {
-				time.Sleep(interval)
+				if err := sleepSessionAction(ctx, interval); err != nil {
+					writeErr = err
+					return
+				}
 			}
 		}
 	})
@@ -155,30 +179,23 @@ func runPauseAction(ctx context.Context, action *SessionAction) error {
 }
 
 func waitForOutput(ctx context.Context, state *sessionState, action *SessionAction) error {
-	timeout := defaultWaitTimeout
-	if action.Timeout != "" {
-		parsed, err := durationpkg.ParseNonNegative(action.Timeout)
-		if err != nil {
-			return fmt.Errorf("invalid wait timeout %q: %w", action.Timeout, err)
-		}
-		timeout = parsed
-	}
-	var re *regexp.Regexp
-	var err error
-	if action.Regex != "" {
-		re, err = regexp.Compile(action.Regex)
-		if err != nil {
-			return err
-		}
+	timeout, re, err := parseWaitAction(action)
+	if err != nil {
+		return err
 	}
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
+	var grace graceTimer
+	defer grace.stop()
 	for {
 		if outputMatches(state, action.Text, re) {
 			return nil
 		}
+		// An open echo span closes when its grace period ends even if no new output arrives.
+		graceC := grace.arm(state)
 		select {
 		case <-state.changed:
+		case <-graceC:
 		case <-deadline.C:
 			return ErrWaitTimeout
 		case <-ctx.Done():
@@ -187,11 +204,50 @@ func waitForOutput(ctx context.Context, state *sessionState, action *SessionActi
 	}
 }
 
+// parseWaitAction resolves a wait action's timeout and optional regex.
+func parseWaitAction(action *SessionAction) (time.Duration, *regexp.Regexp, error) {
+	timeout := defaultWaitTimeout
+	if action.Timeout != "" {
+		parsed, err := durationpkg.ParseNonNegative(action.Timeout)
+		if err != nil {
+			return 0, nil, fmt.Errorf("invalid wait timeout %q: %w", action.Timeout, err)
+		}
+		timeout = parsed
+	}
+	if action.Regex == "" {
+		return timeout, nil, nil
+	}
+	re, err := regexp.Compile(action.Regex)
+	if err != nil {
+		return 0, nil, err
+	}
+	return timeout, re, nil
+}
+
 func outputMatches(state *sessionState, text string, re *regexp.Regexp) bool {
 	state.mu.Lock()
-	current := state.output.String()
-	state.mu.Unlock()
-	return (text != "" && strings.Contains(current, text)) || (re != nil && re.MatchString(current))
+	defer state.mu.Unlock()
+	matches := func(candidate string) bool {
+		return (text != "" && strings.Contains(candidate, text)) || (re != nil && re.MatchString(candidate))
+	}
+	// A wait that matches a line the script typed and submitted searches only
+	// after that line's echo, so it matches the command's output rather than
+	// the terminal echoing the command.
+	raw := state.output.Bytes()
+	state.echo.resolve(raw, time.Now())
+	from := 0
+	if state.scopedWaits {
+		from = state.waitOffset
+	}
+	current := string(raw[state.echo.searchStart(from, len(raw), matches):])
+	if state.scopedWaits {
+		current = ansi.Strip(current)
+	}
+	matched := matches(current)
+	if matched && state.scopedWaits {
+		state.waitOffset = state.output.Len()
+	}
+	return matched
 }
 
 func waitForSessionQuiet(ctx context.Context, state *sessionState, quiet, maxWait time.Duration) {
@@ -268,4 +324,24 @@ func ctrlKeySequence(normalized string) (string, bool) {
 		return "", false
 	}
 	return string(rune(letter - 'a' + 1)), true
+}
+
+// ValidateKey checks a named terminal key before a recording starts.
+func ValidateKey(key string) error {
+	defer perf.Track(nil, "asciicast.ValidateKey")()
+
+	_, err := keySequence(key)
+	return err
+}
+
+// sleepSessionAction makes paced keystrokes interruptible, including during a long interval.
+func sleepSessionAction(ctx context.Context, duration time.Duration) error {
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
