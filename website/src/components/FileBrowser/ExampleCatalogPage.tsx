@@ -2,8 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 import Layout from "@theme/Layout";
 import Head from "@docusaurus/Head";
 import Link from "@docusaurus/Link";
-import { useLocation } from "@docusaurus/router";
+import { useHistory, useLocation } from "@docusaurus/router";
 import useIsBrowser from "@docusaurus/useIsBrowser";
+import useIsomorphicLayoutEffect from "@docusaurus/useIsomorphicLayoutEffect";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -24,6 +25,13 @@ const layouts = [
   { id: "gallery", label: "02 Gallery" },
   { id: "explorer", label: "03 Explorer" },
 ] as const;
+
+function categoryHash(category: string) {
+  return category === "All"
+    ? ""
+    : `#${category.toLowerCase().replace(/\s+/g, "-")}`;
+}
+
 const markdownComponents = {
   a: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
   p: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
@@ -207,6 +215,7 @@ export default function ExampleCatalogPage({
     ...tree.examples.filter((example) => !featuredNames.has(example.name)),
   ];
   const location = useLocation();
+  const history = useHistory();
   const isBrowser = useIsBrowser();
   // Match the static catalog markup during hydration before applying URL state.
   const requestedLayout =
@@ -215,7 +224,37 @@ export default function ExampleCatalogPage({
       : null;
   const layout =
     layouts.find(({ id }) => id === requestedLayout)?.id || "catalog";
-  const [category, setCategory] = useState("All");
+  const categories = ["All", "Featured", ...tree.tags];
+  const category =
+    (isBrowser &&
+      categories.find((tag) => categoryHash(tag) === location.hash)) ||
+    "All";
+  const scrollPosition = useRef<{ x: number; y: number } | null>(null);
+  // Cancel Docusaurus's smooth scroll to the top when clearing a chapter hash.
+  useIsomorphicLayoutEffect(() => {
+    const position = scrollPosition.current;
+    let frame: number | null = null;
+    if (position) {
+      // Wait for the router's scroll to begin before cancelling its animation.
+      frame = requestAnimationFrame(() => {
+        frame = requestAnimationFrame(() =>
+          window.scrollTo({
+            left: position.x,
+            top: position.y,
+            behavior: "instant",
+          }),
+        );
+      });
+    }
+    return () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      scrollPosition.current = { x: window.scrollX, y: window.scrollY };
+    };
+  }, [location.hash]);
+  const setCategory = (tag: string) => {
+    const hash = categoryHash(tag);
+    if (hash !== location.hash) history.push({ ...location, hash });
+  };
   const [query, setQuery] = useState("");
   const [paused, setPaused] = useState(false);
   const { reducedMotion, hidden } = usePlaybackPreference();
@@ -234,7 +273,6 @@ export default function ExampleCatalogPage({
   const filtered = searchMatches.filter((example) =>
     matchesCategory(example, category),
   );
-  const categories = ["All", "Featured", ...tree.tags];
   const filtering = category !== "All" || normalizedQuery !== "";
   const showFeatured = layout === "gallery" && !filtering;
   const featured = showFeatured ? tree.featured.slice(0, 2) : [];
