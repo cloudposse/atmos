@@ -20,8 +20,8 @@ func writeIncludeFixture(t *testing.T, path, content string) {
 
 // TestFindLocalFileResolutionOrder verifies the documented resolution order of local
 // include paths: absolute paths as-is, `./` and `../` paths relative to the including
-// manifest, all other relative paths relative to `base_path`. The process working
-// directory is only a last resort. Checking it before `base_path` made
+// manifest only, all other relative paths relative to `base_path`. The process working
+// directory is only a last resort for the latter. Checking it before `base_path` made
 // `describe affected` read the current checkout's file for both the current and the
 // base stacks whenever the working directory was the repository root, which hid
 // edits to included files.
@@ -66,6 +66,11 @@ func TestFindLocalFileResolutionOrder(t *testing.T) {
 			name:    "dot-dot path resolves against the manifest directory",
 			include: "../../docs/shared.yaml",
 			want:    filepath.Join(baseDir, "docs", "shared.yaml"),
+		},
+		{
+			name:    "dot-slash path missing beside the manifest does not fall back to base_path or the working directory",
+			include: "./docs/shared.yaml",
+			want:    "",
 		},
 		{
 			name:    "absolute path is used as-is",

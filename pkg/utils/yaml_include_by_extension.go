@@ -380,12 +380,11 @@ func findLocalFile(includeFile, manifestFile string, atmosConfig *schema.AtmosCo
 		return resolveAbsolutePath(includeFile)
 	}
 
-	// Paths starting with `./` or `../` are relative to the manifest file.
+	// Paths starting with `./` or `../` are relative to the manifest file and to
+	// nothing else: a file missing next to its manifest must not be replaced by a
+	// same-named file under base_path or the working directory.
 	if isManifestRelativePath(includeFile) {
-		resolved := ResolveRelativePath(includeFile, manifestFile)
-		if absPath := resolveAbsolutePath(resolved); absPath != "" {
-			return absPath
-		}
+		return resolveAbsolutePath(ResolveRelativePath(includeFile, manifestFile))
 	}
 
 	// All other relative paths are relative to the base_path from atmos.yaml.
