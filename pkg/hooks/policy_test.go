@@ -111,6 +111,26 @@ func TestPolicyHookComponentPaths(t *testing.T) {
 	}
 }
 
+func TestPolicyHookAttachments(t *testing.T) {
+	for _, event := range []HookEvent{BeforeTerraformPlan, BeforeHelmApply, BeforeHelmfileApply, BeforeKubernetesApply} {
+		t.Run(string(event), func(t *testing.T) {
+			h := &Hooks{policyBundle: &policy.Bundle{Rules: []policy.Rule{{
+				ID: "platform/deny", On: policy.Operation, Engine: policy.CELEngine, Expression: "true",
+				Match: &policy.Selector{Labels: map[string]string{"stage": "prod"}}, Effects: policy.Effects{Deny: true},
+			}}}, sections: map[string]any{"metadata": map[string]any{"labels": map[string]any{"stage": "prod"}}}}
+			info := &schema.ConfigAndStacksInfo{Stack: "test", ComponentFromArg: "app"}
+			config := &schema.AtmosConfiguration{}
+			require.ErrorIs(t, h.RunAll(event, config, info, nil, nil), errUtils.ErrPolicyDenied)
+			h.sections["metadata"] = map[string]any{"labels": map[string]any{"stage": "dev"}}
+			require.NoError(t, h.RunAll(event, config, info, nil, nil))
+			h.sections["metadata"] = map[string]any{"labels": map[string]any{"stage": 42}}
+			require.ErrorIs(t, h.RunAll(event, config, info, nil, nil), errUtils.ErrPolicyInputInvalid)
+			h.sections = nil
+			require.ErrorIs(t, h.RunAll(event, config, info, nil, nil), errUtils.ErrPolicyEvaluation)
+		})
+	}
+}
+
 func TestPolicyHooksGoverningSourceAndInputs(t *testing.T) {
 	t.Setenv("ATMOS_POLICY_DIR", "")
 	config, info := &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}
@@ -167,4 +187,71 @@ func TestPolicyPlanDetailedExitCode(t *testing.T) {
 	run.outcome.Err = nil
 	run.event = AfterTerraformApply
 	require.Equal(t, RunFailure, policyOperationStatus(run))
+}
+
+func TestStarlarkPolicyHookExecution(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	definition, err := json.Marshal(map[string]any{"kind": "step", "type": "http", "with": map[string]any{"url": server.URL}})
+	require.NoError(t, err)
+	h := policyTestHooks(AfterHelmApply, definition)
+	h.policyBundle.Rules[0].Engine = policy.StarlarkEngine
+	h.policyBundle.Rules[0].Expression = `return ctx.input["event"] == "after.helm.apply"`
+	h.policyBundle.Rules[0].Match = &policy.Selector{Labels: map[string]string{"stage": "prod"}}
+	h.sections = map[string]any{"metadata": map[string]any{"labels": map[string]any{"stage": "prod"}}}
+	config := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{Stack: "prod", ComponentFromArg: "app"}
+	require.NoError(t, h.RunAll(AfterHelmApply, config, info, nil, nil))
+	require.EqualValues(t, 1, calls.Load())
+	require.NoError(t, h.RunAll(BeforeHelmApply, config, info, nil, nil))
+	require.EqualValues(t, 1, calls.Load(), "a different event does not replay the hook")
+	h.policyBundle.Rules = append(h.policyBundle.Rules, policy.Rule{
+		ID: "deny", On: policy.Operation, Engine: policy.CELEngine, Expression: "true", Effects: policy.Effects{Deny: true},
+	})
+	require.ErrorIs(t, h.RunAll(AfterHelmApply, config, info, nil, nil), errUtils.ErrPolicyDenied)
+	require.EqualValues(t, 1, calls.Load(), "a CEL denial blocks Starlark-selected hooks")
+}
+
+// A nil per-run configuration falls back to the one the hooks were built with, and to defaults when
+// there is none, instead of dereferencing it while building the policy subject.
+func TestPolicyHookSubjectToleratesNilConfiguration(t *testing.T) {
+	newHooks := func(config *schema.AtmosConfiguration) *Hooks {
+		return &Hooks{config: config, policyBundle: &policy.Bundle{Rules: []policy.Rule{{
+			ID: "platform/deny", On: policy.Operation, Engine: policy.CELEngine, Expression: "true",
+			Match: &policy.Selector{Labels: map[string]string{"stage": "prod"}}, Effects: policy.Effects{Deny: true},
+		}}}, sections: map[string]any{"metadata": map[string]any{"labels": map[string]any{"stage": "prod"}}}}
+	}
+	info := &schema.ConfigAndStacksInfo{Stack: "test", ComponentFromArg: "app"}
+	for name, config := range map[string]*schema.AtmosConfiguration{
+		"stored configuration": {},
+		"no configuration":     nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHooks(config)
+			require.NotPanics(t, func() {
+				require.ErrorIs(t, h.RunAll(BeforeTerraformPlan, nil, info, nil, nil), errUtils.ErrPolicyDenied)
+			})
+		})
+	}
+}
+
+// Lifecycle discovery reads the component section without rendering templates, so a templated label
+// stays unresolved. The selector fails closed instead of treating the label as absent or as its raw text.
+func TestPolicyHookAttachmentsRejectUnresolvedTemplatedMetadata(t *testing.T) {
+	h := &Hooks{policyBundle: &policy.Bundle{Rules: []policy.Rule{{
+		ID: "platform/deny", On: policy.Operation, Engine: policy.CELEngine, Expression: "true",
+		Match: &policy.Selector{Labels: map[string]string{"stage": "prod"}}, Effects: policy.Effects{Deny: true},
+	}}}, sections: map[string]any{"metadata": map[string]any{"labels": map[string]any{"stage": "{{ .vars.stage }}"}}}}
+	info := &schema.ConfigAndStacksInfo{Stack: "test", ComponentFromArg: "app"}
+	err := h.RunAll(BeforeTerraformPlan, &schema.AtmosConfiguration{}, info, nil, nil)
+	require.ErrorIs(t, err, errUtils.ErrPolicyEvaluation, "unresolved metadata blocks the gate")
+	require.NotErrorIs(t, err, errUtils.ErrPolicyDenied)
+
+	h.sections["metadata"] = map[string]any{"labels": map[string]any{"stage": "prod"}}
+	require.ErrorIs(t, h.RunAll(BeforeTerraformPlan, &schema.AtmosConfiguration{}, info, nil, nil), errUtils.ErrPolicyDenied,
+		"a materialized label selects the instance")
 }

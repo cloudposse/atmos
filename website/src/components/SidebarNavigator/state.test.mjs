@@ -52,6 +52,21 @@ const named = tree[2].items[2].items[0];
 const alias = named.items[0];
 const workflow = () => initialNavigation(tree, "cli", "/workflows");
 
+test("library deep links keep the Library entry selected through navigation and reloads", () => {
+  const items = identifyItems([category('Policies', '/policies', [{
+    type: 'link', label: 'Library', href: '/policies/library', customProps: {navigationMatchPrefix: true},
+  }])]);
+  const library = items[0].items[0];
+  const url = '/policies/library/example';
+  const state = initialNavigation(items, 'cli', url);
+  assert.equal(state.section, entryId(items[0]));
+  assert.equal(state.entry, entryId(library));
+  assert.equal(activeEntryPath(library, url, state.entry), library.href);
+  const next = transitionNavigation(state, items, 'cli', `${url}/policy.yaml`);
+  assert.equal(next.entry, entryId(library));
+  assert.equal(validNavigation(next, items, 'cli', `${url}/policy.yaml`), true);
+});
+
 test("clicked shared categories and leaves stay in the selected branch", () => {
   const start = initialNavigation(tree, "cli", "/stacks/components/terraform");
   const next = transitionNavigation(start, tree, "cli", alias.href, {

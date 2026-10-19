@@ -75,6 +75,34 @@ func TestTerraformPolicyRequiresSavedPlan(t *testing.T) {
 	require.NoError(t, validateTerraformPolicyCommand(&schema.ConfigAndStacksInfo{SubCommand: "state list"}))
 }
 
+func TestTerraformPolicyAttachments(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "apply", ComponentFromArg: "app", Stack: "dev",
+		ComponentSection: schema.AtmosSectionMapType{"metadata": map[string]any{"labels": map[string]any{"stage": "dev"}}},
+	}
+	newGate := func() *planfile.Guard {
+		return &planfile.Guard{Rules: []policy.Rule{{ID: "platform/protect", Match: &policy.Selector{Labels: map[string]string{"stage": "prod"}}}}}
+	}
+	gate, err := bindTerraformPolicy(newGate(), &info)
+	require.NoError(t, err)
+	require.Nil(t, gate, "nonmatching instances must not inherit saved-plan restrictions")
+	info.ComponentSection["metadata"] = map[string]any{"labels": map[string]any{"stage": "prod"}}
+	_, err = bindTerraformPolicy(newGate(), &info)
+	require.ErrorIs(t, err, errUtils.ErrPolicyPlan, "matching instances require an explicit saved plan")
+	info.UseTerraformPlan = true
+	gate, err = bindTerraformPolicy(newGate(), &info)
+	require.NoError(t, err)
+	require.Equal(t, "platform/protect", gate.Rules[0].ID)
+	require.Equal(t, "app", gate.Subject.Name)
+	require.Equal(t, "prod", gate.Subject.Metadata.Labels["stage"])
+	info.ComponentSection["metadata"] = map[string]any{"labels": map[string]any{"stage": 42}}
+	_, err = bindTerraformPolicy(newGate(), &info)
+	require.ErrorIs(t, err, errUtils.ErrPolicyInputInvalid)
+	info.ComponentSection["metadata"] = map[string]any{"labels": map[string]any{"stage": "{{ .vars.stage }}"}}
+	_, err = bindTerraformPolicy(newGate(), &info)
+	require.ErrorIs(t, err, errUtils.ErrPolicyInputUnavailable)
+}
+
 func TestTerraformPolicyInvocation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

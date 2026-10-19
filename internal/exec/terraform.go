@@ -166,6 +166,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 		log.Info("Component is not enabled and skipped", logFieldComponent, info.ComponentFromArg)
 		return nil
 	}
+	planPolicy, err = bindTerraformPolicy(planPolicy, &info, atmosConfig.Templates.Settings.Delimiters...)
+	if err != nil {
+		return err
+	}
 
 	// Ensure ambient credential brokers (e.g., Atmos Pro github/sts) have provisioned before the
 	// subprocess environment is built, so terraform's own `git::` module fetches can read private

@@ -38,7 +38,7 @@ func (c *CEL) Evaluate(ctx context.Context, evaluation Evaluation) (bool, error)
 	if len(evaluation.Expression) > maxExpressionBytes {
 		return false, fmt.Errorf("%w: CEL expression exceeds size limit", errUtils.ErrPolicyInvalid)
 	}
-	activation, err := celActivation(evaluation)
+	activation, err := evaluationActivation(evaluation)
 	if err != nil {
 		return false, err
 	}
@@ -84,7 +84,7 @@ func compileCEL(expression string) (cel.Program, error) {
 	return program, nil
 }
 
-func celActivation(evaluation Evaluation) (map[string]any, error) {
+func evaluationActivation(evaluation Evaluation) (map[string]any, error) {
 	parameters := evaluation.Parameters
 	if len(parameters) == 0 {
 		parameters = json.RawMessage(`{}`)
@@ -98,7 +98,7 @@ func celActivation(evaluation Evaluation) (map[string]any, error) {
 		"input":   evaluation.Request.Input,
 		"params":  parameters,
 		"ci":      evaluation.Request.CI,
-		"request": map[string]any{"kind": evaluation.Request.Kind, "revisions": evaluation.Request.Revisions},
+		"request": map[string]any{"kind": evaluation.Request.Kind, "revisions": evaluation.Request.Revisions, "subject": evaluation.Request.Subject},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrPolicyInputInvalid, err)

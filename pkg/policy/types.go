@@ -44,6 +44,7 @@ type Revisions struct {
 // Request contains one explicitly selected input kind. Input must be a JSON object.
 // No input kind implicitly triggers collection of another kind (including affected).
 type Request struct {
+	Subject   *Subject        `json:"subject,omitempty"`
 	Kind      InputKind       `json:"kind"`
 	Input     json.RawMessage `json:"input"`
 	CI        *CISnapshot     `json:"ci,omitempty"`
@@ -53,13 +54,15 @@ type Request struct {
 // Rule is an already resolved definition, not a policy manifest or trust assertion.
 // A true predicate selects its effects; false means not applicable, never denial.
 type Rule struct {
-	ID         string          `json:"id"`
-	On         InputKind       `json:"on"`
-	Engine     string          `json:"engine"`
-	Expression string          `json:"expression"`
-	Parameters json.RawMessage `json:"parameters,omitempty"`
-	RequiredCI []CIRequirement `json:"required_ci,omitempty"`
-	Effects    Effects         `json:"effects"`
+	Match       *Selector       `json:"match,omitempty"`
+	ID          string          `json:"id"`
+	Description string          `json:"description,omitempty"`
+	On          InputKind       `json:"on"`
+	Engine      string          `json:"engine"`
+	Expression  string          `json:"expression"`
+	Parameters  json.RawMessage `json:"parameters,omitempty"`
+	RequiredCI  []CIRequirement `json:"required_ci,omitempty"`
+	Effects     Effects         `json:"effects"`
 }
 
 // Effects are obligations selected by a predicate. They cannot perform side effects.
@@ -111,8 +114,8 @@ type Evaluation struct {
 	Request    *Request        `json:"request"`
 }
 
-// Evaluator is the language extension point. Future restricted Starlark support
-// can implement this contract without exposing the script automation engine.
+// Evaluator is the language extension point for pure predicates, including CEL
+// and restricted Starlark, without exposing the script automation engine.
 //
 //go:generate go run go.uber.org/mock/mockgen -source=types.go -destination=mock_evaluator_test.go -package=policy
 type Evaluator interface {

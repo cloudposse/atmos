@@ -44,6 +44,14 @@ No `--base`, `--ref`, or `--sha` flags needed — just run `atmos describe affec
 If no CI environment is detected (or `ci.enabled` is not set), the default is `refs/remotes/origin/HEAD` (usually the `main` branch).
 :::
 
+## Policy gate
+
+When your [policy directory](/policies/configuration) contains `on: atmos.affected` rules, Atmos
+evaluates them before output filtering or consuming the affected list. Rules can inspect Git files
+and before/after instance, component, stack, and field changes. Denials and collection errors block;
+`--error-mode=warn` does not bypass this gate. Policy collection requires clean worktrees and uses
+the active discovery configuration for both revisions. See [Affected Changes](/policies/affected).
+
 ## How does it work?
 
 The command performs the following:

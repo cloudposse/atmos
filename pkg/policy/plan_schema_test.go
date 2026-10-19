@@ -21,6 +21,30 @@ func TestPlanManifestSchema(t *testing.T) {
 	var document map[string]any
 	require.NoError(t, yaml.Unmarshal([]byte(testPlanManifest), &document))
 	require.NoError(t, schema.Validate(document))
+	rule := document["spec"].(map[string]any)["policies"].(map[string]any)["no-deletes"].(map[string]any)
+	rule["match"] = map[string]any{"labels": map[string]any{"stage": "prod"}, "tag_mode": "all"}
+	require.NoError(t, schema.Validate(document))
+	rule["match"] = map[string]any{"tag_mode": "invalid"}
+	require.Error(t, schema.Validate(document))
+	delete(rule, "match")
+	rule["on"] = "atmos.affected"
+	require.NoError(t, schema.Validate(document))
+	rule["match"] = map[string]any{}
+	require.Error(t, schema.Validate(document), "affected rules inspect before/after explicitly")
+	delete(rule, "match")
+	rule["on"] = "terraform.plan"
+	document["metadata"].(map[string]any)["description"] = "Protect resources from accidental deletion."
+	require.NoError(t, schema.Validate(document))
+	document["metadata"].(map[string]any)["description"] = map[string]any{"invalid": "object"}
+	require.Error(t, schema.Validate(document))
+	root, entries := policyCatalogEntries(t)
+	for _, entry := range entries {
+		data, err := os.ReadFile(filepath.Join(root, entry, "policy.yaml"))
+		require.NoError(t, err)
+		var manifest map[string]any
+		require.NoError(t, yaml.Unmarshal(data, &manifest))
+		require.NoError(t, schema.Validate(manifest), entry)
+	}
 	for _, family := range []string{"terraform", "github", "lifecycle"} {
 		data, err := os.ReadFile(filepath.Join("..", "..", "examples", "policies", family, "policy.yaml"))
 		require.NoError(t, err)
@@ -30,7 +54,7 @@ func TestPlanManifestSchema(t *testing.T) {
 	}
 	for name, manifest := range map[string]string{
 		"unknown field":  testPlanManifest + "      enforced: true\n",
-		"unknown engine": testPlanManifest + "      engine: starlark\n",
+		"unknown engine": testPlanManifest + "      engine: unknown\n",
 		"warn":           strings.ReplaceAll(testPlanManifest, "action: deny", "action: warn"),
 		"missing rule":   "apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: test}\nspec: {policies: {}}",
 	} {

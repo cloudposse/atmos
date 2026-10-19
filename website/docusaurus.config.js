@@ -536,6 +536,25 @@ const config = {
         [
             path.resolve(__dirname, 'plugins', 'file-browser'),
             {
+                id: 'policies',
+                sourceDir: '../policy-library',
+                routeBasePath: '/policies/library',
+                title: 'Policy Library',
+                docsSidebar: 'cli',
+                presentation: 'policies',
+                description: 'Browse individual policies for Terraform plans, GitHub Actions context, and component lifecycle hooks.',
+                githubRepo: 'cloudposse/atmos',
+                githubBranch: 'main',
+                githubPath: 'policy-library',
+                tagOrder: ['Terraform', 'GitHub Actions', 'Lifecycle Hooks'],
+                searchable: true,
+                cardCtaLabel: 'View policy',
+                enablePerPageMarkdown: true,
+            },
+        ],
+        [
+            path.resolve(__dirname, 'plugins', 'file-browser'),
+            {
                 id: 'skills',
                 sourceDir: '../agent-skills/skills',
                 routeBasePath: '/ai/skills',

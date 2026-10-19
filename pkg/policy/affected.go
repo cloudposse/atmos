@@ -56,9 +56,9 @@ type FieldChange struct {
 	After         json.RawMessage `json:"after,omitempty"`
 }
 
-// AffectedInput is a materialized analysis payload for Request.Input. Collection
-// and completeness verification are not implemented. Do not label existing filtered
-// describe-affected output complete: deletions and indirect effects must be included.
+// AffectedInput is a materialized analysis payload for Request.Input. The command
+// collector compares unfiltered static inventories under active discovery settings;
+// it does not reuse the filtered describe-affected presentation as its inventory.
 // Empty, complete lists must be encoded as [] rather than unavailable/null lists.
 // Evaluating this payload never computes inventories or schedules component work.
 type AffectedInput struct {
