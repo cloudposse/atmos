@@ -81,9 +81,12 @@ for exactly how `atmos auth shell`/`exec`/`env` interact with the default AWS CL
 - **Role-chained profiles follow the exact same `via.identity` chaining** as raw AWS CLI config --
   see [from-aws-config.md](from-aws-config.md#role-chaining-source_profile--role_arn--viaidentity),
   don't re-derive it here.
-- **If Granted was registered as a `credential_process`** for other tooling, the same limitation
-  documented in [from-aws-config.md](from-aws-config.md#no-equivalent-credential_process) applies
-  -- there's no Atmos equivalent for `credential_process`-based integration.
+- **If Granted was registered as a `credential_process`** for other tooling, either keep Granted as the
+  credential source with an `aws/credential-process` identity
+  (`credential_process: granted credential-process --profile=<name>`), or move to native Atmos
+  identities and give the other tooling a profile that calls `atmos aws credential-process`. See
+  [from-aws-config.md](from-aws-config.md#translating-credential_process). On older Atmos
+  versions, use an `aws/ambient` identity with `AWS_PROFILE` set instead.
 
 ## Related Skills
 

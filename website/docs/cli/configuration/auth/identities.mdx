@@ -238,6 +238,137 @@ auth:
 ```
 </File>
 
+## Credential Process
+
+For credentials that come from an external helper such as `okta-aws-cli`, `aws-sso-cli`, `aws-vault`, Granted, or a corporate SAML tool. Atmos runs the helper, which follows the AWS [`credential_process`](https://docs.aws.amazon.com/sdkref/latest/guide/feature-process-credentials.html) protocol, and uses the credentials it prints.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    corp-base:
+      kind: aws/credential-process
+      credentials:
+        credential_process: corp-credential-helper --account=prod
+        region: us-east-1                        # Optional
+      spec:
+        endpoint_url: "http://localhost:4566"    # Optional for Floci/LocalStack-compatible endpoints
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `aws/credential-process`.</dd>
+
+  <dt>`credentials.credential_process`</dt>
+  <dd>**Required.** The command to run. Atmos executes it through the platform shell, like the AWS SDK for Go does: `sh -c` on Linux and macOS, and `%COMSPEC% /S /C "<command>"` on Windows (the command line is passed verbatim, so quoted paths survive). A command copied from `~/.aws/config` therefore runs as written, and shell features such as pipes and environment variable expansion work. The AWS CLI itself does not use a shell: it splits the command into arguments. Keep the command free of shell-only syntax if you want the same line to also work in an AWS CLI profile. The helper's stdin and stderr are passed through to your terminal, so it can prompt for MFA or print browser-login instructions when you run Atmos interactively.</dd>
+
+  <dt>`credentials.region`</dt>
+  <dd>Optional. Default AWS region written to the Atmos-managed AWS config.</dd>
+
+  <dt>`spec.endpoint_url`</dt>
+  <dd>Optional. AWS-compatible base endpoint URL for SDK calls, useful for Floci, LocalStack, and other test endpoints.</dd>
+</dl>
+
+This identity is standalone: it has no `via`, because its credentials come from the helper. Atmos rejects `via`, `session`, `principal`, `access_key_id`, `secret_access_key`, and `mfa_arn` on this kind, before running any helper in the chain. The helper owns the session, so a `session.duration` would have no effect. Use `aws/user` for IAM user access keys.
+
+**Behavior:**
+
+- **Credentials are used as returned.** Atmos makes no STS call and never prompts for MFA. The helper is responsible for any MFA prompt.
+- **Caching.** Atmos writes the credentials to its managed AWS files together with their expiration, and reuses them instead of running the helper again while they have at least 15 minutes of lifetime left. Credentials with less time left than that are refreshed before they expire, so a helper that returns credentials valid for 15 minutes or less runs on every invocation. [`atmos aws credential-process`](/cli/commands/aws/credential-process) raises that threshold with `--min-validity`.
+- **No expiration.** If the helper returns credentials without an `Expiration`, Atmos runs the helper on every invocation because it cannot know how long they stay valid.
+- **No keyring storage.** Helper output is never stored in the system keyring, on any command. The helper stays the source of truth, and `atmos auth logout` removes any stale entry an older version left behind, without `--keychain`.
+- **Timeout.** The helper must finish within one minute, and this limit is not configurable. Atmos then stops it and returns within a few seconds, even when the helper started child processes that keep running. A helper that waits for an MFA code or a browser login can therefore time out. Complete that login in the helper first, or run `atmos auth login --identity=<name>` in a terminal so the credentials are cached before a non-interactive caller needs them.
+- **No prompts under a captured terminal.** Atmos only prompts (identity selection, MFA, credentials) when both stdin and stderr are terminals. When a parent process such as the AWS CLI captures stderr, Atmos fails with an explanation and a hint instead of hanging. Log in first with `atmos auth login`.
+- **Web console.** [`atmos auth console`](/cli/commands/auth/console) works with these identities only when the helper returns temporary credentials that include a `SessionToken`. Long-lived access keys fail with a session token error, because the AWS federation endpoint requires a session.
+- **Safe errors.** If the helper fails or prints invalid output, Atmos reports which fields are missing or invalid without echoing any credential values.
+
+### Chaining from a Credential Process
+
+Credentials from a helper often represent a base session. Chain `aws/assume-role` identities from it to reach other accounts:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    corp-base:
+      kind: aws/credential-process
+      credentials:
+        credential_process: corp-credential-helper --account=prod
+
+    prod-admin:
+      kind: aws/assume-role
+      via:
+        identity: corp-base
+      principal:
+        assume_role: arn:aws:iam::111111111111:role/Admin
+```
+</File>
+
+Each time `prod-admin` needs fresh credentials, Atmos asks `corp-base` for its credentials first. `corp-base` reuses its cached credentials while they have at least 15 minutes left, or runs the helper again when they are closer to expiring or carry no `Expiration`.
+
+### Using Atmos Identities from the AWS CLI
+
+The opposite direction is also supported. Any Atmos identity can serve as an AWS CLI profile through the [`atmos aws credential-process`](/cli/commands/aws/credential-process) command, which prints credentials in the same `credential_process` format. It never prompts, so log in first when the identity needs an interactive login.
+
+### Choosing Between User, Ambient, and Credential Process
+
+<dl>
+  <dt>`aws/user`</dt>
+  <dd>You have an IAM user with long-lived access keys. Atmos calls STS `GetSessionToken` and handles MFA for that user.</dd>
+
+  <dt>`aws/ambient`</dt>
+  <dd>Credentials already exist in the environment, such as IRSA, an EC2 instance profile, an ECS task role, or an `AWS_PROFILE`. Atmos passes them through.</dd>
+
+  <dt>`aws/credential-process`</dt>
+  <dd>You already have a command that prints temporary credentials. Atmos runs that command and caches the result.</dd>
+</dl>
+
+## Ambient
+
+For credentials that the environment already provides, such as IRSA on EKS, an EC2 instance profile, an ECS task role, or a profile selected with `AWS_PROFILE`. The `aws/ambient` identity resolves credentials through the [AWS SDK default credential provider chain](https://docs.aws.amazon.com/sdkref/latest/guide/standardized-credentials.html) and does not clear credential environment variables or disable IMDS.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    eks-deployer:
+      kind: aws/ambient
+      principal:
+        region: us-east-1    # Optional
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `aws/ambient`.</dd>
+
+  <dt>`principal.region`</dt>
+  <dd>Optional. AWS region used for SDK calls.</dd>
+</dl>
+
+Because `aws/ambient` returns real AWS credentials, other identities can chain from it:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    pod-base:
+      kind: aws/ambient
+      principal:
+        region: us-east-1
+
+    cross-account-deployer:
+      kind: aws/assume-role
+      via:
+        identity: pod-base
+      principal:
+        assume_role: arn:aws:iam::999999999999:role/TerraformDeployRole
+```
+</File>
+
+For a cloud-agnostic passthrough that leaves the whole environment untouched, use the `ambient` kind. See the [ambient credentials example](/stacks/auth#ambient-credentials-irsa--ec2-instance-profile--ecs-task-role) for more.
+
 </TabItem>
 <TabItem value="azure" label="Azure">
 
@@ -499,7 +630,7 @@ auth:
 **Chain Rules:**
 - Chains can be arbitrarily deep: `provider → identity → identity → ... → identity`
 - `via.provider` and `via.identity` are mutually exclusive
-- `aws/user` identities don't require a `via` field
+- `aws/user`, `aws/ambient`, and `aws/credential-process` identities don't require a `via` field
 - Circular dependencies are detected and rejected
 
 ## Session Configuration
