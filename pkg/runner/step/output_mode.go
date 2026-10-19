@@ -13,6 +13,7 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/script"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -240,6 +241,19 @@ func (w *OutputModeWriter) executeNoneWithIO(runner func(stdout, stderr io.Write
 
 	err := runner(&stdout, &stderr)
 	return stdout.String(), stderr.String(), err
+}
+
+// MarkNestedAtmosFailure marks the failure of a nested Atmos command so the parent does not annotate
+// it again, but only when the writer forwards the child's output. The child reports its own failure,
+// including its CI annotation, in that output. The none mode captures the output silently, so the
+// child's annotation never reaches the CI log and the parent keeps the failure to report itself.
+func (w *OutputModeWriter) MarkNestedAtmosFailure(err error) error {
+	defer perf.Track(nil, "step.OutputModeWriter.MarkNestedAtmosFailure")()
+
+	if w.mode == OutputModeNone {
+		return err
+	}
+	return script.MarkNestedAtmosFailure(err)
 }
 
 // NewCommandOutputWriter honors step/workflow output settings while retaining

@@ -46,7 +46,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/runner/freshness"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/script"
 	"github.com/cloudposse/atmos/pkg/script/standalone"
 	"github.com/cloudposse/atmos/pkg/taskgraph"
 	"github.com/cloudposse/atmos/pkg/taskgraph/adapters"
@@ -1582,7 +1581,7 @@ func executeCustomCommand(
 							e.WithProcessStreams(process.Streams{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr}),
 						)
 					})
-					return script.MarkNestedAtmosFailure(runErr)
+					return writer.MarkNestedAtmosFailure(runErr)
 				})
 			case schema.TaskTypeParallel, schema.TaskTypeMatrix:
 				// Route through the same control-step engine workflows use, so `needs:`,
