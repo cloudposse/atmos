@@ -58,6 +58,30 @@ func ProcessIncludeTagWalked(
 	return processIncludeTagInternal(atmosConfig, node, val, file, includeMode{walkIn: walkIn})
 }
 
+// IncludeWalkers are the walks a tag walker offers for evaluated YAML includes.
+type IncludeWalkers struct {
+	// Local walks a local include with the included file as its context.
+	Local func(node *yaml.Node, file string) error
+	// Remote walks a remote include with the outer manifest as its resolution context and the
+	// remote include target as the source it is attributed to.
+	Remote func(node *yaml.Node, file, source string) error
+}
+
+// ProcessIncludeTagWalkedFrom is ProcessIncludeTagWalked for callers that attribute walked content
+// to its origin. A remote YAML include is walked through walkers.Remote, so a function inside remote
+// content is admitted as remote rather than as the local manifest that included it.
+func ProcessIncludeTagWalkedFrom(
+	atmosConfig *schema.AtmosConfiguration,
+	node *yaml.Node,
+	val string,
+	file string,
+	walkers IncludeWalkers,
+) (bool, error) {
+	defer perf.Track(atmosConfig, "utils.ProcessIncludeTagWalkedFrom")()
+
+	return processIncludeTagInternal(atmosConfig, node, val, file, includeMode{walkIn: walkers.Local, walkRemote: walkers.Remote})
+}
+
 // includeMode carries the caller-selected include behavior.
 type includeMode struct {
 	// forceRaw returns the file text verbatim (!include.raw).
@@ -65,6 +89,9 @@ type includeMode struct {
 	// walkIn, when set, walks an evaluated YAML include with its local file
 	// or the outer manifest as the tag-resolution context.
 	walkIn func(node *yaml.Node, file string) error
+	// walkRemote, when set, walks an evaluated remote YAML include with the outer manifest as its
+	// resolution context and the remote include target as its attribution.
+	walkRemote func(node *yaml.Node, file, source string) error
 }
 
 // ProcessIncludeRawTag processes the !include.raw tag.
@@ -161,6 +188,9 @@ func processIncludeTagInternal(
 				return false, err
 			}
 			guard.RememberNode(node, includeOrigin(localFile, includeFile, file))
+			if evalFunctions && mode.walkRemote != nil {
+				return true, mode.walkRemote(node, file, includeFile)
+			}
 			if evalFunctions && mode.walkIn != nil {
 				return true, mode.walkIn(node, file)
 			}

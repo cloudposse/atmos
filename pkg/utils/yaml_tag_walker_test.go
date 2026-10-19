@@ -193,7 +193,12 @@ func TestTagContextFileOriginIsResolvedOncePerFile(t *testing.T) {
 	require.Equal(t, "local", ctx.fileOrigin().Provenance)
 	guard.RegisterRemote(dir, "https://example.com/stacks")
 	require.Equal(t, "local", ctx.fileOrigin().Provenance, "the memoized origin is reused for the whole walk")
-	require.Equal(t, "remote", TagContext{File: file}.fileOrigin().Provenance, "a context without a memo resolves the file fresh")
+	fresh := TagContext{File: file}
+	require.Equal(t, "remote", fresh.fileOrigin().Provenance, "a context without a memo resolves the file fresh")
+	remote := TagContext{File: file, source: "https://example.com/remote.yaml"}
+	require.Equal(t, "remote", remote.fileOrigin().Provenance, "remote content is attributed to its source")
+	require.Equal(t, "https://example.com/remote.yaml", remote.attribution())
+	require.Equal(t, file, fresh.attribution())
 }
 
 func TestWalkYAMLTagsRemembersScalarOriginsPerFile(t *testing.T) {

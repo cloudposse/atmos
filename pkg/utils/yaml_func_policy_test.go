@@ -5,8 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestExecPolicyBeforeShell(t *testing.T) {
