@@ -301,12 +301,8 @@ through `stack deploy --affected --allow-destroy` after removing it.
 The existing `stack` group is not experimental. Retire the flat configuration
 aliases in two release phases:
 
-1. Deprecate and hide `stack get`, `set`, `delete`, and `format`, including alternate
-   spellings. Preserve behavior and direct callers to `stack config ...`. Introduce
-   `stack create`, `deploy`, and `destroy` without changing the old deletion behavior.
-2. In a breaking release, remove the flat aliases and introduce manifest deletion
-   under `stack delete`. Reject the old positional-path and `--component` syntax
-   with migration guidance; never reinterpret those invocations as file deletion.
+1. Deprecate and hide `stack get`, `set`, `delete`, and `format`, including alternate spellings. Preserve behavior and direct callers to `stack config ...`. Introduce `stack create`, `deploy`, and `destroy` without changing the old deletion behavior.
+2. In a breaking release, remove the flat aliases and introduce manifest deletion under `stack delete`. Reject the old positional-path and `--component` syntax with migration guidance; never reinterpret those invocations as file deletion.
 
 ## Delivery and acceptance
 
