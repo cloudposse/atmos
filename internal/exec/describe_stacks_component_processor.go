@@ -136,6 +136,9 @@ type describeStacksProcessor struct {
 	// leaves it nil and gets exactly the eager-evaluation behavior that predates this field.
 	evalSections []string
 	evalPaths    [][]string
+	// extraComponentTypes are opt-in component kinds processed after the built-in kinds
+	// (see DescribeStacksErrorOptions.ExtraComponentTypes).
+	extraComponentTypes []string
 }
 
 // withDegradation switches the processor to lenient YAML-function processing: recoverable
@@ -353,10 +356,6 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 		return nil
 	}
 
-	type typeEntry struct {
-		name string
-		opts processComponentTypeOpts
-	}
 	typeEntries := []typeEntry{
 		{cfg.TerraformSectionName, processComponentTypeOpts{
 			buildWorkspace:           true,
@@ -373,6 +372,8 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 		{cfg.CloudFormationSectionName, processComponentTypeOpts{applyMetadataInheritance: true}},
 	}
 
+	typeEntries = p.appendExtraTypeEntries(typeEntries)
+
 	for _, te := range typeEntries {
 		if len(p.componentTypes) > 0 && !slices.Contains(p.componentTypes, te.name) {
 			continue
@@ -387,6 +388,24 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 	}
 
 	return nil
+}
+
+// typeEntry pairs a component kind with the processing options it needs.
+type typeEntry struct {
+	name string
+	opts processComponentTypeOpts
+}
+
+// appendExtraTypeEntries adds the opt-in component kinds that are not already built in.
+// Extra kinds resolve inherited metadata like the other registry-driven kinds.
+func (p *describeStacksProcessor) appendExtraTypeEntries(entries []typeEntry) []typeEntry {
+	for _, name := range p.extraComponentTypes {
+		if name == "" || slices.ContainsFunc(entries, func(e typeEntry) bool { return e.name == name }) {
+			continue
+		}
+		entries = append(entries, typeEntry{name, processComponentTypeOpts{applyMetadataInheritance: true}})
+	}
+	return entries
 }
 
 // processComponentTypeSection iterates over every component within a component type section

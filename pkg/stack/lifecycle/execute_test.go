@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/scheduler"
@@ -180,6 +182,83 @@ func TestChildEnvironment(t *testing.T) {
 	assert.NotContains(t, env, "ATMOS_ALL=true")
 	assert.NotContains(t, env, "ATMOS_TERRAFORM_DESTROY_AFFECTED=true")
 	assert.Contains(t, env, "ATMOS_PROFILE=dev")
+	assert.Contains(t, env, "TF_PLUGIN_CACHE_DIR=/shared")
+}
+
+func TestChildEnvironmentStripsDryRun(t *testing.T) {
+	env := childEnvironment([]string{"ATMOS_DRY_RUN=true", "ATMOS_PROFILE=dev"})
+	assert.NotContains(t, env, "ATMOS_DRY_RUN=true")
+	assert.Equal(t, []string{"ATMOS_PROFILE=dev"}, env)
+	// The scrubbed environment is what the runner receives.
+	var seen []string
+	runner := runnerFunc(func(_ context.Context, s process.TaskSpec) process.Result {
+		seen = s.Env
+		return process.Result{}
+	})
+	result := Execute(context.Background(), executionPlan(t), &ExecutionOptions{Runner: runner, Concurrency: 1, Environment: []string{"ATMOS_DRY_RUN=true", "KEEP=1"}})
+	require.NoError(t, result.Err)
+	assert.Equal(t, []string{"KEEP=1"}, seen)
+}
+
+func TestDispatchFailureErrorOmitsExitStatusWrapper(t *testing.T) {
+	wrapper := fmt.Errorf("%w: exit status 1", errUtils.ErrProcessWaitFailed)
+	for _, tc := range []struct {
+		name        string
+		result      process.Result
+		wantWrapper bool
+	}{
+		{"plain non-zero exit", process.Result{Started: true, ExitCode: 1, Err: wrapper}, false},
+		{"start failure", process.Result{ExitCode: -1, Err: fmt.Errorf("%w: not found", errUtils.ErrProcessStartFailed)}, true},
+		{"canceled", process.Result{Started: true, ExitCode: 1, Canceled: true, Err: errors.Join(wrapper, context.Canceled)}, true},
+		{"signaled", process.Result{Started: true, ExitCode: 137, Signaled: true, Signal: "killed", Err: wrapper}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := runnerFunc(func(context.Context, process.TaskSpec) process.Result { return tc.result })
+			p := executionPlan(t)
+			result := Execute(context.Background(), p, &ExecutionOptions{Runner: runner, Concurrency: 1})
+			require.Error(t, result.Err)
+			require.ErrorIs(t, result.Err, errUtils.ErrComponentExecutionFailed)
+			assert.Contains(t, result.Err.Error(), "(exit ")
+			if tc.wantWrapper {
+				assert.Contains(t, result.Err.Error(), tc.result.Err.Error())
+			} else {
+				assert.NotContains(t, result.Err.Error(), "process wait failed")
+				assert.NotErrorIs(t, result.Err, errUtils.ErrProcessWaitFailed)
+			}
+		})
+	}
+}
+
+func TestGroupedOutputRoutesStreams(t *testing.T) {
+	runner := runnerFunc(func(_ context.Context, s process.TaskSpec) process.Result {
+		name := s.Args[len(s.Args)-1]
+		fmt.Fprintln(s.Streams.Stdout, "data "+name)
+		fmt.Fprintln(s.Streams.Stderr, "log "+name)
+		return process.Result{}
+	})
+	var data, ui bytes.Buffer
+	result := Execute(context.Background(), executionPlan(t), &ExecutionOptions{Runner: runner, Concurrency: 2, Grouped: true, Streams: process.Streams{Stdout: &data, Stderr: &ui}})
+	require.NoError(t, result.Err)
+	for _, name := range []string{"a", "b", "c"} {
+		assert.Contains(t, data.String(), "data "+name+"\n")
+		assert.NotContains(t, data.String(), "log "+name)
+		assert.Contains(t, ui.String(), "log "+name+"\n")
+		assert.NotContains(t, ui.String(), "data "+name)
+	}
+	// Headers belong to the UI channel only.
+	assert.Contains(t, ui.String(), "[terraform/dev/a]\n")
+	assert.NotContains(t, data.String(), "[terraform/dev/a]")
+	// Replay is deterministic: each header precedes its component's stderr content.
+	assert.Less(t, strings.Index(ui.String(), "[terraform/dev/a]"), strings.Index(ui.String(), "log a"))
+}
+
+func TestGroupedOutputToleratesMissingStreams(t *testing.T) {
+	runner := runnerFunc(func(_ context.Context, s process.TaskSpec) process.Result {
+		fmt.Fprintln(s.Streams.Stdout, "data")
+		return process.Result{}
+	})
+	result := Execute(context.Background(), executionPlan(t), &ExecutionOptions{Runner: runner, Concurrency: 2, Grouped: true})
+	require.NoError(t, result.Err)
 }
 
 func TestRealChildrenFreshOutputsAndGroupedLogs(t *testing.T) {
@@ -198,11 +277,13 @@ func TestRealChildrenFreshOutputsAndGroupedLogs(t *testing.T) {
 		}
 		p.Commands[id] = []string{"-c", script}
 	}
-	var logs bytes.Buffer
-	result := Execute(context.Background(), p, &ExecutionOptions{Executable: "/bin/sh", Directory: dir, Environment: os.Environ(), Runner: process.NewDefaultRunner(), Concurrency: 2, Grouped: true, Streams: process.Streams{Stderr: &logs}})
+	var data, ui bytes.Buffer
+	result := Execute(context.Background(), p, &ExecutionOptions{Executable: "/bin/sh", Directory: dir, Environment: os.Environ(), Runner: process.NewDefaultRunner(), Concurrency: 2, Grouped: true, Streams: process.Streams{Stdout: &data, Stderr: &ui}})
 	require.NoError(t, result.Err)
-	assert.Contains(t, logs.String(), "before hook\nafter hook")
-	assert.Contains(t, logs.String(), "fresh output")
+	assert.Contains(t, data.String(), "before hook\nafter hook")
+	assert.Contains(t, data.String(), "fresh output")
+	assert.NotContains(t, ui.String(), "fresh output")
+	assert.Contains(t, ui.String(), "[terraform/dev/a]")
 	assert.FileExists(t, filepath.Join(dir, "output"))
 }
 

@@ -348,3 +348,7 @@ Acceptance tests must cover:
 Update command help, documentation, examples, and screengrabs as behavior ships.
 Document the distinction between removing a definition, destroying a current
 component, and reconciling a removed component through isolated recovery.
+
+Task list:
+
+- [ ] Custom component kinds are selected by `--all` and dependency expansion. `--affected` selection for custom kinds is not yet supported, because affected detection covers built-in kinds only.

@@ -1,19 +1,12 @@
 package create
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/xeipuuv/gojsonschema"
-	"gopkg.in/yaml.v3"
-
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/datafetcher"
-	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -103,34 +96,4 @@ func matchesPatterns(patterns []string, file string, expand bool) (bool, error) 
 		}
 	}
 	return false, nil
-}
-
-func validateManifest(config *schema.AtmosConfiguration, files []engine.File, manifest string) error {
-	for _, file := range files {
-		if filepath.Clean(file.Path) != filepath.Clean(manifest) {
-			continue
-		}
-		var document map[string]any
-		decoder := yaml.NewDecoder(strings.NewReader(file.Content))
-		if err := decoder.Decode(&document); err != nil {
-			return engine.ExplainUnmarkedTemplate(manifest, file.Content, file.Delimiters, fmt.Errorf("%w: %w", errUtils.ErrInvalidConfig, err))
-		}
-		var extra any
-		if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-			return fmt.Errorf("%w: a stack manifest must contain one YAML document", errUtils.ErrInvalidConfig)
-		}
-		schemaBytes, err := datafetcher.NewDataFetcher(config).GetData("atmos://schema/atmos/manifest/1.0")
-		if err != nil {
-			return err
-		}
-		result, err := gojsonschema.Validate(gojsonschema.NewBytesLoader(schemaBytes), gojsonschema.NewGoLoader(document))
-		if err != nil {
-			return err
-		}
-		if !result.Valid() {
-			return fmt.Errorf("%w: generated stack %s: %v", errUtils.ErrInvalidConfig, manifest, result.Errors())
-		}
-		return nil
-	}
-	return fmt.Errorf("%w: scaffold did not generate stack manifest %s", errUtils.ErrInvalidConfig, manifest)
 }

@@ -963,6 +963,9 @@ var (
 	ErrMissingDependencyField      = errors.New("dependency missing required field")
 	ErrDependencyTargetNotFound    = errors.New("dependency target not found")
 	ErrDependencyTargetUnavailable = errors.New("dependency target unavailable")
+	// ErrSurvivingConsumers is returned when a destroy selection would remove a component that
+	// components outside the selection still require.
+	ErrSurvivingConsumers = errors.New("destroy would leave components that depend on it")
 	// ErrCustomCommandDependencyNotRegistered is returned when a dependencies.commands entry
 	// names a command that isn't registered under the custom-command cobra tree.
 	ErrCustomCommandDependencyNotRegistered = errors.New("dependency command is not registered")

@@ -37,11 +37,12 @@ func TestMinimalCreationAndIndependentHistory(t *testing.T) {
 	cfg, renderer := fixture(t)
 	// Existing project answers and files must not be imported or replaced.
 	write(t, filepath.Join(cfg.BasePathAbsolute, ".atmos", "scaffold.yaml"), "unrelated project record")
+	write(t, filepath.Join(cfg.BasePathAbsolute, "stacks", "catalog", "defaults.yaml"), "vars:\n  region: us-east-1\n")
 	opts := &Options{File: "stacks/deploy/dev.yaml", Name: "dev", Imports: []string{"catalog/defaults"}, Components: []string{"terraform:network", "helmfile:services"}, Defaults: true}
 	plan, err := Prepare(cfg, opts, renderer)
 	require.NoError(t, err)
 	require.Len(t, plan.Generation.Files, 2)
-	assert.NoDirExists(t, filepath.Join(cfg.BasePathAbsolute, "stacks"))
+	assert.NoFileExists(t, filepath.Join(cfg.BasePathAbsolute, "stacks", "deploy", "dev.yaml"))
 	manifest := plan.Generation.Files[0].Content
 	assert.Contains(t, manifest, "enabled: false")
 	assert.Contains(t, manifest, "network")

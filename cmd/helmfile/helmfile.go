@@ -37,11 +37,13 @@ var helmfileCmd = &cobra.Command{
 const lifecycleComponentKind = "helmfile"
 
 func init() {
-	deployHandler := lifecycle.NativeHandler(lifecycleComponentKind, "deploy")
-	deployHandler.HookEvents = []string{"before.helmfile.deploy", "after.helmfile.deploy"}
+	// Helmfile has no deploy subcommand; stack deploy maps to `helmfile apply`
+	// and therefore fires the apply hook events (see helmfileBeforeEvent/helmfileAfterEvent).
+	deployHandler := lifecycle.NativeHandler(lifecycleComponentKind, "apply")
+	deployHandler.HookEvents = []string{string(h.BeforeHelmfileApply), string(h.AfterHelmfileApply)}
 	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.Deploy, deployHandler)
 	destroyHandler := lifecycle.NativeHandler(lifecycleComponentKind, "destroy")
-	destroyHandler.HookEvents = []string{"before.helmfile.destroy", "after.helmfile.destroy"}
+	destroyHandler.HookEvents = []string{string(h.BeforeHelmfileDestroy), string(h.AfterHelmfileDestroy)}
 	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.Destroy, destroyHandler)
 
 	// Note: We use FParseErrWhitelist.UnknownFlags=true (set in command definition)

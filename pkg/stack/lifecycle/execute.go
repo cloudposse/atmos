@@ -38,7 +38,7 @@ func Execute(ctx context.Context, plan *Plan, opts *ExecutionOptions) *scheduler
 	if opts == nil || plan == nil || plan.Graph == nil || opts.Concurrency < 1 || opts.Runner == nil {
 		return &scheduler.AggregateResult{Err: fmt.Errorf("%w: invalid lifecycle execution options", errUtils.ErrInvalidConfig)}
 	}
-	d := &dispatcher{plan: plan, opts: opts, logs: make(map[string]*os.File)}
+	d := &dispatcher{plan: plan, opts: opts, logs: make(map[string]*groupedLog)}
 	defer d.cleanup()
 	result := scheduler.New(
 		plan.Graph, d,
@@ -55,7 +55,24 @@ type dispatcher struct {
 	plan *Plan
 	opts *ExecutionOptions
 	mu   sync.Mutex
-	logs map[string]*os.File
+	logs map[string]*groupedLog
+}
+
+// groupedLog buffers one child's output per stream, so a later flush can route
+// stdout to the data channel and stderr to the UI channel.
+type groupedLog struct {
+	stdout, stderr *os.File
+}
+
+func (g *groupedLog) close() {
+	for _, f := range []*os.File{g.stdout, g.stderr} {
+		if f == nil {
+			continue
+		}
+		_ = f.Close()
+		// The path is owned by os.CreateTemp, never component input.
+		_ = os.Remove(f.Name())
+	}
 }
 
 func (d *dispatcher) Dispatch(ctx context.Context, node *dependency.Node) (scheduler.Result, error) {
@@ -83,9 +100,20 @@ func (d *dispatcher) Dispatch(ctx context.Context, node *dependency.Node) (sched
 	})
 	result.Value = processResult.ExitCode
 	if !processResult.Success() {
-		return result, errors.Join(fmt.Errorf("%w: %s (exit %d)", errUtils.ErrComponentExecutionFailed, Label(node), processResult.ExitCode), processResult.Err)
+		failure := fmt.Errorf("%w: %s (exit %d)", errUtils.ErrComponentExecutionFailed, Label(node), processResult.ExitCode)
+		if exitedNonZero(&processResult) {
+			return result, failure
+		}
+		return result, errors.Join(failure, processResult.Err)
 	}
 	return result, nil
+}
+
+// exitedNonZero reports a child that ran to completion and returned a plain
+// non-zero status. Its wait error only restates the exit code, so the dispatcher
+// omits it. Start failures, cancellations, and signals keep their error.
+func exitedNonZero(r *process.Result) bool {
+	return r.Started && r.ExitCode > 0 && !r.Canceled && !r.Signaled
 }
 
 func childEnvironment(base []string) []string {
@@ -96,6 +124,9 @@ func childEnvironment(base []string) []string {
 		"ATMOS_QUERY": true, "ATMOS_TAGS": true, "ATMOS_LABELS": true,
 		"ATMOS_INCLUDE_DEPENDENCIES": true, "ATMOS_INCLUDE_DEPENDENTS": true,
 		"ATMOS_STACK_DEPLOY_AFFECTED": true, "ATMOS_STACK_DESTROY_AFFECTED": true,
+		// The parent consumed dry-run; inheriting it would silently dry-run children
+		// after the parent reported them as executed.
+		"ATMOS_DRY_RUN": true,
 	}
 	result := make([]string, 0, len(base)+1)
 	for _, item := range base {
@@ -135,15 +166,15 @@ func (d *dispatcher) streams(node *dependency.Node) (process.Streams, error) {
 		streams.Stdin = nil
 	}
 	if d.opts.Grouped {
-		f, err := os.CreateTemp("", "atmos-stack-log-*")
+		log, err := newGroupedLog()
 		if err != nil {
 			return streams, err
 		}
 		d.mu.Lock()
-		d.logs[node.ID] = f
+		d.logs[node.ID] = log
 		d.mu.Unlock()
-		writer := &lockedWriter{mu: &d.mu, output: f}
-		streams.Stdout, streams.Stderr = writer, writer
+		streams.Stdout = &lockedWriter{mu: &d.mu, output: log.stdout}
+		streams.Stderr = &lockedWriter{mu: &d.mu, output: log.stderr}
 		return streams, nil
 	}
 	prefix := "[" + Label(node) + "] "
@@ -152,33 +183,55 @@ func (d *dispatcher) streams(node *dependency.Node) (process.Streams, error) {
 	return streams, nil
 }
 
+func newGroupedLog() (*groupedLog, error) {
+	log := &groupedLog{}
+	var err error
+	if log.stdout, err = os.CreateTemp("", "atmos-stack-log-*"); err != nil {
+		return nil, err
+	}
+	if log.stderr, err = os.CreateTemp("", "atmos-stack-log-*"); err != nil {
+		log.close()
+		return nil, err
+	}
+	return log, nil
+}
+
+// flush replays each component's buffered output once all components finished.
+// The header and stderr content go to the UI stream; stdout goes to the data stream.
 func (d *dispatcher) flush(result *scheduler.AggregateResult) error {
 	var errs []error
 	for i := range result.Results {
 		r := &result.Results[i]
-		f := d.logs[r.NodeID]
-		if f == nil {
+		log := d.logs[r.NodeID]
+		if log == nil {
 			continue
 		}
-		if _, err := fmt.Fprintf(d.opts.Streams.Stderr, "[%s]\n", Label(&r.Node)); err != nil {
+		if _, err := io.WriteString(writerOrDiscard(d.opts.Streams.Stderr), "["+Label(&r.Node)+"]\n"); err != nil {
 			errs = append(errs, err)
 		}
-		if _, err := f.Seek(0, io.SeekStart); err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		if _, err := io.Copy(d.opts.Streams.Stderr, f); err != nil {
-			errs = append(errs, err)
-		}
+		errs = append(errs, replay(log.stdout, d.opts.Streams.Stdout), replay(log.stderr, d.opts.Streams.Stderr))
 	}
 	return errors.Join(errs...)
 }
 
+func replay(f *os.File, w io.Writer) error {
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	_, err := io.Copy(writerOrDiscard(w), f)
+	return err
+}
+
+func writerOrDiscard(w io.Writer) io.Writer {
+	if w == nil {
+		return io.Discard
+	}
+	return w
+}
+
 func (d *dispatcher) cleanup() {
-	for _, f := range d.logs {
-		_ = f.Close()
-		// The path is owned by os.CreateTemp above, never component input.
-		_ = os.Remove(f.Name())
+	for _, log := range d.logs {
+		log.close()
 	}
 }
 

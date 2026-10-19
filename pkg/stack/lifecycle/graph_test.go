@@ -3,9 +3,11 @@ package lifecycle
 import (
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func inventory(nodes ...[]string) map[string]any {
@@ -95,12 +97,16 @@ func TestGraphPreflightAndExclusions(t *testing.T) {
 	commands := capabilities("helm", "terraform")
 	depends(stacks, a, b, true)
 	depends(stacks, bad, []string{"terraform", "unused", "missing"}, true)
-	plan, err := BuildPlan(stacks, commands, Selection{Affected: affected(a)}, "{{")
-	require.NoError(t, err)
-	assert.Equal(t, 1, plan.Graph.Size())
+	// A required prerequisite that cannot run the operation fails the plan with or without expansion.
+	_, err := BuildPlan(stacks, commands, Selection{Affected: affected(a)}, "{{")
+	require.ErrorIs(t, err, errUtils.ErrUnsupportedComponentType)
+	require.ErrorContains(t, err, "helm/dev/app requires operation on packer/shared/image")
 	_, err = BuildPlan(stacks, commands, Selection{Affected: affected(a), Dependencies: -1}, "{{")
 	require.ErrorContains(t, err, "requires operation")
 	depends(stacks, a, b, false)
+	plan, err := BuildPlan(stacks, commands, Selection{Affected: affected(a)}, "{{")
+	require.NoError(t, err)
+	assert.Equal(t, 1, plan.Graph.Size())
 	plan, err = BuildPlan(stacks, commands, Selection{Affected: affected(a), Dependencies: -1}, "{{")
 	require.NoError(t, err)
 	require.Len(t, plan.Notices, 1)
@@ -111,8 +117,11 @@ func TestGraphPreflightAndExclusions(t *testing.T) {
 	require.Error(t, err)
 	section(stacks, a[0], a[1], a[2])["dependencies"] = map[string]any{"components": []any{}}
 	section(stacks, a[0], a[1], a[2])["metadata"] = map[string]any{"locked": true}
-	_, err = BuildPlan(stacks, commands, Selection{Affected: affected(a)}, "{{")
-	require.ErrorContains(t, err, "locked")
+	plan, err = BuildPlan(stacks, commands, Selection{Affected: affected(a)}, "{{")
+	require.NoError(t, err)
+	assert.Zero(t, plan.Graph.Size())
+	require.Len(t, plan.Notices, 1)
+	assert.Equal(t, "locked; excluded", plan.Notices[0].Reason)
 	section(stacks, a[0], a[1], a[2])["metadata"] = map[string]any{"enabled": false}
 	plan, err = BuildPlan(stacks, commands, Selection{Affected: affected(a)}, "{{")
 	require.NoError(t, err)
