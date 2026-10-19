@@ -238,3 +238,7 @@ __pycache__/
 **/vendor*.yml.lock
 **/component.yaml.lock
 **/component.yml.lock
+
+# Cast recording working area (built atmos binary + example fixture copies) created by
+# `atmos --chdir=demo/casts casts setup`. Generated cache; never commit it.
+/.context/

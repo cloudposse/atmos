@@ -32,6 +32,9 @@ type ParsedConfig struct {
 	AutoStart   bool
 	Timeout     time.Duration
 	Identity    string
+	// Optional marks a server that is skipped with a warning (instead of erroring) when its
+	// Identity cannot be resolved in the active auth context. See schema.MCPServerConfig.Optional.
+	Optional bool
 }
 
 // ParseConfig validates and converts an MCPServerConfig into a ParsedConfig.
@@ -76,6 +79,7 @@ func ParseConfig(name string, cfg schema.MCPServerConfig) (*ParsedConfig, error)
 		AutoStart:   cfg.AutoStart,
 		Timeout:     timeout,
 		Identity:    cfg.Identity,
+		Optional:    cfg.Optional,
 	}, nil
 }
 

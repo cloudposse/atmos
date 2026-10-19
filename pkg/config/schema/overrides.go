@@ -157,6 +157,27 @@ func applyPolymorphicOverrides(root *jsonschema.Schema) {
 		})
 	}
 
+	// CLI-config `import:` entries accept a plain-string path/glob/URL shorthand
+	// (an optional / fail-open import) in addition to the object form
+	// (see schema.ConfigImportsDecodeHook and schema.ConfigImport).
+	if configImports, ok := root.Definitions["ConfigImports"]; ok && configImports.Items != nil {
+		configImports.Items = anyOfWith(configImports.Items, &jsonschema.Schema{
+			Type:        "string",
+			Description: "Import path, glob, or remote URL (optional - a failed import is warned and skipped).",
+		})
+	}
+
+	// The top-level `import` key also accepts a single scalar string (the loader's
+	// StringToSliceHookFunc coerces `import: path` into a one-element list) in addition to the
+	// array form. The field is a $ref to ConfigImports, so the generic array-scalar coercion in
+	// authoredAlternatives does not fire; add the scalar alternative on the property explicitly.
+	if imp, ok := root.Properties.Get("import"); ok && imp != nil {
+		root.Properties.Set("import", anyOfWith(imp, &jsonschema.Schema{
+			Type:        typeString,
+			Description: "Single import path, glob, or remote URL (optional - fail open).",
+		}))
+	}
+
 	// Definition properties whose decode hooks or weakly-typed decoding (see
 	// schema.Task.UnmarshalYAML, commandEnvMapDecodeHook, Terminal.IsPagerEnabled)
 	// accept more shapes than the Go field declares.

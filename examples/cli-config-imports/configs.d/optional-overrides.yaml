@@ -1,0 +1,5 @@
+# Imported as an optional object entry (skip_if_missing: true) from atmos.yaml. A missing file here
+# is warned and skipped rather than aborting the load.
+settings:
+  terminal:
+    unicode: true

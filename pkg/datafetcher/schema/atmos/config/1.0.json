@@ -4502,6 +4502,78 @@
       "type": "object",
       "description": "Config holds the configuration for the profiler."
     },
+    "ConfigImport": {
+      "properties": {
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Path is the import location: a local path/glob or a remote go-getter URL\n(e.g. `git::https://host/org/repo.git//.atmos.d/mcp.yaml?ref=\u003csha\u003e`)."
+        },
+        "skip_if_missing": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "SkipIfMissing controls failure behavior when the import cannot be resolved or merged.\nFor a bare-string entry it defaults to true (warn and skip - the historical fail-open\nbehavior). For an object entry it defaults to false (fail closed): a required import\nthat cannot be loaded aborts configuration loading. The field name and semantics mirror\nStackImport.SkipIfMissing."
+        },
+        "when": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "Predicate (always, never, ci, local, success, failure) or CEL expression."
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "array",
+              "description": "Conditions that must all hold."
+            },
+            {
+              "type": "object",
+              "description": "Structured condition (all/any/not/cel)."
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "When is an optional condition (`local`, `ci`, or a CEL expression) gating whether this\nimport is resolved at all. An unset condition always imports. It is evaluated at\nconfig-load time against runtime facts (currently CI detection), letting a fragment stay\ncommitted and active on workstations while auto-skipping in CI (and vice versa)."
+        }
+      },
+      "type": "object",
+      "description": "ConfigImport is one entry in the top-level CLI-config `import:` list in `atmos.yaml`\n(and in auto-discovered `.atmos.d` fragments and remote config files). Each entry accepts\neither a bare string path or an object with additional controls, bringing CLI-config imports\ntoward parity with the stack-manifest import model (see StackImport).\n\nA bare string keeps the historical fail-open behavior (a failed import is warned and skipped).\nAn object entry defaults to fail-closed: a required import that cannot be resolved or merged\naborts configuration loading, unless `skip_if_missing: true` is set."
+    },
+    "ConfigImports": {
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ConfigImport"
+          },
+          {
+            "type": "string",
+            "description": "Import path, glob, or remote URL (optional - a failed import is warned and skipped)."
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "type": "array",
+      "description": "ConfigImports is the top-level CLI-config `import:` list. Each entry is a string or an object;\nsee ConfigImport. A mapstructure decode hook (ConfigImportsDecodeHook) normalizes both forms."
+    },
     "ConfigMetadata": {
       "properties": {
         "name": {
@@ -7609,6 +7681,20 @@
             }
           ],
           "description": "Identity is the Atmos Auth identity (from the auth section) for credential injection."
+        },
+        "optional": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Optional marks a server that may be absent in some consumer contexts. When true and the\nserver's Identity cannot be resolved in the active auth context, the server is skipped\nwith a warning instead of failing. This is meant for shared `mcp.servers` config consumed\nacross repositories, where a server's identity is not defined in every consumer's profiles.\nDefaults to false (a server whose identity cannot be resolved is an error)."
         },
         "cwd": {
           "anyOf": [
@@ -17863,26 +17949,14 @@
     "import": {
       "anyOf": [
         {
-          "items": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "type": "array"
+          "$ref": "#/$defs/ConfigImports"
+        },
+        {
+          "type": "string",
+          "description": "Single import path, glob, or remote URL (optional - fail open)."
         },
         {
           "type": "null"
-        },
-        {
-          "$ref": "#/$defs/yamlFunction"
-        },
-        {
-          "type": "string"
         }
       ]
     },

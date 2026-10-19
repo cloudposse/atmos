@@ -183,7 +183,7 @@ type AtmosConfiguration struct {
 	// FIRST --config file's directory regardless of which file actually declared it). Transient,
 	// populated during LoadConfig, never serialized.
 	ProfilesBasePathConfigDir string                 `yaml:"-" json:"-" mapstructure:"-"`
-	Import                    []string               `yaml:"import" json:"import" mapstructure:"import"`
+	Import                    ConfigImports          `yaml:"import" json:"import" mapstructure:"import"`
 	Docs                      Docs                   `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 	Auth                      AuthConfig             `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
 	Container                 ContainerConfig        `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`

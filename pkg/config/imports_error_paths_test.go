@@ -64,7 +64,7 @@ func TestProcessImports_RemoteSourcePolicy(t *testing.T) {
 		adapter := newAdapter(t, nil)
 		tempDir := t.TempDir()
 
-		paths, err := processImports(nil, tempDir, []string{deniedImport}, tempDir, 1, MaximumImportLvL)
+		paths, err := processImports(nil, tempDir, strImports(deniedImport), tempDir, 1, MaximumImportLvL)
 		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
 		assert.Nil(t, paths)
 		assert.Empty(t, adapter.resolved)
@@ -75,7 +75,7 @@ func TestProcessImports_RemoteSourcePolicy(t *testing.T) {
 		adapter := newAdapter(t, nil)
 		tempDir := t.TempDir()
 
-		_, err := processImports(nil, tempDir, []string{deniedImport, allowedImport}, tempDir, 1, MaximumImportLvL)
+		_, err := processImports(nil, tempDir, strImports(deniedImport, allowedImport), tempDir, 1, MaximumImportLvL)
 		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
 		assert.Empty(t, adapter.resolved)
 	})
@@ -85,7 +85,7 @@ func TestProcessImports_RemoteSourcePolicy(t *testing.T) {
 		adapter := newAdapter(t, nil)
 		tempDir := t.TempDir()
 
-		paths, err := processImports(nil, tempDir, []string{allowedImport}, tempDir, 1, MaximumImportLvL)
+		paths, err := processImports(nil, tempDir, strImports(allowedImport), tempDir, 1, MaximumImportLvL)
 		require.NoError(t, err)
 		require.Len(t, paths, 1)
 		assert.Equal(t, allowedImport, paths[0].ImportPaths)
@@ -96,7 +96,7 @@ func TestProcessImports_RemoteSourcePolicy(t *testing.T) {
 		adapter := newAdapter(t, fmt.Errorf("%w: nested source", errUtils.ErrPolicyDenied))
 		tempDir := t.TempDir()
 
-		paths, err := processImports(nil, tempDir, []string{allowedImport, "https://example.org/other.yaml"}, tempDir, 1, MaximumImportLvL)
+		paths, err := processImports(nil, tempDir, strImports(allowedImport, "https://example.org/other.yaml"), tempDir, 1, MaximumImportLvL)
 		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
 		assert.Nil(t, paths)
 		assert.Equal(t, []string{allowedImport}, adapter.resolved)
@@ -106,7 +106,7 @@ func TestProcessImports_RemoteSourcePolicy(t *testing.T) {
 		adapter := newAdapter(t, errors.New("download failed"))
 		tempDir := t.TempDir()
 
-		paths, err := processImports(nil, tempDir, []string{allowedImport, "https://example.org/other.yaml"}, tempDir, 1, MaximumImportLvL)
+		paths, err := processImports(nil, tempDir, strImports(allowedImport, "https://example.org/other.yaml"), tempDir, 1, MaximumImportLvL)
 		require.NoError(t, err)
 		assert.Empty(t, paths)
 		assert.Equal(t, []string{allowedImport, "https://example.org/other.yaml"}, adapter.resolved)
@@ -137,13 +137,27 @@ func TestMergeResolvedImports_PolicyErrors(t *testing.T) {
 		dst := viper.New()
 		dst.SetConfigType("yaml")
 
+		// Optional imports (SkipIfMissing: true): the missing file is skipped and the good one merges.
 		dir, err := mergeResolvedImports([]ResolvedPaths{
-			{FilePath: missing, ImportPaths: "missing.yaml", ImportType: LOCAL},
-			{FilePath: good, ImportPaths: "good.yaml", ImportType: LOCAL},
+			{FilePath: missing, ImportPaths: "missing.yaml", ImportType: LOCAL, SkipIfMissing: true},
+			{FilePath: good, ImportPaths: "good.yaml", ImportType: LOCAL, SkipIfMissing: true},
 		}, dst, fs)
 		require.NoError(t, err)
 		assert.Empty(t, dir)
 		assert.True(t, dst.GetBool("settings.merged"))
+	})
+
+	t.Run("required merge failure fails closed", func(t *testing.T) {
+		tempDir := t.TempDir()
+		missing := filepath.Join(tempDir, "missing.yaml")
+		dst := viper.New()
+		dst.SetConfigType("yaml")
+
+		// A required import (SkipIfMissing: false) that cannot be merged aborts the load.
+		_, err := mergeResolvedImports([]ResolvedPaths{
+			{FilePath: missing, ImportPaths: "missing.yaml", ImportType: LOCAL, SkipIfMissing: false},
+		}, dst, fs)
+		require.ErrorIs(t, err, errUtils.ErrRequiredImportFailed)
 	})
 }
 
@@ -153,7 +167,7 @@ func TestProcessConfigImports_PolicyDenialAbortsLoad(t *testing.T) {
 	writeImportPolicy(t, "function", "input.name == 'exec'")
 	baseDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(baseDir, "imported.yaml"), []byte("base_path: !exec echo never-runs\n"), 0o600))
-	source := &schema.AtmosConfiguration{BasePath: baseDir, Import: []string{"imported.yaml"}}
+	source := &schema.AtmosConfiguration{BasePath: baseDir, Import: schema.ConfigImportsFromPaths([]string{"imported.yaml"})}
 	dst := viper.New()
 	dst.SetConfigType("yaml")
 
@@ -186,7 +200,7 @@ func TestProcessConfigImports_NilDestination(t *testing.T) {
 func TestProcessConfigImports_EmptyImports(t *testing.T) {
 	source := &schema.AtmosConfiguration{
 		BasePath: "/test",
-		Import:   []string{}, // Empty imports
+		Import:   schema.ConfigImportsFromPaths([]string{}), // Empty imports
 	}
 
 	v := viper.New()
@@ -214,7 +228,7 @@ func TestProcessConfigImports_MkdirTempError_WithMock(t *testing.T) {
 
 	source := &schema.AtmosConfiguration{
 		BasePath: "/test",
-		Import:   []string{"config.yaml"},
+		Import:   schema.ConfigImportsFromPaths([]string{"config.yaml"}),
 	}
 
 	v := viper.New()
@@ -251,7 +265,7 @@ func TestProcessConfigImports_ProvenanceReadError(t *testing.T) {
 
 	source := &schema.AtmosConfiguration{
 		BasePath: root,
-		Import:   []string{filepath.Join(".atmos", "extra.yaml")},
+		Import:   schema.ConfigImportsFromPaths([]string{filepath.Join(".atmos", "extra.yaml")}),
 	}
 
 	v := viper.New()
@@ -271,7 +285,7 @@ func TestProcessConfigImports_EmptyBasePathPropagates(t *testing.T) {
 
 	source := &schema.AtmosConfiguration{
 		BasePath: "",
-		Import:   []string{"x.yaml"},
+		Import:   schema.ConfigImportsFromPaths([]string{"x.yaml"}),
 	}
 
 	v := viper.New()
@@ -286,7 +300,7 @@ func TestProcessConfigImports_EmptyBasePathPropagates(t *testing.T) {
 func TestProcessImports_EmptyBasePath(t *testing.T) {
 	tempDir := t.TempDir()
 
-	_, err := processImports(nil, "", []string{"test.yaml"}, tempDir, 1, MaximumImportLvL)
+	_, err := processImports(nil, "", strImports("test.yaml"), tempDir, 1, MaximumImportLvL)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrBasePath)
 }
@@ -295,7 +309,7 @@ func TestProcessImports_EmptyBasePath(t *testing.T) {
 func TestProcessImports_EmptyTempDir(t *testing.T) {
 	tempDir := t.TempDir()
 
-	_, err := processImports(nil, tempDir, []string{"test.yaml"}, "", 1, MaximumImportLvL)
+	_, err := processImports(nil, tempDir, strImports("test.yaml"), "", 1, MaximumImportLvL)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrTempDir)
 }
@@ -304,7 +318,7 @@ func TestProcessImports_EmptyTempDir(t *testing.T) {
 func TestProcessImports_MaxDepthExceeded(t *testing.T) {
 	tempDir := t.TempDir()
 
-	_, err := processImports(nil, tempDir, []string{"test.yaml"}, tempDir, 11, 10)
+	_, err := processImports(nil, tempDir, strImports("test.yaml"), tempDir, 11, 10)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrMaxImportDepth)
 }
@@ -317,7 +331,7 @@ func TestProcessImports_MaxDepthExceeded(t *testing.T) {
 func TestProcessImports_EmptyImportPath(t *testing.T) {
 	tempDir := t.TempDir()
 
-	paths, err := processImports(nil, tempDir, []string{""}, tempDir, 1, MaximumImportLvL)
+	paths, err := processImports(nil, tempDir, strImports(""), tempDir, 1, MaximumImportLvL)
 	assert.NoError(t, err)
 	assert.Empty(t, paths) // Empty import path should be skipped
 }

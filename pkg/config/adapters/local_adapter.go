@@ -2,6 +2,8 @@ package adapters
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -95,9 +97,25 @@ type nestedImportParams struct {
 	atmosConfig            *schema.AtmosConfiguration
 }
 
+// importsContainRequired reports whether any entry is a required (non-optional) import.
+func importsContainRequired(imports schema.ConfigImports) bool {
+	for _, imp := range imports {
+		if !imp.SkipIfMissing {
+			return true
+		}
+	}
+	return false
+}
+
 // processNestedImports handles nested import statements in a config file.
 func (l *LocalAdapter) processNestedImports(v *viper.Viper, p nestedImportParams) ([]config.ResolvedPaths, error) {
-	imports := v.GetStringSlice("import")
+	// Read the raw `import:` value (not GetStringSlice) so object-form nested entries
+	// (skip_if_missing, when) survive; NormalizeConfigImports accepts both forms. A malformed
+	// object entry is a hard error, not a silent omission.
+	imports, err := config.NormalizeConfigImports(v.Get("import"))
+	if err != nil {
+		return nil, err
+	}
 	if len(imports) == 0 {
 		return nil, nil
 	}
@@ -108,8 +126,19 @@ func (l *LocalAdapter) processNestedImports(v *viper.Viper, p nestedImportParams
 	}
 	nestedPaths, err := config.ProcessImportsFromAdapter(p.atmosConfig, importBasePath, imports, p.tempDir, p.currentDepth+1, p.maxDepth)
 	if err != nil {
-		if guard.IsPolicyError(err) {
+		// Policy denials, already-decided required failures, and malformed entries (all fail
+		// closed) must propagate; other nested resolution errors stay non-fatal (a bad optional
+		// nested import is skipped).
+		if guard.IsPolicyError(err) ||
+			errors.Is(err, errUtils.ErrRequiredImportFailed) ||
+			errors.Is(err, errUtils.ErrInvalidConfigImport) {
 			return nil, err
+		}
+		// A depth-limit breach is tolerated when every nested import at the over-depth level is
+		// optional (historical behavior), but fails closed when any is required - the depth guard
+		// in processImports returns before it can classify these entries itself, so convert here.
+		if errors.Is(err, errUtils.ErrMaxImportDepth) && importsContainRequired(imports) {
+			return nil, fmt.Errorf("%w: nested import at %s: %w", errUtils.ErrRequiredImportFailed, config.SanitizeImport(p.path), err)
 		}
 		log.Debug("failed to process nested imports from", "path", p.path, "error", err)
 		return nil, nil
