@@ -19,7 +19,8 @@ func (w *OutputModeWriter) executeScoped(runner func(io.Writer, io.Writer) error
 	if diagnostic == nil || w.mode == OutputModeNone {
 		diagnostic = io.Discard
 	}
-	maskedOut, maskedErr := iolib.NewStreamingMaskWriter(out), iolib.NewStreamingMaskWriter(diagnostic)
+	opts := iolib.MaskOptionsForStdin(w.stdin)
+	maskedOut, maskedErr := iolib.NewStreamingMaskWriter(out, opts...), iolib.NewStreamingMaskWriter(diagnostic, opts...)
 	err := runner(io.MultiWriter(&stdout, maskedOut), io.MultiWriter(&stderr, maskedErr))
 	flushDisplay(maskedOut, maskedErr)
 	return stdout.String(), stderr.String(), err

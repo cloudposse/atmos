@@ -185,8 +185,9 @@ func (w *OutputModeWriter) executeViewportWithIO(runner func(stdout, stderr io.W
 	defer unregister()
 	// Streaming maskers carry a possible secret prefix across reads, so a secret split between two
 	// pipe reads never reaches the captured buffers or the live tail unmasked.
-	stdoutMask := iolib.NewStreamingMaskWriter(io.MultiWriter(&stdout, tail))
-	stderrMask := iolib.NewStreamingMaskWriter(io.MultiWriter(&stderr, tail))
+	opts := iolib.MaskOptionsForStdin(w.stdin)
+	stdoutMask := iolib.NewStreamingMaskWriter(io.MultiWriter(&stdout, tail), opts...)
+	stderrMask := iolib.NewStreamingMaskWriter(io.MultiWriter(&stderr, tail), opts...)
 	runErr := runner(stdoutMask, stderrMask)
 	flushDisplay(stdoutMask, stderrMask)
 	program.Send(viewportFinishedMsg{})
