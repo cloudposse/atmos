@@ -21,7 +21,7 @@ func executeLifecyclePlans(cmd *cobra.Command, run *lifecycleRun, affected []sch
 	if opts.allowDestroy {
 		for i := range affected {
 			target := &affected[i]
-			if target.Deleted && (opts.stack == "" || opts.stack == target.Stack) && (len(opts.components) == 0 || slices.Contains(opts.components, target.Component)) {
+			if target.Deleted && matchesLifecycleTarget(opts, target) {
 				blocked = append(blocked, target.ComponentType+"/"+target.Stack+"/"+target.Component)
 			}
 		}
@@ -38,4 +38,10 @@ func executeLifecyclePlans(cmd *cobra.Command, run *lifecycleRun, affected []sch
 		return fmt.Errorf("%w: --allow-destroy requires deleted-definition recovery for %s; no component operations were started", errUtils.ErrInvalidConfig, strings.Join(blocked, ", "))
 	}
 	return runLifecyclePlan(cmd, run)
+}
+
+// matchesLifecycleTarget applies the same scope filters to deleted definitions as to live ones.
+func matchesLifecycleTarget(opts *lifecycleOptions, target *schema.Affected) bool {
+	return (opts.stack == "" || opts.stack == target.Stack) &&
+		(len(opts.components) == 0 || slices.Contains(opts.components, target.Component))
 }

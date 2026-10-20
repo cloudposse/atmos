@@ -54,7 +54,7 @@ func registerFixtureCommands(t *testing.T) (root, script *cobra.Command) {
 
 // lifecycleFixturePlan builds a plan for the stack-lifecycle-field-test fixture with
 // the real built-in handlers and the fixture's custom script commands.
-func lifecycleFixturePlan(t *testing.T, verb string, selection lifecycle.Selection) (*lifecycle.Plan, error) {
+func lifecycleFixturePlan(t *testing.T, verb string, selection *lifecycle.Selection) (*lifecycle.Plan, error) {
 	t.Helper()
 	useLifecycleFixture(t)
 
@@ -89,7 +89,7 @@ func assertBefore(t *testing.T, labels []string, first, second string) {
 }
 
 func TestLifecycleFixtureDeployPlan(t *testing.T) {
-	plan, err := lifecycleFixturePlan(t, "deploy", lifecycle.Selection{})
+	plan, err := lifecycleFixturePlan(t, "deploy", &lifecycle.Selection{})
 	require.NoError(t, err)
 	labels := planLabels(t, plan)
 
@@ -114,13 +114,13 @@ func TestLifecycleFixtureDeployPlan(t *testing.T) {
 }
 
 func TestLifecycleFixtureDestroyProtectsSurvivingConsumers(t *testing.T) {
-	_, err := lifecycleFixturePlan(t, "destroy", lifecycle.Selection{Stack: "dev", Reverse: true})
+	_, err := lifecycleFixturePlan(t, "destroy", &lifecycle.Selection{Stack: "dev", Reverse: true})
 	require.ErrorIs(t, err, errUtils.ErrSurvivingConsumers)
 	assert.Contains(t, err.Error(), "terraform/prod/app -> terraform/dev/network")
 }
 
 func TestLifecycleFixtureDestroyWithDependentsReversesOrder(t *testing.T) {
-	plan, err := lifecycleFixturePlan(t, "destroy", lifecycle.Selection{Stack: "dev", Dependents: -1, Reverse: true})
+	plan, err := lifecycleFixturePlan(t, "destroy", &lifecycle.Selection{Stack: "dev", Dependents: -1, Reverse: true})
 	require.NoError(t, err)
 	labels := planLabels(t, plan)
 	assertBefore(t, labels, "script/dev/smoke", "terraform/dev/app")
@@ -285,7 +285,7 @@ func TestLifecycleCommandSurfacesSelectionErrors(t *testing.T) {
 // run that launches this test binary as each child. The returned log records every child command line.
 func lifecycleChildRun(t *testing.T, verb string, exitCode int, mutate func(*lifecycleOptions)) (*lifecycleRun, string) {
 	t.Helper()
-	plan, err := lifecycleFixturePlan(t, verb, lifecycle.Selection{Stack: "platform", Reverse: verb == "destroy"})
+	plan, err := lifecycleFixturePlan(t, verb, &lifecycle.Selection{Stack: "platform", Reverse: verb == "destroy"})
 	require.NoError(t, err)
 	require.Equal(t, 2, plan.Graph.Size())
 	log := filepath.Join(t.TempDir(), "children.log")
@@ -347,7 +347,7 @@ func TestRunLifecyclePlanReportsFailureAndSkipsDependents(t *testing.T) {
 
 func TestRunLifecyclePlanDoesNothingWithoutMatches(t *testing.T) {
 	run, log := lifecycleChildRun(t, "deploy", 0, nil)
-	empty, err := lifecycle.BuildPlan(map[string]any{}, run.plan.Handlers, lifecycle.Selection{}, "{{")
+	empty, err := lifecycle.BuildPlan(map[string]any{}, run.plan.Handlers, &lifecycle.Selection{}, "{{")
 	require.NoError(t, err)
 	require.Zero(t, empty.Graph.Size())
 	run.plan = empty

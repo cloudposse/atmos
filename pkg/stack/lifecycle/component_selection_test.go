@@ -34,7 +34,7 @@ func TestComponentSelection(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plan, err := BuildPlan(stacks, capabilities("terraform", "helm"), tt.pick, "{{")
+			plan, err := BuildPlan(stacks, capabilities("terraform", "helm"), &tt.pick, "{{")
 			require.NoError(t, err)
 			var got []string
 			for _, node := range plan.Graph.Nodes {
@@ -44,12 +44,12 @@ func TestComponentSelection(t *testing.T) {
 			require.Equal(t, tt.want, got)
 		})
 	}
-	_, err := BuildPlan(stacks, capabilities("terraform", "helm"), Selection{Stack: "dev", Components: []string{"network"}, Reverse: true}, "{{")
+	_, err := BuildPlan(stacks, capabilities("terraform", "helm"), &Selection{Stack: "dev", Components: []string{"network"}, Reverse: true}, "{{")
 	require.ErrorIs(t, err, errUtils.ErrSurvivingConsumers)
 }
 
 func TestNamedAffectedSelectionFiltersDeletedNotices(t *testing.T) {
-	plan, err := BuildPlan(nil, capabilities("terraform"), Selection{
+	plan, err := BuildPlan(nil, capabilities("terraform"), &Selection{
 		Components: []string{"app"},
 		Affected: []schema.Affected{
 			{ComponentType: "terraform", Stack: "dev", Component: "app", Deleted: true},

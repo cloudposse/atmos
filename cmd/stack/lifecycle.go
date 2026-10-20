@@ -245,7 +245,7 @@ func runLifecycle(cmd *cobra.Command, opts *lifecycleOptions) error {
 		return err
 	}
 	left, _ := tags.TemplateDelims(config.Templates.Settings.Delimiters)
-	plan, err := lifecycle.BuildPlan(stacks, commands, selection, left)
+	plan, err := lifecycle.BuildPlan(stacks, commands, &selection, left)
 	if err != nil {
 		return err
 	}

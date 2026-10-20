@@ -34,7 +34,7 @@ func executionPlan(t *testing.T) *Plan {
 	c := []string{"kubernetes", "dev", "c"}
 	stacks := inventory(a, b, c)
 	depends(stacks, c, a, true)
-	p, err := BuildPlan(stacks, capabilities("terraform", "helm", "kubernetes"), Selection{}, "{{")
+	p, err := BuildPlan(stacks, capabilities("terraform", "helm", "kubernetes"), &Selection{}, "{{")
 	require.NoError(t, err)
 	return p
 }

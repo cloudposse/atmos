@@ -70,7 +70,7 @@ func Label(n *dependency.Node) string {
 // Required prerequisites of a kind that cannot run the operation fail a deploy
 // plan, while a destroy plan fails when components outside the selection still
 // require something it would destroy. Locked components are never operated on.
-func BuildPlan(stacks map[string]any, commands map[string]*Handler, selection Selection, leftDelim string) (*Plan, error) {
+func BuildPlan(stacks map[string]any, commands map[string]*Handler, selection *Selection, leftDelim string) (*Plan, error) {
 	defer perf.Track(nil, "lifecycle.BuildPlan")()
 
 	g, problems := discoverGraph(stacks, leftDelim)
@@ -183,15 +183,12 @@ func missingTarget(n *dependency.Node, d *schema.ComponentDependency, modern boo
 	return nil
 }
 
-func selectSeeds(g *dependency.Graph, commands map[string]*Handler, s Selection, p *Plan) []string {
+func selectSeeds(g *dependency.Graph, commands map[string]*Handler, s *Selection, p *Plan) []string {
 	eligible := affectedEligibility(s, p)
 	var seeds []string
 	for _, id := range keys(g.Nodes) {
 		n := g.Nodes[id]
-		if s.Stack != "" && s.Stack != n.Stack {
-			continue
-		}
-		if len(s.Components) > 0 && !slices.Contains(s.Components, n.Component) {
+		if !s.matchesTarget(n.Stack, n.Component) {
 			continue
 		}
 		if !matchesSelectors(n, s.Filter) {
@@ -226,14 +223,11 @@ func matchesSelectors(n *dependency.Node, f *Filter) bool {
 	return len(f.Labels) == 0 || tags.MatchesLabels(tags.ToStringMap(metadata["labels"]), f.Labels)
 }
 
-func affectedEligibility(s Selection, p *Plan) map[string]bool {
+func affectedEligibility(s *Selection, p *Plan) map[string]bool {
 	eligible := make(map[string]bool)
 	for i := range s.Affected {
 		a := &s.Affected[i]
-		if s.Stack != "" && s.Stack != a.Stack {
-			continue
-		}
-		if len(s.Components) > 0 && !slices.Contains(s.Components, a.Component) {
+		if !s.matchesTarget(a.Stack, a.Component) {
 			continue
 		}
 		if a.Deleted {
@@ -267,7 +261,7 @@ func (p *Plan) replaceNotice(n *dependency.Node, reason string) {
 	p.Notices = append(p.Notices, Notice{n.Type, n.Stack, n.Component, reason})
 }
 
-func expandSelection(g *dependency.Graph, commands map[string]*Handler, seeds []string, s Selection, p *Plan) map[string]bool {
+func expandSelection(g *dependency.Graph, commands map[string]*Handler, seeds []string, s *Selection, p *Plan) map[string]bool {
 	selected := make(map[string]bool)
 	for _, id := range seeds {
 		selected[id] = true
@@ -373,4 +367,10 @@ func keys[V any](m map[string]V) []string {
 	}
 	sort.Strings(result)
 	return result
+}
+
+// matchesTarget applies the stack and component filters before graph expansion.
+func (s *Selection) matchesTarget(stack, component string) bool {
+	return (s.Stack == "" || s.Stack == stack) &&
+		(len(s.Components) == 0 || slices.Contains(s.Components, component))
 }

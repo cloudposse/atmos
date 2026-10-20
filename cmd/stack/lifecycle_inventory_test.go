@@ -107,7 +107,7 @@ func TestLoadLifecycleInventoryIncludesCustomKinds(t *testing.T) {
 	// The plan orders the custom component after the terraform component it depends on.
 	left := "{{"
 	handlers["terraform"] = lifecycle.NativeHandler("terraform", "deploy")
-	plan, err := lifecycle.BuildPlan(stacks, handlers, lifecycle.Selection{}, left)
+	plan, err := lifecycle.BuildPlan(stacks, handlers, &lifecycle.Selection{}, left)
 	require.NoError(t, err)
 	order, err := plan.Graph.TopologicalSort()
 	require.NoError(t, err)
