@@ -39,6 +39,8 @@ For standalone `.star` apps with their own arguments and help, see the
 
 <!--truncate-->
 
+import TryExample, { TryExamples } from '@site/src/components/TryExample';
+
 import CastEmbed from '@site/src/components/CastEmbed'
 import EmbedFile from '@site/src/components/EmbedFile'
 
@@ -147,6 +149,32 @@ with the fields involved. Inspect the result with
 The [`!starlark` reference](/functions/yaml/starlark) covers context fields,
 return types, and evaluation scope. Use automation scripts for commands and
 steps, and YAML expressions for computing configuration values.
+
+## Try it out
+
+<TryExamples>
+
+<TryExample example="starlark-commands" label="Custom Commands">
+
+Run the local automation command with a typed flag.
+
+```shell
+atmos capacity --replicas 3
+```
+
+</TryExample>
+
+<TryExample example="starlark-hooks" label="Git Hooks">
+
+Install Terraform, then follow the README to compare the hook behavior for owned and unowned components.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
+
+</TryExamples>
 
 ## Next steps {#get-involved}
 

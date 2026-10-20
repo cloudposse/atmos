@@ -1,0 +1,75 @@
+---
+slug: try-runnable-examples
+title: "Try Runnable Examples Directly from the Documentation"
+authors: [osterman]
+tags: [documentation, enhancement, dx]
+---
+
+Reading about a feature should lead directly to trying it. Finding its example directory,
+installing Atmos, and assembling the first commands adds unnecessary work. Changelog posts
+with runnable examples and individual example pages now include a quick start with installation
+instructions and copyable commands.
+
+<!--truncate-->
+
+import TryExample from '@site/src/components/TryExample';
+
+## The Problem
+
+A link to source code leaves readers to figure out how to turn that code into a working project.
+Posts covering multiple examples also need to distinguish those projects without repeating the
+installation instructions for each one.
+
+## The Fix
+
+The **Install Atmos** tab provides installation methods for different environments. The next tab
+initializes the example in a local directory. When a post covers multiple examples, each has a named
+tab after the shared installation tab.
+
+The [local policies example](/examples/policies) includes an offline walkthrough: validate the bundle,
+run fixtures, and see a destructive command denied before Terraform or component resolution.
+No Terraform installation or cloud credentials are required.
+
+## How to Use It
+
+Start with a complete example project:
+
+```shell
+atmos init examples/policies
+cd policies
+atmos policy check
+```
+
+The short example path uses the official Atmos repository by default. See
+[initialization settings](/cli/commands/init#examples-and-source-directories) for repository overrides.
+
+### Policy validation output
+
+`atmos policy check` now displays a terminal-friendly validation summary with rule and hook counts
+on stderr. It respects terminal colors and works as plain text when redirected.
+
+**If a script consumes the previous JSON output, add `--format json`:**
+
+```shell
+atmos policy check --format json
+```
+
+This preserves the `valid`, `rules`, and `hooks` fields on stdout. `--format text` explicitly selects
+the default summary. See the [policy command reference](/cli/commands/policy#check).
+
+## Try it out
+
+<TryExample example="policies">
+
+Validate the bundle and run its offline fixtures:
+
+```shell
+atmos policy check
+atmos policy test tests/cases.json
+```
+
+</TryExample>
+
+## Get Involved
+
+Tell us which examples would help you in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

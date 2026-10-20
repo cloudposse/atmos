@@ -16,6 +16,8 @@ by hand as the directory grew.
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 The `matrix:` field already expands a single declared file into one generated file per selected value —
@@ -82,6 +84,18 @@ the same pair under `staging/` — two full copies of `components/`, one per sel
 without listing `vpc/main.tf` and `eks/main.tf` individually in `scaffold.yaml`. Add a glob
 `path:` to any `spec.files[]` entry in your own templates — with `when:` alone to skip a
 directory, or with `matrix:` and `.file.RelPath` in `target:` to duplicate one.
+
+## Try it out
+
+<TryExample example="scaffolding-directory-matrix">
+
+Generate one directory tree per selected environment.
+
+```shell
+atmos scaffold generate example ./my-project --set environments=dev,staging
+```
+
+</TryExample>
 
 ## Get Involved
 

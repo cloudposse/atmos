@@ -6,11 +6,31 @@ description: Tested CEL configurations for Terraform resource controls, GitHub e
 
 import Intro from '@site/src/components/Intro'
 import EmbedFile from '@site/src/components/EmbedFile'
+import TryExample from '@site/src/components/TryExample'
 
 <Intro>
 Copy these tested policy configurations into your governing policy directory and adapt the
 parameters to your environment. For individually reusable policies, use the [Policy Library](/policies/library).
 </Intro>
+
+## Try policies locally
+
+Start with a command-admission walkthrough that requires only Atmos. It demonstrates
+policy inspection, offline fixtures, and an intentional denial before Terraform runs.
+
+<TryExample example="policies">
+
+Validate the bundled rule and run its offline fixtures:
+
+```shell
+atmos policy check
+atmos policy list
+atmos policy test tests/cases.json
+```
+
+Follow the example README to compare an allowed command with a denial and exit code `77`.
+
+</TryExample>
 
 ## Usage
 

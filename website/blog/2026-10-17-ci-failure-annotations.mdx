@@ -12,6 +12,8 @@ request. Atmos now reports a failed command as a CI annotation, so the reason ap
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 A failed job hides its cause. CI providers show a step's exit status at a glance, but the explanation stays in the
@@ -49,6 +51,20 @@ ci:
 
 A [command policy](/policies/admission#block-a-command) is evaluated before `atmos.yaml` loads. A denial at that point
 is annotated whenever a CI provider is detected, because an annotation is the only CI signal it can produce.
+
+## Try it out
+
+<TryExample example="policies">
+
+Only Atmos is required. Validate the rule and run its offline fixtures, then follow the README to compare an allowed command with an intentional denial.
+
+```shell
+atmos policy check
+atmos policy list
+atmos policy test tests/cases.json
+```
+
+</TryExample>
 
 ## Get Involved
 

@@ -14,6 +14,8 @@ We're introducing [`atmos auth`](/cli/commands/auth/usage) - native cloud authen
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem We're Solving
 
 Platform teams face a persistent authentication challenge: **there's no unified, configuration-as-code approach to managing cloud credentials**. Teams typically resort to:
@@ -179,6 +181,18 @@ We're continuing to expand authentication capabilities:
 - [Command Reference](/cli/commands/auth/login)
 - [Migrating from Leapp](/tutorials/migrating-from-leapp)
 - [Configuring Geodesic](/tutorials/configuring-geodesic)
+
+## Try it out
+
+<TryExample example="demo-auth">
+
+Inspect the sample identities locally. Configure your own provider and account details before logging in.
+
+```shell
+atmos auth list
+```
+
+</TryExample>
 
 ## Get Involved
 

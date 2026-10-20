@@ -11,6 +11,8 @@ alongside fixes for dependency ordering, sensitive outputs, and template deliver
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 A successful deployment command is only part of a dependable workflow. Reviewers need a readable
@@ -75,6 +77,29 @@ atmos aws cloudformation drift describe vpc -s plat-ue2-dev --ci
 
 GitHub Actions writes summaries to `GITHUB_STEP_SUMMARY`. In a generic CI environment, set
 `ATMOS_CI_SUMMARY` to the destination file. Dry-run does not publish a summary.
+
+## Try it out
+
+<TryExample example="cloudformation">
+
+Install Docker or Podman and Python 3. Configure the shortcut, start the local emulator, and deploy without an AWS account:
+
+```shell
+atmos config set aliases.cft "aws cloudformation"
+atmos validate stacks
+atmos emulator up aws -s local
+atmos cft deploy demo -s local
+atmos cft output demo -s local
+```
+
+When finished, delete the demo stack and stop the emulator:
+
+```shell
+atmos cft delete demo -s local --auto-approve
+atmos emulator down aws -s local
+```
+
+</TryExample>
 
 ## Get Involved
 

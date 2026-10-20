@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: diff
 description: Preview the changes an apply would make to a CloudFormation stack.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
@@ -95,3 +97,16 @@ that state. Stacks that already existed are preserved.
 
 A stack in `ROLLBACK_COMPLETE` cannot be updated. The command fails with a hint
 to [delete the failed stack](/cli/commands/aws/cloudformation/delete) and apply again.
+
+## Try it out
+
+<TryExample example="cloudformation">
+
+Configure a short alias and render the included template locally. Install Docker or Podman and Python 3 before following the README to start the AWS emulator, deploy, and clean up.
+
+```shell
+atmos config set aliases.cft "aws cloudformation"
+atmos cft render demo -s local
+```
+
+</TryExample>

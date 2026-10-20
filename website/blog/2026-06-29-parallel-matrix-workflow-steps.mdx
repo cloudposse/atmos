@@ -14,6 +14,8 @@ Atmos workflows can now run independent work concurrently with first-class `para
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 Workflows are where teams encode the operational knowledge that should not live in someone's shell history: run the checks, build the thing, deploy the dependencies, then summarize what happened.
@@ -194,6 +196,18 @@ Here are the control steps running end to end:
 Start with validation and reporting workflows first. They usually have the safest fan-out shape: independent checks, obvious dependencies, and low risk if one branch fails.
 
 For the full field reference, see the [`parallel`](/steps/type/parallel) and [`matrix`](/steps/type/matrix) step type documentation.
+
+## Try it out
+
+<TryExample example="parallel-steps">
+
+Run the independent checks concurrently.
+
+```shell
+atmos workflow checks -f parallel
+```
+
+</TryExample>
 
 ## Get Involved
 

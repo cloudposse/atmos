@@ -155,3 +155,91 @@ html[data-theme='light'] .install-widget__copy {
     font-size: 0.85rem;
   }
 }
+
+/* Documentation variant: one terminal surface with a visible method selector. */
+.install-widget.install-widget--docs .install-widget__content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  background: var(--ifm-code-background);
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 8px;
+}
+
+.install-widget.install-widget--docs .install-widget__select-wrapper {
+  grid-column: 1 / -1;
+  justify-self: start;
+  gap: 0.6rem;
+  margin: 0.75rem 1rem 0;
+  padding: 0.25rem 0;
+  border: 0;
+}
+
+.install-widget.install-widget--docs .install-widget__label,
+.install-widget.install-widget--docs .install-widget__chevron {
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.install-widget.install-widget--docs .install-widget__select-wrapper:focus-within {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+
+.install-widget.install-widget--docs .install-widget__select-wrapper:hover .install-widget__chevron {
+  color: var(--ifm-color-primary);
+}
+
+.install-widget.install-widget--docs .install-widget__command {
+  padding: 0.6rem 0 1rem 1rem;
+}
+
+.install-widget.install-widget--docs .install-widget__code {
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  color: var(--ifm-font-color-base);
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+
+.install-widget.install-widget--docs .install-widget__command-url {
+  color: inherit;
+}
+
+.install-widget.install-widget--docs .install-widget__command-curl,
+.install-widget.install-widget--docs .install-widget__command-bash {
+  color: var(--ifm-color-primary-dark);
+}
+
+html[data-theme='dark'] .install-widget--docs .install-widget__command-curl,
+html[data-theme='dark'] .install-widget--docs .install-widget__command-bash {
+  color: var(--ifm-color-primary-lightest);
+}
+
+.install-widget.install-widget--docs .install-widget__copy {
+  align-self: start;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0 0.25rem 0.25rem;
+  padding: 0.75rem;
+  border: 0;
+  border-radius: 6px;
+  color: var(--ifm-color-emphasis-600);
+}
+
+.install-widget.install-widget--docs .install-widget__copy:hover {
+  background: var(--ifm-color-emphasis-200);
+  color: var(--ifm-font-color-base);
+}
+
+.install-widget.install-widget--docs .install-widget__copy:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: -4px;
+}

@@ -14,6 +14,8 @@ Atmos now supports importing stack configurations from remote URLs. Reference sh
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## What Changed
 
 Stack imports now support remote URLs alongside local file paths. The import syntax remains the same, but Atmos detects remote URLs and downloads them automatically using go-getter:
@@ -118,6 +120,18 @@ The example shows both local and remote imports working together, with proper co
 :::note
 This feature was previously documented but not yet implemented. We apologize for this oversight. Remote stack imports now work as documented, exactly like [remote imports for atmos.yaml](/cli/configuration/imports).
 :::
+
+## Try it out
+
+<TryExample example="remote-stack-imports">
+
+Inspect the resolved stacks. This example fetches its shared configuration from GitHub.
+
+```shell
+atmos describe stacks
+```
+
+</TryExample>
 
 ## Get Involved
 

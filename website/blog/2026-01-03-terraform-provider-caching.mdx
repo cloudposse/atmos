@@ -13,6 +13,8 @@ Atmos now automatically caches Terraform providers across all components, dramat
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## Why Provider Caching Matters
 
 In large Atmos projects with many components, each `terraform init` downloads the same providers repeatedly. For the AWS provider alone, this can mean downloading 300+ MB per component. With provider caching, Atmos downloads each provider version once and reuses it across all components.
@@ -80,6 +82,18 @@ In our testing with projects containing 50+ components:
 - **First init**: Same as before (downloads all providers)
 - **Subsequent inits**: 10-50x faster (symlinks from cache)
 - **Disk savings**: Significant reduction in duplicate provider binaries
+
+## Try it out
+
+<TryExample example="caching">
+
+Install Terraform, then follow the README to initialize the sample component and inspect provider caching.
+
+```shell
+atmos terraform cache list
+```
+
+</TryExample>
 
 ## Related Documentation
 

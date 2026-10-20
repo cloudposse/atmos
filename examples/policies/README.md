@@ -1,5 +1,12 @@
 ---
+title: Local Policy Walkthrough
+description: Inspect and test a policy, then see it block a destructive command without Terraform or cloud credentials.
+tags: [Automation]
 related_docs:
+  - label: Command admission policies
+    url: /policies/admission
+  - label: Policy commands
+    url: /cli/commands/policy
   - label: Saved plan policies
     url: /policies/terraform-plan
   - label: Policy reference
@@ -8,7 +15,69 @@ related_docs:
 
 # Policy demonstrations
 
-These parameterized CEL examples demonstrate [saved-plan policies](https://atmos.tools/policies/terraform-plan)
+## Try policies locally
+
+This walkthrough needs only Atmos. It uses [command admission](https://atmos.tools/policies/admission)
+to reject destructive Terraform commands before configuration, stacks, or tools are loaded.
+No Terraform installation, cloud credentials, or infrastructure is needed.
+
+Start in a directory where you want to create the example:
+
+```shell
+atmos init examples/policies
+cd policies
+```
+
+Atmos discovers the included `policy.d/` directory automatically. If you already set
+`ATMOS_POLICY_DIR`, it overrides discovery; point it at this example's `policy.d/`
+for the walkthrough. See [policy configuration](https://atmos.tools/policies/configuration).
+
+Validate the policy, inspect its rule, and run the offline fixtures:
+
+```shell
+atmos policy check
+atmos policy list
+atmos policy test tests/cases.json
+```
+
+`check` displays a terminal-friendly validation summary with rule and hook counts.
+Use `atmos policy check --format json` for machine-readable output on stdout.
+
+The fixtures cover an allowed command, normal plans and applies, direct destroy, and the
+`-destroy` flag on plan, apply, and deploy. A matching deny rule returns `deny`; an
+unmatched rule returns `not_applicable`, meaning this rule does not block the request.
+All fixture expectations should pass. Fixture testing never executes Terraform.
+
+Now run an allowed command with policy diagnostics:
+
+```shell
+atmos about --explain
+```
+
+The command succeeds and reports `local-safety/deny-destroy` as not applicable. Then
+try an intentionally denied command:
+
+```shell
+atmos terraform destroy demo -s local --explain
+```
+
+Expect exit code **77** and the reason:
+
+> Destructive Terraform operations are disabled in this example. Use a reviewed teardown process instead.
+
+There is deliberately no `demo` component or `local` stack. Admission rejects the command
+before component resolution or Terraform execution. The same rule rejects
+`atmos terraform plan demo -s local -destroy --explain`. The `--explain` flag reports
+policy decisions; it does not bypass enforcement or turn a command into a dry run.
+
+Read `policy.d/safety.yaml` to see the CEL predicate. The policy commands remain available
+even when a bundle denies operational commands. Nothing is deployed and no cleanup is needed.
+These controls rely on protecting the governing directory and runner; they do not prevent
+someone who controls the executable or policy files from bypassing them.
+
+## Additional policy bundles
+
+The `terraform/`, `github/`, and `lifecycle/` directories contain parameterized CEL examples that demonstrate [saved-plan policies](https://atmos.tools/policies/terraform-plan)
 and lifecycle hooks, not the reusable policy library. They are opt-in controls, not a default compliance baseline. Review the resource
 types, limits, event selection, executable paths, tool pins, and credentials before adopting them.
 
@@ -34,15 +103,21 @@ The cleanup executable is an example of an organization-owned tool, not a bundle
 Install or pin TFLint and Checkov before enabling the lifecycle samples. `spec.tools` uses the
 existing toolchain installer and does not merge component dependency overrides.
 
-## Tests for every sample
+## Repository tests
+
+Contributors can run these checks from the root of the Atmos source repository.
+In an initialized copy of this example, use `atmos policy test tests/cases.json`
+as shown above instead.
 
 ```shell
+go test ./tests -run '^TestCLICommands/policies_example_' -v
 go test ./pkg/policy -run TestSampleLibrary -v
 go test ./pkg/hooks -run 'TestPolicyHooksLifecycle|TestPolicyHookFailuresBlock' -v
 go test ./pkg/ci/... -run TestPolicySnapshot -v
 ```
 
-The library test loads these exact files and checks every policy, including allow/block or
+The CLI tests exercise the local walkthrough, including command denials and their exit codes.
+The library test loads the three additional bundles and checks every policy, including allow/block or
 select/non-select cases. An added policy without cases fails the suite. Cases exercise thresholds,
 replacement ordering, deletion remediation, absent/null/unknown values, different components and
 lifecycle outcomes, same-repository/fork PRs, and missing CI evidence. Hook integration tests use

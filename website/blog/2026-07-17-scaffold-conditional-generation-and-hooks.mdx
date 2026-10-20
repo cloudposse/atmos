@@ -27,6 +27,8 @@ blindly replacing the custom work that happened after initialization.
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 <CastEmbed src="/casts/examples/scaffolding/generate-example.cast" title="atmos scaffold golden path" chrome controls scrubber />
 
 [View the full scaffolding example](/examples/scaffolding)
@@ -69,6 +71,18 @@ behavior they intentionally do not provide: typed choices, conditional generatio
 safe path for bringing template improvements back to an existing project. A remote source can be
 pinned to a branch, tag, or commit with `--ref`, so platform teams can make a deliberate release
 available instead of distributing an accidental snapshot.
+
+## Try it out
+
+<TryExample example="scaffolding">
+
+Generate a project from the copied scaffold.
+
+```shell
+atmos scaffold generate example ./my-project --set project_name=my-project --set enable_vendoring=false
+```
+
+</TryExample>
 
 See the [Scaffold Command Documentation](/cli/commands/scaffold/generate) for the field, hook,
 remote-source, and update reference.

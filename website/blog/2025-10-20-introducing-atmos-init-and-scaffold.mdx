@@ -9,6 +9,8 @@ We're excited to announce two new commands that dramatically simplify getting st
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem: Setup Friction
 
 Setting up a new Atmos project has traditionally required several manual steps:
@@ -290,6 +292,18 @@ atmos scaffold list
 ```
 
 We'd love to hear your feedback! Join the discussion in our [GitHub Discussions](https://github.com/cloudposse/atmos/discussions) or share your custom scaffold templates with the community.
+
+## Try it out
+
+<TryExample example="scaffolding">
+
+Generate a project from the copied scaffold.
+
+```shell
+atmos scaffold generate example ./my-project --set project_name=my-project --set enable_vendoring=false
+```
+
+</TryExample>
 
 ## Documentation
 

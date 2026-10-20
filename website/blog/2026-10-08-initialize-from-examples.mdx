@@ -9,6 +9,8 @@ Trying Atmos for the first time should be easy. Install it, check out an example
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 Someone new to Atmos should be able to kick the tires almost immediately. A working example provides the configuration, stacks, and components to start exploring with just a few commands.
@@ -52,6 +54,18 @@ init:
 The repository defaults to `github.com/cloudposse/atmos`. Git initialization and an initial commit are enabled by default; set `git: false` or pass `--no-git` to skip them. Explicit source URLs bypass the default repository, and a revision embedded in the source takes precedence over `--ref` and configuration.
 
 Use `--copy` to copy another source verbatim even when it contains a scaffold manifest. Copy mode skips template rendering and scaffold hooks, requires an empty destination unless `--force` is supplied, and does not support scaffold updates or template variables. Read the [init reference](/cli/commands/init) for source formats, precedence, and overwrite behavior.
+
+## Try it out
+
+<TryExample example="quick-start-simple">
+
+Inspect the example stacks. Install Terraform before continuing with the README's component walkthrough.
+
+```shell
+atmos list stacks
+```
+
+</TryExample>
 
 ## Get Involved
 

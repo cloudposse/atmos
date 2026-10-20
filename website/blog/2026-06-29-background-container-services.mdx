@@ -14,6 +14,8 @@ Atmos workflows can now start long-running container services in the background,
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 Plenty of workflows need a service running *alongside* the steps, not as a step. End-to-end tests need a cloud emulator. Integration steps need a database or a local registry. Until now, standing up that dependency meant leaving the workflow and dropping into shell:
@@ -131,6 +133,18 @@ GCP (`floci/gcp`), Azure (`floci/az`), Kubernetes (`k3s`), Vault/OpenBao (`openb
 for the current driver and target list.
 
 For usage and configuration, see [Using Containers](/components/container).
+
+## Try it out
+
+<TryExample example="background-steps">
+
+Install Docker or Podman, then run the local background-service workflow.
+
+```shell
+atmos workflow service -f background
+```
+
+</TryExample>
 
 ## Get Involved
 
