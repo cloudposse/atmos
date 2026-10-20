@@ -33,6 +33,8 @@ const (
 // RunInput bundles scaffoldhooks.Run's inputs into a single argument, mirroring how
 // pkg/hooks.ExecContext bundles a stack-level lifecycle hook run's inputs.
 type RunInput struct {
+	// Edition is the effective project edition pin. Empty selects current behavior.
+	Edition string
 	// HooksMap is the scaffold's decoded spec.hooks block.
 	HooksMap map[string]hooks.Hook
 	// Event is the scaffold lifecycle event being fired (before/after.scaffold.generate).
@@ -60,6 +62,10 @@ type RunInput struct {
 // true for before event/when: evaluation, mirroring pkg/hooks' own --skip-hooks semantics.
 func Run(in RunInput) error {
 	defer perf.Track(nil, "scaffoldhooks.Run")()
+
+	if err := hooks.ValidateEvents(in.Edition, in.HooksMap); err != nil {
+		return err
+	}
 
 	names := make([]string, 0, len(in.HooksMap))
 	for name := range in.HooksMap {

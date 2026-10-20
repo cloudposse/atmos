@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	gen "github.com/cloudposse/atmos/pkg/generator"
@@ -30,6 +31,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/project/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/vendor"
 )
@@ -591,6 +593,12 @@ func loadScaffoldTemplates(sourceOverride, excludeTargetDir string) (map[string]
 			WithExitCode(1).
 			Err()
 	}
+
+	atmosConfig, err := cfg.LoadConfig(&schema.ConfigAndStacksInfo{})
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	genCtx.UI.SetEdition(atmosConfig.Edition)
 
 	// Load embedded templates
 	configs, err := templates.GetAvailableConfigurations()

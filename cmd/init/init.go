@@ -336,6 +336,10 @@ func executeInit(ctx context.Context, opts *initOptions) error {
 		return err
 	}
 
+	if opts.atmosConfig != nil {
+		initUI.SetEdition(opts.atmosConfig.Edition)
+	}
+
 	configs, err := loadInitTemplateConfigs(opts.sourceOverride)
 	if err != nil {
 		return err

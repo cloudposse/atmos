@@ -291,3 +291,43 @@ func TestAbsoluteFileOutsideProjectIsRejected(t *testing.T) {
 	_, err := Prepare(cfg, &Options{File: outside, Defaults: true}, renderer)
 	require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
 }
+
+func TestCreationUsesProjectEditionForHooks(t *testing.T) {
+	for _, pin := range []string{"", "2026-10-18"} {
+		t.Run(pin, func(t *testing.T) {
+			cfg, renderer := fixture(t)
+			cfg.Edition = pin
+			write(t, "recipe/stack.yaml.tmpl", "name: dev\n")
+			write(t, "atmos.yaml", `scaffold:
+  templates:
+    custom:
+      source: ./recipe
+`)
+			// The template output uses stack_file, just like the built-in template.
+			write(t, "recipe/scaffold.yaml", `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: test
+spec:
+  stack:
+    manifest: '{{ .Config.stack_file }}'
+  files:
+    - path: stack.yaml.tmpl
+      target: '{{ .Config.stack_file }}'
+  hooks:
+    typo:
+      events: [after.scaffold.genrate]
+      kind: step
+      type: shell
+`)
+			plan, err := Prepare(cfg, &Options{File: "stacks/deploy/dev.yaml", Template: "custom", Defaults: true}, renderer)
+			if pin == "" {
+				require.ErrorIs(t, err, errUtils.ErrUnsupportedHookEvent)
+			} else {
+				require.NoError(t, err)
+				require.NoError(t, plan.Apply(context.Background(), nil))
+				require.FileExists(t, "stacks/deploy/dev.yaml")
+			}
+		})
+	}
+}

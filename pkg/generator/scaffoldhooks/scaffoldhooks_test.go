@@ -431,3 +431,21 @@ func TestRun_LabelsStepsWithHookName(t *testing.T) {
 	// The default label is the hook's name, never its step type; an explicit step name wins.
 	assert.Equal(t, []string{"hook:a-step", "explicit", "hook:c-steps:1", "hook:c-steps:2"}, *names)
 }
+
+func TestRunValidatesEventsBeforeSkip(t *testing.T) {
+	for _, pin := range []string{"", "2026-10-18"} {
+		t.Run(pin, func(t *testing.T) {
+			err := Run(RunInput{
+				Edition:   pin,
+				Event:     hooks.BeforeScaffoldGenerate,
+				HooksMap:  map[string]hooks.Hook{"typo": {Events: []string{"after.scaffold.genrate"}}},
+				SkipHooks: func(string) bool { return true },
+			})
+			if pin == "" {
+				require.ErrorIs(t, err, errUtils.ErrUnsupportedHookEvent)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

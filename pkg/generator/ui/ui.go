@@ -567,6 +567,7 @@ func (m spinnerModel) View() string {
 
 // InitUI handles the user interface for the init command.
 type InitUI struct {
+	edition      string
 	creationPlan *CreationPlan
 	// quietPlan suppresses the per-file preview lines, the "Would generate N files." summary, and
 	// the README that a creation plan would otherwise print, so the caller can report its own
@@ -607,6 +608,11 @@ func NewInitUI(ioCtx iolib.Context, term terminal.Terminal) *InitUI {
 		ioCtx:        ioCtx,
 		term:         term,
 	}
+}
+
+// SetEdition selects the project edition used for scaffold hook validation.
+func (ui *InitUI) SetEdition(pin string) {
+	ui.edition = pin
 }
 
 // SetMaxChanges sets the maximum percentage of changed lines allowed in a
@@ -1740,15 +1746,6 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 			Err()
 	}
 
-	// Create directory if needed. Skipped in dry-run: a preview must leave no
-	// trace on disk, including an otherwise-empty target directory that
-	// didn't exist before the preview ran.
-	if !ui.processor.DryRun {
-		if err := os.MkdirAll(targetPath, dirPermissions); err != nil {
-			return fmt.Errorf("failed to create directory: %w", err)
-		}
-	}
-
 	// Load the scaffold configuration from embedded content (don't write to target folder)
 	var includedPaths []string
 	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(
@@ -1765,6 +1762,15 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		return fmt.Errorf("failed to load scaffold configuration: %w", err)
 	}
 
+	scaffoldHooks, err := config.DecodeHooks(scaffoldConfig.Spec.Hooks)
+	if err != nil {
+		return fmt.Errorf("failed to decode scaffold hooks: %w", err)
+	}
+
+	if err := hooks.ValidateEvents(ui.edition, scaffoldHooks); err != nil {
+		return err
+	}
+
 	// Run the setup form to collect configuration values.
 	mergedValues, _, err := ui.RunSetupForm(scaffoldConfig, targetPath, useDefaults, cmdTemplateValues)
 	if err != nil {
@@ -1774,11 +1780,6 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	if ui.creationPlan != nil {
 		ui.creationPlan.Config = scaffoldConfig
 		ui.creationPlan.Values = mergedValues
-	}
-
-	scaffoldHooks, err := config.DecodeHooks(scaffoldConfig.Spec.Hooks)
-	if err != nil {
-		return fmt.Errorf("failed to decode scaffold hooks: %w", err)
 	}
 
 	// Resolved once, up front, with the same precedence ProcessFile's own
@@ -1801,6 +1802,15 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		return err
 	}
 
+	// Create directory if needed. Skipped in dry-run: a preview must leave no
+	// trace on disk, including an otherwise-empty target directory that
+	// didn't exist before the preview ran.
+	if !ui.processor.DryRun {
+		if err := os.MkdirAll(targetPath, dirPermissions); err != nil {
+			return fmt.Errorf("failed to create directory: %w", err)
+		}
+	}
+
 	// Run pre-generate hooks before any file is written: nothing has run yet
 	// (status: success), and a hook failure aborts before any write happens,
 	// so no rollback is needed. Skipped in dry-run: hooks can run arbitrary
@@ -1808,6 +1818,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// effects a preview must never trigger.
 	if !ui.processor.DryRun {
 		if err := scaffoldhooks.Run(scaffoldhooks.RunInput{
+			Edition:    ui.edition,
 			HooksMap:   scaffoldHooks,
 			Event:      hooks.BeforeScaffoldGenerate,
 			Answers:    mergedValues,
@@ -1920,6 +1931,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		// hooks above.
 		if !ui.processor.DryRun {
 			if hookErr := scaffoldhooks.Run(scaffoldhooks.RunInput{
+				Edition:    ui.edition,
 				HooksMap:   scaffoldHooks,
 				Event:      hooks.AfterScaffoldGenerate,
 				Answers:    mergedValues,
@@ -1982,6 +1994,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		// (e.g. `git add .`) sees the generated .atmos/scaffold.yaml record too.
 		// Skipped in dry-run, same as the pre-generate hooks above.
 		if err := scaffoldhooks.Run(scaffoldhooks.RunInput{
+			Edition:    ui.edition,
 			HooksMap:   scaffoldHooks,
 			Event:      hooks.AfterScaffoldGenerate,
 			Answers:    mergedValues,

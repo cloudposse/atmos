@@ -28,6 +28,7 @@ const recordPermissions = 0o600
 
 // Renderer is the shared scaffold questionnaire and rendering API.
 type Renderer interface {
+	SetEdition(string)
 	PlanCreation(*templates.Configuration, string, bool, map[string]any) (*generatorui.CreationPlan, error)
 }
 
@@ -41,6 +42,7 @@ type Options struct {
 
 // Plan contains the fully rendered files and the scaffold hooks that accompany them.
 type Plan struct {
+	edition        string
 	Root, Manifest string
 	Generation     *generatorui.CreationPlan
 	Hooks          map[string]hooks.Hook
@@ -72,6 +74,7 @@ func Prepare(config *schema.AtmosConfiguration, opts *Options, renderer Renderer
 	if err != nil {
 		return nil, err
 	}
+	renderer.SetEdition(config.Edition)
 	generated, err := renderer.PlanCreation(template, root, opts.Defaults, values)
 	if err != nil {
 		return nil, err
@@ -94,6 +97,9 @@ func finishPlan(config *schema.AtmosConfiguration, root, file string, template *
 	if err != nil {
 		return nil, err
 	}
+	if err := hooks.ValidateEvents(config.Edition, hookMap); err != nil {
+		return nil, err
+	}
 	record, err := generationRecord(file, template, generated)
 	if err != nil {
 		return nil, err
@@ -102,7 +108,7 @@ func finishPlan(config *schema.AtmosConfiguration, root, file string, template *
 	if err := engine.ValidateCreation(root, generated.Files); err != nil {
 		return nil, err
 	}
-	return &Plan{Root: root, Manifest: file, Generation: generated, Hooks: hookMap}, nil
+	return &Plan{edition: config.Edition, Root: root, Manifest: file, Generation: generated, Hooks: hookMap}, nil
 }
 
 func stackDefinition(template *templates.Configuration) (*project.ScaffoldConfig, error) {
@@ -232,7 +238,7 @@ func (p *Plan) Apply(ctx context.Context, skip func(string) bool) error {
 	if err := engine.ValidateCreation(p.Root, p.Generation.Files); err != nil {
 		return err
 	}
-	input := scaffoldhooks.RunInput{HooksMap: p.Hooks, Event: hooks.BeforeScaffoldGenerate, Answers: p.Generation.Values, Status: "success", SkipHooks: skip, TargetPath: p.Root}
+	input := scaffoldhooks.RunInput{Edition: p.edition, HooksMap: p.Hooks, Event: hooks.BeforeScaffoldGenerate, Answers: p.Generation.Values, Status: "success", SkipHooks: skip, TargetPath: p.Root}
 	if err := scaffoldhooks.Run(input); err != nil {
 		return err
 	}

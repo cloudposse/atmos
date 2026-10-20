@@ -4664,7 +4664,7 @@
                   },
                   "events": {
                     "type": "array",
-                    "description": "Lifecycle events this hook fires on (e.g. after.terraform.apply). The legacy hyphenated form (e.g. after-terraform-apply) is also accepted. Empty matches all events.",
+                    "description": "Lifecycle events this hook fires on (e.g. after.terraform.apply). The legacy hyphenated form (e.g. after-terraform-apply) is also accepted. Empty matches all events. Unpinned projects and editions on or after 2026-10-19 require registered event names.",
                     "items": {
                       "type": "string"
                     }
