@@ -203,7 +203,7 @@ Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 - Use interfaces + dependency injection for testability
 - Generate mocks with `go.uber.org/mock/mockgen`
 - Table-driven tests for comprehensive coverage
-- Target >90% coverage
+- Target 90% patch coverage on new and changed lines
 
 ### Test Isolation (MANDATORY)
 ALWAYS use `cmd.NewTestKit(t)` for cmd tests. Auto-cleans RootCmd state (flags, args).
