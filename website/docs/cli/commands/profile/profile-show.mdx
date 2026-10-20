@@ -5,6 +5,8 @@ sidebar_class_name: command
 description: "Show detailed information about a configuration profile"
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro';
 
@@ -179,6 +181,19 @@ atmos profile show developer --format json | jq -r '.version // "not specified"'
 # Get list of files in a profile
 atmos profile show developer --format json | jq -r '.files[]'
 ```
+
+## Try it out
+
+<TryExample example="config-profiles">
+
+Inspect the sample profiles and their merged settings. Replace the sample cloud identities before running infrastructure commands.
+
+```shell
+atmos profile list
+atmos profile show developer
+```
+
+</TryExample>
 
 ## See Also
 

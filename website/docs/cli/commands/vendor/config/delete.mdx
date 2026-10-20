@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: delete
 description: Delete a raw value from vendor.yaml by dot-notation path.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -43,3 +45,15 @@ atmos vendor config delete spec.sources[0].tags
   <dt>`--file` (string, default `./vendor.yaml`)</dt>
   <dd>The vendor manifest file to edit.</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Inspect the configured sources before downloading components. Pulling sources requires network access.
+
+```shell
+atmos vendor list
+```
+
+</TryExample>

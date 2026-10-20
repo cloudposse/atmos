@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: list
 description: List all workdirs in the project with their status and metadata.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -89,6 +91,18 @@ Each workdir entry includes:
 - **VERSION** - The provisioned source version, if any (`-` for local components)
 - **LAST_ACCESSED** - When the workdir was last accessed
 - **PATH** - The workdir directory path, ending in `<stack>-<component>-<hash>` (the trailing hash keeps two component instances from colliding even when their `<stack>-<component>` prefixes look the same)
+
+## Try it out
+
+<TryExample example="source-provisioning">
+
+Inspect the stacks, then follow the README to try the remote `ipinfo` component with Terraform. The `weather` variant uses a sibling example directory.
+
+```shell
+atmos list stacks
+```
+
+</TryExample>
 
 ## Related Commands
 

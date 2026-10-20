@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: cache
 description: Transparently cache Terraform/OpenTofu providers and modules, and manage the cache.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 import CastPlayer from '@site/src/components/CastPlayer'
@@ -111,3 +113,15 @@ atmos terraform cache mirror vpc -s plat-ue2-prod --platform=linux_amd64 --platf
 - [Terraform CLI config management](/cli/commands/terraform/usage) — the `components.terraform.rc` section the cache builds on.
 - [Terraform Registry Cache (blog)](/changelog/terraform-registry-cache)
 - [Component retry](/stacks/components/terraform/retry) — the retry and backoff layer in Atmos. The cache does not retry on its own.
+
+## Try it out
+
+<TryExample example="caching">
+
+Install Terraform, then follow the README to initialize the sample component and inspect provider caching.
+
+```shell
+atmos terraform cache list
+```
+
+</TryExample>

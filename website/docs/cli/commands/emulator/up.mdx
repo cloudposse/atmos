@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: up
 description: Start (or reuse) an emulator's long-running container
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -51,6 +53,18 @@ atmos emu up aws --stack=plat-ue2-dev
   <dt>`--ephemeral`</dt>
   <dd>Run without persisting state; data is discarded on `down`. Persistence is enabled by default, so this forces a throwaway instance for this `up` (overriding the component's `ephemeral:` config). Also settable with `ATMOS_EMULATOR_EPHEMERAL=true`.</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="emulator-aws">
+
+Install Terraform and Docker or Podman. Follow the README to deploy locally and tear down the emulator afterward.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
 
 ## See Also
 

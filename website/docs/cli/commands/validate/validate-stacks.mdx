@@ -6,6 +6,8 @@ id: stacks
 description: Use this command to validate all Stack configurations.
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
@@ -244,3 +246,15 @@ file 'catalog/invalid-yaml-and-schema/invalid-schema-8.yaml':
 }
 ```
 </Terminal>
+
+## Try it out
+
+<TryExample example="demo-stacks">
+
+Compare the resolved variables across the example stacks.
+
+```shell
+atmos describe component myapp -s dev --query .vars
+```
+
+</TryExample>

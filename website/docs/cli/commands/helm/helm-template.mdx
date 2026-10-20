@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: template
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import Intro from "@site/src/components/Intro";
 
 <Intro>
@@ -109,3 +111,15 @@ atmos helm template monitoring -s plat-ue2-dev -f preview-values.yaml --set imag
 :::note
 `render` is accepted as an alias for `template`.
 :::
+
+## Try it out
+
+<TryExample example="helm">
+
+Install Helm and Docker or Podman before following the local release lifecycle.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>

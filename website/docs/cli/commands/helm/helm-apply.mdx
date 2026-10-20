@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: apply
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import Intro from "@site/src/components/Intro";
 
 <Intro>
@@ -143,3 +145,15 @@ through the masked UI stream; chart hook container logs are not streamed automat
 Lifecycle flags apply only to direct Kubernetes delivery. Combining an explicit
 lifecycle flag with an external `--target` fails instead of implying that Atmos
 waited for or rolled back a GitOps deployment.
+
+## Try it out
+
+<TryExample example="helm">
+
+Install Helm and Docker or Podman before following the local release lifecycle.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>

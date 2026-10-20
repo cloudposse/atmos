@@ -5,6 +5,8 @@ sidebar_label: add
 sidebar_class_name: command
 description: "Bring a dependency under version management by adding it to a track in atmos.yaml."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -82,3 +84,16 @@ atmos version track add checkout --package=actions/checkout --desired=v6 --exclu
 # Add a container image on the prod track
 atmos version track add nginx --package=library/nginx --track=prod
 ```
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Compare the checked-in dev and prod tracks, then verify their pinned files. This example works offline; no cloud credentials are needed.
+
+```shell
+atmos version track list
+atmos version track verify
+```
+
+</TryExample>

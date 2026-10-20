@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: exec
 description: Execute toolchain-managed CLI tools directly without modifying your PATH.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
@@ -212,6 +214,18 @@ This is different from running a subprocess, ensuring proper tool behavior.
 - [`atmos toolchain which`](/cli/commands/toolchain/which) - Find tool binary path
 - [`atmos toolchain path`](/cli/commands/toolchain/path) - Get PATH for shell integration
 - [`atmos toolchain env`](/cli/commands/toolchain/env) - Export PATH in shell format
+
+## Try it out
+
+<TryExample example="toolchain">
+
+Inspect the project's pinned tools. Follow the README to install them and run its workflows; installation downloads require network access.
+
+```shell
+atmos toolchain list
+```
+
+</TryExample>
 
 ## Related Documentation
 

@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: terraform-backend
 description: Manage Terraform state backend infrastructure
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -533,6 +535,18 @@ Running backend provisioner...
 S3 bucket 'acme-ue1-dev-tfstate' already exists (idempotent)
 ✓ Backend provisioning completed
 ```
+
+## Try it out
+
+<TryExample example="backend-provisioning">
+
+Install Terraform and Docker or Podman. Follow the README to provision and remove a backend in the local AWS emulator.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
 
 ## Related Commands
 

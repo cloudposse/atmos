@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: status
 description: Show the working tree status of a managed Git repository or a local path.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -82,3 +84,15 @@ atmos git status flux-deploy | grep '^ M'
 - [`atmos git diff`](/cli/commands/git/diff) — show the actual content changes
 - [`atmos git list`](/cli/commands/git/list) — list configured repositories (`--check-status` shares this status probe)
 - [Git Configuration](/cli/configuration/git) — repository fields and defaults
+
+## Try it out
+
+<TryExample example="gitops">
+
+Review the configured Git repository. Replace the sample remote with a repository you control before following the clone, commit, and push walkthrough.
+
+```shell
+atmos describe config --query .git
+```
+
+</TryExample>

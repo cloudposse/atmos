@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: list
 description: List available scaffold templates configured in atmos.yaml.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -287,6 +289,18 @@ $ git commit -m "Add VPC component from scaffold"
 - [`atmos scaffold generate`](/cli/commands/scaffold/generate) - Generate code from a template
 - [`atmos scaffold validate`](/cli/commands/scaffold/validate) - Validate scaffold configuration
 - [`atmos init`](/cli/commands/init) - Initialize new Atmos projects
+
+## Try it out
+
+<TryExample example="scaffolding">
+
+Generate a project from the copied scaffold.
+
+```shell
+atmos scaffold generate example ./my-project --set project_name=my-project --set enable_vendoring=false
+```
+
+</TryExample>
 
 ## Learn More
 

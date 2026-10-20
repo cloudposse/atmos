@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: workflows
 description: Use this command to show all configured Atmos workflows.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Terminal from '@site/src/components/Terminal'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
@@ -186,3 +188,15 @@ validation.yaml:
 :::tip
 Use the [atmos workflow](/cli/commands/workflow) CLI command to execute an Atmos workflow
 :::
+
+## Try it out
+
+<TryExample example="demo-workflows">
+
+List the example workflows before following the README.
+
+```shell
+atmos workflow list
+```
+
+</TryExample>

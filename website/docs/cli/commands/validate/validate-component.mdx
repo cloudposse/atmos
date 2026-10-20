@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: component
 description: Use this command to validate an Atmos component in a stack using JSON Schema and OPA policies.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import ActionCard from '@site/src/components/ActionCard'
@@ -146,3 +148,15 @@ atmos validate component . --stack dev --timeout 15
   <dt>`--timeout` <em>(optional)</em></dt>
   <dd>Validation timeout in seconds. Can also be specified in `settings.validation` component config. If not provided, timeout of 20 seconds is used by default.</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="demo-opa">
+
+Inspect the example stacks, then follow the README to compare valid and invalid components against its OPA policies.
+
+```shell
+atmos list stacks
+```
+
+</TryExample>

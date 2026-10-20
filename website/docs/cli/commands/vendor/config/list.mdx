@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: list
 description: List raw vendor manifest setting paths.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -52,3 +54,15 @@ atmos vendor config list --format json
   <dt>`--delimiter` (string)</dt>
   <dd>Delimiter to use for `csv`/`tsv` output.</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Inspect the configured sources before downloading components. Pulling sources requires network access.
+
+```shell
+atmos vendor list
+```
+
+</TryExample>

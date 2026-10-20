@@ -5,6 +5,8 @@ sidebar_label: workflows
 sidebar_class_name: command
 description: Use this command to list all workflows defined in your Atmos project
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -179,3 +181,15 @@ atmos list workflows --columns name,file
 # Display custom subset
 atmos list workflows --columns "name,file,description"
 ```
+
+## Try it out
+
+<TryExample example="demo-workflows">
+
+List the example workflows before following the README.
+
+```shell
+atmos workflow list
+```
+
+</TryExample>

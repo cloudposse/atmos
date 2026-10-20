@@ -5,6 +5,8 @@ sidebar_class_name: command
 description: Run Terraform state migrations with tfmigrate.
 id: migrate
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 import DocCardList from '@theme/DocCardList'
@@ -196,3 +198,15 @@ For CI, use `tfmigrate` history mode with durable storage such as S3, GCS, or a 
 - [`atmos terraform migrate list`](/cli/commands/terraform/migrate-list)
 - [Hooks](/stacks/hooks)
 - [Terraform Component Configuration](/cli/configuration/components/terraform)
+
+## Try it out
+
+<TryExample example="hooks-tfmigrate">
+
+Install Terraform and tfmigrate, then follow the README to create local state and migrate it.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>

@@ -5,6 +5,8 @@ sidebar_label: get
 sidebar_class_name: command
 description: "Read a dependency's locked version or another effective setting after defaults and group policies are applied."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -50,3 +52,16 @@ atmos version track get checkout --show=desired
 # Get a different field, from a specific track, as JSON
 atmos version track get checkout --track=prod --show=ecosystem --format=json
 ```
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Compare the checked-in dev and prod tracks, then verify their pinned files. This example works offline; no cloud credentials are needed.
+
+```shell
+atmos version track list
+atmos version track verify
+```
+
+</TryExample>

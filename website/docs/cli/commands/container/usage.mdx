@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: usage
 description: Run your application and its supporting services locally using container components defined in Atmos stacks.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
@@ -454,3 +456,15 @@ atmos container up
 atmos composition validate storefront -s dev
 ```
 </Terminal>
+
+## Try it out
+
+<TryExample example="container-component">
+
+Install Docker or Podman before building and running the example containers.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>

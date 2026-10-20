@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: list
 description: List emulators and their status in a clean table
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -41,6 +43,18 @@ atmos emu ls --stack=plat-ue2-dev
   <dt>`-s, --stack`</dt>
   <dd>Optional. Restrict the listing to a single stack (for example, `plat-ue2-dev`). When omitted, emulators from every stack are listed.</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="emulator-aws">
+
+Install Terraform and Docker or Podman. Follow the README to deploy locally and tear down the emulator afterward.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
 
 ## See Also
 

@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: mirror
 description: Pre-seed the registry cache with providers for multiple platforms.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -75,6 +77,18 @@ atmos terraform cache mirror --components=vpc,eks -s plat-ue2-prod
 # Inspect what landed in the cache
 atmos terraform cache list
 ```
+
+## Try it out
+
+<TryExample example="caching">
+
+Install Terraform, then follow the README to initialize the sample component and inspect provider caching.
+
+```shell
+atmos terraform cache list
+```
+
+</TryExample>
 
 ## Related Commands
 

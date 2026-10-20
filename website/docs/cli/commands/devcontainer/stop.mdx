@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: stop
 description: Stop a running devcontainer
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -49,6 +51,18 @@ atmos devcontainer stop geodesic --timeout 30
 # Stop a specific instance
 atmos devcontainer stop terraform --instance project-a
 ```
+
+## Try it out
+
+<TryExample example="devcontainer">
+
+Install Docker or Podman, then inspect the configured development containers.
+
+```shell
+atmos devcontainer list
+```
+
+</TryExample>
 
 ## See Also
 

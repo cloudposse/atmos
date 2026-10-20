@@ -5,6 +5,8 @@ sidebar_label: diff
 sidebar_class_name: command
 description: "Preview the dependency entries that need lock changes before updating a version track."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -50,3 +52,16 @@ prod,checkout,infrastructure,v6,v6.1.0,v6.2.0,update-available,
 ```
 
 Use `--format=yaml` or `--format=json` for the full-fidelity result.
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Compare the checked-in dev and prod tracks, then verify their pinned files. This example works offline; no cloud credentials are needed.
+
+```shell
+atmos version track list
+atmos version track verify
+```
+
+</TryExample>

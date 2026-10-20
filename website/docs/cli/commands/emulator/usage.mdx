@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: usage
 description: "Develop and test against local substitutes for cloud APIs, Kubernetes, and services such as Vault."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import DocCardList from '@theme/DocCardList';
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
@@ -92,6 +94,18 @@ atmos emulator exec aws --stack=plat-ue2-dev -- aws s3 ls
 # Stop and remove the emulator container
 atmos emulator down aws --stack=plat-ue2-dev
 ```
+
+## Try it out
+
+<TryExample example="emulator-aws">
+
+Install Terraform and Docker or Podman. Follow the README to deploy locally and tear down the emulator afterward.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
 
 ## See Also
 

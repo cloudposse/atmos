@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: playbook
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
@@ -141,3 +143,15 @@ The file is automatically cleaned up after the playbook execution completes.
 ## Example
 
 <EmbedExample example="demo-ansible" />
+
+## Try it out
+
+<TryExample example="demo-ansible">
+
+Inspect the example stacks. Install Ansible before running the playbooks in the README.
+
+```shell
+atmos list stacks
+```
+
+</TryExample>

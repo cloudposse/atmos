@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: set
 description: Set a raw value in vendor.yaml by dot-notation path, preserving comments, anchors, and templates.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -56,3 +58,15 @@ atmos vendor config set --type=yaml 'spec.sources[0].tags' '["a", "b"]'
 ## Related
 
 - Alias (by component name): [`atmos vendor set`](/cli/commands/vendor/vendor-set)
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Inspect the configured sources before downloading components. Pulling sources requires network access.
+
+```shell
+atmos vendor list
+```
+
+</TryExample>

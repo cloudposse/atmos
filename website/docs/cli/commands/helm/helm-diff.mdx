@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: diff
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import Intro from "@site/src/components/Intro";
 
 <Intro>
@@ -86,3 +88,15 @@ chart without comparing, use [`atmos helm template`](/cli/commands/helm/template
 The diff uses the helm-diff library directly — you do **not** need to install the
 `helm-diff` CLI plugin.
 :::
+
+## Try it out
+
+<TryExample example="helm">
+
+Install Helm and Docker or Podman before following the local release lifecycle.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>

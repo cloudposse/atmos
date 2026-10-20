@@ -5,6 +5,8 @@ sidebar_label: status
 sidebar_class_name: command
 description: "Check whether tracked dependencies are locked, current, or eligible for updates."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -72,3 +74,16 @@ prod,nginx,infrastructure,1.x,1.29.0,1.30.0,newer-available (blocked),"1.30.0 re
 
 Use `--format=yaml` or `--format=json` for the full-fidelity result, including fields the table
 omits (e.g. ecosystem, datasource, package).
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Compare the checked-in dev and prod tracks, then verify their pinned files. This example works offline; no cloud credentials are needed.
+
+```shell
+atmos version track list
+atmos version track verify
+```
+
+</TryExample>

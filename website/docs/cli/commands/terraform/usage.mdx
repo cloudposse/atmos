@@ -4,6 +4,8 @@ sidebar_label: terraform
 sidebar_class_name: command
 description: "Deploy infrastructure with Terraform or OpenTofu using configuration shared across your Atmos stacks."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import Terminal from '@site/src/components/Terminal'
@@ -893,3 +895,15 @@ Executing command="atmos terraform apply eks/karpenter-node-pool -s prod" depend
 ## Subcommands
 
 <DocCardList />
+
+## Try it out
+
+<TryExample example="quick-start-simple">
+
+Inspect the example stacks. Install Terraform before continuing with the README's component walkthrough.
+
+```shell
+atmos list stacks
+```
+
+</TryExample>

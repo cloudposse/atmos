@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: usage
 description: "Share values between components, workflows, and external tools through named stores."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -120,6 +122,18 @@ atmos store set app-metadata shared_config '{"region":"us-east-1"}'
 combination as the `set` command that wrote the value. For example, if `set` used only
 `--stack`, `get` and `delete` must also use only `--stack`, with no `--component` flag. Atmos
 uses the stack and component together to build the underlying key.
+
+## Try it out
+
+<TryExample example="auth-stores">
+
+Review the store configuration and replace the sample identities and resource names before accessing cloud stores.
+
+```shell
+atmos store list
+```
+
+</TryExample>
 
 ## See Also
 

@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: vendor-diff
 description: Show the Git diff between two versions of a vendored component without a local checkout.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -101,3 +103,15 @@ atmos vendor diff --stack dev-us-west-2 --tags networking
 Git sources only. The command performs a temporary clone (removed afterward); large
 repositories take proportionally longer. Private repositories are not yet supported.
 :::
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Inspect the configured sources before downloading components. Pulling sources requires network access.
+
+```shell
+atmos vendor list
+```
+
+</TryExample>

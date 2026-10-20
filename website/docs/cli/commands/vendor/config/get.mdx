@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: get
 description: Read a raw value from vendor.yaml by dot-notation path.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -47,3 +49,15 @@ atmos vendor config get spec.sources[0].version
 ## Related
 
 - Alias (by component name): [`atmos vendor get`](/cli/commands/vendor/vendor-get)
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Inspect the configured sources before downloading components. Pulling sources requires network access.
+
+```shell
+atmos vendor list
+```
+
+</TryExample>

@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: components
 description: Use this command to list Atmos components
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
@@ -352,6 +354,18 @@ atmos list components --columns "MyComponent=component,MyStack=stack"
 # Combine simple fields and named columns
 atmos list components --columns component,"CustomType={{ .type | upper }}"
 ```
+
+## Try it out
+
+<TryExample example="demo-stacks">
+
+Compare the resolved variables across the example stacks.
+
+```shell
+atmos describe component myapp -s dev --query .vars
+```
+
+</TryExample>
 
 ## Related Commands
 

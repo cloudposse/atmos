@@ -5,6 +5,8 @@ sidebar_label: vendor
 sidebar_class_name: command
 description: Use this command to list all vendored components and modules
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
@@ -208,6 +210,18 @@ atmos list vendor --columns "component,source,version,atmos_vendor_file"
 - Use `--format json` to pipe vendor information to other tools for analysis
 - Vendor configuration files can be split across multiple `vendor.yaml` files in `vendor.d/` directory
 :::
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Inspect the configured sources before downloading components. Pulling sources requires network access.
+
+```shell
+atmos vendor list
+```
+
+</TryExample>
 
 ## Related Commands
 

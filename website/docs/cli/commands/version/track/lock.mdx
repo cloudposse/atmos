@@ -5,6 +5,8 @@ sidebar_label: lock
 sidebar_class_name: command
 description: "Resolve your declared dependency versions and record the results in versions.lock.yaml."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -57,3 +59,16 @@ prod,nginx,1.29.0,docker,,2026-07-04T00:00:00Z
 
 Use `--format=yaml` or `--format=json` for the full multi-track `versions.lock.yaml` contents,
 rather than just the resolved track's entries.
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Compare the checked-in dev and prod tracks, then verify their pinned files. This example works offline; no cloud credentials are needed.
+
+```shell
+atmos version track list
+atmos version track verify
+```
+
+</TryExample>

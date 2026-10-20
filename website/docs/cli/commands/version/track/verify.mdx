@@ -5,6 +5,8 @@ sidebar_label: verify
 sidebar_class_name: command
 description: "Check that dependency locks are current under your update policies and that managed project files match those locks."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -39,3 +41,16 @@ jobs:
       - uses: actions/checkout@v6
       - run: atmos version track verify prod
 ```
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Compare the checked-in dev and prod tracks, then verify their pinned files. This example works offline; no cloud credentials are needed.
+
+```shell
+atmos version track list
+atmos version track verify
+```
+
+</TryExample>

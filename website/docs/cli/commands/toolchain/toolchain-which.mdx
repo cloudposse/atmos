@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: which
 description: Locate the exact file path of a toolchain-managed tool binary.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
@@ -42,3 +44,15 @@ atmos toolchain which kubectl
         Examples: `terraform`, `hashicorp/terraform`, `terraform@1.9.8`
     </dd>
 </dl>
+
+## Try it out
+
+<TryExample example="toolchain">
+
+Inspect the project's pinned tools. Follow the README to install them and run its workflows; installation downloads require network access.
+
+```shell
+atmos toolchain list
+```
+
+</TryExample>

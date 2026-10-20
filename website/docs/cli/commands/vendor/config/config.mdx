@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: config
 description: "Inspect and update the sources, versions, and file-selection settings in your vendoring manifests."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
@@ -55,3 +57,15 @@ atmos vendor config list
 ## Related
 
 - [`atmos vendor get`](/cli/commands/vendor/vendor-get), [`atmos vendor set`](/cli/commands/vendor/vendor-set) — component-name aliases that resolve to `get`/`set` here.
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Inspect the configured sources before downloading components. Pulling sources requires network access.
+
+```shell
+atmos vendor list
+```
+
+</TryExample>

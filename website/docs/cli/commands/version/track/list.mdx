@@ -5,6 +5,8 @@ sidebar_label: list
 sidebar_class_name: command
 description: "Compare dependency versions across your project's version tracks in one table."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -61,3 +63,16 @@ opentofu,1.10.5,1.10.6,1.10.5
 
 A blank cell means that dependency isn't locked yet for that track (`--show=locked`, the
 default) — run `atmos version track lock <track>` to resolve it.
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Compare the checked-in dev and prod tracks, then verify their pinned files. This example works offline; no cloud credentials are needed.
+
+```shell
+atmos version track list
+atmos version track verify
+```
+
+</TryExample>

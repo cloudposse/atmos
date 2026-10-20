@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: output
 description: Read Terraform output values for an Atmos component from the state file
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import Terminal from '@site/src/components/Terminal'
 import CastPlayer from '@site/src/components/CastPlayer'
@@ -345,6 +347,18 @@ Scalar-only formats (`env`, `dotenv`, `bash`, `csv`, `tsv`) will return an error
         ```
     </dd>
 </dl>
+
+## Try it out
+
+<TryExample example="quick-start-simple">
+
+Inspect the example stacks. Install Terraform before continuing with the README's component walkthrough.
+
+```shell
+atmos list stacks
+```
+
+</TryExample>
 
 ## Related Commands
 

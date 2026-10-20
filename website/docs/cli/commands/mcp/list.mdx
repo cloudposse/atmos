@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: list
 description: List configured external MCP servers
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 import CastPlayer from '@site/src/components/CastPlayer'
@@ -62,3 +64,15 @@ mcp:
       args: ["awslabs.aws-documentation-mcp-server@latest"]
       description: "AWS Documentation — search and fetch AWS docs"
 ```
+
+## Try it out
+
+<TryExample example="mcp">
+
+List the configured servers, then follow the README to install their runtime dependencies and test a connection.
+
+```shell
+atmos mcp list
+```
+
+</TryExample>

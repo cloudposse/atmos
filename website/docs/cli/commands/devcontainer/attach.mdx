@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: attach
 description: Attach to a running devcontainer
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -50,6 +52,18 @@ atmos devcontainer attach terraform --instance project-a
 - Uses login shell (`-l` flag) if `userEnvProbe` is set to `loginShell` or `loginInteractiveShell` in the devcontainer configuration
 - Automatically starts the container if it's not running
 - Inherits your terminal size and supports full TTY features
+
+## Try it out
+
+<TryExample example="devcontainer">
+
+Install Docker or Podman, then inspect the configured development containers.
+
+```shell
+atmos devcontainer list
+```
+
+</TryExample>
 
 ## See Also
 

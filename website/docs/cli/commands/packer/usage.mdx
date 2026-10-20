@@ -4,6 +4,8 @@ sidebar_label: packer
 sidebar_class_name: command
 description: "Build reusable machine images with Packer using configuration from your Atmos stacks."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import File from '@site/src/components/File'
@@ -184,3 +186,15 @@ atmos packer output . -s prod --query '.builds[0].artifact_id'
 ## Subcommands
 
 <DocCardList />
+
+## Try it out
+
+<TryExample example="packer-docker">
+
+Install Packer and Docker before following the README to build a local Alpine image.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>

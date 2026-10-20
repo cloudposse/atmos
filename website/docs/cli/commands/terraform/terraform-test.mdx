@@ -4,6 +4,8 @@ sidebar_label: test
 sidebar_class_name: command
 id: test
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
@@ -126,6 +128,18 @@ fixture without provisioning the VPC itself.
 ## Native Terraform Flags
 
 This command supports native `terraform test` flags such as `-filter` to run specific test files, `-verbose` for detailed output, `-json` for JSON output.
+
+## Try it out
+
+<TryExample example="terraform-tests">
+
+Install Terraform and Docker or Podman before following the local test walkthrough.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
 
 ## Related Commands
 

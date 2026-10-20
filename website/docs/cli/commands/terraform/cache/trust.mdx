@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: trust
 description: Trust the registry cache proxy certificate in the OS trust store (required once on macOS and Windows).
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -57,6 +59,18 @@ atmos terraform cache trust
 # Remove it later
 atmos terraform cache untrust
 ```
+
+## Try it out
+
+<TryExample example="caching">
+
+Install Terraform, then follow the README to initialize the sample component and inspect provider caching.
+
+```shell
+atmos terraform cache list
+```
+
+</TryExample>
 
 ## Related Commands
 

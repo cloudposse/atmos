@@ -5,6 +5,8 @@ sidebar_label: instances
 sidebar_class_name: command
 description: Use this command to list all Atmos component instances across stacks
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -390,6 +392,18 @@ atmos list instances --columns "stack,component,vars.region,enabled"
 - The `--upload` flag sends every real instance to Atmos Pro; the effective `settings.pro.enabled` (collapsed from `metadata.enabled` &gt; `pro.enabled`) is included in the payload so Atmos Pro shows enabled vs. disabled state
 - Use `--format json` or `--format yaml` for programmatic processing
 :::
+
+## Try it out
+
+<TryExample example="demo-stacks">
+
+Compare the resolved variables across the example stacks.
+
+```shell
+atmos describe component myapp -s dev --query .vars
+```
+
+</TryExample>
 
 ## Related Commands
 

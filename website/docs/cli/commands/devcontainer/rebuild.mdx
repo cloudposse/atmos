@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: rebuild
 description: Rebuild a devcontainer from scratch
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -70,6 +72,18 @@ atmos devcontainer rebuild terraform --instance project-a
 - Configuration changes: After updating your `devcontainer.json` or `atmos.yaml`
 - Image updates: To get the latest version of the base image
 - Clean slate: When you want to start fresh without any accumulated state
+
+## Try it out
+
+<TryExample example="devcontainer-build">
+
+Install Docker or Podman before building or entering the Geodesic container.
+
+```shell
+atmos devcontainer list
+```
+
+</TryExample>
 
 ## See Also
 

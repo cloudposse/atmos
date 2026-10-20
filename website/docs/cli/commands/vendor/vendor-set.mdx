@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: vendor-set
 description: Set the pinned version of a vendored component in vendor.yaml, preserving comments, anchors, and templates.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -55,3 +57,15 @@ atmos vendor set eks 1.3.0 --file ./vendor.yaml
 If no source matches the given component name, the command fails rather than silently
 making no change.
 :::
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Inspect the configured sources before downloading components. Pulling sources requires network access.
+
+```shell
+atmos vendor list
+```
+
+</TryExample>

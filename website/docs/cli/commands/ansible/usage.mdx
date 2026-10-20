@@ -4,6 +4,8 @@ sidebar_label: ansible
 sidebar_class_name: command
 description: "Configure hosts and deploy applications with Ansible using your Atmos stacks."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import File from '@site/src/components/File'
@@ -186,3 +188,15 @@ Variables defined in `vars` are passed to Ansible as extra variables via a gener
 ## Subcommands
 
 <DocCardList />
+
+## Try it out
+
+<TryExample example="demo-ansible">
+
+Inspect the example stacks. Install Ansible before running the playbooks in the README.
+
+```shell
+atmos list stacks
+```
+
+</TryExample>

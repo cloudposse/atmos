@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: start
 description: Start a devcontainer
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -61,6 +63,18 @@ atmos devcontainer start geodesic
 3. **Container already running**: Reports that the container is already running
 
 The container name follows the pattern: `atmos-devcontainer-<name>-<instance>`
+
+## Try it out
+
+<TryExample example="devcontainer">
+
+Install Docker or Podman, then inspect the configured development containers.
+
+```shell
+atmos devcontainer list
+```
+
+</TryExample>
 
 ## See Also
 

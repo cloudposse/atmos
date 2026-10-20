@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: diff
 description: Show changes between the working tree and HEAD in a managed Git repository.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -81,3 +83,15 @@ atmos git diff flux-deploy --path=clusters/prod > preview.diff
 - [`atmos git commit`](/cli/commands/git/commit) — commit the changes shown by diff
 - [`atmos git status`](/cli/commands/git/status) — summary view of the working tree
 - [Git Configuration](/cli/configuration/git) — repository fields and defaults
+
+## Try it out
+
+<TryExample example="gitops">
+
+Review the configured Git repository. Replace the sample remote with a repository you control before following the clone, commit, and push walkthrough.
+
+```shell
+atmos describe config --query .git
+```
+
+</TryExample>
