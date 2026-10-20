@@ -71,7 +71,7 @@ These report findings to GitHub code scanning. They inform review. They do not b
 - govulncheck, which performs call-graph reachability analysis and reports whether Atmos calls an affected symbol
 - Trivy container image scan, for vulnerabilities and secrets
 - golangci-lint, which runs with a zero exit code
-- Patch test coverage, target 85 percent on new and changed lines, currently informational
+- Patch test coverage, target 90 percent on new and changed lines, currently informational
 
 Cloud Posse states this division deliberately. Describing an advisory scanner as a gate would be inaccurate and is verifiable in the repository configuration.
 
