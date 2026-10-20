@@ -182,7 +182,7 @@ func (e *Executor) ensureWorkdirProvisioned(
 
 		writeVisibleOutput(func() {
 			ui.ClearLine()
-			ui.Info(fmt.Sprintf("Auto-provisioned JIT workdir for component '%s' in stack '%s'", component, stack))
+			ui.Info(fmt.Sprintf("Auto-provisioned JIT workdir for component %q in stack %q", component, stack))
 			ui.Hint("Tip: use `!terraform.state` instead of `!terraform.output` to read outputs without terraform init")
 		})
 

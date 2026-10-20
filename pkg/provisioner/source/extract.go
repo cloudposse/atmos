@@ -123,7 +123,7 @@ func toStringSlice(items []any) []string {
 // parseDurationPtr parses a duration string from a map, returning nil if not found or invalid.
 func parseDurationPtr(m map[string]any, key string) *time.Duration {
 	if v, ok := m[key].(string); ok {
-		if d, err := time.ParseDuration(v); err == nil {
+		if d, err := duration.ParseNonNegative(v); err == nil {
 			return &d
 		}
 		ui.Warningf("invalid duration for %s: %q", key, v)

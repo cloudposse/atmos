@@ -591,7 +591,7 @@ func findComponentInStacks(
 	stacksMap map[string]any,
 	deferredContexts AllStacksDeferredContexts,
 	authManager auth.AuthManager,
-) (int, []string, schema.ConfigAndStacksInfo, map[string]string, error) {
+) (int, []string, schema.ConfigAndStacksInfo, map[string]string, error, error) {
 	type componentCandidate struct {
 		stackFile string
 		info      schema.ConfigAndStacksInfo
@@ -599,6 +599,7 @@ func findComponentInStacks(
 
 	var candidates []componentCandidate
 	var identityErr error
+	var processingErrs componentProcessingErrors
 	// Track filename -> canonical name mappings for suggestion purposes.
 	stackNameMappings := make(map[string]string)
 
@@ -634,6 +635,13 @@ func findComponentInStacks(
 			authManager,
 		)
 		if err != nil {
+			// A stack that does not define the component is an expected miss. A stack that
+			// defines it but fails to process (for example an invalid `retry:` block) must not
+			// be reported as "component not found"; remember the error so it can be surfaced
+			// when no other manifest provides the component.
+			if componentDefinedInStack(stacksMap, stackName, candidateInfo.ComponentType, candidateInfo.ComponentFromArg) {
+				processingErrs.record(stackName, stackManifestName, configAndStacksInfo.Stack, err)
+			}
 			continue
 		}
 
@@ -683,7 +691,7 @@ func findComponentInStacks(
 
 			log.Debug(
 				fmt.Sprintf(
-					"Found component '%s' in the stack '%s' in the stack manifest '%s'",
+					"Found component %q in the stack %q in the stack manifest %q",
 					candidateInfo.ComponentFromArg,
 					candidateInfo.Stack,
 					stackName,
@@ -693,7 +701,12 @@ func findComponentInStacks(
 	}
 
 	if len(candidates) == 0 {
-		return 0, nil, schema.ConfigAndStacksInfo{}, stackNameMappings, identityErr
+		if identityErr != nil {
+			return 0, nil, schema.ConfigAndStacksInfo{}, stackNameMappings, identityErr, nil
+		}
+		// An error from a stack matching the requested name is the cause and blocks the lookup;
+		// an error from another stack is only a hint for the "not found" message.
+		return 0, nil, schema.ConfigAndStacksInfo{}, stackNameMappings, processingErrs.matched, processingErrs.unmatchedHint()
 	}
 
 	componentConfigs := make([]map[string]any, 0, len(candidates))
@@ -705,22 +718,78 @@ func findComponentInStacks(
 	}
 
 	if !componentConfigsEqual(componentConfigs) {
-		return len(candidates), foundStacks, candidates[0].info, stackNameMappings, nil
+		return len(candidates), foundStacks, candidates[0].info, stackNameMappings, nil, nil
 	}
 
 	// candidates are resolved in lexical manifest-path order. Keep the first
 	// equivalent definition as the canonical source for stable execution,
 	// sources, and provenance output.
-	return 1, []string{candidates[0].stackFile}, candidates[0].info, stackNameMappings, nil
+	return 1, []string{candidates[0].stackFile}, candidates[0].info, stackNameMappings, nil, nil
+}
+
+// componentDefinedInStack reports whether the already-merged stack manifest defines the
+// component under the given type. It reads the manifest map only; no templates or YAML
+// functions are evaluated.
+func componentDefinedInStack(stacksMap map[string]any, stackName, componentType, component string) bool {
+	stackSection, ok := stacksMap[stackName].(map[string]any)
+	if !ok {
+		return false
+	}
+	components, _ := stackSection[cfg.ComponentsSectionName].(map[string]any)
+	componentTypeSection, _ := components[componentType].(map[string]any)
+	_, defined := componentTypeSection[component].(map[string]any)
+	return defined
+}
+
+// componentProcessingErrors collects processing errors for stacks that define the requested
+// component, so a lookup that finds no usable candidate can report the real cause instead of
+// a generic "component not found" message.
+type componentProcessingErrors struct {
+	// matched is the error from a stack whose file name or manifest name equals the requested
+	// stack; it is the most likely cause and wins over errors from other stacks.
+	matched error
+	// first is the first processing error seen in any stack that defines the component.
+	first error
+	// firstStack names the manifest that produced `first`.
+	firstStack string
+}
+
+// record stores err for the given stack, preferring stacks that match the requested stack name.
+func (p *componentProcessingErrors) record(stackName, stackManifestName, requestedStack string, err error) {
+	if p.first == nil {
+		p.first = err
+		p.firstStack = stackName
+	}
+	if p.matched != nil {
+		return
+	}
+	if stackName == requestedStack || filepath.Base(stackName) == requestedStack || (stackManifestName != "" && stackManifestName == requestedStack) {
+		p.matched = err
+	}
+}
+
+// unmatchedHint returns a hint for the "component not found" message when a stack other than
+// the requested one defines the component but failed to process, or nil when there is nothing
+// to add.
+func (p *componentProcessingErrors) unmatchedHint() error {
+	if p.first == nil {
+		return nil
+	}
+	return fmt.Errorf("the component is defined in the stack manifest '%s' but could not be processed: %w", p.firstStack, p.first)
 }
 
 // componentLookup is the outcome of searching the stack manifests for a component.
 type componentLookup struct {
-	identityErr  error
-	count        int
-	stacks       []string
-	info         schema.ConfigAndStacksInfo
-	nameMappings map[string]string
+	// identityErr blocks the lookup: a Starlark stack identity error, or a processing error
+	// from a stack matching the requested stack name.
+	identityErr error
+	// processingHint explains why a component defined in another stack could not be
+	// processed; it is appended to the "not found" message.
+	processingHint error
+	count          int
+	stacks         []string
+	info           schema.ConfigAndStacksInfo
+	nameMappings   map[string]string
 }
 
 // looksLikeComponentPath reports whether a component argument could be a filesystem path.
@@ -769,8 +838,8 @@ type componentSearch struct {
 
 // find searches the stack manifests for the component named in info.
 func (s *componentSearch) find(info *schema.ConfigAndStacksInfo) componentLookup {
-	count, stacks, foundInfo, nameMappings, identityErr := findComponentInStacks(s.atmosConfig, info, s.stacksMap, s.deferredContexts, s.authManager)
-	return componentLookup{count: count, stacks: stacks, info: foundInfo, nameMappings: nameMappings, identityErr: identityErr}
+	count, stacks, foundInfo, nameMappings, identityErr, processingHint := findComponentInStacks(s.atmosConfig, info, s.stacksMap, s.deferredContexts, s.authManager)
+	return componentLookup{count: count, stacks: stacks, info: foundInfo, nameMappings: nameMappings, identityErr: identityErr, processingHint: processingHint}
 }
 
 // retryFromPath retries a failed component lookup by treating the component argument as a
@@ -997,7 +1066,7 @@ func processStacks(
 			return configAndStacksInfo, err
 		}
 	} else {
-		foundStackCount, foundStacks, foundConfigAndStacksInfo, stackNameMappings, identityErr := findComponentInStacks(
+		foundStackCount, foundStacks, foundConfigAndStacksInfo, stackNameMappings, identityErr, processingHint := findComponentInStacks(
 			atmosConfig,
 			&configAndStacksInfo,
 			stacksMap,
@@ -1011,11 +1080,11 @@ func processStacks(
 		}
 
 		search := &componentSearch{atmosConfig: atmosConfig, stacksMap: stacksMap, deferredContexts: deferredContexts, authManager: authManager}
-		lookup := componentLookup{count: foundStackCount, stacks: foundStacks, info: foundConfigAndStacksInfo, nameMappings: stackNameMappings, identityErr: identityErr}
+		lookup := componentLookup{count: foundStackCount, stacks: foundStacks, info: foundConfigAndStacksInfo, nameMappings: stackNameMappings, identityErr: identityErr, processingHint: processingHint}
 		if pathErr := search.retryFromPath(&configAndStacksInfo, &lookup); pathErr != nil {
 			return configAndStacksInfo, pathErr
 		}
-		foundStackCount, foundStacks, foundConfigAndStacksInfo, stackNameMappings, identityErr = lookup.count, lookup.stacks, lookup.info, lookup.nameMappings, lookup.identityErr
+		foundStackCount, foundStacks, foundConfigAndStacksInfo, stackNameMappings, identityErr, processingHint = lookup.count, lookup.stacks, lookup.info, lookup.nameMappings, lookup.identityErr, lookup.processingHint
 
 		// If still not found after path resolution attempt (or if path resolution was skipped), return error.
 		if foundStackCount == 0 {
@@ -1040,13 +1109,19 @@ func processStacks(
 				cliConfigYaml = fmt.Sprintf("\n\n\nCLI config: %v\n", y)
 			}
 
+			processingNote := ""
+			if processingHint != nil {
+				processingNote = fmt.Sprintf("\nNote: %v", processingHint)
+			}
+
 			return configAndStacksInfo,
 				fmt.Errorf("%w: Could not find the component `%s` in the stack `%s`.\n"+
 					"Check that all the context variables are correctly defined in the stack manifests.\n"+
-					"Are the component and stack names correct? Did you forget an import?%v",
+					"Are the component and stack names correct? Did you forget an import?%v%v",
 					errUtils.ErrInvalidComponent,
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
+					processingNote,
 					cliConfigYaml)
 		} else if foundStackCount > 1 {
 			err = fmt.Errorf(
@@ -1115,6 +1190,10 @@ func processStacks(
 	// is a snapshot of ComponentSection taken before templates run. Computing them
 	// here (instead of after templates) doesn't lose any information.
 	if err := computeSpaceliftAndAtlantisNames(atmosConfig, &configAndStacksInfo); err != nil {
+		return configAndStacksInfo, err
+	}
+
+	if err := enforceComponentAdmission(atmosConfig, &configAndStacksInfo); err != nil {
 		return configAndStacksInfo, err
 	}
 
@@ -1364,10 +1443,10 @@ func processStacks(
 						// Build explanation with file location if available.
 						var explanation string
 						if fileLocation != "" {
-							explanation = fmt.Sprintf("The Terraform component '%s' contains invalid HCL code at %s.",
+							explanation = fmt.Sprintf("The Terraform component %q contains invalid HCL code at %s.",
 								configAndStacksInfo.ComponentFromArg, fileLocation)
 						} else {
-							explanation = fmt.Sprintf("The Terraform component '%s' contains invalid HCL code.",
+							explanation = fmt.Sprintf("The Terraform component %q contains invalid HCL code.",
 								configAndStacksInfo.ComponentFromArg)
 						}
 

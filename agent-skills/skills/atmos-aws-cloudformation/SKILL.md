@@ -29,13 +29,12 @@ component and its nested commands are **experimental**; the top-level `aws` grou
 
 ## Component Shape
 
-Define CloudFormation stacks under `components."aws/cloudformation"` in stack manifests. Quoting the
-key is optional in YAML (a `/` doesn't require it) but is the convention used throughout Atmos docs
-and examples:
+Define CloudFormation stacks under `components.aws/cloudformation` in stack manifests. Prefer the
+unquoted `aws/cloudformation:` key in YAML examples; a `/` does not require quoting:
 
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     vpc:
       path: template.yaml                    # file reference, relative to the component's base path
       stack_name: "{{ .vars.stage }}-vpc"     # explicit; no legacy name-pattern interpolation
@@ -176,7 +175,7 @@ it to your infrastructure repository — the same JIT-vendoring mechanism other 
 
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     vpc:
       source:
         uri: github.com/acme/cfn-templates.git//vpc?ref={{ .Version }}
@@ -253,7 +252,7 @@ table.
 
 ```yaml
 components:
-  "aws/cloudformation":
+  aws/cloudformation:
     base_path: components/cloudformation   # default
 ```
 

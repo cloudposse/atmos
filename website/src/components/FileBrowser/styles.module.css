@@ -3,6 +3,11 @@
  */
 
 /* Page Layout */
+.documentLayout {
+  min-width: 0;
+  padding: 1rem 0;
+}
+
 .pageLayout {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);

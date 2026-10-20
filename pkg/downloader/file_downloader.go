@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/github"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 )
 
 const (
@@ -79,6 +80,9 @@ func (fd *fileDownloader) Fetch(src, dest string, mode ClientMode, timeout time.
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
+	if err := guard.Source(ctx, "download", src, ""); err != nil {
+		return err
+	}
 	// Pre-check GitHub rate limits for GitHub HTTP URLs.
 	if isGitHubHTTPURL(src) {
 		if err := github.WaitForRateLimit(ctx, MinRateLimitRemaining); err != nil {
@@ -99,6 +103,7 @@ func (fd *fileDownloader) Fetch(src, dest string, mode ClientMode, timeout time.
 	if err := client.Get(); err != nil {
 		return fmt.Errorf(errWrapFormat, errUtils.ErrDownloadFile, err)
 	}
+	guard.RegisterRemote(dest, src)
 	return nil
 }
 
@@ -116,6 +121,9 @@ func (fd *fileDownloader) FetchWithMetadataContext(parent context.Context, src, 
 		return FetchMetadata{}, err
 	}
 
+	if err := guard.Source(ctx, "download", src, ""); err != nil {
+		return FetchMetadata{}, err
+	}
 	// Pre-check GitHub rate limits for GitHub HTTP URLs.
 	if isGitHubHTTPURL(src) {
 		if err := fd.waitForMetadataRateLimit(ctx, github.CheckRateLimit); err != nil {
@@ -140,6 +148,7 @@ func (fd *fileDownloader) FetchWithMetadataContext(parent context.Context, src, 
 		return FetchMetadata{}, fmt.Errorf("%w: %w", errUtils.ErrDownloadFile, err)
 	}
 
+	guard.RegisterRemote(dest, src)
 	// DownloadClient implementations without provenance support (local copy, test mocks/fakes)
 	// can omit Metadata() and get a zero-value result here -- deliberately not part
 	// of the DownloadClient interface itself, see FetchWithMetadata's doc comment.

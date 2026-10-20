@@ -52,6 +52,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/list"
 	_ "github.com/cloudposse/atmos/cmd/lsp"
 	_ "github.com/cloudposse/atmos/cmd/mcp"
+	policycmd "github.com/cloudposse/atmos/cmd/policy"
 	_ "github.com/cloudposse/atmos/cmd/profile"
 	sbomcmd "github.com/cloudposse/atmos/cmd/sbom"
 	_ "github.com/cloudposse/atmos/cmd/scaffold"
@@ -104,6 +105,7 @@ import (
 	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/admission"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/proexec"
 	atmosprofile "github.com/cloudposse/atmos/pkg/profile"
@@ -1707,6 +1709,17 @@ func applyCIGitCloneBootstrap(cmd *cobra.Command, args []string, tmpConfig *sche
 	return true
 }
 
+// AnnotateFailure reports the error that failed the command as CI annotations through
+// the detected provider, using the loaded configuration when there is one. Reporting
+// is best effort and never replaces the failure itself.
+func AnnotateFailure(err error) {
+	defer perf.Track(&atmosConfig, "cmd.AnnotateFailure")()
+
+	if annotateErr := ci.AnnotateFailure(&atmosConfig, err); annotateErr != nil {
+		log.Debug("Failed to annotate command failure", "error", annotateErr)
+	}
+}
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // Execute runs the root CLI command and performs one-time global startup tasks.
 // It processes a leading --chdir before loading configuration, loads and wires the CLI
@@ -1756,6 +1769,26 @@ func Execute() error {
 			RootCmd.SetArgs(args)
 		}
 		_, err := internal.Execute(RootCmd)
+		return err
+	}
+	// Policy authoring commands deliberately do not load or execute project configuration.
+	if policycmd.IsInspection(RootCmd, os.Args[1:]) {
+		RootCmd.SilenceErrors = true
+		RootCmd.SilenceUsage = true
+		_, err := RootCmd.ExecuteC()
+		return err
+	}
+	restorePolicies, policyErr := admission.BeginInvocation()
+	if policyErr != nil {
+		return policyErr
+	}
+	defer restorePolicies()
+	restoreExplain, explainErr := beginPolicyExplanation(os.Args[1:])
+	if explainErr != nil {
+		return explainErr
+	}
+	defer restoreExplain()
+	if err := internal.CheckEarlyCommandAdmission(RootCmd, os.Args[1:]); err != nil {
 		return err
 	}
 	if err := preflightProjectInit(RootCmd, os.Args[1:]); err != nil {
@@ -2222,6 +2255,10 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 // init initializes CLI wiring for the package: it registers built-in commands, adds template helpers, registers and binds global persistent flags and related environment variables, adjusts the version flag default, sets the custom usage template, and configures Cobra behavior for the root command.
 // This prepares global flag precedence, environment bindings (color, mask, verbose, GitHub token), and other root-level CLI integrations before command execution.
 func init() {
+	// Commands that end the process through CheckErrorPrintAndExit never return to main, so their
+	// failures are reported to the CI provider through this reporter instead.
+	errUtils.SetFailureReporter(AnnotateFailure)
+
 	// Register all global flags as persistent flags using builder pattern.
 	// IMPORTANT: This MUST happen BEFORE registering commands, so commands inherit the persistent flags.
 	// Global flags are registered as persistent so they're inherited by all subcommands.

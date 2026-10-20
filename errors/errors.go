@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/cloudposse/atmos/pkg/duration"
 	schemaPkg "github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -1148,7 +1149,7 @@ var (
 
 	// Credential errors.
 	ErrCredentialsInvalid = errors.New("credentials are invalid or have been revoked")
-	ErrInvalidDuration    = errors.New("invalid duration format")
+	ErrInvalidDuration    = duration.ErrInvalid // Alias so errors.Is matches pkg/duration errors.
 
 	// Auth manager and identity/provider resolution errors (centralized sentinels).
 	ErrFailedToInitializeAuthManager = errors.New("failed to initialize auth manager")
@@ -2014,6 +2015,19 @@ var (
 
 // Test step (`type: test`) failure sentinel.
 var ErrTestsFailed = errors.New("tests failed")
+
+// Policy evaluation errors.
+var (
+	ErrPolicyInvalid          = errors.New("invalid policy")
+	ErrPolicyInputInvalid     = errors.New("invalid policy input")
+	ErrPolicyEngineUnknown    = errors.New("policy engine is not registered")
+	ErrPolicyEngineRegistered = errors.New("policy engine is already registered")
+	ErrPolicyEvaluation       = errors.New("policy evaluation failed")
+	ErrPolicyInputUnavailable = errors.New("required policy input is unavailable or incomplete")
+	ErrPolicyDenied           = errors.New("policy denied execution")
+	ErrPolicyRequirements     = errors.New("policy requirements are not satisfied")
+	ErrPolicyPlan             = errors.New("saved plan policy enforcement failed")
+)
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
 // This allows the root command to exit with the same code as the subcommand.

@@ -7,6 +7,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	yaml "gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 )
 
 func TestIncludeScriptSourcePreservesIncludedDataContext(t *testing.T) {
@@ -28,4 +31,31 @@ func TestIncludeScriptSourcePreservesIncludedDataContext(t *testing.T) {
 			assert.Equal(t, want, items[0], "included data must stay data; real script steps retain provenance")
 		})
 	}
+}
+
+// A YAML include is spliced as nodes rather than decoded, so its scalars must still be
+// attributed to their source for function-provenance policies.
+func TestIncludeSplicedYAMLKeepsProvenance(t *testing.T) {
+	guard.ResetOrigins()
+	t.Cleanup(guard.ResetOrigins)
+	cfg, manifest := scriptSourceProject(t)
+	require.NoError(t, os.WriteFile(filepath.Join(cfg.BasePath, "scripts", "origin.yaml"), []byte("name: spliced-origin-probe\n"), 0o600))
+	include := func(t *testing.T) {
+		t.Helper()
+		node := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!include", Value: "scripts/origin.yaml"}
+		require.NoError(t, ProcessIncludeTag(cfg, node, "scripts/origin.yaml", manifest))
+		require.Equal(t, yaml.MappingNode, node.Kind, "a YAML include is spliced in as nodes")
+	}
+
+	t.Run("local parent manifest", func(t *testing.T) {
+		include(t)
+		assert.Equal(t, "local", guard.ValueOrigin("spliced-origin-probe").Provenance)
+	})
+
+	t.Run("remote parent manifest wins", func(t *testing.T) {
+		guard.ResetOrigins()
+		guard.RegisterRemote(filepath.Dir(manifest), "https://example.com/stacks")
+		include(t)
+		assert.Equal(t, "remote", guard.ValueOrigin("spliced-origin-probe").Provenance)
+	})
 }

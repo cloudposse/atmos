@@ -51,8 +51,8 @@ const (
 	goneWait    = 5 * time.Second
 )
 
-// runProcessHelper implements the helper modes. It never returns normally
-// except for modeDetach.
+// runProcessHelper implements the helper modes, including interpreters that exit
+// before their output-producing descendants.
 func runProcessHelper(mode string) {
 	dir := os.Getenv(helperPIDDirEnv)
 	switch mode {
@@ -84,6 +84,36 @@ func runProcessHelper(mode string) {
 		_, _ = io.Copy(io.Discard, os.Stdin)
 	case modeDetach:
 		spawnGrandchild(modeSleep, true)
+	case "script-output":
+		for range 100 {
+			_, _ = io.WriteString(os.Stdout, "STDOUT\n")
+			_, _ = io.WriteString(os.Stderr, "STDERR\n")
+		}
+	case "script-writer-failure":
+		writePIDFile(dir, "child")
+		_, _ = io.WriteString(os.Stdout, "READY\n")
+		time.Sleep(helperSleep)
+	case "late-output-parent", "late-output-failure", "drain-cancel-parent":
+		writePIDFile(dir, "parent")
+		childMode := "late-output-child"
+		if mode == "drain-cancel-parent" {
+			childMode = modeStubbornChild
+		}
+		exe, _ := os.Executable()
+		child := exec.Command(exe)
+		child.Env = append(os.Environ(), helperModeEnv+"="+childMode)
+		child.Stdout, child.Stderr = os.Stdout, os.Stderr
+		if err := child.Start(); err != nil {
+			os.Exit(2)
+		}
+		if mode == "late-output-failure" {
+			os.Exit(23)
+		}
+	case "late-output-child":
+		writePIDFile(dir, "child")
+		time.Sleep(childShutdownGrace + time.Second)
+		_, _ = io.WriteString(os.Stdout, "LATE-STDOUT\n")
+		_, _ = io.WriteString(os.Stderr, "LATE-STDERR\n")
 	}
 }
 

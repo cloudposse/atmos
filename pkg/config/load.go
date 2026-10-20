@@ -22,6 +22,8 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/provisioning"
 	"github.com/cloudposse/atmos/pkg/config/casemap"
+	"github.com/cloudposse/atmos/pkg/config/projectroot"
+	"github.com/cloudposse/atmos/pkg/duration"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/filetype"
@@ -30,6 +32,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -102,7 +105,7 @@ const (
 	commaDelimiter   = ","
 	profileDelimiter = commaDelimiter
 	// AtmosCliConfigPathEnvVar is the environment variable name for CLI config path.
-	AtmosCliConfigPathEnvVar = "ATMOS_CLI_CONFIG_PATH"
+	AtmosCliConfigPathEnvVar = projectroot.CliConfigPathEnvVar
 	// CwdKey is the log key for current working directory.
 	cwdKey = "cwd"
 )
@@ -181,66 +184,20 @@ func ParseProfilesFromEnvString(envValue string) []string {
 
 // ConfigSelection holds the config-selection flags parsed early from os.Args
 // before Cobra is initialized (same pattern as profile early-parsing).
-type ConfigSelection struct {
-	BasePath   string
-	Config     []string
-	ConfigPath []string
-}
+// The parsing lives in projectroot so policy discovery shares it.
+type ConfigSelection = projectroot.ConfigSelection
 
 // ParseConfigSelectionFromOsArgs parses --base-path, --config, and --config-path
 // flags from os.Args. This is used for early extraction before Cobra parses
 // flags, so that InitCliConfig receives the correct config location.
 func ParseConfigSelectionFromOsArgs(args []string) ConfigSelection {
-	var sel ConfigSelection
-
-	if basePath := strings.TrimSpace(osargs.ParseString(args, "base-path")); basePath != "" {
-		sel.BasePath = basePath
-	}
-
-	for _, v := range osargs.ParseStringSlice(args, "config") {
-		if trimmed := strings.TrimSpace(v); trimmed != "" {
-			sel.Config = append(sel.Config, trimmed)
-		}
-	}
-
-	for _, v := range osargs.ParseStringSlice(args, "config-path") {
-		if trimmed := strings.TrimSpace(v); trimmed != "" {
-			sel.ConfigPath = append(sel.ConfigPath, trimmed)
-		}
-	}
-
-	return sel
+	return projectroot.ParseConfigSelectionFromOsArgs(args)
 }
 
 // ConfigSelectionFromEnv reads config-selection values from environment variables
 // as fallbacks when not provided via CLI flags.
 func ConfigSelectionFromEnv() ConfigSelection {
-	var sel ConfigSelection
-
-	//nolint:forbidigo // Must use os.Getenv: config selection is processed before Viper configuration loads.
-	if v := os.Getenv("ATMOS_BASE_PATH"); v != "" {
-		sel.BasePath = strings.TrimSpace(v)
-	}
-
-	//nolint:forbidigo // Must use os.Getenv: config selection is processed before Viper configuration loads.
-	if v := os.Getenv("ATMOS_CONFIG"); v != "" {
-		for _, part := range strings.Split(v, commaDelimiter) {
-			if trimmed := strings.TrimSpace(part); trimmed != "" {
-				sel.Config = append(sel.Config, trimmed)
-			}
-		}
-	}
-
-	//nolint:forbidigo // Must use os.Getenv: config selection is processed before Viper configuration loads.
-	if v := os.Getenv("ATMOS_CONFIG_PATH"); v != "" {
-		for _, part := range strings.Split(v, commaDelimiter) {
-			if trimmed := strings.TrimSpace(part); trimmed != "" {
-				sel.ConfigPath = append(sel.ConfigPath, trimmed)
-			}
-		}
-	}
-
-	return sel
+	return projectroot.ConfigSelectionFromEnv()
 }
 
 // EarlyConfigAndStacksInfoFromArgs builds the initial config-selection values
@@ -258,25 +215,13 @@ func EarlyConfigAndStacksInfoFromArgs(args []string) schema.ConfigAndStacksInfo 
 
 	configSel := ParseConfigSelectionFromOsArgs(args)
 	envSel := ConfigSelectionFromEnv()
-	configSel.applyFallbacks(envSel)
+	configSel.ApplyFallbacks(envSel)
 
 	return schema.ConfigAndStacksInfo{
 		ProfilesFromArg:         profilesFromArg,
 		AtmosBasePath:           configSel.BasePath,
 		AtmosConfigFilesFromArg: configSel.Config,
 		AtmosConfigDirsFromArg:  configSel.ConfigPath,
-	}
-}
-
-func (s *ConfigSelection) applyFallbacks(fallback ConfigSelection) {
-	if s.BasePath == "" {
-		s.BasePath = fallback.BasePath
-	}
-	if len(s.Config) == 0 {
-		s.Config = fallback.Config
-	}
-	if len(s.ConfigPath) == 0 {
-		s.ConfigPath = fallback.ConfigPath
 	}
 }
 
@@ -320,7 +265,7 @@ func getProfilesFromFallbacks() ([]string, string) {
 // today.
 func getConfigSelectionFromFlagsOrEnv() ConfigSelection {
 	sel := ParseConfigSelectionFromOsArgs(os.Args)
-	sel.applyFallbacks(ConfigSelectionFromEnv())
+	sel.ApplyFallbacks(ConfigSelectionFromEnv())
 	return sel
 }
 
@@ -1188,28 +1133,7 @@ func readWorkDirConfig(v *viper.Viper) error {
 // it finds an atmos.yaml file or reaches the filesystem root.
 // Returns the directory containing atmos.yaml, or empty string if not found.
 func findAtmosConfigInParentDirs(startDir string) string {
-	dir := startDir
-
-	for {
-		// Move to parent directory.
-		parent := filepath.Dir(dir)
-
-		// Check if we've reached the root.
-		if parent == dir {
-			return ""
-		}
-
-		dir = parent
-		log.Trace("Checking for atmos.yaml in parent directory", "path", dir)
-
-		// Check for atmos.yaml or .atmos.yaml in this directory.
-		for _, configName := range []string{AtmosConfigFileName, DotAtmosConfigFileName} {
-			configPath := filepath.Join(dir, configName)
-			if _, err := os.Stat(configPath); err == nil {
-				return dir
-			}
-		}
-	}
+	return projectroot.FindConfigInParentDirs(startDir)
 }
 
 func readEnvAmosConfigPath(v *viper.Viper) error {
@@ -1256,6 +1180,8 @@ func loadConfigFile(path string, fileName string) (*viper.Viper, error) {
 		if canRetryWithResolvedDotenvMergeIncludes(err) {
 			if retryErr := readConfigWithResolvedDotenvMergeIncludes(tempViper, path, fileName); retryErr == nil {
 				return tempViper, nil
+			} else if guard.IsPolicyError(retryErr) {
+				return nil, retryErr
 			}
 		}
 		// Return sentinel error unwrapped for type checking
@@ -1393,6 +1319,9 @@ func loadDotenvIncludeAsYAMLNode(configFile, includeValue string) (*yaml.Node, e
 		includeFile = filepath.Join(filepath.Dir(configFile), includeFile)
 	}
 
+	if err := admitConfigInclude(configFile, includeFile); err != nil {
+		return nil, err
+	}
 	res, err := filetype.ParseFileByExtension(os.ReadFile, includeFile)
 	if err != nil {
 		return nil, err
@@ -2035,6 +1964,7 @@ func preprocessAtmosYamlFuncExceptCommands(content []byte, v *viper.Viper, sourc
 	if err := preprocessGitHookSteps(&root, v, sourceFile); err != nil {
 		return err
 	}
+	rememberConfigOrigins(&root, sourceFile)
 	return processNode(&root, v, "")
 }
 
@@ -2499,7 +2429,7 @@ func populateLegacyIdentityCaseMap(caseMaps *casemap.CaseMaps, atmosConfig *sche
 
 // atmosDecodeHook returns the combined decode hooks for Atmos configuration unmarshaling.
 // This includes:
-// - Default viper hooks (StringToTimeDurationHookFunc, StringToSliceHookFunc)
+// - The shared duration hook (pkg/duration) and the default StringToSliceHookFunc
 // - Custom TasksDecodeHook for flexible command steps parsing (strings or structs).
 func atmosDecodeHook() viper.DecoderConfigOption {
 	return viper.DecodeHook(getAtmosDecodeHookFunc())
@@ -2509,7 +2439,7 @@ func atmosDecodeHook() viper.DecoderConfigOption {
 // Extracted as a separate function to allow reuse in both Viper and mapstructure contexts.
 func getAtmosDecodeHookFunc() mapstructure.DecodeHookFunc {
 	return mapstructure.ComposeDecodeHookFunc(
-		mapstructure.StringToTimeDurationHookFunc(),
+		duration.DecodeHook(),
 		mapstructure.StringToSliceHookFunc(SliceSeparator),
 		commandEnvMapDecodeHook(),
 		schema.SkillRefDecodeHook(),
@@ -2837,6 +2767,9 @@ func mergeDotenvIncludeCaseMap(configFile, path, includeValue string, mergedCase
 		includeFile = filepath.Join(filepath.Dir(configFile), includeFile)
 	}
 
+	if err := admitConfigInclude(configFile, includeFile); err != nil {
+		return
+	}
 	data, err := os.ReadFile(includeFile)
 	if err != nil {
 		log.Trace("Skipping dotenv include case map extraction for unreadable file", "file", includeFile, "error", err)

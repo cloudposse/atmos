@@ -24,6 +24,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	stackimports "github.com/cloudposse/atmos/pkg/stack/imports"
 	atmostmpl "github.com/cloudposse/atmos/pkg/template"
@@ -407,7 +408,8 @@ func processStructuredTemplateRefs(value any, context map[string]any) any {
 // YAML parse error of the raw template. A regular manifest defers atmos.Component to the component
 // sections, where it is evaluated after all manifests are loaded.
 func canDeferManifestTemplateError(originalContextProvided bool, filePath string, err error) bool {
-	if originalContextProvided {
+	// A policy decision is final: deferring would run the template again without the guard.
+	if originalContextProvided || guard.IsPolicyError(err) {
 		return false
 	}
 	return !stderrors.Is(err, errUtils.ErrComponentFuncDuringManifestLoad) || !u.IsTemplateFile(filePath)
@@ -1227,7 +1229,7 @@ func processYAMLConfigFileWithContextInternal(
 	// Set it to `true` to ignore the imported manifest if it does not exist, and don't throw an error.
 	// This is useful when generating Atmos manifests using other tools, but the imported files are not present yet at the generation time.
 	if err != nil {
-		if ignoreMissingFiles || skipIfMissing {
+		if !guard.IsPolicyError(err) && (ignoreMissingFiles || skipIfMissing) {
 			return emptyStackManifestProcessingResult(), nil, nil
 		} else {
 			return nil, nil, err
@@ -1262,9 +1264,9 @@ func processYAMLConfigFileWithContextInternal(
 		context, localsErr = extractAndAddLocalsToContext(atmosConfig, stackYamlConfig, filePath, relativeFilePath, context)
 		if localsErr != nil {
 			if mergeContext != nil {
-				return nil, nil, mergeContext.FormatError(localsErr, fmt.Sprintf("stack manifest '%s'", relativeFilePath))
+				return nil, nil, mergeContext.FormatError(localsErr, fmt.Sprintf("stack manifest %q", relativeFilePath))
 			}
-			return nil, nil, fmt.Errorf("stack manifest '%s': %w", relativeFilePath, localsErr)
+			return nil, nil, fmt.Errorf("stack manifest %q: %w", relativeFilePath, localsErr)
 		}
 	}
 
@@ -1291,7 +1293,7 @@ func processYAMLConfigFileWithContextInternal(
 		}
 
 		var tmplErr error
-		stackManifestTemplatesProcessed, tmplErr = processTmpl(atmosConfig, &tmplInput{name: relativeFilePath, value: stackManifestTemplateInput, data: context, ignoreMissing: ignoreMissingTemplateValues, manifestLoadFile: relativeFilePath})
+		stackManifestTemplatesProcessed, tmplErr = processTmpl(atmosConfig, &tmplInput{name: relativeFilePath, value: stackManifestTemplateInput, data: context, ignoreMissing: ignoreMissingTemplateValues, manifestLoadFile: relativeFilePath, sourceFile: filePath})
 		if tmplErr != nil {
 			// If template processing failed and the only context is from file extraction
 			// (locals/settings/vars/env, not from an explicit import context), this is likely
@@ -1308,9 +1310,9 @@ func processYAMLConfigFileWithContextInternal(
 				}
 				wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrInvalidStackManifest, tmplErr)
 				if mergeContext != nil {
-					return nil, nil, mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
+					return nil, nil, mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest %q%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 				}
-				return nil, nil, fmt.Errorf("%w: stack manifest '%s'\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
+				return nil, nil, fmt.Errorf("%w: stack manifest %q\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
 			}
 		}
 	}
@@ -1325,10 +1327,10 @@ func processYAMLConfigFileWithContextInternal(
 			// Wrap the error with the sentinel first to preserve it
 			wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, err)
 			// Then format it with context information
-			e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
+			e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest %q%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 			return nil, nil, e
 		} else {
-			e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
+			e := fmt.Errorf("%w: stack manifest %q\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
 			return nil, nil, e
 		}
 	}
@@ -1548,7 +1550,7 @@ func processYAMLConfigFileWithContextInternal(
 		// (`settings`/`vars`/`env`) defined by earlier imports in this manifest, plus
 		// this import's own `context`. Only the path string is rendered here; the
 		// imported file's content templating (and its deferral logic) is left untouched.
-		renderedImp, impErr := renderImportPath(atmosConfig, relativeFilePath, imp, accumulatedImportContext, importStruct)
+		renderedImp, impErr := renderImportPath(atmosConfig, relativeFilePath, filePath, imp, accumulatedImportContext, importStruct)
 		if impErr != nil {
 			return nil, nil, impErr
 		}
@@ -2033,6 +2035,7 @@ func emptyStackManifestProcessingResult() *schema.StackManifestProcessingResult 
 func renderImportPath(
 	atmosConfig *schema.AtmosConfiguration,
 	relativeFilePath string,
+	filePath string,
 	imp string,
 	accumulatedImportContext map[string]any,
 	importStruct schema.StackImport,
@@ -2061,6 +2064,8 @@ func renderImportPath(
 		tmplData = merged
 	}
 
+	// Pass the manifest's real path as the policy source so function and source rules see its
+	// provenance (local/remote) instead of the synthetic template name resolving to "unknown".
 	rendered, err := processTmpl(atmosConfig, &tmplInput{
 		name:                  fmt.Sprintf("import-path(%s)", relativeFilePath),
 		value:                 imp,
@@ -2068,6 +2073,7 @@ func renderImportPath(
 		ignoreMissing:         ignoreMissing,
 		manifestLoadFile:      relativeFilePath,
 		skipComponentDeferral: true,
+		sourceFile:            filePath,
 	})
 	if err != nil {
 		wrapped := fmt.Errorf("%w: import path '%s' in file '%s': %w",
@@ -3087,8 +3093,8 @@ func processBaseComponentConfigInternal(
 			componentPath := filepath.Join(componentBasePath, baseComponent)
 			componentPathExists, err := u.IsDirectory(componentPath)
 			if err != nil || !componentPathExists {
-				return errors.New("The component '" + component + "' inherits from the base component '" +
-					baseComponent + "' (using 'component:' attribute), " + "but `" + baseComponent + "' is not defined in any of the YAML config files for the stack '" + stack + "'")
+				return fmt.Errorf("%w: the component %q inherits from the base component %q (using 'component:' attribute), but %q is not defined in any of the YAML config files for the stack %q",
+					errUtils.ErrInvalidBaseComponentConfig, component, baseComponent, baseComponent, stack)
 			}
 		}
 	}

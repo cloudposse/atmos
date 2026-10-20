@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -48,4 +49,25 @@ func TestCustomGitGetterClearsCommitAfterFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.Error(t, g.Get(t.TempDir(), src))
 	assert.Empty(t, g.ResolvedCommit)
+}
+
+// TestFetchWithMetadataGitUnderSourcePolicy exercises the guarded git path with a real local repository:
+// an allowed source clones with hardened git flags and reports its commit through the policy wrapper.
+func TestFetchWithMetadataGitUnderSourcePolicy(t *testing.T) {
+	requireRealGit(t)
+	if runtime.GOOS == "windows" {
+		t.Skip("git cannot reliably clone a local file:// repository on Windows runners")
+	}
+	enableSourcePolicy(t)
+	repoDir := initCloneTestGitRepo(t, map[string]string{"example/file.txt": "guarded"})
+	wantCommit := runCloneTestGit(t, repoDir, "rev-parse", "HEAD")
+	dest := filepath.Join(t.TempDir(), "download")
+	src := "git::" + cloneTestGitFileURI(repoDir) + "//example?ref=main&depth=1"
+
+	metadata, err := NewGoGetterDownloader(&schema.AtmosConfiguration{}).FetchWithMetadata(src, dest, ClientModeDir, time.Minute)
+	require.NoError(t, err)
+	assert.Equal(t, wantCommit, metadata.GitCommit)
+	content, err := os.ReadFile(filepath.Join(dest, "file.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "guarded", string(content))
 }

@@ -1,0 +1,20 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: affected-protect-owner-label
+  description: Preserve existing instance ownership while allowing new owner labels.
+spec:
+  policies:
+    preserve-owner:
+      on: atmos.affected
+      engine: starlark
+      rule: |
+        for instance in ctx.input["instances"]:
+            before = ((instance.get("before") or {}).get("metadata") or {}).get("labels") or {}
+            after = ((instance.get("after") or {}).get("metadata") or {}).get("labels") or {}
+            if "owner" in before and ("owner" not in after or before["owner"] != after["owner"]):
+                return True
+        return False
+
+      action: deny
+      reason: Existing owner labels cannot be changed or removed.

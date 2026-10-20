@@ -13,6 +13,7 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/script"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -24,6 +25,7 @@ type OutputModeWriter struct {
 	viewport *schema.ViewportConfig
 	show     *schema.ShowConfig
 	writers  OutputWriters
+	stdin    io.Reader
 }
 
 // NewOutputModeWriter creates a new OutputModeWriter.
@@ -39,13 +41,25 @@ func NewOutputModeWriter(mode OutputMode, stepName string, viewport *schema.View
 		stepName: stepName,
 		viewport: viewport,
 		show:     showCfg,
+		stdin:    os.Stdin,
 	}
+}
+
+// WithStdin returns a copy using the operation's actual input to select masking behavior.
+// Nil means no input; it must not inherit interactive settings from the parent terminal.
+func (w *OutputModeWriter) WithStdin(stdin io.Reader) *OutputModeWriter {
+	defer perf.Track(nil, "step.OutputModeWriter.WithStdin")()
+
+	copy := *w
+	copy.stdin = stdin
+	return &copy
 }
 
 // Execute runs the command with the configured output mode.
 func (w *OutputModeWriter) Execute(cmd *exec.Cmd) (string, string, error) {
 	defer perf.Track(nil, "step.OutputModeWriter.Execute")()
 
+	w = w.WithStdin(cmd.Stdin)
 	if w.writers.Stdout != nil || w.writers.Stderr != nil {
 		return w.executeScoped(func(stdout, stderr io.Writer) error { cmd.Stdout, cmd.Stderr = stdout, stderr; return cmd.Run() })
 	}
@@ -110,8 +124,9 @@ func (w *OutputModeWriter) executeRawWithIO(runner func(stdout, stderr io.Writer
 	ioCtx := iolib.GetContext()
 
 	// Data() returns stdout for pipeable output, UI() returns stderr for human messages.
-	dataOut := iolib.NewStreamingMaskWriter(ioCtx.Data())
-	uiOut := iolib.NewStreamingMaskWriter(ioCtx.UI())
+	opts := iolib.MaskOptionsForStdin(w.stdin)
+	dataOut := iolib.NewStreamingMaskWriter(ioCtx.Data(), opts...)
+	uiOut := iolib.NewStreamingMaskWriter(ioCtx.UI(), opts...)
 
 	w.writeStepHeader()
 	err := runner(io.MultiWriter(&stdout, dataOut), io.MultiWriter(&stderr, uiOut))
@@ -240,6 +255,19 @@ func (w *OutputModeWriter) executeNoneWithIO(runner func(stdout, stderr io.Write
 
 	err := runner(&stdout, &stderr)
 	return stdout.String(), stderr.String(), err
+}
+
+// MarkNestedAtmosFailure marks the failure of a nested Atmos command so the parent does not annotate
+// it again, but only when the writer forwards the child's output. The child reports its own failure,
+// including its CI annotation, in that output. The none mode captures the output silently, so the
+// child's annotation never reaches the CI log and the parent keeps the failure to report itself.
+func (w *OutputModeWriter) MarkNestedAtmosFailure(err error) error {
+	defer perf.Track(nil, "step.OutputModeWriter.MarkNestedAtmosFailure")()
+
+	if w.mode == OutputModeNone {
+		return err
+	}
+	return script.MarkNestedAtmosFailure(err)
 }
 
 // NewCommandOutputWriter honors step/workflow output settings while retaining

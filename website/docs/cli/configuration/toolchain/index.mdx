@@ -215,8 +215,15 @@ Project-driven Atmos version switching honors the active project's registry, ins
 and lockfile settings, including profiles. Without project configuration, bootstrap uses XDG
 storage for binaries and metadata and does not create `.tool-versions` in the invoking directory.
 
-The `.tool-versions.lock` sidecar coordinates concurrent file access. It is not an artifact
-lockfile and should not be committed.
+Atmos coordinates concurrent `.tool-versions` access using locks stored outside the project,
+under `locks/tool-versions/` in Atmos's XDG data directory. These locks are separate from
+`toolchain.lock.yaml`, which records tool versions, platform-specific download URLs, and
+artifact checksums. Commit the project's `toolchain.lock.yaml` for reproducible installations;
+see [Frozen Installs in CI](#frozen-installs-in-ci) below for project lockfile configuration.
+
+Older releases, including v1.232.0, create a `.tool-versions.lock` sidecar beside `.tool-versions`
+for concurrency coordination. This sidecar contains no artifact integrity metadata and should
+not be committed. Projects using those releases can add `**/.tool-versions.lock` to `.gitignore`.
 
 ### Frozen Installs in CI
 

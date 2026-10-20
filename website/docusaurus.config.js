@@ -57,6 +57,8 @@ const config = {
         [
             '@docusaurus/plugin-client-redirects', {
                 redirects: [
+                    // Policy guides belong in Reference, not the command list.
+                    {from: '/cli/commands/terraform/plan-policies', to: '/policies/terraform-plan'},
                     {
                         from: '/changelog/starlark-yaml-values',
                         to: '/changelog/starlark-custom-commands'
@@ -529,6 +531,25 @@ const config = {
                 // Gist chapters, in display order (gist README front matter `tags:` assigns each gist).
                 tagOrder: ['AWS', 'AI', 'CI/CD', 'Secrets', 'Hooks'],
                 disclaimer: 'Gists are examples that demonstrate a concept, but are not actively maintained and may not work in your environment or current versions of Atmos without adaptations.',
+            },
+        ],
+        [
+            path.resolve(__dirname, 'plugins', 'file-browser'),
+            {
+                id: 'policies',
+                sourceDir: '../policy-library',
+                routeBasePath: '/policies/library',
+                title: 'Policy Library',
+                docsSidebar: 'cli',
+                presentation: 'policies',
+                description: 'Browse individual policies for Terraform plans, GitHub Actions context, and component lifecycle hooks.',
+                githubRepo: 'cloudposse/atmos',
+                githubBranch: 'main',
+                githubPath: 'policy-library',
+                tagOrder: ['Terraform', 'GitHub Actions', 'Lifecycle Hooks'],
+                searchable: true,
+                cardCtaLabel: 'View policy',
+                enablePerPageMarkdown: true,
             },
         ],
         [

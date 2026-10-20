@@ -123,6 +123,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 	)
 
 	info.CliArgs = []string{"terraform", info.SubCommand, info.SubCommand2}
+	planPolicy, err := loadTerraformPlanPolicy(&info)
+	if err != nil {
+		return err
+	}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
@@ -162,6 +166,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 		log.Info("Component is not enabled and skipped", logFieldComponent, info.ComponentFromArg)
 		return nil
 	}
+	planPolicy, err = bindTerraformPolicy(planPolicy, &info, atmosConfig.Templates.Settings.Delimiters...)
+	if err != nil {
+		return err
+	}
 
 	// Ensure ambient credential brokers (e.g., Atmos Pro github/sts) have provisioned before the
 	// subprocess environment is built, so terraform's own `git::` module fetches can read private
@@ -184,6 +192,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 	if err != nil {
 		return err
 	}
+	execCtx.planPolicy = planPolicy
 
 	// Remove the temporary Terraform CLI config (TF_CLI_CONFIG_FILE) after the whole
 	// pipeline (init, workspace, plan/apply) completes. Registered here, not inside the

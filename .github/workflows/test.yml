@@ -1669,9 +1669,10 @@ jobs:
         # setup-colima is vz-only; qemu failed on this Intel runner (see
         # docs/fixes/2026-07-01-macos-k3s-runner-research.md). Budget for brew
         # (7m), cleanup (1.5m), two start/info attempts (14m each), diagnostics
-        # and intermediate cleanup (~4m), verification (1m), and two image
-        # pulls with backoff (10.5m). The 55m step cap covers these ~52m of
-        # nested budgets; the 180m job cap also covers both 45m test attempts.
+        # and intermediate cleanup (~4m), verification plus the VM DNS
+        # readiness gate (3m), and two image pulls with backoff (10.5m). The
+        # 55m step cap covers these ~54m of nested budgets; the 180m job cap
+        # also covers both 45m test attempts.
         timeout-minutes: 55
         uses: ./.github/actions/setup-colima
 

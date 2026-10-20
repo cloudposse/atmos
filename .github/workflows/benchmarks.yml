@@ -21,6 +21,9 @@ jobs:
     timeout-minutes: 60
     env:
       GOPROXY: https://proxy.golang.org
+      # For pull_request this is a placeholder: the step below replaces it with
+      # the merge revision's first parent, which is the main commit actually
+      # measured. For push it is the measured commit itself.
       ATMOS_BENCH_BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
       ATMOS_BENCH_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
@@ -45,6 +48,23 @@ jobs:
           # For pull_request, github.sha is the event's immutable merge revision.
           ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Record the measured base revision
+        if: github.event_name == 'pull_request'
+        # github.event.pull_request.base.sha lags the base branch: on a reopen it
+        # was over an hour stale (run 39196516326 recorded 323db151b8 while the
+        # merge revision was built on f400a34a95), so the reporter rejected the
+        # artifact with "measured merge revision does not match the recorded
+        # base and PR head". The merge revision's first parent is the base that
+        # was measured. Read it from the raw commit object: HEAD^1 does not
+        # resolve on the depth-1 checkout, but cat-file still lists the parents.
+        run: |
+          set -euo pipefail
+          base="$(git cat-file -p HEAD | sed -n 's/^parent //p' | head -n 1)"
+          if ! [[ "$base" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Could not read the merge revision's first parent from HEAD"
+            exit 1
+          fi
+          echo "ATMOS_BENCH_BASE_SHA=${base}" >> "$GITHUB_ENV"
       - name: Set up Go and restore build cache
         uses: ./.github/actions/setup-go-cache
       - name: Collect measurements

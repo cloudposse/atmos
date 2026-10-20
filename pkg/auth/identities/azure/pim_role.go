@@ -15,6 +15,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/duration"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -423,7 +424,7 @@ func (i *pimRoleIdentity) resolveEffectiveDuration(ctx context.Context, client P
 	if i.duration == "" {
 		return ""
 	}
-	d, err := time.ParseDuration(i.duration)
+	d, err := duration.ParseDuration(i.duration)
 	if err != nil {
 		i.warn(fmt.Sprintf("Invalid duration %q for PIM activation on identity %q; using the role's policy default.", i.duration, i.name))
 		return ""
@@ -436,12 +437,13 @@ func (i *pimRoleIdentity) resolveEffectiveDuration(ctx context.Context, client P
 	if err != nil {
 		log.Debug("Could not read PIM policy maximum; sending configured duration",
 			azureCloud.LogFieldIdentity, i.name, "error", err)
-		return goDurationToISO8601(d)
+		return duration.FormatISO8601(d)
 	}
 	if found && policyMax > 0 && d > policyMax {
-		clampedISO := goDurationToISO8601(policyMax)
+		clampedISO := duration.FormatISO8601(policyMax)
 		i.warn(fmt.Sprintf("Configured duration %s for PIM activation on identity %q exceeds the role's policy maximum of %s; capping activation to %s.", i.duration, i.name, policyMax, clampedISO))
-		log.Debug("Clamping PIM activation duration to policy maximum",
+		log.Debug(
+			"Clamping PIM activation duration to policy maximum",
 			azureCloud.LogFieldIdentity, i.name,
 			"configured", i.duration,
 			"policy_max", policyMax.String(),
@@ -450,7 +452,7 @@ func (i *pimRoleIdentity) resolveEffectiveDuration(ctx context.Context, client P
 		return clampedISO
 	}
 
-	return goDurationToISO8601(d)
+	return duration.FormatISO8601(d)
 }
 
 // isoDuration converts the configured Go-style duration to the ISO-8601 form ARM expects,
@@ -459,12 +461,12 @@ func (i *pimRoleIdentity) isoDuration() string {
 	if i.duration == "" {
 		return ""
 	}
-	d, err := time.ParseDuration(i.duration)
+	d, err := duration.ParseDuration(i.duration)
 	if err != nil {
 		i.warn(fmt.Sprintf("Invalid duration %q for PIM activation on identity %q; using the role's policy default.", i.duration, i.name))
 		return ""
 	}
-	return goDurationToISO8601(d)
+	return duration.FormatISO8601(d)
 }
 
 // Environment returns environment variables for this identity (subscription from scope).

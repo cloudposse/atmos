@@ -23,6 +23,10 @@ The `--profile` and `--identity` selections given to the parent Atmos command re
 standalone scripts and in script steps of custom commands, workflows, and hooks. A value in the step's own `env`
 overrides the forwarded selection.
 
+The `--explain` flag reaches nested calls the same way: when the parent runs with `--explain` (or `ATMOS_EXPLAIN=true`),
+each nested `atmos.*` call prints its own `policy: ...` diagnostics too. With `output = "stream"` they appear live; with
+`output = "capture"` they are part of `result.stderr`.
+
 ## Custom commands and aliases
 
 Besides `atmos.run`, `atmos.terraform`, `atmos.helm`, and `atmos.toolchain`, the `atmos` module has one member for every
@@ -137,22 +141,43 @@ For example, `atmos.vendor("pull", flags = {"component": "vpc"})` runs
     <dt>`check`</dt>
     <dd>
         (Optional) Defaults to `True`: a nonzero exit code raises an error, and a failure that reaches the top of the
-        script ends Atmos with the command's exit code. Pass `False` to receive the result and inspect `exit_code`
-        yourself.
+        script ends Atmos with a nonzero exit code (`77` when a policy denied the command; see
+        [policy denials](#policy-denials)). Pass `False` to receive the result and inspect `exit_code` and
+        `policy_denied` yourself.
     </dd>
 </dl>
 
 ## Returns
 
-A result with `stdout` and `stderr` (strings), `exit_code` (an integer), and `data`
+A result with `stdout` and `stderr` (strings), `exit_code` (an integer), `policy_denied` (a boolean), and `data`
 (the JSON value decoded from `stdout` on first access). Raw output remains available even when it is not JSON. See
 [`exec.run`](/functions/automation/exec.run#returns) for the details that all process-running functions share.
+
+`policy_denied` is `True` when a [policy](/policies) denied the nested command, which Atmos reports with exit code `77`.
+It is only on the results of `atmos.*` calls, because `77` has no such meaning for other programs.
+
+### Policy denials {#policy-denials}
+
+Policies are enforced inside the nested `atmos` process, so a denial reaches the script as that process's exit code.
+With `check = False`, read `result.policy_denied` to tell a denial from an ordinary failure:
+
+```python
+result = atmos.terraform("destroy", component = "vpc", stack = "dev", check = False, output = "capture")
+if result.policy_denied:
+    ui.warning("Policy blocked the destroy:\n" + result.stderr)
+elif result.exit_code != 0:
+    fail("destroy failed")
+```
+
+With `check = True`, the error says that a policy denied the command, and Atmos itself exits with `77`.
 
 ## Errors
 
 - An empty `argv`, an empty command name, or a non-string element fails with an argument error.
-- With `check=True`, a nonzero exit code fails with a message that names the command and exit code and lists the
-  last lines of stderr.
+- With `check=True`, a nonzero exit code fails with a message that names the command and exit code. When the output
+  was captured (`output = "capture"`), the message also lists the last lines of stderr. When it was streamed (the
+  default) or shown in a viewport, you already saw it, so it is not repeated: the viewport prints the complete output
+  when a command fails.
 - A command that cannot start, a canceled run, and a command stopped by a signal always raise, whatever `check`
   says.
 

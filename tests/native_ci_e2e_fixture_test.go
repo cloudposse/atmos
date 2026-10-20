@@ -3,11 +3,53 @@ package tests
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
+
+func TestNativeCIFlociSurvivesRunnerHardening(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", ".github", "workflows", "native-ci.yml"))
+	require.NoError(t, err)
+	var workflow struct {
+		Jobs map[string]struct {
+			Services map[string]struct {
+				Options string `yaml:"options"`
+			} `yaml:"services"`
+			Steps []struct {
+				Name string `yaml:"name"`
+				Run  string `yaml:"run"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	require.NoError(t, yaml.Unmarshal(data, &workflow))
+	for _, jobName := range []string{"terraform-plan", "terraform-apply"} {
+		t.Run(jobName, func(t *testing.T) {
+			job, ok := workflow.Jobs[jobName]
+			require.True(t, ok)
+			floci, ok := job.Services["floci"]
+			require.True(t, ok)
+			require.Regexp(t, `(^|\s)--restart(?:=|\s+)always(\s|$)`, floci.Options, "runner hardening can restart Docker")
+			var names []string
+			for _, step := range job.Steps {
+				names = append(names, step.Name)
+			}
+			harden := slices.Index(names, "Harden Runner")
+			wait := slices.Index(names, "Wait for Floci")
+			mirror := slices.Index(names, "Mirror Terraform providers")
+			require.NotEqual(t, -1, harden)
+			require.Greater(t, wait, harden, "check readiness after Docker may have restarted")
+			require.Greater(t, mirror, wait, "provider mirroring authenticates through Floci STS")
+			probe := job.Steps[wait].Run
+			require.Contains(t, probe, "http://127.0.0.1:4566/")
+			require.Contains(t, probe, "--retry-connrefused")
+			require.Contains(t, probe, "--max-time 5")
+			require.Contains(t, probe, "--retry-max-time 60")
+		})
+	}
+}
 
 func TestNativeCIE2ETflintHookRunsInPlanJob(t *testing.T) {
 	path := filepath.Join(
