@@ -49,6 +49,7 @@ func ExecuteCustomCommandControlStep(ctx context.Context, control *CustomCommand
 		},
 		// Children render with the command's renderer and pass count, like sequential steps.
 		RenderTemplate: control.Executor.Variables().ResolveWithData,
+		Delimiters:     control.Executor.Variables().TemplateDelimiters(),
 		StoreResult: func(result *scheduler.Result) {
 			storeCustomCommandControlResult(control.Executor, result)
 		},

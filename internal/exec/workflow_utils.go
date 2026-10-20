@@ -407,8 +407,14 @@ func ExecuteWorkflow(
 	// behave identically in both. Flags are protected so a flag value containing
 	// template markers is not re-evaluated on later passes (mirrors cmd_utils).
 	workflowVars := stepExecutorState.Variables()
+	// Step templates honor templates.settings.delimiters for projects on the
+	// templates.step_delimiters edition behavior; earlier pins keep "{{ }}".
+	if err := workflowVars.ApplyTemplateDelimiters(&atmosConfig); err != nil {
+		return err
+	}
+	stepDelims := workflowVars.TemplateDelimiters()
 	workflowVars.SetTemplateRenderer(func(name, input string, data any) (string, error) {
-		return ProcessTmpl(&atmosConfig, name, input, data, false)
+		return ProcessStepTmpl(&atmosConfig, name, input, data, stepDelims)
 	})
 	workflowVars.SetTemplatePasses(workflowTemplatePasses)
 	workflowVars.ProtectTemplateRoots("Flags", "flags")
@@ -480,7 +486,7 @@ func ExecuteWorkflow(
 
 	// Reject embedded interpreters (Starlark) under an enabled container up front, so the
 	// failure is reported before any earlier step has already run.
-	if err := workflowPkg.ValidateEmbeddedInterpreters(fmt.Sprintf("Workflow `%s`", workflow), workflowDefinition); err != nil {
+	if err := workflowPkg.ValidateEmbeddedInterpreters(fmt.Sprintf("Workflow `%s`", workflow), workflowDefinition, workflowPkg.WithEmbeddedDelimiters(stepDelims)); err != nil {
 		return err
 	}
 
@@ -803,7 +809,7 @@ func ExecuteWorkflow(
 		// container, script) reads the same mode; an unknown rendered mode fails the step instead of
 		// silently running with the default.
 		var outputVars *stepPkg.Variables
-		if strings.Contains(step.Output, "{{") {
+		if stepDelims.Contains(step.Output) {
 			outputVars = stepVars()
 		}
 		if outputErr := stepPkg.ApplyStepOutputMode(&step, outputVars); outputErr != nil {
@@ -1015,7 +1021,7 @@ func ExecuteWorkflow(
 					// interpreter, not a raw template that could hide an embedded one.
 					if err = workflowPkg.RenderScriptInterpreter(&step, func(value string) (string, error) {
 						return resolveWorkflowStepCommand(value, stepEnv)
-					}); err != nil {
+					}, workflowPkg.WithEmbeddedDelimiters(stepDelims)); err != nil {
 						break
 					}
 					stepPkg.RenderCommand(&step, workflowDefinition, process.FormatScriptDisplay(step.Interpreter, step.Script))

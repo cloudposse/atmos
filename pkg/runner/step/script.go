@@ -197,17 +197,17 @@ func WrapScriptInterpreterError(interpreter string, err error) error {
 func (h *ScriptHandler) resolveInvocation(step *schema.WorkflowStep, vars *Variables) (scriptInvocation, error) {
 	interpreter, err := vars.ResolveStepField(step, "interpreter", step.Interpreter)
 	if err != nil {
-		return scriptInvocation{}, TemplateFieldError(step, "interpreter", err)
+		return scriptInvocation{}, vars.TemplateFieldError(step, "interpreter", err)
 	}
 	script, err := vars.ResolveStepField(step, "script", step.Script)
 	if err != nil {
-		return scriptInvocation{}, TemplateFieldError(step, "script", err)
+		return scriptInvocation{}, vars.TemplateFieldError(step, "script", err)
 	}
 	workDir := step.WorkingDirectory
 	if workDir != "" {
 		workDir, err = vars.ResolveStepField(step, "working_directory", workDir)
 		if err != nil {
-			return scriptInvocation{}, TemplateFieldError(step, "working_directory", err)
+			return scriptInvocation{}, vars.TemplateFieldError(step, "working_directory", err)
 		}
 	}
 	return scriptInvocation{interpreter: interpreter, script: script, workDir: workDir}, nil
@@ -227,7 +227,7 @@ func (h *ScriptHandler) resolveEnv(step *schema.WorkflowStep, vars *Variables) (
 	}
 	resolvedEnv, err := vars.ResolveStepEnvMap(step, step.Env)
 	if err != nil {
-		return nil, TemplateFieldError(step, "env", err)
+		return nil, vars.TemplateFieldError(step, "env", err)
 	}
 	for key, value := range resolvedEnv {
 		env = envpkg.UpdateEnvVar(env, key, value)
