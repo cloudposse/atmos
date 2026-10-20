@@ -118,3 +118,35 @@ func TestScopedCheckpointConsumesOutputThroughMarker(t *testing.T) {
 		})
 	}
 }
+
+// TestObserveHoldsOutputUntilCheckpointRecorded pins the contract that the
+// checkpoint callback runs with the session output lock held: PTY output that
+// arrives while the checkpoint marker is being recorded must wait, so it lands
+// after the checkpoint instead of inside the span the wait already consumed.
+func TestObserveHoldsOutputUntilCheckpointRecorded(t *testing.T) {
+	state := &sessionState{scopedWaits: true, discardRecording: true, changed: make(chan struct{}, 1), done: make(chan error, 1)}
+	state.output.WriteString("consumed")
+	arrived := make(chan struct{})
+	opts := &SessionOptions{
+		ScopedWaits: true,
+		Actions:     []SessionAction{{Type: "wait"}},
+		Observe: func(_ int, _ *SessionAction) error {
+			go func() {
+				state.recordOutputChunk([]byte("late"))
+				close(arrived)
+			}()
+			select {
+			case <-arrived:
+				t.Error("output was recorded while the checkpoint was being emitted")
+			case <-time.After(100 * time.Millisecond):
+			}
+			return nil
+		},
+	}
+	require.NoError(t, observeSessionAction(state, opts, 0))
+	<-arrived
+	state.mu.Lock()
+	afterCheckpoint := state.output.String()[state.waitOffset:]
+	state.mu.Unlock()
+	require.Equal(t, "late", afterCheckpoint)
+}
