@@ -57,7 +57,7 @@ func (e *Engine) inspect(ctx context.Context, p *project, o *Options, r *Report)
 	}
 	for i := range r.Checks {
 		if r.Checks[i].ID == ruleLegacyNaming {
-			r.Checks[i] = scanCheck(r, ruleLegacyNaming, checkStatus(r, ruleLegacyNaming), r.Checks[i].Files)
+			r.Checks[i] = scanCheck(r, ruleLegacyNaming, r.Checks[i].Files)
 		}
 	}
 	before := len(r.Findings)
@@ -300,15 +300,7 @@ func appendScanCoverage(o *Options, r *Report, checked int) {
 		switch rule.ID {
 		case ruleLegacyNaming, ruleLocalAtmosSchema, ruleComponentDependencies, ruleSchema, ruleYAMLFunctions, ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure, ruleModernization, ruleComponentMonorepo, ruleImports:
 			if enabled(o, rule.ID, rule.Category) {
-				status := checkStatus(r, rule.ID)
-				if status == statusPassed && checkHasFindings(r, rule.ID) {
-					status = statusFindings
-				}
-				if checked == 0 && status == statusPassed {
-					r.Checks = append(r.Checks, Check{ID: rule.ID, Status: statusSkipped, Reason: "No documents were selected"})
-					continue
-				}
-				r.Checks = append(r.Checks, scanCheck(r, rule.ID, status, checked))
+				r.Checks = append(r.Checks, scanCheck(r, rule.ID, checked))
 			}
 		}
 	}
@@ -316,8 +308,16 @@ func appendScanCoverage(o *Options, r *Report, checked int) {
 
 // scanCheck builds the coverage record of a document scan. A scan that left a component source
 // unverified is incomplete, not passed, so a clean exit never hides an unanswered question.
-func scanCheck(r *Report, id, status string, files int) Check {
+func scanCheck(r *Report, id string, files int) Check {
+	status := checkStatus(r, id)
+	if status == statusPassed && checkHasFindings(r, id) {
+		status = statusFindings
+	}
 	check := Check{ID: id, Status: status, Files: files}
+	if files == 0 && status == statusPassed {
+		check.Status = statusSkipped
+		check.Reason = "No documents were selected"
+	}
 	if id == ruleComponentMonorepo && hasStatus(r, id, statusVerificationIncomplete) {
 		check.Status = "incomplete"
 		check.Reason = "Some component sources could not be verified"

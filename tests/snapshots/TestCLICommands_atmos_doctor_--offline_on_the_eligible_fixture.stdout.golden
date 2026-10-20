@@ -119,7 +119,7 @@
     },
     {
       "id": "legacy-naming",
-      "status": "passed",
+      "status": "findings",
       "files": 2
     },
     {

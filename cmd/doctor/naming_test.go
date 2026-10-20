@@ -48,6 +48,12 @@ func TestDoctorNamingFixUsesProductionResults(t *testing.T) {
 			options := diagnostic.Options{Root: root, Only: []string{"legacy-naming"}, Fix: true, DryRun: true, Offline: true}
 			report, err := engine.Run(context.Background(), options)
 			require.NoError(t, err)
+			wantStatus := "incomplete"
+			if tc.fix || tc.name == "mixed" || tc.name == "mixed-pattern-disabled-templating" || tc.name == "stack-literal-changes-name" || tc.name == "cluster-component-changes-name" {
+				wantStatus = "findings"
+			}
+			require.NotEmpty(t, report.Findings)
+			require.Equal(t, wantStatus, namingCheck(t, &report).Status, "%+v", report.Findings)
 			bytes, err := os.ReadFile(configPath)
 			require.NoError(t, err)
 			require.Equal(t, tc.config, string(bytes))
@@ -83,6 +89,7 @@ func TestDoctorNamingFixUsesProductionResults(t *testing.T) {
 			require.NoError(t, err)
 			require.Empty(t, report.ChangedFiles)
 			require.Empty(t, report.Findings)
+			require.Equal(t, "passed", namingCheck(t, &report).Status)
 		})
 	}
 }
@@ -111,4 +118,15 @@ func TestDoctorNamingRefusesSourceDrift(t *testing.T) {
 	content, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, original+"# concurrent edit\n", string(content))
+}
+
+func namingCheck(t *testing.T, report *diagnostic.Report) diagnostic.Check {
+	t.Helper()
+	for _, check := range report.Checks {
+		if check.ID == "legacy-naming" {
+			return check
+		}
+	}
+	t.Fatal("legacy-naming coverage is missing")
+	return diagnostic.Check{}
 }
