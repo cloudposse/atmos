@@ -248,10 +248,11 @@ RUN atmos toolchain env --format dotenv >> /etc/environment
 
 <TryExample example="toolchain">
 
-Inspect the project's pinned tools. Follow the README to install them and run its workflows; installation downloads require network access.
+Install the pinned jq binary, then print the project toolchain environment. Installation requires network access.
 
 ```shell
-atmos toolchain list
+atmos toolchain install jq
+atmos toolchain env
 ```
 
 </TryExample>

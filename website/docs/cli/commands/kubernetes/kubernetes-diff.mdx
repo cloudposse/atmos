@@ -123,10 +123,12 @@ are omitted from the diff so their data is never printed or written to the summa
 
 <TryExample example="kubernetes">
 
-Install Docker or Podman and kubectl, then follow the README to start the local Kubernetes emulator and deploy.
+Requires Docker or Podman and network access. Use the local Kubernetes emulator and stop it when finished. Diff reports pending changes with a nonzero exit status.
 
 ```shell
-atmos validate stacks
+atmos emulator up kubernetes -s dev
+atmos kubernetes diff demo -s dev --identity local-k3s
+atmos emulator down kubernetes -s dev
 ```
 
 </TryExample>

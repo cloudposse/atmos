@@ -55,11 +55,10 @@ atmos describe config --query <yq-expression>
 
 <TryExample example="config-profiles">
 
-Inspect the sample profiles and their merged settings. Replace the sample cloud identities before running infrastructure commands.
+Inspect the merged CLI configuration with the developer profile selected.
 
 ```shell
-atmos profile list
-atmos profile show developer
+atmos describe config --profile developer
 ```
 
 </TryExample>

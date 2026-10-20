@@ -77,10 +77,12 @@ atmos devcontainer rebuild terraform --instance project-a
 
 <TryExample example="devcontainer-build">
 
-Install Docker or Podman before building or entering the Geodesic container.
+Requires a running Podman runtime (the example selects Podman) and network access for the image. The final commands clean up the local container.
 
 ```shell
-atmos devcontainer list
+atmos devcontainer rebuild geodesic
+atmos devcontainer stop geodesic
+atmos devcontainer remove geodesic
 ```
 
 </TryExample>

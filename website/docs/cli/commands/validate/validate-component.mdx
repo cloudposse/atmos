@@ -153,10 +153,10 @@ atmos validate component . --stack dev --timeout 15
 
 <TryExample example="demo-opa">
 
-Inspect the example stacks, then follow the README to compare valid and invalid components against its OPA policies.
+Evaluate the included OPA policy against dev. This intentionally fails: dev violates the availability-zone and VPC-name rules. No infrastructure is deployed.
 
 ```shell
-atmos list stacks
+atmos validate component vpc -s dev
 ```
 
 </TryExample>

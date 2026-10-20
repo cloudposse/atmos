@@ -461,10 +461,12 @@ atmos composition validate storefront -s dev
 
 <TryExample example="container-component">
 
-Install Docker or Podman before building and running the example containers.
+Requires Docker or Podman and network access. Start the example nginx service on localhost:8080, inspect it, then remove it.
 
 ```shell
-atmos validate stacks
+atmos container up api -s dev
+atmos container ps api -s dev
+atmos container down api -s dev
 ```
 
 </TryExample>

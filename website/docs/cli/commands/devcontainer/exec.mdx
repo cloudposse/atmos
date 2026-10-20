@@ -126,10 +126,13 @@ atmos devcontainer exec geodesic --pty -- bash
 
 <TryExample example="devcontainer">
 
-Install Docker or Podman, then inspect the configured development containers.
+Requires a running Podman runtime (the example selects Podman) and network access for the image. The final commands clean up the local container.
 
 ```shell
-atmos devcontainer list
+atmos devcontainer start geodesic
+atmos devcontainer exec geodesic -- uname -a
+atmos devcontainer stop geodesic
+atmos devcontainer remove geodesic
 ```
 
 </TryExample>

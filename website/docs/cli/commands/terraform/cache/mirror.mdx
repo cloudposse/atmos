@@ -82,10 +82,10 @@ atmos terraform cache list
 
 <TryExample example="caching">
 
-Install Terraform, then follow the README to initialize the sample component and inspect provider caching.
+Requires Terraform and network access. Mirror the providers used by the random-pet component for the configured platforms.
 
 ```shell
-atmos terraform cache list
+atmos terraform cache mirror random-pet -s dev
 ```
 
 </TryExample>

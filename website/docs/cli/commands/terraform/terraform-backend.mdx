@@ -540,10 +540,13 @@ S3 bucket 'acme-ue1-dev-tfstate' already exists (idempotent)
 
 <TryExample example="backend-provisioning">
 
-Install Terraform and Docker or Podman. Follow the README to provision and remove a backend in the local AWS emulator.
+Requires Docker or Podman and network access. Create the demo state bucket in the local AWS emulator, then remove it and stop the emulator.
 
 ```shell
-atmos validate stacks
+atmos emulator up aws -s local
+atmos terraform backend create demo -s dev
+atmos terraform backend delete demo -s dev --force
+atmos emulator down aws -s local
 ```
 
 </TryExample>

@@ -219,10 +219,10 @@ This is different from running a subprocess, ensuring proper tool behavior.
 
 <TryExample example="toolchain">
 
-Inspect the project's pinned tools. Follow the README to install them and run its workflows; installation downloads require network access.
+Run the pinned jq binary. Atmos downloads it if needed; requires network access.
 
 ```shell
-atmos toolchain list
+atmos toolchain exec jq -- --version
 ```
 
 </TryExample>

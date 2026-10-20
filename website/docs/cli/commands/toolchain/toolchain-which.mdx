@@ -49,10 +49,11 @@ atmos toolchain which kubectl
 
 <TryExample example="toolchain">
 
-Inspect the project's pinned tools. Follow the README to install them and run its workflows; installation downloads require network access.
+Install jq, then locate its managed executable. Requires network access for installation.
 
 ```shell
-atmos toolchain list
+atmos toolchain install jq
+atmos toolchain which jq
 ```
 
 </TryExample>

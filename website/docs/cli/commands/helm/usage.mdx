@@ -226,10 +226,10 @@ git target. See [Publishing through a pull request](/stacks/components/kubernete
 
 <TryExample example="helm">
 
-Install Helm and Docker or Podman before following the local release lifecycle.
+Render the included local chart without contacting a cluster.
 
 ```shell
-atmos validate stacks
+atmos helm template demo -s dev
 ```
 
 </TryExample>

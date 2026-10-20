@@ -133,10 +133,10 @@ This command supports native `terraform test` flags such as `-filter` to run spe
 
 <TryExample example="terraform-tests">
 
-Install Terraform and Docker or Podman before following the local test walkthrough.
+Requires Terraform, Docker or Podman, and network access. The test provisions its local emulator and fixture infrastructure as described in the README.
 
 ```shell
-atmos validate stacks
+atmos terraform test app -s fixtures
 ```
 
 </TryExample>

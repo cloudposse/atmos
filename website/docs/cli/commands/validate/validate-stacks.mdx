@@ -251,10 +251,10 @@ file 'catalog/invalid-yaml-and-schema/invalid-schema-8.yaml':
 
 <TryExample example="demo-stacks">
 
-Compare the resolved variables across the example stacks.
+Validate the included stack configuration without running Terraform.
 
 ```shell
-atmos describe component myapp -s dev --query .vars
+atmos validate stacks
 ```
 
 </TryExample>

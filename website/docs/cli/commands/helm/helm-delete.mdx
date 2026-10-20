@@ -60,10 +60,13 @@ atmos helm delete --all --tags production,tier-1
 
 <TryExample example="helm">
 
-Install Helm and Docker or Podman before following the local release lifecycle.
+Requires Docker or Podman and network access. Deploy into the local Kubernetes emulator, then delete the release and stop the emulator.
 
 ```shell
-atmos validate stacks
+atmos emulator up kubernetes -s dev
+atmos helm apply demo -s dev --identity local-k3s
+atmos helm delete demo -s dev --identity local-k3s
+atmos emulator down kubernetes -s dev
 ```
 
 </TryExample>

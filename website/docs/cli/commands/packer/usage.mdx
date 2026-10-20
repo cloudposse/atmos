@@ -191,10 +191,10 @@ atmos packer output . -s prod --query '.builds[0].artifact_id'
 
 <TryExample example="packer-docker">
 
-Install Packer and Docker before following the README to build a local Alpine image.
+Requires Packer and network access. Initialize the Docker plugin before following the README to build the image with a running Docker or Podman runtime.
 
 ```shell
-atmos validate stacks
+atmos packer init alpine -s alpine
 ```
 
 </TryExample>

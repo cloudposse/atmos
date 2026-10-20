@@ -64,10 +64,10 @@ atmos terraform cache untrust
 
 <TryExample example="caching">
 
-Install Terraform, then follow the README to initialize the sample component and inspect provider caching.
+Trust the local registry-cache certificate before following the README to use the proxy. This changes your machine trust store and may require an administrator prompt.
 
 ```shell
-atmos terraform cache list
+atmos terraform cache trust
 ```
 
 </TryExample>

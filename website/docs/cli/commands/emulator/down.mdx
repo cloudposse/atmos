@@ -50,10 +50,11 @@ atmos emu down aws --stack=plat-ue2-dev
 
 <TryExample example="emulator-aws">
 
-Install Terraform and Docker or Podman. Follow the README to deploy locally and tear down the emulator afterward.
+Requires Docker or Podman and network access for the image. Start the local AWS emulator, then stop and remove it when finished.
 
 ```shell
-atmos validate stacks
+atmos emulator up aws -s local
+atmos emulator down aws -s local
 ```
 
 </TryExample>

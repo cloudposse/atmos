@@ -148,10 +148,10 @@ The file is automatically cleaned up after the playbook execution completes.
 
 <TryExample example="demo-ansible">
 
-Inspect the example stacks. Install Ansible before running the playbooks in the README.
+Requires Ansible. Run the included hello-world playbook locally; no cloud credentials are needed.
 
 ```shell
-atmos list stacks
+atmos ansible playbook hello-world -s dev
 ```
 
 </TryExample>

@@ -117,10 +117,10 @@ To see provenance information (where configuration values originated with file:l
 
 <TryExample example="demo-stacks">
 
-Compare the resolved variables across the example stacks.
+Inspect the merged dev stack without running Terraform.
 
 ```shell
-atmos describe component myapp -s dev --query .vars
+atmos describe stacks --stack dev
 ```
 
 </TryExample>

@@ -88,10 +88,11 @@ atmos git diff flux-deploy --path=clusters/prod > preview.diff
 
 <TryExample example="gitops">
 
-Review the configured Git repository. Replace the sample remote with a repository you control before following the clone, commit, and push walkthrough.
+Requires Git and network access. Clone the public demo repository, then inspect its managed checkout. A fresh, unchanged checkout has no diff. These commands do not commit or push.
 
 ```shell
-atmos describe config --query .git
+atmos git clone deploy
+atmos git diff deploy
 ```
 
 </TryExample>

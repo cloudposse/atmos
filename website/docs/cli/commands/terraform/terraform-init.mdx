@@ -559,10 +559,10 @@ atmos terraform init vpc -s dev
 
 <TryExample example="quick-start-simple">
 
-Inspect the example stacks. Install Terraform before continuing with the README's component walkthrough.
+Requires Terraform and network access for provider downloads and the public weather API. The example writes a local weather cache file; no cloud credentials are needed. Apply and destroy prompt for confirmation.
 
 ```shell
-atmos list stacks
+atmos terraform init station -s dev
 ```
 
 </TryExample>

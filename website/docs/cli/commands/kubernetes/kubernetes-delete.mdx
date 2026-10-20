@@ -105,10 +105,13 @@ atmos kubernetes delete --affected --labels cost-center=platform,compliance=sox
 
 <TryExample example="kubernetes">
 
-Install Docker or Podman and kubectl, then follow the README to start the local Kubernetes emulator and deploy.
+Requires Docker or Podman and network access. Apply and delete the example in the local Kubernetes emulator, then stop it.
 
 ```shell
-atmos validate stacks
+atmos emulator up kubernetes -s dev
+atmos kubernetes apply demo -s dev --identity local-k3s
+atmos kubernetes delete demo -s dev --identity local-k3s
+atmos emulator down kubernetes -s dev
 ```
 
 </TryExample>

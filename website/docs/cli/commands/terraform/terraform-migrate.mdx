@@ -203,10 +203,10 @@ For CI, use `tfmigrate` history mode with durable storage such as S3, GCS, or a 
 
 <TryExample example="hooks-tfmigrate">
 
-Install Terraform and tfmigrate, then follow the README to create local state and migrate it.
+List the checked-in tfmigrate migrations for the service component. Follow the README before applying its state migration.
 
 ```shell
-atmos validate stacks
+atmos terraform migrate list service -s test
 ```
 
 </TryExample>

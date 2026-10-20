@@ -57,11 +57,10 @@ atmos version track get checkout --track=prod --show=ecosystem --format=json
 
 <TryExample example="version-tracker">
 
-Compare the checked-in dev and prod tracks, then verify their pinned files. This example works offline; no cloud credentials are needed.
+Read the locked redis version from the dev track. No cloud credentials are needed.
 
 ```shell
-atmos version track list
-atmos version track verify
+atmos version track get redis --track dev
 ```
 
 </TryExample>

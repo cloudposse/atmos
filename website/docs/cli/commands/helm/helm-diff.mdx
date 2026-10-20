@@ -93,10 +93,11 @@ The diff uses the helm-diff library directly — you do **not** need to install 
 
 <TryExample example="helm">
 
-Install Helm and Docker or Podman before following the local release lifecycle.
+Render a baseline, then compare the chart against it offline. An unchanged example has no diff; edit replicaCount in stacks/deploy/dev.yaml to see a change.
 
 ```shell
-atmos validate stacks
+atmos helm template demo -s dev --output baseline.yaml
+atmos helm diff demo -s dev --from-manifest baseline.yaml
 ```
 
 </TryExample>

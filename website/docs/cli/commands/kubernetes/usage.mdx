@@ -246,10 +246,10 @@ Supported events include `before.kubernetes.render`, `after.kubernetes.render`,
 
 <TryExample example="kubernetes">
 
-Install Docker or Podman and kubectl, then follow the README to start the local Kubernetes emulator and deploy.
+Render the included manifests without contacting a cluster.
 
 ```shell
-atmos validate stacks
+atmos kubernetes render demo -s dev
 ```
 
 </TryExample>

@@ -45,11 +45,10 @@ atmos version track rm nginx --track=prod
 
 <TryExample example="version-tracker">
 
-Compare the checked-in dev and prod tracks, then verify their pinned files. This example works offline; no cloud credentials are needed.
+Remove the redis override from your local dev track. No cloud credentials are needed.
 
 ```shell
-atmos version track list
-atmos version track verify
+atmos version track remove redis --track dev
 ```
 
 </TryExample>

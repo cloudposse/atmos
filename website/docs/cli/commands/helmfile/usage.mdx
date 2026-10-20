@@ -214,10 +214,12 @@ All native `helmfile` flags, command options, and arguments are supported
 
 <TryExample example="demo-helmfile">
 
-Install Helmfile, Helm, and Docker or Podman before following the README to deploy into the local Kubernetes emulator and clean up afterward.
+Requires Docker or Podman and network access. Atmos installs the declared Helmfile tools on first run. Deploy into the local Kubernetes emulator, then remove the ephemeral emulator.
 
 ```shell
-atmos validate stacks
+atmos emulator up kubernetes -s dev
+atmos helmfile apply demo -s dev
+atmos emulator down kubernetes -s dev
 ```
 
 </TryExample>
