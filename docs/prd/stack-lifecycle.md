@@ -1,6 +1,6 @@
 # Stack Management and Lifecycle Operations
 
-**Status:** Implementation in progress. Current-definition test/deploy/destroy, scaffold-backed manifest creation, and hook-aware dry runs are implemented. Stack creation reuses the scaffold catalog and renderer, validates complete file plans, and records each stack independently. Deleted-definition recovery remains blocked pending the prerequisite teardown implementation; selecting deletions with `--allow-destroy` fails before any operations start.
+**Status:** Implementation in progress. Current-definition plan/test/deploy/destroy, scaffold-backed manifest creation, and hook-aware dry runs are implemented. Stack creation reuses the scaffold catalog and renderer, validates complete file plans, and records each stack independently. Deleted-definition recovery remains blocked pending the prerequisite teardown implementation; selecting deletions with `--allow-destroy` fails before any operations start.
 
 **Prerequisite:** Merge [PR #3415, Teardown of Deleted Components](https://github.com/cloudposse/atmos/pull/3415)
 before this work. Its `docs/prd/deleted-component-teardown.md` governs configuration
@@ -25,6 +25,7 @@ commands. No top-level `atmos deploy` or `atmos destroy` is introduced.
 | `atmos stack create` | Create a stack manifest. |
 | `atmos stack delete` | Remove a stack manifest. |
 | `atmos stack config get\|set\|delete\|format\|list` | Read and edit configuration within manifests. |
+| `atmos stack plan` | Run selected components’ native plans or diffs in dependency order. |
 | `atmos stack test` | Run selected components' registered tests in dependency order. |
 | `atmos stack deploy` | Deploy selected components; explicitly opt into teardown of removed components. |
 | `atmos stack destroy` | Destroy selected components that remain defined. |
@@ -162,12 +163,21 @@ the required migration and renewed preparation must establish that separately.
 ## Lifecycle registry
 
 Use `pkg/stack/lifecycle.Registry`, keyed by component kind and a fixed `Event`:
-`Build`, `Test`, `Deploy`, `Destroy`, or `Validate`. The set of lifecycle events is
+`Build`, `PlanEvent`, `Test`, `Deploy`, `Destroy`, or `Validate`. The set of lifecycle events is
 not dynamically extensible. A component type supports an event only when it
 registers a handler. Duplicate registrations are rejected. Each handler declares
 its structured component command bindings, hook preview events, optional approval
 arguments, and execution resource/environment policy. The current CLI work wires
-`stack test`, `stack deploy`, and `stack destroy`; it does not repurpose existing `stack validate`.
+`stack plan`, `stack test`, `stack deploy`, and `stack destroy`; it does not repurpose existing `stack validate`.
+
+Planning maps Terraform to `terraform plan`, Helmfile to `helmfile diff`, and Helm,
+Kubernetes, and AWS CloudFormation to their native `plan` commands. Each handler
+previews the native plan/diff hooks and preserves existing execution safeguards.
+Custom commands named `plan` participate through their declared component and
+stack bindings. Unsupported kinds are excluded; explicit required prerequisite
+expansion rejects unsupported operations. A dry run previews commands without
+calculating infrastructure changes. Planning does not deploy prerequisites or
+make proposed outputs available to downstream components.
 
 Terraform registers `Test` as `atmos terraform test`, preserving the native
 `before.terraform.test` and `after.terraform.test` hooks, resource locks, and

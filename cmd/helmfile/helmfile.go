@@ -37,6 +37,9 @@ var helmfileCmd = &cobra.Command{
 const lifecycleComponentKind = "helmfile"
 
 func init() {
+	planHandler := lifecycle.NativeHandler(lifecycleComponentKind, "diff")
+	planHandler.HookEvents = []string{string(h.BeforeHelmfileDiff), string(h.AfterHelmfileDiff)}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.PlanEvent, planHandler)
 	// Helmfile has no deploy subcommand; stack deploy maps to `helmfile apply`
 	// and therefore fires the apply hook events (see helmfileBeforeEvent/helmfileAfterEvent).
 	deployHandler := lifecycle.NativeHandler(lifecycleComponentKind, "apply")

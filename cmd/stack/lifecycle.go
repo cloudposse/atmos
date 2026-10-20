@@ -28,6 +28,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+//go:embed markdown/plan_usage.md
+var stackPlanUsage string
+
 //go:embed markdown/test_usage.md
 var stackTestUsage string
 
@@ -44,7 +47,7 @@ type lifecycleOptions struct {
 }
 
 func init() {
-	stackCmd.AddCommand(newLifecycleCommand("test"), newLifecycleCommand("deploy"), newLifecycleCommand("destroy"))
+	stackCmd.AddCommand(newLifecycleCommand("plan"), newLifecycleCommand("test"), newLifecycleCommand("deploy"), newLifecycleCommand("destroy"))
 }
 
 // affectedOnlyFlags configure the Git comparison and are meaningless without --affected.
@@ -119,7 +122,10 @@ func newLifecycleCommand(verb string) *cobra.Command {
 		// Children are top-level Atmos invocations that open their own CI log groups.
 		Annotations: map[string]string{annotationSkipInvocationGroup: "true"},
 	}
-	if verb == "test" {
+	switch verb {
+	case "plan":
+		cmd.Example = stackPlanUsage
+	case "test":
 		cmd.Example = stackTestUsage
 	}
 	parser.RegisterFlags(cmd)

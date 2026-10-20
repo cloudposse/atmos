@@ -60,6 +60,9 @@ var helmCmd = &cobra.Command{
 const lifecycleComponentKind = "helm"
 
 func init() {
+	planHandler := lifecycle.NativeHandler(lifecycleComponentKind, "plan")
+	planHandler.HookEvents = []string{"before.helm.diff", "after.helm.diff"}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.PlanEvent, planHandler)
 	deployHandler := lifecycle.NativeHandler(lifecycleComponentKind, "deploy")
 	deployHandler.HookEvents = []string{"before.helm.deploy", "after.helm.deploy"}
 	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.Deploy, deployHandler)

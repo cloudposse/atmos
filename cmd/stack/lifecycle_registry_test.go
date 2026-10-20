@@ -24,7 +24,7 @@ func TestBuiltInLifecycleHandlersResolveToRealCommands(t *testing.T) {
 	root := &cobra.Command{Use: "atmos"}
 	require.NoError(t, internal.RegisterAll(root))
 
-	for _, event := range []lifecycle.Event{lifecycle.Test, lifecycle.Deploy, lifecycle.Destroy} {
+	for _, event := range []lifecycle.Event{lifecycle.PlanEvent, lifecycle.Test, lifecycle.Deploy, lifecycle.Destroy} {
 		handlers := lifecycle.DefaultRegistry.Handlers(event)
 		require.NotEmpty(t, handlers, "no built-in %s handlers registered", event)
 		for kind, handler := range handlers {

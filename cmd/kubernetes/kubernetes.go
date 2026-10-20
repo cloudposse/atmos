@@ -49,6 +49,9 @@ var kubernetesCmd = &cobra.Command{
 const lifecycleComponentKind = "kubernetes"
 
 func init() {
+	planHandler := lifecycle.NativeHandler(lifecycleComponentKind, "plan")
+	planHandler.HookEvents = []string{"before.kubernetes.plan", "after.kubernetes.plan"}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.PlanEvent, planHandler)
 	deployHandler := lifecycle.NativeHandler(lifecycleComponentKind, "deploy")
 	deployHandler.HookEvents = []string{"before.kubernetes.deploy", "after.kubernetes.deploy"}
 	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.Deploy, deployHandler)

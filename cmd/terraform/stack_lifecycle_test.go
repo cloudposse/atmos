@@ -28,16 +28,20 @@ func TestTerraformStackLifecycleRegistration(t *testing.T) {
 	assert.False(t, ok, "unregistered events must not be inferred")
 }
 
-func TestTerraformStackTestRegistration(t *testing.T) {
-	handler, ok := lifecycle.DefaultRegistry.Lookup("terraform", lifecycle.Test)
-	require.True(t, ok)
-	args, err := handler.Arguments(&dependency.Node{Type: "terraform", Stack: "dev", Component: "network"})
-	require.NoError(t, err)
-	assert.Equal(t, []string{"terraform", "test", "--stack=dev", "network"}, args)
-	assert.Equal(t, []string{"before.terraform.test", "after.terraform.test"}, handler.HookEvents)
-	assert.Empty(t, handler.ApprovalArgs, "terraform test has no deployment approval step")
-	require.NotNil(t, handler.NewResourceGuard)
-	assert.NotNil(t, handler.NewResourceGuard(&schema.AtmosConfiguration{}))
-	assert.Equal(t, []string{plugin.DisableCacheEnv + "=true"}, handler.WorkerEnvironment(2))
-	assert.Equal(t, []string{plugin.DisableCacheEnv + "=false"}, handler.WorkerEnvironment(1))
+func TestTerraformStackNonDeployRegistrations(t *testing.T) {
+	for _, event := range []lifecycle.Event{lifecycle.Test, lifecycle.PlanEvent} {
+		t.Run(string(event), func(t *testing.T) {
+			handler, ok := lifecycle.DefaultRegistry.Lookup("terraform", event)
+			require.True(t, ok)
+			args, err := handler.Arguments(&dependency.Node{Type: "terraform", Stack: "dev", Component: "network"})
+			require.NoError(t, err)
+			assert.Equal(t, []string{"terraform", string(event), "--stack=dev", "network"}, args)
+			assert.Equal(t, []string{"before.terraform." + string(event), "after.terraform." + string(event)}, handler.HookEvents)
+			assert.Empty(t, handler.ApprovalArgs, "planning and testing do not require deployment approval")
+			require.NotNil(t, handler.NewResourceGuard)
+			assert.NotNil(t, handler.NewResourceGuard(&schema.AtmosConfiguration{}))
+			assert.Equal(t, []string{plugin.DisableCacheEnv + "=true"}, handler.WorkerEnvironment(2))
+			assert.Equal(t, []string{plugin.DisableCacheEnv + "=false"}, handler.WorkerEnvironment(1))
+		})
+	}
 }

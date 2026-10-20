@@ -11,7 +11,7 @@ import (
 
 func TestRegistryFixedEventsAndIsolation(t *testing.T) {
 	r := NewRegistry()
-	for _, event := range []Event{Build, Test, Deploy, Destroy, Validate} {
+	for _, event := range []Event{PlanEvent, Build, Test, Deploy, Destroy, Validate} {
 		h := NativeHandler("widgets", string(event))
 		h.HookEvents = []string{"before.widgets." + string(event)}
 		require.NoError(t, r.Register("widgets", event, h))

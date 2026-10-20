@@ -13,6 +13,9 @@ import (
 )
 
 func init() {
+	plan := terraformStackHandler(lifecycle.PlanEvent)
+	plan.HookEvents = []string{string(hooks.BeforeTerraformPlan), string(hooks.AfterTerraformPlan)}
+	lifecycle.MustRegister(cfg.TerraformComponentType, lifecycle.PlanEvent, plan)
 	test := terraformStackHandler(lifecycle.Test)
 	test.HookEvents = []string{string(hooks.BeforeTerraformTest), string(hooks.AfterTerraformTest)}
 	lifecycle.MustRegister(cfg.TerraformComponentType, lifecycle.Test, test)
