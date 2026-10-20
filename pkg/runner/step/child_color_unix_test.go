@@ -21,6 +21,7 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/manifest"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
 func TestNestedErrorChild(t *testing.T) {
@@ -36,6 +37,7 @@ func TestNestedErrorChild(t *testing.T) {
 	err := errUtils.Build(errors.New("nested failure")).WithHint("Correct the configuration").Err()
 	_, _ = io.WriteString(os.Stderr, errUtils.Format(err, errUtils.DefaultFormatterConfig()))
 	_, _ = io.WriteString(os.Stderr, "nested-test-secret\n")
+	_, _ = fmt.Fprintf(os.Stderr, "nested-color=%t nested-ci=%s\n", terminal.New().ColorProfile() != terminal.ColorNone, os.Getenv("CI"))
 	if os.Getenv("ATMOS_FORCE_TTY") != "" {
 		os.Exit(98)
 	}
@@ -78,7 +80,7 @@ func TestNestedShellCIRedirectionPreservesManifestOutput(t *testing.T) {
 			writer.writers = OutputWriters{Stdout: &destination, Stderr: &destination}
 			_, _, err := (&ShellHandler{}).runInterpreter(context.Background(), writer, shellRunSpec{
 				command: fmt.Sprintf("%q -test.run=^TestNestedManifestChild$ > %q", executable, path),
-				env:     []string{"_ATMOS_NESTED_MANIFEST_HELPER=1"}, stdin: strings.NewReader(""),
+				env:     append(os.Environ(), "_ATMOS_NESTED_MANIFEST_HELPER=1"), stdin: strings.NewReader(""),
 			})
 			require.NoError(t, err)
 			output, err := os.ReadFile(path)
@@ -99,17 +101,24 @@ func TestNestedShellErrorsPreserveRenderingMaskingAndExitCode(t *testing.T) {
 	executable, err := os.Executable()
 	require.NoError(t, err)
 	for _, tc := range []struct {
-		name                string
-		tty, noColor, force bool
+		name                    string
+		tty, noColor, force, ci bool
 	}{
-		{"terminal", true, false, false},
-		{"redirected", false, false, false},
-		{"opt-out", true, true, true},
-		{"explicit-force", false, false, true},
+		{"terminal", true, false, false, false},
+		{"redirected", false, false, false, false},
+		{"CI redirected", false, false, false, true},
+		{"CI forced", false, false, true, true},
+		{"CI terminal", true, false, false, true},
+		{"opt-out", true, true, true, false},
+		{"CI opt-out", true, true, true, true},
+		{"explicit-force", false, false, true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, key := range []string{"NO_COLOR", "CLICOLOR", "CLICOLOR_FORCE", "FORCE_COLOR", "ATMOS_FORCE_COLOR", "ATMOS_FORCE_TTY", "CI"} {
 				t.Setenv(key, "")
+			}
+			if tc.ci {
+				t.Setenv("CI", "1")
 			}
 			t.Setenv("TERM", "xterm-256color")
 			t.Setenv("COLORTERM", "truecolor")
@@ -134,11 +143,15 @@ func TestNestedShellErrorsPreserveRenderingMaskingAndExitCode(t *testing.T) {
 			writer.writers = OutputWriters{Stdout: destination, Stderr: destination}
 			_, captured, err := (&ShellHandler{}).runInterpreter(context.Background(), writer, shellRunSpec{
 				command: fmt.Sprintf("%q -test.run=^TestNestedErrorChild$", executable),
-				env:     []string{"_ATMOS_NESTED_ERROR_HELPER=1"}, stdin: strings.NewReader(""),
+				env:     append(os.Environ(), "_ATMOS_NESTED_ERROR_HELPER=1"), stdin: strings.NewReader(""),
 			})
 			require.Error(t, err)
 			require.Equal(t, 17, getExitCode(err))
 			require.Equal(t, (tc.tty || tc.force) && !tc.noColor, strings.Contains(captured, "\x1b["))
+			require.Contains(t, captured, fmt.Sprintf("nested-color=%t", (tc.tty || tc.force) && !tc.noColor))
+			if tc.ci {
+				require.Contains(t, captured, "nested-ci=1")
+			}
 			require.NotContains(t, captured, "# Error")
 			require.NotContains(t, captured, "**Error:**")
 			require.NotContains(t, captured, "nested-test-secret")

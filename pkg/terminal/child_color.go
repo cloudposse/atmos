@@ -11,7 +11,7 @@ import (
 
 // ChildColorEnv preserves color preferences when a child's output is forwarded through a pipe
 // to destination. It conveys rendering only; stdin and TTY/interactivity remain untouched.
-// Explicit child color settings are preserved. Parent global opt-outs still disable colors.
+// Explicit child force-color and opt-out settings are preserved. Parent global opt-outs still disable colors.
 func ChildColorEnv(environ []string, destination io.Writer) []string {
 	defer perf.Track(nil, "terminal.ChildColorEnv")()
 	return childColorEnv(buildConfig(), environ, destination != nil && IsTTYWriter(destination), destination != nil)
@@ -24,20 +24,27 @@ func childColorEnv(config *Config, environ []string, isTTY, visible bool) []stri
 		// Append wins when callers merge step environments with the process environment.
 		return append(result, "NO_COLOR=1")
 	}
-	if hasChildColorPreference(result) {
-		return result
-	}
-
 	// The actual destination matters: a terminal on stdout does not justify adding color
 	// to a redirected stderr, and an in-memory capture is not a terminal.
 	// CI's automatic UI color support is not an explicit force-color preference: turning
 	// it into one would also highlight machine-readable stdout redirected inside the shell.
 	forwarding := *config
 	forwarding.EnvCI = false
-	if visible && forwarding.ShouldUseColor(isTTY) {
+	if !hasChildColorPreference(result) && visible && forwarding.ShouldUseColor(isTTY) {
 		result = append(result, "ATMOS_FORCE_COLOR=true")
 	}
-	return result
+	return childRedirectedColorEnv(result, visible && isTTY)
+}
+
+// childRedirectedColorEnv prevents CI auto-color from leaking into captured or redirected output.
+func childRedirectedColorEnv(environ []string, terminalDestination bool) []string {
+	if ci, _ := childEnvValue(environ, "CI"); ci != "" && !terminalDestination {
+		// Keep CI available to scripts, but prevent it from enabling automatic color
+		// in a child whose output is redirected. Explicit force-color still wins over
+		// CLICOLOR=0, unlike NO_COLOR, which would suppress intentional forced color.
+		return append(environ, "CLICOLOR=0")
+	}
+	return environ
 }
 
 func childEnvValue(environ []string, key string) (string, bool) {
