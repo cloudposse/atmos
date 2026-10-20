@@ -351,14 +351,14 @@ func TestReportLifecycleResultsTally(t *testing.T) {
 		{Node: node("c"), Status: scheduler.StatusFailed},
 		{Node: node("d"), Status: scheduler.StatusSkipped},
 	}
-	assert.Equal(t, "2 succeeded, 1 failed, 1 skipped, 3 excluded", lifecycleTally(results, 3))
-	reportLifecycleResults("destroy", results, 3)
+	assert.Equal(t, "2 succeeded, 1 failed, 1 skipped, 3 excluded", lifecycleTally(results, 3, 0))
+	reportLifecycleResults("destroy", results, 3, 0)
 	text := output.String()
 	assert.Contains(t, text, "destroy terraform/dev/c: failed")
 	assert.Contains(t, text, "destroy terraform/dev/d: skipped")
 	assert.Contains(t, text, "2 succeeded, 1 failed, 1 skipped, 3 excluded")
 	assert.Equal(t, 1, strings.Count(text, "succeeded,"))
-	assert.Equal(t, "0 succeeded, 0 failed, 0 skipped, 0 excluded", lifecycleTally(nil, 0))
+	assert.Equal(t, "0 succeeded, 0 failed, 0 skipped, 0 excluded", lifecycleTally(nil, 0, 0))
 }
 
 func TestLifecycleGlobalArgsForwardExplicitlySetFlags(t *testing.T) {

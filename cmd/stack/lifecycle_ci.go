@@ -78,6 +78,7 @@ type ciChildFiles struct {
 // publishes one combined summary and one set of namespaced outputs.
 type lifecycleCI struct {
 	dir      string
+	deleted  int
 	files    map[string]ciChildFiles
 	verb     string
 	reporter ci.Reporter
@@ -90,7 +91,7 @@ func newLifecycleCI(config *schema.AtmosConfiguration, opts *lifecycleOptions, p
 	if !opts.ci || !ci.Enabled(config) || plan == nil || plan.Graph == nil {
 		return nil, nil
 	}
-	state := &lifecycleCI{files: make(map[string]ciChildFiles, len(plan.Graph.Nodes)), verb: opts.verb, reporter: reporter, parent: parentEnv}
+	state := &lifecycleCI{files: make(map[string]ciChildFiles, len(plan.Graph.Nodes)), verb: opts.verb, deleted: plan.Deleted, reporter: reporter, parent: parentEnv}
 	if plan.Graph.Size() == 0 {
 		return state, nil
 	}
@@ -204,7 +205,7 @@ func (c *lifecycleCI) summary(entries []ciResult, results []scheduler.Result, ex
 		e := &entries[i]
 		fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", markdownCell(e.Component), markdownCell(e.Kind), markdownCell(e.Stack), e.Status)
 	}
-	fmt.Fprintf(&b, "\n%s\n\n", lifecycleTally(results, excluded))
+	fmt.Fprintf(&b, "\n%s\n\n", lifecycleTally(results, excluded, c.deleted))
 	for _, d := range details {
 		b.WriteString(d)
 		b.WriteString(newline)
@@ -228,6 +229,7 @@ func (c *lifecycleCI) outputs(entries []ciResult, results []scheduler.Result, ex
 		{"components_failed", strconv.Itoa(counts[scheduler.StatusFailed])},
 		{"components_skipped", strconv.Itoa(counts[scheduler.StatusSkipped])},
 		{"components_excluded", strconv.Itoa(excluded)},
+		{"components_deleted", strconv.Itoa(c.deleted)},
 		{"success", strconv.FormatBool(counts[scheduler.StatusFailed] == 0)},
 		{"results", string(encoded)},
 	}, nil

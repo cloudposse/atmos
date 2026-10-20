@@ -281,12 +281,13 @@ func TestLifecycleCIPublishCombinesSummaryAndOutputs(t *testing.T) {
 	assert.Less(t, strings.Index(summary, "| vpc |"), strings.Index(summary, "<details>"))
 
 	outputs := reporter.outputMap()
-	assert.Len(t, reporter.outputs, 7, "outputs are written exactly once")
+	assert.Len(t, reporter.outputs, 8, "outputs are written exactly once")
 	assert.Equal(t, "3", outputs["components_total"])
 	assert.Equal(t, "1", outputs["components_succeeded"])
 	assert.Equal(t, "1", outputs["components_failed"])
 	assert.Equal(t, "1", outputs["components_skipped"])
 	assert.Equal(t, "2", outputs["components_excluded"])
+	assert.Equal(t, "0", outputs["components_deleted"])
 	assert.Equal(t, "false", outputs["success"])
 
 	var decoded []ciResult

@@ -157,7 +157,9 @@ when the run finishes, writes:
   <dt>`components_skipped`</dt>
   <dd>Number of components skipped because of an earlier failure.</dd>
   <dt>`components_excluded`</dt>
-  <dd>Number of components excluded from the plan with a notice.</dd>
+  <dd>Number of components excluded from the plan with a notice, excluding deleted definitions.</dd>
+  <dt>`components_deleted`</dt>
+  <dd>Number of selected definitions removed from configuration and awaiting teardown. These are reported separately from excluded components and are not executed.</dd>
   <dt>`success`</dt>
   <dd>`true` when no component failed.</dd>
   <dt>`results`</dt>

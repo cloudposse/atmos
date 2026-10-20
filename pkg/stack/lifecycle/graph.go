@@ -49,6 +49,8 @@ type Plan struct {
 	Commands map[string][]string
 	Notices  []Notice
 	Handlers map[string]*Handler
+	// Deleted counts notices for selected definitions removed from configuration.
+	Deleted int
 }
 
 // NodeID identifies a component without collisions across kinds or stack names.
@@ -231,6 +233,7 @@ func affectedEligibility(s *Selection, p *Plan) map[string]bool {
 			continue
 		}
 		if a.Deleted {
+			p.Deleted++
 			p.Notices = append(p.Notices, Notice{a.ComponentType, a.Stack, a.Component, deletedReason(s.Reverse)})
 			continue
 		}

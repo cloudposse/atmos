@@ -298,8 +298,9 @@ failures are reported; external hook effects are not rolled back automatically.
 Each creation has an independent generation record under `.atmos/stack-generations/`.
 File-mode records are keyed by the project-relative manifest path. Directory-mode
 records use a separate key for the target directory and list its generated manifests.
-Directory hooks use the target directory as their working-directory default. It records the template, answers,
-source revision when available, and generated file hashes. Creating another stack
+Each record stores the template, answers, source revision when available, and generated
+file hashes. Directory hooks use the target directory as their default working directory.
+Creating another stack
 does not replace project-level init/scaffold records. If you delete a created manifest
 and run `stack create` for the same path again, the new run replaces that manifest's
 generation record. A directory record can be replaced only after all outputs recorded

@@ -348,17 +348,21 @@ func checkLifecycleApproval(plan *lifecycle.Plan, opts *lifecycleOptions) error 
 		Err()
 }
 
-// lifecycleTally summarizes execution outcomes and the components excluded from the plan.
-func lifecycleTally(results []scheduler.Result, excluded int) string {
+// lifecycleTally separates execution outcomes, exclusions, and definitions awaiting teardown.
+func lifecycleTally(results []scheduler.Result, excluded, deleted int) string {
 	counts := map[scheduler.Status]int{}
 	for i := range results {
 		counts[results[i].Status]++
 	}
-	return fmt.Sprintf("%d succeeded, %d failed, %d skipped, %d excluded", counts[scheduler.StatusSucceeded], counts[scheduler.StatusFailed], counts[scheduler.StatusSkipped], excluded)
+	summary := fmt.Sprintf("%d succeeded, %d failed, %d skipped, %d excluded", counts[scheduler.StatusSucceeded], counts[scheduler.StatusFailed], counts[scheduler.StatusSkipped], excluded)
+	if deleted > 0 {
+		summary += fmt.Sprintf(", %d deleted awaiting teardown", deleted)
+	}
+	return summary
 }
 
 // reportLifecycleResults prints one status line per component, then the tally.
-func reportLifecycleResults(verb string, results []scheduler.Result, excluded int) {
+func reportLifecycleResults(verb string, results []scheduler.Result, excluded, deleted int) {
 	for i := range results {
 		r := &results[i]
 		switch r.Status {
@@ -370,7 +374,7 @@ func reportLifecycleResults(verb string, results []scheduler.Result, excluded in
 			ui.Warningf("%s %s: %s", verb, lifecycle.Label(&r.Node), r.Status)
 		}
 	}
-	ui.Info(lifecycleTally(results, excluded))
+	ui.Info(lifecycleTally(results, excluded, deleted))
 }
 
 func compareLifecycleAffected(cmd *cobra.Command, config *schema.AtmosConfiguration, opts *lifecycleOptions) ([]schema.Affected, error) {
@@ -448,11 +452,14 @@ func runLifecyclePlan(cmd *cobra.Command, run *lifecycleRun) error {
 	}
 	if plan.Graph.Size() == 0 {
 		ui.Info("No components matched")
+		if plan.Deleted > 0 {
+			ui.Info(lifecycleTally(nil, len(plan.Notices)-plan.Deleted, plan.Deleted))
+		}
 		captured, err := newLifecycleCI(run.config, opts, plan, nil, newLifecycleReporter(run.config))
 		if err != nil {
 			return err
 		}
-		if err := captured.publish(nil, len(plan.Notices)); err != nil {
+		if err := captured.publish(nil, len(plan.Notices)-plan.Deleted); err != nil {
 			ui.Warningf("Failed to publish the CI summary and outputs: %v", err)
 		}
 		return nil
@@ -510,8 +517,8 @@ func executeLifecycleChildren(cmd *cobra.Command, run *lifecycleRun) error {
 		}
 	}
 	result := lifecycle.Execute(cmd.Context(), plan, execution)
-	reportLifecycleResults(opts.verb, result.Results, len(plan.Notices))
-	if err := captured.publish(result.Results, len(plan.Notices)); err != nil {
+	reportLifecycleResults(opts.verb, result.Results, len(plan.Notices)-plan.Deleted, plan.Deleted)
+	if err := captured.publish(result.Results, len(plan.Notices)-plan.Deleted); err != nil {
 		ui.Warningf("Failed to publish the CI summary and outputs: %v", err)
 	}
 	return result.Err

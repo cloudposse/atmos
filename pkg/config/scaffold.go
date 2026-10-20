@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
+	"slices"
 
 	"github.com/spf13/viper"
 	"go.yaml.in/yaml/v3"
@@ -17,16 +19,11 @@ import (
 func resolveScaffoldConfig(v *viper.Viper, config *schema.AtmosConfiguration) error {
 	resolved := &schema.ScaffoldConfiguration{Templates: make(map[string]any), SourceDirs: make(map[string]string)}
 	for _, source := range collectConfigSourcesForCasePreservation(v, v.ConfigFileUsed()) {
-		var document struct {
-			Scaffold *schema.ScaffoldConfiguration `yaml:"scaffold"`
-		}
-		if err := yaml.Unmarshal([]byte(source.content), &document); err != nil {
+		templates, err := decodeScaffoldTemplates(source)
+		if err != nil {
 			return fmt.Errorf("%w: scaffold configuration in %s: %w", errUtils.ErrInvalidScaffoldConfig, source.path, err)
 		}
-		if document.Scaffold == nil {
-			continue
-		}
-		for name, raw := range document.Scaffold.Templates {
+		for name, raw := range templates {
 			if err := mergeScaffoldTemplate(resolved, name, raw, source.path); err != nil {
 				return err
 			}
@@ -38,6 +35,81 @@ func resolveScaffoldConfig(v *viper.Viper, config *schema.AtmosConfiguration) er
 	}
 	config.ScaffoldConfigLoaded = true
 	return nil
+}
+
+// decodeScaffoldTemplates evaluates only the scaffold section, retaining literal
+// template names and resolving includes relative to the declaring configuration.
+func decodeScaffoldTemplates(source mergedConfigSource) (map[string]any, error) {
+	var root map[string]yaml.Node
+	if err := yaml.Unmarshal([]byte(source.content), &root); err != nil {
+		return nil, err
+	}
+	node, exists := root["scaffold"]
+	if !exists {
+		return nil, nil
+	}
+	// Validate aliases before expanding them, preserving yaml.v3's protections
+	// against recursive or excessively expanded aliases without evaluating tags.
+	var plain any
+	if err := node.Decode(&plain); err != nil {
+		return nil, err
+	}
+	expanded, err := expandScaffoldYAMLNode(&node)
+	if err != nil {
+		return nil, err
+	}
+	decoded, err := decodeNodeWithYamlFunctionsForFile(expanded, source.path)
+	if err != nil || decoded == nil {
+		return nil, err
+	}
+	scaffold, ok := decoded.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%w: scaffold must be a mapping", errUtils.ErrInvalidScaffoldConfig)
+	}
+	raw := scaffold["templates"]
+	if raw == nil {
+		return nil, nil
+	}
+	templates, ok := raw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%w: scaffold.templates must be a mapping", errUtils.ErrInvalidScaffoldConfig)
+	}
+	return templates, nil
+}
+
+// expandScaffoldYAMLNode resolves YAML aliases and merge keys while retaining
+// scalar tags for the source-aware function decoder. The YAML library owns merge precedence.
+func expandScaffoldYAMLNode(node *yaml.Node) (*yaml.Node, error) {
+	if node.Kind == yaml.AliasNode {
+		return expandScaffoldYAMLNode(node.Alias)
+	}
+	expanded := *node
+	switch node.Kind {
+	case yaml.MappingNode:
+		var fields map[string]yaml.Node
+		if err := node.Decode(&fields); err != nil {
+			return nil, err
+		}
+		expanded.Content = nil
+		for _, key := range slices.Sorted(maps.Keys(fields)) {
+			value := fields[key]
+			child, err := expandScaffoldYAMLNode(&value)
+			if err != nil {
+				return nil, err
+			}
+			expanded.Content = append(expanded.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, child)
+		}
+	case yaml.SequenceNode:
+		expanded.Content = make([]*yaml.Node, len(node.Content))
+		for i, value := range node.Content {
+			child, err := expandScaffoldYAMLNode(value)
+			if err != nil {
+				return nil, err
+			}
+			expanded.Content[i] = child
+		}
+	}
+	return &expanded, nil
 }
 
 func mergeScaffoldTemplate(resolved *schema.ScaffoldConfiguration, name string, raw any, path string) error {
