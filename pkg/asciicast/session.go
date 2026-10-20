@@ -95,7 +95,11 @@ type SessionOptions struct {
 	Recorder    *Recorder
 	// ScopedWaits consumes matched output between waits for declarative recordings.
 	ScopedWaits bool
-	// Observe runs after an action and its output have reached the recorder.
+	// Observe runs after an action and its output have reached the recorder. It runs
+	// with the session output lock held, so PTY output that arrives meanwhile is
+	// recorded after anything Observe records (such as a checkpoint marker) rather
+	// than inside the span a scoped wait just consumed. Observe must therefore be
+	// quick and must not wait for session output or call back into the session.
 	Observe func(int, *SessionAction) error
 }
 
