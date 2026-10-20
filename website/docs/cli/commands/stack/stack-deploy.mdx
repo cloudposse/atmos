@@ -18,6 +18,8 @@ Dependencies determine readiness; independent components can run concurrently.
 ## Usage
 
 ```shell
+atmos stack deploy [component] [--stack=dev]
+atmos stack deploy app --stack=dev --dry-run
 atmos stack deploy --all [--stack=dev]
 atmos stack deploy --affected [--stack=dev] [--base=origin/main]
 atmos stack deploy --affected --include-dependencies=2 --dry-run
@@ -25,14 +27,30 @@ atmos stack deploy --tags=networking --stack=dev
 atmos stack deploy --affected --labels=team=platform,tier=1
 ```
 
-Select components with `--all` or `--affected` (not both), or with `--tags` or
-`--labels`. A tag or label filter used alone selects every matching component;
-combined with `--all` or `--affected`, it narrows that selection. Positional component arguments are
-rejected; to deploy one component, run `atmos <kind> deploy <component> --stack=<stack>`.
-A `--stack` filter narrows the initial selection, and a `--stack` value that names no
-existing stack is an error. Dependency expansion is explicit and can cross stack
-boundaries. An unchanged prerequisite is not executed unless selected or included by
-expansion. Ordering is preserved through unchanged intermediate components.
+Pass an optional component name to select that exact name across component kinds.
+For example, `atmos stack deploy app --stack=dev` selects components named `app` in
+`dev`. If several kinds define that name, each matching kind participates. Unknown
+component or stack names are errors.
+
+Without a component or bulk selection, Atmos prompts for a component; it does not
+select the whole stack implicitly. Use `--all` for every component, `--affected`
+for affected components, or `--tags`/`--labels` for an explicit filtered selection.
+`--all` and `--affected` are mutually exclusive. A component name and metadata
+filters narrow the initial selection, including when combined with either bulk flag.
+
+When `--stack`, `--all`, and `--affected` are all omitted, Atmos first prompts for
+a stack. If a component was supplied, the picker only lists stacks containing that
+component with a handler for the operation. Otherwise, after choosing the stack,
+the component picker lists its available components. No component prompt appears
+for bulk selections or tag/label filters. These prompts also work during `--dry-run`.
+In CI, without an interactive terminal, or with `--interactive=false`, missing
+inputs produce an error with the explicit arguments to supply.
+
+A `--stack` value narrows the initial selection. To select across stacks, pass
+`--all` or `--affected`; tag/label filters alone still need a supplied or prompted
+stack. Dependency expansion is explicit and can cross stack boundaries and select
+components with other names. Unselected prerequisites are not executed unless
+included by expansion. Ordering is preserved through unchanged intermediates.
 
 ## Supported component kinds
 
@@ -156,19 +174,26 @@ does not invent lifecycle hook events for them.
 See `examples/stack-lifecycle` for a Terraform → Helm → Kubernetes chain and a
 conditional Docker build hook. Component types have no fixed priority.
 
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>Optional exact component name. Matches that name across component kinds before dependency expansion. Without a name or explicit bulk selection, interactive mode asks you to choose a component.</dd>
+</dl>
+
 ## Flags
 
 <dl>
   <dt>`--all`</dt>
-  <dd>Select every component that defines a `deploy` operation. Use `--all` or `--affected` (not both), or select with `--tags` or `--labels` alone. Default: `false`.</dd>
+  <dd>Select every component that defines a `deploy` operation. May be narrowed by a component name, stack, tags, or labels. Cannot combine `--all` and `--affected`. Default: `false`.</dd>
   <dt>`--affected`</dt>
-  <dd>Select components affected by the Git comparison. Use `--all` or `--affected` (not both), or select with `--tags` or `--labels` alone. Default: `false`.</dd>
+  <dd>Select components affected by the Git comparison. May be narrowed by a component name, stack, tags, or labels. Cannot combine `--all` and `--affected`. Default: `false`.</dd>
   <dt>`--tags`</dt>
-  <dd>Select components whose `metadata.tags` include any of the given tags (comma-separated). Used alone, it selects every matching component; with `--all` or `--affected`, it narrows that selection. Dependency expansion still follows declared dependencies regardless of tags. Environment variable: `ATMOS_TAGS`. Default: No tag filter.</dd>
+  <dd>Select components whose `metadata.tags` include any of the given tags (comma-separated). Selects matching components in a supplied or prompted stack. With a component name, `--all`, or `--affected`, it narrows that selection. Dependency expansion still follows declared dependencies regardless of tags. Environment variable: `ATMOS_TAGS`. Default: No tag filter.</dd>
   <dt>`--labels`</dt>
   <dd>Select components whose `metadata.labels` contain every given `key=value` (or `key:value`) pair. Repeat the flag or separate pairs with commas. Used alone or combined like `--tags`; when both are given, a component must match both. Environment variable: `ATMOS_LABELS`. Default: No label filter.</dd>
   <dt>`--stack`, `-s`</dt>
-  <dd>Intersect the initial selection with a canonical stack name. A name that matches no stack is an error. Environment variable: `ATMOS_STACK`. Default: All stacks.</dd>
+  <dd>Intersect the initial selection with a canonical stack name. A name that matches no stack is an error. Environment variable: `ATMOS_STACK`. Without `--all` or `--affected`, a missing stack is prompted interactively or reported as an error. With either bulk flag, omitting this selects across stacks.</dd>
   <dt>`--base`</dt>
   <dd>Base Git ref or SHA for the comparison. Atmos detects it automatically in supported CI environments. Requires `--affected`. Default: Existing affected baseline rules.</dd>
   <dt>`--ref`</dt>

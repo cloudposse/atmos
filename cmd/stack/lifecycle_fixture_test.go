@@ -211,11 +211,11 @@ func TestLifecycleDryRunSelectsByTagsAndLabels(t *testing.T) {
 		want     []string
 		excluded []string
 	}{
-		{name: "tags alone", args: []string{"--tags=data"}, want: []string{"terraform/dev/database", "terraform/dev/cache"}, excluded: []string{"terraform/dev/network", "terraform/dev/app", "terraform/prod/app"}},
-		{name: "labels must all match", args: []string{"--labels=team=platform,tier=1"}, want: []string{"terraform/dev/database"}, excluded: []string{"terraform/dev/cache"}},
+		{name: "tags alone", args: []string{"--stack=dev", "--tags=data"}, want: []string{"terraform/dev/database", "terraform/dev/cache"}, excluded: []string{"terraform/dev/network", "terraform/dev/app", "terraform/prod/app"}},
+		{name: "labels must all match", args: []string{"--stack=dev", "--labels=team=platform,tier=1"}, want: []string{"terraform/dev/database"}, excluded: []string{"terraform/dev/cache"}},
 		{name: "tags narrow --all", args: []string{"--all", "--tags=stateful"}, want: []string{"terraform/dev/database"}, excluded: []string{"terraform/dev/cache"}},
-		{name: "expansion adds untagged prerequisites", args: []string{"--tags=stateful", "--include-dependencies"}, want: []string{"terraform/dev/network", "terraform/dev/database"}, excluded: []string{"terraform/dev/cache"}},
-		{name: "ATMOS_TAGS selects too", env: map[string]string{"ATMOS_TAGS": "data"}, want: []string{"terraform/dev/database", "terraform/dev/cache"}, excluded: []string{"terraform/dev/app"}},
+		{name: "expansion adds untagged prerequisites", args: []string{"--stack=dev", "--tags=stateful", "--include-dependencies"}, want: []string{"terraform/dev/network", "terraform/dev/database"}, excluded: []string{"terraform/dev/cache"}},
+		{name: "ATMOS_TAGS selects too", args: []string{"--stack=dev"}, env: map[string]string{"ATMOS_TAGS": "data"}, want: []string{"terraform/dev/database", "terraform/dev/cache"}, excluded: []string{"terraform/dev/app"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for key, value := range tc.env {
@@ -240,14 +240,15 @@ func TestLifecycleSelectorValidation(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
 	assert.Contains(t, err.Error(), "exactly one of --all or --affected")
 
-	_, err = lifecycleTestCommand(t, "deploy")
-	require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
-	assert.Contains(t, err.Error(), "or select components with --tags or --labels")
+	opts, err := lifecycleTestCommand(t, "deploy")
+	require.NoError(t, err)
+	assert.True(t, needsLifecycleStack(&opts))
+	assert.True(t, needsLifecycleComponent(&opts))
 
 	_, err = lifecycleTestCommand(t, "deploy", "--labels=missing-separator")
 	require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
 
-	opts, err := lifecycleTestCommand(t, "destroy", "--tags=a,b", "--labels=team=platform", "--labels=tier:1")
+	opts, err = lifecycleTestCommand(t, "destroy", "--tags=a,b", "--labels=team=platform", "--labels=tier:1")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a", "b"}, opts.tags)
 	assert.Equal(t, map[string]string{"team": "platform", "tier": "1"}, opts.labels)
@@ -263,7 +264,7 @@ func TestLifecycleCommandSurfacesSelectionErrors(t *testing.T) {
 		want   string
 		hint   string
 	}{
-		{name: "no selector", verb: "deploy", args: []string{"--dry-run"}, wantIs: errUtils.ErrInvalidFlag, want: "exactly one of --all or --affected"},
+		{name: "no selector", verb: "deploy", args: []string{"--dry-run"}, wantIs: errUtils.ErrInvalidFlag, want: "specify --stack, --all, or --affected"},
 		{name: "unknown stack", verb: "deploy", args: []string{"--all", "--stack=nope", "--dry-run"}, wantIs: errUtils.ErrStackNotFound, want: `"nope"`, hint: "atmos list stacks"},
 		{name: "surviving consumers", verb: "destroy", args: []string{"--all", "--stack=dev", "--dry-run"}, wantIs: errUtils.ErrSurvivingConsumers, want: "terraform/prod/app -> terraform/dev/network", hint: "--include-dependents"},
 		{name: "repo path with ref", verb: "deploy", args: []string{"--affected", "--repo-path=" + os.TempDir(), "--ref=main", "--dry-run"}, wantIs: errUtils.ErrInvalidFlag, want: "--repo-path cannot be combined"},

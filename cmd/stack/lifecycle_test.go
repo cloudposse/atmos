@@ -83,7 +83,6 @@ func TestLifecycleOptionValidation(t *testing.T) {
 		values map[string]any
 		want   string
 	}{
-		{"selection required", nil, "exactly one"},
 		{"both modes", map[string]any{"all": true, "affected": true}, "exactly one"},
 		{"allow requires affected", map[string]any{"all": true, "allow-destroy": true}, "requires --affected"},
 		{"zero concurrency", map[string]any{"all": true, "max-concurrency": 0}, "--max-concurrency must be at least 1, got 0"},
@@ -110,7 +109,7 @@ func TestLifecycleOptionValidation(t *testing.T) {
 	cmd := newLifecycleCommand("deploy")
 	require.NoError(t, cmd.ParseFlags([]string{"--affected", "--include-dependencies", "--include-dependents=2", "--dry-run"}))
 	assert.Equal(t, "all", cmd.Flag("include-dependencies").Value.String())
-	assert.Error(t, cmd.Args(cmd, []string{"component"}))
+	assert.NoError(t, cmd.Args(cmd, []string{"component"}))
 	assert.Nil(t, newLifecycleCommand("destroy").Flag("allow-destroy"))
 }
 
@@ -194,10 +193,12 @@ func TestLifecycleOptionsIgnoreForeignEnvironment(t *testing.T) {
 	t.Setenv("ATMOS_INCLUDE_DEPENDENTS", "true")
 	t.Setenv("ATMOS_TERRAFORM_DEPLOY_MAX_CONCURRENCY", "0")
 	t.Setenv("ATMOS_AFFECTED", "true")
-	t.Run("selection still required", func(t *testing.T) {
-		_, err := lifecycleTestCommand(t, "deploy", "--stack=prod", "--dry-run")
-		require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
-		assert.Contains(t, err.Error(), "exactly one of --all or --affected")
+	t.Run("foreign variables do not supply a bulk selection", func(t *testing.T) {
+		opts, err := lifecycleTestCommand(t, "deploy", "--stack=prod", "--dry-run")
+		require.NoError(t, err)
+		assert.True(t, needsLifecycleComponent(&opts))
+		assert.False(t, opts.all)
+		assert.False(t, opts.affected)
 	})
 	t.Run("unrelated variables leave options at defaults", func(t *testing.T) {
 		opts, err := lifecycleTestCommand(t, "deploy", "--all", "--stack=prod")
@@ -275,12 +276,13 @@ func errString(err error) string {
 	return err.Error()
 }
 
-func TestLifecycleRejectsPositionalArguments(t *testing.T) {
+func TestLifecycleAcceptsOneComponent(t *testing.T) {
 	cmd := newLifecycleCommand("deploy")
 	require.NoError(t, cmd.Args(cmd, nil))
-	err := cmd.Args(cmd, []string{"network"})
+	require.NoError(t, cmd.Args(cmd, []string{"network"}))
+	err := cmd.Args(cmd, []string{"network", "app"})
 	require.ErrorIs(t, err, errUtils.ErrInvalidPositionalArgs)
-	assert.Contains(t, err.Error(), `"network"`)
+	assert.Contains(t, err.Error(), "at most one component")
 	assert.Contains(t, strings.Join(errUtils.AllHints(err), "\n"), "--all, --affected, --tags, or --labels")
 }
 

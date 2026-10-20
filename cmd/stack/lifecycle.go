@@ -31,6 +31,7 @@ const flagSkipHooks = "skip-hooks"
 
 type lifecycleOptions struct {
 	verb, stack, identity, failureMode, logOrder         string
+	component                                            string
 	all, affected, dryRun, allowDestroy, autoApprove, ci bool
 	concurrency, dependencies, dependents                int
 	tags                                                 []string
@@ -89,29 +90,36 @@ func lifecycleShort(verb string) string {
 	return strings.ToUpper(verb[:1]) + verb[1:] + " stack components in dependency order"
 }
 
-// lifecycleArgs rejects positional arguments: the command selects components
-// with --all, --affected, --tags, or --labels, never by name.
+// lifecycleArgs accepts one optional component name.
 func lifecycleArgs(cmd *cobra.Command, args []string) error {
-	if len(args) == 0 {
+	if len(args) <= 1 {
 		return nil
 	}
-	return errUtils.Build(fmt.Errorf("%w: unexpected argument %q; atmos stack %s selects components with --all, --affected, --tags, or --labels (narrow with --stack), not by name; for one component use `atmos KIND %s COMPONENT --stack=STACK`", errUtils.ErrInvalidPositionalArgs, args[0], cmd.Name(), cmd.Name())).
-		WithHintf("Select components with --all, --affected, --tags, or --labels, optionally narrowed with --stack. To act on a single component, use `atmos <kind> %s <component> --stack=<stack>`.", cmd.Name()).
+	return errUtils.Build(fmt.Errorf("%w: atmos stack %s accepts at most one component", errUtils.ErrInvalidPositionalArgs, cmd.Name())).
+		WithHint("Pass one component, or use --all, --affected, --tags, or --labels to select multiple components.").
 		Err()
 }
 
 func newLifecycleCommand(verb string) *cobra.Command {
 	parser := buildLifecycleParser(verb)
 	cmd := &cobra.Command{
-		Use: verb, Short: lifecycleShort(verb), Args: lifecycleArgs,
+		Use: verb + " [component]", Short: lifecycleShort(verb), Args: lifecycleArgs,
+		Long: lifecycleShort(verb) + ".\n\n" +
+			"Pass a component name, or select multiple components with --all, --affected,\n" +
+			"--tags, or --labels. Without --stack, --all, or --affected, choose a stack\n" +
+			"interactively. Without a component or bulk selection, choose a component.\n" +
+			"Missing inputs are errors in noninteractive mode; use --all for a whole stack.",
 		// Children are top-level Atmos invocations that open their own CI log groups.
 		Annotations: map[string]string{annotationSkipInvocationGroup: "true"},
 	}
 	parser.RegisterFlags(cmd)
-	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		opts, err := resolveLifecycleOptions(cmd, parser, verb)
 		if err != nil {
 			return err
+		}
+		if len(args) > 0 {
+			opts.component = args[0]
 		}
 		return runLifecycle(cmd, &opts)
 	}
@@ -152,18 +160,12 @@ func parseLifecycleSelectors(v *viper.Viper) ([]string, map[string]string, error
 	return selectedTags, labels, err
 }
 
-// checkLifecycleSelection requires a selection: --all or --affected (never both),
-// or a --tags/--labels filter on its own, which selects every matching component.
+// checkLifecycleSelection rejects incompatible bulk selections.
 func checkLifecycleSelection(o *lifecycleOptions) error {
 	if o.all && o.affected {
 		return fmt.Errorf("%w: specify exactly one of --all or --affected", errUtils.ErrInvalidFlag)
 	}
-	if o.all || o.affected || len(o.tags) > 0 || len(o.labels) > 0 {
-		return nil
-	}
-	return errUtils.Build(fmt.Errorf("%w: specify exactly one of --all or --affected, or select components with --tags or --labels", errUtils.ErrInvalidFlag)).
-		WithHint("Use --all to select every component, or --tags/--labels to select matching components").
-		Err()
+	return nil
 }
 
 // checkAffectedOnlyFlags rejects comparison flags that would be silently ignored.
@@ -217,6 +219,9 @@ func validateLifecycleChoices(o *lifecycleOptions) error {
 }
 
 func runLifecycle(cmd *cobra.Command, opts *lifecycleOptions) error {
+	if err := checkLifecyclePromptAvailability(opts); err != nil {
+		return err
+	}
 	config, err := loadLifecycleConfig(cmd)
 	if err != nil {
 		return err
@@ -227,6 +232,9 @@ func runLifecycle(cmd *cobra.Command, opts *lifecycleOptions) error {
 	// component kinds are registered before stacks are described.
 	stacks, commands, err := loadLifecycleInventory(cmd, &config, opts.verb, manager)
 	if err != nil {
+		return err
+	}
+	if err := resolveLifecycleTargets(cmd, opts, stacks, commands); err != nil {
 		return err
 	}
 	selection, affected, err := resolveLifecycleSelection(cmd, &config, opts, stacks)
@@ -274,7 +282,7 @@ func loadLifecycleConfig(cmd *cobra.Command) (schema.AtmosConfiguration, error) 
 
 // resolveLifecycleSelection builds the selection, including the affected comparison when requested.
 func resolveLifecycleSelection(cmd *cobra.Command, config *schema.AtmosConfiguration, opts *lifecycleOptions, stacks map[string]any) (lifecycle.Selection, []schema.Affected, error) {
-	selection := lifecycle.Selection{Stack: opts.stack, Dependencies: opts.dependencies, Dependents: opts.dependents, Reverse: opts.verb == "destroy"}
+	selection := lifecycle.Selection{Stack: opts.stack, Component: opts.component, Dependencies: opts.dependencies, Dependents: opts.dependents, Reverse: opts.verb == "destroy"}
 	if len(opts.tags) > 0 || len(opts.labels) > 0 {
 		selection.Filter = &lifecycle.Filter{Tags: opts.tags, Labels: opts.labels}
 	}
@@ -288,6 +296,9 @@ func resolveLifecycleSelection(cmd *cobra.Command, config *schema.AtmosConfigura
 		selection.Affected = append([]schema.Affected{}, affected...)
 	}
 	if err := checkLifecycleStackExists(stacks, affected, opts.stack); err != nil {
+		return selection, nil, err
+	}
+	if err := checkLifecycleComponentExists(stacks, affected, opts); err != nil {
 		return selection, nil, err
 	}
 	return selection, affected, nil

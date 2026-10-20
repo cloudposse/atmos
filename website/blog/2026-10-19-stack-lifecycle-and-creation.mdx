@@ -55,6 +55,18 @@ Preview affected components, their commands, dependencies, and declared lifecycl
 atmos stack deploy --affected --stack dev --dry-run
 ```
 
+Target a component by name, or choose the stack and component interactively:
+
+```shell
+atmos stack deploy app --stack dev --dry-run
+atmos stack deploy --dry-run
+```
+
+Omitting the component does not implicitly select the whole stack. Use `--all` to
+operate on every component, `--affected` for affected components, or tag/label
+filters for a bulk selection. Without `--stack`, `--all`, or `--affected`, Atmos
+prompts for a stack. Automation must supply the missing inputs explicitly.
+
 Deploy with bounded concurrency, or preview destruction of currently defined components:
 
 ```shell

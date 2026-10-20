@@ -36,6 +36,9 @@ component configuration. Keep the existing type-specific lifecycle commands.
 ## Selection and execution controls
 
 ```shell
+atmos stack deploy app --stack dev
+atmos stack deploy --stack dev # prompts for a component
+atmos stack deploy # prompts for a stack, then a component
 atmos stack deploy --affected
 atmos stack deploy --affected --stack dev
 atmos stack deploy --all
@@ -51,10 +54,15 @@ atmos stack deploy --tags=networking --stack dev
 atmos stack deploy --affected --labels=team=platform,tier=1
 ```
 
-Select components with `--all`, `--affected`, `--tags`, or `--labels`. `--all` and
-`--affected` are mutually exclusive. Initially, these commands accept
-no positional component argument. `--stack` narrows the initial selection; omitting
-it selects across stacks. Reuse existing affected detection and baseline options,
+Select an exact positional component name, or use `--all`, `--affected`, `--tags`,
+or `--labels` for explicit bulk selection. `--all` and `--affected` are mutually
+exclusive. A name filters across component kinds before dependency expansion.
+Without `--stack`, `--all`, or `--affected`, prompt for a stack (filtered by the
+supplied component). Without a name or bulk selection, prompt for a component in
+that stack; never implicitly select every component. In noninteractive mode or CI,
+missing inputs are actionable errors. Dry runs may prompt, and cancellation stops
+before execution. `--stack` narrows the initial selection; omitting it selects
+across stacks only with `--all` or `--affected`. Reuse existing affected detection and baseline options,
 including `--base`, rather than introducing another Git comparison algorithm.
 
 ### Tag and label filters
@@ -68,8 +76,9 @@ the same flags, environment variables, and matching rules:
   contain every given `key=value` (or `key:value`) pair. The flag repeats, and
   each occurrence accepts comma-separated pairs.
 
-Used alone, either filter selects every matching component, as `--all` would.
-Combined with `--all` or `--affected`, it narrows that selection. When both are
+Either filter selects matching components in the supplied or prompted stack without
+a component prompt. Combined with a component name, `--all`, or `--affected`, it
+narrows that selection. When both are
 given, a component must match both. Filters apply to the initial selection like
 `--stack`. Dependency expansion follows declared dependencies regardless of tags
 or labels, so `--include-dependencies` can add prerequisites that the filter

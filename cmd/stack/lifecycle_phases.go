@@ -20,7 +20,7 @@ func executeLifecyclePlans(cmd *cobra.Command, run *lifecycleRun, affected []sch
 	if opts.allowDestroy {
 		for i := range affected {
 			target := &affected[i]
-			if target.Deleted && (opts.stack == "" || opts.stack == target.Stack) {
+			if target.Deleted && (opts.stack == "" || opts.stack == target.Stack) && (opts.component == "" || opts.component == target.Component) {
 				blocked = append(blocked, target.ComponentType+"/"+target.Stack+"/"+target.Component)
 			}
 		}
