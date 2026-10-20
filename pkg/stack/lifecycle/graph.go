@@ -17,7 +17,9 @@ import (
 
 // Selection selects seeds before expanding dependencies in the original graph.
 type Selection struct {
-	Stack string
+	// Operation determines preflight and deletion notices; empty preserves deploy semantics.
+	Operation Event
+	Stack     string
 	// Components selects exact names across kinds before expansion; empty selects every name.
 	Components []string
 	// A nil Affected selects all nodes; a non-nil empty slice selects none.
@@ -71,14 +73,19 @@ func Label(n *dependency.Node) string {
 //
 // Required prerequisites of a kind that cannot run the operation fail a deploy
 // plan, while a destroy plan fails when components outside the selection still
-// require something it would destroy. Locked components are never operated on.
+// require something it would destroy. Other forward operations require handler
+// support for prerequisites only when dependency expansion requests them. Locked
+// components are never operated on.
 func BuildPlan(stacks map[string]any, commands map[string]*Handler, selection *Selection, leftDelim string) (*Plan, error) {
 	defer perf.Track(nil, "lifecycle.BuildPlan")()
 
 	g, problems := discoverGraph(stacks, leftDelim)
 	p := &Plan{Commands: make(map[string][]string), Handlers: commands}
 	seeds := selectSeeds(g, commands, selection, p)
-	selected := expandSelection(g, commands, seeds, selection, p)
+	selected, err := expandSelection(g, commands, seeds, selection, p)
+	if err != nil {
+		return nil, err
+	}
 	// Validate reachable sources before contraction, including unchanged intermediates.
 	reachable := g.Filter(dependency.Filter{NodeIDs: keys(selected), IncludeDependencies: true})
 	for _, id := range keys(reachable.Nodes) {
@@ -89,10 +96,9 @@ func BuildPlan(stacks map[string]any, commands map[string]*Handler, selection *S
 	if _, err := reachable.TopologicalSort(); err != nil {
 		return nil, readableCycle(reachable, err)
 	}
-	if err := checkSelection(g, commands, selected, selection.Reverse, p); err != nil {
+	if err := checkSelection(g, commands, selected, selection, p); err != nil {
 		return nil, err
 	}
-	var err error
 	p.Graph, err = contractGraph(g, selected, selection.Reverse)
 	if err != nil {
 		return nil, readableCycle(g, err)
@@ -234,7 +240,7 @@ func affectedEligibility(s *Selection, p *Plan) map[string]bool {
 		}
 		if a.Deleted {
 			p.Deleted++
-			p.Notices = append(p.Notices, Notice{a.ComponentType, a.Stack, a.Component, deletedReason(s.Reverse)})
+			p.Notices = append(p.Notices, Notice{a.ComponentType, a.Stack, a.Component, deletedReason(s)})
 			continue
 		}
 		eligible[NodeID(a.ComponentType, a.Stack, a.Component)] = true
@@ -264,7 +270,7 @@ func (p *Plan) replaceNotice(n *dependency.Node, reason string) {
 	p.Notices = append(p.Notices, Notice{n.Type, n.Stack, n.Component, reason})
 }
 
-func expandSelection(g *dependency.Graph, commands map[string]*Handler, seeds []string, s *Selection, p *Plan) map[string]bool {
+func expandSelection(g *dependency.Graph, commands map[string]*Handler, seeds []string, s *Selection, p *Plan) (map[string]bool, error) {
 	selected := make(map[string]bool)
 	for _, id := range seeds {
 		selected[id] = true
@@ -276,21 +282,24 @@ func expandSelection(g *dependency.Graph, commands map[string]*Handler, seeds []
 		if direction.depth == 0 {
 			continue
 		}
-		walker := expansion{graph: g, handlers: commands, selected: selected, plan: p, upstream: direction.dependencies}
-		walker.run(seeds, direction.depth)
+		walker := expansion{graph: g, handlers: commands, selected: selected, plan: p, upstream: direction.dependencies, validateExpansion: s.Operation != "" && s.Operation != Deploy && !s.Reverse}
+		if err := walker.run(seeds, direction.depth); err != nil {
+			return nil, err
+		}
 	}
-	return selected
+	return selected, nil
 }
 
 type expansion struct {
-	graph    *dependency.Graph
-	handlers map[string]*Handler
-	selected map[string]bool
-	plan     *Plan
-	upstream bool
+	graph             *dependency.Graph
+	handlers          map[string]*Handler
+	selected          map[string]bool
+	plan              *Plan
+	upstream          bool
+	validateExpansion bool
 }
 
-func (w *expansion) run(seeds []string, limit int) {
+func (w *expansion) run(seeds []string, limit int) error {
 	frontier := slices.Clone(seeds)
 	seen := make(map[string]bool)
 	for depth := 0; len(frontier) > 0 && (limit < 0 || depth < limit); depth++ {
@@ -300,13 +309,18 @@ func (w *expansion) run(seeds []string, limit int) {
 				continue
 			}
 			seen[id] = true
-			next = append(next, w.step(id)...)
+			targets, err := w.step(id)
+			if err != nil {
+				return err
+			}
+			next = append(next, targets...)
 		}
 		frontier = next
 	}
+	return nil
 }
 
-func (w *expansion) step(id string) []string {
+func (w *expansion) step(id string) ([]string, error) {
 	n := w.graph.Nodes[id]
 	edges := n.Dependents
 	if w.upstream {
@@ -317,9 +331,13 @@ func (w *expansion) step(id string) []string {
 		t := w.graph.Nodes[target]
 		switch {
 		case w.handlers[t.Type] == nil:
+			if w.validateExpansion && w.upstream && !n.OptionalDependencies[target] {
+				return nil, fmt.Errorf("%w: %s requires operation on %s", errUtils.ErrUnsupportedComponentType, Label(n), Label(t))
+			}
 			w.plan.exclude(t, "expanded component does not define this operation")
-			// Dependents of an unsupported kind are still traversed; prerequisites are
-			// validated separately, so nothing beyond an unsupported prerequisite is expanded.
+			// Dependents of an unsupported kind are still traversed. Deploy prerequisites
+			// are validated separately; other forward operations check expansion above.
+			// Nothing beyond an unsupported prerequisite is expanded.
 			if !w.upstream {
 				next = append(next, target)
 			}
@@ -331,7 +349,7 @@ func (w *expansion) step(id string) []string {
 			next = append(next, target)
 		}
 	}
-	return next
+	return next, nil
 }
 
 // contractGraph retains transitive ordering even when unchanged intermediate

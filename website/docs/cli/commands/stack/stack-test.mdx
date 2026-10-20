@@ -1,0 +1,153 @@
+---
+title: atmos stack test
+sidebar_label: test
+sidebar_class_name: command
+id: stack-test
+description: Run registered component tests in dependency order.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Run the tests supported by each selected component kind in dependency order.
+Terraform components use the existing `atmos terraform test` command.
+</Intro>
+
+<CastPlayer title="atmos stack test --help" src="/casts/screengrabs/atmos-stack-test--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos stack test --stack=dev [--component=network,app]
+atmos stack test --all
+atmos stack test --affected --base=origin/main
+```
+
+With `--stack=dev`, Atmos selects every eligible component in that stack.
+Use `--component=network,app`, repeated `--component` flags, or both to narrow the
+selection. Names match across component kinds and duplicate names run once per
+kind and stack. Positional component arguments are not accepted. Unknown names
+are errors.
+
+Without `--stack`, `--all`, or `--affected`, Atmos prompts for a stack.
+Bare `--component` opens a multiselect picker; explicit names supplied alongside
+it start selected. Cancellation or an empty component selection stops before
+execution. Both prompts work during `--dry-run`. In CI, without an interactive
+terminal, or with `--interactive=false`, supply explicit values instead.
+
+## Examples
+
+```shell
+# Test two named components in dev.
+atmos stack test --stack=dev --component=network --component=app
+
+# Choose components and inspect their commands and hooks without running them.
+atmos stack test --stack=dev --component --dry-run
+
+# Test changed components and their prerequisites.
+atmos stack test --affected --base=origin/main --include-dependencies
+
+# Run independent tests concurrently and continue independent branches on failure.
+atmos stack test --stack=dev --max-concurrency=2 --failure-mode=keep-going
+```
+
+## Supported component kinds
+
+- Terraform runs [`atmos terraform test`](/cli/commands/terraform/test), including
+  its native `before.terraform.test` and `after.terraform.test` hooks.
+- Custom component kinds participate when a custom command named `test` declares
+  `component.type` and supplies component and stack bindings. Custom kinds work
+  with stack selection, `--component`, `--all`, and dependency expansion;
+  affected detection does not yet select custom kinds.
+
+Kinds without a registered test handler are excluded with a notice. Selecting
+only unsupported kinds succeeds with an explicit no-match message; it does not
+substitute a different operation. Unselected prerequisites do not need a test
+handler: a Terraform component can depend on an already deployed Helmfile
+component without testing that prerequisite. Explicit dependency expansion
+fails before execution when a required prerequisite within the requested depth
+has no test handler. Optional unsupported prerequisites are omitted.
+
+`stack test` does not implicitly build or deploy components. Terraform test files
+determine whether tests plan resources or create and clean up temporary resources,
+just as with `atmos terraform test`. Use `--dry-run` to preview the selected
+commands and hook declarations without executing tests or hooks. Use the native
+component command when you need Terraform-specific test flags.
+
+## Execution and results
+
+Tests run in dependency order. Unselected prerequisites do not run unless included
+with `--include-dependencies`; expansion can cross stacks and component names.
+With `fail-fast`, a failed test stops pending operations. With `keep-going`,
+independent branches continue while dependents of the failed test are skipped.
+Failures return a nonzero exit status. The final tally reports succeeded, failed,
+skipped, and excluded components.
+
+Each component runs in an isolated Atmos process, preserving native hooks and
+authentication. Terraform components sharing a source directory are serialized,
+and concurrent workers disable the shared plugin cache. One worker preserves
+interactive input; concurrent workers require a noninteractive identity. Terraform
+test does not require `--auto-approve` for concurrent execution.
+
+CI mode collects child test summaries and outputs into the combined stack report.
+It uses the same [CI output fields and configuration](/cli/commands/stack/stack-deploy#ci)
+as the other stack lifecycle operations. Dry runs do not publish execution results.
+Deleted affected definitions are reported and omitted because their tests are no
+longer available in the current configuration; testing never invokes teardown.
+
+## Flags
+
+<dl>
+  <dt>`--component[=names]`</dt>
+  <dd>Filter by exact component names across kinds. Repeat the flag or comma-separate names; matching any supplied name is sufficient. With no value, open a multiselect picker. Supplied names start selected when combined with a bare flag. Empty names and empty picker selections are errors. Omit the flag to select every eligible component in the chosen scope. Dependency expansion can add other names.</dd>
+  <dt>`--all`</dt>
+  <dd>Select every component that defines a `test` operation. May be narrowed by component names, stack, tags, or labels. Cannot combine `--all` and `--affected`. Default: `false`.</dd>
+  <dt>`--affected`</dt>
+  <dd>Select components affected by the Git comparison. May be narrowed by component names, stack, tags, or labels. Cannot combine `--all` and `--affected`. Default: `false`.</dd>
+  <dt>`--tags`</dt>
+  <dd>Select components whose `metadata.tags` include any of the given tags (comma-separated). Selects matching components in a supplied or prompted stack. With component names, `--all`, or `--affected`, it narrows that selection. Dependency expansion still follows declared dependencies regardless of tags. Environment variable: `ATMOS_TAGS`. Default: No tag filter.</dd>
+  <dt>`--labels`</dt>
+  <dd>Select components whose `metadata.labels` contain every given `key=value` (or `key:value`) pair. Repeat the flag or separate pairs with commas. Used alone or combined like `--tags`; when both are given, a component must match both. Environment variable: `ATMOS_LABELS`. Default: No label filter.</dd>
+  <dt>`--stack`, `-s`</dt>
+  <dd>Intersect the initial selection with a canonical stack name. A name that matches no stack is an error. Environment variable: `ATMOS_STACK`. Without `--all` or `--affected`, a missing stack is prompted interactively or reported as an error. With either bulk flag, omitting this selects across stacks.</dd>
+  <dt>`--base`</dt>
+  <dd>Base Git ref or SHA for the comparison. Atmos detects it automatically in supported CI environments. Requires `--affected`. Default: Existing affected baseline rules.</dd>
+  <dt>`--ref`</dt>
+  <dd>Git reference to compare against. Requires `--affected`.</dd>
+  <dt>`--sha`</dt>
+  <dd>Git SHA to compare against. Requires `--affected`.</dd>
+  <dt>`--repo-path`</dt>
+  <dd>Existing repository to use as the comparison baseline. Requires `--affected`; cannot be combined with `--base`, `--ref`, `--sha`, `--ssh-key`, `--ssh-key-password`, or `--clone-target-ref`.</dd>
+  <dt>`--ssh-key`</dt>
+  <dd>SSH key for cloning the comparison baseline. Requires `--affected`.</dd>
+  <dt>`--ssh-key-password`</dt>
+  <dd>Password for the SSH key. Requires `--affected`.</dd>
+  <dt>`--clone-target-ref`</dt>
+  <dd>Clone the comparison baseline. Requires `--affected`. Default: `false`.</dd>
+  <dt>`--include-dependencies[=N]`</dt>
+  <dd>Include prerequisites of the selected components. The bare flag expands without a depth limit; use the `=N` form, such as `--include-dependencies=2`, to limit the depth. Default: Disabled.</dd>
+  <dt>`--include-dependents[=N]`</dt>
+  <dd>Include consumers of the selected components. The bare flag expands without a depth limit; use the `=N` form to limit the depth. Default: Disabled.</dd>
+  <dt>`--max-concurrency`</dt>
+  <dd>Maximum number of active component operations. One worker permits interactive prompts. Default: `1`.</dd>
+  <dt>`--failure-mode`</dt>
+  <dd>`fail-fast` stops at the first failure. `keep-going` finishes independent branches while dependents of failures are skipped. Default: `fail-fast`.</dd>
+  <dt>`--log-order`</dt>
+  <dd>`stream` prints component output as it arrives. `grouped` emits complete component logs in stable dependency order and applies when `--max-concurrency` is greater than `1`. Grouped mode shows live start and completion messages on stderr while buffering child logs. It sends each component's stdout to stdout and its headers and stderr to stderr. Default: `stream`.</dd>
+  <dt>`--dry-run`</dt>
+  <dd>Preview selection, commands, relationships, and lifecycle hooks without running tests or hooks. Environment variable: `ATMOS_DRY_RUN`. Default: `false`.</dd>
+  <dt>`--identity`, `-i`</dt>
+  <dd>Forward the identity to each child. Use `--identity` without a value to select interactively, which requires `--max-concurrency=1`. Environment variable: `ATMOS_IDENTITY`. Default: Component command behavior.</dd>
+  <dt>`--auto-approve`</dt>
+  <dd>Append each handler's registered approval arguments. The Terraform test handler does not register approval arguments, so this flag adds nothing to its command. Default: `false`.</dd>
+  <dt>`--ci`</dt>
+  <dd>Run in CI mode. Every child component command runs with `ATMOS_CI=true`, and Atmos publishes one combined job summary and one set of outputs for the whole run. Without the flag, CI mode turns on when `ATMOS_CI` or `CI` is truthy or a CI provider is detected; an explicit `--ci=false` turns it off. Environment variables: `ATMOS_CI`, `CI`. Default: `false`.</dd>
+  <dt>`--skip-hooks[=names]`</dt>
+  <dd>Skip all hooks, or the comma-separated hook names; previews identify skipped hooks. Environment variable: `ATMOS_SKIP_HOOKS`.</dd>
+</dl>
+
+Comparison flags (`--base`, `--ref`, `--sha`, `--repo-path`, `--ssh-key`,
+`--ssh-key-password`, and `--clone-target-ref`) require `--affected` and are rejected
+otherwise. Only the environment variables listed above apply to this command. Variables
+that other commands bind to similar settings, such as `ATMOS_TERRAFORM_DESTROY_ALL`, do
+not change the selection.

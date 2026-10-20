@@ -1,6 +1,7 @@
 package stack
 
 import (
+	_ "embed"
 	"errors"
 	"fmt"
 	"os"
@@ -27,6 +28,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+//go:embed markdown/test_usage.md
+var stackTestUsage string
+
 const flagSkipHooks = "skip-hooks"
 
 type lifecycleOptions struct {
@@ -40,7 +44,7 @@ type lifecycleOptions struct {
 }
 
 func init() {
-	stackCmd.AddCommand(newLifecycleCommand("deploy"), newLifecycleCommand("destroy"))
+	stackCmd.AddCommand(newLifecycleCommand("test"), newLifecycleCommand("deploy"), newLifecycleCommand("destroy"))
 }
 
 // affectedOnlyFlags configure the Git comparison and are meaningless without --affected.
@@ -114,6 +118,9 @@ func newLifecycleCommand(verb string) *cobra.Command {
 			"interactively. Use --all or --affected to select across stacks.",
 		// Children are top-level Atmos invocations that open their own CI log groups.
 		Annotations: map[string]string{annotationSkipInvocationGroup: "true"},
+	}
+	if verb == "test" {
+		cmd.Example = stackTestUsage
 	}
 	parser.RegisterFlags(cmd)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
@@ -285,7 +292,7 @@ func loadLifecycleConfig(cmd *cobra.Command) (schema.AtmosConfiguration, error) 
 
 // resolveLifecycleSelection builds the selection, including the affected comparison when requested.
 func resolveLifecycleSelection(cmd *cobra.Command, config *schema.AtmosConfiguration, opts *lifecycleOptions, stacks map[string]any) (lifecycle.Selection, []schema.Affected, error) {
-	selection := lifecycle.Selection{Stack: opts.stack, Components: opts.components, Dependencies: opts.dependencies, Dependents: opts.dependents, Reverse: opts.verb == "destroy"}
+	selection := lifecycle.Selection{Operation: lifecycle.Event(opts.verb), Stack: opts.stack, Components: opts.components, Dependencies: opts.dependencies, Dependents: opts.dependents, Reverse: opts.verb == "destroy"}
 	if len(opts.tags) > 0 || len(opts.labels) > 0 {
 		selection.Filter = &lifecycle.Filter{Tags: opts.tags, Labels: opts.labels}
 	}

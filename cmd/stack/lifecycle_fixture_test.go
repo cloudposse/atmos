@@ -66,6 +66,7 @@ func lifecycleFixturePlan(t *testing.T, verb string, selection *lifecycle.Select
 
 	stacks, handlers, err := loadLifecycleInventory(script, &config, verb, nil)
 	require.NoError(t, err)
+	selection.Operation = lifecycle.Event(verb)
 	return lifecycle.BuildPlan(stacks, handlers, selection, "{{")
 }
 

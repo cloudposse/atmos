@@ -17,9 +17,12 @@ const (
 	reasonDestroyGone   = "removed from configuration; `atmos stack destroy` only destroys components that are still defined"
 )
 
-func deletedReason(reverse bool) string {
-	if reverse {
+func deletedReason(s *Selection) string {
+	if s.Reverse {
 		return reasonDestroyGone
+	}
+	if s.Operation != "" && s.Operation != Deploy {
+		return fmt.Sprintf("removed from configuration; `atmos stack %s` only operates on components that are still defined", s.Operation)
 	}
 	return reasonDeployDeleted
 }
@@ -35,12 +38,16 @@ func isLocked(n *dependency.Node) bool {
 // requires every selected component's required prerequisites to be operable;
 // destroy requires that no surviving component still needs a destroyed one.
 // Required-prerequisite checks do not apply to destroy, which removes
-// consumers before the components they use.
-func checkSelection(g *dependency.Graph, commands map[string]*Handler, selected map[string]bool, reverse bool, p *Plan) error {
-	if reverse {
+// consumers before the components they use. Other forward operations validate
+// required handler support only at explicitly expanded prerequisite edges.
+func checkSelection(g *dependency.Graph, commands map[string]*Handler, selected map[string]bool, s *Selection, p *Plan) error {
+	if s.Reverse {
 		return checkSurvivingConsumers(g, commands, selected, p)
 	}
-	return checkRequiredPrerequisites(g, commands, selected)
+	if s.Operation == "" || s.Operation == Deploy {
+		return checkRequiredPrerequisites(g, commands, selected)
+	}
+	return nil
 }
 
 // checkRequiredPrerequisites fails when a selected component requires a

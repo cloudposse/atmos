@@ -59,5 +59,5 @@ func TestNamedAffectedSelectionFiltersDeletedNotices(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, plan.Notices, 1)
 	require.Equal(t, 1, plan.Deleted)
-	require.Equal(t, Notice{Kind: "terraform", Stack: "dev", Component: "app", Reason: deletedReason(false)}, plan.Notices[0])
+	require.Equal(t, Notice{Kind: "terraform", Stack: "dev", Component: "app", Reason: deletedReason(&Selection{})}, plan.Notices[0])
 }

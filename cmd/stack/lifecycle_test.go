@@ -516,7 +516,7 @@ func TestResolveLifecycleSelection(t *testing.T) {
 
 	selection, affected, err := resolveLifecycleSelection(&cobra.Command{}, &schema.AtmosConfiguration{}, opts, stacks)
 	require.NoError(t, err)
-	assert.Equal(t, lifecycle.Selection{Stack: "dev", Dependencies: 2, Dependents: -1, Reverse: true}, selection)
+	assert.Equal(t, lifecycle.Selection{Operation: lifecycle.Destroy, Stack: "dev", Dependencies: 2, Dependents: -1, Reverse: true}, selection)
 	assert.Nil(t, affected)
 
 	opts.verb = "deploy"

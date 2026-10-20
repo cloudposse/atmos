@@ -3,12 +3,12 @@ title: atmos stack
 sidebar_label: stack
 sidebar_class_name: command
 id: usage
-description: "Create stack manifests, edit configuration, and deploy or destroy components in dependency order."
+description: "Create stack manifests, edit configuration, and test, deploy, or destroy components in dependency order."
 ---
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Create stack manifests, edit configuration, and deploy or destroy components across component types.
+Create stack manifests, edit configuration, and test, deploy, or destroy components across component types.
 Atmos finds the manifest that defines a value and edits it while preserving comments, anchors, and templates.
 </Intro>
 
@@ -27,6 +27,7 @@ directly.
 
 ```shell
 atmos stack create --file stacks/deploy/dev.yaml
+atmos stack test --stack dev --component=network,app
 atmos stack deploy --affected --stack dev --dry-run
 atmos stack destroy --all --stack dev --dry-run
 atmos stack config get <path> -s <stack> -c <component>
@@ -43,6 +44,7 @@ Paths are component-relative (e.g. `vars.region`, `settings.spacelift.workspace_
 ## Subcommands
 
 - [`atmos stack create`](/cli/commands/stack/stack-create) — create a new manifest.
+- [`atmos stack test`](/cli/commands/stack/stack-test) — run registered component tests in dependency order.
 - [`atmos stack deploy`](/cli/commands/stack/stack-deploy) — deploy registered component handlers in dependency order.
 - [`atmos stack destroy`](/cli/commands/stack/stack-destroy) — destroy current components in reverse dependency order.
 - [`atmos stack config`](/cli/commands/stack/config) — the canonical `get`/`set`/`delete`/`format`/`list` command set.

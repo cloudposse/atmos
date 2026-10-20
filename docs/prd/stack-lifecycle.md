@@ -1,6 +1,6 @@
 # Stack Management and Lifecycle Operations
 
-**Status:** Implementation in progress. Current-definition deploy/destroy, scaffold-backed manifest creation, and hook-aware dry runs are implemented. Stack creation reuses the scaffold catalog and renderer, validates complete file plans, and records each stack independently. Deleted-definition recovery remains blocked pending the prerequisite teardown implementation; selecting deletions with `--allow-destroy` fails before any operations start.
+**Status:** Implementation in progress. Current-definition test/deploy/destroy, scaffold-backed manifest creation, and hook-aware dry runs are implemented. Stack creation reuses the scaffold catalog and renderer, validates complete file plans, and records each stack independently. Deleted-definition recovery remains blocked pending the prerequisite teardown implementation; selecting deletions with `--allow-destroy` fails before any operations start.
 
 **Prerequisite:** Merge [PR #3415, Teardown of Deleted Components](https://github.com/cloudposse/atmos/pull/3415)
 before this work. Its `docs/prd/deleted-component-teardown.md` governs configuration
@@ -25,6 +25,7 @@ commands. No top-level `atmos deploy` or `atmos destroy` is introduced.
 | `atmos stack create` | Create a stack manifest. |
 | `atmos stack delete` | Remove a stack manifest. |
 | `atmos stack config get\|set\|delete\|format\|list` | Read and edit configuration within manifests. |
+| `atmos stack test` | Run selected components' registered tests in dependency order. |
 | `atmos stack deploy` | Deploy selected components; explicitly opt into teardown of removed components. |
 | `atmos stack destroy` | Destroy selected components that remain defined. |
 | `atmos stack schema` | Describe the manifest schema. |
@@ -36,6 +37,7 @@ component configuration. Keep the existing type-specific lifecycle commands.
 ## Selection and execution controls
 
 ```shell
+atmos stack test --stack dev --component=network,app
 atmos stack deploy --component=app --component=api --stack dev
 atmos stack deploy --stack dev # selects the whole stack
 atmos stack deploy --stack dev --component # prompts for components
@@ -165,7 +167,19 @@ not dynamically extensible. A component type supports an event only when it
 registers a handler. Duplicate registrations are rejected. Each handler declares
 its structured component command bindings, hook preview events, optional approval
 arguments, and execution resource/environment policy. The current CLI work wires
-`stack deploy` and `stack destroy`; it does not repurpose existing `stack validate`.
+`stack test`, `stack deploy`, and `stack destroy`; it does not repurpose existing `stack validate`.
+
+Terraform registers `Test` as `atmos terraform test`, preserving the native
+`before.terraform.test` and `after.terraform.test` hooks, resource locks, and
+concurrent plugin-cache safeguards. Testing does not implicitly invoke build or
+deploy. Terraform test files own whether they plan resources or create and clean
+up temporary resources. Custom commands explicitly named `test` may participate
+through the same component and stack bindings; other kinds are excluded with a
+notice when they have no registered test handler. Testing does not require an
+unselected prerequisite to support tests. Explicit prerequisite expansion rejects
+required unsupported test operations within the requested depth; optional ones
+remain excluded. Deleted definitions are reported as unavailable to test, without
+advertising deployment-only teardown flags.
 
 Built-in component command packages register their own handlers during startup.
 Configured custom handlers are added to invocation-local snapshots so loading one

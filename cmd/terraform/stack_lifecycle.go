@@ -3,6 +3,7 @@ package terraform
 import (
 	"strconv"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/scheduler/adapters"
@@ -12,17 +13,20 @@ import (
 )
 
 func init() {
+	test := terraformStackHandler(lifecycle.Test)
+	test.HookEvents = []string{string(hooks.BeforeTerraformTest), string(hooks.AfterTerraformTest)}
+	lifecycle.MustRegister(cfg.TerraformComponentType, lifecycle.Test, test)
 	deploy := terraformStackHandler(lifecycle.Deploy)
 	deploy.HookEvents = []string{string(hooks.BeforeTerraformDeploy), string(hooks.AfterTerraformDeploy)}
-	lifecycle.MustRegister("terraform", lifecycle.Deploy, deploy)
+	lifecycle.MustRegister(cfg.TerraformComponentType, lifecycle.Deploy, deploy)
 	destroy := terraformStackHandler(lifecycle.Destroy)
 	destroy.ApprovalArgs = []string{"-auto-approve"}
 	// Single-component destroy currently does not fire user lifecycle hooks.
-	lifecycle.MustRegister("terraform", lifecycle.Destroy, destroy)
+	lifecycle.MustRegister(cfg.TerraformComponentType, lifecycle.Destroy, destroy)
 }
 
 func terraformStackHandler(event lifecycle.Event) *lifecycle.Handler {
-	handler := lifecycle.NativeHandler("terraform", string(event))
+	handler := lifecycle.NativeHandler(cfg.TerraformComponentType, string(event))
 	handler.NewResourceGuard = func(config *schema.AtmosConfiguration) func(*dependency.Node) func() {
 		return adapters.NewTerraformResourceGuard(config, &schema.ConfigAndStacksInfo{SubCommand: string(event)})
 	}

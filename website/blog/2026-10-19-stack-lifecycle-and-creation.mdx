@@ -23,6 +23,8 @@ Component types do not determine execution order. A Helm release might need an o
 
 Stack deployment follows declared component dependencies across types and stacks. Independent components can run concurrently when requested; destruction follows the reverse order. Only component types with a handler for the requested operation participate, including configured custom commands. Each component command retains its authentication, hooks, and confirmation behavior.
 
+The [stack test](/cli/commands/stack/stack-test) command uses the same component selectors and ordering to run registered tests. Terraform components run `atmos terraform test`, including their test hooks; custom component kinds can provide their own test operation.
+
 Stack creation reuses the existing scaffold catalog and renderer. The built-in template can add imports and disabled component stubs; a configured template can generate a complete application stack and supporting files. Creation validates the output plan and refuses to overwrite existing files.
 
 ## How to Use It
@@ -68,6 +70,12 @@ or use the bare flag for an interactive multiselect. Without `--stack`, `--all`,
 `--affected`, Atmos prompts for a stack. Use `--all` to operate across stacks, or
 `--affected` for affected components. Automation must supply values for any requested
 prompts explicitly.
+
+Run Terraform tests for selected components:
+
+```shell
+atmos stack test --stack dev --component=network,app
+```
 
 Deploy with bounded concurrency, or preview destruction of currently defined components:
 
