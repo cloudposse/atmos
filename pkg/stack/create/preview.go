@@ -56,8 +56,9 @@ func isRecordPath(path string) bool {
 	return filepath.Dir(filepath.Clean(path)) == recordDirectory
 }
 
-// Preview prints what Apply would do. Stdout carries the rendered files as one YAML stream, each file
-// introduced by a comment naming its path and separated from the next by `---`, so it stays pipeable.
+// Preview prints what Apply would do. Stdout carries file previews, each introduced by a comment
+// naming its path and separated from the next by `---`, so it stays pipeable. Files may contain
+// non-YAML content, so the stream is not guaranteed to be valid YAML.
 // The generation record is only mentioned on stderr: it holds every answer and is not worth dumping.
 func (p *Plan) Preview(skip func(string) bool) error {
 	defer perf.Track(nil, "create.Plan.Preview")()
@@ -138,7 +139,7 @@ func previewHook(name string, hook *hooks.Hook, skip func(string) bool) error {
 	if err != nil {
 		return err
 	}
-	// Keep stdout a valid YAML stream: each hook is its own document, introduced by a comment.
+	// Separate hook declarations with the same markers as file previews.
 	if err := data.Writeln("---"); err != nil {
 		return err
 	}

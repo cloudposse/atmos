@@ -224,7 +224,7 @@ preview.
   <dt>`--max-concurrency`</dt>
   <dd>Maximum number of active component operations. One worker permits interactive prompts. Default: `1`.</dd>
   <dt>`--failure-mode`</dt>
-  <dd>`fail-fast` stops at the first failure. `keep-going` finishes independent branches while dependents of failures are skipped. Default: `fail-fast`.</dd>
+  <dd>`fail-fast` stops at the first failure. `keep-going` finishes independent branches while prerequisites of failed components are skipped, leaving them in place because they wait for their consumers in destroy order. Default: `fail-fast`.</dd>
   <dt>`--log-order`</dt>
   <dd>`stream` prints component output as it arrives. `grouped` emits complete component logs in stable dependency order and applies when `--max-concurrency` is greater than `1`. Grouped mode shows live start and completion messages on stderr while buffering child logs. It sends each component's stdout to stdout and its headers and stderr to stderr. Default: `stream`.</dd>
   <dt>`--dry-run`</dt>

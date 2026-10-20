@@ -273,10 +273,11 @@ and runs no hooks.
 
 ## Preview, hooks, and generation records
 
-A dry run prints each file that would be created as a YAML stream: a `# <path>` comment
-followed by the file content, with `---` between files. The stream goes to stdout so
-it can be piped. It creates no output files or directories and runs no hooks. Resolving
-a remote template can still download it.
+A dry run prints a stream of file previews: a `# <path>` comment followed by each
+file's content, with `---` between files. The stream goes to stdout so it can be
+piped, but it is not guaranteed to be valid YAML: files can contain Terraform
+sources, documentation, or other content. It creates no output files or directories
+and runs no hooks. Resolving a remote template can still download it.
 
 The preview also lists each scaffold hook in the order it would run, with `before`
 hooks ahead of `after` hooks, including its actions and conditions. A hook whose events
