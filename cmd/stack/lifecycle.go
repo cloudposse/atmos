@@ -31,7 +31,8 @@ const flagSkipHooks = "skip-hooks"
 
 type lifecycleOptions struct {
 	verb, stack, identity, failureMode, logOrder         string
-	component                                            string
+	components                                           []string
+	pickComponents                                       bool
 	all, affected, dryRun, allowDestroy, autoApprove, ci bool
 	concurrency, dependencies, dependents                int
 	tags                                                 []string
@@ -48,6 +49,8 @@ var affectedOnlyFlags = []string{"base", "ref", "sha", "repo-path", "ssh-key", "
 func buildLifecycleParser(verb string) *flags.StandardParser {
 	options := []flags.Option{
 		flags.WithStackFlag(), flags.WithDryRunFlag(), flags.WithIdentityFlag(),
+		flags.WithStringSliceFlag("component", "", nil, "Select component names (repeat or comma-separate); omit the value to choose interactively"),
+		flags.WithNoOptDefVal("component", lifecycleComponentSelect),
 		flags.WithBoolFlag("all", "", false, "Select all components defining this operation"),
 		flags.WithBoolFlag("affected", "", false, "Select components affected by the Git comparison"),
 		flags.WithStringFlag("base", "", "", "Base Git ref or SHA (auto-detected in supported CI environments)"),
@@ -90,25 +93,25 @@ func lifecycleShort(verb string) string {
 	return strings.ToUpper(verb[:1]) + verb[1:] + " stack components in dependency order"
 }
 
-// lifecycleArgs accepts one optional component name.
+// lifecycleArgs rejects positional components in favor of the repeatable flag.
 func lifecycleArgs(cmd *cobra.Command, args []string) error {
-	if len(args) <= 1 {
+	if len(args) == 0 {
 		return nil
 	}
-	return errUtils.Build(fmt.Errorf("%w: atmos stack %s accepts at most one component", errUtils.ErrInvalidPositionalArgs, cmd.Name())).
-		WithHint("Pass one component, or use --all, --affected, --tags, or --labels to select multiple components.").
+	return errUtils.Build(fmt.Errorf("%w: atmos stack %s does not accept positional arguments", errUtils.ErrInvalidPositionalArgs, cmd.Name())).
+		WithHint("Use --component=NAME, repeat --component, or comma-separate names.").
 		Err()
 }
 
 func newLifecycleCommand(verb string) *cobra.Command {
 	parser := buildLifecycleParser(verb)
 	cmd := &cobra.Command{
-		Use: verb + " [component]", Short: lifecycleShort(verb), Args: lifecycleArgs,
+		Use: verb, Short: lifecycleShort(verb), Args: lifecycleArgs,
 		Long: lifecycleShort(verb) + ".\n\n" +
-			"Pass a component name, or select multiple components with --all, --affected,\n" +
-			"--tags, or --labels. Without --stack, --all, or --affected, choose a stack\n" +
-			"interactively. Without a component or bulk selection, choose a component.\n" +
-			"Missing inputs are errors in noninteractive mode; use --all for a whole stack.",
+			"Select a whole stack with --stack, or narrow it with --component=app,api.\n" +
+			"Repeat --component to add names; use --component without a value for a\n" +
+			"multiselect picker. Without --stack, --all, or --affected, choose a stack\n" +
+			"interactively. Use --all or --affected to select across stacks.",
 		// Children are top-level Atmos invocations that open their own CI log groups.
 		Annotations: map[string]string{annotationSkipInvocationGroup: "true"},
 	}
@@ -117,9 +120,6 @@ func newLifecycleCommand(verb string) *cobra.Command {
 		opts, err := resolveLifecycleOptions(cmd, parser, verb)
 		if err != nil {
 			return err
-		}
-		if len(args) > 0 {
-			opts.component = args[0]
 		}
 		return runLifecycle(cmd, &opts)
 	}
@@ -137,6 +137,9 @@ func resolveLifecycleOptions(cmd *cobra.Command, parser *flags.StandardParser, v
 	}
 	opts, err := parseLifecycleOptions(verb, v)
 	if err != nil {
+		return opts, err
+	}
+	if err := parseLifecycleComponents(cmd, v, &opts); err != nil {
 		return opts, err
 	}
 	opts.ci = lifecycleCIMode(cmd, v)
@@ -282,7 +285,7 @@ func loadLifecycleConfig(cmd *cobra.Command) (schema.AtmosConfiguration, error) 
 
 // resolveLifecycleSelection builds the selection, including the affected comparison when requested.
 func resolveLifecycleSelection(cmd *cobra.Command, config *schema.AtmosConfiguration, opts *lifecycleOptions, stacks map[string]any) (lifecycle.Selection, []schema.Affected, error) {
-	selection := lifecycle.Selection{Stack: opts.stack, Component: opts.component, Dependencies: opts.dependencies, Dependents: opts.dependents, Reverse: opts.verb == "destroy"}
+	selection := lifecycle.Selection{Stack: opts.stack, Components: opts.components, Dependencies: opts.dependencies, Dependents: opts.dependents, Reverse: opts.verb == "destroy"}
 	if len(opts.tags) > 0 || len(opts.labels) > 0 {
 		selection.Filter = &lifecycle.Filter{Tags: opts.tags, Labels: opts.labels}
 	}

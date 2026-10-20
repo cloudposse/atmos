@@ -18,8 +18,8 @@ Dependencies determine readiness; independent components can run concurrently.
 ## Usage
 
 ```shell
-atmos stack deploy [component] [--stack=dev]
-atmos stack deploy app --stack=dev --dry-run
+atmos stack deploy --stack=dev [--component=app,api]
+atmos stack deploy --component=app --component=api --stack=dev --dry-run
 atmos stack deploy --all [--stack=dev]
 atmos stack deploy --affected [--stack=dev] [--base=origin/main]
 atmos stack deploy --affected --include-dependencies=2 --dry-run
@@ -27,24 +27,39 @@ atmos stack deploy --tags=networking --stack=dev
 atmos stack deploy --affected --labels=team=platform,tier=1
 ```
 
-Pass an optional component name to select that exact name across component kinds.
-For example, `atmos stack deploy app --stack=dev` selects components named `app` in
-`dev`. If several kinds define that name, each matching kind participates. Unknown
-component or stack names are errors.
+With `--stack=dev` and no component filter, Atmos selects the whole stack.
+Use `--component=app` to select an exact name, `--component=app,api` to select
+several names, or repeat the flag: `--component=app --component=api`. Repeated and
+comma-separated values can be combined; duplicate names are selected once.
+Positional component arguments are not accepted. Unknown component or stack names
+are errors.
 
-Without a component or bulk selection, Atmos prompts for a component; it does not
-select the whole stack implicitly. Use `--all` for every component, `--affected`
-for affected components, or `--tags`/`--labels` for an explicit filtered selection.
-`--all` and `--affected` are mutually exclusive. A component name and metadata
-filters narrow the initial selection, including when combined with either bulk flag.
+Names match across component kinds. For example, if `dev` defines a Terraform
+component named `app` and `prod` defines a Helm component named `app`, then
+`atmos stack deploy --all --component=app` selects both.
+Adding `--stack=prod` selects only the Helm component. If several kinds in the
+same stack define `app`, each matching kind participates.
+
+Use bare `--component` to open a multiselect picker. Explicit names supplied
+alongside the bare flag start selected; otherwise nothing is preselected.
+An empty selection or cancellation stops before any operations start.
+The picker lists available names in the selected stack, or across stacks with
+`--all` or `--affected`. Affected, tag, and label filters then narrow the selection.
+`--all` and `--affected` are mutually exclusive.
 
 When `--stack`, `--all`, and `--affected` are all omitted, Atmos first prompts for
-a stack. If a component was supplied, the picker only lists stacks containing that
-component with a handler for the operation. Otherwise, after choosing the stack,
-the component picker lists its available components. No component prompt appears
-for bulk selections or tag/label filters. These prompts also work during `--dry-run`.
-In CI, without an interactive terminal, or with `--interactive=false`, missing
-inputs produce an error with the explicit arguments to supply.
+a stack. If component names were supplied, the picker only lists stacks containing
+all those names with handlers for the operation. The component picker appears
+only when explicitly requested with bare `--component`. Both prompts work during
+`--dry-run`. In CI, without an interactive terminal, or with `--interactive=false`,
+a missing stack or bare `--component` produces an error explaining which values
+to supply.
+
+```shell
+atmos stack deploy --stack=prod --dry-run
+atmos stack deploy --stack=prod --component --dry-run
+atmos stack deploy --component=app,api --component=worker --stack=prod --dry-run
+```
 
 A `--stack` value narrows the initial selection. To select across stacks, pass
 `--all` or `--affected`; tag/label filters alone still need a supplied or prompted
@@ -66,7 +81,7 @@ Component packages register handlers for a fixed set of lifecycle events: `build
 - Kubernetes runs `atmos kubernetes deploy`.
 - AWS CloudFormation runs `atmos aws cloudformation deploy`.
 - Custom component kinds are supported when a custom command named `deploy` declares
-  `component.type`. The `--all` flag and dependency expansion select these
+  `component.type`. Whole-stack selection, `--component`, `--all`, and dependency expansion select these
   components; `--affected` does not select custom kinds yet. Semantic
   `provides: component` and `provides: stack` inputs receive the selected component
   and stack. Ambiguous handlers and required inputs without defaults fail before
@@ -174,22 +189,17 @@ does not invent lifecycle hook events for them.
 See `examples/stack-lifecycle` for a Terraform → Helm → Kubernetes chain and a
 conditional Docker build hook. Component types have no fixed priority.
 
-## Arguments
-
-<dl>
-  <dt>`component`</dt>
-  <dd>Optional exact component name. Matches that name across component kinds before dependency expansion. Without a name or explicit bulk selection, interactive mode asks you to choose a component.</dd>
-</dl>
-
 ## Flags
 
 <dl>
+  <dt>`--component[=names]`</dt>
+  <dd>Filter by exact component names across kinds. Repeat the flag or comma-separate names; matching any supplied name is sufficient. With no value, open a multiselect picker. Supplied names start selected when combined with a bare flag. Empty names and empty picker selections are errors. Omit the flag to select every eligible component in the chosen scope. Dependency expansion can add other names.</dd>
   <dt>`--all`</dt>
-  <dd>Select every component that defines a `deploy` operation. May be narrowed by a component name, stack, tags, or labels. Cannot combine `--all` and `--affected`. Default: `false`.</dd>
+  <dd>Select every component that defines a `deploy` operation. May be narrowed by component names, stack, tags, or labels. Cannot combine `--all` and `--affected`. Default: `false`.</dd>
   <dt>`--affected`</dt>
-  <dd>Select components affected by the Git comparison. May be narrowed by a component name, stack, tags, or labels. Cannot combine `--all` and `--affected`. Default: `false`.</dd>
+  <dd>Select components affected by the Git comparison. May be narrowed by component names, stack, tags, or labels. Cannot combine `--all` and `--affected`. Default: `false`.</dd>
   <dt>`--tags`</dt>
-  <dd>Select components whose `metadata.tags` include any of the given tags (comma-separated). Selects matching components in a supplied or prompted stack. With a component name, `--all`, or `--affected`, it narrows that selection. Dependency expansion still follows declared dependencies regardless of tags. Environment variable: `ATMOS_TAGS`. Default: No tag filter.</dd>
+  <dd>Select components whose `metadata.tags` include any of the given tags (comma-separated). Selects matching components in a supplied or prompted stack. With component names, `--all`, or `--affected`, it narrows that selection. Dependency expansion still follows declared dependencies regardless of tags. Environment variable: `ATMOS_TAGS`. Default: No tag filter.</dd>
   <dt>`--labels`</dt>
   <dd>Select components whose `metadata.labels` contain every given `key=value` (or `key:value`) pair. Repeat the flag or separate pairs with commas. Used alone or combined like `--tags`; when both are given, a component must match both. Environment variable: `ATMOS_LABELS`. Default: No label filter.</dd>
   <dt>`--stack`, `-s`</dt>

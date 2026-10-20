@@ -3,8 +3,10 @@ package stack
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -17,7 +19,7 @@ func needsLifecycleStack(o *lifecycleOptions) bool {
 }
 
 func needsLifecycleComponent(o *lifecycleOptions) bool {
-	return o.component == "" && !o.all && !o.affected && len(o.tags) == 0 && len(o.labels) == 0
+	return o.pickComponents
 }
 
 // checkLifecyclePromptAvailability fails before loading configuration when a
@@ -32,15 +34,15 @@ func checkLifecyclePromptAvailability(o *lifecycleOptions) error {
 			Err()
 	}
 	if needsLifecycleComponent(o) {
-		return errUtils.Build(fmt.Errorf("%w: component is required without a bulk selection", errUtils.ErrInvalidPositionalArgs)).
-			WithHint("Pass a component or run interactively to choose one. Use --all for every component in the stack, or filter with --affected, --tags, or --labels.").
+		return errUtils.Build(fmt.Errorf("%w: --component without a value requires an interactive terminal", errUtils.ErrInvalidFlag)).
+			WithHint("Pass --component=NAME (repeat or comma-separate names), or run interactively to choose components.").
 			Err()
 	}
 	return nil
 }
 
 // resolveLifecycleTargets uses the same selector as Terraform, with options
-// from the already loaded mixed-kind inventory. Bulk selections skip the component picker.
+// from the already loaded mixed-kind inventory. Only bare --component opens its picker.
 func resolveLifecycleTargets(cmd *cobra.Command, o *lifecycleOptions, stacks map[string]any, handlers map[string]*lifecycle.Handler) error {
 	if err := checkLifecyclePromptAvailability(o); err != nil {
 		return err
@@ -54,15 +56,7 @@ func resolveLifecycleTargets(cmd *cobra.Command, o *lifecycleOptions, stacks map
 		return err
 	}
 	if needsLifecycleComponent(o) {
-		options := lifecycleComponentNames(stacks, o.stack, handlers)
-		if len(options) == 0 {
-			return fmt.Errorf("%w: no components define %s in stack %q", errUtils.ErrNoComponentsToSelect, o.verb, o.stack)
-		}
-		component, err := promptLifecycleTarget(cmd, "component", "Choose a component", options)
-		if err != nil {
-			return err
-		}
-		o.component = component
+		return promptLifecycleComponents(cmd, o, stacks, handlers)
 	}
 	return nil
 }
@@ -71,12 +65,12 @@ func promptLifecycleStack(cmd *cobra.Command, o *lifecycleOptions, stacks map[st
 	var options []string
 	for stack := range stacks {
 		names := lifecycleComponentNames(stacks, stack, handlers)
-		if o.component == "" || slices.Contains(names, o.component) {
+		if containsLifecycleComponents(names, o.components) {
 			options = append(options, stack)
 		}
 	}
 	if len(options) == 0 {
-		return fmt.Errorf("%w: no stacks match component %q", errUtils.ErrNoStacksToSelect, o.component)
+		return fmt.Errorf("%w: no stacks match components %q", errUtils.ErrNoStacksToSelect, o.components)
 	}
 	stack, err := promptLifecycleTarget(cmd, "stack", "Choose a stack", options)
 	if err != nil {
@@ -129,25 +123,24 @@ func lifecycleComponentNames(stacks map[string]any, stack string, handlers map[s
 }
 
 func checkLifecycleComponentExists(stacks map[string]any, affected []schema.Affected, o *lifecycleOptions) error {
-	if o.component == "" {
-		return nil
+	for _, name := range o.components {
+		if !lifecycleComponentExists(stacks, affected, o.stack, name) {
+			return errUtils.Build(fmt.Errorf("%w: component %q was not found in the selected stacks", errUtils.ErrInvalidComponent, name)).
+				WithHint("Run `atmos list components` to see the available components.").Err()
+		}
 	}
+	return nil
+}
+
+func lifecycleComponentExists(stacks map[string]any, affected []schema.Affected, selectedStack, name string) bool {
 	for stack, value := range stacks {
-		if o.stack != "" && o.stack != stack {
-			continue
-		}
-		if lifecycleStackContainsComponent(value, o.component) {
-			return nil
+		if (selectedStack == "" || selectedStack == stack) && lifecycleStackContainsComponent(value, name) {
+			return true
 		}
 	}
-	for i := range affected {
-		if affected[i].Component == o.component && (o.stack == "" || o.stack == affected[i].Stack) {
-			return nil
-		}
-	}
-	return errUtils.Build(fmt.Errorf("%w: component %q was not found in the selected stacks", errUtils.ErrInvalidComponent, o.component)).
-		WithHint("Run `atmos list components` to see the available components.").
-		Err()
+	return slices.ContainsFunc(affected, func(a schema.Affected) bool {
+		return a.Component == name && (selectedStack == "" || selectedStack == a.Stack)
+	})
 }
 
 func lifecycleStackContainsComponent(value any, name string) bool {
@@ -160,4 +153,67 @@ func lifecycleStackContainsComponent(value any, name string) bool {
 		}
 	}
 	return false
+}
+
+// lifecycleComponentSelect follows the optional-value sentinel convention.
+const lifecycleComponentSelect = "__SELECT__"
+
+func parseLifecycleComponents(cmd *cobra.Command, v *viper.Viper, o *lifecycleOptions) error {
+	values := v.GetStringSlice("component")
+	if cmd.Flags().Changed("component") && len(values) == 0 {
+		return fmt.Errorf("%w: --component requires a nonempty name; use bare --component to choose interactively", errUtils.ErrInvalidFlag)
+	}
+	for _, name := range values {
+		name = strings.TrimSpace(name)
+		switch name {
+		case lifecycleComponentSelect:
+			o.pickComponents = true
+		case "":
+			return fmt.Errorf("%w: --component names must not be empty", errUtils.ErrInvalidFlag)
+		default:
+			if !slices.Contains(o.components, name) {
+				o.components = append(o.components, name)
+			}
+		}
+	}
+	return nil
+}
+
+func containsLifecycleComponents(options, names []string) bool {
+	for _, name := range names {
+		if !slices.Contains(options, name) {
+			return false
+		}
+	}
+	return true
+}
+
+func promptLifecycleComponents(cmd *cobra.Command, o *lifecycleOptions, stacks map[string]any, handlers map[string]*lifecycle.Handler) error {
+	if err := cmd.Context().Err(); err != nil {
+		return err
+	}
+	var options []string
+	for stack := range stacks {
+		if o.stack == "" || o.stack == stack {
+			options = append(options, lifecycleComponentNames(stacks, stack, handlers)...)
+		}
+	}
+	slices.Sort(options)
+	options = slices.Compact(options)
+	if len(options) == 0 {
+		return fmt.Errorf("%w: no components define %s in the selected stacks", errUtils.ErrNoComponentsToSelect, o.verb)
+	}
+	if !containsLifecycleComponents(options, o.components) {
+		return fmt.Errorf("%w: --component names must be available in the selected stacks", errUtils.ErrInvalidComponent)
+	}
+	selected, err := flags.PromptForMultipleValuesWithPreselection("component", "Choose components", options, o.components)
+	if err != nil {
+		return err
+	}
+	if len(selected) == 0 || !containsLifecycleComponents(options, selected) {
+		return fmt.Errorf("%w: no components selected", errUtils.ErrMissingInput)
+	}
+	o.components = selected
+	o.pickComponents = false
+	return cmd.Context().Err()
 }

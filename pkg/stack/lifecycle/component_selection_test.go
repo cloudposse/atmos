@@ -23,13 +23,14 @@ func TestComponentSelection(t *testing.T) {
 		pick Selection
 		want []string
 	}{
-		{"exact name across kinds", Selection{Stack: "dev", Component: "services/app"}, []string{"helm/dev/services/app", "terraform/dev/services/app"}},
-		{"across stacks", Selection{Component: "services/app"}, []string{"helm/dev/services/app", "terraform/dev/services/app", "terraform/prod/services/app"}},
-		{"affected intersection", Selection{Component: "services/app", Affected: affected(app, network)}, []string{"terraform/dev/services/app"}},
-		{"unaffected name", Selection{Component: "services/app", Affected: affected(network)}, nil},
-		{"tag intersection", Selection{Component: "services/app", Filter: &Filter{Tags: []string{"release"}}}, []string{"helm/dev/services/app"}},
-		{"dependencies may have other names", Selection{Stack: "dev", Component: "services/app", Dependencies: 1}, []string{"helm/dev/services/app", "terraform/dev/network", "terraform/dev/services/app"}},
-		{"dependents may have other names", Selection{Stack: "dev", Component: "network", Dependents: 1}, []string{"terraform/dev/network", "terraform/dev/services/app"}},
+		{"multiple names union", Selection{Stack: "dev", Components: []string{"services/app", "network"}}, []string{"helm/dev/services/app", "terraform/dev/network", "terraform/dev/services/app"}},
+		{"exact name across kinds", Selection{Stack: "dev", Components: []string{"services/app"}}, []string{"helm/dev/services/app", "terraform/dev/services/app"}},
+		{"across stacks", Selection{Components: []string{"services/app"}}, []string{"helm/dev/services/app", "terraform/dev/services/app", "terraform/prod/services/app"}},
+		{"affected intersection", Selection{Components: []string{"services/app"}, Affected: affected(app, network)}, []string{"terraform/dev/services/app"}},
+		{"unaffected name", Selection{Components: []string{"services/app"}, Affected: affected(network)}, nil},
+		{"tag intersection", Selection{Components: []string{"services/app"}, Filter: &Filter{Tags: []string{"release"}}}, []string{"helm/dev/services/app"}},
+		{"dependencies may have other names", Selection{Stack: "dev", Components: []string{"services/app"}, Dependencies: 1}, []string{"helm/dev/services/app", "terraform/dev/network", "terraform/dev/services/app"}},
+		{"dependents may have other names", Selection{Stack: "dev", Components: []string{"network"}, Dependents: 1}, []string{"terraform/dev/network", "terraform/dev/services/app"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -43,13 +44,13 @@ func TestComponentSelection(t *testing.T) {
 			require.Equal(t, tt.want, got)
 		})
 	}
-	_, err := BuildPlan(stacks, capabilities("terraform", "helm"), Selection{Stack: "dev", Component: "network", Reverse: true}, "{{")
+	_, err := BuildPlan(stacks, capabilities("terraform", "helm"), Selection{Stack: "dev", Components: []string{"network"}, Reverse: true}, "{{")
 	require.ErrorIs(t, err, errUtils.ErrSurvivingConsumers)
 }
 
 func TestNamedAffectedSelectionFiltersDeletedNotices(t *testing.T) {
 	plan, err := BuildPlan(nil, capabilities("terraform"), Selection{
-		Component: "app",
+		Components: []string{"app"},
 		Affected: []schema.Affected{
 			{ComponentType: "terraform", Stack: "dev", Component: "app", Deleted: true},
 			{ComponentType: "terraform", Stack: "dev", Component: "network", Deleted: true},

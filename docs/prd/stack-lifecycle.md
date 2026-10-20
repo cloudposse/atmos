@@ -36,9 +36,11 @@ component configuration. Keep the existing type-specific lifecycle commands.
 ## Selection and execution controls
 
 ```shell
-atmos stack deploy app --stack dev
-atmos stack deploy --stack dev # prompts for a component
-atmos stack deploy # prompts for a stack, then a component
+atmos stack deploy --component=app --component=api --stack dev
+atmos stack deploy --stack dev # selects the whole stack
+atmos stack deploy --stack dev --component # prompts for components
+atmos stack deploy # prompts for a stack
+atmos stack deploy --component=app,api # prompts for a stack containing both names
 atmos stack deploy --affected
 atmos stack deploy --affected --stack dev
 atmos stack deploy --all
@@ -54,15 +56,18 @@ atmos stack deploy --tags=networking --stack dev
 atmos stack deploy --affected --labels=team=platform,tier=1
 ```
 
-Select an exact positional component name, or use `--all`, `--affected`, `--tags`,
-or `--labels` for explicit bulk selection. `--all` and `--affected` are mutually
-exclusive. A name filters across component kinds before dependency expansion.
-Without `--stack`, `--all`, or `--affected`, prompt for a stack (filtered by the
-supplied component). Without a name or bulk selection, prompt for a component in
-that stack; never implicitly select every component. In noninteractive mode or CI,
-missing inputs are actionable errors. Dry runs may prompt, and cancellation stops
-before execution. `--stack` narrows the initial selection; omitting it selects
-across stacks only with `--all` or `--affected`. Reuse existing affected detection and baseline options,
+Select a whole stack with `--stack`, or narrow the selection with `--component`.
+Accept exact names as `--component=app`, repeated flags, comma-separated values,
+or a combination. Names match across kinds and are deduplicated before expansion.
+Reject positional component arguments and empty names. Validate every supplied name.
+`--all` and `--affected` are mutually exclusive; both allow selection across stacks.
+Without `--stack`, `--all`, or `--affected`, prompt for a stack containing all supplied
+names with handlers for the operation. Only a bare `--component` opens the multiselect
+picker, which lists available names in the selected scope. Supplied names start selected;
+otherwise nothing is preselected. Reject an empty selection, and stop on cancellation.
+Affected and metadata filters intersect the chosen names before dependency expansion.
+In noninteractive mode or CI, a missing stack or bare `--component` is an actionable
+error. Dry runs may prompt. Reuse existing affected detection and baseline options,
 including `--base`, rather than introducing another Git comparison algorithm.
 
 ### Tag and label filters
@@ -77,7 +82,7 @@ the same flags, environment variables, and matching rules:
   each occurrence accepts comma-separated pairs.
 
 Either filter selects matching components in the supplied or prompted stack without
-a component prompt. Combined with a component name, `--all`, or `--affected`, it
+a component prompt unless bare `--component` is supplied. Combined with component names, `--all`, or `--affected`, it
 narrows that selection. When both are
 given, a component must match both. Filters apply to the initial selection like
 `--stack`. Dependency expansion follows declared dependencies regardless of tags

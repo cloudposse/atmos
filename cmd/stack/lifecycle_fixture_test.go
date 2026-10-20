@@ -243,7 +243,7 @@ func TestLifecycleSelectorValidation(t *testing.T) {
 	opts, err := lifecycleTestCommand(t, "deploy")
 	require.NoError(t, err)
 	assert.True(t, needsLifecycleStack(&opts))
-	assert.True(t, needsLifecycleComponent(&opts))
+	assert.False(t, needsLifecycleComponent(&opts))
 
 	_, err = lifecycleTestCommand(t, "deploy", "--labels=missing-separator")
 	require.ErrorIs(t, err, errUtils.ErrInvalidFlag)

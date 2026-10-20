@@ -18,8 +18,8 @@ import (
 // Selection selects seeds before expanding dependencies in the original graph.
 type Selection struct {
 	Stack string
-	// Component matches an exact component name across kinds before expansion.
-	Component string
+	// Components selects exact names across kinds before expansion; empty selects every name.
+	Components []string
 	// A nil Affected selects all nodes; a non-nil empty slice selects none.
 	Affected []schema.Affected
 	// Zero disables expansion, -1 expands without a depth limit.
@@ -191,7 +191,7 @@ func selectSeeds(g *dependency.Graph, commands map[string]*Handler, s Selection,
 		if s.Stack != "" && s.Stack != n.Stack {
 			continue
 		}
-		if s.Component != "" && s.Component != n.Component {
+		if len(s.Components) > 0 && !slices.Contains(s.Components, n.Component) {
 			continue
 		}
 		if !matchesSelectors(n, s.Filter) {
@@ -233,7 +233,7 @@ func affectedEligibility(s Selection, p *Plan) map[string]bool {
 		if s.Stack != "" && s.Stack != a.Stack {
 			continue
 		}
-		if s.Component != "" && s.Component != a.Component {
+		if len(s.Components) > 0 && !slices.Contains(s.Components, a.Component) {
 			continue
 		}
 		if a.Deleted {

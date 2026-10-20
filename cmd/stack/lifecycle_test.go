@@ -109,7 +109,7 @@ func TestLifecycleOptionValidation(t *testing.T) {
 	cmd := newLifecycleCommand("deploy")
 	require.NoError(t, cmd.ParseFlags([]string{"--affected", "--include-dependencies", "--include-dependents=2", "--dry-run"}))
 	assert.Equal(t, "all", cmd.Flag("include-dependencies").Value.String())
-	assert.NoError(t, cmd.Args(cmd, []string{"component"}))
+	assert.ErrorIs(t, cmd.Args(cmd, []string{"component"}), errUtils.ErrInvalidPositionalArgs)
 	assert.Nil(t, newLifecycleCommand("destroy").Flag("allow-destroy"))
 }
 
@@ -196,7 +196,7 @@ func TestLifecycleOptionsIgnoreForeignEnvironment(t *testing.T) {
 	t.Run("foreign variables do not supply a bulk selection", func(t *testing.T) {
 		opts, err := lifecycleTestCommand(t, "deploy", "--stack=prod", "--dry-run")
 		require.NoError(t, err)
-		assert.True(t, needsLifecycleComponent(&opts))
+		assert.False(t, needsLifecycleComponent(&opts))
 		assert.False(t, opts.all)
 		assert.False(t, opts.affected)
 	})
@@ -276,14 +276,14 @@ func errString(err error) string {
 	return err.Error()
 }
 
-func TestLifecycleAcceptsOneComponent(t *testing.T) {
+func TestLifecycleRejectsPositionalComponents(t *testing.T) {
 	cmd := newLifecycleCommand("deploy")
 	require.NoError(t, cmd.Args(cmd, nil))
-	require.NoError(t, cmd.Args(cmd, []string{"network"}))
+	require.ErrorIs(t, cmd.Args(cmd, []string{"network"}), errUtils.ErrInvalidPositionalArgs)
 	err := cmd.Args(cmd, []string{"network", "app"})
 	require.ErrorIs(t, err, errUtils.ErrInvalidPositionalArgs)
-	assert.Contains(t, err.Error(), "at most one component")
-	assert.Contains(t, strings.Join(errUtils.AllHints(err), "\n"), "--all, --affected, --tags, or --labels")
+	assert.Contains(t, err.Error(), "does not accept positional arguments")
+	assert.Contains(t, strings.Join(errUtils.AllHints(err), "\n"), "--component=NAME")
 }
 
 func TestLifecycleShortDescriptions(t *testing.T) {
