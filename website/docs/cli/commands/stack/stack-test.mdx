@@ -29,7 +29,7 @@ selection. Names match across component kinds and duplicate names run once per
 kind and stack. Positional component arguments are not accepted. Unknown names
 are errors.
 
-Without `--stack`, `--all`, or `--affected`, Atmos prompts for a stack.
+Without `--stack`, `--all`, or `--affected`, Atmos prompts for a stack that has at least one enabled, unlocked, non-abstract component supporting the requested operation.
 Bare `--component` opens a multiselect picker; explicit names supplied alongside
 it start selected. Cancellation or an empty component selection stops before
 execution. Both prompts work during `--dry-run`. In CI, without an interactive
@@ -94,6 +94,15 @@ It uses the same [CI output fields and configuration](/cli/commands/stack/stack-
 as the other stack lifecycle operations. Dry runs do not publish execution results.
 Deleted affected definitions are reported and omitted because their tests are no
 longer available in the current configuration; testing never invokes teardown.
+
+Before execution, Atmos checks named identities and component authentication defaults
+across the selected components. An undefined identity stops the operation before any
+component starts and includes matching profile suggestions when available. This check
+does not log in; credential acquisition remains with each component command. Dry runs
+and `--identity=false` bypass this authentication check.
+
+Skipped status lines include the reason, such as `fail-fast after terraform/dev/vpc failed`,
+`dependency terraform/dev/vpc failed`, or `context canceled`.
 
 ## Flags
 

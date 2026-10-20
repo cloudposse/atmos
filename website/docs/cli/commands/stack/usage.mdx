@@ -21,11 +21,15 @@ A value may come from an imported manifest shared by multiple stacks. Editing th
 [`atmos stack config get|set|delete|format|list`](/cli/commands/stack/config) is
 the **canonical** command set. The flat commands documented below (`get`, `set`,
 `delete`, `format`) are deprecated, hidden aliases of the matching `stack config` subcommand. They retain their existing behavior until a breaking release; `stack delete` does not yet remove manifests.
-`list` has no flat form — a flat `atmos stack list` would collide with the existing
-[`atmos list stacks`](/cli/commands/list/stacks) — so use `atmos stack config list`
-directly.
+`atmos stack config list` lists editable configuration paths. Use
+[`atmos stack list`](/cli/commands/stack/stack-list) to list stacks,
+[`atmos stack describe`](/cli/commands/stack/stack-describe) to inspect their resolved configuration,
+and [`atmos stack instances`](/cli/commands/stack/stack-instances) to list component instances.
 
 ```shell
+atmos stack list
+atmos stack describe --stack dev
+atmos stack instances --stack dev
 atmos stack create --file stacks/deploy/dev.yaml
 atmos stack plan --stack dev --component=network,app
 atmos stack test --stack dev --component=network,app
@@ -43,6 +47,10 @@ atmos stack validate
 Paths are component-relative (e.g. `vars.region`, `settings.spacelift.workspace_enabled`).
 
 ## Subcommands
+
+- [`atmos stack list`](/cli/commands/stack/stack-list) — alias of `atmos list stacks`.
+- [`atmos stack describe`](/cli/commands/stack/stack-describe) — alias of `atmos describe stacks`.
+- [`atmos stack instances`](/cli/commands/stack/stack-instances) — alias of `atmos list instances`.
 
 - [`atmos stack create`](/cli/commands/stack/stack-create) — create a new manifest.
 - [`atmos stack plan`](/cli/commands/stack/stack-plan) — run native component plans or diffs in dependency order.

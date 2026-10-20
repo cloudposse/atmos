@@ -188,6 +188,15 @@ for these aliases, hook events retain the `delete` name. Helmfile destroy fires
 destroy currently does not fire user lifecycle hooks, so none are promised in its
 preview.
 
+Before execution, Atmos checks named identities and component authentication defaults
+across the selected components. An undefined identity stops the operation before any
+component starts and includes matching profile suggestions when available. This check
+does not log in; credential acquisition remains with each component command. Dry runs
+and `--identity=false` bypass this authentication check.
+
+Skipped status lines include the reason, such as `fail-fast after terraform/dev/vpc failed`,
+`dependency terraform/dev/vpc failed`, or `context canceled`.
+
 ## Flags
 
 <dl>

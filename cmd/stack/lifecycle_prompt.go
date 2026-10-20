@@ -62,15 +62,28 @@ func resolveLifecycleTargets(cmd *cobra.Command, o *lifecycleOptions, stacks map
 }
 
 func promptLifecycleStack(cmd *cobra.Command, o *lifecycleOptions, stacks map[string]any, handlers map[string]*lifecycle.Handler) error {
+	if len(stacks) == 0 {
+		return errUtils.Build(errUtils.ErrNoStacksToSelect).
+			WithHint("Check `stacks.base_path` and `stacks.included_paths` in `atmos.yaml`, or use `--chdir` to select your project.").
+			Err()
+	}
 	var options []string
 	for stack := range stacks {
 		names := lifecycleComponentNames(stacks, stack, handlers)
-		if containsLifecycleComponents(names, o.components) {
+		if len(names) > 0 && containsLifecycleComponents(names, o.components) {
 			options = append(options, stack)
 		}
 	}
 	if len(options) == 0 {
-		return fmt.Errorf("%w: no stacks match components %q", errUtils.ErrNoStacksToSelect, o.components)
+		if len(o.components) == 0 {
+			return errUtils.Build(errUtils.ErrNoStacksToSelect).
+				WithExplanationf("No stacks contain enabled, unlocked components that support %s.", o.verb).
+				WithHint("Run `atmos stack instances` to inspect the configured components.").
+				Err()
+		}
+		return errUtils.Build(fmt.Errorf("%w: no stacks match components %q", errUtils.ErrNoStacksToSelect, o.components)).
+			WithHint("Run `atmos list components` to check the component names and which stacks contain them.").
+			Err()
 	}
 	stack, err := promptLifecycleTarget(cmd, "stack", "Choose a stack", options)
 	if err != nil {
@@ -98,7 +111,7 @@ func promptLifecycleTarget(cmd *cobra.Command, name, title string, options []str
 	return value, cmd.Context().Err()
 }
 
-// lifecycleComponentNames excludes abstract, disabled, and unsupported kinds
+// lifecycleComponentNames excludes abstract, disabled, locked, and unsupported kinds
 // from the component picker. Repeated names across kinds appear once.
 func lifecycleComponentNames(stacks map[string]any, stack string, handlers map[string]*lifecycle.Handler) []string {
 	section, _ := stacks[stack].(map[string]any)
@@ -112,7 +125,7 @@ func lifecycleComponentNames(stacks map[string]any, stack string, handlers map[s
 		for name, value := range components {
 			component, _ := value.(map[string]any)
 			metadata, _ := component["metadata"].(map[string]any)
-			if component == nil || metadata["type"] == "abstract" || metadata["enabled"] == false {
+			if component == nil || metadata["type"] == "abstract" || metadata["enabled"] == false || metadata["locked"] == true {
 				continue
 			}
 			names = append(names, name)

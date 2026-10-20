@@ -22,6 +22,9 @@ commands. No top-level `atmos deploy` or `atmos destroy` is introduced.
 
 | Command | Responsibility |
 | --- | --- |
+| `atmos stack list` | Alias for `atmos list stacks`. |
+| `atmos stack describe` | Alias for `atmos describe stacks`. |
+| `atmos stack instances` | Alias for `atmos list instances`. |
 | `atmos stack create` | Create a stack manifest. |
 | `atmos stack delete` | Remove a stack manifest. |
 | `atmos stack config get\|set\|delete\|format\|list` | Read and edit configuration within manifests. |

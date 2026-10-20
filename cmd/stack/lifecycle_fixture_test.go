@@ -2,6 +2,7 @@ package stack
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -18,12 +19,93 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependency"
+	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/stack/lifecycle"
 )
 
 // lifecyclePackageDir is the package directory, captured before any test changes the working directory.
 var lifecyclePackageDir, _ = os.Getwd()
+
+func TestLifecycleAuthPreflight(t *testing.T) {
+	configured := schema.AuthConfig{Identities: map[string]schema.Identity{
+		"global": {Kind: "aws/permission-set", Default: true},
+	}, IdentityCaseMap: map[string]string{"global": "global"}}
+	marker := map[string]any{"auth": map[string]any{"identities": map[string]any{
+		"missing": map[string]any{"default": true},
+	}}}
+	local := map[string]any{"auth": map[string]any{"identities": map[string]any{
+		"local": map[string]any{"kind": "aws/permission-set", "default": true},
+	}}}
+	for _, tt := range []struct {
+		name      string
+		identity  string
+		component map[string]any
+		dryRun    bool
+		want      error
+	}{
+		{"missing explicit", "missing", nil, false, errUtils.ErrIdentityNotFound},
+		{"undefined component default", "", marker, false, errUtils.ErrInvalidIdentityConfig},
+		{"explicit retains native merge validation", "global", marker, false, errUtils.ErrInvalidIdentityConfig},
+		{"component identity", "local", local, false, nil},
+		{"component default", "", local, false, nil},
+		{"explicit overrides valid default", "global", local, false, nil},
+		{"case insensitive explicit", "GLOBAL", nil, false, nil},
+		{"interactive selection remains deferred", cfg.IdentityFlagSelectValue, nil, false, nil},
+		{"disabled auth", cfg.IdentityFlagDisabledValue, marker, false, nil},
+		{"dry run", "missing", marker, true, nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.SetContext(context.Background())
+			node := &dependency.Node{ID: "app", Type: "terraform", Stack: "dev", Component: "app", Metadata: tt.component}
+			run := &lifecycleRun{
+				config: &schema.AtmosConfiguration{Auth: configured},
+				plan: &lifecycle.Plan{Graph: &dependency.Graph{Nodes: map[string]*dependency.Node{
+					"app": node,
+				}}},
+				options: &lifecycleOptions{identity: tt.identity, dryRun: tt.dryRun},
+			}
+			err := checkLifecycleAuth(cmd, run)
+			if tt.want == nil {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, tt.want)
+				require.Contains(t, strings.Join(errUtils.AllHints(err), " "), "no component operations were started")
+			}
+			require.True(t, configured.Identities["global"].Default, "preflight must not mutate global auth")
+		})
+	}
+}
+
+func TestLifecycleAuthNoDefaultDoesNotSelectIdentity(t *testing.T) {
+	config := &schema.AuthConfig{Identities: map[string]schema.Identity{"unused": {}}}
+	require.NoError(t, checkLifecycleIdentity(config, ""))
+	require.ErrorIs(t, checkLifecycleIdentity(config, "unused"), errUtils.ErrIdentityNotFound)
+}
+
+func TestLifecycleAuthProfileHints(t *testing.T) {
+	t.Setenv("ATMOS_PROFILE", "")
+	root := t.TempDir()
+	profileDir := filepath.Join(root, "profiles", "developer")
+	require.NoError(t, os.MkdirAll(profileDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(profileDir, "auth.yaml"), []byte("auth:\n  identities:\n    plat-dev:\n      kind: aws/permission-set\n"), 0o600))
+	config := &schema.AtmosConfiguration{CliConfigPath: root, Profiles: schema.ProfilesConfig{BasePath: "profiles"}}
+	err := lifecycleAuthConfigError(config, missingLifecycleIdentity("plat-dev"), "terraform/dev/app")
+	require.ErrorIs(t, err, errUtils.ErrIdentityNotFound)
+	require.Contains(t, strings.Join(errUtils.AllHints(err), " "), "--profile=developer")
+	otherProfile := filepath.Join(root, "profiles", "devops")
+	require.NoError(t, os.MkdirAll(otherProfile, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(otherProfile, "auth.yaml"), []byte("auth:\n  identities:\n    plat-dev:\n      kind: aws/permission-set\n"), 0o600))
+	err = lifecycleAuthConfigError(config, missingLifecycleIdentity("plat-dev"), "terraform/dev/app")
+	hints := strings.Join(errUtils.AllHints(err), " ")
+	require.Contains(t, hints, "developer, devops")
+	require.Equal(t, 1, strings.Count(hints, "--profile="))
+	t.Setenv("ATMOS_PROFILE", "production")
+	err = lifecycleAuthConfigError(config, missingLifecycleIdentity("plat-dev"), "terraform/dev/app")
+	require.NotContains(t, strings.Join(errUtils.AllHints(err), " "), "--profile=developer")
+}
 
 // useLifecycleFixture switches to the stack-lifecycle-field-test fixture and points Atmos at it.
 func useLifecycleFixture(t *testing.T) string {
@@ -394,4 +476,76 @@ func TestRunLifecyclePlanRejectsUnanswerableConcurrency(t *testing.T) {
 		assert.Contains(t, lines, "--base-path=fixture terraform destroy --stack=platform registry -auto-approve", "the registered approval arguments reach the child")
 		assert.Contains(t, lines, "--base-path=fixture helmfile destroy --stack=platform ingress", "handlers without approval arguments are unchanged")
 	})
+}
+
+func TestRunLifecyclePlanRejectsMissingIdentityBeforeAnyChild(t *testing.T) {
+	run, log := lifecycleChildRun(t, "deploy", 0, nil)
+	// The dependency runs first; an invalid identity on the later child must still
+	// stop the entire operation before that first dependency is launched.
+	for _, node := range run.plan.Graph.Nodes {
+		if node.Component == "ingress" {
+			node.Metadata["auth"] = map[string]any{"identities": map[string]any{
+				"missing": map[string]any{"default": true},
+			}}
+		}
+	}
+	output := captureLifecycle(t)
+	err := runLifecyclePlan(lifecycleTestCommandWithContext(), run)
+	require.ErrorIs(t, err, errUtils.ErrInvalidIdentityConfig)
+	require.NoFileExists(t, log)
+	require.NotContains(t, output.String(), ": failed")
+	require.NotContains(t, output.String(), ": skipped")
+	require.NotContains(t, output.String(), "succeeded")
+	require.Contains(t, strings.Join(errUtils.AllHints(err), " "), "no component operations were started")
+}
+
+func TestReportLifecycleResultsExplainsSchedulerSkips(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		failFast    bool
+		dependent   string
+		independent string
+	}{
+		{"fail fast", true, "skipped: fail-fast after terraform/dev/a failed", "skipped: fail-fast after terraform/dev/a failed"},
+		{"keep going", false, "skipped: dependency terraform/dev/a failed", "succeeded"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			output := captureLifecycle(t)
+			builder := dependency.NewBuilder()
+			for _, name := range []string{"a", "b", "z"} {
+				require.NoError(t, builder.AddNode(&dependency.Node{
+					ID: lifecycle.NodeID("terraform", "dev", name), Type: "terraform", Stack: "dev", Component: name,
+				}))
+			}
+			require.NoError(t, builder.AddDependency(lifecycle.NodeID("terraform", "dev", "b"), lifecycle.NodeID("terraform", "dev", "a")))
+			graph, err := builder.Build()
+			require.NoError(t, err)
+			dispatcher := scheduler.DispatcherFunc(func(_ context.Context, node *dependency.Node) (scheduler.Result, error) {
+				if node.Component == "a" {
+					return scheduler.Result{}, errors.New("operation failed")
+				}
+				return scheduler.Result{}, nil
+			})
+			result := scheduler.New(graph, dispatcher, scheduler.WithMaxConcurrency(1), scheduler.WithFailFast(tc.failFast)).Run(t.Context())
+			require.Error(t, result.Err)
+			reportLifecycleResults("plan", result.Results, 0, 0)
+			assert.Contains(t, output.String(), "plan terraform/dev/b: "+tc.dependent)
+			assert.Contains(t, output.String(), "plan terraform/dev/z: "+tc.independent)
+			assert.NotContains(t, output.String(), "scheduler node skipped")
+			assert.NotContains(t, output.String(), lifecycle.NodeID("terraform", "dev", "a"))
+		})
+	}
+}
+
+func TestReportLifecycleResultsExplainsCancellation(t *testing.T) {
+	for _, reason := range []error{context.Canceled, context.DeadlineExceeded, errors.New("custom skip reason")} {
+		t.Run(reason.Error(), func(t *testing.T) {
+			output := captureLifecycle(t)
+			reportLifecycleResults("plan", []scheduler.Result{{
+				Node: dependency.Node{Type: "terraform", Stack: "dev", Component: "app"}, Status: scheduler.StatusSkipped, Err: reason,
+			}}, 0, 0)
+			assert.Contains(t, output.String(), "plan terraform/dev/app: skipped: "+reason.Error())
+			assert.Contains(t, output.String(), "0 succeeded, 0 failed, 1 skipped, 0 excluded")
+		})
+	}
 }

@@ -152,9 +152,10 @@ func TestLifecycleTargetPromptContextAndCI(t *testing.T) {
 func TestLifecyclePickerExcludesUnavailableComponents(t *testing.T) {
 	stacks := map[string]any{"dev": map[string]any{"components": map[string]any{
 		"terraform": map[string]any{
-			"app":  map[string]any{},
-			"base": map[string]any{"metadata": map[string]any{"type": "abstract"}},
-			"off":  map[string]any{"metadata": map[string]any{"enabled": false}},
+			"app":    map[string]any{},
+			"base":   map[string]any{"metadata": map[string]any{"type": "abstract"}},
+			"off":    map[string]any{"metadata": map[string]any{"enabled": false}},
+			"locked": map[string]any{"metadata": map[string]any{"locked": true}},
 		},
 		"helm":   map[string]any{"app": map[string]any{}},
 		"packer": map[string]any{"image": map[string]any{}},
@@ -170,6 +171,22 @@ func TestLifecycleEmptyPickerOptions(t *testing.T) {
 	require.ErrorIs(t, resolveLifecycleTargets(cmd, &lifecycleOptions{}, nil, nil), errUtils.ErrNoStacksToSelect)
 	require.ErrorIs(t, resolveLifecycleTargets(cmd, &lifecycleOptions{stack: "dev", pickComponents: true},
 		map[string]any{"dev": map[string]any{}}, nil), errUtils.ErrNoComponentsToSelect)
+}
+
+func TestLifecycleEmptyStackPickerError(t *testing.T) {
+	lifecycleInteractiveTest(t)
+	cmd := newLifecycleCommand("plan")
+	cmd.SetContext(context.Background())
+	for _, components := range [][]string{nil, {"app"}} {
+		err := resolveLifecycleTargets(cmd, &lifecycleOptions{components: components}, nil, nil)
+		require.ErrorIs(t, err, errUtils.ErrNoStacksToSelect)
+		require.EqualError(t, err, errUtils.ErrNoStacksToSelect.Error())
+		output := errUtils.Format(err, errUtils.FormatterConfig{})
+		require.Equal(t, 1, strings.Count(output, errUtils.ErrNoStacksToSelect.Error()))
+		require.NotContains(t, output, "no stacks match components")
+		require.Contains(t, output, "stacks.base_path")
+		require.Contains(t, output, "--chdir")
+	}
 }
 
 func TestNamedSelectionIgnoresOtherDeletedComponents(t *testing.T) {
@@ -265,6 +282,46 @@ func TestLifecycleStackPickerRequiresEverySuppliedName(t *testing.T) {
 	cmd, _ := lifecycleFixtureCommand(t, "deploy", "--component=app,ingress", "--dry-run")
 	output := captureLifecycle(t)
 	lifecycleInteractiveTest(t)
-	require.ErrorIs(t, cmd.RunE(cmd, nil), errUtils.ErrNoStacksToSelect)
+	err := cmd.RunE(cmd, nil)
+	require.ErrorIs(t, err, errUtils.ErrNoStacksToSelect)
+	require.Contains(t, err.Error(), `no stacks match components ["app" "ingress"]`)
+	require.Contains(t, strings.Join(errUtils.AllHints(err), " "), "atmos list components")
 	require.NotContains(t, output.String(), "Would deploy")
+}
+
+func TestLifecycleStackPickerExcludesInoperableStacks(t *testing.T) {
+	for _, verb := range []string{"plan", "test", "deploy", "destroy"} {
+		t.Run(verb, func(t *testing.T) {
+			calls := lifecycleInteractiveTest(t, "1\n")
+			cmd := newLifecycleCommand(verb)
+			cmd.SetContext(context.Background())
+			componentStack := func(kind string, metadata map[string]any) any {
+				// Module inputs do not control Atmos eligibility: even vars.enabled=false
+				// must remain selectable when metadata permits the operation.
+				return map[string]any{"components": map[string]any{kind: map[string]any{"app": map[string]any{
+					"metadata": metadata, "vars": map[string]any{"enabled": false},
+				}}}}
+			}
+			stacks := map[string]any{
+				"a-empty":       map[string]any{},
+				"b-disabled":    componentStack("terraform", map[string]any{"enabled": false}),
+				"c-abstract":    componentStack("terraform", map[string]any{"type": "abstract"}),
+				"d-locked":      componentStack("terraform", map[string]any{"locked": true}),
+				"e-unsupported": componentStack("packer", nil),
+				"z-enabled":     componentStack("terraform", map[string]any{"enabled": true}),
+			}
+			handlers := map[string]*lifecycle.Handler{"terraform": {}}
+			opts := &lifecycleOptions{verb: verb}
+			require.NoError(t, resolveLifecycleTargets(cmd, opts, stacks, handlers))
+			require.Equal(t, "z-enabled", opts.stack)
+			require.Equal(t, 1, *calls)
+			delete(stacks, "z-enabled")
+			err := resolveLifecycleTargets(cmd, &lifecycleOptions{verb: verb}, stacks, handlers)
+			require.ErrorIs(t, err, errUtils.ErrNoStacksToSelect)
+			rendered := errUtils.Format(err, errUtils.FormatterConfig{})
+			require.Contains(t, rendered, "support "+verb)
+			require.NotContains(t, rendered, "components []")
+			require.Equal(t, 1, *calls, "no prompt when every stack is inoperable")
+		})
+	}
 }

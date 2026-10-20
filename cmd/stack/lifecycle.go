@@ -376,18 +376,43 @@ func lifecycleTally(results []scheduler.Result, excluded, deleted int) string {
 
 // reportLifecycleResults prints one status line per component, then the tally.
 func reportLifecycleResults(verb string, results []scheduler.Result, excluded, deleted int) {
+	const statusFormat = "%s %s: %s"
+	// Scheduler errors identify nodes by their collision-safe IDs. Render the
+	// same readable component labels as the status lines instead.
+	labels := make([]string, 0, len(results)*2)
+	for i := range results {
+		if results[i].NodeID != "" {
+			labels = append(labels, results[i].NodeID, lifecycle.Label(&results[i].Node))
+		}
+	}
+	replacer := strings.NewReplacer(labels...)
 	for i := range results {
 		r := &results[i]
 		switch r.Status {
 		case scheduler.StatusSucceeded:
-			ui.Successf("%s %s: %s", verb, lifecycle.Label(&r.Node), r.Status)
+			ui.Successf(statusFormat, verb, lifecycle.Label(&r.Node), r.Status)
 		case scheduler.StatusFailed:
-			ui.Errorf("%s %s: %s", verb, lifecycle.Label(&r.Node), r.Status)
+			ui.Errorf(statusFormat, verb, lifecycle.Label(&r.Node), r.Status)
+		case scheduler.StatusSkipped:
+			ui.Warningf(statusFormat, verb, lifecycle.Label(&r.Node), lifecycleSkippedStatus(r.Err, replacer))
 		default:
-			ui.Warningf("%s %s: %s", verb, lifecycle.Label(&r.Node), r.Status)
+			ui.Warningf(statusFormat, verb, lifecycle.Label(&r.Node), r.Status)
 		}
 	}
 	ui.Info(lifecycleTally(results, excluded, deleted))
+}
+
+// lifecycleSkippedStatus preserves the scheduler's reason without repeating
+// its skipped sentinel or exposing internal node IDs.
+func lifecycleSkippedStatus(err error, labels *strings.Replacer) string {
+	if err == nil {
+		return string(scheduler.StatusSkipped)
+	}
+	reason := err.Error()
+	if errors.Is(err, errUtils.ErrNodeSkipped) {
+		reason = strings.TrimPrefix(reason, errUtils.ErrNodeSkipped.Error()+": ")
+	}
+	return string(scheduler.StatusSkipped) + ": " + labels.Replace(reason)
 }
 
 func compareLifecycleAffected(cmd *cobra.Command, config *schema.AtmosConfiguration, opts *lifecycleOptions) ([]schema.Affected, error) {
@@ -480,7 +505,7 @@ func runLifecyclePlan(cmd *cobra.Command, run *lifecycleRun) error {
 	if opts.concurrency > 1 && opts.identity == cfg.IdentityFlagSelectValue {
 		return fmt.Errorf("%w: concurrent execution requires a non-interactive identity", errUtils.ErrInvalidConfig)
 	}
-	if err := checkLifecycleApproval(plan, opts); err != nil {
+	if err := checkLifecycleExecution(cmd, run); err != nil {
 		return err
 	}
 	return executeLifecycleChildren(cmd, run)
