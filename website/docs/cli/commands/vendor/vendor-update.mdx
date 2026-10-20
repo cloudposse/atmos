@@ -185,10 +185,10 @@ for precedence, ordering, interruption, and shared-file coordination.
 
 <TryExample example="demo-vendoring">
 
-Inspect the configured sources before downloading components. Pulling sources requires network access.
+Check the included `weather` source for a newer release without editing the manifest. Requires network access.
 
 ```shell
-atmos vendor list
+atmos vendor update --component weather --check
 ```
 
 </TryExample>

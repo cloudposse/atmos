@@ -50,10 +50,11 @@ atmos vendor config delete spec.sources[0].tags
 
 <TryExample example="demo-vendoring">
 
-Inspect the configured sources before downloading components. Pulling sources requires network access.
+Remove the optional description from your local manifest, then list the remaining metadata. This works offline and leaves the component sources intact.
 
 ```shell
-atmos vendor list
+atmos vendor config delete metadata.description
+atmos vendor config list 'metadata.*'
 ```
 
 </TryExample>

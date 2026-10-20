@@ -54,10 +54,10 @@ atmos vendor get vpc --file ./vendor.yaml
 
 <TryExample example="demo-vendoring">
 
-Inspect the configured sources before downloading components. Pulling sources requires network access.
+Read the version pinned for the included `weather` component. This works offline and prints `main` in a fresh copy.
 
 ```shell
-atmos vendor list
+atmos vendor get weather
 ```
 
 </TryExample>

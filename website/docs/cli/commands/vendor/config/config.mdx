@@ -62,10 +62,11 @@ atmos vendor config list
 
 <TryExample example="demo-vendoring">
 
-Inspect the configured sources before downloading components. Pulling sources requires network access.
+List the editable manifest paths, then inspect the version of the included `weather` source. Both commands work offline.
 
 ```shell
-atmos vendor list
+atmos vendor config list
+atmos vendor config get 'spec.sources[1].version'
 ```
 
 </TryExample>

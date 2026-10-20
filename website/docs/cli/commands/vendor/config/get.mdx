@@ -54,10 +54,10 @@ atmos vendor config get spec.sources[0].version
 
 <TryExample example="demo-vendoring">
 
-Inspect the configured sources before downloading components. Pulling sources requires network access.
+Read the version of the included `weather` source by its manifest path. This works offline and prints `main` in a fresh copy.
 
 ```shell
-atmos vendor list
+atmos vendor config get 'spec.sources[1].version'
 ```
 
 </TryExample>

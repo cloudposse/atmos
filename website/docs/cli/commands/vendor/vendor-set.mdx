@@ -62,10 +62,11 @@ making no change.
 
 <TryExample example="demo-vendoring">
 
-Inspect the configured sources before downloading components. Pulling sources requires network access.
+Pin the included `weather` component to a release, then read back the new version. This edits only your local `vendor.yaml`; it does not download components.
 
 ```shell
-atmos vendor list
+atmos vendor set weather v1.201.0
+atmos vendor get weather
 ```
 
 </TryExample>

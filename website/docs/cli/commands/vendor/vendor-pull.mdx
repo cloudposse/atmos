@@ -408,10 +408,10 @@ for precedence, ordering, interruption, and shared-file coordination.
 
 <TryExample example="demo-vendoring">
 
-Inspect the configured sources before downloading components. Pulling sources requires network access.
+Download the included `weather` component into your local project. Requires Git and network access; no Terraform installation or cloud credentials are needed.
 
 ```shell
-atmos vendor list
+atmos vendor pull --component weather
 ```
 
 </TryExample>

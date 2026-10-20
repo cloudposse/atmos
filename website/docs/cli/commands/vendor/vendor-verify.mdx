@@ -93,10 +93,11 @@ outright.
 
 <TryExample example="demo-vendoring">
 
-Inspect the configured sources before downloading components. Pulling sources requires network access.
+Download `weather` and refresh its local receipt, then verify that its files match. The initial pull requires Git and network access; verification is offline.
 
 ```shell
-atmos vendor list
+atmos vendor pull --component weather --refresh-lock
+atmos vendor verify --component weather
 ```
 
 </TryExample>

@@ -63,10 +63,11 @@ atmos vendor config set --type=yaml 'spec.sources[0].tags' '["a", "b"]'
 
 <TryExample example="demo-vendoring">
 
-Inspect the configured sources before downloading components. Pulling sources requires network access.
+Update the description in your local vendor manifest, then read it back. No downloads or cloud credentials are needed.
 
 ```shell
-atmos vendor list
+atmos vendor config set metadata.description "My vendoring demo"
+atmos vendor config get metadata.description
 ```
 
 </TryExample>
