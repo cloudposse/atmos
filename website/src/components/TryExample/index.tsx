@@ -37,7 +37,7 @@ function ExampleTabs({ examples }: { examples: TryExampleProps[] }) {
 
   return (
     <div className={styles.example}>
-      <Tabs defaultValue="install">
+      <Tabs defaultValue={`example:${first.example}`}>
         <TabItem value="install" label="Install Atmos">
           <InstallWidget variant="docs" />
           <div className={styles.links}>

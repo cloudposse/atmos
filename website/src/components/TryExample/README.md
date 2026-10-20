@@ -53,7 +53,8 @@ Individual `/examples/<path>` pages include a single `TryExample` above their
 demo and README. They use `showExampleLink={false}` to omit links back to the
 current page, and link to the README for prerequisites and follow-up commands.
 
-Each instance has its own tabs, initially showing installation. The command uses
+Each instance has its own tabs, initially showing the example (the first named
+example in a group). Installation remains available in the first tab. The command uses
 `atmos init examples/<path>`, which defaults to the official Atmos repository on
 `main`. User initialization settings can override the repository or revision;
 the component links to that configuration reference.

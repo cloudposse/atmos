@@ -39,9 +39,9 @@ vm.runInNewContext(code, {
 }, { filename });
 const { default: TryExample, TryExamples } = module.exports;
 
-test('single example starts with installation and preserves follow-up instructions', () => {
+test('single example starts with the example and preserves follow-up instructions', () => {
   const html = renderToStaticMarkup(h(TryExample, { example: 'policies' }, 'Run offline fixtures.'));
-  assert.match(html, /data-default="install"/);
+  assert.match(html, /data-default="example:policies"/);
   assert.match(html, /data-label="Try the example"/);
   assert.match(html, /atmos init examples\/policies\ncd policies/);
   assert.match(html, /Run offline fixtures\./);
@@ -56,6 +56,7 @@ test('group shares installation and keeps each named example and instructions di
   ));
   assert.equal(html.match(/INSTALL_WIDGET/g).length, 1);
   assert.equal(html.match(/data-label="Install Atmos"/g).length, 1);
+  assert.match(html, /data-default="example:devcontainer"/);
   assert.match(html, /data-label="Dev Container"/);
   assert.match(html, /data-label="Build Geodesic"/);
   assert.match(html, /atmos init examples\/devcontainer\ncd devcontainer/);
