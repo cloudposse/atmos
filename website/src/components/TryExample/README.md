@@ -30,6 +30,12 @@ Optional children appear after the initialization commands in the example tab.
 Include relevant prerequisites and a useful first command; keep the full walkthrough
 in the example README.
 
+On a command reference page, the quick start must run the command documented by
+that page against a real target in the example. Do not reuse a generic inspection
+command across a family of pages. Include prerequisite commands when needed (for
+example, deploy before reading outputs), expected failures or empty results, and
+cleanup for local resources. Verify commands in a fresh copy of the project.
+
 For multiple examples in one section, wrap direct `TryExample` children in
 `TryExamples` and give each a short `label`. This renders one **Install Atmos** tab
 followed by the named example tabs, preserving each project's instructions:

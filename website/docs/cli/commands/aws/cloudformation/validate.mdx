@@ -86,11 +86,13 @@ atmos aws cloudformation validate --affected --labels cost-center=platform
 
 <TryExample example="cloudformation">
 
-Configure a short alias and render the included template locally. Install Docker or Podman and Python 3 before following the README to start the AWS emulator, deploy, and clean up.
+Requires Docker or Podman, Python 3, and network access for the emulator image. Run against the local AWS emulator; the final commands clean up. No AWS account is needed.
 
 ```shell
 atmos config set aliases.cft "aws cloudformation"
-atmos cft render demo -s local
+atmos emulator up aws -s local
+atmos cft validate demo -s local
+atmos emulator down aws -s local
 ```
 
 </TryExample>

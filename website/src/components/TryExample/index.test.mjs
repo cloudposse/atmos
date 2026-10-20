@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
@@ -84,4 +84,30 @@ test('unlabeled grouped examples remain identifiable and an empty group renders 
   assert.match(html, /data-label="one"/);
   assert.match(html, /data-label="two"/);
   assert.equal(renderToStaticMarkup(h(TryExamples, null)), '');
+});
+
+test('command-page quick starts demonstrate the documented command', () => {
+  const directory = new URL('../../../docs/cli/commands/', import.meta.url);
+  const files = readdirSync(directory, { recursive: true }).filter((file) => file.endsWith('.mdx'));
+  let checked = 0;
+  for (const file of files) {
+    const source = readFileSync(new URL(file, directory), 'utf8');
+    const title = source.match(/^title:\s*["']?(atmos [^"'\n]+)["']?\s*$/m)?.[1];
+    if (!title) continue;
+    for (const [, body] of source.matchAll(/<TryExample\b[^>]*>([\s\S]*?)<\/TryExample>/g)) {
+      const commands = [...body.matchAll(/```(?:shell|bash)\n([\s\S]*?)```/g)]
+        .flatMap(([, code]) => code.split('\n'));
+      const aliases = new Map(commands.flatMap((command) => {
+        const match = command.match(/^atmos config set aliases\.(\w+) "([^"]+)"$/);
+        return match ? [[match[1], match[2]]] : [];
+      }));
+      const expanded = commands.map((command) =>
+        command.replace(/^atmos (\w+)(?= |$)/, (match, name) =>
+          aliases.has(name) ? `atmos ${aliases.get(name)}` : match));
+      assert.ok(expanded.some((command) => command === title || command.startsWith(`${title} `)),
+        `${file}: quick start must run "${title}" (or one of its subcommands), not just inspect unrelated configuration`);
+      checked++;
+    }
+  }
+  assert.ok(checked > 0, 'expected command-page quick starts to be checked');
 });
