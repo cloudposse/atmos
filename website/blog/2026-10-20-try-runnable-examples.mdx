@@ -14,24 +14,6 @@ with installation instructions and copyable commands.
 
 import TryExample from '@site/src/components/TryExample';
 
-## The Problem
-
-A link to source code leaves readers to figure out how to turn that code into a working project.
-Posts covering multiple examples also need to distinguish those projects without repeating the
-installation instructions for each one.
-
-## The Fix
-
-Each quick start opens on the example tab, with copyable commands to initialize a complete project
-and try the feature. The **Install Atmos** tab is there when you need it. Related examples share
-one installation tab and have their own named tabs.
-
-### Policy validation output
-
-The [policy check command](/cli/commands/policy#check) now shows a readable summary on stderr.
-**Scripts consuming its previous JSON output must use `atmos policy check --format json`**, which
-preserves the `valid`, `rules`, and `hooks` fields on stdout.
-
 ## Try it out
 
 <TryExample example="policies">
@@ -45,6 +27,18 @@ atmos policy test tests/cases.json
 ```
 
 </TryExample>
+
+## How it works
+
+Each quick start opens on the example tab, with copyable commands to initialize a complete project
+and try the feature. The **Install Atmos** tab is there when you need it. Related examples share
+one installation tab and have their own named tabs.
+
+### Policy validation output
+
+The [policy check command](/cli/commands/policy#check) now shows a readable summary on stderr.
+**Scripts consuming its previous JSON output must use `atmos policy check --format json`**, which
+preserves the `valid`, `rules`, and `hooks` fields on stdout.
 
 ## Get Involved
 
