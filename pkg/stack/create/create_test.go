@@ -533,8 +533,8 @@ func TestFailingBeforeHookStopsApplyBeforeAnyWrite(t *testing.T) {
 	cfg, renderer := fixture(t)
 	events := []string{}
 	runnerstep.Register(&recordingHook{BaseHandler: runnerstep.NewBaseHandler("stack-create-failing-before", runnerstep.CategoryOutput, false), events: &events, fail: true})
-	runnerstep.Register(&recordingHook{BaseHandler: runnerstep.NewBaseHandler("stack-create-record-after", runnerstep.CategoryOutput, false), events: &events})
-	customFixture(t, hookedDefinition("stack-create-failing-before", "stack-create-record-after"))
+	runnerstep.Register(&recordingHook{BaseHandler: runnerstep.NewBaseHandler("stack-create-record-after-failed-hook", runnerstep.CategoryOutput, false), events: &events})
+	customFixture(t, hookedDefinition("stack-create-failing-before", "stack-create-record-after-failed-hook"))
 	plan, err := Prepare(cfg, &Options{File: "stacks/deploy/dev.yaml", Template: "application-stack", Values: map[string]any{"environment": "dev"}, Defaults: true}, renderer)
 	require.NoError(t, err)
 
@@ -548,8 +548,8 @@ func TestAfterHookObservesFailedApply(t *testing.T) {
 	cfg, renderer := fixture(t)
 	events := []string{}
 	runnerstep.Register(&recordingHook{BaseHandler: runnerstep.NewBaseHandler("stack-create-passing-before", runnerstep.CategoryOutput, false), events: &events})
-	runnerstep.Register(&recordingHook{BaseHandler: runnerstep.NewBaseHandler("stack-create-record-after", runnerstep.CategoryOutput, false), events: &events})
-	customFixture(t, hookedDefinition("stack-create-passing-before", "stack-create-record-after"))
+	runnerstep.Register(&recordingHook{BaseHandler: runnerstep.NewBaseHandler("stack-create-record-after-failed-apply", runnerstep.CategoryOutput, false), events: &events})
+	customFixture(t, hookedDefinition("stack-create-passing-before", "stack-create-record-after-failed-apply"))
 	plan, err := Prepare(cfg, &Options{File: "stacks/deploy/dev.yaml", Template: "application-stack", Values: map[string]any{"environment": "dev"}, Defaults: true}, renderer)
 	require.NoError(t, err)
 	// Make writing fail: the superseded record is a non-empty directory that cannot be removed.
