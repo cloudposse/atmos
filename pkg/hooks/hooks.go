@@ -160,7 +160,7 @@ func (h *Hooks) SetOutcome(outcome Outcome) {
 func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
 	defer perf.Track(atmosConfig, "hooks.Hooks.RunAll")()
 
-	if err := ValidateEvents(atmosConfig.Edition, h.items); err != nil {
+	if err := h.validateEvents(atmosConfig); err != nil {
 		return err
 	}
 
