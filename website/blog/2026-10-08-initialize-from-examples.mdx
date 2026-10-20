@@ -27,15 +27,8 @@ Copies preserve literal template content, dotfiles, executable permissions, and 
 
 ## How to Use It
 
-After installing Atmos, initialize the quick-start example and list its stacks:
-
-```shell
-atmos init github.com/cloudposse/atmos//examples/quick-start-simple
-cd quick-start-simple
-atmos list stacks
-```
-
-The destination defaults to the source directory's name. Supply a second argument to choose another destination, or use the shorthand for the default repository:
+The quick start below initializes a complete project and lists its stacks. The destination defaults
+to the source directory's name. Supply a second argument to choose another destination:
 
 ```shell
 atmos init examples/quick-start-simple ./my-project

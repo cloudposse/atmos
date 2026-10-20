@@ -74,16 +74,9 @@ Save this configuration as `atmos.yaml`. It defines a `capacity` command with a
 
 <EmbedFile filePath="examples/starlark-commands/atmos.yaml" />
 
-With Atmos installed, run from the directory containing that file:
-
-```shell
-atmos capacity --replicas 3
-```
-
-The command prints `3 replicas x 4 workers = 12 workers`. The script reads
-`ctx.flags["replicas"]`, converts it to an integer, and rejects counts below one.
-Run `atmos capacity --help` for the command's generated help. This example needs
-no stacks or external tools.
+The script reads `ctx.flags["replicas"]`, converts it to an integer, and rejects
+counts below one. The **Custom Commands** tab below includes the runnable project
+and commands to try it.
 
 <CastEmbed src="/casts/examples/starlark-commands/capacity.cast" title="Custom command: atmos capacity --replicas 3" chrome controls scrubber />
 
@@ -95,16 +88,8 @@ A lifecycle hook runs automatically when Atmos reaches a component event.
 The [owner-check example](/examples/starlark-hooks) reads `ctx.component.vars`
 before a Terraform plan and requires the component to have an owner.
 
-With Atmos and Terraform installed, run these commands from the example's directory:
-
-```shell
-atmos terraform plan api -s dev
-atmos terraform plan api -s unowned
-```
-
-The `dev` stack passes the check and Terraform reports no changes. The `unowned`
-stack fails with `Set an owner before planning api`, stopping the plan. The
-example module has no providers or resources and needs no cloud credentials.
+Compare an owned and unowned component in the **Lifecycle Hooks** tab below.
+The hook stops the unowned component before Terraform runs.
 
 <CastEmbed src="/casts/examples/starlark-hooks/owner-check.cast" title="Check ownership before Terraform plans" chrome controls scrubber />
 
@@ -156,21 +141,37 @@ steps, and YAML expressions for computing configuration values.
 
 <TryExample example="starlark-commands" label="Custom Commands">
 
-Run the local automation command with a typed flag.
+Run the local automation command with a typed flag. No stacks or external tools are required:
 
 ```shell
 atmos capacity --replicas 3
 ```
 
-</TryExample>
-
-<TryExample example="starlark-hooks" label="Git Hooks">
-
-Install Terraform, then follow the README to compare the hook behavior for owned and unowned components.
+The command prints `3 replicas x 4 workers = 12 workers`. Inspect its generated help:
 
 ```shell
-atmos validate stacks
+atmos capacity --help
 ```
+
+</TryExample>
+
+<TryExample example="starlark-hooks" label="Lifecycle Hooks">
+
+Install Terraform, then plan the component with an owner:
+
+```shell
+atmos terraform plan api -s dev
+```
+
+The owner check passes and Terraform reports no changes. The module has no providers or resources
+and requires no cloud credentials. Next, try the component without an owner:
+
+```shell
+atmos terraform plan api -s unowned
+```
+
+This command is expected to fail with `Set an owner before planning api`; the hook stops the plan
+before Terraform runs.
 
 </TryExample>
 
