@@ -100,3 +100,9 @@ bonddim:
   title: Contributor
   url: https://github.com/bonddim
   image_url: https://github.com/bonddim.png
+
+hashfunc:
+  name: hashfunc
+  title: Contributor
+  url: https://github.com/hashfunc
+  image_url: https://github.com/hashfunc.png

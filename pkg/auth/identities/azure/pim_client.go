@@ -12,6 +12,7 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -511,7 +512,7 @@ func (c *armPIMClient) PolicyMaxDuration(ctx context.Context, roleDefinitionID s
 		}
 		for j := range rules {
 			if isActivationExpirationRule(&rules[j]) {
-				d, err := parseISO8601Duration(rules[j].MaximumDuration)
+				d, err := duration.ParseISO8601(rules[j].MaximumDuration)
 				if err != nil {
 					return 0, false, fmt.Errorf("%w: parsing policy maximumDuration %q: %w", errUtils.ErrAzurePIMRequestFailed, rules[j].MaximumDuration, err)
 				}

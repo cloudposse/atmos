@@ -97,6 +97,7 @@ mcp:
       # Atmos extensions
       description: "Human-readable description"
       identity: "my-identity"           # Atmos Auth identity (from the auth section)
+      optional: false                   # Skip (with a warning) if the identity can't be resolved
       auto_start: false                 # Start server automatically
       timeout: "30s"                    # Connection timeout
 ```
@@ -126,11 +127,14 @@ These fields are compatible with the `mcpServers` JSON format used by Claude Cod
   <dt>`identity`</dt>
   <dd>Name of an Atmos Auth identity (from the [`auth`](/cli/configuration/auth) section) to use for credential injection. When set, Atmos authenticates through the identity chain and injects `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`, and `AWS_REGION` into the subprocess environment.</dd>
 
+  <dt>`optional`</dt>
+  <dd>When `true`, a server whose `identity` cannot be resolved in the active auth context is skipped with a warning instead of failing (default: `false`). This is meant for a shared `mcp.servers` configuration consumed across repositories, where a server's identity (for example a central-logging reader) is only defined in some consumers' profiles. A non-optional server whose identity cannot be resolved is still an error. Any other start failure (a bad command, a crashed subprocess) is always an error, optional or not.</dd>
+
   <dt>`auto_start`</dt>
   <dd>Start the server automatically when Atmos starts (default: `false`).</dd>
 
   <dt>`timeout`</dt>
-  <dd>Connection timeout as a Go duration string (default: `30s`). Examples: `10s`, `1m`, `5m`.</dd>
+  <dd>Connection timeout as a [duration](/steps/retry#duration-values) (default: `30s`). Examples: `10s`, `1m`, `5m`, or a bare number of seconds.</dd>
 </dl>
 
 ### YAML Functions in Env Values

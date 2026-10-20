@@ -251,6 +251,15 @@ var journal = []Entry{
 		Description: "README generation honors explicit section visibility, hide_empty, and indent_level; earlier pins retain the legacy formatter output.",
 		Ref:         "https://github.com/cloudposse/atmos/pull/3404",
 	},
+	{
+		Date:        "2026-10-19",
+		Key:         "templates.step_delimiters",
+		Kind:        KindBehavior,
+		Old:         "workflow, custom-command, and hook step templates always use {{ }}",
+		New:         "step templates use templates.settings.delimiters",
+		Description: "Workflow, custom-command, and lifecycle-hook step templates honor the configured templates.settings.delimiters; earlier pins keep the default {{ }} for steps.",
+		Ref:         "https://github.com/cloudposse/atmos/pull/3436",
+	},
 }
 
 // Journal returns a copy of the journal sorted by date (oldest first), then key.

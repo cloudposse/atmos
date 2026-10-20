@@ -14,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/asciicast"
+	"github.com/cloudposse/atmos/pkg/duration"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -826,7 +827,7 @@ func validateKeyAction(action *schema.WorkflowStep) error {
 	if action.Interval == "" {
 		return nil
 	}
-	if _, err := time.ParseDuration(action.Interval); err != nil {
+	if _, err := duration.ParseNonNegative(action.Interval); err != nil {
 		return fmt.Errorf("key interval: %w", err)
 	}
 	return nil
@@ -836,7 +837,7 @@ func validatePauseAction(action *schema.WorkflowStep) error {
 	if action.Duration == "" {
 		return ErrPauseActionRequiresDuration
 	}
-	if _, err := time.ParseDuration(action.Duration); err != nil {
+	if _, err := duration.ParseNonNegative(action.Duration); err != nil {
 		return fmt.Errorf("pause duration: %w", err)
 	}
 	return nil
@@ -856,7 +857,7 @@ func validateWaitAction(action *schema.WorkflowStep) error {
 	if action.Timeout == "" {
 		return nil
 	}
-	if _, err := time.ParseDuration(action.Timeout); err != nil {
+	if _, err := duration.ParseNonNegative(action.Timeout); err != nil {
 		return fmt.Errorf("wait timeout: %w", err)
 	}
 	return nil
@@ -866,12 +867,9 @@ func parseDurationDefault(value string, fallback time.Duration) (time.Duration, 
 	if value == "" {
 		return fallback, nil
 	}
-	if value == "0" {
-		return 0, nil
-	}
-	duration, err := time.ParseDuration(value)
+	parsed, err := duration.ParseNonNegative(value)
 	if err != nil {
 		return 0, fmt.Errorf("invalid duration %q: %w", value, err)
 	}
-	return duration, nil
+	return parsed, nil
 }

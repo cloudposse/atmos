@@ -3,6 +3,7 @@ package downloader
 import (
 	"context"
 	"net/http"
+	neturl "net/url"
 	"strings"
 
 	"github.com/hashicorp/go-getter"
@@ -63,6 +64,16 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		return nil, err
 	}
 
+	// Run CustomGitDetector against a "git::"-forced, already-schemed source ourselves: see
+	// applyForcedGitDetection's doc comment for why go-getter's own Detect() would otherwise
+	// silently skip it, leaving token injection inconsistently applied depending on source shape.
+	src = applyForcedGitDetection(ctx, f.atmosConfig, src)
+
+	src, err = prepareOCISource(src)
+	if err != nil {
+		return nil, err
+	}
+
 	// Lazily provision ambient credential brokers (e.g., Atmos Pro github/sts) before the first
 	// remote read so private repositories are reachable. Brokers export GIT_CONFIG_*/tokens into
 	// the process env, which the git subprocess this client spawns inherits. Process-once and
@@ -106,6 +117,7 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 			"http":  httpGetter,
 			"https": httpGetter,
 			"s3":    s3source.NewGetter(ctx),
+			"oci":   &OCIGetter{AtmosConfig: f.atmosConfig},
 			// "gcs": &getter.GCSGetter{},
 		},
 	}
@@ -136,6 +148,12 @@ func WithProgress(progress getter.ProgressTracker) GoGetterOption {
 func isRemoteSource(src string) bool {
 	s := strings.TrimPrefix(src, GitPrefix)
 
+	// OCI registries authenticate through go-containerregistry (docker keychain, ghcr.io token),
+	// never through the git/GitHub credential brokers this check gates.
+	if strings.HasPrefix(s, ociScheme) {
+		return false
+	}
+
 	if i := strings.Index(s, schemeSeparator); i >= 0 {
 		return !strings.EqualFold(s[:i], "file")
 	}
@@ -157,6 +175,44 @@ func isRemoteSource(src string) bool {
 	// isSupportedHost parameters here.
 	lowerHost := strings.ToLower(host)
 	return isSupportedHost(lowerHost, lowerHost)
+}
+
+// applyForcedGitDetection re-runs CustomGitDetector against a "git::"-forced source whose inner
+// URL already carries an explicit scheme (e.g. "git::https://github.com/org/repo.git").
+//
+// go-getter's own Detect() (detect.go) skips calling every registered Detector -- including
+// CustomGitDetector -- whenever the un-forced source already parses with a non-empty URL scheme
+// (its "u.Scheme != "" -> return early" check runs before any detector sees the source).
+// CustomGitDetector therefore only ever runs, through go-getter's normal Client.Get() dispatch,
+// for scheme-less shorthand sources like "github.com/org/repo" -- never for an explicitly-schemed
+// "git::https://github.com/..." source, even though that is a documented, common way to force a
+// git clone (see CLAUDE.md's go-getter composite-scheme example). The practical effect: token
+// injection (and the default depth=1 shallow-clone query) silently never applies to that source
+// shape, which looks like inconsistent/"sometimes skipped" injection depending on which form a
+// stack manifest, vendor source, or scaffold source happens to use for the same host.
+//
+// This re-runs the SAME detector directly against the inner (scheme-stripped-of-"git::") URL,
+// bypassing go-getter's early return, so a forced git:: GitHub/GitLab/Bitbucket source gets the
+// same token injection a scheme-less shorthand source already receives. Only "git::"-forced
+// sources are touched here -- a plain "https://github.com/..." source without forcing is routed
+// to the http(s) getter instead (e.g. an archive/release download via isGitHubHTTPURL's handling
+// in file_downloader.go), and must not be reinterpreted as a git clone target.
+func applyForcedGitDetection(ctx context.Context, atmosConfig *schema.AtmosConfiguration, src string) string {
+	inner, ok := strings.CutPrefix(src, GitPrefix)
+	if !ok {
+		return src
+	}
+	if u, err := neturl.Parse(inner); err != nil || u.Scheme == "" {
+		// No explicit scheme: go-getter's own Detect() already runs every Detector for this (its
+		// early return only triggers once a scheme is already present), so CustomGitDetector sees
+		// it during the normal Client.Get() -> Detect() call. Nothing to do here.
+		return src
+	}
+	result, detected, err := NewCustomGitDetectorContext(ctx, atmosConfig, inner).Detect(inner, "")
+	if err != nil || !detected {
+		return src
+	}
+	return result
 }
 
 // GoGetterOption configures the go-getter downloader.

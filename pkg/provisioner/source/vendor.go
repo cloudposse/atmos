@@ -12,7 +12,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/downloader"
-	"github.com/cloudposse/atmos/pkg/oci"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/vendor"
@@ -228,37 +227,10 @@ func VendorSource(
 	return nil
 }
 
-// downloadSource populates tempDir from uri, branching between the OCI-native
-// path (oci.ProcessImage) and go-getter for everything else.
+// downloadSource populates tempDir from uri through the shared go-getter downloader. OCI sources
+// (oci://) need no special handling: the downloader registers an OCI getter alongside the other
+// protocols.
 func downloadSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, uri, tempDir string) error {
-	if vendor.IsOCIURI(uri) {
-		return downloadOCISource(ctx, atmosConfig, uri, tempDir)
-	}
-	return downloadGoGetterSource(ctx, atmosConfig, sourceSpec, uri, tempDir)
-}
-
-// downloadOCISource pulls an oci:// source directly via pkg/oci. Go-containerregistry
-// doesn't understand the "oci://" scheme prefix itself, so it's trimmed first (mirroring
-// the legacy vendor pull path in internal/exec/vendor_component_utils.go). The pull is
-// bounded to DefaultVendorTimeout, matching the go-getter path's explicit timeout.
-func downloadOCISource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri, tempDir string) error {
-	ctx, cancel := context.WithTimeout(ctx, DefaultVendorTimeout)
-	defer cancel()
-
-	imageRef := strings.TrimPrefix(uri, "oci://")
-	if err := oci.ProcessImage(ctx, atmosConfig, imageRef, tempDir); err != nil {
-		return errUtils.Build(errUtils.ErrSourceProvision).
-			WithCause(err).
-			WithExplanation("Failed to download OCI source").
-			WithContext("uri", uri).
-			WithHint("Verify the source URI is accessible and credentials are configured").
-			Err()
-	}
-	return nil
-}
-
-// downloadGoGetterSource fetches a non-OCI source via the go-getter downloader.
-func downloadGoGetterSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, uri, tempDir string) error {
 	downloadOpts := []downloader.GoGetterOption{downloader.WithRetryConfig(effectiveRetryConfig(sourceSpec))}
 	dl := downloader.NewGoGetterDownloader(atmosConfig, downloadOpts...)
 	_, err := dl.(downloader.ContextFileDownloader).FetchWithMetadataContext(ctx, uri, tempDir, downloader.ClientModeAny, DefaultVendorTimeout)

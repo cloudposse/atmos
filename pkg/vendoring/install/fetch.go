@@ -72,8 +72,16 @@ func fetchToTempDir(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 	case PkgTypeRemote:
 		return fetchRemote(ctx, atmosConfig, uri, tempDir, opts)
 	case PkgTypeOci:
-		dir, err := fetchOCI(oci.WithRetryObserver(ctx, opts.OnRetry), atmosConfig, uri, tempDir)
-		return dir, downloader.FetchMetadata{}, err
+		// OCI goes through the same downloader as every other remote source. An image is always a
+		// whole directory fetched straight into tempDir, so the single-file and sanitized-name
+		// targeting fetchRemote applies to other sources does not apply.
+		ociOpts := opts
+		ociOpts.Target, ociOpts.JoinSanitizedFilename, ociOpts.ClientMode = "", false, downloader.ClientModeDir
+		dir, _, err := fetchRemote(oci.WithRetryObserver(ctx, opts.OnRetry), atmosConfig, ociScheme+uri, tempDir, ociOpts)
+		if err != nil {
+			return "", downloader.FetchMetadata{}, fmt.Errorf("%w: %w", ErrProcessOCIImage, err)
+		}
+		return dir, downloader.FetchMetadata{}, nil
 	case PkgTypeLocal:
 		dir, err := fetchLocal(ctx, uri, tempDir, opts)
 		return dir, downloader.FetchMetadata{}, err
@@ -100,15 +108,6 @@ func fetchRemote(ctx context.Context, atmosConfig *schema.AtmosConfiguration, ur
 		return "", downloader.FetchMetadata{}, fmt.Errorf("%w: %w", ErrDownloadPackage, errors.Join(err, ctx.Err()))
 	}
 	return target, metadata, nil
-}
-
-func fetchOCI(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri, tempDir string) (string, error) {
-	ociCtx, cancel := context.WithTimeout(ctx, fetchTimeout)
-	defer cancel()
-	if err := oci.ProcessImage(ociCtx, atmosConfig, uri, tempDir); err != nil {
-		return "", fmt.Errorf("%w: %w", ErrProcessOCIImage, err)
-	}
-	return tempDir, nil
 }
 
 func fetchLocal(ctx context.Context, uri, tempDir string, opts fetchOptions) (string, error) {

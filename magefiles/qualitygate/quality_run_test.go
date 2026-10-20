@@ -158,6 +158,9 @@ func (s *stateFixture) client(t *testing.T) *qualityClient {
 			return githubtest.Respond(map[string]any{"labels": labels}, response)
 		case strings.Contains(path, "/reviews?") && s.reviewsFail:
 			return errors.New("reviews unavailable")
+		case strings.HasSuffix(path, "/commits/"+githubtest.Base):
+			// Scenarios that set MergeSHA to the base use GitHub's synthetic merge commit shape.
+			return githubtest.Respond(qualityCommitParents(githubtest.Base, pr.Head.SHA), response)
 		}
 		return getter(path, response)
 	}

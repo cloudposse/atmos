@@ -73,6 +73,7 @@ func (controlBridge) RunControl(ctx context.Context, step *schema.WorkflowStep, 
 		},
 		// Children render with the caller's renderer and pass count, like sequential steps.
 		RenderTemplate: vars.ResolveWithData,
+		Delimiters:     vars.TemplateDelimiters(),
 		StoreResult: func(result *scheduler.Result) {
 			storeControlBridgeResult(vars, result)
 		},

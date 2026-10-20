@@ -20,6 +20,8 @@ func TestValidateOutputMode(t *testing.T) {
 		{name: "none", mode: "none"},
 		{name: "surrounding space is ignored", mode: " raw "},
 		{name: "a templated mode is checked after rendering", mode: "{{ .flags.mode }}"},
+		{name: "a mode templated with configured delimiters is checked after rendering", mode: "[[ .flags.mode ]]"},
+		{name: "a value that is not a plain word is deferred to render time", mode: "<% .flags.mode %>"},
 		{name: "capture is not a mode", mode: "capture", wantErr: ErrStepInvalidOutputMode},
 		{name: "modes are case sensitive", mode: "Raw", wantErr: ErrStepInvalidOutputMode},
 		{name: "unknown", mode: "pretty", wantErr: ErrStepInvalidOutputMode},

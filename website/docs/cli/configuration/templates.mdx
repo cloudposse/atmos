@@ -30,6 +30,7 @@ templates:
     # https://docs.gomplate.ca/functions
     gomplate:
       enabled: true
+      experimental: false
       # Timeout in seconds to execute the datasources
       timeout: 5
       # https://docs.gomplate.ca/datasources
@@ -73,6 +74,16 @@ templates:
   <dt>`templates.settings.gomplate.timeout`</dt>
   <dd>
     Timeout in seconds to execute [Gomplate Datasources](https://docs.gomplate.ca/datasources).
+  </dd>
+
+  <dt>`templates.settings.gomplate.experimental`</dt>
+  <dd>
+    Enables experimental Gomplate functions, such as `net.CIDRHost`.
+    Defaults to `false`.
+
+    Set globally in `atmos.yaml` or override per stack with `settings.templates.settings.gomplate.experimental`.
+    Stacks inherit the global value when omitted; an explicit `false` disables experimental functions for that stack.
+    Import templates use the global value. Does not apply to document generation or scaffold templates.
   </dd>
 
   <dt>`templates.settings.ignore_missing_template_values`</dt>

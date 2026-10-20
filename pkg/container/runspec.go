@@ -122,6 +122,8 @@ func validateHealthCheckStep(hc *schema.ContainerHealthCheck) error {
 		if value == "" {
 			continue
 		}
+		// Health-check durations are passed to the container runtime verbatim, which requires
+		// Go duration syntax, so the shared Atmos parser (bare seconds, days) does not apply here.
 		if _, err := time.ParseDuration(value); err != nil {
 			return fmt.Errorf("%w: %s %q is not a valid duration (e.g. 30s, 1m30s): %w",
 				errUtils.ErrInvalidContainerHealthCheck, field, value, err)

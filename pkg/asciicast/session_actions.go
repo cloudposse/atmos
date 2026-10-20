@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	durationpkg "github.com/cloudposse/atmos/pkg/duration"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 )
 
@@ -71,7 +72,7 @@ func runScreenshotAction(action *SessionAction) error {
 func runWriteAction(input *syncWriter, action *SessionAction, fallback time.Duration) error {
 	rate := fallback
 	if action.Rate != "" {
-		parsed, err := time.ParseDuration(action.Rate)
+		parsed, err := durationpkg.ParseNonNegative(action.Rate)
 		if err != nil {
 			return fmt.Errorf("invalid write rate %q: %w", action.Rate, err)
 		}
@@ -131,7 +132,7 @@ func keyInterval(value string, fallback time.Duration) (time.Duration, error) {
 	if value == "" {
 		return fallback, nil
 	}
-	parsed, err := time.ParseDuration(value)
+	parsed, err := durationpkg.ParseNonNegative(value)
 	if err != nil {
 		return 0, fmt.Errorf("invalid key interval %q: %w", value, err)
 	}
@@ -139,7 +140,7 @@ func keyInterval(value string, fallback time.Duration) (time.Duration, error) {
 }
 
 func runPauseAction(ctx context.Context, action *SessionAction) error {
-	duration, err := time.ParseDuration(action.Duration)
+	duration, err := durationpkg.ParseNonNegative(action.Duration)
 	if err != nil {
 		return fmt.Errorf("invalid pause duration %q: %w", action.Duration, err)
 	}
@@ -156,7 +157,7 @@ func runPauseAction(ctx context.Context, action *SessionAction) error {
 func waitForOutput(ctx context.Context, state *sessionState, action *SessionAction) error {
 	timeout := defaultWaitTimeout
 	if action.Timeout != "" {
-		parsed, err := time.ParseDuration(action.Timeout)
+		parsed, err := durationpkg.ParseNonNegative(action.Timeout)
 		if err != nil {
 			return fmt.Errorf("invalid wait timeout %q: %w", action.Timeout, err)
 		}

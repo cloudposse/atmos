@@ -81,6 +81,9 @@ type ExecContext struct {
 	ExitCode int
 	// CommandError is the subprocess error, if any.
 	CommandError error
+
+	// stepDelims caches the step template delimiters resolved for this invocation.
+	stepDelims stepDelimiterState
 }
 
 // Outcome carries the result of the lifecycle operation a hook fires around

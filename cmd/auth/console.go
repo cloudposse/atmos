@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/browser"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	durationpkg "github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -111,7 +112,7 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 	skipOpen := v.GetBool("no-open")
 
 	// Parse duration.
-	duration, err := time.ParseDuration(durationStr)
+	duration, err := durationpkg.ParseDuration(durationStr)
 	if err != nil {
 		return fmt.Errorf("%w: invalid duration: %w", errUtils.ErrAuthConsole, err)
 	}
@@ -406,7 +407,7 @@ func resolveConsoleDuration(cmd *cobra.Command, authManager types.AuthManager, p
 	}
 
 	// Parse provider's session duration.
-	duration, err := time.ParseDuration(provider.Console.SessionDuration)
+	duration, err := durationpkg.ParseDuration(provider.Console.SessionDuration)
 	if err != nil {
 		return 0, fmt.Errorf("invalid session_duration in provider %q console config: %w", providerName, err)
 	}

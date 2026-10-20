@@ -59,13 +59,21 @@ Templating in Atmos stack manifests is configured in the `atmos.yaml` [CLI confi
   <dd>Number of evaluations/passes to process `Go` templates. If not defined, `evaluations` is automatically set to `1`. For more details, refer to [Template Evaluations and Template Processing Pipelines](#processing-pipelines).</dd>
 
   <dt>`templates.settings.delimiters`</dt>
-  <dd>A list of left and right delimiters to use to process the templates. If not defined, the default `Go` template delimiters `["{{", "}}"]` will be used.</dd>
+  <dd>A list of left and right delimiters to use to process the templates. If not defined, the default `Go` template delimiters `["{{", "}}"]` will be used. The delimiters also apply to the templates in [workflow](/workflows) steps, [custom command](/cli/configuration/commands/steps) steps, and [lifecycle hook](/stacks/hooks) steps. With `delimiters: ["[[", "]]"]`, a step field is written `[[ .steps.first.value ]]`, and `{{ }}` stays literal text. Projects [pinned](/cli/configuration/edition#behavior-changes) to an edition before `2026-10-19` keep `{{ }}` for step templates, whatever the setting says.</dd>
 
   <dt>`templates.settings.sprig.enabled`</dt>
   <dd>A boolean flag to enable/disable the [Sprig Functions](https://masterminds.github.io/sprig/) in Atmos stack manifests. Defaults to `true`.</dd>
 
   <dt>`templates.settings.gomplate.enabled`</dt>
   <dd>A boolean flag to enable/disable the [Gomplate Functions](https://docs.gomplate.ca/functions/) and [Gomplate Datasources](https://docs.gomplate.ca/datasources) in Atmos stack manifests. Defaults to `true`.</dd>
+
+  <dt>`templates.settings.gomplate.experimental`</dt>
+  <dd>
+    Enables experimental Gomplate functions in stack templates. Defaults to `false`.
+    Set globally in `atmos.yaml` or override per stack with `settings.templates.settings.gomplate.experimental`.
+    Stacks inherit the global value when omitted; an explicit `false` disables experimental functions for that stack.
+    Import templates use the global value. Does not apply to document generation or scaffold templates.
+  </dd>
 
   <dt>`templates.settings.gomplate.timeout`</dt>
   <dd>Timeout in seconds to execute [Gomplate Datasources](https://docs.gomplate.ca/datasources).</dd>
@@ -123,6 +131,8 @@ templates:
     gomplate:
       # Enable Gomplate functions and data sources in `Go` templates in Atmos stack manifests
       enabled: true
+      # Enable experimental Gomplate functions (disabled by default)
+      experimental: false
       # Timeout in seconds to execute the data sources
       timeout: 5
       datasources: {}

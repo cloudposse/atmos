@@ -2,9 +2,11 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -82,6 +84,20 @@ func startAndRegisterTools(mgr *Manager, registry *tools.Registry, startOpts []S
 	return totalTools
 }
 
+// shouldSkipOptionalServer reports whether a server start failure should be downgraded to a
+// warn-and-skip instead of an error: the server is marked optional and failed specifically
+// because its identity could not be resolved in the active auth context. That surfaces as
+// errUtils.ErrMCPServerAuthUnavailable when no auth manager is available, or
+// errUtils.ErrIdentityNotFound when an auth manager exists but the named identity is not defined
+// in this context (the common cross-repo case). Any other failure of an optional server, and any
+// failure of a non-optional server, is still an error.
+func shouldSkipOptionalServer(cfg *ParsedConfig, err error) bool {
+	if cfg == nil || !cfg.Optional {
+		return false
+	}
+	return errors.Is(err, errUtils.ErrMCPServerAuthUnavailable) || errors.Is(err, errUtils.ErrIdentityNotFound)
+}
+
 // startAndRegisterSession starts a single MCP server session and registers its bridged
 // tools, showing a spinner while the handshake is in flight — server startup (e.g. an
 // npx/uvx cold start) can take several seconds with no other visible progress.
@@ -90,6 +106,14 @@ func startAndRegisterSession(ctx context.Context, session *Session, registry *to
 	sp.Start()
 
 	if err := session.Start(ctx, startOpts...); err != nil {
+		// An optional server whose identity cannot be resolved in the active auth context is
+		// skipped with a warning instead of erroring. This supports shared `mcp.servers` config
+		// consumed across repos where a server's identity is not defined in every consumer.
+		if shouldSkipOptionalServer(session.Config(), err) {
+			sp.Stop()
+			ui.Warning(fmt.Sprintf("Skipping optional MCP server `%s`: %v", session.Name(), err))
+			return 0
+		}
 		sp.Error(fmt.Sprintf("MCP server `%s` failed to start: %v", session.Name(), err))
 		return 0
 	}

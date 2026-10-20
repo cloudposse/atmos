@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/provisioning"
 	"github.com/cloudposse/atmos/pkg/config/casemap"
 	"github.com/cloudposse/atmos/pkg/config/projectroot"
+	"github.com/cloudposse/atmos/pkg/duration"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/filetype"
@@ -1403,6 +1404,12 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 		return nil, fmt.Errorf("%w: parse main config base path: %w", errUtils.ErrMergeConfiguration, err)
 	}
 	if _, err := mergeImports(tempViper, configDir, basePathSource, runtimeBasePath); err != nil {
+		// A required (non-optional) import that fails to load must abort the whole config load
+		// (fail closed). Other import failures stay lenient (historical warn-and-continue): a
+		// bad optional import does not abort configuration loading.
+		if errors.Is(err, errUtils.ErrRequiredImportFailed) {
+			return nil, err
+		}
 		log.Debug("error process explicit imports", "file", tempViper.ConfigFileUsed(), "error", err)
 	}
 
@@ -1875,7 +1882,8 @@ func injectProvisionedIdentityImports(src *schema.AtmosConfiguration) error {
 	// This ensures manual config (in existing imports) takes precedence over provisioned config.
 	if len(provisionedImports) > 0 {
 		log.Debug("Injecting provisioned identity imports", "count", len(provisionedImports))
-		src.Import = append(provisionedImports, src.Import...)
+		// Provisioned identity files are optional (fail-open): inject them as string-form imports.
+		src.Import = append(schema.ConfigImportsFromPaths(provisionedImports), src.Import...)
 	}
 
 	return nil
@@ -2024,7 +2032,13 @@ func mergeConfigFileWithImports(path string, v *viper.Viper) error {
 		return err
 	}
 
-	imports := tempViper.GetStringSlice("import")
+	// Read the raw `import:` value (not GetStringSlice) so object-form entries
+	// (skip_if_missing, when) survive; NormalizeConfigImports accepts both forms. A malformed
+	// object entry is a hard error, not a silent omission.
+	imports, err := NormalizeConfigImports(tempViper.Get("import"))
+	if err != nil {
+		return err
+	}
 	if len(imports) > 0 {
 		var importConfig schema.AtmosConfiguration
 		if err = v.UnmarshalKey("settings", &importConfig.Settings, atmosDecodeHook()); err != nil {
@@ -2428,7 +2442,7 @@ func populateLegacyIdentityCaseMap(caseMaps *casemap.CaseMaps, atmosConfig *sche
 
 // atmosDecodeHook returns the combined decode hooks for Atmos configuration unmarshaling.
 // This includes:
-// - Default viper hooks (StringToTimeDurationHookFunc, StringToSliceHookFunc)
+// - The shared duration hook (pkg/duration) and the default StringToSliceHookFunc
 // - Custom TasksDecodeHook for flexible command steps parsing (strings or structs).
 func atmosDecodeHook() viper.DecoderConfigOption {
 	return viper.DecodeHook(getAtmosDecodeHookFunc())
@@ -2438,11 +2452,12 @@ func atmosDecodeHook() viper.DecoderConfigOption {
 // Extracted as a separate function to allow reuse in both Viper and mapstructure contexts.
 func getAtmosDecodeHookFunc() mapstructure.DecodeHookFunc {
 	return mapstructure.ComposeDecodeHookFunc(
-		mapstructure.StringToTimeDurationHookFunc(),
+		duration.DecodeHook(),
 		mapstructure.StringToSliceHookFunc(SliceSeparator),
 		commandEnvMapDecodeHook(),
 		schema.SkillRefDecodeHook(),
 		schema.ConditionDecodeHook(),
+		schema.ConfigImportsDecodeHook(),
 		schema.WorkflowStepDecodeHook(),
 		schema.TasksDecodeHook(),
 		schema.UnitDependencyDecodeHook(),
