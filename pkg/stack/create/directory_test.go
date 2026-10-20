@@ -64,6 +64,47 @@ func directoryOptions() *Options {
 	return &Options{Target: "stacks/deploy/dev", Template: "./recipe", Name: "dev", Imports: []string{"catalog/defaults"}, Components: []string{"terraform:network", "helmfile:services"}, Values: map[string]any{"environment": "dev"}, Defaults: true}
 }
 
+func TestDirectoryHookEditionValidation(t *testing.T) {
+	for _, location := range []string{"scaffold", "manifest"} {
+		for _, pin := range []string{"", "2026-10-18", "2026-10-19"} {
+			t.Run(location+"/edition-"+pin, func(t *testing.T) {
+				captureChannels(t)
+				cfg, renderer := fixture(t)
+				cfg.Edition = pin
+				definition := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n    - path: stack.yaml\n"
+				manifest := "name: dev\n"
+				if location == "scaffold" {
+					definition += "  hooks:\n    typo:\n      kind: step\n      type: shell\n      events: [after.scaffold.genrate]\n"
+				} else {
+					manifest += "hooks:\n  typo:\n    kind: step\n    type: shell\n    events: [after.terraform.aply]\n"
+				}
+				write(t, "recipe/scaffold.yaml", definition)
+				write(t, "recipe/stack.yaml", manifest)
+				opts := &Options{Target: "stacks/deploy/dev", Template: "./recipe", Defaults: true}
+				plan, err := Prepare(cfg, opts, renderer)
+				if pin != "2026-10-18" {
+					expected := errUtils.ErrUnsupportedHookEvent
+					if location == "manifest" {
+						// Overlay preflight reports a sanitized manifest error.
+						expected = errUtils.ErrInvalidStackManifest
+					}
+					require.ErrorIs(t, err, expected)
+					require.Contains(t, err.Error(), errUtils.ErrUnsupportedHookEvent.Error())
+					require.NoDirExists(t, opts.Target)
+					require.NoDirExists(t, ".atmos")
+					return
+				}
+				require.NoError(t, err)
+				require.NoError(t, plan.Preview(nil))
+				require.NoDirExists(t, opts.Target)
+				require.NoDirExists(t, ".atmos")
+				require.NoError(t, plan.Apply(context.Background(), func(string) bool { return true }))
+				require.FileExists(t, filepath.Join(opts.Target, "stack.yaml"))
+			})
+		}
+	}
+}
+
 func TestDirectoryCreationSplitStack(t *testing.T) {
 	captureChannels(t)
 	cfg, renderer := namedFixture(t)
