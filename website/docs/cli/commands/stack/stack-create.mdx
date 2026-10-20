@@ -3,7 +3,7 @@ title: atmos stack create
 sidebar_label: create
 sidebar_class_name: command
 id: stack-create
-description: Create a new stack manifest without overwriting an existing file.
+description: Create stack manifests or directory layouts from scaffolds without overwriting files.
 ---
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
@@ -26,10 +26,12 @@ atmos stack create --file=stacks/deploy/dev.yaml \
   --dry-run
 ```
 
-`--file` is required, must end in `.yaml` or `.yml`, and must match the project's
+Choose either `--file` for a manifest or `--target` for a directory layout. These flags
+are mutually exclusive. A `--file` must end in `.yaml` or `.yml` and match the project's
 stack discovery paths. A relative `--file` resolves from the project base path, not the
 current directory, and output files are rooted there too. Relative `source` paths in
-`scaffold.templates` resolve from the directory containing `atmos.yaml`.
+`scaffold.templates` resolve from the configuration file that declares the source.
+Named templates honor `--config`, configuration imports, and active profiles.
 `--name` explicitly sets the stack name in the built-in scaffold. When omitted,
 the generated manifest leaves naming to the project's conventions; provide the
 variables required by your `stacks.name_template`, directly or through imports.
@@ -39,11 +41,20 @@ stubs. These stubs have `metadata.enabled: false` and empty `vars`. Configure th
 and enable them when ready. The command does not generate component sources unless
 your selected scaffold includes them. Component order does not imply dependencies.
 
+If a write fails or creation is canceled, Atmos rolls back files created by that
+attempt so you can correct the cause and retry. It preserves preexisting files,
+hook-created files, and generated files changed after creation. If cleanup cannot
+finish, the error lists the remaining paths for manual recovery. A replaced stale
+generation record is restored when possible. Hook side effects are not rolled back.
+If generation succeeds but an after hook fails, the generated files and record remain.
+
 ## Flags
 
 <dl>
   <dt>`--file`</dt>
-  <dd>Path of the new stack manifest. Required. Must end in `.yaml` or `.yml` and fall under the project's stack discovery paths. Existing files are never overwritten.</dd>
+  <dd>Path of the new stack manifest. Mutually exclusive with `--target`. Must end in `.yaml` or `.yml` and fall under the project's stack discovery paths. Existing files are never overwritten.</dd>
+  <dt>`--target`</dt>
+  <dd>Directory for generated stack files. Mutually exclusive with `--file`. Relative paths resolve from the project base path. The directory must be under `stacks.base_path`; template outputs are relative to it. Existing directories are allowed, but existing files are never overwritten.</dd>
   <dt>`--template`</dt>
   <dd>Scaffold name or source: a name from `scaffold.templates`, an embedded catalog template, or a direct local or remote source. Default: `stack`.</dd>
   <dt>`--name`</dt>
@@ -57,7 +68,7 @@ your selected scaffold includes them. Component order does not imply dependencie
   <dt>`--ref`</dt>
   <dd>Git revision to use for a scaffold fetched from a Git source. Using it with an embedded or local scaffold is an error. Default: The source's default revision.</dd>
   <dt>`--interactive`, `-i`</dt>
-  <dd>Prompt for scaffold answers when connected to a terminal. Without a terminal, Atmos uses defaults. Default: `true`.</dd>
+  <dd>Prompt for the destination and scaffold answers when connected to a terminal, including during `--dry-run`. Without a terminal, Atmos uses defaults and errors on missing required inputs. Default: `true`.</dd>
   <dt>`--defaults`</dt>
   <dd>Use scaffold defaults and `--set` values without prompting. `--interactive=false` has the same effect. Default: `false`.</dd>
   <dt>`--skip-hooks[=names]`</dt>
@@ -67,7 +78,8 @@ your selected scaffold includes them. Component order does not imply dependencie
 </dl>
 
 The template must consume the flags you pass. If `--name`, `--import`, or `--component`
-is given and the rendered manifest does not contain the value, creation fails and
+is given and the rendered manifest does not contain the value (or no generated stack
+document contains it in directory mode), creation fails and
 names the flag, so no input is dropped silently. A custom template reads these flags
 through `stack_name`, `stack_imports`, and `stack_components`.
 
@@ -81,8 +93,9 @@ manifests together with every generated stack file, using the same pipeline as
   `stacks.name_template` uses.
 - A missing import. Import paths are relative to `stacks.base_path`; create the
   imported manifest or correct the `--import` value.
-- A stack name that another manifest already defines. Choose values or `--name` that
-  give the new stack a unique name, or edit the existing stack with
+- A component defined in more than one top-level manifest resolving to the same stack.
+  Disjoint component definitions may share a stack name. Choose distinct component
+  definitions or stack names, or edit the existing stack with
   [`atmos stack config set`](/cli/commands/stack/config/set).
 - An invalid generated stack file.
 
@@ -111,7 +124,7 @@ atmos stack create --template application-stack \
   --file stacks/deploy/dev.yaml --set environment=dev --dry-run
 ```
 
-A stack-compatible scaffold declares its manifest output using `spec.stack.manifest`:
+For `--file`, a stack-compatible scaffold declares its manifest output using `spec.stack.manifest`:
 
 ```yaml title="scaffolds/application-stack/scaffold.yaml"
 apiVersion: atmos/v1
@@ -146,7 +159,7 @@ Custom templates decide how to use these reserved inputs:
 
 <dl>
   <dt>`stack_file`</dt>
-  <dd>Project-relative manifest path from `--file`.</dd>
+  <dd>Project-relative manifest path from `--file`. In directory mode, defaults to `stack.yaml`, relative to `--target`; templates do not have to use it.</dd>
   <dt>`stack_name`</dt>
   <dd>Explicit `--name`, or an empty string.</dd>
   <dt>`stack_imports`</dt>
@@ -160,6 +173,103 @@ Existing template defaults, questions, conditions, matrices, and per-file delimi
 work through the same engine as [`scaffold generate`](/cli/commands/scaffold/generate).
 Use `--set key=value` for answers, `--defaults` or `--interactive=false` for automation,
 and `--ref` to select a Git source revision. Required answers are validated before writing.
+
+## Create a directory layout
+
+Use `--target` when the recipe produces several stack files. It supports both one
+logical stack split across files and several distinct stacks:
+
+```shell
+atmos stack create --template application-stack \
+  --target stacks/deploy/dev \
+  --set environment=dev --set name=dev \
+  --component terraform:network --component helmfile:services \
+  --import catalog/defaults --dry-run
+```
+
+The template chooses which files receive the requested imports and component stubs.
+Each supplied value must appear in a generated stack document. The `--set name=dev`
+answer belongs to the template; `--name dev` supplies the reserved `stack_name` input.
+
+Directory templates do not need `spec.stack.manifest`. If they declare it, its path
+is relative to the target and must identify a generated, discoverable stack manifest.
+The built-in `stack` template creates `stack.yaml` inside the target directory.
+
+For example, a recipe can generate this layout:
+
+```text
+stacks/deploy/dev/
+├── _defaults.yaml
+├── network.yaml
+└── services.yaml
+```
+
+Configure discovery to include `deploy/**/*` and exclude `**/_*`. The excluded
+`_defaults.yaml` is an import fragment, while the other two files are entrypoints:
+
+```yaml title="scaffold.yaml"
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: application-stack
+spec:
+  fields:
+    - name: environment
+      type: input
+      required: true
+    - name: name
+      type: input
+      required: true
+  files:
+    - path: _defaults.yaml
+    - path: network.yaml
+    - path: services.yaml
+```
+
+```yaml title="_defaults.yaml"
+# atmos:template
+name: {{ .Config.name | quote }}
+vars:
+  environment: {{ .Config.environment | quote }}
+```
+
+```yaml title="network.yaml"
+# atmos:template
+import:
+  - ./_defaults
+{{ range .Config.stack_imports }}  - {{ . | quote }}
+{{ end }}components:
+  terraform:
+{{ range $name, $_ := .Config.stack_components.terraform }}    {{ $name | quote }}:
+      metadata:
+        enabled: false
+      vars: {}
+{{ end }}
+```
+
+The `services.yaml` template follows the same pattern using the `helmfile` group
+from `stack_components`. Both entrypoints import the shared name and variables;
+their distinct components participate in one logical stack. To create separate
+stacks, give their entrypoints distinct names or naming variables. Existing scaffold
+matrices can repeat an entrypoint for several environments or regions.
+
+Files do not merge merely because they share a directory. Atmos uses its existing
+imports, discovery, and stack naming rules. At least one generated stack file must
+match discovery; excluded fragments can be imported by entrypoints. All generated
+stack YAML is validated before hooks or writes. Output paths cannot escape the target.
+
+## Interactive inputs
+
+When no destination is supplied in an interactive terminal, Atmos asks for a single
+file or directory layout, then its destination. The single-file option is selected
+initially. The scaffold questionnaire follows, with defaults and `--set` answers
+prefilled for review. Required fields, conditions, and dynamic choices behave like
+`scaffold generate`.
+
+Interactive dry runs collect answers and then preview the files. Pass `--defaults`
+or `--interactive=false` to suppress prompts. Without a terminal, provide a destination
+and any required answers that have no defaults. Canceling a prompt writes nothing
+and runs no hooks.
 
 ## Preview, hooks, and generation records
 
@@ -185,12 +295,15 @@ so existing stack manifests, component sources, and project files are never over
 Creation writes the same rendered content shown in the preview. Filesystem or hook
 failures are reported; external hook effects are not rolled back automatically.
 
-Each stack has an independent generation record under `.atmos/stack-generations/`,
-keyed by its project-relative manifest path. It records the template, answers,
+Each creation has an independent generation record under `.atmos/stack-generations/`.
+File-mode records are keyed by the project-relative manifest path. Directory-mode
+records use a separate key for the target directory and list its generated manifests.
+Directory hooks use the target directory as their working-directory default. It records the template, answers,
 source revision when available, and generated file hashes. Creating another stack
 does not replace project-level init/scaffold records. If you delete a created manifest
 and run `stack create` for the same path again, the new run replaces that manifest's
-generation record. Updating an existing stack from this record is not yet supported
+generation record. A directory record can be replaced only after all outputs recorded
+by the previous generation have been removed. Updating an existing stack from this record is not yet supported
 by `stack create`.
 
 [`init`](/cli/commands/init) bootstraps a project; `scaffold generate` runs general

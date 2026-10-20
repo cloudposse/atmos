@@ -3,6 +3,7 @@ package create
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -41,7 +42,7 @@ func (p *Plan) Outputs() []Output {
 	for _, file := range p.Generation.Files {
 		kind := OutputFile
 		switch {
-		case filepath.Clean(file.Path) == filepath.Clean(p.Manifest):
+		case filepath.Clean(file.Path) == filepath.Clean(p.Manifest) || slices.Contains(p.Manifests, filepath.ToSlash(file.Path)):
 			kind = OutputManifest
 		case isRecordPath(file.Path):
 			kind = OutputRecord

@@ -34,6 +34,10 @@ type ExecutionOptions struct {
 	// child environment for one node. It runs on scheduler workers, so it must be
 	// safe for concurrent use.
 	NodeEnvironment func(node *dependency.Node) []string
+	// OnStart and OnComplete report live progress separately from child logs.
+	// Calls are serialized. Start occurs only after acquiring the resource guard.
+	OnStart    func(*dependency.Node)
+	OnComplete func(*dependency.Node, error)
 }
 
 // Execute runs a prevalidated plan with the shared ready-queue scheduler.
@@ -80,9 +84,9 @@ func (g *groupedLog) close() {
 	}
 }
 
-func (d *dispatcher) Dispatch(ctx context.Context, node *dependency.Node) (scheduler.Result, error) {
+func (d *dispatcher) Dispatch(ctx context.Context, node *dependency.Node) (result scheduler.Result, err error) {
 	defer perf.Track(nil, "lifecycle.dispatcher.Dispatch")()
-	result := scheduler.Result{NodeID: node.ID, Node: *node, Status: scheduler.StatusSucceeded}
+	result = scheduler.Result{NodeID: node.ID, Node: *node, Status: scheduler.StatusSucceeded}
 	if guard := d.opts.ResourceGuards[node.Type]; guard != nil {
 		unlock := guard(node)
 		defer unlock()
@@ -95,6 +99,8 @@ func (d *dispatcher) Dispatch(ctx context.Context, node *dependency.Node) (sched
 		return result, err
 	}
 	args := append(slices.Clone(d.opts.GlobalArgs), d.plan.Commands[node.ID]...)
+	d.progress(node, true, nil)
+	defer func() { d.progress(node, false, err) }()
 	processResult := d.opts.Runner.Run(ctx, process.TaskSpec{
 		Command: d.opts.Executable, Args: args, Dir: d.opts.Directory,
 		Env: d.environment(node), Streams: streams,
@@ -109,6 +115,17 @@ func (d *dispatcher) Dispatch(ctx context.Context, node *dependency.Node) (sched
 		return result, errors.Join(failure, processResult.Err)
 	}
 	return result, nil
+}
+
+func (d *dispatcher) progress(node *dependency.Node, started bool, err error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if started && d.opts.OnStart != nil {
+		d.opts.OnStart(node)
+	}
+	if !started && d.opts.OnComplete != nil {
+		d.opts.OnComplete(node, err)
+	}
 }
 
 // environment builds one child's environment: the inherited base, then the

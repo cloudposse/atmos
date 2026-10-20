@@ -3,14 +3,11 @@ package create
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
@@ -39,18 +36,22 @@ type Renderer interface {
 
 // Options selects a scaffold and its stack-specific inputs.
 type Options struct {
-	File, Name, Template, Ref string
-	Imports, Components       []string
-	Values                    map[string]any
-	Defaults                  bool
+	File, Target, Name, Template, Ref string
+	Imports, Components               []string
+	Values                            map[string]any
+	Defaults                          bool
 }
 
 // Plan contains the fully rendered files and the scaffold hooks that accompany them.
 type Plan struct {
 	edition        string
 	Root, Manifest string
-	Generation     *generatorui.CreationPlan
-	Hooks          map[string]hooks.Hook
+	// Target is the project-relative directory destination; empty in file mode.
+	Target string
+	// Manifests lists discoverable generated stack manifests.
+	Manifests  []string
+	Generation *generatorui.CreationPlan
+	Hooks      map[string]hooks.Hook
 	// staleRecord is the generation record left behind by a manifest that has since been deleted.
 	// The record is Atmos-owned, so Apply replaces it instead of treating it as a conflict.
 	staleRecord string
@@ -65,11 +66,7 @@ func resolveTemplate(config *schema.AtmosConfiguration, opts *Options, root, fil
 	if name == "" {
 		name = "stack"
 	}
-	configDir, err := scaffoldConfigDir(config, root)
-	if err != nil {
-		return nil, noop, err
-	}
-	template, cleanup, err := catalog.Resolve(name, opts.Ref, configDir, filepath.Join(root, file))
+	template, cleanup, err := resolveCatalog(config, name, opts.Ref, root, file)
 	if err != nil {
 		return nil, noop, err
 	}
@@ -77,50 +74,65 @@ func resolveTemplate(config *schema.AtmosConfiguration, opts *Options, root, fil
 		cleanup()
 		return nil, noop, err
 	}
-	if _, err := stackDefinition(template); err != nil {
+	if _, err := stackDefinition(template, opts.Target != ""); err != nil {
 		cleanup()
 		return nil, noop, err
 	}
 	return template, cleanup, nil
 }
 
+func resolveCatalog(config *schema.AtmosConfiguration, name, ref, root, file string) (*templates.Configuration, func(), error) {
+	if config.ScaffoldConfigLoaded || config.Scaffold != nil {
+		return catalog.ResolveWithConfig(name, ref, filepath.Join(root, file), config.Scaffold)
+	}
+	// Compatibility for callers constructing configuration by hand. Loaded
+	// configurations mark their catalog as loaded, including an empty one.
+	configDir, err := scaffoldConfigDir(config, root)
+	if err != nil {
+		return nil, func() {}, err
+	}
+	return catalog.Resolve(name, ref, configDir, filepath.Join(root, file))
+}
+
 // Prepare renders and validates a new stack before any generation hook or write.
 func Prepare(config *schema.AtmosConfiguration, opts *Options, renderer Renderer) (*Plan, error) {
 	defer perf.Track(config, "create.Prepare")()
 
-	root, file, err := resolveManifest(config, opts.File)
+	req, err := resolveRequest(config, opts)
 	if err != nil {
-		return nil, err
-	}
-	// Reject an existing manifest first so the shared renderer's overwrite and update guidance, which stack create does not offer, is never shown.
-	if err := rejectExisting(root, file); err != nil {
 		return nil, err
 	}
 	declared, err := parseComponents(config, opts.Components)
 	if err != nil {
 		return nil, err
 	}
-	values, err := stackValues(opts, declared, file)
+	values, err := stackValues(opts, declared, req.file)
 	if err != nil {
 		return nil, err
 	}
-	template, cleanup, err := resolveTemplate(config, opts, root, file)
+	template, cleanup, err := resolveTemplate(config, opts, req.root, req.destination())
 	if err != nil {
 		return nil, err
 	}
 	defer cleanup()
 	renderer.SetEdition(config.Edition)
-	generated, err := renderer.PlanCreationQuiet(template, root, opts.Defaults, values)
+	generated, err := renderer.PlanCreationQuiet(template, req.renderRoot(), opts.Defaults, values)
 	if err != nil {
 		return nil, translateRenderError(err)
 	}
-	return finishPlan(&request{config: config, root: root, file: file, opts: opts, declared: declared}, template, generated)
+	req.declared = declared
+	if err := req.normalizeOutputs(generated); err != nil {
+		return nil, err
+	}
+	return finishPlan(req, template, generated)
 }
 
 // request carries what Prepare resolved before rendering.
 type request struct {
 	config     *schema.AtmosConfiguration
 	root, file string
+	target     string
+	manifests  []string
 	opts       *Options
 	declared   []declaredComponent
 }
@@ -130,7 +142,7 @@ func finishPlan(req *request, template *templates.Configuration, generated *gene
 	if err != nil {
 		return nil, err
 	}
-	record, err := generationRecord(req.file, template, generated)
+	record, err := requestRecord(req, template, generated)
 	if err != nil {
 		return nil, err
 	}
@@ -142,23 +154,16 @@ func finishPlan(req *request, template *templates.Configuration, generated *gene
 	if err := engine.ValidateCreation(req.root, withoutPath(generated.Files, stale)); err != nil {
 		return nil, err
 	}
-	return &Plan{edition: req.config.Edition, Root: req.root, Manifest: req.file, Generation: generated, Hooks: hookMap, staleRecord: stale}, nil
+	plan := &Plan{edition: req.config.Edition, Root: req.root, Manifest: req.file, Target: req.target, Manifests: req.manifests, Generation: generated, Hooks: hookMap, staleRecord: stale}
+	if err := plan.validateDirectoryRecord(); err != nil {
+		return nil, err
+	}
+	return plan, nil
 }
 
 // checkRendered validates everything the scaffold rendered, and the project it lands in, before anything is written.
 func checkRendered(req *request, template *templates.Configuration, generated *generatorui.CreationPlan) (map[string]hooks.Hook, error) {
-	output, err := engine.NewProcessor().ProcessTemplate(generated.Config.Spec.Stack.Manifest, req.root, generated.Config, generated.Values)
-	if err != nil {
-		return nil, err
-	}
-	if filepath.Clean(output) != filepath.Clean(req.file) {
-		return nil, fmt.Errorf("%w: scaffold stack output %q must match --file %q (use .Config.stack_file)", errUtils.ErrInvalidConfig, output, req.file)
-	}
-	document, err := validateRendered(req.config, req.root, generated.Files, req.file)
-	if err != nil {
-		return nil, err
-	}
-	if err := verifyReservedInputs(template.Name, req.opts, req.declared, document); err != nil {
+	if err := req.checkStackOutputs(template.Name, generated); err != nil {
 		return nil, err
 	}
 	hookMap, err := project.DecodeHooks(generated.Config.Spec.Hooks)
@@ -175,7 +180,7 @@ func checkRendered(req *request, template *templates.Configuration, generated *g
 	return hookMap, preflightProject(req.config, generated.Files, req.root)
 }
 
-func stackDefinition(template *templates.Configuration) (*project.ScaffoldConfig, error) {
+func stackDefinition(template *templates.Configuration, directory bool) (*project.ScaffoldConfig, error) {
 	for _, file := range template.Files {
 		if file.Path != project.ScaffoldConfigFileName {
 			continue
@@ -184,7 +189,7 @@ func stackDefinition(template *templates.Configuration) (*project.ScaffoldConfig
 		if err != nil {
 			return nil, err
 		}
-		if definition.Spec.Stack == nil {
+		if definition.Spec.Stack == nil && !directory {
 			break
 		}
 		for i := range definition.Spec.Fields {
@@ -252,27 +257,6 @@ func knownCustomKind(kind string, commands []schema.Command) bool {
 	return false
 }
 
-func generationRecord(file string, template *templates.Configuration, plan *generatorui.CreationPlan) (engine.File, error) {
-	outputs := make(map[string]string)
-	for _, output := range plan.Files {
-		outputs[filepath.ToSlash(output.Path)] = fmt.Sprintf("%x", sha256.Sum256([]byte(output.Content)))
-	}
-	record := struct {
-		Manifest string                  `yaml:"manifest"`
-		Template string                  `yaml:"template"`
-		Source   string                  `yaml:"source"`
-		Revision string                  `yaml:"revision,omitempty"`
-		Scaffold *project.ScaffoldConfig `yaml:"scaffold"`
-		Outputs  map[string]string       `yaml:"outputs"`
-	}{filepath.ToSlash(file), template.Name, template.Source, template.ResolvedRef, plan.Config, outputs}
-	snapshot := *plan.Config
-	snapshot.Spec.Values = plan.Values
-	record.Scaffold = &snapshot
-	content, err := yaml.Marshal(record)
-	key := fmt.Sprintf("%x", sha256.Sum256([]byte(filepath.ToSlash(file))))
-	return engine.File{Path: filepath.Join(recordDirectory, key+".yaml"), Content: string(content), Permissions: recordPermissions}, err
-}
-
 // Apply runs scaffold hooks around exclusive writes of exactly the previewed bytes.
 func (p *Plan) Apply(ctx context.Context, skip func(string) bool) error {
 	defer perf.Track(nil, "create.Plan.Apply")()
@@ -280,21 +264,34 @@ func (p *Plan) Apply(ctx context.Context, skip func(string) bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := engine.ValidateCreation(p.Root, withoutPath(p.Generation.Files, p.staleRecord)); err != nil {
+	if err := p.validateCreation(); err != nil {
 		return err
 	}
-	input := scaffoldhooks.RunInput{Edition: p.edition, HooksMap: p.Hooks, Event: hooks.BeforeScaffoldGenerate, Answers: p.Generation.Values, Status: "success", SkipHooks: skip, TargetPath: p.Root}
+	input := scaffoldhooks.RunInput{Edition: p.edition, HooksMap: p.Hooks, Event: hooks.BeforeScaffoldGenerate, Answers: p.Generation.Values, Status: "success", SkipHooks: skip, TargetPath: p.generationRoot()}
 	if err := scaffoldhooks.Run(input); err != nil {
 		return err
 	}
-	err := p.removeStaleRecord()
-	if err == nil {
-		err = engine.ApplyCreation(ctx, p.Root, p.Generation.Files)
-	}
+	err := p.applyFiles(ctx)
 	input.Event = hooks.AfterScaffoldGenerate
 	if err != nil {
 		input.Status, input.Err = "failure", err
 	}
 	hookErr := scaffoldhooks.Run(input)
+	if err == nil && hookErr != nil {
+		return fmt.Errorf("generation completed for %s; generated files and record were retained; after hook failed: %w", p.destination(), hookErr)
+	}
 	return errors.Join(err, hookErr)
+}
+
+// applyFiles revalidates after before-hooks and preserves rollback of a superseded record.
+func (p *Plan) applyFiles(ctx context.Context) error {
+	if err := p.validateCreation(); err != nil {
+		return err
+	}
+	finish, err := p.stageStaleRecord()
+	if err != nil {
+		return err
+	}
+	err = engine.ApplyCreation(ctx, p.Root, p.Generation.Files)
+	return errors.Join(err, finish(err == nil))
 }

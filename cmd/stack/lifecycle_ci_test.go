@@ -118,9 +118,10 @@ func TestLifecycleCIModePrecedence(t *testing.T) {
 func TestWithCIMode(t *testing.T) {
 	base := []string{"KEEP=1", "ATMOS_CI=false"}
 	got := withCIMode(append([]string{}, base...), true)
-	assert.Equal(t, []string{"KEEP=1", "ATMOS_CI=true"}, got)
-	// Off leaves the environment untouched, including an inherited value.
-	assert.Equal(t, base, withCIMode(append([]string{}, base...), false))
+	assert.Equal(t, []string{"KEEP=1", "ATMOS_CI=true", ci.WorkerModeEnv + "=true"}, got)
+	// Off overrides automatic detection without dropping provider metadata.
+	assert.Equal(t, []string{"KEEP=1", "ATMOS_CI=false", ci.WorkerModeEnv + "=false"}, withCIMode(base, false))
+	assert.Equal(t, []string{"KEEP=1", "ATMOS_CI=false"}, base)
 }
 
 func TestLifecycleEnvironmentSetsCIModeForChildren(t *testing.T) {
@@ -463,4 +464,44 @@ func TestExecuteLifecycleChildrenStopsWhenCICaptureCannotBePrepared(t *testing.T
 
 	require.Error(t, executeLifecycleChildren(lifecycleTestCommandWithContext(), run))
 	assert.NoFileExists(t, log, "no child starts without somewhere to capture its CI output")
+}
+
+func TestEmptyLifecyclePublishesCIResultsWithoutStartingChildren(t *testing.T) {
+	for _, verb := range []string{"deploy", "destroy"} {
+		for _, mode := range []string{"enabled", "disabled", "preview"} {
+			t.Run(verb+"/"+mode, func(t *testing.T) {
+				clearCIEnvironment(t)
+				dir := t.TempDir()
+				output, summary := filepath.Join(dir, "output"), filepath.Join(dir, "summary")
+				t.Setenv("ATMOS_CI", "true")
+				t.Setenv("ATMOS_CI_OUTPUT", output)
+				t.Setenv("ATMOS_CI_SUMMARY", summary)
+				run, childLog := lifecycleChildRun(t, verb, 0, nil)
+				run.config = &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}
+				run.plan = ciTestPlan(t)
+				run.options.ci = mode != "disabled"
+				run.options.dryRun = mode == "preview"
+				captureLifecycle(t)
+				require.NoError(t, runLifecyclePlan(lifecycleTestCommandWithContext(), run))
+				assert.NoFileExists(t, childLog)
+				if mode != "enabled" {
+					assert.NoFileExists(t, output)
+					assert.NoFileExists(t, summary)
+					return
+				}
+				content, err := os.ReadFile(output)
+				require.NoError(t, err)
+				outputs := parseCIOutputs(string(content))
+				assert.Equal(t, "true", outputs["success"])
+				assert.Equal(t, "[]", outputs["results"])
+				for _, key := range []string{"components_total", "components_succeeded", "components_failed", "components_skipped", "components_excluded"} {
+					assert.Equal(t, "0", outputs[key], key)
+				}
+				body, err := os.ReadFile(summary)
+				require.NoError(t, err)
+				assert.Contains(t, string(body), "atmos stack "+verb)
+				assert.Contains(t, string(body), "0 succeeded, 0 failed, 0 skipped, 0 excluded")
+			})
+		}
+	}
 }

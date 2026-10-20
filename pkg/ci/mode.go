@@ -1,6 +1,9 @@
 package ci
 
 import (
+	"os"
+	"strconv"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -8,20 +11,39 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// WorkerModeEnv carries an orchestrator's resolved CI mode into child Atmos
+// processes without removing CI provider metadata from their environment.
+const WorkerModeEnv = "ATMOS_CI_WORKER_MODE"
+
+const modeFlag = "ci"
+
+// ResolveMode honors the parent invocation before automatic CI detection.
+// Callers must handle an explicitly changed command flag before calling this.
+func ResolveMode(configured bool) bool {
+	defer perf.Track(nil, "ci.ResolveMode")()
+
+	if value, err := strconv.ParseBool(os.Getenv(WorkerModeEnv)); err == nil {
+		return value
+	}
+	return configured || IsCI()
+}
+
 // ModeEnabled reports whether CI mode is requested by a flag, configuration,
 // or an active CI provider.
 func ModeEnabled(cmd *cobra.Command) bool {
 	defer perf.Track(nil, "ci.ModeEnabled")()
 
 	if cmd != nil {
-		if value, err := cmd.Flags().GetBool("ci"); err == nil && value {
-			return true
+		if flag := cmd.Flags().Lookup(modeFlag); flag != nil && flag.Changed {
+			value, _ := cmd.Flags().GetBool(modeFlag)
+			return value
 		}
-		if value, err := cmd.InheritedFlags().GetBool("ci"); err == nil && value {
-			return true
+		if flag := cmd.InheritedFlags().Lookup(modeFlag); flag != nil && flag.Changed {
+			value, _ := cmd.InheritedFlags().GetBool(modeFlag)
+			return value
 		}
 	}
-	return viper.GetBool("ci") || IsCI()
+	return ResolveMode(viper.GetBool(modeFlag))
 }
 
 // Enabled reports whether the ci.enabled master switch is set.

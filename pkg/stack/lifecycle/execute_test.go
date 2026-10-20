@@ -552,3 +552,73 @@ func TestDispatchWithCanceledContextDoesNotRunTheChild(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, calls)
 }
+
+func TestGroupedExecutionReportsProgressBeforeChildFinishes(t *testing.T) {
+	plan := executionPlan(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	started := make(chan string, 3)
+	release := make(chan struct{})
+	finished := make(chan *scheduler.AggregateResult, 1)
+	var events []string
+	var stdout, stderr bytes.Buffer
+	opts := &ExecutionOptions{
+		Concurrency: 2, Grouped: true,
+		Streams:    process.Streams{Stdout: &stdout, Stderr: &stderr},
+		OnStart:    func(n *dependency.Node) { events = append(events, "start:"+n.ID); started <- n.ID },
+		OnComplete: func(n *dependency.Node, err error) { events = append(events, "done:"+n.ID) },
+		Runner: runnerFunc(func(ctx context.Context, task process.TaskSpec) process.Result {
+			_, _ = io.WriteString(task.Streams.Stdout, "child output\n")
+			select {
+			case <-release:
+				return process.Result{ExitCode: 0, Started: true}
+			case <-ctx.Done():
+				return process.Result{ExitCode: 1, Err: ctx.Err()}
+			}
+		}),
+	}
+	go func() { finished <- Execute(ctx, plan, opts) }()
+	// Both independent children report progress while their logs stay buffered.
+	for i := 0; i < 2; i++ {
+		select {
+		case <-started:
+		case <-ctx.Done():
+			t.Fatal("no live progress")
+		}
+	}
+	assert.Empty(t, stdout.String())
+	assert.Empty(t, stderr.String())
+	close(release)
+	result := <-finished
+	require.NoError(t, result.Err)
+	require.Len(t, events, 6)
+	for _, r := range result.Results {
+		assert.Contains(t, events, "start:"+r.NodeID)
+		assert.Contains(t, events, "done:"+r.NodeID)
+	}
+	assert.Equal(t, strings.Repeat("child output\n", 3), stdout.String())
+}
+
+func TestProgressStartsAfterResourceGuard(t *testing.T) {
+	plan := executionPlan(t)
+	guarded := false
+	opts := &ExecutionOptions{
+		Concurrency: 1, Grouped: true,
+		ResourceGuards: map[string]func(*dependency.Node) func(){"terraform": func(*dependency.Node) func() { guarded = true; return func() { guarded = false } }},
+		OnStart: func(n *dependency.Node) {
+			if n.Type == "terraform" {
+				assert.True(t, guarded)
+			}
+		},
+		OnComplete: func(n *dependency.Node, err error) {
+			if n.Type == "terraform" {
+				assert.True(t, guarded)
+			}
+		},
+		Runner: runnerFunc(func(context.Context, process.TaskSpec) process.Result {
+			return process.Result{ExitCode: 0, Started: true}
+		}),
+	}
+	require.NoError(t, Execute(context.Background(), plan, opts).Err)
+	assert.False(t, guarded)
+}

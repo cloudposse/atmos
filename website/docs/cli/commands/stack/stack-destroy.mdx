@@ -98,7 +98,12 @@ In CI mode, each component command runs with `ATMOS_CI=true`. Children inherit t
 of the environment, so provider variables such as `GITHUB_ACTIONS` pass through. The
 `--ci` flag sets `ATMOS_CI` for the children without forwarding the flag itself, because
 not every component command accepts it. Job summaries and outputs also require
-`ci.enabled: true` in `atmos.yaml`.
+`ci.enabled: true` in `atmos.yaml`. Explicit `--ci=false` disables CI reporting
+and grouping in child Atmos commands even when the environment identifies a CI provider.
+
+A valid selection matching no components publishes a successful result with zero
+execution counts, `success=true`, `results=[]`, and a job summary. Dry runs do not
+publish execution results.
 
 Concurrent components would otherwise append to the same job summary and overwrite
 the same output keys. Atmos gives each component private summary and output files and,
@@ -127,7 +132,7 @@ when the run finishes, writes:
 </dl>
 
 ```shell
-atmos stack destroy --all --stack=dev --ci --max-concurrency=2
+atmos stack destroy --all --stack=dev --ci --max-concurrency=2 --auto-approve
 ```
 
 Workflow commands such as `::add-mask::`, `::group::`, `::error::`, `::warning::`, and
@@ -184,7 +189,7 @@ preview.
   <dt>`--failure-mode`</dt>
   <dd>`fail-fast` stops at the first failure. `keep-going` finishes independent branches while dependents of failures are skipped. Default: `fail-fast`.</dd>
   <dt>`--log-order`</dt>
-  <dd>`stream` prints component output as it arrives. `grouped` emits complete component logs in stable dependency order and applies when `--max-concurrency` is greater than `1`. Grouped mode sends each component's stdout to stdout and its headers and stderr to stderr. Default: `stream`.</dd>
+  <dd>`stream` prints component output as it arrives. `grouped` emits complete component logs in stable dependency order and applies when `--max-concurrency` is greater than `1`. Grouped mode shows live start and completion messages on stderr while buffering child logs. It sends each component's stdout to stdout and its headers and stderr to stderr. Default: `stream`.</dd>
   <dt>`--dry-run`</dt>
   <dd>Preview selection, commands, relationships, and lifecycle hooks without destroying anything. Environment variable: `ATMOS_DRY_RUN`. Default: `false`.</dd>
   <dt>`--identity`, `-i`</dt>

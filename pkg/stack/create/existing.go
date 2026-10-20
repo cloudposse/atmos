@@ -76,13 +76,45 @@ func withoutPath(files []engine.File, path string) []engine.File {
 	return kept
 }
 
-// removeStaleRecord deletes the superseded generation record so the new one can be created exclusively.
-func (p *Plan) removeStaleRecord() error {
+// stageStaleRecord keeps the superseded record until creation commits. Restoration
+// uses a hard link so a concurrently created destination is never overwritten.
+func (p *Plan) stageStaleRecord() (func(bool) error, error) {
+	noop := func(bool) error { return nil }
 	if p.staleRecord == "" {
-		return nil
+		return noop, nil
 	}
-	if err := os.Remove(filepath.Join(p.Root, p.staleRecord)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("%w: %s: %w", errUtils.ErrFileWrite, filepath.ToSlash(p.staleRecord), err)
+	path := filepath.Join(p.Root, p.staleRecord)
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return noop, nil
+	}
+	if err != nil {
+		return noop, fmt.Errorf("%w: %s: %w", errUtils.ErrFileWrite, filepath.ToSlash(path), err)
+	}
+	if !info.Mode().IsRegular() {
+		return noop, fmt.Errorf("%w: %s is not a regular generation record", errUtils.ErrFileWrite, filepath.ToSlash(path))
+	}
+	backup, err := os.CreateTemp(filepath.Dir(path), ".stack-record-*")
+	if err != nil {
+		return noop, fmt.Errorf("%w: %s: %w", errUtils.ErrFileWrite, filepath.ToSlash(path), err)
+	}
+	if err := backup.Close(); err != nil {
+		return noop, errors.Join(err, os.Remove(backup.Name()))
+	}
+	if err := os.Rename(path, backup.Name()); err != nil {
+		return noop, errors.Join(fmt.Errorf("%w: %s: %w", errUtils.ErrFileWrite, filepath.ToSlash(path), err), os.Remove(backup.Name()))
+	}
+	return func(committed bool) error { return finishStaleRecord(path, backup.Name(), committed) }, nil
+}
+
+func finishStaleRecord(path, backup string, committed bool) error {
+	if !committed {
+		if err := os.Link(backup, path); err != nil {
+			return fmt.Errorf("%w: restore %s from retained backup %s: %w", errUtils.ErrFileWrite, filepath.ToSlash(path), filepath.ToSlash(backup), err)
+		}
+	}
+	if err := os.Remove(backup); err != nil {
+		return fmt.Errorf("%w: remove generation record backup %s: %w", errUtils.ErrFileWrite, backup, err)
 	}
 	return nil
 }

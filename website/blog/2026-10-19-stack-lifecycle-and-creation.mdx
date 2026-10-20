@@ -36,6 +36,19 @@ atmos stack create --file stacks/deploy/dev.yaml --name dev \
 
 Remove `--dry-run` to create the files, then configure and enable the generated stubs before deployment. Select a team recipe with `--template application-stack`, where `application-stack` is defined in `scaffold.templates` in `atmos.yaml`; the recipe declares its primary stack output using `spec.stack.manifest`.
 
+For a recipe that splits stacks across several files, use a directory destination:
+
+```shell
+atmos stack create --template application-stack --target stacks/deploy/dev \
+  --set environment=dev --set name=dev \
+  --component terraform:network --component helmfile:services --dry-run
+```
+
+Directory recipes own the layout and can create one decomposed stack or several distinct
+stacks. They do not require a primary manifest. In an interactive terminal, creation asks
+for a missing destination and runs the scaffold questionnaire, including during dry runs.
+Use `--defaults` for automation and supply required answers with `--set`.
+
 Preview affected components, their commands, dependencies, and declared lifecycle hooks:
 
 ```shell

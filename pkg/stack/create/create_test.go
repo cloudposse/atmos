@@ -2,6 +2,7 @@ package create
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -163,7 +164,7 @@ func TestPreflightFailures(t *testing.T) {
 		definition, body string
 		want             string
 	}{
-		{name: "missing file", want: "--file is required"},
+		{name: "missing file", want: "--file or --target is required"},
 		{name: "extension", options: Options{File: "stacks/deploy/dev.txt"}, want: ".yaml"},
 		{name: "excluded", options: Options{File: "stacks/deploy/_defaults.yaml"}, want: "excluded_paths"},
 		{name: "undiscovered", options: Options{File: "stacks/catalog/dev.yaml"}, want: "included_paths"},
@@ -583,4 +584,48 @@ func TestUnreadableGenerationRecordLocationFailsPlanning(t *testing.T) {
 	_, err := Prepare(cfg, &Options{File: "stacks/deploy/dev.yaml", Name: "dev", Defaults: true}, renderer)
 	require.ErrorIs(t, err, errUtils.ErrReadFile)
 	assert.NoFileExists(t, filepath.Join(cfg.BasePathAbsolute, "stacks", "deploy", "dev.yaml"))
+}
+
+func TestStaleRecordRestoredOnFailureWithoutClobberingNewFile(t *testing.T) {
+	for _, concurrent := range []bool{false, true} {
+		t.Run(fmt.Sprint(concurrent), func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(recordDirectory, "record.yaml")
+			write(t, filepath.Join(root, path), "old record")
+			plan := &Plan{Root: root, staleRecord: path}
+			finish, err := plan.stageStaleRecord()
+			require.NoError(t, err)
+			assert.NoFileExists(t, filepath.Join(root, path))
+			if concurrent {
+				write(t, filepath.Join(root, path), "concurrent record")
+			}
+			err = finish(false)
+			content, readErr := os.ReadFile(filepath.Join(root, path))
+			require.NoError(t, readErr)
+			if concurrent {
+				require.ErrorIs(t, err, errUtils.ErrFileWrite)
+				assert.Contains(t, err.Error(), "retained backup")
+				assert.Equal(t, "concurrent record", string(content))
+				backups, globErr := filepath.Glob(filepath.Join(root, recordDirectory, ".stack-record-*"))
+				require.NoError(t, globErr)
+				require.Len(t, backups, 1)
+				preserved, readErr := os.ReadFile(backups[0])
+				require.NoError(t, readErr)
+				assert.Equal(t, "old record", string(preserved))
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, "old record", string(content))
+			}
+		})
+	}
+}
+
+func TestLoadedEmptyCatalogDoesNotReadAmbientTemplates(t *testing.T) {
+	config, _ := fixture(t)
+	write(t, filepath.Join(config.BasePathAbsolute, "atmos.yaml"), "scaffold:\n  templates:\n    stack:\n      source: ./missing-template\n")
+	config.ScaffoldConfigLoaded = true
+	template, cleanup, err := resolveTemplate(config, &Options{}, config.BasePathAbsolute, "stacks/deploy/new.yaml")
+	require.NoError(t, err)
+	defer cleanup()
+	assert.Equal(t, "embedded", template.Source)
 }

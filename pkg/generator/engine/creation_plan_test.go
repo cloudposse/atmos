@@ -2,6 +2,8 @@ package engine
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -135,4 +137,87 @@ func TestApplyCreationReportsWriteFailuresWithoutPartialOutput(t *testing.T) {
 	entries, readErr := os.ReadDir(root)
 	require.NoError(t, readErr)
 	assert.Empty(t, entries, "a failed creation leaves nothing behind")
+}
+
+func TestCreationRollsBackLateFailureAndCanRetry(t *testing.T) {
+	root := t.TempDir()
+	files := []File{{Path: "manifest.yaml", Content: "manifest", Permissions: 0o644}, {Path: "later.txt", Content: "later", Permissions: 0o644}}
+	write := func(path string, file *File) (*createdFile, error) {
+		if file.Path == "later.txt" {
+			return nil, os.ErrPermission
+		}
+		return writeCreationFile(path, file)
+	}
+	err := applyCreation(context.Background(), root, files, write)
+	require.ErrorIs(t, err, os.ErrPermission)
+	assert.NoFileExists(t, filepath.Join(root, "manifest.yaml"))
+	require.NoError(t, ApplyCreation(context.Background(), root, files))
+}
+
+func TestCreationRollbackPreservesConcurrentChanges(t *testing.T) {
+	for _, change := range []string{"edit", "replace", "hook file"} {
+		t.Run(change, func(t *testing.T) {
+			root := t.TempDir()
+			files := []File{{Path: "first", Content: "ours", Permissions: 0o644}, {Path: "second", Content: "ours", Permissions: 0o644}}
+			write := func(path string, file *File) (*createdFile, error) {
+				if file.Path == "first" {
+					return writeCreationFile(path, file)
+				}
+				first := filepath.Join(root, "first")
+				switch change {
+				case "replace":
+					require.NoError(t, os.Rename(first, first+".moved"))
+					require.NoError(t, os.WriteFile(first, []byte("replacement"), 0o644))
+				case "edit":
+					require.NoError(t, os.WriteFile(first, []byte("edited"), 0o644))
+				case "hook file":
+					require.NoError(t, os.WriteFile(filepath.Join(root, "hook"), []byte("keep"), 0o644))
+				}
+				return nil, os.ErrPermission
+			}
+			err := applyCreation(context.Background(), root, files, write)
+			require.ErrorIs(t, err, os.ErrPermission)
+			if change == "hook file" {
+				assert.NoFileExists(t, filepath.Join(root, "first"))
+				assert.FileExists(t, filepath.Join(root, "hook"))
+			} else {
+				assert.Contains(t, err.Error(), "rollback left")
+				content, readErr := os.ReadFile(filepath.Join(root, "first"))
+				require.NoError(t, readErr)
+				assert.NotEqual(t, "ours", string(content))
+			}
+		})
+	}
+}
+
+func TestCreationRollsBackCancellationAndPartialWrites(t *testing.T) {
+	for _, partial := range []bool{false, true} {
+		t.Run(fmt.Sprint(partial), func(t *testing.T) {
+			root := t.TempDir()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			files := []File{{Path: "first", Content: "complete", Permissions: 0o644}, {Path: "second", Content: "complete", Permissions: 0o644}}
+			write := func(path string, file *File) (*createdFile, error) {
+				if partial && file.Path == "second" {
+					file.Content = "part"
+					owned, err := writeCreationFile(path, file)
+					require.NoError(t, err)
+					return owned, io.ErrShortWrite
+				}
+				owned, err := writeCreationFile(path, file)
+				if !partial {
+					cancel()
+				}
+				return owned, err
+			}
+			err := applyCreation(ctx, root, files, write)
+			if partial {
+				require.ErrorIs(t, err, io.ErrShortWrite)
+			} else {
+				require.ErrorIs(t, err, context.Canceled)
+			}
+			assert.NoFileExists(t, filepath.Join(root, "first"))
+			assert.NoFileExists(t, filepath.Join(root, "second"))
+		})
+	}
 }

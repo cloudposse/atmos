@@ -434,6 +434,13 @@ func runLifecyclePlan(cmd *cobra.Command, run *lifecycleRun) error {
 	}
 	if plan.Graph.Size() == 0 {
 		ui.Info("No components matched")
+		captured, err := newLifecycleCI(run.config, opts, plan, nil, newLifecycleReporter(run.config))
+		if err != nil {
+			return err
+		}
+		if err := captured.publish(nil, len(plan.Notices)); err != nil {
+			ui.Warningf("Failed to publish the CI summary and outputs: %v", err)
+		}
 		return nil
 	}
 	if opts.concurrency > 1 && opts.identity == cfg.IdentityFlagSelectValue {
@@ -474,6 +481,19 @@ func executeLifecycleChildren(cmd *cobra.Command, run *lifecycleRun) error {
 	}
 	if captured != nil {
 		execution.NodeEnvironment = captured.nodeEnvironment
+	}
+	if execution.Grouped && execution.Concurrency > 1 {
+		ui.Infof("Starting stack %s: %d components, %d workers", opts.verb, plan.Graph.Size(), opts.concurrency)
+		execution.OnStart = func(node *dependency.Node) {
+			ui.Infof("Running %s: %s", opts.verb, lifecycle.Label(node))
+		}
+		execution.OnComplete = func(node *dependency.Node, err error) {
+			if err != nil {
+				ui.Errorf("Failed %s: %s", opts.verb, lifecycle.Label(node))
+				return
+			}
+			ui.Successf("Completed %s: %s", opts.verb, lifecycle.Label(node))
+		}
 	}
 	result := lifecycle.Execute(cmd.Context(), plan, execution)
 	reportLifecycleResults(opts.verb, result.Results, len(plan.Notices))

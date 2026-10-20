@@ -43,7 +43,7 @@ func scaffoldConfigDir(config *schema.AtmosConfiguration, root string) (string, 
 
 func resolveManifest(config *schema.AtmosConfiguration, file string) (string, string, error) {
 	if file == "" {
-		return "", "", fmt.Errorf("%w: --file is required", errUtils.ErrInvalidFlag)
+		return "", "", fmt.Errorf("%w: --file or --target is required", errUtils.ErrInvalidFlag)
 	}
 	ext := filepath.Ext(file)
 	if ext != ".yaml" && ext != ".yml" {

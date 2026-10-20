@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/xeipuuv/gojsonschema"
@@ -20,7 +21,19 @@ import (
 // each must be one YAML document that satisfies the stack manifest JSON schema. It returns the parsed
 // primary manifest.
 func validateRendered(config *schema.AtmosConfiguration, root string, files []engine.File, manifest string) (map[string]any, error) {
-	var primary map[string]any
+	documents, err := validateRenderedDocuments(config, root, files, manifest)
+	if err != nil {
+		return nil, err
+	}
+	primary := documents[filepath.Clean(manifest)]
+	if primary == nil {
+		return nil, fmt.Errorf("%w: scaffold did not generate stack manifest %s", errUtils.ErrInvalidConfig, filepath.ToSlash(manifest))
+	}
+	return primary, nil
+}
+
+func validateRenderedDocuments(config *schema.AtmosConfiguration, root string, files []engine.File, manifest string) (map[string]map[string]any, error) {
+	documents := make(map[string]map[string]any)
 	var schemaBytes []byte
 	stacksBase := stacksBasePath(config)
 	for i := range files {
@@ -39,14 +52,9 @@ func validateRendered(config *schema.AtmosConfiguration, root string, files []en
 		if err != nil {
 			return nil, err
 		}
-		if isPrimary {
-			primary = document
-		}
+		documents[filepath.Clean(file.Path)] = document
 	}
-	if primary == nil {
-		return nil, fmt.Errorf("%w: scaffold did not generate stack manifest %s", errUtils.ErrInvalidConfig, filepath.ToSlash(manifest))
-	}
-	return primary, nil
+	return documents, nil
 }
 
 // isStackDocument reports whether a rendered file is a YAML stack file inside stacks.base_path. Template
@@ -79,4 +87,33 @@ func validateStackDocument(schemaBytes []byte, file *engine.File) (map[string]an
 		return nil, fmt.Errorf("%w: generated stack %s: %v", errUtils.ErrInvalidConfig, path, result.Errors())
 	}
 	return document, nil
+}
+
+// validateDirectoryOutputs checks all stack documents, allowing excluded import fragments but requiring a discoverable entrypoint.
+func validateDirectoryOutputs(config *schema.AtmosConfiguration, root string, files []engine.File, manifest string) ([]map[string]any, []string, error) {
+	documents, err := validateRenderedDocuments(config, root, files, manifest)
+	if err != nil {
+		return nil, nil, err
+	}
+	if manifest != "" {
+		if documents[filepath.Clean(manifest)] == nil {
+			return nil, nil, fmt.Errorf("%w: scaffold did not generate stack manifest %s", errUtils.ErrInvalidConfig, manifest)
+		}
+		if err := discoverable(config, filepath.Join(root, manifest)); err != nil {
+			return nil, nil, err
+		}
+	}
+	var all []map[string]any
+	var manifests []string
+	for path, document := range documents {
+		all = append(all, document)
+		if err := discoverable(config, filepath.Join(root, path)); err == nil {
+			manifests = append(manifests, filepath.ToSlash(path))
+		}
+	}
+	if len(manifests) == 0 {
+		return nil, nil, fmt.Errorf("%w: scaffold must generate at least one stack manifest matching stacks.included_paths and stacks.excluded_paths", errUtils.ErrInvalidConfig)
+	}
+	sort.Strings(manifests)
+	return all, manifests, nil
 }

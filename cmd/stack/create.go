@@ -1,12 +1,9 @@
 package stack
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -24,7 +21,8 @@ func init() { stackCmd.AddCommand(newStackCreateCommand()) }
 
 func newStackCreateCommand() *cobra.Command {
 	parser := flags.NewStandardParser(
-		flags.WithStringFlag("file", "", "", "New stack manifest path (required; never overwrites a file)"),
+		flags.WithStringFlag("file", "", "", "New stack manifest path (mutually exclusive with --target; never overwrites)"),
+		flags.WithStringFlag("target", "", "", "Directory for generated stack files (mutually exclusive with --file; never overwrites)"),
 		flags.WithStringFlag("name", "", "", "Explicit stack name (otherwise preserve the project's naming convention)"),
 		flags.WithStringFlag("template", "", "stack", "Scaffold name or source (from scaffold.templates or the built-in catalog)"),
 		flags.WithStringFlag("ref", "", "", "Git revision for a Git scaffold source"),
@@ -41,6 +39,7 @@ func newStackCreateCommand() *cobra.Command {
 	)
 	cmd := &cobra.Command{Use: "create", Short: "Create a new stack from a scaffold", Args: cobra.NoArgs}
 	parser.RegisterFlags(cmd)
+	cmd.MarkFlagsMutuallyExclusive("file", "target")
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		v := viper.New()
 		if err := parser.BindFlagsToViper(cmd, v); err != nil {
@@ -56,8 +55,9 @@ func runStackCreate(cmd *cobra.Command, v *viper.Viper) error {
 	if err != nil {
 		return err
 	}
-	if v.GetString("file") == "" {
-		return fmt.Errorf("%w: --file is required", errUtils.ErrInvalidFlag)
+	file, target, err := creationDestination(cmd.Context(), v)
+	if err != nil {
+		return err
 	}
 	gen, err := setup.NewGeneratorContext()
 	if err != nil {
@@ -72,7 +72,7 @@ func runStackCreate(cmd *cobra.Command, v *viper.Viper) error {
 		return err
 	}
 	opts := &stackcreate.Options{
-		File: v.GetString("file"), Name: v.GetString("name"), Template: v.GetString("template"), Ref: v.GetString("ref"),
+		File: file, Target: target, Name: v.GetString("name"), Template: v.GetString("template"), Ref: v.GetString("ref"),
 		Imports: imports, Components: components, Values: values,
 		Defaults: creationDefaults(v),
 	}

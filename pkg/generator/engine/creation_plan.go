@@ -51,9 +51,19 @@ func ValidateCreation(target string, files []File) error {
 func ApplyCreation(ctx context.Context, target string, files []File) error {
 	defer perf.Track(nil, "engine.ApplyCreation")()
 
+	return applyCreation(ctx, target, files, writeCreationFile)
+}
+
+func applyCreation(ctx context.Context, target string, files []File, write func(string, *File) (*createdFile, error)) (err error) {
 	if err := ValidateCreation(target, files); err != nil {
 		return err
 	}
+	var created []*createdFile
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, rollbackCreation(created))
+		}
+	}()
 	for _, file := range files {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -65,9 +75,13 @@ func ApplyCreation(ctx context.Context, target string, files []File) error {
 		if err := validateWriteTarget(full, target); err != nil {
 			return err
 		}
-		if err := writeFileSecure(full, []byte(file.Content), file.Permissions, false); err != nil {
+		owned, err := write(full, &file)
+		if owned != nil {
+			created = append(created, owned)
+		}
+		if err != nil {
 			return fmt.Errorf("%w: %s: %w", errUtils.ErrFileWrite, file.Path, err)
 		}
 	}
-	return nil
+	return ctx.Err()
 }

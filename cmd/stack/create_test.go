@@ -200,11 +200,11 @@ func writeCreateRecipe(t *testing.T, definition string) {
 	require.NoError(t, os.WriteFile(filepath.Join("recipe", "main.tf"), []byte("# network\n"), 0o644))
 }
 
-func TestCreateRequiresFile(t *testing.T) {
+func TestCreateRequiresDestination(t *testing.T) {
 	createProject(t)
 	err := runCreate(t, "--defaults")
 	require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
-	assert.Contains(t, err.Error(), "--file is required")
+	assert.Contains(t, err.Error(), "--file or --target is required")
 	assert.NoDirExists(t, ".atmos")
 }
 

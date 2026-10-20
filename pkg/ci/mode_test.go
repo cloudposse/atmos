@@ -1,10 +1,12 @@
 package ci
 
 import (
+	"os"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -99,4 +101,39 @@ func TestFeatureGates(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWorkerModeOverridesAutomaticCIWithoutDiscardingMetadata(t *testing.T) {
+	for _, env := range []string{"ATMOS_CI", "CI", "GITHUB_ACTIONS"} {
+		t.Run(env, func(t *testing.T) {
+			t.Setenv(env, "true")
+			t.Setenv(WorkerModeEnv, "false")
+			assert.False(t, ResolveMode(true))
+			assert.False(t, ModeEnabled(nil))
+			assert.Equal(t, "true", os.Getenv(env))
+			cmd := &cobra.Command{Use: "test"}
+			cmd.Flags().Bool("ci", false, "")
+			require.NoError(t, cmd.Flags().Set("ci", "true"))
+			assert.True(t, ModeEnabled(cmd), "explicit child flag wins")
+			t.Setenv(WorkerModeEnv, "true")
+			require.NoError(t, cmd.Flags().Set("ci", "false"))
+			assert.False(t, ModeEnabled(cmd))
+			assert.True(t, ResolveMode(false))
+		})
+	}
+}
+
+func TestWorkerModeDisablesProviderGroupingAndReporter(t *testing.T) {
+	p := registerGrouping(t)
+	config := &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}
+	t.Setenv(WorkerModeEnv, "false")
+	ran := false
+	require.NoError(t, Group(config, DimensionPhase, "hidden", func() error { ran = true; return nil }))
+	assert.True(t, ran)
+	assert.Empty(t, p.started)
+	reporter := NewReporter(config).(*reporter)
+	assert.Nil(t, reporter.detected)
+	assert.False(t, reporter.forced)
+	// Provider detection remains available independently of the output mode.
+	assert.NotNil(t, Detect())
 }

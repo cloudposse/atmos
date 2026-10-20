@@ -12,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestResolveBuiltinAndConfiguredOverride(t *testing.T) {
@@ -201,4 +202,27 @@ func TestResolveDefaultSources(t *testing.T) {
 		require.ErrorIs(t, err, errUtils.ErrScaffoldNotFound)
 		assert.Contains(t, err.Error(), "not-a-catalog-name")
 	})
+}
+
+func TestResolveWithEffectiveConfig(t *testing.T) {
+	root := t.TempDir()
+	writeRecipe(t, filepath.Join(root, "recipe"))
+	t.Chdir(t.TempDir())
+	// A neighboring atmos.yaml must never override the selected configuration.
+	require.NoError(t, os.WriteFile("atmos.yaml", []byte("scaffold:\n  templates:\n    stack:\n      source: ./missing\n"), 0o644))
+	scaffold := &schema.ScaffoldConfiguration{
+		Templates:  map[string]any{"Company.Stack": map[string]any{"source": "./recipe", "description": "Effective"}},
+		SourceDirs: map[string]string{"Company.Stack": root},
+	}
+	configured, cleanup, err := ResolveWithConfig("Company.Stack", "", "", scaffold)
+	require.NoError(t, err)
+	defer cleanup()
+	assert.Equal(t, "Effective", configured.Description)
+	require.NotEmpty(t, configured.Files)
+	builtin, cleanup, err := ResolveWithConfig("stack", "", "", scaffold)
+	require.NoError(t, err)
+	defer cleanup()
+	assert.Equal(t, "embedded", builtin.Source)
+	_, _, err = ResolveWithConfig("company.stack", "", "", scaffold)
+	require.ErrorIs(t, err, errUtils.ErrScaffoldNotFound)
 }

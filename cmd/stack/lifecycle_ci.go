@@ -66,7 +66,7 @@ func lifecycleCIMode(cmd *cobra.Command, v *viper.Viper) bool {
 		value, _ := cmd.Flags().GetBool(flagCI)
 		return value
 	}
-	return v.GetBool(flagCI) || ci.IsCI()
+	return ci.ResolveMode(v.GetBool(flagCI))
 }
 
 // ciChildFiles holds the per-child files that capture CI outputs and the job summary.
@@ -90,11 +90,15 @@ func newLifecycleCI(config *schema.AtmosConfiguration, opts *lifecycleOptions, p
 	if !opts.ci || !ci.Enabled(config) || plan == nil || plan.Graph == nil {
 		return nil, nil
 	}
+	state := &lifecycleCI{files: make(map[string]ciChildFiles, len(plan.Graph.Nodes)), verb: opts.verb, reporter: reporter, parent: parentEnv}
+	if plan.Graph.Size() == 0 {
+		return state, nil
+	}
 	dir, err := os.MkdirTemp("", ciChildDirPattern)
 	if err != nil {
 		return nil, err
 	}
-	state := &lifecycleCI{dir: dir, files: make(map[string]ciChildFiles, len(plan.Graph.Nodes)), verb: opts.verb, reporter: reporter, parent: parentEnv}
+	state.dir = dir
 	ids := make([]string, 0, len(plan.Graph.Nodes))
 	for id := range plan.Graph.Nodes {
 		ids = append(ids, id)
@@ -150,7 +154,7 @@ func envValue(env []string, key string) string {
 
 // cleanup removes the capture files.
 func (c *lifecycleCI) cleanup() {
-	if c != nil {
+	if c != nil && c.dir != "" {
 		_ = os.RemoveAll(c.dir)
 	}
 }
@@ -285,11 +289,12 @@ func heredocStart(line string) (key, delimiter string, ok bool) {
 	return key, delimiter, true
 }
 
-// withCIMode marks every child as running in CI mode; children inherit the rest of the environment.
+// withCIMode propagates both enabled and disabled modes. Provider metadata stays
+// available to custom commands and hooks, but cannot re-enable Atmos CI output.
 func withCIMode(env []string, enabled bool) []string {
-	if !enabled {
-		return env
-	}
-	env = slices.DeleteFunc(env, func(entry string) bool { return strings.HasPrefix(entry, ciModeEnv+"=") })
-	return append(env, ciModeEnv+"=true")
+	env = slices.DeleteFunc(slices.Clone(env), func(entry string) bool {
+		return strings.HasPrefix(entry, ciModeEnv+"=") || strings.HasPrefix(entry, ci.WorkerModeEnv+"=")
+	})
+	value := strconv.FormatBool(enabled)
+	return append(env, ciModeEnv+"="+value, ci.WorkerModeEnv+"="+value)
 }
