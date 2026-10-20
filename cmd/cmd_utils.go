@@ -1543,7 +1543,7 @@ func executeCustomCommand(
 								Command: commandToRun,
 								Name:    commandName,
 								Dir:     stepWorkDir,
-								EnvVars: env,
+								EnvVars: writer.ChildEnvironment(env),
 								Stdout:  io.MultiWriter(masked.Stdout, stdoutCapture),
 								Stderr:  io.MultiWriter(masked.Stderr, stderrCapture),
 							})

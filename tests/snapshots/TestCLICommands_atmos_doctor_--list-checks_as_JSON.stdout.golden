@@ -35,6 +35,11 @@
     "description": "Validate workflows using actionlint"
   },
   {
+    "id": "legacy-naming",
+    "category": "deprecations",
+    "description": "Migrate legacy naming syntax after comparing runtime identities"
+  },
+  {
     "id": "deprecated-field",
     "category": "deprecations",
     "description": "Report schema-declared deprecated fields"
@@ -58,6 +63,11 @@
     "id": "component-dependencies",
     "category": "deprecations",
     "description": "Migrate simple legacy dependencies to modern required dependencies"
+  },
+  {
+    "id": "local-atmos-schema",
+    "category": "modernization",
+    "description": "Recommend bundled schemas instead of local Atmos schema copies"
   },
   {
     "id": "modernization",

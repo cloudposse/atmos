@@ -2627,6 +2627,10 @@
               "type": "string",
               "description": "Terraform workspace pattern"
             },
+            "terraform_workspace_template": {
+              "type": "string",
+              "description": "Terraform workspace Go template"
+            },
             "custom": {
               "oneOf": [
                 {
@@ -2718,6 +2722,10 @@
             "terraform_workspace_pattern": {
               "type": "string",
               "description": "Default Terraform workspace pattern applied stack-wide"
+            },
+            "terraform_workspace_template": {
+              "type": "string",
+              "description": "Terraform workspace Go template"
             }
           },
           "required": []
