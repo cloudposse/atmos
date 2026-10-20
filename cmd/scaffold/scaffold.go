@@ -596,9 +596,12 @@ func loadScaffoldTemplates(sourceOverride, excludeTargetDir string) (map[string]
 
 	atmosConfig, err := cfg.LoadConfig(&schema.ConfigAndStacksInfo{})
 	if err != nil {
-		return nil, nil, nil, nil, err
+		// Unrelated typed configuration must not block template loading. The
+		// scaffold section is validated below; an unset edition uses current defaults.
+		log.Debug("Failed to load Atmos config for scaffold edition", "error", err)
+	} else {
+		genCtx.UI.SetEdition(atmosConfig.Edition)
 	}
-	genCtx.UI.SetEdition(atmosConfig.Edition)
 
 	// Load embedded templates
 	configs, err := templates.GetAvailableConfigurations()

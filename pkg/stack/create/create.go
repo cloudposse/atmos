@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -29,7 +30,7 @@ const recordPermissions = 0o600
 // Renderer is the shared scaffold questionnaire and rendering API.
 type Renderer interface {
 	SetEdition(string)
-	PlanCreation(*templates.Configuration, string, bool, map[string]any) (*generatorui.CreationPlan, error)
+	PlanCreationQuiet(*templates.Configuration, string, bool, map[string]any) (*generatorui.CreationPlan, error)
 }
 
 // Options selects a scaffold and its stack-specific inputs.
@@ -75,7 +76,7 @@ func Prepare(config *schema.AtmosConfiguration, opts *Options, renderer Renderer
 		return nil, err
 	}
 	renderer.SetEdition(config.Edition)
-	generated, err := renderer.PlanCreation(template, root, opts.Defaults, values)
+	generated, err := renderer.PlanCreationQuiet(template, root, opts.Defaults, values)
 	if err != nil {
 		return nil, err
 	}
@@ -104,11 +105,28 @@ func finishPlan(config *schema.AtmosConfiguration, root, file string, template *
 	if err != nil {
 		return nil, err
 	}
+	if err := checkGenerationRecordConflict(root, file, record.Path); err != nil {
+		return nil, err
+	}
 	generated.Files = append(generated.Files, record)
 	if err := engine.ValidateCreation(root, generated.Files); err != nil {
 		return nil, err
 	}
 	return &Plan{edition: config.Edition, Root: root, Manifest: file, Generation: generated, Hooks: hookMap}, nil
+}
+
+// checkGenerationRecordConflict identifies a prior generation using both readable
+// manifest and record paths, so recreating a deleted manifest has an actionable remedy.
+func checkGenerationRecordConflict(root, manifest, record string) error {
+	if _, err := os.Lstat(filepath.Join(root, record)); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("%w: inspect generation record %s: %w", errUtils.ErrFileWrite, record, err)
+	}
+	return errUtils.Build(errUtils.ErrFileWrite).
+		WithExplanationf("Cannot recreate stack manifest `%s`: generation record `%s` already exists", filepath.ToSlash(manifest), filepath.ToSlash(record)).
+		WithHint("Check the previous generation's recorded outputs, then remove its generation record and retry").
+		Err()
 }
 
 func stackDefinition(template *templates.Configuration) (*project.ScaffoldConfig, error) {
@@ -246,6 +264,7 @@ func (p *Plan) Apply(ctx context.Context, skip func(string) bool) error {
 	input.Event = hooks.AfterScaffoldGenerate
 	if err != nil {
 		input.Status = "failure"
+		input.Err = err
 	}
 	hookErr := scaffoldhooks.Run(input)
 	return errors.Join(err, hookErr)

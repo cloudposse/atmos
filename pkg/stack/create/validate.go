@@ -113,7 +113,7 @@ func validateManifest(config *schema.AtmosConfiguration, files []engine.File, ma
 		var document map[string]any
 		decoder := yaml.NewDecoder(strings.NewReader(file.Content))
 		if err := decoder.Decode(&document); err != nil {
-			return fmt.Errorf("%w: %w", errUtils.ErrInvalidConfig, err)
+			return engine.ExplainUnmarkedTemplate(manifest, file.Content, file.Delimiters, fmt.Errorf("%w: %w", errUtils.ErrInvalidConfig, err))
 		}
 		var extra any
 		if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {

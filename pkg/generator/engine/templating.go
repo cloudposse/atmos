@@ -810,7 +810,7 @@ func (p *Processor) writeNewFile(file File, fullPath, targetPath string, force b
 			if err != nil {
 				return err
 			}
-			p.PreviewFile(File{Path: relative, Content: content, Permissions: file.Permissions})
+			p.PreviewFile(File{Path: relative, Content: content, Permissions: file.Permissions, Delimiters: delimiters})
 		}
 		return nil
 	}
