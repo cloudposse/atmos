@@ -17,6 +17,8 @@ func TestChildColorPreservesEffectivePreferences(t *testing.T) {
 	}{
 		{"terminal forwarding", Config{}, []string{"CUSTOM=value"}, true, true, []string{"CUSTOM=value", "ATMOS_FORCE_COLOR=true"}},
 		{"redirected", Config{}, nil, false, true, nil},
+		{"CI does not force redirected output", Config{EnvCI: true}, nil, false, true, nil},
+		{"CI terminal forwarding", Config{EnvCI: true}, nil, true, true, []string{"ATMOS_FORCE_COLOR=true"}},
 		{"capture only", Config{}, nil, true, false, nil},
 		{"explicit force on redirected stream", Config{ForceColor: true}, nil, false, true, []string{"ATMOS_FORCE_COLOR=true"}},
 		{"parent opt out wins over force", Config{NoColor: true, ForceColor: true}, []string{"ATMOS_FORCE_COLOR=true"}, true, true, []string{"ATMOS_FORCE_COLOR=true", "NO_COLOR=1"}},

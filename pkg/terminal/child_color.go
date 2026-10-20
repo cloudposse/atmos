@@ -30,7 +30,11 @@ func childColorEnv(config *Config, environ []string, isTTY, visible bool) []stri
 
 	// The actual destination matters: a terminal on stdout does not justify adding color
 	// to a redirected stderr, and an in-memory capture is not a terminal.
-	if visible && config.ShouldUseColor(isTTY) {
+	// CI's automatic UI color support is not an explicit force-color preference: turning
+	// it into one would also highlight machine-readable stdout redirected inside the shell.
+	forwarding := *config
+	forwarding.EnvCI = false
+	if visible && forwarding.ShouldUseColor(isTTY) {
 		result = append(result, "ATMOS_FORCE_COLOR=true")
 	}
 	return result
