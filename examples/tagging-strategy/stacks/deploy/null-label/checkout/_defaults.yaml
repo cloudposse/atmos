@@ -5,6 +5,6 @@ import:
 vars:
   tenant: payments
   tags:
-    # Mixed case on purpose: label_key_case and label_value_case lowercase these.
-    Product: Checkout
-    Owner: Payments-Team
+    # The label module passes these through as written, so they follow the lowercase convention.
+    product: checkout
+    owner: payments-team

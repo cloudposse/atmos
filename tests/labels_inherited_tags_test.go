@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestLabelsOverrideRendersInheritedTags verifies that a component whose `vars.tags` is a
@@ -52,5 +54,55 @@ func TestLabelsOverrideRendersInheritedTags(t *testing.T) {
 		assert.Equal(t, "inherited-tags", tags["stack"])
 		assert.Equal(t, "plain-map", tags["component"])
 		assert.False(t, strings.HasPrefix(tags["repository"].(string), "!"))
+	})
+}
+
+// TestLabelsOverrideLeavesInheritedTemplatesWhenTemplatesDisabled verifies that describing stacks
+// with template processing off but YAML functions on (the `list` commands pass the two flags
+// independently) resolves the inherited YAML functions but leaves the inherited Go templates
+// exactly as written, because the whole-document template pass was skipped too.
+func TestLabelsOverrideLeavesInheritedTemplatesWhenTemplatesDisabled(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/atmos-labels-inherited-tags")
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	describeTags := func(t *testing.T, processTemplates bool) map[string]any {
+		t.Helper()
+		stacks, err := e.ExecuteDescribeStacks(
+			&atmosConfig, "inherited-tags", []string{"labeled"}, nil, []string{"vars"},
+			false, processTemplates, true, false, nil, nil,
+		)
+		require.NoError(t, err)
+		stack, ok := stacks["inherited-tags"].(map[string]any)
+		require.True(t, ok, "stack must be a map, got %T", stacks["inherited-tags"])
+		components, ok := stack["components"].(map[string]any)
+		require.True(t, ok, "components must be a map")
+		terraform, ok := components["terraform"].(map[string]any)
+		require.True(t, ok, "terraform components must be a map")
+		labeled, ok := terraform["labeled"].(map[string]any)
+		require.True(t, ok, "labeled component must be a map")
+		vars, ok := labeled["vars"].(map[string]any)
+		require.True(t, ok, "vars section must be a map")
+		tags, ok := vars["tags"].(map[string]any)
+		require.True(t, ok, "vars.tags must be a map, got %T", vars["tags"])
+		return tags
+	}
+
+	t.Run("templates disabled leaves inherited templates as written", func(t *testing.T) {
+		tags := describeTags(t, false)
+		assert.Equal(t, "{{ .atmos_stack }}", tags["stack"])
+		assert.Equal(t, "{{ .atmos_component }}", tags["component"])
+		assert.Equal(t, "platform", tags["cost-center"])
+		repository, ok := tags["repository"].(string)
+		require.True(t, ok, "repository must be a string")
+		assert.False(t, strings.HasPrefix(repository, "!"), "YAML function left unresolved: %q", repository)
+	})
+
+	// Negative path: with templates enabled the same inherited strings are rendered.
+	t.Run("templates enabled renders inherited templates", func(t *testing.T) {
+		tags := describeTags(t, true)
+		assert.Equal(t, "inherited-tags", tags["stack"])
+		assert.Equal(t, "labeled", tags["component"])
 	})
 }

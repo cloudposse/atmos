@@ -47,18 +47,18 @@ variable "delimiter" {
 
 variable "tags" {
   type        = map(string)
-  description = "Tags merged across all inheritance levels by Atmos."
+  description = "Tags merged across all inheritance levels by Atmos. Passed through unchanged."
   default     = {}
 }
 
 variable "label_key_case" {
   type        = string
-  description = "Case of tag keys: lower, title, or upper. Anything else leaves keys unchanged."
+  description = "Case of the tag keys the module generates: lower, title, or upper. Defaults to title. Does not change keys in `tags`."
   default     = null
 }
 
 variable "label_value_case" {
   type        = string
-  description = "Case of tag values: lower, title, or upper. Anything else leaves values unchanged."
+  description = "Case of the tag values the module generates: lower, title, or upper. Defaults to lower. Does not change values in `tags`."
   default     = null
 }

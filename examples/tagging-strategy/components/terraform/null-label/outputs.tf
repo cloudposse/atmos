@@ -1,9 +1,9 @@
 output "id" {
   description = "Generated resource ID."
-  value       = join(var.delimiter, local.id_elements)
+  value       = local.id
 }
 
 output "tags" {
-  description = "Tags after key and value case normalization."
-  value       = terraform_data.this.output
+  description = "Generated label tags merged with the supplied tags."
+  value       = local.tags
 }

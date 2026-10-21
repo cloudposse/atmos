@@ -67,6 +67,9 @@ func TestResolveConcreteLayers(t *testing.T) {
 			"repository": "!git.repository unknown",
 			"nested":     map[string]any{"stack": "{{ .atmos_stack }}"},
 			"list":       []any{"{{ .atmos_stack }}", "last"},
+			"count":      3,
+			"enabled":    true,
+			"empty":      nil,
 		}
 		dctx := newLabelsOverrideContext(t, inherited)
 
@@ -79,6 +82,9 @@ func TestResolveConcreteLayers(t *testing.T) {
 		assert.Equal(t, "acme/infra", got["repository"])
 		assert.Equal(t, map[string]any{"stack": "plat-ue2-dev"}, got["nested"])
 		assert.Equal(t, []any{"plat-ue2-dev", "last"}, got["list"])
+		assert.Equal(t, 3, got["count"], "non-string scalars pass through unchanged")
+		assert.Equal(t, true, got["enabled"])
+		assert.Nil(t, got["empty"])
 	})
 
 	t.Run("does not mutate the caller's maps in either direction", func(t *testing.T) {
@@ -138,6 +144,25 @@ func TestResolveConcreteLayers(t *testing.T) {
 		err := ResolveConcreteLayers(dctx, processor, filter)
 		require.ErrorIs(t, err, errConcreteBoom)
 	})
+
+	// The error must propagate from every container depth, not just the first map level.
+	for _, tc := range []struct {
+		name      string
+		inherited map[string]any
+	}{
+		{"nested map", map[string]any{"nested": map[string]any{"stack": "{{ .atmos_stack }}"}}},
+		{"list", map[string]any{"list": []any{"first", "{{ .atmos_stack }}"}}},
+		{"map inside list", map[string]any{"list": []any{map[string]any{"stack": "{{ .atmos_stack }}"}}}},
+	} {
+		t.Run("processor error inside a "+tc.name+" is returned", func(t *testing.T) {
+			dctx := newLabelsOverrideContext(t, tc.inherited)
+			processor := NewMockYAMLFunctionProcessor(gomock.NewController(t))
+			processor.EXPECT().ProcessYAMLFunctionString("{{ .atmos_stack }}").Return(nil, errConcreteBoom)
+
+			err := ResolveConcreteLayers(dctx, processor, filter)
+			require.ErrorIs(t, err, errConcreteBoom)
+		})
+	}
 
 	t.Run("nil arguments are a no-op", func(t *testing.T) {
 		require.NoError(t, ResolveConcreteLayers(nil, renderingProcessor(t), filter))

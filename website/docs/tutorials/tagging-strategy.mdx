@@ -191,8 +191,10 @@ Start at the organization level. The `vars.tags` map holds the source tags, whic
 
 <EmbedFile filePath="examples/tagging-strategy/stacks/deploy/null-label/_defaults.yaml" />
 
-`label_key_case: lower` and `label_value_case: lower` make the module normalize every tag key and value to lowercase, so
-the convention's casing rule is enforced in one place. The module's default key case is title case.
+`label_key_case: lower` and `label_value_case: lower` set the case of the tags the module generates from the label
+context. The module's default key case is title case. These settings do not change the keys or values you pass in
+`vars.tags`, so write those in lowercase yourself, or check the casing with a validation policy as described in
+[Enforce the Convention](#enforce-the-convention).
 
 The product level adds the tenant and the product tags:
 
@@ -221,10 +223,10 @@ name: app
 namespace: acme
 stage: dev
 tags:
-  Owner: Payments-Team
-  Product: Checkout
   component: app
   managed-by: atmos
+  owner: payments-team
+  product: checkout
   region: us-east-2
   repository: acme/infrastructure
   source-branch: main
@@ -234,8 +236,8 @@ tags:
 tenant: payments
 ```
 
-The mixed-case `Owner` and `Product` keys are written that way on purpose. The module lowercases them, and the plan
-shows the normalized tags:
+The plan shows the supplied tags together with the tags the module generates from the label context. The generated
+tags use the lowercase keys and values that `label_key_case` and `label_value_case` ask for:
 
 ```shell
 atmos terraform plan app --stack=null-label-dev
@@ -247,7 +249,10 @@ atmos terraform plan app --stack=null-label-dev
       + id     = (known after apply)
       + input  = {
           + component     = "app"
+          + environment   = "ue2"
           + managed-by    = "atmos"
+          + name          = "acme-ue2-dev-app"
+          + namespace     = "acme"
           + owner         = "payments-team"
           + product       = "checkout"
           + region        = "us-east-2"
@@ -255,6 +260,8 @@ atmos terraform plan app --stack=null-label-dev
           + source-branch = "main"
           + source-commit = "0bed64ed1c7b95255d42bae36e1e5465a341bcab"
           + stack         = "null-label-dev"
+          + stage         = "dev"
+          + tenant        = "payments"
           + tier          = "nonprod"
         }
       + output = (known after apply)
@@ -299,7 +306,8 @@ component belongs to, so those values are set once in `_defaults.yaml` files and
 author writes no naming logic.
 
 The two approaches combine. Use the naming module for names and per-resource tags, and add `default_tags` on AWS as a
-backstop for resources and modules that do not accept a `tags` argument.
+backstop for taggable resources that a component does not tag explicitly. `default_tags` only applies to resource types
+that support provider-level tagging, so it does not cover everything.
 
 ## Atmos Tags and Labels Are Different
 
@@ -318,7 +326,8 @@ A convention that nobody checks decays. Two checks catch problems early:
 ## Roll It Out
 
 1. **Start from clean plans.** Adding tags makes every plan show tag changes, so do it when other pending changes are already applied.
-2. **Add the tags in the organization defaults.** The plan shows in-place tag updates only. Nothing is replaced.
+2. **Add the tags in the organization defaults.** Read each plan for replacements before you apply it. Tag changes are
+   in-place updates for most resources, but a few resource types are replaced when their tags change.
 3. **Remove the old tag blocks** from the Terraform files as you touch each component.
 
 ## Try It

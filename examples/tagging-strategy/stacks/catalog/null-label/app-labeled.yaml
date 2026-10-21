@@ -5,8 +5,8 @@ components:
         component: null-label
         # Labels are also searchable with `atmos list components --labels`.
         labels:
-          Cost-Center: Platform
-          Compliance: SOX
+          cost-center: platform
+          compliance: sox
       vars:
         name: app-labeled
         # Bridges metadata.labels into the tags map.

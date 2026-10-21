@@ -81,12 +81,10 @@ component.
 ### Style 2: Null Label tag maps
 
 Tags live in `vars.tags`, next to the label context (`namespace`, `tenant`, `environment`, `stage`).
-`label_key_case: lower` and `label_value_case: lower` normalize the tags. The product tags
-`Product: Checkout` and `Owner: Payments-Team` are written in mixed case on purpose.
-
-The real `cloudposse/label/null` module also generates tags from the label context itself
-(`namespace`, `tenant`, `environment`, `stage`, and the `Name` tag), so those keys do not need to
-appear in `vars.tags`.
+`label_key_case: lower` and `label_value_case: lower` set the case of the tags the module generates
+from the label context (`namespace`, `tenant`, `environment`, `stage`, and the `Name` tag), so those
+keys do not need to appear in `vars.tags`. The module does not change the keys or values you pass in
+`vars.tags`, so the convention's lowercase rule applies to what you write there.
 
 ```shell
 atmos describe component app --stack=null-label-dev --query=.vars
