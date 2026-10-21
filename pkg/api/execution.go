@@ -1,4 +1,4 @@
-package automation
+package api
 
 import (
 	"context"
@@ -22,7 +22,7 @@ type ExecutionPolicy struct {
 // Execute runs a context-aware operation using the shared timeout and retry
 // policy. The caller decides which failures are safe to retry.
 func (p ExecutionPolicy) Execute(ctx context.Context, operation func(context.Context) error, shouldRetry func(error) bool) error {
-	defer perf.Track(nil, "automation.ExecutionPolicy.Execute")()
+	defer perf.Track(nil, "api.ExecutionPolicy.Execute")()
 
 	if p.Timeout < 0 {
 		return fmt.Errorf("%w: timeout must not be negative", errUtils.ErrAutomation)

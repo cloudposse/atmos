@@ -6,13 +6,13 @@ import (
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // WithFileSystem supplies read-only filesystem metadata operations.
-func WithFileSystem(fs automation.FileSystem) Option {
+func WithFileSystem(fs api.FileSystem) Option {
 	defer perf.Track(nil, "starlark.WithFileSystem")()
 	return func(e *Engine) { e.filesystem = fs }
 }

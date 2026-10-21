@@ -9,7 +9,7 @@ import (
 	"go.starlark.net/starlark"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/scheduler"
@@ -93,7 +93,7 @@ type parallelRun struct {
 	prefix      string
 	concurrency int
 	failFast    bool
-	library     automation.StepLibrary
+	library     api.StepLibrary
 }
 
 func (s *session) runParallel(ctx context.Context, tasks []*task, run parallelRun) (starlark.Value, error) {
@@ -198,7 +198,7 @@ func combineFailures(errs []error) error {
 	}
 }
 
-func (s *session) runTask(ctx context.Context, prefix string, t *task, library automation.StepLibrary) (starlark.Value, error) {
+func (s *session) runTask(ctx context.Context, prefix string, t *task, library api.StepLibrary) (starlark.Value, error) {
 	parent := ctx
 	if t.timeout > 0 {
 		var cancel context.CancelFunc
@@ -234,7 +234,7 @@ func (s *session) runTask(ctx context.Context, prefix string, t *task, library a
 }
 
 // attempt runs one invocation of the task function on its own thread and output sink.
-func (s *session) attempt(ctx context.Context, prefix string, t *task, library automation.StepLibrary) (starlark.Value, error) {
+func (s *session) attempt(ctx context.Context, prefix string, t *task, library api.StepLibrary) (starlark.Value, error) {
 	out := s.newTaskOutput(prefix)
 	thread, stop := s.thread(ctx, t.name, out)
 	thread.SetLocal(stepLibraryKey, forkSteps(library))

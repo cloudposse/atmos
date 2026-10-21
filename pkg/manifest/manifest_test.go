@@ -430,3 +430,20 @@ func TestWriteObjects_SingleFile(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, decoded, 2)
 }
+
+func TestRegisterRejectsContractReplacement(t *testing.T) {
+	resetRegistry()
+	t.Cleanup(resetRegistry)
+	require.NoError(t, Register(testKind, DefaultAPIVersion, &testSpec{}))
+	require.NoError(t, Register(testKind, DefaultAPIVersion, &testSpec{}))
+	before, found := GetDefinition(testKind)
+	require.True(t, found)
+	require.ErrorIs(t, Register(testKind, "atmos/v2", &testSpec{}), errUtils.ErrDuplicateManifestRegistration)
+	require.ErrorIs(t, Register(testKind, DefaultAPIVersion, &struct {
+		Different string `json:"different"`
+	}{}), errUtils.ErrDuplicateManifestRegistration)
+	after, found := GetDefinition(testKind)
+	require.True(t, found)
+	assert.Equal(t, before.SchemaJSON(), after.SchemaJSON())
+	assert.Equal(t, before.SpecType(), after.SpecType())
+}

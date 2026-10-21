@@ -10,7 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -73,15 +73,15 @@ func TestResolveOutputStepSkipsTypesWithTheirOwnOutput(t *testing.T) {
 func TestSleepRejectsFieldsOfOtherStepTypes(t *testing.T) {
 	library := NewAutomationLibrary(nil, nil)
 
-	err := library.Validate(&automation.StepCall{Type: "sleep", Configuration: map[string]any{"duration": "100ms"}})
+	err := library.Validate(&api.StepCall{Type: "sleep", Configuration: map[string]any{"duration": "100ms"}})
 	require.ErrorIs(t, err, errUtils.ErrAutomation)
 	assert.Contains(t, err.Error(), `unknown field "duration" for step type "sleep"`)
 	assert.Contains(t, err.Error(), "timeout")
 
-	require.NoError(t, library.Validate(&automation.StepCall{Type: "sleep", Configuration: map[string]any{"timeout": "100ms", "name": "pause"}}))
+	require.NoError(t, library.Validate(&api.StepCall{Type: "sleep", Configuration: map[string]any{"timeout": "100ms", "name": "pause"}}))
 
 	// Every built-in step declares its fields, so join rejects the field that belongs to sleep.
-	err = library.Validate(&automation.StepCall{Type: "join", Configuration: map[string]any{"content": "x", "duration": "1s"}})
+	err = library.Validate(&api.StepCall{Type: "join", Configuration: map[string]any{"content": "x", "duration": "1s"}})
 	require.ErrorIs(t, err, errUtils.ErrAutomation)
 	assert.Contains(t, err.Error(), `unknown field "duration" for step type "join"`)
 }
@@ -101,15 +101,15 @@ func TestHandlerWithoutKnownFieldsKeepsTheUnionOfStepFields(t *testing.T) {
 	})
 
 	library := NewAutomationLibrary(nil, nil)
-	require.NoError(t, library.Validate(&automation.StepCall{Type: handlerName, Configuration: map[string]any{"content": "x", "duration": "1s"}}))
-	err := library.Validate(&automation.StepCall{Type: handlerName, Configuration: map[string]any{"not_a_field": "x"}})
+	require.NoError(t, library.Validate(&api.StepCall{Type: handlerName, Configuration: map[string]any{"content": "x", "duration": "1s"}}))
+	err := library.Validate(&api.StepCall{Type: handlerName, Configuration: map[string]any{"not_a_field": "x"}})
 	require.ErrorIs(t, err, errUtils.ErrAutomation)
 	assert.Contains(t, err.Error(), `unknown step field "not_a_field"`)
 }
 
 func TestAutomationValidationReportsMisspelledRequiredField(t *testing.T) {
 	library := NewAutomationLibrary(nil, nil)
-	err := library.Validate(&automation.StepCall{Type: "script", Configuration: map[string]any{"scritp": "print(1)", "interpreter": "starlark"}})
+	err := library.Validate(&api.StepCall{Type: "script", Configuration: map[string]any{"scritp": "print(1)", "interpreter": "starlark"}})
 	require.ErrorIs(t, err, errUtils.ErrAutomation)
 	assert.Contains(t, err.Error(), `unknown field "scritp" for step type "script"`)
 }

@@ -15,7 +15,7 @@ import (
 	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/ci"
 	durationpkg "github.com/cloudposse/atmos/pkg/duration"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
@@ -83,7 +83,7 @@ type ControlCommandExecutor struct {
 	// CI reports into the active CI provider for embedded script children and renders locally
 	// when none is detected. Hosts construct it with ci.NewReporter; nil means a local-only reporter.
 	CI          ci.Reporter
-	ScriptSteps automation.StepLibrary
+	ScriptSteps api.StepLibrary
 	// ProjectRoot is the absolute Atmos project base path. Embedded script children show paths under
 	// it relative to it in errors and tracebacks.
 	ProjectRoot string
@@ -465,7 +465,7 @@ func controlChildExecutionResult(stdout, stderr *bytes.Buffer, err error) *Contr
 
 // scriptStepLibrary supplies the shared Go API even for an executor constructed
 // directly by an embedding application rather than a CLI adapter.
-func (executor *ControlCommandExecutor) scriptStepLibrary() automation.StepLibrary {
+func (executor *ControlCommandExecutor) scriptStepLibrary() api.StepLibrary {
 	if executor.ScriptSteps != nil {
 		return executor.ScriptSteps
 	}

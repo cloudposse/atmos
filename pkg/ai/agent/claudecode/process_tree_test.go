@@ -38,7 +38,10 @@ func TestExecClaude_CancellationStopsDescendantWork(t *testing.T) {
 				}
 			})
 			if reason == "timeout" {
-				c.SetTimeout(2 * time.Second)
+				// Both the provider and its descendant start the race-instrumented test
+				// binary. Leave enough startup time on shared CI runners to reach the
+				// child-ready event before testing timeout-driven process-tree cleanup.
+				c.SetTimeout(10 * time.Second)
 			}
 			// Always clean up the descendant even when testing an unfixed implementation.
 			t.Cleanup(func() {

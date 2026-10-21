@@ -15,7 +15,7 @@ import (
 	"go.starlark.net/starlarkstruct"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -31,7 +31,7 @@ import (
 
 // Engine contains immutable host services shared by independent invocations.
 type Engine struct {
-	filesystem automation.FileSystem
+	filesystem api.FileSystem
 	runner     process.Runner
 	clock      retry.Clock
 	readFile   func(string) ([]byte, error)
@@ -76,7 +76,7 @@ func WithTaskObserver(observe func(TaskEvent)) Option {
 func New(opts ...Option) *Engine {
 	defer perf.Track(nil, "starlark.New")()
 
-	e := &Engine{filesystem: automation.LocalFileSystem{}, runner: process.NewDefaultRunner(), readFile: os.ReadFile, executable: os.Executable}
+	e := &Engine{filesystem: api.LocalFileSystem{}, runner: process.NewDefaultRunner(), readFile: os.ReadFile, executable: os.Executable}
 	for _, opt := range opts {
 		opt(e)
 	}

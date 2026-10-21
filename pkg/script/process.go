@@ -13,7 +13,7 @@ import (
 	cockroach "github.com/cockroachdb/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 )
@@ -27,7 +27,7 @@ type ProcessCall struct {
 	Check, Stream    bool
 	AllowPlanChanges bool
 	Stdout, Stderr   io.Writer
-	Policy           automation.ExecutionPolicy
+	Policy           api.ExecutionPolicy
 	// Label names the command in failures; the executable (argv[0]) when empty. Nested Atmos
 	// calls set it to the readable `atmos <args>` form, because argv[0] is the binary's path.
 	Label string
