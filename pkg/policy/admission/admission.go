@@ -164,6 +164,8 @@ type invocationContext struct{}
 func (invocationContext) Collect(ctx context.Context) (*policy.RuntimeContext, error) {
 	defer perf.Track(nil, "admission.invocationContext.Collect")()
 
+	// Only environment is pinned for the invocation. Resample time and capacity at
+	// each gate so long-running plans cannot preserve expired deployment windows.
 	snapshot, err := (policy.HostContextProvider{}).Collect(ctx)
 	if err != nil {
 		return nil, err

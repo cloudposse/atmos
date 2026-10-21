@@ -19,7 +19,9 @@ import (
 )
 
 // RuntimeContext is host-owned evidence, separate from the document being validated.
-// Unknown measurements are null, never fabricated zeroes. It can contain secrets.
+// Unknown measurements are null, never fabricated zeroes. Unavailable host strings
+// are omitted so partial fixtures cannot manufacture present-but-empty facts.
+// Environment values retain explicitly empty strings. Context can contain secrets.
 type RuntimeContext struct {
 	Env     map[string]string `json:"env"`
 	Atmos   AtmosFacts        `json:"atmos"`
@@ -29,14 +31,14 @@ type RuntimeContext struct {
 
 // AtmosFacts describes the running executable and active crypto mode.
 type AtmosFacts struct {
-	Version string `json:"version"`
+	Version string `json:"version,omitempty"`
 	FIPS    bool   `json:"fips"`
 }
 
 // HostFacts identifies the executable platform and sampled resource capacity.
 type HostFacts struct {
-	OS     string      `json:"os"`
-	Arch   string      `json:"arch"`
+	OS     string      `json:"os,omitempty"`
+	Arch   string      `json:"arch,omitempty"`
 	User   UserFacts   `json:"user"`
 	Memory MemoryFacts `json:"memory"`
 	Disk   DiskFacts   `json:"disk"`
@@ -53,22 +55,22 @@ type UserFacts struct {
 type MemoryFacts struct {
 	AvailableBytes *uint64 `json:"available_bytes"`
 	TotalBytes     *uint64 `json:"total_bytes"`
-	Scope          string  `json:"scope"`
+	Scope          string  `json:"scope,omitempty"`
 }
 
 // DiskFacts names the sampled filesystem location explicitly.
 type DiskFacts struct {
-	Path           string  `json:"path"`
+	Path           string  `json:"path,omitempty"`
 	AvailableBytes *uint64 `json:"available_bytes"`
 	TotalBytes     *uint64 `json:"total_bytes"`
 }
 
 // ClockFacts is one UTC instant shared by every rule in an evaluation.
 type ClockFacts struct {
-	Now      string `json:"now"`
-	Date     string `json:"date"`
-	Weekday  string `json:"weekday"`
-	Timezone string `json:"timezone"`
+	Now      string `json:"now,omitempty"`
+	Date     string `json:"date,omitempty"`
+	Weekday  string `json:"weekday,omitempty"`
+	Timezone string `json:"timezone,omitempty"`
 }
 
 // ContextProvider collects evidence outside pure language evaluators.

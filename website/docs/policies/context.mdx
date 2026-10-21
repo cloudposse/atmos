@@ -7,7 +7,7 @@ description: Shared environment, runtime, calendar, and CI evidence for every na
 # Policy Context
 
 Native policies share one context across CEL, Starlark, OPA, and JSON Schema. Atmos collects
-runtime facts outside the evaluators and supplies the same snapshot to each rule. This
+runtime facts outside the evaluators and supplies the same snapshot to each rule within an evaluation. This
 capability requires the release containing these changes; it is not available in 1.233.0.
 
 ## Available facts
@@ -30,6 +30,8 @@ differ from a component or temporary directory. Capacity is a snapshot, not a re
 
 The CLI pins environment variables before configuration evaluation. Treat environment-based
 agent detection as an accidental-operation guardrail: callers can alter their environment.
+Clock and resource facts are sampled again at subsequent gates, so an apply after a long
+plan uses the current deployment window and capacity measurements.
 Context can contain secrets; never include environment values in policy diagnostics.
 
 ## Language bindings
@@ -170,3 +172,6 @@ A test fixture can provide `request.context` with `env`, `atmos`, `runtime`, and
 and `request.ci` with native datasets. `atmos policy test` never collects live host or CI facts.
 A fixture that omits context receives empty/unavailable facts. This keeps calendar and
 machine-dependent policies reproducible.
+Unavailable host string fields, such as `time.now` and `atmos.version`, are absent. A shared
+check requiring one reports `input_unavailable`. Explicitly empty environment or input
+strings remain present and produce a false date/version check result.

@@ -100,8 +100,9 @@ The example reports a decision; it does not execute or intercept Terraform.
     type or CI provider. For example, <code>plan</code> and <code>terraform.plan</code> are distinct;
     the core does not implicitly normalize or fan out inputs.</dd>
     <dt><code>Request.Input</code></dt>
-    <dd>A materialized JSON object, including an empty object when appropriate. Null, arrays, and
-    malformed JSON are invalid. The affected input kind has additional completeness checks.</dd>
+    <dd>A materialized JSON object, including an empty object when appropriate. The file input kind
+    also accepts arrays, scalars, and null. Malformed JSON is invalid for every kind. The affected
+    input kind has additional completeness checks.</dd>
     <dt><code>Request.CI</code></dt>
     <dd>An optional provider-native snapshot, available to any input kind, including early function
     and source checks. Supplying it must not require executing configuration.</dd>
@@ -128,14 +129,14 @@ and trust-tier merging are not implemented.
 
 ## CEL inputs and limits
 
-CEL exposes four variables:
+CEL exposes these base variables alongside the shared runtime context:
 
 | Variable | Contents |
 |---|---|
-| `input` | The request's JSON object |
+| `input` | The request's JSON value (an object except for file inputs) |
 | `params` | The rule's JSON-object parameters, or an empty object |
 | `ci` | The CI snapshot, or null when none was supplied |
-| `request` | `kind` and `revisions.governing`, `revisions.base`, `revisions.head` |
+| `request` | `kind`, `file`, `subject`, and `revisions.governing`, `revisions.base`, `revisions.head` |
 
 Use `input.command` or `input.changes` for corresponding supplied fields. This activation is separate from the existing
 workflow/hook `when:` activation, where `ci` remains a boolean.

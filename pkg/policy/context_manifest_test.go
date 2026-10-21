@@ -88,3 +88,46 @@ func TestFileChecksUseSharedCIEvidence(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, NotApplicable, results[0].Decision.Status)
 }
+
+func TestOfflineChecksRequireHostFactsAcrossEngines(t *testing.T) {
+	adapters := []Rule{
+		{Engine: CELEngine, Expression: `checks.valid`},
+		{Engine: StarlarkEngine, Expression: `return ctx.checks["valid"]`},
+		{Engine: OPAEngine, OPA: &OPAConfig{Query: "data.test.deny", Modules: map[string]string{"test.rego": "package test\ndeny = data.atmos_context.checks.valid"}}},
+		{Engine: JSONSchemaEngine, Schema: &SchemaConfig{Target: "context", Entry: schemaBase + "test.json", Resources: map[string]json.RawMessage{schemaBase + "test.json": json.RawMessage(`{"not":{"properties":{"checks":{"properties":{"valid":{"const":true}}}}}}`)}}},
+	}
+	checks := []struct {
+		name    string
+		check   ContextCheck
+		context *RuntimeContext
+		status  DecisionStatus
+		error   string
+	}{
+		{"missing clock", ContextCheck{Kind: "schedule"}, nil, EvaluationError, "input_unavailable"},
+		{"missing version", ContextCheck{Kind: "semver", Path: "/atmos/version", Constraint: ">= 1.0.0"}, nil, EvaluationError, "input_unavailable"},
+		{"partial context", ContextCheck{Kind: "schedule"}, &RuntimeContext{Atmos: AtmosFacts{Version: "1.233.0"}}, EvaluationError, "input_unavailable"},
+		{"provided clock", ContextCheck{Kind: "schedule"}, &RuntimeContext{Time: ClockFacts{Now: "2026-10-21T12:00:00Z"}}, Deny, ""},
+		{"provided version", ContextCheck{Kind: "semver", Path: "/atmos/version", Constraint: ">= 1.0.0"}, &RuntimeContext{Atmos: AtmosFacts{Version: "1.233.0"}}, Deny, ""},
+		{"missing env", ContextCheck{Kind: "date", Path: "/env/DATE"}, nil, EvaluationError, "input_unavailable"},
+		{"empty env", ContextCheck{Kind: "date", Path: "/env/DATE"}, &RuntimeContext{Env: map[string]string{"DATE": ""}}, NotApplicable, ""},
+		{"empty input", ContextCheck{Kind: "date", Path: "/input/date"}, nil, NotApplicable, ""},
+	}
+	for _, adapter := range adapters {
+		for _, check := range checks {
+			t.Run(adapter.Engine+"/"+check.name, func(t *testing.T) {
+				rule := adapter
+				rule.ID, rule.On, rule.Effects.Deny = "check", Command, true
+				rule.Checks = map[string]ContextCheck{"valid": check.check}
+				cases := []TestCase{{Name: check.name, Request: Request{Kind: Command, Input: json.RawMessage(`{"date":""}`), Context: check.context}, Status: check.status, Error: check.error}}
+				raw, err := json.Marshal(cases)
+				require.NoError(t, err)
+				path := filepath.Join(t.TempDir(), "cases.json")
+				require.NoError(t, os.WriteFile(path, raw, 0o600))
+				results, err := RunTests(t.Context(), &Bundle{Rules: []Rule{rule}}, path)
+				require.NoError(t, err)
+				require.Len(t, results, 1)
+				require.True(t, results[0].Passed)
+			})
+		}
+	}
+}

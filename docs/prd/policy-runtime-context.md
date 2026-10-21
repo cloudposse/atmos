@@ -15,6 +15,10 @@ copy. `ContextProvider` and `FactCollector` are injectable host interfaces; adap
 pure, bounded, and free of I/O. Offline `policy test` uses fixture context, never live host
 facts. Request documents cannot overwrite context fields. At CLI admission, capture process
 environment before configuration evaluation and reuse it through the invocation.
+Resample clock and resource facts at subsequent gates: a long-running plan must not leave
+an apply gate using an expired deployment window or stale capacity measurements.
+Unavailable host string fields are omitted, including in partial fixtures; explicit empty
+environment and input strings remain present values and fail date/version checks normally.
 
 | Field | Contract |
 | --- | --- |
