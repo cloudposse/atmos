@@ -1,16 +1,7 @@
 name: Release
 
-# Drafts (and, once shared-auto-release.yml's `publish` gate says so, cuts)
-# the next release, then condenses its notes with an LLM. Split out of
-# test.yml so a release-drafter or summarization hiccup shows up here, not as
-# a "Tests" failure on main - the two have nothing to do with each other, and
-# conflating them made a release-notes-only incident look like a test
-# regression (see docs/fixes). Triggered by workflow_run instead of push so
-# it only ever runs after the full Tests suite has actually finished and
-# passed, without hand-maintaining a `needs: [...]` list of every job in
-# test.yml's matrix (the previous inline `release:` job had to list all
-# eleven by name).
-
+# Notes only. Builds and publication belong to publish-release.yml; a mutable
+# draft must never carry binaries compiled for an earlier tag or commit.
 on:
   workflow_run:
     workflows: ["Tests"]
@@ -18,51 +9,45 @@ on:
 
 permissions: {}
 
-# The single draft release is a shared, mutable resource: summarize-notes
-# reads it, then writes it back. Two overlapping runs (two Tests runs
-# finishing close together) would race on that read-modify-write and one
-# run's rewrite could clobber the other's. A release-wide group serializes
-# runs instead; cancel-in-progress stays false so a run mid-write is never
-# torn down, it just makes the next run wait its turn.
+# Shared by ALL release writers, including manual, nightly and feature release
+# entrypoints. Never cancel an active upload or publication.
 concurrency:
-  group: release-notes
+  group: atmos-release
   cancel-in-progress: false
 
 jobs:
   draft:
-    name: Draft release
+    name: Draft release notes
     if: >-
       github.event.workflow_run.conclusion == 'success'
       && github.event.workflow_run.event == 'push'
-    # Workflow-level default above is empty. id-token: write is needed for
-    # cosign's keyless OIDC signing (in shared-go-auto-release.yml's
-    # goreleaser job, invoked below); contents: read is needed because a
-    # job-level permissions: block replaces the workflow-level default
-    # entirely rather than merging with it, and the pinned commit below
-    # declares contents: read at its own top level - an omitted scope here
-    # means `none`, not inherited, so GitHub rejects the whole run at parse
-    # time without it (see docs/fixes).
+      && github.event.workflow_run.head_branch == github.event.repository.default_branch
     permissions:
-      id-token: write
       contents: read
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@281621d6f2e63a883ea884559ffdbb4895c1bd98 # main
-    with:
-      publish: false
-      format: binary
-      runs-on: '["ubuntu-latest"]'
-    # `secrets: inherit`, not an explicit map: shared-go-auto-release.yml doesn't declare a
-    # `workflow_call.secrets:` schema, so GitHub rejects a named-secret map against it outright
-    # (observed as a startup_failure -- "likely failed because of a workflow file issue" -- with
-    # zero jobs ever created, on both this workflow and feature-release.yml after an earlier
-    # attempt to narrow this to an explicit list). Same accepted pattern as build.yml,
-    # feature-release.yml and nightlybuilds.yml's calls to this same reusable workflow.
-    # nosemgrep: yaml.github-actions.security.secrets-inherit.secrets-inherit
-    secrets: inherit
+    runs-on: ubuntu-latest
+    environment: release
+    outputs:
+      id: ${{ steps.draft.outputs.id }}
+      exists: ${{ steps.draft.outputs.exists }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        with:
+          egress-policy: audit
+
+      - name: Draft release notes
+        id: draft
+        uses: $/.github/actions/release-draft
+        with:
+          app-id: ${{ vars.BOT_GITHUB_APP_ID }}
+          app-private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+          prerelease: 'false'
+
 
   summarize-notes:
     name: Rewrite release notes with condensed PR summaries
     needs: [draft]
-    # draft.outputs.id is empty when shared-auto-release.yml found nothing to
+    # draft.outputs.id is empty when the drafting action found nothing to
     # release (has-duplicate short-circuit) - nothing to rewrite then.
     if: needs.draft.outputs.id != ''
     runs-on: ubuntu-latest

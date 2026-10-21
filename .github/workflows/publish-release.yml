@@ -1,0 +1,44 @@
+name: Publish verified release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release-id:
+        description: 'GitHub draft release ID (its tag is the authoritative version)'
+        required: true
+        type: string
+      commit:
+        description: 'Full 40-character source commit SHA'
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: atmos-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment: release
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        with:
+          egress-policy: audit
+
+      - name: Build and publish verified release
+        uses: $/.github/actions/guarded-release
+        with:
+          release-id: ${{ inputs.release-id }}
+          commit: ${{ inputs.commit }}
+          app-id: ${{ vars.BOT_GITHUB_APP_ID }}
+          app-private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+          releases-enabled: ${{ vars.ATMOS_GUARDED_RELEASES_ENABLED }}

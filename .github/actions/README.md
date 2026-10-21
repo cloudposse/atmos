@@ -1,0 +1,40 @@
+# Testing local actions
+
+[`local-action-tests.yml`](../workflows/local-action-tests.yml) runs on relevant
+pull requests, pushes to `main`, and manual dispatch. Script tests run on Linux,
+macOS, and Windows with a read-only job token and no application secrets.
+
+Test discovery follows these conventions:
+
+| Implementation | Discovered suite | Command |
+| --- | --- | --- |
+| Standalone JavaScript | `*.test.cjs` and `*.test.mjs` under `.github/actions/` and `.github/scripts/` | `node --test --experimental-test-coverage` |
+| Python | Each action directory containing `test_*.py` | `python -m unittest discover` |
+| npm/TypeScript action | Each action directory containing `package.json` | `npm ci`, `npm test`, and optional `npm run typecheck` |
+
+New suites using these conventions join CI automatically. Generated `dist/`
+and installed `node_modules/` directories are excluded. Discovery fails if a
+suite category is unexpectedly empty. The authenticated SHA-pinning smoke
+test named `test.mjs` is intentionally excluded; its offline suites run here.
+This workflow runs test suites, not production action entrypoints or external
+service mutations. Actions that only compose other actions have no standalone
+script suite to discover.
+
+The release rehearsal job installs GoReleaser **v2.18.3**, validates the
+production configuration, and runs the Go release guards with the race detector.
+The integration test creates tags only in temporary local repositories and
+builds stable, nightly and feature fixture releases across all ten supported
+platforms. A higher conflicting tag must not change their version. It exercises
+real package generation, public asset names, staging, checksums and binary
+verification; signing and SBOM files are explicitly unsigned test fixtures.
+
+To run that rehearsal locally:
+
+```sh
+ATMOS_TEST_GORELEASER=/path/to/goreleaser-v2.18.3 \
+  go test -tags=mage -race -count=1 ./magefiles/release ./internal/releaseidentity ./pkg/version
+```
+
+To rehearse actual GitHub signing, uploads and immutable publication, use an
+isolated repository. Offline tests cannot establish GitHub App permissions,
+OIDC acceptance, environment protections, or GitHub's behavior at publication.
