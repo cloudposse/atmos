@@ -2,6 +2,7 @@ package cloudformation
 
 import (
 	"testing"
+	"time"
 
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	cockroachErrors "github.com/cockroachdb/errors"
@@ -104,7 +105,7 @@ func TestBuildStackSpec_FullConfig(t *testing.T) {
 	assert.Equal(t, []string{"arn:aws:sns:us-east-2:123456789012:notify"}, spec.NotificationArns)
 	assert.True(t, spec.DisableRollback)
 	assert.True(t, spec.TerminationProtection)
-	assert.Equal(t, int32(30), spec.TimeoutInMinutes)
+	assert.Equal(t, 30*time.Minute, spec.Timeout)
 
 	require.Len(t, spec.Parameters, 3)
 	paramMap := make(map[string]string, len(spec.Parameters))
@@ -317,16 +318,6 @@ func TestBuildStackSpec_RejectsListTags(t *testing.T) {
 	assert.Equal(t, "Team", *spec.Tags[0].Key)
 }
 
-func TestToInt32_ClampsOverflow(t *testing.T) {
-	assert.Equal(t, int32(30), toInt32(30))
-	assert.Equal(t, int32(30), toInt32(int32(30)))
-	assert.Equal(t, int32(30), toInt32(int64(30)))
-	assert.Equal(t, int32(30), toInt32(float64(30)))
-	assert.Equal(t, int32(2147483647), toInt32(int64(9999999999)))
-	assert.Equal(t, int32(-2147483648), toInt32(int64(-9999999999)))
-	assert.Equal(t, int32(0), toInt32("not-a-number"))
-}
-
 func TestIsAbstractComponent(t *testing.T) {
 	assert.True(t, isAbstractComponent(map[string]any{
 		"metadata": map[string]any{"type": "abstract"},
@@ -337,11 +328,11 @@ func TestIsAbstractComponent(t *testing.T) {
 	assert.False(t, isAbstractComponent(map[string]any{}))
 }
 
-func TestBuildStackSpec_WarnsForIgnoredTimeout(t *testing.T) {
+func TestBuildStackSpec_WarnsForDeprecatedTimeout(t *testing.T) {
 	section := map[string]any{"stack_name": "vpc", "template": "template.yaml", "timeout_in_minutes": 30}
 	output := captureStderr(t, func() { _, err := buildStackSpec(section); require.NoError(t, err) })
 	assert.Contains(t, normalizeUIOutput(output), "timeout_in_minutes")
-	assert.Contains(t, normalizeUIOutput(output), "ignored")
+	assert.Contains(t, normalizeUIOutput(output), "deprecated")
 	delete(section, "timeout_in_minutes")
 	output = captureStderr(t, func() { _, err := buildStackSpec(section); require.NoError(t, err) })
 	assert.NotContains(t, output, "timeout_in_minutes")

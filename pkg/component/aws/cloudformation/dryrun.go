@@ -36,6 +36,11 @@ func validateDryRun(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigA
 	if body, ok := section["template"].(string); ok && deferredExpression(atmosConfig, body) {
 		section["template"] = "Resources: {}"
 	}
+	for _, key := range []string{cfg.CloudFormationTimeoutSectionName, cfg.TimeoutInMinutesSectionName} {
+		if value, ok := section[key].(string); ok && deferredExpression(atmosConfig, value) {
+			delete(section, key)
+		}
+	}
 	if err := validateComponentConfig(section); err != nil {
 		return err
 	}

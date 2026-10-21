@@ -40,6 +40,8 @@ type sectionScope struct {
 // Keep this in sync with the extraction whitelist in internal/exec/stack_processor_process_stacks.go
 // (top-level) and stack_processor_process_stacks_helpers_extraction.go (component-level).
 var manifestSections = map[string]sectionScope{
+	"region":                    {topLevel: true}, // CloudFormation region default.
+	"timeout":                   {topLevel: true}, // CloudFormation operation deadline.
 	"import":                    {topLevel: true},
 	"name":                      {topLevel: true},
 	"terraform":                 {topLevel: true},
@@ -107,7 +109,6 @@ var nonManifestSections = map[string]struct{}{
 	"wait":               {}, // Native Helm wait policy.
 	"strategy":           {}, // Native Helm wait strategy.
 	"jobs":               {}, // Native Helm job wait policy.
-	"timeout":            {}, // Native Helm release timeout.
 	"history":            {}, // Native Helm history policy.
 	"max":                {}, // Native Helm history maximum.
 	"chart_hooks":        {}, // Native Helm chart-hook policy.

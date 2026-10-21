@@ -121,6 +121,12 @@ func touchedIDs(edits []edit) (before, after map[string]bool) {
 	for i := range edits {
 		e := &edits[i]
 		switch e.kind {
+		case ruleCloudFormationRegion:
+			mark(before, child(e.path, "settings", "aws_cloudformation", "region"))
+			mark(after, child(e.path, "region"))
+		case ruleCloudFormationTimeout:
+			mark(before, child(e.path, "timeout_in_minutes"))
+			mark(after, child(e.path, "timeout"))
 		case ruleComponentDependencies:
 			oldPath := child(e.path, "settings", "depends_on")
 			newPath := child(e.path, "dependencies", "components")

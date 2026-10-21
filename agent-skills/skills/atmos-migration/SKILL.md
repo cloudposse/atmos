@@ -1,6 +1,6 @@
 ---
 name: atmos-migration
-description: "Migrate to Atmos from native Terraform, Terraform Workspaces, Terramate, Terragrunt, Make, Just, or Task; migrate Rain or raw CloudFormation stacks to the aws/cloudformation component; migrate tool versions from mise or Aqua CLI; migrate AWS/GCP/Azure CLI configs, Leapp, Granted, saml2aws, or okta-aws-cli to atmos auth; and replace GitHub Actions CI (dflook, tfcmt, cloud OIDC, component updater, TFLint, Checkov, Trivy, KICS, Infracost, tfsec) with Atmos Native CI. Use for incremental adoption that preserves layout, state, task behavior, and CI enforcement."
+description: "Migrate to Atmos from native Terraform, Terraform Workspaces, Fogg, Terramate, Terragrunt, Make, Just, or Task; migrate Rain or raw CloudFormation stacks to the aws/cloudformation component; migrate tool versions from mise or Aqua CLI; migrate AWS/GCP/Azure CLI configs, Leapp, Granted, saml2aws, or okta-aws-cli to atmos auth; and replace GitHub Actions CI (dflook, tfcmt, cloud OIDC, component updater, TFLint, Checkov, Trivy, KICS, Infracost, tfsec) with Atmos Native CI. Use for incremental adoption that preserves layout, state, task behavior, and CI enforcement."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -9,6 +9,7 @@ references:
   - references/from-native-terraform.md
   - references/from-terraform-workspaces.md
   - references/remote-state-bridge.md
+  - references/from-fogg.md
   - references/from-terramate.md
   - references/from-makefile.md
   - references/from-justfile.md
@@ -45,12 +46,18 @@ and let Atmos call the existing task runner while individual tasks are migrated.
 For Terraform repositories, Atmos can adopt the existing file layout. Start with the smallest
 change that gives value and add structure as needed.
 
+For Fogg, read [from-fogg.md](references/from-fogg.md) before applying generic Terraform advice:
+keep generated files for adoption, then take ownership of configuration generation and checks
+so future changes no longer require Fogg.
+
 For full tutorials for end users, see:
 
 - [Migrating from Native Terraform](https://atmos.tools/migration/native-terraform)
 - [Migrating from Terraform Workspaces](https://atmos.tools/migration/terraform-workspaces)
 - [Migrating from Terragrunt](https://atmos.tools/migration/terragrunt) -- see
   [from-terragrunt.md](references/from-terragrunt.md) for agent recipes
+- [Migrating from Fogg](https://atmos.tools/migration/fogg) -- see
+  [from-fogg.md](references/from-fogg.md) for adoption and behavioral parity
 - Migrating from Terramate -- see [from-terramate.md](references/from-terramate.md)
   (no atmos.tools tutorial yet)
 - [Migrating from Makefiles](https://atmos.tools/migration/makefile)
@@ -109,6 +116,7 @@ reference file:
 | One TF root module, env config via `.tfvars` or env vars | [from-native-terraform.md](references/from-native-terraform.md) |
 | Multiple TF root modules in scattered dirs | [from-native-terraform.md](references/from-native-terraform.md) |
 | `terraform.workspace`-driven environments with shared state backend | [from-terraform-workspaces.md](references/from-terraform-workspaces.md) |
+| `fogg.yml`, Fogg-generated Terraform and Make/CI tasks | [from-fogg.md](references/from-fogg.md) |
 | `.tm.hcl` files, `stack.tm.hcl`, `generate_hcl` blocks (Terramate project) | [from-terramate.md](references/from-terramate.md) |
 | Need to read outputs from un-migrated TF (legacy or another repo) | [remote-state-bridge.md](references/remote-state-bridge.md) |
 | User has a Makefile driving builds/tests/deploys | [from-makefile.md](references/from-makefile.md) |

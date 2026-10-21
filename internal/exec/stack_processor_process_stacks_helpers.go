@@ -65,6 +65,10 @@ type ComponentProcessorOptions struct {
 	// GlobalHelmLifecycle contains stack-level native Helm lifecycle defaults.
 	GlobalHelmLifecycle map[string]any
 
+	// CloudFormation region and timeout defaults are normalized per scope before inheritance.
+	GlobalCloudFormationDefaults map[string]any
+	TypeCloudFormationDefaults   map[string]any
+
 	// GlobalPlugins holds component-type Helm CLI plugin defaults (helm.plugins or helmfile.plugins).
 	GlobalPlugins any
 

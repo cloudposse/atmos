@@ -44,7 +44,7 @@ type driftDetectionResult struct {
 func detectDrift(ctx context.Context, client CloudFormationClient, stackName string) (*driftDetectionResult, error) {
 	defer perf.Track(nil, "cloudformation.detectDrift")()
 
-	timeoutCtx, cancel := context.WithTimeout(ctx, driftDetectionTimeout)
+	timeoutCtx, cancel := withDefaultTimeout(ctx, driftDetectionTimeout)
 	defer cancel()
 
 	out, err := client.DetectStackDrift(timeoutCtx, &cloudformation.DetectStackDriftInput{StackName: awsString(stackName)})
