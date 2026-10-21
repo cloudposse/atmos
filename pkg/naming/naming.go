@@ -29,7 +29,7 @@ func Upgrade(value string) (string, []string, []string) {
 		return value, nil, nil
 	}
 	upgrade := tokenUpgrade{}
-	upgrade.visit(tree.Root)
+	upgrade.visit(tree.Root, ".")
 	if len(upgrade.tokens) == 0 {
 		return value, nil, nil
 	}
@@ -40,7 +40,7 @@ type tokenUpgrade struct {
 	tokens, unsupported []string
 }
 
-func (u *tokenUpgrade) replace(token string) string {
+func (u *tokenUpgrade) replace(token, root string) string {
 	if !slices.Contains(u.tokens, token) {
 		u.tokens = append(u.tokens, token)
 	}
@@ -48,13 +48,13 @@ func (u *tokenUpgrade) replace(token string) string {
 	var expression string
 	switch key {
 	case "namespace", "tenant", "environment", "stage", "region":
-		expression = ".vars." + key
+		expression = root + "vars." + key
 	case "component":
-		expression = ".atmos_component"
+		expression = root + "atmos_component"
 	case "base-component":
-		expression = ".component"
+		expression = root + "component"
 	case "attributes":
-		expression = `join "-" .vars.attributes`
+		expression = `join "-" ` + root + "vars.attributes"
 	default:
 		if !slices.Contains(u.unsupported, token) {
 			u.unsupported = append(u.unsupported, token)
@@ -64,23 +64,26 @@ func (u *tokenUpgrade) replace(token string) string {
 	return "{{ " + expression + " }}"
 }
 
-func (u *tokenUpgrade) visit(list *parse.ListNode) {
+// visit preserves root context for tokens in scoped bodies; else branches keep their enclosing scope.
+func (u *tokenUpgrade) visit(list *parse.ListNode, root string) {
 	if list == nil {
 		return
 	}
 	for _, node := range list.Nodes {
 		switch n := node.(type) {
 		case *parse.TextNode:
-			n.Text = []byte(tokenPattern.ReplaceAllStringFunc(string(n.Text), u.replace))
+			n.Text = []byte(tokenPattern.ReplaceAllStringFunc(string(n.Text), func(token string) string {
+				return u.replace(token, root)
+			}))
 		case *parse.IfNode:
-			u.visit(n.List)
-			u.visit(n.ElseList)
+			u.visit(n.List, root)
+			u.visit(n.ElseList, root)
 		case *parse.RangeNode:
-			u.visit(n.List)
-			u.visit(n.ElseList)
+			u.visit(n.List, "$.")
+			u.visit(n.ElseList, root)
 		case *parse.WithNode:
-			u.visit(n.List)
-			u.visit(n.ElseList)
+			u.visit(n.List, "$.")
+			u.visit(n.ElseList, root)
 		}
 	}
 }

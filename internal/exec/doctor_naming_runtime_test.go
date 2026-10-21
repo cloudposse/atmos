@@ -64,3 +64,43 @@ func TestDoctorNamingMatchesTerraformCommandPipeline(t *testing.T) {
 		}
 	}
 }
+
+// Legacy tokens read the root naming context even when a Go template rebinds dot.
+func TestDoctorNamingUpgradePreservesScopedTokenContext(t *testing.T) {
+	scope := map[string]any{
+		"vars":            map[string]any{"stage": "wrong", "attributes": []any{"wrong"}},
+		"atmos_component": "wrong", "component": "wrong", "empty": []any{}, "enabled": true,
+	}
+	vars := map[string]any{
+		"stage": "dev", "attributes": []any{"one", "two"},
+		"scope": scope, "items": []any{scope}, "empty": []any{},
+	}
+	data := map[string]any{"vars": vars, "atmos_component": "app", "component": "base"}
+	legacy := cfg.GetContextFromVars(vars)
+	legacy.Component, legacy.BaseComponent = "app", "base"
+	for _, tc := range []struct{ name, pattern, want string }{
+		{"range body", `{{ range .vars.items }}{stage}-{component}-{base-component}-{attributes}{{ end }}`, "dev-app-base-one-two"},
+		{"with body", `{{ with .vars.scope }}{stage}-{component}-{base-component}-{attributes}{{ end }}`, "dev-app-base-one-two"},
+		{"if inside range", `{{ range .vars.items }}{{ if .enabled }}{stage}{{ else }}{component}{{ end }}{{ end }}`, "dev"},
+		{"if else inside with", `{{ with .vars.scope }}{{ if .empty }}{stage}{{ else }}{component}{{ end }}{{ end }}`, "app"},
+		{"with else inside range", `{{ range .vars.items }}{{ with .empty }}{stage}{{ else }}{component}{{ end }}{{ end }}`, "app"},
+		{"range else inside with", `{{ with .vars.scope }}{{ range .empty }}{stage}{{ else }}{component}{{ end }}{{ end }}`, "app"},
+		{"root with else", `{{ with .vars.empty }}{component}{{ else }}{stage}{{ end }}`, "dev"},
+		{"root range else", `{{ range .vars.empty }}{component}{{ else }}{stage}{{ end }}`, "dev"},
+		{"scope restored", `{{ with .vars.scope }}{stage}{{ end }}-{component}`, "dev-app"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			config := &schema.AtmosConfiguration{}
+			before, err := ProcessTmpl(config, "legacy-scoped-naming", cfg.ReplaceContextTokens(legacy, tc.pattern), data, false)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, before)
+			replacement, tokens, unsupported := naming.Upgrade(tc.pattern)
+			require.NotEmpty(t, tokens)
+			require.Empty(t, unsupported)
+			after, err := ProcessTmpl(config, "upgraded-scoped-naming", replacement, data, false)
+			require.NoError(t, err)
+			require.Equal(t, before, after)
+			require.False(t, naming.SafeTemplate(replacement), "scoped templates must still require manual migration review")
+		})
+	}
+}

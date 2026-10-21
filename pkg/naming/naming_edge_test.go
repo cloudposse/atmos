@@ -9,8 +9,8 @@ import (
 func TestUpgradeConditionalBranches(t *testing.T) {
 	for _, tc := range []struct{ name, before, after string }{
 		{"if", `{{ if .vars.stage }}{stage}{{ else }}{component}{{ end }}`, `{{if .vars.stage}}{{ .vars.stage }}{{else}}{{ .atmos_component }}{{end}}`},
-		{"range", `{{ range .vars.attributes }}{stage}{{ else }}{component}{{ end }}`, `{{range .vars.attributes}}{{ .vars.stage }}{{else}}{{ .atmos_component }}{{end}}`},
-		{"with", `{{ with .vars }}{stage}{{ else }}{component}{{ end }}`, `{{with .vars}}{{ .vars.stage }}{{else}}{{ .atmos_component }}{{end}}`},
+		{"range", `{{ range .vars.attributes }}{stage}{{ else }}{component}{{ end }}`, `{{range .vars.attributes}}{{ $.vars.stage }}{{else}}{{ .atmos_component }}{{end}}`},
+		{"with", `{{ with .vars }}{stage}{{ else }}{component}{{ end }}`, `{{with .vars}}{{ $.vars.stage }}{{else}}{{ .atmos_component }}{{end}}`},
 		{"without else", `{{ if .vars.stage }}{stage}-{component}{{ end }}`, `{{if .vars.stage}}{{ .vars.stage }}-{{ .atmos_component }}{{end}}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
