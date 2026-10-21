@@ -97,6 +97,8 @@ func TestRunList(t *testing.T) {
 }
 
 func TestCheckFilesCommand(t *testing.T) {
+	// Text assertions must not depend on the runner's terminal color settings.
+	t.Setenv("NO_COLOR", "1")
 	stdout, stderr := captureOutput(t)
 	t.Setenv("ATMOS_POLICY_CHECK_FORMAT", "")
 	directory := writePolicyDir(t)
