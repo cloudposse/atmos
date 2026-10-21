@@ -237,7 +237,7 @@ func init() {
 	internal.Register(
 		&InitCommandProvider{},
 		internal.WithDocumentationURL("https://atmos.tools/cli/commands/init"),
-		internal.WithExample("examples/init", "Project Initialization"),
+		internal.WithExample("examples/quick-start-simple", "Quick Start (Simple)"),
 	)
 }
 
