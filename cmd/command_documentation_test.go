@@ -57,8 +57,9 @@ func TestCommandDocumentationHelpTopics(t *testing.T) {
 	}
 }
 
-// Match Docusaurus's local doc IDs and explicit slugs, rather than guessing a
-// URL from the command name. This also catches links to removed example folders.
+// Match Docusaurus's category indexes, local doc IDs, and explicit slugs, rather
+// than guessing a URL from the command name. This also catches links to removed
+// example folders.
 func TestCommandDocumentationCatalog(t *testing.T) {
 	routes := map[string]string{"https://atmos.tools": "atmos"}
 	expected := make(map[string]string)
@@ -90,18 +91,7 @@ func TestCommandDocumentationCatalog(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		rel = strings.TrimSuffix(filepath.ToSlash(rel), filepath.Ext(rel))
-		if metadata.ID != "" {
-			rel = filepath.ToSlash(filepath.Join(filepath.Dir(rel), metadata.ID))
-		}
-		if metadata.Slug != "" {
-			if strings.HasPrefix(metadata.Slug, "/") {
-				rel = strings.TrimPrefix(metadata.Slug, "/")
-			} else {
-				rel = filepath.ToSlash(filepath.Join(filepath.Dir(rel), metadata.Slug))
-			}
-		}
-		url := "https://atmos.tools/" + rel
+		url := commandDocumentationRoute(rel, metadata.ID, metadata.Slug)
 		routes[url] = metadata.Title
 		if strings.HasPrefix(metadata.Title, "atmos ") {
 			expected[metadata.Title] = url
@@ -129,4 +119,51 @@ func TestCommandDocumentationCatalog(t *testing.T) {
 		}
 	}
 	visit(RootCmd)
+}
+
+// Docusaurus uses the source filename, not the frontmatter ID, when recognizing
+// category indexes. An explicit slug takes precedence over that convention.
+func commandDocumentationRoute(relativePath, id, slug string) string {
+	directory := filepath.Dir(relativePath)
+	name := strings.TrimSuffix(filepath.Base(relativePath), filepath.Ext(relativePath))
+	var route string
+	switch {
+	case strings.HasPrefix(slug, "/"):
+		route = slug
+	case slug != "":
+		route = filepath.Join(directory, slug)
+	case strings.EqualFold(name, "index"), strings.EqualFold(name, "readme"),
+		strings.EqualFold(name, filepath.Base(directory)):
+		route = directory
+	case id != "":
+		route = filepath.Join(directory, id)
+	default:
+		route = filepath.Join(directory, name)
+	}
+	if route == "." {
+		route = ""
+	}
+	return strings.TrimRight("https://atmos.tools/"+strings.TrimPrefix(filepath.ToSlash(route), "/"), "/")
+}
+
+func TestCommandDocumentationRoute(t *testing.T) {
+	tests := []struct {
+		name, source, id, slug, expected string
+	}{
+		{"ordinary page", "cli/commands/terraform/usage.mdx", "", "", "/cli/commands/terraform/usage"},
+		{"explicit ID", "cli/commands/terraform/terraform-plan.mdx", "plan", "", "/cli/commands/terraform/plan"},
+		{"folder index", "cli/commands/terraform/cache/cache.mdx", "cache", "", "/cli/commands/terraform/cache"},
+		{"index page", "cli/commands/auth/user/index.mdx", "user", "", "/cli/commands/auth/user"},
+		{"readme page", "cli/commands/example/README.md", "", "", "/cli/commands/example"},
+		{"index ignores ID", "cli/commands/Example/example.mdx", "different", "", "/cli/commands/Example"},
+		{"relative slug overrides index", "cli/commands/cache/cache.mdx", "cache", "overview", "/cli/commands/cache/overview"},
+		{"absolute slug overrides index", "cli/commands/cache/index.mdx", "cache", "/reference/cache", "/reference/cache"},
+		{"root index", "index.mdx", "", "", ""},
+		{"explicit root slug", "home.mdx", "", "/", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, "https://atmos.tools"+tt.expected, commandDocumentationRoute(tt.source, tt.id, tt.slug))
+		})
+	}
 }
