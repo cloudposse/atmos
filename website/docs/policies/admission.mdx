@@ -18,7 +18,6 @@ restrictions to component instances using literal tags and labels.
 | `function` | Before YAML function execution and Go-template calls, including configuration loading | `name`: canonical YAML name without `!` or template function/namespace; `engine`: `yaml` or `go-template` | No; instance metadata may not exist yet |
 | `command` | Before a runnable CLI command's argument validator and pre-run hooks | `command`: command path string; `path`: array of command names, excluding `atmos`; `destroy`: boolean, see [Destroy detection](#destroy-detection) | No |
 | `component.command` | During shared stack resolution, before component template/function evaluation and tool execution | `command`, `component_type`, `component`, `stack`, `dry_run`, `destroy` (see [Destroy detection](#destroy-detection)), `capabilities`, `agents` | Yes; literal inherited metadata |
-
 | `auth` | Before auth-manager authentication and credential cache access | `identity`, `provider`, `identities` (the complete resolved identity chain) | No |
 
 These gates do not require `--affected`. Function arguments and CLI argument/flag values are not

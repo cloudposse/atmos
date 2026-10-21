@@ -176,7 +176,7 @@ func checkFile(ctx context.Context, evaluation *fileCheckContext, directory, nam
 
 func parseFileDocument(name string, raw []byte) (json.RawMessage, error) {
 	if strings.EqualFold(path.Ext(name), ".json") {
-		_, err := decodeDocument(raw)
+		err := validateDocument(raw)
 		return raw, err
 	}
 	decoder := yaml.NewDecoder(bytes.NewReader(raw))
@@ -221,17 +221,18 @@ func validateYAMLTags(node *yaml.Node) error {
 	return nil
 }
 
-func decodeDocument(raw json.RawMessage) (any, error) {
+func validateDocument(raw json.RawMessage) error {
 	if !json.Valid(raw) {
-		return nil, fmt.Errorf("%w: expected a JSON document", errUtils.ErrPolicyInputInvalid)
+		return fmt.Errorf("%w: expected a JSON document", errUtils.ErrPolicyInputInvalid)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
 	var value any
 	if err := decoder.Decode(&value); err != nil {
-		return nil, fmt.Errorf("%w: decode document: %w", errUtils.ErrPolicyInputInvalid, err)
+		return fmt.Errorf("%w: decode document: %w", errUtils.ErrPolicyInputInvalid, err)
 	}
-	return normalizeNumbers(value)
+	_, err := normalizeNumbers(value)
+	return err
 }
 
 // FileCheckOption configures optional host evidence for file policies.

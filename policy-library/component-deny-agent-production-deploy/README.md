@@ -35,7 +35,9 @@ Deny production apply and deploy commands launched by Claude Code or Codex.
 | `CODEX_THREAD_ID` | Any nonempty value |
 
 The shared context exposes environment values to every engine; do not include them in diagnostics.
-[Claude Code documents `CLAUDECODE`](https://code.claude.com/docs/en/env-vars).
+[Claude Code also sets `CLAUDECODE=1` in IDE-integrated terminals](https://code.claude.com/docs/en/env-vars),
+so this policy denies human-run production applies and deployments from those terminals too.
+For a reviewed manual deployment, use a terminal without the marker.
 [Codex sets `CODEX_THREAD_ID` in its shell environment](https://github.com/openai/codex/blob/main/codex-rs/protocol/src/shell_environment.rs).
 The presence of a CLI executable, an API key, or a configured home directory does not identify an agent invocation.
 

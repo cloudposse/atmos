@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
@@ -66,7 +67,7 @@ func (j *JSONSchema) EvaluateDetailed(ctx context.Context, evaluation Evaluation
 }
 
 func compileSchema(config *SchemaConfig) (*jsonschema.Schema, error) {
-	if config == nil || config.Entry == "" || len(config.Resources) == 0 || (config.Target != "" && config.Target != "input" && config.Target != "context") {
+	if config == nil || config.Entry == "" || len(config.Resources) == 0 || !slices.Contains([]string{"", "input", "context"}, config.Target) {
 		return nil, fmt.Errorf("%w: JSON Schema requires materialized schema resources", errUtils.ErrPolicyInvalid)
 	}
 	compiler := jsonschema.NewCompiler()

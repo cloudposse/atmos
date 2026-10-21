@@ -10,6 +10,8 @@ import (
 )
 
 // PolicyFactProvider materializes explicitly requested provider facts before evaluation.
+//
+//go:generate go run go.uber.org/mock/mockgen -source=policy_facts.go -destination=mock_policy_facts_test.go -package=ci
 type PolicyFactProvider interface {
 	CollectPolicyApprovers(context.Context, *policy.Request) (policy.Dataset, error)
 }

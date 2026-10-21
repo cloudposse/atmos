@@ -1,10 +1,12 @@
 package policy
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -113,4 +115,50 @@ func TestFileResourceConfinement(t *testing.T) {
 	}
 	require.Error(t, validateFileSelector(Command, &FileSelector{Include: []string{"*.json"}}))
 	require.Error(t, validateFileSelector(File, nil))
+}
+
+func TestFileCheckSelectionFailures(t *testing.T) {
+	root := t.TempDir()
+	rule := Rule{ID: "file", On: File, Engine: CELEngine, Expression: "false", Files: &FileSelector{Include: []string{"*.json"}}}
+	for _, tc := range []struct {
+		name      string
+		bundle    *Bundle
+		directory string
+		want      error
+	}{
+		{"nil bundle", nil, root, errUtils.ErrPolicyInvalid},
+		{"missing root", &Bundle{Rules: []Rule{rule}}, filepath.Join(root, "missing"), errUtils.ErrPolicyInputInvalid},
+		{"missing selector", &Bundle{Rules: []Rule{{ID: "invalid", On: File}}}, root, errUtils.ErrPolicyInvalid},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			results, err := CheckFiles(t.Context(), tc.bundle, tc.directory)
+			require.ErrorIs(t, err, tc.want)
+			require.Empty(t, results)
+		})
+	}
+	// No file policy means no filesystem access, even with a nonexistent root.
+	results, err := CheckFiles(t.Context(), &Bundle{}, filepath.Join(root, "missing"))
+	require.NoError(t, err)
+	require.Empty(t, results)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	results, err = CheckFiles(ctx, &Bundle{Rules: []Rule{rule}}, root)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Empty(t, results)
+
+	_, err = matchingFiles(t.Context(), fstest.MapFS{}, &FileSelector{Include: []string{"["}})
+	require.ErrorIs(t, err, errUtils.ErrPolicyInputInvalid)
+}
+
+func TestFileCheckCancellationAfterSelection(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "one.json"), []byte(`{}`), 0o600))
+	rule := Rule{ID: "file", On: File, Engine: CELEngine, Expression: "true", Files: &FileSelector{Include: []string{"*.json"}}}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	// Options run after selection and before any document is evaluated.
+	results, err := CheckFiles(ctx, &Bundle{Rules: []Rule{rule}}, root, func(_ *fileCheckContext) { cancel() })
+	require.ErrorIs(t, err, context.Canceled)
+	require.Empty(t, results)
 }

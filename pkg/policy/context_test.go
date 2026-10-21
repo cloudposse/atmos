@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -313,4 +314,39 @@ func TestContextPointerAndCheckValidation(t *testing.T) {
 	require.NoError(t, clock.validate())
 	require.True(t, clock.matches("09:00:00"))
 	require.False(t, clock.matches("17:00:00"))
+}
+
+func TestUnknownCIContextIsNotEmptyEvidence(t *testing.T) {
+	for _, data := range []any{nil, "alice", []any{123}, []any{""}, []any{"alice", false}} {
+		require.Nil(t, contextApprovers(map[string]any{"status": string(Available), "complete": true, "data": data}))
+	}
+	require.Equal(t, []string{}, contextApprovers(map[string]any{"status": string(Available), "complete": true, "data": []any{}}))
+	require.Equal(t, []string{"alice", "bob"}, contextApprovers(map[string]any{"status": string(Available), "complete": true, "data": []any{"bob", "alice"}}))
+	require.Nil(t, contextLabels(map[string]any{"status": string(Available), "complete": true, "data": map[string]any{"pull_request": map[string]any{"labels": []any{"preview"}}}}))
+}
+
+func TestSharedCheckLimitsAndInvalidDefinitions(t *testing.T) {
+	checks := map[string]ContextCheck{}
+	for i := range maxContextChecks + 1 {
+		checks[strconv.Itoa(i)] = ContextCheck{Kind: "schedule"}
+	}
+	_, err := evaluateChecks(checks, map[string]any{})
+	require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+	require.ErrorContains(t, err, "at most 100")
+	_, err = evaluateChecks(map[string]ContextCheck{"broken": {Kind: "unknown"}}, map[string]any{})
+	require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+}
+
+func TestContainerMemoryUnavailableMeasurements(t *testing.T) {
+	root := t.TempDir()
+	total, available := uint64(100), uint64(70)
+	want := MemoryFacts{TotalBytes: &total, AvailableBytes: &available, Scope: "host"}
+	facts := want
+	applyMemoryLimit(&facts, filepath.Join(root, "missing"), "limit", "usage")
+	require.Equal(t, want, facts)
+	applyMemoryLimit(&facts, root, "limit", "usage")
+	require.Equal(t, want, facts)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "limit"), []byte("80"), 0o600))
+	applyMemoryLimit(&facts, root, "limit", "usage")
+	require.Equal(t, want, facts)
 }

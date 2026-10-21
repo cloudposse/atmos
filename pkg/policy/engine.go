@@ -110,7 +110,7 @@ func validateRequest(ctx context.Context, request *Request) error {
 	}
 	var err error
 	if request.Kind == File {
-		_, err = decodeDocument(request.Input)
+		err = validateDocument(request.Input)
 	} else {
 		_, err = decodeObject(request.Input)
 	}
