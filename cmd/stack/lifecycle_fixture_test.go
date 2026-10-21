@@ -549,3 +549,31 @@ func TestReportLifecycleResultsExplainsCancellation(t *testing.T) {
 		})
 	}
 }
+
+func TestLifecycleForwardsCanonicalIdentity(t *testing.T) {
+	config := &schema.AuthConfig{
+		Identities:      map[string]schema.Identity{"prod-admin": {Kind: "aws/permission-set"}},
+		IdentityCaseMap: map[string]string{"prod-admin": "Prod-Admin"},
+	}
+	tests := []struct {
+		name      string
+		requested string
+		want      string
+	}{
+		{"mixed case resolves to the configured key", "Prod-Admin", "prod-admin"},
+		{"exact case is unchanged", "prod-admin", "prod-admin"},
+		{"unknown identity is unchanged", "Other-Admin", "Other-Admin"},
+		{"interactive selection sentinel is unchanged", cfg.IdentityFlagSelectValue, cfg.IdentityFlagSelectValue},
+		{"disabled sentinel is unchanged", cfg.IdentityFlagDisabledValue, cfg.IdentityFlagDisabledValue},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, forwardedLifecycleIdentity(config, tt.requested))
+			args := lifecycleGlobalArgs(&cobra.Command{}, &schema.AtmosConfiguration{Auth: *config}, &lifecycleOptions{identity: tt.requested})
+			assert.Contains(t, args, "--identity="+tt.want)
+		})
+	}
+	// Preflight accepts the same mixed-case spelling that is forwarded.
+	require.NoError(t, checkLifecycleIdentity(config, "Prod-Admin"))
+	require.ErrorIs(t, checkLifecycleIdentity(config, "Other-Admin"), errUtils.ErrIdentityNotFound)
+}

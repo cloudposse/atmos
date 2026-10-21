@@ -430,10 +430,19 @@ func compareLifecycleAffected(cmd *cobra.Command, config *schema.AtmosConfigurat
 	return e.GetAffectedComponents(args)
 }
 
+// forwardedLifecycleIdentity keeps the interactive and disabled sentinels intact and
+// canonicalizes named identities before they are forwarded to children.
+func forwardedLifecycleIdentity(config *schema.AuthConfig, identity string) string {
+	if identity == cfg.IdentityFlagSelectValue || identity == cfg.IdentityFlagDisabledValue {
+		return identity
+	}
+	return canonicalLifecycleIdentity(config, identity)
+}
+
 func lifecycleGlobalArgs(cmd *cobra.Command, config *schema.AtmosConfiguration, opts *lifecycleOptions) []string {
 	args := []string{"--base-path=" + config.BasePathAbsolute}
 	if opts.identity != "" {
-		args = append(args, "--identity="+opts.identity)
+		args = append(args, "--identity="+forwardedLifecycleIdentity(&config.Auth, opts.identity))
 	}
 	for _, name := range []string{"config", "config-path", "profile"} {
 		f := cmd.Flag(name)

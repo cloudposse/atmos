@@ -133,17 +133,27 @@ func checkLifecycleIdentity(config *schema.AuthConfig, requested string) error {
 		}
 		return nil
 	}
-	name := requested
-	if _, ok := config.Identities[name]; !ok {
-		if _, known := config.IdentityCaseMap[strings.ToLower(name)]; known {
-			name = strings.ToLower(name)
-		}
-	}
-	identity, ok := config.Identities[name]
+	identity, ok := config.Identities[canonicalLifecycleIdentity(config, requested)]
 	if !ok || identity.Kind == "" {
 		return missingLifecycleIdentity(requested)
 	}
 	return nil
+}
+
+// canonicalLifecycleIdentity returns the configured spelling of a requested identity.
+// Viper lowercases identity keys, so a mixed-case request resolves to its lowercase
+// key. Children authenticate case-insensitively but prepare their environment with a
+// case-sensitive lookup, so they must receive the configured spelling.
+func canonicalLifecycleIdentity(config *schema.AuthConfig, requested string) string {
+	if _, ok := config.Identities[requested]; ok {
+		return requested
+	}
+	if lower := strings.ToLower(requested); lower != requested {
+		if _, known := config.IdentityCaseMap[lower]; known {
+			return lower
+		}
+	}
+	return requested
 }
 
 func missingLifecycleIdentity(name string) error {
