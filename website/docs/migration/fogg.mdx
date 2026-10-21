@@ -4,6 +4,7 @@ sidebar_label: From Fogg
 description: Replace Fogg with Atmos while preserving Terraform state, module addresses, providers, and workflows, with a behavioral parity assessment.
 id: fogg
 ---
+import FAQItem from '@site/src/components/FAQItem'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -39,7 +40,7 @@ implementation; a generic ability to run a script is not evidence of parity.
 | Defaults and per-component overrides | Supported | Stack imports, component inheritance, and `vars` |
 | S3 or remote backend and state locking | Supported with explicit configuration | Preserve the existing backend, or reproduce it with `backend_type` and `backend` |
 | Provider configuration and regional/account aliases | Supported with explicit configuration | Terraform provider blocks or `providers`, preserving aliases, roles, account restrictions, and tags |
-| Module invocation, provider mappings, output forwarding | Supported with explicit configuration | Maintain ordinary Terraform wrapper components, optionally created from a scaffold |
+| Module invocation, provider mappings, output forwarding | Supported with explicit configuration | Maintain ordinary Terraform wrappers, create them from scaffolds, or regenerate them with explicit `generate` templates |
 | Global/account/sibling remote-state access | Supported with explicit configuration | Terraform data sources or `!terraform.output`; declare each required relationship |
 | Component ordering | Supported | `dependencies.components` and graph-backed Terraform commands or ordered workflows |
 | Terraform versions and CLI installation | Supported | `dependencies.tools` and toolchain registries |
@@ -322,6 +323,7 @@ wrapper.
 
 When changing the child module later, update arguments and forwarded outputs in this maintained Terraform code, or update your
 scaffold/template. Module introspection is not required to deploy the same resources or expose the same outputs.
+For roots containing several child modules, see [common questions](#common-questions) for a reusable generation example.
 
 ### Remote State and Execution Ordering
 
@@ -357,6 +359,7 @@ See [component dependencies](/stacks/dependencies/components) and [`!terraform.o
 output must exist before it can be read. Planning a new producer does not create its outputs; apply producers first during
 initial bootstrap, then plan consumers. Keep Terraform-side data sources when remote execution must read outputs itself rather
 than accepting values resolved on the Atmos runner.
+To publish selected outputs outside Terraform state, see the [stores example in common questions](#common-questions).
 
 ### Terraform Versions and Tools
 
@@ -402,6 +405,7 @@ Set `components.terraform.auto_generate_files: true` when generation should happ
 filename to `.gitignore`. Keep each declaration owned by one file; do not let Fogg, Atmos, and a developer all rewrite the same
 file. Preserve an `extra_templates` file intended to be created only once as maintained source or a scaffold, rather than an
 always-regenerated file.
+See [common questions](#common-questions) for generating module calls and retaining TypeScript and monorepo tooling.
 
 ## Replace Make and CI
 
@@ -629,6 +633,143 @@ Use its recorded workspace, retain its TFE provider and backend, and take owners
 required checks there when adding workspaces. Alternatively, move those values into declared Terraform inputs or a `generate`
 template that emits the same object shape. Do not infer that the presence of an Atmos stack creates a TFE workspace. This is
 explicit Terraform management, separate from using a `remote` backend.
+
+## Common Questions
+
+These optional migration scenarios cover existing repository customizations as well as generated Terraform. They do not
+extend the upstream Fogg feature assessment above.
+
+<FAQItem question="Can one component contain multiple Terraform modules?">
+
+Yes. A Terraform root managed as one Atmos component can call multiple child modules, sharing that root's state. Preserve
+each module's label, source, version, provider mappings, `for_each` or `count`, dependencies, and forwarded outputs during
+migration. Independently deployed roots with separate states should remain separate Atmos components.
+
+Keep the existing wrapper HCL, or use an explicit `generate` template to maintain its module calls. Both provide equivalent
+behavior; splitting child modules into separate states is not required.
+
+</FAQItem>
+
+<FAQItem question="Can Atmos keep generating configuration from my stacks?">
+
+Yes. [`generate`](/stacks/generate) supports reusable templates with access to component `settings`, `vars`, backend, and
+provider configuration. Share templates through stack imports or [component inheritance](/howto/inheritance). In your stack
+manifest, add `settings` and `generate` under `components.terraform.webserver` to generate two child-module calls:
+
+```yaml title="stacks/deploy/development.yaml (component additions)"
+components:
+  terraform:
+    webserver:
+      settings:
+        modules:
+          webserver:
+            source: ../../../modules/webserver
+          worker:
+            source: ../../../modules/worker
+      generate:
+        modules.generated.tf: |
+          {{ range $name, $module := .settings.modules }}
+          module {{ printf "%q" $name }} {
+            source = {{ printf "%q" $module.source }}
+            vpc_id = local.vpc_id
+          }
+          {{ end }}
+```
+
+This example assumes both local modules accept `vpc_id` and the root already defines `local.vpc_id`. Substitute the existing
+module labels, paths, and arguments, including any provider mappings or output declarations. Transfer ownership of the
+module blocks before generating them so the original files do not declare them twice.
+
+Preview with `atmos terraform generate files webserver -s development --dry-run`. Enable
+`components.terraform.auto_generate_files` when generation should run with Terraform commands. `generate` is currently
+experimental and writes into the resolved component directory; use scaffolds for initial repository-level files. It does
+not automatically inspect child-module interfaces to discover inputs or outputs.
+
+</FAQItem>
+
+<FAQItem question="Can I publish outputs to SSM Parameter Store or other stores?">
+
+Yes. Atmos has first-class [stores](/cli/configuration/stores) for publishing and sharing data outside Terraform state.
+Configure a named store in `atmos.yaml`:
+
+```yaml title="atmos.yaml (additional configuration)"
+stores:
+  outputs:
+    kind: aws/ssm
+    options:
+      region: us-east-1
+      prefix: /infra
+```
+
+Publish selected root outputs with a store hook, then read them from another component:
+
+```yaml title="stacks/deploy/development.yaml (component additions)"
+components:
+  terraform:
+    vpc:
+      hooks:
+        publish-outputs:
+          events: [after.terraform.apply]
+          kind: store
+          name: outputs
+          outputs:
+            vpc_id: .vpc_id
+    webserver:
+      vars:
+        vpc_id: !store outputs vpc vpc_id
+```
+
+The producer must expose `vpc_id` as a root output, and the consumer must declare that input. The hook writes after apply;
+the value must exist before resolving the consumer. Declare component dependencies separately when ordering deployments.
+Store paths follow `prefix/stack/component/key`: with stack name `development`, this example writes
+`/infra/development/vpc/vpc_id`. Preserve existing consumer paths and value formats during migration. See
+[sharing data through stores](/stacks/sharing-state/stores) for other backends and cross-stack reads.
+
+Publish only explicitly selected non-sensitive outputs through this ordinary store. For secrets, use a supported encrypted
+store marked `secret: true` and the [secrets configuration](/cli/configuration/secrets) with `!secret`; ordinary `!store`
+reads can appear in configuration output and cannot read secret stores.
+
+If Terraform should own the parameters' lifecycle, keep or generate `aws_ssm_parameter` resources referencing module
+outputs instead. Terraform resolves those expressions during deployment. Both approaches are supported with explicit
+configuration. Keep existing Terraform-managed parameters under that ownership during adoption; moving publication to a
+store hook is a separate ownership change, not a second writer to the same parameters.
+
+</FAQItem>
+
+<FAQItem question="Can I keep TypeScript, CDK Terrain, or TerraConstructs components?">
+
+Yes. CDK Terrain (`cdktn`) is the community fork of CDK for Terraform (CDKTF). Keep the application source and synthesize
+Terraform JSON before running Terraform through Atmos. The
+[CDK and CDK Terrain tutorial](/tutorials/deploy-cdk-with-hooks) shows synthesis hooks, artifact handling, and adoption of
+existing CDKTF deployments. Preserve construct paths, resource addresses, providers, and state identity.
+
+Use `generate` for component JSON or YAML configuration consumed by the application. Any adapter that turns that
+configuration into constructs, providers, backends, or remote-state references must be retained or adapted to the new
+configuration contract. File generation alone does not implement that adapter. Complete the migration by removing its
+dependency on Fogg-generated configuration.
+
+</FAQItem>
+
+<FAQItem question="Can I preserve typed outputs and their tests?">
+
+Yes. Keep TypeScript interfaces, remote-state helper code, type checks, and output contract tests in the application's build.
+You can generate declarations from output names and types explicitly supplied in stack settings. This does not automatically
+infer types from arbitrary Terraform modules or provide typed runtime accessors. Preserve or adapt any inspection and helper
+code your application uses, and keep tests that compare declared output contracts with synthesized Terraform outputs.
+
+</FAQItem>
+
+<FAQItem question="Can I keep pnpm, Turborepo, and VS Code workspaces?">
+
+Yes. Keep the workspace manifests, lockfiles, editor configuration, and build scripts alongside Atmos. Use
+[scaffolds](/cli/commands/scaffold/generate) for initial repository setup, `generate` for component-local configuration, and
+[custom commands](/scripting/custom-commands) or [hooks](/stacks/hooks) to invoke builds, tests, and synthesis.
+
+Turborepo can continue managing package dependencies, affected builds, and artifact caching. Atmos component dependencies
+control infrastructure execution order; they do not automatically import the package build graph. Preserve the existing
+build-before-synthesis order and required artifacts when replacing Make or CI entry points.
+
+</FAQItem>
 
 ## Cutover Checklist
 
