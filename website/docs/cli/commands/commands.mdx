@@ -46,7 +46,9 @@ If multiple examples are available, Atmos presents a picker with the recommended
 example first. It shows the selected example's source, destination, and installation
 command, then asks for confirmation. Selecting **Yes** runs `atmos init` to create
 an example directory under your current directory. `--chdir` changes that location.
-Existing files are not overwritten, and Terraform is not run automatically.
+If the destination contains files, the confirmation asks whether to overwrite
+matching files. **No** is selected by default. Selecting **Yes** overwrites matching
+files and keeps other files. Terraform is not run automatically.
 
 Without an interactive terminal, in CI, or with `--interactive=false`, Atmos lists
 the examples and their installation commands without prompting or creating files.

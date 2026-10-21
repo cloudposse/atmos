@@ -166,6 +166,105 @@ func TestDiscoveryDocs(t *testing.T) {
 	assert.Contains(t, output.String(), "Documentation: https://atmos.tools/terraform")
 }
 
+func TestDiscoveryCustomFlagOwnership(t *testing.T) {
+	for _, name := range []string{"docs", "example"} {
+		for _, owner := range []string{"local", "persistent", "inherited persistent"} {
+			for _, position := range []string{"before command", "between commands", "after command", "after separator", "disabled"} {
+				t.Run(name+"/"+owner+"/"+position, func(t *testing.T) {
+					mockDiscoveryDependencies(t)
+					root, leaf, output := discoveryTestRoot(t)
+					var enabled bool
+					switch owner {
+					case "local":
+						leaf.Flags().BoolVar(&enabled, name, false, "Custom command option")
+					case "persistent":
+						leaf.PersistentFlags().BoolVar(&enabled, name, false, "Custom command option")
+					case "inherited persistent":
+						leaf.Parent().PersistentFlags().BoolVar(&enabled, name, false, "Custom command option")
+					}
+					var args, expectedArgs []string
+					switch position {
+					case "before command":
+						args = []string{"--" + name, "terraform", "plan"}
+					case "between commands":
+						args = []string{"terraform", "--" + name, "plan"}
+					case "after command":
+						args = []string{"terraform", "plan", "--" + name}
+					case "after separator":
+						args = []string{"terraform", "plan", "--", "--docs", "--example"}
+						expectedArgs = []string{"--docs", "--example"}
+					case "disabled":
+						args = []string{"--" + name + "=false", "terraform", "plan"}
+					}
+					originalArgs := append([]string(nil), args...)
+					root.PersistentPreRunE = nil
+					leaf.PreRunE = nil
+					leaf.Args = cobra.ArbitraryArgs
+					executed := false
+					leaf.Run = func(_ *cobra.Command, actualArgs []string) {
+						executed = true
+						assert.Equal(t, expectedArgs, append([]string(nil), actualArgs...))
+					}
+					leaf.RunE = nil
+					handled, err := dispatchCommandDiscovery(root, args)
+					require.NoError(t, err)
+					require.False(t, handled)
+					assert.Equal(t, originalArgs, args)
+					assert.Empty(t, output.String())
+					root.SetArgs(args)
+					require.NoError(t, root.Execute())
+					assert.True(t, executed)
+					assert.Equal(t, position != "after separator" && position != "disabled", enabled)
+				})
+			}
+		}
+	}
+}
+
+func TestDiscoveryParentLocalFlagDoesNotShadowChild(t *testing.T) {
+	for _, name := range []string{"docs", "example"} {
+		for _, args := range [][]string{
+			{"--" + name, "terraform", "plan"},
+			{"terraform", "--" + name, "plan"},
+			{"terraform", "plan", "--" + name},
+		} {
+			t.Run(strings.Join(args, " "), func(t *testing.T) {
+				mockDiscoveryDependencies(t)
+				root, leaf, output := discoveryTestRoot(t)
+				leaf.Parent().Flags().Bool(name, false, "Parent-local option")
+				opened := false
+				openDocsURL = func(string) error { opened = true; return nil }
+				handled, err := dispatchCommandDiscovery(root, args)
+				require.NoError(t, err)
+				assert.True(t, handled)
+				assert.Equal(t, name == "docs", opened)
+				assert.Contains(t, output.String(), "Documentation:")
+			})
+		}
+	}
+}
+
+func TestDiscoveryCustomFlagAlongsideGlobalDiscovery(t *testing.T) {
+	for _, custom := range []string{"docs", "example"} {
+		t.Run(custom, func(t *testing.T) {
+			mockDiscoveryDependencies(t)
+			root, leaf, _ := discoveryTestRoot(t)
+			leaf.Flags().Bool(custom, false, "Custom option")
+			global := "docs"
+			if custom == global {
+				global = "example"
+			}
+			opened := false
+			openDocsURL = func(string) error { opened = true; return nil }
+			// Discovery bypasses custom flag validation, even before the command.
+			handled, err := dispatchCommandDiscovery(root, []string{"--" + custom + "=invalid", "terraform", "plan", "--" + global})
+			require.NoError(t, err)
+			assert.True(t, handled)
+			assert.Equal(t, global == "docs", opened)
+		})
+	}
+}
+
 func TestDiscoveryDispatchBoundaries(t *testing.T) {
 	mockDiscoveryDependencies(t)
 	root, _, _ := discoveryTestRoot(t)
@@ -215,6 +314,7 @@ func TestDiscoveryNoninteractiveExamples(t *testing.T) {
 }
 
 func TestDiscoveryInteractiveExamples(t *testing.T) {
+	_ = NewTestKit(t)
 	for _, scenario := range []string{"install", "decline", "cancel-picker", "cancel-confirm", "picker-error", "confirm-error", "init-error", "single"} {
 		t.Run(scenario, func(t *testing.T) {
 			mockDiscoveryDependencies(t)
@@ -272,13 +372,14 @@ func TestDiscoveryInteractiveExamples(t *testing.T) {
 				assert.Contains(t, output.String(), "Destination:")
 			}
 			if scenario == "decline" {
-				assert.Contains(t, output.String(), "Example initialization declined. No files were changed.")
+				assert.Contains(t, ansi.Strip(output.String()), "\n\n⚠ Example initialization declined. No files were changed.")
 			}
 		})
 	}
 }
 
 func TestDiscoveryExistingDestination(t *testing.T) {
+	_ = NewTestKit(t)
 	for _, scenario := range []string{"overwrite", "decline", "cancel", "empty", "file", "noninteractive", "init-error"} {
 		t.Run(scenario, func(t *testing.T) {
 			mockDiscoveryDependencies(t)
@@ -319,7 +420,10 @@ func TestDiscoveryExistingDestination(t *testing.T) {
 			}
 			assert.Equal(t, scenario == "overwrite" || scenario == "empty" || scenario == "init-error", installed)
 			if scenario == "decline" {
-				assert.Contains(t, output.String(), "initialization declined")
+				assert.Contains(t, ansi.Strip(output.String()), "\n\n⚠ Example initialization declined. No files were changed.")
+			}
+			if scenario == "cancel" {
+				assert.Contains(t, ansi.Strip(output.String()), "\n\n⚠ Example initialization canceled. No files were changed.")
 			}
 			if scenario == "noninteractive" {
 				assert.Contains(t, output.String(), "--force=false")

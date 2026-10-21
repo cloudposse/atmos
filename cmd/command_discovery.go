@@ -62,7 +62,7 @@ func dispatchCommandDiscovery(root *cobra.Command, args []string) (bool, error) 
 	if parseErr != nil {
 		return true, discoveryUsageError(request.command, parseErr)
 	}
-	if err := validateDiscoveryRequest(request); err != nil {
+	if err := validateDiscoveryRequest(&request); err != nil {
 		return true, discoveryUsageError(request.command, err)
 	}
 	metadata := internal.ResolveCommandMetadata(request.command)
@@ -79,10 +79,10 @@ func dispatchCommandDiscovery(root *cobra.Command, args []string) (bool, error) 
 		}
 		return true, nil
 	}
-	return true, discoverCommandExamples(request, metadata.Examples)
+	return true, discoverCommandExamples(&request, metadata.Examples)
 }
 
-func validateDiscoveryRequest(request discoveryRequest) error {
+func validateDiscoveryRequest(request *discoveryRequest) error {
 	if request.docs && request.example {
 		return fmt.Errorf("%w: --docs and --example", errUtils.ErrMutuallyExclusiveFlags)
 	}
@@ -102,7 +102,7 @@ func discoveryUsageError(cmd *cobra.Command, err error) error {
 		WithExitCode(2).Err()
 }
 
-func discoveryInteractive(request discoveryRequest) bool {
+func discoveryInteractive(request *discoveryRequest) bool {
 	if !discoveryTTY() {
 		return false
 	}
@@ -116,7 +116,7 @@ func discoveryInteractive(request discoveryRequest) bool {
 	return true
 }
 
-func discoverCommandExamples(request discoveryRequest, examples []internal.CommandExample) error {
+func discoverCommandExamples(request *discoveryRequest, examples []internal.CommandExample) error {
 	out := request.command.OutOrStdout()
 	if len(examples) == 0 {
 		fmt.Fprintln(out, "No examples are registered for this command.")
@@ -134,13 +134,14 @@ func discoverCommandExamples(request discoveryRequest, examples []internal.Comma
 	}
 	err := initializeSelectedExample(request, examples)
 	if errors.Is(err, huh.ErrUserAborted) {
-		fmt.Fprintln(out, "Example initialization canceled. No files were changed.")
+		fmt.Fprintln(out)
+		ui.New(out).Warning("Example initialization canceled. No files were changed.")
 		return nil
 	}
 	return err
 }
 
-func initializeSelectedExample(request discoveryRequest, examples []internal.CommandExample) error {
+func initializeSelectedExample(request *discoveryRequest, examples []internal.CommandExample) error {
 	selected := examples[0]
 	if len(examples) > 1 {
 		index, err := discoverySelect(request.command, examples)
@@ -171,7 +172,8 @@ func initializeSelectedExample(request discoveryRequest, examples []internal.Com
 		return err
 	}
 	if !confirmed {
-		fmt.Fprintln(out, styles.muted.Render("Example initialization declined. No files were changed."))
+		fmt.Fprintln(out)
+		ui.New(out).Warning("Example initialization declined. No files were changed.")
 		return nil
 	}
 	return discoveryInit(request.command, exampleInitArgs(request.globals, selected, overwrite))

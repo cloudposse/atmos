@@ -20,7 +20,7 @@ def validate():
         "--force=false",
         "--force=true",
         "Overwrite matching files in the existing directory?",
-        "Example initialization declined. No files were changed.",
+        "⚠ Example initialization declined. No files were changed.",
         "Fetching source",
         "Initialized quick-start-simple",
         "Example: Quick Start Simple",

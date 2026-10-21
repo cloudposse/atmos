@@ -15,15 +15,20 @@ import (
 )
 
 type discoveryRequest struct {
-	command     *cobra.Command
-	docs        bool
-	example     bool
-	help        bool
-	noColor     bool
-	forceColor  bool
-	interactive *bool
-	globals     []string
-	positionals []string
+	command         *cobra.Command
+	docs            bool
+	example         bool
+	help            bool
+	noColor         bool
+	forceColor      bool
+	interactive     *bool
+	globals         []string
+	positionals     []string
+	discoveryValues []discoveryFlagValue
+}
+
+type discoveryFlagValue struct {
+	name, value string
 }
 
 const discoveryDash = "-"
@@ -63,7 +68,25 @@ func parseDiscoveryRequest(root *cobra.Command, args []string) (discoveryRequest
 		}
 		i += consumed - 1
 	}
+	if err := request.setDiscoveryFlags(root); firstErr == nil {
+		firstErr = err
+	}
 	return request, firstErr
+}
+
+// Cobra parses flags on the selected command, even when they precede its name.
+// Wait until that command is known before deciding who owns discovery flags.
+func (request *discoveryRequest) setDiscoveryFlags(root *cobra.Command) error {
+	var firstErr error
+	for _, value := range request.discoveryValues {
+		if discoveryFlag(request.command, value.name, false) != root.PersistentFlags().Lookup(value.name) {
+			continue
+		}
+		if err := request.setFlag(value.name, value.value); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 func (request *discoveryRequest) addPositional(root *cobra.Command, arg string) {
@@ -97,7 +120,12 @@ func (request *discoveryRequest) readFlag(root *cobra.Command, args []string) (i
 			value = args[1]
 		}
 	}
-	err := request.setFlag(flag.Name, value)
+	var err error
+	if flag.Name == "docs" || flag.Name == "example" {
+		request.discoveryValues = append(request.discoveryValues, discoveryFlagValue{flag.Name, value})
+	} else {
+		err = request.setFlag(flag.Name, value)
+	}
 	if forwardDiscoveryGlobal(root, flag.Name) {
 		request.globals = append(request.globals, args[:consumed]...)
 	}
@@ -166,7 +194,7 @@ func discoveryFlag(cmd *cobra.Command, name string, shorthand bool) *pflag.Flag 
 	for current := cmd; current != nil; current = current.Parent() {
 		sets := []*pflag.FlagSet{current.PersistentFlags()}
 		if current == cmd {
-			sets = append(sets, current.Flags())
+			sets = []*pflag.FlagSet{current.Flags(), current.PersistentFlags()}
 		}
 		for _, set := range sets {
 			var flag *pflag.Flag
@@ -184,7 +212,19 @@ func discoveryFlag(cmd *cobra.Command, name string, shorthand bool) *pflag.Flag 
 }
 
 func (request *discoveryRequest) setFlag(name, value string) error {
-	if !slices.Contains([]string{"docs", "example", helpFlagName, "interactive", "no-color", "force-color"}, name) {
+	targets := map[string]*bool{
+		"docs":        &request.docs,
+		"example":     &request.example,
+		helpFlagName:  &request.help,
+		"no-color":    &request.noColor,
+		"force-color": &request.forceColor,
+	}
+	target := targets[name]
+	if name == "interactive" {
+		request.interactive = new(bool)
+		target = request.interactive
+	}
+	if target == nil {
 		return nil
 	}
 	if name == helpFlagName && !isBoolHelpValue(value) {
@@ -197,19 +237,6 @@ func (request *discoveryRequest) setFlag(name, value string) error {
 		request.docs = true
 		return fmt.Errorf("invalid value %q for --%s: %w", value, name, err)
 	}
-	switch name {
-	case "docs":
-		request.docs = enabled
-	case "example":
-		request.example = enabled
-	case helpFlagName:
-		request.help = enabled
-	case "interactive":
-		request.interactive = &enabled
-	case "no-color":
-		request.noColor = enabled
-	case "force-color":
-		request.forceColor = enabled
-	}
+	*target = enabled
 	return nil
 }
