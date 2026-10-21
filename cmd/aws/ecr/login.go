@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
@@ -319,4 +320,8 @@ func init() {
 	loginCmd.Flags().Bool("public", false, "Login to AWS ECR Public (public.ecr.aws)")
 
 	EcrCmd.AddCommand(loginCmd)
+	internal.RegisterCommandMetadata(
+		loginCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/ecr-login"),
+	)
 }

@@ -1,6 +1,10 @@
 package eks
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
+)
 
 // EksCmd executes 'aws eks' CLI commands.
 var EksCmd = &cobra.Command{
@@ -14,4 +18,11 @@ For a list of available AWS EKS commands, refer to the Atmos documentation:
 https://atmos.tools/cli/commands/aws/eks-update-kubeconfig`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
+}
+
+func init() {
+	internal.RegisterCommandMetadata(
+		EksCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/eks/eks"),
+	)
 }

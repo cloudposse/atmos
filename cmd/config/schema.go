@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/datafetcher"
@@ -38,6 +39,13 @@ if given.`,
 		defer perf.Track(atmosConfigPtr, "config.schemaRunE")()
 		return runConfigSchema(args)
 	},
+}
+
+func init() {
+	internal.RegisterCommandMetadata(
+		configSchemaCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/config/config-schema"),
+	)
 }
 
 func runConfigSchema(args []string) error {

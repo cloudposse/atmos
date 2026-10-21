@@ -71,7 +71,11 @@ func init() {
 	RegisterAnsibleCompletions(ansibleCmd)
 
 	// Register this command with the registry.
-	internal.Register(&AnsibleCommandProvider{})
+	internal.Register(
+		&AnsibleCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ansible/usage"),
+		internal.WithExample("examples/demo-ansible", "Ansible"),
+	)
 }
 
 // AnsibleCommandProvider implements the CommandProvider interface.

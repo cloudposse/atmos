@@ -5,6 +5,7 @@ package source
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	sourcecmd "github.com/cloudposse/atmos/pkg/provisioner/source/cmd"
 )
 
@@ -33,10 +34,34 @@ Commands:
 
 func init() {
 	// Add subcommands from shared package.
-	sourceCmd.AddCommand(sourcecmd.PullCommand(packerConfig))
-	sourceCmd.AddCommand(sourcecmd.ListCommand(packerConfig))
-	sourceCmd.AddCommand(sourcecmd.DescribeCommand(packerConfig))
-	sourceCmd.AddCommand(sourcecmd.DeleteCommand(packerConfig))
+	pullCmd := sourcecmd.PullCommand(packerConfig)
+	internal.RegisterCommandMetadata(
+		pullCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/packer/source/pull"),
+	)
+	sourceCmd.AddCommand(pullCmd)
+	listCmd := sourcecmd.ListCommand(packerConfig)
+	internal.RegisterCommandMetadata(
+		listCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/packer/source/list"),
+	)
+	sourceCmd.AddCommand(listCmd)
+	describeCmd := sourcecmd.DescribeCommand(packerConfig)
+	internal.RegisterCommandMetadata(
+		describeCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/packer/source/describe"),
+	)
+	sourceCmd.AddCommand(describeCmd)
+	deleteCmd := sourcecmd.DeleteCommand(packerConfig)
+	internal.RegisterCommandMetadata(
+		deleteCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/packer/source/delete"),
+	)
+	sourceCmd.AddCommand(deleteCmd)
+	internal.RegisterCommandMetadata(
+		sourceCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/packer/source/source"),
+	)
 }
 
 // GetSourceCommand returns the source command for parent registration.

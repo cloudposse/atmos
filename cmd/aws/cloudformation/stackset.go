@@ -2,6 +2,8 @@ package cloudformation
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // newStackSetCmd is the `atmos aws cloudformation stackset` verb group:
@@ -17,5 +19,9 @@ func newStackSetCmd() *cobra.Command {
 	cmd.AddCommand(newOperationCommand("update", "stackset-update", "Update a StackSet's template/parameters/capabilities"))
 	cmd.AddCommand(newOperationCommand(subCommandDelete, "stackset-delete", "Delete every stack instance, then the StackSet itself"))
 	cmd.AddCommand(newOperationCommand("instances", "stackset-instances", "List a StackSet's stack instances"))
+	internal.RegisterCommandMetadata(
+		cmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/stackset/stackset"),
+	)
 	return cmd
 }

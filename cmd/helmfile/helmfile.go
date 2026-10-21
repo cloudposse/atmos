@@ -48,7 +48,11 @@ func init() {
 	helmfileCmd.AddCommand(source.GetSourceCommand())
 
 	// Register this command with the registry.
-	internal.Register(&HelmfileCommandProvider{})
+	internal.Register(
+		&HelmfileCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/helmfile/usage"),
+		internal.WithExample("examples/demo-helmfile", "Helmfile"),
+	)
 }
 
 // helmfileRun is the shared execution function for all helmfile subcommands.

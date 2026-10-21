@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cipkg "github.com/cloudposse/atmos/pkg/ci"
 	cachepkg "github.com/cloudposse/atmos/pkg/ci/cache"
@@ -50,6 +51,10 @@ func init() {
 	cacheCmd.AddCommand(cacheListCmd)
 	cacheCmd.AddCommand(cacheDeleteCmd)
 	cacheCmd.AddCommand(cachePathsCmd)
+	internal.RegisterCommandMetadata(
+		cacheCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ci/cache/cache"),
+	)
 }
 
 // buildConfigAndStacksInfo creates ConfigAndStacksInfo from global flags so the

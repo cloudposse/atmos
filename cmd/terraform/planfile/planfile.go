@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 )
@@ -43,4 +44,8 @@ func init() {
 
 	// Register as persistent flags so subcommands inherit them.
 	planfileParser.RegisterPersistentFlags(PlanfileCmd)
+	internal.RegisterCommandMetadata(
+		PlanfileCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/planfile/planfile"),
+	)
 }

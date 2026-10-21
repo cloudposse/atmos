@@ -5,6 +5,7 @@ package ansible
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/flags"
 )
@@ -43,6 +44,10 @@ func init() {
 	_, validator, usage := argsBuilder.Build()
 	playbookCmd.Use = "playbook " + usage
 	playbookCmd.Args = validator
+	internal.RegisterCommandMetadata(
+		playbookCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ansible/playbook"),
+	)
 }
 
 // runPlaybook executes the ansible playbook command.

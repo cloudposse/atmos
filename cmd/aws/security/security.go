@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	atmosTools "github.com/cloudposse/atmos/pkg/ai/tools/atmos"
@@ -334,6 +335,14 @@ func init() {
 	}
 
 	SecurityCmd.AddCommand(securityAnalyzeCmd)
+	internal.RegisterCommandMetadata(
+		SecurityCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/security/security"),
+	)
+	internal.RegisterCommandMetadata(
+		securityAnalyzeCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/security/analyze"),
+	)
 }
 
 // Finding is a type alias for the security package Finding type (used in buildSecurityReport).
