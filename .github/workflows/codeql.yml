@@ -277,11 +277,24 @@ jobs:
             semgrep/semgrep@sha256:65dcd4408adda7c183a6b4550cb1e9b19f7f627a6fbb7e0559bd466bedc44d7b \
             semgrep scan --config=p/ci --sarif --output=semgrep.sarif --metrics=off
 
+      # Semgrep keeps nosemgrep findings in SARIF with inSource suppressions,
+      # which GitHub code scanning does not honor. Keep the raw report intact.
+      - name: Honor inline Semgrep suppressions
+        id: semgrep-sarif
+        if: ${{ !cancelled() && hashFiles('semgrep.sarif') != '' }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require('node:fs');
+            const filter = require('./.github/scripts/filter-semgrep-sarif.cjs');
+            const report = JSON.parse(fs.readFileSync('semgrep.sarif', 'utf8'));
+            fs.writeFileSync('semgrep-upload.sarif', JSON.stringify(filter(report)));
+
       - name: Upload SARIF to code-scanning
-        if: always()
+        if: ${{ !cancelled() && steps.semgrep-sarif.outcome == 'success' }}
         uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
-          sarif_file: semgrep.sarif
+          sarif_file: semgrep-upload.sarif
           category: semgrep
           # See the ref/sha override comment on the analyze job's upload step
           # above: without it, merge_group uploads race the ephemeral
