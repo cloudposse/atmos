@@ -1100,9 +1100,20 @@ func (n *terraformNodeHooks) BeforeWithWriters(_ context.Context, info *schema.C
 	return verifyStoredPlanForNode(n.subCommand, info, nodeAuthContext, nodeAuthManager)
 }
 
-// BeforePrepared runs lifecycle hooks with the executor's authenticated,
-// resolved component info. It never provisions again, so hook-created files
-// survive until Terraform runs in the same directory.
+// NeedsPreAuth preserves fixture bootstrap for test components with user hooks.
+func (n *terraformNodeHooks) NeedsPreAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (bool, error) {
+	defer perf.Track(atmosConfig, "terraform.terraformNodeHooks.NeedsPreAuth")()
+
+	if n.subCommand != "test" {
+		return false, nil
+	}
+	hooks, err := h.GetHooks(atmosConfig, info)
+	return hooks != nil && hooks.HasHooks(), err
+}
+
+// BeforePrepared runs lifecycle hooks with the executor's resolved component
+// info (authenticated except for test fixture bootstrap). It never provisions
+// again, so hook-created files survive until Terraform runs in the same directory.
 func (n *terraformNodeHooks) BeforePrepared(_ context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, writers schema.ComponentNodeHookWriters) error {
 	if !terraformHooksNeedPreparation(n.subCommand) {
 		return nil

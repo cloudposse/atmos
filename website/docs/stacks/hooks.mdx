@@ -74,11 +74,14 @@ explicit `atmos terraform init` command. They do not fire for the implicit
 `init` that `plan`, `apply`, and `deploy` run automatically — use
 `before.terraform.plan` / `before.terraform.apply` for those.
 
-For `init`, `destroy`, and `test`, before-hooks run after authentication, source
-and workdir provisioning, and configuration generation, before Terraform runs
-(including any implicit init). Hook commands and steps use the prepared component
-workdir by default. After-hooks run when the operation finishes, with its success
-or failure outcome. In multi-component runs, these events fire separately for each
+For `init` and `destroy`, before-hooks run after authentication, source and
+workdir provisioning, and configuration generation, before Terraform runs
+(including any implicit init). For `test`, before-hooks run after source and
+workdir provisioning but before authentication and Terraform configuration
+generation, so they can start fixtures such as an emulator needed by the
+component's identity. Hook commands and steps use the prepared component workdir
+by default. After-hooks run when the operation finishes, with its success or
+failure outcome. In multi-component runs, these events fire separately for each
 component; they are not aggregate events.
 
 ## Supported Kinds

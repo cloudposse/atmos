@@ -131,7 +131,7 @@ func writeLifecycleWorkdirFixture(t *testing.T, command string, source bool) str
 			},
 		}
 		if source {
-			config["source"] = map[string]any{"uri": module}
+			config["source"] = map[string]any{"uri": module, "ttl": "0s"}
 		} else {
 			config["metadata"] = map[string]any{"component": "module"}
 		}

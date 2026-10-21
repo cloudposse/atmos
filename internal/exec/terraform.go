@@ -3,6 +3,7 @@ package exec
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -145,6 +146,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 		return handleVersionSubcommand(&atmosConfig, &info)
 	}
 
+	// Test fixtures may start the emulator that authentication needs. Provision
+	// their workdir and run their hooks first, retaining per-invocation source state.
+	fixtureState, err := prepareTerraformTestFixtures(&atmosConfig, &info, opts...)
+	if err != nil {
+		return err
+	}
+
 	// Set up authentication (merge global + component auth, create AuthManager, inject bridge).
 	authManager, err := setupTerraformAuth(&atmosConfig, &info)
 	if err != nil {
@@ -159,6 +167,9 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 			return err
 		}
 	}
+	// Stack processing rebuilds ComponentSection; keep the provisioning markers
+	// so implicit init cannot re-copy the source over fixture-generated files.
+	maps.Copy(info.ComponentSection, fixtureState)
 	if shouldCheckStack && len(info.Stack) < 1 {
 		return errUtils.ErrMissingStack
 	}
@@ -210,14 +221,9 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 	// execution. Without this, hooks create a fresh info with no auth.
 	SetLastAuthContext(info.AuthContext, info.AuthManager)
 
-	// Hooks that consume component files must run after workdir provisioning;
-	// scheduler/Cobra before-hooks run too early and may see the shared source.
-	if preparedHooks, ok := info.NodeHooks.(schema.ComponentNodeHooksWithPreparation); ok {
-		writers := shellCommandOutputWriters(opts...)
-		if err := preparedHooks.BeforePrepared(shellCommandContext(opts...), &atmosConfig, &info, schema.ComponentNodeHookWriters{
-			Stdout: writers.Stdout,
-			Stderr: writers.Stderr,
-		}); err != nil {
+	// Test hooks already ran before authentication to bootstrap their fixtures.
+	if fixtureState == nil {
+		if err := runPreparedTerraformHooks(&atmosConfig, &info, opts...); err != nil {
 			return err
 		}
 	}

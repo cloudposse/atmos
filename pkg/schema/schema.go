@@ -1280,12 +1280,16 @@ type ComponentNodeHooksWithOutput interface {
 }
 
 // ComponentNodeHooksWithPreparation supports before-hooks that need the actual
-// execution directory. Terraform calls BeforePrepared after authentication,
-// source/workdir provisioning and config generation, before running Terraform
-// (including implicit init). Implementations defer their user hooks from Before
+// execution directory. Terraform calls BeforePrepared after source/workdir
+// provisioning, before running Terraform (including implicit init). Test hooks
+// run before authentication to bootstrap fixtures; other commands run them after
+// authentication and config generation. Implementations defer their hooks from Before
 // to this callback. A failure prevents the Terraform command from running.
 type ComponentNodeHooksWithPreparation interface {
 	ComponentNodeHooks
+	// NeedsPreAuth reports whether test fixtures must run before authentication.
+	// A test component without user hooks keeps normal authenticated provisioning.
+	NeedsPreAuth(atmosConfig *AtmosConfiguration, info *ConfigAndStacksInfo) (bool, error)
 	BeforePrepared(ctx context.Context, atmosConfig *AtmosConfiguration, info *ConfigAndStacksInfo, writers ComponentNodeHookWriters) error
 }
 
