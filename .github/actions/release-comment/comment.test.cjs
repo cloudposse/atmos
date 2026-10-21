@@ -1,15 +1,6 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { readFileSync } = require('node:fs');
-const { join } = require('node:path');
-
-// Exercise the actual inline github-script body without a separate runtime module.
-const workflow = readFileSync(join(__dirname, '../workflows/release-distribution.yml'), 'utf8');
-const script = workflow.match(/      - name: Notify included pull requests\r?\n[\s\S]*?          script: \|\r?\n((?: {12}[^\r\n]*\r?\n|\r?\n)+)/)?.[1];
-assert.ok(script, 'release notification github-script body must exist');
-const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-const run = new AsyncFunction('github', 'context', script.replace(/^ {12}/gm, ''));
-const notify = ({ github, context }) => run(github, context);
+const notify = require('./comment.cjs');
 
 const repo = { owner: 'cloudposse', repo: 'atmos' };
 const release = {

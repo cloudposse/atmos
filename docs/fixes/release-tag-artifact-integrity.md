@@ -109,9 +109,9 @@ diagnostic for these calls. Go tooling and release source still need checkouts.
 ## Post-publication maintenance
 
 After verification, `release-distribution.yml` directly invokes the existing Cloud Posse
-release-branch-manager action for stable releases and `actions/github-script`
-for release notifications, retaining the shared workflow's inline notification code.
-`.github/scripts/release-comment.test.cjs` tests that inline code directly;
+release-branch-manager action for stable releases. The local `release-comment`
+action preserves the shared workflow's notification code using `actions/github-script`.
+Its script and regression tests live in `.github/actions/release-comment/`;
 `atmos test local-actions javascript` discovers the tests automatically.
 The separate guarded `release-major-tag.yml` workflow remains the sole writer
 of the moving major-version tag.
