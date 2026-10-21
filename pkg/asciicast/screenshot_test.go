@@ -2,6 +2,7 @@ package asciicast
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image/png"
 	"os"
@@ -90,5 +91,59 @@ func TestRenderMarkerScreenshotsReturnsErrorOnMissingInput(t *testing.T) {
 	err := RenderMarkerScreenshots(filepath.Join(t.TempDir(), "missing.cast"))
 	if err == nil {
 		t.Fatal("expected an error for a missing input file")
+	}
+}
+
+func TestRenderMarkerScreenshotsReturnsErrScreenshotRenderFailed(t *testing.T) {
+	tests := []struct {
+		name string
+		// target builds the marker's output path inside dir.
+		target func(t *testing.T, dir string) string
+	}{
+		{
+			name: "parent directory cannot be created because a file is in the way",
+			target: func(t *testing.T, dir string) string {
+				blocker := filepath.Join(dir, "blocker")
+				if err := os.WriteFile(blocker, []byte("not a directory"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				return filepath.Join(blocker, "shot.png")
+			},
+		},
+		{
+			name: "output path is an existing directory so the rename fails",
+			target: func(t *testing.T, dir string) string {
+				existing := filepath.Join(dir, "shot.png")
+				if err := os.Mkdir(existing, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				return existing
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			target := tt.target(t, dir)
+			path := writeMarkerTestCast(t, 20, 5, [][3]any{
+				{0.1, "o", "one\n"},
+				{0.2, "m", target},
+			})
+
+			err := RenderMarkerScreenshots(path)
+			if !errors.Is(err, ErrScreenshotRenderFailed) {
+				t.Fatalf("expected ErrScreenshotRenderFailed, got %v", err)
+			}
+
+			// A failed render must not leave temp files behind next to the target.
+			leftovers, globErr := filepath.Glob(filepath.Join(dir, ".screenshot-*.png.tmp"))
+			if globErr != nil {
+				t.Fatal(globErr)
+			}
+			if len(leftovers) != 0 {
+				t.Fatalf("expected no leftover temp files, found %v", leftovers)
+			}
+		})
 	}
 }
