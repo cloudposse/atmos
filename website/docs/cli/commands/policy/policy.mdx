@@ -17,6 +17,8 @@ discovering stacks, contacting CI APIs, installing tools, or executing hooks.
 
 ```shell
 atmos policy check
+atmos policy check --syntax-only
+atmos policy check --root /path/to/project
 atmos policy list
 atmos policy schema function
 atmos policy test tests/cases.json
@@ -29,9 +31,12 @@ Normal operational commands retain their policy gates.
 
 ## check
 
-`atmos policy check` validates document fields, CEL/Starlark compilation, unique rule identities,
+`atmos policy check` validates document fields, CEL/Starlark/OPA compilation, JSON Schemas, unique rule identities,
 selectors, CI requirements, approval specifications, hook references and definitions, and tool-pin
-consistency. It checks configuration, not whether an operation would be allowed. It does not require
+consistency. It then evaluates configured `on: file` rules against YAML/JSON files selected by globs,
+relative to `--root` (default: current working directory). Use `--syntax-only` to check definitions
+without reading input files. See [file checks](/policies/validation-engines#file-checks) for diagnostics,
+input handling, and exit behavior. Other input kinds are not evaluated by this command. It does not require
 installed hook executables or CI credentials. An absent or empty policy bundle is an error.
 
 ## list
@@ -47,7 +52,7 @@ potentially private when sharing the output.
   <dt><code>input-kind</code></dt>
   <dd>One of <code>command</code>, <code>component.command</code>, <code>function</code>,
   <code>source</code>, <code>operation</code>, <code>terraform.plan</code>, or
-  <code>atmos.affected</code>. Prints the JSON Schema for <code>input</code>, rather than the
+  <code>atmos.affected</code>, or <code>file</code>. Prints the JSON Schema for <code>input</code>, rather than the
   entire request envelope. Terraform retains its native plan shape.</dd>
 </dl>
 

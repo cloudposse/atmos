@@ -7,6 +7,7 @@ command integrations collect specific inputs and enforce their decisions.
 
 | Input | Collector | Enforcement |
 |---|---|---|
+| `file` | Literal YAML/JSON documents selected by globs | `atmos policy check`, with per-file JSON diagnostics |
 | `function` | YAML/template function name, engine, and available provenance, without secret arguments | Before config/stack/registry/template handler execution |
 | `source` | Normalized destination, scheme, hostname, canonical path and provenance | Before imports/cache reuse, downloads, includes, and guarded template I/O |
 | `command` | Canonical runnable CLI command path | Before argument validation and pre-run hooks |
@@ -45,7 +46,7 @@ for limits and error behavior.
 
 | Layer | Implemented responsibility |
 |---|---|
-| `pkg/policy` | Input validation, CEL/Starlark evaluation, rule dispatch, decision precedence, and typed obligations |
+| `pkg/policy` | Input validation, CEL/Starlark/OPA/JSON Schema evaluation, structured diagnostics, rule dispatch, decision precedence, and typed obligations |
 | `pkg/policy/planfile` | Private artifact extraction, plan validation, and binding evaluation to saved-plan apply |
 | `pkg/ci` | Provider detection and optional snapshot collection |
 | `pkg/hooks` | Governing hook resolution, execution, skip protection, and failure propagation |
@@ -77,3 +78,11 @@ Protect policy sources, workflow configuration, binaries, and credentials. See
 Offline authoring commands: `atmos policy check`, `list`, `schema <input-kind>`, and `test <cases.json>`.
 Operational `--explain` reports reached gates and decisions on stderr without changing enforcement.
 See [source boundaries](https://atmos.tools/policies/sources) for guarded transport limitations.
+
+## Validation engines
+
+OPA evaluates boolean predicates or violation collections using embedded Rego. JSON Schema selects
+effects when validation fails. Both retain structured diagnostics and accept existing input kinds,
+including Terraform plans. File checks also support any JSON value as input. Definitions and local
+resources are loaded before pure evaluation. See [OPA, JSON Schema, and file checks](../website/docs/policies/validation-engines.mdx)
+for configuration and runtime limits.

@@ -49,6 +49,8 @@ func InputSchema(kind InputKind) (*jsonschema.Schema, error) {
 
 	var value any
 	switch kind {
+	case File:
+		return &jsonschema.Schema{Title: "file policy input"}, nil
 	case Command:
 		value = CommandInput{}
 	case ComponentCommand:

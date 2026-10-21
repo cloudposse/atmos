@@ -11,6 +11,7 @@ type InputKind string
 // Well-known input kind names. Collectors and command integration are separate.
 const (
 	Validation       InputKind = "validation"
+	File             InputKind = "file"
 	Plan             InputKind = "plan"
 	TerraformPlan    InputKind = "terraform.plan"
 	Operation        InputKind = "operation"
@@ -43,7 +44,8 @@ type Revisions struct {
 	Head      string `json:"head"`
 }
 
-// Request contains one explicitly selected input kind. Input must be a JSON object.
+// Request contains one explicitly selected input kind. File inputs may be any JSON value;
+// all other inputs must be JSON objects.
 // No input kind implicitly triggers collection of another kind (including affected).
 type Request struct {
 	Subject   *Subject        `json:"subject,omitempty"`
@@ -51,6 +53,7 @@ type Request struct {
 	Input     json.RawMessage `json:"input"`
 	CI        *CISnapshot     `json:"ci,omitempty"`
 	Revisions Revisions       `json:"revisions"`
+	File      string          `json:"file,omitempty"`
 }
 
 // Rule is an already resolved definition, not a policy manifest or trust assertion.
@@ -66,6 +69,9 @@ type Rule struct {
 	Parameters   json.RawMessage `json:"parameters,omitempty"`
 	RequiredCI   []CIRequirement `json:"required_ci,omitempty"`
 	Effects      Effects         `json:"effects"`
+	OPA          *OPAConfig      `json:"opa,omitempty"`
+	Schema       *SchemaConfig   `json:"schema,omitempty"`
+	Files        *FileSelector   `json:"files,omitempty"`
 }
 
 // Effects are obligations selected by a predicate. They cannot perform side effects.
@@ -96,10 +102,11 @@ type HookRequirement struct {
 
 // Finding preserves each rule's outcome and obligations, including on aggregate denial.
 type Finding struct {
-	RuleID  string         `json:"rule_id"`
-	Status  DecisionStatus `json:"status"`
-	Effects Effects        `json:"effects"`
-	Error   string         `json:"error,omitempty"`
+	RuleID      string         `json:"rule_id"`
+	Status      DecisionStatus `json:"status"`
+	Effects     Effects        `json:"effects"`
+	Error       string         `json:"error,omitempty"`
+	Diagnostics []Diagnostic   `json:"diagnostics,omitempty"`
 }
 
 // Decision is a pure evaluation result, not a final CI or operation result.
@@ -115,6 +122,28 @@ type Evaluation struct {
 	Expression string          `json:"expression"`
 	Parameters json.RawMessage `json:"parameters,omitempty"`
 	Request    *Request        `json:"request"`
+	OPA        *OPAConfig      `json:"opa,omitempty"`
+	Schema     *SchemaConfig   `json:"schema,omitempty"`
+}
+
+// Diagnostic retains a validator's explanation and document location.
+// Messages and details may contain input values; callers control their disclosure.
+type Diagnostic struct {
+	Message    string          `json:"message"`
+	Path       string          `json:"path,omitempty"`
+	SchemaPath string          `json:"schema_path,omitempty"`
+	Details    json.RawMessage `json:"details,omitempty"`
+}
+
+// EvaluationResult extends a predicate match with structured diagnostics.
+type EvaluationResult struct {
+	Matched     bool         `json:"matched"`
+	Diagnostics []Diagnostic `json:"diagnostics,omitempty"`
+}
+
+// DetailedEvaluator is an optional capability, preserving the boolean Evaluator API.
+type DetailedEvaluator interface {
+	EvaluateDetailed(ctx context.Context, evaluation Evaluation) (EvaluationResult, error)
 }
 
 // Evaluator is the language extension point for pure predicates, including CEL

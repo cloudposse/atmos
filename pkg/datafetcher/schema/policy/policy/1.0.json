@@ -30,11 +30,14 @@
           "additionalProperties": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["on", "rule", "action"],
+            "required": ["on", "action"],
             "properties": {
-              "on": {"enum": ["terraform.plan", "operation", "atmos.affected", "function", "command", "component.command", "source"]},
+              "on": {"enum": ["terraform.plan", "operation", "atmos.affected", "function", "command", "component.command", "source", "file"]},
               "allowed_roots": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
-              "engine": {"enum": ["cel", "starlark"], "default": "cel"},
+              "engine": {"enum": ["cel", "starlark", "opa", "jsonschema"], "default": "cel"},
+              "opa": {"type": "object", "additionalProperties": false, "required": ["query", "modules"], "properties": {"query": {"type": "string", "minLength": 1, "maxLength": 65536}, "modules": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}, "rego_version": {"enum": [0, 1], "default": 0}}},
+              "schema": {"type": "object", "additionalProperties": false, "required": ["path"], "properties": {"path": {"type": "string", "minLength": 1}}},
+              "files": {"type": "object", "additionalProperties": false, "required": ["include"], "properties": {"include": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}, "exclude": {"type": "array", "items": {"type": "string", "minLength": 1}}}},
               "rule": {"type": "string", "minLength": 1, "maxLength": 65536},
               "action": {"enum": ["deny", "hooks", "require_approval"]},
               "approvals": {
@@ -95,8 +98,12 @@
                 }
               }
             },
-            "allOf": [{"if": {"required": ["allowed_roots"]}, "then": {"properties": {"on": {"const": "source"}}}},{
-              "if": {"properties": {"on": {"enum": ["atmos.affected", "function", "command", "source"]}}},
+            "allOf": [{"if": {"properties": {"on": {"const": "file"}}}, "then": {"required": ["files"]}, "else": {"not": {"required": ["files"]}}},
+              {"if": {"required": ["engine"], "properties": {"engine": {"const": "opa"}}}, "then": {"required": ["opa"], "not": {"anyOf": [{"required": ["rule"]}, {"required": ["schema"]}]}}, "else": {"not": {"required": ["opa"]}}},
+              {"if": {"required": ["engine"], "properties": {"engine": {"const": "jsonschema"}}}, "then": {"required": ["schema"], "not": {"anyOf": [{"required": ["rule"]}, {"required": ["opa"]}]}}, "else": {"not": {"required": ["schema"]}}},
+              {"if": {"required": ["engine"], "properties": {"engine": {"enum": ["opa", "jsonschema"]}}}, "else": {"required": ["rule"]}},
+              {"if": {"required": ["allowed_roots"]}, "then": {"properties": {"on": {"const": "source"}}}},{
+              "if": {"properties": {"on": {"enum": ["atmos.affected", "function", "command", "source", "file"]}}},
               "then": {"not": {"required": ["match"]}}
             }, {
               "if": {"properties": {"action": {"const": "hooks"}}},

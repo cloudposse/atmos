@@ -251,6 +251,7 @@ module.exports = {
                 'policies/sources',
                 'policies/approvals',
                 'policies/starlark',
+                'policies/validation-engines',
                 'policies/terraform-plan',
                 'policies/affected',
                 'policies/hooks',

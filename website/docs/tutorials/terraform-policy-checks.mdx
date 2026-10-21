@@ -1,0 +1,303 @@
+---
+title: Replace Terraform Plan Wrappers with Policies and Hooks
+sidebar_label: Terraform Policies and Hooks
+description: Migrate custom Terraform plan checks to native OPA policies, add local and CI hooks, and validate repository files with JSON Schema.
+---
+
+Use native OPA policies to check Terraform plans, add Infracost and Markdown reporting through
+lifecycle hooks, and validate repository files with JSON Schema. This tutorial builds on a community
+workflow that used custom `atmos terraform plan+` and `plan++` commands to combine these tasks.
+
+By the end, you will have separate Rego checks for database changes and owner tags, optional
+component and stack selectors, hooks scoped to local or CI execution, and a schema-based file check.
+
+## Prerequisites
+
+- An Atmos version with the experimental OPA and JSON Schema policy engines.
+- An existing Atmos project with working Terraform plan commands and the credentials it needs.
+- For the optional cost hook, the Infracost CLI and configured credentials.
+- For the optional custom report hook, your own report executable on PATH.
+
+Run the commands from your project root. Replace `vpc`, `database`, and `acme-use1-prod` with your
+component and stack names. The Rego examples target AWS resources; adapt them to your infrastructure.
+Native OPA policies use the embedded engine and do not require the external OPA CLI.
+
+## Choose What to Migrate
+
+
+The community script discovers the component directory and saved-plan filename, converts the plan
+to JSON, runs three OPA checks, and prints findings. One command checks an existing plan; another
+creates the plan first. It also manages optional Infracost execution and displays focused resource
+details for changes that deserve attention.
+
+Here is how those responsibilities map to Atmos:
+
+| Workflow responsibility | Native approach |
+|---|---|
+| Evaluate Rego against Terraform changes | `engine: opa` with `on: terraform.plan` |
+| Find and extract the plan for enforcement | Atmos captures native plan JSON after planning and checks it again before saved-plan apply |
+| Apply checks to selected infrastructure | `match.components`, `match.component_types`, `match.stacks`, tags, and labels |
+| Estimate costs | An `after.terraform.plan` hook with `kind: infracost` |
+| Present a custom resource report | A command hook that writes Markdown to `$ATMOS_OUTPUT_FILE` |
+| Check repository configuration files | `on: file` with OPA or JSON Schema and file globs |
+
+**The original script reports violations without explicitly failing on them.** The native policy
+examples below use `action: deny`, which blocks the command. Keep advisory checks in hooks if you
+want the original warning-only behavior. This is a migration pattern, not an identical replacement
+for every part of the script.
+
+## 1. Add Native OPA Plan Policies
+
+Create `policy.d/rego/`, then save the following manifest and Rego files at their indicated paths. Each rule has its own module list, so existing policies that
+use the same package and decision name can remain separate:
+
+```yaml title="policy.d/terraform.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: terraform-safety
+spec:
+  policies:
+    protect-databases:
+      on: terraform.plan
+      engine: opa
+      opa:
+        query: data.terraform.analysis.warn
+        modules: [rego/database-changes.rego]
+      action: deny
+      reason: Database deletion or replacement needs review.
+    require-owner-tags:
+      on: terraform.plan
+      engine: opa
+      opa:
+        query: data.terraform.analysis.warn
+        modules: [rego/owner-tags.rego]
+      action: deny
+      reason: EC2 instances must have a known, nonempty Owner tag.
+```
+
+These two small policies illustrate the pattern; substitute your own reviewed rules for your
+organization's change and tagging requirements:
+
+```rego title="policy.d/rego/database-changes.rego"
+package terraform.analysis
+
+warn[msg] {
+  resource := input.resource_changes[_]
+  resource.mode == "managed"
+  resource.type == "aws_db_instance"
+  resource.change.actions[_] == "delete"
+  msg := sprintf("Database %s will be deleted or replaced", [resource.address])
+}
+```
+
+```rego title="policy.d/rego/owner-tags.rego"
+package terraform.analysis
+
+warn[msg] {
+  resource := input.resource_changes[_]
+  resource.mode == "managed"
+  resource.type == "aws_instance"
+  resource.change.after != null
+  tags := object.get(resource.change.after, "tags_all", {})
+  not valid_owner(tags)
+  msg := sprintf("Resource %s needs an Owner tag", [resource.address])
+}
+
+valid_owner(tags) {
+  is_string(tags.Owner)
+  tags.Owner != ""
+}
+```
+
+The deletion check also catches replacements, whose action list contains `delete`. The tag check
+skips resources being deleted and rejects absent, null, or empty owners. An owner unknown until
+apply is not a known valid tag and does not pass this check.
+
+The embedded OPA engine accepts a boolean or an array/set of violation strings or objects.
+`true` or a nonempty collection selects the configured action. An empty collection selects no
+action; an undefined query is an evaluation error. No external `opa` executable is required.
+The default syntax is Rego v0; use `opa.rego_version: 1` for Rego v1.
+
+List local `.rego` files explicitly, including shared helper modules. This interface loads module
+files, not `opa exec --bundle` directories or their data files. Module paths are relative to the
+policy manifest and must stay within its directory.
+
+## 2. Validate and Run the Plan
+
+First validate the policy definitions, then run your normal plan command:
+
+```shell
+atmos policy check --syntax-only
+atmos terraform plan vpc -s acme-use1-prod
+```
+
+A database deletion or replacement, or an EC2 instance without a valid Owner tag, denies the plan.
+A plan with neither violation passes these checks. The command displays the static `reason` for a
+blocking rule; the Rego messages remain available in structured findings.
+
+After the plan passes and you have reviewed its changes, apply that saved plan:
+
+```shell
+atmos terraform apply vpc -s acme-use1-prod --from-plan
+```
+
+Atmos evaluates the saved plan after planning and again before applying it. With plan policies
+enabled, use explicit planning and saved-plan apply; implicit apply/deploy and direct destroy are
+rejected. `atmos policy check` validates definitions and configured file inputs—it does not inspect
+an existing binary Terraform plan as the community's `plan+` command did.
+
+### Limit the Checks to Selected Components and Stacks
+
+To restrict either rule, add a selector alongside `on` and `engine`:
+
+```yaml
+match:
+  component_types: [terraform]
+  components: [vpc, database]
+  stacks: [acme-use1-prod]
+```
+
+These are exact names. Values within a list combine with OR; different selector fields combine
+with AND. Omit a field to leave that dimension unrestricted.
+
+## 3. Add Cost Estimates and Markdown Reports
+
+Stack hooks can run only on a developer's machine with **`when: local`**, or only in a detected
+CI environment with **`when: ci`**. For example, run cost estimates in CI:
+
+```yaml title="Stack component configuration"
+components:
+  terraform:
+    vpc:
+      hooks:
+        cost:
+          events: [after.terraform.plan]
+          when: ci
+          kind: infracost
+```
+
+`kind: infracost` supplies the command, arguments, output handling, and Markdown cost summary.
+No `command` or `args` configuration is needed. Its default failure mode is `warn`.
+
+For a separate custom resource report that runs locally, add a command hook:
+
+```yaml title="Custom reporting hook"
+components:
+  terraform:
+    vpc:
+      hooks:
+        policy-report:
+          events: [after.terraform.plan]
+          when: local
+          kind: command
+          command: plan-policy-report
+          format: markdown
+          on_failure: warn
+```
+
+`plan-policy-report` represents **your own executable**, installed on the runner's PATH. Adapt the
+existing report generator to read `$ATMOS_COMPONENT` and `$ATMOS_STACK`, and write a Markdown table
+or resource details to `$ATMOS_OUTPUT_FILE`. Atmos supplies these environment variables and renders
+the output as Markdown in the terminal. The reporter still owns its plan
+lookup and extraction; the current command-hook interface does not populate `$ATMOS_PLANFILE`.
+Native policy findings are not automatically passed into this report hook.
+
+The Infracost hook requires the Infracost CLI and credentials. Its default command analyzes the
+component directory; it does not reproduce the wrapper's credential-file detection or cleanup of
+old `*.tfvars.json` files. Built-in Infracost summaries render in the terminal and flow to configured
+CI/Pro reporting. A generic `format: markdown` artifact supports terminal rendering; it does not
+automatically become the same built-in summary envelope.
+
+Change `when: ci` to `when: local` to run cost analysis locally, or omit `when` to run after
+successful plans in both environments. The local/CI predicates retain the hooks' implicit
+success condition. `on_failure: warn` keeps a report or cost-tool failure advisory. A custom
+reporter can continue invoking external OPA if it needs to preserve the original advisory checks.
+
+These `when` conditions belong to **stack hooks**. Native `policy.d` rules and governing
+`spec.hooks` definitions do not accept `when`. A hook's local/CI condition does not restrict the
+native plan policies above, and `--skip-hooks` does not bypass those policies. Policy engines can
+inspect their collected CI snapshot; see [policy CI context](/policies/ci). For file checks, another
+option is to run `atmos policy check` from a workflow or custom-command step with `when: ci` or
+`when: local`, selecting when the validation command runs.
+
+## 4. Preserve Checks That Need Stack Metadata
+
+The community's PCI check augments the plan with Spacelift labels and a `pci_compliant` variable.
+Those fields are not part of native Terraform plan JSON, so that Rego policy cannot be moved
+unchanged into `on: terraform.plan`.
+
+If the check only needs resolved component configuration, use existing
+[OPA component validation](/validation/opa). If it combines stack metadata with resource changes,
+retain the input-augmentation step in a custom hook/reporter, or deliberately rewrite the rule
+around the available policy context. OPA exposes literal `with` parameters through
+`data.atmos_context.params` and instance identity/tags/labels through
+`data.atmos_context.request.subject`; it does not automatically add arbitrary stack vars or
+Spacelift settings to `input`.
+
+## 5. Validate Repository Files with JSON Schema
+
+Create `policy.d/schemas/`, then add a policy and schema to check YAML and JSON documents selected
+by globs. This example requires a document’s top-level `metadata.owner` to equal `platform` whenever
+that property is present:
+
+```yaml title="policy.d/owners.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: ownership
+spec:
+  policies:
+    owner:
+      on: file
+      files:
+        include: ["config/**/*.json", "stacks/**/*.yaml"]
+      engine: jsonschema
+      schema:
+        path: schemas/owner.schema.json
+      action: deny
+```
+
+```json title="policy.d/schemas/owner.schema.json"
+{
+  "type": "object",
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "owner": { "const": "platform" }
+      }
+    }
+  }
+}
+```
+
+```shell
+atmos policy check
+atmos policy check --root /path/to/project
+```
+
+To try the rule, create `config/owner.json` and run `atmos policy check` with these contents:
+
+| File contents | Expected result |
+|---|---|
+| `{}` | Pass |
+| `{"metadata":{"owner":"platform"}}` | Pass |
+| `{"metadata":{"owner":"other"}}` | Deny |
+| `{"metadata":{"owner":null}}` | Deny |
+
+JSON Schema expresses this optional-property rule directly. Add `required` if absence should also
+fail. File globs are relative to the command's working directory or `--root`; each file rule must
+match at least one document.
+
+File checks use documents as written, without stack merging, template expansion, or YAML function
+execution. Output identifies each file and includes structured diagnostics with field paths. A
+denial returns a nonzero exit status. OPA findings are also retained as structured diagnostics;
+operational plan gates display static rule reasons rather than automatically printing potentially
+sensitive evaluated values.
+
+## Further Reading
+
+See [OPA, JSON Schema, and File Checks](/policies/validation-engines) for the full engine contracts,
+[Terraform Plan Policies](/policies/terraform-plan) for plan enforcement, and
+[Lifecycle Hooks](/stacks/hooks) for reporting and local/CI conditions.

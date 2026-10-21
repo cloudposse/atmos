@@ -23,7 +23,7 @@ type Engine struct {
 func NewEngine() *Engine {
 	defer perf.Track(nil, "policy.NewEngine")()
 
-	return &Engine{evaluators: map[string]Evaluator{CELEngine: &CEL{}, StarlarkEngine: &Starlark{}}}
+	return &Engine{evaluators: map[string]Evaluator{CELEngine: &CEL{}, StarlarkEngine: &Starlark{}, OPAEngine: &OPA{}, JSONSchemaEngine: &JSONSchema{}}}
 }
 
 // Register adds a language adapter without permitting replacement of an existing one.
@@ -86,7 +86,12 @@ func validateRequest(ctx context.Context, request *Request) error {
 	if request == nil || request.Kind == "" {
 		return fmt.Errorf("%w: kind is required", errUtils.ErrPolicyInputInvalid)
 	}
-	_, err := decodeObject(request.Input)
+	var err error
+	if request.Kind == File {
+		_, err = decodeDocument(request.Input)
+	} else {
+		_, err = decodeObject(request.Input)
+	}
 	if err == nil && request.Kind == AtmosAffected {
 		err = validateAffectedInput(request.Input)
 	}
@@ -98,14 +103,15 @@ func validateRequest(ctx context.Context, request *Request) error {
 
 func (e *Engine) evaluateRule(ctx context.Context, request *Request, rule *Rule) (Finding, error) {
 	finding := Finding{RuleID: rule.ID, Status: NotApplicable}
-	matched, effects, err := e.match(ctx, request, rule)
+	result, effects, err := e.match(ctx, request, rule)
+	finding.Diagnostics = result.Diagnostics
 	if err != nil {
 		finding.Status = EvaluationError
 		finding.Error = err.Error()
 		Explain(request.Kind, rule.ID, "evaluation error; required input may be unavailable")
 		return finding, fmt.Errorf("%w: rule %q: %w", errUtils.ErrPolicyEvaluation, rule.ID, err)
 	}
-	if matched {
+	if result.Matched {
 		finding.Effects = effects
 		finding.Status = Allow
 		if len(effects.Approvals) > 0 {
@@ -125,35 +131,39 @@ func (e *Engine) evaluateRule(ctx context.Context, request *Request, rule *Rule)
 	return finding, nil
 }
 
-func (e *Engine) match(ctx context.Context, request *Request, rule *Rule) (bool, Effects, error) {
+func (e *Engine) match(ctx context.Context, request *Request, rule *Rule) (EvaluationResult, Effects, error) {
 	selected, err := selectRule(ctx, request, rule)
 	if err != nil || !selected {
-		return false, Effects{}, err
+		return EvaluationResult{}, Effects{}, err
 	}
 	e.mu.RLock()
 	evaluator, exists := e.evaluators[rule.Engine]
 	e.mu.RUnlock()
 	if !exists {
-		return false, Effects{}, fmt.Errorf("%w: %s", errUtils.ErrPolicyEngineUnknown, rule.Engine)
+		return EvaluationResult{}, Effects{}, fmt.Errorf("%w: %s", errUtils.ErrPolicyEngineUnknown, rule.Engine)
 	}
 	if request.Kind == Source {
 		var err error
 		request, err = sourceRequest(request, rule.AllowedRoots)
 		if err != nil {
-			return false, Effects{}, err
+			return EvaluationResult{}, Effects{}, err
 		}
 	}
 	// JSON cloning rejects unsupported raw payloads and isolates each adapter and result.
-	input, err := cloneJSON(Evaluation{Expression: rule.Expression, Parameters: rule.Parameters, Request: request})
+	input, err := cloneJSON(Evaluation{Expression: rule.Expression, Parameters: rule.Parameters, Request: request, OPA: rule.OPA, Schema: rule.Schema})
 	if err != nil {
-		return false, Effects{}, err
+		return EvaluationResult{}, Effects{}, err
 	}
 	effects, err := cloneJSON(rule.Effects)
 	if err != nil {
-		return false, Effects{}, err
+		return EvaluationResult{}, Effects{}, err
+	}
+	if detailed, ok := evaluator.(DetailedEvaluator); ok {
+		result, err := detailed.EvaluateDetailed(ctx, input)
+		return result, effects, err
 	}
 	matched, err := evaluator.Evaluate(ctx, input)
-	return matched, effects, err
+	return EvaluationResult{Matched: matched}, effects, err
 }
 
 func validateRuleIdentities(rules []Rule) error {
@@ -169,7 +179,7 @@ func validateRuleIdentities(rules []Rule) error {
 }
 
 func validateRule(rule *Rule) error {
-	if rule.ID == "" || rule.Engine == "" || strings.TrimSpace(rule.Expression) == "" {
+	if rule.ID == "" || rule.Engine == "" || (strings.TrimSpace(rule.Expression) == "" && rule.OPA == nil && rule.Schema == nil) {
 		return fmt.Errorf("%w: id, engine, and expression are required", errUtils.ErrPolicyInvalid)
 	}
 	if len(rule.Parameters) > 0 {

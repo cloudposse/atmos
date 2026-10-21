@@ -13,7 +13,7 @@ result-contract, and integration boundaries without treating supplied-data tests
 ## Implemented
 
 - An instance-local `Engine` with explicit language registration through `Evaluator`.
-  `NewEngine()` installs CEL and restricted Starlark. No engines register themselves globally.
+  `NewEngine()` installs CEL, restricted Starlark, OPA, and JSON Schema. No engines register themselves globally.
 - Explicit input-kind dispatch. An `atmos.affected` rule cannot run on an `operation`
   request, and evaluating a rule never computes affected data or loads configuration.
 - Materialized JSON inputs and detached copies per evaluator. No lazy configuration
@@ -31,7 +31,7 @@ result-contract, and integration boundaries without treating supplied-data tests
   The caller must actually establish completeness; the engine cannot verify a claim.
 - CEL cost bounds and Starlark step bounds, source-size limits, cancellation, and integer-preserving JSON decoding.
 - Strict native Terraform plan validation, `LoadPlanDirectory` compatibility API, and `LoadDirectory`
-  for mixed inline CEL/Starlark plan/operation/affected bundles with governing hook definitions/tool pins.
+  for mixed-engine policy bundles with governing hook definitions/tool pins.
 - `planfile.Guard` binds evaluation to private binary plan artifacts. Terraform commands opt in
   through `policy.d/` or `ATMOS_POLICY_DIR`, check after plan, and recheck before applying the evaluated copy.
   Gate failures are separate from Terraform exit codes. Implicit apply/destroy are rejected.
@@ -50,9 +50,12 @@ policy explicitly handles them. This activation is separate from legacy `when: c
 
 Starlark implements `Evaluator` using shared restricted compilation and read-only value conversion
 from `pkg/script/starlark/value`. It exposes `ctx.input`, `ctx.params`, `ctx.ci`, and `ctx.request`;
-requires a boolean return; and performs no logging or host calls. Rego and declarative adapters
-are not implemented in this package; selecting an unregistered language is an error. Existing Rego/JSON-Schema
-`settings.validation` execution remains unchanged.
+requires a boolean return; and performs no logging or host calls. OPA accepts boolean or violation-collection results; JSON Schema selects effects on validation failure.
+Both preserve structured diagnostics through the optional `DetailedEvaluator` interface. Resources are
+materialized by the loader, keeping evaluation free of filesystem/network I/O.
+`atmos policy check` evaluates file rules; `--syntax-only` retains definition-only checks.
+See [validation engines](../../website/docs/policies/validation-engines.mdx) for configuration,
+resource limits, and cancellation behavior. Existing `settings.validation` remains unchanged.
 
 `pkg/ci.CollectPolicySnapshot` uses the existing provider registry and optional
 `PolicySnapshotProvider` capability. GitHub Actions collects allowlisted native environment metadata

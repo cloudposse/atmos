@@ -103,12 +103,17 @@ spec:
 <dl>
   <dt><code>on</code></dt>
   <dd>Required string: <code>terraform.plan</code>, <code>operation</code>, <code>atmos.affected</code>,
-  <code>function</code>, <code>source</code>, <code>command</code>, or <code>component.command</code>. Selects the input kind.</dd>
+  <code>function</code>, <code>source</code>, <code>command</code>, <code>component.command</code>, or <code>file</code>. Selects the input kind.</dd>
   <dt><code>engine</code></dt>
-  <dd>Optional string: <code>cel</code> (default) or <code>starlark</code>.</dd>
+  <dd>Optional string: <code>cel</code> (default), <code>starlark</code>, <code>opa</code>, or <code>jsonschema</code>.</dd>
   <dt><code>rule</code></dt>
-  <dd>Required CEL expression or <a href="/policies/starlark">Starlark function body</a> returning
+  <dd>Required for CEL/Starlark: a CEL expression or <a href="/policies/starlark">Starlark function body</a> returning
   a boolean. True selects the action; false makes the rule not applicable. Maximum source size: 64 KiB.</dd>
+  <dt><code>opa</code>, <code>schema</code>, <code>files</code></dt>
+  <dd>OPA uses <code>opa.query</code> and <code>opa.modules</code>; JSON Schema uses
+  <code>schema.path</code>, instead of <code>rule</code>. File inputs require
+  <code>files.include</code>, with optional <code>files.exclude</code>. See
+  <a href="/policies/validation-engines">OPA, JSON Schema, and file checks</a>.</dd>
   <dt><code>action</code></dt>
   <dd>Required string. <code>deny</code> blocks the operation when selected.
   <code>hooks</code> selects hook requirements and is valid only with <code>on: operation</code>.
@@ -126,7 +131,7 @@ spec:
   input values into them. JSON decisions retain the text in <code>findings[].effects.reason</code>.</dd>
   <dt><code>with</code></dt>
   <dd>Optional JSON-compatible object exposed as <code>params</code> in CEL or <code>ctx.params</code>
-  in Starlark. Default: an empty object.</dd>
+  in Starlark, or <code>data.atmos_context.params</code> in OPA. Default: an empty object.</dd>
   <dt><code>match</code></dt>
   <dd>Optional instance selector. A matching instance receives the rule; other instances are not
   applicable. Omit it to evaluate all requests of the selected input kind. See instance attachments below.</dd>

@@ -2,6 +2,7 @@
 package policy
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -19,8 +20,11 @@ var command = newCommand()
 
 func newCommand() *cobra.Command {
 	root := &cobra.Command{Use: "policy", Short: "Validate, inspect, and test policies offline", PersistentPreRunE: func(*cobra.Command, []string) error { return nil }}
+	check := &cobra.Command{Use: "check", Short: "Validate policies and check selected YAML/JSON files", Args: cobra.NoArgs, RunE: runCheck}
+	check.Flags().Bool("syntax-only", false, "Validate definitions without checking files")
+	check.Flags().String("root", ".", "Root directory for file policy globs")
 	root.AddCommand(
-		&cobra.Command{Use: "check", Short: "Validate the policy bundle without executing it", Args: cobra.NoArgs, RunE: runCheck},
+		check,
 		&cobra.Command{Use: "list", Short: "List loaded policy definitions", Args: cobra.NoArgs, RunE: runList},
 		&cobra.Command{Use: "schema <input-kind>", Short: "Print the JSON Schema of a supported policy input", Args: cobra.ExactArgs(1), RunE: runSchema},
 		&cobra.Command{Use: "test <cases.json>", Short: "Run offline fixtures against the policy bundle", Args: cobra.ExactArgs(1), RunE: runTest},
@@ -28,7 +32,7 @@ func newCommand() *cobra.Command {
 	return root
 }
 
-func runCheck(_ *cobra.Command, _ []string) error {
+func runCheck(cmd *cobra.Command, _ []string) error {
 	bundle, err := loadBundle()
 	if err != nil {
 		return err
@@ -36,7 +40,29 @@ func runCheck(_ *cobra.Command, _ []string) error {
 	if err := hooks.ValidatePolicyBundle(bundle); err != nil {
 		return err
 	}
-	return data.WriteJSON(map[string]any{"valid": true, "rules": len(bundle.Rules), "hooks": len(bundle.Hooks)})
+	report := map[string]any{"valid": true, "rules": len(bundle.Rules), "hooks": len(bundle.Hooks)}
+	if len(bundle.RulesFor(policypkg.File)) == 0 {
+		return data.WriteJSON(report)
+	}
+	ctx := context.Background()
+	root := "."
+	if cmd != nil {
+		ctx = cmd.Context()
+		syntaxOnly, _ := cmd.Flags().GetBool("syntax-only")
+		if syntaxOnly {
+			return data.WriteJSON(report)
+		}
+		if value, err := cmd.Flags().GetString("root"); err == nil {
+			root = value
+		}
+	}
+	results, checkErr := policypkg.CheckFiles(ctx, bundle, root)
+	report["valid"] = checkErr == nil
+	report["files"] = results
+	if err := data.WriteJSON(report); err != nil {
+		return err
+	}
+	return checkErr
 }
 
 func runList(_ *cobra.Command, _ []string) error {
