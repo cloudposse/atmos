@@ -22,6 +22,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
@@ -2441,10 +2442,9 @@ func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 
 func showUsageExample(cmd *cobra.Command, details string) {
 	contentName := strings.ReplaceAll(strings.ReplaceAll(cmd.CommandPath(), " ", "_"), "-", "_")
-	suggestion := fmt.Sprintf("\n\nRun `%s --help` for usage", cmd.CommandPath())
+	suggestion := fmt.Sprintf("Run `%s --help` for usage.\n\nDocumentation: %s", cmd.CommandPath(), internal.ResolveCommandMetadata(cmd).DocumentationURL)
 	details = appendUsageSection(details, cmd)
 	if exampleContent, ok := examples[contentName]; ok {
-		suggestion = exampleContent.Suggestion
 		details += "\n## Usage Examples:\n" + exampleContent.Content
 	}
 	errUtils.CheckErrorPrintAndExit(errors.New(details), "Incorrect Usage", suggestion)

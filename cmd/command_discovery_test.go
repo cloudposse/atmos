@@ -1,0 +1,241 @@
+package cmd
+
+import (
+	"bytes"
+	"errors"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/charmbracelet/huh"
+	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/pkg/flags"
+)
+
+func discoveryTestRoot(t *testing.T) (*cobra.Command, *cobra.Command, *bytes.Buffer) {
+	t.Helper()
+	root := &cobra.Command{Use: "atmos"}
+	flags.NewGlobalOptionsBuilder().Build().RegisterPersistentFlags(root)
+	parent := &cobra.Command{Use: "terraform", Aliases: []string{"tf"}}
+	leaf := &cobra.Command{Use: "plan component", Args: cobra.ExactArgs(1)}
+	leaf.Flags().StringP("stack", "s", "", "")
+	leaf.Flags().String("label", "", "")
+	leaf.RunE = func(*cobra.Command, []string) error { t.Fatal("command executed"); return nil }
+	leaf.PreRunE = leaf.RunE
+	root.PersistentPreRunE = leaf.RunE
+	root.AddCommand(parent)
+	parent.AddCommand(leaf)
+	internal.RegisterCommandMetadata(parent, internal.WithDocumentationURL("https://atmos.tools/terraform"),
+		internal.WithExample("examples/quick-start-simple", "Simple"), internal.WithExample("examples/quick-start-advanced", "Advanced"))
+	internal.RegisterCommandMetadata(leaf, internal.WithDocumentationURL("https://atmos.tools/terraform/plan"))
+	var output bytes.Buffer
+	root.SetOut(&output)
+	return root, leaf, &output
+}
+
+func mockDiscoveryDependencies(t *testing.T) {
+	t.Helper()
+	oldOpen, oldSelect, oldConfirm, oldInit, oldTTY := openDocsURL, discoverySelect, discoveryConfirm, discoveryInit, discoveryTTY
+	t.Cleanup(func() {
+		openDocsURL, discoverySelect, discoveryConfirm, discoveryInit, discoveryTTY = oldOpen, oldSelect, oldConfirm, oldInit, oldTTY
+	})
+	openDocsURL = func(string) error { t.Fatal("unexpected browser"); return nil }
+	discoverySelect = func(*cobra.Command, []internal.CommandExample) (int, error) {
+		t.Fatal("unexpected picker")
+		return 0, nil
+	}
+	discoveryConfirm = func(*cobra.Command) (bool, error) { t.Fatal("unexpected confirmation"); return false, nil }
+	discoveryInit = func(*cobra.Command, []string) error { t.Fatal("unexpected installation"); return nil }
+	discoveryTTY = func() bool { return false }
+}
+
+func TestDiscoveryFlagParsing(t *testing.T) {
+	cases := []struct {
+		args                string
+		command             string
+		docs, example, help bool
+		wantError           bool
+	}{
+		{"terraform plan --docs", "atmos terraform plan", true, false, false, false},
+		{"--docs tf plan", "atmos terraform plan", true, false, false, false},
+		{"--docs=false terraform plan", "atmos terraform plan", false, false, false, false},
+		{"terraform plan --docs false", "atmos terraform plan", false, false, false, false},
+		{"terraform plan --docs --docs=false", "atmos terraform plan", false, false, false, false},
+		{"terraform plan --example=true", "atmos terraform plan", false, true, false, false},
+		{"terraform plan -- --docs", "atmos terraform plan", false, false, false, false},
+		{"terraform plan --label --docs", "atmos terraform plan", false, false, false, false},
+		{"terraform plan --label=--docs", "atmos terraform plan", false, false, false, false},
+		{"terraform plan -s --docs", "atmos terraform plan", false, false, false, false},
+		{"--config --docs terraform plan", "atmos terraform plan", false, false, false, false},
+		{"--config project.yaml --docs terraform plan", "atmos terraform plan", true, false, false, false},
+		{"--pager terraform plan --docs", "atmos terraform plan", true, false, false, false},
+		{"--pager less terraform plan --docs", "atmos terraform plan", true, false, false, false},
+		{"--cast terraform plan --docs", "atmos terraform plan", true, false, false, false},
+		{"-C/tmp terraform plan --docs", "atmos terraform plan", true, false, false, false},
+		{"terraform plan --help=usage --docs", "atmos terraform plan", true, false, true, false},
+		{"terraform plan --help=false --docs", "atmos terraform plan", true, false, false, false},
+		{"help terraform plan --docs", "atmos terraform plan", true, false, true, false},
+		{"terraform plan --docs --unknown", "atmos terraform plan", true, false, false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.args, func(t *testing.T) {
+			root, _, _ := discoveryTestRoot(t)
+			request, err := parseDiscoveryRequest(root, strings.Fields(tc.args))
+			assert.Equal(t, tc.wantError, err != nil)
+			assert.Equal(t, tc.command, request.command.CommandPath())
+			assert.Equal(t, tc.docs, request.docs)
+			assert.Equal(t, tc.example, request.example)
+			assert.Equal(t, tc.help, request.help)
+		})
+	}
+}
+
+func TestDiscoveryDocs(t *testing.T) {
+	mockDiscoveryDependencies(t)
+	root, leaf, output := discoveryTestRoot(t)
+	// Required arguments and hooks must not run, even with custom flag parsing.
+	leaf.Args = func(*cobra.Command, []string) error { t.Fatal("validated execution arguments"); return nil }
+	leaf.DisableFlagParsing = true
+	var opened string
+	openDocsURL = func(url string) error { opened = url; return nil }
+	handled, err := dispatchCommandDiscovery(root, []string{"tf", "plan", "--docs"})
+	require.NoError(t, err)
+	assert.True(t, handled)
+	assert.Equal(t, "https://atmos.tools/terraform/plan", opened)
+	assert.Contains(t, output.String(), "Documentation: "+opened)
+	openDocsURL = func(string) error { return errors.New("browser unavailable") }
+	_, err = dispatchCommandDiscovery(root, []string{"terraform", "--docs"})
+	assert.ErrorContains(t, err, "browser unavailable")
+	assert.Contains(t, output.String(), "Documentation: https://atmos.tools/terraform")
+}
+
+func TestDiscoveryDispatchBoundaries(t *testing.T) {
+	mockDiscoveryDependencies(t)
+	root, _, _ := discoveryTestRoot(t)
+	for _, args := range [][]string{
+		{"terraform", "plan", "--help", "--docs", "--example"},
+		{"terraform", "plan", "--docs=false"},
+		{"terraform", "plan", "--", "--example"},
+		{"terraform", "plan", "--label", "--docs"},
+	} {
+		handled, err := dispatchCommandDiscovery(root, args)
+		require.NoError(t, err)
+		assert.False(t, handled)
+	}
+	for _, args := range [][]string{
+		{"terraform", "--docs", "--example"},
+		{"terraform", "--docs=invalid"},
+		{"terraform", "--example=invalid"},
+		{"terraform", "unknown", "--docs"},
+		{"unknown", "--example"},
+	} {
+		handled, err := dispatchCommandDiscovery(root, args)
+		assert.True(t, handled)
+		assert.Error(t, err)
+	}
+}
+
+func TestDiscoveryNoninteractiveExamples(t *testing.T) {
+	mockDiscoveryDependencies(t)
+	root, _, output := discoveryTestRoot(t)
+	handled, err := dispatchCommandDiscovery(root, []string{"terraform", "plan", "--example"})
+	require.NoError(t, err)
+	assert.True(t, handled)
+	assert.Contains(t, output.String(), "Simple (recommended)")
+	assert.Contains(t, output.String(), "atmos init examples/quick-start-simple ./quick-start-simple")
+	assert.Contains(t, output.String(), "atmos init examples/quick-start-advanced ./quick-start-advanced")
+	output.Reset()
+	_, err = dispatchCommandDiscovery(root, []string{"--example"})
+	require.NoError(t, err)
+	assert.Contains(t, output.String(), "No examples are registered")
+	assert.Contains(t, output.String(), "Documentation: https://atmos.tools")
+	discoveryTTY = func() bool { return true }
+	_, err = dispatchCommandDiscovery(root, []string{"terraform", "--example", "--interactive=false"})
+	require.NoError(t, err)
+	t.Setenv("ATMOS_INTERACTIVE", "false")
+	_, err = dispatchCommandDiscovery(root, []string{"terraform", "--example"})
+	require.NoError(t, err)
+}
+
+func TestDiscoveryInteractiveExamples(t *testing.T) {
+	for _, scenario := range []string{"install", "decline", "cancel-picker", "cancel-confirm", "picker-error", "confirm-error", "init-error", "single"} {
+		t.Run(scenario, func(t *testing.T) {
+			mockDiscoveryDependencies(t)
+			root, leaf, output := discoveryTestRoot(t)
+			discoveryTTY = func() bool { return true }
+			if scenario == "single" {
+				internal.RegisterCommandMetadata(leaf, internal.WithExample("examples/quick-start-simple", "Simple"))
+			} else {
+				discoverySelect = func(_ *cobra.Command, examples []internal.CommandExample) (int, error) {
+					require.Len(t, examples, 2)
+					switch scenario {
+					case "cancel-picker":
+						return 0, huh.ErrUserAborted
+					case "picker-error":
+						return 0, errors.New("picker failed")
+					}
+					return 1, nil
+				}
+			}
+			discoveryConfirm = func(*cobra.Command) (bool, error) {
+				switch scenario {
+				case "cancel-confirm":
+					return false, huh.ErrUserAborted
+				case "confirm-error":
+					return false, errors.New("confirm failed")
+				}
+				return scenario != "decline", nil
+			}
+			installed := false
+			discoveryInit = func(_ *cobra.Command, args []string) error {
+				installed = true
+				assert.Contains(t, args, "--force=false")
+				assert.NotContains(t, args, "--update=false", "copy initialization rejects even an explicitly disabled update flag")
+				assert.Contains(t, args, "config.yaml")
+				assert.NotContains(t, args, "--example")
+				assert.NotContains(t, args, "--stack")
+				if scenario == "single" {
+					assert.Contains(t, args, "./quick-start-simple")
+				} else {
+					assert.Contains(t, args, "./quick-start-advanced")
+				}
+				if scenario == "init-error" {
+					return errors.New("destination occupied")
+				}
+				return nil
+			}
+			_, err := dispatchCommandDiscovery(root, []string{"--config", "config.yaml", "terraform", "plan", "--example", "--interactive=true", "--stack", "dev"})
+			if strings.HasSuffix(scenario, "error") {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, scenario == "install" || scenario == "single" || scenario == "init-error", installed)
+			if installed {
+				assert.Contains(t, output.String(), "Destination:")
+			}
+		})
+	}
+}
+
+func TestDiscoveryExecuteWithoutProject(t *testing.T) {
+	mockDiscoveryDependencies(t)
+	_ = NewTestKit(t)
+	t.Chdir(t.TempDir())
+	require.NoError(t, os.WriteFile("atmos.yaml", []byte("invalid: [yaml"), 0o600))
+	oldArgs := os.Args
+	oldChdir := chdirProcessed
+	t.Cleanup(func() { os.Args = oldArgs; chdirProcessed = oldChdir })
+	os.Args = []string{"atmos", "terraform", "plan", "--docs"}
+	openDocsURL = func(url string) error {
+		assert.Equal(t, "https://atmos.tools/cli/commands/terraform/plan", url)
+		return nil
+	}
+	require.NoError(t, Execute())
+	require.NoError(t, os.Remove("atmos.yaml"))
+	require.NoError(t, Execute())
+}

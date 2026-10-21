@@ -31,96 +31,96 @@ This document defines the standards for printing **usage** and **help** informat
 ## Usage Guidelines
 
 1. **When to Display Usage**:
-   - Display when a command is misused, such as:
-     - Missing required arguments.
-     - Invalid arguments provided.
-     - Syntax errors in the command.
-   - Example:
+    - Display when a command is misused, such as:
+      - Missing required arguments.
+      - Invalid arguments provided.
+      - Syntax errors in the command.
+    - Example:
 
-     ```plaintext
-     Error: Missing required argument `--stack`.
-     Usage:
-         atmos terraform plan --stack <stack-name>
-     ```
+      ```plaintext
+      Error: Missing required argument `--stack`.
+      Usage:
+          atmos terraform plan --stack <stack-name>
+      ```
 
 2. **Behavior**:
-   - **Error Context**: Always display usage after a clear error message.
-   - **Brevity**: Usage output must be concise and limited to the essential syntax.
-   - **Exit Code**: Displaying usage must result in a **non-zero exit code**.
-   - **No Logo**: The usage output must never include the Atmos logo or branding.
+    - **Error Context**: Always display usage after a clear error message.
+    - **Brevity**: Usage output must be concise and limited to the essential syntax.
+    - **Exit Code**: Displaying usage must result in a **non-zero exit code**.
+    - **No Logo**: The usage output must never include the Atmos logo or branding.
 
 3. **Output Characteristics**:
-   - Usage must clearly indicate:
-     - Command syntax.
-     - Required and optional arguments.
-     - Minimal explanation to guide correction of misuse.
+    - Usage must clearly indicate:
+      - Command syntax.
+      - Required and optional arguments.
+      - Minimal explanation to guide correction of misuse.
 
 ---
 
 ## Help Guidelines
 
 1. **When to Display Help**:
-   - Display when the user explicitly requests it, such as:
-     - Running the `help` subcommand:
+    - Display when the user explicitly requests it, such as:
+      - Running the `help` subcommand:
 
-       ```bash
-       atmos help
-       ```
+        ```bash
+        atmos help
+        ```
 
-     - Using the `--help` flag with a command:
+      - Using the `--help` flag with a command:
 
-       ```bash
-       atmos terraform --help
-       ```
+        ```bash
+        atmos terraform --help
+        ```
 
 2. **Behavior**:
-   - **Comprehensive**: Help output must include:
-     - A description of the command.
-     - All available options, flags, and parameters.
-     - Examples of usage.
-   - **Error-Free**:
-     - Help must always succeed and exit with a **zero exit code**.
-     - Help should not fail due to misconfigured files, missing dependencies, or validation errors.
-   - **Static**:
-     - Help must be non-interactive and preformatted.
+    - **Comprehensive**: Help output must include:
+      - A description of the command.
+      - All available options, flags, and parameters.
+      - Examples of usage.
+    - **Error-Free**:
+      - Help must always succeed and exit with a **zero exit code**.
+      - Help should not fail due to misconfigured files, missing dependencies, or validation errors.
+    - **Static**:
+      - Help must be non-interactive and preformatted.
 
 3. **Atmos Logo**:
-   - The Atmos logo can be included in the `help` output, especially for the main `help` command.
-   - Subcommands or options help may omit the logo to keep focus on the content.
+    - The Atmos logo can be included in the `help` output, especially for the main `help` command.
+    - Subcommands or options help may omit the logo to keep focus on the content.
 
 4. **No Validation**:
-   - Help must not perform any validation, such as:
-     - Checking configuration files.
-     - Verifying that required tools (e.g., Terraform) are installed.
+    - Help must not perform any validation, such as:
+      - Checking configuration files.
+      - Verifying that required tools (e.g., Terraform) are installed.
 
 5. **Example Output**
 
-   ```plaintext
-   Atmos CLI - Version 1.0.0
+    ```plaintext
+    Atmos CLI - Version 1.0.0
 
-   Usage:
-       atmos <command> [options]
+    Usage:
+        atmos <command> [options]
 
-   Available Commands:
-       terraform    Manage Terraform workflows
-       helmfile     Manage Helmfile workflows
-       help         Show this help message
+    Available Commands:
+        terraform    Manage Terraform workflows
+        helmfile     Manage Helmfile workflows
+        help         Show this help message
 
-   Options:
-       -v, --version    Show the Atmos version
-       -h, --help       Show help for a command
+    Options:
+        -v, --version    Show the Atmos version
+        -h, --help       Show help for a command
 
-   Examples:
+    Examples:
 
-   - Display the current atmos version
+    - Display the current atmos version
 
-     $ atmos version
+      $ atmos version
 
-   - Display the help for the terraform subcommand
+    - Display the help for the terraform subcommand
 
-     $ atmos terraform --help
+      $ atmos terraform --help
 
-   ```
+    ```
 
 ---
 
@@ -140,11 +140,21 @@ This document defines the standards for printing **usage** and **help** informat
 ## Implementation Notes
 
 1. **Always Return Expected Output**:
-   - Usage for errors.
-   - Help for guidance.
+    - Usage for errors.
+    - Help for guidance.
 2. **Clarity First**:
-   - Separate error messages from usage or help outputs clearly.
+    - Separate error messages from usage or help outputs clearly.
 3. **Testing Requirements**:
-   - Ensure usage and help outputs work as defined under all conditions.
+    - Ensure usage and help outputs work as defined under all conditions.
 4. **Avoid Redundancy**:
-   - Help includes usage; there is no need for separate outputs in `help` documentation.
+    - Help includes usage; there is no need for separate outputs in `help` documentation.
+
+## Documentation URLs and discovery
+
+All help topics and usage errors include `Documentation: <URL>`. Keep the URL
+visible in plain text, paged output, and terminal recordings. Normal command
+execution does not print this footer.
+
+`--docs` prints and opens the resolved URL. `--example` offers registered examples
+and confirms installation; noninteractive invocations print install commands.
+Metadata lives in the command registry; see [Developing Atmos Commands](developing-atmos-commands.md#documentation-and-installable-examples).

@@ -1759,6 +1759,11 @@ func Execute() error {
 		}
 		return err
 	}
+	// Discovery is independent of project configuration, required arguments,
+	// authentication, admission policies, and component execution hooks.
+	if handled, err := dispatchBuiltinCommandDiscovery(RootCmd, os.Args[1:]); handled {
+		return err
+	}
 	// Doctor must inspect malformed and executable YAML without evaluating it.
 	// Dispatch before configuration, project init, authentication, or tool installation.
 	// Flag arity comes from the registered root flags, so any root flag may precede the command.
@@ -1884,6 +1889,11 @@ func Execute() error {
 		if err != nil {
 			return err
 		}
+	}
+
+	// Custom commands and configured aliases can now use inherited discovery metadata.
+	if handled, err := dispatchCommandDiscovery(RootCmd, os.Args[1:]); handled {
+		return err
 	}
 
 	// All package init functions, custom commands, and configured aliases have
@@ -2362,6 +2372,10 @@ func init() {
 	data.SetMarkdownRenderer(ui.Format) // Connect markdown rendering to data channel
 
 	initCobraConfig(ioCtx)
+	internal.RegisterCommandMetadata(
+		RootCmd,
+		internal.WithDocumentationURL("https://atmos.tools"),
+	)
 }
 
 // initCobraConfig initializes Cobra command configuration and styling.
@@ -2391,6 +2405,7 @@ func initCobraConfig(ioCtx iolib.Context) {
 // command's own Args validator.
 func rootUsageFunc(c *cobra.Command, b *boa.Boa) error {
 	if c.Use == rootCommandName {
+		defer printCommandDocumentation(c.OutOrStdout(), c)
 		return b.UsageFunc(c)
 	}
 	// Get actual arguments (handles DisableFlagParsing=true case).
