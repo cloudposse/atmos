@@ -5,6 +5,8 @@ sidebar_label: values
 sidebar_class_name: command
 description: Use this command to list component values across all stacks
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -162,6 +164,18 @@ Example JSON output with nested objects:
   }
 }
 ```
+
+## Try it out
+
+<TryExample example="demo-stacks">
+
+Inspect the values for myapp across the example stacks.
+
+```shell
+atmos list values myapp
+```
+
+</TryExample>
 
 ## Related Commands
 

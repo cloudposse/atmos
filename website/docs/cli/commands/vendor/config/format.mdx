@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: format
 description: Format vendor manifest config files.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -37,3 +39,15 @@ atmos vendor config format --file ./vendor.yaml
   <dt>`--file` (string, default `./vendor.yaml`)</dt>
   <dd>The vendor manifest file to format (along with any manifests it imports).</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Format your local vendor manifest in place while preserving its comments and templates. This works offline.
+
+```shell
+atmos vendor config format
+```
+
+</TryExample>

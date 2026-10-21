@@ -4,6 +4,8 @@ sidebar_label: ai
 sidebar_class_name: hidden
 description: "Atmos AI is a built-in assistant that understands your stacks, components, and configuration."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
@@ -59,3 +61,15 @@ See [Global Flags](/cli/global-flags) for details.
 ## Subcommands
 
 <DocCardList />
+
+## Try it out
+
+<TryExample example="ai">
+
+Configure an AI provider and its credentials as described in the README, then ask about the sample infrastructure.
+
+```shell
+atmos ai ask "What stacks and components do we have?"
+```
+
+</TryExample>

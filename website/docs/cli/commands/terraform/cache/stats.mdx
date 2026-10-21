@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: stats
 description: Show cache size, object count, and provider/module breakdown.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -41,6 +43,18 @@ atmos terraform cache stats [flags]
 atmos terraform cache stats
 atmos terraform cache stats --format=json
 ```
+
+## Try it out
+
+<TryExample example="caching">
+
+Inspect the cache statistics. A fresh cache may be empty; the README shows how to populate it.
+
+```shell
+atmos terraform cache stats
+```
+
+</TryExample>
 
 ## Related Commands
 

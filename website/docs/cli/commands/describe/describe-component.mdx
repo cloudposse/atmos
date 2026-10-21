@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: component
 description: "Inspect the resolved configuration for a component in a particular stack."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
@@ -1041,3 +1043,15 @@ The `stack_dependencies` inheritance chain shows the sources of the setting in t
 The first item in the list was processed the last and its `variable_value` overrode all the previous values of the setting.
 
 :::
+
+## Try it out
+
+<TryExample example="demo-stacks">
+
+Compare the resolved variables across the example stacks.
+
+```shell
+atmos describe component myapp -s dev --query .vars
+```
+
+</TryExample>

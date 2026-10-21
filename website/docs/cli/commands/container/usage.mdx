@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: usage
 description: Run your application and its supporting services locally using container components defined in Atmos stacks.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
@@ -454,3 +456,17 @@ atmos container up
 atmos composition validate storefront -s dev
 ```
 </Terminal>
+
+## Try it out
+
+<TryExample example="container-component">
+
+Requires Docker or Podman and network access. Start the example nginx service on localhost:8080, inspect it, then remove it.
+
+```shell
+atmos container up api -s dev
+atmos container ps api -s dev
+atmos container down api -s dev
+```
+
+</TryExample>

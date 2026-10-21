@@ -4,6 +4,8 @@ sidebar_label: workflow
 sidebar_class_name: command
 description: "Turn recurring tasks—such as setting up a development environment, validating changes, or deploying infrastructure—into named workflows your team can run with one command."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
@@ -194,3 +196,15 @@ Run `atmos workflow --help` to see all the available options
   <dt>`--dry-run` <em>(optional)</em></dt>
   <dd>Dry run. Print information about the executed workflow steps without executing them.</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="demo-workflows">
+
+Preview the deploy workflow for dev without executing its Terraform plan. Follow the README to run it after installing Terraform.
+
+```shell
+atmos workflow deploy -s dev --dry-run
+```
+
+</TryExample>

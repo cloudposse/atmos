@@ -8,6 +8,8 @@ slug: /cli/commands/version/track
 description: "Keep dependency versions consistent across GitHub Actions workflows, container references, and other project files."
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -60,6 +62,19 @@ atmos version track status prod --format=json
 atmos version track apply prod --check
 atmos version track verify prod
 ```
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Compare the checked-in dev and prod tracks, then verify their pinned files. This example works offline; no cloud credentials are needed.
+
+```shell
+atmos version track list
+atmos version track verify
+```
+
+</TryExample>
 
 ## See Also
 
