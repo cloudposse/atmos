@@ -13,6 +13,8 @@ Atmos provides these workflows through native CloudFormation components.
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 import CastEmbed from '@site/src/components/CastEmbed'
 
 <CastEmbed src="/casts/examples/cloudformation/lifecycle.cast" title="atmos aws cloudformation lifecycle" chrome controls scrubber />
@@ -56,17 +58,46 @@ components:
         - CAPABILITY_IAM
 ```
 
-Import the catalog into a stack that defines `vars.stage`, then preview and
-apply the component:
+Import the catalog into a stack that defines `vars.stage`. To save typing, configure a
+[command alias](/cli/configuration/aliases) with [`atmos config set`](/cli/commands/config/config-set):
 
 ```shell
-atmos aws cloudformation diff vpc -s prod
-atmos aws cloudformation apply vpc -s prod
-atmos aws cloudformation drift detect vpc -s prod
+atmos config set aliases.cft "aws cloudformation"
+```
+
+Then preview and deploy the component:
+
+```shell
+atmos cft diff vpc -s prod
+atmos cft deploy vpc -s prod
+atmos cft drift detect vpc -s prod
 ```
 
 See the [Rain migration guide](/migration/rain) for directive conversion,
 parameter imports, and using an existing deployed stack.
+
+## Try it out
+
+<TryExample example="cloudformation">
+
+Install Docker or Podman and Python 3. Configure the shortcut, start the local emulator, and deploy without an AWS account:
+
+```shell
+atmos config set aliases.cft "aws cloudformation"
+atmos validate stacks
+atmos emulator up aws -s local
+atmos cft deploy demo -s local
+atmos cft output demo -s local
+```
+
+When finished, delete the demo stack and stop the emulator:
+
+```shell
+atmos cft delete demo -s local --auto-approve
+atmos emulator down aws -s local
+```
+
+</TryExample>
 
 ## Get Involved
 

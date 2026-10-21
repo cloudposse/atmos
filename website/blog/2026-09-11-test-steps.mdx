@@ -17,6 +17,8 @@ collects the results, keeps passing output quiet, and reveals each failed check'
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 <CastEmbed src="/casts/examples/tests/tests.cast" title="Post-deployment tests" chrome controls scrubber />
 
 [View the full example](/examples/tests)
@@ -47,6 +49,18 @@ failure behavior.
 The local example runs without stacks. Running bare [`atmos`](/cli) now displays
 usage and available commands, including custom commands, without requiring stack
 configuration.
+
+## Try it out
+
+<TryExample example="tests">
+
+Run the passing local checks. The README also includes an intentionally failing demonstration.
+
+```shell
+atmos test
+```
+
+</TryExample>
 
 ## Get Involved
 

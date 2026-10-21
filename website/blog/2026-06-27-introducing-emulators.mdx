@@ -20,6 +20,8 @@ your laptop, with no cloud account and no credentials.**
 
 <!--truncate-->
 
+import TryExample, { TryExamples } from '@site/src/components/TryExample';
+
 ## The Problem
 
 Iterating on a Terraform component is always coupled to something real:
@@ -134,6 +136,32 @@ atmos emulator up registry -s local --ephemeral
   process and is rediscovered by label — no local state files).
 - `atmos emulator reset <component> -s <stack>` to wipe persisted state.
 - `--ephemeral` (or `ephemeral: true` on the component) for a throwaway instance.
+
+## Try it out
+
+<TryExamples>
+
+<TryExample example="emulator-aws" label="AWS Emulator">
+
+Install Terraform and Docker or Podman. Follow the README to deploy locally and tear down the emulator afterward.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
+
+<TryExample example="emulator-k8s" label="Kubernetes Emulator">
+
+Install Docker or Podman, Helm, and Helmfile. Follow the README for the local Kubernetes lifecycle and cleanup.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
+
+</TryExamples>
 
 See the [emulator component reference](/stacks/components/emulator) and the
 [`atmos emulator`](/cli/commands/emulator/usage) command docs for details.

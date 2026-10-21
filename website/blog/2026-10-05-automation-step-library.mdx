@@ -19,6 +19,8 @@ Atmos itself.
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## Give project automation a language {#the-problem}
 
 [Custom commands](/cli/configuration/commands) give a team familiar entry points,
@@ -83,6 +85,18 @@ configured defaults without one. Collect input before starting
 For a step type selected at runtime, call `steps.run(type, **fields)`. See the
 [step-library reference](/functions/automation/steps.run) for available functions,
 result fields, and execution-context requirements.
+
+## Try it out
+
+<TryExample example="starlark-commands">
+
+Run the local automation command with a typed flag.
+
+```shell
+atmos capacity --replicas 3
+```
+
+</TryExample>
 
 ## Get Involved
 

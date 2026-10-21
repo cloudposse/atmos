@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: list
 description: List deployed CloudFormation stacks in the account.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
@@ -110,3 +112,20 @@ MANAGED   STATUS                         STACK NAME
 managed   CREATE_COMPLETE                vpc-plat-ue2-dev
 unmanaged UPDATE_COMPLETE                some-other-stack
 ```
+
+## Try it out
+
+<TryExample example="cloudformation">
+
+Requires Docker or Podman, Python 3, and network access. Deploy the demo into the local AWS emulator, inspect it, then clean up. No AWS account is needed.
+
+```shell
+atmos config set aliases.cft "aws cloudformation"
+atmos emulator up aws -s local
+atmos cft deploy demo -s local
+atmos cft list -s local
+atmos cft delete demo -s local --auto-approve
+atmos emulator down aws -s local
+```
+
+</TryExample>

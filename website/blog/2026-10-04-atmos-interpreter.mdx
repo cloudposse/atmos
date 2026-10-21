@@ -25,6 +25,8 @@ error formatting and reporting.
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 import CastEmbed from '@site/src/components/CastEmbed'
 import EmbedFile from '@site/src/components/EmbedFile'
 
@@ -104,6 +106,18 @@ app's subprocesses must be available in that environment.
 Use [`ui` for progress and `log` for diagnostics](/scripting/language#data-status-and-diagnostics).
 UI messages go to stderr, leaving stdout available for data consumed by another
 process. Test your automation with [script checks and test steps](/scripting/testing).
+
+## Try it out
+
+<TryExample example="starlark-script">
+
+Run the standalone script with Atmos; no separate language runtime is needed.
+
+```shell
+atmos ./summarize.star services.json
+```
+
+</TryExample>
 
 ## Next steps {#get-involved}
 

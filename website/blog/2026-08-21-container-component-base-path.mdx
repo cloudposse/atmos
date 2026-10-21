@@ -16,6 +16,8 @@ accepted but quietly ignored.
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 Terraform, Helmfile, Kubernetes, and Helm components have always resolved their working directory
@@ -65,6 +67,18 @@ components:
 ```
 
 For usage and configuration, see [Using Containers](/components/container).
+
+## Try it out
+
+<TryExample example="container-component">
+
+Install Docker or Podman before building and running the example containers.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
 
 ## Get Involved
 
