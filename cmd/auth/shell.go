@@ -67,6 +67,10 @@ func init() {
 
 	// Add to parent command.
 	authCmd.AddCommand(authShellCmd)
+	internal.RegisterCommandMetadata(
+		authShellCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/auth/shell"),
+	)
 }
 
 // executeAuthShellCommand is the main execution function for auth shell command.

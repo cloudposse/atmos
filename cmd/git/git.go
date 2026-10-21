@@ -14,11 +14,10 @@ import (
 	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
-	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
-
 	// Self-register the CLI provider so Git subprocesses are available.
 	_ "github.com/cloudposse/atmos/pkg/git/providers/cli"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // atmosConfigPtr holds the Atmos configuration injected by root.go before
@@ -54,7 +53,10 @@ func init() {
 	gitCmd.AddCommand(cmdhooks.Command)
 
 	// Register this command with the registry.
-	internal.Register(&GitCommandProvider{})
+	internal.Register(
+		&GitCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/git/usage"),
+	)
 }
 
 // GitCommandProvider implements the CommandProvider interface for `atmos git`.

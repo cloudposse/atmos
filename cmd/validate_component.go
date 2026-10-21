@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	comp "github.com/cloudposse/atmos/pkg/component"
@@ -171,6 +172,10 @@ func init() {
 	}
 
 	validateCmd.AddCommand(validateComponentCmd)
+	internal.RegisterCommandMetadata(
+		validateComponentCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/validate/component"),
+	)
 }
 
 // componentStackSource supplies a stable file-level anchor until the component

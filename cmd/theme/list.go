@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -52,6 +53,10 @@ func init() {
 	}
 
 	themeCmd.AddCommand(themeListCmd)
+	internal.RegisterCommandMetadata(
+		themeListCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/theme/list"),
+	)
 }
 
 // executeThemeList runs the theme list command.

@@ -32,7 +32,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/validation"
 )
 
-func init() { internal.Register(&CommandProvider{}) }
+func init() {
+	internal.Register(&CommandProvider{}, internal.WithDocumentationURL("https://atmos.tools/cli/commands/doctor"))
+}
 
 // configureStartup applies the root's configuration-free startup (global flags, color, masking, and the
 // UI and data writers). It is a variable so tests that inject their own writers can keep them in place.

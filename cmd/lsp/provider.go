@@ -53,5 +53,5 @@ func (p *Provider) IsExperimental() bool {
 
 func init() {
 	// Register this command provider with the command registry.
-	internal.Register(&Provider{})
+	internal.Register(&Provider{}, internal.WithDocumentationURL("https://atmos.tools/lsp/lsp"))
 }

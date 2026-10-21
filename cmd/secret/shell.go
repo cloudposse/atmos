@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -46,6 +47,10 @@ func init() {
 	if err := shellParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		shellCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/secret/shell"),
+	)
 }
 
 func runSecretShell(cmd *cobra.Command, args []string) error {

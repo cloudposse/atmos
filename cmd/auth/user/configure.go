@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
@@ -33,6 +34,10 @@ var authUserConfigureCmd = &cobra.Command{
 func init() {
 	defer perf.Track(nil, "auth.user.configure.init")()
 	AuthUserCmd.AddCommand(authUserConfigureCmd)
+	internal.RegisterCommandMetadata(
+		authUserConfigureCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/auth/user/configure"),
+	)
 }
 
 // executeAuthUserConfigureCommand is the main execution function for auth user configure.

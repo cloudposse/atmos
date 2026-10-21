@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -318,6 +319,30 @@ func init() {
 	vendorConfigCmd.AddCommand(vendorConfigFormatCmd)
 	vendorConfigCmd.AddCommand(vendorConfigListCmd)
 	vendorCmd.AddCommand(vendorConfigCmd)
+	internal.RegisterCommandMetadata(
+		vendorConfigCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/vendor/config/config"),
+	)
+	internal.RegisterCommandMetadata(
+		vendorConfigDeleteCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/vendor/config/delete"),
+	)
+	internal.RegisterCommandMetadata(
+		vendorConfigFormatCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/vendor/config/format"),
+	)
+	internal.RegisterCommandMetadata(
+		vendorConfigGetCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/vendor/config/get"),
+	)
+	internal.RegisterCommandMetadata(
+		vendorConfigListCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/vendor/config/list"),
+	)
+	internal.RegisterCommandMetadata(
+		vendorConfigSetCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/vendor/config/set"),
+	)
 }
 
 func buildVendorConfigPathRows(rootFile string) ([]listpkg.PathRow, error) {

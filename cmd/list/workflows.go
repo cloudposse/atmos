@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -111,6 +112,10 @@ func init() {
 	if err := workflowsParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		workflowsCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/list-workflows"),
+	)
 }
 
 func listWorkflowsWithOptions(cmd *cobra.Command, args []string, opts *WorkflowsOptions) error {

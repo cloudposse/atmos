@@ -64,6 +64,10 @@ func init() {
 
 	// Add to parent command.
 	authCmd.AddCommand(authExecCmd)
+	internal.RegisterCommandMetadata(
+		authExecCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/auth/exec"),
+	)
 }
 
 // executeAuthExecCommand is the main execution function for auth exec command.

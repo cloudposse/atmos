@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsAuth "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	azureAuth "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
@@ -91,6 +92,10 @@ func init() {
 
 	// Add to parent command.
 	authCmd.AddCommand(authConsoleCmd)
+	internal.RegisterCommandMetadata(
+		authConsoleCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/auth/console"),
+	)
 }
 
 func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
