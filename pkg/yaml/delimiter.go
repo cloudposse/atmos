@@ -7,6 +7,7 @@ import (
 
 	goyaml "gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/perf"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -24,14 +25,15 @@ var bufferPool = sync.Pool{
 // values (like those starting with '!'), which escapes internal single quotes by doubling them.
 // This breaks template processing because the delimiter pattern is altered. This function forces
 // double-quoted YAML style for affected scalar values to preserve delimiters.
+// With no options, function sources are preserved for internal template rendering.
+// Explicit options can restore real YAML tags by leaving PreserveFunctionSources false.
 func ConvertToYAMLPreservingDelimiters(data any, delimiters []string, opts ...u.YAMLOptions) (string, error) {
 	defer perf.Track(nil, "yaml.ConvertToYAMLPreservingDelimiters")()
 
 	options := u.YAMLOptions{PreserveFunctionSources: true}
 	if len(opts) > 0 {
-		options.Indent = opts[0].Indent
+		options = opts[0]
 	}
-	// Preserve loader source identity during internal template rendering.
 	// If no delimiters or delimiters don't contain single quotes, use standard encoding.
 	if !DelimiterConflictsWithYAMLQuoting(delimiters) {
 		return u.ConvertToYAML(data, options)
@@ -41,6 +43,9 @@ func ConvertToYAMLPreservingDelimiters(data any, delimiters []string, opts ...u.
 	var node goyaml.Node
 	if err := node.Encode(data); err != nil {
 		return "", err
+	}
+	if !options.PreserveFunctionSources {
+		yamlsource.RestoreTags(&node)
 	}
 
 	// Walk the node tree and force double-quoted style for scalar values
@@ -59,8 +64,8 @@ func ConvertToYAMLPreservingDelimiters(data any, delimiters []string, opts ...u.
 	encoder := goyaml.NewEncoder(buf)
 
 	indent := DefaultIndent
-	if len(opts) > 0 && opts[0].Indent > 0 {
-		indent = opts[0].Indent
+	if options.Indent > 0 {
+		indent = options.Indent
 	}
 	encoder.SetIndent(indent)
 

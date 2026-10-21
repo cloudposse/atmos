@@ -798,6 +798,16 @@ func BenchmarkConvertToYAML(b *testing.B) {
 	}
 }
 
+// BenchmarkConvertToYAML_PreserveFunctionSources measures internal template serialization.
+func BenchmarkConvertToYAML_PreserveFunctionSources(b *testing.B) {
+	data := generateLargeNestedMap(3, 6)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ConvertToYAML(data, YAMLOptions{PreserveFunctionSources: true})
+	}
+}
+
 // BenchmarkConvertToYAML_Large benchmarks YAML conversion with large data.
 // This demonstrates P7.8 buffer pooling benefit on larger data structures.
 func BenchmarkConvertToYAML_Large(b *testing.B) {

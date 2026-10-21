@@ -792,6 +792,18 @@ func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	}
 	encoder.SetIndent(indent)
 
+	// Internal serialization keeps source markers verbatim, so it needs no node
+	// rewrite. Avoid an extra encode/parse pass on every template rendering.
+	if len(opts) > 0 && opts[0].PreserveFunctionSources {
+		if node, ok := cleanedData.(yaml.Node); ok {
+			cleanedData = &node
+		}
+		if err := encoder.Encode(cleanedData); err != nil {
+			return "", err
+		}
+		return buf.String(), nil
+	}
+
 	var outputNode *yaml.Node
 	switch value := cleanedData.(type) {
 	case *yaml.Node:
@@ -804,9 +816,7 @@ func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 			return "", err
 		}
 	}
-	if len(opts) == 0 || !opts[0].PreserveFunctionSources {
-		yamlsource.RestoreTags(outputNode)
-	}
+	yamlsource.RestoreTags(outputNode)
 	if err := encoder.Encode(outputNode); err != nil {
 		return "", err
 	}

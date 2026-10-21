@@ -15,9 +15,11 @@ func TestConvertToYAMLPreservesSyntaxTree(t *testing.T) {
 	var node yaml.Node
 	require.NoError(t, yaml.Unmarshal([]byte(input), &node))
 	for _, value := range []any{node, &node} {
-		output, err := ConvertToYAML(value)
-		require.NoError(t, err)
-		assert.Equal(t, input, output)
+		for _, preserve := range []bool{false, true} {
+			output, err := ConvertToYAML(value, YAMLOptions{PreserveFunctionSources: preserve})
+			require.NoError(t, err)
+			assert.Equal(t, input, output)
+		}
 	}
 }
 
