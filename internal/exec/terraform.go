@@ -210,6 +210,18 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 	// execution. Without this, hooks create a fresh info with no auth.
 	SetLastAuthContext(info.AuthContext, info.AuthManager)
 
+	// Hooks that consume component files must run after workdir provisioning;
+	// scheduler/Cobra before-hooks run too early and may see the shared source.
+	if preparedHooks, ok := info.NodeHooks.(schema.ComponentNodeHooksWithPreparation); ok {
+		writers := shellCommandOutputWriters(opts...)
+		if err := preparedHooks.BeforePrepared(shellCommandContext(opts...), &atmosConfig, &info, schema.ComponentNodeHookWriters{
+			Stdout: writers.Stdout,
+			Stderr: writers.Stderr,
+		}); err != nil {
+			return err
+		}
+	}
+
 	// Run the full command pipeline: init, arg build, workspace, execute, cleanup.
 	// Forward caller-provided options (e.g. CI stdout/stderr capture) alongside the environment option.
 	opts = append(opts, WithEnvironment(info.SanitizedEnv))
