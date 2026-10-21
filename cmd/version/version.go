@@ -103,10 +103,7 @@ func init() {
 
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.
-	internal.Register(
-		&VersionCommandProvider{},
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/version/usage"),
-	)
+	internal.Register(&VersionCommandProvider{})
 }
 
 // VersionCommandProvider implements the CommandProvider interface.
