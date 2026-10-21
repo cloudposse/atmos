@@ -161,3 +161,24 @@ func TestCustomDiscoveryFlagRegistration(t *testing.T) {
 		})
 	}
 }
+
+func TestDiscoveryMarkdownResolvesLinksAfterRedirect(t *testing.T) {
+	_ = NewTestKit(t)
+	mockDiscoveryDependencies(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/original.md" {
+			http.Redirect(w, r, "/moved/page.md", http.StatusFound)
+			return
+		}
+		fmt.Fprint(w, "[Root](/intro.md)\n\n[Sibling](next.md)\n\n[Section](#examples)")
+	}))
+	t.Cleanup(server.Close)
+	root, leaf, output := discoveryTestRoot(t)
+	internal.RegisterCommandMetadata(leaf, internal.WithDocumentationURL(server.URL+"/original"))
+	handled, err := dispatchCommandDiscovery(root, []string{"terraform", "plan", "--docs=md", "--no-color"})
+	require.NoError(t, err)
+	assert.True(t, handled)
+	assert.Contains(t, output.String(), server.URL+"/intro.md")
+	assert.Contains(t, output.String(), server.URL+"/moved/next.md")
+	assert.Contains(t, output.String(), server.URL+"/moved/page.md#examples")
+}

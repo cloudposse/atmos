@@ -39,7 +39,8 @@ atmos terraform plan --docs=md
 
 `--docs=md` fetches the page's `.md` URL and displays it with Atmos's terminal
 Markdown renderer (`--docs=markdown` is also accepted). The source URL stays visible
-for copying. Bare `--docs` opens the web page in your browser; `--docs=false` disables discovery.
+for copying. Relative links become absolute URLs so they work outside the website.
+Bare `--docs` opens the web page in your browser; `--docs=false` disables discovery.
 
 Use `--example` to try a related example:
 

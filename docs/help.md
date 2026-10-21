@@ -159,7 +159,8 @@ execution does not print this footer.
 URL, fetches it, and displays the page using the shared terminal Markdown renderer.
 It appends `.md` to the documentation route (the homepage uses `/index.md`).
 `--docs=markdown` is an alias for `--docs=md`. `--docs=false` disables discovery.
-Use equals syntax for the Markdown format.
+Use equals syntax for the Markdown format. Relative links and images resolve against
+the fetched page URL, including its final URL after redirects.
 `--example` offers registered examples
 and confirms installation; noninteractive invocations print install commands.
 If the destination contains files, the confirmation explicitly asks to overwrite

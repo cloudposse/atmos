@@ -46,40 +46,40 @@ func renderCommandDocumentation(cmd *cobra.Command, documentationURL string) err
 	printDocumentationURL(out, markdownURL)
 	progress := spinner.New("Fetching documentation")
 	progress.Start()
-	content, err := fetchCommandDocumentation(discoveryContext(cmd), markdownURL)
+	content, baseURL, err := fetchCommandDocumentation(discoveryContext(cmd), markdownURL)
 	progress.Stop()
 	if err != nil {
 		return fmt.Errorf("fetch documentation %s: %w", markdownURL, err)
 	}
-	ui.New(out).Markdown(content)
+	ui.New(out).MarkdownWithBaseURL(content, baseURL)
 	return nil
 }
 
 // fetchCommandDocumentation bounds downloads and honors cancellation and the
 // shared HTTP client's timeout. HTML error/fallback pages are not Markdown.
-func fetchCommandDocumentation(ctx context.Context, markdownURL string) (string, error) {
+func fetchCommandDocumentation(ctx context.Context, markdownURL string) (string, string, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, markdownURL, nil)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	request.Header.Set("Accept", "text/markdown, text/plain;q=0.9")
 	response, err := atmoshttp.NewDefaultClient().Do(request)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("%w: %s", errUtils.ErrHTTPRequestFailed, response.Status)
+		return "", "", fmt.Errorf("%w: %s", errUtils.ErrHTTPRequestFailed, response.Status)
 	}
 	if strings.HasPrefix(response.Header.Get("Content-Type"), "text/html") {
-		return "", fmt.Errorf("%w: expected Markdown, received HTML", errUtils.ErrDownloadFile)
+		return "", "", fmt.Errorf("%w: expected Markdown, received HTML", errUtils.ErrDownloadFile)
 	}
 	content, err := io.ReadAll(io.LimitReader(response.Body, maxCommandDocumentationBytes+1))
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if len(content) > maxCommandDocumentationBytes {
-		return "", fmt.Errorf("%w: documentation exceeds %d bytes", errUtils.ErrDownloadFile, maxCommandDocumentationBytes)
+		return "", "", fmt.Errorf("%w: documentation exceeds %d bytes", errUtils.ErrDownloadFile, maxCommandDocumentationBytes)
 	}
-	return string(content), nil
+	return string(content), response.Request.URL.String(), nil
 }
