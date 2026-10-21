@@ -5,7 +5,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -686,38 +685,5 @@ func (i *Installer) extractGzip(gzPath, binaryPath string) error {
 		return fmt.Errorf("%w: failed to decompress gzip: %w", ErrFileOperation, err)
 	}
 
-	return nil
-}
-
-// copyFile stages a raw binary beside its destination before replacing it.
-// Rewriting an existing executable in place can invalidate macOS code-signing
-// pages cached against its inode, even when the replacement bytes are identical.
-func (i *Installer) copyFile(src, dst string) error {
-	log.Debug("Copying binary", "src", filepath.Base(src), "dst", filepath.Base(dst))
-
-	stageDir, err := os.MkdirTemp(filepath.Dir(dst), ".copy-")
-	if err != nil {
-		return fmt.Errorf("%w: failed to create copy staging directory: %w", ErrFileOperation, err)
-	}
-	defer os.RemoveAll(stageDir)
-
-	staged := filepath.Join(stageDir, "binary")
-	if err := copyFileFallback(src, staged); err != nil {
-		return fmt.Errorf("%w: failed to copy file: %w", ErrFileOperation, err)
-	}
-	// Preserve an existing destination's permissions, matching os.Create.
-	// A new destination retains the creation mode filtered through the umask.
-	if info, err := os.Stat(dst); err == nil {
-		if err := os.Chmod(staged, info.Mode().Perm()); err != nil {
-			return fmt.Errorf("%w: failed to preserve destination permissions: %w", ErrFileOperation, err)
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("%w: failed to inspect destination file: %w", ErrFileOperation, err)
-	}
-	// The sibling staging directory guarantees the same filesystem. Do not
-	// fall back to an in-place copy if replacement fails.
-	if err := os.Rename(staged, dst); err != nil {
-		return fmt.Errorf("%w: failed to replace destination file: %w", ErrFileOperation, err)
-	}
 	return nil
 }
