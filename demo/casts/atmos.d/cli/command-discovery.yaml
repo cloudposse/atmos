@@ -88,6 +88,36 @@ commands:
             working_directory: "../../.context/cast-fixtures/command-discovery/project/quick-start-simple"
             command: atmos list stacks
             interval: 3s
+          - type: simulate
+            text: cd ..
+          - type: session
+            steps:
+              - type: wait
+                text: '> '
+                timeout: 10s
+              - type: write
+                text: atmos terraform --example
+              - type: key
+                key: enter
+              - type: wait
+                text: Choose an example
+                timeout: 15s
+              - type: pause
+                duration: 1s
+              - type: key
+                key: enter
+              - type: wait
+                text: Overwrite matching files in the existing directory?
+                timeout: 10s
+              - type: pause
+                duration: 3s
+              - type: key
+                key: enter
+              - type: wait
+                text: Example initialization declined.
+                timeout: 10s
+              - type: pause
+                duration: 2s
       - type: script
         name: sanitize
         interpreter: python3

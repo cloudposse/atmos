@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -127,12 +128,13 @@ func discoverCommandExamples(request discoveryRequest, examples []internal.Comma
 			if i == 0 {
 				label += " (recommended)"
 			}
-			fmt.Fprintf(out, "\n%s\n  %s\n", label, exampleInstallCommand(request.globals, example)) // #nosec G705 -- plain terminal text, not HTML.
+			fmt.Fprintf(out, "\n%s\n  %s\n", label, exampleInstallCommand(request.globals, example, false)) // #nosec G705 -- plain terminal text, not HTML.
 		}
 		return nil
 	}
 	err := initializeSelectedExample(request, examples)
 	if errors.Is(err, huh.ErrUserAborted) {
+		fmt.Fprintln(out, "Example initialization canceled. No files were changed.")
 		return nil
 	}
 	return err
@@ -152,6 +154,10 @@ func initializeSelectedExample(request discoveryRequest, examples []internal.Com
 	if err != nil {
 		return err
 	}
+	overwrite, err := exampleNeedsOverwrite(absoluteTarget)
+	if err != nil {
+		return fmt.Errorf("inspect example destination: %w", err)
+	}
 	out := request.command.OutOrStdout()
 	styles := createHelpStyles(ui.NewRenderer(out))
 	// #nosec G705 -- plain terminal text, not HTML.
@@ -159,25 +165,47 @@ func initializeSelectedExample(request discoveryRequest, examples []internal.Com
 		styles.muted.Render("Example:"), styles.heading.Render(selected.Label),
 		styles.muted.Render("Source:"), selected.Source,
 		styles.muted.Render("Destination:"), absoluteTarget,
-		styles.commandName.Bold(false).Render(exampleInstallCommand(request.globals, selected)))
-	confirmed, err := discoveryConfirm(request.command)
-	if err != nil || !confirmed {
+		styles.commandName.Bold(false).Render(exampleInstallCommand(request.globals, selected, overwrite)))
+	confirmed, err := discoveryConfirm(request.command, overwrite)
+	if err != nil {
 		return err
 	}
-	return discoveryInit(request.command, exampleInitArgs(request.globals, selected))
+	if !confirmed {
+		fmt.Fprintln(out, styles.muted.Render("Example initialization declined. No files were changed."))
+		return nil
+	}
+	return discoveryInit(request.command, exampleInitArgs(request.globals, selected, overwrite))
+}
+
+// Inspect only the first entry; init still validates the destination immediately
+// before copying. An empty or newly created destination never enables overwrite.
+func exampleNeedsOverwrite(target string) (bool, error) {
+	directory, err := os.Open(target)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	defer directory.Close()
+	entries, err := directory.Readdirnames(1)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return false, err
+	}
+	return len(entries) > 0, nil
 }
 
 func exampleTarget(example internal.CommandExample) string {
 	return "./" + filepath.Base(example.Source)
 }
 
-func exampleInitArgs(globals []string, example internal.CommandExample) []string {
+func exampleInitArgs(globals []string, example internal.CommandExample, overwrite bool) []string {
 	args := append([]string{}, globals...)
-	return append(args, "init", example.Source, exampleTarget(example), "--force=false")
+	return append(args, "init", example.Source, exampleTarget(example), "--force="+strconv.FormatBool(overwrite))
 }
 
-func exampleInstallCommand(globals []string, example internal.CommandExample) string {
-	return shellescape.QuoteCommand(append([]string{"atmos"}, exampleInitArgs(globals, example)...))
+func exampleInstallCommand(globals []string, example internal.CommandExample, overwrite bool) string {
+	return shellescape.QuoteCommand(append([]string{"atmos"}, exampleInitArgs(globals, example, overwrite)...))
 }
 
 func discoveryContext(cmd *cobra.Command) context.Context {
@@ -202,9 +230,13 @@ func selectCommandExample(cmd *cobra.Command, examples []internal.CommandExample
 	return selected, err
 }
 
-func confirmCommandExample(cmd *cobra.Command) (bool, error) {
+func confirmCommandExample(cmd *cobra.Command, overwrite bool) (bool, error) {
 	confirmed := false
 	field := tuiutils.NewAtmosConfirm().Title("Initialize this example?").Affirmative("Yes").Negative("No").Value(&confirmed)
+	if overwrite {
+		field.Title("Overwrite matching files in the existing directory?").
+			Description("Matching files will be replaced. Other files will be kept.")
+	}
 	err := commandExampleForm(cmd, field).RunWithContext(discoveryContext(cmd))
 	return confirmed, err
 }
@@ -234,5 +266,12 @@ func initializeCommandExample(cmd *cobra.Command, args []string) error {
 	// fetch spinner and other interactive output are not disabled by exec pipes.
 	child.Stdout = iolib.ChildProcessOutput(child.Stdout)
 	child.Stderr = iolib.ChildProcessOutput(child.Stderr)
-	return child.Run()
+	err = child.Run()
+	var exitError *exec.ExitError
+	if errors.As(err, &exitError) && exitError.ExitCode() > 0 {
+		// Init already rendered its error. Preserve its status without printing a
+		// second, unhelpful "exit status" error in the parent.
+		return errUtils.ExitCodeError{Code: exitError.ExitCode(), Silent: true}
+	}
+	return err
 }

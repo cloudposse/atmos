@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	errUtils "github.com/cloudposse/atmos/errors"
 	tuiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -99,7 +101,7 @@ func mockDiscoveryDependencies(t *testing.T) {
 		t.Fatal("unexpected picker")
 		return 0, nil
 	}
-	discoveryConfirm = func(*cobra.Command) (bool, error) { t.Fatal("unexpected confirmation"); return false, nil }
+	discoveryConfirm = func(*cobra.Command, bool) (bool, error) { t.Fatal("unexpected confirmation"); return false, nil }
 	discoveryInit = func(*cobra.Command, []string) error { t.Fatal("unexpected installation"); return nil }
 	discoveryTTY = func() bool { return false }
 }
@@ -232,7 +234,7 @@ func TestDiscoveryInteractiveExamples(t *testing.T) {
 					return 1, nil
 				}
 			}
-			discoveryConfirm = func(*cobra.Command) (bool, error) {
+			discoveryConfirm = func(*cobra.Command, bool) (bool, error) {
 				switch scenario {
 				case "cancel-confirm":
 					return false, huh.ErrUserAborted
@@ -269,8 +271,84 @@ func TestDiscoveryInteractiveExamples(t *testing.T) {
 			if installed {
 				assert.Contains(t, output.String(), "Destination:")
 			}
+			if scenario == "decline" {
+				assert.Contains(t, output.String(), "Example initialization declined. No files were changed.")
+			}
 		})
 	}
+}
+
+func TestDiscoveryExistingDestination(t *testing.T) {
+	for _, scenario := range []string{"overwrite", "decline", "cancel", "empty", "file", "noninteractive", "init-error"} {
+		t.Run(scenario, func(t *testing.T) {
+			mockDiscoveryDependencies(t)
+			t.Chdir(t.TempDir())
+			root, leaf, output := discoveryTestRoot(t)
+			internal.RegisterCommandMetadata(leaf, internal.WithExample("examples/quick-start-simple", "Simple"))
+			discoveryTTY = func() bool { return scenario != "noninteractive" }
+			const target = "quick-start-simple"
+			if scenario == "file" {
+				require.NoError(t, os.WriteFile(target, []byte("keep"), 0o600))
+			} else {
+				require.NoError(t, os.Mkdir(target, 0o700))
+				if scenario != "empty" {
+					require.NoError(t, os.WriteFile(target+"/README.md", []byte("keep"), 0o600))
+				}
+			}
+			discoveryConfirm = func(_ *cobra.Command, overwrite bool) (bool, error) {
+				assert.Equal(t, scenario != "empty", overwrite)
+				if scenario == "cancel" {
+					return false, huh.ErrUserAborted
+				}
+				return scenario != "decline", nil
+			}
+			installed := false
+			discoveryInit = func(_ *cobra.Command, args []string) error {
+				installed = true
+				assert.Contains(t, args, "--force="+fmt.Sprint(scenario != "empty"))
+				if scenario == "init-error" {
+					return errors.New("copy failed")
+				}
+				return nil
+			}
+			_, err := dispatchCommandDiscovery(root, []string{"terraform", "plan", "--example"})
+			if scenario == "file" || scenario == "init-error" {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, scenario == "overwrite" || scenario == "empty" || scenario == "init-error", installed)
+			if scenario == "decline" {
+				assert.Contains(t, output.String(), "initialization declined")
+			}
+			if scenario == "noninteractive" {
+				assert.Contains(t, output.String(), "--force=false")
+			}
+			if scenario != "file" && scenario != "empty" {
+				contents, readErr := os.ReadFile(target + "/README.md")
+				require.NoError(t, readErr)
+				assert.Equal(t, "keep", string(contents), "discovery itself must never change existing files")
+			}
+		})
+	}
+}
+
+func TestInitializeCommandExampleExitStatus(t *testing.T) {
+	if os.Getenv("ATMOS_TEST_INIT_EXIT") == "1" {
+		fmt.Fprintln(os.Stderr, "Initialization failed")
+		os.Exit(2)
+	}
+	t.Setenv("ATMOS_TEST_INIT_EXIT", "1")
+	var output bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	err := initializeCommandExample(cmd, []string{"-test.run=^TestInitializeCommandExampleExitStatus$"})
+	var exitError errUtils.ExitCodeError
+	require.ErrorAs(t, err, &exitError)
+	assert.Equal(t, 2, exitError.Code)
+	assert.True(t, exitError.Silent)
+	assert.Equal(t, "Initialization failed\n", output.String())
 }
 
 func TestDiscoveryExecuteWithoutProject(t *testing.T) {

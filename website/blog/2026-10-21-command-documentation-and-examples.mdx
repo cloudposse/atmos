@@ -43,7 +43,9 @@ confirmation. **No is selected by default.** After you choose Yes, a progress
 indicator tracks initialization and Atmos displays the example's README.
 
 Examples install into `./<example-directory-name>`, respecting `--chdir`. Existing
-destinations are protected, and initialization does not run Terraform. In a
+destinations require explicit confirmation before matching files are overwritten;
+other files are kept. Declining prints a message confirming that no files were
+changed. Initialization does not run Terraform. In a
 noninteractive terminal, `--example` prints the available examples and explicit
 installation commands without prompting or installing anything.
 

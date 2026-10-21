@@ -157,4 +157,7 @@ execution does not print this footer.
 
 `--docs` prints and opens the resolved URL. `--example` offers registered examples
 and confirms installation; noninteractive invocations print install commands.
+If the destination contains files, the confirmation explicitly asks to overwrite
+matching files using `atmos init --force`. No is selected by default, and declining
+prints a message without changing files. Noninteractive discovery never enables force.
 Metadata lives in the command registry; see [Developing Atmos Commands](developing-atmos-commands.md#documentation-and-installable-examples).
