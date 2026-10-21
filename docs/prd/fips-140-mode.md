@@ -98,7 +98,7 @@ Every distinct Go-toolchain build invocation in the repo sets `GOFIPS140`:
 This table covers every build invocation *in this repo*. It did not use to cover the
 Homebrew distribution path: the `atmos` formula lives entirely in the external
 `Homebrew/homebrew-core` repo (this repo's only involvement is a version-bump PR via
-`brew bump-formula-pr` in `.github/workflows/build.yml`), and that formula's `install`
+`brew bump-formula-pr` in `.github/workflows/release-distribution.yml`), and that formula's `install`
 block did a plain `go build` with no `GOFIPS140` set — so `brew install atmos` produced
 a binary reporting `"fips": false` while GitHub Release binaries correctly reported
 `"fips": true`. Fixed upstream in

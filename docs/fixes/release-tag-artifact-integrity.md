@@ -54,7 +54,7 @@ GitHub's SHA-256 digests against the verified manifest, then rechecks the draft
 ID, tag, target and remote tag commit immediately before setting `draft: false`.
 Any mismatch or failed upload leaves the release unpublished. Downstream
 distribution and major-tag updates require the immutable release's manifest
-and asset digests to match. `build.yml` no longer rebuilds release executables.
+and asset digests to match. `release-distribution.yml` (formerly `build.yml`) handles downstream distribution without rebuilding release executables.
 
 Failures may leave a pinned tag or partially uploaded draft. They are preserved
 for investigation. Do not move the tag or overwrite the assets to retry; use a
@@ -105,3 +105,13 @@ Local action calls use GitHub's `$/.github/actions/...` syntax, resolving from
 the workflow revision without a checkout solely to load the action. Actionlint
 1.7.12 predates this syntax; the repository lint configuration excludes only its specific missing-ref
 diagnostic for these calls. Go tooling and release source still need checkouts.
+
+## Post-publication maintenance
+
+After verification, `release-distribution.yml` directly invokes the existing Cloud Posse
+release-branch-manager action for stable releases and `actions/github-script`
+for release notifications. The notification module and its regression tests
+live in `.github/scripts/release-comment.cjs` and `release-comment.test.cjs`;
+`atmos test local-actions javascript` discovers the tests automatically.
+The separate guarded `release-major-tag.yml` workflow remains the sole writer
+of the moving major-version tag.

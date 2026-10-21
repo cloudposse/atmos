@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const notify = require('./comment.cjs');
+const notify = require('./release-comment.cjs');
 
 const repo = { owner: 'cloudposse', repo: 'atmos' };
 const release = {

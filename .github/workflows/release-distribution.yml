@@ -45,11 +45,38 @@ jobs:
         with:
           egress-policy: audit
 
-      - name: Maintain release branches and notifications
-        uses: $/.github/actions/release-maintenance # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+      - name: Check out release notification script
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Create branch maintenance token
+        if: ${{ !github.event.release.prerelease }}
+        id: token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ vars.BOT_GITHUB_APP_ID }}
-          app-private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+          private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-workflows: write
+
+      - name: Maintain stable release branch
+        if: ${{ !github.event.release.prerelease }}
+        uses: cloudposse/github-action-release-branch-manager@d1eac0bfdfcf2c3e2c1a9669a6c5783a448bee65 # v2.0.0
+        with:
+          token: ${{ steps.token.outputs.token }}
+
+      # The major tag has its own guarded workflow: release-major-tag.yml.
+      - name: Notify included pull requests
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ github.token }}
+          retries: 3
+          script: |
+            const notify = require('./.github/scripts/release-comment.cjs');
+            await notify({ github, context });
 
   homebrew:
     if: ${{ github.event.release.prerelease == false }}
