@@ -2,6 +2,7 @@ package cloudformation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -35,12 +36,10 @@ type driftDetectionResult struct {
 
 // detectDrift starts a new drift detection operation and polls until it
 // completes (or fails), returning the overall stack drift status. The
-// driftDetectionTimeout budget is applied once, here, before the initial
-// DetectStackDrift call, and its deadline is shared with pollDriftDetection.
-// A stalled startup request is bounded by the same 15-minute budget as the
-// polling loop that follows it, instead of only the polling loop being
-// bounded. The original ctx is preserved and threaded through so caller
-// cancellation is still reported distinctly from a timeoutCtx deadline.
+// configured operation deadline, or the default driftDetectionTimeout budget,
+// bounds both the initial DetectStackDrift call and pollDriftDetection. The
+// original ctx is preserved so caller cancellation remains distinct from
+// deadline expiry during either a stalled request or the polling loop.
 func detectDrift(ctx context.Context, client CloudFormationClient, stackName string) (*driftDetectionResult, error) {
 	defer perf.Track(nil, "cloudformation.detectDrift")()
 
@@ -64,15 +63,17 @@ func errDriftDetectionTimedOut() error {
 }
 
 // classifyDriftPollError maps a DescribeStackDriftDetectionStatus failure to the right error:
-// the caller's own cancellation (ctx.Err()) takes priority, then the per-request timeoutCtx
-// deadline, then the raw AWS error wrapped generically. Split out of pollDriftDetection to keep
-// its cyclomatic complexity down.
+// caller cancellation takes priority; configured and default deadlines both preserve the drift
+// timeout classification and the underlying context error. Other AWS errors are wrapped generically.
 func classifyDriftPollError(ctx, timeoutCtx context.Context, err error) error {
 	if parentErr := ctx.Err(); parentErr != nil {
+		if errors.Is(parentErr, context.DeadlineExceeded) {
+			return fmt.Errorf("%w: %w", errDriftDetectionTimedOut(), parentErr)
+		}
 		return parentErr
 	}
-	if timeoutCtx.Err() != nil {
-		return errDriftDetectionTimedOut()
+	if timeoutErr := timeoutCtx.Err(); timeoutErr != nil {
+		return fmt.Errorf("%w: %w", errDriftDetectionTimedOut(), timeoutErr)
 	}
 	return fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
 }
@@ -84,13 +85,13 @@ func classifyDriftPollError(ctx, timeoutCtx context.Context, err error) error {
 // as a drift-detection timeout.
 func waitForNextDriftPoll(ctx, timeoutCtx context.Context) error {
 	if ctx.Err() != nil {
-		return ctx.Err()
+		return classifyDriftPollError(ctx, timeoutCtx, ctx.Err())
 	}
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return classifyDriftPollError(ctx, timeoutCtx, ctx.Err())
 	case <-timeoutCtx.Done():
-		return errDriftDetectionTimedOut()
+		return classifyDriftPollError(ctx, timeoutCtx, timeoutCtx.Err())
 	case <-time.After(driftPollInterval):
 		return nil
 	}
@@ -100,9 +101,8 @@ func waitForNextDriftPoll(ctx, timeoutCtx context.Context) error {
 // reaches DETECTION_COMPLETE or DETECTION_FAILED. The timeoutCtx (created by detectDrift, before
 // the initial DetectStackDrift call) bounds every AWS request in this loop too, so a stalled
 // DescribeStackDriftDetectionStatus call can't keep the command blocked past the shared
-// driftDetectionTimeout budget. The caller's own cancellation (ctx.Err()) is preserved and
-// reported separately from the child context's own deadline, which maps to
-// ErrAwsCloudFormationAPICallFailed.
+// operation deadline or default driftDetectionTimeout budget. Caller cancellation is preserved;
+// either deadline maps to ErrAwsCloudFormationAPICallFailed while retaining context.DeadlineExceeded.
 func pollDriftDetection(ctx, timeoutCtx context.Context, client CloudFormationClient, detectionID string) (*driftDetectionResult, error) {
 	for {
 		out, err := client.DescribeStackDriftDetectionStatus(timeoutCtx, &cloudformation.DescribeStackDriftDetectionStatusInput{
