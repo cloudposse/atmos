@@ -4,6 +4,25 @@
 pull requests, pushes to `main`, and manual dispatch. Script tests run on Linux,
 macOS, and Windows with a read-only job token and no application secrets.
 
+Run the same Starlark-backed custom commands locally (Atmos **1.233.0**,
+Node.js **24**, Python **3.13** (as `python`), and npm must be on `PATH`):
+
+```sh
+atmos test local-actions
+# Or run one category:
+atmos test local-actions javascript
+atmos test local-actions python
+atmos test local-actions packages
+```
+
+Discovery and execution live in [`.atmos.d/test.yaml`](../../.atmos.d/test.yaml).
+Regression tests exercise those Starlark steps with temporary filesystem fixtures
+and a mock process runner, including empty discovery and failed test commands:
+
+```sh
+go test -race ./magefiles/localactions
+```
+
 Test discovery follows these conventions:
 
 | Implementation | Discovered suite | Command |

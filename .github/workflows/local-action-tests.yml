@@ -3,6 +3,8 @@ name: Local action tests
 on:
   pull_request:
     paths:
+      - '.atmos.d/test.yaml'
+      - 'magefiles/localactions/**'
       - '.github/actions/**'
       - '.github/scripts/**'
       - '.github/workflows/**'
@@ -15,6 +17,8 @@ on:
   push:
     branches: [main]
     paths:
+      - '.atmos.d/test.yaml'
+      - 'magefiles/localactions/**'
       - '.github/actions/**'
       - '.github/scripts/**'
       - '.github/workflows/**'
@@ -63,41 +67,19 @@ jobs:
         with:
           python-version: '3.13'
 
-      # Discover offline suites before installing npm dependencies. The live
-      # verify-sha-pinning/test.mjs smoke test is intentionally not a *.test file.
+      - name: Set up pinned Atmos
+        uses: $/.github/actions/setup-atmos-bootstrap
+        with:
+          atmos-version: '1.233.0'
+
       - name: Test standalone JavaScript scripts
-        run: |
-          suites=()
-          while IFS= read -r -d '' suite; do
-            suites+=("$suite")
-          done < <(find .github/actions .github/scripts -type d \( -name node_modules -o -name dist \) -prune -o -type f \( -name '*.test.cjs' -o -name '*.test.mjs' \) -print0)
-          test "${#suites[@]}" -gt 0
-          node --test --experimental-test-coverage "${suites[@]}"
+        run: atmos test local-actions javascript
 
       - name: Test Python actions
-        run: |
-          shopt -s nullglob
-          count=0
-          for action in .github/actions/*/; do
-            suites=("$action"test_*.py)
-            if (( ${#suites[@]} > 0 )); then
-              python -m unittest discover -s "$action" -p 'test_*.py' -v
-              count=$((count + 1))
-            fi
-          done
-          test "$count" -gt 0
+        run: atmos test local-actions python
 
       - name: Test packaged JavaScript and TypeScript actions
-        run: |
-          shopt -s nullglob
-          packages=(.github/actions/*/package.json)
-          test "${#packages[@]}" -gt 0
-          for package in "${packages[@]}"; do
-            action="${package%/package.json}"
-            npm ci --prefix "$action"
-            npm test --prefix "$action"
-            npm run typecheck --if-present --prefix "$action"
-          done
+        run: atmos test local-actions packages
 
   release-rehearsal:
     name: Release guard and GoReleaser rehearsal
@@ -117,12 +99,18 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Install pinned GoReleaser and validate production configuration
+      - name: Install pinned GoReleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           distribution: goreleaser
           version: 'v2.18.3'
-          args: check --config .goreleaser.yml
+          install-only: true
+
+      - name: Validate production GoReleaser configuration
+        run: goreleaser check --config .goreleaser.yml
+
+      - name: Test Starlark action test orchestration
+        run: go test -race -count=1 ./magefiles/localactions
 
       - name: Test all release guards and rehearse stable, nightly and feature builds
         env:
