@@ -22,6 +22,6 @@ https://atmos.tools/cli/commands/azure/aks/update-kubeconfig`,
 func init() {
 	internal.RegisterCommandMetadata(
 		AksCmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/azure/aks/aks"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/azure/aks"),
 	)
 }

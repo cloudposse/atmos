@@ -337,7 +337,7 @@ func init() {
 	SecurityCmd.AddCommand(securityAnalyzeCmd)
 	internal.RegisterCommandMetadata(
 		SecurityCmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/security/security"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/security"),
 	)
 	internal.RegisterCommandMetadata(
 		securityAnalyzeCmd,

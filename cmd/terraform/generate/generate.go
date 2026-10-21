@@ -32,7 +32,7 @@ func init() {
 	GenerateCmd.AddCommand(required_providers.NewRequiredProvidersCommand())
 	internal.RegisterCommandMetadata(
 		GenerateCmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/generate/generate"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/generate"),
 		internal.WithExample("examples/generate-files", "Generate Files"),
 	)
 }

@@ -21,7 +21,7 @@ func newStackSetCmd() *cobra.Command {
 	cmd.AddCommand(newOperationCommand("instances", "stackset-instances", "List a StackSet's stack instances"))
 	internal.RegisterCommandMetadata(
 		cmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/stackset/stackset"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/stackset"),
 	)
 	return cmd
 }

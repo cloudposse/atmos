@@ -60,7 +60,7 @@ func init() {
 	sourceCmd.AddCommand(deleteCmd)
 	internal.RegisterCommandMetadata(
 		sourceCmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/helmfile/source/source"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/helmfile/source"),
 	)
 }
 

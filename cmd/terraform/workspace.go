@@ -135,6 +135,6 @@ func init() {
 	terraformCmd.AddCommand(workspaceCmd)
 	internal.RegisterCommandMetadata(
 		workspaceCmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/workspace/workspace"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/workspace"),
 	)
 }

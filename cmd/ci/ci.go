@@ -31,7 +31,7 @@ func init() {
 	// This happens during package initialization via blank import in cmd/root.go.
 	internal.Register(
 		&CICommandProvider{},
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ci/ci"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ci"),
 		internal.WithExample("examples/gitops", "GitOps"),
 		internal.WithExample("examples/local-gitops", "Local GitOps"),
 	)

@@ -60,7 +60,7 @@ func init() {
 	sourceCmd.AddCommand(deleteCmd)
 	internal.RegisterCommandMetadata(
 		sourceCmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/source/source"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/source"),
 		internal.WithExample("examples/source-provisioning", "Source Provisioning"),
 	)
 }

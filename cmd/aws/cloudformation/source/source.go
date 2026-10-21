@@ -62,7 +62,7 @@ func init() {
 	sourceCmd.AddCommand(deleteCmd)
 	internal.RegisterCommandMetadata(
 		sourceCmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/source/source"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/source"),
 	)
 }
 

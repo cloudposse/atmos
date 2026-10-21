@@ -49,7 +49,7 @@ func init() {
 	cacheCmd.AddCommand(untrustCmd)
 	internal.RegisterCommandMetadata(
 		cacheCmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/cache/cache"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/cache"),
 	)
 }
 

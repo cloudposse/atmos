@@ -228,7 +228,7 @@ func init() {
 	ComplianceCmd.AddCommand(complianceReportCmd)
 	internal.RegisterCommandMetadata(
 		ComplianceCmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/compliance/compliance"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/compliance"),
 	)
 	internal.RegisterCommandMetadata(
 		complianceReportCmd,

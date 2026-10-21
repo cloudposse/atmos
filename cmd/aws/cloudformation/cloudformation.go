@@ -141,7 +141,7 @@ func init() {
 	CloudFormationCmd.AddCommand(backend.GetBackendCommand())
 	internal.RegisterCommandMetadata(
 		CloudFormationCmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/cloudformation"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation"),
 		internal.WithExample("examples/cloudformation", "CloudFormation"),
 		internal.WithExample("examples/cloudformation-advanced", "CloudFormation (Advanced)"),
 	)
@@ -167,7 +167,7 @@ func newChangesetCmd() *cobra.Command {
 	cmd.AddCommand(newOperationCommand(subCommandDelete, "changeset-delete", "Delete a named changeset"))
 	internal.RegisterCommandMetadata(
 		cmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/changeset/changeset"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/changeset"),
 	)
 	return cmd
 }
@@ -188,7 +188,7 @@ func newDriftCmd() *cobra.Command {
 	cmd.AddCommand(newOperationCommand("describe", "drift-describe", "Show the results of the most recent drift detection"))
 	internal.RegisterCommandMetadata(
 		cmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/drift/drift"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/drift"),
 	)
 	return cmd
 }
@@ -209,7 +209,7 @@ func newGetCmd() *cobra.Command {
 	cmd.AddCommand(newOperationCommand("policy", "get-policy", "Fetch the deployed stack's policy"))
 	internal.RegisterCommandMetadata(
 		cmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/get/get"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/get"),
 	)
 	return cmd
 }

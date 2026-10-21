@@ -121,7 +121,7 @@ func init() {
 	stackConfigCmd.AddCommand(stackConfigListCmd)
 	internal.RegisterCommandMetadata(
 		stackConfigCmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/config/config"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/config"),
 	)
 	internal.RegisterCommandMetadata(
 		stackConfigDeleteCmd,

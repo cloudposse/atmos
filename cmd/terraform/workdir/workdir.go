@@ -34,7 +34,7 @@ func init() {
 	workdirCmd.AddCommand(cleanCmd)
 	internal.RegisterCommandMetadata(
 		workdirCmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/workdir/workdir"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/workdir"),
 	)
 }
 

@@ -44,7 +44,7 @@ func init() {
 	backendCmd.AddCommand(listCmd)
 	internal.RegisterCommandMetadata(
 		backendCmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/backend/backend"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/backend"),
 	)
 }
 

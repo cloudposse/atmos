@@ -46,6 +46,6 @@ func init() {
 	planfileParser.RegisterPersistentFlags(PlanfileCmd)
 	internal.RegisterCommandMetadata(
 		PlanfileCmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/planfile/planfile"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/planfile"),
 	)
 }

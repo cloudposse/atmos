@@ -53,7 +53,7 @@ func init() {
 	cacheCmd.AddCommand(cachePathsCmd)
 	internal.RegisterCommandMetadata(
 		cacheCmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ci/cache/cache"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ci/cache"),
 	)
 }
 

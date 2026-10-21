@@ -23,6 +23,6 @@ https://atmos.tools/cli/commands/aws/eks-update-kubeconfig`,
 func init() {
 	internal.RegisterCommandMetadata(
 		EksCmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/eks/eks"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/eks"),
 	)
 }
