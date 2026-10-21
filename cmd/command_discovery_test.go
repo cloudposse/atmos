@@ -292,25 +292,34 @@ func TestDiscoveryDispatchBoundaries(t *testing.T) {
 }
 
 func TestDiscoveryNoninteractiveExamples(t *testing.T) {
-	mockDiscoveryDependencies(t)
-	root, _, output := discoveryTestRoot(t)
-	handled, err := dispatchCommandDiscovery(root, []string{"terraform", "plan", "--example"})
-	require.NoError(t, err)
-	assert.True(t, handled)
-	assert.Contains(t, output.String(), "Simple (recommended)")
-	assert.Contains(t, output.String(), "atmos init examples/quick-start-simple ./quick-start-simple")
-	assert.Contains(t, output.String(), "atmos init examples/quick-start-advanced ./quick-start-advanced")
-	output.Reset()
-	_, err = dispatchCommandDiscovery(root, []string{"--example"})
-	require.NoError(t, err)
-	assert.Contains(t, output.String(), "No examples are registered")
-	assert.Contains(t, output.String(), "Documentation: https://atmos.tools")
-	discoveryTTY = func() bool { return true }
-	_, err = dispatchCommandDiscovery(root, []string{"terraform", "--example", "--interactive=false"})
-	require.NoError(t, err)
-	t.Setenv("ATMOS_INTERACTIVE", "false")
-	_, err = dispatchCommandDiscovery(root, []string{"terraform", "--example"})
-	require.NoError(t, err)
+	previous := ui.GetColorProfile()
+	t.Cleanup(func() { ui.SetColorProfile(previous) })
+	t.Setenv("NO_COLOR", "")
+	for name, profile := range map[string]termenv.Profile{"plain": termenv.Ascii, "colored": termenv.TrueColor} {
+		t.Run(name, func(t *testing.T) {
+			mockDiscoveryDependencies(t)
+			ui.SetColorProfile(profile)
+			root, _, output := discoveryTestRoot(t)
+			handled, err := dispatchCommandDiscovery(root, []string{"terraform", "plan", "--example"})
+			require.NoError(t, err)
+			assert.True(t, handled)
+			assert.Contains(t, output.String(), "Simple (recommended)")
+			assert.Contains(t, output.String(), "atmos init examples/quick-start-simple ./quick-start-simple")
+			assert.Contains(t, output.String(), "atmos init examples/quick-start-advanced ./quick-start-advanced")
+			output.Reset()
+			_, err = dispatchCommandDiscovery(root, []string{"--example"})
+			require.NoError(t, err)
+			assert.Contains(t, output.String(), "No examples are registered")
+			assert.Contains(t, ansi.Strip(output.String()), "Documentation: https://atmos.tools")
+			assert.Equal(t, profile != termenv.Ascii, strings.Contains(output.String(), "\x1b["))
+			discoveryTTY = func() bool { return true }
+			_, err = dispatchCommandDiscovery(root, []string{"terraform", "--example", "--interactive=false"})
+			require.NoError(t, err)
+			t.Setenv("ATMOS_INTERACTIVE", "false")
+			_, err = dispatchCommandDiscovery(root, []string{"terraform", "--example"})
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestDiscoveryInteractiveExamples(t *testing.T) {
