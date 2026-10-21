@@ -63,6 +63,8 @@ jobs:
 
       # The major tag has its own guarded workflow: release-major-tag.yml.
       - name: Notify included pull requests
+        # A comment failure must not block distribution of a verified release.
+        continue-on-error: true
         uses: $/.github/actions/release-comment # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           github-token: ${{ github.token }}
