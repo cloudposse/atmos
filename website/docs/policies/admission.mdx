@@ -193,10 +193,10 @@ confinement, and [policy commands](/cli/commands/policy) for offline checks and 
 ## Block coding-agent production deployments
 
 The [agent deployment policy](/policies/library/component-deny-agent-production-deploy)
-uses `input.agents` to deny production `apply` and `deploy` commands. Atmos captures
-`claude-code` when `CLAUDECODE=1` and `codex` when `CODEX_THREAD_ID` is nonempty,
-before configuration loading can change the environment. Only the detected names are
-exposed; session IDs and arbitrary environment variables are excluded.
+uses the shared `env` context to deny production `apply` and `deploy` commands. Atmos captures
+process environment before configuration loading can change it. The example checks
+`CLAUDECODE=1` or a nonempty `CODEX_THREAD_ID`. Environment values can contain secrets;
+do not include them in diagnostics. See [shared context](/policies/context) for all engines.
 
 The example identifies production by `prod`/`production` segments in stack names.
 Adapt that condition to your stack convention or use inherited literal labels with `match`.

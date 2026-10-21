@@ -326,3 +326,11 @@ snapshot isolation, cancellation, and complete versus incomplete affected invent
 The [catalog test runner](policy-library.md) verifies distributed definitions and fixtures.
 Command enforcement additionally depends on the
 [protected execution configuration](https://atmos.tools/policies/configuration#enforcement).
+
+## Shared runtime context
+
+All four engines receive the same environment, Atmos version/FIPS, OS/architecture, effective
+user, memory/disk, clock, CI labels, and verified approver facts. Named `checks` centralize
+semantic-version, date, and calendar operations. JSON Schema opts into the shared envelope
+with `schema.target: context`; its default remains the original document. See the
+[runtime-context PRD](prd/policy-runtime-context.md) and [reference](../website/docs/policies/context.mdx).

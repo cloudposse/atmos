@@ -1,0 +1,172 @@
+---
+title: Policy Context
+sidebar_label: Context
+description: Shared environment, runtime, calendar, and CI evidence for every native policy engine.
+---
+
+# Policy Context
+
+Native policies share one context across CEL, Starlark, OPA, and JSON Schema. Atmos collects
+runtime facts outside the evaluators and supplies the same snapshot to each rule. This
+capability requires the release containing these changes; it is not available in 1.233.0.
+
+## Available facts
+
+| Context | Contents |
+| --- | --- |
+| `env` | Process environment variables, including `CLAUDECODE` and `CODEX_THREAD_ID` |
+| `atmos` | `version` and active `fips` mode |
+| `runtime` | `os`, `arch`, effective `user.uid`, `user.gid`, `user.username` |
+| `runtime.memory` | `available_bytes`, `total_bytes`, and `scope` (`host` or `container`) |
+| `runtime.disk` | `path`, `available_bytes`, and `total_bytes` for the current working directory's filesystem |
+| `time` | UTC `now` timestamp, `date`, `weekday`, and `timezone` |
+| `ci` | Native metadata/event/facts plus `labels` and verified `approvers` |
+| `checks` | Named results from shared version, date, and schedule checks |
+
+An unavailable measurement is `null`, not zero. Numeric UID/GID are unavailable on Windows.
+Memory uses readable conventional Linux cgroup limits when detected; check `scope` when
+container-specific capacity is required. Disk space describes the stated `path`, which may
+differ from a component or temporary directory. Capacity is a snapshot, not a reservation.
+
+The CLI pins environment variables before configuration evaluation. Treat environment-based
+agent detection as an accidental-operation guardrail: callers can alter their environment.
+Context can contain secrets; never include environment values in policy diagnostics.
+
+## Language bindings
+
+| Engine | Access |
+| --- | --- |
+| CEL | `env.CLAUDECODE`, `atmos.fips`, `runtime.user.uid`, `checks.window` |
+| Starlark | `ctx.env.get("CLAUDECODE", "")`, `ctx.atmos["fips"]`, `ctx.checks["window"]` |
+| OPA | `data.atmos_context.env.CLAUDECODE`, `data.atmos_context.checks.window` |
+| JSON Schema | Set `schema.target: context`, then validate `properties.env`, `properties.checks`, etc. |
+
+OPA retains the original document as `input`. JSON Schema defaults to `schema.target: input`,
+so existing schemas continue to validate the original document. The context target includes
+`input`, `params`, `request`, and the shared fields above.
+
+An unset environment variable is absent; an explicitly empty value remains `""`. For optional
+variables, CEL uses `has(env.CLAUDECODE) && env.CLAUDECODE == '1'`, Starlark can use
+`ctx.env.get("CLAUDECODE", "")`, and OPA can use `object.get(data.atmos_context.env, "CLAUDECODE", "")`.
+JSON Schema makes presence mandatory only with `required`. A shared check pointing to a missing
+variable fails with unavailable input rather than silently returning false.
+
+## Version and deployment-window checks
+
+Named checks use the same implementation for every engine. Their values are booleans;
+the engine predicate decides whether they select an action.
+
+```yaml
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: production-runtime
+spec:
+  policies:
+    deploy:
+      on: component.command
+      match:
+        labels: {stage: prod}
+      checks:
+        supported_version:
+          kind: semver
+          path: /atmos/version
+          constraint: '>= 1.233.0'
+        window:
+          kind: schedule
+          timezone: America/New_York
+          weekdays: [Monday, Tuesday, Wednesday, Thursday]
+          start_time: '09:00'
+          end_time: '17:00'
+      rule: >-
+        input.command in ['apply', 'deploy'] &&
+        (!checks.supported_version || !checks.window || !atmos.fips)
+      action: deny
+      reason: Production deployments require an approved runtime and deployment window.
+```
+
+Semantic versions use numeric ordering and prerelease-aware constraints. Unknown development
+versions fail a version check. A schedule defaults to the captured `/time/now` and UTC; an
+IANA timezone applies its daylight-saving rules. Start boundaries are inclusive; end
+boundaries are exclusive. Split overnight windows into two checks and combine them with OR.
+
+## Validate dates and ranges
+
+```yaml
+checks:
+  expiration:
+    kind: date
+    path: /input/expiration
+    format: date
+    start: '2026-01-01'
+    end: '2027-01-01'
+```
+
+Formats are `date` (YYYY-MM-DD), `date-time` (RFC3339, the default), and `time` (HH:MM:SS).
+Checks validate calendar values as well as syntax. Missing or null source fields are errors;
+present invalid dates return false. Omit bounds to check format/calendar validity alone.
+JSON Schema also asserts standard formats such as `date` and `date-time`.
+
+For JSON Schema, consume the same named check using a context schema:
+
+```yaml
+engine: jsonschema
+schema:
+  path: schemas/runtime.schema.json
+  target: context
+```
+
+```json
+{
+  "type": "object",
+  "required": ["checks"],
+  "properties": {
+    "checks": {
+      "type": "object",
+      "required": ["expiration"],
+      "properties": {"expiration": {"const": true}}
+    }
+  }
+}
+```
+
+A schema violation selects the configured action, just like document validation.
+
+## CI labels and approvers
+
+Local execution has `ci: null`. In GitHub Actions, `ci.labels` contains label names from a
+complete PR event; `null` means unavailable and `[]` means known empty. Labels describe the
+triggering event and are not a fresh API lookup. Native datasets retain their provenance.
+
+```yaml
+rule: ci != null && ci.labels != null && 'preview' in ci.labels
+```
+
+To inspect verified approvers, explicitly request collection:
+
+```yaml
+required_ci:
+  - provider: github-actions
+    schema: github-actions/v1
+    dataset: facts
+    fact: approvers
+rule: "!('alice' in ci.approvers)"
+action: deny
+reason: A current approval from alice is required.
+```
+
+Operational policy gates collect reviews when requested. Offline file checks never fetch review
+evidence; use fixture evidence with `policy test` when testing approver rules.
+
+Collection requires `pull-requests: read` and verifies the open PR, checked-out revision,
+complete paginated reviews, and unchanged revisions during collection. Names are lowercase;
+author, stale, dismissed, and superseded approvals do not count. Missing required evidence
+fails closed. Other CI providers leave unsupported summaries unavailable. For approval
+obligations, prefer [require-approval policies](/policies/approvals).
+
+## Offline tests
+
+A test fixture can provide `request.context` with `env`, `atmos`, `runtime`, and `time` values,
+and `request.ci` with native datasets. `atmos policy test` never collects live host or CI facts.
+A fixture that omits context receives empty/unavailable facts. This keeps calendar and
+machine-dependent policies reproducible.

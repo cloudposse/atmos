@@ -10,6 +10,7 @@ spec:
       action: deny
       reason: Production apply and deploy are blocked from coding-agent sessions. Use a reviewed deployment workflow.
       rule: |
-        input.agents.exists(agent, agent in ['claude-code', 'codex']) &&
+        ((has(env.CLAUDECODE) && env.CLAUDECODE == '1') ||
+        (has(env.CODEX_THREAD_ID) && env.CODEX_THREAD_ID != '')) &&
         input.command in ['apply', 'deploy'] &&
         input.stack.matches('(?i)(^|[-_/])(prod|production)([-_/]|$)')

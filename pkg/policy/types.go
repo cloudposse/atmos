@@ -49,6 +49,7 @@ type Revisions struct {
 // all other inputs must be JSON objects.
 // No input kind implicitly triggers collection of another kind (including affected).
 type Request struct {
+	Context   *RuntimeContext `json:"context,omitempty"`
 	Subject   *Subject        `json:"subject,omitempty"`
 	Kind      InputKind       `json:"kind"`
 	Input     json.RawMessage `json:"input"`
@@ -60,19 +61,20 @@ type Request struct {
 // Rule is an already resolved definition, not a policy manifest or trust assertion.
 // A true predicate selects its effects; false means not applicable, never denial.
 type Rule struct {
-	AllowedRoots []string        `json:"allowed_roots,omitempty"`
-	Match        *Selector       `json:"match,omitempty"`
-	ID           string          `json:"id"`
-	Description  string          `json:"description,omitempty"`
-	On           InputKind       `json:"on"`
-	Engine       string          `json:"engine"`
-	Expression   string          `json:"expression"`
-	Parameters   json.RawMessage `json:"parameters,omitempty"`
-	RequiredCI   []CIRequirement `json:"required_ci,omitempty"`
-	Effects      Effects         `json:"effects"`
-	OPA          *OPAConfig      `json:"opa,omitempty"`
-	Schema       *SchemaConfig   `json:"schema,omitempty"`
-	Files        *FileSelector   `json:"files,omitempty"`
+	Checks       map[string]ContextCheck `json:"checks,omitempty"`
+	AllowedRoots []string                `json:"allowed_roots,omitempty"`
+	Match        *Selector               `json:"match,omitempty"`
+	ID           string                  `json:"id"`
+	Description  string                  `json:"description,omitempty"`
+	On           InputKind               `json:"on"`
+	Engine       string                  `json:"engine"`
+	Expression   string                  `json:"expression"`
+	Parameters   json.RawMessage         `json:"parameters,omitempty"`
+	RequiredCI   []CIRequirement         `json:"required_ci,omitempty"`
+	Effects      Effects                 `json:"effects"`
+	OPA          *OPAConfig              `json:"opa,omitempty"`
+	Schema       *SchemaConfig           `json:"schema,omitempty"`
+	Files        *FileSelector           `json:"files,omitempty"`
 }
 
 // Effects are obligations selected by a predicate. They cannot perform side effects.
@@ -120,6 +122,7 @@ type Decision struct {
 // Evaluation contains detached, materialized data for a single predicate.
 // Adapters must be concurrency-safe, honor cancellation, and perform no I/O.
 type Evaluation struct {
+	Checks     map[string]bool `json:"checks,omitempty"`
 	Expression string          `json:"expression"`
 	Parameters json.RawMessage `json:"parameters,omitempty"`
 	Request    *Request        `json:"request"`

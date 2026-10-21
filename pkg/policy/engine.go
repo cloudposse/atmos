@@ -15,15 +15,21 @@ import (
 // Engine owns an instance-local language registry; it has no implicit evaluators.
 // Its zero value is usable. Register adapters before evaluation for reproducibility.
 type Engine struct {
-	mu         sync.RWMutex
-	evaluators map[string]Evaluator
+	contextProvider ContextProvider
+	factCollector   FactCollector
+	mu              sync.RWMutex
+	evaluators      map[string]Evaluator
 }
 
 // NewEngine returns an isolated registry with the supported pure evaluators.
-func NewEngine() *Engine {
+func NewEngine(options ...EngineOption) *Engine {
 	defer perf.Track(nil, "policy.NewEngine")()
 
-	return &Engine{evaluators: map[string]Evaluator{CELEngine: &CEL{}, StarlarkEngine: &Starlark{}, OPAEngine: &OPA{}, JSONSchemaEngine: &JSONSchema{}}}
+	engine := &Engine{evaluators: map[string]Evaluator{CELEngine: &CEL{}, StarlarkEngine: &Starlark{}, OPAEngine: &OPA{}, JSONSchemaEngine: &JSONSchema{}}}
+	for _, option := range options {
+		option(engine)
+	}
+	return engine
 }
 
 // Register adds a language adapter without permitting replacement of an existing one.
@@ -60,6 +66,22 @@ func (e *Engine) Evaluate(ctx context.Context, request *Request, rules []Rule) (
 		return decision, err
 	}
 	if err := validateRuleIdentities(rules); err != nil {
+		decision.Status = EvaluationError
+		return decision, err
+	}
+	if !hasMatchingKind(request.Kind, rules) {
+		return decision, nil
+	}
+	request, err := e.prepareContext(ctx, request)
+	if err != nil {
+		decision.Status = EvaluationError
+		return decision, err
+	}
+	request, err = cloneJSON(request)
+	if err == nil && e.factCollector != nil {
+		err = e.factCollector.CollectFacts(ctx, request, rules)
+	}
+	if err != nil {
 		decision.Status = EvaluationError
 		return decision, err
 	}
@@ -150,7 +172,7 @@ func (e *Engine) match(ctx context.Context, request *Request, rule *Rule) (Evalu
 		}
 	}
 	// JSON cloning rejects unsupported raw payloads and isolates each adapter and result.
-	input, err := cloneJSON(Evaluation{Expression: rule.Expression, Parameters: rule.Parameters, Request: request, OPA: rule.OPA, Schema: rule.Schema})
+	input, err := prepareEvaluation(request, rule)
 	if err != nil {
 		return EvaluationResult{}, Effects{}, err
 	}
@@ -186,6 +208,9 @@ func validateRule(rule *Rule) error {
 		if _, err := decodeObject(rule.Parameters); err != nil {
 			return fmt.Errorf("%w: parameters: %w", errUtils.ErrPolicyInvalid, err)
 		}
+	}
+	if err := validateChecks(rule.Checks); err != nil {
+		return err
 	}
 	return validateEffects(rule.Effects)
 }
@@ -246,4 +271,28 @@ func selectRule(ctx context.Context, request *Request, rule *Rule) (bool, error)
 		}
 	}
 	return true, nil
+}
+
+func hasMatchingKind(kind InputKind, rules []Rule) bool {
+	for i := range rules {
+		if rules[i].On == kind {
+			return true
+		}
+	}
+	return false
+}
+
+func prepareEvaluation(request *Request, rule *Rule) (Evaluation, error) {
+	input, err := cloneJSON(Evaluation{Expression: rule.Expression, Parameters: rule.Parameters, Request: request, OPA: rule.OPA, Schema: rule.Schema})
+	if err != nil || len(rule.Checks) == 0 {
+		return input, err
+	}
+	// Version/calendar checks (including timezone loading) belong to the host.
+	// Language adapters consume only detached data and precomputed boolean results.
+	activation, err := evaluationActivation(input)
+	if err != nil {
+		return input, err
+	}
+	input.Checks, err = evaluateChecks(rule.Checks, activation)
+	return input, err
 }

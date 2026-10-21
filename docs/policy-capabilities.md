@@ -87,3 +87,11 @@ effects when validation fails. Both retain structured diagnostics and accept exi
 including Terraform plans. File checks also support any JSON value as input. Definitions and local
 resources are loaded before pure evaluation. See [OPA, JSON Schema, and file checks](../website/docs/policies/validation-engines.mdx)
 for configuration and runtime limits.
+
+## Shared runtime context
+
+All four engines receive the same environment, Atmos version/FIPS, OS/architecture, effective
+user, memory/disk, clock, CI labels, and verified approver facts. Named `checks` centralize
+semantic-version, date, and calendar operations. JSON Schema opts into the shared envelope
+with `schema.target: context`; its default remains the original document. See the
+[runtime-context PRD](prd/policy-runtime-context.md) and [reference](../website/docs/policies/context.mdx).

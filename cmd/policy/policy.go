@@ -9,6 +9,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -56,7 +57,11 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 			root = value
 		}
 	}
-	results, checkErr := policypkg.CheckFiles(ctx, bundle, root)
+	snapshot, err := ci.CollectPolicySnapshot(ctx)
+	if err != nil {
+		return err
+	}
+	results, checkErr := policypkg.CheckFiles(ctx, bundle, root, policypkg.WithFileEvidence(policypkg.NewEngine(), snapshot))
 	report["valid"] = checkErr == nil
 	report["files"] = results
 	if err := data.WriteJSON(report); err != nil {

@@ -22,4 +22,11 @@ func TestInvocationPinsAgents(t *testing.T) {
 	require.Equal(t, []string{"claude-code", "codex"}, names)
 	names[0] = "modified"
 	require.Equal(t, []string{"claude-code", "codex"}, AgentNames())
+	snapshot, err := (invocationContext{}).Collect(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "1", snapshot.Env["CLAUDECODE"])
+	snapshot.Env["CLAUDECODE"] = "mutated"
+	again, err := (invocationContext{}).Collect(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "1", again.Env["CLAUDECODE"])
 }

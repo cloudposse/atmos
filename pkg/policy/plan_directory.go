@@ -110,20 +110,21 @@ func (b *Bundle) RulesFor(kind InputKind) []Rule {
 }
 
 type planPolicyItem struct {
-	OPA          *opaPolicyConfig    `yaml:"opa"`
-	Schema       *schemaPolicyConfig `yaml:"schema"`
-	Files        *FileSelector       `yaml:"files"`
-	AllowedRoots []string            `yaml:"allowed_roots"`
-	Match        *Selector           `yaml:"match"`
-	On           InputKind           `yaml:"on"`
-	Engine       string              `yaml:"engine"`
-	Rule         string              `yaml:"rule"`
-	Action       string              `yaml:"action"`
-	Reason       string              `yaml:"reason"`
-	With         map[string]any      `yaml:"with"`
-	RequiredCI   []CIRequirement     `yaml:"required_ci"`
-	Hooks        []HookRequirement   `yaml:"hooks"`
-	Approvals    []approvalItem      `yaml:"approvals"`
+	Checks       map[string]ContextCheck `yaml:"checks"`
+	OPA          *opaPolicyConfig        `yaml:"opa"`
+	Schema       *schemaPolicyConfig     `yaml:"schema"`
+	Files        *FileSelector           `yaml:"files"`
+	AllowedRoots []string                `yaml:"allowed_roots"`
+	Match        *Selector               `yaml:"match"`
+	On           InputKind               `yaml:"on"`
+	Engine       string                  `yaml:"engine"`
+	Rule         string                  `yaml:"rule"`
+	Action       string                  `yaml:"action"`
+	Reason       string                  `yaml:"reason"`
+	With         map[string]any          `yaml:"with"`
+	RequiredCI   []CIRequirement         `yaml:"required_ci"`
+	Hooks        []HookRequirement       `yaml:"hooks"`
+	Approvals    []approvalItem          `yaml:"approvals"`
 }
 
 type approvalItem struct {
@@ -298,6 +299,9 @@ func (p *planPolicyItem) resolve(document, name string) (Rule, error) {
 			return Rule{}, err
 		}
 	}
+	if err := validateChecks(p.Checks); err != nil {
+		return Rule{}, err
+	}
 	if err := p.validateEffects(name); err != nil {
 		return Rule{}, err
 	}
@@ -376,7 +380,7 @@ func (p *planPolicyItem) resolveExpression(document, name string) (Rule, error) 
 		approvals = append(approvals, requirement)
 	}
 	return Rule{
-		ID: document + "/" + name, On: p.On, Engine: p.Engine, Expression: p.Rule, Match: p.Match,
+		Checks: p.Checks, ID: document + "/" + name, On: p.On, Engine: p.Engine, Expression: p.Rule, Match: p.Match,
 		Files: p.Files, Parameters: parameters, RequiredCI: p.RequiredCI, Effects: Effects{Deny: p.Action == "deny", Reason: p.Reason, Hooks: p.Hooks, Approvals: approvals},
 	}, nil
 }

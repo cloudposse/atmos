@@ -23,7 +23,8 @@ type opaPolicyConfig struct {
 }
 
 type schemaPolicyConfig struct {
-	Path string `yaml:"path"`
+	Target string `yaml:"target"`
+	Path   string `yaml:"path"`
 }
 
 // resolveEvaluator materializes sources while loading the governing bundle.
@@ -43,6 +44,10 @@ func (p *planPolicyItem) resolveEvaluator(directory string, rule *Rule) error {
 		if err != nil {
 			return err
 		}
+		if p.Schema.Target != "" && p.Schema.Target != "input" && p.Schema.Target != "context" {
+			return fmt.Errorf("%w: schema.target must be input or context", errUtils.ErrPolicyInvalid)
+		}
+		config.Target = p.Schema.Target
 		rule.Schema = config
 	}
 	return nil

@@ -57,7 +57,7 @@ func validateFileSelector(kind InputKind, selector *FileSelector) error {
 
 // CheckFiles evaluates file policies without loading Atmos configuration or executing effects.
 // It returns all collected outcomes, including denials and input errors, before failing the check.
-func CheckFiles(ctx context.Context, bundle *Bundle, directory string) ([]FileResult, error) {
+func CheckFiles(ctx context.Context, bundle *Bundle, directory string, options ...FileCheckOption) ([]FileResult, error) {
 	defer perf.Track(nil, "policy.CheckFiles")()
 	if bundle == nil {
 		return nil, fmt.Errorf("%w: missing policy bundle", errUtils.ErrPolicyInvalid)
@@ -73,12 +73,15 @@ func CheckFiles(ctx context.Context, bundle *Bundle, directory string) ([]FileRe
 	sort.Strings(names)
 	results := make([]FileResult, 0, len(names))
 	var failures []error
-	engine := NewEngine()
+	evaluation := &fileCheckContext{engine: NewEngine()}
+	for _, option := range options {
+		option(evaluation)
+	}
 	for _, name := range names {
 		if err := ctx.Err(); err != nil {
 			return results, errors.Join(append(failures, err)...)
 		}
-		result, err := checkFile(ctx, engine, directory, name, selected[name])
+		result, err := checkFile(ctx, evaluation, directory, name, selected[name])
 		results = append(results, result)
 		if err != nil {
 			failures = append(failures, err)
@@ -153,7 +156,7 @@ func excludedFile(patterns []string, name string) bool {
 	return false
 }
 
-func checkFile(ctx context.Context, engine *Engine, directory, name string, rules []Rule) (FileResult, error) {
+func checkFile(ctx context.Context, evaluation *fileCheckContext, directory, name string, rules []Rule) (FileResult, error) {
 	result := FileResult{File: name}
 	raw, err := readLocalResource(directory, name, maxFileInputBytes)
 	if err == nil {
@@ -164,7 +167,7 @@ func checkFile(ctx context.Context, engine *Engine, directory, name string, rule
 		result.Error = err.Error()
 		return result, fmt.Errorf("%w: file %q: %w", errUtils.ErrPolicyInputInvalid, name, err)
 	}
-	result.Decision, err = engine.Evaluate(ctx, &Request{Kind: File, File: name, Input: raw}, rules)
+	result.Decision, err = evaluation.engine.Evaluate(ctx, &Request{Kind: File, File: name, Input: raw, CI: evaluation.ci}, rules)
 	if err == nil {
 		err = EnforceDecision(result.Decision)
 	}
@@ -229,4 +232,23 @@ func decodeDocument(raw json.RawMessage) (any, error) {
 		return nil, fmt.Errorf("%w: decode document: %w", errUtils.ErrPolicyInputInvalid, err)
 	}
 	return normalizeNumbers(value)
+}
+
+// FileCheckOption configures optional host evidence for file policies.
+type FileCheckOption func(*fileCheckContext)
+
+type fileCheckContext struct {
+	engine *Engine
+	ci     *CISnapshot
+}
+
+// WithFileEvidence supplies an engine and CI snapshot without coupling policy to CI providers.
+func WithFileEvidence(engine *Engine, snapshot *CISnapshot) FileCheckOption {
+	defer perf.Track(nil, "policy.WithFileEvidence")()
+	return func(evaluation *fileCheckContext) {
+		if engine != nil {
+			evaluation.engine = engine
+		}
+		evaluation.ci = snapshot
+	}
 }

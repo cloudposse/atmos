@@ -6,11 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
@@ -18,9 +20,10 @@ import (
 
 var invocation struct {
 	sync.RWMutex
-	active bool
-	bundle *policy.Bundle
-	agents []string
+	active      bool
+	bundle      *policy.Bundle
+	agents      []string
+	environment map[string]string
 }
 
 // BeginInvocation pins governing definitions before configuration can change the
@@ -33,14 +36,16 @@ func BeginInvocation() (func(), error) {
 		return nil, err
 	}
 	invocation.Lock()
-	previous, active, agents := invocation.bundle, invocation.active, invocation.agents
+	previous, active, agents, environment := invocation.bundle, invocation.active, invocation.agents, invocation.environment
 	invocation.bundle, invocation.active = bundle, true
 	invocation.agents = policy.DetectAgents()
+	invocation.environment = env.EnvironToMap()
 	invocation.Unlock()
 	return func() {
 		invocation.Lock()
 		invocation.bundle, invocation.active = previous, active
 		invocation.agents = agents
+		invocation.environment = environment
 		invocation.Unlock()
 	}, nil
 }
@@ -108,7 +113,7 @@ func Check(ctx context.Context, request *policy.Request) error {
 	if err != nil {
 		return err
 	}
-	decision, err := policy.NewEngine().Evaluate(ctx, request, rules)
+	decision, err := NewEngine().Evaluate(ctx, request, rules)
 	if err != nil {
 		return fmt.Errorf("%w: admission evaluation failed (input details withheld)", errUtils.ErrPolicyEvaluation)
 	}
@@ -145,4 +150,28 @@ func FunctionValue(ctx context.Context, name, value string) error {
 	defer perf.Track(nil, "admission.FunctionValue")()
 
 	return guard.FunctionValue(ctx, name, value)
+}
+
+// NewEngine applies the invocation's pinned environment and live CI fact collection.
+func NewEngine() *policy.Engine {
+	defer perf.Track(nil, "admission.NewEngine")()
+
+	return policy.NewEngine(policy.WithContextProvider(invocationContext{}), policy.WithFactCollector(ci.PolicyFacts{}))
+}
+
+type invocationContext struct{}
+
+func (invocationContext) Collect(ctx context.Context) (*policy.RuntimeContext, error) {
+	defer perf.Track(nil, "admission.invocationContext.Collect")()
+
+	snapshot, err := (policy.HostContextProvider{}).Collect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	invocation.RLock()
+	defer invocation.RUnlock()
+	if invocation.active {
+		snapshot.Env = maps.Clone(invocation.environment)
+	}
+	return snapshot, nil
 }

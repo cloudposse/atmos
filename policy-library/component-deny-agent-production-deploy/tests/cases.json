@@ -4,11 +4,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "claude-code"
-        ],
         "command": "apply",
         "stack": "prod"
+      },
+      "context": {
+        "env": {
+          "CLAUDECODE": "1"
+        }
       }
     },
     "status": "deny"
@@ -18,11 +20,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "claude-code"
-        ],
         "command": "apply",
         "stack": "production"
+      },
+      "context": {
+        "env": {
+          "CLAUDECODE": "1"
+        }
       }
     },
     "status": "deny"
@@ -32,11 +36,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "claude-code"
-        ],
         "command": "apply",
         "stack": "acme-ue2-prod"
+      },
+      "context": {
+        "env": {
+          "CLAUDECODE": "1"
+        }
       }
     },
     "status": "deny"
@@ -46,11 +52,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "claude-code"
-        ],
         "command": "apply",
         "stack": "PRODUCTION/us"
+      },
+      "context": {
+        "env": {
+          "CLAUDECODE": "1"
+        }
       }
     },
     "status": "deny"
@@ -60,11 +68,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "claude-code"
-        ],
         "command": "apply",
         "stack": "acme_prod_us"
+      },
+      "context": {
+        "env": {
+          "CLAUDECODE": "1"
+        }
       }
     },
     "status": "deny"
@@ -74,11 +84,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "claude-code"
-        ],
         "command": "deploy",
         "stack": "prod"
+      },
+      "context": {
+        "env": {
+          "CLAUDECODE": "1"
+        }
       }
     },
     "status": "deny"
@@ -88,11 +100,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "claude-code"
-        ],
         "command": "deploy",
         "stack": "production"
+      },
+      "context": {
+        "env": {
+          "CLAUDECODE": "1"
+        }
       }
     },
     "status": "deny"
@@ -102,11 +116,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "claude-code"
-        ],
         "command": "deploy",
         "stack": "acme-ue2-prod"
+      },
+      "context": {
+        "env": {
+          "CLAUDECODE": "1"
+        }
       }
     },
     "status": "deny"
@@ -116,11 +132,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "claude-code"
-        ],
         "command": "deploy",
         "stack": "PRODUCTION/us"
+      },
+      "context": {
+        "env": {
+          "CLAUDECODE": "1"
+        }
       }
     },
     "status": "deny"
@@ -130,11 +148,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "claude-code"
-        ],
         "command": "deploy",
         "stack": "acme_prod_us"
+      },
+      "context": {
+        "env": {
+          "CLAUDECODE": "1"
+        }
       }
     },
     "status": "deny"
@@ -144,11 +164,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "codex"
-        ],
         "command": "apply",
         "stack": "prod"
+      },
+      "context": {
+        "env": {
+          "CODEX_THREAD_ID": "fixture"
+        }
       }
     },
     "status": "deny"
@@ -158,11 +180,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "codex"
-        ],
         "command": "apply",
         "stack": "production"
+      },
+      "context": {
+        "env": {
+          "CODEX_THREAD_ID": "fixture"
+        }
       }
     },
     "status": "deny"
@@ -172,11 +196,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "codex"
-        ],
         "command": "apply",
         "stack": "acme-ue2-prod"
+      },
+      "context": {
+        "env": {
+          "CODEX_THREAD_ID": "fixture"
+        }
       }
     },
     "status": "deny"
@@ -186,11 +212,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "codex"
-        ],
         "command": "apply",
         "stack": "PRODUCTION/us"
+      },
+      "context": {
+        "env": {
+          "CODEX_THREAD_ID": "fixture"
+        }
       }
     },
     "status": "deny"
@@ -200,11 +228,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "codex"
-        ],
         "command": "apply",
         "stack": "acme_prod_us"
+      },
+      "context": {
+        "env": {
+          "CODEX_THREAD_ID": "fixture"
+        }
       }
     },
     "status": "deny"
@@ -214,11 +244,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "codex"
-        ],
         "command": "deploy",
         "stack": "prod"
+      },
+      "context": {
+        "env": {
+          "CODEX_THREAD_ID": "fixture"
+        }
       }
     },
     "status": "deny"
@@ -228,11 +260,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "codex"
-        ],
         "command": "deploy",
         "stack": "production"
+      },
+      "context": {
+        "env": {
+          "CODEX_THREAD_ID": "fixture"
+        }
       }
     },
     "status": "deny"
@@ -242,11 +276,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "codex"
-        ],
         "command": "deploy",
         "stack": "acme-ue2-prod"
+      },
+      "context": {
+        "env": {
+          "CODEX_THREAD_ID": "fixture"
+        }
       }
     },
     "status": "deny"
@@ -256,11 +292,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "codex"
-        ],
         "command": "deploy",
         "stack": "PRODUCTION/us"
+      },
+      "context": {
+        "env": {
+          "CODEX_THREAD_ID": "fixture"
+        }
       }
     },
     "status": "deny"
@@ -270,11 +308,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "codex"
-        ],
         "command": "deploy",
         "stack": "acme_prod_us"
+      },
+      "context": {
+        "env": {
+          "CODEX_THREAD_ID": "fixture"
+        }
       }
     },
     "status": "deny"
@@ -284,9 +324,11 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [],
         "command": "apply",
         "stack": "prod"
+      },
+      "context": {
+        "env": {}
       }
     },
     "status": "not_applicable"
@@ -296,11 +338,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "codex"
-        ],
         "command": "apply",
         "stack": "dev"
+      },
+      "context": {
+        "env": {
+          "CODEX_THREAD_ID": "fixture"
+        }
       }
     },
     "status": "not_applicable"
@@ -310,11 +354,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "claude-code"
-        ],
         "command": "plan",
         "stack": "prod"
+      },
+      "context": {
+        "env": {
+          "CLAUDECODE": "1"
+        }
       }
     },
     "status": "not_applicable"
@@ -324,11 +370,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "codex"
-        ],
         "command": "diff",
         "stack": "prod"
+      },
+      "context": {
+        "env": {
+          "CODEX_THREAD_ID": "fixture"
+        }
       }
     },
     "status": "not_applicable"
@@ -338,11 +386,13 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "codex"
-        ],
         "command": "apply",
         "stack": "product-dev"
+      },
+      "context": {
+        "env": {
+          "CODEX_THREAD_ID": "fixture"
+        }
       }
     },
     "status": "not_applicable"
@@ -352,11 +402,11 @@
     "request": {
       "kind": "component.command",
       "input": {
-        "agents": [
-          "other"
-        ],
         "command": "apply",
         "stack": "prod"
+      },
+      "context": {
+        "env": {}
       }
     },
     "status": "not_applicable"

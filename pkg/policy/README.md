@@ -83,3 +83,12 @@ per-policy tests, and current lifecycle/CI limitations.
 
 Run `go test -race ./pkg/policy/... ./pkg/condition` for the isolated core and compatibility
 tests. These tests require no CI credentials, network calls, stacks, or hook execution.
+
+## Shared context
+
+`ContextProvider` and `FactCollector` materialize host and requested CI evidence before
+language evaluation. `RuntimeContext` carries environment, executable/platform/identity/resource
+facts and one captured UTC clock. `checks` runs the same version/date/calendar operations
+for every adapter; `schema.target: context` opts JSON Schema into the full envelope.
+Adapters remain pure. Offline fixtures supply `request.context` and never collect host facts.
+See `docs/prd/policy-runtime-context.md` for contracts and limitations.

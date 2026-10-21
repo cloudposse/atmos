@@ -19,6 +19,7 @@ const JSONSchemaEngine = "jsonschema"
 
 // SchemaConfig holds the entrypoint URI and all materialized local references.
 type SchemaConfig struct {
+	Target    string                     `json:"target,omitempty"`
 	Entry     string                     `json:"entry"`
 	Resources map[string]json.RawMessage `json:"resources"`
 }
@@ -43,7 +44,7 @@ func (j *JSONSchema) EvaluateDetailed(ctx context.Context, evaluation Evaluation
 	if err != nil {
 		return EvaluationResult{}, err
 	}
-	input, err := decodeDocument(evaluation.Request.Input)
+	input, err := schemaInput(evaluation)
 	if err != nil {
 		return EvaluationResult{}, err
 	}
@@ -65,11 +66,12 @@ func (j *JSONSchema) EvaluateDetailed(ctx context.Context, evaluation Evaluation
 }
 
 func compileSchema(config *SchemaConfig) (*jsonschema.Schema, error) {
-	if config == nil || config.Entry == "" || len(config.Resources) == 0 {
+	if config == nil || config.Entry == "" || len(config.Resources) == 0 || (config.Target != "" && config.Target != "input" && config.Target != "context") {
 		return nil, fmt.Errorf("%w: JSON Schema requires materialized schema resources", errUtils.ErrPolicyInvalid)
 	}
 	compiler := jsonschema.NewCompiler()
 	compiler.Draft = jsonschema.Draft2020
+	compiler.AssertFormat = true
 	compiler.LoadURL = func(uri string) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("%w: schema resource %q was not materialized", errUtils.ErrPolicyInvalid, uri)
 	}
@@ -99,4 +101,15 @@ func schemaDiagnostics(err *jsonschema.ValidationError) []Diagnostic {
 		result = append(result, schemaDiagnostics(cause)...)
 	}
 	return result
+}
+
+func schemaInput(evaluation Evaluation) (any, error) {
+	activation, err := evaluationActivation(evaluation)
+	if err != nil {
+		return nil, err
+	}
+	if evaluation.Schema != nil && evaluation.Schema.Target == "context" {
+		return activation, nil
+	}
+	return activation["input"], nil
 }

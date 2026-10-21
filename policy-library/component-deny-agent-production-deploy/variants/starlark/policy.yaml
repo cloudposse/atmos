@@ -11,6 +11,6 @@ spec:
       action: deny
       reason: Production apply and deploy are blocked from coding-agent sessions. Use a reviewed deployment workflow.
       rule: |
-        agents = ctx.input["agents"]
+        agent = ctx.env.get("CLAUDECODE", "") == "1" or ctx.env.get("CODEX_THREAD_ID", "") != ""
         production = any([part in ["prod", "production"] for part in ctx.input["stack"].lower().replace("_", "-").replace("/", "-").split("-")])
-        return any([agent in ["claude-code", "codex"] for agent in agents]) and ctx.input["command"] in ["apply", "deploy"] and production
+        return agent and ctx.input["command"] in ["apply", "deploy"] and production

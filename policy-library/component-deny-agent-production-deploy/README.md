@@ -27,14 +27,14 @@ Deny production apply and deploy commands launched by Claude Code or Codex.
 
 ## Configuration
 
-`input.agents` is collected from the invoking process before configuration loading:
+`env` is collected from the invoking process before configuration loading:
 
-| Environment marker | Value that detects the agent | `input.agents` entry |
-|---|---|---|
-| `CLAUDECODE` | Exactly `1` | `claude-code` |
-| `CODEX_THREAD_ID` | Any nonempty value | `codex` |
+| Environment marker | Value that detects the agent |
+|---|---|
+| `CLAUDECODE` | Exactly `1` |
+| `CODEX_THREAD_ID` | Any nonempty value |
 
-Atmos exposes only agent names, not session IDs or other environment values.
+The shared context exposes environment values to every engine; do not include them in diagnostics.
 [Claude Code documents `CLAUDECODE`](https://code.claude.com/docs/en/env-vars).
 [Codex sets `CODEX_THREAD_ID` in its shell environment](https://github.com/openai/codex/blob/main/codex-rs/protocol/src/shell_environment.rs).
 The presence of a CLI executable, an API key, or a configured home directory does not identify an agent invocation.
