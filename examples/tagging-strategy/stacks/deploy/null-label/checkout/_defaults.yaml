@@ -1,0 +1,10 @@
+# Product level: adds the product and its owner to the organization tags.
+import:
+  - ../_defaults
+
+vars:
+  tenant: payments
+  tags:
+    # Mixed case on purpose: label_key_case and label_value_case lowercase these.
+    Product: Checkout
+    Owner: Payments-Team

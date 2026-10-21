@@ -1,0 +1,35 @@
+# Minimal atmos.yaml for the tagging strategy example.
+base_path: "."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  # Stack names come from the explicit `name` field in each stack manifest.
+
+# Templating must be enabled so that `{{ .atmos_stack }}` and `{{ .atmos_component }}`
+# render inside the `terraform.providers` and `vars.tags` sections.
+templates:
+  settings:
+    enabled: true
+
+# Credential-free checks used by CI. The default_tags component is only described, never
+# planned, because planning it would require the AWS provider and credentials.
+commands:
+  - name: "test"
+    description: "Run all tests for the tagging-strategy example"
+    steps:
+      - atmos validate stacks
+      - atmos describe component app -s default-tags-dev
+      - atmos describe component app -s default-tags-prod
+      - atmos describe component app -s null-label-dev
+      - atmos describe component app-labeled -s null-label-dev
+      - atmos terraform plan app -s null-label-dev
+      - atmos terraform plan app -s null-label-prod

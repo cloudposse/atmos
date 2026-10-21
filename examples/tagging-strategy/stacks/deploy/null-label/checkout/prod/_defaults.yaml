@@ -1,0 +1,10 @@
+# Environment level: adds environment-specific tags to the product tags.
+import:
+  - ../_defaults
+
+vars:
+  environment: ue2
+  stage: prod
+  tags:
+    tier: production
+    region: us-east-2

@@ -1,0 +1,7 @@
+name: default-tags-prod
+
+import:
+  - ./_defaults
+  - catalog/default-tags/app
+  # Pipeline-only variant: source tags come from the CI environment instead of the checkout.
+  - mixins/ci-source-tags
