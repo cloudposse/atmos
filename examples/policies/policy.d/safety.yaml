@@ -9,4 +9,4 @@ spec:
       on: command
       action: deny
       reason: Destructive Terraform operations are disabled in this example. Use a reviewed teardown process instead.
-      rule: input.command == 'terraform destroy' || input.destroy
+      rule: input.command == 'terraform destroy' || (input.command.startsWith('terraform ') && input.destroy)

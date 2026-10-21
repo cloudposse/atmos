@@ -59,6 +59,8 @@ tests:
       stdout:
         - "about permitted"
         - "destroy denied"
+        - "helmfile destroy permitted"
+        - "similarly named command permitted"
       exit_code: 0
 
   - name: policies example allowed

@@ -102,5 +102,35 @@
       }
     },
     "status": "not_applicable"
+  },
+  {
+    "name": "helmfile destroy permitted",
+    "request": {
+      "kind": "command",
+      "input": {
+        "command": "helmfile destroy",
+        "path": [
+          "helmfile",
+          "destroy"
+        ],
+        "destroy": true
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "similarly named command permitted",
+    "request": {
+      "kind": "command",
+      "input": {
+        "command": "terraformer destroy",
+        "path": [
+          "terraformer",
+          "destroy"
+        ],
+        "destroy": true
+      }
+    },
+    "status": "not_applicable"
   }
 ]
