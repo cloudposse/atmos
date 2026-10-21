@@ -7,7 +7,7 @@ tags: [breaking-change, configuration]
 
 Starting with the `2026-10-20` edition, Atmos evaluates YAML functions only when they are written as explicit YAML tags. Quoting an entire function expression keeps it as literal text.
 
-Previously, Atmos stored deferred function calls as plain strings to evaluate them after merging and template rendering, which erased the distinction between a real YAML tag and quoted text.
+Previously, Atmos stored deferred function calls as plain strings to evaluate them after merging and template rendering, which erased the distinction between a real YAML tag and quoted text. That was a bug.
 
 <!--truncate-->
 
