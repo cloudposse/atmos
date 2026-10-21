@@ -165,15 +165,15 @@ Authentication is an orthogonal migration axis from IaC -- a user may migrate th
 their auth setup, both, or neither in a given session. Don't conflate the two. Identify which
 credential tooling the user has today and route to the matching reference:
 
-| User has...                                            | Use reference                                    |
-|------------------------------------------------------------|----------------------------------------------------|
-| `~/.aws/config`/`~/.aws/credentials` profiles               | [from-aws-config.md](references/from-aws-config.md) |
-| `gcloud` CLI config, ADC, or service-account keys            | [from-gcp-config.md](references/from-gcp-config.md) |
-| `az` CLI config, service principals, or Managed Identity     | [from-azure-config.md](references/from-azure-config.md) |
-| Leapp (desktop credential manager)                           | [from-leapp.md](references/from-leapp.md)           |
-| Granted (the `assume` CLI)                                   | [from-granted.md](references/from-granted.md)       |
-| saml2aws                                                      | [from-aws2saml.md](references/from-aws2saml.md)     |
-| okta-aws-cli                                                   | [from-okta-cli.md](references/from-okta-cli.md) -- **partial support only, read the gap callouts** |
+| User has... | Use reference |
+| --- | --- |
+| `~/.aws/config`/`~/.aws/credentials` profiles | [from-aws-config.md](references/from-aws-config.md) |
+| `gcloud` CLI config, ADC, or service-account keys | [from-gcp-config.md](references/from-gcp-config.md) |
+| `az` CLI config, service principals, or Managed Identity | [from-azure-config.md](references/from-azure-config.md) |
+| Leapp (desktop credential manager) | [from-leapp.md](references/from-leapp.md) |
+| Granted (the `assume` CLI) | [from-granted.md](references/from-granted.md) |
+| saml2aws | [from-aws2saml.md](references/from-aws2saml.md) |
+| okta-aws-cli | [from-okta-cli.md](references/from-okta-cli.md) -- **partial support only, read the gap callouts** |
 
 All are pure config-translation guides -- there is no `atmos auth import`/`migrate` command.
 None of them require touching the user's IaC migration path; they can run before, after, or
@@ -223,10 +223,10 @@ Pick the layout that matches the user's goals. Atmos recommends the `components/
 layout, especially for a new repository or a multi-tool project. You can keep an existing layout
 when the user wants less disruption.
 
-| `base_path`                              | Use when                                                                |
-|------------------------------------------|-------------------------------------------------------------------------|
-| `base_path: "."`                         | TF root modules live at the repo root; user wants zero file moves       |
-| `base_path: "terraform"`                 | TF-only repo with code already in `terraform/`; preserve dir name       |
+| `base_path` | Use when |
+| --- | --- |
+| `base_path: "."` | TF root modules live at the repo root; user wants zero file moves |
+| `base_path: "terraform"` | TF-only repo with code already in `terraform/`; preserve dir name |
 | `base_path: "."` + `components.terraform.base_path: "components/terraform"` | Multi-toolchain or new repo; canonical Atmos layout |
 
 For more organization patterns, such as multi-region, multi-account, and organization
@@ -237,14 +237,14 @@ hierarchies, see the skill [atmos-design-patterns](../atmos-design-patterns/SKIL
 This is a common mistake: an agent chooses a Gomplate datasource when a YAML function is safer
 and clearer. Use the option in the right column:
 
-| Goal                          | Reach for (NOT this)                              | Use instead                              |
-|-------------------------------|---------------------------------------------------|------------------------------------------|
-| Include a file's contents     | `gomplate.datasources` with file URL              | `!include path/to/file`                  |
-| Read an environment variable  | `gomplate getenv "FOO"`                           | `!env FOO`                               |
-| Run a shell command           | Template + `gomplate exec`                        | `!exec "command"`                        |
-| Read a store value            | Custom datasource URL                             | `!store store_name component stack key`  |
-| Read Terraform output         | Templated remote-state datasource                 | `!terraform.state component output`      |
-| Get current AWS account ID    | `gomplate.datasources` AWS plugin                 | `!aws.account_id`                        |
+| Goal | Reach for (NOT this) | Use instead |
+| --- | --- | --- |
+| Include a file's contents | `gomplate.datasources` with file URL | `!include path/to/file` |
+| Read an environment variable | `gomplate getenv "FOO"` | `!env FOO` |
+| Run a shell command | Template + `gomplate exec` | `!exec "command"` |
+| Read a store value | Custom datasource URL | `!store store_name component stack key` |
+| Read Terraform output | Templated remote-state datasource | `!terraform.state component output` |
+| Get current AWS account ID | `gomplate.datasources` AWS plugin | `!aws.account_id` |
 
 A YAML function checks its own types. It gives a clear error message. It works without Gomplate
 turned on. It does not require the template text to stay valid YAML. Use a Go template only for
