@@ -10,6 +10,7 @@ import (
 	yaml "gopkg.in/yaml.v3"
 
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -299,9 +300,9 @@ list_values:
 
 	result, err := UnmarshalYAML[map[string]any](input)
 	require.NoError(t, err)
-	assert.Equal(t, `!terraform.state producer ".fields.PRIVATE_KEY"`, result["mapping_value"])
+	assert.Equal(t, `!terraform.state producer ".fields.PRIVATE_KEY"`, yamlsource.Display(result["mapping_value"]))
 	require.Len(t, result["list_values"], 1)
-	assert.Equal(t, "!env DEMO_EXPLICIT_TAG_VALUE", result["list_values"].([]any)[0])
+	assert.Equal(t, "!env DEMO_EXPLICIT_TAG_VALUE", yamlsource.Display(result["list_values"].([]any)[0]))
 }
 
 // TestUnmarshalYAMLFromFile_BasicFunctionality tests the UnmarshalYAMLFromFile function.

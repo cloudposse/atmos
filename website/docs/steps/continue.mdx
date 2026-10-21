@@ -37,7 +37,7 @@ If `lint` fails, `apply` still runs and the workflow can still finish successful
   <dd>Equivalent to `always` for this field (a step only reaches `continue` evaluation after it has already failed), included for symmetry with `when`'s predicate vocabulary.</dd>
 
   <dt>CEL expression</dt>
-  <dd>Any CEL expression that evaluates to a boolean, for finer control — for example, `continue: "!cel env.CI == 'true'"` to tolerate a failure only in CI.</dd>
+  <dd>Any CEL expression that evaluates to a boolean, for finer control — for example, `continue: !cel "env.CI == 'true'"` to tolerate a failure only in CI.</dd>
 </dl>
 
 ## `continue` vs. `when: always`

@@ -150,7 +150,7 @@ func TestProcessComponentEntry_DisabledComponentSkipsTerraformState(t *testing.T
 			ClearResolutionContext()
 			t.Cleanup(ClearResolutionContext)
 
-			vars := map[string]any{"x": "!terraform.state some/component someoutput"}
+			vars := map[string]any{"x": taggedFunctionForTest("!terraform.state some/component someoutput")}
 			if tc.varsEnabled != nil {
 				vars["enabled"] = *tc.varsEnabled
 			}

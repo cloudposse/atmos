@@ -27,9 +27,14 @@ var bufferPool = sync.Pool{
 func ConvertToYAMLPreservingDelimiters(data any, delimiters []string, opts ...u.YAMLOptions) (string, error) {
 	defer perf.Track(nil, "yaml.ConvertToYAMLPreservingDelimiters")()
 
+	options := u.YAMLOptions{PreserveFunctionSources: true}
+	if len(opts) > 0 {
+		options.Indent = opts[0].Indent
+	}
+	// Preserve loader source identity during internal template rendering.
 	// If no delimiters or delimiters don't contain single quotes, use standard encoding.
 	if !DelimiterConflictsWithYAMLQuoting(delimiters) {
-		return u.ConvertToYAML(data, opts...)
+		return u.ConvertToYAML(data, options)
 	}
 
 	// Marshal Go value to yaml.Node tree so we can control quoting styles.

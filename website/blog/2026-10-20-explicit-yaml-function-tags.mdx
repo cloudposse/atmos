@@ -1,0 +1,38 @@
+---
+slug: explicit-yaml-function-tags
+title: "YAML functions require explicit tags"
+authors: [osterman]
+tags: [breaking-change, configuration]
+---
+
+Starting with the `2026-10-20` edition, Atmos evaluates YAML functions only when they are written as explicit YAML tags. Quoting an entire function expression keeps it as literal text.
+
+<!--truncate-->
+
+```yaml
+# Reads the environment variable:
+foo: !env "SOMETHING"
+
+# Keeps the literal string !env SOMETHING:
+literal: "!env SOMETHING"
+
+import:
+  - path: configs.d/prod-overrides.yaml
+    when: !cel 'env.DEPLOY_ENV == "prod"'
+```
+
+The tag belongs outside the quotes. This applies to all Atmos YAML functions, including `!exec`, `!terraform.state`, `!store`, and `!cel`. Quoted `!unset` no longer removes a value. Strings returned by a function are not automatically treated as new function calls.
+
+Condition fields still accept named predicates such as `ci` and `local`, and unprefixed expressions such as `when: 'env.CI == "true"'`. A quoted `!cel ...` condition is invalid under the new behavior.
+
+## Migration
+
+Move the tag outside the quotes wherever you intend to invoke a function. Leave intentional literal strings unchanged. Explicit evaluation APIs such as `atmos.Resolve "!env SOMETHING"` continue to accept function strings, and Go-template interpolation remains supported.
+
+Unpinned projects follow the latest behavior. To preserve legacy string-prefix evaluation while migrating, pin an earlier [edition](/cli/configuration/edition):
+
+```yaml title="atmos.yaml"
+edition: "2026-10-19"
+```
+
+Pins on or after `2026-10-20` use explicit tags. Edition flags and environment variables retain their existing precedence. `atmos list editions` and `atmos describe edition` report the `yaml_functions.explicit_tags` transition.
