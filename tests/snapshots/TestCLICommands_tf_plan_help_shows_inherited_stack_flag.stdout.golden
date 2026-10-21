@@ -246,4 +246,4 @@ COMPATIBILITY FLAGS
       -var-file             Load variable values from the given file
 
 
-Documentation: https://atmos.tools/cli/commands/terraform/plan
+  Documentation: https://atmos.tools/cli/commands/terraform/plan

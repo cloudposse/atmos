@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,7 +18,22 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+func TestCommandDocumentationColor(t *testing.T) {
+	_ = NewTestKit(t)
+	previous := ui.GetColorProfile()
+	t.Cleanup(func() { ui.SetColorProfile(previous) })
+	root, _, _ := discoveryTestRoot(t)
+	for _, profile := range []termenv.Profile{termenv.Ascii, termenv.TrueColor} {
+		ui.SetColorProfile(profile)
+		var out bytes.Buffer
+		printCommandDocumentation(&out, root)
+		assert.Equal(t, "\n  Documentation: "+internal.ResolveCommandMetadata(root).DocumentationURL+"\n", ansi.Strip(out.String()))
+		assert.Equal(t, profile != termenv.Ascii, strings.Contains(out.String(), "\x1b["))
+	}
+}
 
 func TestCommandDocumentationHelpTopics(t *testing.T) {
 	_ = NewTestKit(t)

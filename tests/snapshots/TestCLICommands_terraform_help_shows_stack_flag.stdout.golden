@@ -241,4 +241,4 @@ COMPATIBILITY FLAGS
 
 Use atmos terraform [command] --help for more information about a command.
 
-Documentation: https://atmos.tools/cli/commands/terraform/usage
+  Documentation: https://atmos.tools/cli/commands/terraform/usage

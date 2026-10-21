@@ -7,14 +7,65 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	tuiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+func TestDiscoveryColorFlags(t *testing.T) {
+	_ = NewTestKit(t)
+	mockDiscoveryDependencies(t)
+	previous := ui.GetColorProfile()
+	t.Cleanup(func() { ui.SetColorProfile(previous) })
+	openDocsURL = func(string) error { return nil }
+	for _, tc := range []struct {
+		args    string
+		noColor string
+		colored bool
+	}{
+		{args: "--force-color", colored: true},
+		{args: "--force-color=false"},
+		{args: "--force-color --no-color"},
+		{args: "--force-color --no-color=false", colored: true},
+		{args: "--force-color", noColor: "1"},
+	} {
+		t.Run(tc.args+tc.noColor, func(t *testing.T) {
+			t.Setenv("NO_COLOR", tc.noColor)
+			ui.SetColorProfile(termenv.Ascii)
+			root, _, output := discoveryTestRoot(t)
+			handled, err := dispatchCommandDiscovery(root, strings.Fields("terraform --docs "+tc.args))
+			require.NoError(t, err)
+			assert.True(t, handled)
+			assert.Equal(t, tc.colored, strings.Contains(output.String(), "\x1b["))
+			assert.Contains(t, ansi.Strip(output.String()), "Documentation: https://atmos.tools/terraform")
+		})
+	}
+}
+
+func TestCommandExampleConfirmationButtons(t *testing.T) {
+	_ = NewTestKit(t)
+	cmd := &cobra.Command{}
+	cmd.SetOut(&bytes.Buffer{}) // No terminal size events, like Cobra's output wrapper.
+	confirmed := false
+	field := tuiutils.NewAtmosConfirm().Title("Initialize this example?").Affirmative("Yes").Negative("No").Value(&confirmed)
+	form := commandExampleForm(cmd, field)
+	form.Init()
+	view := ansi.Strip(form.View())
+	// Check the buttons themselves, not the "y Yes / n No" keyboard help.
+	assert.Regexp(t, `Yes\s+No`, view)
+	assert.Contains(t, view, "Initialize this example?")
+	form.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	assert.False(t, confirmed, "Enter must decline by default")
+}
 
 func discoveryTestRoot(t *testing.T) (*cobra.Command, *cobra.Command, *bytes.Buffer) {
 	t.Helper()

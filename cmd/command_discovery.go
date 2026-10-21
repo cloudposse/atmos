@@ -16,10 +16,13 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	tuiutils "github.com/cloudposse/atmos/internal/tui/utils"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/reexec"
+	"github.com/cloudposse/atmos/pkg/startup"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/terminal"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Dependencies are replaceable so discovery tests never open a browser, prompt,
@@ -62,6 +65,12 @@ func dispatchCommandDiscovery(root *cobra.Command, args []string) (bool, error) 
 		return true, discoveryUsageError(request.command, err)
 	}
 	metadata := internal.ResolveCommandMetadata(request.command)
+	// Discovery skips Cobra's parsing and startup hooks. Apply its parsed color
+	// settings without mutating the original command's flags.
+	colorCommand := &cobra.Command{}
+	colorCommand.Flags().Bool("no-color", request.noColor, "")
+	colorCommand.Flags().Bool("force-color", request.forceColor, "")
+	startup.ConfigureEarlyColorProfile(colorCommand)
 	printCommandDocumentation(request.command.OutOrStdout(), request.command)
 	if request.docs {
 		if err := openDocsURL(metadata.DocumentationURL); err != nil {
@@ -143,8 +152,14 @@ func initializeSelectedExample(request discoveryRequest, examples []internal.Com
 	if err != nil {
 		return err
 	}
+	out := request.command.OutOrStdout()
+	styles := createHelpStyles(ui.NewRenderer(out))
 	// #nosec G705 -- plain terminal text, not HTML.
-	fmt.Fprintf(request.command.OutOrStdout(), "\nExample: %s\nSource: %s\nDestination: %s\n\n%s\n", selected.Label, selected.Source, absoluteTarget, exampleInstallCommand(request.globals, selected))
+	fmt.Fprintf(out, "\n  %s %s\n  %s %s\n  %s %s\n\n  %s\n",
+		styles.muted.Render("Example:"), styles.heading.Render(selected.Label),
+		styles.muted.Render("Source:"), selected.Source,
+		styles.muted.Render("Destination:"), absoluteTarget,
+		styles.commandName.Bold(false).Render(exampleInstallCommand(request.globals, selected)))
 	confirmed, err := discoveryConfirm(request.command)
 	if err != nil || !confirmed {
 		return err
@@ -183,17 +198,24 @@ func selectCommandExample(cmd *cobra.Command, examples []internal.CommandExample
 		options = append(options, huh.NewOption(label, i))
 	}
 	field := huh.NewSelect[int]().Title("Choose an example").Options(options...).Value(&selected)
-	err := huh.NewForm(huh.NewGroup(field)).WithTheme(tuiutils.NewAtmosHuhTheme()).
-		WithKeyMap(tuiutils.NewAtmosKeyMap()).WithInput(cmd.InOrStdin()).WithOutput(cmd.OutOrStdout()).RunWithContext(discoveryContext(cmd))
+	err := commandExampleForm(cmd, field).RunWithContext(discoveryContext(cmd))
 	return selected, err
 }
 
 func confirmCommandExample(cmd *cobra.Command) (bool, error) {
 	confirmed := false
 	field := tuiutils.NewAtmosConfirm().Title("Initialize this example?").Affirmative("Yes").Negative("No").Value(&confirmed)
-	err := huh.NewForm(huh.NewGroup(field)).WithTheme(tuiutils.NewAtmosHuhTheme()).
-		WithKeyMap(tuiutils.NewAtmosKeyMap()).WithInput(cmd.InOrStdin()).WithOutput(cmd.OutOrStdout()).RunWithContext(discoveryContext(cmd))
+	err := commandExampleForm(cmd, field).RunWithContext(discoveryContext(cmd))
 	return confirmed, err
+}
+
+func commandExampleForm(cmd *cobra.Command, field huh.Field) *huh.Form {
+	// Apply spacing before NewGroup measures the field, including when the output
+	// writer cannot report a terminal size (for example a recording wrapper).
+	theme := tuiutils.NewAtmosHuhTheme()
+	field.WithTheme(theme)
+	return huh.NewForm(huh.NewGroup(field)).WithTheme(theme).
+		WithKeyMap(tuiutils.NewAtmosKeyMap()).WithInput(cmd.InOrStdin()).WithOutput(cmd.OutOrStdout())
 }
 
 // Use the current executable, never an unrelated Atmos from PATH. A fresh init
@@ -208,5 +230,9 @@ func initializeCommandExample(cmd *cobra.Command, args []string) error {
 	// --chdir (including ATMOS_CHDIR) was already applied by the parent.
 	child.Env = reexec.FilterChdirEnv(os.Environ())
 	child.Stdin, child.Stdout, child.Stderr = cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr()
+	// Init applies its own masking. Preserve terminal handles so its existing
+	// fetch spinner and other interactive output are not disabled by exec pipes.
+	child.Stdout = iolib.ChildProcessOutput(child.Stdout)
+	child.Stderr = iolib.ChildProcessOutput(child.Stderr)
 	return child.Run()
 }

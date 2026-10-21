@@ -19,6 +19,8 @@ type discoveryRequest struct {
 	docs        bool
 	example     bool
 	help        bool
+	noColor     bool
+	forceColor  bool
 	interactive *bool
 	globals     []string
 	positionals []string
@@ -182,7 +184,7 @@ func discoveryFlag(cmd *cobra.Command, name string, shorthand bool) *pflag.Flag 
 }
 
 func (request *discoveryRequest) setFlag(name, value string) error {
-	if !slices.Contains([]string{"docs", "example", helpFlagName, "interactive"}, name) {
+	if !slices.Contains([]string{"docs", "example", helpFlagName, "interactive", "no-color", "force-color"}, name) {
 		return nil
 	}
 	if name == helpFlagName && !isBoolHelpValue(value) {
@@ -204,6 +206,10 @@ func (request *discoveryRequest) setFlag(name, value string) error {
 		request.help = enabled
 	case "interactive":
 		request.interactive = &enabled
+	case "no-color":
+		request.noColor = enabled
+	case "force-color":
+		request.forceColor = enabled
 	}
 	return nil
 }
