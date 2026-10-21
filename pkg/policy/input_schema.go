@@ -22,6 +22,7 @@ type CommandInput struct {
 
 // ComponentCommandInput describes shared component admission.
 type ComponentCommandInput struct {
+	Agents        []string `json:"agents"`
 	Command       string   `json:"command"`
 	ComponentType string   `json:"component_type"`
 	Component     string   `json:"component"`
@@ -55,6 +56,8 @@ func InputSchema(kind InputKind) (*jsonschema.Schema, error) {
 		value = CommandInput{}
 	case ComponentCommand:
 		value = ComponentCommandInput{}
+	case Auth:
+		value = AuthInput{}
 	case Operation:
 		value = OperationInput{}
 	case Function:

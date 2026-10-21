@@ -17,6 +17,7 @@ const (
 	Operation        InputKind = "operation"
 	Command          InputKind = "command"
 	ComponentCommand InputKind = "component.command"
+	Auth             InputKind = "auth"
 	Function         InputKind = "function"
 	Source           InputKind = "source"
 	GitChange        InputKind = "git.change"

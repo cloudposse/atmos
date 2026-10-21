@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -19,6 +20,7 @@ var invocation struct {
 	sync.RWMutex
 	active bool
 	bundle *policy.Bundle
+	agents []string
 }
 
 // BeginInvocation pins governing definitions before configuration can change the
@@ -31,14 +33,28 @@ func BeginInvocation() (func(), error) {
 		return nil, err
 	}
 	invocation.Lock()
-	previous, active := invocation.bundle, invocation.active
+	previous, active, agents := invocation.bundle, invocation.active, invocation.agents
 	invocation.bundle, invocation.active = bundle, true
+	invocation.agents = policy.DetectAgents()
 	invocation.Unlock()
 	return func() {
 		invocation.Lock()
 		invocation.bundle, invocation.active = previous, active
+		invocation.agents = agents
 		invocation.Unlock()
 	}, nil
+}
+
+// AgentNames returns markers captured before configuration can change the environment.
+func AgentNames() []string {
+	defer perf.Track(nil, "admission.AgentNames")()
+
+	invocation.RLock()
+	defer invocation.RUnlock()
+	if invocation.active {
+		return slices.Clone(invocation.agents)
+	}
+	return policy.DetectAgents()
 }
 
 func loadDirectory() (*policy.Bundle, error) {

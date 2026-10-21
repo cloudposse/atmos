@@ -292,7 +292,7 @@ func TestTestErrorMatches(t *testing.T) {
 }
 
 func TestImplementedInputSchemas(t *testing.T) {
-	for _, kind := range []InputKind{Function, Source, Command, ComponentCommand, TerraformPlan, Operation, AtmosAffected} {
+	for _, kind := range []InputKind{Function, Source, Command, ComponentCommand, Auth, TerraformPlan, Operation, AtmosAffected} {
 		schema, err := InputSchema(kind)
 		require.NoError(t, err)
 		require.NotEmpty(t, schema.Title)

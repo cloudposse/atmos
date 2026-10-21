@@ -11,7 +11,8 @@ command integrations collect specific inputs and enforce their decisions.
 | `function` | YAML/template function name, engine, and available provenance, without secret arguments | Before config/stack/registry/template handler execution |
 | `source` | Normalized destination, scheme, hostname, canonical path and provenance | Before imports/cache reuse, downloads, includes, and guarded template I/O |
 | `command` | Canonical runnable CLI command path | Before argument validation and pre-run hooks |
-| `component.command` | Shared stack resolution, inherited literal selector metadata, capability list | Before component templates/functions and tool execution |
+| `auth` | Resolved provider and complete identity chain, without credentials | Before authentication and credential cache access |
+| `component.command` | Shared stack resolution, inherited literal selector metadata, capability list, captured agent names | Before component templates/functions and tool execution |
 | `terraform.plan` | Native JSON extracted from a private saved Terraform-compatible plan | After successful planning and before applying the evaluated private copy |
 | `operation` | Terraform, Helmfile, Helm, and Kubernetes lifecycle metadata | Denial and governing hook requirements at the current lifecycle event |
 | `atmos.affected` | Unfiltered static inventories from clean Git worktrees, file changes, and structured differences | Denial before affected output filtering or scheduling |

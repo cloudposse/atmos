@@ -1,0 +1,17 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: auth-deny-production
+  description: Deny any production auth provider or identity, including intermediate identities and cached credentials.
+spec:
+  policies:
+    guard:
+      on: auth
+      action: deny
+      reason: Production authentication is prohibited by this policy. Select a permitted non-production provider and identity.
+      with:
+        production_names: []
+      rule: |
+        ([input.identity, input.provider] + input.identities).exists(name,
+        name in params.production_names ||
+        name.matches('(?i)(^|[-_/])(prod|production)([-_/]|$)'))

@@ -21,7 +21,7 @@ as `ctx.input`, `ctx.params`, `ctx.ci`, and `ctx.request`, with dictionary index
 | `input` | JSON value (object except for file inputs) | Data for the rule's `on` kind |
 | `params` | Object | Rule's `with` values; empty object by default |
 | `ci` | Object or `null` | [Provider-native CI snapshot](/policies/ci); `null` when no provider is detected |
-| `request.kind` | String | `terraform.plan`, `operation`, `atmos.affected`, `function`, `source`, `command`, `component.command`, or `file` |
+| `request.kind` | String | `terraform.plan`, `operation`, `atmos.affected`, `function`, `source`, `command`, `component.command`, `auth`, or `file` |
 | `request.file` | String | Root-relative filename for file checks; empty otherwise |
 | `request.revisions` | Object | `governing`, `base`, `head`; empty strings when not supplied |
 | `request.subject` | Object or `null` | Instance identity and metadata for plan/lifecycle attachments |

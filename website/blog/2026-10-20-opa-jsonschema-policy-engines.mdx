@@ -5,9 +5,9 @@ authors: [osterman]
 tags: [feature, experimental]
 ---
 
-Atmos policies now support **OPA and JSON Schema** alongside CEL and Starlark. Reuse Rego checks
-against saved Terraform plans and validate YAML and JSON files with schemas, without an external
-OPA process.
+Reusing existing Rego checks should not require a separate plan wrapper. Atmos policies now support
+**[OPA and JSON Schema](/policies/validation-engines)** alongside CEL and Starlark, for saved Terraform
+plans and YAML/JSON files, without an external OPA process.
 
 <!--truncate-->
 
@@ -19,6 +19,9 @@ OPA process.
   identify the fields that failed validation.
 - **File checks:** select YAML/JSON documents using globs and evaluate them with `atmos policy check`.
   Use `--syntax-only` to validate policy definitions without checking input files.
+- **Production guardrails:** library examples [block agent apply/deploy commands](/policies/library/component-deny-agent-production-deploy)
+  using Claude Code and Codex markers, or [deny production authentication](/policies/library/auth-deny-production)
+  for every caller, including cached credentials and environment exports.
 
 Both engines also work with existing policy inputs, including Terraform plans. Plan policies run
 after planning and again before saved-plan apply. Component, component-type, and stack selectors

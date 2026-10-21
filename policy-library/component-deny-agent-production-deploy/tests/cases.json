@@ -1,0 +1,364 @@
+[
+  {
+    "name": "claude-code apply prod denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "claude-code"
+        ],
+        "command": "apply",
+        "stack": "prod"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "claude-code apply production denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "claude-code"
+        ],
+        "command": "apply",
+        "stack": "production"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "claude-code apply acme-ue2-prod denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "claude-code"
+        ],
+        "command": "apply",
+        "stack": "acme-ue2-prod"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "claude-code apply PRODUCTION/us denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "claude-code"
+        ],
+        "command": "apply",
+        "stack": "PRODUCTION/us"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "claude-code apply acme_prod_us denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "claude-code"
+        ],
+        "command": "apply",
+        "stack": "acme_prod_us"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "claude-code deploy prod denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "claude-code"
+        ],
+        "command": "deploy",
+        "stack": "prod"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "claude-code deploy production denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "claude-code"
+        ],
+        "command": "deploy",
+        "stack": "production"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "claude-code deploy acme-ue2-prod denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "claude-code"
+        ],
+        "command": "deploy",
+        "stack": "acme-ue2-prod"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "claude-code deploy PRODUCTION/us denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "claude-code"
+        ],
+        "command": "deploy",
+        "stack": "PRODUCTION/us"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "claude-code deploy acme_prod_us denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "claude-code"
+        ],
+        "command": "deploy",
+        "stack": "acme_prod_us"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "codex apply prod denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "codex"
+        ],
+        "command": "apply",
+        "stack": "prod"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "codex apply production denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "codex"
+        ],
+        "command": "apply",
+        "stack": "production"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "codex apply acme-ue2-prod denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "codex"
+        ],
+        "command": "apply",
+        "stack": "acme-ue2-prod"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "codex apply PRODUCTION/us denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "codex"
+        ],
+        "command": "apply",
+        "stack": "PRODUCTION/us"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "codex apply acme_prod_us denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "codex"
+        ],
+        "command": "apply",
+        "stack": "acme_prod_us"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "codex deploy prod denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "codex"
+        ],
+        "command": "deploy",
+        "stack": "prod"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "codex deploy production denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "codex"
+        ],
+        "command": "deploy",
+        "stack": "production"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "codex deploy acme-ue2-prod denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "codex"
+        ],
+        "command": "deploy",
+        "stack": "acme-ue2-prod"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "codex deploy PRODUCTION/us denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "codex"
+        ],
+        "command": "deploy",
+        "stack": "PRODUCTION/us"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "codex deploy acme_prod_us denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "codex"
+        ],
+        "command": "deploy",
+        "stack": "acme_prod_us"
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "human production apply",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [],
+        "command": "apply",
+        "stack": "prod"
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "agent development apply",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "codex"
+        ],
+        "command": "apply",
+        "stack": "dev"
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "agent production plan",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "claude-code"
+        ],
+        "command": "plan",
+        "stack": "prod"
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "agent production diff",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "codex"
+        ],
+        "command": "diff",
+        "stack": "prod"
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "substring is not production",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "codex"
+        ],
+        "command": "apply",
+        "stack": "product-dev"
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "other agent",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "agents": [
+          "other"
+        ],
+        "command": "apply",
+        "stack": "prod"
+      }
+    },
+    "status": "not_applicable"
+  }
+]
