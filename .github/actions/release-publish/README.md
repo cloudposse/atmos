@@ -18,6 +18,12 @@ only supplies inputs and calls its tested `run()` entrypoint.
 an absent tag at the requested commit, rejects conflicting existing tags, and
 sets the draft target to that exact commit.
 
+The selected source commit may belong to a maintenance branch for a hotfix;
+stable releases do not require ancestry from the default branch. Selecting the
+source is an authorized release operator's decision; the guard requires the
+tag and every binary to match it exactly. The manual publishing
+workflow itself runs only from the default branch so it uses trusted tooling.
+
 `publish` uploads only the manifest's files. Immediately before publication it
 checks every uploaded asset's GitHub SHA-256 digest, the complete asset set,
 draft identity and remote tag commit. Failures leave a draft. It never deletes

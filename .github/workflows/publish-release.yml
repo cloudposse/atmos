@@ -35,7 +35,7 @@ jobs:
           egress-policy: audit
 
       - name: Build and publish verified release
-        uses: $/.github/actions/guarded-release
+        uses: $/.github/actions/guarded-release # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           release-id: ${{ inputs.release-id }}
           commit: ${{ inputs.commit }}

@@ -50,7 +50,7 @@ runs:
 
     - name: Pin draft tag and source commit
       id: identity
-      uses: $/.github/actions/release-publish
+      uses: $/.github/actions/release-publish # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
       with:
         operation: prepare
         github-token: ${{ steps.prepare-token.outputs.token }}
@@ -121,7 +121,7 @@ runs:
         go tool mage release:verifyArtifacts "$RUNNER_TEMP/release-upload" "$RELEASE_TAG" "$SOURCE_COMMIT"
 
     - name: Record the actual build source for provenance
-      uses: $/.github/actions/release-publish
+      uses: $/.github/actions/release-publish # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
       with:
         operation: provenance
         github-token: ${{ github.token }}
@@ -154,7 +154,7 @@ runs:
         permission-contents: write
 
     - name: Upload, verify and publish the same draft
-      uses: $/.github/actions/release-publish
+      uses: $/.github/actions/release-publish # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
       with:
         operation: publish
         github-token: ${{ steps.publish-token.outputs.token }}

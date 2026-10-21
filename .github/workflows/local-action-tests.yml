@@ -68,7 +68,7 @@ jobs:
           python-version: '3.13'
 
       - name: Set up pinned Atmos
-        uses: $/.github/actions/setup-atmos-bootstrap
+        uses: $/.github/actions/setup-atmos-bootstrap # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           atmos-version: '1.233.0'
 

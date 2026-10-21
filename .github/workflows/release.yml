@@ -37,7 +37,7 @@ jobs:
 
       - name: Draft release notes
         id: draft
-        uses: $/.github/actions/release-draft
+        uses: $/.github/actions/release-draft # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           app-id: ${{ vars.BOT_GITHUB_APP_ID }}
           app-private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}

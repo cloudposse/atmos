@@ -57,3 +57,12 @@ ATMOS_TEST_GORELEASER=/path/to/goreleaser-v2.18.3 \
 To rehearse actual GitHub signing, uploads and immutable publication, use an
 isolated repository. Offline tests cannot establish GitHub App permissions,
 OIDC acceptance, environment protections, or GitHub's behavior at publication.
+
+## References to local actions
+
+Use `$/` for actions from this repository. GitHub resolves these references to
+[the exact workflow commit](https://github.blog/changelog/2026-07-30-reference-same-repository-actions-with-self-repository-syntax/),
+including nested composite actions, without a workspace checkout.
+The upstream Semgrep mutable-tag rule currently recognizes only `./` as local.
+The rule-specific `nosemgrep` comments on `$/` references suppress this false
+positive; third-party action references still require full commit SHA pins.
