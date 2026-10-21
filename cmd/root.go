@@ -2189,7 +2189,7 @@ func preprocessCommandBoolFlags(args []string) []string {
 
 	boolFlags := make(map[string]bool)
 	collect := func(f *pflag.Flag) {
-		if f.Value.Type() != "bool" {
+		if f.Value.Type() != "bool" && f != RootCmd.PersistentFlags().Lookup("docs") {
 			return
 		}
 		boolFlags[f.Name] = true

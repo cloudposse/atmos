@@ -17,6 +17,7 @@ import (
 type discoveryRequest struct {
 	command         *cobra.Command
 	docs            bool
+	docsMarkdown    bool
 	example         bool
 	help            bool
 	noColor         bool
@@ -168,7 +169,7 @@ func discoveryConsumesValue(cmd *cobra.Command, flag *pflag.Flag, rest []string)
 	if len(rest) == 0 {
 		return false
 	}
-	if flag.Value.Type() == "bool" {
+	if flag.Value.Type() == "bool" || flag.Name == "docs" {
 		return terminalenv.IsBoolLiteral(rest[0])
 	}
 	registered := flags.GlobalFlagsRegistry().Get(flag.Name)
@@ -212,8 +213,10 @@ func discoveryFlag(cmd *cobra.Command, name string, shorthand bool) *pflag.Flag 
 }
 
 func (request *discoveryRequest) setFlag(name, value string) error {
+	if name == "docs" {
+		return request.setDocsFlag(value)
+	}
 	targets := map[string]*bool{
-		"docs":        &request.docs,
 		"example":     &request.example,
 		helpFlagName:  &request.help,
 		"no-color":    &request.noColor,
@@ -238,5 +241,21 @@ func (request *discoveryRequest) setFlag(name, value string) error {
 		return fmt.Errorf("invalid value %q for --%s: %w", value, name, err)
 	}
 	*target = enabled
+	return nil
+}
+
+// setDocsFlag accepts the existing boolean syntax and terminal Markdown mode.
+func (request *discoveryRequest) setDocsFlag(value string) error {
+	request.docsMarkdown = value == "md" || value == "markdown"
+	if request.docsMarkdown {
+		request.docs = true
+		return nil
+	}
+	enabled, err := strconv.ParseBool(value)
+	if err != nil {
+		request.docs = true
+		return fmt.Errorf("%w: --docs expects true, false, md, or markdown (got %q)", errUtils.ErrInvalidFlagValue, value)
+	}
+	request.docs = enabled
 	return nil
 }

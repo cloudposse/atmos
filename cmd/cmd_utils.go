@@ -667,6 +667,11 @@ func validateFlag(cmdName string, flag *schema.CommandFlag, seen map[string]bool
 	}
 
 	if existingFlag != nil {
+		// A custom boolean --docs keeps its original ownership even though the
+		// global discovery flag now also accepts the Markdown format.
+		if flag.Name == "docs" && flag.Type == "bool" && existingFlag == parentCommand.Root().PersistentFlags().Lookup("docs") {
+			return nil
+		}
 		return validateFlagTypeConflict(cmdName, flag, existingFlag)
 	}
 
@@ -747,7 +752,7 @@ func validateFlagShorthand(cmdName string, flag *schema.CommandFlag, seen map[st
 }
 
 // registerCustomCommandFlags adds validated flags to the custom command,
-// skipping flags that are inherited from the parent command chain.
+// skipping inherited flags except explicitly owned discovery flags.
 func registerCustomCommandFlags(commandConfig *schema.Command, customCommand *cobra.Command, parentCommand *cobra.Command) error {
 	for i := range commandConfig.Flags {
 		flag := &commandConfig.Flags[i]
@@ -756,7 +761,9 @@ func registerCustomCommandFlags(commandConfig *schema.Command, customCommand *co
 		if existingFlag == nil {
 			existingFlag = parentCommand.InheritedFlags().Lookup(flag.Name)
 		}
-		if existingFlag != nil {
+		// An explicit discovery flag belongs to the custom command. Reusing the
+		// global flag here would let early discovery intercept the command.
+		if existingFlag != nil && flag.Name != "docs" && flag.Name != "example" {
 			continue
 		}
 
@@ -2142,6 +2149,7 @@ func isRootBoolFlag(arg string) bool {
 	flagName := strings.SplitN(arg, equalsSign, 2)[0]
 	switch flagName {
 	case "--ai",
+		"--docs",
 		"--force-color",
 		"--force-tty",
 		"--heatmap",

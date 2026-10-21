@@ -25,11 +25,17 @@ import CastEmbed from '@site/src/components/CastEmbed';
 atmos terraform --help
 atmos terraform --docs
 atmos terraform plan --docs
+atmos terraform plan --docs=md
 ```
 
 Help and usage output show the documentation URL, including when redirected to a
 file. `--docs` prints the URL and opens it using your browser. These discovery
 flags work without a component, stack, Terraform installation, or cloud credentials.
+
+Use `--docs=md` to read the page in your terminal. Atmos prints the `.md`
+source URL, fetches it with a progress indicator, and renders it using its shared
+Markdown renderer. `--docs=markdown` is an alias. The homepage's Markdown index
+is available at `/index.md`.
 
 ## Try an example
 

@@ -90,7 +90,7 @@ GLOBAL FLAGS
 
       --config-path strings                  Paths to search for Atmos configuration (comma-separated or repeated flag)
 
-      --docs                                 Print and open this command's documentation URL
+      --docs string                          Open command documentation (--docs=md renders it in the terminal)
 
       --dry-run                              Perform dry run without making actual changes
 

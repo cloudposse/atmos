@@ -228,7 +228,8 @@ func (b *GlobalOptionsBuilder) registerSettingsFlags(defaults *global.Flags) {
 // registerSystemFlags registers system configuration flags.
 func (b *GlobalOptionsBuilder) registerSystemFlags(defaults *global.Flags) {
 	defer perf.Track(nil, "flags.GlobalOptionsBuilder.registerSystemFlags")()
-	b.options = append(b.options, WithBoolFlag("docs", "", defaults.Docs, "Print and open this command's documentation URL"))
+	b.options = append(b.options, WithStringFlag("docs", "", defaults.Docs, "Open command documentation (--docs=md renders it in the terminal)"))
+	b.options = append(b.options, WithNoOptDefValNoSpaceValue("docs", "true"))
 	b.options = append(b.options, WithBoolFlag("example", "", defaults.Example, "Select and initialize a related example (prints install commands without a terminal)"))
 
 	b.options = append(b.options, WithStringFlag("redirect-stderr", "", defaults.RedirectStderr, "File descriptor to redirect stderr to. Errors can be redirected to any file or any standard file descriptor (including '/dev/null')"))

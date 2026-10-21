@@ -72,6 +72,9 @@ func dispatchCommandDiscovery(root *cobra.Command, args []string) (bool, error) 
 	colorCommand.Flags().Bool("no-color", request.noColor, "")
 	colorCommand.Flags().Bool("force-color", request.forceColor, "")
 	startup.ConfigureEarlyColorProfile(colorCommand)
+	if request.docsMarkdown {
+		return true, renderCommandDocumentation(request.command, metadata.DocumentationURL)
+	}
 	printCommandDocumentation(request.command.OutOrStdout(), request.command)
 	if request.docs {
 		if err := openDocsURL(metadata.DocumentationURL); err != nil {
@@ -211,8 +214,10 @@ func exampleInstallCommand(globals []string, example internal.CommandExample, ov
 }
 
 func discoveryContext(cmd *cobra.Command) context.Context {
-	if cmd.Context() != nil {
-		return cmd.Context()
+	for current := cmd; current != nil; current = current.Parent() {
+		if current.Context() != nil {
+			return current.Context()
+		}
 	}
 	return context.Background()
 }
