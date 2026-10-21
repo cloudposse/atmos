@@ -1,0 +1,571 @@
+---
+title: Share Terraform Code Across Components
+sidebar_label: Share Terraform Code
+sidebar_position: 14
+id: share-terraform-code-across-components
+description: Write common Terraform variable declarations and provider configuration once and reuse them in every component with the Atmos providers section, Atmos Scaffold, generate blocks, or vendored Terraform mixins.
+---
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+import File from '@site/src/components/File'
+import Experimental from '@site/src/components/Experimental'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+Components keep needing the same Terraform code: the same `variable` blocks in every `variables.tf`, the same provider
+block in every root module. This tutorial shows how to write that code once and share it with every component, using
+the built-in `providers` section for provider configuration and three options for everything else.
+</Intro>
+
+<KeyPoints>
+- Share Terraform code at a smaller level than a module: a variable declaration, a provider block, a `context.tf`
+- Generate provider configuration from stack configuration with the `providers` section, with no HCL to copy
+- For other shared code, use Atmos Scaffold, `generate` blocks, or vendored Terraform mixins, depending on how your team works
+- Keep shared code in its own `*.mixin.tf` files so it never collides with component-specific code
+</KeyPoints>
+
+## The Problem
+
+Say you define three components and want to pass `cost_center` to each of them. Every component needs its own
+`cost_center` variable declaration in its `variables.tf`. The same happens with other common variables, such as a
+`secret_arn` that is declared with identical code in several components, and with provider definitions, where the same
+provider block is repeated in every root module.
+
+Terraform modules do not solve this. A module is too coarse. What you need is code reuse at the level of an HCL
+snippet, so that common variable declarations and provider definitions are written once.
+
+By the end of this tutorial, you will have:
+
+- one shared `cost_center` variable declaration
+- one provider configuration, defined in the stack and generated for every component
+- every component receiving them without hand-edited copies
+- a way to change the shared code once and roll it out to all components
+
+## Before You Start
+
+Two pairs of terms are easy to confuse. Knowing the difference makes the rest of the tutorial straightforward.
+
+<dl>
+  <dt>Setting a variable versus declaring a variable</dt>
+  <dd>
+    **Setting** a variable gives it a value in stack configuration under [`vars`](/stacks/vars). You can set it once at a
+    shared level and every component instance inherits it. **Declaring** a variable means writing the `variable` block
+    in the component's Terraform code. Terraform needs a declaration in every component that uses the variable, and
+    setting a value in a stack does not replace that step.
+  </dd>
+
+  <dt>Stack mixin versus Terraform mixin</dt>
+  <dd>
+    A **stack mixin** is a YAML file that you [import](/howto/mixins) to share configuration **values** across
+    stacks. A **Terraform mixin** is a drop-in `.tf` file that shares **code**, such as variable declarations and
+    provider blocks. This tutorial is about Terraform mixins and other ways to share code.
+  </dd>
+</dl>
+
+In short, stack mixins and catalogs share values. Terraform mixins, scaffold templates, and `generate` blocks share
+code.
+
+## Organize the Shared Files
+
+With any of the approaches below, the shared code lives in its own files, named by a convention such as the
+`.mixin.tf` suffix that Cloud Posse uses. Component-specific code stays in `variables.tf` and your other files.
+
+```text
+components/terraform/my-component/
+├── main.tf               # Component-specific
+├── variables.tf          # Component-specific variables only
+├── cost_center.mixin.tf  # Shared: the cost_center variable
+└── versions.mixin.tf     # Shared: required Terraform and provider versions
+```
+
+Terraform loads every `.tf` file in a directory, so separate files behave exactly like one file. The only rule is that
+a variable must be declared in one place, so the shared file and `variables.tf` must not both declare it.
+
+Here are the two shared files used in the rest of this tutorial. A good first test is the shared `cost_center` variable
+plus one more shared file.
+
+<File title="cost_center.mixin.tf">
+```hcl
+variable "cost_center" {
+  type        = string
+  description = "Cost center, set in the stack configuration."
+}
+```
+</File>
+
+<File title="versions.mixin.tf">
+```hcl
+terraform {
+  required_version = ">= 1.5.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0"
+    }
+  }
+}
+```
+</File>
+
+If a component already has a `terraform` block with `required_providers`, remove it from the component and keep the
+shared file. Terraform rejects the same provider requirement declared twice.
+
+## Providers Are a Special Case
+
+Provider blocks are the one piece of shared code that Atmos can generate for you without any HCL to copy. The
+[`providers`](/stacks/providers) section in stack configuration describes provider settings, and Atmos writes them to a
+`providers_override.tf.json` file in the component directory every time you run an `atmos terraform` command. Terraform
+treats an override file as configuration for the provider, so the component does not need a `provider` block of its
+own.
+
+Define the provider once in a catalog default that your stacks import. The `terraform.providers` section applies to
+every Terraform component in scope:
+
+<File title="stacks/catalog/_defaults.yaml">
+```yaml
+terraform:
+  providers:
+    aws:
+      region: "{{ .vars.region }}"
+      default_tags:
+        tags:
+          CostCenter: "{{ .vars.cost_center }}"
+          ManagedBy: Atmos
+```
+</File>
+
+The values are [Go templates](/stacks/providers#dynamic-provider-configuration) rendered from the component's `vars`,
+so the region and tags come from the stack. Make sure [templating](/templates) is enabled in `atmos.yaml`, or Atmos
+writes the `{{ ... }}` text into the file unrendered:
+
+<File title="atmos.yaml">
+```yaml
+templates:
+  settings:
+    enabled: true
+```
+</File>
+
+Atmos writes the rendered values into the generated file as literals. That also removes the need to declare a `region`
+variable in the component just to feed the provider.
+
+```json title="components/terraform/my-component/providers_override.tf.json"
+{
+  "provider": {
+    "aws": {
+      "region": "us-east-2",
+      "default_tags": {
+        "tags": {
+          "CostCenter": "platform",
+          "ManagedBy": "Atmos"
+        }
+      }
+    }
+  }
+}
+```
+
+A component can override any part of the provider settings with its own `providers` section. The two levels are
+deep-merged, with the component winning. Use dotted keys such as `aws.uswest2` to configure aliased providers for
+multi-region components.
+
+Add `providers_override.tf.json` to `.gitignore`, because Atmos regenerates it.
+
+The `providers` section configures providers. It does not declare which providers a component requires, and it does not
+cover logic that needs Terraform itself, such as a provider block that reads a data source. Those pieces are still shared
+code, which is what the rest of this tutorial is for. Cloud Posse's shared provider mixins, described in the vendoring tab of
+[Step 1](#step-1-publish-the-shared-files), are an example of the second kind.
+
+## Choose an Approach
+
+| | [Scaffold](/cli/commands/scaffold/usage) | [`generate` blocks](/stacks/generate) | [Vendoring and Terraform mixins](/vendor) |
+| --- | --- | --- | --- |
+| **What it does** | Creates files from a shared, versioned template | Writes shared files into each component directory from stack configuration | Pulls shared files from a remote source into your repo |
+| **When it runs** | When you generate, or later update, the files | Before Terraform runs, every time, if `auto_generate_files` is enabled | When you run `atmos vendor pull` |
+| **Where the shared content lives** | A local directory, a Git repository, or an OCI repository | Inline in a stack manifest, or in a file pulled in with `!include.raw` | A Git, OCI, HTTP, or S3 source, pinned to a version |
+| **Result in each component** | A real file you can edit and commit | A generated file, usually gitignored | A real file, committed to the repo |
+
+Pick Scaffold when you want versioned templates that can also create other things (whole components, stack
+configuration) and you want later template changes to merge into files that already exist. Pick `generate` blocks when
+you want the files to be impossible to drift and you want content that can vary by stack. Pick vendoring when you want
+plain committed files pulled from a repo of shared code, pinned to a version.
+
+The steps below use tabs. Choose your approach in any tab group and every step on this page switches to match.
+
+## Step 1: Publish the Shared Files
+
+First put the shared files, `cost_center.mixin.tf` and `versions.mixin.tf`, somewhere your whole team can reach them.
+
+<Tabs groupId="share-approach" defaultValue="scaffold">
+<TabItem value="scaffold" label="Scaffold">
+
+Atmos Scaffold is like cookiecutter on steroids. It can copy, update, and template any file, and it can pull templates
+from a local directory, a Git repository, or an [OCI registry](/changelog/scaffold-oci-sources). Atmos does not care
+what the files are, so a template can hold nothing but your shared `.tf` files.
+
+A scaffold template is a directory with a [`scaffold.yaml`](/cli/commands/scaffold/usage#template-contract) manifest and
+the files to generate. Put the two shared files next to the manifest:
+
+```text
+terraform-boilerplate/
+├── scaffold.yaml
+├── cost_center.mixin.tf
+└── versions.mixin.tf
+```
+
+<File title="terraform-boilerplate/scaffold.yaml">
+```yaml
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: terraform-boilerplate
+  description: Shared variable declarations and version constraints
+  version: 1.0.0
+spec:
+  fields: []
+```
+</File>
+
+Files without a `.tmpl` suffix or an `atmos:template` marker are copied as written, so the HCL passes through
+untouched. Check the manifest with [`atmos scaffold validate`](/cli/commands/scaffold/validate):
+
+```shell
+atmos scaffold validate ./terraform-boilerplate
+```
+
+To share the template with your team, publish the directory to a Git repository or to an OCI registry you already use.
+The version is part of the reference, so every team gets the same files and moves to a newer version on purpose.
+
+</TabItem>
+<TabItem value="generate" label="generate blocks">
+
+<Experimental />
+
+The [`generate` section](/stacks/generate) in stack configuration describes files that Atmos writes into the component
+directory before Terraform runs. You define the content once, and every component in scope gets the files.
+
+Put the shared files in the `terraform.generate` section of a catalog default that your stacks import. That section
+applies to every Terraform component in the stack scope. To limit the files to specific components, put `generate` on a
+component and let other components [inherit](/stacks/components/component-metadata#inherits) it instead.
+
+<File title="stacks/catalog/_defaults.yaml">
+```yaml
+terraform:
+  generate:
+    "cost_center.mixin.tf": |
+      variable "cost_center" {
+        type        = string
+        description = "Cost center, set in the stack configuration."
+      }
+```
+</File>
+
+Inline HCL sits inside YAML, so editors do not highlight or check it. Keep the code in a real `.tf` file and read it
+with [`!include.raw`](/functions/yaml/include.raw). The function inserts the file as a string. Use `!include.raw` and
+not `!include` here, because `!include` parses `.tf` files as HCL instead of returning the text. Relative paths resolve
+from the file that contains the tag.
+
+<File title="stacks/catalog/_defaults.yaml">
+```yaml
+terraform:
+  generate:
+    "cost_center.mixin.tf": !include.raw ../../shared/cost_center.mixin.tf
+    "versions.mixin.tf": !include.raw ../../shared/versions.mixin.tf
+```
+</File>
+
+The shared files can also live in another repository. Atmos converts standard GitHub URLs to raw URLs, so you can use
+the same link you would open in a browser:
+
+```yaml
+terraform:
+  generate:
+    "cost_center.mixin.tf": !include.raw https://github.com/example/terraform-boilerplate/blob/v1.0.0/cost_center.mixin.tf
+    "versions.mixin.tf": !include.raw https://github.com/example/terraform-boilerplate/blob/v1.0.0/versions.mixin.tf
+```
+
+</TabItem>
+<TabItem value="vendoring" label="Vendoring">
+
+[Vendoring](/vendor) copies shared content from a remote source into your repository, pinned to a version, and commits
+it. It is the same mechanism that distributes whole components, so it also distributes the small shared files that sit
+next to them.
+
+Put the shared files in a Git repository, an OCI registry, or any other [vendor source](/vendor/url-syntax), named with
+the `.mixin.tf` suffix so they stay visibly separate from each component's own code. Cloud Posse does this for
+`context.tf` and for provider blocks that need Terraform logic, and publishes a
+[`mixins` repository](https://github.com/cloudposse-terraform-components/mixins) of drop-in `.tf` files, including
+provider configurations such as `providers.depth-1.tf`, `provider-helm.tf`, and `provider-datadog.tf`. You can publish
+your own repository the same way.
+
+</TabItem>
+</Tabs>
+
+## Step 2: Get the Files into a Component
+
+<Tabs groupId="share-approach" defaultValue="scaffold">
+<TabItem value="scaffold" label="Scaffold">
+
+Point [`atmos scaffold generate`](/cli/commands/scaffold/generate) at the template and the component directory:
+
+```shell
+atmos scaffold generate ./terraform-boilerplate ./components/terraform/my-component --defaults
+```
+
+Atmos writes `cost_center.mixin.tf` and `versions.mixin.tf` into the component. It does not copy `scaffold.yaml`. It
+also records how the files were produced under `.atmos/`, which is what makes later updates possible. Commit that
+directory together with the generated files.
+
+Once the template is published, use its reference as the source:
+
+```shell
+atmos scaffold generate oci://ghcr.io/example/terraform-boilerplate:v1.0.0 ./components/terraform/my-component
+atmos scaffold generate https://github.com/example/terraform-boilerplate.git ./components/terraform/my-component --ref v1.0.0
+```
+
+</TabItem>
+<TabItem value="generate" label="generate blocks">
+
+Import the catalog default from Step 1 in each stack. Every Terraform component in that stack gets the files.
+
+<File title="stacks/dev.yaml">
+```yaml
+import:
+  - catalog/_defaults
+
+components:
+  terraform:
+    app: {}
+```
+</File>
+
+Turn on [automatic generation](/stacks/generate#auto-generation) in `atmos.yaml` so Atmos writes the files before every
+Terraform command:
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    auto_generate_files: true
+```
+</File>
+
+Or generate them yourself with [`atmos terraform generate files`](/cli/commands/terraform/generate/files):
+
+```shell
+atmos terraform generate files app --stack dev
+```
+
+```text
+✓ Created components/terraform/app/versions.mixin.tf
+✓ Created components/terraform/app/cost_center.mixin.tf
+✓ Generated components/terraform/app (2 created)
+```
+
+Add the generated files to `.gitignore`.
+
+</TabItem>
+<TabItem value="vendoring" label="Vendoring">
+
+List the repository that holds the shared files, the version to pin, and where to put them. Use `included_paths` to
+select only the mixin files:
+
+<File title="vendor.yaml">
+```yaml
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: terraform-mixins
+spec:
+  sources:
+    - component: terraform-mixins
+      source: github.com/example/terraform-boilerplate.git?ref={{.Version}}
+      version: v1.0.0
+      included_paths:
+        - "**/*.mixin.tf"
+      targets:
+        - components/terraform/my-component
+        - components/terraform/other-component
+```
+</File>
+
+Then pull them:
+
+```shell
+atmos vendor pull
+```
+
+Every target directory now has the shared files. Commit them. See [`vendor.yaml`](/vendor/vendor-config) and
+[URL syntax](/vendor/url-syntax) for the supported sources.
+
+If a component is already vendored with a [`component.yaml`](/vendor/component-manifest), you can instead add the shared
+files as mixins. Each mixin is a remote file with a `uri`, an optional `version`, and the `filename` to write. Atmos
+processes mixins in the order listed, and a mixin overwrites a file from the component source that has the same name.
+This is the legacy form, so prefer `vendor.yaml` for new work.
+
+<File title="components/terraform/my-component/component.yaml">
+```yaml
+apiVersion: atmos/v1
+kind: ComponentVendorConfig
+spec:
+  mixins:
+    - uri: https://raw.githubusercontent.com/example/terraform-boilerplate/{{ .Version }}/cost_center.mixin.tf
+      version: v1.0.0
+      filename: cost_center.mixin.tf
+    - uri: https://raw.githubusercontent.com/example/terraform-boilerplate/{{ .Version }}/versions.mixin.tf
+      version: v1.0.0
+      filename: versions.mixin.tf
+```
+</File>
+
+```shell
+atmos vendor pull --component my-component
+```
+
+</TabItem>
+</Tabs>
+
+## Step 3: Set the Value in a Stack
+
+The shared file only declares `cost_center`. The value still comes from stack configuration. Set it once at a shared
+level and every component instance inherits it:
+
+<File title="stacks/dev.yaml">
+```yaml
+vars:
+  cost_center: platform
+```
+</File>
+
+## Step 4: Verify
+
+Run any component. Terraform sees `cost_center` declared in `cost_center.mixin.tf`, and the value comes from the stack:
+
+```shell
+atmos terraform plan app --stack dev
+```
+
+If the plan fails with a duplicate declaration, the component's own `variables.tf` still declares `cost_center`. Delete
+that declaration and keep the shared file.
+
+## Step 5: Change the Shared Code Later
+
+<Tabs groupId="share-approach" defaultValue="scaffold">
+<TabItem value="scaffold" label="Scaffold">
+
+Most scaffolding tools generate once and stop. Scaffold can re-apply later template changes to files that were already
+generated, using a three-way merge:
+
+```shell
+atmos scaffold generate oci://ghcr.io/example/terraform-boilerplate:v1.1.0 ./components/terraform/my-component --update
+```
+
+The default `manual` [merge strategy](/cli/commands/scaffold/usage#update-existing-output) surfaces any conflict that
+remains. [`--max-changes`](/changelog/scaffold-max-changes-flag) (default `50`) stops an update that would touch too
+many lines.
+
+</TabItem>
+<TabItem value="generate" label="generate blocks">
+
+Edit the source file, or change the version in the `!include.raw` URL. Atmos rewrites the generated files the next time
+it runs a Terraform command. To remove generated files, use
+[`--clean`](/stacks/generate#cleaning-generated-files).
+
+</TabItem>
+<TabItem value="vendoring" label="Vendoring">
+
+Change `version` in `vendor.yaml`, run `atmos vendor pull`, and commit the result. The change to shared code is a
+deliberate version bump that shows up in the pull request.
+
+</TabItem>
+</Tabs>
+
+## Trade-offs
+
+<Tabs groupId="share-approach" defaultValue="scaffold">
+<TabItem value="scaffold" label="Scaffold">
+
+- **Pro:** one versioned source of truth, distributed through a registry you already run. The result is ordinary files
+  that appear in code review and work with plain `terraform` outside Atmos.
+- **Pro:** templates can ask for [validated inputs](/cli/commands/scaffold/usage#template-contract), include files
+  [conditionally](/cli/commands/scaffold/usage#conditions-and-files), and run
+  [hooks](/cli/commands/scaffold/usage#generation-hooks) such as `terraform fmt` after generation.
+- **Con:** updates can conflict when someone edits a scaffolded file by hand. Keeping shared code in separate
+  `*.mixin.tf` files and component code elsewhere avoids most conflicts.
+- **Con:** someone has to author, version, and publish the template, and updates only happen when someone runs
+  `--update`. It is not continuous sync.
+
+See also: [`atmos scaffold`](/cli/commands/scaffold/usage), [`atmos scaffold list`](/cli/commands/scaffold/list),
+and the [`examples/scaffolding`](https://github.com/cloudposse/atmos/tree/main/examples/scaffolding) and
+[`examples/scaffolds`](https://github.com/cloudposse/atmos/tree/main/examples/scaffolds) examples.
+
+</TabItem>
+<TabItem value="generate" label="generate blocks">
+
+- **Pro:** defined once and regenerated every time, so files cannot drift from their source. Content can use the
+  component's `vars`, `settings`, and stack name through [Go templates](/stacks/generate#template-context), so one
+  definition can produce different content per stack.
+- **Pro:** uses normal Atmos inheritance and [remote stack imports](/stacks/imports), so many repositories can share one
+  source.
+- **Con:** the feature is experimental, so check the release notes for the version you run.
+- **Con:** generated files are usually gitignored, so they do not appear in pull requests, and plain `terraform` outside
+  Atmos works only after the files exist. In CI, enable `auto_generate_files` or add an explicit
+  `atmos terraform generate files` step.
+
+See also: [Generate Terraform Files](/stacks/generate), the
+[`examples/generate-files`](https://github.com/cloudposse/atmos/tree/main/examples/generate-files) example, which
+generates a `variables.tf` from stack configuration, and the
+[announcement](/changelog/declarative-file-generation).
+
+</TabItem>
+<TabItem value="vendoring" label="Vendoring">
+
+- **Pro:** the shared files are committed, so they show up in pull requests and work with plain `terraform` outside
+  Atmos. Every mixin is pinned to a version.
+- **Pro:** your own repository of mixins works the same way, so any team can publish shared files.
+- **Con:** the output is a copy. Files can drift between pulls, and someone has to run `atmos vendor pull` after a
+  version bump.
+- **Con:** the shared file is plain text, so there is no per-stack templating. Every component gets identical content.
+
+See also: [Vendoring overview](/vendor), [`atmos vendor pull`](/cli/commands/vendor/pull), and the
+[Cloud Posse mixins repository](https://github.com/cloudposse-terraform-components/mixins).
+
+</TabItem>
+</Tabs>
+
+## Troubleshooting
+
+<dl>
+  <dt>`Duplicate variable declaration`</dt>
+  <dd>
+    The shared file and `variables.tf` both declare the same variable. Delete the declaration from `variables.tf` and
+    keep the shared file.
+  </dd>
+
+  <dt>`Reference to undeclared input variable` for `var.cost_center`</dt>
+  <dd>
+    The shared file is missing from the component directory. With `generate` blocks, run
+    `atmos terraform generate files` or enable `auto_generate_files`. With Scaffold or vendoring, run the generate or
+    pull command again and make sure the target path is the component directory.
+  </dd>
+
+  <dt>The value is set but Terraform warns about an undeclared variable</dt>
+  <dd>
+    Setting a variable in a stack does not declare it. Add the declaration through one of the shared files.
+  </dd>
+
+  <dt>`scaffold --update` reports conflicts</dt>
+  <dd>
+    Someone edited a scaffolded file by hand. Move component-specific changes out of the `*.mixin.tf` files, or choose a
+    [merge strategy](/cli/commands/scaffold/usage#update-existing-output) explicitly.
+  </dd>
+</dl>
+
+## Next Steps
+
+- Move the rest of your repeated declarations into shared files: `secret_arn`, tags, and `context.tf`
+- Move repeated `provider` blocks into the stack `providers` section and delete the hand-edited copies from each component
+- Read about [`generate`](/stacks/generate), [Scaffold](/cli/commands/scaffold/usage), and [Vendoring](/vendor) in more
+  depth
