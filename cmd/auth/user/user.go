@@ -23,6 +23,6 @@ func init() {
 	// Subcommands are added in their respective init() functions.
 	internal.RegisterCommandMetadata(
 		AuthUserCmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/auth/user/index"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/auth/user"),
 	)
 }

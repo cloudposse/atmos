@@ -58,6 +58,6 @@ func init() {
 	Command.AddCommand(runCmd)
 	internal.RegisterCommandMetadata(
 		Command,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/git/hooks/index"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/git/hooks"),
 	)
 }

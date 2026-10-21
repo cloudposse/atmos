@@ -39,7 +39,7 @@ func init() {
 	// This happens during package initialization via blank import in cmd/root.go.
 	internal.Register(
 		&DevcontainerCommandProvider{},
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/devcontainer/devcontainer"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/devcontainer"),
 		internal.WithExample("examples/devcontainer", "Devcontainers"),
 		internal.WithExample("examples/devcontainer-build", "Build a Devcontainer"),
 	)

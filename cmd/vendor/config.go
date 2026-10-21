@@ -321,7 +321,7 @@ func init() {
 	vendorCmd.AddCommand(vendorConfigCmd)
 	internal.RegisterCommandMetadata(
 		vendorConfigCmd,
-		internal.WithDocumentationURL("https://atmos.tools/cli/commands/vendor/config/config"),
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/vendor/config"),
 	)
 	internal.RegisterCommandMetadata(
 		vendorConfigDeleteCmd,
