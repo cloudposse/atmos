@@ -198,6 +198,7 @@ func (r *providerRequest) evaluate(path []string, raw any) (any, error) {
 // the component, the stack and the selector, and hints at the usual cause: a producer that has not
 // been deployed yet.
 func (r *providerRequest) unresolved(name, field, selector string, cause error) error {
+	selector = yamlsource.Expression(selector)
 	b := errUtils.Build(ErrSelectorUnresolved).
 		WithCausef("secret %q field %q in component %q of stack %q uses selector %q: %w",
 			name, field, r.component, r.stack, selector, cause)

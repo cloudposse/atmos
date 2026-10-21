@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/list/format"
@@ -288,7 +289,7 @@ func backendLabel(decl *secrets.Declaration) string {
 	if decl.BackendName == "" {
 		return "(none)"
 	}
-	return string(decl.BackendType) + ":" + decl.BackendName
+	return string(decl.BackendType) + ":" + yamlsource.Expression(decl.BackendName)
 }
 
 // statusLabel returns the initialization status text for a secret.

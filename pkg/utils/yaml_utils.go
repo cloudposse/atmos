@@ -375,24 +375,34 @@ func getOrCreateCacheLock(cacheKey string) *sync.Mutex {
 // leaving Content and Alias fields aliased to the original.
 // Without deep copying, mutations to cached nodes would affect all consumers.
 func deepCopyYAMLNode(n *yaml.Node) *yaml.Node {
+	return copyYAMLNodeGraph(n, make(map[*yaml.Node]*yaml.Node))
+}
+
+// copyYAMLNodeGraph preserves shared alias targets and supports recursive aliases.
+func copyYAMLNodeGraph(n *yaml.Node, seen map[*yaml.Node]*yaml.Node) *yaml.Node {
 	if n == nil {
 		return nil
 	}
 
+	if copied, ok := seen[n]; ok {
+		return copied
+	}
+
 	// Copy the struct fields.
 	cp := *n
+	seen[n] = &cp
 
 	// Deep copy the Content slice.
 	if n.Content != nil {
 		cp.Content = make([]*yaml.Node, len(n.Content))
 		for i, c := range n.Content {
-			cp.Content[i] = deepCopyYAMLNode(c)
+			cp.Content[i] = copyYAMLNodeGraph(c, seen)
 		}
 	}
 
 	// Deep copy the Alias pointer.
 	if n.Alias != nil {
-		cp.Alias = deepCopyYAMLNode(n.Alias)
+		cp.Alias = copyYAMLNodeGraph(n.Alias, seen)
 	}
 
 	return &cp
@@ -782,14 +792,22 @@ func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	}
 	encoder.SetIndent(indent)
 
-	var outputNode yaml.Node
-	if err := outputNode.Encode(cleanedData); err != nil {
-		return "", err
+	var outputNode *yaml.Node
+	switch value := cleanedData.(type) {
+	case *yaml.Node:
+		outputNode = deepCopyYAMLNode(value)
+	case yaml.Node:
+		outputNode = deepCopyYAMLNode(&value)
+	default:
+		outputNode = &yaml.Node{}
+		if err := outputNode.Encode(cleanedData); err != nil {
+			return "", err
+		}
 	}
 	if len(opts) == 0 || !opts[0].PreserveFunctionSources {
-		yamlsource.RestoreTags(&outputNode)
+		yamlsource.RestoreTags(outputNode)
 	}
-	if err := encoder.Encode(&outputNode); err != nil {
+	if err := encoder.Encode(outputNode); err != nil {
 		return "", err
 	}
 	return buf.String(), nil
