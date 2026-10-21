@@ -282,13 +282,10 @@ jobs:
       - name: Honor inline Semgrep suppressions
         id: semgrep-sarif
         if: ${{ !cancelled() && hashFiles('semgrep.sarif') != '' }}
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        uses: $/.github/actions/filter-semgrep-sarif # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
-          script: |
-            const fs = require('node:fs');
-            const filter = require('./.github/scripts/filter-semgrep-sarif.cjs');
-            const report = JSON.parse(fs.readFileSync('semgrep.sarif', 'utf8'));
-            fs.writeFileSync('semgrep-upload.sarif', JSON.stringify(filter(report)));
+          input-file: semgrep.sarif
+          output-file: semgrep-upload.sarif
 
       - name: Upload SARIF to code-scanning
         if: ${{ !cancelled() && steps.semgrep-sarif.outcome == 'success' }}

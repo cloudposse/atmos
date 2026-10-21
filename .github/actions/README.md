@@ -70,5 +70,5 @@ positive; third-party action references still require full commit SHA pins.
 Semgrep retains these suppressed findings in SARIF with `inSource` suppression
 metadata, which [GitHub code scanning does not consume](https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/sarif-support).
 The Semgrep job filters those findings before upload using
-`../scripts/filter-semgrep-sarif.cjs`, preserving the raw report and all
+[the local filter-semgrep-sarif action](filter-semgrep-sarif/README.md), preserving the raw report and all
 unsuppressed findings. Its regression tests run with the JavaScript suites.
