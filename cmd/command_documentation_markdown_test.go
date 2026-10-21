@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -40,7 +41,11 @@ func TestDiscoveryMarkdown(t *testing.T) {
 	mockDiscoveryDependencies(t)
 	t.Setenv("NO_COLOR", "")
 	previous := ui.GetColorProfile()
-	t.Cleanup(func() { ui.SetColorProfile(previous) })
+	previousArgs := os.Args
+	t.Cleanup(func() {
+		os.Args = previousArgs
+		ui.SetColorProfile(previous)
+	})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/plan.md", r.URL.Path)
 		assert.Contains(t, r.Header.Get("Accept"), "text/markdown")
@@ -56,7 +61,13 @@ func TestDiscoveryMarkdown(t *testing.T) {
 			if forceColor {
 				colorFlag = "--force-color"
 			}
-			handled, err := dispatchCommandDiscovery(root, []string{"terraform", "plan", "--docs=md", colorFlag})
+			args := []string{"terraform", "plan", "--docs=md", colorFlag}
+			// Match cmd.init() in a fresh CLI: terminal capabilities are captured
+			// from the invocation before early discovery, not inherited from
+			// a previous test's formatter (which caches its color profile).
+			os.Args = append([]string{"atmos"}, args...)
+			ensureIOInitialized(t)
+			handled, err := dispatchCommandDiscovery(root, args)
 			require.NoError(t, err)
 			assert.True(t, handled)
 			plain := ansi.Strip(output.String())

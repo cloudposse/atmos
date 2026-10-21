@@ -159,11 +159,11 @@ func TestDiscoveryDocs(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, handled)
 	assert.Equal(t, "https://atmos.tools/terraform/plan", opened)
-	assert.Contains(t, output.String(), "Documentation: "+opened)
+	assert.Contains(t, ansi.Strip(output.String()), "Documentation: "+opened)
 	openDocsURL = func(string) error { return errors.New("browser unavailable") }
 	_, err = dispatchCommandDiscovery(root, []string{"terraform", "--docs"})
 	assert.ErrorContains(t, err, "browser unavailable")
-	assert.Contains(t, output.String(), "Documentation: https://atmos.tools/terraform")
+	assert.Contains(t, ansi.Strip(output.String()), "Documentation: https://atmos.tools/terraform")
 }
 
 func TestDiscoveryCustomFlagOwnership(t *testing.T) {

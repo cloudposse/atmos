@@ -46,7 +46,7 @@ func TestCommandDocumentationHelpTopics(t *testing.T) {
 				styles := createHelpStyles(renderer)
 				ctx := &helpRenderContext{writer: &out, renderer: renderer, styles: &styles, atmosConfig: &schema.AtmosConfiguration{}}
 				printHelpForTopic(ctx, command, helpTopicRequest{topic: topic, valid: true})
-				assert.Contains(t, out.String(), "Documentation: "+internal.ResolveCommandMetadata(command).DocumentationURL)
+				assert.Contains(t, ansi.Strip(out.String()), "Documentation: "+internal.ResolveCommandMetadata(command).DocumentationURL)
 				assert.Equal(t, 1, strings.Count(out.String(), "Documentation:"))
 				if topic == helpTopicAll {
 					assert.Contains(t, out.String(), "--docs")
