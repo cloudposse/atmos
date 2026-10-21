@@ -81,8 +81,12 @@ configuration layers (globals, environment and component-level config).
 
 - **Terraform State Backend Lookup and Read**
 Based on the resolved context, Atmos identifies the corresponding backend for the component in the stack
-and reads the state file directly from the backend. If access to the backend requires a role assumption
-(e.g. `assume_role.role_arn` for the `s3` backend), Atmos assumes the role before accessing the backend state file.
+and reads the state file directly from the backend. When the component configures a
+[`remote_state_backend`](/stacks/backend#remote-state-backend) (and `remote_state_backend_type`), Atmos uses
+that configuration for the read, falling back to the component's primary `backend` otherwise. This lets a
+component read another component's state through a read-only role while its primary `backend` keeps write
+access. If access to the backend requires a role assumption (e.g. `assume_role.role_arn` for the `s3` backend),
+Atmos assumes the role before accessing the backend state file.
 
 - **Output Parsing and Interpolation**
 The relevant output variable is extracted from the state file (using a [YQ](https://mikefarah.gitbook.io/yq/) parser).

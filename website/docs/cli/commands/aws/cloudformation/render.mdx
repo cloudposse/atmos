@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: render
 description: Render a CloudFormation template client-side, without deploying or validating it through the CloudFormation API.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
@@ -80,3 +82,16 @@ private S3 downloads use the component's resolved AWS identity.
 Secret and output lookups can also require authentication and network access.
 Use `--dry-run` for static validation without downloads or lookups. Use
 [`diff`](/cli/commands/aws/cloudformation/diff) to preview changes against AWS.
+
+## Try it out
+
+<TryExample example="cloudformation">
+
+Configure the short alias, then inspect the local example without deploying infrastructure.
+
+```shell
+atmos config set aliases.cft "aws cloudformation"
+atmos cft render demo -s local
+```
+
+</TryExample>

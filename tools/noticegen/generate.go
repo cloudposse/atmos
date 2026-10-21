@@ -19,7 +19,10 @@ func generate(root, outputPath string, fetchDescription func() (string, error)) 
 		return Summary{}, err
 	}
 
-	entries := runLicenseReport(binPath, root, env)
+	entries, err := runLicenseReport(binPath, root, env)
+	if err != nil {
+		return Summary{}, err
+	}
 
 	applyOverrides(entries, goListModuleVersion(root, env))
 	if err := applyGoogleCloudGoOverrides(entries, goListAllGoogleCloudGoModules(root, env)); err != nil {

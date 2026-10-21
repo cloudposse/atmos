@@ -13,6 +13,8 @@ Previously, locals were defined but not integrated into the template processing 
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 When using file-scoped locals as documented, templates referencing locals were not being resolved:
@@ -297,6 +299,18 @@ atmos describe locals -s prod
 # Verify locals are resolving correctly in component output
 atmos describe component myapp -s prod --format yaml
 ```
+
+## Try it out
+
+<TryExample example="locals">
+
+Inspect the file-scoped locals resolved for the development stack.
+
+```shell
+atmos describe locals -s dev
+```
+
+</TryExample>
 
 ## References
 

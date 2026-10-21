@@ -42,7 +42,7 @@ spec:
 	require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte("broken: !not-a-valid-function value\n"), 0o600))
 	cases := filepath.Join(root, "cases.json")
 	require.NoError(t, os.WriteFile(cases, []byte(`[{"name":"deny","request":{"kind":"command","input":{}},"status":"deny"}]`), 0o600))
-	for _, args := range [][]string{{"policy", "check"}, {"policy", "list"}, {"policy", "schema", "function"}, {"policy", "test", cases}} {
+	for _, args := range [][]string{{"policy", "check"}, {"policy", "check", "--format", "json"}, {"policy", "list"}, {"policy", "schema", "function"}, {"policy", "test", cases}} {
 		t.Run(args[1], func(t *testing.T) {
 			_ = NewTestKit(t)
 			os.Args = append([]string{"atmos"}, args...)

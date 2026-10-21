@@ -14,6 +14,8 @@ Custom command steps can now read their own command-line flags through `{{ .Flag
 
 <!--truncate-->
 
+import TryExample, { TryExamples } from '@site/src/components/TryExample';
+
 ## What Changed
 
 Two things came together:
@@ -73,6 +75,32 @@ Every `{{ .Flags.stack }}` resolves to `plat-ue2-dev`, the stage titles and tabl
 - **Consistent across workflows and custom commands.** The same step library powers both, so what you learn in one applies to the other.
 
 For usage and configuration, see [flags](/cli/configuration/commands/flags).
+
+## Try it out
+
+<TryExamples>
+
+<TryExample example="demo-stacks" label="Stack Variables">
+
+Compare the resolved variables across the example stacks.
+
+```shell
+atmos describe component myapp -s dev --query .vars
+```
+
+</TryExample>
+
+<TryExample example="interactive-workflows" label="Interactive Workflows">
+
+Run the interactive walkthrough in a terminal.
+
+```shell
+atmos workflow deploy -f interactive
+```
+
+</TryExample>
+
+</TryExamples>
 
 ## Get Involved
 

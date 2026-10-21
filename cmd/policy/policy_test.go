@@ -16,6 +16,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const testPolicyManifest = `apiVersion: atmos/v1
@@ -43,12 +44,20 @@ func (s *testStreams) RawError() stdio.Writer  { return s.stderr }
 // captureData routes the data channel to a buffer for the duration of a test.
 func captureData(t *testing.T) *bytes.Buffer {
 	t.Helper()
-	stdout := &bytes.Buffer{}
-	ioCtx, err := iolib.NewContext(iolib.WithStreams(&testStreams{stdout: stdout, stderr: &bytes.Buffer{}}))
+	stdout, _ := captureOutput(t)
+	return stdout
+}
+
+func captureOutput(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(&testStreams{stdout: stdout, stderr: stderr}))
 	require.NoError(t, err)
 	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
 	t.Cleanup(data.Reset)
-	return stdout
+	t.Cleanup(ui.Reset)
+	return stdout, stderr
 }
 
 // contextCommand returns a command carrying a live context, as cobra provides during execution.
@@ -76,18 +85,10 @@ func writePolicyDir(t *testing.T) string {
 	return directory
 }
 
-func TestRunCheckAndList(t *testing.T) {
+func TestRunList(t *testing.T) {
 	stdout := captureData(t)
 	writePolicyDir(t)
 
-	require.NoError(t, runCheck(nil, nil))
-	var checked map[string]any
-	require.NoError(t, json.Unmarshal(stdout.Bytes(), &checked))
-	assert.Equal(t, true, checked["valid"])
-	assert.EqualValues(t, 1, checked["rules"])
-	assert.EqualValues(t, 0, checked["hooks"])
-
-	stdout.Reset()
 	require.NoError(t, runList(nil, nil))
 	var rules []map[string]any
 	require.NoError(t, json.Unmarshal(stdout.Bytes(), &rules))
@@ -96,7 +97,8 @@ func TestRunCheckAndList(t *testing.T) {
 }
 
 func TestCheckFilesCommand(t *testing.T) {
-	stdout := captureData(t)
+	stdout, stderr := captureOutput(t)
+	t.Setenv("ATMOS_POLICY_CHECK_FORMAT", "")
 	directory := writePolicyDir(t)
 	require.NoError(t, os.Mkdir(filepath.Join(directory, "schemas"), 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(directory, "schemas", "owner.json"), []byte(`{"properties":{"owner":{"const":"platform"}}}`), 0o600))
@@ -116,7 +118,7 @@ spec:
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "owner.json"), []byte(`{"owner":"other"}`), 0o600))
 	cmd := newCommand()
-	cmd.SetArgs([]string{"check", "--root", root})
+	cmd.SetArgs([]string{"check", "--format", "json", "--root", root})
 	err := cmd.ExecuteContext(t.Context())
 	require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
 	var report map[string]any
@@ -124,12 +126,99 @@ spec:
 	assert.Equal(t, false, report["valid"])
 	assert.Contains(t, stdout.String(), "owner.json")
 	assert.Contains(t, stdout.String(), "diagnostics")
+	assert.Empty(t, stderr.String())
+
+	stdout.Reset()
+	cmd = newCommand()
+	cmd.SetArgs([]string{"check", "--root", root})
+	require.ErrorIs(t, cmd.ExecuteContext(t.Context()), errUtils.ErrPolicyDenied)
+	assert.Empty(t, stdout.String())
+	assert.Contains(t, stderr.String(), "Policy file checks failed")
+	assert.Contains(t, stderr.String(), "owner.json: deny")
+	assert.Contains(t, stderr.String(), "/owner")
+
+	stderr.Reset()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "owner.json"), []byte(`{`), 0o600))
+	cmd = newCommand()
+	cmd.SetArgs([]string{"check", "--root", root})
+	require.ErrorIs(t, cmd.ExecuteContext(t.Context()), errUtils.ErrPolicyInputInvalid)
+	assert.Contains(t, stderr.String(), "owner.json: error")
+	assert.Contains(t, stderr.String(), "expected a JSON document")
+
+	stdout.Reset()
+	cmd = newCommand()
+	cmd.SetArgs([]string{"check", "--format", "json", "--syntax-only", "--root", filepath.Join(root, "missing")})
+	require.NoError(t, cmd.ExecuteContext(t.Context()))
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &report))
+	assert.Equal(t, true, report["valid"])
+
+	stderr.Reset()
 	stdout.Reset()
 	cmd = newCommand()
 	cmd.SetArgs([]string{"check", "--syntax-only", "--root", filepath.Join(root, "missing")})
 	require.NoError(t, cmd.ExecuteContext(t.Context()))
-	require.NoError(t, json.Unmarshal(stdout.Bytes(), &report))
-	assert.Equal(t, true, report["valid"])
+	assert.Empty(t, stdout.String())
+	assert.Contains(t, stderr.String(), "Policy bundle is valid")
+}
+
+func TestRunCheckFormats(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		env  string
+		json bool
+	}{
+		{name: "human readable by default"},
+		{name: "explicit text", args: []string{"--format", "text"}},
+		{name: "explicit json", args: []string{"--format", "json"}, json: true},
+		{name: "short flag", args: []string{"-f", "json"}, json: true},
+		{name: "environment", env: "json", json: true},
+		{name: "flag overrides environment", args: []string{"--format", "text"}, env: "json"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("ATMOS_POLICY_CHECK_FORMAT", tc.env)
+			t.Setenv("NO_COLOR", "1")
+			stdout, stderr := captureOutput(t)
+			writePolicyDir(t)
+			cmd := newCheckCommand()
+			require.NoError(t, cmd.ParseFlags(tc.args))
+
+			require.NoError(t, cmd.RunE(cmd, nil))
+
+			if tc.json {
+				var checked map[string]any
+				require.NoError(t, json.Unmarshal(stdout.Bytes(), &checked))
+				assert.Equal(t, map[string]any{"valid": true, "rules": float64(1), "hooks": float64(0)}, checked)
+				assert.Empty(t, stderr.String())
+			} else {
+				assert.Empty(t, stdout.String())
+				assert.Contains(t, stderr.String(), "Policy bundle is valid")
+				assert.Contains(t, stderr.String(), "Rules: 1")
+				assert.Contains(t, stderr.String(), "Hooks: 0")
+				assert.NotContains(t, stderr.String(), "\x1b[")
+			}
+		})
+	}
+}
+
+func TestRunCheckRejectsInvalidFormat(t *testing.T) {
+	for _, source := range []string{"flag", "environment"} {
+		t.Run(source, func(t *testing.T) {
+			stdout, stderr := captureOutput(t)
+			writePolicyDir(t)
+			t.Setenv("ATMOS_POLICY_CHECK_FORMAT", "")
+			cmd := newCheckCommand()
+			if source == "flag" {
+				require.NoError(t, cmd.ParseFlags([]string{"--format", "yaml"}))
+			} else {
+				t.Setenv("ATMOS_POLICY_CHECK_FORMAT", "yaml")
+			}
+
+			require.ErrorIs(t, cmd.RunE(cmd, nil), errUtils.ErrInvalidFlagValue)
+			assert.Empty(t, stdout.String())
+			assert.Empty(t, stderr.String())
+		})
+	}
 }
 
 func TestRunSchema(t *testing.T) {
@@ -185,7 +274,7 @@ func TestCommandsFailWithoutPolicyDirectory(t *testing.T) {
 	t.Setenv("ATMOS_POLICY_DIR", "")
 
 	for name, run := range map[string]func() error{
-		"check": func() error { return runCheck(nil, nil) },
+		"check": func() error { return runCheck(newCheckCommand(), nil) },
 		"list":  func() error { return runList(nil, nil) },
 		"test":  func() error { return runTest(&cobra.Command{}, []string{"cases.json"}) },
 	} {
@@ -204,7 +293,7 @@ func TestCommandsFailOnInvalidPolicy(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(directory, "bad.yaml"), []byte("kind: Nope"), 0o600))
 
 	for name, run := range map[string]func() error{
-		"check": func() error { return runCheck(nil, nil) },
+		"check": func() error { return runCheck(newCheckCommand(), nil) },
 		"list":  func() error { return runList(nil, nil) },
 		"test":  func() error { return runTest(&cobra.Command{}, []string{"cases.json"}) },
 	} {
@@ -243,7 +332,7 @@ func TestCommandsRejectInvalidGoverningHooks(t *testing.T) {
 	require.NoError(t, os.WriteFile(cases, []byte(`[{"name":"x","request":{"kind":"operation","input":{}},"status":"allow"}]`), 0o600))
 
 	t.Run("check", func(t *testing.T) {
-		require.ErrorIs(t, runCheck(nil, nil), errUtils.ErrInvalidHookOnFailure)
+		require.ErrorIs(t, runCheck(newCheckCommand(), nil), errUtils.ErrInvalidHookOnFailure)
 		assert.Empty(t, stdout.String(), "an invalid bundle is never reported as valid")
 	})
 
@@ -259,7 +348,7 @@ func TestCommandsFailWhenDefaultPolicyDirectoryIsAFile(t *testing.T) {
 	t.Setenv("ATMOS_POLICY_DIR", "")
 	require.NoError(t, os.WriteFile("policy.d", []byte("not a directory"), 0o600))
 
-	err := runCheck(nil, nil)
+	err := runCheck(newCheckCommand(), nil)
 
 	require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
 	assert.Contains(t, err.Error(), "not a directory")

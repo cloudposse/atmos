@@ -2,10 +2,10 @@
 package policy
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -15,17 +15,23 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	policypkg "github.com/cloudposse/atmos/pkg/policy"
+	"github.com/cloudposse/atmos/pkg/ui"
+)
+
+var checkParser = flags.NewStandardParser(
+	flags.WithBoolFlag("syntax-only", "", false, "Validate definitions without checking files"),
+	flags.WithStringFlag("root", "", ".", "Root directory for file policy globs"),
+	flags.WithStringFlag("format", "f", "text", "Output format: text or json"),
+	flags.WithEnvVars("format", "ATMOS_POLICY_CHECK_FORMAT"),
+	flags.WithValidValues("format", "text", "json"),
 )
 
 var command = newCommand()
 
 func newCommand() *cobra.Command {
 	root := &cobra.Command{Use: "policy", Short: "Validate, inspect, and test policies offline", PersistentPreRunE: func(*cobra.Command, []string) error { return nil }}
-	check := &cobra.Command{Use: "check", Short: "Validate policies and check selected YAML/JSON files", Args: cobra.NoArgs, RunE: runCheck}
-	check.Flags().Bool("syntax-only", false, "Validate definitions without checking files")
-	check.Flags().String("root", ".", "Root directory for file policy globs")
 	root.AddCommand(
-		check,
+		newCheckCommand(),
 		&cobra.Command{Use: "list", Short: "List loaded policy definitions", Args: cobra.NoArgs, RunE: runList},
 		&cobra.Command{Use: "schema <input-kind>", Short: "Print the JSON Schema of a supported policy input", Args: cobra.ExactArgs(1), RunE: runSchema},
 		&cobra.Command{Use: "test <cases.json>", Short: "Run offline fixtures against the policy bundle", Args: cobra.ExactArgs(1), RunE: runTest},
@@ -33,7 +39,28 @@ func newCommand() *cobra.Command {
 	return root
 }
 
+func newCheckCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "check",
+		Short:   "Validate policies and check selected YAML/JSON files",
+		Long:    "Validate the policy bundle and check selected YAML/JSON files.\nUse --syntax-only to validate definitions without checking files.\nUse --format json for machine-readable output on stdout.",
+		Example: "atmos policy check\natmos policy check --format json",
+		Args:    cobra.NoArgs,
+		RunE:    runCheck,
+	}
+	checkParser.RegisterFlags(cmd)
+	return cmd
+}
+
 func runCheck(cmd *cobra.Command, _ []string) error {
+	// Keep offline inspection independent of project configuration and global Viper state.
+	v := viper.New()
+	if err := checkParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+	if err := checkParser.ValidateFlagValues(cmd); err != nil {
+		return err
+	}
 	bundle, err := loadBundle()
 	if err != nil {
 		return err
@@ -41,33 +68,56 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 	if err := hooks.ValidatePolicyBundle(bundle); err != nil {
 		return err
 	}
-	report := map[string]any{"valid": true, "rules": len(bundle.Rules), "hooks": len(bundle.Hooks)}
-	if len(bundle.RulesFor(policypkg.File)) == 0 {
-		return data.WriteJSON(report)
-	}
-	ctx := context.Background()
-	root := "."
-	if cmd != nil {
-		ctx = cmd.Context()
-		syntaxOnly, _ := cmd.Flags().GetBool("syntax-only")
-		if syntaxOnly {
-			return data.WriteJSON(report)
+	report := checkReport{Valid: true, Rules: len(bundle.Rules), Hooks: len(bundle.Hooks)}
+	var checkErr error
+	if len(bundle.RulesFor(policypkg.File)) > 0 && !v.GetBool("syntax-only") {
+		snapshot, err := ci.CollectPolicySnapshot(cmd.Context())
+		if err != nil {
+			return err
 		}
-		if value, err := cmd.Flags().GetString("root"); err == nil {
-			root = value
-		}
+		report.Files, checkErr = policypkg.CheckFiles(cmd.Context(), bundle, v.GetString("root"), policypkg.WithFileEvidence(policypkg.NewEngine(), snapshot))
+		report.Valid = checkErr == nil
 	}
-	snapshot, err := ci.CollectPolicySnapshot(ctx)
-	if err != nil {
-		return err
-	}
-	results, checkErr := policypkg.CheckFiles(ctx, bundle, root, policypkg.WithFileEvidence(policypkg.NewEngine(), snapshot))
-	report["valid"] = checkErr == nil
-	report["files"] = results
-	if err := data.WriteJSON(report); err != nil {
+	if err := writeCheckReport(report, v.GetString("format")); err != nil {
 		return err
 	}
 	return checkErr
+}
+
+type checkReport struct {
+	Valid bool                   `json:"valid"`
+	Rules int                    `json:"rules"`
+	Hooks int                    `json:"hooks"`
+	Files []policypkg.FileResult `json:"files,omitempty"`
+}
+
+func writeCheckReport(report checkReport, format string) error {
+	if format == "json" {
+		return data.WriteJSON(report)
+	}
+	if report.Valid {
+		ui.Success("Policy bundle is valid")
+	} else {
+		ui.Error("Policy file checks failed")
+	}
+	ui.Writef("Rules: %d\nHooks: %d\n", report.Rules, report.Hooks)
+	for i := range report.Files {
+		writeFileResult(&report.Files[i])
+	}
+	return nil
+}
+
+func writeFileResult(result *policypkg.FileResult) {
+	ui.Writef("%s: %s\n", result.File, result.Decision.Status)
+	if result.Error != "" {
+		ui.Writef("  %s\n", result.Error)
+	}
+	for i := range result.Decision.Findings {
+		finding := &result.Decision.Findings[i]
+		for _, diagnostic := range finding.Diagnostics {
+			ui.Writef("  %s %s: %s\n", finding.RuleID, diagnostic.Path, diagnostic.Message)
+		}
+	}
 }
 
 func runList(_ *cobra.Command, _ []string) error {

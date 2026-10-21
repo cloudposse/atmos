@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: apply
 description: Create or update a CloudFormation stack via a changeset.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
@@ -136,3 +138,19 @@ Publish-only targets do not prompt for a stack change:
 
 Use the [`stackset` commands](/cli/commands/aws/cloudformation/stackset) for
 StackSet targets. See [Delivery Targets](/stacks/components/aws-cloudformation#delivery-targets).
+
+## Try it out
+
+<TryExample example="cloudformation">
+
+Requires Docker or Podman, Python 3, and network access for the emulator image. Run against the local AWS emulator; the final commands clean up. No AWS account is needed.
+
+```shell
+atmos config set aliases.cft "aws cloudformation"
+atmos emulator up aws -s local
+atmos cft apply demo -s local --auto-approve
+atmos cft delete demo -s local --auto-approve
+atmos emulator down aws -s local
+```
+
+</TryExample>
