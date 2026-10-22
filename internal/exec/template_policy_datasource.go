@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hairyhenderson/gomplate/v3/data"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
+	data "github.com/cloudposse/atmos/pkg/template/gomplate"
 )
 
 func policyDatasource(d *data.Data, file, alias string, raw bool, args ...string) (any, error) {

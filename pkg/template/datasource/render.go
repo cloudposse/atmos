@@ -10,7 +10,7 @@ import (
 	"os"
 	"text/template"
 
-	"github.com/hairyhenderson/gomplate/v3"
+	"github.com/hairyhenderson/gomplate/v4"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -162,8 +162,8 @@ func RenderWith(
 	}
 
 	// Construct Gomplate Options.
-	opts := gomplate.Options{
-		Context: map[string]gomplate.Datasource{
+	opts := gomplate.RenderOptions{
+		Context: map[string]gomplate.DataSource{
 			".": {
 				URL: finalTopLevelFileURL,
 			},
