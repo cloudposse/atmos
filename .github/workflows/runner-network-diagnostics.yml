@@ -4,14 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       test_resolver_repair:
-        description: After recording the failure, test routing host DNS through systemd-resolved
+        description: After recording the failure, test routing host DNS through StepSecurity
         type: boolean
-        default: false
+        default: true
   # Exercise the diagnostic before it exists on the default branch. No
   # scheduled runs or changes to the normal test/release workflows.
   pull_request:
     paths:
       - .github/workflows/runner-network-diagnostics.yml
+      - .github/actions/runner-dns-repair/**
 
 permissions:
   contents: read
@@ -141,20 +142,19 @@ jobs:
         shell: bash
         run: bash "$DIAGNOSTIC_DIR/probe.sh" hardened
 
-      - name: Test routing host DNS through systemd-resolved
-        if: inputs.test_resolver_repair && steps.harden.outcome == 'success'
-        timeout-minutes: 3
+      - name: Test routing host DNS through StepSecurity
+        id: repair
+        if: (github.event_name == 'pull_request' || inputs.test_resolver_repair) && steps.harden.outcome == 'success'
+        uses: $/.github/actions/runner-dns-repair
+
+      - name: Probe repaired DNS under block mode
+        if: steps.repair.outcome == 'success'
+        timeout-minutes: 4
         shell: bash
         run: |
-          # This is an experiment, not a repair applied to normal CI. Only
-          # change the host route when the expected community agent is active.
-          sudo -n systemctl is-active --quiet agent
-          grep -qx 'DNS=127.0.0.1' /etc/systemd/resolved.conf
-          grep -qx 'Domains=~\.' /etc/systemd/resolved.conf
-          test -f /run/systemd/resolve/stub-resolv.conf
-          sudo -n cp -a /etc/resolv.conf "$DIAGNOSTIC_DIR/resolv.conf.original"
-          sudo -n ln -sfn /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
-          sudo -n resolvectl flush-caches
+          # Docker's Go resolver can cache resolv.conf for five seconds.
+          sleep 6
+          timeout 90 docker pull "$CURL_IMAGE" || echo "::warning::Container download still failed after repair."
           bash "$DIAGNOSTIC_DIR/probe.sh" repaired
 
       - name: Capture final DNS and agent evidence

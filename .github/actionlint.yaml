@@ -4,3 +4,10 @@ self-hosted-runner:
     - tag=atmos
     - extras=s3-cache
     - private=false
+
+# actionlint 1.7.12 predates GitHub's checkout-free self-repository syntax.
+# Suppress only this exact supported reference until actionlint supports $/.
+paths:
+  .github/workflows/runner-network-diagnostics.yml:
+    ignore:
+      - 'specifying action "\$/\.github/actions/runner-dns-repair" in invalid format because ref is missing'
