@@ -1,6 +1,6 @@
 # Plugin wire protocol
 
-**Status:** Proposed; part of the [plugin platform](../overview.md). Protocol, messages, and bindings below are proposed APIs. [Platform workstream](README.md).
+**Status:** Implemented native-pilot contracts and proposed extensions; part of the [plugin platform](../overview.md). The authoritative current wire definitions are [`plugin.proto`](../../../../proto/atmos/plugin/v1/plugin.proto) and [`api.proto`](../../../../proto/atmos/api/v1/api.proto). The abbreviated designs below also include follow-on services and messages; they are not a substitute for those sources. [Platform workstream](README.md).
 
 This document defines how Atmos talks to native plugins, how Starlark plugins see the same contracts, and what a Wasm runtime would have to preserve. The product behavior of each extension lives in the [extension PRDs](../extensions/README.md); the Go interfaces being adapted are inventoried in the [gap analysis](gap-analysis.md). Internal Go structs, managers, and callbacks never cross the boundary (see [types that must not cross](gap-analysis.md#internal-types-that-must-not-cross-the-boundary)).
 
@@ -8,7 +8,7 @@ This document defines how Atmos talks to native plugins, how Starlark plugins se
 |---|---|
 | Transport | `hashicorp/go-plugin`, gRPC mode only; no `net/rpc`. |
 | Ownership | Atmos owns the `.proto`: packages `atmos.plugin.v1` and `atmos.api.v1`, files under `proto/atmos/plugin/v1/` and `proto/atmos/api/v1/`, generated Go in both `pkg/plugin/proto` (CLI) and `sdk/proto` (SDK). The Go SDK wraps its own copy; neither module imports the other. |
-| Commands | Plain executable dispatch; no RPC. |
+| Commands | Native `Commands.Run` RPC streams stdout, stderr, and a terminal exit event; no stdin stream or TTY attachment. |
 | Starlark | Follow-on runtime: in-process, same contracts and field names. |
 | Wasm | Extism runtime is a declared follow-on, not initial. |
 | Contract testing | `buf breaking` plus the Atmos-shipped conformance suite; not Pact. See [Decision 15](decisions.md). |
@@ -159,7 +159,7 @@ message ValidateResponse { repeated Diagnostic diagnostics = 1; }   // Shared by
 
 Rules:
 
-- **Secrets never appear in `message`, `hint`, `details`, or `Diagnostic` text.** Atmos masks what it knows, but plugins must not rely on that. `Credentials.sensitive_keys` drives masking and keyring handling; keys not listed are treated as non-sensitive and may appear in `atmos auth whoami`.
+- **Secrets never appear in `message`, `hint`, `details`, or `Diagnostic` text.** Atmos masks what it knows, but plugins must not rely on that. `Credentials.sensitive_keys` declares additional sensitive keys; omission never makes a schema-known secret safe to display. OIDC tokens, authorization codes, and verifiers remain sensitive regardless of the list. `atmos auth whoami` exposes only approved identity metadata, never arbitrary envelope data. The implemented `PluginCredentials.BuildWhoamiInfo` exposes subject and expiration only. Boundary registration of sensitive values with the masker remains a [target requirement](errors.md#diagnostics-and-masking); this list does not guarantee automatic redaction today.
 - **Credential types are a registry.** `aws/v1`, `gcp/v1`, `azure/v1`, `oidc/v1`, and `atmos-pro/v1` have Atmos adapters. Plugin-namespaced types such as `acme/okta-session/v1` are opaque to Atmos, stored by Atmos keyring, and decoded only by the owning plugin. The version suffix is the plugin-owned schema version; a cached type the plugin no longer accepts triggers reauthentication, not an unsafe decode. A chain that needs a type nobody produces fails with `UNSUPPORTED`.
 - **Errors travel as gRPC status with an `Error` detail**, using the code in [Error model](#error-model). Findings that are results travel in normal responses. A crash, timeout, or malformed response is never an empty successful result.
 - **Optional operations return `Unsupported`** in a `oneof` beside the success payload. A plugin that does not implement the RPC at all returns gRPC `UNIMPLEMENTED`; Atmos treats both as `ErrPluginUnsupportedOperation`.
@@ -184,7 +184,7 @@ message ConfigureRequest { map<string, uint32> broker_ids = 1; google.protobuf.S
 
 ### AuthProvider
 
-The first-release provider is the [Go OIDC pilot](../oidc-pilot.md). Its callback, token/session schemas, refresh coordination, and HTTP-library integration are required parts of this protocol. Remaining extension services and Starlark bindings below are follow-on contracts unless enabled by the [first-release scope](../first-release.md).
+The first-release provider is the [Go OIDC pilot](../oidc-pilot.md). Its callback, token/session schemas, refresh coordination, and HTTP-library integration are required parts of this protocol. The native pilot also implements `AuthIdentity` and `Commands`; remaining extension services and Starlark bindings below are follow-on contracts unless enabled by the [first-release scope](../first-release.md).
 
 ```proto
 service AuthProvider {
@@ -208,7 +208,7 @@ message PathsResponse { repeated CredentialPath paths = 1; }   // CredentialPath
 |---|---|
 | `Validate`, `Authenticate`, `Logout`, `Environment`, `Paths`, `PrepareEnvironment` | Method of the same name. |
 | `Refresh` | None; optional per [authoring](../authoring.md). |
-| (none) | `Kind`, `Name`: manifest and request. `SetRealm`: `realm` field. `GetFilesDisplayPath`: `CredentialPath.purpose` and `location`. `PreAuthenticate(AuthManager)`: removed; replaced by `Configure` and `api.Credentials`. |
+| (none) | `Kind`, `Name`: manifest and request. `SetRealm`: `realm` field. `GetFilesDisplayPath`: `CredentialPath.purpose` and `location`. `PreAuthenticate(AuthManager)`: remains a local no-op in the current adapter; accepted and produced credential types are static metadata. |
 
 ### AuthIdentity
 
@@ -227,6 +227,32 @@ message IdentityAuthenticateRequest { IdentityRequest identity = 1; Credentials 
 |---|---|
 | `Validate`, `Authenticate(upstream)`, `Environment`, `Paths`, `PrepareEnvironment`, `Logout` | Method of the same name; `Authenticate` takes `baseCreds` as `upstream`. |
 | (none) | `PostAuthenticate(PostAuthenticateParams)`: Atmos writes files from `Paths` and applies `PrepareEnvironment`; `Manager` never crosses. `CredentialsExist`, `LoadCredentials`: Atmos keyring. `GetProviderName`: manifest `via`. `SetRealm`: field. |
+
+### Commands
+
+This service is implemented in the native pilot and registered by the Go SDK when a command server is supplied.
+
+```proto
+message CommandRequest {
+  Invocation invocation = 1;
+  string name = 2;
+  repeated string arguments = 3;
+  google.protobuf.Struct settings = 4;
+}
+message CommandExit { uint32 code = 1; }
+message CommandEvent {
+  oneof event {
+    bytes stdout = 1;
+    bytes stderr = 2;
+    CommandExit exit = 3;
+  }
+}
+service Commands { rpc Run(CommandRequest) returns (stream CommandEvent); }
+```
+
+Atmos selects the command export from manifest metadata before starting the native runtime. `Run` sends the export name, arguments, validated settings, and invocation context. Each stdout or stderr event must contain 1–65536 bytes. Exactly one exit event, with a code from 0 through 255, must terminate the stream and be followed by EOF. Zero means success; a nonzero code becomes the Atmos exit code. An absent exit event, an event after exit, an invalid chunk, or an out-of-range code is `ErrPluginProtocol`. Commands do not return `OperationOutcome`.
+
+The runtime writes events to caller-provided stdout/stderr writers; callers supply masked writers for terminal output. The plugin process's own stdout is reserved for the go-plugin transport, not command data. Cancellation and deadlines follow the native invocation lifecycle. There is no stdin stream, inherited interactive terminal, or TTY negotiation in this contract. The current command bootstrap starts the process in the package directory, leaves `Invocation.working_directory` unset, and grants `api.HTTP` with no auth provider's private credential namespace.
 
 ### Component
 
@@ -285,7 +311,7 @@ message HandleEventRequest { Invocation invocation = 1; string event = 2; string
 message HandleEventResponse { bool handled = 1; repeated Diagnostic diagnostics = 2; }
 ```
 
-Handled events come from the manifest (`capabilities.ci.components.<type>.events`). The plugin interprets `outcome` and `output`, then sends reporting requests through [`api.CIReporter`](#apicireporter); it does not hold a GitHub or GitLab client. A reporting failure never changes the infrastructure outcome.
+This is a proposed follow-on service, not part of the current native-pilot protobuf. Handled events come from the manifest (`capabilities.ci.components.<type>.events`). The plugin interprets `outcome` and `output`, then sends all reporting requests through [`api.CIReporter`](#apicireporter); it does not hold a GitHub or GitLab client. `HandleEventResponse` carries only acknowledgment and diagnostics, not a second outcome or deferred reporting requests. `handled = true` acknowledges processing; `handled = false` marks the event non-applicable without claiming a report was written. Atmos renders diagnostics; handler execution or reporting failure returns an error under the error contract. A reporting failure never changes the original infrastructure outcome.
 
 | RPC | Replaces on `plugin.Plugin` |
 |---|---|
@@ -536,7 +562,7 @@ Atmos-detected conditions: process exit or transport loss is the proposed `ErrPl
 
 ## Starlark parity
 
-Starlark plugins run in process on the existing [Starlark engine](../../../../pkg/script/starlark/engine.go) and implement the same contracts. Field names match the proto; messages appear as frozen dicts and structs, with `None` for unset fields. `spec.runtime.api: 1` versions the Starlark surface alongside the service contracts.
+The proposed Starlark plugin runtime runs in process on the existing [Starlark engine](../../../../pkg/script/starlark/engine.go) and implements the same contracts. Field names match the proto; messages appear as frozen dicts and structs. Ordinary proto3 scalar fields have no presence: omitted and explicitly default-valued fields both expose their protobuf defaults (`""`, `0`, `False`, empty bytes, or the zero enum value), not `None`. Absent fields with explicit presence—message fields, `optional` scalars, or unselected `oneof` members—map to `None`; repeated and map fields expose empty collections when empty. A scalar that needs to distinguish absence from its default must use `optional` or a wrapper message in the wire schema. `spec.runtime.api: 1` versions the Starlark surface alongside the service contracts.
 
 ### Service bindings
 

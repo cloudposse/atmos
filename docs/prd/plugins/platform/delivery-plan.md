@@ -425,7 +425,7 @@ Phase 2 makes packages executable. Foundation WPs use `no-release` until an adap
 
 ## Phase 3: Extension adapters
 
-Order and rationale: auth first because it is the customer outcome and exercises the hardest boundaries (credential envelopes, prompts, browser, chains). Commands next because plain-exec dispatch needs no RPC and proves collision handling. Steps and hooks share the automation foundation. Stores and secrets share `api.Credentials`. Validation follows once the check registry has settled. Component engines are the largest closed-list change and gate the CI work. CI providers are tested in both directions against component reporting. MCP and skills carry the least risk to Atmos but need the combined-package test. Backend provisioners go last: the smallest surface and the most dependence on auth.
+Order and rationale: auth first because it is the customer outcome and exercises the hardest boundaries (credential envelopes, prompts, browser, chains). Commands next because `Commands.Run` reuses the native runtime and proves streamed output, terminal exit validation, and collision handling. Steps and hooks share the automation foundation. Stores and secrets share `api.Credentials`. Validation follows once the check registry has settled. Component engines are the largest closed-list change and gate the CI work. CI providers are tested in both directions against component reporting. MCP and skills carry the least risk to Atmos but need the combined-package test. Backend provisioners go last: the smallest surface and the most dependence on auth.
 
 Every adapter WP delivers a package under `pkg/plugin/adapter/<ext>`, a Go fixture (and Starlark parity when that runtime ships), the plugin-backed implementation of the small seam in the existing package, and the extension's acceptance tests. Injection points come from the gap analysis [missing injection points](gap-analysis.md#missing-injection-points).
 
@@ -438,10 +438,10 @@ Every adapter WP delivers a package under `pkg/plugin/adapter/<ext>`, a Go fixtu
 
 ### WP3.2 Commands
 
-**Depends on:** first-release P0.3, WP1.9. Starlark commands are a follow-on requiring WP2.4. **Size:** M.
+**Depends on:** first-release P0.3, WP1.9, WP2.1 (wire contracts), and WP2.2 (native runtime). Starlark commands are a follow-on requiring WP2.4. **Size:** M.
 **Adapter:** `pkg/plugin/adapter/command` behind `cmd/plugin` ([D9](decisions.md)). **Injection points:** plugin command adapters between `RegisterAll` and `processCustomCommands`; collision records; `atmos plugin run <alias> -- …` and `--command <export-name>`; help from static metadata.
 **Fixtures:** an executable command (Go) in the OIDC package; a Starlark command follows later.
-**Done when:** commands appear in help without starting a plugin; argv boundaries, `--`, stdin, stdout and stderr, working directory, cancellation, and exit status are preserved, with no shell interpolation (`A8`); a colliding shortcut is unavailable and diagnosed while `plugin run` works; plugins never replace built-ins or YAML commands ([D8](decisions.md)); the [commands contract](../extensions/commands.md) tests pass.
+**Done when:** commands appear in help without starting a plugin; argv boundaries, `--`, streamed stdout and stderr, cancellation, and terminal exit status are preserved through `Commands.Run`, with no shell interpolation (`A8`); the process starts in the package directory, with stdin streaming and TTY attachment outside the current contract; a colliding shortcut is unavailable and diagnosed while `plugin run` works; plugins never replace built-ins or YAML commands ([D8](decisions.md)); the [commands contract](../extensions/commands.md) tests pass.
 
 ### WP3.3 Steps and hooks
 

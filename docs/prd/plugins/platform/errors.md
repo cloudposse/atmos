@@ -76,7 +76,7 @@ Atmos-detected conditions during RPC extension invocations map without a plugin-
 - Malformed messages, unknown enum values, or an unsupported protocol version map to `ErrPluginProtocol`.
 - A missing `OperationOutcome` maps to `ErrPluginProtocol` only when the extension's response contract requires it.
 
-[Executable commands](../extensions/commands.md) preserve process streams, and `atmos plugin run` propagates their exit status as the Atmos exit code; they do not require RPC or `OperationOutcome`. Their normal process exit is not an RPC crash or protocol violation.
+[Native commands](../extensions/commands.md) use the [`Commands.Run`](protocol.md#commands) RPC to stream stdout, stderr, and exactly one terminal `CommandExit`, followed by EOF. `atmos plugin run` propagates the reported exit code as the Atmos exit code; commands do not return `OperationOutcome`. A valid terminal exit, including a nonzero code, is not a protocol violation. Process or transport termination without that event is a failure, not successful command completion. The current native command receiver reports malformed or incomplete streams as `ErrPluginProtocol`.
 
 Rules:
 

@@ -13,7 +13,7 @@ Numbered decision records for the platform. Sibling documents cite them by numbe
 | Mechanism | Used by | Fit for Atmos |
 |---|---|---|
 | `hashicorp/go-plugin` (subprocess, gRPC, handshake, mTLS) | Terraform/OpenTofu providers, Vault, Nomad, Packer, TFLint, Argo Rollouts, Velero, Grafana, Mattermost, Steampipe, Jaeger (legacy storage plugins) | Chosen. Proven for bidirectional calls, health checks, graceful kill, version negotiation. |
-| Plain exec with argv/env | `gh` extensions, `kubectl` plugins, Helm subprocess plugins, Docker CLI plugins | Right for opaque commands only; no structured contract, no API services, no typed errors. Kept for the command extension's shortcut path. |
+| Plain exec with argv/env | `gh` extensions, `kubectl` plugins, Helm subprocess plugins, Docker CLI plugins | An alternative for opaque commands only; not selected for native command extensions, which use `Commands.Run` and API services. |
 | Stdio protobuf/JSON, one-shot or long-lived | `protoc`/Buf plugins (one-shot), Nushell plugins, Kong external plugin servers | Simple, but each project re-invents handshake, versioning, cancellation, and callbacks. |
 | JSON-RPC over stdio | Language Server Protocol | Good for editors; weak typing and no streaming conventions we would own. |
 | Wasm (Extism, wazero) | Helm 4, Envoy | Declared follow-on runtime ([Decision 2](#decision-2-wasm-extism-is-the-declared-follow-on-runtime-not-initial)). Sandbox is strong but Extism host-function surface and toolchain are younger. |
@@ -23,7 +23,7 @@ Numbered decision records for the platform. Sibling documents cite them by numbe
 
 `hashicorp/go-plugin` remains MPL-2.0; the license change HashiCorp applied to Terraform and other products did not extend to it. It is absent from `go.mod`; `google.golang.org/grpc` is already a direct dependency.
 
-**Decision.** Use `hashicorp/go-plugin` in gRPC-only mode with a magic-cookie handshake, automatic mTLS, `VersionedPlugins` for future protocol majors, and a health service. Atmos owns the `atmos.plugin.v1` proto package; it is not derived from Terraform's protocol. Starlark remains in-process and commands keep the plain-exec shortcut path. The [protocol document](protocol.md) specifies services and messages.
+**Decision.** Use `hashicorp/go-plugin` in gRPC-only mode with a magic-cookie handshake, automatic mTLS, `VersionedPlugins` for future protocol majors, and a health service. Atmos owns the `atmos.plugin.v1` proto package; it is not derived from Terraform's protocol. Starlark remains a proposed in-process runtime. Native commands use `Commands.Run` for both shortcuts and qualified invocation, streaming stdout, stderr, and a terminal exit event; the current contract has no stdin stream or TTY attachment. The [protocol document](protocol.md) specifies services and messages.
 
 **Consequences.**
 - One new direct dependency and a generated-code step (`buf generate`).
