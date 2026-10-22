@@ -281,7 +281,7 @@ atmos scaffold generate my-template ./target --update --dry-run
 ```
 
 `--update` performs a real 3-way merge (base = the git ref the target was generated
-from, defaulting to `HEAD`) instead of failing on a non-empty target directory.
+from, falling back to `HEAD` when no generation record exists) instead of failing on a non-empty target directory.
 `--merge-strategy` controls conflict resolution: `manual` (surface conflicts, default),
 `ours` (keep your version), `theirs` (use the template's version). Full mechanics
 (base storage, conflict markers, the "offer to update instead of failing" interactive

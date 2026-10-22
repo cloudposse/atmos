@@ -31,17 +31,23 @@ The `//` delimiter separates the repository URL from the subdirectory within the
 
 ## OCI Registries
 
-Pull artifacts from OCI-compatible container registries:
+Pull artifacts from OCI-compatible container registries. This public example extracts the nginx
+container filesystem; it does not contain a Terraform component. Use a separate asset target:
 
 ```yaml
-# AWS ECR Public
-source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+source: "oci://docker.io/library/nginx:alpine"
+targets:
+  - "vendor-assets/nginx"
+```
 
-# GitHub Container Registry
-# source: "oci://ghcr.io/cloudposse/components/vpc:{{.Version}}"
+For Terraform components, publish your component files in an image and replace the registry,
+repository and tag with your own. These are placeholders, not existing public components:
 
-# Docker Hub
-# source: "oci://docker.io/library/nginx:alpine"
+```yaml
+# AWS ECR Public: replace YOUR_PUBLIC_ALIAS and publish the repository/tag first.
+source: "oci://public.ecr.aws/YOUR_PUBLIC_ALIAS/components/vpc:{{.Version}}"
+# GitHub Container Registry: replace YOUR_ORG and publish the repository/tag first.
+# source: "oci://ghcr.io/YOUR_ORG/components/vpc:{{.Version}}"
 ```
 
 OCI authentication precedence:

@@ -16,7 +16,7 @@ schemas:
   jsonschema:
     # Supports absolute and relative paths
     # Can be set via ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH env var
-    # or --schemas-jsonschema-dir command-line argument
+    # or --schemas-jsonschema-dir on atmos validate component
     base_path: "stacks/schemas/jsonschema"
 ```
 

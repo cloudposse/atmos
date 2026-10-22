@@ -70,7 +70,7 @@ The URL or path to download the component from. Supports all go-getter protocols
 | Git | `git::https://github.com/org/repo.git?ref=v1.0` |
 | SSH | `git::ssh://git@github.com/org/repo.git?ref=v1.0` |
 | SCP-style SSH | `git@github.com:org/repo.git?ref=v1.0` |
-| OCI | `oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:latest` |
+| OCI (container filesystem; use an asset target) | `oci://docker.io/library/nginx:alpine` |
 | S3 | `s3::https://s3.amazonaws.com/bucket/path.tar.gz` |
 | GCS | `gcs::https://www.googleapis.com/storage/v1/bucket/path.tar.gz` |
 | HTTP/HTTPS | `https://example.com/components.tar.gz` |
@@ -307,6 +307,8 @@ git@github.com:org/repo.git?ref=v1.0.0
 
 ### OCI URL Format
 
+The public nginx image contains a container filesystem, not Terraform source. Extract it to an asset directory such as `vendor-assets/nginx`. Replace `ghcr.io/org` with a registry you publish to.
+
 ```text
 oci://registry/namespace/image:tag
 ```
@@ -314,9 +316,8 @@ oci://registry/namespace/image:tag
 Examples:
 
 ```text
-oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:latest
-oci://ghcr.io/org/components/vpc:v1.0.0
 oci://docker.io/library/nginx:alpine
+oci://ghcr.io/org/components/vpc:v1.0.0
 ```
 
 ### Authentication Environment Variables
