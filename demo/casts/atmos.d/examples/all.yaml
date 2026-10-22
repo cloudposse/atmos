@@ -13,6 +13,12 @@ commands:
         name: cloudformation-lifecycle
         command: atmos casts generate examples cloudformation lifecycle
       - type: shell
+        name: cdk-cloudformation-lifecycle
+        command: atmos casts generate examples cdk-cloudformation lifecycle
+      - type: shell
+        name: cdk-terraform-lifecycle
+        command: atmos casts generate examples cdk-terraform lifecycle
+      - type: shell
         name: cloudformation-advanced-lifecycle
         command: atmos casts generate examples cloudformation-advanced lifecycle
       - type: shell
