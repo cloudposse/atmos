@@ -104,12 +104,13 @@ func TestStartProcess_CancellationPreservesCause(t *testing.T) {
 							cause = context.Canceled
 						}
 					}
-					binary := c.binaryPath
+					cmd := exec.CommandContext(runCtx, c.binaryPath)
 					if phase == "start" {
-						binary = filepath.Join(t.TempDir(), "missing-provider")
+						// Missing executables have different OS error chains. Inject the
+						// same startup failure before cancellation on every platform.
+						cmd.Err = os.ErrNotExist
 						interrupt()
 					}
-					cmd := exec.CommandContext(runCtx, binary)
 					tree, err := prepareProcessTree(cmd)
 					require.NoError(t, err)
 					defer tree.close()
