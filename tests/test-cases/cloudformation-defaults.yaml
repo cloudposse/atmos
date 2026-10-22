@@ -172,4 +172,6 @@ tests:
       stdout:
         - "(?m)^vars:"
         - "(?m)^\\s+region_from_settings: none"
+        - not: "(?m)^region:"
+        - not: "(?m)^timeout:"
       exit_code: 0

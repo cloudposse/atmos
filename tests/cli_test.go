@@ -166,6 +166,8 @@ func cleanupSandboxes() {
 	}
 }
 
+// UnmarshalYAML accepts a plain pattern, a `!not`-tagged pattern, or the `{not: pattern}` map
+// form that tests/test-cases/schema.json documents; the last two negate the match.
 func (m *MatchPattern) UnmarshalYAML(value *yaml.Node) error {
 	switch value.Tag {
 	case "!!str": // Regular string
@@ -173,6 +175,17 @@ func (m *MatchPattern) UnmarshalYAML(value *yaml.Node) error {
 		m.Negate = false
 	case "!not": // Negated pattern
 		m.Pattern = value.Value
+		m.Negate = true
+	case "!!map": // Negated pattern in the schema's map form: {not: pattern}
+		var fields map[string]string
+		if err := value.Decode(&fields); err != nil {
+			return fmt.Errorf("unsupported pattern map: %w", err)
+		}
+		pattern, ok := fields["not"]
+		if !ok || len(fields) != 1 {
+			return fmt.Errorf("unsupported pattern map at line %d: expected a single `not` key", value.Line)
+		}
+		m.Pattern = pattern
 		m.Negate = true
 	default:
 		return fmt.Errorf("unsupported tag %q", value.Tag)
