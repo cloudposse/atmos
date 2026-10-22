@@ -36,8 +36,16 @@ const (
 var recordParser = newRecordParser()
 
 var recordCmd = &cobra.Command{
-	Use:     "record <input.tape>",
-	Short:   "Record a VHS-dialect tape into an asciicast recording",
+	Use:   "record <input.tape>",
+	Short: "Record a VHS-dialect tape into an asciicast recording",
+	Long: `Interpret a VHS-dialect tape using Atmos's built-in terminal recorder.
+
+Session mode (the default) drives an interactive terminal with typing, keypresses,
+pauses, and pattern-based waits. Steps mode runs each typed command separately
+and checks its exit status; interactive directives require session mode.
+
+Use --output to save a .cast recording or render an artifact. The output extension
+selects the format unless --format is supplied.`,
 	Example: markdown.CastRecordUsageMarkdown,
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {

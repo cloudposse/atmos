@@ -395,12 +395,18 @@ func runCastTapeRequirements(ctx context.Context, castStep *schema.WorkflowStep,
 	if len(castStep.Tools) == 0 {
 		return nil
 	}
+	// Preflight sees the same environment as the recording without persisting
+	// session-local overrides or requirement results in the enclosing workflow.
+	requireVars := vars.Clone()
+	if err := applyCastStepEnv(castStep, requireVars); err != nil {
+		return err
+	}
 	requireStep := &schema.WorkflowStep{
 		Name:  castStep.Name + "_require",
 		Type:  "require",
 		Tools: castStep.Tools,
 	}
-	_, err := NewStepExecutorWithVars(vars).Execute(ctx, requireStep)
+	_, err := NewStepExecutorWithVars(requireVars).Execute(ctx, requireStep)
 	return err
 }
 
@@ -729,7 +735,7 @@ func castSessionActions(ctx context.Context, castStep *schema.WorkflowStep, vars
 // executor (simulate, and any registered step type).
 func isCastSessionPTYAction(actionType string) bool {
 	switch actionType {
-	case "write", "key", "pause", "wait":
+	case "write", "key", "pause", "wait", "hide", "show":
 		return true
 	default:
 		return false

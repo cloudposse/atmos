@@ -116,7 +116,7 @@ steps:
 The existing `mode` field governs how a tape is translated, and it determines whether a failing typed command actually fails the step:
 
 - **`mode: steps`** (exit-code fidelity) — each `Type "cmd" Enter` becomes a `type: simulate` child (so it looks typed in the recording) paired with a real `type: shell` child that actually executes `cmd`, with a real, tracked exit code. `Sleep`/`Wait` are dropped (step execution is already synchronous). A visible `cd`/`export`/`unset`/`clear` command updates the following real steps' `working_directory`/`env` instead of running as its own (state-losing) subprocess. `Screenshot` is supported. Any directive with no discrete-step equivalent — a bare keypress, `Hide`/`Show`, or a `Type` with no trailing `Enter` — is a **parse-time error** naming the offending line, telling you to switch to `mode: session`.
-- **`mode: session`** (raw keypress/PTY fidelity) — `Type`/`Sleep`/`Wait`/keypresses (including `Ctrl+<letter>`) map onto the existing `write`/`key`/`pause`/`wait` session actions. This keeps `mode: session`'s existing limitation: no per-command exit code, since the whole script drives one continuous PTY session.
+- **`mode: session`** (raw keypress/PTY fidelity) — `Type`/`Sleep`/`Wait`/keypresses (including `Ctrl+<letter>`) map onto the existing `write`/`key`/`pause`/`wait` session actions. `Wait` requires an explicit regex, such as `Wait /prompt$/`; a bare `Wait` is a parse-time error because waiting for terminal idle is not supported. This keeps `mode: session`'s existing limitation: no per-command exit code, since the whole script drives one continuous PTY session.
 
 ### `Set`, `Output`, `Require`, `Source`
 
