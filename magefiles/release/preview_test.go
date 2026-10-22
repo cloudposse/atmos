@@ -24,6 +24,7 @@ type previewFixture struct {
 	mutations              []string
 	fail                   string
 	graphqlError           string
+	failUnpin              bool
 	createdIdentityMissing bool
 }
 
@@ -326,6 +327,10 @@ func (f *previewFixture) graphql(t *testing.T, w http.ResponseWriter, r *http.Re
 	}
 	id := request.Variables["id"]
 	if strings.Contains(request.Query, "{unpinIssue(") {
+		if f.failUnpin {
+			githubtest.JSON(t, w, map[string]any{"errors": []map[string]string{{"message": "temporary unpin failure"}}})
+			return
+		}
 		f.mutations = append(f.mutations, "unpin "+id)
 		f.pinned = slices.DeleteFunc(f.pinned, func(value string) bool { return value == id })
 	} else {
@@ -334,4 +339,51 @@ func (f *previewFixture) graphql(t *testing.T, w http.ResponseWriter, r *http.Re
 		f.pinned = append(f.pinned, id)
 	}
 	githubtest.JSON(t, w, map[string]any{"data": map[string]any{}})
+}
+
+func TestReleasePreviewFinalizedSkipsPRReadsAndRepairsUnpin(t *testing.T) {
+	for _, pinned := range []bool{false, true} {
+		t.Run(fmt.Sprintf("pinned=%t", pinned), func(t *testing.T) {
+			f := newPreviewFixture()
+			f.milestones[0].State = previewClosed
+			preview := ownedPreview(90, previewClosed)
+			preview.Body += "\n" + milestoneClosedMarker
+			f.issues[1] = []previewIssue{preview, {Number: 42, PullRequest: json.RawMessage(`{}`)}}
+			f.fail = "GET pulls/42"
+			if pinned {
+				f.pinned = []string{"I_unrelated", preview.NodeID}
+				f.failUnpin = true
+			}
+			c := f.client(t)
+			if pinned {
+				require.ErrorContains(t, c.previews(), "temporary unpin failure")
+				f.failUnpin = false
+			}
+			require.NoError(t, c.previews(), "finalized previews must not fetch old PRs")
+			require.Equal(t, preview, f.issues[1][0])
+			require.Empty(t, f.writes)
+			if pinned {
+				require.Equal(t, []string{"unpin I_90"}, f.mutations)
+				require.Equal(t, []string{"I_unrelated"}, f.pinned)
+			} else {
+				require.Empty(t, f.mutations)
+			}
+		})
+	}
+}
+
+func TestReleasePreviewUnfinishedStillRenders(t *testing.T) {
+	for _, state := range []string{previewOpen, previewClosed} {
+		t.Run(state, func(t *testing.T) {
+			f := newPreviewFixture()
+			f.milestones[0].State = previewClosed
+			preview := ownedPreview(90, state)
+			if state == previewOpen {
+				preview.Body += "\n" + milestoneClosedMarker
+			}
+			f.issues[1] = []previewIssue{preview, {Number: 42, PullRequest: json.RawMessage(`{}`)}}
+			f.fail = "GET pulls/42"
+			require.ErrorContains(t, f.client(t).previews(), "HTTP 503", "both closure and the finalization marker are required to skip rendering")
+		})
+	}
 }

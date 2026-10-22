@@ -65,6 +65,9 @@ func TestQueuePagination(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			calls := 0
 			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+				if emptyCurrentStatus(t, w, r) {
+					return
+				}
 				require.Equal(t, "/graphql", r.URL.Path)
 				require.Equal(t, http.MethodPost, r.Method)
 				calls++
@@ -124,6 +127,9 @@ func TestQueuePagination(t *testing.T) {
 func TestMilestoneStatusValidationAndUTF8(t *testing.T) {
 	calls := 0
 	c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+		if emptyCurrentStatus(t, w, r) {
+			return
+		}
 		calls++
 		require.Equal(t, "/repos/cloudposse/atmos/statuses/"+githubtest.SHA, r.URL.Path)
 		var body map[string]string
@@ -155,6 +161,9 @@ func TestMilestoneGateLivePoliciesAndSharedHeads(t *testing.T) {
 			prs[3].Head.SHA = laterQueueSHA
 			statuses := map[string][]string{}
 			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+				if emptyCurrentStatus(t, w, r) {
+					return
+				}
 				switch r.URL.Path {
 				case "/repos/cloudposse/atmos/":
 					githubtest.JSON(t, w, map[string]string{"default_branch": "release/main"})
@@ -189,21 +198,24 @@ func TestMilestoneGateLivePoliciesAndSharedHeads(t *testing.T) {
 			if baselineFails {
 				expected = "failure"
 			}
-			require.Equal(t, []string{"pending", expected}, statuses[githubtest.SHA])
-			require.Equal(t, []string{"pending", "failure"}, statuses[githubtest.Base], "a no-release PR cannot overwrite a failure at its shared head")
-			require.Equal(t, []string{"pending", "success"}, statuses[laterQueueSHA], "no-release does not require a published baseline")
-			require.Equal(t, []string{"pending", expected}, statuses[queueSHA])
+			require.Equal(t, []string{expected}, statuses[githubtest.SHA])
+			require.Equal(t, []string{"failure"}, statuses[githubtest.Base], "a no-release PR cannot overwrite a failure at its shared head")
+			require.Equal(t, []string{"success"}, statuses[laterQueueSHA], "no-release does not require a published baseline")
+			require.Equal(t, []string{expected}, statuses[queueSHA])
 		})
 	}
 }
 
 func TestMilestoneGateFailuresRemainClosed(t *testing.T) {
-	for _, mode := range []string{"repo read", "missing default", "PR read", "queue read", "missing event group", "pending status", "milestone read", "final status"} {
+	for _, mode := range []string{"repo read", "missing default", "PR read", "queue read", "missing event group", "status failure", "milestone read", "final status"} {
 		t.Run(mode, func(t *testing.T) {
 			statuses := []string{}
 			pr := policyPR("no-release", nil)
 			pr.Head.SHA = githubtest.SHA
 			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+				if emptyCurrentStatus(t, w, r) {
+					return
+				}
 				switch r.URL.Path {
 				case "/repos/cloudposse/atmos/":
 					if mode == "repo read" {
@@ -239,7 +251,7 @@ func TestMilestoneGateFailuresRemainClosed(t *testing.T) {
 					var body map[string]string
 					require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 					statuses = append(statuses, body["state"])
-					if mode == "pending status" || mode == "final status" && body["state"] == "success" {
+					if mode == "status failure" || mode == "final status" && body["state"] == "success" {
 						http.Error(w, "status failure", http.StatusServiceUnavailable)
 						return
 					}
@@ -252,9 +264,9 @@ func TestMilestoneGateFailuresRemainClosed(t *testing.T) {
 			}
 			require.Error(t, c.reconcileMilestoneStatuses(eventHead))
 			if mode == "queue read" {
-				require.Equal(t, []string{"pending"}, statuses, "a queue API failure must invalidate prior successful PR-head checks")
+				require.Equal(t, []string{"error"}, statuses, "a queue API failure must invalidate prior successful PR-head checks")
 			}
-			if mode != "final status" {
+			if mode != "final status" && mode != "status failure" {
 				require.NotContains(t, statuses, "success")
 			}
 		})
@@ -262,7 +274,7 @@ func TestMilestoneGateFailuresRemainClosed(t *testing.T) {
 }
 
 func TestMergeGroupEvent(t *testing.T) {
-	for _, mode := range []string{"missing directory", "missing file", "invalid JSON", "invalid SHA", "pending failed", "reconciliation failed", "success"} {
+	for _, mode := range []string{"missing directory", "missing file", "invalid JSON", "invalid SHA", "status failed", "reconciliation failed", "success"} {
 		t.Run(mode, func(t *testing.T) {
 			file := filepath.Join(t.TempDir(), "event.json")
 			if mode == "missing directory" {
@@ -282,6 +294,9 @@ func TestMergeGroupEvent(t *testing.T) {
 			pr := policyPR("no-release", nil)
 			pr.Head.SHA = githubtest.SHA
 			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+				if emptyCurrentStatus(t, w, r) {
+					return
+				}
 				switch r.URL.Path {
 				case "/repos/cloudposse/atmos/":
 					if mode == "reconciliation failed" {
@@ -303,7 +318,7 @@ func TestMergeGroupEvent(t *testing.T) {
 					if strings.HasSuffix(r.URL.Path, queueSHA) {
 						statuses = append(statuses, body["state"])
 					}
-					if mode == "pending failed" {
+					if mode == "status failed" {
 						http.Error(w, "cannot write status", http.StatusServiceUnavailable)
 						return
 					}
@@ -320,19 +335,23 @@ func TestMergeGroupEvent(t *testing.T) {
 			}
 			if mode == "success" {
 				require.NoError(t, err)
-				require.Equal(t, []string{"pending", "pending", "success"}, statuses)
+				require.Equal(t, []string{"success"}, statuses)
 			} else {
 				require.Error(t, err)
-				require.NotContains(t, statuses, "success")
+				if mode == "status failed" {
+					require.Equal(t, []string{"success", "error"}, statuses, "a failed final write must attempt to revoke the known merge-group head")
+				} else {
+					require.NotContains(t, statuses, "success")
+				}
 			}
 			if mode == "reconciliation failed" {
-				require.Equal(t, []string{"pending", "error"}, statuses)
+				require.Equal(t, []string{"error"}, statuses)
 			}
 		})
 	}
 }
 
-func TestMilestoneGateQueuePendingStatus(t *testing.T) {
+func TestMilestoneGateQueueFinalStatus(t *testing.T) {
 	for _, failQueue := range []bool{false, true} {
 		t.Run(fmt.Sprintf("queue status fails %t", failQueue), func(t *testing.T) {
 			statuses := map[string][]string{}
@@ -343,6 +362,9 @@ func TestMilestoneGateQueuePendingStatus(t *testing.T) {
 				entries = append(entries, queueItem(queueSHA, githubtest.SHA, pr.Number))
 			}
 			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+				if emptyCurrentStatus(t, w, r) {
+					return
+				}
 				switch r.URL.Path {
 				case "/repos/cloudposse/atmos/":
 					githubtest.JSON(t, w, map[string]string{"default_branch": "main"})
@@ -369,12 +391,21 @@ func TestMilestoneGateQueuePendingStatus(t *testing.T) {
 			err := c.reconcileMilestoneStatuses("")
 			if failQueue {
 				require.ErrorContains(t, err, "503")
-				require.Equal(t, []string{"pending"}, statuses[githubtest.SHA])
-				require.Equal(t, []string{"pending"}, statuses[queueSHA])
+				require.Equal(t, []string{"success", "error"}, statuses[githubtest.SHA])
+				require.Equal(t, []string{"success", "error"}, statuses[queueSHA])
 			} else {
 				require.NoError(t, err)
-				require.Equal(t, []string{"pending", "success"}, statuses[githubtest.SHA], "shared PR/queue head must have one pending transition")
+				require.Equal(t, []string{"success"}, statuses[githubtest.SHA], "shared PR/queue head must have one final verdict")
 			}
 		})
 	}
+}
+
+func emptyCurrentStatus(t *testing.T, w http.ResponseWriter, r *http.Request) bool {
+	t.Helper()
+	if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/status") {
+		githubtest.JSON(t, w, map[string]any{"statuses": []any{}})
+		return true
+	}
+	return false
 }

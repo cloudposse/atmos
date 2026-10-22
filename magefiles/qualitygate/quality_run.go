@@ -25,6 +25,8 @@ const (
 // next scheduled run and stay visible in the annotations. PRs left unvisited
 // when the run budget ends are not failures; the next run selects them again.
 func (q *qualityClient) reconcileAll(numbers []int) error {
+	// Every reporter run gets fresh repository evidence, shared by scoped copies.
+	q.releaseEvidence = &releaseEvidenceCache{}
 	timeout := q.prTimeout
 	if timeout <= 0 {
 		timeout = qualityPRTimeout

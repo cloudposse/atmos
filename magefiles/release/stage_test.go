@@ -52,3 +52,56 @@ func TestStageRejectsPathsOutsideDist(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, entries)
 }
+
+func TestStageRejectsIncompleteAndConflictingBuilds(t *testing.T) {
+	for _, mode := range []string{"missing manifest", "invalid manifest", "missing binary", "duplicate public name", "missing metadata", "missing SBOM"} {
+		t.Run(mode, func(t *testing.T) {
+			source := t.TempDir()
+			dist := filepath.Join(source, "dist")
+			require.NoError(t, os.Mkdir(dist, 0o700))
+			for _, name := range []string{"binary", "metadata.json", "atmos-sbom.spdx.json"} {
+				require.NoError(t, os.WriteFile(filepath.Join(dist, name), []byte("build output"), 0o600))
+			}
+			artifact := goreleaserArtifact{Name: "atmos_1.233.0_linux_amd64", Path: "dist/binary", Type: artifactUploadBinary}
+			artifacts := []goreleaserArtifact{artifact}
+			if mode == "duplicate public name" {
+				artifacts = append(artifacts, artifact)
+			}
+			data, err := json.Marshal(artifacts)
+			require.NoError(t, err)
+			if mode == "invalid manifest" {
+				data = []byte("{")
+			}
+			if mode != "missing manifest" {
+				require.NoError(t, os.WriteFile(filepath.Join(dist, "artifacts.json"), data, 0o600))
+			}
+			missing := map[string]string{"missing binary": "binary", "missing metadata": "metadata.json", "missing SBOM": "atmos-sbom.spdx.json"}
+			if name := missing[mode]; name != "" {
+				require.NoError(t, os.Remove(filepath.Join(dist, name)))
+			}
+			destination := filepath.Join(t.TempDir(), "upload")
+			err = (Release{}).StageArtifacts(source, destination)
+			require.Error(t, err)
+			if mode == "duplicate public name" {
+				require.ErrorIs(t, err, os.ErrExist, "never overwrite an asset with another artifact")
+			} else if mode != "invalid manifest" {
+				require.ErrorIs(t, err, os.ErrNotExist, "incomplete builds cannot proceed to publication")
+			}
+		})
+	}
+}
+
+func TestStageRejectsSymlinkEscape(t *testing.T) {
+	source := t.TempDir()
+	dist := filepath.Join(source, "dist")
+	require.NoError(t, os.Mkdir(dist, 0o700))
+	outside := filepath.Join(source, "secret")
+	require.NoError(t, os.WriteFile(outside, []byte("must not upload"), 0o600))
+	require.NoError(t, os.Symlink(outside, filepath.Join(dist, "binary")))
+	destination := t.TempDir()
+	err := stageArtifact(source, destination, goreleaserArtifact{Name: "atmos", Path: filepath.Join(dist, "binary")})
+	require.ErrorIs(t, err, ErrReleaseVerification)
+	entries, err := os.ReadDir(destination)
+	require.NoError(t, err)
+	require.Empty(t, entries, "a manifest cannot upload files outside the build directory via symlinks")
+}

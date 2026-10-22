@@ -147,6 +147,29 @@ func TestVerifyCompleteArtifactSet(t *testing.T) {
 	require.Equal(t, tag, manifest.Tag)
 	require.Equal(t, commit, manifest.Commit)
 	require.Len(t, manifest.Assets, len(releasePlatforms)+4)
+	for _, name := range []string{checksumName + ".sigstore.json", "atmos-sbom.spdx.json"} {
+		t.Run("missing "+name, func(t *testing.T) {
+			path := filepath.Join(dir, name)
+			contents, err := os.ReadFile(path)
+			require.NoError(t, err)
+			require.NoError(t, os.Remove(path))
+			require.ErrorIs(t, (Release{}).VerifyArtifacts(dir, tag, commit), os.ErrNotExist)
+			require.NoError(t, os.WriteFile(path, contents, 0o600))
+		})
+	}
+	t.Run("unexpected upload", func(t *testing.T) {
+		path := filepath.Join(dir, "unverified.txt")
+		require.NoError(t, os.WriteFile(path, []byte("must not publish"), 0o600))
+		require.ErrorContains(t, (Release{}).VerifyArtifacts(dir, tag, commit), "unexpected staged asset")
+		require.NoError(t, os.Remove(path))
+	})
+	t.Run("manifest cannot be written", func(t *testing.T) {
+		path := filepath.Join(dir, "release-manifest.json")
+		require.NoError(t, os.Remove(path))
+		require.NoError(t, os.Mkdir(path, 0o700))
+		require.Error(t, (Release{}).VerifyArtifacts(dir, tag, commit))
+		require.NoError(t, os.Remove(path))
+	})
 	// Removing a platform from both the files and the checksum list still fails.
 	remaining := strings.SplitAfter(checksums.String(), "\n")[1:]
 	require.NoError(t, os.WriteFile(filepath.Join(dir, checksumName), []byte(strings.Join(remaining, "")), 0o600))
@@ -184,4 +207,27 @@ func TestShippingMatrixMatchesGoReleaser(t *testing.T) {
 		}
 	}
 	require.ElementsMatch(t, expected, releasePlatforms, "update the guard when changing the shipping matrix")
+}
+
+func TestVerificationRejectsUnreadableBuildEvidence(t *testing.T) {
+	dir := t.TempDir()
+	const commit = "12f83b5248253662d8af06030e3966034a7ef5d4"
+	require.Error(t, (Release{}).VerifyArtifacts(dir, "not-a-tag", commit))
+	require.ErrorIs(t, verifyMetadata(dir, "v1.233.0", "1.233.0", commit), os.ErrNotExist)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "metadata.json"), []byte("{"), 0o600))
+	require.Error(t, verifyMetadata(dir, "v1.233.0", "1.233.0", commit))
+	_, err := verifyChecksums(dir, "missing")
+	require.ErrorIs(t, err, os.ErrNotExist)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "oversized"), []byte(strings.Repeat("a", 128*1024)), 0o600))
+	_, err = verifyChecksums(dir, "oversized")
+	require.ErrorContains(t, err, "token too long")
+	require.ErrorIs(t, verifyAssetSet(filepath.Join(dir, "missing"), nil), os.ErrNotExist)
+	require.ErrorContains(t, verifyBinary(filepath.Join(dir, "metadata.json"), "v1.233.0", commit, "linux_amd64"), "read binary provenance")
+	for _, path := range []string{dir, filepath.Join(dir, "empty")} {
+		if path != dir {
+			require.NoError(t, os.WriteFile(path, nil, 0o600))
+		}
+		_, err = digestFile(path)
+		require.ErrorIs(t, err, ErrReleaseVerification, "directories and empty assets cannot be sealed for publication")
+	}
 }

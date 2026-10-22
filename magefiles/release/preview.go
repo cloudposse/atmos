@@ -94,6 +94,11 @@ func (c *milestoneClient) reconcilePreview(m Milestone, version string) error {
 	if existing == nil && m.State != previewOpen {
 		return nil
 	}
+	if m.State != previewOpen && existing.State == previewClosed && strings.Contains(existing.Body, milestoneClosedMarker) {
+		// Finalized content needs no old PR lookups, but a failed unpin must
+		// remain repairable on the next reconciliation.
+		return c.pinPreview(existing.NodeID, false)
+	}
 	body, err := c.renderPreview(m, version, items)
 	if err != nil {
 		return err

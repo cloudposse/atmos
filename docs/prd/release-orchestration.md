@@ -165,8 +165,10 @@ requires signature, timestamp, and signer verification for meaningful assurance.
 [GitHub CLI verification options](https://cli.github.com/manual/gh_attestation_verify).
 
 The source commit being released can differ from the workflow/tooling commit,
-particularly for a maintenance release. Record both. Verify the actual build
-source in the authenticated provenance predicate; do not assume the signing
+for example when retrying a release after newer commits merge. Record both.
+Stable and candidate preparation accepts only source commits on the default
+branch; maintenance-branch hotfixes are outside the supported release process.
+Verify the actual build source in the authenticated provenance predicate; do not assume the signing
 workflow's checkout SHA is the source of the binary. Restrict signer identities
 to approved workflows and trusted workflow revisions. A matching repository
 name alone is insufficient. No SLSA level certification is claimed by this PRD.

@@ -49,6 +49,7 @@ type qualityClient struct {
 	api                   githubapi.API
 	repo                  string
 	benchmarkReportFailed bool
+	releaseEvidence       *releaseEvidenceCache
 	// prTimeout overrides qualityPRTimeout for each PR's reconcile.
 	prTimeout time.Duration
 }

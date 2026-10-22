@@ -18,11 +18,13 @@ only supplies inputs and calls its tested `run()` entrypoint.
 an absent tag at the requested commit, rejects conflicting existing tags, and
 sets the draft target to that exact commit.
 
-The selected source commit may belong to a maintenance branch for a hotfix;
-stable releases do not require ancestry from the default branch. Selecting the
-source is an authorized release operator's decision; the guard requires the
-tag and every binary to match it exactly. The manual publishing
-workflow itself runs only from the default branch so it uses trusted tooling.
+Stable and candidate release preparation requires the selected source commit
+to be on the default branch and validates its unreleased PRs against the next
+milestone. A patch is blocked if that history already contains changes assigned
+to a later minor release; maintenance-branch hotfixes are not supported by this
+entry point. The publication guard requires the tag and every binary to match
+the validated source exactly. The manual publishing workflow itself runs only
+from the default branch so it uses trusted tooling.
 
 `publish` uploads only the manifest's files. Immediately before publication it
 checks every uploaded asset's GitHub SHA-256 digest, the complete asset set,

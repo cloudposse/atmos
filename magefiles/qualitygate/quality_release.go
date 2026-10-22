@@ -4,10 +4,50 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync"
 
 	"github.com/cloudposse/atmos/magefiles/internal/githubapi"
 	"github.com/cloudposse/atmos/magefiles/release/milestone"
 )
+
+// Repository evidence is shared by evaluator copies for one reporter run.
+// Errors are cached too: unavailable evidence must never imply eligibility.
+type releaseEvidenceCache struct {
+	once        sync.Once
+	historyOnce sync.Once
+	milestones  []milestone.Milestone
+	baseline    string
+	err         error
+	historyErr  error
+}
+
+func (q *qualityClient) initReleaseEvidence() {
+	if q.releaseEvidence == nil {
+		q.releaseEvidence = &releaseEvidenceCache{}
+	}
+}
+
+func (q *qualityClient) releaseState() *releaseEvidenceCache {
+	q.initReleaseEvidence()
+	state := q.releaseEvidence
+	state.once.Do(func() {
+		c := milestone.Client{Context: q.ctx, API: q.api, Repo: q.repo}
+		state.milestones, state.err = c.ListMilestones()
+		if state.err != nil {
+			return
+		}
+		state.baseline, state.err = c.LatestStable()
+	})
+	return state
+}
+
+func (q *qualityClient) releaseHistory(state *releaseEvidenceCache) error {
+	state.historyOnce.Do(func() {
+		c := milestone.Client{Context: q.ctx, API: q.api, Repo: q.repo}
+		state.historyErr = c.CheckReleaseHistory(state.milestones, state.baseline)
+	})
+	return state.historyErr
+}
 
 // releasePolicy uses the merge guard's policy and live repository state. A past
 // successful commit status cannot establish eligibility after metadata changes.
@@ -25,25 +65,20 @@ func (q *qualityClient) releasePolicy(pr *githubapi.PR) (qualityGate, error) {
 	if label == "no-release" {
 		return qualityGate{Passed: true, Detail: "no-release: no release milestone required"}, nil
 	}
-	c := milestone.Client{Context: q.ctx, API: q.api, Repo: q.repo}
-	milestones, err := c.ListMilestones()
-	if err != nil {
-		return qualityGate{}, err
+	state := q.releaseState()
+	if state.err != nil {
+		return qualityGate{}, state.err
 	}
-	baseline, err := c.LatestStable()
-	if err != nil {
-		return qualityGate{}, err
-	}
-	if err = milestone.CheckMilestonePR(&releasePR, milestones, baseline); err != nil {
+	if err = milestone.CheckMilestonePR(&releasePR, state.milestones, state.baseline); err != nil {
 		return releasePolicyFailure(err), nil
 	}
-	if err = c.CheckReleaseHistory(milestones, baseline); err != nil {
+	if err = q.releaseHistory(state); err != nil {
 		if errors.Is(err, milestone.ErrMilestonePolicy) {
 			return releasePolicyFailure(err), nil
 		}
 		return qualityGate{}, err
 	}
-	return qualityGate{Passed: true, Detail: fmt.Sprintf("%s fits next release %s (published baseline %s)", label, pr.Milestone.Title, baseline)}, nil
+	return qualityGate{Passed: true, Detail: fmt.Sprintf("%s fits next release %s (published baseline %s)", label, pr.Milestone.Title, state.baseline)}, nil
 }
 
 func releasePolicyFailure(err error) qualityGate {

@@ -25,8 +25,10 @@ is exempt; other PRs must target the lowest open versioned milestone and cannot
 require a larger bump than that milestone supplies. Non-versioned planning
 milestones do not participate. Equivalent duplicate versions fail closed.
 
-Milestone/label changes refresh the statuses, including queued PRs. Scheduled
-reconciliation recovers missed events; GitHub event delivery and merge decisions
+Milestone/label changes refresh the statuses, including queued PRs. Unchanged
+results reuse the existing status to avoid GitHub's per-commit status limit.
+Evidence failures revoke known heads; interrupted runs or failed API writes
+require a later reconciliation. Scheduled reconciliation recovers missed events; GitHub event delivery and merge decisions
 are not atomic. Administrators retaining bypass privileges remain trusted.
 
 Regression tests: `go test -tags=mage ./magefiles/release/...`. Workflow wiring is

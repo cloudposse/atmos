@@ -44,16 +44,64 @@ func (Milestones) Check(repo string) error {
 	return client.checkMilestones(os.Getenv("GITHUB_EVENT_NAME"), os.Getenv("GITHUB_EVENT_PATH"))
 }
 
+const statusEvidenceError = "Milestone policy could not be verified; see workflow logs"
+
+type commitStatus struct {
+	Context     string `json:"context"`
+	State       string `json:"state"`
+	Description string `json:"description"`
+}
+
 func (c *Client) status(sha, state, description string) error {
 	if !githubapi.SHAPattern.MatchString(sha) {
 		return fmt.Errorf("%w: invalid status SHA", ErrMilestonePolicy)
 	}
-	// GitHub's status description is limited to 140 characters.
+	description = truncateStatus(description)
+	current, err := c.currentStatus(sha)
+	if err != nil {
+		// Never publish success when status evidence is unreadable. Attempt to
+		// revoke a previous green result even if the read endpoint is unavailable.
+		return errors.Join(err, c.writeStatus(sha, "error", statusEvidenceError))
+	}
+	if current.State == state && current.Description == description {
+		return nil
+	}
+	return c.writeStatus(sha, state, description)
+}
+
+func truncateStatus(description string) string {
 	chars := []rune(description)
 	if len(chars) > statusDescriptionLimit {
-		description = string(chars[:statusDescriptionLimit-len("...")]) + "..."
+		return string(chars[:statusDescriptionLimit-len("...")]) + "..."
 	}
+	return description
+}
+
+func (c *Client) writeStatus(sha, state, description string) error {
 	return c.Write(http.MethodPost, "statuses/"+sha, map[string]string{"state": state, "context": milestoneStatus, "description": description})
+}
+
+func (c *Client) currentStatus(sha string) (commitStatus, error) {
+	// The combined endpoint returns the latest status for each context rather
+	// than its entire history. Other contexts can occupy additional pages.
+	for page := 1; page <= githubapi.PageLimit; page++ {
+		var result struct {
+			Statuses []commitStatus `json:"statuses"`
+		}
+		path := fmt.Sprintf("commits/%s/status?per_page=%d&page=%d", sha, githubapi.PageSize, page)
+		if err := c.Get(path, &result); err != nil {
+			return commitStatus{}, err
+		}
+		for _, status := range result.Statuses {
+			if status.Context == milestoneStatus {
+				return status, nil
+			}
+		}
+		if len(result.Statuses) < githubapi.PageSize {
+			return commitStatus{}, nil
+		}
+	}
+	return commitStatus{}, fmt.Errorf("%w: commit status pagination limit", ErrMilestonePolicy)
 }
 
 func (c *Client) queue(base string) ([]queueEntry, error) {
@@ -180,18 +228,29 @@ func (c *Client) checkMilestones(eventName, eventPath string) error {
 		if err != nil {
 			return err
 		}
-		if err = c.status(eventHead, "pending", "Checking live release milestone policy"); err != nil {
-			return err
+		if !githubapi.SHAPattern.MatchString(eventHead) {
+			return fmt.Errorf("%w: invalid status SHA", ErrMilestonePolicy)
 		}
 	}
-	err := c.reconcileMilestoneStatuses(eventHead)
-	if err != nil && eventHead != "" {
-		err = errors.Join(err, c.status(eventHead, "error", "Milestone policy could not be verified; see workflow logs"))
-	}
-	return err
+	return c.reconcileMilestoneStatuses(eventHead)
 }
 
-func (c *Client) reconcileMilestoneStatuses(eventHead string) error {
+func (c *Client) reconcileMilestoneStatuses(eventHead string) (result error) {
+	heads := map[string]bool{}
+	if eventHead != "" {
+		heads[eventHead] = true
+	}
+	// Reuse unchanged final statuses: pending/success pairs on every scheduled
+	// run exhaust GitHub's per-context status limit. Known heads are revoked on
+	// any evidence or publication error, including errors before queue discovery.
+	// An existing success remains during evaluation; a killed process or an API
+	// write outage cannot atomically revoke it. A later successful reconciliation
+	// repairs those cases.
+	defer func() {
+		if result != nil {
+			result = errors.Join(result, c.revokeStatuses(heads))
+		}
+	}()
 	branch, err := c.defaultBranch()
 	if err != nil {
 		return err
@@ -200,28 +259,31 @@ func (c *Client) reconcileMilestoneStatuses(eventHead string) error {
 	if err != nil {
 		return err
 	}
-	heads := map[string]bool{}
 	for _, pr := range prs {
 		heads[pr.Head.SHA] = true
-	}
-	// Invalidate known PR results before querying optional queue metadata. A
-	// queue API failure must not preserve a green result from before a label or
-	// milestone change on a PR whose current policy has not been verified.
-	if err = c.markPending(heads, nil); err != nil {
-		return err
 	}
 	entries, err := c.queue(branch)
 	if err != nil {
 		return err
 	}
 	queueHeads, err := queueGroupHeads(entries, eventHead)
+	for head := range queueHeads {
+		heads[head] = true
+	}
 	if err != nil {
 		return err
 	}
-	if err = c.markPending(queueHeads, heads); err != nil {
-		return err
-	}
 	return c.publishPolicyVerdicts(prs, entries, queueHeads)
+}
+
+func (c *Client) revokeStatuses(heads map[string]bool) error {
+	var failures []error
+	for head := range heads {
+		if err := c.status(head, "error", statusEvidenceError); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	return errors.Join(failures...)
 }
 
 func (c *Client) defaultBranch() (string, error) {
@@ -245,21 +307,9 @@ func queueGroupHeads(entries []queueEntry, eventHead string) (map[string]bool, e
 		}
 	}
 	if eventHead != "" && !heads[eventHead] {
-		return nil, fmt.Errorf("%w: merge group is not present in the live queue; retry", ErrMilestonePolicy)
+		return heads, fmt.Errorf("%w: merge group is not present in the live queue; retry", ErrMilestonePolicy)
 	}
 	return heads, nil
-}
-
-func (c *Client) markPending(heads, alreadyPending map[string]bool) error {
-	for head := range heads {
-		if alreadyPending[head] {
-			continue
-		}
-		if err := c.status(head, "pending", "Checking live release milestone policy"); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (c *Client) publishPolicyVerdicts(prs []ReleasePR, entries []queueEntry, queueHeads map[string]bool) error {

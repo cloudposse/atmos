@@ -30,6 +30,9 @@ func TestMilestoneGateRejectsPatchAfterMinorPRMerged(t *testing.T) {
 			merged.Base.Ref = "main"
 			states := map[string]map[string]string{}
 			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+				if emptyCurrentStatus(t, w, r) {
+					return
+				}
 				path := strings.TrimPrefix(r.URL.Path, "/repos/cloudposse/atmos/")
 				switch path {
 				case "":

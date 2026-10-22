@@ -182,6 +182,7 @@ type qualityRenderedReport struct {
 
 // render evaluates live evidence and records whether retaining an old report is safe.
 func (q *qualityClient) render(pr *githubapi.PR, existing *githubapi.Comment, performance string, run *githubapi.Run) qualityRenderedReport {
+	q.initReleaseEvidence()
 	if performance == "" {
 		performance = qualityPreservePerformance(existing, pr.Head.SHA)
 	}
