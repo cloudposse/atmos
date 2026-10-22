@@ -643,6 +643,13 @@ func writeProviderIterationFixture(t *testing.T) string {
 		`  provider = aws.by_account[each.value] # one per account`,    // Line 10: indexed alias with a trailing comment.
 		`  provider = aws.by_account[local.ids["dev"]]`,                // Line 11: indexed alias with a nested index.
 		"  provider = aws.by_account[each.key]\r",                      // Line 12: indexed alias with a CRLF line ending.
+		`  provider = aws.by_account[`,                                 // Line 13: indexed alias split across lines.
+		`    each.value`,                                               // Line 14.
+		`  ]`,                                                          // Line 15.
+		`  provider = aws.by_account[`,                                 // Line 16: split across lines, then a conditional.
+		`    each.value`,                                               // Line 17.
+		`  ] ? aws.dev : aws.prod`,                                     // Line 18.
+		`  provider = aws.by_account[`,                                 // Line 19: the bracket never closes.
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 	return path
@@ -681,6 +688,9 @@ func TestIsProviderIterationDiagnostic(t *testing.T) {
 		{name: "indexed provider alias with a trailing comment", diag: providerReferenceDiag(path, 10), expected: true},
 		{name: "indexed provider alias with a nested index", diag: providerReferenceDiag(path, 11), expected: true},
 		{name: "indexed provider alias with a CRLF line ending", diag: providerReferenceDiag(path, 12), expected: true},
+		{name: "indexed provider alias split across lines", diag: providerReferenceDiag(path, 13), expected: true},
+		{name: "conditional after an index split across lines is a real error", diag: providerReferenceDiag(path, 16), expected: false},
+		{name: "unclosed bracket is a real error", diag: providerReferenceDiag(path, 19), expected: false},
 		{name: "line without a provider argument", diag: providerReferenceDiag(path, 1), expected: false},
 		{name: "line past end of file", diag: providerReferenceDiag(path, 99), expected: false},
 		{name: "missing file", diag: providerReferenceDiag(filepath.Join(t.TempDir(), "missing.tf"), 3), expected: false},
