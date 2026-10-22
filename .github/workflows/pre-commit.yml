@@ -44,7 +44,11 @@ jobs:
           git diff --exit-code -- .github/actions/harden-runner/runtime/yaml.cjs
 
       - name: Test CI helper scripts
-        run: node --test .github/scripts/*.test.mjs .github/actions/harden-runner/runtime/*.test.cjs
+        run: >-
+          node --test
+          .github/scripts/*.test.mjs
+          .github/actions/harden-runner/runtime/*.test.cjs
+          .github/actions/runner-network-diagnostics/*.test.cjs
 
       - name: Set up Atmos
         uses: ./.github/actions/setup-atmos-bootstrap

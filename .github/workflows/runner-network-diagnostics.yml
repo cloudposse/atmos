@@ -13,6 +13,7 @@ on:
     paths:
       - .github/workflows/runner-network-diagnostics.yml
       - .github/actions/harden-runner/**
+      - .github/actions/runner-network-diagnostics/**
       - .github/allowlist.yaml
 
 permissions:
@@ -23,14 +24,11 @@ jobs:
     name: DNS and egress (${{ matrix.sample > 3 && 'repair first' || 'before/after' }}, sample ${{ matrix.sample }})
     runs-on: ubuntu-24.04
     # Reserve time for both timeout-heavy probe phases, uploads, and cleanup.
-    timeout-minutes: 22
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
         sample: [1, 2, 3, 4, 5, 6]
-    env:
-      # Use a fixed public probe image. No credentials enter the container.
-      CURL_IMAGE: curlimages/curl:8.12.1@sha256:94e9e444bcba979c2ea12e27ae39bee4cd10bc7041a472c4727a558e213744e6
     steps:
       # Harden Runner installs in its pre-job hook, before ALL normal steps.
       # Capture the host resolver route under enforcement; do not claim an
@@ -52,120 +50,17 @@ jobs:
 
       - name: Prepare probes
         timeout-minutes: 4
-        shell: bash
-        run: |
-          export DIAGNOSTIC_DIR="$RUNNER_TEMP/network-diagnostics"
-          echo "DIAGNOSTIC_DIR=$DIAGNOSTIC_DIR" >> "$GITHUB_ENV"
-          mkdir -p "$DIAGNOSTIC_DIR"
-          cat > "$DIAGNOSTIC_DIR/probe.sh" <<'SCRIPT'
-          #!/usr/bin/env bash
-          set -euo pipefail
-          phase="$1"
-          exec > >(tee "$DIAGNOSTIC_DIR/$phase.log") 2>&1
-          echo "Phase: $phase; time: $(date -u +%FT%TZ)"
-          echo "Image: ${ImageOS:-unknown} ${ImageVersion:-unknown}"
-          # Region is also recorded in GitHub's 'Set up job' log.
-          for file in /etc/resolv.conf /etc/systemd/resolved.conf /etc/docker/daemon.json; do
-            echo "--- $file"
-            ls -l "$file" || true
-            cat "$file" || true
-          done
-          timeout 5 resolvectl status || true
-          timeout 5 sudo -n ss -lntup '( sport = :53 )' || true
-          timeout 5 systemctl is-active agent || true
-          timeout 5 sudo -n iptables-save || true
-          timeout 5 sudo -n ip6tables-save || true
-          image_ready=false
-          if docker image inspect "$CURL_IMAGE" > /dev/null 2>&1; then
-            image_ready=true
-            timeout 10 docker run --rm --pull=never --network bridge --cap-drop ALL \
-              --security-opt no-new-privileges --read-only --entrypoint cat \
-              "$CURL_IMAGE" /etc/resolv.conf || true
-          fi
-          printf '\n| Phase | Client | URL | curl exit | Connection |\n|---|---|---|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
-          for client in host container; do
-            if [[ "$client" == container && "$image_ready" == false ]]; then
-              echo "Container probes unavailable: pinned image was not downloaded."
-              touch "$DIAGNOSTIC_DIR/$phase-incomplete"
-              continue
-            fi
-            # Unique names avoid reusing a cached rejection from another probe.
-            canary="${phase}-${client}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.example.com"
-            for url in \
-              https://github.com/ \
-              https://api.github.com/meta \
-              https://codeload.github.com/actions/download-artifact/tar.gz/d3f86a106a0bac45b974a628896c90dbdf5c8093 \
-              https://proxy.golang.org/golang.org/x/text/@v/list \
-              https://release-assets.githubusercontent.com/ \
-              "https://$canary/"; do
-              command=(curl)
-              if [[ "$client" == container ]]; then
-                command=(timeout 15 docker run --rm --pull=never --network bridge --cap-drop ALL
-                  --security-opt no-new-privileges --read-only "$CURL_IMAGE")
-              fi
-              # Any HTTP response proves transport connectivity, even a 404.
-              # Do not follow redirects to introduce unrelated destinations.
-              log_start=''
-              if [[ "$url" == "https://$canary/" ]]; then
-                # Run the file read under sudo, not a shell input redirection.
-                if log_lines=$(sudo -n wc -l /home/agent/agent.log); then
-                  read -r log_lines _ <<< "$log_lines"
-                  log_start=$((log_lines + 1))
-                fi
-              fi
-              result=0
-              connection=$("${command[@]}" --noproxy '*' --silent --show-error --head \
-                --connect-timeout 3 --max-time 8 --output /dev/null \
-                --write-out 'ip=%{remote_ip} http=%{http_code}' "$url") || result=$?
-              printf '%s %s exit=%s %s\n' "$client" "$url" "$result" "$connection"
-              printf '| %s | %s | %s | %s | %s |\n' "$phase" "$client" "$url" "$result" "$connection" >> "$GITHUB_STEP_SUMMARY"
-              if [[ "$url" == "https://$canary/" ]]; then
-                confirmed=false
-                if [[ "$result" == 0 ]]; then
-                  echo "::error::Unlisted destination $canary was reachable ($phase/$client)."
-                  touch "$DIAGNOSTIC_DIR/policy-failed"
-                else
-                  # Allow a bounded interval for the agent to flush this probe's
-                  # rejection. Never accept an older line as current evidence.
-                  for attempt in 1 2 3 4; do
-                    if [[ -n "$log_start" ]] && sudo -n tail -n +"$log_start" /home/agent/agent.log \
-                      | awk -F 'GMT:' -v rejection="domain not allowed: $canary." \
-                        '$2 == rejection { found=1 } END { exit !found }'; then
-                      confirmed=true
-                      break
-                    fi
-                    sleep 0.5
-                  done
-                  if [[ "$confirmed" != true ]]; then
-                    echo "::warning::No fresh agent rejection for $canary ($phase/$client)."
-                    touch "$DIAGNOSTIC_DIR/$phase-incomplete"
-                  fi
-                fi
-                # Persist only our own fields, never raw agent output.
-                printf '%s %s domain=%s curl_exit=%s rejection_confirmed=%s\n' \
-                  "$phase" "$client" "$canary" "$result" "$confirmed" >> "$DIAGNOSTIC_DIR/enforcement.log"
-              elif [[ "$result" != 0 ]]; then
-                touch "$DIAGNOSTIC_DIR/$phase-connectivity-failed"
-              fi
-            done
-          done
-          for domain in github.com api.github.com codeload.github.com proxy.golang.org release-assets.githubusercontent.com; do
-            echo "--- DNS: $domain (application resolver, then each local resolver)"
-            timeout 5 getent ahostsv4 "$domain" || true
-            for resolver in 127.0.0.100 127.0.0.53 127.0.0.1; do
-              dig +time=1 +tries=1 +noall +answer "@$resolver" "$domain" A || true
-            done
-          done
-          touch "$DIAGNOSTIC_DIR/$phase-complete"
-          SCRIPT
-          # Registry hosts are explicitly allowed: hardening is already active.
-          timeout 90 docker pull "$CURL_IMAGE" || echo "::warning::Container image unavailable; host probes will still run."
+        uses: $/.github/actions/runner-network-diagnostics
+        with:
+          operation: prepare
 
       - name: Probe unchanged DNS under block mode
         if: always() && steps.harden.outcome == 'success'
-        timeout-minutes: 5
-        shell: bash
-        run: bash "$DIAGNOSTIC_DIR/probe.sh" hardened
+        timeout-minutes: 6
+        uses: $/.github/actions/runner-network-diagnostics
+        with:
+          operation: probe
+          phase: hardened
 
       - name: Test routing host DNS through StepSecurity
         id: repair
@@ -182,24 +77,18 @@ jobs:
 
       - name: Probe repaired DNS under block mode
         if: always() && !cancelled() && steps.repair.outcome == 'success'
-        timeout-minutes: 7
-        shell: bash
-        run: |
-          # Docker's Go resolver can cache resolv.conf for five seconds.
-          sleep 6
-          timeout 90 docker pull "$CURL_IMAGE" || echo "::warning::Container download still failed after repair."
-          bash "$DIAGNOSTIC_DIR/probe.sh" repaired
+        timeout-minutes: 8
+        uses: $/.github/actions/runner-network-diagnostics
+        with:
+          operation: probe
+          phase: repaired
 
       - name: Capture final DNS and agent evidence
         if: always()
         timeout-minutes: 1
-        shell: bash
-        run: |
-          # A second snapshot helps detect a runner service rewriting our repair.
-          { date -u; ls -l /etc/resolv.conf; cat /etc/resolv.conf; } | tee "$DIAGNOSTIC_DIR/final-dns.log"
-          # Agent logs/config/status can contain credentials. Do not upload or
-          # print them. Probe-specific enforcement.log contains only our fields.
-          systemctl is-active agent > "$DIAGNOSTIC_DIR/agent-state.txt" || true
+        uses: $/.github/actions/runner-network-diagnostics
+        with:
+          operation: capture
 
       - name: Upload diagnostic evidence
         if: always()
@@ -214,31 +103,8 @@ jobs:
       - name: Report diagnostic result
         if: always()
         timeout-minutes: 1
-        shell: bash
-        env:
-          EXPECT_REPAIR: ${{ github.event_name == 'pull_request' || inputs.test_resolver_repair }}
-          REPAIR_FIRST: ${{ matrix.sample > 3 }}
-        run: |
-          sudo -n systemctl is-active --quiet agent
-          # An unlisted destination must never succeed, even before repair.
-          test ! -f "$DIAGNOSTIC_DIR/policy-failed"
-          phases=(hardened)
-          if [[ "$EXPECT_REPAIR" == true ]]; then
-            phases=(repaired)
-            if [[ "$REPAIR_FIRST" == true ]]; then
-              phases+=(hardened)
-            elif [[ -f "$DIAGNOSTIC_DIR/hardened-connectivity-failed" || -f "$DIAGNOSTIC_DIR/hardened-incomplete" ]]; then
-              echo "::notice::Original DNS failed; evaluating recovery. Original evidence is retained."
-              echo "Original DNS failed; see the before/after tables and uploaded evidence." >> "$GITHUB_STEP_SUMMARY"
-            fi
-          fi
-          for phase in "${phases[@]}"; do
-            test -f "$DIAGNOSTIC_DIR/$phase-complete"
-            for finding in incomplete connectivity-failed; do
-              if [[ -f "$DIAGNOSTIC_DIR/$phase-$finding" ]]; then
-                echo "::error::Diagnostic finding: $phase-$finding (see summary and logs)."
-                exit 1
-              fi
-            done
-          done
-          echo "Verified allowed connectivity and enforcement for: ${phases[*]}" >> "$GITHUB_STEP_SUMMARY"
+        uses: $/.github/actions/runner-network-diagnostics
+        with:
+          operation: report
+          expect-repair: ${{ github.event_name == 'pull_request' || inputs.test_resolver_repair }}
+          repair-first: ${{ matrix.sample > 3 }}

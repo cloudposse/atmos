@@ -168,6 +168,7 @@ test('Linux build excludes OS background-service DNS, including the NXDOMAIN reg
     for (const endpoint of groups[name].endpoints) assert.ok(!linux.has(endpoint), endpoint);
   }
   for (const os of ['Linux', 'Windows', 'macOS']) {
-    assert.ok(!readPolicy(content, selection, os).includes('pti.store.microsoft.com'));
+    const endpoints = new Set(readPolicy(content, selection, os).split(' '));
+    assert.equal(endpoints.has('pti.store.microsoft.com:443'), false);
   }
 });

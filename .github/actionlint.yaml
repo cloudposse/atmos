@@ -11,3 +11,4 @@ paths:
   .github/workflows/*:
     ignore:
       - 'specifying action "\$/\.github/actions/harden-runner(?:/runtime)?" in invalid format because ref is missing'
+      - 'specifying action "\$/\.github/actions/runner-network-diagnostics" in invalid format because ref is missing'
