@@ -20,11 +20,15 @@ Decode only import-resolution inputs before processing imports. Preserve authent
 downloader settings, remote-cache options, and stack paths needed by the import adapters.
 Propagate resolver errors; optional missing imports retain their existing resolver behavior.
 YAML functions still run in their normal configuration-loading phase.
+The temporary resolver context preserves native function tags and defers unresolved typed fields,
+including whole-section and nested includes in auth, settings, and import options. It retains
+static sibling settings without modifying the original configuration or evaluating functions early.
 
 ## Validation
 
 Regression tests cover native and quoted includes, inline controls, required and optional missing
-imports, invalid conditions, resolver context, and CLI auth validation. The rebuilt CLI passed
+imports, invalid conditions, resolver context, whole-section and nested includes, static type
+errors, and CLI auth validation. The rebuilt CLI passed
 18 isolated runtime invocations covering imported values, invalid auth, required import errors,
 provisioned identities, manual override precedence, and remote-cache expiration.
 

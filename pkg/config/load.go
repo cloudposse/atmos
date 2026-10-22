@@ -1385,7 +1385,11 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 
 	// Now load the main config temporarily to process explicit imports.
 	// We need this because the import paths are defined in the main config.
-	if err := tempViper.MergeConfig(bytes.NewReader(content)); err != nil {
+	importContent, err := importContextYAML(content)
+	if err != nil {
+		return nil, fmt.Errorf("%w: prepare import context: %w", errUtils.ErrMergeConfiguration, err)
+	}
+	if err := tempViper.MergeConfig(bytes.NewReader(importContent)); err != nil {
 		return nil, fmt.Errorf("%w: merge main config: %w", errUtils.ErrMergeConfiguration, err)
 	}
 

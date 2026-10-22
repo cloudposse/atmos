@@ -123,3 +123,43 @@ func TestMergeImports_PreservesResolverContext(t *testing.T) {
 	assert.True(t, adapter.config.Settings.Pro.Enabled)
 	assert.Equal(t, "aws/iam-identity-center", adapter.config.Auth.Providers["test"].Kind)
 }
+
+func TestMergeConfig_DeferredImportContextSections(t *testing.T) {
+	for _, test := range []struct{ name, config, key, want string }{
+		{"auth", "auth: !include section.yaml", "auth.providers.local.kind", "mock"},
+		{"nested auth", "auth:\n  providers: !include section.yaml .providers", "auth.providers.local.kind", "mock"},
+		{"settings", "settings: !include section.yaml", "settings.github_username", "fixture-reader"},
+		{"imports", "imports: !include section.yaml", "imports.ttl", "1h"},
+	} {
+		for _, imports := range []string{"", "import: [base.yaml]\n"} {
+			t.Run(test.name+"/"+imports, func(t *testing.T) {
+				setupTestAdapters()
+				t.Cleanup(ResetImportAdapterRegistry)
+				dir := t.TempDir()
+				t.Chdir(dir)
+				t.Setenv("TEST_GIT_ROOT", dir)
+				createConfigFile(t, dir, "base.yaml", "mcp:\n  servers:\n    inherited:\n      command: imported-control\n")
+				createConfigFile(t, dir, "section.yaml", "providers:\n  local:\n    kind: mock\ngithub_username: fixture-reader\nttl: 1h\n")
+				createConfigFile(t, dir, "atmos.yaml", "base_path: ./\n"+imports+test.config+"\n")
+				v := viper.New()
+				v.SetConfigType("yaml")
+				require.NoError(t, mergeConfig(v, dir, CliConfigFileName, true))
+				assert.Equal(t, test.want, v.GetString(test.key))
+				if imports != "" {
+					assert.Equal(t, "imported-control", v.GetString("mcp.servers.inherited.command"))
+				}
+			})
+		}
+	}
+}
+
+func TestDecodeConfigForImports_RejectsStaticInvalidSections(t *testing.T) {
+	for _, section := range []string{"auth", "settings", "imports"} {
+		t.Run(section, func(t *testing.T) {
+			v := viper.New()
+			v.Set(section, "invalid-static-value")
+			_, err := decodeConfigForImports(v)
+			require.ErrorIs(t, err, errUtils.ErrMergeConfiguration)
+		})
+	}
+}
