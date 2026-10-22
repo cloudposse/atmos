@@ -24,15 +24,33 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sample: [1, 2, 3]
+        sample: [1, 2, 3, 4, 5, 6]
     env:
-      # Preload a fixed image so registry availability does not obscure the
-      # post-hardening container probes. No credentials enter the container.
+      # Use a fixed public probe image. No credentials enter the container.
       CURL_IMAGE: curlimages/curl:8.12.1@sha256:94e9e444bcba979c2ea12e27ae39bee4cd10bc7041a472c4727a558e213744e6
     steps:
-      # Deliberately before hardening: capture the runner's original DNS path.
-      # No checkout is needed; even a blocked checkout must leave evidence.
-      - name: Prepare probes and capture the baseline
+      # Harden Runner installs in its pre-job hook, before ALL normal steps.
+      # Capture the host resolver route under enforcement; do not claim an
+      # unprotected baseline. No checkout is required to collect evidence.
+      - name: Harden Runner
+        id: harden
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        with:
+          egress-policy: block
+          # Needed only to inspect DNS/firewall state and test the opt-in repair.
+          disable-sudo: false
+          allowed-endpoints: >-
+            api.github.com:443
+            auth.docker.io:443
+            codeload.github.com:443
+            github.com:443
+            proxy.golang.org:443
+            production.cloudflare.docker.com:443
+            *.r2.cloudflarestorage.com:443
+            registry-1.docker.io:443
+            release-assets.githubusercontent.com:443
+
+      - name: Prepare probes
         timeout-minutes: 4
         shell: bash
         run: |
@@ -92,13 +110,12 @@ jobs:
               printf '%s %s exit=%s %s\n' "$client" "$url" "$result" "$connection"
               printf '| %s | %s | %s | %s | %s |\n' "$phase" "$client" "$url" "$result" "$connection" >> "$GITHUB_STEP_SUMMARY"
               if [[ "$url" == https://example.com/ ]]; then
-                if [[ "$phase" == baseline && "$result" == 0 ]]; then
-                  touch "$DIAGNOSTIC_DIR/canary-$client"
-                elif [[ "$phase" != baseline && "$result" == 0 ]]; then
+                if [[ "$result" == 0 ]]; then
                   echo "::error::Unlisted destination example.com was reachable ($phase/$client)."
                   touch "$DIAGNOSTIC_DIR/policy-failed"
-                elif [[ "$phase" != baseline && ! -f "$DIAGNOSTIC_DIR/canary-$client" ]]; then
-                  echo "::warning::Blocked canary is inconclusive: baseline did not connect ($client)."
+                elif ! sudo -n grep -Fq 'domain not allowed: example.com.' /home/agent/agent.log; then
+                  # A failed connection alone does not prove enforcement.
+                  echo "::warning::Cannot confirm that the agent rejected example.com ($client)."
                   touch "$DIAGNOSTIC_DIR/incomplete"
                 fi
               elif [[ "$result" != 0 ]]; then
@@ -114,23 +131,8 @@ jobs:
             done
           done
           SCRIPT
-          # The only baseline network setup: pull a digest-pinned public image.
+          # Registry hosts are explicitly allowed: hardening is already active.
           timeout 90 docker pull "$CURL_IMAGE" || echo "::warning::Container image unavailable; host probes will still run."
-          bash "$DIAGNOSTIC_DIR/probe.sh" baseline
-
-      - name: Harden Runner
-        id: harden
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
-        with:
-          egress-policy: block
-          # Needed only to inspect DNS/firewall state and test the opt-in repair.
-          disable-sudo: false
-          allowed-endpoints: >-
-            api.github.com:443
-            codeload.github.com:443
-            github.com:443
-            proxy.golang.org:443
-            release-assets.githubusercontent.com:443
 
       - name: Probe unchanged DNS under block mode
         if: always() && steps.harden.outcome == 'success'
@@ -188,7 +190,8 @@ jobs:
           # A successful repair must not erase evidence that the original
           # configuration failed. Detailed per-destination results are above.
           test -f "$DIAGNOSTIC_DIR/hardened.log"
-          for marker in policy-failed incomplete baseline-connectivity-failed hardened-connectivity-failed repaired-connectivity-failed; do
+          sudo -n systemctl is-active --quiet agent
+          for marker in policy-failed incomplete hardened-connectivity-failed repaired-connectivity-failed; do
             if [[ -f "$DIAGNOSTIC_DIR/$marker" ]]; then
               echo "::error::Diagnostic finding: $marker (see summary and logs)."
               exit 1
