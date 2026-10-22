@@ -4,6 +4,7 @@ title: "Deploy AWS CDK and CDK Terrain with Atmos Hooks"
 authors: [osterman]
 tags: [documentation, dx]
 ---
+import CastEmbed from '@site/src/components/CastEmbed'
 import TryExample, { TryExamples } from '@site/src/components/TryExample';
 
 Infrastructure written with AWS CDK or CDK Terrain needs a synthesis step before it can be
@@ -12,6 +13,8 @@ is part of managing the application. Our new [CDK tutorial](/tutorials/deploy-cd
 shows how Atmos hooks run synthesis while Atmos stacks supply deployment configuration.
 
 <!--truncate-->
+
+<CastEmbed src="/casts/examples/cdk-cloudformation/lifecycle.cast" title="atmos aws cloudformation lifecycle with AWS CDK" chrome controls scrubber />
 
 ## The Problem
 
@@ -34,6 +37,8 @@ Choose between two complete setup tracks:
 - **With Terraform:** Deploy the same kind of AWS CDK template with a direct
   Terraform `aws_cloudformation_stack` resource. This track also shows how to deploy CDK Terrain's
   generated Terraform JSON directly with Terraform or OpenTofu, without CloudFormation.
+
+<CastEmbed src="/casts/examples/cdk-terraform/lifecycle.cast" title="atmos terraform lifecycle with CDK Terrain" chrome controls scrubber />
 
 Both tracks ship as runnable examples: [`cdk-cloudformation`](/examples/cdk-cloudformation)
 and [`cdk-terraform`](/examples/cdk-terraform) run against a local
