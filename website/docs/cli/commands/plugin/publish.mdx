@@ -1,0 +1,85 @@
+---
+title: atmos plugin publish
+sidebar_label: publish
+sidebar_class_name: command
+id: publish
+description: Publish a verified release layout to an OCI registry.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Publish a verified release layout to an OCI registry.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin publish --help" src="/casts/screengrabs/atmos-plugin-publish--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin publish <layout> --to=<repository> [--sign]
+```
+
+Before the first registry write, Atmos validates the destination and the signing flags locally. It
+then re-inspects every platform payload in the layout. Layouts can come from other tools or older
+versions, so `publish` never trusts how a layout was built. It applies the same rules as
+[`plugin pack`](pack.mdx#what-goes-into-a-release): a payload may contain only `plugin.yaml`,
+`schemas/**/*.json`, and the declared executable, and anything hidden, credential-like, state-like,
+linked, or not a native binary for the platform fails the publish. Nothing is uploaded in that case.
+
+The default output confirms publication and shows the package, version, platforms,
+immutable digest, repository, and signing result, followed by the inventory of files published for
+each platform with their sizes and modes. Request a structured format explicitly for automation.
+
+The release tag always comes from `metadata.version` in `plugin.yaml`. Publishing the same bytes
+again is a no-op, and a version tag that already points at different content is rejected, because
+published releases are immutable.
+
+## Arguments and flags
+
+<dl>
+  <dt><code>layout</code></dt>
+  <dd>OCI layout produced by plugin pack.</dd>
+  <dt><code>--to</code></dt>
+  <dd>Destination OCI repository, with or without the <code>oci://</code> prefix, and without a tag or digest,
+  for example <code>oci://registry.example.com/team/oidc</code>. A destination that includes a tag or digest is
+  rejected, because the tag is derived from the manifest version. Existing version tags cannot be replaced
+  with different content.</dd>
+  <dt><code>--sign</code></dt>
+  <dd>Sign the published index digest with Sigstore. Uses the same signing flow as <code>atmos plugin sign</code>.</dd>
+  <dt><code>--cosign-version</code></dt>
+  <dd>Exact managed Cosign 3 version used with <code>--sign</code>. Defaults to <code>3.1.3</code>. Requires <code>--sign</code>;
+  without it the command fails instead of ignoring the flag.</dd>
+  <dt><code>--yes</code>, <code>-y</code></dt>
+  <dd>Accept Sigstore transparency log publication without prompting when signing. Requires <code>--sign</code>;
+  without it the command fails instead of ignoring the flag.</dd>
+  <dt><code>--format</code></dt>
+  <dd>Output format: table (default), json, yaml, csv, or tsv. Also configurable with <code>ATMOS_PLUGIN_FORMAT</code>.</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos plugin publish ./oidc-release --to=oci://registry.example.com/team/oidc
+atmos plugin publish ./oidc-release --to=oci://registry.example.com/team/oidc --format=json
+```
+
+Publish and sign a release:
+
+```shell
+atmos plugin publish ./oidc-release --to=oci://ghcr.io/acme/oidc --sign --yes
+```
+
+Publishing and signing are separate registry operations. If signing fails, the release remains
+published and the command returns an error with its immutable digest.
+Retry the same command, or run `atmos plugin sign` against the reported digest. For repositories
+requiring signatures, publish with `--sign` before enabling a release for consumers.
+
+Publishing never modifies a discovery catalog. For small collections, configure the repository
+under `plugins.registries.<name>.repositories`; search builds a cached discovery index.
+For curated collections, a dedicated catalog maintainer can use
+[`atmos plugin catalog publish`](/cli/commands/plugin/catalog-publish) to publish snapshots separately.
+Serialize catalog writes through one owner or CI concurrency group: revision checks detect stale
+updates but are not a distributed lock or an atomic compare-and-swap guarantee.

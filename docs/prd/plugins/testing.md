@@ -4,7 +4,7 @@
 
 Plugin authors own their repository's tests and release pipeline. Atmos supplies SDK testing helpers and a runtime contract runner. Contract tests exercise the plugin through the actual Atmos adapter, not just direct Go method calls.
 
-Reuse Atmos's existing automation test-step execution and reporting for authored assertion steps, cancellation, and grouped results. The plugin runner adds capability fixtures and mocked API services, rather than a second scheduling or results engine. Authors can also test shared Starlark logic with the existing automation testing workflow (`website/docs/automation/testing.mdx`; added with the CLI release layer); the proposed plugin contract runner does not depend on the still-proposed general Starlark test-file discovery feature.
+Reuse Atmos's existing automation test-step execution and reporting for authored assertion steps, cancellation, and grouped results. The plugin runner adds capability fixtures and mocked API services, rather than a second scheduling or results engine. Authors can also test shared Starlark logic with the existing [automation testing workflow](../../../website/docs/automation/testing.mdx); the proposed plugin contract runner does not depend on the still-proposed general Starlark test-file discovery feature.
 
 ```shell
 # Go-specific unit tests, independent of an Atmos source checkout.
@@ -87,7 +87,7 @@ The first-release runner supports Go auth and executable-command fixtures. Starl
 - Validate the generated Atmos configuration schema and shared manifest schemas, including publisher settings and `on: plugin` input/schema registration. Reject unsupported required contracts and reserved settings rather than silently accepting them.
 - Test common output formats, terminal/color degradation, installed green dots, narrow widths, and CSV/TSV quoting. Machine output must remain parseable and free of UI decorations.
 - Target at least 90% aggregate statement coverage for authored plugin implementation, auth registry, shared OCI/API changes, plugin CLI, and SDK. Report the exact scope and exclusions (generated protobufs, generated mocks, and test support); do not present scoped coverage as whole-repository or Codecov patch coverage. Prioritize behavioral negative paths over tests that mirror implementation.
-- Record and validate the emulator-backed lifecycle using `atmos --chdir=demo/casts casts generate examples native-auth-plugins lifecycle` and the corresponding `casts validate` command. Embed the recording in the changelog post (`website/blog/2026-10-19-native-auth-plugins.mdx`; added with the CLI release layer). The generated and downloaded binaries both run the OIDC suite; the recording is not evidence of a live enterprise IdP deployment.
+- Record and validate the emulator-backed lifecycle using `atmos --chdir=demo/casts casts generate examples native-auth-plugins lifecycle` and the corresponding `casts validate` command. Embed the recording in the [changelog post](../../../website/blog/2026-10-19-native-auth-plugins.mdx). The generated and downloaded binaries both run the OIDC suite; the recording is not evidence of a live enterprise IdP deployment.
 - Generate protocol bindings with `atmos dev generate proto`, which pins tools through the existing custom-command/toolchain mechanism; no `generate.sh` entry point. Verify parity of `pkg/plugin/proto` and `sdk/proto` from one source.
 
 ## Additional release gates

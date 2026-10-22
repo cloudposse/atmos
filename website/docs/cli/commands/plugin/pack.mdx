@@ -1,0 +1,69 @@
+---
+title: atmos plugin pack
+sidebar_label: pack
+sidebar_class_name: command
+id: pack
+description: Pack precompiled native executables and schemas into a multi-platform OCI layout.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Pack precompiled native executables and schemas into a multi-platform OCI layout.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin pack --help" src="/casts/screengrabs/atmos-plugin-pack--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin pack [directory] --output=<layout>
+```
+
+Success confirms the local OCI layout path and displays the package ID, version, and included
+platforms, followed by an inventory of every file packed for each platform with its size and mode.
+Review the inventory before you publish. Packing prepares a local release; use
+[plugin publish](publish.mdx) to upload it to a registry.
+
+## What goes into a release
+
+Each platform payload contains only:
+
+- `plugin.yaml`
+- `schemas/**/*.json`
+- the executable that the manifest declares for that platform
+
+Nothing else is added, and Atmos rejects the pack instead of silently skipping a problem file:
+
+- Hidden files and directories, such as `.git`, `.terraform`, `.atmos`, `.env`, `.aws`, or `.ssh`.
+- Names that look like credentials, keys, or state: `.tfstate`, `.tfvars`, `.pem`, `.key`, `.p12`,
+  `.pfx`, `id_rsa`-style names, `terraform.rc`, and anything containing `credentials` or `secret`.
+- Symbolic links, hard links, directories, and special files. Only regular files are packed.
+- Any file under `schemas/` that is not a `.json` file.
+- An executable that is not a native binary for its platform. Atmos reads the file header (ELF
+  for Linux and BSD, Mach-O for macOS, PE for Windows) and checks the operating system and
+  architecture; it never runs the file. A script, or a binary built for another platform, fails
+  with a hint to build for that platform.
+
+The same rules run in [`plugin validate`](validate.mdx) and again when a release is published or
+extracted, so a layout edited by hand cannot smuggle extra files into a release.
+
+## Arguments and flags
+
+<dl>
+  <dt><code>directory</code></dt>
+  <dd>Package directory; defaults to the current directory.</dd>
+  <dt><code>--output, -o</code></dt>
+  <dd>New destination directory for the OCI layout. Every declared platform must already be compiled.</dd>
+  <dt><code>--format</code></dt>
+  <dd>Output format: table (default), json, yaml, csv, or tsv. Also configurable with <code>ATMOS_PLUGIN_FORMAT</code>.</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos plugin pack ./corporate-oidc --output=./oidc-release
+atmos plugin pack ./corporate-oidc --output=./another-release --format=json
+```

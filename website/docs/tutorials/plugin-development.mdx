@@ -1,0 +1,411 @@
+---
+title: Develop a Native Plugin
+sidebar_label: Plugin Development
+sidebar_position: 14
+id: plugin-development
+description: Build, test, and publish a native Atmos plugin, then run your local build in a project through a profile without reinstalling, and govern local builds with policy.
+---
+
+import Experimental from '@site/src/components/Experimental'
+
+<Experimental />
+
+This guide follows one plugin from the first scaffold to a published release, then shows how to run the build on your machine, in the project that consumes it, without publishing or reinstalling after every change.
+
+## Overview
+
+A native plugin is a compiled Go program that Atmos starts to provide an authentication provider, a credential-exchange identity, or a command. Consumers normally install a signed, locked release from an OCI registry. That is the right behavior for a teammate or a pipeline, and the wrong one while you are still changing the code: a publish, an install, and a lock update for every edit would make the feedback loop minutes long.
+
+A package declaration can instead name a directory with `plugins.packages.<alias>.path`. Atmos then reads the manifest and the executable from that directory every time it starts the plugin. You rebuild, and the next command runs the new executable. Because you set `path` in a [profile](/cli/configuration/profiles) of your own, it applies only to you and only while you ask for it. Without the profile, the same project uses the registry release.
+
+**Key benefits:**
+- **Fast loop**: Rebuild with `atmos plugin build` and rerun the command. There is nothing to reinstall.
+- **Opt-in and personal**: The local build lives in a profile you choose. The committed `atmos.yaml` and the lock keep describing the release.
+- **Same project, two modes**: Deactivate the profile and the identical commands run the locked release.
+- **Governed**: `on: plugin` policy rules can allow local builds only below approved directories, only for testing, or only under conventions you define.
+
+## Prerequisites
+
+- An Atmos installation and Go on your `PATH`. Only plugin authors need Go; consumers install compiled releases.
+- An OCI registry that accepts pushes from your machine. This guide uses a registry listening on `localhost:5001`; Atmos talks plain HTTP to `localhost`. Any registry works, and port `5000` is avoided because macOS uses it for AirPlay.
+
+## Quick Start
+
+All commands run from the project directory, `infra/`. It starts with one file:
+
+```yaml title="infra/atmos.yaml"
+base_path: "."
+```
+
+### 1. Scaffold, build, and test the plugin
+
+Generate the OIDC starter next to the code that uses it:
+
+```shell
+atmos plugin create ./plugins/corporate-oidc --kind=acme/oidc --module=example.com/acme/oidc --defaults
+```
+
+When you work against an unreleased Atmos checkout, add `--sdk-path=/absolute/path/to/atmos/sdk`. Released builds select the Plugin SDK that matches your Atmos version.
+
+Compile the executable and run the conformance suite, which uses local mock endpoints and needs no identity provider:
+
+```shell
+atmos plugin build ./plugins/corporate-oidc
+atmos plugin test ./plugins/corporate-oidc
+```
+
+```text
+✓ Plugin built successfully: plugins/corporate-oidc/bin/plugin
+▶ Testing plugin in plugins/corporate-oidc with isolated fixtures...
+✓ Plugin contract: executable capabilities match plugin.yaml
+✓ OIDC lifecycle: PKCE login, token validation, credential exchange, cached reuse, refresh, and logout (local fixtures)
+✓ Command about: output and exit status match the fixture
+✓ All 3 plugin checks passed.
+```
+
+Unlike `plugin validate`, `plugin test` starts the plugin executable, so build first. See [`plugin build`](/cli/commands/plugin/build) and [`plugin test`](/cli/commands/plugin/test).
+
+### 2. Publish the first release
+
+Package the executable and publish it. The package ID `acme/oidc` and version `0.1.0` come from `plugin.yaml`.
+
+```shell
+atmos plugin pack ./plugins/corporate-oidc --output=./oidc-release
+atmos plugin publish ./oidc-release --to=oci://localhost:5001/acme/oidc
+```
+
+```text
+✓ Published acme/oidc version 0.1.0.
+Plugin	acme/oidc
+Version	0.1.0
+Platforms	darwin/arm64
+Digest	sha256:eb63bf7c8cb4f038acd481f105790a779a3cc0e4d3f740d3b43326ae8d95779c
+Repository	oci://localhost:5001/acme/oidc
+Signing	Not signed by this command
+Files (darwin/arm64)	bin/plugin  20.6 MiB  0755
+Files (darwin/arm64)	plugin.yaml  892 B  0644
+Files (darwin/arm64)	schemas/broker.json  212 B  0644
+Files (darwin/arm64)	schemas/provider.json  365 B  0644
+```
+
+A release holds only `plugin.yaml`, the JSON schemas, and the executables the manifest declares. A registry refuses to overwrite a version with different bytes, so publish a new `version` for every change you want consumers to see. See [`plugin pack`](/cli/commands/plugin/pack) and [`plugin publish`](/cli/commands/plugin/publish).
+
+The scaffold declares only the platform of the machine that created it. List every OS and architecture you ship under `spec.platforms` in `plugin.yaml` before you publish for others.
+
+### 3. Install the release into the project
+
+```shell
+atmos plugin install oci://localhost:5001/acme/oidc --as=corporate
+```
+
+```text
+✓ corporate (0.1.0)
+```
+
+Atmos records a caret pin of the release it installed in `atmos.yaml` and the exact digests in `.atmos.plugins.lock.yaml`:
+
+```yaml title="infra/atmos.yaml"
+base_path: "."
+plugins:
+  packages:
+    corporate:
+      source: oci://localhost:5001/acme/oidc
+      version: ^0.1.0
+```
+
+Add an authentication provider that uses the plugin's kind, then check the plugin and run its `about` command:
+
+```yaml title="infra/atmos.yaml"
+auth:
+  providers:
+    corporate:
+      kind: acme/oidc
+      spec:
+        issuer: https://login.example.com
+        client_id: native-application-client-id
+        scopes: [openid, profile, offline_access]
+```
+
+```shell
+atmos plugin list
+atmos plugin run corporate --
+```
+
+```text
+corporate	acme/oidc	0.1.0	installed
+▶ Running corporate command about.
+▶ Display the plugin name and supported authentication flow
+acme/oidc: OIDC PKCE login and AWS credential exchange
+This is the plugin's about command. No authentication was performed.
+To sign in, configure an auth identity using this plugin and run:
+  atmos auth login --identity <identity>
+```
+
+Commit `atmos.yaml` and `.atmos.plugins.lock.yaml`. This is the state every teammate and pipeline restores.
+
+### 4. Run your local build through a profile
+
+Create a profile whose only job is to point the package at your build directory. The name is yours to choose; Atmos gives no meaning to it. This guide uses `kestrel-7`.
+
+```yaml title="infra/.atmos/profiles/kestrel-7/atmos.yaml"
+plugins:
+  packages:
+    corporate:
+      path: plugins/corporate-oidc
+```
+
+Profiles deep-merge over the base configuration, so `source` and `version` stay in the merged result. They are unused while `path` is set. A relative `path` is relative to the project directory (the directory of the root `atmos.yaml`); an absolute path also works.
+
+Select the profile with `--profile` or `ATMOS_PROFILE`:
+
+```shell
+atmos plugin list
+atmos --profile=kestrel-7 plugin list
+ATMOS_PROFILE=kestrel-7 atmos plugin info corporate
+```
+
+```text
+corporate	acme/oidc	0.1.0	installed
+corporate	acme/oidc	0.1.0	path
+Alias	corporate
+Status	path
+Path	/path/to/infra/plugins/corporate-oidc
+Origin	plugins.packages.corporate.path (local build; lock, signature and version checks are bypassed)
+Plugin	acme/oidc
+Version	0.1.0
+...
+```
+
+The state is `path` while the profile is active and `installed` without it. The name and version come from the local `plugin.yaml`.
+
+Run the plugin with the profile active:
+
+```shell
+atmos --profile=kestrel-7 plugin run corporate --
+```
+
+```text
+⚠ Plugin corporate runs from local path plugins/corporate-oidc; lock, signature and version checks are bypassed.
+▶ Running corporate command about.
+...
+```
+
+Atmos prints that warning once per alias, when a command first starts the plugin. Commands that only read configuration, such as `plugin list` and `plugin info`, do not start it and do not warn.
+
+Profile directories are discovered in several places (see [profile discovery](/cli/configuration/profiles#profile-discovery)). `.atmos/profiles/` keeps the profile inside the project, so add it to `.gitignore`. A profile under your user configuration directory (`~/.config/atmos/profiles/kestrel-7/atmos.yaml`) works the same way and changes nothing in the repository.
+
+### 5. Edit, rebuild, and rerun
+
+Change the first line of the `about` output in `plugins/corporate-oidc/command.go` from `OIDC PKCE login and AWS credential exchange` to `OIDC PKCE login and AWS credential exchange (local build)`, then rebuild and test:
+
+```shell
+atmos plugin build ./plugins/corporate-oidc
+atmos plugin test ./plugins/corporate-oidc
+```
+
+The test fails because the fixture still expects the old text. The failure shows the first difference and both values:
+
+```text
+✓ Plugin contract: executable capabilities match plugin.yaml
+✓ OIDC lifecycle: PKCE login, token validation, credential exchange, cached reuse, refresh, and logout (local fixtures)
+✗ Command about: output and exit status match the fixture
+    stdout does not match the fixture (first difference at byte 54):
+      expected: "acme/oidc: OIDC PKCE login and AWS credential exchange\nThis is ..."
+      actual:   "acme/oidc: OIDC PKCE login and AWS credential exchange (local build)\nThis is ..."
+✗ Plugin tests failed: 2 passed, 1 failed.
+```
+
+Make the same edit to the `about` fixture in `plugin.tests.yaml`, run the test again, and run the plugin. There is no install step:
+
+```shell
+atmos --profile=kestrel-7 plugin run corporate --
+```
+
+```text
+⚠ Plugin corporate runs from local path plugins/corporate-oidc; lock, signature and version checks are bypassed.
+▶ Running corporate command about.
+▶ Display the plugin name and supported authentication flow
+acme/oidc: OIDC PKCE login and AWS credential exchange (local build)
+...
+```
+
+The next command reads `plugin.yaml` and the executable from the directory again, so every rebuild is picked up. Edits to `plugin.yaml` need a rebuild too, because the executable embeds the manifest.
+
+### 6. Return to the release
+
+Run the same command without the profile:
+
+```shell
+atmos plugin run corporate --
+```
+
+```text
+▶ Running corporate command about.
+▶ Display the plugin name and supported authentication flow
+acme/oidc: OIDC PKCE login and AWS credential exchange
+...
+```
+
+The output has no `(local build)` text and there is no warning: Atmos restored the locked release from the cache. When your change is ready, bump `metadata.version` in `plugin.yaml`, build, test, then `pack` and `publish` again, and move consumers with [`plugin update`](/cli/commands/plugin/update).
+
+## What a `path` package bypasses
+
+A package that sets `path` runs code you control, so Atmos skips the checks that exist to protect consumers from unreviewed code:
+
+| Skipped | Why |
+|---|---|
+| Lock entry | Nothing is read from or written to `.atmos.plugins.lock.yaml`. |
+| Download and cache | The directory is used in place. There is no digest to verify. |
+| Signature and trusted-publisher checks | A local build has no signature. `plugins.policy.require_signature` governs released packages only. |
+| Version constraint | The `version` you declared is not compared with the manifest in the directory. |
+| Automatic installation | `atmos plugin install` skips the package with a notice. |
+
+Policy still applies. Every activation of a `path` package is checked with `origin: development` and `operation: activate`, and `atmos plugin test <dir>` is checked with `operation: test`. See [policy](#govern-local-builds-with-policy) below.
+
+If `enabled: false` is set on the package, the `path` is ignored and the package stays disabled.
+
+## In CI and with `--frozen`
+
+`atmos plugin install --frozen` restores exactly what the lock records, so it refuses while the active configuration sets `path`. The hint names the active profiles:
+
+```text
+Error: plugin declarations or artifacts differ from the release lock
+
+plugins.packages.corporate.path is set
+
+💡 The active configuration sets path for corporate, which runs a local build with no lock entry. Frozen installs are
+for released packages: run without --frozen, or use a configuration that does not set path (active profiles: kestrel-7).
+```
+
+Plain `atmos plugin install` prints `Skipping plugin corporate: plugins.packages.corporate.path runs a local build, which is never fetched or locked.` and leaves the declaration and the lock alone.
+
+`atmos plugin remove corporate` refuses for the same reason: the path comes from configuration, not from a file `remove` wrote. Edit the profile, or deactivate it.
+
+Keep local profiles out of pipelines. A pipeline that does not select your profile restores the locked release, and CI still refuses to create a lock entry that is not committed. A pipeline that does select a profile with `path` runs unlocked code, so protect against that with policy.
+
+## Govern local builds with policy
+
+Local builds are the one place a plugin runs without a signature or a lock, so organizations that use [plugin policies](/policies/plugins) usually add rules for them. Rules load from `policy.d/` or `ATMOS_POLICY_DIR`. The inputs that matter here:
+
+| Input | Value for a local build |
+|---|---|
+| `input.origin` | `development` |
+| `input.operation` | `activate` when a command starts the plugin, `test` for `atmos plugin test` |
+| `input.path` | The build directory: a project-relative slash path such as `plugins/corporate-oidc`, or an absolute path when it is outside the project. It never contains `..`. |
+| `input.profiles` | The active profile names exactly as typed, in activation order; empty when none is active. |
+
+### Allow a localhost registry
+
+A rule that permits only an approved registry also denies a local registry. Add `localhost:5001` to its allowed authorities. Entries are exact authorities, including the port:
+
+```yaml title="infra/policy.d/plugins.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: plugin-registries
+  description: Plugins must come from an approved registry.
+spec:
+  policies:
+    approved-registries:
+      on: plugin
+      action: deny
+      reason: Plugins and catalogs must use an approved registry
+      with:
+        allowed_registries:
+          - registry.example.com
+          - "localhost:5001"
+      rule: >-
+        input.origin == 'layout' || (input.origin != 'development' && !(input.registry in params.allowed_registries))
+```
+
+This rule leaves `origin: development` to other rules, so it permits `path` packages and `plugin test`, and still denies offline layouts. Add the next rules to restrict development.
+
+### Allow local builds only under approved directories
+
+```yaml title="infra/policy.d/plugin-development.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: plugin-development
+  description: Local plugin builds are limited to approved directories.
+spec:
+  policies:
+    approved-dev-roots:
+      on: plugin
+      action: deny
+      reason: Local plugin builds must live under an approved directory
+      with:
+        dev_roots:
+          - plugins/
+      rule: "input.origin == 'development' && !params.dev_roots.exists(r, input.path.startsWith(r))"
+```
+
+A profile that points `path` at `scratch` is denied, for activation and for `atmos plugin test scratch`:
+
+```text
+Error: policy denied execution
+
+plugin-development/approved-dev-roots:
+
+Local plugin builds must live under an approved directory
+```
+
+A plugin outside the project has an absolute `path`, so a relative root never matches it. List an absolute root if you want to allow a sibling checkout, and note that it is then specific to one machine layout.
+
+### Allow only `plugin test` for development
+
+To let authors test but not run unlocked code through Atmos, deny every development operation except `test`:
+
+```yaml
+    development-test-only:
+      on: plugin
+      action: deny
+      reason: Local plugin builds may be tested but not run
+      rule: "input.origin == 'development' && input.operation != 'test'"
+```
+
+`atmos --profile=kestrel-7 plugin run corporate --` is denied, while `atmos plugin test ./plugins/corporate-oidc` passes. `atmos plugin build` is never a policy operation, because it compiles source, admits nothing, and runs no plugin code.
+
+### Use profile names for audit and team conventions
+
+`input.profiles` lets a rule require a convention, such as a `local-` prefix, so activations of local builds are recognizable in logs and reviews:
+
+```yaml
+    development-profile-convention:
+      on: plugin
+      action: deny
+      reason: Activate local plugin builds with a profile named local-*
+      rule: >-
+        input.origin == 'development' && input.operation == 'activate' &&
+        !input.profiles.exists(p, p.startsWith('local-'))
+```
+
+With this rule `--profile=kestrel-7` is denied and `--profile=local-kestrel` runs. The rule is limited to `activate` because `plugin test` runs from a directory argument and has no profile.
+
+:::caution
+Profile names are chosen by the developer, so any rule that depends on a name can be avoided by renaming the profile, or by setting `path` in `atmos.yaml`, where no profile is involved. Use `input.profiles` for audit and organization conventions. Gate trust on `input.origin` and `input.path`, and protect the policy directory and the Atmos runtime as described in [enforcement](/policies/plugins#enforcement).
+:::
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
+|---|---|
+| `policy denied execution` naming a `plugin-*` rule | A policy rule matched `origin: development`, the `path`, the operation, or the profile list. Read the rule's `reason`, then move the build under an approved root, use the required profile name, or change the policy. `atmos plugin build` is never denied. |
+| `plugin declarations or artifacts differ from the release lock` with `plugins.packages.<alias>.path is set` | `--frozen` was run with a profile that sets `path`. Run without `--frozen`, or without that profile. |
+| `plugin package runs from a local path set in configuration` | `atmos plugin remove` cannot remove a package whose `path` comes from configuration. Edit the profile or `atmos.yaml`, or deactivate the profile. |
+| `plugin list` shows state `broken` and a warning that `plugin.yaml` cannot be read | The directory in `path` does not exist or holds no `plugin.yaml`. Check the path (relative paths are relative to the project directory) and run `atmos plugin build <dir>`. |
+| `plugin run` fails with `no such file or directory` for `bin/plugin` | The executable is missing. Run `atmos plugin build <dir>`. The hint names the resolved directory. |
+| `profile not found` | `--profile` or `ATMOS_PROFILE` names a profile that no discovery location contains. The error lists the available profiles; `atmos profile list` shows where each one lives. |
+| Changes are not picked up | The profile is not active, so the release runs. Check that `atmos plugin list` shows state `path`. If the behavior of `plugin.yaml` changed, rebuild: the executable embeds the manifest. |
+| `plugin source looks like a filesystem path` | `atmos plugin install ./dir` was run. `install` fetches releases only. Declare `path` in a profile instead. |
+
+## Clean up
+
+Delete the profile directory (and the `.gitignore` entry you added for it). The declaration in `atmos.yaml` and the lock are untouched, because the profile never wrote to them.
+
+## Next steps
+
+- [`atmos plugin`](/cli/commands/plugin/usage) covers the full lifecycle, including signing releases and registry authentication.
+- [Plugins configuration](/cli/configuration/plugins) lists every `plugins.packages.<alias>` field, including `path`.
+- [Plugin policies](/policies/plugins) documents all inputs and operations.
+- [Profiles](/cli/configuration/profiles) explains discovery, activation, and merge behavior.
