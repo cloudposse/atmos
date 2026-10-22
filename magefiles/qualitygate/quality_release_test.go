@@ -21,11 +21,14 @@ func TestQualityReleasePolicy(t *testing.T) {
 	for _, tc := range []struct {
 		name, label, target, next, failure string
 		pass                               bool
+		historyConflict                    bool
 	}{
 		{name: "no-release without milestone", label: "no-release", pass: true},
 		{name: "missing label"},
 		{name: "conflicting labels", label: "no-release,patch"},
 		{name: "missing milestone", label: "patch", next: "v1.234.0"},
+		{name: "patch after merged minor", label: "patch", target: "v1.233.1", next: "v1.233.1", historyConflict: true},
+		{name: "history API failure", label: "patch", target: "v1.233.1", next: "v1.233.1", failure: "/compare/"},
 		{name: "patch into patch", label: "patch", target: "v1.233.1", next: "v1.233.1", pass: true},
 		{name: "patch into minor", label: "patch", target: "v1.234.0", next: "v1.234.0", pass: true},
 		{name: "minor into patch", label: "minor", target: "v1.233.1", next: "v1.233.1"},
@@ -58,6 +61,26 @@ func TestQualityReleasePolicy(t *testing.T) {
 				if strings.Contains(path, "milestones?") {
 					return githubtest.Respond([]milestone.Milestone{{Number: 1, Title: tc.next, State: "open"}}, out)
 				}
+				switch {
+				case strings.HasSuffix(path, "/atmos/"):
+					return githubtest.Respond(map[string]string{"default_branch": "main"}, out)
+				case strings.HasSuffix(path, "/commits/main"):
+					return githubtest.Respond(map[string]string{"sha": githubtest.SHA}, out)
+				case strings.Contains(path, "/compare/"):
+					if tc.historyConflict {
+						return githubtest.Respond(map[string]any{"status": "ahead", "total_commits": 1, "commits": []map[string]string{{"sha": githubtest.SHA}}}, out)
+					}
+					return githubtest.Respond(map[string]any{"status": "identical", "total_commits": 0, "commits": []any{}}, out)
+				}
+				if strings.Contains(path, "/commits/"+githubtest.SHA+"/pulls") {
+					return githubtest.Respond([]map[string]int{{"number": 44}}, out)
+				}
+				if strings.HasSuffix(path, "/pulls/44") {
+					merged := milestone.PullRequest{ReleasePR: milestone.ReleasePR{Number: 44, Milestone: &milestone.Milestone{Number: 2, Title: "v1.234.0", State: "open"}}, Merged: true}
+					merged.Base.Ref = "main"
+					merged.Labels = pr.Labels
+					return githubtest.Respond(merged, out)
+				}
 				require.Contains(t, path, "releases?")
 				return githubtest.Respond([]map[string]any{{"tag_name": "v1.233.0", "published_at": "2026-10-01T00:00:00Z"}}, out)
 			})
@@ -72,6 +95,11 @@ func TestQualityReleasePolicy(t *testing.T) {
 			body, ready := qualityMarkdown(&pr, gates, "")
 			require.Equal(t, tc.pass, ready)
 			require.Contains(t, body, "Release label and milestone")
+			if tc.historyConflict {
+				require.Contains(t, body, "cannot release v1.233.1")
+				require.Contains(t, body, "merged PR #44 assigned to v1.234.0")
+			}
+
 			if tc.failure != "" {
 				require.Contains(t, body, "GitHub evidence was unavailable")
 			}
@@ -186,6 +214,7 @@ func TestQualityReleaseMetadataEventsSelectAffectedPRs(t *testing.T) {
 		name, event, payload string
 		want                 []int
 	}{
+		{"merged PR", "pull_request_target", `{"action":"closed","number":42,"pull_request":{"merged":true}}`, []int{42, 43}},
 		{"PR milestone assignment", "pull_request_target", `{"action":"milestoned","number":42,"pull_request":{"number":42}}`, []int{42}},
 		{"PR release label", "pull_request_target", `{"action":"labeled","number":42,"label":{"name":"minor"}}`, []int{42}},
 		{"lower milestone created", "milestone", `{"action":"created","milestone":{"number":99}}`, []int{42, 43}},
@@ -197,7 +226,7 @@ func TestQualityReleaseMetadataEventsSelectAffectedPRs(t *testing.T) {
 			t.Setenv("GITHUB_EVENT_NAME", tc.event)
 			t.Setenv("GITHUB_EVENT_PATH", path)
 			q := qualityTestClient(t, func(path string, out any) error {
-				require.NotEqual(t, "pull_request_target", tc.event, "PR metadata events should select the PR directly")
+				require.Len(t, tc.want, 2, "repository state changes should select all open PRs")
 				require.Contains(t, path, "pulls?state=open")
 				pr := githubtest.PR(githubtest.Run())
 				pr.Updated = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)

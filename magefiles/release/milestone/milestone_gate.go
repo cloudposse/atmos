@@ -268,6 +268,9 @@ func (c *Client) publishPolicyVerdicts(prs []ReleasePR, entries []queueEntry, qu
 		return err
 	}
 	baseline, baselineErr := c.LatestStable()
+	if baselineErr == nil && requiresReleaseHistory(prs) {
+		baselineErr = c.CheckReleaseHistory(milestones, baseline)
+	}
 	verdicts, headVerdicts := evaluatePRs(prs, milestones, baseline, baselineErr)
 	for head := range queueHeads {
 		headVerdicts[head] = errors.Join(headVerdicts[head], queueVerdict(head, entries, verdicts))
@@ -304,4 +307,15 @@ func (c *Client) writeVerdictStatuses(verdicts map[string]error) error {
 		}
 	}
 	return errors.Join(failures...)
+}
+
+// Exempt-only batches must remain independent of release history availability.
+func requiresReleaseHistory(prs []ReleasePR) bool {
+	for _, pr := range prs {
+		label, err := ReleaseLabel(&pr)
+		if err == nil && label != "no-release" {
+			return true
+		}
+	}
+	return false
 }

@@ -5,7 +5,7 @@ on:
   # Release eligibility can change without a new commit. Always run trusted
   # default-branch code; these events never execute pull request source.
   pull_request_target:
-    types: [labeled, unlabeled, milestoned, demilestoned]
+    types: [labeled, unlabeled, milestoned, demilestoned, closed]
   milestone:
     types: [created, opened, edited, closed, deleted]
   release:

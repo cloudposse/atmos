@@ -1,6 +1,7 @@
 package qualitygate
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 
@@ -35,6 +36,12 @@ func (q *qualityClient) releasePolicy(pr *githubapi.PR) (qualityGate, error) {
 	}
 	if err = milestone.CheckMilestonePR(&releasePR, milestones, baseline); err != nil {
 		return releasePolicyFailure(err), nil
+	}
+	if err = c.CheckReleaseHistory(milestones, baseline); err != nil {
+		if errors.Is(err, milestone.ErrMilestonePolicy) {
+			return releasePolicyFailure(err), nil
+		}
+		return qualityGate{}, err
 	}
 	return qualityGate{Passed: true, Detail: fmt.Sprintf("%s fits next release %s (published baseline %s)", label, pr.Milestone.Title, baseline)}, nil
 }

@@ -163,6 +163,10 @@ func TestMilestoneGateLivePoliciesAndSharedHeads(t *testing.T) {
 					githubtest.JSON(t, w, prs)
 				case "/graphql":
 					githubtest.JSON(t, w, queueResponse([]queueEntry{queueItem(queueSHA, githubtest.Base, 1)}, false, ""))
+				case "/repos/cloudposse/atmos/commits/release/main":
+					githubtest.JSON(t, w, map[string]string{"sha": githubtest.SHA})
+				case "/repos/cloudposse/atmos/compare/v1.233.0..." + githubtest.SHA:
+					githubtest.JSON(t, w, map[string]any{"status": "identical", "total_commits": 0, "commits": []any{}})
 				case "/repos/cloudposse/atmos/milestones":
 					githubtest.JSON(t, w, []Milestone{m, future})
 				case "/repos/cloudposse/atmos/releases":

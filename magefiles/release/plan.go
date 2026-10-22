@@ -31,16 +31,7 @@ type Plan struct {
 	Unfinished  []int                  `json:"unfinished"`
 }
 
-type releasePull struct {
-	ReleasePR
-	Title       string `json:"title"`
-	Body        string `json:"body"`
-	Merged      bool   `json:"merged"`
-	MergeCommit string `json:"merge_commit_sha"`
-	User        struct {
-		Login string `json:"login"`
-	} `json:"user"`
-}
+type releasePull = milestone.PullRequest
 
 // plan reads current GitHub state without changing tags, releases or milestones.
 // Stable cuts require a complete milestone; candidates validate included changes
@@ -197,90 +188,22 @@ func (c *milestoneClient) collectReleaseEntries(plan *Plan, milestones []Milesto
 	if err != nil {
 		return err
 	}
-	commits, err := c.compareCommits(plan.PreviousTag, plan.Commit)
+	prs, err := c.ReleaseChanges(plan.PreviousTag, plan.Commit, plan.Branch)
 	if err != nil {
 		return err
 	}
-	if len(commits) == 0 && plan.Mode == releaseModeCut {
+	if len(prs) == 0 && plan.Mode == releaseModeCut {
 		return fmt.Errorf("%w: no changes since %s", ErrMilestonePolicy, plan.PreviousTag)
 	}
-	seen := map[int]bool{}
-	for _, commit := range commits {
-		if err = c.collectCommitEntries(plan, milestones, commit, seen, notes); err != nil {
+	for i := range prs {
+		pr := &prs[i]
+		if err = milestone.CheckIncludedPR(&pr.ReleasePR, milestones, plan.PreviousTag); err != nil {
 			return err
 		}
+		plan.Entries = append(plan.Entries, notes.noteEntry(pr))
 	}
 	notes.sortEntries(plan.Entries)
 	return nil
-}
-
-func (c *milestoneClient) collectCommitEntries(plan *Plan, milestones []Milestone, commit string, seen map[int]bool, notes *releaseNotesSelection) error {
-	prs, err := milestonePages[struct {
-		Number int `json:"number"`
-	}](c, "commits/"+commit+"/pulls?")
-	if err != nil {
-		return err
-	}
-	if len(prs) == 0 {
-		return fmt.Errorf("%w: commit %s has no associated PR", ErrMilestonePolicy, commit)
-	}
-	included := false
-	for _, associated := range prs {
-		if seen[associated.Number] {
-			included = true
-			continue
-		}
-		var pr releasePull
-		if err = c.Get(fmt.Sprintf("pulls/%d", associated.Number), &pr); err != nil {
-			return err
-		}
-		if !pr.Merged || pr.Base.Ref != plan.Branch {
-			continue
-		}
-		if err = milestone.CheckMilestonePR(&pr.ReleasePR, milestones, plan.PreviousTag); err != nil {
-			return err
-		}
-		seen[pr.Number] = true
-		included = true
-		plan.Entries = append(plan.Entries, notes.noteEntry(&pr))
-	}
-	if !included {
-		return fmt.Errorf("%w: commit %s has no eligible merged PR", ErrMilestonePolicy, commit)
-	}
-	return nil
-}
-
-func (c *milestoneClient) compareCommits(base, head string) ([]string, error) {
-	var all []string
-	for page := 1; page <= githubapi.PageLimit; page++ {
-		var comparison struct {
-			Status  string `json:"status"`
-			Commits []struct {
-				SHA string `json:"sha"`
-			} `json:"commits"`
-			Total int `json:"total_commits"`
-		}
-		err := c.Get(fmt.Sprintf("compare/%s...%s?per_page=100&page=%d", url.PathEscape(base), url.PathEscape(head), page), &comparison)
-		if err != nil {
-			return nil, err
-		}
-		if comparison.Status != "ahead" && comparison.Status != "identical" {
-			return nil, fmt.Errorf("%w: source diverges from previous release", ErrMilestonePolicy)
-		}
-		for _, commit := range comparison.Commits {
-			if !githubapi.SHAPattern.MatchString(commit.SHA) {
-				return nil, fmt.Errorf("%w: invalid compared commit", ErrMilestonePolicy)
-			}
-			all = append(all, commit.SHA)
-		}
-		if len(comparison.Commits) < githubapi.PageSize {
-			if len(all) != comparison.Total {
-				return nil, fmt.Errorf("%w: incomplete commit comparison", ErrMilestonePolicy)
-			}
-			return all, nil
-		}
-	}
-	return nil, fmt.Errorf("%w: commit comparison pagination limit", ErrMilestonePolicy)
 }
 
 func validateSourceCommit(actual, requested string) error {

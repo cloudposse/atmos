@@ -3,9 +3,7 @@
 package release
 
 import (
-	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -184,58 +182,6 @@ func TestReleasePlanRejectsClosedUnmergedMilestonePR(t *testing.T) {
 	require.ErrorContains(t, err, "milestone PR #44 is not merged; merge it or move it out of the milestone")
 }
 
-func TestReleaseCompareCommits(t *testing.T) {
-	for _, mode := range []string{"two pages", "http error", "diverged", "invalid SHA", "incomplete", "page limit"} {
-		t.Run(mode, func(t *testing.T) {
-			calls := 0
-			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
-				calls++
-				require.Equal(t, planPrefix+"compare/v1.233.0..."+githubtest.SHA, r.URL.Path)
-				require.Equal(t, strconv.Itoa(calls), r.URL.Query().Get("page"))
-				require.Equal(t, "100", r.URL.Query().Get("per_page"))
-				if mode == "http error" {
-					http.Error(w, "unavailable", http.StatusServiceUnavailable)
-					return
-				}
-				status := "ahead"
-				if mode == "diverged" {
-					status = "diverged"
-				}
-				count := 100
-				if mode != "page limit" && (mode != "two pages" || calls == 2) {
-					count = 1
-				}
-				commits := make([]map[string]string, count)
-				for i := range commits {
-					commits[i] = map[string]string{"sha": fmt.Sprintf("%040x", (calls-1)*100+i+1)}
-				}
-				if mode == "invalid SHA" {
-					commits[0]["sha"] = "short"
-				}
-				total := 101
-				if mode == "incomplete" {
-					total = 2
-				}
-				githubtest.JSON(t, w, map[string]any{"status": status, "commits": commits, "total_commits": total})
-			})
-			got, err := c.compareCommits("v1.233.0", githubtest.SHA)
-			if mode == "two pages" {
-				require.NoError(t, err)
-				require.Len(t, got, 101)
-				require.Equal(t, fmt.Sprintf("%040x", 1), got[0])
-				require.Equal(t, fmt.Sprintf("%040x", 101), got[100])
-			} else {
-				require.Error(t, err)
-				require.Nil(t, got)
-				if mode == "page limit" {
-					require.Equal(t, 100, calls)
-					require.ErrorContains(t, err, "pagination limit")
-				}
-			}
-		})
-	}
-}
-
 func TestReleasePlanPreviewIssueDoesNotBlockCut(t *testing.T) {
 	routes := planRoutes()
 	items := routes["issues"].([]map[string]any)
@@ -247,4 +193,22 @@ func TestReleasePlanPreviewIssueDoesNotBlockCut(t *testing.T) {
 	require.Equal(t, "v1.234.0", p.Version)
 	require.Equal(t, githubtest.SHA, p.Commit)
 	require.Equal(t, []int{43, 42}, []int{p.Entries[0].Number, p.Entries[1].Number})
+}
+
+func TestReleasePreflightRejectsPatchAfterMinorPRMerged(t *testing.T) {
+	for _, mode := range []string{"check", "cut", "candidate"} {
+		t.Run(mode, func(t *testing.T) {
+			routes := planRoutes()
+			patch := Milestone{Number: 1, Title: "v1.233.1", State: "open"}
+			minor := Milestone{Number: 2, Title: "v1.234.0", State: "open"}
+			routes["milestones"] = []Milestone{patch, minor}
+			routes["issues"] = []any{}
+			routes["pulls/42"] = planPull(42, "minor", &minor)
+			c := planHTTP(t, routes, "unreachable")
+			p, err := c.commandPlan(mode, "true", "")
+			require.Nil(t, p)
+			require.ErrorIs(t, err, ErrMilestonePolicy)
+			require.ErrorContains(t, err, "cannot release v1.233.1: source already includes merged PR #42 assigned to v1.234.0")
+		})
+	}
 }

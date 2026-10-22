@@ -92,7 +92,7 @@ jobs:
         run: atmos test local-actions packages
 
   release-rehearsal:
-    name: Release guard and GoReleaser rehearsal
+    name: Release process tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -120,8 +120,15 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Install package inspection tools
-        run: sudo apt-get update && sudo apt-get install -y libarchive-tools
+      # Native custom-command tests need libudev with CGO enabled for -race.
+      - name: Install package inspection tools and Linux build dependencies
+        run: |
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libarchive-tools libudev-dev pkg-config
 
       - name: Validate production GoReleaser configuration
         run: goreleaser check --config .goreleaser.yml

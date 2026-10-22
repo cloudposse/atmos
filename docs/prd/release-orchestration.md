@@ -40,6 +40,11 @@ fallback remains. Labels declare compatibility requirements and categorize notes
 - `no-release` PRs are exempt from milestone and release-order requirements.
 - Other PRs require the **lowest open stable-semver milestone**, ordered
   numerically, not by title, due date, creation date or API order.
+- The next milestone must also be viable from the unreleased commits already on
+  the default branch. If PRs for `1.234.0` have merged, creating `1.233.1` must
+  not make patch PRs mergeable. The merge gate, quality gate and release preflight
+  reject that state and identify the conflicting merged PRs and milestones.
+  They use the same commit-range validation; `no-release` remains exempt.
 - Compare its version against the highest published stable release. Patch
   milestones accept patch PRs; minor milestones accept patch/minor; major
   milestones accept all three. A minor PR cannot enter `1.233.1` after `1.233.0`.
