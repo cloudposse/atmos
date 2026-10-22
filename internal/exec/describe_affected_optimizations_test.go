@@ -657,6 +657,22 @@ module "subnets" {
 		assert.Contains(t, patterns[0], "/**")
 	})
 
+	t.Run("invalid provider reference that is not provider iteration still fails", func(t *testing.T) {
+		t.Parallel()
+		badPath := filepath.Join(tempDir, "components", "terraform", "conditional-provider")
+		require.NoError(t, os.MkdirAll(badPath, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(badPath, "main.tf"), []byte(`
+data "aws_caller_identity" "bad" {
+  provider = var.use_dev ? aws.dev : aws.prod
+}
+`), 0o644))
+
+		freshCache := newComponentPathPatternCache()
+		_, err := freshCache.getTerraformModulePatterns("conditional-provider", atmosConfig)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrFailedToLoadTerraformComponent)
+	})
+
 	t.Run("non-existent component returns empty", func(t *testing.T) {
 		t.Parallel()
 		patterns, err := cache.getTerraformModulePatterns("nonexistent", atmosConfig)
@@ -2392,6 +2408,24 @@ module "subnets" {
 			[]string{filepath.Join(tempDir, "some/other/file.txt")})
 		require.NoError(t, err)
 		assert.False(t, changed, "an unrelated change must not mark the component as changed")
+	})
+
+	t.Run("invalid provider reference that is not provider iteration still fails", func(t *testing.T) {
+		t.Parallel()
+		// Terraform-config-inspect emits "Invalid provider reference" for a conditional provider expression
+		// too. OpenTofu rejects that as well, so it must not be tolerated as provider iteration.
+		componentPath := filepath.Join(tempDir, "components/terraform/conditional-provider")
+		require.NoError(t, os.MkdirAll(componentPath, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(componentPath, "main.tf"), []byte(`
+data "aws_caller_identity" "bad" {
+  provider = var.use_dev ? aws.dev : aws.prod
+}
+`), 0o644))
+
+		_, err := areTerraformComponentModulesChanged("conditional-provider", atmosConfig,
+			[]string{filepath.Join(tempDir, "some/other/file.txt")})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrFailedToLoadTerraformComponent)
 	})
 
 	t.Run("component with unchanged module", func(t *testing.T) {

@@ -1425,7 +1425,10 @@ func processStacks(
 					// diags[0]'s text, so a genuine unrelated error sorting after the known-safe one would
 					// never appear in diagErr yet would still be silently discarded if only diagErr were
 					// checked.
-					if !allDiagnosticsAreModuleSourceInterpolation(diags) {
+					//
+					// OpenTofu provider iteration (`provider = aws.by_account[each.key]`) is the same kind of
+					// static-parser limitation, so it is skipped too (see allDiagnosticsAreKnownStaticParserLimitations).
+					if !allDiagnosticsAreKnownStaticParserLimitations(diags) {
 						// For other errors (syntax errors, permission issues, etc.), return error.
 						// Use ErrorBuilder to provide helpful context about the HCL parsing failure.
 						// This fixes https://github.com/cloudposse/atmos/issues/1864 by showing a clear error
