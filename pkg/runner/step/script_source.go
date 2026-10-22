@@ -208,7 +208,9 @@ func MaterializeScriptSource(step *schema.WorkflowStep, workDir string, render f
 
 // materializeScriptFile reads the script file named by source into the step's inline fields.
 func materializeScriptFile(step *schema.WorkflowStep, source, workDir string, render func(string) (string, error)) error {
-	if render != nil && strings.Contains(source, "{{") {
+	// Render whenever a renderer is supplied: hosts pass renderers that honor the configured step
+	// template delimiters, and rendering a plain path returns it unchanged.
+	if render != nil {
 		rendered, err := render(source)
 		if err != nil {
 			return TemplateFieldError(step, "source", err)

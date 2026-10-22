@@ -25,10 +25,10 @@ func TestCastValidatePropagatesTapeExpansionError(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrUnsupportedTapeOutputExtension), "got %v", err)
 }
 
-func TestCastValidateReturnsTapeFileLoadError(t *testing.T) {
+func TestCastValidateReturnsSourceLoadError(t *testing.T) {
 	err := (&CastHandler{}).Validate(&schema.WorkflowStep{
 		Name: "demo", Type: schema.TaskTypeCast, Mode: "session",
-		WorkingDirectory: t.TempDir(), TapeFile: "missing.tape",
+		WorkingDirectory: t.TempDir(), Source: "missing.tape",
 	})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrTapeSourceNotFound), "got %v", err)
