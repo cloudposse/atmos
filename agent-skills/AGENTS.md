@@ -35,6 +35,8 @@ command. Use `--no-color` for plain output. Use `--help=usage` to check invocati
 - **Native Kubernetes** -- Experimental manifest/Kustomize deployment via the Kubernetes Go SDK (no `kubectl`/`kustomize` binary).
 - **Hooks** -- Lifecycle automation before/after component operations.
 - **Policies** -- Experimental CEL saved-plan and lifecycle guardrails, with provider-native CI context.
+- **Native Plugins** -- Experimental compiled Go plugins (auth providers, identities, commands) installed from OCI
+  registries with a lock file, run locally through a profile that sets `plugins.packages.<alias>.path`, and governed by `on: plugin` policy.
 - **Steps** -- Shared typed actions used by workflows, custom commands, hooks, and cast recordings.
 - **Compositions** -- Named service groupings that validate systems made of component instances.
 - **GitOps** -- Native managed Git repositories, hooks, signed commits, and auth-aware clone/commit/push flows.
@@ -129,6 +131,7 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | Secrets: `secrets.vars`, `!secret`, backends, secret init/set/get/import/push/pull/shell/exec/validate                | `atmos-secrets`         | `agent-skills/skills/atmos-secrets/SKILL.md`         |
 | Hooks: lifecycle events, hook kinds, `kind: step`/`kind: steps`, `when:` conditions, scoping, `--skip-hooks`, toolchain-aware checks and uploads | `atmos-hooks`           | `agent-skills/skills/atmos-hooks/SKILL.md`           |
 | Experimental CEL policy authoring/tests, saved-plan guardrails, policy-required hooks, provider-native inputs and capability boundaries | `atmos-policy` | `agent-skills/skills/atmos-policy/SKILL.md` |
+| Native plugins (experimental): `plugins.packages`, `atmos plugin install/update/list/run`, release lock, registries and discovery, create/build/test/pack/publish/sign, local builds via a profile with `path`, `on: plugin` policy | `atmos-plugins` | `agent-skills/skills/atmos-plugins/SKILL.md` |
 | JSON Schema for stack manifests and atmos.yaml, IDE auto-completion, validate stacks/schema/config, SchemaStore      | `atmos-schemas`         | `agent-skills/skills/atmos-schemas/SKILL.md`         |
 | Atmos CI: Native CI, GitHub Actions containers, collapsible log groups, Atlantis, affected/all matrices, OIDC profiles, cache, Pro dispatch | `atmos-ci`              | `agent-skills/skills/atmos-ci/SKILL.md`              |
 | Cache: CI cache and Terraform registry cache                                                                         | `atmos-cache`           | `agent-skills/skills/atmos-cache/SKILL.md`           |
