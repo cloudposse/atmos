@@ -1,0 +1,56 @@
+commands:
+  - name: release
+    description: Release planning, publication, and milestone operations
+    working_directory: !repo-root .
+    env:
+      GOTOOLCHAIN: auto
+    commands:
+      - name: check
+        description: Validate and print the next milestone's exact release version and source SHA
+        steps:
+          - type: shell
+            command: go tool mage release:check cloudposse/atmos
+      - name: cut
+        description: Validate, dispatch, and follow a stable release of the next milestone
+        steps:
+          - name: plan
+            type: shell
+            command: go tool mage release:check cloudposse/atmos
+          - name: confirm
+            type: confirm
+            prompt: 'Do you want to cut {{ trimPrefix "v" (fromJson .steps.plan.value).version }}?'
+            default: "no"
+          - type: shell
+            env:
+              RELEASE_CONFIRMED: '{{ .steps.confirm.value }}'
+              RELEASE_APPROVED_PLAN: '{{ .steps.plan.value }}'
+            command: go tool mage release:cut cloudposse/atmos
+      - name: candidate
+        description: Dispatch and follow a prerelease while allowing unfinished milestone work
+        steps:
+          - type: shell
+            command: go tool mage release:candidate cloudposse/atmos
+      - name: milestones
+        description: Maintain release milestones and verify PR eligibility
+        commands:
+          - name: ensure
+            description: Keep the next three minor milestones open (never creates patch or major milestones)
+            steps:
+              - type: shell
+                command: go tool mage milestones:ensure cloudposse/atmos
+          - name: create
+            description: Create an explicitly versioned milestone (patch and major versions are manual)
+            arguments:
+              - name: version
+                description: Full stable release version, such as v1.233.1
+                required: true
+            env:
+              RELEASE_MILESTONE_VERSION: '{{ .Arguments.version }}'
+            steps:
+              - type: shell
+                command: go tool mage milestones:create cloudposse/atmos "$RELEASE_MILESTONE_VERSION"
+          - name: check
+            description: Reconcile release milestone statuses for open PRs and the merge queue
+            steps:
+              - type: shell
+                command: go tool mage milestones:check cloudposse/atmos

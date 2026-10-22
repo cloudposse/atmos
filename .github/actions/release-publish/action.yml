@@ -8,8 +8,8 @@ inputs:
     description: GitHub token; prepare/publish require contents write
     required: true
   release-id:
-    description: Exact GitHub release ID
-    required: true
+    description: Exact GitHub release ID (omitted only for build provenance)
+    default: ''
   commit:
     description: Full source commit SHA
     default: ''

@@ -29,7 +29,7 @@ checks every uploaded asset's GitHub SHA-256 digest, the complete asset set,
 draft identity and remote tag commit. Failures leave a draft. It never deletes
 or overwrites existing tags or assets. The caller must have completed the
 immutable-release cutover and hold release concurrency throughout preparation,
-build and publication; normally use `guarded-release` rather than invoking the
+build and publication; normally use the `release-pipeline.yml` workflow rather than invoking the
 publishing operation directly.
 
 `provenance` records the selected source commit separately from the workflow

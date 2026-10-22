@@ -277,3 +277,59 @@ test('downstream rejects a manifest naming a different release or invalid commit
     await assert.rejects(verifyPublished(api, 123), /identity mismatch/);
   }
 });
+
+test('retry resumes only identical uploaded assets after a partial failure', async t => {
+  const api = fakeGitHub({ failUpload: 2 });
+  const dir = await fixture(t);
+  await assert.rejects(publish(api, identity, dir), /upload failed/);
+  assert.equal(api.state.assets.length, 1);
+  api.state.failUpload = null;
+  await publish(api, identity, dir);
+  assert.equal(api.state.assets.length, 2);
+  assert.equal(api.state.published, 1);
+  assert.equal(api.state.release.make_latest, 'true');
+});
+
+test('prereleases never replace the latest stable release', async t => {
+  const tag = 'v1.234.0-rc.42';
+  const api = fakeGitHub({ release: { ...release, tag_name: tag, prerelease: true } });
+  const dir = await fixture(t);
+  const manifestPath = path.join(dir, 'release-manifest.json');
+  const manifest = JSON.parse(await fs.readFile(manifestPath));
+  manifest.tag = tag;
+  await fs.writeFile(manifestPath, JSON.stringify(manifest));
+  await publish(api, { ...identity, tag }, dir);
+  assert.equal(api.state.release.make_latest, 'false');
+});
+
+test('retry refuses conflicting, duplicate or unfinished existing assets', async t => {
+  for (const change of ['digest', 'duplicate', 'unfinished']) {
+    const api = fakeGitHub({ failUpload: 2 });
+    const dir = await fixture(t);
+    await assert.rejects(publish(api, identity, dir));
+    api.state.failUpload = null;
+    if (change === 'digest') api.state.assets[0].digest = digest('changed');
+    if (change === 'duplicate') api.state.assets.push({ ...api.state.assets[0] });
+    if (change === 'unfinished') api.state.assets[0].state = 'new';
+    await assert.rejects(publish(api, identity, dir), /asset/i);
+    assert.equal(api.state.published, 0);
+  }
+});
+
+test('build provenance is generated before a GitHub draft exists', async t => {
+  const dir = await fixture(t);
+  const file = path.join(dir, 'build-provenance.json');
+  const api = fakeGitHub();
+  api.context.runId = 42;
+  await run(api, {
+    RELEASE_OPERATION: 'provenance', RELEASE_ID: '',
+    RELEASE_TAG: identity.tag, RELEASE_COMMIT: commit,
+    RELEASE_WORKFLOW_SHA: 'a'.repeat(40), RELEASE_PROVENANCE: file,
+  });
+  const record = JSON.parse(await fs.readFile(file));
+  assert.equal(record.buildDefinition.externalParameters.commit, commit);
+  assert.equal(record.buildDefinition.externalParameters.tag, identity.tag);
+  assert.equal(record.buildDefinition.externalParameters.releaseId, undefined);
+  assert.equal(record.buildDefinition.resolvedDependencies[0].digest.gitCommit, commit);
+  assert.equal(api.state.published, 0);
+});

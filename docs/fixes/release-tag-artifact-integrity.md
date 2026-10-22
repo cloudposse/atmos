@@ -1,5 +1,11 @@
 # Release tag and artifact integrity
 
+> **Design update:** This document describes the initial guard implementation.
+> The [Release Orchestration PRD](../prd/release-orchestration.md) defines the proposed
+> milestone-based operator flow, authorization and remaining security work.
+> Its rollout requirements supersede the activation instructions below; the
+> current branch is not yet the complete command-driven implementation.
+
 ## Incidents
 
 The `v1.233.0` tag resolves to `12f83b5248253662d8af06030e3966034a7ef5d4`, but its

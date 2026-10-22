@@ -2,65 +2,21 @@ name: Nightly Builds
 on:
   workflow_dispatch:
   schedule:
-  # Run at 00:15 UTC (12:15 AM UTC) daily.
-  # • Pacific Time (PT): 4:15 PM (previous day)
-  # • Mountain Time (MT): 5:15 PM (previous day)
-  # • Central Time (CT): 6:15 PM (previous day)
-  # • Eastern Time (ET): 7:15 PM (previous day)
     - cron: "15 0 * * *"
-
 permissions: {}
-
 concurrency:
   group: atmos-release
   cancel-in-progress: false
-
 jobs:
-  draft:
+  release:
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     permissions:
       contents: read
-    runs-on: ubuntu-latest
-    environment: release
-    outputs:
-      id: ${{ steps.draft.outputs.id }}
-      exists: ${{ steps.draft.outputs.exists }}
-    steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
-        with:
-          egress-policy: audit
-
-      - name: Draft release notes
-        id: draft
-        uses: $/.github/actions/release-draft # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
-        with:
-          app-id: ${{ vars.BOT_GITHUB_APP_ID }}
-          app-private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
-          prerelease: 'true'
-
-
-  publish:
-    needs: draft
-    if: needs.draft.outputs.id != '' && needs.draft.outputs.exists == 'false'
-    permissions:
-      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
       id-token: write
       attestations: write
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
-    environment: release
-    steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
-        with:
-          egress-policy: audit
-
-      - name: Build and publish verified release
-        uses: $/.github/actions/guarded-release # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
-        with:
-          release-id: ${{ needs.draft.outputs.id }}
-          commit: ${{ github.sha }}
-          app-id: ${{ vars.BOT_GITHUB_APP_ID }}
-          app-private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
-          releases-enabled: ${{ vars.ATMOS_GUARDED_RELEASES_ENABLED }}
+    uses: ./.github/workflows/release-pipeline.yml
+    with:
+      mode: nightly

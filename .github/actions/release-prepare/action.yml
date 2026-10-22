@@ -1,0 +1,47 @@
+name: Prepare tagged release
+description: Validate the release plan and reserve its tag using tested Mage operations.
+inputs:
+  mode:
+    description: cut, candidate, nightly, or feature
+    required: true
+  milestone:
+    description: Expected milestone number for manual stable/candidate requests
+    default: ''
+  version:
+    description: Expected milestone version
+    default: ''
+  commit:
+    description: Exact requested source SHA
+    default: ''
+  pr:
+    description: Feature PR number
+    default: ''
+  github-token:
+    description: Scoped preparation token
+    required: true
+outputs:
+  tag:
+    description: Reserved release tag
+    value: ${{ steps.prepare.outputs.tag }}
+  commit:
+    description: Exact build source
+    value: ${{ steps.prepare.outputs.commit }}
+  milestone:
+    description: Selected milestone number
+    value: ${{ steps.prepare.outputs.milestone }}
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/setup-go-cache
+    - id: prepare
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        RELEASE_MODE: ${{ inputs.mode }}
+        RELEASE_MILESTONE: ${{ inputs.milestone }}
+        RELEASE_VERSION: ${{ inputs.version }}
+        RELEASE_COMMIT: ${{ inputs.commit }}
+        RELEASE_PR: ${{ inputs.pr }}
+        RELEASE_PLAN_FILE: ${{ runner.temp }}/release-plan.json
+        ATMOS_GUARDED_RELEASES_ENABLED: ${{ vars.ATMOS_GUARDED_RELEASES_ENABLED }}
+      run: go tool mage release:prepare "$GITHUB_REPOSITORY"

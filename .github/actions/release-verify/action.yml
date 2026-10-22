@@ -1,0 +1,112 @@
+name: Verify tagged release
+description: Verify downloaded artifacts, existing signatures and build attestations before publication.
+inputs:
+  signing-workflow-ref:
+    description: Exact trusted reusable workflow identity in the OIDC certificate
+    required: true
+  app-id:
+    description: Release GitHub App ID
+    required: true
+  app-private-key:
+    description: Release GitHub App private key
+    required: true
+  openai-api-key:
+    description: Optional release summary API key
+    required: false
+  tag:
+    description: Reserved release tag
+    required: true
+  commit:
+    description: Tagged source SHA
+    required: true
+  mode:
+    description: cut, candidate, nightly or feature
+    required: true
+  plan-file:
+    description: Trusted preparation artifact from this workflow run
+    required: true
+outputs:
+  release-id:
+    description: Versioned draft ID for this verified build
+    value: ${{ steps.draft.outputs.release-id }}
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/setup-go-cache
+    - name: Install package inspection tool
+      shell: bash
+      run: sudo apt-get update && sudo apt-get install -y libarchive-tools
+    - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      with:
+        cosign-release: v3.1.3
+    - name: Create scoped validation token
+      id: validate-token
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.app-private-key }}
+        permission-contents: read
+        permission-issues: read
+        permission-pull-requests: read
+    - name: Validate plan and inspect every raw and packaged executable
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.validate-token.outputs.token }}
+        RELEASE_TAG: ${{ inputs.tag }}
+        RELEASE_COMMIT: ${{ inputs.commit }}
+        RELEASE_MODE: ${{ inputs.mode }}
+        RELEASE_PLAN: ${{ inputs.plan-file }}
+        ATMOS_GUARDED_RELEASES_ENABLED: ${{ vars.ATMOS_GUARDED_RELEASES_ENABLED }}
+      run: |
+        set -euo pipefail
+        go tool mage release:validatePlan "$GITHUB_REPOSITORY" "$RELEASE_PLAN"
+        go tool mage release:stageArtifacts source "$RUNNER_TEMP/release-upload"
+        go tool mage release:verifyBuild "$RUNNER_TEMP/release-upload" "$RELEASE_TAG" "$RELEASE_COMMIT"
+    - name: Verify GoReleaser checksum signature
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.tag }}
+        SIGNING_WORKFLOW_REF: ${{ inputs.signing-workflow-ref }}
+      run: |
+        set -euo pipefail
+        checksums="$RUNNER_TEMP/release-upload/atmos_${RELEASE_TAG#v}_SHA256SUMS"
+        cosign verify-blob --bundle="$checksums.sigstore.json" \
+          --certificate-identity="https://github.com/$SIGNING_WORKFLOW_REF" \
+          --certificate-oidc-issuer=https://token.actions.githubusercontent.com "$checksums"
+    - name: Seal verified upload manifest
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.tag }}
+        RELEASE_COMMIT: ${{ inputs.commit }}
+      run: go tool mage release:verifyArtifacts "$RUNNER_TEMP/release-upload" "$RELEASE_TAG" "$RELEASE_COMMIT"
+    - name: Create draft token
+      id: draft-token
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.app-private-key }}
+        permission-contents: write
+        permission-issues: read
+        permission-pull-requests: read
+    - name: Create draft notes for this tagged source
+      id: draft
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.draft-token.outputs.token }}
+        RELEASE_PLAN: ${{ inputs.plan-file }}
+      run: go tool mage release:draft "$GITHUB_REPOSITORY" "$RELEASE_PLAN"
+    - name: Refine release summaries
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ steps.draft-token.outputs.token }}
+        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+        RELEASE_ID: ${{ steps.draft.outputs.release-id }}
+      run: go tool mage release:summarizeNotes "$GITHUB_REPOSITORY" "$RELEASE_ID"
+    - name: Verify provenance cryptography and actual build identity
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        RELEASE_TAG: ${{ inputs.tag }}
+        RELEASE_COMMIT: ${{ inputs.commit }}
+        RELEASE_WORKFLOW_SHA: ${{ github.workflow_sha }}
+      run: go tool mage release:verifyAttestations "$RUNNER_TEMP/release-upload" "$GITHUB_REPOSITORY" "$RELEASE_TAG" "$RELEASE_COMMIT" "$RELEASE_WORKFLOW_SHA"

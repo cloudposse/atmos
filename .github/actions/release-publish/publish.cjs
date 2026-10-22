@@ -93,11 +93,20 @@ async function publish({ github, context, core }, identity, dir) {
   const release = await getRelease();
   assertIdentity(release, identity);
   await assertTag(github, repo, identity);
-  if ((await listAssets()).length) throw new Error('Draft acquired assets during build; refusing to overwrite');
+  const existing = await listAssets();
+  const names = new Set();
+  for (const asset of existing) {
+    if (names.has(asset.name) || !Object.hasOwn(expected, asset.name) ||
+        asset.state !== 'uploaded' || asset.digest !== `sha256:${expected[asset.name]}`) {
+      throw new Error(`Existing release asset conflicts with verified build: ${asset.name}`);
+    }
+    names.add(asset.name);
+  }
 
   for (const [name, digest] of Object.entries(expected)) {
     const data = await fs.readFile(path.join(dir, name));
     if (sha256(data) !== digest) throw new Error(`Local asset changed after verification: ${name}`);
+    if (names.has(name)) continue; // Retry an identical partial upload without replacing assets.
     await github.rest.repos.uploadReleaseAsset({
       ...repo, release_id: identity.id, name, data,
       headers: { 'content-type': 'application/octet-stream', 'content-length': data.length },
@@ -109,7 +118,7 @@ async function publish({ github, context, core }, identity, dir) {
   assertAssets(await listAssets(), expected);
   assertIdentity(await getRelease(), identity);
   await assertTag(github, repo, identity);
-  const { data: published } = await github.rest.repos.updateRelease({ ...repo, release_id: identity.id, draft: false });
+  const { data: published } = await github.rest.repos.updateRelease({ ...repo, release_id: identity.id, draft: false, make_latest: identity.tag.includes('-') ? 'false' : 'true' });
   if (!published.immutable) throw new Error('Repository immutability was disabled; downstream distribution will reject this release');
   core.info(`Published ${identity.tag} at ${identity.commit}; all ${Object.keys(expected).length} assets verified`);
 }
@@ -139,7 +148,7 @@ function provenance(context, identity, workflowSHA) {
       resolvedDependencies: [{ uri: `git+${repository}@refs/tags/${identity.tag}`, digest: { gitCommit: identity.commit } }],
     },
     runDetails: {
-      builder: { id: `${repository}/.github/actions/guarded-release@${workflowSHA}` },
+      builder: { id: `${repository}/.github/workflows/release-pipeline.yml@${workflowSHA}` },
       metadata: { invocationId: `${repository}/actions/runs/${context.runId}` },
     },
   };
@@ -149,10 +158,11 @@ function provenance(context, identity, workflowSHA) {
 // dispatch, input validation and summary behavior in the tested module.
 async function run(api, env) {
   const releaseID = env.RELEASE_ID;
-  if (!/^[1-9]\d*$/.test(releaseID || '') || !Number.isSafeInteger(Number(releaseID))) {
+  const buildProvenance = env.RELEASE_OPERATION === 'provenance' && !releaseID;
+  if (!buildProvenance && (!/^[1-9]\d*$/.test(releaseID || '') || !Number.isSafeInteger(Number(releaseID)))) {
     throw new Error('A positive numeric release ID is required');
   }
-  const identity = { id: Number(releaseID), tag: env.RELEASE_TAG, commit: env.RELEASE_COMMIT };
+  const identity = { id: buildProvenance ? undefined : Number(releaseID), tag: env.RELEASE_TAG, commit: env.RELEASE_COMMIT };
   if (['publish', 'provenance'].includes(env.RELEASE_OPERATION) &&
       (!tagPattern.test(identity.tag || '') || !commitPattern.test(identity.commit || ''))) {
     throw new Error('A release tag and full source commit SHA are required');

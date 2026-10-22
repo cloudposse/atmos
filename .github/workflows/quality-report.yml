@@ -2,6 +2,14 @@ name: Quality Gate
 
 on:
   workflow_call:
+  # Release eligibility can change without a new commit. Always run trusted
+  # default-branch code; these events never execute pull request source.
+  pull_request_target:
+    types: [labeled, unlabeled, milestoned, demilestoned]
+  milestone:
+    types: [created, opened, edited, closed, deleted]
+  release:
+    types: [published]
   # Actions has no review-thread resolution trigger. Reconcile these changes
   # and third-party events not delivered to Actions every 15 minutes, for open
   # main PRs with a head commit from the last 24 hours or no usable report for
@@ -27,6 +35,11 @@ concurrency:
 
 jobs:
   report:
+    # Our readiness labels must not recursively trigger this reporter.
+    if: >-
+      github.event_name != 'pull_request_target' ||
+      (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+      contains(fromJSON('["major","minor","patch","no-release"]'), github.event.label.name)
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:

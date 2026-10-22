@@ -4,12 +4,17 @@ on:
   pull_request:
     paths:
       - '.atmos.d/test.yaml'
+      - '.atmos.d/release.yaml'
       - 'magefiles/localactions/**'
       - '.github/actions/**'
       - '.github/scripts/**'
       - '.github/workflows/**'
       - '.goreleaser.yml'
+      - '.github/release-notes.yml'
       - 'magefiles/release/**'
+      - 'magefiles/qualitygate/**'
+      - 'magefiles/internal/githubapi/**'
+      - 'magefiles/internal/githubtest/**'
       - 'internal/releaseidentity/**'
       - 'pkg/version/**'
       - 'go.mod'
@@ -18,12 +23,17 @@ on:
     branches: [main]
     paths:
       - '.atmos.d/test.yaml'
+      - '.atmos.d/release.yaml'
       - 'magefiles/localactions/**'
       - '.github/actions/**'
       - '.github/scripts/**'
       - '.github/workflows/**'
       - '.goreleaser.yml'
+      - '.github/release-notes.yml'
       - 'magefiles/release/**'
+      - 'magefiles/qualitygate/**'
+      - 'magefiles/internal/githubapi/**'
+      - 'magefiles/internal/githubtest/**'
       - 'internal/releaseidentity/**'
       - 'pkg/version/**'
       - 'go.mod'
@@ -106,6 +116,13 @@ jobs:
           version: 'v2.18.3'
           install-only: true
 
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24'
+
+      - name: Install package inspection tools
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools
+
       - name: Validate production GoReleaser configuration
         run: goreleaser check --config .goreleaser.yml
 
@@ -115,4 +132,19 @@ jobs:
       - name: Test all release guards and rehearse stable, nightly and feature builds
         env:
           ATMOS_TEST_GORELEASER: goreleaser
-        run: go test -tags=mage -race -count=1 -v ./magefiles/release ./internal/releaseidentity ./pkg/version
+        run: go test -tags=mage -race -count=1 -v -coverprofile=release-coverage.out ./magefiles/release/... ./magefiles/qualitygate ./internal/releaseidentity ./pkg/version
+
+      - name: Upload release coverage to Codecov
+        timeout-minutes: 10
+        continue-on-error: true
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: ${{ github.repository }}
+          files: release-coverage.out
+          disable_search: true
+          fail_ci_if_error: false
+          flags: unittests
+          verbose: true
+          # Match the existing uploader's workaround for its GPG keyserver outage.
+          use_pypi: true

@@ -1,66 +1,26 @@
 name: Feature release
 on:
-  pull_request:
-    types: [ opened, synchronize, reopened, labeled, unlabeled ]
-    paths-ignore:
-      - "README.md"
-
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Open pull request number to build as a unique prerelease
+        type: string
+        required: true
 permissions: {}
-
 concurrency:
   group: atmos-release
   cancel-in-progress: false
-
 jobs:
-  draft:
-    # Only a maintainer-labeled, same-repository, non-draft PR may publish.
-    if: >-
-      github.event.pull_request.head.repo.full_name == github.repository
-      && !github.event.pull_request.draft
-      && contains(github.event.pull_request.labels.*.name, 'release/feature')
+  release:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     permissions:
       contents: read
-    runs-on: ubuntu-latest
-    environment: feature-releases
-    outputs:
-      id: ${{ steps.draft.outputs.id }}
-      exists: ${{ steps.draft.outputs.exists }}
-    steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
-        with:
-          egress-policy: audit
-
-      - name: Draft release notes
-        id: draft
-        uses: $/.github/actions/release-draft # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
-        with:
-          app-id: ${{ vars.BOT_GITHUB_APP_ID }}
-          app-private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
-          prerelease: 'true'
-
-
-  publish:
-    needs: draft
-    if: needs.draft.outputs.id != '' && needs.draft.outputs.exists == 'false'
-    permissions:
-      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
       id-token: write
       attestations: write
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
-    environment: feature-releases
-    steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
-        with:
-          egress-policy: audit
-
-      - name: Build and publish verified release
-        uses: $/.github/actions/guarded-release # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
-        with:
-          release-id: ${{ needs.draft.outputs.id }}
-          commit: ${{ github.event.pull_request.head.sha }}
-          app-id: ${{ vars.BOT_GITHUB_APP_ID }}
-          app-private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
-          releases-enabled: ${{ vars.ATMOS_GUARDED_RELEASES_ENABLED }}
+    uses: ./.github/workflows/release-pipeline.yml
+    with:
+      mode: feature
+      pr: ${{ inputs.pr }}

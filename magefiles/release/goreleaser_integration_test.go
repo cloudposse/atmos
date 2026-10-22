@@ -1,3 +1,5 @@
+//go:build mage
+
 package release
 
 import (
@@ -34,7 +36,7 @@ func TestGoReleaserTagAuthority(t *testing.T) {
 		"-c", "commit.gpgsign=false", "-c", "core.hooksPath="+t.TempDir(), "commit", "--quiet", "-m", "ignore generated artifacts")
 	commit := strings.TrimSpace(gitFixture(t, source, "rev-parse", "HEAD"))
 	gitFixture(t, source, "remote", "add", "origin", "https://github.com/cloudposse/atmos.git")
-	tags := []string{"v1.233.0", "v1.233.1-rc.1", "v1.233.1-test.123"}
+	tags := []string{"v1.233.0", "v1.233.1-rc.1", "v1.233.1-nightly.1", "v1.233.1-feature.42.1"}
 	for _, tag := range append(tags, "v1.234.0") {
 		gitFixture(t, source, "tag", tag)
 	}
@@ -52,6 +54,7 @@ func TestGoReleaserTagAuthority(t *testing.T) {
 			require.NoError(t, os.WriteFile(sbom, []byte(`{"fixture":"unsigned rehearsal"}`), 0o600))
 			staged := filepath.Join(t.TempDir(), "upload")
 			require.NoError(t, (Release{}).StageArtifacts(source, staged))
+			require.NoError(t, (Release{}).VerifyBuild(staged, tag, commit))
 			signature := filepath.Join(staged, "atmos_"+tag[1:]+"_SHA256SUMS.sigstore.json")
 			require.NoError(t, os.WriteFile(signature, []byte(`{"fixture":"unsigned rehearsal"}`), 0o600))
 			require.NoError(t, (Release{}).VerifyArtifacts(staged, tag, commit))
@@ -71,6 +74,7 @@ func TestGoReleaserTagAuthority(t *testing.T) {
 				}
 				require.Equal(t, 4, count, "one %s per Linux architecture", extension)
 			}
+			rehearseReleaseLifecycle(t, staged, tag, commit)
 			_, err = verifyArtifacts(staged, "v1.234.0", commit)
 			require.ErrorContains(t, err, "release identity mismatch")
 		})

@@ -1,0 +1,307 @@
+package milestone
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/cloudposse/atmos/magefiles/internal/githubapi"
+)
+
+const milestoneStatus = "Release milestone"
+
+// GitHub limits commit-status descriptions to 140 Unicode characters.
+const statusDescriptionLimit = 140
+
+type queueCommit struct {
+	OID string `json:"oid"`
+}
+type queueEntry struct {
+	Head *queueCommit `json:"headCommit"`
+	Base *queueCommit `json:"baseCommit"`
+	PR   struct {
+		Number int `json:"number"`
+	} `json:"pullRequest"`
+}
+
+// Check reconciles PR-head and merge-queue statuses using live metadata.
+// It never checks out or executes a PR's source. Require the Release milestone
+// status in branch protection/rulesets to enforce this policy at merge time.
+func (Milestones) Check(repo string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	client, err := NewClient(ctx, repo)
+	if err != nil {
+		return err
+	}
+	return client.checkMilestones(os.Getenv("GITHUB_EVENT_NAME"), os.Getenv("GITHUB_EVENT_PATH"))
+}
+
+func (c *Client) status(sha, state, description string) error {
+	if !githubapi.SHAPattern.MatchString(sha) {
+		return fmt.Errorf("%w: invalid status SHA", ErrMilestonePolicy)
+	}
+	// GitHub's status description is limited to 140 characters.
+	chars := []rune(description)
+	if len(chars) > statusDescriptionLimit {
+		description = string(chars[:statusDescriptionLimit-len("...")]) + "..."
+	}
+	return c.Write(http.MethodPost, "statuses/"+sha, map[string]string{"state": state, "context": milestoneStatus, "description": description})
+}
+
+func (c *Client) queue(base string) ([]queueEntry, error) {
+	parts := strings.Split(c.Repo, "/")
+	const query = `query($owner:String!,$name:String!,$branch:String!,$cursor:String){repository(owner:$owner,name:$name){mergeQueue(branch:$branch){entries(first:100,after:$cursor){nodes{headCommit{oid} baseCommit{oid} pullRequest{number}} pageInfo{hasNextPage endCursor}}}}}`
+	var all []queueEntry
+	var cursor *string
+	for page := 0; page < githubapi.PageLimit; page++ {
+		body, _ := json.Marshal(map[string]any{"query": query, "variables": map[string]any{"owner": parts[0], "name": parts[1], "branch": base, "cursor": cursor}})
+		var result struct {
+			Errors []struct {
+				Message string `json:"message"`
+			} `json:"errors"`
+			Data struct {
+				Repository *struct {
+					Queue *struct {
+						Entries struct {
+							Nodes    []queueEntry `json:"nodes"`
+							PageInfo struct {
+								HasNext bool   `json:"hasNextPage"`
+								Cursor  string `json:"endCursor"`
+							} `json:"pageInfo"`
+						} `json:"entries"`
+					} `json:"mergeQueue"`
+				} `json:"repository"`
+			} `json:"data"`
+		}
+		err := c.API.DoWithContext(c.Context, http.MethodPost, "graphql", bytes.NewReader(body), &result)
+		if err != nil {
+			return nil, err
+		}
+		if len(result.Errors) > 0 || result.Data.Repository == nil {
+			return nil, fmt.Errorf("%w: cannot read merge queue", ErrMilestonePolicy)
+		}
+		if result.Data.Repository.Queue == nil {
+			return all, nil
+		}
+		entries := result.Data.Repository.Queue.Entries
+		all = append(all, entries.Nodes...)
+		if !entries.PageInfo.HasNext {
+			return all, nil
+		}
+		if entries.PageInfo.Cursor == "" || (cursor != nil && *cursor == entries.PageInfo.Cursor) {
+			return nil, fmt.Errorf("%w: invalid queue pagination cursor", ErrMilestonePolicy)
+		}
+		cursor = &entries.PageInfo.Cursor
+	}
+	return nil, fmt.Errorf("%w: merge queue pagination limit", ErrMilestonePolicy)
+}
+
+// queueVerdict includes all entries sharing a group head and every preceding
+// queued group in its base chain. A later blocked PR cannot taint earlier groups.
+func queueVerdict(head string, entries []queueEntry, verdicts map[int]error) error {
+	policy := queuePolicy{entries: entries, verdicts: verdicts, visiting: map[string]bool{}}
+	return policy.checkHead(head)
+}
+
+type queuePolicy struct {
+	entries  []queueEntry
+	verdicts map[int]error
+	visiting map[string]bool
+}
+
+func (p *queuePolicy) checkHead(sha string) error {
+	if p.visiting[sha] {
+		return fmt.Errorf("%w: cyclic merge queue", ErrMilestonePolicy)
+	}
+	p.visiting[sha] = true
+	defer delete(p.visiting, sha)
+	for _, entry := range p.entries {
+		if entry.Head == nil || entry.Head.OID != sha {
+			continue
+		}
+		if err := p.checkEntry(entry, sha); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *queuePolicy) checkEntry(entry queueEntry, sha string) error {
+	verdict, ok := p.verdicts[entry.PR.Number]
+	if !ok {
+		return fmt.Errorf("%w: queue PR #%d is missing from live open PRs", ErrMilestonePolicy, entry.PR.Number)
+	}
+	if verdict != nil {
+		return verdict
+	}
+	if entry.Base == nil || !githubapi.SHAPattern.MatchString(entry.Base.OID) {
+		return fmt.Errorf("%w: queue base missing", ErrMilestonePolicy)
+	}
+	if entry.Base.OID == sha {
+		return nil
+	}
+	return p.checkHead(entry.Base.OID)
+}
+
+func mergeGroupHead(eventPath string) (string, error) {
+	root, err := os.OpenRoot(filepath.Dir(eventPath))
+	if err != nil {
+		return "", err
+	}
+	defer root.Close()
+	data, err := root.ReadFile(filepath.Base(eventPath))
+	if err != nil {
+		return "", err
+	}
+	var event struct {
+		Group struct {
+			Head string `json:"head_sha"`
+		} `json:"merge_group"`
+	}
+	if err = json.Unmarshal(data, &event); err != nil {
+		return "", err
+	}
+	return event.Group.Head, nil
+}
+
+func (c *Client) checkMilestones(eventName, eventPath string) error {
+	eventHead := ""
+	if eventName == "merge_group" {
+		var err error
+		eventHead, err = mergeGroupHead(eventPath)
+		if err != nil {
+			return err
+		}
+		if err = c.status(eventHead, "pending", "Checking live release milestone policy"); err != nil {
+			return err
+		}
+	}
+	err := c.reconcileMilestoneStatuses(eventHead)
+	if err != nil && eventHead != "" {
+		err = errors.Join(err, c.status(eventHead, "error", "Milestone policy could not be verified; see workflow logs"))
+	}
+	return err
+}
+
+func (c *Client) reconcileMilestoneStatuses(eventHead string) error {
+	branch, err := c.defaultBranch()
+	if err != nil {
+		return err
+	}
+	prs, err := c.OpenPRs(branch)
+	if err != nil {
+		return err
+	}
+	heads := map[string]bool{}
+	for _, pr := range prs {
+		heads[pr.Head.SHA] = true
+	}
+	// Invalidate known PR results before querying optional queue metadata. A
+	// queue API failure must not preserve a green result from before a label or
+	// milestone change on a PR whose current policy has not been verified.
+	if err = c.markPending(heads, nil); err != nil {
+		return err
+	}
+	entries, err := c.queue(branch)
+	if err != nil {
+		return err
+	}
+	queueHeads, err := queueGroupHeads(entries, eventHead)
+	if err != nil {
+		return err
+	}
+	if err = c.markPending(queueHeads, heads); err != nil {
+		return err
+	}
+	return c.publishPolicyVerdicts(prs, entries, queueHeads)
+}
+
+func (c *Client) defaultBranch() (string, error) {
+	var repo struct {
+		DefaultBranch string `json:"default_branch"`
+	}
+	if err := c.Get("", &repo); err != nil {
+		return "", err
+	}
+	if repo.DefaultBranch == "" {
+		return "", fmt.Errorf("%w: default branch missing", ErrMilestonePolicy)
+	}
+	return repo.DefaultBranch, nil
+}
+
+func queueGroupHeads(entries []queueEntry, eventHead string) (map[string]bool, error) {
+	heads := map[string]bool{}
+	for _, entry := range entries {
+		if entry.Head != nil {
+			heads[entry.Head.OID] = true
+		}
+	}
+	if eventHead != "" && !heads[eventHead] {
+		return nil, fmt.Errorf("%w: merge group is not present in the live queue; retry", ErrMilestonePolicy)
+	}
+	return heads, nil
+}
+
+func (c *Client) markPending(heads, alreadyPending map[string]bool) error {
+	for head := range heads {
+		if alreadyPending[head] {
+			continue
+		}
+		if err := c.status(head, "pending", "Checking live release milestone policy"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Client) publishPolicyVerdicts(prs []ReleasePR, entries []queueEntry, queueHeads map[string]bool) error {
+	milestones, err := c.ListMilestones()
+	if err != nil {
+		return err
+	}
+	baseline, baselineErr := c.LatestStable()
+	verdicts, headVerdicts := evaluatePRs(prs, milestones, baseline, baselineErr)
+	for head := range queueHeads {
+		headVerdicts[head] = errors.Join(headVerdicts[head], queueVerdict(head, entries, verdicts))
+	}
+	return c.writeVerdictStatuses(headVerdicts)
+}
+
+func evaluatePRs(prs []ReleasePR, milestones []Milestone, baseline string, baselineErr error) (map[int]error, map[string]error) {
+	verdicts := map[int]error{}
+	headVerdicts := map[string]error{}
+	for _, pr := range prs {
+		verdict := CheckMilestonePR(&pr, milestones, baseline)
+		label, labelErr := ReleaseLabel(&pr)
+		if baselineErr != nil && (labelErr != nil || label != "no-release") {
+			verdict = baselineErr
+		}
+		verdicts[pr.Number] = verdict
+		// Two PRs sharing a head must both qualify. Never let an exemption on one
+		// PR overwrite a failure on another PR at the same commit.
+		headVerdicts[pr.Head.SHA] = errors.Join(headVerdicts[pr.Head.SHA], verdict)
+	}
+	return verdicts, headVerdicts
+}
+
+func (c *Client) writeVerdictStatuses(verdicts map[string]error) error {
+	var failures []error
+	for head, verdict := range verdicts {
+		state, description := "success", "Milestone ordering and release-label compatibility verified"
+		if verdict != nil {
+			state, description = "failure", verdict.Error()
+		}
+		if err := c.status(head, state, description); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	return errors.Join(failures...)
+}
