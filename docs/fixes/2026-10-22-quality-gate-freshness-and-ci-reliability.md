@@ -64,7 +64,9 @@ reporter run's summary URL.
 - Allow GitHub's Azure artifact storage hosts in the multi-OS test jobs; the
   artifact account can differ from the cache account detected by runner hardening.
 - Download demo lint build artifacts through the supported REST path, scoped to
-  the current workflow run with an `actions: read` token. Retain bounded retries.
+  the current workflow run with an `actions: read` token. Allow the Azure storage
+  redirect hosts in this job too, so runner hardening permits the REST download.
+  Retain bounded retries.
 - Replace live latest-release tests with local API fixtures and a TLS server
   that checks authenticated and unauthenticated requests. Preserve real 404
   error coverage instead of treating missing releases as transient errors.

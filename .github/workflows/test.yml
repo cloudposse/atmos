@@ -2108,6 +2108,7 @@ jobs:
         with:
           egress-policy: block
           allowed-endpoints: >
+            *.blob.core.windows.net:443
             api.github.com:443
             get.helm.sh:443
             github.com:443
