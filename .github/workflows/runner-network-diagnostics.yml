@@ -1,0 +1,196 @@
+name: Runner Network Diagnostics
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_resolver_repair:
+        description: After recording the failure, test routing host DNS through systemd-resolved
+        type: boolean
+        default: false
+  # Exercise the diagnostic before it exists on the default branch. No
+  # scheduled runs or changes to the normal test/release workflows.
+  pull_request:
+    paths:
+      - .github/workflows/runner-network-diagnostics.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: DNS and egress (sample ${{ matrix.sample }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3]
+    env:
+      # Preload a fixed image so registry availability does not obscure the
+      # post-hardening container probes. No credentials enter the container.
+      CURL_IMAGE: curlimages/curl:8.12.1@sha256:94e9e444bcba979c2ea12e27ae39bee4cd10bc7041a472c4727a558e213744e6
+    steps:
+      # Deliberately before hardening: capture the runner's original DNS path.
+      # No checkout is needed; even a blocked checkout must leave evidence.
+      - name: Prepare probes and capture the baseline
+        timeout-minutes: 4
+        shell: bash
+        run: |
+          export DIAGNOSTIC_DIR="$RUNNER_TEMP/network-diagnostics"
+          echo "DIAGNOSTIC_DIR=$DIAGNOSTIC_DIR" >> "$GITHUB_ENV"
+          mkdir -p "$DIAGNOSTIC_DIR"
+          cat > "$DIAGNOSTIC_DIR/probe.sh" <<'SCRIPT'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          phase="$1"
+          exec > >(tee "$DIAGNOSTIC_DIR/$phase.log") 2>&1
+          echo "Phase: $phase; time: $(date -u +%FT%TZ)"
+          echo "Image: ${ImageOS:-unknown} ${ImageVersion:-unknown}"
+          # Region is also recorded in GitHub's 'Set up job' log.
+          for file in /etc/resolv.conf /etc/systemd/resolved.conf /etc/docker/daemon.json; do
+            echo "--- $file"
+            ls -l "$file" || true
+            cat "$file" || true
+          done
+          timeout 5 resolvectl status || true
+          timeout 5 sudo -n ss -lntup '( sport = :53 )' || true
+          timeout 5 systemctl is-active agent || true
+          timeout 5 sudo -n iptables-save || true
+          timeout 5 sudo -n ip6tables-save || true
+          image_ready=false
+          if docker image inspect "$CURL_IMAGE" > /dev/null 2>&1; then
+            image_ready=true
+            timeout 10 docker run --rm --pull=never --network bridge --cap-drop ALL \
+              --security-opt no-new-privileges --read-only --entrypoint cat \
+              "$CURL_IMAGE" /etc/resolv.conf || true
+          fi
+          printf '\n| Phase | Client | URL | curl exit | Connection |\n|---|---|---|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
+          for client in host container; do
+            if [[ "$client" == container && "$image_ready" == false ]]; then
+              echo "Container probes unavailable: pinned image was not downloaded."
+              touch "$DIAGNOSTIC_DIR/incomplete"
+              continue
+            fi
+            for url in \
+              https://github.com/ \
+              https://api.github.com/meta \
+              https://codeload.github.com/actions/download-artifact/tar.gz/d3f86a106a0bac45b974a628896c90dbdf5c8093 \
+              https://proxy.golang.org/golang.org/x/text/@v/list \
+              https://release-assets.githubusercontent.com/ \
+              https://example.com/; do
+              command=(curl)
+              if [[ "$client" == container ]]; then
+                command=(timeout 15 docker run --rm --pull=never --network bridge --cap-drop ALL
+                  --security-opt no-new-privileges --read-only "$CURL_IMAGE")
+              fi
+              # Any HTTP response proves transport connectivity, even a 404.
+              # Do not follow redirects to introduce unrelated destinations.
+              result=0
+              connection=$("${command[@]}" --noproxy '*' --silent --show-error --head \
+                --connect-timeout 3 --max-time 8 --output /dev/null \
+                --write-out 'ip=%{remote_ip} http=%{http_code}' "$url") || result=$?
+              printf '%s %s exit=%s %s\n' "$client" "$url" "$result" "$connection"
+              printf '| %s | %s | %s | %s | %s |\n' "$phase" "$client" "$url" "$result" "$connection" >> "$GITHUB_STEP_SUMMARY"
+              if [[ "$url" == https://example.com/ ]]; then
+                if [[ "$phase" == baseline && "$result" == 0 ]]; then
+                  touch "$DIAGNOSTIC_DIR/canary-$client"
+                elif [[ "$phase" != baseline && "$result" == 0 ]]; then
+                  echo "::error::Unlisted destination example.com was reachable ($phase/$client)."
+                  touch "$DIAGNOSTIC_DIR/policy-failed"
+                elif [[ "$phase" != baseline && ! -f "$DIAGNOSTIC_DIR/canary-$client" ]]; then
+                  echo "::warning::Blocked canary is inconclusive: baseline did not connect ($client)."
+                  touch "$DIAGNOSTIC_DIR/incomplete"
+                fi
+              elif [[ "$result" != 0 ]]; then
+                touch "$DIAGNOSTIC_DIR/$phase-connectivity-failed"
+              fi
+            done
+          done
+          for domain in github.com api.github.com codeload.github.com proxy.golang.org release-assets.githubusercontent.com; do
+            echo "--- DNS: $domain (application resolver, then each local resolver)"
+            timeout 5 getent ahostsv4 "$domain" || true
+            for resolver in 127.0.0.100 127.0.0.53 127.0.0.1; do
+              dig +time=1 +tries=1 +noall +answer "@$resolver" "$domain" A || true
+            done
+          done
+          SCRIPT
+          # The only baseline network setup: pull a digest-pinned public image.
+          timeout 90 docker pull "$CURL_IMAGE" || echo "::warning::Container image unavailable; host probes will still run."
+          bash "$DIAGNOSTIC_DIR/probe.sh" baseline
+
+      - name: Harden Runner
+        id: harden
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        with:
+          egress-policy: block
+          # Needed only to inspect DNS/firewall state and test the opt-in repair.
+          disable-sudo: false
+          allowed-endpoints: >-
+            api.github.com:443
+            codeload.github.com:443
+            github.com:443
+            proxy.golang.org:443
+            release-assets.githubusercontent.com:443
+
+      - name: Probe unchanged DNS under block mode
+        if: always() && steps.harden.outcome == 'success'
+        timeout-minutes: 3
+        shell: bash
+        run: bash "$DIAGNOSTIC_DIR/probe.sh" hardened
+
+      - name: Test routing host DNS through systemd-resolved
+        if: inputs.test_resolver_repair && steps.harden.outcome == 'success'
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          # This is an experiment, not a repair applied to normal CI. Only
+          # change the host route when the expected community agent is active.
+          sudo -n systemctl is-active --quiet agent
+          grep -qx 'DNS=127.0.0.1' /etc/systemd/resolved.conf
+          grep -qx 'Domains=~\.' /etc/systemd/resolved.conf
+          test -f /run/systemd/resolve/stub-resolv.conf
+          sudo -n cp -a /etc/resolv.conf "$DIAGNOSTIC_DIR/resolv.conf.original"
+          sudo -n ln -sfn /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+          sudo -n resolvectl flush-caches
+          bash "$DIAGNOSTIC_DIR/probe.sh" repaired
+
+      - name: Capture final DNS and agent evidence
+        if: always()
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          # A second snapshot helps detect a runner service rewriting our repair.
+          { date -u; ls -l /etc/resolv.conf; cat /etc/resolv.conf; } | tee "$DIAGNOSTIC_DIR/final-dns.log"
+          for file in /home/agent/agent.log /home/agent/agent.status; do
+            if sudo -n test -f "$file"; then
+              sudo -n cat "$file" | sed -E '/OneTimeKey:|one_time_key/d' | tee "$DIAGNOSTIC_DIR/$(basename "$file")" > /dev/null
+            fi
+          done
+          # Do not collect agent.json: it can contain authentication material.
+          if [[ -f "$DIAGNOSTIC_DIR/agent.log" ]]; then
+            tail -n 150 "$DIAGNOSTIC_DIR/agent.log"
+          fi
+
+      - name: Upload diagnostic evidence
+        if: always()
+        timeout-minutes: 1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runner-network-${{ matrix.sample }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/network-diagnostics
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Report diagnostic result
+        if: always()
+        shell: bash
+        run: |
+          # A successful repair must not erase evidence that the original
+          # configuration failed. Detailed per-destination results are above.
+          test -f "$DIAGNOSTIC_DIR/hardened.log"
+          for marker in policy-failed incomplete baseline-connectivity-failed hardened-connectivity-failed repaired-connectivity-failed; do
+            if [[ -f "$DIAGNOSTIC_DIR/$marker" ]]; then
+              echo "::error::Diagnostic finding: $marker (see summary and logs)."
+              exit 1
+            fi
+          done
