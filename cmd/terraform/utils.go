@@ -1343,6 +1343,8 @@ func terraformHookEvents(subCommand string) (before, after h.HookEvent, ok bool)
 		return h.BeforeTerraformPlan, h.AfterTerraformPlan, true
 	case "apply":
 		return h.BeforeTerraformApply, h.AfterTerraformApply, true
+	case "destroy":
+		return h.BeforeTerraformDestroy, h.AfterTerraformDestroy, true
 	case "deploy":
 		return h.BeforeTerraformDeploy, h.AfterTerraformDeploy, true
 	case "output":

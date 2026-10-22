@@ -81,6 +81,16 @@ atmos validate component station/2 --stack dev  # ✓ Explicit and unambiguous
 Run `atmos validate component --help` to see all the available options
 :::
 
+## Schema directory overrides
+
+Use `--schemas-jsonschema-dir` and `--schemas-opa-dir` to select schema base directories for this invocation. These flags override `schemas.jsonschema.base_path` / `schemas.opa.base_path` and their environment variables. Relative directories resolve from the Atmos base path; absolute directories are preserved.
+
+```shell
+atmos validate component infra/vpc -s tenant1-ue2-dev \
+  --schemas-jsonschema-dir stacks/schemas/jsonschema \
+  --schemas-opa-dir stacks/schemas/opa
+```
+
 ## Examples
 
 ### Component Name Examples

@@ -25,12 +25,12 @@ Atmos bundles the manifest and CLI configuration schemas with the installed bina
 schemas:
   # https://json-schema.org
   jsonschema:
-    # Can also be set using 'ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH' ENV var, or '--schemas-jsonschema-dir' command-line argument
+    # Can also be set using 'ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH' ENV var, or '--schemas-jsonschema-dir' on `atmos validate component`
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/jsonschema"
   # https://www.openpolicyagent.org
   opa:
-    # Can also be set using 'ATMOS_SCHEMAS_OPA_BASE_PATH' ENV var, or '--schemas-opa-dir' command-line argument
+    # Can also be set using 'ATMOS_SCHEMAS_OPA_BASE_PATH' ENV var, or '--schemas-opa-dir' on `atmos validate component`
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/opa"
 ```
@@ -41,12 +41,12 @@ schemas:
 <dl>
   <dt>`schemas.jsonschema.base_path`</dt>
   <dd>
-    Base path to JSON Schema files for component validation. Supports both absolute and relative paths. Can also be set using `ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH` environment variable or `--schemas-jsonschema-dir` command-line argument.
+    Base path to JSON Schema files for component validation. Supports both absolute and relative paths. Can also be set using `ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH` environment variable or `--schemas-jsonschema-dir` on `atmos validate component`.
   </dd>
 
   <dt>`schemas.opa.base_path`</dt>
   <dd>
-    Base path to OPA (Open Policy Agent) policy files for component validation. Supports both absolute and relative paths. Can also be set using `ATMOS_SCHEMAS_OPA_BASE_PATH` environment variable or `--schemas-opa-dir` command-line argument.
+    Base path to OPA (Open Policy Agent) policy files for component validation. Supports both absolute and relative paths. Can also be set using `ATMOS_SCHEMAS_OPA_BASE_PATH` environment variable or `--schemas-opa-dir` on `atmos validate component`.
   </dd>
 
   <dt>`schemas.atmos.manifest`</dt>

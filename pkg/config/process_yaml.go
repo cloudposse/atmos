@@ -288,6 +288,15 @@ func processSequenceElement(child *yaml.Node, v *viper.Viper, elementPath string
 		if err != nil {
 			return nil, err
 		}
+		if strings.HasPrefix(elementPath, "devcontainer.") && isIncludeTag(child.Tag) {
+			if err := child.Encode(value); err != nil {
+				return nil, err
+			}
+			encodeDevcontainerKeys(child, elementPath)
+			if err := child.Decode(&value); err != nil {
+				return nil, err
+			}
+		}
 		// Also set the individual element for path-based access.
 		v.Set(elementPath, value)
 		// Clear the tag to avoid re-processing.
@@ -799,7 +808,13 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	if includeValue != nil {
 		data, ok := includeValue["include_data"]
 		if ok {
-			// Set the value in Viper.
+			if err := node.Encode(data); err != nil {
+				return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
+			}
+			encodeDevcontainerKeys(node, currentPath)
+			if err := node.Decode(&data); err != nil {
+				return err
+			}
 			v.Set(currentPath, data)
 			if err := node.Encode(data); err != nil {
 				return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)

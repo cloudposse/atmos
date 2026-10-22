@@ -24,8 +24,9 @@ type ExecOptions struct {
 }
 
 var execCmd = &cobra.Command{
-	Use:   "exec <name> -- <command> [args...]",
-	Short: "Execute a command in a running devcontainer",
+	Use:                "exec <name> -- <command> [args...]",
+	DisableFlagParsing: true,
+	Short:              "Execute a command in a running devcontainer",
 	Long: `Execute a command in a running devcontainer.
 
 By default, runs in non-interactive mode where output is automatically masked.
