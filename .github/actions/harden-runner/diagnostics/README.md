@@ -4,7 +4,7 @@ A dependency-free Node action for testing DNS and StepSecurity enforcement on
 GitHub-hosted Linux runners. Use it through `$/` before checkout:
 
 ```yaml
-- uses: $/.github/actions/runner-network-diagnostics
+- uses: $/.github/actions/harden-runner/diagnostics
   with:
     operation: probe
     phase: hardened
@@ -42,5 +42,5 @@ inject command results and use temporary files; they do not change local DNS,
 start containers, or contact external services.
 
 ```shell
-node --test .github/actions/runner-network-diagnostics/*.test.cjs
+node --test .github/actions/harden-runner/diagnostics/*.test.cjs
 ```

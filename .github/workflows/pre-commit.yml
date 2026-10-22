@@ -48,7 +48,7 @@ jobs:
           node --test
           .github/scripts/*.test.mjs
           .github/actions/harden-runner/runtime/*.test.cjs
-          .github/actions/runner-network-diagnostics/*.test.cjs
+          .github/actions/harden-runner/diagnostics/*.test.cjs
 
       - name: Set up Atmos
         uses: ./.github/actions/setup-atmos-bootstrap

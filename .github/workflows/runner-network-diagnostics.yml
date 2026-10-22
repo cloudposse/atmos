@@ -13,7 +13,6 @@ on:
     paths:
       - .github/workflows/runner-network-diagnostics.yml
       - .github/actions/harden-runner/**
-      - .github/actions/runner-network-diagnostics/**
       - .github/allowlist.yaml
 
 permissions:
@@ -50,14 +49,14 @@ jobs:
 
       - name: Prepare probes
         timeout-minutes: 4
-        uses: $/.github/actions/runner-network-diagnostics
+        uses: $/.github/actions/harden-runner/diagnostics
         with:
           operation: prepare
 
       - name: Probe unchanged DNS under block mode
         if: always() && steps.harden.outcome == 'success'
         timeout-minutes: 6
-        uses: $/.github/actions/runner-network-diagnostics
+        uses: $/.github/actions/harden-runner/diagnostics
         with:
           operation: probe
           phase: hardened
@@ -78,7 +77,7 @@ jobs:
       - name: Probe repaired DNS under block mode
         if: always() && !cancelled() && steps.repair.outcome == 'success'
         timeout-minutes: 8
-        uses: $/.github/actions/runner-network-diagnostics
+        uses: $/.github/actions/harden-runner/diagnostics
         with:
           operation: probe
           phase: repaired
@@ -86,7 +85,7 @@ jobs:
       - name: Capture final DNS and agent evidence
         if: always()
         timeout-minutes: 1
-        uses: $/.github/actions/runner-network-diagnostics
+        uses: $/.github/actions/harden-runner/diagnostics
         with:
           operation: capture
 
@@ -103,7 +102,7 @@ jobs:
       - name: Report diagnostic result
         if: always()
         timeout-minutes: 1
-        uses: $/.github/actions/runner-network-diagnostics
+        uses: $/.github/actions/harden-runner/diagnostics
         with:
           operation: report
           expect-repair: ${{ github.event_name == 'pull_request' || inputs.test_resolver_repair }}

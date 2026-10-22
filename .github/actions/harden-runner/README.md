@@ -51,14 +51,14 @@ do not combine all jobs’ destinations into a global permissive list.
 Run tests:
 
 ```shell
-node --test .github/actions/harden-runner/runtime/*.test.cjs
+npm test --prefix .github/actions/harden-runner
 ```
 
 The pinned actionlint version predates `$/`. `.github/actionlint.yaml` suppresses
 only the unsupported-reference diagnostic for this action reference in
 workflows. Other lint checks remain enabled.
 
-The diagnostic retains before/after evidence. In before/after mode, an original
+The [diagnostics action](diagnostics/README.md) retains before/after evidence. In before/after mode, an original
 connectivity failure is informational if the repaired probes complete and pass.
 A reachable unlisted destination, failed final probe, or incomplete final probe
 always fails the job. Repair-first samples require both probe phases to pass.

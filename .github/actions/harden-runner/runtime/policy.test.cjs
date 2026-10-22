@@ -76,7 +76,7 @@ test('all workflow group selections resolve and every group has a consumer', () 
     const workflow = parse(fs.readFileSync(path.join(github, 'workflows', file), 'utf8'));
     for (const job of Object.values(workflow.jobs || {})) {
       for (const step of job.steps || []) {
-        if (!step.uses?.startsWith('$/.github/actions/harden-runner')) continue;
+        if (!['$/.github/actions/harden-runner', '$/.github/actions/harden-runner/runtime'].includes(step.uses)) continue;
         const selection = step.with?.policies;
         for (const os of ['Linux', 'Windows', 'macOS']) {
           assert.doesNotThrow(() => readPolicy(content, selection, os), `${file}/${os}`);
