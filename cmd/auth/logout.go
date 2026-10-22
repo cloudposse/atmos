@@ -140,7 +140,7 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 		return errUtils.ErrMutuallyExclusiveFlags
 	}
 
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	// Handle --all-realms flag - logout from all realms across all repositories.
 	if allRealmsFlag {

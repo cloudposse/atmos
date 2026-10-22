@@ -18,6 +18,7 @@ const (
 	ComponentCommand InputKind = "component.command"
 	Function         InputKind = "function"
 	Source           InputKind = "source"
+	Plugin           InputKind = "plugin"
 	GitChange        InputKind = "git.change"
 	AtmosAffected    InputKind = "atmos.affected"
 	GitHubEvent      InputKind = "github.event"

@@ -63,7 +63,7 @@ func (m *manager) authenticateChain(ctx context.Context, _ string) (types.ICrede
 	// aws/credential-process) bypasses this cache: helper credentials may carry no expiration,
 	// so isCredentialValid would treat them as valid and skip the helper for the whole process.
 	// Multi-step chains still cache their final downstream credentials.
-	skipProcessCache := len(m.chain) == 1 && m.chainRootIsStandalone()
+	skipProcessCache := (len(m.chain) == 1 && m.chainRootIsStandalone()) || m.chainRootHasPrivateCache()
 	cacheKey := m.chainCacheKey()
 	if !skipProcessCache {
 		if entry, ok := processCredentialCache.Load(cacheKey); ok {
@@ -197,8 +197,8 @@ func (m *manager) findFirstValidCachedCredentials() int {
 	// Ambient chains must always re-resolve from the environment. Returning -1 forces
 	// authentication to start at the provider so a changed ambient principal (e.g. a new
 	// `gcloud auth application-default login`) is picked up on the very next login.
-	if m.chainRootIsAmbient() {
-		log.Debug("Skipping cached credentials for ambient chain", logKeyChain, m.chain, logKeyProvider, m.chain[0])
+	if m.chainRootIsAmbient() || m.chainRootHasPrivateCache() {
+		log.Debug("Skipping cached credentials for externally managed chain", logKeyChain, m.chain, logKeyProvider, m.chain[0])
 		return -1
 	}
 
@@ -522,6 +522,8 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 	// principal from the environment on every call; persisting their token would make the
 	// next login replay that principal even after the ambient credentials change.
 	switch {
+	case types.UsesPrivateCredentialCache(provider):
+		m.purgeCachedCredentials(providerName)
 	case types.ProviderIsAmbient(provider):
 		log.Debug("Skipping keyring cache for ambient provider credentials", logKeyProvider, providerName)
 		m.purgeCachedCredentials(providerName)
@@ -790,4 +792,12 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 	}
 
 	return fmt.Errorf("%w: identity %q has invalid via configuration", errUtils.ErrInvalidIdentityConfig, identityName)
+}
+
+// chainRootHasPrivateCache forces configuration-bound session validation before cache reuse.
+func (m *manager) chainRootHasPrivateCache() bool {
+	if len(m.chain) == 0 {
+		return false
+	}
+	return types.UsesPrivateCredentialCache(m.providers[m.chain[0]])
 }

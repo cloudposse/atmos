@@ -569,6 +569,12 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		return atmosConfig, err
 	}
 
+	atmosConfig.ActiveProfiles = uniqueProfileNames(configAndStacksInfo.ProfilesFromArg)
+
+	if err := applyPluginPolicy(v, &atmosConfig); err != nil {
+		return atmosConfig, err
+	}
+
 	if err := validateSkillSources(&atmosConfig); err != nil {
 		return atmosConfig, err
 	}
@@ -2911,4 +2917,16 @@ func findYAMLMappingPath(node *goyaml.Node, path ...string) *goyaml.Node {
 		}
 	}
 	return nil
+}
+
+// uniqueProfileNames keeps the names exactly as typed, drops blanks and duplicates, and preserves
+// activation order. The result is never nil.
+func uniqueProfileNames(names []string) []string {
+	result := make([]string, 0, len(names))
+	for _, name := range names {
+		if name != "" && !slices.Contains(result, name) {
+			result = append(result, name)
+		}
+	}
+	return result
 }
