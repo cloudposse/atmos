@@ -36,6 +36,10 @@ reporter run's summary URL.
   and [macOS](https://github.com/cloudposse/atmos/actions/runs/39782257359/job/119844160649),
   and [three refused internal artifact API connections](https://github.com/cloudposse/atmos/actions/runs/39782257359/job/119844159899)
   before demo linting could start.
+- The [consumer contract job](https://github.com/cloudposse/atmos/actions/runs/39799519472/job/119897869185)
+  failed before running tests when the Pact native library download was reset by
+  GitHub's release-assets host. The pinned installer creates the destination
+  file before downloading and can accept that leftover file on a normal retry.
 
 ## Changes
 
@@ -67,6 +71,10 @@ reporter run's summary URL.
   the current workflow run with an `actions: read` token. Allow the Azure storage
   redirect hosts in this job too, so runner hardening permits the REST download.
   Retain bounded retries.
+- Retry the pinned Pact library installer up to three times, waiting 10 seconds
+  between failures and limiting the setup step to five minutes. Force each
+  download so a partial library cannot satisfy the installer's existence check.
+  Exhausted retries fail the job; contract test failures are not retried.
 - Replace live latest-release tests with local API fixtures and a TLS server
   that checks authenticated and unauthenticated requests. Preserve real 404
   error coverage instead of treating missing releases as transient errors.
@@ -89,6 +97,9 @@ reporter run's summary URL.
   all 91 changed executable lines were covered locally after the review fix.
   This is a touched-package check, not full-suite coverage; Codecov remains
   authoritative. Invalid summary run IDs are tested explicitly.
+- Executed the Pact setup shell with a simulated installer: first-attempt
+  success, recovery after two failed partial downloads, and failure after all
+  three attempts. Verified forced downloads and the 10-second retry delays.
 - Workflow validation with `actionlint`, the fix-log format validator,
   `git diff --check`, and the commit hooks passed.
 - Hosted CI must validate the artifact download path; a local unit test cannot
