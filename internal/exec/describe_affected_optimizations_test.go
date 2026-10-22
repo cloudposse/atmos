@@ -673,6 +673,32 @@ data "aws_caller_identity" "bad" {
 		assert.ErrorIs(t, err, errUtils.ErrFailedToLoadTerraformComponent)
 	})
 
+	t.Run("provider iteration with the index split across lines still yields module patterns", func(t *testing.T) {
+		t.Parallel()
+		// Terraform-config-inspect reports only the line where the provider expression starts, so the
+		// index has to be read across the following lines.
+		splitPath := filepath.Join(tempDir, "components", "terraform", "split-provider-iteration")
+		require.NoError(t, os.MkdirAll(filepath.Join(splitPath, "modules", "subnets"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(splitPath, "main.tf"), []byte(`
+data "aws_caller_identity" "each" {
+  for_each = toset(["dev", "prod"])
+  provider = aws.by_account[
+    each.value
+  ]
+}
+
+module "subnets" {
+  source = "./modules/subnets"
+}
+`), 0o644))
+
+		freshCache := newComponentPathPatternCache()
+		patterns, err := freshCache.getTerraformModulePatterns("split-provider-iteration", atmosConfig)
+		require.NoError(t, err)
+		require.Len(t, patterns, 1)
+		assert.Contains(t, filepath.ToSlash(patterns[0]), "split-provider-iteration/modules/subnets")
+	})
+
 	t.Run("conditional after an indexed provider alias still fails", func(t *testing.T) {
 		t.Parallel()
 		// The expression starts with an indexed provider alias, but the whole value is a conditional, which

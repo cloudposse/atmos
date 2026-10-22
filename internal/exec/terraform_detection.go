@@ -236,12 +236,20 @@ func isProviderIterationDiagnostic(diag tfconfig.Diagnostic) bool {
 		return false
 	}
 
-	line, ok := sourceLine(diag.Pos.Filename, diag.Pos.Line)
-	return ok && indexedProviderAliasPattern.MatchString(line)
+	text, ok := providerArgumentText(diag.Pos.Filename, diag.Pos.Line)
+	return ok && indexedProviderAliasPattern.MatchString(text)
 }
 
-// sourceLine returns the 1-based line from filename, and false if the file or line cannot be read.
-func sourceLine(filename string, line int) (string, bool) {
+// maxProviderArgumentLines bounds how many lines providerArgumentText joins for an index split across lines.
+const maxProviderArgumentLines = 20
+
+// providerArgumentText returns the `provider` argument that starts on the 1-based line of filename.
+// Terraform-config-inspect reports only the line where the expression starts, so if that line opens more
+// square brackets than it closes, the following lines are joined until the brackets balance. This lets an
+// index split across lines (`provider = aws.by_account[` ... `]`) be matched as one expression, including
+// anything that follows the closing bracket. It returns false if the file or line cannot be read, or the
+// brackets do not balance within maxProviderArgumentLines lines.
+func providerArgumentText(filename string, line int) (string, bool) {
 	if filename == "" || line < 1 {
 		return "", false
 	}
@@ -255,7 +263,22 @@ func sourceLine(filename string, line int) (string, bool) {
 	if line > len(lines) {
 		return "", false
 	}
-	return lines[line-1], true
+
+	text := lines[line-1]
+	depth := bracketDepth(text)
+	for next := line; depth > 0 && next < len(lines) && next < line-1+maxProviderArgumentLines; next++ {
+		text += " " + strings.TrimSpace(lines[next])
+		depth += bracketDepth(lines[next])
+	}
+	if depth != 0 {
+		return "", false
+	}
+	return text, true
+}
+
+// bracketDepth returns how many more square brackets s opens than it closes.
+func bracketDepth(s string) int {
+	return strings.Count(s, "[") - strings.Count(s, "]")
 }
 
 // allDiagnosticsAreProviderIteration reports whether every error-severity diagnostic in diags is
