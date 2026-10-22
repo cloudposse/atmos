@@ -54,7 +54,9 @@ reporter run's summary URL.
   A new head, base commit, or target branch requires a new snapshot. A same-head
   rerun replaces a previously final report with a pending snapshot.
 - Keep pending snapshots eligible for scheduled recovery beyond the 24-hour
-  recent-commit window. Publish final evidence after CI completes, including
+  recent-commit window. Also check for active current-head workflows before
+  applying the age cutoff, recovering same-head reruns whose events were missed.
+  Empty workflow listings do not keep inactive old PRs selected. Publish final evidence after CI completes, including
   failures, and continue reconciling later review and external-check changes.
 - Compare report content independently of its reporter-run summary URL. Keep
   the existing link when evidence is unchanged, while still producing a job
@@ -71,10 +73,12 @@ reporter run's summary URL.
   the current workflow run with an `actions: read` token. Allow the Azure storage
   redirect hosts in this job too, so runner hardening permits the REST download.
   Retain bounded retries.
-- Retry the pinned Pact library installer up to three times, waiting 10 seconds
-  between failures and limiting the setup step to five minutes. Force each
-  download so a partial library cannot satisfy the installer's existence check.
-  Exhausted retries fail the job; contract test failures are not retried.
+- Run Pact library installation through `atmos test pact-install`, using the
+  custom command's native retry policy: three attempts with 10-second delays.
+  The local default is `build/pact`; CI passes `--lib-dir "$RUNNER_TEMP/pact"`
+  and limits the setup step to five minutes. Force each download so a partial
+  library cannot satisfy the installer's existence check. Exhausted retries
+  fail the job; contract test failures are not retried.
 - Replace live latest-release tests with local API fixtures and a TLS server
   that checks authenticated and unauthenticated requests. Preserve real 404
   error coverage instead of treating missing releases as transient errors.
@@ -97,9 +101,13 @@ reporter run's summary URL.
   all 91 changed executable lines were covered locally after the review fix.
   This is a touched-package check, not full-suite coverage; Codecov remains
   authoritative. Invalid summary run IDs are tested explicitly.
-- Executed the Pact setup shell with a simulated installer: first-attempt
+- Executed `atmos test pact-install` with a simulated installer: first-attempt
   success, recovery after two failed partial downloads, and failure after all
-  three attempts. Verified forced downloads and the 10-second retry delays.
+  three attempts. Verified forced downloads and a library path containing spaces.
+  The command help and workflow configuration also validated.
+- Old-head rerun selection regressions failed before the recovery fix and cover
+  active statuses, terminal runs, empty listings, other heads, reporter workflows,
+  API errors, and both stale and recent PR update timestamps.
 - Workflow validation with `actionlint`, the fix-log format validator,
   `git diff --check`, and the commit hooks passed.
 - Hosted CI must validate the artifact download path; a local unit test cannot

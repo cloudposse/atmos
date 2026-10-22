@@ -876,22 +876,13 @@ jobs:
           persist-credentials: false
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
+      - name: Set up Atmos bootstrap
+        uses: ./.github/actions/setup-atmos-bootstrap
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
       - name: Install native Pact library using the pinned Go dependency
         timeout-minutes: 5
-        run: |
-          for attempt in 1 2 3; do
-            # The installer leaves a file behind on download failure. Force a
-            # fresh download so the next attempt cannot accept that partial file.
-            if go run github.com/pact-foundation/pact-go/v2 install --force --libDir "$RUNNER_TEMP/pact"; then
-              exit 0
-            fi
-            if [ "$attempt" -eq 3 ]; then
-              echo "::error::Pact library installation failed after 3 attempts"
-              exit 1
-            fi
-            echo "::warning::Pact library installation failed (attempt $attempt/3); retrying in 10 seconds"
-            sleep 10
-          done
+        run: atmos test pact-install --lib-dir "$RUNNER_TEMP/pact"
       - name: Verify consumer contracts
         env:
           CGO_LDFLAGS: -L${{ runner.temp }}/pact

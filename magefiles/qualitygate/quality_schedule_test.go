@@ -11,9 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/cloudposse/atmos/magefiles/internal/githubapi"
 	"github.com/cloudposse/atmos/magefiles/internal/githubtest"
-	"github.com/stretchr/testify/require"
 )
 
 // scheduleCommentState describes the gate comment a PR has.
@@ -59,6 +60,8 @@ var (
 
 func (s *scheduleServer) get(path string, response any) error {
 	switch {
+	case strings.Contains(path, "/actions/runs?"):
+		return githubtest.Respond(map[string]any{"workflow_runs": []githubapi.Run{}}, response)
 	case strings.Contains(path, "/pulls?"):
 		page, _ := strconv.Atoi(schedulePagePattern.FindStringSubmatch(path)[1])
 		s.pages = append(s.pages, page)

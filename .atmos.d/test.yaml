@@ -191,6 +191,26 @@ commands:
             # reasoning behind each choice.
             command: go tool mage test:race
 
+      - name: pact-install
+        description: Install the pinned native Pact library, retrying failed downloads
+        working_directory: !repo-root .
+        flags:
+          - name: lib-dir
+            description: Directory for the native Pact library (relative to the repository root)
+            default: build/pact
+        env:
+          GOTOOLCHAIN: *go_auto_toolchain
+          PACT_LIBRARY_DIR: '{{ index .Flags "lib-dir" }}'
+        steps:
+          - type: shell
+            # Failed downloads leave a partial file that the installer could
+            # otherwise accept on the next attempt. Always download it afresh.
+            command: go run github.com/pact-foundation/pact-go/v2 install --force --libDir "$PACT_LIBRARY_DIR"
+            retry:
+              max_attempts: 3
+              initial_delay: 10s
+              backoff_strategy: constant
+
       - name: magefiles
         description: Run magefiles/ unit tests with coverage (excluded from `go test ./...` by the mage build tag, so CI runs it as a separate step)
         env: *go_auto_env

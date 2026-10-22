@@ -334,7 +334,9 @@ review-thread resolution. It selects open PRs targeting this repository, includi
 stacked PRs, whose head commit
 (the later of author and committer date) is within the last 24 hours (inclusive),
 plus any PR with no final gate report for its current head and base, a pending
-CI snapshot, or a gate whose evidence was unavailable, at any age. Each report
+CI snapshot, an active current-head workflow, or a gate whose evidence was
+unavailable, at any age. Active workflows are checked before either age cutoff
+so a missed rerun event cannot preserve stale readiness. Each report
 records the evaluated base branch and SHA, so advancing a prerequisite or
 retargeting the PR triggers reconciliation even when its head is unchanged. GitHub's
 `updated_at` is not used as an activity signal because the gate's own labels and
