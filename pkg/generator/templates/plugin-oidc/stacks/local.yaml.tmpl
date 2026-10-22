@@ -1,0 +1,10 @@
+vars:
+  stage: plugin-local
+components:
+  emulator:
+    {{ .Config.plugin_name | replace "/" "-" }}-registry:
+      driver: registry
+      container:
+        ports:
+          - host: 15557
+            container: 5000
