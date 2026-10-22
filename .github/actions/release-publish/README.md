@@ -8,7 +8,7 @@ only supplies inputs and calls its tested `run()` entrypoint.
 | --- | --- | --- |
 | `operation` | Yes | `prepare`, `provenance`, `publish`, or `verify`. |
 | `github-token` | Yes | Contents write for prepare/publish; contents read for verify. |
-| `release-id` | Yes | Exact numeric GitHub draft or published release ID. |
+| `release-id` | For `prepare`, `publish`, and `verify` | Exact numeric GitHub draft or published release ID; optional for `provenance`. |
 | `commit` | For prepare/provenance/publish | Full source commit SHA. |
 | `tag` | For provenance/publish | Authoritative tag returned by prepare. |
 | `artifact-directory` | For publish | Directory sealed by `release:verifyArtifacts`. |

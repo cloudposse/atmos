@@ -1,6 +1,7 @@
 package qualitygate
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -13,6 +14,7 @@ import (
 // Repository evidence is shared by evaluator copies for one reporter run.
 // Errors are cached too: unavailable evidence must never imply eligibility.
 type releaseEvidenceCache struct {
+	ctx         context.Context
 	once        sync.Once
 	historyOnce sync.Once
 	milestones  []milestone.Milestone
@@ -23,7 +25,7 @@ type releaseEvidenceCache struct {
 
 func (q *qualityClient) initReleaseEvidence() {
 	if q.releaseEvidence == nil {
-		q.releaseEvidence = &releaseEvidenceCache{}
+		q.releaseEvidence = &releaseEvidenceCache{ctx: q.ctx}
 	}
 }
 
@@ -31,7 +33,7 @@ func (q *qualityClient) releaseState() *releaseEvidenceCache {
 	q.initReleaseEvidence()
 	state := q.releaseEvidence
 	state.once.Do(func() {
-		c := milestone.Client{Context: q.ctx, API: q.api, Repo: q.repo}
+		c := milestone.Client{Context: state.ctx, API: q.api, Repo: q.repo}
 		state.milestones, state.err = c.ListMilestones()
 		if state.err != nil {
 			return
@@ -43,7 +45,7 @@ func (q *qualityClient) releaseState() *releaseEvidenceCache {
 
 func (q *qualityClient) releaseHistory(state *releaseEvidenceCache) error {
 	state.historyOnce.Do(func() {
-		c := milestone.Client{Context: q.ctx, API: q.api, Repo: q.repo}
+		c := milestone.Client{Context: state.ctx, API: q.api, Repo: q.repo}
 		state.historyErr = c.CheckReleaseHistory(state.milestones, state.baseline)
 	})
 	return state.historyErr

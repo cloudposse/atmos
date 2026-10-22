@@ -26,7 +26,8 @@ const (
 // when the run budget ends are not failures; the next run selects them again.
 func (q *qualityClient) reconcileAll(numbers []int) error {
 	// Every reporter run gets fresh repository evidence, shared by scoped copies.
-	q.releaseEvidence = &releaseEvidenceCache{}
+	// Shared loads use the run budget, not the first PR's shorter deadline.
+	q.releaseEvidence = &releaseEvidenceCache{ctx: q.ctx}
 	timeout := q.prTimeout
 	if timeout <= 0 {
 		timeout = qualityPRTimeout
