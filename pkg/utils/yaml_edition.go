@@ -27,7 +27,11 @@ func yamlCachePolicy(config *schema.AtmosConfiguration) string {
 	if config == nil {
 		return ""
 	}
-	return config.Settings.YAML.KeyDelimiter + "\x00edition=" + config.Edition
+	policy := config.Settings.YAML.KeyDelimiter + "\x00edition=" + config.Edition
+	if config.PreserveStackLiterals {
+		policy += "\x00stack-literals"
+	}
+	return policy
 }
 
 // preserveLegacyConditionFields records legacy CEL syntax only in structural

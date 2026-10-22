@@ -117,6 +117,8 @@ type AtmosConfiguration struct {
 	// configuration constructed by a caller that still needs catalog discovery.
 	ScaffoldConfigLoaded bool          `yaml:"-" json:"-" mapstructure:"-"`
 	Plugins              PluginsConfig `yaml:"plugins,omitempty" json:"plugins,omitempty" mapstructure:"plugins"`
+	// PreserveStackLiterals is set only on a stack loader copy, including its nested includes.
+	PreserveStackLiterals bool `yaml:"-" json:"-" mapstructure:"-"`
 	// AuthManager carries the same invocation-local manager passed by the caller.
 	// Like ConfigAndStacksInfo.AuthManager, any avoids the auth/schema import cycle.
 	AuthManager any `yaml:"-" json:"-" mapstructure:"-"`

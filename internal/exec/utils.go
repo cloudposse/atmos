@@ -24,6 +24,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/env"
+	"github.com/cloudposse/atmos/pkg/function/literalsource"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -1187,15 +1188,13 @@ func processStacks(
 		// Use delimiter-safe YAML encoding when custom delimiters are configured.
 		// This prevents YAML's single-quote escaping ('') from breaking template delimiters
 		// that contain single-quote characters (e.g., ["'{{", "}}'"]). See #2052.
-		componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
-			templateInput,
-			atmosConfig.Templates.Settings.Delimiters,
-		)
-		if err != nil {
+		if err := mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSectionStruct); err != nil {
 			return configAndStacksInfo, err
 		}
-
-		err = mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSectionStruct)
+		componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
+			templateInput,
+			effectiveComponentTemplateDelimiters(atmosConfig, &settingsSectionStruct),
+		)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -1294,13 +1293,17 @@ func processStacks(
 		}
 	}
 
-	if processTemplates || processYamlFunctions {
-		postProcessTemplatesAndYamlFunctions(&configAndStacksInfo)
-	}
+	// Literal restoration is independent of evaluation flags and happens only after
+	// all evaluators have finished. Refresh section views even when evaluation is disabled.
+	configAndStacksInfo.ComponentSection = literalsource.RestoreMap(configAndStacksInfo.ComponentSection)
+	postProcessTemplatesAndYamlFunctions(&configAndStacksInfo)
 	if hasLiteralMocks {
-		configAndStacksInfo.ComponentSection[cfg.MocksSectionName] = literalMocks
+		configAndStacksInfo.ComponentSection[cfg.MocksSectionName] = literalsource.Restore(literalMocks)
 	}
 	restoreSources()
+	if sources, found := configAndStacksInfo.ComponentSection[sourcesSectionName]; found {
+		configAndStacksInfo.ComponentSection[sourcesSectionName] = literalsource.Restore(sources)
+	}
 
 	// Process the ENV variables from the `env` section.
 	configAndStacksInfo.ComponentEnvList = env.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)

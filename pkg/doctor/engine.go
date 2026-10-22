@@ -318,9 +318,13 @@ func scanCheck(r *Report, id string, files int) Check {
 		check.Status = statusSkipped
 		check.Reason = "No documents were selected"
 	}
-	if id == ruleComponentMonorepo && hasStatus(r, id, statusVerificationIncomplete) {
+	if (id == ruleComponentMonorepo || id == ruleYAMLFunctions) && hasStatus(r, id, statusVerificationIncomplete) ||
+		(id == ruleYAMLFunctions && hasStatus(r, ruleImports, statusVerificationIncomplete)) {
 		check.Status = "incomplete"
 		check.Reason = "Some component sources could not be verified"
+		if id == ruleYAMLFunctions {
+			check.Reason = "Some YAML function contexts could not be inspected"
+		}
 	}
 	if id == ruleLegacyNaming && hasStatus(r, id, statusVerificationIncomplete) {
 		check.Status = "incomplete"

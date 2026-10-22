@@ -18,6 +18,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfgpkg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/literalsource"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/merge"
@@ -128,13 +129,17 @@ func manifestLoadOnlyContextKeys(tmplData any) []string {
 // processTmpl parses and executes Go templates. A non-empty in.manifestLoadFile selects the
 // manifest-load behavior.
 func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendered string, renderErr error) {
-	protectedSource, restoreSource, protectErr := starlarksource.Protect(in.value, in.name)
+	literalProtected, restoreLiteralSource, literalErr := literalsource.ProtectYAML(in.value)
+	if literalErr != nil {
+		return "", literalErr
+	}
+	protectedSource, restoreSource, protectErr := starlarksource.Protect(literalProtected, in.name)
 	if protectErr != nil {
 		return "", protectErr
 	}
 	defer func() {
 		if renderErr == nil {
-			rendered = restoreSource(rendered)
+			rendered = restoreLiteralSource(restoreSource(rendered))
 		}
 	}()
 
@@ -149,6 +154,8 @@ func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendere
 		return "", err
 	}
 
+	effectiveDelims := in.delims.Normalize()
+	protectedSource, restoreLiterals := literalsource.ProtectEncoded(protectedSource, effectiveDelims.Left, effectiveDelims.Right)
 	t, err := in.delims.Apply(template.New(in.name)).Funcs(funcs).Parse(protectedSource)
 	if err != nil {
 		return "", err
@@ -180,12 +187,12 @@ func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendere
 	}
 
 	var res bytes.Buffer
-	err = t.Execute(&res, in.data)
+	err = t.Execute(&res, literalsource.Restore(in.data))
 	if err != nil {
 		return "", err
 	}
 
-	return res.String(), nil
+	return restoreLiterals(res.String()), nil
 }
 
 // buildTemplateFuncMap combines template functions with the appropriate manifest-load guard and
@@ -350,14 +357,18 @@ func ProcessTmplWithDatasources(
 ) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmplWithDatasources")()
 
-	protectedSource, restoreSource, protectErr := starlarksource.Protect(tmplValue, tmplName)
+	literalProtected, restoreLiteralSource, literalErr := literalsource.ProtectYAML(tmplValue)
+	if literalErr != nil {
+		return "", literalErr
+	}
+	protectedSource, restoreSource, protectErr := starlarksource.Protect(literalProtected, tmplName)
 	if protectErr != nil {
 		return "", protectErr
 	}
 	tmplValue = protectedSource
 	defer func() {
 		if renderErr == nil {
-			rendered = restoreSource(rendered)
+			rendered = restoreLiteralSource(restoreSource(rendered))
 		}
 	}()
 
@@ -521,20 +532,22 @@ func ProcessTmplWithDatasources(
 
 		t.Option(option)
 
-		// Parse the template
-		t, err = t.Parse(result)
+		// Parse the template, shielding envelopes for this pass's effective delimiters.
+		delimiterProtected, restoreDelimiterSettings := protectTemplateDelimiterSettings(result)
+		protectedResult, restoreLiterals := literalsource.ProtectEncoded(delimiterProtected, leftDelimiter, rightDelimiter)
+		t, err = t.Parse(protectedResult)
 		if err != nil {
 			return "", err
 		}
 
 		// Execute the template
 		var res bytes.Buffer
-		err = t.Execute(&res, tmplData)
+		err = t.Execute(&res, literalsource.Restore(tmplData))
 		if err != nil {
 			return "", err
 		}
 
-		result = res.String()
+		result = restoreDelimiterSettings(restoreLiterals(res.String()))
 		resultMap, err := u.UnmarshalYAML[schema.AtmosSectionMapType](result)
 		if err != nil {
 			return "", err
