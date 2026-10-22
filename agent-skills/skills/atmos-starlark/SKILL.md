@@ -254,8 +254,8 @@ The existing dependency installer installs missing tools and scopes `PATH` to th
 invocation. Declare dependencies in the main thread before parallel tasks; declarations
 inside branches are rejected. Repeated identical pins are cached and conflicting
 versions fail. `atmos.toolchain("install", "jqlang/jq@1.7.1")` runs an explicit toolchain
-command like the CLI: it pins the tool in the project's `.tool-versions`, after which every
-Atmos command in that project installs it automatically. It returns the usual process result
+command like the CLI: it pins the tool in the project's `.tool-versions`. Subsequent
+commands honor the project's `toolchain.install` policy. It returns the usual process result
 and does not change the calling script's `PATH`. Use `dependencies.tools` for a script-scoped
 pin that puts the tool on `PATH`. Spell tools `owner/name`; a short name such as `jq` fails
 when it matches more than one package. There

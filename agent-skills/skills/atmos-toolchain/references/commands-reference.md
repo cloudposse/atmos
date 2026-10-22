@@ -166,12 +166,14 @@ atmos toolchain search <query>
 
 ---
 
-## atmos toolchain aliases
+## Tool aliases (configuration)
 
-List all configured tool aliases.
+Define aliases with `toolchain.aliases` in `atmos.yaml`. There is no `aliases` subcommand.
 
-```shell
-atmos toolchain aliases
+```yaml
+toolchain:
+  aliases:
+    tf: hashicorp/terraform
 ```
 
 ---

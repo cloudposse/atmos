@@ -72,7 +72,7 @@ atmos devcontainer stop <name> [flags]
 | Flag | Description |
 |------|-------------|
 | `--instance` | Instance name (default: "default") |
-| `--timeout` | Stop timeout duration |
+| `--timeout` | Stop timeout in whole seconds |
 | `--rm` | Remove container after stopping |
 
 ### Examples
@@ -80,7 +80,7 @@ atmos devcontainer stop <name> [flags]
 ```shell
 atmos devcontainer stop default
 atmos devcontainer stop default --rm
-atmos devcontainer stop default --timeout 30s
+atmos devcontainer stop default --timeout 30
 ```
 
 ---

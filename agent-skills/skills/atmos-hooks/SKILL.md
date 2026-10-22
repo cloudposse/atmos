@@ -181,9 +181,10 @@ integration for the job.
 
 A step's relative paths (`source`, `destination`, `path`, `files`, `context`, and other
 step-specific fields) resolve against `with: { working_directory: ... }` when set, or the
-component's own working directory when unset. This is the only surface where `working_directory`
-is ever component-relative -- workflows and custom commands always resolve relative values against
-the current working directory, since neither is scoped to a single component.
+component's own working directory when unset. Workflow-level and custom-command directories,
+including relative shell-step overrides, resolve against the configured `base_path`.
+An extended step's own `working_directory` can instead resolve against the invocation directory;
+when it inherits a workflow directory, it receives that resolved directory.
 
 An explicit `working_directory:` value resolves differently depending on its shape:
 

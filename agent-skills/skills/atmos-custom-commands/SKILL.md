@@ -32,7 +32,7 @@ commands:
         default: World
     steps:
       - type: say
-        text: "Hello {{ .Arguments.name }}"
+        content: "Hello {{ .Arguments.name }}"
 ```
 
 ```shell

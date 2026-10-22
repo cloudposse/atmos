@@ -304,7 +304,7 @@ tables here.
   the body needs Atmos's own `{{ }}` templating or YAML functions before reaching CloudFormation.
   CloudFormation has no `generate:` — inline templating replaces it.
 - Use `dependencies.components` so `--all`/`--affected` deploys stacks in the right order — a
-  Terraform component can `depends_on` a CFN stack and vice versa.
+  Terraform component can depend on a CFN stack and vice versa.
 - Use `provision.backend.enabled: true` for a zero-friction dev sandbox; use explicit
   `backend create`/`update` in shared/production environments to re-apply secure defaults
   deliberately rather than only on first use.
