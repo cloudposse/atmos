@@ -22,7 +22,7 @@ func TestCopyRawBinaryPreservesPreviousExecutable(t *testing.T) {
 	previous := filepath.Join(dir, "previous")
 	require.NoError(t, os.WriteFile(source, []byte("replacement binary"), 0o755))
 	require.NoError(t, os.WriteFile(destination, []byte("previous binary"), 0o755))
-	before, err := os.Stat(destination)
+	before, err := rawBinarySnapshot(destination)
 	require.NoError(t, err)
 	require.NoError(t, os.Link(destination, previous))
 
@@ -99,7 +99,7 @@ func TestCopyRawBinaryIdenticalReinstallPreservesOpenExecutable(t *testing.T) {
 			source, destination := filepath.Join(dir, "download"), filepath.Join(dir, "installed")
 			require.NoError(t, os.WriteFile(source, content, 0o600))
 			require.NoError(t, os.WriteFile(destination, content, 0o755))
-			before, err := os.Stat(destination)
+			before, err := rawBinarySnapshot(destination)
 			require.NoError(t, err)
 			// Windows opens this without FILE_SHARE_DELETE, modeling a scanner's
 			// read handle. Reinstalling identical verified bytes needs no rename.
@@ -185,8 +185,9 @@ func TestRawBinaryMatchesRejectsReplacedDestination(t *testing.T) {
 	content := []byte("identical bytes in different files")
 	require.NoError(t, os.WriteFile(staged, content, 0o600))
 	require.NoError(t, os.WriteFile(destination, content, 0o755))
-	expected, err := os.Lstat(destination)
+	expected, err := rawBinarySnapshot(destination)
 	require.NoError(t, err)
+	// Snapshot identity through the same handle-based path as installation.
 	// Keep the original inode alive so creating its replacement cannot reuse it.
 	require.NoError(t, os.Rename(destination, previous))
 	require.NoError(t, os.WriteFile(destination, content, 0o755))
@@ -212,7 +213,7 @@ func TestRawBinaryMatchesMissingInput(t *testing.T) {
 			content := []byte("verified binary")
 			require.NoError(t, os.WriteFile(staged, content, 0o600))
 			require.NoError(t, os.WriteFile(destination, content, 0o755))
-			expected, err := os.Lstat(destination)
+			expected, err := rawBinarySnapshot(destination)
 			require.NoError(t, err)
 			require.NoError(t, os.Remove(filepath.Join(dir, missing)))
 
@@ -237,7 +238,7 @@ func TestRawBinaryMatchesRejectsUnreadableStagedContent(t *testing.T) {
 	require.NoError(t, os.Mkdir(staged, 0o755))
 	content := []byte("installed executable")
 	require.NoError(t, os.WriteFile(destination, content, 0o755))
-	expected, err := os.Lstat(destination)
+	expected, err := rawBinarySnapshot(destination)
 	require.NoError(t, err)
 
 	matches, err := rawBinaryMatches(staged, destination, expected)
@@ -272,4 +273,60 @@ func TestCopyRawBinaryInvalidDestinationPreservesSource(t *testing.T) {
 			require.Equal(t, "download", entries[0].Name())
 		})
 	}
+}
+
+func TestCopyRawBinaryRejectsDirectoryDestination(t *testing.T) {
+	t.Parallel()
+	for _, populated := range []bool{false, true} {
+		t.Run(fmt.Sprintf("populated_%t", populated), func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			source, destination := filepath.Join(dir, "download"), filepath.Join(dir, "installed")
+			content := []byte("verified binary")
+			require.NoError(t, os.WriteFile(source, content, 0o755))
+			require.NoError(t, os.Mkdir(destination, 0o755))
+			if populated {
+				require.NoError(t, os.WriteFile(filepath.Join(destination, "sentinel"), content, 0o600))
+			}
+			require.ErrorIs(t, (&Installer{}).copyFile(source, destination), ErrFileOperation)
+			require.DirExists(t, destination, "even an empty destination directory must not be replaced")
+			if populated {
+				actual, err := os.ReadFile(filepath.Join(destination, "sentinel"))
+				require.NoError(t, err)
+				require.Equal(t, content, actual)
+			}
+			actual, err := os.ReadFile(source)
+			require.NoError(t, err)
+			require.Equal(t, content, actual)
+			entries, err := os.ReadDir(dir)
+			require.NoError(t, err)
+			require.Len(t, entries, 2, "failed inspection must clean up staged bytes")
+		})
+	}
+}
+
+func TestCopyRawBinaryCannotInspectUnreadableDestination(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission bits do not deny Windows file reads")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses permission checks")
+	}
+	dir := t.TempDir()
+	source, destination := filepath.Join(dir, "download"), filepath.Join(dir, "installed")
+	require.NoError(t, os.WriteFile(source, []byte("new executable"), 0o755))
+	require.NoError(t, os.WriteFile(destination, []byte("preserved executable"), 0o600))
+	require.NoError(t, os.Chmod(destination, 0))
+	t.Cleanup(func() { require.NoError(t, os.Chmod(destination, 0o600)) })
+	err := (&Installer{}).copyFile(source, destination)
+	require.ErrorIs(t, err, ErrFileOperation)
+	require.ErrorIs(t, err, os.ErrPermission)
+	require.NoError(t, os.Chmod(destination, 0o600))
+	actual, err := os.ReadFile(destination)
+	require.NoError(t, err)
+	require.Equal(t, "preserved executable", string(actual))
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Len(t, entries, 2, "failed identity capture must remove staged bytes")
 }

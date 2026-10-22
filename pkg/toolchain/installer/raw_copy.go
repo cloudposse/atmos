@@ -30,7 +30,7 @@ func (i *Installer) copyFile(src, dst string) error {
 	}
 	// Preserve an existing destination's permissions, matching os.Create.
 	// A new destination retains the creation mode filtered through the umask.
-	info, err := os.Lstat(dst)
+	info, err := rawBinarySnapshot(dst)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("%w: failed to inspect destination file: %w", ErrFileOperation, err)
 	}
@@ -52,6 +52,23 @@ func (i *Installer) copyFile(src, dst string) error {
 		return fmt.Errorf("%w: failed to replace destination file: %w", ErrFileOperation, err)
 	}
 	return nil
+}
+
+// rawBinarySnapshot captures identity from a handle before comparison starts.
+// Windows Lstat can defer loading a file ID until SameFile, at which point the
+// path may name a replacement. File.Stat records the opened file's ID eagerly.
+// Retain Lstat's non-regular metadata so symlinks are rejected without following them.
+func rawBinarySnapshot(destination string) (os.FileInfo, error) {
+	info, err := os.Lstat(destination)
+	if err != nil || !info.Mode().IsRegular() {
+		return info, err
+	}
+	file, err := os.Open(destination)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	return file.Stat()
 }
 
 // rawBinaryMatches avoids replacing an identical executable that Windows may
