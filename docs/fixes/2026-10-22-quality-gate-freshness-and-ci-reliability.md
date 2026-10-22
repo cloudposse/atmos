@@ -39,8 +39,11 @@ reporter run's summary URL.
 
 ## Changes
 
-- Preserve the first, newest result per app/name across all check pages,
-  including Codecov checks.
+- Select the newest result per app/name across all check pages, including
+  Codecov checks, by `started_at` rather than API response order. Check IDs
+  break timestamp ties; if any duplicate lacks a start time, use IDs for that
+  entire group so selection remains independent of page order. Check-run
+  responses do not expose the `created_at` field suggested in review.
 - Allow quality reconciliation when the timing coordinator succeeds without
   publishing final timing data. Publish an initial pending snapshot and clear
   stale readiness once, then retain that snapshot while CI remains incomplete.
@@ -52,6 +55,8 @@ reporter run's summary URL.
 - Compare report content independently of its reporter-run summary URL. Keep
   the existing link when evidence is unchanged, while still producing a job
   summary on each publishing pass. Genuine report changes get the new link.
+- Update the reporter README to describe pending snapshots, recovery selection,
+  check ordering, and summary-link deduplication.
 - Group the report into Readiness, Reviews, and Measures; link to the existing
   Actions job summary only when running in a summary-producing invocation.
 - Use the shared toolchain action's bounded installation retry for race shards,
@@ -66,7 +71,10 @@ reporter run's summary URL.
 
 ## Validation
 
-- Duplicate-check regression cases cover multiple suites/pages and changed results.
+- Duplicate-check regression cases cover both response orders across multiple
+  suites/pages, successful and failed replacements, queued/running reruns,
+  timestamp ties, and missing timestamps. Reversed-order cases failed before
+  replacing the initial first-result selection with explicit age comparison.
 - New update-frequency regressions failed before the fix: intermediate CI
   progress and a changed summary URL both caused comment PATCH requests.
 - Tests cover initial publication, repeated pending events, final success and
@@ -75,6 +83,10 @@ reporter run's summary URL.
   recovery of pending snapshots older than 24 hours.
 - `go test -tags=mage -race ./magefiles/...` passed during this PR's validation.
 - `go test -race ./pkg/github -count=1` passed after replacing the live release tests.
+- The patch-scoped coverage skill passed for the reporter and GitHub packages;
+  all 91 changed executable lines were covered locally after the review fix.
+  This is a touched-package check, not full-suite coverage; Codecov remains
+  authoritative. Invalid summary run IDs are tested explicitly.
 - Workflow validation with `actionlint`, the fix-log format validator,
   `git diff --check`, and the commit hooks passed.
 - Hosted CI must validate the artifact download path; a local unit test cannot

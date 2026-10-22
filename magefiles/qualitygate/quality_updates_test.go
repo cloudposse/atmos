@@ -8,9 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/cloudposse/atmos/magefiles/internal/githubapi"
 	"github.com/cloudposse/atmos/magefiles/internal/githubtest"
-	"github.com/stretchr/testify/require"
 )
 
 func TestQualityIncompleteCIWaitsForFinalReport(t *testing.T) {
