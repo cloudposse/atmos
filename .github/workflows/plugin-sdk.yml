@@ -32,7 +32,7 @@ jobs:
             sdk/go.sum
       - name: Standalone SDK tests
         working-directory: sdk
-        run: go test -race -coverpkg=./... -coverprofile=../sdk-coverage.out ./...
+        run: go test -race ./...
       - name: Protocol parity
         env:
           CGO_ENABLED: "0"
@@ -47,17 +47,6 @@ jobs:
         env:
           CGO_ENABLED: "0"
         run: go test ./cmd -run '^TestPluginOIDCAcrossCLIProcesses$' -count=1
-
-      - name: Upload SDK coverage
-        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          slug: ${{ github.repository }}
-          files: sdk-coverage.out
-          disable_search: true
-          flags: unittests
-          use_pypi: true
-          fail_ci_if_error: false
 
   release-sdk:
     if: github.event_name == 'release'
