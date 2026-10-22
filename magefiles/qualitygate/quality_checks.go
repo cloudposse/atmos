@@ -215,11 +215,17 @@ func (q *qualityClient) allCheckStates(sha string, states map[string]string) err
 			if check.HeadSHA != sha {
 				continue
 			}
+			// filter=latest can still return the same app/name from multiple
+			// check suites, newest first. Keep the first across all pages.
+			key := "check: " + check.App.Slug + "/" + check.Name
+			if _, seen := states[key]; seen {
+				continue
+			}
 			state := check.Status
 			if state == "completed" {
 				state = check.Conclusion
 			}
-			states["check: "+check.App.Slug+"/"+check.Name] = state
+			states[key] = state
 		}
 		if len(response.Checks) < githubapi.PageSize {
 			return nil
@@ -290,6 +296,10 @@ func (q *qualityClient) coverageChecks(sha string, states map[string]string) err
 		}
 		for _, check := range response.Checks {
 			if check.App.Slug != "codecov" || check.HeadSHA != sha {
+				continue
+			}
+			// Preserve the newest result across check suites and pages, as in CI.
+			if _, seen := states[check.Name]; seen {
 				continue
 			}
 			state := check.Status
