@@ -1428,13 +1428,9 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 		return nil, fmt.Errorf("%w: parse main config base path: %w", errUtils.ErrMergeConfiguration, err)
 	}
 	if _, err := mergeImports(tempViper, configDir, basePathSource, runtimeBasePath); err != nil {
-		// A required (non-optional) import that fails to load must abort the whole config load
-		// (fail closed). Other import failures stay lenient (historical warn-and-continue): a
-		// bad optional import does not abort configuration loading.
-		if errors.Is(err, errUtils.ErrRequiredImportFailed) {
-			return nil, err
-		}
-		log.Debug("error process explicit imports", "file", tempViper.ConfigFileUsed(), "error", err)
+		// Optional missing imports are handled by the import resolver. Setup, policy,
+		// and required-import errors must never silently discard shared configuration.
+		return nil, err
 	}
 
 	// Get commands after defaults and explicit imports (without main commands).
@@ -1842,8 +1838,7 @@ func effectiveImportBasePath(runtimeBasePath, declared, declaredSource string) (
 
 // mergeImports processes imports from the atmos configuration and merges them into the destination configuration.
 func mergeImports(dst *viper.Viper, configDir, basePathSource, runtimeBasePath string) (string, error) {
-	var src schema.AtmosConfiguration
-	err := dst.Unmarshal(&src, atmosDecodeHook(dst))
+	src, err := decodeConfigForImports(dst)
 	if err != nil {
 		return "", err
 	}
