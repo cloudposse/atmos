@@ -126,8 +126,12 @@ for (const mode of ['stale', 'missing-log', 'tail-failed', 'malformed-count', 'l
 }
 
 test('reachable canary fails the diagnostic report', async t => {
+  const reachable = new Set([
+    'https://hardened-host-42-1.example.com/',
+    'https://hardened-container-42-1.example.com/',
+  ]);
   const f = fixture(t, { run(command, args) {
-    if (['curl', 'docker'].includes(command) && String(args.at(-1)).endsWith('.example.com/')) {
+    if (['curl', 'docker'].includes(command) && reachable.has(args.at(-1))) {
       return { code: 0, stdout: 'ip=192.0.2.2 http=200', stderr: '' };
     }
   } });
