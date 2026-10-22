@@ -1025,16 +1025,6 @@ jobs:
         with:
           atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
-      # Restore the toolchain directory before the installs below so they
-      # skip every tool already on disk instead of downloading five tools
-      # from the network on every run (restore-only: the build job's linux
-      # leg is this key's writer).
-      - name: Restore the Atmos toolchain cache
-        continue-on-error: true
-        uses: ./actions/cache
-        with:
-          mode: restore-only
-
       - name: Install Linux build dependencies (libudev-dev for CGO_ENABLED=1 -- see comment above)
         run: |
           # The DEB822 /etc/apt/sources.list.d/ubuntu.sources file (and the
@@ -1052,24 +1042,15 @@ jobs:
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
 
-      - name: Install Terraform, OpenTofu, Packer, Helm, and Helmfile
-        # Unlike the `test`/`build` jobs, this job never ran this step, so
-        # tests needing these binaries (e.g. cmd/terraform/migrate,
-        # TestPackerValidateCmd) fell back to Atmos's own lazy/auto-install
-        # path -- unreliable here since `go test ./...` runs each shard's
-        # packages as separate concurrent processes, and nothing serializes a
-        # shared install across them. Pre-installing once, before any test
-        # process starts, removes that race entirely (see docs/fixes for the
-        # incident this closes).
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          atmos toolchain install hashicorp/terraform
-          atmos toolchain install opentofu/opentofu
-          atmos toolchain install hashicorp/packer
-          atmos toolchain install helm/helm
-          atmos toolchain install helmfile/helmfile
-          atmos toolchain env --format=github
+      # Install before concurrent test processes can trigger competing lazy
+      # installs. Match the other test jobs: restore the shared cache, retry
+      # a failed install once (e.g. HTTP 502 fetching an OpenTofu signature),
+      # and export the pinned tools to PATH only after installation succeeds.
+      - name: Set up the CI toolchain
+        uses: ./.github/actions/ci-toolchain
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: restore-only
 
       - name: Run atmos test race
         env:
