@@ -4,7 +4,6 @@ import (
 	"context"
 
 	cfnmanifest "github.com/cloudposse/atmos/pkg/component/aws/cloudformation/manifest"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -18,17 +17,5 @@ func StaticCloudFormationSettings(ctx context.Context, config *schema.AtmosConfi
 	if err != nil {
 		return nil, err
 	}
-	result := map[string]any{}
-	for name, raw := range stacks {
-		stack, _ := raw.(map[string]any)
-		components, _ := stack[cfg.ComponentsSectionName].(map[string]any)
-		cfn, _ := components[cfg.CloudFormationComponentType].(map[string]any)
-		settings := map[string]any{}
-		for component, raw := range cfn {
-			section, _ := raw.(map[string]any)
-			settings[component] = cfnmanifest.DefaultsSection(section)
-		}
-		result[name] = settings
-	}
-	return result, nil
+	return cfnmanifest.SettingsByStack(stacks), nil
 }

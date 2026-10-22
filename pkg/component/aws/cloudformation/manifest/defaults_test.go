@@ -58,3 +58,17 @@ func TestRegionDefaults(t *testing.T) {
 		"region": "us-west-2", "timeout": 30, "unrelated": "value",
 	}))
 }
+
+func TestSettingsByStack(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{"components": map[string]any{"aws/cloudformation": map[string]any{
+			"vpc":   map[string]any{"region": "us-east-1", "timeout": "30m", "stack_name": "vpc"},
+			"plain": map[string]any{"stack_name": "plain"},
+		}, "terraform": map[string]any{"ignored": map[string]any{"region": "eu-west-1"}}}},
+		"empty": map[string]any{},
+	}
+	assert.Equal(t, map[string]any{
+		"dev":   map[string]any{"vpc": map[string]any{"region": "us-east-1", "timeout": "30m"}, "plain": map[string]any{}},
+		"empty": map[string]any{},
+	}, SettingsByStack(stacks))
+}

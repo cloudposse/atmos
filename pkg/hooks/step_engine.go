@@ -83,6 +83,7 @@ func (stepEngine) Run(ctx *ExecContext) (*Output, error) {
 		return nil, err
 	}
 	setDefaultStepWorkingDirectory(ctx, ws)
+	policy := newHookStepPolicy(ctx)
 
 	executor := runnerstep.NewStepExecutorWithVars(vars)
 	runCtx := context.Background()
@@ -93,8 +94,19 @@ func (stepEngine) Run(ctx *ExecContext) (*Output, error) {
 
 	var result *runnerstep.StepResult
 	run := func(attemptCtx context.Context) error {
+		runs, whenErr := policy.shouldRun(ctx, ws, 0)
+		if whenErr != nil {
+			return whenErr
+		}
+		if !runs {
+			log.Debug("Skipping hook step, `when` condition did not match", "hook", ctx.HookName, "step", ws.Name)
+			return nil
+		}
 		r, runErr := executor.Execute(attemptCtx, ws)
 		result = r
+		if runErr == nil {
+			policy.recordSuccess(ws, 0)
+		}
 		return runErr
 	}
 
@@ -220,6 +232,7 @@ func (stepsEngine) Run(ctx *ExecContext) (*Output, error) {
 			runCtx = runnerstep.WithOutputSuppressed(runCtx)
 			executor.SetOutputWriters(runnerstep.OutputWriters{Stdout: ctx.Stdout, Stderr: ctx.Stderr})
 		}
+		policy := newHookStepPolicy(ctx)
 		for i, rawStep := range rawSteps {
 			step, resolveErr := workflowStepFromHookPayload(ctx, vars, rawStep)
 			if resolveErr != nil {
@@ -229,11 +242,20 @@ func (stepsEngine) Run(ctx *ExecContext) (*Output, error) {
 			if step.Name == "" {
 				step.Name = fmt.Sprintf("hook:steps:%d", i+1)
 			}
+			runs, whenErr := policy.shouldRun(ctx, step, i)
+			if whenErr != nil {
+				return whenErr
+			}
+			if !runs {
+				log.Debug("Skipping hook step, `when` condition did not match", "hook", ctx.HookName, "step", step.Name)
+				continue
+			}
 			result, runErr := executor.Execute(runCtx, step)
 			lastResult = result
 			if runErr != nil {
 				return runErr
 			}
+			policy.recordSuccess(step, i)
 		}
 		return nil
 	}
