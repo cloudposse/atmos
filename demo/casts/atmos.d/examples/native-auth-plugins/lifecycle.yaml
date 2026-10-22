@@ -1,0 +1,247 @@
+commands:
+  - name: casts generate examples native-auth-plugins lifecycle
+    description: Record creating, publishing, installing, and testing a native OIDC plugin
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        env:
+          GOFLAGS: -p=2
+        command: atmos casts setup
+      - type: workdir
+        name: plugin-fixture
+        source: fixtures/native-auth-plugins
+        path: "../../.context/cast-fixtures/native-auth-plugins"
+        reset: true
+      - type: script
+        name: local-sdk
+        interpreter: python3
+        script: |
+          from pathlib import Path
+          fixture = Path('../../.context/cast-fixtures/native-auth-plugins')
+          (fixture / 'sdk').symlink_to(Path('../../sdk').resolve(), target_is_directory=True)
+      - type: script
+        name: record-and-cleanup
+        interpreter: python3
+        script: |
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          project = Path('../../.context/cast-fixtures/native-auth-plugins/corporate-oidc')
+          result = None
+          try:
+              result = subprocess.run([
+                  'atmos', 'casts', 'record', 'examples', 'native-auth-plugins', 'lifecycle',
+              ], check=False)
+          finally:
+              # Only stop the generated demo registry, never another project's emulator.
+              if project.is_dir():
+                  try:
+                      cleanup = subprocess.run([
+                          'atmos', f'--chdir={project}', 'dev', 'registry', 'down',
+                      ], check=False)
+                      if cleanup.returncode != 0:
+                          sys.stderr.write(f'registry cleanup failed ({cleanup.returncode})\n')
+                  except OSError as error:
+                      sys.stderr.write(f'registry cleanup failed: {error}\n')
+          raise SystemExit(result.returncode if result is not None else 1)
+      - type: script
+        name: sanitize-paths
+        interpreter: python3
+        script: |
+          import os, sys
+          from pathlib import Path
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import sanitize_paths
+
+          path = Path('../../website/static/casts/examples/native-auth-plugins/lifecycle.cast')
+          path.write_text(sanitize_paths(path.read_text(), Path('../..').resolve()))
+      - type: shell
+        name: validate
+        command: atmos casts validate examples native-auth-plugins lifecycle
+  - name: casts record examples native-auth-plugins lifecycle
+    description: Record the prepared native plugin fixture (used by the generator)
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: cast
+        name: lifecycle
+        working_directory: "../../.context/cast-fixtures/native-auth-plugins"
+        title: "Native OIDC plugin: create, publish, install, verify"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/native-auth-plugins/lifecycle.cast"
+        steps:
+          - type: simulate
+            text: "# create a Go OIDC plugin using the local SDK"
+          - type: simulate
+            text: &plugin_create atmos plugin create corporate-oidc --kind acme/oidc --sdk-path sdk --defaults
+          - type: shell
+            name: create
+            duration: 500ms
+            interval: 800ms
+            command: *plugin_create
+          - type: shell
+            name: isolate-registry-port
+            command: |
+              python3 - <<'PYTHON'
+              from pathlib import Path
+              for name in ['atmos.yaml', 'stacks/local.yaml']:
+                  path = Path('corporate-oidc') / name
+                  path.write_text(path.read_text().replace('15557', '15556'))
+              PYTHON
+            output: none
+          - type: simulate
+            text: "# use the generated project's build command"
+          - type: simulate
+            text: &plugin_build atmos --chdir corporate-oidc build
+          - type: shell
+            name: build
+            duration: 500ms
+            interval: 800ms
+            command: *plugin_build
+          - type: simulate
+            text: "# validate the manifest and inspect the exported capabilities"
+          - type: simulate
+            text: &plugin_validate atmos plugin validate corporate-oidc
+          - type: shell
+            name: validate
+            duration: 500ms
+            interval: 800ms
+            command: *plugin_validate
+          - type: simulate
+            text: "# validate PKCE, tokens, exchange, cache, refresh, and logout against local mocks"
+          - type: simulate
+            text: &plugin_test atmos --chdir corporate-oidc test
+          - type: shell
+            name: test
+            duration: 500ms
+            interval: 800ms
+            command: *plugin_test
+          - type: simulate
+            text: "# start an ephemeral local OCI registry"
+          - type: simulate
+            text: &plugin_registry_up atmos --chdir corporate-oidc dev registry up
+          - type: shell
+            name: registry-up
+            duration: 500ms
+            interval: 800ms
+            command: *plugin_registry_up
+          - type: simulate
+            text: "# build, test, package, and publish with the generated push command"
+          - type: simulate
+            text: &plugin_pack atmos --chdir corporate-oidc push
+          - type: shell
+            name: pack
+            duration: 500ms
+            interval: 800ms
+            command: *plugin_pack
+          - type: simulate
+            text: &plugin_discovery atmos plugin registry add local --host localhost:15556 --repository oci://localhost:15556/plugins/acme/oidc
+          - type: shell
+            name: configure-discovery
+            duration: 500ms
+            interval: 800ms
+            command: *plugin_discovery
+          - type: simulate
+            text: "# inspect the configured repository discovery source"
+          - type: simulate
+            text: &plugin_registry_list atmos plugin registry list
+          - type: shell
+            name: registry_list
+            duration: 500ms
+            interval: 800ms
+            command: *plugin_registry_list
+          - type: simulate
+            text: "# use structured output for automation"
+          - type: simulate
+            text: &plugin_registry_json atmos plugin registry list --format json
+          - type: shell
+            name: registry_json
+            duration: 500ms
+            interval: 800ms
+            command: *plugin_registry_json
+          - type: simulate
+            text: "# discover the plugin through a cached repository index"
+          - type: simulate
+            text: &plugin_search atmos plugin search oidc --registry local
+          - type: shell
+            name: search
+            duration: 500ms
+            interval: 800ms
+            command: *plugin_search
+          - type: simulate
+            text: "# download and pin version 0.1.0 in this project"
+          - type: simulate
+            text: &plugin_install atmos plugin install local/acme/oidc --as corporate --version 0.1.0
+          - type: shell
+            name: install
+            duration: 500ms
+            interval: 800ms
+            command: *plugin_install
+          - type: simulate
+            text: &plugin_list atmos plugin list
+          - type: shell
+            name: list
+            duration: 500ms
+            interval: 800ms
+            command: *plugin_list
+          - type: simulate
+            text: "# inspect the installed version and provenance"
+          - type: simulate
+            text: &plugin_info atmos plugin info corporate
+          - type: shell
+            name: info
+            duration: 500ms
+            interval: 800ms
+            command: *plugin_info
+          - type: simulate
+            text: "# execute the installed package"
+          - type: simulate
+            text: &plugin_run atmos plugin run corporate
+          - type: shell
+            name: run
+            duration: 500ms
+            interval: 800ms
+            command: *plugin_run
+          - type: simulate
+            text: "# run the same mock OIDC lifecycle against the downloaded executable"
+          - type: simulate
+            text: &plugin_downloaded_test atmos demo test-downloaded
+          - type: shell
+            name: downloaded-test
+            duration: 500ms
+            interval: 800ms
+            command: *plugin_downloaded_test
+          - type: simulate
+            text: "# stop the registry and discard its artifacts"
+          - type: simulate
+            text: &plugin_registry_down atmos --chdir corporate-oidc dev registry down
+          - type: shell
+            name: registry-down
+            duration: 500ms
+            interval: 800ms
+            command: *plugin_registry_down
+          - type: simulate
+            text: "# search the cached index after the registry is stopped"
+          - type: simulate
+            text: *plugin_search
+          - type: shell
+            name: cached-search
+            duration: 500ms
+            interval: 800ms
+            command: *plugin_search
+  - name: casts validate examples native-auth-plugins lifecycle
+    description: Validate the recorded OCI plugin lifecycle and local OIDC fixture results
+    steps:
+      - type: script
+        name: validate
+        interpreter: starlark
+        script: !include scripts/validate-native-auth-plugins.star

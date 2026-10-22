@@ -101,7 +101,7 @@ func TestRegisterMultiple(t *testing.T) {
 	assert.Equal(t, provider2, retrieved2)
 }
 
-func TestRegisterOverride(t *testing.T) {
+func TestRegisterRejectsOverride(t *testing.T) {
 	Reset()
 
 	provider1 := &mockCommandProvider{
@@ -117,15 +117,16 @@ func TestRegisterOverride(t *testing.T) {
 	}
 
 	Register(provider1)
-	Register(provider2)
+	require.ErrorIs(t, TryRegister(provider2), errUtils.ErrDuplicateCommandRegistration)
 
-	// Should only have one provider (override)
+	// The rejected provider cannot replace the existing command.
 	assert.Equal(t, 1, Count())
 
-	// Should retrieve the second provider
+	// Re-registering the same instance is idempotent.
+	Register(provider1)
 	retrieved, ok := GetProvider("test")
 	assert.True(t, ok)
-	assert.Equal(t, "Second", retrieved.GetCommand().Short)
+	assert.Equal(t, "First", retrieved.GetCommand().Short)
 }
 
 func TestRegisterAll(t *testing.T) {
@@ -306,8 +307,8 @@ func TestCount(t *testing.T) {
 	Register(&mockCommandProvider{name: "test2", group: "Test", cmd: &cobra.Command{Use: "test2"}})
 	assert.Equal(t, 2, Count())
 
-	Register(&mockCommandProvider{name: "test1", group: "Test", cmd: &cobra.Command{Use: "test1"}})
-	assert.Equal(t, 2, Count()) // Override doesn't increase count
+	require.ErrorIs(t, TryRegister(&mockCommandProvider{name: "test1", group: "Test", cmd: &cobra.Command{Use: "test1"}}), errUtils.ErrDuplicateCommandRegistration)
+	assert.Equal(t, 2, Count()) // Rejected registration leaves the registry unchanged.
 }
 
 func TestReset(t *testing.T) {

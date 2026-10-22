@@ -1,0 +1,67 @@
+---
+title: atmos plugin build
+sidebar_label: build
+sidebar_class_name: command
+id: build
+description: Compile a native Go plugin into the executable path declared in its manifest.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Compile a Go plugin into the executable path declared in plugin.yaml.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin build --help" src="/casts/screengrabs/atmos-plugin-build--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin build [directory]
+```
+
+The command validates the manifest and extension metadata, then runs `go build`
+in the plugin's source directory. It uses the installed Go toolchain and its
+normal module, workspace, and environment configuration. For a fresh standalone
+module without `go.sum`, it first runs `go mod tidy` to prepare dependency metadata.
+Existing module metadata and Go workspaces use the normal build behavior. An interactive terminal
+shows compilation in the same four-line output viewport used by `atmos build`.
+Redirected output streams compiler diagnostics without terminal controls.
+
+Everything `build` prints is UI output on stderr: the progress line, compiler diagnostics, and the
+final `Plugin built successfully` message with the executable path. Standard output stays empty, so
+the command never mixes into a pipeline. A successful build replaces the executable selected for the current platform in
+`spec.platforms`, falling back to `spec.runtime.executable`. A failure or cancellation
+preserves the previous binary.
+
+Building requires Go on `PATH`. Consumers install precompiled OCI releases and
+do not need Go. The command does not install, publish, or run the plugin, and it runs no plugin
+code. For that reason `build` is not a plugin policy operation: `on: plugin` rules never evaluate
+it, so a policy that denies development plugins does not stop authors from compiling.
+
+## Examples
+
+```shell
+atmos plugin create ./corporate-oidc --defaults
+atmos plugin build ./corporate-oidc
+atmos plugin test ./corporate-oidc
+```
+
+Inside the generated directory:
+
+```shell
+atmos plugin build
+```
+
+For release-specific compiler options or cross-compilation, use Go directly
+and write each platform's binary to its declared manifest path before
+[packing the release](/cli/commands/plugin/pack).
+
+## Arguments
+
+<dl>
+  <dt><code>directory</code></dt>
+  <dd>Go plugin source directory containing plugin.yaml and go.mod. Defaults to the current directory.</dd>
+</dl>

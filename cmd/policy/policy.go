@@ -17,12 +17,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-var checkParser = flags.NewStandardParser(
-	flags.WithStringFlag("format", "f", "text", "Output format: text or json"),
-	flags.WithEnvVars("format", "ATMOS_POLICY_CHECK_FORMAT"),
-	flags.WithValidValues("format", "text", "json"),
-)
-
 var command = newCommand()
 
 func newCommand() *cobra.Command {
@@ -34,19 +28,6 @@ func newCommand() *cobra.Command {
 		&cobra.Command{Use: "test <cases.json>", Short: "Run offline fixtures against the policy bundle", Args: cobra.ExactArgs(1), RunE: runTest},
 	)
 	return root
-}
-
-func newCheckCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:     "check",
-		Short:   "Validate the policy bundle without executing it",
-		Long:    "Validate the policy bundle and display a human-readable summary.\nUse --format json for machine-readable output on stdout.",
-		Example: "atmos policy check\natmos policy check --format json",
-		Args:    cobra.NoArgs,
-		RunE:    runCheck,
-	}
-	checkParser.RegisterFlags(cmd)
-	return cmd
 }
 
 func runCheck(cmd *cobra.Command, _ []string) error {
@@ -65,8 +46,12 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 	if err := hooks.ValidatePolicyBundle(bundle); err != nil {
 		return err
 	}
-	if v.GetString("format") == "json" {
-		return data.WriteJSON(map[string]any{"valid": true, "rules": len(bundle.Rules), "hooks": len(bundle.Hooks)})
+	result := map[string]any{"valid": true, "rules": len(bundle.Rules), "hooks": len(bundle.Hooks)}
+	switch v.GetString("format") {
+	case "json":
+		return data.WriteJSON(result)
+	case "yaml":
+		return data.WriteYAML(result)
 	}
 	ui.Success("Policy bundle is valid")
 	ui.Writef("Rules: %d\nHooks: %d\n", len(bundle.Rules), len(bundle.Hooks))

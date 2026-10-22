@@ -10,6 +10,7 @@ description: Validate, inspect, and test policy bundles without executing projec
 import TryExample from '@site/src/components/TryExample';
 
 import Intro from "@site/src/components/Intro"
+import CastPlayer from "@site/src/components/CastPlayer"
 
 <Intro>
 The `policy` commands support policy authoring. They read literal policy documents from
@@ -55,11 +56,14 @@ atmos policy check --format json
 
 <dl>
   <dt><code>--format</code> / <code>-f</code></dt>
-  <dd>Output format: <code>text</code> (default) or <code>json</code>. JSON is written to
-  stdout without the human-readable summary.</dd>
+  <dd>Output format: <code>text</code> (default), <code>json</code>, or <code>yaml</code>.
+  Structured output is written to stdout without the human-readable summary.</dd>
   <dt><code>ATMOS_POLICY_CHECK_FORMAT</code></dt>
-  <dd>Environment equivalent of <code>--format</code>. The command-line flag takes precedence.</dd>
+  <dd>Environment equivalent of <code>--format</code>. The command-line flag takes precedence.
+  <code>ATMOS_POLICY_FORMAT</code> is a fallback when <code>ATMOS_POLICY_CHECK_FORMAT</code> is unset.</dd>
 </dl>
+
+<CastPlayer title="atmos policy check --help" src="/casts/screengrabs/atmos-policy-check--help.cast" static chrome />
 
 ## list
 
@@ -73,9 +77,10 @@ potentially private when sharing the output.
 <dl>
   <dt><code>input-kind</code></dt>
   <dd>One of <code>command</code>, <code>component.command</code>, <code>function</code>,
-  <code>source</code>, <code>operation</code>, <code>terraform.plan</code>, or
+  <code>source</code>, <code>operation</code>, <code>plugin</code>, <code>terraform.plan</code>, or
   <code>atmos.affected</code>. Prints the JSON Schema for <code>input</code>, rather than the
-  entire request envelope. Terraform retains its native plan shape.</dd>
+  entire request envelope. Terraform retains its native plan shape. The <code>plugin</code> kind
+  describes the input of <code>on: plugin</code> rules; see <a href="/policies/plugins">plugin policies</a>.</dd>
 </dl>
 
 Use `atmos ci context` to inspect the provider-native CI snapshot. A schema describes available

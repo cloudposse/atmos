@@ -31,7 +31,7 @@ test('Policies has a Reference landing page and technical guides outside command
   assert.equal(policies.link.id, 'policies/index');
   assert.deepEqual(policies.items, [
     {type: 'link', label: 'Library', href: '/policies/library', customProps: {navigationMatchPrefix: true}},
-    'policies/configuration', 'policies/inputs', 'policies/admission', 'policies/sources', 'policies/approvals', 'policies/starlark', 'policies/terraform-plan', 'policies/affected',
+    'policies/configuration', 'policies/inputs', 'policies/admission', 'policies/sources', 'policies/plugins', 'policies/approvals', 'policies/starlark', 'policies/terraform-plan', 'policies/affected',
     'policies/hooks', 'policies/ci', 'policies/examples',
   ]);
   for (const id of [policies.link.id, ...policies.items.filter(item => typeof item === 'string')]) {

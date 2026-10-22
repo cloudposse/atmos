@@ -1,0 +1,114 @@
+---
+title: atmos plugin install
+sidebar_label: install
+sidebar_class_name: command
+id: install
+description: Install a declared release or restore locked plugin releases. Local builds run through plugins.packages.<alias>.path instead.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Install a declared release or restore the releases that the lock records. A plugin you build locally is not installed; it runs from a directory named by `path`.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin install --help" src="/casts/screengrabs/atmos-plugin-install--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin install [source]
+```
+
+With a `source`, the command installs one package, records it under `plugins.packages` in
+`atmos.yaml`, and writes the selected release to `.atmos.plugins.lock.yaml`. Without a
+`source`, it restores every enabled declaration from the lock.
+
+### Version constraints
+
+A new declaration installed without `--version` is written as a caret pin of the release that
+was actually installed, so the declaration is reviewable and later releases do not slip in
+silently:
+
+| Installed release | Recorded constraint | Meaning |
+|---|---|---|
+| `1.4.2` | `^1.4.2` | Any stable `1.x.y` at or above `1.4.2`. |
+| `0.1.0` | `^0.1.0` | Only `0.1.x`; caret treats a 0.x minor as breaking. |
+| `1.5.0-rc.1` | `1.5.0-rc.1` | Pinned exactly, because caret ranges never advance across pre-release tags. |
+
+Passing `--version` always stores your constraint verbatim. Re-running `install` for a source
+that is already declared keeps the existing constraint and never advances a locked release.
+Use [`plugin update`](update.mdx) to move to a newer release.
+
+### Automatic installation and trust
+
+Declared project plugins also install automatically, but only when a command needs one of their
+exports, such as an `auth` provider or identity kind that Atmos does not provide. First use
+creates a missing lock entry and prints a notice naming the source, digest, and signature status.
+An existing lock pins every later restoration. In CI, Atmos refuses to create a new lock entry
+and asks you to run `atmos plugin install` locally and commit the lockfile; restoring an already
+locked release is allowed. See [automatic installation](usage.mdx#automatic-installation) for the
+full rules.
+
+Missing releases download in parallel with toolchain-style progress on stderr.
+The default limit is four; `plugins.max_concurrency` changes the limit (`1`
+selects sequential installation). A failed or canceled batch leaves the project
+declaration and lockfile unchanged. Verified downloads use shared XDG storage and can be reused
+by other projects selecting the same digest and platform.
+
+Signature policy applies equally to explicit installation and automatic restoration.
+Configure `plugins.policy.trusted_publishers` to require an authenticated release
+signer. Cached bundles are checked against the current policy; a lockfile label
+alone does not establish trust. See [trusted publishers](usage.mdx#require-trusted-publishers)
+for policy and offline layout setup.
+
+### Local builds
+
+`install` only fetches and restores releases. To run a plugin you built locally, set
+`plugins.packages.<alias>.path` to its directory, normally in a [profile](/cli/configuration/profiles)
+of your own so the local build applies only while that profile is active. A package with a `path` is
+never fetched, locked, or checked for a signature, so `install` skips it with a notice, and
+`install --frozen` refuses while the active configuration sets one. See
+[`path`](/cli/configuration/plugins) and the
+[plugin development tutorial](/tutorials/plugin-development).
+
+A path-like source (one that starts with `.`, `/`, `~`, or a drive letter, or names a directory
+that contains `plugin.yaml`) is never treated as a release; the error explains how to declare `path`.
+To install a copied OCI layout offline, pass the release source together with `--from-layout`.
+
+## Arguments and flags
+
+<dl>
+  <dt><code>source</code></dt>
+  <dd>An <code>oci://</code> repository, or a <code>&lt;registry&gt;/&lt;package&gt;</code> selector for a
+  configured discovery source (repository discovery or a catalog). Omit to restore declarations.</dd>
+  <dt><code>--as</code></dt>
+  <dd>Package alias. Defaults to the existing alias bound to the same source, or to the package name.
+  Needs a <code>source</code>.</dd>
+  <dt><code>--version</code></dt>
+  <dd>Semantic version constraint, stored verbatim. Without it, a new declaration is pinned with a caret
+  from the installed release (see above) and an existing declaration keeps its constraint. Needs a
+  <code>source</code>.</dd>
+  <dt><code>--from-layout</code></dt>
+  <dd>Read release bytes from a copied OCI image layout instead of a registry.</dd>
+  <dt><code>--frozen</code></dt>
+  <dd>Restore exactly what the lock records. Fails when the declarations and the lock disagree, when the
+  active configuration sets <code>plugins.packages.&lt;alias&gt;.path</code> (the error names the active
+  profiles), or when the cached release is corrupt. It never writes the lock, the declaration, or the
+  cache, and cannot be combined with a <code>source</code>.</dd>
+</dl>
+
+Packages with `enabled: false` or a `path` are skipped, with a notice, when restoring declarations.
+
+## Examples
+
+```shell
+atmos plugin install oci://registry.example.com/team/oidc --as=corporate
+atmos plugin install oci://registry.example.com/team/oidc --as=corporate --version='^0.1'
+atmos plugin install team/acme/oidc --as=corporate --version='^0.1'
+atmos plugin install
+atmos plugin install --frozen
+atmos plugin install oci://registry.example.com/team/oidc --from-layout=./oidc-release
+```
