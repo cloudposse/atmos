@@ -624,6 +624,39 @@ module "remote_module" {
 		assert.Equal(t, patterns1, patterns2)
 	})
 
+	t.Run("OpenTofu provider iteration still yields module patterns", func(t *testing.T) {
+		t.Parallel()
+		// "Invalid provider reference" from OpenTofu 1.9+ provider iteration is a known
+		// terraform-config-inspect limitation. Loading must not fail, and the local module must
+		// still produce a pattern so changes to it are detected.
+		iterPath := filepath.Join(tempDir, "components", "terraform", "tofu-provider-iteration")
+		require.NoError(t, os.MkdirAll(filepath.Join(iterPath, "modules", "subnets"), 0o755))
+		mainTf := `
+provider "aws" {
+  alias    = "by_account"
+  for_each = toset(["dev", "prod"])
+  profile  = each.value
+}
+
+data "aws_caller_identity" "each" {
+  for_each = toset(["dev", "prod"])
+  provider = aws.by_account[each.value]
+}
+
+module "subnets" {
+  source = "./modules/subnets"
+}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(iterPath, "main.tf"), []byte(mainTf), 0o644))
+
+		freshCache := newComponentPathPatternCache()
+		patterns, err := freshCache.getTerraformModulePatterns("tofu-provider-iteration", atmosConfig)
+		require.NoError(t, err)
+		require.Len(t, patterns, 1)
+		assert.Contains(t, filepath.ToSlash(patterns[0]), "tofu-provider-iteration/modules/subnets")
+		assert.Contains(t, patterns[0], "/**")
+	})
+
 	t.Run("non-existent component returns empty", func(t *testing.T) {
 		t.Parallel()
 		patterns, err := cache.getTerraformModulePatterns("nonexistent", atmosConfig)
@@ -2317,6 +2350,48 @@ module "subnets" {
 		changed, err := areTerraformComponentModulesChanged("vpc", atmosConfig, changedFiles)
 		require.NoError(t, err)
 		assert.True(t, changed)
+	})
+
+	t.Run("OpenTofu provider iteration does not block module change detection", func(t *testing.T) {
+		t.Parallel()
+		// OpenTofu 1.9+ provider iteration (`provider = aws.by_account[each.value]`) makes
+		// terraform-config-inspect report "Invalid provider reference". That is a static-parser
+		// limitation, not a configuration error, so the local module must still be detected.
+		componentPath := filepath.Join(tempDir, "components/terraform/tofu-provider-iteration")
+		modulePath := filepath.Join(componentPath, "modules/subnets")
+		err := os.MkdirAll(modulePath, 0o755)
+		require.NoError(t, err)
+
+		mainTf := `
+provider "aws" {
+  alias    = "by_account"
+  for_each = toset(["dev", "prod"])
+  profile  = each.value
+}
+
+data "aws_caller_identity" "each" {
+  for_each = toset(["dev", "prod"])
+  provider = aws.by_account[each.value]
+}
+
+module "subnets" {
+  source = "./modules/subnets"
+}
+`
+		err = os.WriteFile(filepath.Join(componentPath, "main.tf"), []byte(mainTf), 0o644)
+		require.NoError(t, err)
+		err = os.WriteFile(filepath.Join(modulePath, "main.tf"), []byte("# module"), 0o644)
+		require.NoError(t, err)
+
+		changed, err := areTerraformComponentModulesChanged("tofu-provider-iteration", atmosConfig,
+			[]string{filepath.Join(modulePath, "main.tf")})
+		require.NoError(t, err)
+		assert.True(t, changed, "a change in the local module must still mark the component as changed")
+
+		changed, err = areTerraformComponentModulesChanged("tofu-provider-iteration", atmosConfig,
+			[]string{filepath.Join(tempDir, "some/other/file.txt")})
+		require.NoError(t, err)
+		assert.False(t, changed, "an unrelated change must not mark the component as changed")
 	})
 
 	t.Run("component with unchanged module", func(t *testing.T) {
