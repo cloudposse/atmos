@@ -95,18 +95,24 @@ func TestTerminalTypingCancellation(t *testing.T) {
 	}
 }
 
-func TestScopedCheckpointConsumesOutputThroughMarker(t *testing.T) {
+func TestScopedCheckpointPreservesWaitBoundary(t *testing.T) {
 	for _, kind := range []string{"wait", "show"} {
 		t.Run(kind, func(t *testing.T) {
 			state := &sessionState{scopedWaits: true}
 			state.output.WriteString("output before checkpoint")
+			require.True(t, outputMatches(state, "output before", nil))
+			waitEnd := state.waitOffset
 			observed := false
 			opts := &SessionOptions{
 				ScopedWaits: true,
 				Actions:     []SessionAction{{Type: kind}},
 				Observe: func(_ int, _ *SessionAction) error {
 					observed = true
-					require.Equal(t, state.output.Len(), state.waitOffset)
+					if kind == "show" {
+						require.Equal(t, state.output.Len(), state.waitOffset)
+					} else {
+						require.Equal(t, waitEnd, state.waitOffset)
+					}
 					return nil
 				},
 			}
@@ -126,6 +132,7 @@ func TestScopedCheckpointConsumesOutputThroughMarker(t *testing.T) {
 func TestObserveHoldsOutputUntilCheckpointRecorded(t *testing.T) {
 	state := &sessionState{scopedWaits: true, discardRecording: true, changed: make(chan struct{}, 1), done: make(chan error, 1)}
 	state.output.WriteString("consumed")
+	require.True(t, outputMatches(state, "consumed", nil))
 	arrived := make(chan struct{})
 	opts := &SessionOptions{
 		ScopedWaits: true,
