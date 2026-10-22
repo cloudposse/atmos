@@ -673,6 +673,25 @@ data "aws_caller_identity" "bad" {
 		assert.ErrorIs(t, err, errUtils.ErrFailedToLoadTerraformComponent)
 	})
 
+	t.Run("conditional after an indexed provider alias still fails", func(t *testing.T) {
+		t.Parallel()
+		// The expression starts with an indexed provider alias, but the whole value is a conditional, which
+		// OpenTofu rejects. Only the complete expression may count as provider iteration.
+		badPath := filepath.Join(tempDir, "components", "terraform", "trailing-conditional-provider")
+		require.NoError(t, os.MkdirAll(badPath, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(badPath, "main.tf"), []byte(`
+data "aws_caller_identity" "bad" {
+  for_each = toset(["dev", "prod"])
+  provider = aws.by_account[each.value] ? aws.dev : aws.prod
+}
+`), 0o644))
+
+		freshCache := newComponentPathPatternCache()
+		_, err := freshCache.getTerraformModulePatterns("trailing-conditional-provider", atmosConfig)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrFailedToLoadTerraformComponent)
+	})
+
 	t.Run("non-existent component returns empty", func(t *testing.T) {
 		t.Parallel()
 		patterns, err := cache.getTerraformModulePatterns("nonexistent", atmosConfig)

@@ -638,7 +638,11 @@ func writeProviderIterationFixture(t *testing.T) string {
 		`data "aws_caller_identity" "bad" {`, // Line 5.
 		`  provider = var.use_dev ? aws.dev : aws.prod`, // Line 6: conditional, invalid in OpenTofu too.
 		`}`, // Line 7.
-		`  provider =   aws.by_region [ "us-east-2" ]`, // Line 8: indexed alias with extra spacing.
+		`  provider =   aws.by_region [ "us-east-2" ]`,                 // Line 8: indexed alias with extra spacing.
+		`  provider = aws.by_account[each.value] ? aws.dev : aws.prod`, // Line 9: conditional after an indexed alias.
+		`  provider = aws.by_account[each.value] # one per account`,    // Line 10: indexed alias with a trailing comment.
+		`  provider = aws.by_account[local.ids["dev"]]`,                // Line 11: indexed alias with a nested index.
+		"  provider = aws.by_account[each.key]\r",                      // Line 12: indexed alias with a CRLF line ending.
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 	return path
@@ -673,6 +677,10 @@ func TestIsProviderIterationDiagnostic(t *testing.T) {
 		{name: "indexed provider alias", diag: providerReferenceDiag(path, 3), expected: true},
 		{name: "indexed provider alias with extra spacing", diag: providerReferenceDiag(path, 8), expected: true},
 		{name: "conditional provider expression is a real error", diag: providerReferenceDiag(path, 6), expected: false},
+		{name: "conditional after an indexed alias is a real error", diag: providerReferenceDiag(path, 9), expected: false},
+		{name: "indexed provider alias with a trailing comment", diag: providerReferenceDiag(path, 10), expected: true},
+		{name: "indexed provider alias with a nested index", diag: providerReferenceDiag(path, 11), expected: true},
+		{name: "indexed provider alias with a CRLF line ending", diag: providerReferenceDiag(path, 12), expected: true},
 		{name: "line without a provider argument", diag: providerReferenceDiag(path, 1), expected: false},
 		{name: "line past end of file", diag: providerReferenceDiag(path, 99), expected: false},
 		{name: "missing file", diag: providerReferenceDiag(filepath.Join(t.TempDir(), "missing.tf"), 3), expected: false},

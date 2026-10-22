@@ -214,9 +214,14 @@ func allDiagnosticsAreModuleSourceInterpolation(diags tfconfig.Diagnostics) bool
 // argument it cannot read as a bare `name` or `name.alias` traversal.
 const providerIterationSummary = "Invalid provider reference"
 
-// indexedProviderAliasPattern matches a `provider` argument that selects an indexed provider alias, such
-// as `provider = aws.by_account[each.key]` (OpenTofu 1.9+ provider iteration).
-var indexedProviderAliasPattern = regexp.MustCompile(`^\s*provider\s*=\s*[A-Za-z_][A-Za-z0-9_-]*\.[A-Za-z_][A-Za-z0-9_-]*\s*\[`)
+// indexedProviderAliasPattern matches a `provider` argument whose whole value is an indexed provider
+// alias, such as `provider = aws.by_account[each.key]` (OpenTofu 1.9+ provider iteration). The index may
+// contain one level of nested brackets (`aws.by_account[local.ids["dev"]]`), and only a comment may follow
+// the closing bracket, so an expression that merely starts with an indexed alias, such as a conditional,
+// does not match.
+var indexedProviderAliasPattern = regexp.MustCompile(
+	`^\s*provider\s*=\s*[A-Za-z_][A-Za-z0-9_-]*\.[A-Za-z_][A-Za-z0-9_-]*\s*\[(?:[^\[\]]|\[[^\[\]]*\])*\]\s*(?:(?:#|//).*)?$`,
+)
 
 // isProviderIterationDiagnostic reports whether diag is terraform-config-inspect's "Invalid provider
 // reference" for OpenTofu 1.9+ provider iteration.
