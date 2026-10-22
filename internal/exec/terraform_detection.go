@@ -215,12 +215,13 @@ func allDiagnosticsAreModuleSourceInterpolation(diags tfconfig.Diagnostics) bool
 const providerIterationSummary = "Invalid provider reference"
 
 // indexedProviderAliasPattern matches a `provider` argument whose whole value is an indexed provider
-// alias, such as `provider = aws.by_account[each.key]` (OpenTofu 1.9+ provider iteration). The index may
-// contain one level of nested brackets (`aws.by_account[local.ids["dev"]]`), and only a comment may follow
-// the closing bracket, so an expression that merely starts with an indexed alias, such as a conditional,
-// does not match.
+// alias, such as `provider = aws.by_account[each.key]` (OpenTofu 1.9+ provider iteration). It is applied
+// to text from sanitizeProviderLine, so comments are already removed and string literals are empty. The
+// index may contain one level of nested brackets (`aws.by_account[local.ids["dev"]]`), and nothing may
+// follow the closing bracket, so an expression that merely starts with an indexed alias, such as a
+// conditional, does not match.
 var indexedProviderAliasPattern = regexp.MustCompile(
-	`^\s*provider\s*=\s*[A-Za-z_][A-Za-z0-9_-]*\.[A-Za-z_][A-Za-z0-9_-]*\s*\[(?:[^\[\]]|\[[^\[\]]*\])*\]\s*(?:(?:#|//).*)?$`,
+	`^\s*provider\s*=\s*[A-Za-z_][A-Za-z0-9_-]*\.[A-Za-z_][A-Za-z0-9_-]*\s*\[(?:[^\[\]]|\[[^\[\]]*\])*\]\s*$`,
 )
 
 // isProviderIterationDiagnostic reports whether diag is terraform-config-inspect's "Invalid provider
@@ -243,7 +244,8 @@ func isProviderIterationDiagnostic(diag tfconfig.Diagnostic) bool {
 // maxProviderArgumentLines bounds how many lines providerArgumentText joins for an index split across lines.
 const maxProviderArgumentLines = 20
 
-// providerArgumentText returns the `provider` argument that starts on the 1-based line of filename.
+// providerArgumentText returns the `provider` argument that starts on the 1-based line of filename, with
+// comments removed and string literals emptied (see sanitizeProviderLine).
 // Terraform-config-inspect reports only the line where the expression starts, so if that line opens more
 // square brackets than it closes, the following lines are joined until the brackets balance. This lets an
 // index split across lines (`provider = aws.by_account[` ... `]`) be matched as one expression, including
@@ -264,11 +266,12 @@ func providerArgumentText(filename string, line int) (string, bool) {
 		return "", false
 	}
 
-	text := lines[line-1]
+	text := sanitizeProviderLine(lines[line-1])
 	depth := bracketDepth(text)
 	for next := line; depth > 0 && next < len(lines) && next < line-1+maxProviderArgumentLines; next++ {
-		text += " " + strings.TrimSpace(lines[next])
-		depth += bracketDepth(lines[next])
+		continuation := sanitizeProviderLine(lines[next])
+		text += " " + strings.TrimSpace(continuation)
+		depth += bracketDepth(continuation)
 	}
 	if depth != 0 {
 		return "", false
@@ -276,7 +279,37 @@ func providerArgumentText(filename string, line int) (string, bool) {
 	return text, true
 }
 
-// bracketDepth returns how many more square brackets s opens than it closes.
+// sanitizeProviderLine removes a trailing `#` or `//` comment from an HCL line and empties every string
+// literal (`"..."` becomes `""`), so brackets and comment markers inside comments or strings cannot change
+// how a provider argument is read.
+func sanitizeProviderLine(s string) string {
+	var out strings.Builder
+	inString := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if inString {
+			switch c {
+			case '\\':
+				i++ // Skip the escaped character.
+			case '"':
+				inString = false
+				out.WriteByte(c)
+			}
+			continue
+		}
+		switch {
+		case c == '#', c == '/' && i+1 < len(s) && s[i+1] == '/':
+			return out.String()
+		case c == '"':
+			inString = true
+		}
+		out.WriteByte(c)
+	}
+	return out.String()
+}
+
+// bracketDepth returns how many more square brackets s opens than it closes. Callers pass text from
+// sanitizeProviderLine, so brackets inside comments and strings are already gone.
 func bracketDepth(s string) int {
 	return strings.Count(s, "[") - strings.Count(s, "]")
 }
