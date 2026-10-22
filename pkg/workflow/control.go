@@ -421,7 +421,7 @@ func resolveControlStep(step *schema.WorkflowStep, matrix map[string]string, tem
 	if source, ok := step.Source.(string); ok && source != "" && step.Type == schema.TaskTypeScript {
 		rendered, err := templates.resolve(source, step.Name, matrix)
 		if err != nil {
-			return resolved, stepPkg.TemplateFieldError(step, "source", err)
+			return resolved, templates.fieldError(step, "source", err)
 		}
 		resolved.Source = rendered
 	}
