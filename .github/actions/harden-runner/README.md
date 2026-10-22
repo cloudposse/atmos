@@ -5,13 +5,22 @@ Use this composite before checkout:
 ```yaml
 - uses: $/.github/actions/harden-runner
   with:
-    policy: network-diagnostics
+    policies: |
+      github
+      go-toolchain
+      go-proxy
+      go-checksums
 ```
 
 `$/` loads this action and its files at the workflow's running commit, without
-checkout. `endpoints.json` contains named, reviewed endpoint lists. The action
-rejects missing/empty policies and malformed endpoints. Policies are selected by
-name; no workspace file or arbitrary path is loaded.
+checkout. [`.github/allowlist.yaml`](../../allowlist.yaml) contains reusable endpoint
+groups. The action reads it relative to its downloaded action directory, at the
+same commit as the workflow. `$/` is action-reference syntax, not a file-path
+prefix. The action
+rejects missing policies and malformed endpoints. An explicit empty list adds
+no destinations beyond StepSecurity’s implicit endpoints. Select one or more groups
+with the whitespace-separated `policies` input; their union is allowed. No workspace
+file or arbitrary path is loaded.
 
 The lifecycle is intentional:
 
@@ -33,10 +42,11 @@ Set `dns-repair: 'false'` only to observe the original behavior in diagnostics.
 The diagnostic workflow invokes the internal helper later to measure before and
 after on the same runner. Normal workflows need only the composite above.
 
-This is currently integrated with the diagnostic workflow. Validate recovery on
-an affected runner and hook ordering before moving normal CI jobs to it. Add a
-separate named policy for each workload; do not combine all jobs' destinations
-into a global permissive list.
+All block-mode workflow jobs use this composite. Audit-mode jobs retain their
+existing configuration. Recovery was verified on an affected westus2 runner,
+including host/container probes, denied traffic, and artifact upload. Reuse
+service groups and add narrowly scoped groups for workload-specific endpoints;
+do not combine all jobs’ destinations into a global permissive list.
 
 Run tests:
 
@@ -45,5 +55,22 @@ node --test .github/actions/harden-runner/runtime/*.test.cjs
 ```
 
 The pinned actionlint version predates `$/`. `.github/actionlint.yaml` suppresses
-only the unsupported-reference diagnostic for this workflow. Other lint checks
-remain enabled.
+only the unsupported-reference diagnostic for this action reference in
+workflows. Other lint checks remain enabled.
+
+The diagnostic retains before/after evidence. In before/after mode, an original
+connectivity failure is informational if the repaired probes complete and pass.
+A reachable unlisted destination, failed final probe, or incomplete final probe
+always fails the job. Repair-first samples require both probe phases to pass.
+
+The YAML parser is bundled and version-pinned, so pre-job policy loading makes
+no npm requests. After changing its dependency, rebuild and test:
+
+```shell
+npm ci --ignore-scripts --prefix .github/actions/harden-runner
+npm run build --prefix .github/actions/harden-runner
+npm test --prefix .github/actions/harden-runner
+```
+
+Commit `runtime/yaml.cjs` with the lockfile. Its upstream license is included in
+`runtime/YAML-LICENSE`.

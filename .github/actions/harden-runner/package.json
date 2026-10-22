@@ -1,0 +1,12 @@
+{
+  "name": "atmos-harden-runner",
+  "private": true,
+  "scripts": {
+    "build": "esbuild runtime/yaml-entry.cjs --bundle --platform=node --target=node24 --minify --legal-comments=eof --outfile=runtime/yaml.cjs",
+    "test": "node --test runtime/*.test.cjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "yaml": "2.9.1"
+  }
+}

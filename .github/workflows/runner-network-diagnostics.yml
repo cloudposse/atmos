@@ -8,11 +8,12 @@ on:
         type: boolean
         default: true
   # Exercise the diagnostic before it exists on the default branch. No
-  # scheduled runs or changes to the normal test/release workflows.
+  # scheduled runs are needed; normal CI also uses the combined action.
   pull_request:
     paths:
       - .github/workflows/runner-network-diagnostics.yml
       - .github/actions/harden-runner/**
+      - .github/allowlist.yaml
 
 permissions:
   contents: read
@@ -37,7 +38,7 @@ jobs:
         id: harden
         uses: $/.github/actions/harden-runner
         with:
-          policy: network-diagnostics
+          policies: github github-archives github-releases docker-hub go-proxy diagnostic-downloads
           # Half the samples exercise the normal combined entry point before
           # any network work; half record the original failure before repair.
           dns-repair: ${{ matrix.sample > 3 && (github.event_name == 'pull_request' || inputs.test_resolver_repair) }}
@@ -78,7 +79,7 @@ jobs:
           for client in host container; do
             if [[ "$client" == container && "$image_ready" == false ]]; then
               echo "Container probes unavailable: pinned image was not downloaded."
-              touch "$DIAGNOSTIC_DIR/incomplete"
+              touch "$DIAGNOSTIC_DIR/$phase-incomplete"
               continue
             fi
             for url in \
@@ -108,7 +109,7 @@ jobs:
                 elif ! sudo -n grep -Fq 'domain not allowed: example.com.' /home/agent/agent.log; then
                   # A failed connection alone does not prove enforcement.
                   echo "::warning::Cannot confirm that the agent rejected example.com ($client)."
-                  touch "$DIAGNOSTIC_DIR/incomplete"
+                  touch "$DIAGNOSTIC_DIR/$phase-incomplete"
                 fi
               elif [[ "$result" != 0 ]]; then
                 touch "$DIAGNOSTIC_DIR/$phase-connectivity-failed"
@@ -122,6 +123,7 @@ jobs:
               dig +time=1 +tries=1 +noall +answer "@$resolver" "$domain" A || true
             done
           done
+          touch "$DIAGNOSTIC_DIR/$phase-complete"
           SCRIPT
           # Registry hosts are explicitly allowed: hardening is already active.
           timeout 90 docker pull "$CURL_IMAGE" || echo "::warning::Container image unavailable; host probes will still run."
@@ -137,7 +139,7 @@ jobs:
         if: (github.event_name == 'pull_request' || inputs.test_resolver_repair) && steps.harden.outcome == 'success'
         uses: $/.github/actions/harden-runner/runtime
         with:
-          policy: network-diagnostics
+          policies: github github-archives github-releases docker-hub go-proxy diagnostic-downloads
 
       - name: Probe repaired DNS under block mode
         if: steps.repair.outcome == 'success'
@@ -179,14 +181,30 @@ jobs:
       - name: Report diagnostic result
         if: always()
         shell: bash
+        env:
+          EXPECT_REPAIR: ${{ github.event_name == 'pull_request' || inputs.test_resolver_repair }}
+          REPAIR_FIRST: ${{ matrix.sample > 3 }}
         run: |
-          # A successful repair must not erase evidence that the original
-          # configuration failed. Detailed per-destination results are above.
-          test -f "$DIAGNOSTIC_DIR/hardened.log"
           sudo -n systemctl is-active --quiet agent
-          for marker in policy-failed incomplete hardened-connectivity-failed repaired-connectivity-failed; do
-            if [[ -f "$DIAGNOSTIC_DIR/$marker" ]]; then
-              echo "::error::Diagnostic finding: $marker (see summary and logs)."
-              exit 1
+          # An unlisted destination must never succeed, even before repair.
+          test ! -f "$DIAGNOSTIC_DIR/policy-failed"
+          phases=(hardened)
+          if [[ "$EXPECT_REPAIR" == true ]]; then
+            phases=(repaired)
+            if [[ "$REPAIR_FIRST" == true ]]; then
+              phases+=(hardened)
+            elif [[ -f "$DIAGNOSTIC_DIR/hardened-connectivity-failed" || -f "$DIAGNOSTIC_DIR/hardened-incomplete" ]]; then
+              echo "::notice::Original DNS failed; evaluating recovery. Original evidence is retained."
+              echo "Original DNS failed; see the before/after tables and uploaded evidence." >> "$GITHUB_STEP_SUMMARY"
             fi
+          fi
+          for phase in "${phases[@]}"; do
+            test -f "$DIAGNOSTIC_DIR/$phase-complete"
+            for finding in incomplete connectivity-failed; do
+              if [[ -f "$DIAGNOSTIC_DIR/$phase-$finding" ]]; then
+                echo "::error::Diagnostic finding: $phase-$finding (see summary and logs)."
+                exit 1
+              fi
+            done
           done
+          echo "Verified allowed connectivity and enforcement for: ${phases[*]}" >> "$GITHUB_STEP_SUMMARY"

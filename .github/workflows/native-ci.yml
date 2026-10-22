@@ -81,25 +81,10 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            github.com:443
-            api.github.com:443
-            codeload.github.com:443
-            release-assets.githubusercontent.com:443
-            us.i.posthog.com:443
-            proxy.golang.org:443
-            sum.golang.org:443
-            storage.googleapis.com:443
-            google.golang.org:443
-            modernc.org:443
-            raw.githubusercontent.com:443
-            go.dev:443
-            golang.org:443
-            dl.google.com:443
-
+          policies: >-
+            github github-archives github-releases github-content go-checksums telemetry go-proxy go-toolchain go-vanity
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -156,34 +141,10 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            github.com:443
-            api.github.com:443
-            codeload.github.com:443
-            release-assets.githubusercontent.com:443
-            us.i.posthog.com:443
-            checkpoint-api.hashicorp.com:443
-            registry.terraform.io:443
-            releases.hashicorp.com:443
-            pypi.org:443
-            api0.prismacloud.io:443
-            mirror.gcr.io:443
-            check.trivy.dev:443
-            proxy.golang.org:443
-            sum.golang.org:443
-            storage.googleapis.com:443
-            google.golang.org:443
-            modernc.org:443
-            raw.githubusercontent.com:443
-            tuf-repo-cdn.sigstore.dev:443
-            rekor.sigstore.dev:443
-            go.dev:443
-            golang.org:443
-            dl.google.com:443
-
+          policies: >-
+            github github-archives github-releases github-content go-checksums sigstore terraform docker-mirror telemetry go-proxy go-toolchain go-vanity terraform-policy-scanners
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -264,30 +225,10 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            github.com:443
-            api.github.com:443
-            codeload.github.com:443
-            release-assets.githubusercontent.com:443
-            us.i.posthog.com:443
-            checkpoint-api.hashicorp.com:443
-            registry.terraform.io:443
-            releases.hashicorp.com:443
-            proxy.golang.org:443
-            sum.golang.org:443
-            storage.googleapis.com:443
-            google.golang.org:443
-            modernc.org:443
-            raw.githubusercontent.com:443
-            tuf-repo-cdn.sigstore.dev:443
-            rekor.sigstore.dev:443
-            go.dev:443
-            golang.org:443
-            dl.google.com:443
-
+          policies: >-
+            github github-archives github-releases github-content go-checksums sigstore terraform telemetry go-proxy go-toolchain go-vanity
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -356,33 +297,10 @@ jobs:
       contents: read
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            github.com:443
-            api.github.com:443
-            codeload.github.com:443
-            release-assets.githubusercontent.com:443
-            us.i.posthog.com:443
-            checkpoint-api.hashicorp.com:443
-            registry.terraform.io:443
-            releases.hashicorp.com:443
-            pypi.org:443
-            mirror.gcr.io:443
-            check.trivy.dev:443
-            proxy.golang.org:443
-            sum.golang.org:443
-            storage.googleapis.com:443
-            google.golang.org:443
-            modernc.org:443
-            raw.githubusercontent.com:443
-            tuf-repo-cdn.sigstore.dev:443
-            rekor.sigstore.dev:443
-            go.dev:443
-            golang.org:443
-            dl.google.com:443
-
+          policies: >-
+            github github-archives github-releases github-content go-checksums sigstore terraform docker-mirror telemetry go-proxy go-toolchain go-vanity terraform-scanner-cache
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:

@@ -1,8 +1,8 @@
 name: Harden runner policy and DNS lifecycle
 description: Internal lifecycle helper for the harden-runner composite.
 inputs:
-  policy:
-    description: Named policy in the parent action's endpoints.json
+  policies:
+    description: Space-separated endpoint groups from .github/allowlist.yaml
     required: true
   dns-repair:
     description: Whether to repair Linux host DNS in the main step

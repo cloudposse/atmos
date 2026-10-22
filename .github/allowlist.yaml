@@ -1,0 +1,191 @@
+# Endpoint groups for the local harden-runner composite.
+# Select one or more groups with its policies input; their union is allowed.
+# Keep groups scoped to services. Add workload-specific destinations here,
+# not to a broad shared group. Empty `none` adds only upstream implicit hosts.
+# DNS repair does not add endpoints or widen firewall rules.
+none: []
+github:
+  - api.github.com:443
+  - github.com:443
+github-api:
+  - api.github.com:443
+github-checkout:
+  - github.com:443
+github-archives:
+  - codeload.github.com:443
+github-releases:
+  - release-assets.githubusercontent.com:443
+github-content:
+  - raw.githubusercontent.com:443
+github-containers:
+  - ghcr.io:443
+  - pkg-containers.githubusercontent.com:443
+github-actions:
+  - '*.actions.githubusercontent.com:443'
+github-blob-storage:
+  - '*.blob.core.windows.net:443'
+go-checksums:
+  - sum.golang.org:443
+sigstore:
+  - rekor.sigstore.dev:443
+  - tuf-repo-cdn.sigstore.dev:443
+terraform:
+  - checkpoint-api.hashicorp.com:443
+  - registry.terraform.io:443
+  - releases.hashicorp.com:443
+opentofu:
+  - registry.opentofu.org:443
+helm:
+  - get.helm.sh:443
+docker-hub:
+  - auth.docker.io:443
+  - production.cloudfront.docker.com:443
+  - registry-1.docker.io:443
+docker-mirror:
+  - mirror.gcr.io:443
+telemetry:
+  - us.i.posthog.com:443
+macos-services:
+  - '*.apple.com:443'
+  - '*.aaplimg.com:443'
+  - '*.mzstatic.com:443'
+  - '*.icloud.com:443'
+  - '*.apple-dns.net:443'
+  - ocsp.usertrust.com:80
+  - ocsp.digicert.com:80
+  - '*.pool.ntp.org:123'
+windows-services:
+  - www.msftconnecttest.com:443
+  - ipv6.msftconnecttest.com:443
+  - www.msftncsi.com:443
+  - ipv6.msftncsi.com:443
+  - time.windows.com:443
+  - client.wns.windows.com:443
+  - settings-win.data.microsoft.com:443
+  - '*.events.data.microsoft.com:443'
+  - '*.update.microsoft.com:443'
+  - ecs.office.com:443
+  - pti.store.microsoft.com:443
+  - login.live.com:443
+  - go.microsoft.com:443
+  - www.microsoft.com:443
+  - ocsp.sectigo.com:80
+  - ocsp.sectigo.com:443
+  - crl.sectigo.com:80
+  - crl.sectigo.com:443
+website-build:
+  - nodejs.org:443
+  - registry.npmjs.org:443
+  - api.scorecard.dev:443
+  - www.bestpractices.dev:443
+website-preview-storage:
+  - cplive-plat-ue2-dev-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
+  - sts.us-east-2.amazonaws.com:443
+go-proxy:
+  - proxy.golang.org:443
+go-toolchain:
+  - dl.google.com:443
+  - go.dev:443
+  - golang.org:443
+  - storage.googleapis.com:443
+go-vanity:
+  - google.golang.org:443
+  - modernc.org:443
+hashicorp-releases:
+  - releases.hashicorp.com:443
+go-analysis:
+  - filippo.io:443
+  - go.googlesource.com:443
+  - gocloud.dev:443
+  - pkg.go.dev:443
+  - sigs.k8s.io:443
+ubuntu-packages:
+  - archive.ubuntu.com:80
+  - esm.ubuntu.com:443
+diagnostic-downloads:
+  - '*.r2.cloudflarestorage.com:443'
+  - production.cloudflare.docker.com:443
+go-analysis-toolchain:
+  - go.dev:443
+  - golang.org:443
+  - storage.googleapis.com:443
+go-vulnerability-db:
+  - vuln.go.dev:443
+semgrep:
+  - semgrep.dev:443
+installer-packages:
+  - azure.archive.ubuntu.com:80
+  - crl.sectigo.com:443
+  - dl.cloudsmith.io:443
+  - dl.google.com:443
+  - esm.ubuntu.com:443
+  - motd.ubuntu.com:443
+  - ocsp.sectigo.com:443
+  - packages.microsoft.com:443
+terraform-policy-scanners:
+  - api0.prismacloud.io:443
+  - check.trivy.dev:443
+  - pypi.org:443
+terraform-scanner-cache:
+  - check.trivy.dev:443
+  - pypi.org:443
+openai:
+  - api.openai.com:443
+scorecard:
+  - api.deps.dev:443
+  - api.osv.dev:443
+  - api.scorecard.dev:443
+  - fulcio.sigstore.dev:443
+  - oss-fuzz-build-logs.storage.googleapis.com:443
+  - www.bestpractices.dev:443
+hosted-runner-updates:
+  - '*.prod.do.dsp.mp.microsoft.com:443'
+  - au.download.windowsupdate.com:443
+  - au.download.windowsupdate.com:80
+  - azure.archive.ubuntu.com:80
+  - motd.ubuntu.com:443
+  - packages.microsoft.com:443
+  - security.ubuntu.com:80
+acceptance-cloud-services:
+  - accounts.google.com:443
+  - api.bitbucket.org:443
+  - atmos.tools:443
+  - azcliprod.blob.core.windows.net:443
+  - dc.services.visualstudio.com:443
+  - dl.k8s.io:443
+  - management.azure.com:443
+  - secretmanager.googleapis.com:443
+  - sts.us-east-1.amazonaws.com:443
+trivy:
+  - check.trivy.dev:443
+  - get.trivy.dev:443
+floci-registry:
+  - d2glxqk2uabbnd.cloudfront.net:443
+  - d5l0dvt14r5h8.cloudfront.net:443
+  - public.ecr.aws:443
+floci-test-services:
+  - azure.archive.ubuntu.com:80
+  - motd.ubuntu.com:443
+  - openidconnect.googleapis.com:443
+kubernetes-registries:
+  - '*.pkg.dev:443'
+  - cdn.registry.k8s.io:443
+  - charts.bitnami.com:443
+  - contracts.canonical.com:443
+  - dl.k8s.io:443
+  - download.docker.com:443
+  - kubernetes.github.io:443
+  - livepatch.canonical.com:443
+  - registry.k8s.io:443
+  - repo.broadcom.com:443
+  - security.ubuntu.com:80
+go-mock-dependencies:
+  - google.golang.org:443
+sigstore-legacy:
+  - tuf-repo.github.com:443
+website-production-storage:
+  - cloudfront.amazonaws.com:443
+  - cplive-plat-ue2-prod-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
+  - sts.us-east-2.amazonaws.com:443
+cloudfront:
+  - cloudfront.amazonaws.com:443

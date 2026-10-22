@@ -67,9 +67,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
           # Operating-system background services on the hosted Windows and
           # macOS images are listed after the job-specific endpoints; see the
           # `test` job's allowed-endpoints comment in test.yml for the
@@ -81,56 +80,8 @@ jobs:
           # Optimization (*.prod.do.dsp.mp.microsoft.com) and Windows Update
           # download hosts were flagged on the same run and belong with the
           # other Windows background services.
-          allowed-endpoints: >
-            github.com:443
-            api.github.com:443
-            codeload.github.com:443
-            release-assets.githubusercontent.com:443
-            proxy.golang.org:443
-            sum.golang.org:443
-            storage.googleapis.com:443
-            google.golang.org:443
-            modernc.org:443
-            azure.archive.ubuntu.com:80
-            archive.ubuntu.com:80
-            security.ubuntu.com:80
-            esm.ubuntu.com:443
-            motd.ubuntu.com:443
-            packages.microsoft.com:443
-            dl.google.com:443
-            *.prod.do.dsp.mp.microsoft.com:443
-            au.download.windowsupdate.com:80
-            au.download.windowsupdate.com:443
-            www.msftconnecttest.com:443
-            ipv6.msftconnecttest.com:443
-            www.msftncsi.com:443
-            ipv6.msftncsi.com:443
-            time.windows.com:443
-            client.wns.windows.com:443
-            settings-win.data.microsoft.com:443
-            *.events.data.microsoft.com:443
-            *.update.microsoft.com:443
-            ecs.office.com:443
-            pti.store.microsoft.com:443
-            login.live.com:443
-            go.microsoft.com:443
-            www.microsoft.com:443
-            ocsp.sectigo.com:80
-            ocsp.sectigo.com:443
-            crl.sectigo.com:80
-            crl.sectigo.com:443
-            *.apple.com:443
-            *.aaplimg.com:443
-            *.mzstatic.com:443
-            *.icloud.com:443
-            *.apple-dns.net:443
-            ocsp.usertrust.com:80
-            ocsp.digicert.com:80
-            *.pool.ntp.org:123
-            raw.githubusercontent.com:443
-            go.dev:443
-            golang.org:443
-
+          policies: >-
+            github github-archives github-releases github-content go-checksums macos-services windows-services go-proxy go-toolchain go-vanity ubuntu-packages hosted-runner-updates
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:

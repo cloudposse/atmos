@@ -8,6 +8,6 @@ self-hosted-runner:
 # actionlint 1.7.12 predates GitHub's checkout-free self-repository syntax.
 # Suppress only this exact supported reference until actionlint supports $/.
 paths:
-  .github/workflows/runner-network-diagnostics.yml:
+  .github/workflows/*:
     ignore:
       - 'specifying action "\$/\.github/actions/harden-runner(?:/runtime)?" in invalid format because ref is missing'
