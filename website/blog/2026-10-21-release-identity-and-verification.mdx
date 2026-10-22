@@ -41,9 +41,9 @@ flowchart LR
   E --> F[Publish and distribute]
 ```
 
-Every binary must match the tag's version and exact commit; packages must contain the verified executable. GoReleaser signs during the build. A separate job verifies signatures and provenance attestations. Uploaded assets are checked again before publication.
+Every binary must match the tag's version and exact commit; packages must contain that executable. GoReleaser signs using the build workflow's OIDC identity. Verification checks signatures, provenance attestations, and uploaded assets before publication.
 
-Stable, candidate, nightly, and feature releases share the guard. Go caching stays enabled, and Homebrew follows verified stable publication.
+Separate GitHub Apps authorize production and feature release operations. Environment branch/tag policies gate access to their credentials. All release modes share artifact verification; Homebrew follows verified stable publication.
 
 ## Test the release system itself
 
