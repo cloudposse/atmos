@@ -867,8 +867,6 @@ jobs:
     name: "[pro] consumer contracts"
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      CGO_ENABLED: "1"
     steps:
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -880,14 +878,8 @@ jobs:
         uses: ./.github/actions/setup-atmos-bootstrap
         with:
           atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
-      - name: Install native Pact library using the pinned Go dependency
-        timeout-minutes: 5
-        run: atmos test pact-install --lib-dir "$RUNNER_TEMP/pact"
       - name: Verify consumer contracts
-        env:
-          CGO_LDFLAGS: -L${{ runner.temp }}/pact
-          LD_LIBRARY_PATH: ${{ runner.temp }}/pact
-        run: go test -tags pact ./pkg/pro/... -run TestPact -count=1 -timeout 2m
+        run: atmos test pact --lib-dir "$RUNNER_TEMP/pact"
       - name: Check committed contracts
         # Pact omits the final newline required by the repository hygiene hooks.
         run: git diff --exit-code --ignore-space-at-eol -- pacts/
