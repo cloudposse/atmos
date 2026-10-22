@@ -280,6 +280,8 @@ auth:
     github-oidc:
       kind: github/oidc
       region: us-east-1
+      spec:
+        audience: sts.us-east-1.amazonaws.com
 
   identities:
     # Development access via SSO
@@ -379,6 +381,8 @@ auth:
     github-oidc:
       kind: github/oidc
       region: us-east-1
+      spec:
+        audience: sts.us-east-1.amazonaws.com
   identities:
     deploy:
       kind: aws/assume-role

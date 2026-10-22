@@ -24,9 +24,8 @@ func TestParseGCPADCProviderSpec_Valid(t *testing.T) {
 
 func TestParseGCPADCProviderSpec_NilSpec(t *testing.T) {
 	out, err := ParseGCPADCProviderSpec(nil)
-	assert.Nil(t, out)
-	assert.Error(t, err)
-	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig))
+	assert.NoError(t, err)
+	assert.Equal(t, &GCPADCProviderSpec{}, out)
 }
 
 func TestParseGCPADCProviderSpec_EmptySpec(t *testing.T) {

@@ -205,9 +205,10 @@ export const roadmapConfig = {
       tagline: 'Replace a dozen auth tools with one identity layer',
       description:
         'The way humans login with SSO is different from how automation systems authenticate with OIDC. Yet most teams implement this with fragmented approaches. Atmos brings authentication into the core with native support for identity profiles configurable by runtime.',
-      progress: 95,
+      progress: 93,
       status: 'in-progress',
       milestones: [
+        { label: 'Scoped authentication validation', status: 'in-progress', quarter: 'q4-2026', changelog: 'scoped-auth-validation', docs: '/cli/commands/auth/validate', description: 'Validate merged authentication for every selected concrete component with auth validate --stack and optional --component, without authenticating or evaluating dynamic stack expressions.', benefits: 'Check identities whose principals are supplied by stack inheritance while keeping global auth validation strict.' },
         { label: 'Added `atmos auth` command framework', status: 'shipped', quarter: 'q2-2025', docs: '/cli/commands/auth/usage', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Unified command for managing authentication across cloud providers and CI systems.', benefits: 'One command replaces aws-vault, saml2aws, gcloud auth, and azure login. Credentials are managed consistently across all providers.', category: 'featured', priority: 'high' },
         { label: 'AWS IAM Identity Center (SSO)', status: 'shipped', quarter: 'q2-2025', docs: '/cli/configuration/auth/providers', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Native support for AWS SSO login with automatic credential caching and session refresh.', benefits: 'Log in once and work across all AWS accounts. Sessions refresh automatically without interrupting your workflow.', category: 'featured', priority: 'high' },
         { label: 'AWS IAM Users', status: 'shipped', quarter: 'q4-2025', docs: '/cli/configuration/auth/providers', description: 'Support for traditional IAM user credentials with secure credential management.', benefits: 'Teams with IAM users can adopt Atmos auth without changing their identity provider.' },

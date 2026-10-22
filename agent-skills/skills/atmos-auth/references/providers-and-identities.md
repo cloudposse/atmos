@@ -54,7 +54,7 @@ auth:
       kind: github/oidc                     # Required
       region: us-east-1                     # Required: AWS region for STS endpoint
       spec:
-        audience: sts.us-east-1.amazonaws.com  # Optional: defaults to STS endpoint for region
+        audience: sts.us-east-1.amazonaws.com  # Required: match the cloud trust policy audience
 ```
 
 GitHub Actions workflow must have `id-token: write` permission and should select the CI profile with
@@ -69,10 +69,11 @@ auth:
   providers:
     <name>:
       kind: gcp/adc                         # Required
-      project_id: my-gcp-project            # Optional: override gcloud config default
-      region: us-central1                   # Optional: default region
-      scopes:                               # Optional: OAuth scopes
-        - https://www.googleapis.com/auth/cloud-platform
+      spec:
+        project_id: my-gcp-project            # Optional: override gcloud config default
+        region: us-central1                   # Optional: default region
+        scopes:                               # Optional: OAuth scopes
+          - https://www.googleapis.com/auth/cloud-platform
 ```
 
 Requires existing ADC. Run `gcloud auth application-default login` first.
@@ -84,22 +85,23 @@ auth:
   providers:
     <name>:
       kind: gcp/workload-identity-federation  # Required
-      project_id: my-gcp-project              # Optional: GCP project ID
-      project_number: "123456789012"          # Required: GCP project number (numeric)
-      workload_identity_pool_id: github-pool  # Required: WIF pool ID
-      workload_identity_provider_id: github-provider  # Required: WIF provider ID
-      service_account_email: ci-sa@my-project.iam.gserviceaccount.com  # Optional: SA to impersonate
-      scopes:                                 # Optional: OAuth scopes
-        - https://www.googleapis.com/auth/cloud-platform
-      token_source:                           # Auto-detected in GitHub Actions
-        type: url                             # url, file, or environment
-        url: https://my-oidc-provider.example.com/token
-        request_token: <bearer-token>         # For type: url
-        audience: //iam.googleapis.com/projects/...
-        allowed_hosts:
-          - my-oidc-provider.example.com
-        environment_variable: OIDC_TOKEN      # For type: environment
-        file_path: /path/to/token             # For type: file
+      spec:
+        project_id: my-gcp-project              # Optional: GCP project ID
+        project_number: "123456789012"          # Required: GCP project number (numeric)
+        workload_identity_pool_id: github-pool  # Required: WIF pool ID
+        workload_identity_provider_id: github-provider  # Required: WIF provider ID
+        service_account_email: ci-sa@my-project.iam.gserviceaccount.com  # Optional: SA to impersonate
+        scopes:                                 # Optional: OAuth scopes
+          - https://www.googleapis.com/auth/cloud-platform
+        token_source:                           # Auto-detected in GitHub Actions
+          type: url                             # url, file, or environment
+          url: https://my-oidc-provider.example.com/token
+          request_token: <bearer-token>         # For type: url
+          audience: //iam.googleapis.com/projects/...
+          allowed_hosts:
+            - my-oidc-provider.example.com
+          environment_variable: OIDC_TOKEN      # For type: environment
+          file_path: /path/to/token             # For type: file
 ```
 
 **GitHub Actions auto-detection:**
@@ -412,6 +414,8 @@ auth:
     github-oidc:
       kind: github/oidc
       region: us-east-1
+      spec:
+        audience: sts.us-east-1.amazonaws.com
 
   identities:
     deploy:
@@ -435,9 +439,10 @@ auth:
   providers:
     gcp-wif:
       kind: gcp/workload-identity-federation
-      project_number: "123456789012"
-      workload_identity_pool_id: github-pool
-      workload_identity_provider_id: github-provider
+      spec:
+        project_number: "123456789012"
+        workload_identity_pool_id: github-pool
+        workload_identity_provider_id: github-provider
 
   identities:
     terraform:
