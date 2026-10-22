@@ -2075,6 +2075,9 @@ jobs:
     name: "[lint] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -2125,6 +2128,8 @@ jobs:
         uses: ./.github/actions/setup-atmos-install
         with:
           target: linux
+          # Bypass the internal ListArtifacts service, which can refuse all retries.
+          github-token: ${{ github.token }}
 
       # The build job already installed and verified the pinned tools. The
       # shared action skips cached binaries and retries installs on a miss.
