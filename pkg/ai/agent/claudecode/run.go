@@ -82,13 +82,8 @@ func (c *Client) execClaude(ctx context.Context, prompt, systemPrompt string) (s
 	if err != nil {
 		return "", execFailed(err, "")
 	}
-	if err := cmd.Start(); err != nil {
-		return "", execFailed(err, "")
-	}
-	if err := tree.started(); err != nil {
-		_ = cmd.Cancel()
-		_ = cmd.Wait()
-		return "", execFailed(err, "")
+	if err := c.startProcess(ctx, sess, cmd, tree.started); err != nil {
+		return "", err
 	}
 
 	if c.approver != nil {
@@ -107,6 +102,24 @@ func (c *Client) execClaude(ctx context.Context, prompt, systemPrompt string) (s
 	grace.Stop()
 
 	return c.finish(ctx, sess, waitErr, stderr.String())
+}
+
+// startProcess starts Claude and completes platform-specific process-tree setup.
+func (c *Client) startProcess(ctx context.Context, sess *session, cmd *exec.Cmd, started func() error) error {
+	err := cmd.Start()
+	if err == nil {
+		err = started()
+		if err != nil {
+			_ = cmd.Cancel()
+			_ = cmd.Wait()
+		}
+	}
+	if err != nil {
+		// Cancellation can kill a suspended Windows process before its thread is
+		// resumed. Preserve the timeout or caller cancellation behind that OS error.
+		_, err = c.finish(ctx, sess, err, "")
+	}
+	return err
 }
 
 // consume reads stream-json lines until the final result, the end of the stream, or a fatal error.

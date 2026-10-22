@@ -3,6 +3,7 @@ package claudecode
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/approval"
 )
 
@@ -72,6 +74,63 @@ func TestExecClaude_CancellationStopsDescendantWork(t *testing.T) {
 			}
 			require.NoError(t, os.WriteFile(filepath.Join(dir, "trigger"), []byte("write only after Atmos returned"), 0o600))
 			require.Never(t, func() bool { _, err := os.Stat(filepath.Join(dir, "side-effect")); return err == nil }, 500*time.Millisecond, 10*time.Millisecond, "a cancelled provider child must not perform work after the invocation returned")
+		})
+	}
+}
+
+// TestStartProcess_CancellationPreservesCause covers a timeout or caller cancellation
+// while Windows is attaching the suspended process to its job and resuming its thread.
+func TestStartProcess_CancellationPreservesCause(t *testing.T) {
+	for _, phase := range []string{"start", "attach"} {
+		t.Run(phase, func(t *testing.T) {
+			for _, reason := range []string{"timeout", "caller cancellation", "startup failure"} {
+				t.Run(reason, func(t *testing.T) {
+					c, _ := newFakeClient(t, scenarioHang)
+					ctx, cancel := context.WithCancel(t.Context())
+					defer cancel()
+					runCtx, runCancel := context.WithCancel(ctx)
+					defer runCancel()
+					timer := newPausableTimer(time.Hour, runCancel)
+					defer timer.stop()
+					sess := &session{timer: timer}
+					cause := os.ErrNotExist
+					interrupt := func() {
+						switch reason {
+						case "timeout":
+							timer.fire()
+							cause = context.DeadlineExceeded
+						case "caller cancellation":
+							cancel()
+							cause = context.Canceled
+						}
+					}
+					binary := c.binaryPath
+					if phase == "start" {
+						binary = filepath.Join(t.TempDir(), "missing-provider")
+						interrupt()
+					}
+					cmd := exec.CommandContext(runCtx, binary)
+					tree, err := prepareProcessTree(cmd)
+					require.NoError(t, err)
+					defer tree.close()
+					attached := false
+					err = c.startProcess(ctx, sess, cmd, func() error {
+						attached = true
+						interrupt()
+						// Cancellation can remove the suspended thread before enumeration.
+						return os.ErrNotExist
+					})
+					require.ErrorIs(t, err, errUtils.ErrCLIProviderExecFailed)
+					require.ErrorIs(t, err, cause)
+					if phase == "attach" {
+						require.True(t, attached)
+						require.NotNil(t, cmd.ProcessState, "startup failure must wait for the killed process")
+						require.False(t, cmd.ProcessState.Success(), "the failed provider must be terminated")
+					} else {
+						require.False(t, attached, "a process that did not start cannot be attached")
+					}
+				})
+			}
 		})
 	}
 }
