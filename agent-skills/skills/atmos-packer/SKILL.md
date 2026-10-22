@@ -325,7 +325,7 @@ components:
 - **Git** -- `github.com/org/repo//path`, `git::https://...`, `git::ssh://...`
 - **S3** -- `s3::https://s3-us-east-1.amazonaws.com/bucket/path.tar.gz`
 - **HTTP/HTTPS** -- `https://releases.example.com/templates/component.tar.gz`
-- **OCI** -- `oci::registry.example.com/templates/component:v1.0.0`
+- **OCI** -- `oci://registry.example.com/templates/component:v1.0.0`
 
 ### Authentication for Sources
 
@@ -457,3 +457,9 @@ PACKER_LOG=1 atmos packer build ubuntu-base -s ue2-dev
 ## Additional Resources
 
 - For the complete command reference, see [references/commands-reference.md](references/commands-reference.md)
+
+### Per-invocation executable
+
+Use `--command=<executable>` to override the configured component executable for one invocation.
+The value is a name or path, not a shell command. Pass native arguments after `--`.
+`--packer-command` is a compatibility alias; do not combine the two flags.

@@ -46,6 +46,7 @@ func init() {
 
 	// Register as persistent flags (inherited by subcommands).
 	ansibleParser.RegisterPersistentFlags(ansibleCmd)
+	flags.RegisterComponentCommandFlags(ansibleCmd, "ansible")
 
 	// Bind flags to Viper for environment variable support.
 	if err := ansibleParser.BindToViper(viper.GetViper()); err != nil {
