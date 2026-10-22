@@ -203,3 +203,15 @@ func TestPathWithinAny(t *testing.T) {
 	assert.False(t, pathWithinAny("clusters/production/app.yaml", []string{"clusters/prod"}))
 	assert.False(t, pathWithinAny("README.md", []string{"clusters/prod"}))
 }
+
+func TestCommitUnstagedChangesFailWithoutStaging(t *testing.T) {
+	runner := newFakeRunner()
+	runner.on("rev-parse --verify HEAD", atmosgit.RunResult{Stdout: "abc\n"}, nil)
+	runner.on("status --porcelain", atmosgit.RunResult{Stdout: " M README.md\n?? new.txt\n"}, nil)
+	provider := New(WithRunner(runner))
+	result, err := provider.Commit(context.Background(), &atmosgit.CommitOptions{RepoContext: atmosgit.RepoContext{Workdir: "/w"}, Message: "publish"})
+	require.ErrorIs(t, err, errUtils.ErrGitNothingStaged)
+	require.Nil(t, result)
+	require.NotContains(t, runner.joinedCalls(), "add --")
+	require.NotContains(t, runner.joinedCalls(), "commit -m")
+}

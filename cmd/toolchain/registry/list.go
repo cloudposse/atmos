@@ -107,15 +107,14 @@ func executeListCommand(cmd *cobra.Command, args []string) error {
 
 	ctx := context.Background()
 
-	// If no registry name provided, list all configured registries.
-	if len(args) == 0 {
-		return listConfiguredRegistries(ctx)
-	}
-
 	// Parse options.
 	opts, err := parseListOptions(cmd, v, args)
 	if err != nil {
 		return err
+	}
+
+	if len(args) == 0 {
+		return listConfiguredRegistries(ctx, opts)
 	}
 
 	// List tools from specific registry.
@@ -146,20 +145,21 @@ func parseListOptions(cmd *cobra.Command, v *viper.Viper, _ []string) (*ListOpti
 	}, nil
 }
 
-func listConfiguredRegistries(_ context.Context) error {
+func listConfiguredRegistries(_ context.Context, opts *ListOptions) error {
 	defer perf.Track(nil, "registry.listConfiguredRegistries")()
-
-	// For MVP, show placeholder message.
-	// TODO: Load registries from atmos.yaml configuration.
-	message := `**Available registries:**
-
-Default built-in registries:
-  - aqua-public (aqua, priority: 10)
-
-Use 'atmos toolchain registry list aqua' to see tools in the Aqua registry.
-`
-	ui.MarkdownMessage(message)
-
+	registries := toolchainregistry.ConfiguredRegistries(toolchain.GetAtmosConfig())
+	switch opts.Format {
+	case "json":
+		return data.WriteJSON(registries)
+	case "yaml":
+		return data.WriteYAML(registries)
+	}
+	var message strings.Builder
+	message.WriteString("**Available registries:**\n\n")
+	for _, reg := range registries {
+		fmt.Fprintf(&message, "  - %s (%s, priority: %d)\n", reg.Name, reg.Type, reg.Priority)
+	}
+	ui.MarkdownMessage(message.String())
 	return nil
 }
 
@@ -227,14 +227,9 @@ func listRegistryTools(ctx context.Context, registryName string, opts *ListOptio
 	// Use pager with proper PagerSelector.
 	pagerEnabled := opts.Pager.IsEnabled()
 
-	// Create registry based on name.
-	// For MVP, only support aqua-public.
-	var reg toolchainregistry.ToolRegistry
-	switch registryName {
-	case "aqua-public", "aqua":
-		reg = toolchain.NewAquaRegistry()
-	default:
-		return fmt.Errorf("%w: '%s' (supported registries: 'aqua-public', 'aqua')", toolchainregistry.ErrUnknownRegistry, registryName)
+	reg, err := toolchainregistry.LoadNamedFromConfig(toolchain.GetAtmosConfig(), registryName)
+	if err != nil {
+		return err
 	}
 
 	// Get tools from registry.
