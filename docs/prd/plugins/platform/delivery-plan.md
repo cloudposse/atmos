@@ -441,7 +441,7 @@ Every adapter WP delivers a package under `pkg/plugin/adapter/<ext>`, a Go fixtu
 **Depends on:** first-release P0.3, WP1.9, WP2.1 (wire contracts), and WP2.2 (native runtime). Starlark commands are a follow-on requiring WP2.4. **Size:** M.
 **Adapter:** `pkg/plugin/adapter/command` behind `cmd/plugin` ([D9](decisions.md)). **Injection points:** plugin command adapters between `RegisterAll` and `processCustomCommands`; collision records; `atmos plugin run <alias> -- …` and `--command <export-name>`; help from static metadata.
 **Fixtures:** an executable command (Go) in the OIDC package; a Starlark command follows later.
-**Done when:** commands appear in help without starting a plugin; argv boundaries, `--`, streamed stdout and stderr, cancellation, and terminal exit status are preserved through `Commands.Run`, with no shell interpolation (`A8`); the process starts in the package directory, with stdin streaming and TTY attachment outside the current contract; a colliding shortcut is unavailable and diagnosed while `plugin run` works; plugins never replace built-ins or YAML commands ([D8](decisions.md)); the [commands contract](../extensions/commands.md) tests pass.
+**Done when:** commands appear in help without starting a plugin; argv boundaries, `--`, streamed stdout and stderr, cancellation, and terminal exit status are preserved through `Commands.Run`, with no shell interpolation (`A8`); the process starts in the package directory; stdin streaming and TTY attachment are unavailable; a colliding shortcut is unavailable and diagnosed while `plugin run` works; plugins never replace built-ins or YAML commands ([D8](decisions.md)); the [commands contract](../extensions/commands.md) tests pass.
 
 ### WP3.3 Steps and hooks
 
