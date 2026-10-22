@@ -1,0 +1,87 @@
+# Fix: Keep quality reports current without repeated pending updates
+
+**Date:** 2026-10-22
+
+## Summary
+
+[PR #3476](https://github.com/cloudposse/atmos/pull/3476) fixes stale quality
+verdicts, adds report sections and a job-summary link, and addresses the CI
+failures encountered while validating those changes. The reporter publishes one
+pending snapshot for the current head/base revision, waits for CI completion
+before publishing the full report, and avoids edits caused only by a new
+reporter run's summary URL.
+
+## Context
+
+- On [PR #3426](https://github.com/cloudposse/atmos/pull/3426), an older failed
+  semver-label check overwrote a newer successful check under the same app/name
+  key. The checks API's `filter=latest` still returned results from multiple
+  check suites, newest first.
+- [PR #3457](https://github.com/cloudposse/atmos/pull/3457) retained a ready report
+  while current tests failed. Both the timing coordinator and the reporter
+  deferred quality publication until all workflows completed, allowing stale
+  readiness to survive a push or rerun.
+- PR #3476 initially had no quality comment for the same reason. The
+  [scheduled reporter](https://github.com/cloudposse/atmos/actions/runs/39790514328)
+  explicitly deferred it at 13:56 UTC. Reporters load trusted code from `main`,
+  so unmerged reporter changes cannot affect their own PR automatically.
+- Refreshing on every workflow completion would create unnecessary comment
+  edits as pending jobs finished. A different job-summary URL on each reporter
+  run also made otherwise identical reports compare unequal.
+- The attached CI logs showed an
+  [OpenTofu signature download returning HTTP 502](https://github.com/cloudposse/atmos/actions/runs/39775051378/job/119812106486),
+  a [blocked Windows artifact storage host](https://github.com/cloudposse/atmos/actions/runs/39776523423/job/119825363021),
+  live latest-release API 404s on
+  [Linux](https://github.com/cloudposse/atmos/actions/runs/39782257359/job/119844161169)
+  and [macOS](https://github.com/cloudposse/atmos/actions/runs/39782257359/job/119844160649),
+  and [three refused internal artifact API connections](https://github.com/cloudposse/atmos/actions/runs/39782257359/job/119844159899)
+  before demo linting could start.
+
+## Changes
+
+- Preserve the first, newest result per app/name across all check pages,
+  including Codecov checks.
+- Allow quality reconciliation when the timing coordinator succeeds without
+  publishing final timing data. Publish an initial pending snapshot and clear
+  stale readiness once, then retain that snapshot while CI remains incomplete.
+  A new head, base commit, or target branch requires a new snapshot. A same-head
+  rerun replaces a previously final report with a pending snapshot.
+- Keep pending snapshots eligible for scheduled recovery beyond the 24-hour
+  recent-commit window. Publish final evidence after CI completes, including
+  failures, and continue reconciling later review and external-check changes.
+- Compare report content independently of its reporter-run summary URL. Keep
+  the existing link when evidence is unchanged, while still producing a job
+  summary on each publishing pass. Genuine report changes get the new link.
+- Group the report into Readiness, Reviews, and Measures; link to the existing
+  Actions job summary only when running in a summary-producing invocation.
+- Use the shared toolchain action's bounded installation retry for race shards,
+  retaining signature verification and restore-only caching.
+- Allow GitHub's Azure artifact storage hosts in the multi-OS test jobs; the
+  artifact account can differ from the cache account detected by runner hardening.
+- Download demo lint build artifacts through the supported REST path, scoped to
+  the current workflow run with an `actions: read` token. Retain bounded retries.
+- Replace live latest-release tests with local API fixtures and a TLS server
+  that checks authenticated and unauthenticated requests. Preserve real 404
+  error coverage instead of treating missing releases as transient errors.
+
+## Validation
+
+- Duplicate-check regression cases cover multiple suites/pages and changed results.
+- New update-frequency regressions failed before the fix: intermediate CI
+  progress and a changed summary URL both caused comment PATCH requests.
+- Tests cover initial publication, repeated pending events, final success and
+  failure, one-time stale-readiness removal even when review evidence is
+  unavailable, revision changes, and scheduled
+  recovery of pending snapshots older than 24 hours.
+- `go test -tags=mage -race ./magefiles/...` passed during this PR's validation.
+- `go test -race ./pkg/github -count=1` passed after replacing the live release tests.
+- Workflow validation with `actionlint`, the fix-log format validator,
+  `git diff --check`, and the commit hooks passed.
+- Hosted CI must validate the artifact download path; a local unit test cannot
+  reproduce the hosted runner's refused connection or network allowlist.
+
+## Follow-ups
+
+Verify the final PR CI run before merging. Reporter behavior becomes active
+after the changes reach `main`; the scheduled reconciler then recovers pending
+reports. No separate issue is needed for this unmerged work.

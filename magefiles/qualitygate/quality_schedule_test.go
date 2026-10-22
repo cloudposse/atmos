@@ -23,6 +23,7 @@ const (
 	scheduleCommentCurrent     scheduleCommentState = iota // Report for the PR's current head.
 	scheduleCommentOldHead                                 // Report for a previous head.
 	scheduleCommentUnavailable                             // Report for the current head with a gate whose evidence was unavailable.
+	scheduleCommentPending                                 // Initial snapshot awaiting CI completion.
 	scheduleCommentNone
 	scheduleCommentError
 )
@@ -124,6 +125,8 @@ func (s *scheduleServer) commentsFor(number int, response any) error {
 			body = qualityMarker + "\n" + qualityHeadMarker(scheduleSHA(number)) + "\n"
 		case scheduleCommentUnavailable:
 			body = qualityMarker + "\n" + qualityHeadMarker(scheduleSHA(number)) + "\nAll CI checks and workflows " + qualityUnavailableProblem + "\n"
+		case scheduleCommentPending:
+			body = qualityMarker + "\n" + qualityHeadMarker(scheduleSHA(number)) + "\n" + qualityCIPending + "\n"
 		case scheduleCommentOldHead:
 			body = qualityMarker + "\n" + qualityHeadMarker(githubtest.Base) + "\n"
 		case scheduleCommentNone:
@@ -184,6 +187,15 @@ func TestQualityScheduledSelection(t *testing.T) {
 			name: "report with unavailable evidence stays eligible at any age without a commit read",
 			prs: []schedulePR{
 				{number: 1, labeled: true, updated: old, committed: old, comment: scheduleCommentUnavailable},
+				{number: 2, labeled: true, updated: old, committed: old, comment: scheduleCommentCurrent},
+			},
+			want:         []int{1},
+			wantComments: []int{1, 2},
+		},
+		{
+			name: "pending snapshot stays eligible at any age without a commit read",
+			prs: []schedulePR{
+				{number: 1, labeled: true, updated: old, committed: old, comment: scheduleCommentPending},
 				{number: 2, labeled: true, updated: old, committed: old, comment: scheduleCommentCurrent},
 			},
 			want:         []int{1},

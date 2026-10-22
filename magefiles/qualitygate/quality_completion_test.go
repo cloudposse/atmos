@@ -48,7 +48,7 @@ func TestQualityRecognizesIncompleteWorkflows(t *testing.T) {
 }
 
 func TestQualityIncompleteCIRemovesStaleReadiness(t *testing.T) {
-	for _, scenario := range []string{"new head", "same head rerun", "failed job while running", "no runs"} {
+	for _, scenario := range []string{"new head", "same head rerun", "failed job while running", "no runs", "unavailable reviews while running"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Setenv("GITHUB_STEP_SUMMARY", "")
 			run := githubtest.Run()
@@ -64,6 +64,7 @@ func TestQualityIncompleteCIRemovesStaleReadiness(t *testing.T) {
 			require.True(t, ready)
 			comment := githubapi.Comment{ID: 17, Body: body}
 			comment.User.Login, comment.User.Type = "github-actions[bot]", "Bot"
+			label := qualityReady
 			reads := 0
 			get := qualityPublishGetter(t, "create", &pr, &run, &reads)
 			fake := &githubtest.FakeAPI{T: t}
@@ -73,11 +74,13 @@ func TestQualityIncompleteCIRemovesStaleReadiness(t *testing.T) {
 				case strings.Contains(path, "/comments?"):
 					return githubtest.Respond([]githubapi.Comment{comment}, response)
 				case strings.HasSuffix(path, "/issues/42"):
-					return githubtest.Respond(map[string]any{"labels": []map[string]string{{"name": qualityReady}}}, response)
+					return githubtest.Respond(map[string]any{"labels": []map[string]string{{"name": label}}}, response)
 				case scenario == "no runs" && strings.Contains(path, "actions/runs?"):
 					return githubtest.Respond(map[string]any{"workflow_runs": []githubapi.Run{}}, response)
 				case scenario == "failed job while running" && strings.Contains(path, "/check-runs?"):
 					return githubtest.Respond(map[string]any{"check_runs": []qualityCheck{{Name: "Acceptance tests", HeadSHA: pr.Head.SHA, Status: "completed", Conclusion: "failure"}}}, response)
+				case scenario == "unavailable reviews while running" && strings.Contains(path, "/reviews?"):
+					return errors.New("reviews unavailable")
 				default:
 					return get(path, response)
 				}
@@ -89,11 +92,13 @@ func TestQualityIncompleteCIRemovesStaleReadiness(t *testing.T) {
 					var payload map[string]string
 					require.NoError(t, json.NewDecoder(reader).Decode(&payload))
 					body = payload["body"]
+					comment.Body = body
 				}
 				if method == http.MethodPost {
 					var payload struct{ Labels []string }
 					require.NoError(t, json.NewDecoder(reader).Decode(&payload))
 					require.Equal(t, []string{qualityNotReady}, payload.Labels)
+					label = qualityNotReady
 				}
 				return nil
 			}
@@ -107,6 +112,9 @@ func TestQualityIncompleteCIRemovesStaleReadiness(t *testing.T) {
 			if scenario == "failed job while running" {
 				require.Contains(t, body, "Acceptance tests: failure")
 			}
+			writes = nil
+			require.NoError(t, q.reconcile(pr.Number))
+			require.Empty(t, writes, "stale readiness is cleared once per pending revision")
 		})
 	}
 }

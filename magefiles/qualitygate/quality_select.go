@@ -26,6 +26,7 @@ const (
 	qualityReasonUnpublished = "no report for current head"
 	qualityReasonBaseChanged = "no report for current base"
 	qualityReasonUnavailable = "report has unavailable evidence"
+	qualityReasonPending     = "report awaits CI completion"
 	qualityReasonRecent      = "recent head commit"
 	qualityReasonUnknown     = "selection check failed"
 )
@@ -94,8 +95,8 @@ func (q *qualityClient) searchPRNumbers(sha string) ([]int, error) {
 }
 
 // recentPRNumbers selects open PRs that need a scheduled reconcile: those
-// with no gate report for their current head and base or a report with unavailable
-// evidence (any age) and those whose head commit is newer than the cutoff.
+// with no final gate report for their current head and base or a report with
+// unavailable evidence (any age) and those whose head commit is newer than the cutoff.
 //
 // GitHub's updated_at is not an activity signal: the gate's own labels and
 // comments, Mergify, CodeRabbit and Codecov all advance it, which previously
@@ -191,6 +192,10 @@ func (q *qualityClient) scheduledReason(pr *githubapi.PR, cutoff time.Time) (str
 	// age so it is replaced once the evidence recovers.
 	if strings.Contains(existing.Body, qualityUnavailableProblem) {
 		return qualityReasonUnavailable, nil
+	}
+	// A pending snapshot is not a final report, even after the recent-head window.
+	if strings.Contains(existing.Body, qualityCIPending) {
+		return qualityReasonPending, nil
 	}
 	if !pr.Updated.IsZero() && pr.Updated.Before(cutoff) {
 		return qualityReasonNone, nil

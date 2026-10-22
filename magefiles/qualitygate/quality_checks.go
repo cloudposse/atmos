@@ -17,9 +17,10 @@ func (q *qualityClient) tests(pr *githubapi.PR) (qualityGate, error) {
 	if err := q.workflowStates(pr.Head.SHA, states); err != nil {
 		return qualityGate{}, err
 	}
-	if len(states) == 0 {
+	if len(states) == 0 || q.ciIncomplete {
 		// A push can be observed before Actions creates its workflow runs.
-		// Other checks alone must not make that head ready in the meantime.
+		// A pending snapshot also stays non-ready if CI finishes during rendering;
+		// the next reconciliation publishes the complete report.
 		states["workflow: GitHub Actions"] = "pending"
 	}
 	if err := q.allCheckStates(pr.Head.SHA, states); err != nil {

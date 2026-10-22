@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -102,7 +103,7 @@ func (q *qualityClient) refresh(number int, performance string, run *githubapi.R
 		if err != nil {
 			return err
 		}
-		if len(unavailable) > 0 && qualityPublishedRevision(existing, &pr) && !qualitySameComment(existing, stalePublished) {
+		if !q.ciIncomplete && len(unavailable) > 0 && qualityPublishedRevision(existing, &pr) && !qualitySameComment(existing, stalePublished) {
 			if !valid {
 				// Re-evaluate the new revision instead of retaining stale readiness,
 				// including draft or merge changes that keep the same head and base.
@@ -112,6 +113,8 @@ func (q *qualityClient) refresh(number int, performance string, run *githubapi.R
 			// Missing evidence is not a verdict. Replacing a report for this head and base
 			// would flip its label and comment on every transient API failure; keep the
 			// last published state and let the failure surface for a retry.
+			// Known incomplete CI is an exception: clear stale readiness even when
+			// another gate's evidence is temporarily unavailable.
 			return bench.Error("evidence unavailable for %s; kept the published report for %s", strings.Join(unavailable, ", "), pr.Head.SHA)
 		}
 		if !valid {
@@ -173,6 +176,11 @@ func qualityPublishedFor(existing *githubapi.Comment, sha string) bool {
 // render returns the report body, the readiness verdict, and the names of gates
 // whose evidence was unavailable (each logged with its cause).
 func (q *qualityClient) render(pr *githubapi.PR, existing *githubapi.Comment, performance string, run *githubapi.Run) (string, bool, []string) {
+	if q.ciIncomplete && qualityPublishedRevision(existing, pr) && strings.Contains(existing.Body, qualityCIPending) {
+		// Keep the initial snapshot while jobs/workflows finish. refresh still
+		// validates the revision and publish still repairs a stale ready label.
+		return existing.Body, false, nil
+	}
 	if performance == "" {
 		performance = qualityPreservePerformance(existing, pr.Head.SHA)
 	}
@@ -187,6 +195,10 @@ func (q *qualityClient) render(pr *githubapi.PR, existing *githubapi.Comment, pe
 		}
 	}
 	body, ready := qualityMarkdown(pr, gates, performance)
+	if q.ciIncomplete {
+		notice := qualityCIPending + "\n> CI is still running. This is an initial snapshot; the full report will refresh when all workflows finish.\n"
+		body = strings.Replace(body, qualityMarker, qualityMarker+"\n"+notice, 1)
+	}
 	if run != nil {
 		body += fmt.Sprintf("\n<!-- atmos-benchmark-run:%d:%d -->\n", run.ID, run.Attempt)
 	} else if qualityPublishedFor(existing, pr.Head.SHA) {
@@ -214,7 +226,7 @@ func (q *qualityClient) publish(number int, existing *githubapi.Comment, body st
 	if err = qualitySummary(body); err != nil {
 		return false, err
 	}
-	if existing != nil && existing.Body == body {
+	if existing != nil && qualitySameReport(existing.Body, body) {
 		return true, nil
 	}
 	method, path := http.MethodPost, fmt.Sprintf("issues/%d/comments", number)
@@ -222,6 +234,15 @@ func (q *qualityClient) publish(number int, existing *githubapi.Comment, body st
 		method, path = http.MethodPatch, fmt.Sprintf("issues/comments/%d", existing.ID)
 	}
 	return true, q.write(method, path, map[string]string{"body": body})
+}
+
+var qualitySummaryLink = regexp.MustCompile(`(?m)^\[View job summary\]\(https://github\.com/[^/\s]+/[^/\s]+/actions/runs/[0-9]+#summary\)$`)
+
+// A new reporter run alone is not new evidence. Keep the published summary link
+// until the report changes, while still writing this invocation's job summary.
+func qualitySameReport(before, after string) bool {
+	return qualitySummaryLink.ReplaceAllString(before, "[View job summary]") ==
+		qualitySummaryLink.ReplaceAllString(after, "[View job summary]")
 }
 
 // stillCurrent rechecks the PR revision and optional benchmark attempt before publication.

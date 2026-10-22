@@ -26,6 +26,7 @@ const (
 	qualityPerformanceStart = "<!-- atmos-quality-performance:start -->"
 	qualityPerformanceEnd   = "<!-- atmos-quality-performance:end -->"
 	qualityBenchmarkError   = "<!-- atmos-benchmark-report-error -->"
+	qualityCIPending        = "<!-- atmos-quality-ci-pending -->"
 )
 
 type qualityGate struct {
@@ -50,6 +51,8 @@ type qualityClient struct {
 	api                   githubapi.API
 	repo                  string
 	benchmarkReportFailed bool
+	// ciIncomplete publishes one pending snapshot, then waits for the final CI report.
+	ciIncomplete bool
 	// prTimeout overrides qualityPRTimeout for each PR's reconcile.
 	prTimeout time.Duration
 }
@@ -185,8 +188,10 @@ func (q *qualityClient) reconcile(number int) error {
 		return err
 	}
 	if !complete {
-		fmt.Printf("PR #%d: refreshing quality report while CI is incomplete; deferring benchmark recovery\n", number)
-		return q.refresh(number, "", nil)
+		fmt.Printf("PR #%d: ensuring a pending report; deferring further updates until CI completes\n", number)
+		pending := *q
+		pending.ciIncomplete = true
+		return pending.refresh(number, "", nil)
 	}
 	var response struct {
 		Runs []githubapi.Run `json:"workflow_runs"`
