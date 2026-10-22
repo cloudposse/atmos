@@ -56,6 +56,7 @@ func init() {
 
 	// Register as persistent flags (inherited by subcommands).
 	terraformParser.RegisterPersistentFlags(terraformCmd)
+	flags.RegisterComponentCommandFlags(terraformCmd, "terraform")
 
 	// Bind flags to Viper for environment variable support.
 	if err := terraformParser.BindToViper(viper.GetViper()); err != nil {
@@ -193,6 +194,13 @@ func terraformGlobalFlagsHandler(cmd *cobra.Command, args []string) error {
 
 			// Get the terraform command, with fallback to default.
 			command := atmosConfig.Components.Terraform.Command
+			override, err := flags.ComponentCommand(cmd, "terraform")
+			if err != nil {
+				return err
+			}
+			if override != "" {
+				command = override
+			}
 			if command == "" {
 				command = cfg.TerraformComponentType // Default to "terraform".
 			}
