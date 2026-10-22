@@ -18,7 +18,7 @@ The [first-release scope](../first-release.md) is authoritative for delivery gat
 
 ## Decisions that shape these documents
 
-- **Transport.** Native plugins use `hashicorp/go-plugin` in gRPC mode with Atmos-owned `.proto` definitions. Wasm through Extism is the declared follow-on runtime. Commands use plain executable dispatch; Starlark runs in-process. [Decision 1](decisions.md), [Decision 2](decisions.md).
+- **Transport.** Native plugins use `hashicorp/go-plugin` in gRPC mode with Atmos-owned `.proto` definitions. Wasm through Extism is the declared follow-on runtime. Native commands use `Commands.Run` with streamed stdout, stderr, and a terminal exit event; the proposed Starlark runtime runs in-process. [Decision 1](decisions.md), [Decision 2](decisions.md).
 - **Validate together, split after.** The auth registry refactor and first-release foundations remain with the working OIDC/plugin implementation until validated. Split into reviewable PRs afterward. Remaining registry work accompanies its adapter. [Decision 13](decisions.md).
 - **Shared admission and presentation.** CEL/Starlark `on: plugin` gates use the existing policy engine. Plugin views use `pkg/list`; parallel downloads use the toolchain batch UI. [Plugin policies](../policy.md), [first release](../first-release.md).
 - **Complete inventory.** The gap analysis covers all 12 planned extension types in full and every follow-on surface in one row each. [Decision 16](decisions.md).
