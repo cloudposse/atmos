@@ -4,7 +4,7 @@ import (
 	"sync"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/hairyhenderson/gomplate/v3/data"
+	data "github.com/cloudposse/atmos/pkg/template/gomplate"
 )
 
 var gomplateDatasourceFuncSyncMap = sync.Map{}

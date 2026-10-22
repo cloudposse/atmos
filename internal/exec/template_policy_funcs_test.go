@@ -13,7 +13,6 @@ import (
 	"testing"
 	"text/template"
 
-	"github.com/hairyhenderson/gomplate/v3/data"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/policy/admission"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
+	data "github.com/cloudposse/atmos/pkg/template/gomplate"
 )
 
 // failPolicyEnabled replaces the capability lookup with one that fails when shouldFail reports true for the
@@ -255,8 +255,13 @@ func TestAtmosFuncsResolveRemembersRemoteProvenance(t *testing.T) {
 // per-alias cache instead of fetching the datasource again. With a source rule every call is checked.
 func TestAtmosFuncsGomplateDatasourceCaching(t *testing.T) {
 	var hits atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		hits.Add(1)
+	var heads atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			heads.Add(1)
+		} else {
+			hits.Add(1)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"n":1}`))
 	}))
@@ -272,6 +277,7 @@ func TestAtmosFuncsGomplateDatasourceCaching(t *testing.T) {
 	t.Run("no source rule reuses the alias cache", func(t *testing.T) {
 		templatePolicy(t, "function", "false", nil)
 		hits.Store(0)
+		heads.Store(0)
 
 		// Each template render builds its own datasource set, so only the shared alias cache can avoid a refetch.
 		first, err := funcs(t, "cached-alias").GomplateDatasource("cached-alias")
@@ -281,6 +287,7 @@ func TestAtmosFuncsGomplateDatasourceCaching(t *testing.T) {
 
 		require.Equal(t, first, second)
 		require.EqualValues(t, 1, hits.Load(), "the second render is served from the cache")
+		require.EqualValues(t, 1, heads.Load(), "Gomplate v4 reads metadata once, then reuses the alias cache")
 	})
 
 	t.Run("a source rule checks and reads every call", func(t *testing.T) {

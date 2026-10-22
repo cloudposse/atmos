@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hairyhenderson/gomplate/v3/data"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	data "github.com/cloudposse/atmos/pkg/template/gomplate"
 )
 
 // manifestLoadTestTimeout bounds every describe in this file so a regression of the unbounded
