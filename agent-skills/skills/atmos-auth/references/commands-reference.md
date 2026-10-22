@@ -89,16 +89,28 @@ atmos auth whoami -i                    # Interactive selector
 ## atmos auth validate
 
 Validate the `auth` configuration in `atmos.yaml` for syntax errors, missing required fields, circular
-dependency chains, and logical inconsistencies.
+dependency chains, and logical inconsistencies. Add `--stack` to validate every concrete component’s
+merged auth after imports and inheritance, including its component overrides. `--component` narrows
+the selection across component types and requires `--stack`. Abstract components are excluded; no
+matches is an error. Each failing scope names the stack, component, and component type.
+
+Global validation remains strict. If a principal is supplied in stack manifests, use scoped
+validation instead of a placeholder principal in `atmos.yaml`. Scoped validation does not authenticate
+or evaluate component templates/YAML functions. Unresolved dynamic auth values fail with
+`cannot fully validate`; unrelated component expressions are left unevaluated. Dynamic import paths
+and manifests requiring template rendering are unsupported. Normal imports and inheritance still
+load. Global `--base-path`, `--config`, `--config-path`, and `--profile` selectors apply.
 
 ```shell
-atmos auth validate [--verbose]
+atmos auth validate [--stack <stack> [--component <component>]] [--verbose]
 ```
 
 ### Flags
 
 | Flag | Alias | Description |
 |------|-------|-------------|
+| `--stack` | `-s` | Logical stack or manifest path whose merged auth to validate |
+| `--component` | `-c` | Component name to validate within `--stack` |
 | `--verbose` | `-v` | Enable verbose validation output |
 
 ### Environment Variables
@@ -110,7 +122,9 @@ atmos auth validate [--verbose]
 ### Examples
 
 ```shell
-atmos auth validate                     # Basic validation
+atmos auth validate                     # Strict global validation
+atmos auth validate -s dev              # Every concrete component in dev
+atmos auth validate -s dev -c demo      # Components named demo in dev
 atmos auth validate --verbose           # Verbose output with details
 ```
 
@@ -451,13 +465,13 @@ atmos auth list --format graphviz | dot -Tsvg > auth.svg
 
 ---
 
-## atmos auth ecr-login
+## atmos aws ecr login
 
 Login to AWS Elastic Container Registry using integrations or explicit registry URLs. Writes Docker
 credentials to `~/.docker/config.json`.
 
 ```shell
-atmos auth ecr-login [integration] [--identity <name>] [--registry <url>]
+atmos aws ecr login [integration] [--identity <name>] [--registry <url>] [--public]
 ```
 
 ### Arguments
@@ -472,21 +486,22 @@ atmos auth ecr-login [integration] [--identity <name>] [--registry <url>]
 |------|-------|-------------|
 | `--identity` | `-i` | Execute all ECR integrations linked to this identity |
 | `--registry` | `-r` | Explicit registry URL(s) for ad-hoc login (can be repeated) |
+| `--public` | | Login to ECR Public using ambient credentials or the selected identity |
 
 ### Examples
 
 ```shell
 # Named integration
-atmos auth ecr-login dev/ecr/primary
+atmos aws ecr login dev/ecr/primary
 
 # All integrations for an identity
-atmos auth ecr-login --identity dev-admin
+atmos aws ecr login --identity dev-admin
 
 # Explicit registry URL
-atmos auth ecr-login --registry 123456789012.dkr.ecr.us-east-1.amazonaws.com
+atmos aws ecr login --registry 123456789012.dkr.ecr.us-east-1.amazonaws.com
 
 # Multiple explicit registries
-atmos auth ecr-login \
+atmos aws ecr login \
   --registry 123456789012.dkr.ecr.us-east-1.amazonaws.com \
   --registry 987654321098.dkr.ecr.us-west-2.amazonaws.com
 ```
@@ -495,7 +510,7 @@ atmos auth ecr-login \
 
 - ECR tokens expire after approximately 12 hours (AWS-enforced).
 - Requires IAM permission: `ecr:GetAuthorizationToken`.
-- Only private ECR registries are supported (not ECR Public or China/GovCloud).
+- Use `--public` for ECR Public; it cannot be combined with an integration name or `--registry`.
 - Respects `DOCKER_CONFIG` environment variable for credential file location.
 
 ---
