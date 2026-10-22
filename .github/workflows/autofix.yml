@@ -14,5 +14,6 @@ jobs:
         uses: $/.github/actions/harden-runner
         with:
           # This job makes no network calls at all (just echo); block all egress.
-          policies: none
+          policies: >-
+            none
       - run: echo "See Atmos Pro"

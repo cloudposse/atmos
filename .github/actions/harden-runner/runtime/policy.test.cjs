@@ -31,7 +31,9 @@ test('every packaged policy validates', () => {
   const content=fs.readFileSync(path.join(__dirname, '..', '..', '..', 'allowlist.yaml'), 'utf8');
   const names = Object.keys(parse(content));
   assert.ok(names.length > 0);
-  for (const name of names) assert.equal(typeof readPolicy(content, name), 'string');
+  for (const os of ['Linux', 'Windows', 'macOS']) {
+    for (const name of names) assert.equal(typeof readPolicy(content, name, os), 'string');
+  }
 });
 
 test('explicit empty policy adds no endpoints beyond upstream implicit destinations', () => {
@@ -76,7 +78,9 @@ test('all workflow group selections resolve and every group has a consumer', () 
       for (const step of job.steps || []) {
         if (!step.uses?.startsWith('$/.github/actions/harden-runner')) continue;
         const selection = step.with?.policies;
-        assert.doesNotThrow(() => readPolicy(content, selection), file);
+        for (const os of ['Linux', 'Windows', 'macOS']) {
+          assert.doesNotThrow(() => readPolicy(content, selection, os), `${file}/${os}`);
+        }
         for (const name of selection.trim().split(/\s+/)) used.add(name);
         consumers++;
       }
@@ -106,4 +110,64 @@ test('pre-hook loads policies from its downloaded repository without checkout or
     env: { ...process.env, INPUT_POLICIES: 'github\ngo', GITHUB_ENV: envFile },
   });
   assert.equal(fs.readFileSync(envFile, 'utf8'), 'ATMOS_HARDEN_RUNNER_ENDPOINTS=github.com:443 proxy.golang.org:443\n');
+});
+
+const scopedPolicies = `
+shared: [github.com:443]
+windows:
+  runner-os: Windows
+  endpoints: [windows.example.com:443]
+macos:
+  runner-os: macOS
+  endpoints: [macos.example.com:443]
+`;
+for (const [os, expected] of [
+  ['Linux', 'github.com:443'],
+  ['Windows', 'github.com:443 windows.example.com:443'],
+  ['macOS', 'github.com:443 macos.example.com:443'],
+]) {
+  test(`scopes OS services for ${os} while retaining shared destinations`, () => {
+    assert.equal(readPolicy(scopedPolicies, 'shared windows macos', os), expected);
+  });
+}
+for (const os of [undefined, '', 'linux', 'FreeBSD']) {
+  test(`rejects missing or unsupported runner OS: ${os}`, () => {
+    assert.throws(() => readPolicy(scopedPolicies, 'windows', os), /Runner OS is required/);
+  });
+}
+for (const group of [
+  { 'runner-os': 'windows', endpoints: [] },
+  { 'runner-os': 'Windows', endpoint: [] },
+  { 'runner-os': 'Windows', endpoints: 'windows.example.com:443' },
+  { 'runner-os': 'Windows', endpoints: ['https://windows.example.com:443'] },
+  { 'runner-os': 'Windows', endpoints: ['windows.example.com:65536'] },
+  null,
+]) {
+  test(`rejects malformed scoped group even on another OS: ${JSON.stringify(group)}`, () => {
+    assert.throws(() => readPolicy(JSON.stringify({ a: group }), 'a', 'Linux'));
+  });
+}
+test('pre-hook uses GitHub RUNNER_OS to omit other operating systems', () => {
+  let value;
+  prepare({
+    files: { readFileSync: () => scopedPolicies, appendFileSync: (_, content) => { value = content; } },
+    env: { INPUT_POLICIES: 'shared windows macos', RUNNER_OS: 'Linux', GITHUB_ENV: '/tmp/env' },
+  });
+  assert.equal(value, 'ATMOS_HARDEN_RUNNER_ENDPOINTS=github.com:443\n');
+});
+test('Linux build excludes OS background-service DNS, including the NXDOMAIN regression', () => {
+  const github = path.resolve(__dirname, '..', '..', '..');
+  const workflow = parse(fs.readFileSync(path.join(github, 'workflows', 'test.yml'), 'utf8'));
+  const selection = workflow.jobs.build.steps.find(step => step.uses === '$/.github/actions/harden-runner').with.policies;
+  const content = fs.readFileSync(path.join(github, 'allowlist.yaml'), 'utf8');
+  const groups = parse(content);
+  const linux = new Set(readPolicy(content, selection, 'Linux').split(' '));
+  assert.ok(linux.has('github.com:443'));
+  assert.ok(linux.has('proxy.golang.org:443'));
+  for (const name of ['windows-services', 'macos-services']) {
+    for (const endpoint of groups[name].endpoints) assert.ok(!linux.has(endpoint), endpoint);
+  }
+  for (const os of ['Linux', 'Windows', 'macOS']) {
+    assert.ok(!readPolicy(content, selection, os).includes('pti.store.microsoft.com'));
+  }
 });

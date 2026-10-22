@@ -81,7 +81,19 @@ jobs:
           # download hosts were flagged on the same run and belong with the
           # other Windows background services.
           policies: >-
-            github github-archives github-releases github-content go-checksums macos-services windows-services go-proxy go-toolchain go-vanity ubuntu-packages hosted-runner-updates
+            github
+            github-archives
+            github-releases
+            github-content
+            go-checksums
+            macos-services
+            windows-services
+            go-proxy
+            go-toolchain
+            go-vanity
+            ubuntu-packages
+            windows-updates
+            linux-updates
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:

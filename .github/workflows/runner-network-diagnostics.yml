@@ -39,7 +39,13 @@ jobs:
         id: harden
         uses: $/.github/actions/harden-runner
         with:
-          policies: github github-archives github-releases docker-hub go-proxy diagnostic-downloads
+          policies: >-
+            github
+            github-archives
+            github-releases
+            docker-hub
+            go-proxy
+            diagnostic-downloads
           # Half the samples exercise the normal combined entry point before
           # any network work; half record the original failure before repair.
           dns-repair: ${{ matrix.sample > 3 && (github.event_name == 'pull_request' || inputs.test_resolver_repair) }}
@@ -166,7 +172,13 @@ jobs:
         if: always() && !cancelled() && (github.event_name == 'pull_request' || inputs.test_resolver_repair) && steps.harden.outcome == 'success'
         uses: $/.github/actions/harden-runner/runtime
         with:
-          policies: github github-archives github-releases docker-hub go-proxy diagnostic-downloads
+          policies: >-
+            github
+            github-archives
+            github-releases
+            docker-hub
+            go-proxy
+            diagnostic-downloads
 
       - name: Probe repaired DNS under block mode
         if: always() && !cancelled() && steps.repair.outcome == 'success'

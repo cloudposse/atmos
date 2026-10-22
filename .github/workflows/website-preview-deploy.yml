@@ -54,7 +54,15 @@ jobs:
         uses: $/.github/actions/harden-runner
         with:
           policies: >-
-            github github-archives github-releases github-content github-actions website-preview-storage go-proxy go-toolchain cloudfront
+            github
+            github-archives
+            github-releases
+            github-content
+            github-actions
+            website-preview-storage
+            go-proxy
+            go-toolchain
+            cloudfront
       - name: Start deployment
         uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8 # v1
         id: deployment

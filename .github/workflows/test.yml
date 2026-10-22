@@ -139,7 +139,20 @@ jobs:
           # StepSecurity Insights -> Network Events; keep in sync with the
           # other Windows/macOS legs in this file.
           policies: >-
-            github github-archives github-releases github-content go-checksums sigstore helm telemetry macos-services windows-services go-proxy go-toolchain go-vanity hashicorp-releases
+            github
+            github-archives
+            github-releases
+            github-content
+            go-checksums
+            sigstore
+            helm
+            telemetry
+            macos-services
+            windows-services
+            go-proxy
+            go-toolchain
+            go-vanity
+            hashicorp-releases
       - name: Announce build target
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         run: echo "Building on ${{ matrix.os }}"
@@ -263,7 +276,10 @@ jobs:
       - name: Harden Runner
         uses: $/.github/actions/harden-runner
         with:
-          policies: github github-archives telemetry
+          policies: >-
+            github
+            github-archives
+            telemetry
       - name: Check out source with validation base history
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -346,7 +362,20 @@ jobs:
           # StepSecurity Insights -> Network Events; keep in sync with the
           # other Windows/macOS legs in this file.
           policies: >-
-            github github-archives github-releases github-content go-checksums sigstore terraform helm telemetry macos-services windows-services go-proxy go-toolchain go-vanity
+            github
+            github-archives
+            github-releases
+            github-content
+            go-checksums
+            sigstore
+            terraform
+            helm
+            telemetry
+            macos-services
+            windows-services
+            go-proxy
+            go-toolchain
+            go-vanity
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -526,7 +555,24 @@ jobs:
           # StepSecurity Insights -> Network Events; keep in sync with the
           # other Windows/macOS legs in this file.
           policies: >-
-            github github-archives github-releases github-content github-containers go-checksums sigstore terraform opentofu helm docker-hub telemetry macos-services windows-services go-proxy go-toolchain go-vanity acceptance-cloud-services
+            github
+            github-archives
+            github-releases
+            github-content
+            github-containers
+            go-checksums
+            sigstore
+            terraform
+            opentofu
+            helm
+            docker-hub
+            telemetry
+            macos-services
+            windows-services
+            go-proxy
+            go-toolchain
+            go-vanity
+            acceptance-cloud-services
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -966,7 +1012,15 @@ jobs:
           # check. cancelled() is only valid in an `if:`, not inside a script, so
           # the verification steps below are skipped via `if: ${{ !cancelled() }}`
           # rather than early-exiting from within their run: blocks.
-          policies: github github-archives github-releases github-content go-checksums go-proxy go-toolchain go-vanity
+          policies: >-
+            github
+            github-archives
+            github-releases
+            github-content
+            go-checksums
+            go-proxy
+            go-toolchain
+            go-vanity
       - name: Skip verification (workflow run was cancelled)
         if: ${{ cancelled() }}
         run: echo "workflow run was cancelled (e.g. superseded by a newer push); nothing to verify"
@@ -1128,7 +1182,11 @@ jobs:
       - name: Harden Runner
         uses: $/.github/actions/harden-runner
         with:
-          policies: github github-archives github-releases trivy
+          policies: >-
+            github
+            github-archives
+            github-releases
+            trivy
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -1204,7 +1262,15 @@ jobs:
         uses: $/.github/actions/harden-runner
         with:
           policies: >-
-            github github-archives github-releases github-content sigstore terraform docker-mirror telemetry floci-registry
+            github
+            github-archives
+            github-releases
+            github-content
+            sigstore
+            terraform
+            docker-mirror
+            telemetry
+            floci-registry
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -1282,7 +1348,20 @@ jobs:
         uses: $/.github/actions/harden-runner
         with:
           policies: >-
-            github github-archives github-releases github-content sigstore terraform opentofu docker-hub docker-mirror telemetry go-proxy go-toolchain ubuntu-packages floci-test-services
+            github
+            github-archives
+            github-releases
+            github-content
+            sigstore
+            terraform
+            opentofu
+            docker-hub
+            docker-mirror
+            telemetry
+            go-proxy
+            go-toolchain
+            ubuntu-packages
+            floci-test-services
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -1387,7 +1466,19 @@ jobs:
           # listed below the job-specific endpoints; see the `test` job's
           # allowed-endpoints comment for the rationale.
           policies: >-
-            github github-archives github-releases github-content github-containers sigstore helm docker-hub docker-mirror telemetry macos-services ubuntu-packages kubernetes-registries
+            github
+            github-archives
+            github-releases
+            github-content
+            github-containers
+            sigstore
+            helm
+            docker-hub
+            docker-mirror
+            telemetry
+            macos-services
+            ubuntu-packages
+            kubernetes-registries
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -1526,7 +1617,8 @@ jobs:
           # See the matching comment on test-required's per-OS check step: a
           # whole-run cancellation is not a genuine k3s failure, and cancelled()
           # is only valid in an `if:`, not inside a script.
-          policies: none
+          policies: >-
+            none
       - name: Skip verification (workflow run was cancelled)
         if: ${{ cancelled() }}
         run: echo "workflow run was cancelled (e.g. superseded by a newer push); nothing to verify"
@@ -1572,7 +1664,14 @@ jobs:
           # Allow setup-go's version manifest and official fallback download
           # chain, plus module checksum verification on runners with cold caches.
           policies: >-
-            github github-archives github-releases github-content go-checksums macos-services go-proxy go-toolchain
+            github
+            github-archives
+            github-releases
+            github-content
+            go-checksums
+            macos-services
+            go-proxy
+            go-toolchain
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -1676,7 +1775,20 @@ jobs:
           # StepSecurity Insights -> Network Events; keep in sync with the
           # other Windows/macOS legs in this file.
           policies: >-
-            github github-archives github-releases github-content github-containers go-checksums sigstore terraform helm telemetry macos-services windows-services go-proxy go-mock-dependencies
+            github
+            github-archives
+            github-releases
+            github-content
+            github-containers
+            go-checksums
+            sigstore
+            terraform
+            helm
+            telemetry
+            macos-services
+            windows-services
+            go-proxy
+            go-mock-dependencies
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1790,7 +1902,15 @@ jobs:
         uses: $/.github/actions/harden-runner
         with:
           policies: >-
-            github github-archives github-releases github-content sigstore helm telemetry hashicorp-releases sigstore-legacy
+            github
+            github-archives
+            github-releases
+            github-content
+            sigstore
+            helm
+            telemetry
+            hashicorp-releases
+            sigstore-legacy
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -1830,7 +1950,15 @@ jobs:
         uses: $/.github/actions/harden-runner
         with:
           policies: >-
-            github github-archives github-releases github-content sigstore helm telemetry hashicorp-releases sigstore-legacy
+            github
+            github-archives
+            github-releases
+            github-content
+            sigstore
+            helm
+            telemetry
+            hashicorp-releases
+            sigstore-legacy
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -1889,7 +2017,10 @@ jobs:
       - name: Harden Runner
         uses: $/.github/actions/harden-runner
         with:
-          policies: github github-archives telemetry
+          policies: >-
+            github
+            github-archives
+            telemetry
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -1944,7 +2075,15 @@ jobs:
         uses: $/.github/actions/harden-runner
         with:
           policies: >-
-            github github-archives github-releases github-content docker-hub docker-mirror telemetry go-proxy go-toolchain
+            github
+            github-archives
+            github-releases
+            github-content
+            docker-hub
+            docker-mirror
+            telemetry
+            go-proxy
+            go-toolchain
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:

@@ -31,7 +31,13 @@ jobs:
         uses: $/.github/actions/harden-runner
         with:
           # setup-go follows GitHub release redirects; the Go hosts cover its fallback.
-          policies: github github-archives github-releases go-checksums go-proxy go-toolchain
+          policies: >-
+            github
+            github-archives
+            github-releases
+            go-checksums
+            go-proxy
+            go-toolchain
       - name: Check out measured revision
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:

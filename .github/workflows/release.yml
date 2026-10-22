@@ -88,7 +88,15 @@ jobs:
           # so setup-go failed with
           # "getaddrinfo EAI_AGAIN golang.org" before the summarizer ran). The
           # rest is the module download behind `go tool mage`.
-          policies: github github-releases github-content go-checksums go-proxy go-toolchain go-vanity openai
+          policies: >-
+            github
+            github-releases
+            github-content
+            go-checksums
+            go-proxy
+            go-toolchain
+            go-vanity
+            openai
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:

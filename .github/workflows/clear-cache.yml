@@ -20,7 +20,8 @@ jobs:
       - name: Harden Runner
         uses: $/.github/actions/harden-runner
         with:
-          policies: github-api
+          policies: >-
+            github-api
       - name: Cleanup
         run: |
           echo "Fetching list of cache keys"

@@ -44,7 +44,14 @@ jobs:
       - name: Harden Runner
         uses: $/.github/actions/harden-runner
         with:
-          policies: github github-releases go-checksums go-proxy go-vanity go-analysis go-analysis-toolchain
+          policies: >-
+            github
+            github-releases
+            go-checksums
+            go-proxy
+            go-vanity
+            go-analysis
+            go-analysis-toolchain
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -115,7 +122,15 @@ jobs:
           # setup-go reads its version manifest from raw.githubusercontent.com;
           # its official fallback follows golang.org -> go.dev -> dl.google.com.
           policies: >-
-            github github-releases github-content go-checksums go-proxy go-toolchain go-vanity go-analysis go-vulnerability-db
+            github
+            github-releases
+            github-content
+            go-checksums
+            go-proxy
+            go-toolchain
+            go-vanity
+            go-analysis
+            go-vulnerability-db
       - name: Checkout code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -214,7 +229,10 @@ jobs:
       - name: Harden Runner
         uses: $/.github/actions/harden-runner
         with:
-          policies: github docker-hub semgrep
+          policies: >-
+            github
+            docker-hub
+            semgrep
       - name: Checkout code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -407,7 +425,9 @@ jobs:
         uses: $/.github/actions/harden-runner
         with:
           # Checkout is required for local composite actions
-          policies: github github-archives
+          policies: >-
+            github
+            github-archives
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
         with:

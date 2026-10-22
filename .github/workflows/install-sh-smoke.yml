@@ -33,7 +33,11 @@ jobs:
           # in this repo that happen to have enough setup steps first. A short wait
           # avoids the race; see the exit-code-35/"no upstream DNS servers available"
           # failures this job hit repeatedly before this was added.
-          policies: github github-releases telemetry installer-packages
+          policies: >-
+            github
+            github-releases
+            telemetry
+            installer-packages
       - name: Wait for Harden Runner's Windows agent to finish hooking adapters
         if: matrix.os == 'windows-latest'
         shell: bash

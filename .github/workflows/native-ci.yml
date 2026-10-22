@@ -84,7 +84,15 @@ jobs:
         uses: $/.github/actions/harden-runner
         with:
           policies: >-
-            github github-archives github-releases github-content go-checksums telemetry go-proxy go-toolchain go-vanity
+            github
+            github-archives
+            github-releases
+            github-content
+            go-checksums
+            telemetry
+            go-proxy
+            go-toolchain
+            go-vanity
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -144,7 +152,19 @@ jobs:
         uses: $/.github/actions/harden-runner
         with:
           policies: >-
-            github github-archives github-releases github-content go-checksums sigstore terraform docker-mirror telemetry go-proxy go-toolchain go-vanity terraform-policy-scanners
+            github
+            github-archives
+            github-releases
+            github-content
+            go-checksums
+            sigstore
+            terraform
+            docker-mirror
+            telemetry
+            go-proxy
+            go-toolchain
+            go-vanity
+            terraform-policy-scanners
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -228,7 +248,17 @@ jobs:
         uses: $/.github/actions/harden-runner
         with:
           policies: >-
-            github github-archives github-releases github-content go-checksums sigstore terraform telemetry go-proxy go-toolchain go-vanity
+            github
+            github-archives
+            github-releases
+            github-content
+            go-checksums
+            sigstore
+            terraform
+            telemetry
+            go-proxy
+            go-toolchain
+            go-vanity
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -300,7 +330,19 @@ jobs:
         uses: $/.github/actions/harden-runner
         with:
           policies: >-
-            github github-archives github-releases github-content go-checksums sigstore terraform docker-mirror telemetry go-proxy go-toolchain go-vanity terraform-scanner-cache
+            github
+            github-archives
+            github-releases
+            github-content
+            go-checksums
+            sigstore
+            terraform
+            docker-mirror
+            telemetry
+            go-proxy
+            go-toolchain
+            go-vanity
+            terraform-scanner-cache
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:

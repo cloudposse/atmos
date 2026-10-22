@@ -2,6 +2,7 @@
 # Select one or more groups with its policies input; their union is allowed.
 # Keep groups scoped to services. Add workload-specific destinations here,
 # not to a broad shared group. Empty `none` adds only upstream implicit hosts.
+# runner-os restricts background-service groups to their operating system.
 # DNS repair does not add endpoints or widen firewall rules.
 none: []
 github:
@@ -46,33 +47,36 @@ docker-mirror:
 telemetry:
   - us.i.posthog.com:443
 macos-services:
-  - '*.apple.com:443'
-  - '*.aaplimg.com:443'
-  - '*.mzstatic.com:443'
-  - '*.icloud.com:443'
-  - '*.apple-dns.net:443'
-  - ocsp.usertrust.com:80
-  - ocsp.digicert.com:80
-  - '*.pool.ntp.org:123'
+  runner-os: macOS
+  endpoints:
+    - '*.apple.com:443'
+    - '*.aaplimg.com:443'
+    - '*.mzstatic.com:443'
+    - '*.icloud.com:443'
+    - '*.apple-dns.net:443'
+    - ocsp.usertrust.com:80
+    - ocsp.digicert.com:80
+    - '*.pool.ntp.org:123'
 windows-services:
-  - www.msftconnecttest.com:443
-  - ipv6.msftconnecttest.com:443
-  - www.msftncsi.com:443
-  - ipv6.msftncsi.com:443
-  - time.windows.com:443
-  - client.wns.windows.com:443
-  - settings-win.data.microsoft.com:443
-  - '*.events.data.microsoft.com:443'
-  - '*.update.microsoft.com:443'
-  - ecs.office.com:443
-  - pti.store.microsoft.com:443
-  - login.live.com:443
-  - go.microsoft.com:443
-  - www.microsoft.com:443
-  - ocsp.sectigo.com:80
-  - ocsp.sectigo.com:443
-  - crl.sectigo.com:80
-  - crl.sectigo.com:443
+  runner-os: Windows
+  endpoints:
+    - www.msftconnecttest.com:443
+    - ipv6.msftconnecttest.com:443
+    - www.msftncsi.com:443
+    - ipv6.msftncsi.com:443
+    - time.windows.com:443
+    - client.wns.windows.com:443
+    - settings-win.data.microsoft.com:443
+    - '*.events.data.microsoft.com:443'
+    - '*.update.microsoft.com:443'
+    - ecs.office.com:443
+    - login.live.com:443
+    - go.microsoft.com:443
+    - www.microsoft.com:443
+    - ocsp.sectigo.com:80
+    - ocsp.sectigo.com:443
+    - crl.sectigo.com:80
+    - crl.sectigo.com:443
 website-build:
   - nodejs.org:443
   - registry.npmjs.org:443
@@ -138,14 +142,19 @@ scorecard:
   - fulcio.sigstore.dev:443
   - oss-fuzz-build-logs.storage.googleapis.com:443
   - www.bestpractices.dev:443
-hosted-runner-updates:
-  - '*.prod.do.dsp.mp.microsoft.com:443'
-  - au.download.windowsupdate.com:443
-  - au.download.windowsupdate.com:80
-  - azure.archive.ubuntu.com:80
-  - motd.ubuntu.com:443
-  - packages.microsoft.com:443
-  - security.ubuntu.com:80
+windows-updates:
+  runner-os: Windows
+  endpoints:
+    - '*.prod.do.dsp.mp.microsoft.com:443'
+    - au.download.windowsupdate.com:443
+    - au.download.windowsupdate.com:80
+linux-updates:
+  runner-os: Linux
+  endpoints:
+    - azure.archive.ubuntu.com:80
+    - motd.ubuntu.com:443
+    - packages.microsoft.com:443
+    - security.ubuntu.com:80
 acceptance-cloud-services:
   - accounts.google.com:443
   - api.bitbucket.org:443

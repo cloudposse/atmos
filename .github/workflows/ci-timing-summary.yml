@@ -72,7 +72,8 @@ jobs:
         with:
           # workflow_run executes with default-branch privileges. Load only the
           # reviewed action implementation from that branch, never from the PR.
-          policies: github
+          policies: >-
+            github
       - name: Check out timing action from the default branch
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:

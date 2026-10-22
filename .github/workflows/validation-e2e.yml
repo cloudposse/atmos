@@ -29,7 +29,15 @@ jobs:
       - name: Harden Runner
         uses: $/.github/actions/harden-runner
         with:
-          policies: github github-archives github-releases github-content go-checksums telemetry go-proxy go-toolchain
+          policies: >-
+            github
+            github-archives
+            github-releases
+            github-content
+            go-checksums
+            telemetry
+            go-proxy
+            go-toolchain
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:

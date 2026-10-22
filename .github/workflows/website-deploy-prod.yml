@@ -48,7 +48,15 @@ jobs:
         with:
           # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
           policies: >-
-            github github-releases github-content github-actions telemetry website-build go-proxy go-toolchain website-production-storage
+            github
+            github-releases
+            github-content
+            github-actions
+            telemetry
+            website-build
+            go-proxy
+            go-toolchain
+            website-production-storage
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:

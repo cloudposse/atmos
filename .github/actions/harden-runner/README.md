@@ -5,7 +5,7 @@ Use this composite before checkout:
 ```yaml
 - uses: $/.github/actions/harden-runner
   with:
-    policies: |
+    policies: >-
       github
       go-toolchain
       go-proxy
@@ -74,3 +74,17 @@ npm test --prefix .github/actions/harden-runner
 
 Commit `runtime/yaml.cjs` with the lockfile. Its upstream license is included in
 `runtime/YAML-LICENSE`.
+
+OS background-service policies use `runner-os` and `endpoints` in the allowlist:
+
+```yaml
+windows-services:
+  runner-os: Windows
+  endpoints:
+    - www.msftconnecttest.com:443
+```
+
+The runtime validates every selected policy and includes scoped endpoints only
+when `RUNNER_OS` matches. Missing or invalid runner OS values fail validation
+when a scoped policy is selected. This keeps Linux agent initialization from
+depending on Windows or macOS background-service DNS.

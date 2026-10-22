@@ -58,7 +58,16 @@ jobs:
       - name: Harden Runner
         uses: $/.github/actions/harden-runner
         with:
-          policies: github github-releases github-content github-actions sigstore opentofu telemetry go-proxy go-toolchain
+          policies: >-
+            github
+            github-releases
+            github-content
+            github-actions
+            sigstore
+            opentofu
+            telemetry
+            go-proxy
+            go-toolchain
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -99,7 +108,16 @@ jobs:
       - name: Harden Runner
         uses: $/.github/actions/harden-runner
         with:
-          policies: github github-releases github-content github-actions sigstore opentofu telemetry go-proxy go-toolchain
+          policies: >-
+            github
+            github-releases
+            github-content
+            github-actions
+            sigstore
+            opentofu
+            telemetry
+            go-proxy
+            go-toolchain
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
