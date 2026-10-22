@@ -1463,10 +1463,18 @@ func processStacks(
 						return configAndStacksInfo, err
 					}
 
-					// Skip validation for known module-source-interpolation diagnostics.
-					log.Debug("Skipping terraform-config-inspect validation for known module-source-interpolation diagnostic", "diagnostic", errMsg)
+					// Skip validation for known static-parser limitations, and record which ones were found so
+					// `describe component` reports the right reason.
+					providerIteration, moduleSourceInterpolation := staticParserLimitationKinds(diags)
 					componentInfo[terraformConfigKey] = nil
-					componentInfo["validation_skipped_module_source_interpolation"] = true
+					if moduleSourceInterpolation {
+						log.Debug("Skipping terraform-config-inspect validation for known module-source-interpolation diagnostic", "diagnostic", errMsg)
+						componentInfo["validation_skipped_module_source_interpolation"] = true
+					}
+					if providerIteration {
+						log.Debug("Skipping terraform-config-inspect validation for OpenTofu provider iteration diagnostic", "diagnostic", errMsg)
+						componentInfo["validation_skipped_provider_iteration"] = true
+					}
 				} else {
 					componentInfo[terraformConfigKey] = nil
 				}

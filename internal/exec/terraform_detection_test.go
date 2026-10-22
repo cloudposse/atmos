@@ -773,3 +773,37 @@ func TestAllDiagnosticsAreKnownStaticParserLimitations(t *testing.T) {
 		})
 	}
 }
+
+// TestStaticParserLimitationKinds tests that the skipped limitations are reported separately, so
+// component processing records the right reason.
+func TestStaticParserLimitationKinds(t *testing.T) {
+	path := writeProviderIterationFixture(t)
+
+	moduleSource := tfconfig.Diagnostic{
+		Severity: tfconfig.DiagError,
+		Summary:  "Variables not allowed",
+		Detail:   "Variables may not be used here.",
+		Pos:      &tfconfig.SourcePos{Filename: "other.tf", Line: 10},
+	}
+	warning := tfconfig.Diagnostic{Severity: tfconfig.DiagWarning, Summary: "Some warning"}
+
+	tests := []struct {
+		name              string
+		diags             tfconfig.Diagnostics
+		providerIteration bool
+		moduleSource      bool
+	}{
+		{name: "provider iteration only", diags: tfconfig.Diagnostics{providerReferenceDiag(path, 3), warning}, providerIteration: true},
+		{name: "module source interpolation only", diags: tfconfig.Diagnostics{moduleSource}, moduleSource: true},
+		{name: "both", diags: tfconfig.Diagnostics{moduleSource, providerReferenceDiag(path, 8)}, providerIteration: true, moduleSource: true},
+		{name: "warnings only", diags: tfconfig.Diagnostics{warning}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			providerIteration, moduleSource := staticParserLimitationKinds(tt.diags)
+			assert.Equal(t, tt.providerIteration, providerIteration)
+			assert.Equal(t, tt.moduleSource, moduleSource)
+		})
+	}
+}
