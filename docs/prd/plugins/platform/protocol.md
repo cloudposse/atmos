@@ -528,7 +528,7 @@ Atmos maps the wire class; [errors](errors.md) owns the full sentinel list, hint
 | `INTERACTION_REQUIRED` | `FAILED_PRECONDITION` | `ErrPluginInteractionRequired` | Names the missing input. |
 | `INTERNAL` | `INTERNAL` | `ErrPluginCrashed` | Plugin bug; message shown after masking. |
 
-Atmos-detected conditions: process exit or transport loss is the proposed `ErrPluginCrashed`; an expired deadline is `ErrPluginTimeout`; malformed messages, unknown enum values, or a missing `OperationOutcome` is `ErrPluginProtocol`; an empty version intersection is `ErrPluginIncompatible` (see [Negotiation](#negotiation)).
+Atmos-detected conditions: process exit or transport loss is the proposed `ErrPluginCrashed`; an expired deadline is `ErrPluginTimeout`; malformed messages, unknown enum values, or a missing `OperationOutcome` required by the extension response contract is `ErrPluginProtocol`; an empty version intersection is `ErrPluginIncompatible` (see [Negotiation](#negotiation)).
 
 - **Crash, timeout, cancel.** None is success, skipped, or an empty result. A cancel stops plugin work and owned subprocesses; completed work of a state-changing operation is reported as partial.
 - **No automatic retry.** Atmos never reruns an operation after a crash, timeout, or `UNAVAILABLE` write. `Invocation.id` stays stable and `attempt` increments only when workflow or hook retry configuration reruns the operation, so plugins can implement idempotency keys. Exactly-once external execution is not promised.
