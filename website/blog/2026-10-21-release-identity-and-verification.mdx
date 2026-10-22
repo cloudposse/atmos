@@ -28,7 +28,7 @@ atmos release cut        # Confirm, dispatch, wait, and report the result
 atmos release candidate  # Build a prerelease without closing the milestone
 ```
 
-The operator decides when to release. The milestone determines the version. Local preflight requires all milestone PRs to be merged and included, then asks **Do you want to cut X.Y.Z?** Actions repeats validation and owns every release mutation.
+The operator chooses when; the milestone determines the version. Preflight requires every milestone PR to be merged and included, then asks **Do you want to cut X.Y.Z?** These commands dispatch workflows that repeat validation. Building, signing, and publication run on GitHub-managed ephemeral runners, tying artifacts to verified source and workflow identity to protect supply-chain integrity.
 
 ## Verify the artifacts people receive
 
