@@ -1,4 +1,4 @@
-package factory
+package registry
 
 import (
 	"testing"
@@ -10,7 +10,7 @@ import (
 )
 
 func TestRegisterGCPProviders(t *testing.T) {
-	f := NewFactory()
+	f := NewRegistry()
 
 	// Verify gcp/adc is registered.
 	assert.True(t, f.HasProvider(types.ProviderKindGCPADC))
@@ -20,7 +20,7 @@ func TestRegisterGCPProviders(t *testing.T) {
 }
 
 func TestCreateGCPADCProvider(t *testing.T) {
-	f := NewFactory()
+	f := NewRegistry()
 
 	spec := map[string]any{
 		"project_id": "test-project",
@@ -36,7 +36,7 @@ func TestCreateGCPADCProvider(t *testing.T) {
 }
 
 func TestCreateGCPADCProvider_InvalidSpec(t *testing.T) {
-	f := NewFactory()
+	f := NewRegistry()
 
 	// Invalid spec (e.g., wrong type for a field).
 	spec := map[string]any{
@@ -52,7 +52,7 @@ func TestCreateGCPADCProvider_InvalidSpec(t *testing.T) {
 }
 
 func TestCreateGCPWIFProvider(t *testing.T) {
-	f := NewFactory()
+	f := NewRegistry()
 
 	spec := map[string]any{
 		"project_id":                    "wif-project",
@@ -74,7 +74,7 @@ func TestCreateGCPWIFProvider(t *testing.T) {
 }
 
 func TestCreateGCPWIFProvider_MissingRequired(t *testing.T) {
-	f := NewFactory()
+	f := NewRegistry()
 
 	// Missing project_number, pool_id, provider_id.
 	spec := map[string]any{

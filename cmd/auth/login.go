@@ -97,7 +97,7 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	forceWebflow := v.GetBool("webflow")
 
 	// Perform authentication based on whether provider or identity was specified.
-	ctx := context.Background()
+	ctx := cmd.Context()
 	if forceWebflow {
 		ctx = authTypes.WithForceAWSWebflow(ctx, true)
 	}

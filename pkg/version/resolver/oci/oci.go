@@ -7,12 +7,11 @@ import (
 	"context"
 	"strings"
 
-	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
-	v1remote "github.com/google/go-containerregistry/pkg/v1/remote"
 
 	atmosoci "github.com/cloudposse/atmos/pkg/oci"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version/resolver"
 )
 
@@ -21,10 +20,6 @@ const (
 	DatasourceOCI    = "oci-tags"
 	DatasourceDocker = "docker-tags"
 )
-
-// ghcrHost is the GitHub Container Registry host, which gets token-based auth
-// from Atmos settings when the default keychain has no credentials.
-const ghcrHost = "ghcr.io"
 
 // Resolver resolves OCI image tags and digests.
 type Resolver struct{}
@@ -45,7 +40,7 @@ func (Resolver) Versions(ctx context.Context, req *resolver.Request) ([]resolver
 	if err != nil {
 		return nil, err
 	}
-	tags, err := v1remote.List(repo, remoteOptions(ctx, req, repo)...)
+	tags, err := versionClient(req.Config, repo).Tags(ctx, repo)
 	if err != nil {
 		return nil, err
 	}
@@ -64,11 +59,22 @@ func (Resolver) Pin(ctx context.Context, req *resolver.Request, version string) 
 	if err != nil {
 		return "", err
 	}
-	descriptor, err := v1remote.Head(repo.Tag(version), remoteOptions(ctx, req, repo)...)
+	descriptor, err := versionClient(req.Config, repo).Head(ctx, repo.Tag(version))
 	if err != nil {
 		return "", err
 	}
 	return descriptor.Digest.String(), nil
+}
+
+// Version discovery historically prefers an available Atmos GHCR token to Docker credentials.
+// Keep that read-only policy local; shared clients retain Docker-first authentication.
+func versionClient(config *schema.AtmosConfiguration, repo name.Repository) *atmosoci.Client {
+	if strings.EqualFold(repo.RegistryStr(), "ghcr.io") {
+		if auth, _ := atmosoci.GHCRAuth(config); auth != nil {
+			return atmosoci.NewClient(config, atmosoci.WithKeychain(nil))
+		}
+	}
+	return atmosoci.NewClient(config)
 }
 
 // repository builds the repository reference for a request. The package may
@@ -93,19 +99,6 @@ func repository(req *resolver.Request) (name.Repository, error) {
 func hasRegistryHost(repoRef string) bool {
 	first := strings.SplitN(repoRef, "/", 2)[0]
 	return strings.ContainsAny(first, ".:")
-}
-
-// remoteOptions assembles remote call options: request context plus
-// authentication from the default keychain (docker login, ambient cloud
-// credential helpers), with a GHCR token fallback from Atmos settings.
-func remoteOptions(ctx context.Context, req *resolver.Request, repo name.Repository) []v1remote.Option {
-	opts := []v1remote.Option{v1remote.WithContext(ctx)}
-	if repo.RegistryStr() == ghcrHost {
-		if auth, _ := atmosoci.GHCRAuth(req.Config); auth != nil {
-			return append(opts, v1remote.WithAuth(auth))
-		}
-	}
-	return append(opts, v1remote.WithAuthFromKeychain(authn.DefaultKeychain))
 }
 
 func init() {

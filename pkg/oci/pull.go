@@ -215,31 +215,12 @@ func processImageWithFS(ctx context.Context, atmosConfig *schema.AtmosConfigurat
 // 2. ATMOS_GITHUB_TOKEN or GITHUB_TOKEN environment variables (for ghcr.io only)
 // 3. Anonymous authentication - fallback.
 func pullImage(ctx context.Context, atmosConfig *schema.AtmosConfiguration, ref name.Reference) (*remote.Descriptor, error) {
-	var authMethod authn.Authenticator
-	var authSource string
-
 	registry := ref.Context().Registry.Name()
-
-	// First, try to use credentials from the user's Docker config.
-	// This allows users to authenticate with `docker login` and have those credentials respected.
-	keychainAuth, err := authn.DefaultKeychain.Resolve(ref.Context())
-	if err != nil {
-		log.Debug("DefaultKeychain resolution failed, will try other auth methods", "error", err)
-	} else if keychainAuth != authn.Anonymous {
-		// User has credentials configured for this registry - highest precedence.
-		authMethod = keychainAuth
-		authSource = "Docker keychain (~/.docker/config.json)"
-	}
-
-	// If no user credentials, try environment variable token injection for ghcr.io.
-	if authMethod == nil && strings.EqualFold(registry, "ghcr.io") {
-		authMethod, authSource = GHCRAuth(atmosConfig)
-	}
-
-	// Fall back to anonymous authentication if no credentials found.
-	if authMethod == nil {
-		authMethod = authn.Anonymous
-		authSource = "anonymous"
+	authMethod, authSource, authErr := ResolveAuthentication(atmosConfig, authn.DefaultKeychain, ref.Context())
+	if authErr != nil {
+		// Preserve the legacy read-only fallback when a local Docker helper fails.
+		log.Debug("DefaultKeychain resolution failed, will try other auth methods", "error", authErr)
+		authMethod, authSource, _ = ResolveAuthentication(atmosConfig, nil, ref.Context())
 	}
 
 	if !observed(ctx) {
