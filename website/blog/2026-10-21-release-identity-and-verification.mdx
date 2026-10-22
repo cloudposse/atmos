@@ -48,6 +48,6 @@ Separate GitHub Apps authorize production and feature release operations. Enviro
 
 ## Test the release system itself
 
-We measure coverage of the release tooling itself. A stateful GitHub mock exercises production planning, tagging, verification, and publication code with real executable fixtures and packages. Nineteen lifecycle scenarios inject wrong identities, incompatible milestones, moved tags, corrupted assets, and interrupted uploads. Assertions require publication to stay blocked or retries to resume safely.
+To maintain confidence in our release system, we set the bar high for test coverage. A stateful GitHub mock exercises production planning, tagging, verification, and publication code with real executable fixtures and packages. Nineteen lifecycle scenarios inject wrong identities, incompatible milestones, moved tags, corrupted assets, and interrupted uploads. Assertions require publication to stay blocked or retries to resume safely.
 
 Local coverage is **96.2% of Go statements** and **100% of publisher JavaScript lines**; Go coverage also feeds Codecov in CI. Live permissions, issue creation, and OIDC signing require separate validation. Immutable releases protect published assets once enabled; direct publishing access remains a bypass boundary.
