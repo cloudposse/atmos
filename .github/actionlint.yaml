@@ -8,6 +8,6 @@ self-hosted-runner:
 # GitHub supports workflow-revision local actions without checkout. Actionlint
 # v1.7.12 predates the $/ syntax; suppress only this format false positive.
 paths:
-  .github/workflows/*.yml:
+  .github/workflows/*:
     ignore:
       - '^specifying action "\$/\.github/actions/[A-Za-z0-9_/-]+" in invalid format because ref is missing\.'

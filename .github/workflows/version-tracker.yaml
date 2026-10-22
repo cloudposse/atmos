@@ -34,7 +34,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Set up Atmos
-        uses: ./.github/actions/setup-atmos-bootstrap
+        uses: $/.github/actions/setup-atmos-bootstrap # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
