@@ -117,7 +117,7 @@ func TestOutputMatchesScopedWaitOffsetStillAdvances(t *testing.T) {
 	if !outputMatches(state, "READY", nil) {
 		t.Fatal("expected match on command output")
 	}
-	if got, want := state.waitOffset, state.output.Len(); got != want {
+	if got, want := state.waitOffset, len("> echo READY\r\nREADY"); got != want {
 		t.Fatalf("waitOffset = %d, want %d", got, want)
 	}
 	if outputMatches(state, "READY", nil) {

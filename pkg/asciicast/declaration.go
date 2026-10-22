@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
@@ -121,13 +122,32 @@ func validateDeclarationEvents(events []Event, plan *castplan.Plan) (string, err
 		if err := validateDeclarationCheckpoint(&expected[next], event.Data, span.String()); err != nil {
 			return "", err
 		}
+		remainder := declarationWaitRemainder(&expected[next], span.String())
 		span.Reset()
+		span.WriteString(remainder)
 		next++
 	}
 	if next != len(expected) {
 		return "", declarationError("missing recording metadata or incomplete recording; regenerate the cast")
 	}
 	return raw.String(), nil
+}
+
+// declarationWaitRemainder preserves prompts already recorded after a successful wait.
+// Other checkpoints, including hidden waits and show, start a new visible interval.
+func declarationWaitRemainder(checkpoint *declarationCheckpoint, output string) string {
+	if checkpoint.marker.Kind != "wait" || checkpoint.action == nil {
+		return ""
+	}
+	matcher := checkpoint.action.Expect[0]
+	literal := matcher.Text
+	var expression *regexp.Regexp
+	if matcher.Regex {
+		expression, _ = regexp.Compile(matcher.Text)
+		literal = ""
+	}
+	end, _ := waitMatchEnd(ansi.Strip(output), literal, expression)
+	return output[rawTerminalOffset(output, end):]
 }
 
 func validateDeclarationCheckpoint(checkpoint *declarationCheckpoint, data, output string) error {

@@ -298,7 +298,8 @@ func outputMatches(state *sessionState, text string, re *regexp.Regexp) bool {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	matches := func(candidate string) bool {
-		return (text != "" && strings.Contains(candidate, text)) || (re != nil && re.MatchString(candidate))
+		_, matched := waitMatchEnd(candidate, text, re)
+		return matched
 	}
 	// A wait that matches a line the script typed and submitted searches only
 	// after that line's echo, so it matches the command's output rather than
@@ -309,13 +310,14 @@ func outputMatches(state *sessionState, text string, re *regexp.Regexp) bool {
 	if state.scopedWaits {
 		from = state.waitOffset
 	}
-	current := string(raw[state.echo.searchStart(from, len(raw), matches):])
+	from = state.echo.searchStart(from, len(raw), matches)
+	current := string(raw[from:])
 	if state.scopedWaits {
 		current = ansi.Strip(current)
 	}
-	matched := matches(current)
+	end, matched := waitMatchEnd(current, text, re)
 	if matched && state.scopedWaits {
-		state.waitOffset = state.output.Len()
+		state.waitOffset = from + rawTerminalOffset(string(raw[from:]), end)
 	}
 	return matched
 }

@@ -159,7 +159,7 @@ func RunSession(ctx context.Context, opts *SessionOptions) error {
 func observeSessionAction(state *sessionState, opts *SessionOptions, index int) error {
 	state.mu.Lock()
 	defer state.mu.Unlock()
-	if opts.ScopedWaits && (opts.Actions[index].Type == "wait" || opts.Actions[index].Type == "show") {
+	if opts.ScopedWaits && opts.Actions[index].Type == "show" {
 		state.waitOffset = state.output.Len()
 	}
 	return opts.Observe(index, &opts.Actions[index])
