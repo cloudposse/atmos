@@ -20,6 +20,7 @@ type pipelineStep struct {
 	ContinueOnError bool              `yaml:"continue-on-error"`
 }
 type pipelineJob struct {
+	Timeout     int               `yaml:"timeout-minutes"`
 	Needs       any               `yaml:"needs"`
 	If          string            `yaml:"if"`
 	Uses        string            `yaml:"uses"`
@@ -269,6 +270,31 @@ func TestPublicationRequiresExistingSignaturesAndAttestationsBeforeBoundary(t *t
 		}
 	}
 	require.Equal(t, publishIndex-1, finalValidate, "final live guard belongs immediately before publication")
+}
+
+func TestPublicationTokenCannotAgeDuringBuild(t *testing.T) {
+	var wf pipelineWorkflow
+	pipelineYAML(t, ".github/workflows/release-pipeline.yml", &wf)
+	job := wf.Jobs["publish"]
+	require.Positive(t, job.Timeout, "publication must have a bounded job lifetime")
+	require.Less(t, job.Timeout, 60, "publication must finish before its fresh App token expires")
+	require.Contains(t, job.Needs, "verify", "publication starts only after build verification")
+	steps := pipelineAction(t, "release-finalize")
+	setup, mint, validate := -1, -1, pipelineRunIndex(t, steps, "release:validatePlan")
+	for i, step := range steps {
+		if step.Uses == "./.github/actions/setup-go-cache" {
+			setup = i
+		}
+		if strings.HasPrefix(step.Uses, "actions/create-github-app-token@") {
+			require.Equal(t, -1, mint, "one fresh publication token")
+			mint = i
+			require.Equal(t, "publish-token", step.ID)
+		}
+	}
+	require.NotEqual(t, -1, setup)
+	require.Greater(t, mint, setup, "mint after setup rather than spending token lifetime on cache restoration")
+	require.Less(t, mint, validate, "final validation and publication use fresh credentials")
+	require.Equal(t, "${{ steps.publish-token.outputs.token }}", steps[validate].Env["GH_TOKEN"])
 }
 
 func TestReleaseActionsAreDocumentedAndDoNotUseImplicitSecretsOrReleaseDrafter(t *testing.T) {

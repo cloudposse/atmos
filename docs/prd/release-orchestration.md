@@ -9,6 +9,10 @@ published files correspond to that intended release and its exact source SHA.
 
 **Status:** Implementation in progress on PR #3474; production cutover has not occurred.
 
+The [incident and recovery record](../fixes/release-tag-artifact-integrity.md)
+documents both artifact mismatches, the separate expired-token failures, measured
+upload durations, and the remaining live validation requirements.
+
 ## Supported entry point
 
 Atmos custom commands call tested Mage operations. GitHub Actions owns tag,
@@ -294,6 +298,6 @@ The feature-releases environment currently has a `**/*` branch policy. Confirm i
 allows the default branch used by the new trusted feature dispatcher, or explicitly
 add `main` during cutover. No environment approval requirement is introduced.
 
-The accompanying blog remains a draft until live signing, immutability, distribution,
-and operator rehearsal evidence has been recorded. Do not claim production readiness
-from statement coverage alone.
+The accompanying blog describes the release-engineering changes. Live signing,
+immutability, distribution and operator rehearsal evidence remains a separate
+cutover requirement. Do not claim production readiness from statement coverage alone.

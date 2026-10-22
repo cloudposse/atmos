@@ -1,123 +1,204 @@
-# Release tag and artifact integrity
+# Release identity, publication, and token lifetime
 
-> **Design update:** This document describes the initial guard implementation.
-> The [Release Orchestration PRD](../prd/release-orchestration.md) defines the proposed
-> milestone-based operator flow, authorization and remaining security work.
-> Its rollout requirements supersede the activation instructions below; the
-> current branch is not yet the complete command-driven implementation.
+Incident record: [#3475](https://github.com/cloudposse/atmos/issues/3475).
+Implementation: [#3474](https://github.com/cloudposse/atmos/pull/3474).
+The [Release Orchestration PRD](../prd/release-orchestration.md) defines the complete
+policy and rollout requirements. The implementation is on this branch; production
+cutover and live signing/distribution validation are still pending.
 
-## Incidents
+## What failed
 
-The `v1.233.0` tag resolves to `12f83b5248253662d8af06030e3966034a7ef5d4`, but its
-Darwin arm64 asset embeds Go's `vcs.revision=b392e54f74a9c436d2c27fc8ba1b82605e95b58e`.
-The latter precedes the credential-injection fix by three commits.
+### v1.233.0: correct version, wrong source
+
+The tag resolves to `12f83b5248253662d8af06030e3966034a7ef5d4`, but its Darwin
+arm64 binary embeds `vcs.revision=b392e54f74a9c436d2c27fc8ba1b82605e95b58e`.
+The binary precedes the credential-injection fix by three commits.
 
 The [draft build](https://github.com/cloudposse/atmos/actions/runs/39352125013)
-checked out `b392e54f7` and uploaded binaries for its locally calculated `v1.233.0`.
-The draft retained `main` as its target. When published, the tag was created at
-the newer `12f83b5`, leaving the earlier binaries attached.
-The [publication workflow](https://github.com/cloudposse/atmos/actions/runs/39357239296)
-then rebuilt the correct commit with `--skip=publish`. It added a source SBOM,
-but did not replace the stale executable assets. The evidence supports stale
-draft assets surviving publication, rather than a late build overwriting correct assets.
+built and uploaded that earlier source. The draft still targeted moving `main`.
+Publication created the tag at the newer commit without rebuilding its assets.
+The [post-publication workflow](https://github.com/cloudposse/atmos/actions/runs/39357239296)
+rebuilt the tagged source with `--skip=publish`, so stale executables remained
+attached. A later workflow overwriting correct binaries is not needed to explain
+this mismatch.
 
-The subsequent patch attempt had the other mismatch: the
-[draft build](https://github.com/cloudposse/atmos/actions/runs/39611235648)
-calculated `v1.234.0` from labels, while the
-[publication run](https://github.com/cloudposse/atmos/actions/runs/39672354878)
-requested assets named for `v1.233.1` and received a 404. The initial incident
-report called the intended patch `1.231.1`; the inspected run records use
-`v1.233.1`. Both attempted releases were subsequently deleted.
+### v1.233.1: assets for a different version
 
-## Publication contract
+A `minor` label caused the [draft build](https://github.com/cloudposse/atmos/actions/runs/39611235648)
+to resolve `v1.234.0` and attach `atmos_1.234.0_*` assets. The intended patch was
+`v1.233.1`. Erik changed the release identity in GitHub's UI and clicked Publish,
+without realizing the attached assets still represented `1.234.0`. Editing the
+metadata did not rebuild or invalidate them.
 
-Draft creation writes notes only. Stable publication is an explicit dispatch of
-`publish-release.yml` with a draft ID and full source commit SHA. Nightly and
-feature workflows draft notes and then invoke the same local `guarded-release`
-composite action. Job environments, permissions and the repository-wide
-`atmos-release` concurrency group remain in the calling workflows.
+The [publication workflow](https://github.com/cloudposse/atmos/actions/runs/39672354878)
+requested `atmos_1.233.1_linux_amd64` and received HTTP 404. The release was
+subsequently deleted; its tag remains. The initial report mentioned `1.231.1`,
+but the inspected run records identify this incident as `1.233.1`.
 
-The selected draft's tag is the authoritative version. Preparation requires an
-empty draft, pins its target to the requested commit, and creates its tag only
-if absent. An existing tag must already resolve to that commit, including when
-it is an annotated tag. Existing tags and assets are never overwritten.
+### Separate failed attempts: expired publication credentials
 
-The build checks out that exact commit and uses `GORELEASER_CURRENT_TAG` to
-prevent a newer tag or label-derived version from taking precedence. Build
-configuration and verification tooling come from the workflow revision.
-GoReleaser signs and builds locally with `--skip=publish`; the action stages
-assets using the public names in its artifact manifest.
+Two earlier attempts completed building and signing, then failed before uploading:
 
-`magefiles/release/verify.go` checks metadata, checksums, all ten expected
-platform binaries, Go's embedded commit and clean-tree flag, and the embedded
-release identity. The CLI derives its displayed version and commit from that
-same identity, which survives stripping and `-trimpath`. Old source commits
-without that identity cannot pass verification; backport the identity support
-before releasing such a branch.
+| Run | Intended version | App token created (UTC) | Publication failed (UTC) |
+| --- | --- | --- | --- |
+| [39528459177](https://github.com/cloudposse/atmos/actions/runs/39528459177/job/118988782348) | `v1.233.1` | Oct 21 01:40:38 | Oct 21 02:42:48 |
+| [39543133137](https://github.com/cloudposse/atmos/actions/runs/39543133137/job/119035425224) | `v1.234.0` | Oct 21 04:19:06 | Oct 21 05:22:24 |
 
-After attestation and upload, the publisher checks the complete asset set and
-GitHub's SHA-256 digests against the verified manifest, then rechecks the draft
-ID, tag, target and remote tag commit immediately before setting `draft: false`.
-Any mismatch or failed upload leaves the release unpublished. Downstream
-distribution and major-tag updates require the immutable release's manifest
-and asset digests to match. `release-distribution.yml` (formerly `build.yml`) handles downstream distribution without rebuilding release executables.
+Both returned `401 Bad credentials` while GoReleaser listed existing releases.
+[Installation tokens expire after one hour](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app).
+The tokens were over 62 and 63 minutes old: the evidence supports expiration,
+not insufficient repository permissions. Their downstream publication jobs were
+skipped. These failures do not by themselves explain either artifact mismatch.
+The logs show local tag creation, without proving those tags were pushed remotely.
 
-Failures may leave a pinned tag or partially uploaded draft. They are preserved
-for investigation. Do not move the tag or overwrite the assets to retry; use a
-fresh empty draft with the same validated tag/commit, or choose a new version.
+## Replacement process
 
-## Enable immutable releases after deployment
-
-Merge these workflows and local actions, then let older release-writing runs
-finish before enabling immutable releases. The publisher stays paused until
-`ATMOS_GUARDED_RELEASES_ENABLED` is set to `true`.
-
-Enable **Release immutability** in the repository's **Settings → General →
-Releases** section, then set that repository Actions variable to `true`.
-An administrator can also perform the same two setting changes with `gh`:
-
-```sh
-gh api --method PUT repos/cloudposse/atmos/immutable-releases
-gh api repos/cloudposse/atmos/immutable-releases --jq .enabled
-gh variable set ATMOS_GUARDED_RELEASES_ENABLED --body true --repo cloudposse/atmos
+```mermaid
+flowchart LR
+    A[Milestone and exact SHA] --> B[Validate and reserve tag]
+    B --> C[Build, sign, attest]
+    C --> D[Verify binaries, packages, provenance]
+    D --> E[Create versioned draft]
+    E --> F[Fresh publication token]
+    F --> G[Upload and verify complete asset set]
+    G --> H[Publish]
+    H --> I[Verified distribution and milestone completion]
 ```
 
-Confirm that the second command returns `true` before running the third.
-This is a one-time repository setting change, not a release action.
-The current [Settings app repository plugin](https://github.com/repository-settings/app/blob/master/lib/plugins/repository.js)
-does not support the separate immutable-releases API, so adding a key to
-`.github/settings.yml` would not enable it.
+The supported stable entry point is:
 
-Use **Publish verified release** for stable drafts. All uploads finish before
-publication, as required by
-[GitHub immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases).
-The implementation branch does not itself change the live setting.
+```bash
+atmos release check
+atmos release cut
+```
 
-Anyone retaining direct publishing permissions can bypass these workflows;
-administrators can also disable immutability. Preventing that requires
-restricting the publishing path and administrative access. The manifest is a
-consistency guard, not proof against a privileged publisher forging a manifest.
+`cut` confirms the exact version through Atmos's native confirmation UI (default
+No), dispatches the milestone, expected version and full SHA, and follows that
+specific run. Actions independently authorizes the actor and repeats preflight.
+`atmos release candidate` uses the same pipeline while allowing unfinished
+milestone work; it leaves the milestone open. Nightly and feature workflows also
+call `release-pipeline.yml`. They do not create release-preview issues.
 
-## Validation
+All modes reserve real Git tags before building. For a next milestone of
+`v1.234.0`, examples are:
 
-Go regression tests reproduce the two incident identities, inspect real stripped
-ELF, Mach-O and PE binaries without executing them, verify the complete shipping
-matrix, and reject missing platforms, dirty builds, tampering and unsafe staging
-paths. Node tests exercise the action entrypoint, tag pinning, partial uploads,
-changed tags/commits, unexpected assets, digest failures, downstream verification
-and permission failures.
+| Mode | Tag | Source |
+| --- | --- | --- |
+| Stable | `v1.234.0` | Validated default-branch SHA |
+| Candidate | `v1.234.0-rc.123456` | Validated default-branch SHA; unfinished milestone work allowed |
+| Nightly | `v1.234.0-nightly.123456` | Validated default-branch SHA |
+| Feature | `v1.234.0-feature.42.123456` | PR #42's exact head SHA |
 
-Local action calls use GitHub's `$/.github/actions/...` syntax, resolving from
-the workflow revision without a checkout solely to load the action. Actionlint
-1.7.12 predates this syntax; the repository lint configuration excludes only its specific missing-ref
-diagnostic for these calls. Go tooling and release source still need checkouts.
+`123456` represents the workflow run ID. Workflow dispatch or the nightly
+schedule initiates tag creation; manually pushing a tag is not the entry point.
+Retries retain the run's version and refuse a tag that points elsewhere.
 
-## Post-publication maintenance
+The milestone defines the version; labels no longer select it. Every PR except
+`no-release` needs a compatible label and the lowest open release milestone.
+Patch changes may enter minor releases, but minor changes cannot enter patches.
+If merged minor-release PRs already occur in the default branch's unreleased
+history, creating an earlier patch milestone does not make it viable. The merge
+status, Quality Gate and release preflight reject that history.
+`atmos release milestones ensure` maintains three sequential minor milestones;
+patch and major milestones are manual. Upcoming stable releases have one managed
+preview issue per milestone, updated after merges, pinned while open and unpinned
+on completion. Release notes use `.github/release-notes.yml` and Go rather than
+Release Drafter.
 
-After verification, `release-distribution.yml` directly invokes the existing Cloud Posse
-release-branch-manager action for stable releases. The local `release-comment`
-action preserves the shared workflow's notification code using `actions/github-script`.
-Its script and regression tests live in `.github/actions/release-comment/`;
-`atmos test local-actions javascript` discovers the tests automatically.
-The separate guarded `release-major-tag.yml` workflow remains the sole writer
-of the moving major-version tag.
+The pipeline reserves the tag at the validated SHA before building. The build
+uses that exact source and authoritative version, with trusted configuration
+from the workflow revision. GoReleaser retains signing, packaging and caching,
+but runs with `--skip=publish` and no release-publishing App token.
+
+Verification checks all ten platform binaries, packaged executables, embedded
+version/commit, clean build state, checksums, signatures and attestations. It
+checks the actual source SHA separately from the trusted workflow revision.
+Artifacts transfer between jobs by immutable Actions artifact ID. The publisher
+checks local bytes, the complete uploaded asset set and GitHub SHA-256 digests,
+then rechecks draft identity and the remote tag immediately before publication.
+Mismatches and rejected requests before publication leave a draft.
+
+`release-distribution.yml` consumes the verified immutable release; it does not
+rebuild replacement release executables. Homebrew remains stable-only and builds
+its own bottles from source. Existing branch maintenance and PR notifications
+remain; `release-major-tag.yml` is the moving major-tag writer.
+
+## Token lifetime and the 30-minute publication budget
+
+`release-finalize` creates a fresh App token after artifact downloads and Go cache
+setup, after the separate build and verification jobs have completed. The
+publication job allows 30 minutes, below the token's one-hour lifetime. Preparation,
+verification and milestone completion also obtain their own credentials; the
+build does not pass a publication token between jobs.
+
+Historical successful GoReleaser upload phases took **1m 6s** for
+[46 assets on October 20](https://github.com/cloudposse/atmos/actions/runs/39352125013/job/118398746618)
+and **1m 9s** for
+[46 assets on October 21](https://github.com/cloudposse/atmos/actions/runs/39611235648/job/119260784682).
+Their separate follow-up release jobs took 45–46 seconds. The new job also
+includes artifact downloads, setup and live policy validation, and uploads
+sequentially rather than GoReleaser's concurrent uploads. Thirty minutes has
+headroom relative to those measurements, but the complete new job has not yet
+been timed in production. Record warm/cold-cache and upload durations at cutover;
+old upload timings do not prove the new job's worst-case duration.
+
+A fresh token does not prevent revocation, permission changes or GitHub outages.
+Authentication errors stop the operation; they never authorize skipping checks.
+
+## Recovery
+
+- If preparation or building fails, the tag may remain without a published
+  release. An existing tag is reusable only at the exact validated SHA; never
+  move it to make a retry succeed.
+- For a failed upload, rerun **failed jobs** in the original workflow. Reuse the
+  sealed artifacts, signatures and manifest byte-for-byte. Identical completed
+  uploads are skipped; missing assets are uploaded. Conflicting, duplicate or
+  unfinished assets block publication instead of being overwritten.
+- Do not rerun the entire build merely to resume uploads: new signatures or
+  manifests can differ from already attached bytes. Do not edit the release
+  version or click Publish to recover a failed run.
+- If the publication response is lost, inspect the existing release and run
+  before retrying. GitHub may have accepted the request; a client error alone
+  does not establish that publication did not occur.
+- Milestone completion is a separate job so bookkeeping can be retried without
+  rebuilding or republishing. An interrupted local wait does not redispatch.
+
+## Validation and cutover
+
+Regression tests reproduce both identity mismatches and inspect real stripped
+ELF, Mach-O and PE binaries. They reject missing platforms, unsafe paths, altered
+packages, bad signatures/provenance and conflicting tags or uploaded assets.
+Lifecycle tests exercise stable, candidate, nightly and feature flows with real
+GoReleaser executable fixtures against a stateful local GitHub mock. Retry tests
+reuse the same draft and artifact bytes. Explicit `401` cases cover initial reads,
+partial uploads, final tag verification and rejected publication requests, then
+resume with restored credentials. A workflow contract test enforces fresh token
+creation after setup and a publication timeout below one hour.
+Milestone tests cover merged-history
+viability, policy changes, status revocation and preview-issue idempotency.
+
+These tests create no GitHub repositories or releases. The lifecycle fixture is
+not a full Atmos build and does not obtain live signing credentials. Separate
+cryptographic tests and workflow contract tests cover verification and wiring;
+local mocks cannot prove live environment, OIDC, Homebrew or permission settings.
+Coverage is reported through Codecov; the development target for this change was
+90%+, not a new hardcoded Mage coverage threshold.
+
+Before production use:
+
+1. Land the workflows and stop old release writers. Keep
+    `ATMOS_GUARDED_RELEASES_ENABLED` unset/false during cutover.
+2. Validate release/feature App credentials and environment ref policies in a
+    scoped non-publishing run. No deployment approval requirement is introduced.
+3. Require **Release milestone** in the default branch ruleset; a displayed
+    failing status alone does not prevent merging.
+4. Enable repository release immutability, verify it, then set
+    `ATMOS_GUARDED_RELEASES_ENABLED=true`.
+5. Record live signing, publication timing, operator and downstream distribution
+    evidence. The implementation branch does not itself change live settings.
+
+Immutability protects published assets and tags; it does not validate them.
+Users retaining direct release-publishing permissions can bypass the workflow,
+and administrators can change protections. The final checks and GitHub's publish
+request are not atomic. Restricting direct publication is a separate permissions
+decision; do not describe the workflow guard as an unbypassable GitHub UI gate.

@@ -290,6 +290,45 @@ test('retry resumes only identical uploaded assets after a partial failure', asy
   assert.equal(api.state.release.make_latest, 'true');
 });
 
+test('expired credentials stop publication and fresh credentials resume identical assets', async t => {
+  for (const [stage, group, method, failCall] of [
+    ['initial read', 'repos', 'getRelease', 1],
+    ['partial upload', 'repos', 'uploadReleaseAsset', 2],
+    ['final tag verification', 'git', 'getRef', 2],
+    ['publication request', 'repos', 'updateRelease', 1],
+  ]) {
+    await t.test(stage, async t => {
+      const api = fakeGitHub();
+      const dir = await fixture(t);
+      const client = api.github.rest[group];
+      const original = client[method];
+      let calls = 0;
+      client[method] = async (...args) => {
+        if (++calls >= failCall) throw Object.assign(new Error('Bad credentials'), { status: 401 });
+        return original(...args);
+      };
+
+      await assert.rejects(publish(api, identity, dir), { message: 'Bad credentials', status: 401 });
+      assert.equal(api.state.published, 0);
+      assert.equal(api.state.release.draft, true);
+      assert.equal(api.state.tag, commit);
+      const attached = api.state.assets.map(asset => ({ ...asset }));
+
+      // A rerun obtains fresh credentials; it keeps the sealed files and draft.
+      client[method] = original;
+      await publish(api, identity, dir);
+      assert.equal(api.state.published, 1);
+      assert.equal(api.state.assets.length, 2);
+      for (const asset of attached) {
+        assert.deepEqual(api.state.assets.find(current => current.id === asset.id), asset);
+      }
+      assert.equal(api.state.release.id, identity.id);
+      assert.equal(api.state.release.tag_name, identity.tag);
+      assert.equal(api.state.tag, commit);
+    });
+  }
+});
+
 test('prereleases never replace the latest stable release', async t => {
   const tag = 'v1.234.0-rc.42';
   const api = fakeGitHub({ release: { ...release, tag_name: tag, prerelease: true } });
