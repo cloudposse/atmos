@@ -41,6 +41,12 @@ reporter run's summary URL.
   GitHub's release-assets host. The pinned installer creates the destination
   file before downloading and can accept that leftover file on a normal retry.
 
+- The [Floci Go E2E job](https://github.com/cloudposse/atmos/actions/runs/39805844063/job/119953543543)
+  failed during APT installation, before tests ran. Azure's Ubuntu mirror returned
+  HTTP 503s and closed connections. The existing direct-URL replacement did not
+  match the runner's `mirror+file:/etc/apt/apt-mirrors.txt` source, and its HTTPS
+  fallback archives were outside this job's network allowlist.
+
 ## Changes
 
 - Select the newest result per app/name across all check pages, including
@@ -81,6 +87,9 @@ reporter run's summary URL.
   from satisfying the installer's existence check. The command enables CGO and
   configures absolute linker and Linux/macOS loader paths before running tests.
   Exhausted retries fail the job; contract test failures are not retried.
+- Rewrite both direct Azure and GitHub mirror-list APT sources to the allowed
+  primary HTTP Ubuntu archive in the Floci and race dependency setup steps.
+  Keep APT's bounded retries, timeouts, and package signature verification.
 - Replace live latest-release tests with local API fixtures and a TLS server
   that checks authenticated and unauthenticated requests. Preserve real 404
   error coverage instead of treating missing releases as transient errors.
@@ -115,6 +124,10 @@ reporter run's summary URL.
 - Old-head rerun selection regressions failed before the recovery fix and cover
   active statuses, terminal runs, empty listings, other heads, reporter workflows,
   API errors, and both stale and recent PR update timestamps.
+- Executed both APT rewrite commands against mirror-list, direct Azure, and
+  already-primary source fixtures. Verified idempotence, preserved suites and
+  signing keyrings, and the Floci host/port allowlist match. Hosted package
+  installation remains a CI check.
 - Workflow validation with `actionlint`, the fix-log format validator,
   `git diff --check`, and the commit hooks passed.
 - Hosted CI must validate the artifact download path; a local unit test cannot

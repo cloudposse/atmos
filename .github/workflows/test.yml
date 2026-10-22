@@ -1031,11 +1031,14 @@ jobs:
       - name: Install Linux build dependencies (libudev-dev for CGO_ENABLED=1 -- see comment above)
         run: |
           # The DEB822 /etc/apt/sources.list.d/ubuntu.sources file (and the
-          # Azure mirror it points at) is a GitHub-hosted-runner-image thing;
+          # direct Azure URL or mirror+file URI it contains) is runner-specific;
           # only rewrite the mirror if that file actually exists, so this
           # step works across runner image variations.
           if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
-            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+            sudo sed -i \
+              -e 's|mirror+file:/etc/apt/apt-mirrors\.txt|http://archive.ubuntu.com/ubuntu|g' \
+              -e 's|http://azure\.archive\.ubuntu\.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+              /etc/apt/sources.list.d/ubuntu.sources
           fi
           # Chrome is preinstalled on some runner images but is not needed by
           # this libudev-only step. Its mutable apt index intermittently
@@ -1533,8 +1536,13 @@ jobs:
         run: |
           # The Azure mirror used by GitHub's Ubuntu runners can stall long
           # enough to exhaust this job's timeout. Use Ubuntu's primary archive
-          # for this small, deterministic dependency install instead.
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          # for this small dependency install. Current runner images use a
+          # mirror+file URI, while older ones contain the Azure URL directly.
+          # Pin both forms to the HTTP archive endpoint allowed by this job.
+          sudo sed -i \
+            -e 's|mirror+file:/etc/apt/apt-mirrors\.txt|http://archive.ubuntu.com/ubuntu|g' \
+            -e 's|http://azure\.archive\.ubuntu\.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
 
