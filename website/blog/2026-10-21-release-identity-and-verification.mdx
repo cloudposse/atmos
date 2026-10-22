@@ -1,62 +1,54 @@
 ---
 slug: release-identity-and-verification
-title: "Hardening Atmos releases: explicit versions, verified artifacts"
+title: "Release engineering as tested software"
 authors: [osterman]
 tags: [security, bugfix]
 draft: true
 ---
 
-As release pipelines grow, successful builds can still produce the wrong release.
+Release engineering coordinates what ships, how it is built, and how it reaches users. Versioning, signing, provenance, and distribution form a system with their own failure modes. Application test coverage tells us little about whether that system releases the right thing.
 
-Atmos hit two failures: binaries from the wrong commit, and an unintended version. Our new process aims to eliminate those operator mistakes and ship PRs in their intended releases.
+Atmos makes that process testable through explicit policy and repeatable operations, without publishing real releases.
 
 <!--truncate-->
 
-## Milestones define the version
+## Make release intent enforceable
 
-The lowest open versioned milestone determines the next release. Labels describe compatibility, never calculate versions.
+Atmos records release intent in versioned milestones: the lowest open milestone defines the next release. PR labels describe compatibility, and merge checks reject changes that do not fit their milestone. The quality gate applies the same rules.
 
-Except for `no-release`, PRs must belong to the next milestone before merging. A patch fits a minor release; a minor change cannot enter a patch. The merge check and quality report share these rules.
+Automation maintains minor milestones and stable-release preview issues. Patch and major milestones remain manual; included PRs supply release notes.
 
-Automation maintains three minor milestones and previews upcoming stable releases in GitHub issues. Patch and major milestones remain manual; nightly and feature releases get no issues.
+## Make the operation repeatable
 
-## One command initiates the release
-
-Maintainers use repository [custom commands](/scripting/custom-commands):
+Atmos puts release logic in tested Go operations, shared by local [custom commands](/scripting/custom-commands) and GitHub Actions:
 
 ```bash
-atmos release check
-atmos release cut
-atmos release candidate
+atmos release check      # Validate the next milestone and source commit
+atmos release cut        # Confirm, dispatch, wait, and report the result
+atmos release candidate  # Build a prerelease without closing the milestone
 ```
 
-The cut command checks that all milestone PRs are merged and included, asks **Do you want to cut X.Y.Z?**, then dispatches and follows GitHub Actions. CI repeats the checks against the confirmed version and SHA.
+The operator decides when to release. The milestone determines the version. Local preflight requires all milestone PRs to be merged and included, then asks **Do you want to cut X.Y.Z?** Actions repeats validation and owns every release mutation.
+
+## Verify the artifacts people receive
 
 ```mermaid
 flowchart LR
-  A[Validate milestone and SHA] --> B[Tag exact commit]
+  A[Validate version and SHA] --> B[Tag exact commit]
   B --> C[Build, sign and attest]
-  C --> D[Verify artifacts and evidence]
-  D --> E[Attach and verify uploads]
-  E --> F[Publish]
+  C --> D[Verify artifacts]
+  D --> E[Upload and verify]
+  E --> F[Publish and distribute]
 ```
 
-Release notes come from included PRs, preserving our categories and optional AI summaries. Release Drafter is no longer needed.
+Every binary must match the tag's version and exact commit; packages must contain the verified executable. GoReleaser signs during the build. A separate job verifies signatures and provenance attestations. Uploaded assets are checked again before publication.
 
-## Verify before publishing
+Stable, candidate, nightly, and feature releases share the guard. Go caching stays enabled, and Homebrew follows verified stable publication.
 
-Every binary must match the tag's version and exact commit. Packages must contain the verified executable. Missing, extra, stale, or changed assets stop publication.
+## Test the release system itself
 
-GoReleaser retains its signing setup. The build job signs and attests; a separate job verifies that evidence. Checksums identify bytes, signatures authenticate the signer, and provenance records the workflow and source. All must agree with the release identity.
+We measure coverage of the release tooling itself. A stateful GitHub mock exercises production planning, tagging, verification, and publication code with real executable fixtures and packages. Nineteen lifecycle scenarios inject wrong identities, incompatible milestones, moved tags, corrupted assets, and interrupted uploads. Assertions require publication to stay blocked or retries to resume safely.
 
-Every release type shares the guard. Go caching stays enabled, and Homebrew follows verified stable publication.
-
-## Test failures without releasing anything
-
-A stateful GitHub mock exercises the production release code with real, locally built executable fixtures and packages. It creates no GitHub repositories or releases.
-
-Tests inject wrong versions, SHAs, milestones, moved tags, corrupted assets, and interrupted uploads. Invalid releases must remain unpublished; identical partial uploads must resume safely. Coverage is reported through Codecov.
-
-Live permissions and OIDC signing still need rollout checks. Immutable releases prevent later changes once enabled; direct publishing permissions remain a bypass boundary.
+Local coverage is **96.1% of Go statements** and **100% of publisher JavaScript lines**; Go coverage also feeds Codecov in CI. Live permissions, issue creation, and OIDC signing require separate validation. Immutable releases protect published assets once enabled; direct publishing access remains a bypass boundary.
 
 *Draft: rollout validation is still in progress.*
