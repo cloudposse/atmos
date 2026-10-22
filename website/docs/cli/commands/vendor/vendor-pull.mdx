@@ -101,7 +101,7 @@ Refer to [`Atmos Component Vendoring`](/vendor/component-manifest) for more deta
 
 ## Vendoring from OCI Registries
 
-The following config can be used to download the `vpc` component from an AWS public ECR registry:
+The following config is a project-owned registry placeholder. Publish a `vpc` component image to your AWS public ECR registry, then replace `YOUR_PUBLIC_ALIAS` and the repository/tag:
 
   ```yaml
   apiVersion: atmos/v1
@@ -112,7 +112,8 @@ The following config can be used to download the `vpc` component from an AWS pub
   spec:
     source:
       # Download the component from the AWS public ECR registry (https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html)
-      uri: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+      # Placeholder: replace YOUR_PUBLIC_ALIAS with a registry where you publish this component.
+      uri: "oci://public.ecr.aws/YOUR_PUBLIC_ALIAS/components/terraform/stable/aws/vpc:{{.Version}}"
       version: "latest"
   ```
 

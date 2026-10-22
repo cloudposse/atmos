@@ -154,8 +154,7 @@ These flags apply only together with `--pull`. Atmos passes them through to <a h
 </dl>
 
 :::note
-Version detection is supported for Git sources only (tags via `git ls-remote`), which
-covers GitHub, GitLab, Bitbucket, and self-hosted Git. OCI, S3, GCS, and HTTP sources
+Version detection reads remote Git tags. It recognizes `git::` sources, supported hosting-provider URLs, and explicit `git://` or `ssh://` repository URLs, including self-hosted Git. OCI, S3, GCS, and HTTP sources
 are skipped. Private repositories are not yet supported.
 :::
 

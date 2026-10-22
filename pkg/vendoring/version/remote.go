@@ -94,7 +94,7 @@ func IsGitSource(source string) bool {
 	defer perf.Track(nil, "version.IsGitSource")()
 
 	switch {
-	case strings.HasPrefix(source, "git::"):
+	case strings.HasPrefix(source, "git::"), strings.HasPrefix(source, "git://"), strings.HasPrefix(source, "ssh://"):
 		return true
 	case strings.HasPrefix(source, "github.com/"):
 		return true
