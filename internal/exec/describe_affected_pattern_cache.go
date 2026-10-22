@@ -122,7 +122,12 @@ func (c *componentPathPatternCache) getTerraformModulePatterns(
 			c.cacheEmptyPatterns(component)
 			return []string{}, nil
 		}
-		return nil, componentLoadError(component, diags)
+		// OpenTofu 1.9+ provider iteration is a terraform-config-inspect static-parser limitation, not a
+		// configuration error. The parser records it and keeps loading, so the module calls it returns are
+		// complete and still drive affected detection below.
+		if !allDiagnosticsAreProviderIteration(diags) {
+			return nil, componentLoadError(component, diags)
+		}
 	}
 
 	if terraformConfiguration == nil {

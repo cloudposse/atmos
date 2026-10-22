@@ -119,6 +119,10 @@ func cacheDetectionResult(command string, isTofu bool) {
 // source interpolation) and Terraform 1.15+ (via `const = true` variables); it is not a
 // tool-specific feature gate, so this check intentionally does not depend on which command
 // (terraform/tofu) is configured.
+//
+// The same applies to OpenTofu provider iteration (`provider = aws.by_account[each.key]`), which
+// terraform-config-inspect reports as "Invalid provider reference". See
+// matchesModuleSourceInterpolationPattern for the full list of patterns.
 func isKnownModuleSourceInterpolationDiagnostic(err error) bool {
 	if err == nil {
 		return false
@@ -136,6 +140,10 @@ func matchesModuleSourceInterpolationPattern(msg string) bool {
 	// variable references in module source/version attributes.
 	moduleSourceInterpolationPatterns := []string{
 		"Variables not allowed", // Module source interpolation (OpenTofu 1.8+, Terraform 1.15+ const vars).
+		// Provider iteration (OpenTofu 1.9+), e.g. `provider = aws.by_account[each.key]`. Terraform-config-inspect
+		// only accepts a bare `name` or `name.alias` traversal in a `provider` argument, so an indexed alias is
+		// reported here even though OpenTofu evaluates it. The rest of the module still loads.
+		"Invalid provider reference",
 		// Add more patterns here as needed.
 	}
 
@@ -176,6 +184,31 @@ func diagnosticPositionKey(index int, diag tfconfig.Diagnostic) string {
 // would never surface in the matched text, yet the caller would still skip validation for the
 // whole diagnostics set, silently discarding the real error.
 func allDiagnosticsAreModuleSourceInterpolation(diags tfconfig.Diagnostics) bool {
+	return allDiagnosticsMatch(diags, matchesModuleSourceInterpolationPattern)
+}
+
+// allDiagnosticsAreProviderIteration reports whether every error-severity diagnostic in diags is
+// terraform-config-inspect's "Invalid provider reference" for OpenTofu 1.9+ provider iteration
+// (`provider = aws.by_account[each.key]`).
+//
+// Affected detection uses this narrower check rather than allDiagnosticsAreModuleSourceInterpolation:
+// it has always treated "Variables not allowed" as a hard error, and provider iteration is the only
+// limitation it needs to tolerate. Terraform-config-inspect records the diagnostic and keeps loading,
+// so the module calls it returns are complete.
+func allDiagnosticsAreProviderIteration(diags tfconfig.Diagnostics) bool {
+	return allDiagnosticsMatch(diags, matchesProviderIterationPattern)
+}
+
+// matchesProviderIterationPattern checks whether msg is terraform-config-inspect's diagnostic for an
+// indexed provider alias in a `provider` argument.
+func matchesProviderIterationPattern(msg string) bool {
+	return strings.Contains(msg, "Invalid provider reference")
+}
+
+// allDiagnosticsMatch reports whether every error-severity diagnostic in diags belongs to a
+// position group that contains at least one diagnostic accepted by match. See
+// allDiagnosticsAreModuleSourceInterpolation for why diagnostics are grouped by position.
+func allDiagnosticsMatch(diags tfconfig.Diagnostics, match func(string) bool) bool {
 	groupIsKnown := make(map[string]bool)
 	var order []string
 
@@ -190,7 +223,7 @@ func allDiagnosticsAreModuleSourceInterpolation(diags tfconfig.Diagnostics) bool
 		}
 
 		msg := fmt.Sprintf("%s: %s", diag.Summary, diag.Detail)
-		if matchesModuleSourceInterpolationPattern(msg) {
+		if match(msg) {
 			groupIsKnown[key] = true
 		}
 	}

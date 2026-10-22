@@ -321,7 +321,8 @@ func TestIsKnownModuleSourceInterpolationDiagnostic(t *testing.T) {
 func TestIsKnownModuleSourceInterpolationDiagnostic_Patterns(t *testing.T) {
 	// List of known error patterns that should be skipped, regardless of tool.
 	knownPatterns := []string{
-		"Variables not allowed", // Module source interpolation (OpenTofu 1.8+, Terraform 1.15+ const vars).
+		"Variables not allowed",      // Module source interpolation (OpenTofu 1.8+, Terraform 1.15+ const vars).
+		"Invalid provider reference", // Provider iteration (OpenTofu 1.9+).
 	}
 
 	for _, pattern := range knownPatterns {
@@ -363,6 +364,14 @@ func TestAllDiagnosticsAreModuleSourceInterpolation(t *testing.T) {
 		Detail:   "unrelated warning text",
 		Pos:      &tfconfig.SourcePos{Filename: "main.tf", Line: 3},
 	}
+	// OpenTofu 1.9+ provider iteration (`provider = aws.by_account[each.value]`), as emitted by
+	// terraform-config-inspect for each resource or data source that uses it.
+	providerIterationDiag := tfconfig.Diagnostic{
+		Severity: tfconfig.DiagError,
+		Summary:  "Invalid provider reference",
+		Detail:   `Provider argument requires a provider name followed by an optional alias, like "aws.foo".`,
+		Pos:      &tfconfig.SourcePos{Filename: "main.tf", Line: 21},
+	}
 	noPosDiag := tfconfig.Diagnostic{
 		Severity: tfconfig.DiagError,
 		Summary:  "Variables not allowed",
@@ -383,6 +392,21 @@ func TestAllDiagnosticsAreModuleSourceInterpolation(t *testing.T) {
 			name:     "single known diagnostic",
 			diags:    tfconfig.Diagnostics{knownDiag},
 			expected: true,
+		},
+		{
+			name:     "provider iteration diagnostic",
+			diags:    tfconfig.Diagnostics{providerIterationDiag},
+			expected: true,
+		},
+		{
+			name:     "provider iteration plus module source interpolation",
+			diags:    tfconfig.Diagnostics{providerIterationDiag, knownDiag},
+			expected: true,
+		},
+		{
+			name:     "provider iteration plus a genuine unrelated error",
+			diags:    tfconfig.Diagnostics{providerIterationDiag, unrelatedDiag},
+			expected: false,
 		},
 		{
 			name:     "known diagnostic plus its same-position companion",
@@ -618,5 +642,53 @@ func BenchmarkIsKnownModuleSourceInterpolationDiagnostic(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		isKnownModuleSourceInterpolationDiagnostic(err)
+	}
+}
+
+// TestAllDiagnosticsAreProviderIteration tests the narrower check used by affected detection, which
+// tolerates OpenTofu provider iteration but must keep rejecting every other diagnostic.
+func TestAllDiagnosticsAreProviderIteration(t *testing.T) {
+	providerIterationDiag := tfconfig.Diagnostic{
+		Severity: tfconfig.DiagError,
+		Summary:  "Invalid provider reference",
+		Detail:   `Provider argument requires a provider name followed by an optional alias, like "aws.foo".`,
+		Pos:      &tfconfig.SourcePos{Filename: "main.tf", Line: 21},
+	}
+	secondUseDiag := tfconfig.Diagnostic{
+		Severity: tfconfig.DiagError,
+		Summary:  "Invalid provider reference",
+		Detail:   `Provider argument requires a provider name followed by an optional alias, like "aws.foo".`,
+		Pos:      &tfconfig.SourcePos{Filename: "main.tf", Line: 40},
+	}
+	variablesNotAllowedDiag := tfconfig.Diagnostic{
+		Severity: tfconfig.DiagError,
+		Summary:  "Variables not allowed",
+		Detail:   "Variables may not be used here.",
+		Pos:      &tfconfig.SourcePos{Filename: "main.tf", Line: 3},
+	}
+	unrelatedDiag := tfconfig.Diagnostic{
+		Severity: tfconfig.DiagError,
+		Summary:  "Unsuitable value type",
+		Detail:   "Unsuitable value: bool required, but have tuple",
+		Pos:      &tfconfig.SourcePos{Filename: "main.tf", Line: 25},
+	}
+
+	tests := []struct {
+		name     string
+		diags    tfconfig.Diagnostics
+		expected bool
+	}{
+		{name: "empty diagnostics", diags: tfconfig.Diagnostics{}, expected: false},
+		{name: "single provider iteration", diags: tfconfig.Diagnostics{providerIterationDiag}, expected: true},
+		{name: "provider iteration used twice", diags: tfconfig.Diagnostics{providerIterationDiag, secondUseDiag}, expected: true},
+		{name: "variables not allowed is still an error", diags: tfconfig.Diagnostics{variablesNotAllowedDiag}, expected: false},
+		{name: "provider iteration plus variables not allowed", diags: tfconfig.Diagnostics{providerIterationDiag, variablesNotAllowedDiag}, expected: false},
+		{name: "provider iteration plus unrelated error", diags: tfconfig.Diagnostics{providerIterationDiag, unrelatedDiag}, expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, allDiagnosticsAreProviderIteration(tt.diags))
+		})
 	}
 }
